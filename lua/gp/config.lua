@@ -340,6 +340,20 @@ local config = {
 	chat_free_cursor = false,
 	-- use prompt buftype for chats (:h prompt-buffer)
 	chat_prompt_buf_type = false,
+	
+	-- chat memory configuration (for summarizing older messages)
+	chat_memory = {
+		-- enable summary feature for older messages
+		enable = true,
+		-- maximum number of full exchanges to keep (a user and assistant pair)
+		max_full_exchanges = 3,
+		-- prefix for note lines in assistant responses (used to extract summaries)
+		summary_prefix = "📝:",
+		-- prefix for reasoning lines in assistant responses (used to ignore reasoning in subsequent requests)
+		reasoning_prefix = "🧠:", 
+		-- text to replace omitted user messages
+		omit_user_text = "[Previous messages omitted]",
+	},
 
 	-- how to display GpChatToggle or GpContext
 	---@type "popup" | "split" | "vsplit" | "tabnew"

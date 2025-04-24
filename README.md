@@ -29,7 +29,7 @@
 
 # Goals and Features
 
-The goal is to extend Neovim with the **power of GPT models in a simple unobtrusive extensible way.**  
+The goal is to extend Neovim with the **power of GPT models in a simple unobtrusive extensible way.**
 Trying to keep things as native as possible - reusing and integrating well with the natural features of (Neo)vim.
 
 - **Streaming responses**
@@ -49,13 +49,13 @@ Trying to keep things as native as possible - reusing and integrating well with 
   - templating mechanism to combine user instructions, selections etc into the gpt query
   - multimodal - same command works for normal/insert mode, with selection or a range
   - many possible output targets - rewrite, prepend, append, new buffer, popup
-  - non interactive command mode available for common repetitive tasks implementable as simple hooks  
-    (explain something in a popup window, write unit tests for selected code into a new buffer,  
+  - non interactive command mode available for common repetitive tasks implementable as simple hooks
+    (explain something in a popup window, write unit tests for selected code into a new buffer,
     finish selected code based on comments in it, etc.)
-  - custom instructions per repository with `.gp.md` file  
+  - custom instructions per repository with `.gp.md` file
     (instruct gpt to generate code using certain libs, packages, conventions and so on)
 - **Speech to text support**
-  - a mouth is 2-4x faster than fingers when it comes to outputting words - use it where it makes sense  
+  - a mouth is 2-4x faster than fingers when it comes to outputting words - use it where it makes sense
     (dicating comments and notes, asking gpt questions, giving instructions for code operations, ..)
 - **Image generation**
   - be even less tempted to open the browser with the ability to generate images directly from Neovim
@@ -671,6 +671,46 @@ require("which-key").add({
 })
 ```
 
+# Chat Memory Management
+
+The plugin supports automatic summarization of longer chat histories to maintain context while reducing token usage. This feature is particularly useful for long conversations where earlier parts can be summarized instead of sending the full transcript to the API.
+
+## How It Works
+
+1. When chat messages exceed a configured threshold, older exchanges are replaced with a summary
+2. Summaries are extracted from assistant responses with a specific prefix (default: "📝:")
+3. This allows the LLM to maintain context of the conversation without the full token cost
+
+## Configuration
+
+The chat memory feature can be configured in your setup:
+
+```lua
+chat_memory = {
+    -- enable summary feature for older messages
+    enable = true,
+    -- maximum number of full exchanges to keep (a user and assistant pair)
+    max_full_exchanges = 3,
+    -- prefix for note lines in assistant responses (used to extract summaries)
+    summary_prefix = "📝:",
+    -- prefix for reasoning lines in assistant responses (used to extract summaries)
+    reasoning_prefix = "🧠:",
+    -- text to replace omitted user messages
+    omit_user_text = "[Previous messages omitted]",
+},
+```
+
+## Usage
+
+To take advantage of this feature, instruct your LLM in the system prompt to include summaries of the conversation. For example the following, or check defaults.lua for details.
+
+```
+When thinking through complex problems, prefix your reasoning with 🧠: for clarity.
+After answering my question, please include a brief summary of our exchange prefixed with 📝:
+```
+
+When the chat grows beyond the configured limit, the plugin will automatically replace older messages with the extracted summaries.
+
 # Extend functionality
 
 You can extend/override the plugin functionality with your own, by putting functions into `config.hooks`.
@@ -860,10 +900,10 @@ Prompt(params, target, agent, template, prompt, whisper, callback)
 - `prompt`
   - string used similarly as bash/zsh prompt in terminal, when plugin asks for user command to gpt.
   - if `nil`, user is not asked to provide input (for specific predefined commands - document this, explain that, write tests ..)
-  - simple `🤖 ~ ` might be used or you could use different msg to convey info about the method which is called  
+  - simple `🤖 ~ ` might be used or you could use different msg to convey info about the method which is called
     (`🤖 rewrite ~`, `🤖 popup ~`, `🤖 enew ~`, `🤖 inline ~`, etc.)
 - `whisper`
   - optional string serving as a default for input prompt (for example generated from speech by Whisper)
 - `callback`
-  - optional callback function allowing post processing logic on the prompt response  
+  - optional callback function allowing post processing logic on the prompt response
     (for example letting the model to generate commit message and using the callback to make actual commit)

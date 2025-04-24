@@ -996,6 +996,13 @@ M.chat_respond = function(params)
 	local agent = M.get_chat_agent()
 	local agent_name = agent.name
 
+	-- prepare for summary extraction
+	local memory_enabled = M.config.chat_memory and M.config.chat_memory.enable
+	local summary_prefix = memory_enabled and M.config.chat_memory.summary_prefix or "📝:"
+	local reasoning_prefix = memory_enabled and M.config.chat_memory.reasoning_prefix or "🧠:"
+	local max_exchanges = memory_enabled and M.config.chat_memory.max_full_exchanges or 999999
+	local omit_user_text = memory_enabled and M.config.chat_memory.omit_user_text or "[Previous messages omitted]"
+
 	-- if model contains { } then it is a json string otherwise it is a model name
 	if headers.model and headers.model:match("{.*}") then
 		-- unescape underscores before decoding json
@@ -1031,26 +1038,96 @@ M.chat_respond = function(params)
 	agent_suffix = M.render.template(agent_suffix, { ["{{agent}}"] = agent_name })
 
 	local old_default_user_prefix = "🗨:"
+	-- Parse all messages as in the original code
+	local all_messages = {}
+	local message_summaries = {}
+
+	-- the following loop extract from past messages a chat thread.
+    -- the first message's empty, which will be repurposed as system message.
+    -- the messages starting for reasoning line and summary line's ignored.
+    -- we assume there's a single line for reasoning/summary per assistant response
+	-- just to keep this parsing code simple.
 	for index = start_index, end_index do
 		local line = lines[index]
 		if line:sub(1, #M.config.chat_user_prefix) == M.config.chat_user_prefix then
-			table.insert(messages, { role = role, content = content })
+			-- Save previous message unconditionally
+			table.insert(all_messages, { role = role, content = content })
 			role = "user"
 			content = line:sub(#M.config.chat_user_prefix + 1)
 		elseif line:sub(1, #old_default_user_prefix) == old_default_user_prefix then
-			table.insert(messages, { role = role, content = content })
+			-- Save previous message unconditionally
+			table.insert(all_messages, { role = role, content = content })
 			role = "user"
 			content = line:sub(#old_default_user_prefix + 1)
 		elseif line:sub(1, #agent_prefix) == agent_prefix then
-			table.insert(messages, { role = role, content = content })
+			-- Save previous message unconditionally
+			table.insert(all_messages, { role = role, content = content })
 			role = "assistant"
 			content = ""
+        elseif role == "assistant" and line:sub(1, #summary_prefix) == summary_prefix then
+		    table.insert(message_summaries, line:sub(#summary_prefix + 1))
+		elseif role == "assistant" and line:sub(1, #reasoning_prefix) == reasoning_prefix then
+		    -- do thing, skip reasoning during request construction
 		elseif role ~= "" then
 			content = content .. "\n" .. line
 		end
 	end
-	-- insert last message not handled in loop
-	table.insert(messages, { role = role, content = content })
+
+	-- Insert the last message
+	table.insert(all_messages, { role = role, content = content })
+
+	M.logger.debug("Found " .. #message_summaries .. " summary lines")
+
+	-- Now apply summarization if memory feature is enabled and we have enough messages
+	if memory_enabled and #all_messages > 0 then
+		local total_exchanges = math.floor(#all_messages / 2)
+
+		if total_exchanges > max_exchanges then
+			-- Keep only the most recent exchanges
+			local messages_to_keep = max_exchanges * 2
+			if messages_to_keep < #all_messages - 2 then
+				-- Create a summary message pair at the beginning
+				messages = {
+					{
+						role = "user",
+						content = omit_user_text
+					}
+				}
+
+				-- Compile all summary lines into one message
+	            M.logger.debug("# of summaries: ".. tostring(#message_summaries))
+				if #message_summaries > 0 then
+					local summary_content = " "
+				    for i = 1, #message_summaries - max_exchanges do
+						summary_content = summary_content .. message_summaries[i] .. "\n"
+					end
+
+		            M.logger.debug("previous summaries: ".. tostring(summary_content))
+
+					table.insert(messages, {
+						role = "assistant",
+						content = summary_content
+					})
+				end
+
+				-- Add the remaining messages (most recent ones)
+				for i = #all_messages - messages_to_keep, #all_messages do
+					table.insert(messages, all_messages[i])
+				end
+			else
+				-- If we don't actually have enough messages to summarize, use all of them
+				messages = all_messages
+			end
+		else
+			-- Not enough exchanges to trigger summarization
+			messages = all_messages
+		end
+	else
+		-- Memory feature disabled, use all messages
+		messages = all_messages
+	end
+
+    M.logger.debug("messages to send" .. vim.inspect(messages))
 
 	-- replace first empty message with system prompt
 	content = ""
