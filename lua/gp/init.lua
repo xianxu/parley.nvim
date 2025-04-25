@@ -1,5 +1,6 @@
--- Gp (GPT prompt) lua plugin for Neovim
+-- Gp (GPT prompt) lua plugin for Neovim - Simplified Version
 -- https://github.com/Robitx/gp.nvim/
+-- This is a simplified version focused on chat functionality only
 
 --------------------------------------------------------------------------------
 -- Module structure
@@ -17,14 +18,11 @@ local M = {
 	deprecator = require("gp.deprecator"), -- handle deprecated options
 	dispatcher = require("gp.dispatcher"), -- handle communication with LLM providers
 	helpers = require("gp.helper"), -- helper functions
-	imager = require("gp.imager"), -- image generation module
 	logger = require("gp.logger"), -- logger module
 	outline = require("gp.outline"), -- outline navigation module
 	render = require("gp.render"), -- render module
-	spinner = require("gp.spinner"), -- spinner module
 	tasker = require("gp.tasker"), -- tasker module
 	vault = require("gp.vault"), -- handles secrets
-	whisper = require("gp.whisper"), -- whisper module
 }
 
 --------------------------------------------------------------------------------
@@ -74,22 +72,6 @@ M.setup = function(opts)
 	M.dispatcher.setup({ providers = opts.providers, curl_params = curl_params })
 	M.config.providers = nil
 	opts.providers = nil
-
-	local image_opts = opts.image or {}
-	image_opts.state_dir = state_dir
-	image_opts.cmd_prefix = cmd_prefix
-	image_opts.secret = image_opts.secret or openai_api_key
-	M.imager.setup(image_opts)
-	M.config.image = nil
-	opts.image = nil
-
-	local whisper_opts = opts.whisper or {}
-	whisper_opts.style_popup_border = opts.style_popup_border or M.config.style_popup_border
-	whisper_opts.curl_params = curl_params
-	whisper_opts.cmd_prefix = cmd_prefix
-	M.whisper.setup(whisper_opts)
-	M.config.whisper = nil
-	opts.whisper = nil
 
 	-- merge nested tables
 	local mergeTables = { "hooks", "agents" }
@@ -190,7 +172,7 @@ M.setup = function(opts)
 		end)
 	end
 	
-	-- Set up global keymaps for commands that should work everywhere
+	-- Set up global keymaps for commands
 	vim.keymap.set("n", "<C-g>f", ":" .. M.config.cmd_prefix .. "ChatFinder<CR>", { silent = true, desc = "Open Chat Finder" })
 	vim.keymap.set("i", "<C-g>f", "<ESC>:" .. M.config.cmd_prefix .. "ChatFinder<CR>", { silent = true, desc = "Open Chat Finder" })
 	
@@ -218,10 +200,7 @@ M.setup = function(opts)
 	end, { silent = true, desc = "Search for chat sections" })
 
 	local completions = {
-		ChatNew = { "popup", "split", "vsplit", "tabnew" },
-		ChatPaste = { "popup", "split", "vsplit", "tabnew" },
-		ChatToggle = { "popup", "split", "vsplit", "tabnew" },
-		Context = { "popup", "split", "vsplit", "tabnew" },
+		ChatNew = { },
 		Agent = agent_completion,
 	}
 
@@ -301,95 +280,9 @@ M.refresh_state = function(update)
 
 	M.helpers.table_to_file(M._state, state_file)
 
-	M.prepare_commands()
-
 	local buf = vim.api.nvim_get_current_buf()
 	local file_name = vim.api.nvim_buf_get_name(buf)
 	M.display_chat_agent(buf, file_name)
-end
-
-M.Target = {
-	rewrite = 0, -- for replacing the selection, range or the current line
-	append = 1, -- for appending after the selection, range or the current line
-	prepend = 2, -- for prepending before the selection, range or the current line
-	popup = 3, -- for writing into the popup window
-
-	-- for writing into a new buffer
-	---@param filetype nil | string # nil = same as the original buffer
-	---@return table # a table with type=4 and filetype=filetype
-	enew = function(filetype)
-		return { type = 4, filetype = filetype }
-	end,
-
-	--- for creating a new horizontal split
-	---@param filetype nil | string # nil = same as the original buffer
-	---@return table # a table with type=5 and filetype=filetype
-	new = function(filetype)
-		return { type = 5, filetype = filetype }
-	end,
-
-	--- for creating a new vertical split
-	---@param filetype nil | string # nil = same as the original buffer
-	---@return table # a table with type=6 and filetype=filetype
-	vnew = function(filetype)
-		return { type = 6, filetype = filetype }
-	end,
-
-	--- for creating a new tab
-	---@param filetype nil | string # nil = same as the original buffer
-	---@return table # a table with type=7 and filetype=filetype
-	tabnew = function(filetype)
-		return { type = 7, filetype = filetype }
-	end,
-}
-
--- creates prompt commands for each target
-M.prepare_commands = function()
-	for name, target in pairs(M.Target) do
-		-- uppercase first letter
-		local command = name:gsub("^%l", string.upper)
-
-		local cmd = function(params, whisper)
-			local agent = M.get_command_agent()
-			-- popup is like ephemeral one off chat
-			if target == M.Target.popup then
-				agent = M.get_chat_agent()
-			end
-
-			-- template is chosen dynamically based on mode in which the command is called
-			local template = M.config.template_command
-			if params.range > 0 then
-				template = M.config.template_selection
-			end
-			-- rewrite needs custom template
-			if target == M.Target.rewrite then
-				template = M.config.template_rewrite
-			end
-			if target == M.Target.append then
-				template = M.config.template_append
-			end
-			if target == M.Target.prepend then
-				template = M.config.template_prepend
-			end
-			if agent then
-				M.Prompt(params, target, agent, template, agent.cmd_prefix, whisper)
-			end
-		end
-
-		M.cmd[command] = function(params)
-			cmd(params)
-		end
-
-		if not M.whisper.disabled then
-			M.cmd["Whisper" .. command] = function(params)
-				M.whisper.Whisper(function(text)
-					vim.schedule(function()
-						cmd(params, text)
-					end)
-				end)
-			end
-		end
-	end
 end
 
 -- stop receiving gpt responses for all processes and clean the handles
@@ -401,60 +294,6 @@ end
 --------------------------------------------------------------------------------
 -- Chat logic
 --------------------------------------------------------------------------------
-
-M._toggle = {}
-
-M._toggle_kind = {
-	unknown = 0, -- unknown toggle
-	chat = 1, -- chat toggle
-	popup = 2, -- popup toggle
-	context = 3, -- context toggle
-}
-
----@param kind number # kind of toggle
----@return boolean # true if toggle was closed
-M._toggle_close = function(kind)
-	if
-		M._toggle[kind]
-		and M._toggle[kind].win
-		and M._toggle[kind].buf
-		and M._toggle[kind].close
-		and vim.api.nvim_win_is_valid(M._toggle[kind].win)
-		and vim.api.nvim_buf_is_valid(M._toggle[kind].buf)
-		and vim.api.nvim_win_get_buf(M._toggle[kind].win) == M._toggle[kind].buf
-	then
-		if #vim.api.nvim_list_wins() == 1 then
-			M.logger.warning("Can't close the last window.")
-		else
-			M._toggle[kind].close()
-			M._toggle[kind] = nil
-		end
-		return true
-	end
-	M._toggle[kind] = nil
-	return false
-end
-
----@param kind number # kind of toggle
----@param toggle table # table containing `win`, `buf`, and `close` information
-M._toggle_add = function(kind, toggle)
-	M._toggle[kind] = toggle
-end
-
----@param kind string # string representation of the toggle kind
----@return number # numeric kind of the toggle
-M._toggle_resolve = function(kind)
-	kind = kind:lower()
-	if kind == "chat" then
-		return M._toggle_kind.chat
-	elseif kind == "popup" then
-		return M._toggle_kind.popup
-	elseif kind == "context" then
-		return M._toggle_kind.context
-	end
-	M.logger.warning("Unknown toggle kind: " .. kind)
-	return M._toggle_kind.unknown
-end
 
 ---@param buf number | nil # buffer number
 M.prep_md = function(buf)
@@ -688,7 +527,6 @@ M.buf_handler = function()
 
 		M.prep_chat(buf, file_name)
 		M.display_chat_agent(buf, file_name)
-		M.prep_context(buf, file_name)
 		
 		-- Apply highlighting to chat files
 		if M.not_chat(buf, file_name) == nil then
@@ -714,158 +552,31 @@ M.buf_handler = function()
 	end, gid)
 end
 
-M.BufTarget = {
-	current = 0, -- current window
-	popup = 1, -- popup window
-	split = 2, -- split window
-	vsplit = 3, -- vsplit window
-	tabnew = 4, -- new tab
-}
-
----@param params table | string # table with args or string args
----@return number # buf target
-M.resolve_buf_target = function(params)
-	local args = ""
-	if type(params) == "table" then
-		args = params.args or ""
-	else
-		args = params
-	end
-
-	args = args:match("^%s*(.-)%s*$")
-
-	if args == "popup" then
-		return M.BufTarget.popup
-	elseif args == "split" then
-		return M.BufTarget.split
-	elseif args == "vsplit" then
-		return M.BufTarget.vsplit
-	elseif args == "tabnew" then
-		return M.BufTarget.tabnew
-	else
-		return M.BufTarget.current
-	end
-end
-
 ---@param file_name string
----@param target number | nil # buf target
----@param kind number # nil or a toggle kind
----@param toggle boolean # whether to toggle
 ---@return number # buffer number
-M.open_buf = function(file_name, target, kind, toggle)
-	target = target or M.BufTarget.current
-
-	-- close previous popup if it exists
-	M._toggle_close(M._toggle_kind.popup)
-
-	if toggle then
-		M._toggle_close(kind)
-	end
-
-	local close, buf, win
-
-	if target == M.BufTarget.popup then
-		local old_buf = M.helpers.get_buffer(file_name)
-
-		buf, win, close, _ = M.render.popup(old_buf, M._Name .. " Popup", function(w, h)
-			local top = M.config.style_popup_margin_top or 2
-			local bottom = M.config.style_popup_margin_bottom or 8
-			local left = M.config.style_popup_margin_left or 1
-			local right = M.config.style_popup_margin_right or 1
-			local max_width = M.config.style_popup_max_width or 160
-			local ww = math.min(w - (left + right), max_width)
-			local wh = h - (top + bottom)
-			return ww, wh, top, (w - ww) / 2
-		end, { on_leave = false, escape = false, persist = true }, {
-			border = M.config.style_popup_border or "single",
-			zindex = M.config.zindex,
-		})
-
-		if not toggle then
-			M._toggle_add(M._toggle_kind.popup, { win = win, buf = buf, close = close })
-		end
-
-		if old_buf == nil then
-			-- read file into buffer and force write it
-			vim.api.nvim_command("silent 0read " .. file_name)
-			vim.api.nvim_command("silent file " .. file_name)
-			-- set the filetype to markdown
-			vim.api.nvim_set_option_value("filetype", "markdown", { buf = buf })
-		else
-			-- move cursor to the beginning of the file and scroll to the end
-			M.helpers.feedkeys("ggG", "xn")
-		end
-
-		-- delete whitespace lines at the end of the file
-		local last_content_line = M.helpers.last_content_line(buf)
-		vim.api.nvim_buf_set_lines(buf, last_content_line, -1, false, {})
-		-- insert a new line at the end of the file
-		vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "" })
-		vim.api.nvim_command("silent write! " .. file_name)
-	elseif target == M.BufTarget.split then
-		vim.api.nvim_command("split " .. file_name)
-	elseif target == M.BufTarget.vsplit then
-		vim.api.nvim_command("vsplit " .. file_name)
-	elseif target == M.BufTarget.tabnew then
-		vim.api.nvim_command("tabnew " .. file_name)
-	else
-		-- is it already open in a buffer?
-		for _, b in ipairs(vim.api.nvim_list_bufs()) do
-			if vim.api.nvim_buf_get_name(b) == file_name then
-				for _, w in ipairs(vim.api.nvim_list_wins()) do
-					if vim.api.nvim_win_get_buf(w) == b then
-						vim.api.nvim_set_current_win(w)
-						return b
-					end
+M.open_buf = function(file_name)
+	-- Is the file already open in a buffer?
+	for _, b in ipairs(vim.api.nvim_list_bufs()) do
+		if vim.api.nvim_buf_get_name(b) == file_name then
+			for _, w in ipairs(vim.api.nvim_list_wins()) do
+				if vim.api.nvim_win_get_buf(w) == b then
+					vim.api.nvim_set_current_win(w)
+					return b
 				end
 			end
 		end
-
-		-- open in new buffer
-		vim.api.nvim_command("edit " .. file_name)
 	end
 
-	buf = vim.api.nvim_get_current_buf()
-	win = vim.api.nvim_get_current_win()
-	close = close or function() end
-
-	if not toggle then
-		return buf
-	end
-
-	vim.api.nvim_set_option_value("buflisted", false, { buf = buf })
-
-	if target == M.BufTarget.split or target == M.BufTarget.vsplit then
-		close = function()
-			if vim.api.nvim_win_is_valid(win) then
-				vim.api.nvim_win_close(win, true)
-			end
-		end
-	end
-
-	if target == M.BufTarget.tabnew then
-		close = function()
-			if vim.api.nvim_win_is_valid(win) then
-				local tab = vim.api.nvim_win_get_tabpage(win)
-				vim.api.nvim_set_current_tabpage(tab)
-				vim.api.nvim_command("tabclose")
-			end
-		end
-	end
-
-	M._toggle_add(kind, { win = win, buf = buf, close = close })
-
+	-- Open in new buffer
+	vim.api.nvim_command("edit " .. file_name)
+	local buf = vim.api.nvim_get_current_buf()
 	return buf
 end
 
----@param params table  # vim command parameters such as range, args, etc.
----@param toggle boolean # whether chat is toggled
 ---@param system_prompt string | nil # system prompt to use
----@param agent table | nil # obtained from get_command_agent or get_chat_agent
+---@param agent table | nil # obtained from get_chat_agent
 ---@return number # buffer number
-M.new_chat = function(params, toggle, system_prompt, agent)
-	M._toggle_close(M._toggle_kind.popup)
-
+M.new_chat = function(system_prompt, agent)
 	local filename = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
 
 	-- encode as json if model is a table
@@ -904,115 +615,24 @@ M.new_chat = function(params, toggle, system_prompt, agent)
 	-- escape underscores (for markdown)
 	template = template:gsub("_", "\\_")
 
-	local cbuf = vim.api.nvim_get_current_buf()
-
 	-- strip leading and trailing newlines
 	template = template:gsub("^%s*(.-)%s*$", "%1") .. "\n"
 
 	-- create chat file
 	vim.fn.writefile(vim.split(template, "\n"), filename)
-	local target = M.resolve_buf_target(params)
-	local buf = M.open_buf(filename, target, M._toggle_kind.chat, toggle)
-
-	if params.range == 2 then
-		M.render.append_selection(params, cbuf, buf, M.config.template_selection)
-	end
+	local buf = M.open_buf(filename)
+	
 	M.helpers.feedkeys("G", "xn")
 	return buf
 end
 
 ---@param params table
 ---@param system_prompt string | nil
----@param agent table | nil # obtained from get_command_agent or get_chat_agent
+---@param agent table | nil # obtained from get_chat_agent
 ---@return number # buffer number
 M.cmd.ChatNew = function(params, system_prompt, agent)
-	if M.deprecator.has_old_chat_signature(agent) then
-		return -1
-	end
-
-	-- if chat toggle is open, close it and start a new one
-	if M._toggle_close(M._toggle_kind.chat) then
-		params.args = params.args or ""
-		if params.args == "" then
-			params.args = M.config.toggle_target
-		end
-		return M.new_chat(params, true, system_prompt, agent)
-	end
-
-	return M.new_chat(params, false, system_prompt, agent)
-end
-
----@param params table
----@param system_prompt string | nil
----@param agent table | nil # obtained from get_command_agent or get_chat_agent
-M.cmd.ChatToggle = function(params, system_prompt, agent)
-	if M._toggle_close(M._toggle_kind.popup) then
-		return
-	end
-	if M._toggle_close(M._toggle_kind.chat) and params.range ~= 2 then
-		return
-	end
-
-	-- create new chat file otherwise
-	params.args = params.args or ""
-	if params.args == "" then
-		params.args = M.config.toggle_target
-	end
-
-	-- if the range is 2, we want to create a new chat file with the selection
-	if params.range ~= 2 then
-		local last = M._state.last_chat
-		if last and vim.fn.filereadable(last) == 1 then
-			last = vim.fn.resolve(last)
-			M.open_buf(last, M.resolve_buf_target(params), M._toggle_kind.chat, true)
-			return
-		end
-	end
-
-	M.new_chat(params, true, system_prompt, agent)
-end
-
-M.cmd.ChatPaste = function(params)
-	-- if there is no selection, do nothing
-	if params.range ~= 2 then
-		M.logger.warning("Please select some text to paste into the chat.")
-		return
-	end
-
-	-- get current buffer
-	local cbuf = vim.api.nvim_get_current_buf()
-
-	-- make new chat if last doesn't exist
-	local last = M._state.last_chat
-	if not last or vim.fn.filereadable(last) ~= 1 then
-		-- skip rest since new chat will handle snippet on it's own
-		M.cmd.ChatNew(params, nil, nil)
-		return
-	end
-
-	params.args = params.args or ""
-	if params.args == "" then
-		params.args = M.config.toggle_target
-	end
-	local target = M.resolve_buf_target(params)
-
-	last = vim.fn.resolve(last)
-	local buf = M.helpers.get_buffer(last)
-	local win_found = false
-	if buf then
-		for _, w in ipairs(vim.api.nvim_list_wins()) do
-			if vim.api.nvim_win_get_buf(w) == buf then
-				vim.api.nvim_set_current_win(w)
-				vim.api.nvim_set_current_buf(buf)
-				win_found = true
-				break
-			end
-		end
-	end
-	buf = win_found and buf or M.open_buf(last, target, M._toggle_kind.chat, true)
-
-	M.render.append_selection(params, cbuf, buf, M.config.template_selection)
-	M.helpers.feedkeys("G", "xn")
+	-- Simple version that just creates a new chat
+	return M.new_chat(system_prompt, agent)
 end
 
 M.cmd.ChatDelete = function()
@@ -1597,8 +1217,6 @@ M.cmd.ChatRespond = function(params)
 	M.chat_respond(params)
 end
 
-M._chat_finder_opened = false
-
 -- Command for navigating questions and headers in chat documents
 M.cmd.Outline = function()
 	-- Check if current buffer is a chat file
@@ -1613,6 +1231,7 @@ M.cmd.Outline = function()
 	M.outline.question_picker(M.config)
 end
 
+M._chat_finder_opened = false
 M.cmd.ChatFinder = function()
 	if M._chat_finder_opened then
 		M.logger.warning("Chat finder is already open")
@@ -1623,296 +1242,79 @@ M.cmd.ChatFinder = function()
 	local dir = M.config.chat_dir
 	local delete_shortcut = M.config.chat_finder_mappings.delete or M.config.chat_shortcut_delete
 
-	-- prepare unique group name and register augroup
-	local gid = M.helpers.create_augroup("GpChatFinder", { clear = true })
-
-	-- prepare three popup buffers and windows
-	local style = { border = M.config.style_chat_finder_border or "single", zindex = M.config.zindex }
-	local ratio = M.config.style_chat_finder_preview_ratio or 0.5
-	local top = M.config.style_chat_finder_margin_top or 2
-	local bottom = M.config.style_chat_finder_margin_bottom or 8
-	local left = M.config.style_chat_finder_margin_left or 1
-	local right = M.config.style_chat_finder_margin_right or 2
-	local picker_buf, picker_win, picker_close, picker_resize = M.render.popup(
-		nil,
-		"Picker: j/k <Esc>|exit <Enter>|open " .. delete_shortcut.shortcut .. "|del i|srch",
-		function(w, h)
-			local wh = h - top - bottom - 2
-			local ww = w - left - right - 2
-			return math.floor(ww * (1 - ratio)), wh, top, left
-		end,
-		{ gid = gid },
-		style
-	)
-
-	local preview_buf, preview_win, preview_close, preview_resize = M.render.popup(
-		nil,
-		"Preview (edits are ephemeral)",
-		function(w, h)
-			local wh = h - top - bottom - 2
-			local ww = w - left - right - 1
-			return ww * ratio, wh, top, left + math.ceil(ww * (1 - ratio)) + 2
-		end,
-		{ gid = gid },
-		style
-	)
-
-	vim.api.nvim_set_option_value("filetype", "markdown", { buf = preview_buf })
-
-	local command_buf, command_win, command_close, command_resize = M.render.popup(
-		nil,
-		"Search: <Tab>/<Shift+Tab>|navigate <Esc>|picker <C-c>|exit "
-			.. "<Enter>/<C-f>/<C-x>/<C-v>/<C-t>/<C-g>t|open/float/split/vsplit/tab/toggle",
-		function(w, h)
-			return w - left - right, 1, h - bottom, left
-		end,
-		{ gid = gid },
-		style
-	)
-	-- set initial content of command buffer
-	vim.api.nvim_buf_set_lines(command_buf, 0, -1, false, { M.config.chat_finder_pattern })
-
-	local hl_search_group = "GpExplorerSearch"
-	vim.cmd("highlight default link " .. hl_search_group .. " Search ")
-	local hl_cursorline_group = "GpExplorerCursorLine"
-	vim.cmd("highlight default " .. hl_cursorline_group .. " gui=standout cterm=standout")
-
-	local picker_pos_id = 0
-	local picker_match_id = 0
-	local preview_match_id = 0
-	local regex = ""
-
-	-- clean up augroup and popup buffers/windows
-	local close = M.tasker.once(function()
-		vim.api.nvim_del_augroup_by_id(gid)
-		picker_close()
-		preview_close()
-		command_close()
-		M._chat_finder_opened = false
-	end)
-
-	local resize = function()
-		picker_resize()
-		preview_resize()
-		command_resize()
-	end
-
-	-- logic for updating picker and preview
-	local picker_files = {}
-	local preview_lines = {}
-
-	local refresh = function()
-		if not vim.api.nvim_buf_is_valid(picker_buf) then
-			return
-		end
-
-		-- empty preview buffer
-		vim.api.nvim_buf_set_lines(preview_buf, 0, -1, false, {})
-		vim.api.nvim_win_set_cursor(preview_win, { 1, 0 })
-
-		local index = vim.api.nvim_win_get_cursor(picker_win)[1]
-		local file = picker_files[index]
-		if not file then
-			return
-		end
-
-		local lines = {}
-		for l in io.lines(file) do
-			table.insert(lines, l)
-		end
-		vim.api.nvim_buf_set_lines(preview_buf, 0, -1, false, lines)
-
-		local preview_line = preview_lines[index]
-		if preview_line then
-			vim.api.nvim_win_set_cursor(preview_win, { preview_line, 0 })
-		end
-
-		-- highlight grep results and current line
-		if picker_pos_id ~= 0 then
-			vim.fn.matchdelete(picker_pos_id, picker_win)
-		end
-		if picker_match_id ~= 0 then
-			vim.fn.matchdelete(picker_match_id, picker_win)
-		end
-		if preview_match_id ~= 0 then
-			vim.fn.matchdelete(preview_match_id, preview_win)
-		end
-
-		if regex == "" then
-			picker_pos_id = 0
-			picker_match_id = 0
-			preview_match_id = 0
-			return
-		end
-
-		picker_match_id = vim.fn.matchadd(hl_search_group, regex, 0, -1, { window = picker_win })
-		preview_match_id = vim.fn.matchadd(hl_search_group, regex, 0, -1, { window = preview_win })
-		picker_pos_id = vim.fn.matchaddpos(hl_cursorline_group, { { index } }, 0, -1, { window = picker_win })
-	end
-
-	local refresh_picker = function()
-		-- get last line of command buffer
-		local cmd = vim.api.nvim_buf_get_lines(command_buf, -2, -1, false)[1]
-
-		M.tasker.grep_directory(nil, dir, cmd, function(results, re)
-			if not vim.api.nvim_buf_is_valid(picker_buf) then
-				return
-			end
-
-			picker_files = {}
-			preview_lines = {}
-			local picker_lines = {}
-			for _, f in ipairs(results) do
-				if f.line:len() > 0 then
-					table.insert(picker_files, dir .. "/" .. f.file)
-					local fline = string.format("%s:%s %s", f.file:sub(3, -11), f.lnum, f.line)
-					table.insert(picker_lines, fline)
-					table.insert(preview_lines, tonumber(f.lnum))
+	-- Launch telescope finder
+	if pcall(require, "telescope") then
+		local pickers = require("telescope.pickers")
+		local finders = require("telescope.finders")
+		local conf = require("telescope.config").values
+		local actions = require("telescope.actions")
+		local action_state = require("telescope.actions.state")
+		
+		local files = vim.fn.glob(dir .. "/*.md", false, true)
+		local entries = {}
+		
+		for _, file in ipairs(files) do
+			local lines = vim.fn.readfile(file, "", 5) -- Read first 5 lines to get topic
+			local topic = ""
+			for _, line in ipairs(lines) do
+				local t = line:match("^# topic: (.+)")
+				if t then
+					topic = t
+					break
 				end
 			end
-
-			vim.api.nvim_buf_set_lines(picker_buf, 0, -1, false, picker_lines)
-
-			-- prepare regex for highlighting
-			regex = re
-			if regex ~= "" then
-				-- case insensitive
-				regex = "\\c" .. regex
-			end
-
-			refresh()
-		end)
+			
+			local filename = vim.fn.fnamemodify(file, ":t")
+			table.insert(entries, {
+				value = file,
+				display = filename .. " - " .. topic,
+				ordinal = filename .. " " .. topic,
+			})
+		end
+		
+		pickers.new({}, {
+			prompt_title = "Chat Files",
+			finder = finders.new_table({
+				results = entries,
+				entry_maker = function(entry)
+					return entry
+				end,
+			}),
+			sorter = conf.generic_sorter({}),
+			attach_mappings = function(prompt_bufnr, map)
+				actions.select_default:replace(function()
+					actions.close(prompt_bufnr)
+					local selection = action_state.get_selected_entry()
+					M.open_buf(selection.value)
+				end)
+				
+				map("i", delete_shortcut.shortcut, function()
+					local selection = action_state.get_selected_entry()
+					vim.ui.input({ prompt = "Delete " .. selection.value .. "? [y/N] " }, function(input)
+						if input and input:lower() == "y" then
+							M.helpers.delete_file(selection.value)
+							actions.close(prompt_bufnr)
+							-- Reopen finder to show updated list
+							vim.defer_fn(function()
+								M._chat_finder_opened = false
+								M.cmd.ChatFinder()
+							end, 100)
+						end
+					end)
+				end)
+				
+				return true
+			end,
+		}):find()
+	else
+		M.logger.error("Telescope not found. ChatFinder requires telescope.nvim to be installed.")
 	end
-
-	refresh_picker()
-	vim.api.nvim_set_current_win(command_win)
-	vim.api.nvim_command("startinsert!")
-
-	-- resize on VimResized
-	M.helpers.autocmd({ "VimResized" }, nil, resize, gid)
-
-	-- moving cursor on picker window will update preview window
-	M.helpers.autocmd({ "CursorMoved", "CursorMovedI" }, { picker_buf }, function()
-		vim.api.nvim_command("stopinsert")
-		refresh()
-	end, gid)
-
-	-- InsertEnter on picker or preview window will go to command window
-	M.helpers.autocmd({ "InsertEnter" }, { picker_buf, preview_buf }, function()
-		vim.api.nvim_set_current_win(command_win)
-		vim.api.nvim_command("startinsert!")
-	end, gid)
-
-	-- InsertLeave on command window will go to picker window
-	M.helpers.autocmd({ "InsertLeave" }, { command_buf }, function()
-		vim.api.nvim_set_current_win(picker_win)
-		vim.api.nvim_command("stopinsert")
-	end, gid)
-
-	-- when preview becomes active call some function
-	M.helpers.autocmd({ "WinEnter" }, { preview_buf }, function()
-		-- go to normal mode
-		vim.api.nvim_command("stopinsert")
-	end, gid)
-
-	-- when command buffer is written, execute it
-	M.helpers.autocmd({ "TextChanged", "TextChangedI", "TextChangedP", "TextChangedT" }, { command_buf }, function()
-		vim.api.nvim_win_set_cursor(picker_win, { 1, 0 })
-		refresh_picker()
-	end, gid)
-
-	-- close on buffer delete
-	M.helpers.autocmd({ "BufWipeout", "BufHidden", "BufDelete" }, { picker_buf, preview_buf, command_buf }, close, gid)
-
-	-- close by escape key on any window
-	M.helpers.set_keymap({ picker_buf, preview_buf, command_buf }, "n", "<esc>", close)
-	M.helpers.set_keymap({ picker_buf, preview_buf, command_buf }, { "i", "n" }, "<C-c>", close)
-
-	---@param target number
-	---@param toggle boolean
-	local open_chat = function(target, toggle)
-		local index = vim.api.nvim_win_get_cursor(picker_win)[1]
-		local file = picker_files[index]
-		close()
-		-- delay so explorer can close before opening file
-		vim.defer_fn(function()
-			if not file then
-				return
-			end
-			M.open_buf(file, target, M._toggle_kind.chat, toggle)
-		end, 200)
-	end
-
-	-- enter on picker window will open file
-	M.helpers.set_keymap({ picker_buf, preview_buf, command_buf }, { "i", "n", "v" }, "<cr>", open_chat)
-	M.helpers.set_keymap({ picker_buf, preview_buf, command_buf }, { "i", "n", "v" }, "<C-f>", function()
-		open_chat(M.BufTarget.popup, false)
-	end)
-	M.helpers.set_keymap({ picker_buf, preview_buf, command_buf }, { "i", "n", "v" }, "<C-x>", function()
-		open_chat(M.BufTarget.split, false)
-	end)
-	M.helpers.set_keymap({ picker_buf, preview_buf, command_buf }, { "i", "n", "v" }, "<C-v>", function()
-		open_chat(M.BufTarget.vsplit, false)
-	end)
-	M.helpers.set_keymap({ picker_buf, preview_buf, command_buf }, { "i", "n", "v" }, "<C-t>", function()
-		open_chat(M.BufTarget.tabnew, false)
-	end)
-	M.helpers.set_keymap({ picker_buf, preview_buf, command_buf }, { "i", "n", "v" }, "<C-g>t", function()
-		local target = M.resolve_buf_target(M.config.toggle_target)
-		open_chat(target, true)
-	end)
-
-	-- tab in command window will cycle through lines in picker window
-	M.helpers.set_keymap({ command_buf, picker_buf }, { "i", "n" }, "<tab>", function()
-		local index = vim.api.nvim_win_get_cursor(picker_win)[1]
-		local next_index = index + 1
-		if next_index > #picker_files then
-			next_index = 1
-		end
-		vim.api.nvim_win_set_cursor(picker_win, { next_index, 0 })
-		refresh()
-	end)
-
-	-- shift-tab in command window will cycle through lines in picker window
-	M.helpers.set_keymap({ command_buf, picker_buf }, { "i", "n" }, "<s-tab>", function()
-		local index = vim.api.nvim_win_get_cursor(picker_win)[1]
-		local next_index = index - 1
-		if next_index < 1 then
-			next_index = #picker_files
-		end
-		vim.api.nvim_win_set_cursor(picker_win, { next_index, 0 })
-		refresh()
-	end)
-
-	-- dd on picker or preview window will delete file
-	M.helpers.set_keymap(
-		{ command_buf, picker_buf, preview_buf },
-		delete_shortcut.modes,
-		delete_shortcut.shortcut,
-		function()
-			local index = vim.api.nvim_win_get_cursor(picker_win)[1]
-			local file = picker_files[index]
-
-			-- delete without confirmation
-			if not M.config.chat_confirm_delete then
-				M.helpers.delete_file(file)
-				refresh_picker()
-				return
-			end
-
-			-- ask for confirmation
-			vim.ui.input({ prompt = "Delete " .. file .. "? [y/N] " }, function(input)
-				if input and input:lower() == "y" then
-					M.helpers.delete_file(file)
-					refresh_picker()
-				end
-			end)
-		end
-	)
+	
+	M._chat_finder_opened = false
 end
 
 --------------------------------------------------------------------------------
--- Prompt logic
+-- Agent functionality
 --------------------------------------------------------------------------------
 
 M.cmd.Agent = function(params)
@@ -2019,376 +1421,6 @@ M.get_chat_agent = function(name)
 		system_prompt = system_prompt,
 		provider = provider,
 	}
-end
-
--- tries to find an .gp.md file in the root of current git repo
----@return string # returns instructions from the .gp.md file
-M.repo_instructions = function()
-	local git_root = M.helpers.find_git_root()
-
-	if git_root == "" then
-		return ""
-	end
-
-	local instruct_file = git_root .. "/.gp.md"
-
-	if vim.fn.filereadable(instruct_file) == 0 then
-		return ""
-	end
-
-	local lines = vim.fn.readfile(instruct_file)
-	return table.concat(lines, "\n")
-end
-
-M.prep_context = function(buf, file_name)
-	if not M.helpers.ends_with(file_name, ".gp.md") then
-		return
-	end
-
-	if buf ~= vim.api.nvim_get_current_buf() then
-		return
-	end
-	if M._prepared_bufs[buf] then
-		M.logger.debug("buffer already prepared: " .. buf)
-		return
-	end
-	M._prepared_bufs[buf] = true
-
-	M.prep_md(buf)
-end
-
-M.cmd.Context = function(params)
-	M._toggle_close(M._toggle_kind.popup)
-	-- if there is no selection, try to close context toggle
-	if params.range ~= 2 then
-		if M._toggle_close(M._toggle_kind.context) then
-			return
-		end
-	end
-
-	local cbuf = vim.api.nvim_get_current_buf()
-
-	local file_name = ""
-	local buf = M.helpers.get_buffer(".gp.md")
-	if buf then
-		file_name = vim.api.nvim_buf_get_name(buf)
-	else
-		local git_root = M.helpers.find_git_root()
-		if git_root == "" then
-			M.logger.warning("Not in a git repository")
-			return
-		end
-		file_name = git_root .. "/.gp.md"
-	end
-
-	if vim.fn.filereadable(file_name) ~= 1 then
-		vim.fn.writefile({ "Additional context is provided below.", "" }, file_name)
-	end
-
-	params.args = params.args or ""
-	if params.args == "" then
-		params.args = M.config.toggle_target
-	end
-	local target = M.resolve_buf_target(params)
-	buf = M.open_buf(file_name, target, M._toggle_kind.context, true)
-
-	if params.range == 2 then
-		M.render.append_selection(params, cbuf, buf, M.config.template_selection)
-	end
-
-	M.helpers.feedkeys("G", "xn")
-end
-
----@param params table  # vim command parameters such as range, args, etc.
----@param target number | function | table  # where to put the response
----@param agent table  # obtained from get_command_agent or get_chat_agent
----@param template string  # template with model instructions
----@param prompt string | nil  # nil for non interactive commads
----@param whisper string | nil  # predefined input (e.g. obtained from Whisper)
----@param callback function | nil  # callback after completing the prompt
-M.Prompt = function(params, target, agent, template, prompt, whisper, callback)
-	if M.deprecator.has_old_prompt_signature(agent) then
-		return
-	end
-
-	-- enew, new, vnew, tabnew should be resolved into table
-	if type(target) == "function" then
-		target = target()
-	end
-
-	target = target or M.Target.enew()
-
-	-- get current buffer
-	local buf = vim.api.nvim_get_current_buf()
-	local win = vim.api.nvim_get_current_win()
-
-	if M.tasker.is_busy(buf) then
-		return
-	end
-
-	local start_line = params.line1
-	local end_line = params.line2
-	local lines = vim.api.nvim_buf_get_lines(buf, start_line - 1, end_line, false)
-
-	local min_indent = nil
-	local use_tabs = false
-	-- measure minimal common indentation for lines with content
-	for i, line in ipairs(lines) do
-		lines[i] = line
-		-- skip whitespace only lines
-		if not line:match("^%s*$") then
-			local indent = line:match("^%s*")
-			-- contains tabs
-			if indent:match("\t") then
-				use_tabs = true
-			end
-			if min_indent == nil or #indent < min_indent then
-				min_indent = #indent
-			end
-		end
-	end
-	if min_indent == nil then
-		min_indent = 0
-	end
-	local prefix = string.rep(use_tabs and "\t" or " ", min_indent)
-
-	for i, line in ipairs(lines) do
-		lines[i] = line:sub(min_indent + 1)
-	end
-
-	local selection = table.concat(lines, "\n")
-
-	M._selection_first_line = start_line
-	M._selection_last_line = end_line
-
-	local cb = function(command)
-		-- dummy handler
-		local handler = function() end
-		-- default on_exit strips trailing backticks if response was markdown snippet
-		local on_exit = function(qid)
-			local qt = M.tasker.get_query(qid)
-			if not qt then
-				return
-			end
-			-- if buf is not valid, return
-			if not vim.api.nvim_buf_is_valid(buf) then
-				return
-			end
-
-			local flc, llc
-			local fl = qt.first_line
-			local ll = qt.last_line
-			-- remove empty lines from the start and end of the response
-			while fl < ll do
-				-- get content of first_line and last_line
-				flc = vim.api.nvim_buf_get_lines(buf, fl, fl + 1, false)[1]
-				llc = vim.api.nvim_buf_get_lines(buf, ll, ll + 1, false)[1]
-
-				if not flc or not llc then
-					break
-				end
-
-				local flm = flc:match("%S")
-				local llm = llc:match("%S")
-
-				-- break loop if both lines contain non-whitespace characters
-				if flm and llm then
-					break
-				end
-
-				if not flm then
-					M.helpers.undojoin(buf)
-					vim.api.nvim_buf_set_lines(buf, fl, fl + 1, false, {})
-				else
-					M.helpers.undojoin(buf)
-					vim.api.nvim_buf_set_lines(buf, ll, ll + 1, false, {})
-				end
-				ll = ll - 1
-			end
-
-			-- if fl and ll starts with triple backticks, remove these lines
-			if fl < ll and flc and llc and flc:match("^%s*```") and llc:match("^%s*```") then
-				-- remove first line with undojoin
-				M.helpers.undojoin(buf)
-				vim.api.nvim_buf_set_lines(buf, fl, fl + 1, false, {})
-				-- remove last line
-				M.helpers.undojoin(buf)
-				vim.api.nvim_buf_set_lines(buf, ll - 1, ll, false, {})
-				ll = ll - 2
-			end
-			qt.first_line = fl
-			qt.last_line = ll
-
-			-- option to not select response automatically
-			if not M.config.command_auto_select_response then
-				return
-			end
-
-			-- don't select popup response
-			if target == M.Target.popup then
-				return
-			end
-
-			-- default works for rewrite and enew
-			local start = fl
-			local finish = ll
-
-			if target == M.Target.append then
-				start = M._selection_first_line - 1
-			end
-
-			if target == M.Target.prepend then
-				finish = M._selection_last_line + ll - fl
-			end
-
-			-- select from first_line to last_line
-			vim.api.nvim_win_set_cursor(0, { start + 1, 0 })
-			vim.api.nvim_command("normal! V")
-			vim.api.nvim_win_set_cursor(0, { finish + 1, 0 })
-		end
-
-		-- prepare messages
-		local messages = {}
-		local filetype = M.helpers.get_filetype(buf)
-		local filename = vim.api.nvim_buf_get_name(buf)
-
-		local sys_prompt = M.render.prompt_template(agent.system_prompt, command, selection, filetype, filename)
-		sys_prompt = sys_prompt or ""
-		table.insert(messages, { role = "system", content = sys_prompt })
-
-		local repo_instructions = M.repo_instructions()
-		if repo_instructions ~= "" then
-			table.insert(messages, { role = "system", content = repo_instructions })
-		end
-
-		local user_prompt = M.render.prompt_template(template, command, selection, filetype, filename)
-		table.insert(messages, { role = "user", content = user_prompt })
-
-		-- cancel possible visual mode before calling the model
-		M.helpers.feedkeys("<esc>", "xn")
-
-		local cursor = true
-		if not M.config.command_auto_select_response then
-			cursor = false
-		end
-
-		-- mode specific logic
-		if target == M.Target.rewrite then
-			-- delete selection
-			vim.api.nvim_buf_set_lines(buf, start_line - 1, end_line - 1, false, {})
-			-- prepare handler
-			handler = M.dispatcher.create_handler(buf, win, start_line - 1, true, prefix, cursor)
-		elseif target == M.Target.append then
-			-- move cursor to the end of the selection
-			vim.api.nvim_win_set_cursor(0, { end_line, 0 })
-			-- put newline after selection
-			vim.api.nvim_put({ "" }, "l", true, true)
-			-- prepare handler
-			handler = M.dispatcher.create_handler(buf, win, end_line, true, prefix, cursor)
-		elseif target == M.Target.prepend then
-			-- move cursor to the start of the selection
-			vim.api.nvim_win_set_cursor(0, { start_line, 0 })
-			-- put newline before selection
-			vim.api.nvim_put({ "" }, "l", false, true)
-			-- prepare handler
-			handler = M.dispatcher.create_handler(buf, win, start_line - 1, true, prefix, cursor)
-		elseif target == M.Target.popup then
-			M._toggle_close(M._toggle_kind.popup)
-			-- create a new buffer
-			local popup_close = nil
-			buf, win, popup_close, _ = M.render.popup(
-				nil,
-				M._Name .. " popup (close with <esc>/<C-c>)",
-				function(w, h)
-					local top = M.config.style_popup_margin_top or 2
-					local bottom = M.config.style_popup_margin_bottom or 8
-					local left = M.config.style_popup_margin_left or 1
-					local right = M.config.style_popup_margin_right or 1
-					local max_width = M.config.style_popup_max_width or 160
-					local ww = math.min(w - (left + right), max_width)
-					local wh = h - (top + bottom)
-					return ww, wh, top, (w - ww) / 2
-				end,
-				{ on_leave = true, escape = true },
-				{ border = M.config.style_popup_border or "single", zindex = M.config.zindex }
-			)
-			-- set the created buffer as the current buffer
-			vim.api.nvim_set_current_buf(buf)
-			-- set the filetype to markdown
-			vim.api.nvim_set_option_value("filetype", "markdown", { buf = buf })
-			-- better text wrapping
-			vim.api.nvim_command("setlocal wrap linebreak")
-			-- prepare handler
-			handler = M.dispatcher.create_handler(buf, win, 0, false, "", false)
-			M._toggle_add(M._toggle_kind.popup, { win = win, buf = buf, close = popup_close })
-		elseif type(target) == "table" then
-			if target.type == M.Target.new().type then
-				vim.cmd("split")
-				win = vim.api.nvim_get_current_win()
-			elseif target.type == M.Target.vnew().type then
-				vim.cmd("vsplit")
-				win = vim.api.nvim_get_current_win()
-			elseif target.type == M.Target.tabnew().type then
-				vim.cmd("tabnew")
-				win = vim.api.nvim_get_current_win()
-			end
-
-			buf = vim.api.nvim_create_buf(true, true)
-			vim.api.nvim_set_current_buf(buf)
-
-			local group = M.helpers.create_augroup("GpScratchSave" .. M.helpers.uuid(), { clear = true })
-			vim.api.nvim_create_autocmd({ "BufWritePre" }, {
-				buffer = buf,
-				group = group,
-				callback = function(ctx)
-					vim.api.nvim_set_option_value("buftype", "", { buf = ctx.buf })
-					vim.api.nvim_buf_set_name(ctx.buf, ctx.file)
-					vim.api.nvim_command("w!")
-					vim.api.nvim_del_augroup_by_id(ctx.group)
-				end,
-			})
-
-			local ft = target.filetype or filetype
-			vim.api.nvim_set_option_value("filetype", ft, { buf = buf })
-
-			handler = M.dispatcher.create_handler(buf, win, 0, false, "", cursor)
-		end
-
-		-- call the model and write the response
-		M.dispatcher.query(
-			buf,
-			agent.provider,
-			M.dispatcher.prepare_payload(messages, agent.model, agent.provider),
-			handler,
-			vim.schedule_wrap(function(qid)
-				on_exit(qid)
-				vim.cmd("doautocmd User GpDone")
-			end),
-			callback
-		)
-	end
-
-	vim.schedule(function()
-		local args = params.args or ""
-		if args:match("%S") then
-			cb(args)
-			return
-		end
-
-		-- if prompt is not provided, run the command directly
-		if not prompt or prompt == "" then
-			cb(nil)
-			return
-		end
-
-		-- if prompt is provided, ask the user to enter the command
-		vim.ui.input({ prompt = prompt, default = whisper }, function(input)
-			if not input or input == "" then
-				return
-			end
-			cb(input)
-		end)
-	end)
 end
 
 return M
