@@ -1,6 +1,6 @@
--- Gp (GPT prompt) lua plugin for Neovim - Simplified Version
--- https://github.com/Robitx/gp.nvim/
--- This is a simplified version focused on chat functionality only
+-- Parley - A Neovim LLM Chat Plugin
+-- https://github.com/xianxu/parley.nvim/
+-- A streamlined LLM chat interface for Neovim with highlighting and navigation
 
 --------------------------------------------------------------------------------
 -- Module structure

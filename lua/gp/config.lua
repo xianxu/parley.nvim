@@ -1,5 +1,5 @@
--- Gp (GPT prompt) lua plugin for Neovim
--- https://github.com/Robitx/gp.nvim/
+-- Parley - A Neovim LLM Chat Plugin
+-- https://github.com/xianxu/parley.nvim/
 
 --------------------------------------------------------------------------------
 -- Default config
