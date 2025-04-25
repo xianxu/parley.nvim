@@ -81,7 +81,7 @@ local config = {
 			-- string with model name or table with model name and parameters
 			model = { model = "gpt-4.1", temperature = 1.1, top_p = 1 },
 			-- system prompt (use this to specify the persona/role of the AI)
-			system_prompt = chat_system_prompt,
+			system_prompt = require("gp.defaults").chat_system_prompt,
 		},
 		{
 			provider = "openai",
@@ -113,7 +113,7 @@ local config = {
 			-- string with model name or table with model name and parameters
 			model = { model = "claude-3-7-sonnet-latest", temperature = 0.8, top_p = 1 },
 			-- system prompt (use this to specify the persona/role of the AI)
-			system_prompt = chat_system_prompt,
+			system_prompt = require("gp.defaults").chat_system_prompt,
 		},
 		{
 			provider = "anthropic",
@@ -139,7 +139,7 @@ local config = {
 				min_p = 0.05,
 			},
 			-- system prompt (use this to specify the persona/role of the AI)
-			system_prompt = "You are a general AI assistant.",
+			system_prompt = require("gp.defaults").chat_system_prompt,
 			disable = true,
 		},
 	},
@@ -177,7 +177,7 @@ local config = {
 		delete = { modes = { "n", "i", "v", "x" }, shortcut = "<C-d>" },
 	},
 	-- if true, finished ChatResponder won't move the cursor to the end of the buffer
-	chat_free_cursor = false,
+	chat_free_cursor = true,
 	-- use prompt buftype for chats (:h prompt-buffer)
 	chat_prompt_buf_type = false,
 	

@@ -32,7 +32,7 @@ function M.check()
 		vim.health.error("grep is not installed")
 	end
 
-	require("gp.whisper").check_health()
+	-- Whisper module removed in simplified version
 	require("gp.deprecator").check_health()
 end
 

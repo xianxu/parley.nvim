@@ -28,7 +28,7 @@ local deprecated = {
 	chat_system_prompt = "`chat_system_prompt`\n" .. switch_to_agent,
 	command_prompt_prefix = "`command_prompt_prefix`\nPlease use `command_prompt_prefix_template`"
 		.. " with support for \n`{{agent}}` variable so you know which agent is currently active",
-	whisper_max_time = "`whisper_max_time`\nPlease use fully customizable `whisper_rec_cmd`",
+	-- whisper_max_time removed in simplified version,
 
 	openai_api_endpoint = "`openai_api_endpoint`\n\n"
 		.. "Gp.nvim finally supports multiple LLM providers; sorry it took so long.\n"
@@ -43,9 +43,7 @@ local deprecated = {
 		.. "\n  -- azure = {...},\n  -- copilot = {...},\n  -- ollama = {...},\n  -- googleai= {...},\n  -- pplx = {...},\n  -- anthropic = {...},\n},\n"
 		.. "\nThe `openai_api_key` is still supported for backwards compatibility,\n"
 		.. "and automatically converted to `providers.openai.secret` if the new config is not set.",
-	image_dir = "`image_dir`\nPlease use `image = { store_dir = ... }`",
-	whisper_dir = "`whisper_dir`\nPlease use `whisper = { store_dir = ... }`",
-	whisper_api_endpoint = "`whisper_api_endpoint`\nPlease use `whisper = { endpoint = ... }`",
+	-- image and whisper options removed in simplified version,
 }
 
 M.is_valid = function(k, v)
@@ -53,14 +51,7 @@ M.is_valid = function(k, v)
 		table.insert(M._deprecated, { name = k, msg = deprecated[k], value = v })
 		return false
 	end
-	if helpers.starts_with(k, "image_") then
-		table.insert(M._deprecated, { name = k, msg = nested(k, "image"), value = v })
-		return false
-	end
-	if helpers.starts_with(k, "whisper_") then
-		table.insert(M._deprecated, { name = k, msg = nested(k, "whisper"), value = v })
-		return false
-	end
+	-- image_ and whisper_ prefixes removed in simplified version
 	return true
 end
 
