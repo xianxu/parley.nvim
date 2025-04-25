@@ -19,6 +19,7 @@ local M = {
 	helpers = require("gp.helper"), -- helper functions
 	imager = require("gp.imager"), -- image generation module
 	logger = require("gp.logger"), -- logger module
+	outline = require("gp.outline"), -- outline navigation module
 	render = require("gp.render"), -- render module
 	spinner = require("gp.spinner"), -- spinner module
 	tasker = require("gp.tasker"), -- tasker module
@@ -188,6 +189,33 @@ M.setup = function(opts)
 			M.logger.error("The hook '" .. hook .. "' does not exist.")
 		end)
 	end
+	
+	-- Set up global keymaps for commands that should work everywhere
+	vim.keymap.set("n", "<C-g>f", ":" .. M.config.cmd_prefix .. "ChatFinder<CR>", { silent = true, desc = "Open Chat Finder" })
+	vim.keymap.set("i", "<C-g>f", "<ESC>:" .. M.config.cmd_prefix .. "ChatFinder<CR>", { silent = true, desc = "Open Chat Finder" })
+	
+	vim.keymap.set("n", "<C-g>c", ":" .. M.config.cmd_prefix .. "ChatNew<CR>", { silent = true, desc = "Create New Chat" })
+	vim.keymap.set("i", "<C-g>c", "<ESC>:" .. M.config.cmd_prefix .. "ChatNew<CR>", { silent = true, desc = "Create New Chat" })
+	
+	vim.keymap.set("n", "<C-g>a", ":" .. M.config.cmd_prefix .. "NextAgent<CR>", { silent = true, desc = "Cycle to Next Agent" })
+	vim.keymap.set("i", "<C-g>a", "<ESC>:" .. M.config.cmd_prefix .. "NextAgent<CR>", { silent = true, desc = "Cycle to Next Agent" })
+	
+	-- Chat section navigation (search for question/answer markers)
+	vim.keymap.set("n", "<C-g>n", function()
+		local user_prefix = M.config.chat_user_prefix
+		local assistant_prefix = type(M.config.chat_assistant_prefix) == "string" 
+			and M.config.chat_assistant_prefix 
+			or M.config.chat_assistant_prefix[1] or ""
+		vim.cmd("/^" .. vim.pesc(user_prefix) .. "\\|^" .. vim.pesc(assistant_prefix))
+	end, { silent = true, desc = "Search for chat sections" })
+	
+	vim.keymap.set("i", "<C-g>n", function()
+		local user_prefix = M.config.chat_user_prefix
+		local assistant_prefix = type(M.config.chat_assistant_prefix) == "string" 
+			and M.config.chat_assistant_prefix 
+			or M.config.chat_assistant_prefix[1] or ""
+		vim.cmd("/^" .. vim.pesc(user_prefix) .. "\\|^" .. vim.pesc(assistant_prefix))
+	end, { silent = true, desc = "Search for chat sections" })
 
 	local completions = {
 		ChatNew = { "popup", "split", "vsplit", "tabnew" },
@@ -565,6 +593,9 @@ M.prep_chat = function(buf, file_name)
 
 	local ss = M.config.chat_shortcut_stop
 	M.helpers.set_keymap({ buf }, ss.modes, ss.shortcut, M.cmd.Stop, "GPT prompt Chat Stop")
+	
+	-- Set outline navigation keybinding
+	M.helpers.set_keymap({ buf }, "n", "<C-g>t", M.cmd.Outline, "GPT prompt Outline Navigator")
 
 	-- conceal parameters in model header so it's not distracting
 	if M.config.chat_conceal_model_params then
@@ -577,10 +608,76 @@ M.prep_chat = function(buf, file_name)
 	end
 end
 
+-- Define namespace and highlighting colors for questions, annotations, and thinking
+M.highlight_questions = function()
+	-- Set up namespace
+	local ns = vim.api.nvim_create_namespace("gp_question")
+	
+	-- Set up highlight groups
+	vim.api.nvim_set_hl(0, "Question", {
+		fg = "#ffaf00",
+		bold = false,
+		italic = true,
+		sp = "#ffaa00",
+	})
+	
+	vim.api.nvim_set_hl(0, "Annotation", {
+		bg = "#205c2c", 
+		fg = "#ffffff" 
+	})
+	
+	vim.api.nvim_set_hl(0, "Think", {
+		fg = "#777777" 
+	})
+	
+	return ns
+end
+
+-- Function to apply highlighting to chat blocks in the current buffer
+M.highlight_question_block = function(buf)
+	local ns = M.highlight_questions()
+	vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+
+	local in_block = false
+	
+	-- Get the configured prefix values from config
+	local user_prefix = M.config.chat_user_prefix
+	local memory_enabled = M.config.chat_memory and M.config.chat_memory.enable
+	local reasoning_prefix = memory_enabled and M.config.chat_memory.reasoning_prefix or "🧠:"
+	local summary_prefix = memory_enabled and M.config.chat_memory.summary_prefix or "📝:"
+	
+	-- Get the assistant prefix (first part)
+	local assistant_prefix
+	if type(M.config.chat_assistant_prefix) == "string" then
+		assistant_prefix = M.config.chat_assistant_prefix
+	elseif type(M.config.chat_assistant_prefix) == "table" then
+		assistant_prefix = M.config.chat_assistant_prefix[1]
+	end
+
+	for i, line in ipairs(lines) do
+		if line:match("^" .. vim.pesc(reasoning_prefix)) or line:match("^" .. vim.pesc(summary_prefix)) then
+			vim.api.nvim_buf_add_highlight(buf, ns, "Think", i - 1, 0, -1)
+		elseif line:match("^" .. vim.pesc(user_prefix)) then
+			vim.api.nvim_buf_add_highlight(buf, ns, "Question", i - 1, 0, -1)
+			in_block = true
+		elseif line:match("^" .. vim.pesc(assistant_prefix)) then
+			in_block = false
+		elseif in_block then
+			vim.api.nvim_buf_add_highlight(buf, ns, "Question", i - 1, 0, -1)
+		end
+
+		-- Highlight annotations in the format @...@
+		for start_idx, match_text, end_idx in line:gmatch"()@(.-)@()" do
+			vim.api.nvim_buf_add_highlight(buf, ns, "Annotation", i - 1, start_idx - 1, end_idx - 1)
+		end
+	end
+end
+
 M.buf_handler = function()
 	local gid = M.helpers.create_augroup("GpBufHandler", { clear = true })
 
-	M.helpers.autocmd({ "BufEnter" }, nil, function(event)
+	M.helpers.autocmd({ "BufEnter", "TextChanged", "TextChangedI" }, nil, function(event)
 		local buf = event.buf
 
 		if not vim.api.nvim_buf_is_valid(buf) then
@@ -592,6 +689,11 @@ M.buf_handler = function()
 		M.prep_chat(buf, file_name)
 		M.display_chat_agent(buf, file_name)
 		M.prep_context(buf, file_name)
+		
+		-- Apply highlighting to chat files
+		if M.not_chat(buf, file_name) == nil then
+			M.highlight_question_block(buf)
+		end
 	end, gid)
 
 	M.helpers.autocmd({ "WinEnter" }, nil, function(event)
@@ -604,6 +706,11 @@ M.buf_handler = function()
 		local file_name = vim.api.nvim_buf_get_name(buf)
 
 		M.display_chat_agent(buf, file_name)
+		
+		-- Apply highlighting to chat files
+		if M.not_chat(buf, file_name) == nil then
+			M.highlight_question_block(buf)
+		end
 	end, gid)
 end
 
@@ -1491,6 +1598,21 @@ M.cmd.ChatRespond = function(params)
 end
 
 M._chat_finder_opened = false
+
+-- Command for navigating questions and headers in chat documents
+M.cmd.Outline = function()
+	-- Check if current buffer is a chat file
+	local buf = vim.api.nvim_get_current_buf()
+	local file_name = vim.api.nvim_buf_get_name(buf)
+	if M.not_chat(buf, file_name) then
+		M.logger.warning("Outline command is only available in chat files")
+		return
+	end
+	
+	-- Launch the question picker
+	M.outline.question_picker(M.config)
+end
+
 M.cmd.ChatFinder = function()
 	if M._chat_finder_opened then
 		M.logger.warning("Chat finder is already open")
