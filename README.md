@@ -696,7 +696,7 @@ chat_memory = {
     -- prefix for reasoning lines in assistant responses (used to extract summaries)
     reasoning_prefix = "🧠:",
     -- text to replace omitted user messages
-    omit_user_text = "[Previous messages omitted]",
+    omit_user_text = "Summarize previous chat",
 },
 ```
 

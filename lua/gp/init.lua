@@ -933,9 +933,166 @@ M.cmd.ChatDelete = function()
 	end)
 end
 
+-- Structure to represent a parsed chat:
+-- {
+--   headers = { key-value pairs },
+--   exchanges = {
+--     {
+--       question = { line_start = N, line_end = N, content = "text" },
+--       answer = { line_start = N, line_end = N, content = "text" },
+--       summary = { line = N, content = "text" },       -- optional
+--       reasoning = { line = N, content = "text" },     -- optional
+--     },
+--     ...
+--   }
+-- }
+
+-- Parse a chat file into a structured representation
+M.parse_chat = function(lines, header_end)
+	local result = {
+		headers = {},
+		exchanges = {}
+	}
+	
+	-- Parse headers
+	for i = 1, header_end do
+		local line = lines[i]
+		local key, value = line:match("^[-#] (%w+): (.*)")
+		if key ~= nil then
+			result.headers[key] = value
+		end
+	end
+	
+	-- Get prefixes
+	local memory_enabled = M.config.chat_memory and M.config.chat_memory.enable
+	local summary_prefix = memory_enabled and M.config.chat_memory.summary_prefix or "📝:"
+	local reasoning_prefix = memory_enabled and M.config.chat_memory.reasoning_prefix or "🧠:"
+	local user_prefix = M.config.chat_user_prefix
+	local old_user_prefix = "🗨:"
+
+	M.logger.debug("memory config: " .. vim.inspect({memory_enabled, summary_prefix, reasoning_prefix}))
+
+	-- Determine agent prefix
+	local agent_prefix = config.chat_assistant_prefix[1]
+	if type(M.config.chat_assistant_prefix) == "string" then
+		agent_prefix = M.config.chat_assistant_prefix
+	elseif type(M.config.chat_assistant_prefix) == "table" then
+		agent_prefix = M.config.chat_assistant_prefix[1]
+	end
+	
+	-- Track the current exchange and component being built
+	local current_exchange = nil
+	local current_component = nil
+	
+	-- Loop through content lines
+	for i = header_end + 1, #lines do
+		local line = lines[i]
+		
+		-- Check for user message start
+		if line:sub(1, #user_prefix) == user_prefix or line:sub(1, #old_user_prefix) == old_user_prefix then
+			-- If we were building a previous exchange, finalize it
+			if current_exchange and current_component then
+				current_exchange[current_component].line_end = i - 1
+				current_exchange[current_component].content = current_exchange[current_component].content:gsub("^%s*(.-)%s*$", "%1")
+			end
+			
+			-- Start a new exchange
+			current_exchange = {
+				question = {
+					line_start = i,
+					line_end = nil,
+					content = line:sub(line:sub(1, #user_prefix) == user_prefix and #user_prefix + 1 or #old_user_prefix + 1)
+				},
+				answer = nil
+			}
+			table.insert(result.exchanges, current_exchange)
+			current_component = "question"
+		
+		-- Check for assistant message start
+		elseif line:sub(1, #agent_prefix) == agent_prefix then
+			-- If we were building a previous component, finalize it
+			if current_exchange and current_component then
+				current_exchange[current_component].line_end = i - 1
+				current_exchange[current_component].content = current_exchange[current_component].content:gsub("^%s*(.-)%s*$", "%1")
+			end
+			
+			-- Make sure we have an exchange to add this answer to
+			if not current_exchange then
+				-- Handle edge case: assistant message without preceding user message
+				current_exchange = {
+					question = {
+						line_start = header_end + 1,
+						line_end = i - 1,
+						content = ""
+					},
+					answer = nil
+				}
+				table.insert(result.exchanges, current_exchange)
+			end
+			
+			-- Start the answer component
+			current_exchange.answer = {
+				line_start = i,
+				line_end = nil,
+				content = ""
+			}
+			current_component = "answer"
+			
+		-- Check for summary line
+		elseif current_component == "answer" and line:sub(1, #summary_prefix) == summary_prefix then
+			current_exchange.summary = {
+				line = i,
+				content = line:sub(#summary_prefix + 1):gsub("^%s*(.-)%s*$", "%1")
+			}
+			
+		-- Check for reasoning line
+		elseif current_component == "answer" and line:sub(1, #reasoning_prefix) == reasoning_prefix then
+			current_exchange.reasoning = {
+				line = i,
+				content = line:sub(#reasoning_prefix + 1):gsub("^%s*(.-)%s*$", "%1")
+			}
+			
+		-- Handle content continuation
+		elseif current_exchange and current_component then
+			current_exchange[current_component].content = current_exchange[current_component].content .. "\n" .. line
+		end
+	end
+	
+	-- Finalize the last component if needed
+	if current_exchange and current_component then
+		current_exchange[current_component].line_end = #lines
+		current_exchange[current_component].content = current_exchange[current_component].content:gsub("^%s*(.-)%s*$", "%1")
+	end
+	
+	return result
+end
+
+-- Find which exchange contains the given line
+M.find_exchange_at_line = function(parsed_chat, line_number)
+	for i, exchange in ipairs(parsed_chat.exchanges) do
+		-- Check if the line is in the question
+		if exchange.question and 
+		   line_number >= exchange.question.line_start and 
+		   line_number <= exchange.question.line_end then
+			return i, "question"
+		end
+		
+		-- Check if the line is in the answer
+		if exchange.answer and 
+		   line_number >= exchange.answer.line_start and 
+		   line_number <= exchange.answer.line_end then
+			return i, "answer"
+		end
+	end
+	
+	return nil, nil
+end
+
 M.chat_respond = function(params)
 	local buf = vim.api.nvim_get_current_buf()
 	local win = vim.api.nvim_get_current_win()
+	local cursor_pos = vim.api.nvim_win_get_cursor(0)
+	local cursor_line = cursor_pos[1]
 
 	if M.tasker.is_busy(buf) then
 		return
@@ -955,24 +1112,13 @@ M.chat_respond = function(params)
 		return
 	end
 
-	-- headers are fields before first ---
-	local headers = {}
+	-- Find header section end
 	local header_end = nil
-	local line_idx = 0
-	---parse headers
-	for _, line in ipairs(lines) do
-		-- first line starts with ---
+	for i, line in ipairs(lines) do
 		if line:sub(1, 3) == "---" then
-			header_end = line_idx
+			header_end = i
 			break
 		end
-		-- parse header fields
-		local key, value = line:match("^[-#] (%w+): (.*)")
-		if key ~= nil then
-			headers[key] = value
-		end
-
-		line_idx = line_idx + 1
 	end
 
 	if header_end == nil then
@@ -980,26 +1126,56 @@ M.chat_respond = function(params)
 		return
 	end
 
-	-- message needs role and content
-	local messages = {}
-	local role = ""
-	local content = ""
-
-	-- iterate over lines
-	local start_index = header_end + 1
+	-- Parse chat into structured representation
+	local parsed_chat = M.parse_chat(lines, header_end)
+    M.logger.debug("chat_respond: parsed chat: ".. vim.inspect(parsed_chat))
+	
+	-- Determine which part of the chat to process based on cursor position
 	local end_index = #lines
+	local start_index = header_end + 1
+	local exchange_idx, component = M.find_exchange_at_line(parsed_chat, cursor_line)
+    M.logger.debug("chat_respond: exchange_idx and component under cursor ".. tostring(exchange_idx) .. " " .. tostring(component))
+	
+	-- If range was explicitly provided, respect it
 	if params.range == 2 then
 		start_index = math.max(start_index, params.line1)
 		end_index = math.min(end_index, params.line2)
+	else
+		-- Check if cursor is in the middle of the document on a question
+		if exchange_idx and component == "question" then
+			-- Cursor is on a question - process up to the end of this question's answer
+			M.logger.debug("Resubmitting question at exchange #" .. exchange_idx)
+			
+			if parsed_chat.exchanges[exchange_idx].answer then
+				end_index = parsed_chat.exchanges[exchange_idx].answer.line_end
+			else
+				-- If the question has no answer yet, process to the end
+				end_index = #lines
+			end
+			
+			-- Highlight the lines that will be reprocessed
+			local ns_id = vim.api.nvim_create_namespace("GpResubmit")
+			vim.api.nvim_buf_clear_namespace(buf, ns_id, 0, -1)
+			
+			local highlight_start = parsed_chat.exchanges[exchange_idx].question.line_start
+			vim.api.nvim_buf_add_highlight(buf, ns_id, "DiffAdd", highlight_start - 1, 0, -1)
+			
+			-- Always schedule the highlight to clear after a brief delay
+			vim.defer_fn(function()
+				vim.api.nvim_buf_clear_namespace(buf, ns_id, 0, -1)
+			end, 3000)
+		end
 	end
 
+	-- Get agent to use
 	local agent = M.get_chat_agent()
 	local agent_name = agent.name
-
+	
+	-- Process headers for agent information
+	local headers = parsed_chat.headers
+	
 	-- prepare for summary extraction
 	local memory_enabled = M.config.chat_memory and M.config.chat_memory.enable
-	local summary_prefix = memory_enabled and M.config.chat_memory.summary_prefix or "📝:"
-	local reasoning_prefix = memory_enabled and M.config.chat_memory.reasoning_prefix or "🧠:"
 	local max_exchanges = memory_enabled and M.config.chat_memory.max_full_exchanges or 999999
 	local omit_user_text = memory_enabled and M.config.chat_memory.omit_user_text or "[Previous messages omitted]"
 
@@ -1017,7 +1193,6 @@ M.chat_respond = function(params)
 	end
 
 	if headers.role and headers.role:match("%S") then
-		---@diagnostic disable-next-line: cast-local-type
 		agent_name = agent_name .. " & custom role"
 	end
 
@@ -1025,62 +1200,48 @@ M.chat_respond = function(params)
 		headers.provider = "openai"
 	end
 
+	-- Set up agent prefixes
 	local agent_prefix = config.chat_assistant_prefix[1]
 	local agent_suffix = config.chat_assistant_prefix[2]
 	if type(M.config.chat_assistant_prefix) == "string" then
-		---@diagnostic disable-next-line: cast-local-type
 		agent_prefix = M.config.chat_assistant_prefix
 	elseif type(M.config.chat_assistant_prefix) == "table" then
 		agent_prefix = M.config.chat_assistant_prefix[1]
 		agent_suffix = M.config.chat_assistant_prefix[2] or ""
 	end
-	---@diagnostic disable-next-line: cast-local-type
 	agent_suffix = M.render.template(agent_suffix, { ["{{agent}}"] = agent_name })
 
-	local old_default_user_prefix = "🗨:"
-	-- Parse all messages as in the original code
+	-- Convert parsed_chat to messages for the model
 	local all_messages = {}
+	-- message_summaries stores the summary of corresponding exchange.
 	local message_summaries = {}
-
-	-- the following loop extract from past messages a chat thread.
-    -- the first message's empty, which will be repurposed as system message.
-    -- the messages starting for reasoning line and summary line's ignored.
-    -- we assume there's a single line for reasoning/summary per assistant response
-	-- just to keep this parsing code simple.
-	for index = start_index, end_index do
-		local line = lines[index]
-		if line:sub(1, #M.config.chat_user_prefix) == M.config.chat_user_prefix then
-			-- Save previous message unconditionally
-			table.insert(all_messages, { role = role, content = content })
-			role = "user"
-			content = line:sub(#M.config.chat_user_prefix + 1)
-		elseif line:sub(1, #old_default_user_prefix) == old_default_user_prefix then
-			-- Save previous message unconditionally
-			table.insert(all_messages, { role = role, content = content })
-			role = "user"
-			content = line:sub(#old_default_user_prefix + 1)
-		elseif line:sub(1, #agent_prefix) == agent_prefix then
-			-- Save previous message unconditionally
-			table.insert(all_messages, { role = role, content = content })
-			role = "assistant"
-			content = ""
-        elseif role == "assistant" and line:sub(1, #summary_prefix) == summary_prefix then
-		    table.insert(message_summaries, line:sub(#summary_prefix + 1))
-		elseif role == "assistant" and line:sub(1, #reasoning_prefix) == reasoning_prefix then
-		    -- do thing, skip reasoning during request construction
-		elseif role ~= "" then
-			content = content .. "\n" .. line
+	
+	-- Add empty first message that will be replaced with system prompt
+	table.insert(all_messages, { role = "", content = "" })
+	
+	-- Extract exchanges within our processing range
+	for idx, exchange in ipairs(parsed_chat.exchanges) do
+		if exchange.question and exchange.question.line_start >= start_index and 
+		    idx <= exchange_idx then
+			table.insert(all_messages, { role = "user", content = exchange.question.content })
+			
+			if exchange.answer and exchange.answer.line_start <= end_index and idx < exchange_idx then
+		        -- insert assistant response and summary for all previous questions.
+				table.insert(all_messages, { role = "assistant", content = exchange.answer.content })
+				
+				if exchange.summary then
+					table.insert(message_summaries, exchange.summary.content)
+				end
+			end
 		end
 	end
 
-	-- Insert the last message
-	table.insert(all_messages, { role = role, content = content })
+	M.logger.debug("Messages: " .. vim.inspect(all_messages))
 
-	M.logger.debug("Found " .. #message_summaries .. " summary lines")
-
-	-- Now apply summarization if memory feature is enabled and we have enough messages
-	if memory_enabled and #all_messages > 0 then
-		local total_exchanges = math.floor(#all_messages / 2)
+	-- simplify all_messages and message_summaries into messages, by use message_summaries instead of precise exchange recorded in all_messages
+	local messages = {}
+	if memory_enabled and #all_messages > 1 then -- Skip the empty first message
+		local total_exchanges = math.floor((#all_messages - 1) / 2)
 
 		if total_exchanges > max_exchanges then
 			-- Keep only the most recent exchanges
@@ -1095,14 +1256,12 @@ M.chat_respond = function(params)
 				}
 
 				-- Compile all summary lines into one message
-	            M.logger.debug("# of summaries: ".. tostring(#message_summaries))
+				M.logger.debug("# of summaries: ".. tostring(#message_summaries) .. " and messages: " .. tostring(#all_messages))
 				if #message_summaries > 0 then
 					local summary_content = " "
-				    for i = 1, #message_summaries - max_exchanges do
+					for i = 1, #message_summaries - max_exchanges do
 						summary_content = summary_content .. message_summaries[i] .. "\n"
 					end
-
-		            M.logger.debug("previous summaries: ".. tostring(summary_content))
 
 					table.insert(messages, {
 						role = "assistant",
@@ -1127,7 +1286,7 @@ M.chat_respond = function(params)
 		messages = all_messages
 	end
 
-    M.logger.debug("messages to send" .. vim.inspect(messages))
+	M.logger.debug("messages to send" .. vim.inspect(messages))
 
 	-- replace first empty message with system prompt
 	content = ""
@@ -1147,40 +1306,71 @@ M.chat_respond = function(params)
 		message.content = message.content:gsub("^%s*(.-)%s*$", "%1")
 	end
 
-	-- write assistant prompt
-	local last_content_line = M.helpers.last_content_line(buf)
-	vim.api.nvim_buf_set_lines(buf, last_content_line, last_content_line, false, { "", agent_prefix .. agent_suffix, "" })
+	-- Find where to insert assistant response
+	local response_line = M.helpers.last_content_line(buf)
+	
+	-- If cursor is on a question, handle insertion based on question position
+	if exchange_idx and (component == "question" or component == "answer") then
+		if parsed_chat.exchanges[exchange_idx].answer then
+			-- If question already has an answer, replace it
+			local answer = parsed_chat.exchanges[exchange_idx].answer
+			
+			-- Delete the existing answer
+			vim.api.nvim_buf_set_lines(buf, answer.line_start - 1, answer.line_end, false, {})
+			
+			-- Set response line to insert at answer position
+			response_line = answer.line_start - 2
+		else
+			-- New question (no answer yet)
+			-- Insert right after the question
+			local question_end = parsed_chat.exchanges[exchange_idx].question.line_end
+			response_line = question_end - 1
+			
+			-- Check if this is a question in the middle (not the last one)
+			-- If so, we need to make sure we don't have to insert anything
+			-- since we'll just insert at the end of the question anyway
+			M.logger.debug("New question in middle - inserting after line " .. question_end)
+		end
+	end
+
+	-- Write assistant prompt
+	vim.api.nvim_buf_set_lines(buf, response_line, response_line, false, { "", agent_prefix .. agent_suffix, "" })
 
 	-- call the model and write response
 	M.dispatcher.query(
 		buf,
 		headers.provider or agent.provider,
 		M.dispatcher.prepare_payload(messages, headers.model or agent.model, headers.provider or agent.provider),
-		M.dispatcher.create_handler(buf, win, M.helpers.last_content_line(buf), true, "", not M.config.chat_free_cursor),
+		M.dispatcher.create_handler(buf, win, response_line + 2, true, "", not M.config.chat_free_cursor),
 		vim.schedule_wrap(function(qid)
 			local qt = M.tasker.get_query(qid)
 			if not qt then
 				return
 			end
 
-			-- write user prompt
-			last_content_line = M.helpers.last_content_line(buf)
-			M.helpers.undojoin(buf)
-			vim.api.nvim_buf_set_lines(
-				buf,
-				last_content_line,
-				last_content_line,
-				false,
-				{ "", "", M.config.chat_user_prefix, "" }
-			)
+			-- Only add a new user prompt at the end if we're not in the middle of the document
+           M.logger.debug("exchange_idx: " .. tostring(exchange_idx) .. " and #parsed_chat: " .. tostring(#parsed_chat))
 
-			-- delete whitespace lines at the end of the file
-			last_content_line = M.helpers.last_content_line(buf)
-			M.helpers.undojoin(buf)
-			vim.api.nvim_buf_set_lines(buf, last_content_line, -1, false, {})
-			-- insert a new line at the end of the file
-			M.helpers.undojoin(buf)
-			vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "" })
+			if exchange_idx == #parsed_chat.exchanges then
+				-- write user prompt at the end
+				last_content_line = M.helpers.last_content_line(buf)
+				M.helpers.undojoin(buf)
+				vim.api.nvim_buf_set_lines(
+					buf,
+					last_content_line,
+					last_content_line,
+					false,
+					{ "", "", M.config.chat_user_prefix, "" }
+				)
+
+				-- delete whitespace lines at the end of the file
+				last_content_line = M.helpers.last_content_line(buf)
+				M.helpers.undojoin(buf)
+				vim.api.nvim_buf_set_lines(buf, last_content_line, -1, false, {})
+				-- insert a new line at the end of the file
+				M.helpers.undojoin(buf)
+				vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "" })
+			end
 
 			-- if topic is ?, then generate it
 			if headers.topic == "?" then
@@ -1221,9 +1411,18 @@ M.chat_respond = function(params)
 					end)
 				)
 			end
+			
+			-- Place cursor appropriately
 			if not M.config.chat_free_cursor then
-				local line = vim.api.nvim_buf_line_count(buf)
-				M.helpers.cursor_to_line(line, buf, win)
+				if exchange_idx and component == "question" then
+					-- If we replaced an answer in the middle, move cursor to that position
+					local line = response_line + 2
+					M.helpers.cursor_to_line(line, buf, win)
+				else
+					-- Otherwise, move to the end of the buffer
+					local line = vim.api.nvim_buf_line_count(buf)
+					M.helpers.cursor_to_line(line, buf, win)
+				end
 			end
 			vim.cmd("doautocmd User GpDone")
 		end)
@@ -1245,18 +1444,49 @@ M.cmd.ChatRespond = function(params)
 		return
 	end
 
+	-- Get all lines of the buffer
 	local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-	local cur_index = #lines
-	while cur_index > 0 and n_requests > 0 do
-		if lines[cur_index]:sub(1, #M.config.chat_user_prefix) == M.config.chat_user_prefix then
-			n_requests = n_requests - 1
+	
+	-- Find header section end
+	local header_end = nil
+	for i, line in ipairs(lines) do
+		if line:sub(1, 3) == "---" then
+			header_end = i
+			break
 		end
-		cur_index = cur_index - 1
 	end
 
-	params.range = 2
-	params.line1 = cur_index + 1
-	params.line2 = #lines
+	if header_end == nil then
+		M.logger.error("Error while parsing headers: --- not found. Check your chat template.")
+		return
+	end
+	
+	-- Parse chat structure to find exchanges
+	local parsed_chat = M.parse_chat(lines, header_end)
+    M.logger.debug("ChatRespond: parsed chat: ".. vim.inspect(parsed_chat))
+	
+	-- Find the nth question from the end
+	if #parsed_chat.exchanges >= n_requests then
+		local exchange_idx = #parsed_chat.exchanges - n_requests + 1
+		
+		-- Set range to process everything from start up to the identified exchange
+		if parsed_chat.exchanges[exchange_idx].answer then
+			params.range = 2
+			params.line1 = header_end + 1
+			params.line2 = parsed_chat.exchanges[exchange_idx].answer.line_end
+		else
+			-- If no answer, process to the end of the file
+			params.range = 2
+			params.line1 = header_end + 1
+			params.line2 = #lines
+		end
+	else
+		-- If not enough exchanges, process everything
+		params.range = 2
+		params.line1 = header_end + 1
+		params.line2 = #lines
+	end
+	
 	M.chat_respond(params)
 end
 
