@@ -47,7 +47,9 @@ Each chat transcript is really just a markdown file, with some conventions.
 With this, any question asked is associated with context of all questions and answers coming before this question. When the chat gets too long and the chat_memory is enabled, chat exchanges earlier in the transcript will be represented by the summary line (📝:).
 
 ## Interaction
-Place cursor in the question area, and `<C-g>g`, to ask assistant about it. If the question is at the end of document, it's a new question. Otherwise, a previously asked question is asked again, and previous answer replaced by new answers. You might want to do this, for example, if upon learning, you tweaks your questions more precisely.
+Place cursor in the question area, and `<C-g>g`, to ask assistant about it. If the question is at the end of document, it's a new question. Otherwise, a previously asked question is asked again, and previous answer replaced by new answers. You might want to do this, for example, if upon learning, you tweaks your questions more precisely. 
+
+Because you can update previous questions and even assistant's answers, the answers of future questions, re-asked or not, will be different, subtly influenced by all those. After all, we are dealing with a statistical machine here.
 
 The 🧠:, 📝: are done through system prompt. It seems to work fine, but there's no guarantee. If assistant omitted those lines, you can update the question to include: "remember to reply 🧠: lines for your reasoning, and 📝: for your summary". Something like that.
 
