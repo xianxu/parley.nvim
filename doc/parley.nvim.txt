@@ -21,12 +21,7 @@ Table of Contents                                *parley.nvim-table-of-contents*
 
 **ChatGPT-like sessions with highlighting and navigation, focused on simplicity and readability.**
 
-
-YOUTUBE DEMOS ~
-
-- 5-min-demo <https://www.youtube.com/watch?v=X-cT7s47PLo> (December 2023)
-- older-5-min-demo <https://www.youtube.com/watch?v=wPDcBnQgNCc> (screen capture, no sound)
-
+** TO BE UPDATED **
 
 ==============================================================================
 1. Goals and Features                             *parley.nvim-goals-and-features*
