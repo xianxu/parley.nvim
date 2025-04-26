@@ -46,7 +46,7 @@ local config = {
 			-- secret will be loaded from api_keys.openai
 		},
 		anthropic = {
-			disable = true,
+			disable = false,
 			endpoint = "https://api.anthropic.com/v1/messages",
 			-- secret will be loaded from api_keys.anthropic
 		},
@@ -154,6 +154,17 @@ local config = {
 			-- system prompt (use this to specify the persona/role of the AI)
 			system_prompt = require("parley.defaults").chat_system_prompt,
 			disable = true,
+		},
+		{
+			provider = "googleai",
+			name = "Gemini2.5-Flash",
+			chat = true,
+			command = false,
+			-- model list: https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash
+			-- string with model name or table with model name and parameters
+			model = { model = "gemini-2.5-flash-preview-04-17", temperature = 1.1, top_p = 1 },
+			-- system prompt (use this to specify the persona/role of the AI)
+			system_prompt = require("parley.defaults").chat_system_prompt,
 		},
 	},
 
