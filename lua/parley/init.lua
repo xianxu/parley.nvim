@@ -65,11 +65,29 @@ M.setup = function(opts)
 
 	M.vault.setup({ state_dir = state_dir, curl_params = curl_params })
 
-	M.vault.add_secret("openai_api_key", openai_api_key)
-	M.config.openai_api_key = nil
-	opts.openai_api_key = nil
+	-- Process API keys from api_keys table and load them into vault
+	local api_keys = opts.api_keys or M.config.api_keys or {}
+	for provider_name, api_key in pairs(api_keys) do
+		if api_key then
+			M.logger.debug("Loading " .. provider_name .. " API key into vault")
+			M.vault.add_secret(provider_name, api_key)
+		end
+	end
+	
+	-- Process providers and inject secrets from vault if needed
+	local providers = opts.providers or M.config.providers or {}
+	for provider_name, provider in pairs(providers) do
+		if provider and type(provider) == "table" and not provider.secret and api_keys[provider_name] then
+			M.logger.debug("Setting " .. provider_name .. " provider secret from api_keys")
+			provider.secret = api_keys[provider_name]
+		end
+	end
 
-	M.dispatcher.setup({ providers = opts.providers, curl_params = curl_params })
+	M.dispatcher.setup({ providers = providers, curl_params = curl_params })
+	
+	-- Clear sensitive data from config
+	M.config.api_keys = nil
+	opts.api_keys = nil
 	M.config.providers = nil
 	opts.providers = nil
 

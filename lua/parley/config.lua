@@ -20,33 +20,45 @@ local config = {
 	-- openai_api_key = os.getenv("env_name.."),
 	-- openai_api_key = os.getenv("OPENAI_API_KEY"),
 
+	-- API keys for each provider - easy to override just this section without copying entire config
+	-- Set these in your local configuration - this is separate from providers section
+	api_keys = {
+		-- Different ways to provide API keys (from lowest to highest security):
+		-- 1. Hardcode: api_key = "sk-..."
+		-- 2. Environment variable: api_key = os.getenv("OPENAI_API_KEY")
+		-- 3. File: api_key = { "cat", "/path/to/api_key_file" }
+		-- 4. Password manager: api_key = { "pass", "show", "openai-key" }
+		-- 5. macOS Keychain: api_key = { "security", "find-generic-password", "-a", "your_username", "-s", "OPENAI_API_KEY", "-w" }
+		
+		openai = os.getenv("OPENAI_API_KEY"),
+		anthropic = os.getenv("ANTHROPIC_API_KEY"),
+		googleai = os.getenv("GOOGLEAI_API_KEY"),
+		ollama = "dummy_secret", -- ollama typically uses a dummy token for local instances
+		copilot = os.getenv("GITHUB_TOKEN"), -- for GitHub Copilot
+	},
+	
 	-- at least one working provider is required
 	-- to disable a provider set it to empty table like openai = {}
 	providers = {
-		-- secrets can be strings or tables with command and arguments
-		-- secret = { "cat", "path_to/openai_api_key" },
-		-- secret = { "bw", "get", "password", "OPENAI_API_KEY" },
-		-- secret : "sk-...",
-		-- secret = os.getenv("env_name.."),
 		openai = {
 			disable = false,
 			endpoint = "https://api.openai.com/v1/chat/completions",
-			secret = os.getenv("OPENAI_API_KEY"),
+			-- secret will be loaded from api_keys.openai
 		},
 		anthropic = {
 			disable = true,
 			endpoint = "https://api.anthropic.com/v1/messages",
-			secret = os.getenv("ANTHROPIC_API_KEY"),
+			-- secret will be loaded from api_keys.anthropic
 		},
 		googleai = {
 			disable = false,
 			endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{{model}}:streamGenerateContent?key={{secret}}",
-			secret = os.getenv("GOOGLEAI_API_KEY"),
+			-- secret will be loaded from api_keys.googleai
 		},
 		ollama = {
 			disable = true,
 			endpoint = "http://localhost:11434/v1/chat/completions",
-			secret = "dummy_secret",
+			-- secret will be loaded from api_keys.ollama
 		},
 	},
 
