@@ -3,7 +3,7 @@
 -- A streamlined LLM chat interface for Neovim with highlighting and navigation
 
 --------------------------------------------------------------------------------
--- Module structure
+-- This is the main module
 --------------------------------------------------------------------------------
 local config = require("parley.config")
 
@@ -30,17 +30,13 @@ local M = {
 --------------------------------------------------------------------------------
 
 local agent_completion = function()
-	local buf = vim.api.nvim_get_current_buf()
-	local file_name = vim.api.nvim_buf_get_name(buf)
-	if M.not_chat(buf, file_name) == nil then
-		return M._chat_agents
-	end
-	return M._command_agents
+	return M._agents
 end
 
 -- setup function
 M._setup_called = false
----@param opts ParleyConfig? # table with options
+---@param opts the one returned from config.lua, it can come from several sources, either fully specified
+---            in ~/.config/nvim/lua/parley/config.lua, or partially overrides from ~/.config/nvim/lua/plugins/parley.lua
 M.setup = function(opts)
 	M._setup_called = true
 
@@ -148,34 +144,23 @@ M.setup = function(opts)
 		end
 	end
 
-	-- prepare agent completions
-	M._chat_agents = {}
-	M._command_agents = {}
+	-- prepare agent list
+	M._agents = {}
 	for name, agent in pairs(M.agents) do
 		M.agents[name].provider = M.agents[name].provider or "openai"
 
 		if M.dispatcher.providers[M.agents[name].provider] then
-			if agent.command then
-				table.insert(M._command_agents, name)
-			end
-			if agent.chat then
-				table.insert(M._chat_agents, name)
-			end
+			table.insert(M._agents, name)
 		else
 			M.agents[name] = nil
 		end
 	end
-	table.sort(M._chat_agents)
-	table.sort(M._command_agents)
+	table.sort(M._agents)
 
 	M.refresh_state()
 
-	if M.config.default_command_agent then
-		M.refresh_state({ command_agent = M.config.default_command_agent })
-	end
-
-	if M.config.default_chat_agent then
-		M.refresh_state({ chat_agent = M.config.default_chat_agent })
+	if M.config.default_agent then
+		M.refresh_state({ agent = M.config.default_agent })
 	end
 
 	-- register user commands
@@ -273,12 +258,8 @@ M.refresh_state = function(update)
 		M._state[k] = v
 	end
 
-	if not M._state.chat_agent or not M.agents[M._state.chat_agent] then
-		M._state.chat_agent = M._chat_agents[1]
-	end
-
-	if not M._state.command_agent or not M.agents[M._state.command_agent] then
-		M._state.command_agent = M._command_agents[1]
+	if not M._state.agent or not M.agents[M._state.agent] then
+		M._state.agent = M._agents[1]
 	end
 
 	if M._state.last_chat and vim.fn.filereadable(M._state.last_chat) == 0 then
@@ -303,7 +284,7 @@ M.refresh_state = function(update)
 
 	local buf = vim.api.nvim_get_current_buf()
 	local file_name = vim.api.nvim_buf_get_name(buf)
-	M.display_chat_agent(buf, file_name)
+	M.display_agent(buf, file_name)
 end
 
 -- stop receiving gpt responses for all processes and clean the handles
@@ -333,6 +314,8 @@ M.prep_md = function(buf)
 	M.helpers.feedkeys("<esc>", "xn")
 end
 
+--- Checks if a file should be considered a chat transcript, it enforces that a file needs to be in chat_dir
+--- and have header portion. Also first line needs to start with # (for the topic)
 ---@param buf number # buffer number
 ---@param file_name string # file name
 ---@return string | nil # reason for not being a chat or nil if it is a chat
@@ -367,7 +350,7 @@ M.not_chat = function(buf, file_name)
 	return nil
 end
 
-M.display_chat_agent = function(buf, file_name)
+M.display_agent = function(buf, file_name)
 	if M.not_chat(buf, file_name) then
 		return
 	end
@@ -384,7 +367,7 @@ M.display_chat_agent = function(buf, file_name)
 		right_gravity = true,
 		virt_text_pos = "right_align",
 		virt_text = {
-			{ "Current Agent: [" .. M._state.chat_agent .. "]", "DiagnosticHint" },
+			{ "Current Agent: [" .. M._state.agent .. "]", "DiagnosticHint" },
 		},
 		hl_mode = "combine",
 	})
@@ -562,7 +545,7 @@ M.buf_handler = function()
 		local file_name = vim.api.nvim_buf_get_name(buf)
 
 		M.prep_chat(buf, file_name)
-		M.display_chat_agent(buf, file_name)
+		M.display_agent(buf, file_name)
 		
 		-- Apply highlighting to chat files
 		if M.not_chat(buf, file_name) == nil then
@@ -579,7 +562,7 @@ M.buf_handler = function()
 
 		local file_name = vim.api.nvim_buf_get_name(buf)
 
-		M.display_chat_agent(buf, file_name)
+		M.display_agent(buf, file_name)
 		
 		-- Apply highlighting to chat files
 		if M.not_chat(buf, file_name) == nil then
@@ -610,7 +593,7 @@ M.open_buf = function(file_name)
 end
 
 ---@param system_prompt string | nil # system prompt to use
----@param agent table | nil # obtained from get_chat_agent
+---@param agent table | nil # obtained from get_agent
 ---@return number # buffer number
 M.new_chat = function(system_prompt, agent)
 	local filename = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
@@ -664,7 +647,7 @@ end
 
 ---@param params table
 ---@param system_prompt string | nil
----@param agent table | nil # obtained from get_chat_agent
+---@param agent table | nil # obtained from get_agent
 ---@return number # buffer number
 M.cmd.ChatNew = function(params, system_prompt, agent)
 	-- Simple version that just creates a new chat
@@ -931,7 +914,7 @@ M.chat_respond = function(params)
 	end
 
 	-- Get agent to use
-	local agent = M.get_chat_agent()
+	local agent = M.get_agent()
 	local agent_name = agent.name
 	
 	-- Process headers for agent information
@@ -1356,7 +1339,7 @@ end
 M.cmd.Agent = function(params)
 	local agent_name = string.gsub(params.args, "^%s*(.-)%s*$", "%1")
 	if agent_name == "" then
-		M.logger.info(" Chat agent: " .. M._state.chat_agent .. "  |  Command agent: " .. M._state.command_agent)
+		M.logger.info("Current agent: " .. M._state.agent)
 		return
 	end
 
@@ -1365,43 +1348,17 @@ M.cmd.Agent = function(params)
 		return
 	end
 
-	local buf = vim.api.nvim_get_current_buf()
-	local file_name = vim.api.nvim_buf_get_name(buf)
-	local is_chat = M.not_chat(buf, file_name) == nil
-	if is_chat and M.agents[agent_name].chat then
-		M.refresh_state({ chat_agent = agent_name })
-		M.logger.info("Chat agent: " .. M._state.chat_agent)
-	elseif M.agents[agent_name].command then
-		M.refresh_state({ command_agent = agent_name })
-		M.logger.info("Command agent: " .. M._state.command_agent)
-	else
-		M.logger.warning(agent_name .. " is not a valid agent for current buffer")
-		M.refresh_state()
-	end
+	M.refresh_state({ agent = agent_name })
+	M.logger.info("Agent set to: " .. M._state.agent)
 end
 
 M.cmd.NextAgent = function()
-	local buf = vim.api.nvim_get_current_buf()
-	local file_name = vim.api.nvim_buf_get_name(buf)
-	local is_chat = M.not_chat(buf, file_name) == nil
-	local current_agent, agent_list
-
-	if is_chat then
-		current_agent = M._state.chat_agent
-		agent_list = M._chat_agents
-	else
-		current_agent = M._state.command_agent
-		agent_list = M._command_agents
-	end
+	local current_agent = M._state.agent
+	local agent_list = M._agents
 
 	local set_agent = function(agent_name)
-		if is_chat then
-			M.refresh_state({ chat_agent = agent_name })
-			M.logger.info("Chat agent: " .. M._state.chat_agent)
-		else
-			M.refresh_state({ command_agent = agent_name })
-			M.logger.info("Command agent: " .. M._state.command_agent)
-		end
+		M.refresh_state({ agent = agent_name })
+		M.logger.info("Agent: " .. M._state.agent)
 	end
 
 	for i, agent_name in ipairs(agent_list) do
@@ -1414,19 +1371,19 @@ M.cmd.NextAgent = function()
 end
 
 ---@param name string | nil
----@return table | nil # { cmd_prefix, name, model, system_prompt, provider}
-M.get_command_agent = function(name)
-	name = name or M._state.command_agent
+---@return table # { cmd_prefix, name, model, system_prompt, provider }
+M.get_agent = function(name)
+	name = name or M._state.agent
 	if M.agents[name] == nil then
-		M.logger.warning("Command Agent " .. name .. " not found, using " .. M._state.command_agent)
-		name = M._state.command_agent
+		M.logger.warning("Agent " .. name .. " not found, using " .. M._state.agent)
+		name = M._state.agent
 	end
 	local template = M.config.command_prompt_prefix_template
 	local cmd_prefix = M.render.template(template, { ["{{agent}}"] = name })
 	local model = M.agents[name].model
 	local system_prompt = M.agents[name].system_prompt
 	local provider = M.agents[name].provider
-	M.logger.debug("getting command agent: " .. name)
+	M.logger.debug("getting agent: " .. name)
 	return {
 		cmd_prefix = cmd_prefix,
 		name = name,
@@ -1436,27 +1393,7 @@ M.get_command_agent = function(name)
 	}
 end
 
----@param name string | nil
----@return table # { cmd_prefix, name, model, system_prompt, provider }
-M.get_chat_agent = function(name)
-	name = name or M._state.chat_agent
-	if M.agents[name] == nil then
-		M.logger.warning("Chat Agent " .. name .. " not found, using " .. M._state.chat_agent)
-		name = M._state.chat_agent
-	end
-	local template = M.config.command_prompt_prefix_template
-	local cmd_prefix = M.render.template(template, { ["{{agent}}"] = name })
-	local model = M.agents[name].model
-	local system_prompt = M.agents[name].system_prompt
-	local provider = M.agents[name].provider
-	M.logger.debug("getting chat agent: " .. name)
-	return {
-		cmd_prefix = cmd_prefix,
-		name = name,
-		model = model,
-		system_prompt = system_prompt,
-		provider = provider,
-	}
-end
+-- Aliases for backwards compatibility
+M.get_chat_agent = M.get_agent
 
 return M

@@ -76,21 +76,17 @@ local config = {
 	-- directory for persisting state dynamically changed by user (like model or persona)
 	state_dir = vim.fn.stdpath("data"):gsub("/$", "") .. "/parley/persisted",
 
-	-- default agent names set during startup, if nil last used agent is used
-	default_command_agent = nil,
-	default_chat_agent = nil,
+	-- default agent name set during startup, if nil last used agent is used
+	default_agent = nil,
 
-	-- default chat agents (model + persona)
+	-- default agents (model + persona)
 	-- name, model and system_prompt are mandatory fields
-	-- to use agent for chat set chat = true, for command set command = true
 	-- to remove some default agent completely set it like:
 	-- agents = {  { name = "ChatGPT3-5", disable = true, }, ... },
 	agents = {
 		{
 			provider = "openai",
 			name = "ChatGPT4.1",
-			chat = true,
-			command = false,
 			-- string with model name or table with model name and parameters
 			model = { model = "gpt-4.1", temperature = 1.1, top_p = 1 },
 			-- system prompt (use this to specify the persona/role of the AI)
@@ -99,8 +95,6 @@ local config = {
 		{
 			provider = "openai",
 			name = "ChatGPT4o",
-			chat = true,
-			command = false,
 			-- string with model name or table with model name and parameters
 			model = { model = "gpt-4o", temperature = 1.1, top_p = 1 },
 			-- system prompt (use this to specify the persona/role of the AI)
@@ -110,8 +104,6 @@ local config = {
 		{
 			provider = "openai",
 			name = "ChatGPT-o3-mini",
-			chat = true,
-			command = false,
 			-- string with model name or table with model name and parameters
 			model = { model = "o3-mini", temperature = 1.1, top_p = 1 },
 			-- system prompt (use this to specify the persona/role of the AI)
@@ -121,8 +113,6 @@ local config = {
 		{
 			provider = "anthropic",
 			name = "ChatClaude-3-7-Sonnet",
-			chat = true,
-			command = false,
 			-- string with model name or table with model name and parameters
 			model = { model = "claude-3-7-sonnet-latest", temperature = 0.8, top_p = 1 },
 			-- system prompt (use this to specify the persona/role of the AI)
@@ -131,19 +121,14 @@ local config = {
 		{
 			provider = "anthropic",
 			name = "ChatClaude-3-7-Haiku",
-			chat = true,
-			command = false,
 			-- string with model name or table with model name and parameters
-			model = { model = "claude-3-5-haiku-latest", temperature = 0.8, top_p = 1 },
+			model = { model = "claude-3-7-haiku-latest", temperature = 0.8, top_p = 1 },
 			-- system prompt (use this to specify the persona/role of the AI)
 			system_prompt = require("parley.defaults").chat_system_prompt,
-			disable = true,
 		},
 		{
 			provider = "ollama",
 			name = "ChatOllamaLlama3.1-8B",
-			chat = true,
-			command = false,
 			-- string with model name or table with model name and parameters
 			model = {
 				model = "llama3.1",
@@ -158,8 +143,6 @@ local config = {
 		{
 			provider = "googleai",
 			name = "Gemini2.5-Flash",
-			chat = true,
-			command = false,
 			-- model list: https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash
 			-- string with model name or table with model name and parameters
 			model = { model = "gemini-2.5-flash-preview-04-17", temperature = 1.1, top_p = 1 },

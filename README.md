@@ -71,6 +71,16 @@ Snippets for your preferred package manager:
     config = function()
         local conf = {
             -- For customization, refer to Install > Configuration in the Documentation/Readme
+			-- Typically you should override the api_keys, e.g. if you are using Mac Keychain to store API keys.
+            -- Use the following to add api keys to Mac Keychain.
+	        -- security add-generic-password -a "your_username" -s "OPENAI_API_KEY" -w "your_api_key" -U
+			api_keys = {
+                openai = { "security", "find-generic-password", "-a", "your_username", "-s", "OPENAI_API_KEY", "-w" },
+                anthropic = { "security", "find-generic-password", "-a", "your_username", "-s", "ANTHROPIC_API_KEY", "-w" },
+                googleai = { "security", "find-generic-password", "-a", "your_username", "-s", "GOOGLEAI_API_KEY", "-w" },
+                ollama = "dummy_secret",
+            },
+
         }
         require("parley").setup(conf)
 
@@ -86,6 +96,15 @@ use({
     config = function()
         local conf = {
             -- For customization, refer to Install > Configuration in the Documentation/Readme
+			-- Typically you should override the api_keys, e.g. if you are using Mac Keychain to store API keys.
+            -- Use the following to add api keys to Mac Keychain.
+	        -- security add-generic-password -a "your_username" -s "OPENAI_API_KEY" -w "your_api_key" -U
+			api_keys = {
+                openai = { "security", "find-generic-password", "-a", "your_username", "-s", "OPENAI_API_KEY", "-w" },
+                anthropic = { "security", "find-generic-password", "-a", "your_username", "-s", "ANTHROPIC_API_KEY", "-w" },
+                googleai = { "security", "find-generic-password", "-a", "your_username", "-s", "GOOGLEAI_API_KEY", "-w" },
+                ollama = "dummy_secret",
+            },
         }
         require("parley").setup(conf)
 
@@ -100,6 +119,15 @@ Plug 'xianxu/parley.nvim'
 
 local conf = {
     -- For customization, refer to Install > Configuration in the Documentation/Readme
+	-- Typically you should override the api_keys, e.g. if you are using Mac Keychain to store API keys.
+    -- Use the following to add api keys to Mac Keychain.
+    -- security add-generic-password -a "your_username" -s "OPENAI_API_KEY" -w "your_api_key" -U
+	api_keys = {
+        openai = { "security", "find-generic-password", "-a", "your_username", "-s", "OPENAI_API_KEY", "-w" },
+        anthropic = { "security", "find-generic-password", "-a", "your_username", "-s", "ANTHROPIC_API_KEY", "-w" },
+        googleai = { "security", "find-generic-password", "-a", "your_username", "-s", "GOOGLEAI_API_KEY", "-w" },
+        ollama = "dummy_secret",
+    },
 }
 require("parley").setup(conf)
 

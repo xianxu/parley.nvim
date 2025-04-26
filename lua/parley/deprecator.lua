@@ -83,7 +83,7 @@ UnitTests = function(parley, params)
     local template = "I have the following code from {{filename}}:\n\n"
         .. "```{{filetype}}\n{{selection}}\n```\n\n"
         .. "Please respond by writing table driven unit tests for the code above."
-    local agent = parley.get_command_agent()
+    local agent = parley.get_chat_agent()
     parley.Prompt(params, parley.Target.vnew, agent, template)
 end,
 ]]

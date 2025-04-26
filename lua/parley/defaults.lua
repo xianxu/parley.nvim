@@ -20,6 +20,7 @@ M.chat_system_prompt = "A conversation between You and Me. \n\n"
 	.. "When providing code, make sure it works.\n\n"
 	.. "After you finish your answer, create a single plaintext line summary of my question, key points and facts of your answer.\n\n"
 	.. "This summary should the format of: you asked about [summary of question], I answered with [summary of answer], without any newline, no need to form proper sentence, prefixed with 📝:.\n\n"
+	.. "Leaving an empty line between reasoning line (🧠:), main answer, and summary line (📝:).\n\n"
 
 M.code_system_prompt = "You are an AI working as a code editor.\n\n"
 	.. "Please AVOID COMMENTARY OUTSIDE OF THE SNIPPET RESPONSE.\n"
