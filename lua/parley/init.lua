@@ -173,31 +173,34 @@ M.setup = function(opts)
 	end
 	
 	-- Set up global keymaps for commands
-	vim.keymap.set("n", "<C-g>f", ":" .. M.config.cmd_prefix .. "ChatFinder<CR>", { silent = true, desc = "Open Chat Finder" })
-	vim.keymap.set("i", "<C-g>f", "<ESC>:" .. M.config.cmd_prefix .. "ChatFinder<CR>", { silent = true, desc = "Open Chat Finder" })
+	if M.config.global_shortcut_finder then
+		for _, mode in ipairs(M.config.global_shortcut_finder.modes) do
+			if mode == "n" then
+				vim.keymap.set(mode, M.config.global_shortcut_finder.shortcut, ":" .. M.config.cmd_prefix .. "ChatFinder<CR>", { silent = true, desc = "Open Chat Finder" })
+			elseif mode == "i" then
+				vim.keymap.set(mode, M.config.global_shortcut_finder.shortcut, "<ESC>:" .. M.config.cmd_prefix .. "ChatFinder<CR>", { silent = true, desc = "Open Chat Finder" })
+			end
+		end
+	end
 	
-	vim.keymap.set("n", "<C-g>c", ":" .. M.config.cmd_prefix .. "ChatNew<CR>", { silent = true, desc = "Create New Chat" })
-	vim.keymap.set("i", "<C-g>c", "<ESC>:" .. M.config.cmd_prefix .. "ChatNew<CR>", { silent = true, desc = "Create New Chat" })
+	if M.config.global_shortcut_new then
+		for _, mode in ipairs(M.config.global_shortcut_new.modes) do
+			if mode == "n" then
+				vim.keymap.set(mode, M.config.global_shortcut_new.shortcut, function()
+					M.cmd.ChatNew({})
+				end, { silent = true, desc = "Create New Chat" })
+			elseif mode == "i" then
+				vim.keymap.set(mode, M.config.global_shortcut_new.shortcut, function()
+					vim.cmd("stopinsert")
+					M.cmd.ChatNew({})
+				end, { silent = true, desc = "Create New Chat" })
+			end
+		end
+	end
 	
-	vim.keymap.set("n", "<C-g>a", ":" .. M.config.cmd_prefix .. "NextAgent<CR>", { silent = true, desc = "Cycle to Next Agent" })
-	vim.keymap.set("i", "<C-g>a", "<ESC>:" .. M.config.cmd_prefix .. "NextAgent<CR>", { silent = true, desc = "Cycle to Next Agent" })
+	-- Note: Agent switching is now handled in buffer-local bindings
 	
-	-- Chat section navigation (search for question/answer markers)
-	vim.keymap.set("n", "<C-g>n", function()
-		local user_prefix = M.config.chat_user_prefix
-		local assistant_prefix = type(M.config.chat_assistant_prefix) == "string" 
-			and M.config.chat_assistant_prefix 
-			or M.config.chat_assistant_prefix[1] or ""
-		vim.cmd("/^" .. vim.pesc(user_prefix) .. "\\|^" .. vim.pesc(assistant_prefix))
-	end, { silent = true, desc = "Search for chat sections" })
-	
-	vim.keymap.set("i", "<C-g>n", function()
-		local user_prefix = M.config.chat_user_prefix
-		local assistant_prefix = type(M.config.chat_assistant_prefix) == "string" 
-			and M.config.chat_assistant_prefix 
-			or M.config.chat_assistant_prefix[1] or ""
-		vim.cmd("/^" .. vim.pesc(user_prefix) .. "\\|^" .. vim.pesc(assistant_prefix))
-	end, { silent = true, desc = "Search for chat sections" })
+	-- Note: Chat section navigation is now handled in the buffer-local bindings
 
 	local completions = {
 		ChatNew = { },
@@ -404,12 +407,6 @@ M.prep_chat = function(buf, file_name)
 			shortcut = M.config.chat_shortcut_respond.shortcut,
 			comment = "Parley prompt Chat Respond",
 		},
-		{
-			command = "ChatNew",
-			modes = M.config.chat_shortcut_new.modes,
-			shortcut = M.config.chat_shortcut_new.shortcut,
-			comment = "Parley prompt Chat New",
-		},
 	}
 	for _, rc in ipairs(range_commands) do
 		local cmd = M.config.cmd_prefix .. rc.command .. "<cr>"
@@ -432,6 +429,27 @@ M.prep_chat = function(buf, file_name)
 
 	local ss = M.config.chat_shortcut_stop
 	M.helpers.set_keymap({ buf }, ss.modes, ss.shortcut, M.cmd.Stop, "Parley prompt Chat Stop")
+	
+	-- Note: ChatFinder is now handled by global shortcuts
+	
+	local as = M.config.chat_shortcut_agent
+	M.helpers.set_keymap({ buf }, as.modes, as.shortcut, M.cmd.NextAgent, "Parley prompt Next Agent")
+	
+	local ss = M.config.chat_shortcut_search
+	if ss then
+		-- Create a function for searching chat sections
+		local function search_chat_sections()
+			local user_prefix = M.config.chat_user_prefix
+			local assistant_prefix = type(M.config.chat_assistant_prefix) == "string" 
+				and M.config.chat_assistant_prefix 
+				or M.config.chat_assistant_prefix[1] or ""
+			vim.cmd("/^" .. vim.pesc(user_prefix) .. "\\|^" .. vim.pesc(assistant_prefix))
+		end
+		
+		for _, mode in ipairs(ss.modes) do
+			M.helpers.set_keymap({ buf }, mode, ss.shortcut, search_chat_sections, "Parley prompt Search Chat Sections")
+		end
+	end
 	
 	-- Set outline navigation keybinding
 	M.helpers.set_keymap({ buf }, "n", "<C-g>t", M.cmd.Outline, "Parley prompt Outline Navigator")
@@ -609,7 +627,7 @@ M.new_chat = function(system_prompt, agent)
 		["{{cmd_prefix}}"] = M.config.cmd_prefix,
 		["{{stop_shortcut}}"] = M.config.chat_shortcut_stop.shortcut,
 		["{{delete_shortcut}}"] = M.config.chat_shortcut_delete.shortcut,
-		["{{new_shortcut}}"] = M.config.chat_shortcut_new.shortcut,
+		["{{new_shortcut}}"] = M.config.global_shortcut_new.shortcut,
 	})
 
 	-- escape underscores (for markdown)
@@ -890,7 +908,7 @@ M.chat_respond = function(params)
 			-- Always schedule the highlight to clear after a brief delay
 			vim.defer_fn(function()
 				vim.api.nvim_buf_clear_namespace(buf, ns_id, 0, -1)
-			end, 3000)
+			end, 1000)
 		end
 	end
 

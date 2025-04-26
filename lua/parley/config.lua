@@ -172,7 +172,12 @@ local config = {
 	chat_shortcut_respond = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g><C-g>" },
 	chat_shortcut_delete = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>d" },
 	chat_shortcut_stop = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>s" },
-	chat_shortcut_new = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>c" },
+	chat_shortcut_agent = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>a" },
+	chat_shortcut_search = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>n" },
+	
+	-- global shortcuts (available in any buffer)
+	global_shortcut_new = { modes = { "n", "i" }, shortcut = "<C-g>c" },
+	global_shortcut_finder = { modes = { "n", "i" }, shortcut = "<C-g>f" },
 	-- default search term when using :ParleyChatFinder
 	chat_finder_pattern = "^# topic: ",
 	chat_finder_mappings = {
