@@ -1096,15 +1096,15 @@ M.chat_respond = function(params)
 		end
 	end
 
-	-- Write assistant prompt
-	vim.api.nvim_buf_set_lines(buf, response_line, response_line, false, { "", agent_prefix .. agent_suffix, "" })
+	-- Write assistant prompt with extra newline, note later insertion point is response_line + 3
+	vim.api.nvim_buf_set_lines(buf, response_line, response_line, false, { "", agent_prefix .. agent_suffix, "", "" })
 
 	-- call the model and write response
 	M.dispatcher.query(
 		buf,
 		headers.provider or agent.provider,
 		M.dispatcher.prepare_payload(messages, headers.model or agent.model, headers.provider or agent.provider),
-		M.dispatcher.create_handler(buf, win, response_line + 2, true, "", not M.config.chat_free_cursor),
+		M.dispatcher.create_handler(buf, win, response_line + 3, true, "", not M.config.chat_free_cursor),
 		vim.schedule_wrap(function(qid)
 			local qt = M.tasker.get_query(qid)
 			if not qt then
