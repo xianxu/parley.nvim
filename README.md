@@ -10,11 +10,10 @@
 
 **ChatGPT-like sessions with highlighting and navigation, focused on simplicity and readability.** 
 
-NOTE: this was [gp.nvim](https://github.com/Robitx/gp.nvim). I decided to fork as I wanted a simple transcript tool to talk to LLM providers.
 
 # Goals and Features
 
-Parley is a streamlined LLM chat plugin for NeoVIM, focusing exclusively on providing a clean and efficient interface for conversations with AI assistants. With built-in highlighting, question tracking, memory management and navigation tools, it makes LLM interactions in your editor both pleasant and productive. You brainstorm with your favorite AI assistant while keeping track the discussion. You can go back to the discussion, update questions and refresh answers. You can update and markup in assistant's answers, as you learn more facts. Think a document more as a research draft on some topic.
+Parley is a streamlined LLM chat plugin for NeoVIM, focusing exclusively on providing a clean and efficient interface for conversations with AI assistants. Imagine having full transcript of a chat session with ChatGPT (or Anthropic, or Gemini) that allows editing of all questions, and answers themselves! I created this as a way to construct research report, improve my understanding of new topics. It's a researcher's notebook.
 
 - **Streamlined Chat Experience**
   - Markdown-formatted chat transcripts with syntax highlighting
@@ -28,11 +27,34 @@ Parley is a streamlined LLM chat plugin for NeoVIM, focusing exclusively on prov
 - **Minimum dependencies** (`neovim`, `curl`, `grep`)
   - Zero dependencies on other lua plugins to minimize chance of breakage
 - **ChatGPT like sessions**
-  - Just good old neovim buffers formated as markdown with autosave
-  - Chat finder - management popup for searching, previewing, deleting and opening chat sessions
+  - Just good old neovim buffers formatted as markdown with autosave
+  - Chat finder - management pop-up for searching, previewing, deleting and opening chat sessions
 - **A live document**
   - Refresh answers on any questions
   - Insert questions in the middle of the transcript and expand with assistant's answers
+  - You have the full NeoVIM behind you.
+
+# The Format of Text
+
+Each chat transcript is really just a markdown file, with some conventions. 
+
+1. Questions and answers take turn. 
+2. A question is a line prefixed by 💬:, and all following lines until next answer.
+3. An Answer is a line prefixed by 🤖:, and all following lines until next question.
+4. Two special lines in answer section, one is for assistant's reasoning output, prefixed with 🧠:. The other is for summary of one chat exchange prefixed with 📝:.
+    1. We kept those two lines in the transcript itself for simplicity really, so that one transcript file's hermetic.
+
+With this, any question asked is associated with context of all questions and answers coming before this question. When the chat gets too long and the chat_memory is enabled, chat exchanges earlier in the transcript will be represented by the summary line (📝:).
+
+## Interaction
+Place cursor in the question area, and `<C-g>g`, to ask assistant about it. If the question is at the end of document, it's a new question. Otherwise, a previously asked question is asked again, and previous answer replaced by new answers. You might want to do this, for example, if upon learning, you tweaks your questions more precisely.
+
+The 🧠:, 📝: are done through system prompt. It seems to work fine, but there's no guarantee. If assistant omitted those lines, you can update the question to include: "remember to reply 🧠: lines for your reasoning, and 📝: for your summary". Something like that.
+
+## Manual Curation
+The transcript is really just a text document. So long you maintain the 💬:, 🤖:, 🧠:, 📝: pattern, things would work. You are free to edit any text in this transcript. For example, adding headings `#` and `##` to group your questions sections, which shows up in Table of Content with `<C-g>t`.
+
+You are free to put bold on text, as a marker so you can remember things easier. The whole thing is markdown format, so you can use `backtick`, or [link], or **bold**, each having different visual effect. I may add some customized highlighter, just to make certain text jumping out.
 
 # Install
 
@@ -48,7 +70,7 @@ Snippets for your preferred package manager:
         local conf = {
             -- For customization, refer to Install > Configuration in the Documentation/Readme
         }
-        require("gp").setup(conf)
+        require("parley").setup(conf)
 
         -- Setup shortcuts here (see Usage > Shortcuts in the Documentation/Readme)
     end,
@@ -63,7 +85,7 @@ use({
         local conf = {
             -- For customization, refer to Install > Configuration in the Documentation/Readme
         }
-        require("gp").setup(conf)
+        require("parley").setup(conf)
 
         -- Setup shortcuts here (see Usage > Shortcuts in the Documentation/Readme)
     end,
@@ -77,13 +99,14 @@ Plug 'xianxu/parley.nvim'
 local conf = {
     -- For customization, refer to Install > Configuration in the Documentation/Readme
 }
-require("gp").setup(conf)
+require("parley").setup(conf)
 
 -- Setup shortcuts here (see Usage > Shortcuts in the Documentation/Readme)
 ```
+
 ## 2. OpenAI API key
 
-Make sure you have OpenAI API key. [Get one here](https://platform.openai.com/account/api-keys) and use it in the [4. Configuration](#4-configuration). Also consider setting up [usage limits](https://platform.openai.com/account/billing/limits) so you won't get suprised at the end of the month.
+Make sure you have OpenAI API key. [Get one here](https://platform.openai.com/account/api-keys) and use it in the [4. Configuration](#4-configuration). Also consider setting up [usage limits](https://platform.openai.com/account/billing/limits) so you won't get surprised at the end of the month.
 
 The OpenAI API key can be passed to the plugin in multiple ways:
 
@@ -95,7 +118,7 @@ The OpenAI API key can be passed to the plugin in multiple ways:
 | read from file            | `openai_api_key = { "cat", "path_to_api_key" },`               | Medium-High         |
 | password manager          | `openai_api_key = { "bw", "get", "password", "OAI_API_KEY" },` | High                |
 
-If `openai_api_key` is a table, Gp runs it asynchronously to avoid blocking Neovim (password managers can take a second or two).
+If `openai_api_key` is a table, Parley runs it asynchronously to avoid blocking Neovim (password managers can take a second or two).
 
 ## 3. Multiple providers
 The following LLM providers are currently supported besides OpenAI:
@@ -146,16 +169,17 @@ Each of these providers has some agents preconfigured. Below is an example of ho
 
 ```
 
-
 ## 4. Dependencies
 
 The core plugin only needs `curl` installed to make calls to OpenAI API and `grep` for ChatFinder. So Linux, BSD and Mac OS should be covered.
 
 ## 5. Configuration
 
-Expose `OPENAI_API_KEY` env and it should work.
+Expose `OPENAI_API_KEY` env and it should work. Otherwise copy `lua/parley/config.lua` to your `~/.config/nvim/lua/parley/` and update.
 
 # Usage
+
+All commands can be configured in `config.lua`.
 
 ## Chat commands
 
@@ -179,7 +203,7 @@ Delete the current chat. By default requires confirmation before delete, which c
 
 #### `:GpNextAgent` <!-- {doc=:GpNextAgent}  -->
 
-Cycles between available agents based on the current buffer (chat agents if current buffer is a chat and command agents otherwise). The agent setting is persisted on disk across Neovim instances. `<C-g>d`
+Cycles between available agents based on the current buffer (chat agents if current buffer is a chat and command agents otherwise). The agent setting is persisted on disk across Neovim instances. `<C-g>a`
 
 ## Other commands
 
@@ -218,7 +242,7 @@ chat_memory = {
 
 ## Usage
 
-To take advantage of this feature, instruct your LLM in the system prompt to include summaries of the conversation. For example the following, or check defaults.lua for details.
+To take advantage of this feature, instruct your LLM in the system prompt to include summaries of the conversation. For example the following, or check defaults.lua for details, which is already included as default. If LLM is not good at following after a long session, you can add those to your question to refresh its memory.
 
 ```
 When thinking through complex problems, prefix your reasoning with 🧠: for clarity.
@@ -226,3 +250,7 @@ After answering my question, please include a brief summary of our exchange pref
 ```
 
 When the chat grows beyond the configured limit, the plugin will automatically replace older messages with the extracted summaries.
+
+# Acknowledgement
+
+This was adapted from [gp.nvim](https://github.com/Robitx/gp.nvim). I decided to fork as I wanted a simple transcript tool to talk to LLM providers.
