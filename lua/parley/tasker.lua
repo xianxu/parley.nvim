@@ -2,7 +2,7 @@
 -- Task managmenet module
 --------------------------------------------------------------------------------
 
-local logger = require("gp.logger")
+local logger = require("parley.logger")
 
 local uv = vim.uv or vim.loop
 
@@ -88,7 +88,7 @@ M.is_busy = function(buf)
 	end
 	for _, h in ipairs(M._handles) do
 		if h.buf == buf then
-			logger.warning("Another Gp process [" .. h.pid .. "] is already running for buffer " .. buf)
+			logger.warning("Another Parley process [" .. h.pid .. "] is already running for buffer " .. buf)
 			return true
 		end
 	end

@@ -1,22 +1,22 @@
 --------------------------------------------------------------------------------
--- :checkhealth gp
+-- :checkhealth parley
 --------------------------------------------------------------------------------
 
 local M = {}
 
 function M.check()
-	vim.health.start("gp.nvim checks")
+	vim.health.start("Parley.nvim checks")
 
-	local ok, gp = pcall(require, "gp")
+	local ok, parley = pcall(require, "parley")
 	if not ok then
-		vim.health.error("require('gp') failed")
+		vim.health.error("require('parley') failed")
 	else
-		vim.health.ok("require('gp') succeeded")
+		vim.health.ok("require('parley') succeeded")
 
-		if gp._setup_called then
-			vim.health.ok("require('gp').setup() has been called")
+		if parley._setup_called then
+			vim.health.ok("require('parley').setup() has been called")
 		else
-			vim.health.error("require('gp').setup() has not been called")
+			vim.health.error("require('parley').setup() has not been called")
 		end
 	end
 
@@ -33,7 +33,7 @@ function M.check()
 	end
 
 	-- Whisper module removed in simplified version
-	require("gp.deprecator").check_health()
+	require("parley.deprecator").check_health()
 end
 
 return M

@@ -1,4 +1,4 @@
--- Outline module for gp.nvim
+-- Outline module for Parley.nvim
 -- Provides navigation through chat messages and markdown headers
 
 local M = {}

@@ -2,14 +2,14 @@
 -- Deprecator module
 --------------------------------------------------------------------------------
 
-local logger = require("gp.logger")
-local helpers = require("gp.helper")
-local render = require("gp.render")
+local logger = require("parley.logger")
+local helpers = require("parley.helper")
+local render = require("parley.render")
 
 local M = {}
 M._deprecated = {}
 
-local switch_to_agent = "Please use `agents` table and switch agents in runtime via `:GpAgent XY`"
+local switch_to_agent = "Please use `agents` table and switch agents in runtime via `:ParleyAgent XY`"
 
 local nested = function(variable, prefix)
 	local new_variable = variable:gsub(prefix .. "_", "")
@@ -20,7 +20,6 @@ local nested = function(variable, prefix)
 end
 
 local deprecated = {
-	chat_toggle_target = "`chat_toggle_target`\nPlease rename it to `toggle_target` which is also used by other commands",
 	command_model = "`command_model`\n" .. switch_to_agent,
 	command_system_prompt = "`command_system_prompt`\n" .. switch_to_agent,
 	chat_custom_instructions = "`chat_custom_instructions`\n" .. switch_to_agent,
@@ -31,7 +30,7 @@ local deprecated = {
 	-- whisper_max_time removed in simplified version,
 
 	openai_api_endpoint = "`openai_api_endpoint`\n\n"
-		.. "Gp.nvim finally supports multiple LLM providers; sorry it took so long.\n"
+		.. "Parley.nvim finally supports multiple LLM providers; sorry it took so long.\n"
 		.. "I've dreaded merging this, because I hate breaking people's setups.\n"
 		.. "But this change is necessary for future improvements.\n\n"
 		.. "Migration hints are below; for more help, try the readme docs or open an issue.\n\n"
@@ -61,12 +60,12 @@ M.report = function()
 	end
 
 	local msg = "Hey there, I have good news and bad news for you."
-		.. "\n\nThe good news is that you've updated Gp.nvim and got some new features."
+		.. "\n\nThe good news is that you've updated Parley.nvim and got some new features."
 		.. "\nThe bad news is that some of the config options you are using are deprecated."
 		.. "\n\nThis is shown only at startup and deprecated options are ignored"
 		.. "\nso everything should work without problems and you can deal with this later."
-		.. "\n\nYou can check deprecated options any time with `:checkhealth gp`"
-		.. "\nSorry for the inconvenience and thank you for using Gp.nvim."
+		.. "\n\nYou can check deprecated options any time with `:checkhealth parley`"
+		.. "\nSorry for the inconvenience and thank you for using Parley.nvim."
 		.. "\n\n********************************************************************************"
 		.. "\n********************************************************************************"
 	table.sort(M._deprecated, function(a, b)
@@ -80,19 +79,19 @@ M.report = function()
 end
 
 local examplePromptHook = [[
-UnitTests = function(gp, params)
+UnitTests = function(parley, params)
     local template = "I have the following code from {{filename}}:\n\n"
         .. "```{{filetype}}\n{{selection}}\n```\n\n"
         .. "Please respond by writing table driven unit tests for the code above."
-    local agent = gp.get_command_agent()
-    gp.Prompt(params, gp.Target.vnew, agent, template)
+    local agent = parley.get_command_agent()
+    parley.Prompt(params, parley.Target.vnew, agent, template)
 end,
 ]]
 
 M.has_old_prompt_signature = function(agent)
 	if not agent or not type(agent) == "table" or not agent.provider then
 		logger.warning(
-			"The `gp.Prompt` method signature has changed.\n"
+			"The `parley.Prompt` method signature has changed.\n"
 				.. "Please update your hook functions as demonstrated in the example below:\n\n"
 				.. examplePromptHook
 				.. "\nFor more information, refer to the 'Extend Functionality' section in the documentation."
@@ -103,13 +102,13 @@ M.has_old_prompt_signature = function(agent)
 end
 
 local exampleChatHook = [[
-Translator = function(gp, params)
+Translator = function(parley, params)
     local chat_system_prompt = "You are a Translator, please translate between English and Chinese."
-    gp.cmd.ChatNew(params, chat_system_prompt)
+    parley.cmd.ChatNew(params, chat_system_prompt)
 
     -- -- you can also create a chat with a specific fixed agent like this:
-    -- local agent = gp.get_chat_agent("ChatGPT4o")
-    -- gp.cmd.ChatNew(params, chat_system_prompt, agent)
+    -- local agent = parley.get_chat_agent("ChatGPT4o")
+    -- parley.cmd.ChatNew(params, chat_system_prompt, agent)
 end,
 ]]
 
@@ -117,7 +116,7 @@ M.has_old_chat_signature = function(agent)
 	if agent then
 		if not type(agent) == "table" or not agent.provider then
 			logger.warning(
-				"The `gp.cmd.ChatNew` method signature has changed.\n"
+				"The `parley.cmd.ChatNew` method signature has changed.\n"
 					.. "Please update your hook functions as demonstrated in the example below:\n\n"
 					.. exampleChatHook
 					.. "\nFor more information, refer to the 'Extend Functionality' section in the documentation."

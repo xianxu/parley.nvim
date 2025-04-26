@@ -97,7 +97,7 @@ local log = function(msg, level, slevel, sensitive)
 	end
 
 	vim.schedule(function()
-		vim.notify("Gp.nvim: " .. msg, level, { title = "Gp.nvim" })
+		vim.notify("Parley.nvim: " .. msg, level, { title = "Parley.nvim" })
 	end)
 end
 

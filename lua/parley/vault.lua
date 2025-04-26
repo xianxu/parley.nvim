@@ -2,10 +2,10 @@
 -- Vault module for managing secrets
 --------------------------------------------------------------------------------
 
-local logger = require("gp.logger")
-local tasker = require("gp.tasker")
-local helpers = require("gp.helper")
-local default_config = require("gp.config")
+local logger = require("parley.logger")
+local tasker = require("parley.tasker")
+local helpers = require("parley.helper")
+local default_config = require("parley.config")
 
 local V = {
 	_obfuscated_secrets = {},

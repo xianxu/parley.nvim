@@ -2,7 +2,7 @@
 -- Generic independent helper functions
 --------------------------------------------------------------------------------
 
-local logger = require("gp.logger")
+local logger = require("parley.logger")
 
 local _H = {}
 
@@ -267,7 +267,7 @@ _H.create_user_command = function(cmd_name, cmd_func, completion, desc)
 	vim.api.nvim_create_user_command(cmd_name, cmd_func, {
 		nargs = "*",
 		range = true,
-		desc = desc or "Gp.nvim command",
+		desc = desc or "Parley.nvim command",
 		complete = function(arg_lead, cmd_line, cursor_pos)
 			logger.debug(
 				"completing user command: "

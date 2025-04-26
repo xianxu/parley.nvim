@@ -2,18 +2,18 @@
 -- Dispatcher handles the communication between the plugin and LLM providers.
 --------------------------------------------------------------------------------
 
-local logger = require("gp.logger")
-local tasker = require("gp.tasker")
-local vault = require("gp.vault")
-local render = require("gp.render")
-local helpers = require("gp.helper")
+local logger = require("parley.logger")
+local tasker = require("parley.tasker")
+local vault = require("parley.vault")
+local render = require("parley.render")
+local helpers = require("parley.helper")
 
-local default_config = require("gp.config")
+local default_config = require("parley.config")
 
 local D = {
 	config = {},
 	providers = {},
-	query_dir = vim.fn.stdpath("cache") .. "/gp/query",
+	query_dir = vim.fn.stdpath("cache") .. "/parley/query",
 }
 
 ---@param opts table #	user config
@@ -455,10 +455,10 @@ D.create_handler = function(buf, win, line, first_undojoin, prefix, cursor)
 	local finished_lines = 0
 	local skip_first_undojoin = not first_undojoin
 
-	local hl_handler_group = "GpHandlerStandout"
+	local hl_handler_group = "ParleyHandlerStandout"
 	vim.cmd("highlight default link " .. hl_handler_group .. " CursorLine")
 
-	local ns_id = vim.api.nvim_create_namespace("GpHandler_" .. helpers.uuid())
+	local ns_id = vim.api.nvim_create_namespace("ParleyHandler_" .. helpers.uuid())
 
 	local ex_id = vim.api.nvim_buf_set_extmark(buf, ns_id, first_line, 0, {
 		strict = false,

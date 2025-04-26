@@ -5,24 +5,24 @@
 --------------------------------------------------------------------------------
 -- Module structure
 --------------------------------------------------------------------------------
-local config = require("gp.config")
+local config = require("parley.config")
 
 local M = {
-	_Name = "Gp", -- plugin name
+	_Name = "Parley", -- plugin name
 	_state = {}, -- table of state variables
 	agents = {}, -- table of agents
 	cmd = {}, -- default command functions
 	config = {}, -- config variables
 	hooks = {}, -- user defined command functions
-	defaults = require("gp.defaults"), -- some useful defaults
-	deprecator = require("gp.deprecator"), -- handle deprecated options
-	dispatcher = require("gp.dispatcher"), -- handle communication with LLM providers
-	helpers = require("gp.helper"), -- helper functions
-	logger = require("gp.logger"), -- logger module
-	outline = require("gp.outline"), -- outline navigation module
-	render = require("gp.render"), -- render module
-	tasker = require("gp.tasker"), -- tasker module
-	vault = require("gp.vault"), -- handles secrets
+	defaults = require("parley.defaults"), -- some useful defaults
+	deprecator = require("parley.deprecator"), -- handle deprecated options
+	dispatcher = require("parley.dispatcher"), -- handle communication with LLM providers
+	helpers = require("parley.helper"), -- helper functions
+	logger = require("parley.logger"), -- logger module
+	outline = require("parley.outline"), -- outline navigation module
+	render = require("parley.render"), -- render module
+	tasker = require("parley.tasker"), -- tasker module
+	vault = require("parley.vault"), -- handles secrets
 }
 
 --------------------------------------------------------------------------------
@@ -40,7 +40,7 @@ end
 
 -- setup function
 M._setup_called = false
----@param opts GpConfig? # table with options
+---@param opts ParleyConfig? # table with options
 M.setup = function(opts)
 	M._setup_called = true
 
@@ -218,7 +218,7 @@ M.setup = function(opts)
 	M.buf_handler()
 
 	if vim.fn.executable("curl") == 0 then
-		M.logger.error("curl is not installed, run :checkhealth gp")
+		M.logger.error("curl is not installed, run :checkhealth parley")
 	end
 
 	M.logger.debug("setup finished")
@@ -355,7 +355,7 @@ M.display_chat_agent = function(buf, file_name)
 		return
 	end
 
-	local ns_id = vim.api.nvim_create_namespace("GpChatExt_" .. file_name)
+	local ns_id = vim.api.nvim_create_namespace("ParleyChatExt_" .. file_name)
 	vim.api.nvim_buf_clear_namespace(buf, ns_id, 0, -1)
 
 	vim.api.nvim_buf_set_extmark(buf, ns_id, 0, 0, {
@@ -402,13 +402,13 @@ M.prep_chat = function(buf, file_name)
 			command = "ChatRespond",
 			modes = M.config.chat_shortcut_respond.modes,
 			shortcut = M.config.chat_shortcut_respond.shortcut,
-			comment = "GPT prompt Chat Respond",
+			comment = "Parley prompt Chat Respond",
 		},
 		{
 			command = "ChatNew",
 			modes = M.config.chat_shortcut_new.modes,
 			shortcut = M.config.chat_shortcut_new.shortcut,
-			comment = "GPT prompt Chat New",
+			comment = "Parley prompt Chat New",
 		},
 	}
 	for _, rc in ipairs(range_commands) do
@@ -428,13 +428,13 @@ M.prep_chat = function(buf, file_name)
 	end
 
 	local ds = M.config.chat_shortcut_delete
-	M.helpers.set_keymap({ buf }, ds.modes, ds.shortcut, M.cmd.ChatDelete, "GPT prompt Chat Delete")
+	M.helpers.set_keymap({ buf }, ds.modes, ds.shortcut, M.cmd.ChatDelete, "Parley prompt Chat Delete")
 
 	local ss = M.config.chat_shortcut_stop
-	M.helpers.set_keymap({ buf }, ss.modes, ss.shortcut, M.cmd.Stop, "GPT prompt Chat Stop")
+	M.helpers.set_keymap({ buf }, ss.modes, ss.shortcut, M.cmd.Stop, "Parley prompt Chat Stop")
 	
 	-- Set outline navigation keybinding
-	M.helpers.set_keymap({ buf }, "n", "<C-g>t", M.cmd.Outline, "GPT prompt Outline Navigator")
+	M.helpers.set_keymap({ buf }, "n", "<C-g>t", M.cmd.Outline, "Parley prompt Outline Navigator")
 
 	-- conceal parameters in model header so it's not distracting
 	if M.config.chat_conceal_model_params then
@@ -450,7 +450,7 @@ end
 -- Define namespace and highlighting colors for questions, annotations, and thinking
 M.highlight_questions = function()
 	-- Set up namespace
-	local ns = vim.api.nvim_create_namespace("gp_question")
+	local ns = vim.api.nvim_create_namespace("parley_question")
 	
 	-- Set up highlight groups
 	vim.api.nvim_set_hl(0, "Question", {
@@ -514,7 +514,7 @@ M.highlight_question_block = function(buf)
 end
 
 M.buf_handler = function()
-	local gid = M.helpers.create_augroup("GpBufHandler", { clear = true })
+	local gid = M.helpers.create_augroup("ParleyBufHandler", { clear = true })
 
 	M.helpers.autocmd({ "BufEnter", "TextChanged", "TextChangedI" }, nil, function(event)
 		local buf = event.buf
@@ -601,7 +601,7 @@ M.new_chat = function(system_prompt, agent)
 		system_prompt = ""
 	end
 
-	local template = M.render.template(M.config.chat_template or require("gp.defaults").chat_template, {
+	local template = M.render.template(M.config.chat_template or require("parley.defaults").chat_template, {
 		["{{filename}}"] = string.match(filename, "([^/]+)$"),
 		["{{optional_headers}}"] = model .. provider .. system_prompt,
 		["{{user_prefix}}"] = M.config.chat_user_prefix,
@@ -700,7 +700,7 @@ M.parse_chat = function(lines, header_end)
 	M.logger.debug("memory config: " .. vim.inspect({memory_enabled, summary_prefix, reasoning_prefix}))
 
 	-- Determine agent prefix
-	local agent_prefix = config.chat_assistant_prefix[1]
+	local agent_prefix = M.config.chat_assistant_prefix[1]
 	if type(M.config.chat_assistant_prefix) == "string" then
 		agent_prefix = M.config.chat_assistant_prefix
 	elseif type(M.config.chat_assistant_prefix) == "table" then
@@ -881,7 +881,7 @@ M.chat_respond = function(params)
 			end
 			
 			-- Highlight the lines that will be reprocessed
-			local ns_id = vim.api.nvim_create_namespace("GpResubmit")
+			local ns_id = vim.api.nvim_create_namespace("ParleyResubmit")
 			vim.api.nvim_buf_clear_namespace(buf, ns_id, 0, -1)
 			
 			local highlight_start = parsed_chat.exchanges[exchange_idx].question.line_start
@@ -928,7 +928,7 @@ M.chat_respond = function(params)
 	end
 
 	-- Set up agent prefixes
-	local agent_prefix = config.chat_assistant_prefix[1]
+	local agent_prefix = M.config.chat_assistant_prefix[1]
 	local agent_suffix = config.chat_assistant_prefix[2]
 	if type(M.config.chat_assistant_prefix) == "string" then
 		agent_prefix = M.config.chat_assistant_prefix
@@ -1151,7 +1151,7 @@ M.chat_respond = function(params)
 					M.helpers.cursor_to_line(line, buf, win)
 				end
 			end
-			vim.cmd("doautocmd User GpDone")
+			vim.cmd("doautocmd User ParleyDone")
 		end)
 	)
 end
