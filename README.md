@@ -33,33 +33,38 @@ Parley is a streamlined LLM chat plugin for NeoVIM, focusing exclusively on prov
   - Refresh answers on any questions
   - Insert questions in the middle of the transcript and expand with assistant's answers
   - You have the full NeoVIM behind you.
+  - Referencing other local files, for example, to get critics for that file and ask questions about them, essentially adding context.
 
-# The Format of Text
+# The Format of the Transcript
 
-Each chat transcript is really just a markdown file, with some conventions. 
+Each chat transcript is really just a markdown file, with some additional conventions. So think them as markdown files with benefits (of Parley).
 
-1. Questions and answers take turn. 
-2. A question is a line prefixed by 💬:, and all following lines until next answer.
-3. An Answer is a line prefixed by 🤖:, and all following lines until next question.
-4. Two special lines in answer section, one is for assistant's reasoning output, prefixed with 🧠:. The other is for summary of one chat exchange prefixed with 📝:.
-    1. We kept those two lines in the transcript itself for simplicity really, so that one transcript file's hermetic.
-5. File inclusion: a line that starts with @@ followed by a file path will automatically load that file's content into the prompt when sending to the LLM. For example, `@@/path/to/file.txt`. This only works when the line starts with @@ and appears alone on its own line within a question. Use this, if you want LLM to help you write your blog, for example.
+1. There is a header section. 
+2. User's questions and Assistant's answers take turns.
+3. A question is a line starting with 💬:, and all following lines until next answer.
+4. An Answer is a line starting with 🤖:, and all following lines until next question.
+5. Two special lines in answers. Those are states maintained by Parley, and not designed for human consumption. They are grayed out by default.
+    1. The first is the Assistant's reasoning output, prefixed with 🧠:. 
+	2. The second is the summary of one chat exchange prefixed with 📝:, in the format of "you asked ..., I answered ...".
+    3. We keep those two lines in the transcript itself for simplicity, so that one transcript file's hermetic.
+6. File inclusion: a line that starts with @@ followed by a file path will automatically load that file's content into the prompt when sending to the LLM. For example, `@@/path/to/file.txt`. This expansion only works if it is detected in User's questions. Use this, if you want LLM to help you write your blog, for example.
 
-With this, any question asked is associated with context of all questions and answers coming before this question. When the chat gets too long and the chat_memory is enabled, chat exchanges earlier in the transcript will be represented by the summary line (📝:).
+With this, any question asked is associated with context of all questions and answers coming before this question. When the chat gets too long and the chat_memory is enabled, chat exchanges earlier in the transcript will be represented by the concatenation of their summary lines (📝:).
 
 ## Interaction
-Place cursor in the question area, and `<C-g>g`, to ask assistant about it. If the question is at the end of document, it's a new question. Otherwise, a previously asked question is asked again, and previous answer replaced by new answers. You might want to do this, for example, if upon learning, you tweaks your questions more precisely. 
 
-For more extensive revisions, you can place the cursor on a question and use `<C-g>G` to resubmit all questions from the beginning of the chat up to and including the current question. Each question will be processed in sequence, with responses replacing the existing answers at their correct positions. This is particularly useful when you've edited multiple previous questions and want to regenerate all responses to maintain conversation coherence. 
+Place cursor in the question area, and `<C-g>g`, to ask assistant about it. If the question is at the end of document, it's a new question. Otherwise, a previously asked question is asked again, and previous answer replaced by the new answer. You might want to do this, for example, if upon learning, you tweaks your questions. Or you updated referenced file (with the `@@` syntax).
 
-During resubmission, a visual indicator will highlight each question as it's being processed, and notifications will display progress. You can stop the resubmission at any time with the stop shortcut (`<C-g>s`). When complete, the cursor will return to your original position.
+For more extensive revisions, you can place the cursor on a question and use `<C-g>G` to resubmit all questions from the beginning of the chat up to and including the current question. Each question will be processed in sequence, with responses replacing the existing answers at their correct positions. This is particularly useful when you've edited multiple previous questions, and/or referenced files and want to update all previously asked questions.
 
-Because you can update previous questions and even assistant's answers, the answers of future questions, re-asked or not, will be different, subtly influenced by all those. After all, we are dealing with a statistical machine here.
+During the resubmission, a visual indicator will highlight each question as it's being processed, and notifications will display progress. You can stop the resubmission at any time with the stop shortcut (`<C-g>s`). When complete, the cursor will return to your original position.
 
-The 🧠:, 📝: are done through system prompt. It seems to work fine, but there's no guarantee. If assistant omitted those lines, you can update the question to include: "remember to reply 🧠: lines for your reasoning, and 📝: for your summary". Something like that.
+Because you can update previous questions and even assistant's answers, the answers of future questions, will be different, subtly influenced by all those. After all, we are dealing with a `large scale statistical machine` here.
+
+The 🧠:, 📝: are done through system prompt. It seems to work fine, but there's no guarantee. If assistant omitted those lines, you can update the question to reinforce it: "remember to reply with 🧠: lines for your reasoning, and 📝: for your summary". Something like that.
 
 ## Manual Curation
-The transcript is really just a text document. So long you maintain the 💬:, 🤖:, 🧠:, 📝: pattern, things would work. You are free to edit any text in this transcript. For example, adding headings `#` and `##` to group your questions sections, which shows up in Table of Content with `<C-g>t`.
+The transcript is really just a text document. So long the 💬:, 🤖:, 🧠:, 📝: pattern is maintained, things would work. You are free to edit any text in this transcript. For example, adding headings `#` and `##` to group your questions sections, which shows up in Table of Content with `<C-g>t`.
 
 You are free to put bold on text, as a marker so you can remember things easier. The whole thing is markdown format, so you can use `backtick`, or [link], or **bold**, each having different visual effect. I may add some customized highlighter, just to make certain text jumping out.
 
