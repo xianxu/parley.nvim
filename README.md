@@ -47,7 +47,15 @@ Each chat transcript is really just a markdown file, with some additional conven
     1. The first is the Assistant's reasoning output, prefixed with 🧠:. 
 	2. The second is the summary of one chat exchange prefixed with 📝:, in the format of "you asked ..., I answered ...".
     3. We keep those two lines in the transcript itself for simplicity, so that one transcript file's hermetic.
-6. File inclusion: a line that starts with @@ followed by a file path will automatically load that file's content into the prompt when sending to the LLM. For example, `@@/path/to/file.txt`. This expansion only works if it is detected in User's questions. You can open referenced files directly by placing the cursor on the line with the @@ syntax and pressing `<C-g>o`. Use this feature when you want LLM to help you understand, debug, or improve existing files.
+6. File and directory inclusion: a line that starts with @@ followed by a path will automatically load content into the prompt when sending to the LLM. This works in several ways:
+
+   - `@@/path/to/file.txt` - Include a single file
+   - `@@/path/to/directory/` - Include all files in a directory (non-recursive)
+   - `@@/path/to/directory/*.lua` - Include all matching files in a directory (non-recursive)
+   - `@@/path/to/directory/**/` - Include all files in a directory and its subdirectories (recursive)
+   - `@@/path/to/directory/**/*.lua` - Include all matching files in a directory and its subdirectories (recursive)
+
+   You can open referenced files or directories directly by placing the cursor on the line with the @@ syntax and pressing `<C-g>o`. For directories or glob patterns, this will open the file explorer. Use this feature when you want LLM to help you understand, debug, or improve existing code.
 
 With this, any question asked is associated with context of all questions and answers coming before this question. When the chat gets too long and the chat_memory is enabled, chat exchanges earlier in the transcript will be represented by the concatenation of their summary lines (📝:).
 

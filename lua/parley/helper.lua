@@ -200,6 +200,121 @@ _H.read_file_content = function(filepath)
     return table.concat(lines, "\n")
 end
 
+-- Determine if a path is a directory
+---@param path string # path to check
+---@return boolean # true if path is a directory
+_H.is_directory = function(path)
+    local expanded_path = vim.fn.expand(path)
+    return vim.fn.isdirectory(expanded_path) == 1
+end
+
+-- Get a formatted representation of a file with its content
+---@param filepath string # path to the file
+---@return string # formatted file content with header
+_H.format_file_content = function(filepath)
+    local content = _H.read_file_content(filepath)
+    if not content then
+        return "Error: Could not read file " .. filepath
+    end
+    
+    local filetype = vim.filetype.match({ filename = filepath }) or ""
+    return "File: " .. filepath .. "\n```" .. filetype .. "\n" .. content .. "\n```\n\n"
+end
+
+-- Find files in a directory matching a pattern
+---@param dirpath string # directory path
+---@param pattern string # glob pattern
+---@param recursive boolean # whether to search recursively
+---@return table # list of matching file paths
+_H.find_files = function(dirpath, pattern, recursive)
+    local expanded_dir = vim.fn.expand(dirpath)
+    if vim.fn.isdirectory(expanded_dir) == 0 then
+        logger.warning("Directory not found: " .. expanded_dir)
+        return {}
+    end
+    
+    -- Construct glob pattern based on parameters
+    local glob_pattern
+    if recursive then
+        -- Use vim's ** for recursive glob
+        if pattern then
+            glob_pattern = expanded_dir .. "/**/" .. pattern
+        else
+            glob_pattern = expanded_dir .. "/**/*"
+        end
+    else
+        -- Non-recursive glob
+        if pattern then
+            glob_pattern = expanded_dir .. "/" .. pattern
+        else
+            glob_pattern = expanded_dir .. "/*"
+        end
+    end
+    
+    logger.debug("Searching with glob pattern: " .. glob_pattern)
+    
+    -- Use vim's glob() to find matching files
+    local matches = vim.fn.glob(glob_pattern, false, true)
+    local files = {}
+    
+    -- Filter to include only files, not directories
+    for _, match in ipairs(matches) do
+        if vim.fn.isdirectory(match) == 0 then
+            table.insert(files, match)
+        end
+    end
+    
+    logger.debug("Found " .. #files .. " matching files")
+    return files
+end
+
+-- Process a directory pattern (possibly with glob) and return all matching file contents
+---@param dirspec string # directory specification (possibly with glob pattern)
+---@return string # combined contents of all matching files
+_H.process_directory_pattern = function(dirspec)
+    local result = {}
+    local recursive = false
+    local pattern = nil
+    local dir = dirspec
+    
+    -- Check if this is a recursive search pattern with **
+    if dirspec:match("**/") then
+        recursive = true
+        dir = dirspec:gsub("/*%*%*/.*$", "") -- Remove ** and anything after
+    end
+    
+    -- Extract a filename pattern if it exists
+    if dirspec:match("/%*%*?/?.*%.%w+$") or dirspec:match("/%*%.%w+$") then
+        pattern = dirspec:match(".*/(%*%*?/?.*%.%w+)$") or dirspec:match(".*/(%*%.%w+)$")
+        dir = dirspec:gsub("/%*%*?/?.*%.%w+$", ""):gsub("/%*%.%w+$", "")
+    end
+    
+    -- If it ends with a trailing slash, it's a directory without pattern
+    if dirspec:match("/$") then
+        dir = dirspec:gsub("/$", "")
+    end
+    
+    logger.debug("Processed directory pattern: dir=" .. dir .. 
+                ", pattern=" .. (pattern or "nil") .. 
+                ", recursive=" .. tostring(recursive))
+    
+    -- Find all matching files
+    local files = _H.find_files(dir, pattern, recursive)
+    
+    -- Collect content from all files
+    if #files > 0 then
+        table.insert(result, "Directory listing for " .. dirspec .. " (" .. #files .. " files):\n")
+        
+        for _, file in ipairs(files) do
+            table.insert(result, _H.format_file_content(file))
+        end
+    else
+        table.insert(result, "No files found matching pattern: " .. dirspec)
+    end
+    
+    return table.concat(result, "\n")
+end
+
 -- helper function to find the root directory of the current git repository
 ---@param path string | nil  # optional path to start searching from
 ---@return string # returns the path of the git root dir or an empty string if not found

@@ -1080,17 +1080,34 @@ M.chat_respond = function(params, callback, override_free_cursor)
 			for i, line in ipairs(lines) do
 				if line:match("^@@") then
 					-- Extract everything after @@ until the end of the line, trimming whitespace
-					local filepath = line:match("^@@(.+)$"):gsub("^%s*(.-)%s*$", "%1")
-					M.logger.debug("Detected file loading request: " .. filepath)
-					local file_content = M.helpers.read_file_content(filepath)
+					local path = line:match("^@@(.+)$"):gsub("^%s*(.-)%s*$", "%1")
+					M.logger.debug("Detected file/directory loading request: " .. path)
 					
-					if file_content then
-						-- Replace the @@filename line with the file content
-						lines[i] = "File contents of " .. filepath .. ":\n\n```" .. (vim.filetype.match({ filename = filepath }) or "") .. "\n" .. file_content .. "\n```"
-						M.logger.debug("Loaded file: " .. filepath)
+					-- Check if this is a directory or has directory pattern markers (* or **/)
+					if M.helpers.is_directory(path) or 
+					   path:match("/$") or        -- Ends with slash
+					   path:match("/%*%*?/?") or  -- Contains /** or /**/ 
+					   path:match("/%*%.%w+$") then -- Contains /*.ext pattern
+						
+						-- Process as a directory pattern
+						M.logger.debug("Processing as directory pattern: " .. path)
+						local directory_content = M.helpers.process_directory_pattern(path)
+						
+						-- Replace the @@directory line with the directory content
+						lines[i] = directory_content
+						M.logger.debug("Loaded directory content for: " .. path)
 					else
-						-- Keep the line but add error note
-						lines[i] = line .. " (File not found or couldn't be read)"
+						-- Process as a single file
+						local file_content = M.helpers.read_file_content(path)
+						
+						if file_content then
+							-- Replace the @@filename line with the file content
+							lines[i] = "File contents of " .. path .. ":\n\n```" .. (vim.filetype.match({ filename = path }) or "") .. "\n" .. file_content .. "\n```"
+							M.logger.debug("Loaded file: " .. path)
+						else
+							-- Keep the line but add error note
+							lines[i] = line .. " (File not found or couldn't be read)"
+						end
 					end
 				end
 			end
@@ -1645,15 +1662,38 @@ M.cmd.OpenFileUnderCursor = function()
 	-- Expand the path (handle relative paths, ~, etc.)
 	local expanded_path = vim.fn.expand(filepath)
 	
-	-- Check if file exists
-	if vim.fn.filereadable(expanded_path) == 0 then
-		M.logger.warning("File not found: " .. expanded_path)
-		return
+	-- Check if it's a directory or a directory pattern
+	if M.helpers.is_directory(expanded_path) or 
+	   filepath:match("/$") or 
+	   filepath:match("/%*%*?/?") or 
+	   filepath:match("/%*%.%w+$") then
+		
+		-- Open file explorer for the directory
+		-- Try to handle glob patterns by extracting the base directory
+		local base_dir = filepath:gsub("/%*%*?/?.*$", ""):gsub("/%*%.%w+$", "")
+		expanded_path = vim.fn.expand(base_dir)
+		
+		if vim.fn.isdirectory(expanded_path) == 0 then
+			M.logger.warning("Directory not found: " .. expanded_path)
+			return
+		end
+		
+		M.logger.info("Opening directory: " .. expanded_path)
+		
+		-- Use netrw (built-in file explorer) to view the directory
+		vim.cmd("Explore " .. vim.fn.fnameescape(expanded_path))
+	else
+		-- Handle as a normal file
+		-- Check if file exists
+		if vim.fn.filereadable(expanded_path) == 0 then
+			M.logger.warning("File not found: " .. expanded_path)
+			return
+		end
+		
+		-- Open the file in a new buffer
+		M.logger.info("Opening file: " .. expanded_path)
+		vim.cmd("edit " .. vim.fn.fnameescape(expanded_path))
 	end
-	
-	-- Open the file in a new buffer
-	M.logger.info("Opening file: " .. expanded_path)
-	vim.cmd("edit " .. vim.fn.fnameescape(expanded_path))
 end
 
 M._chat_finder_opened = false
