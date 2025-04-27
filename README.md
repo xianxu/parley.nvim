@@ -281,6 +281,49 @@ After answering my question, please include a brief summary of our exchange pref
 
 When the chat grows beyond the configured limit, the plugin will automatically replace older messages with the extracted summaries.
 
+# Lualine Integration
+
+Parley includes built-in integration with lualine, allowing you to display the current agent in your statusline when working with chat buffers.
+
+## Configuration
+
+The lualine integration can be configured in your setup:
+
+```lua
+lualine = {
+    -- enable lualine integration
+    enable = true,
+    -- which section to add the component to
+    section = "lualine_x",
+},
+```
+
+## How It Works
+
+1. When working in a chat buffer, the lualine component will show the current agent
+2. The component will only appear when you're in a chat buffer
+3. The integration automatically registers itself with lualine if enabled
+
+To set this up, no additional configuration is needed beyond enabling it in your Parley config.
+
+## Manual Integration
+
+You can also manually add the Parley component to your lualine configuration if you need more control:
+
+```lua
+-- In your lualine setup
+require('lualine').setup {
+  sections = {
+    lualine_x = {
+      -- Other components...
+      require('parley.lualine').create_component(),
+    }
+  }
+}
+```
+
+This is useful if you want to position the component precisely within your statusline configuration.
+
 # Acknowledgement
 
 This was adapted from [gp.nvim](https://github.com/Robitx/gp.nvim). I decided to fork as I wanted a simple transcript tool to talk to LLM providers.

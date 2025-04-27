@@ -23,6 +23,7 @@ local M = {
 	render = require("parley.render"), -- render module
 	tasker = require("parley.tasker"), -- tasker module
 	vault = require("parley.vault"), -- handles secrets
+	lualine = require("parley.lualine"), -- lualine integration
 }
 
 --------------------------------------------------------------------------------
@@ -222,6 +223,13 @@ M.setup = function(opts)
 	end
 
 	M.buf_handler()
+	
+	-- Setup lualine integration if lualine is enabled
+	pcall(function()
+		if M.config.lualine and M.config.lualine.enable then
+			M.lualine.setup(M)
+		end
+	end)
 
 	if vim.fn.executable("curl") == 0 then
 		M.logger.error("curl is not installed, run :checkhealth parley")
@@ -1350,6 +1358,7 @@ M.cmd.Agent = function(params)
 
 	M.refresh_state({ agent = agent_name })
 	M.logger.info("Agent set to: " .. M._state.agent)
+	vim.cmd("doautocmd User ParleyAgentChanged")
 end
 
 M.cmd.NextAgent = function()
@@ -1359,6 +1368,7 @@ M.cmd.NextAgent = function()
 	local set_agent = function(agent_name)
 		M.refresh_state({ agent = agent_name })
 		M.logger.info("Agent: " .. M._state.agent)
+		vim.cmd("doautocmd User ParleyAgentChanged")
 	end
 
 	for i, agent_name in ipairs(agent_list) do

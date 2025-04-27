@@ -47,7 +47,7 @@ end
 ---@return table | nil # query data
 M.get_query = function(qid)
 	if not M._queries[qid] then
-		M.logger.error("query with ID " .. tostring(qid) .. " not found.")
+		logger.error("query with ID " .. tostring(qid) .. " not found.")
 		return nil
 	end
 	return M._queries[qid]
@@ -57,7 +57,13 @@ end
 ---@param payload table # query payload
 M.set_query = function(qid, payload)
 	M._queries[qid] = payload
+	M._queries[qid].timestamp = os.time()
 	M.cleanup_old_queries(10, 60)
+	
+	-- Trigger event for lualine update
+	vim.schedule(function()
+		vim.cmd("doautocmd User ParleyQueryStarted")
+	end)
 end
 
 -- add a process handle and its corresponding pid to the _handles table
@@ -109,6 +115,11 @@ M.stop = function(signal)
 	end
 
 	M._handles = {}
+	
+	-- Trigger event for lualine update when stopping queries
+	vim.schedule(function()
+		vim.cmd("doautocmd User ParleyQueryFinished")
+	end)
 end
 
 ---@param buf number | nil # buffer number
@@ -142,6 +153,9 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader)
 			callback(code, signal, stdout_data, stderr_data)
 		end
 		M.remove_handle(pid)
+		
+		-- Trigger event for lualine update
+		vim.cmd("doautocmd User ParleyQueryFinished")
 	end))
 
 	handle, pid = uv.spawn(cmd, {

@@ -112,7 +112,7 @@ local config = {
 		},
 		{
 			provider = "anthropic",
-			name = "ChatClaude-3-7-Sonnet",
+			name = "Claude-Sonnet",
 			-- string with model name or table with model name and parameters
 			model = { model = "claude-3-7-sonnet-latest", temperature = 0.8, top_p = 1 },
 			-- system prompt (use this to specify the persona/role of the AI)
@@ -120,9 +120,9 @@ local config = {
 		},
 		{
 			provider = "anthropic",
-			name = "ChatClaude-3-7-Haiku",
+			name = "Claude-Haiku",
 			-- string with model name or table with model name and parameters
-			model = { model = "claude-3-7-haiku-latest", temperature = 0.8, top_p = 1 },
+			model = { model = "claude-3-5-haiku-latest", temperature = 0.8, top_p = 1 },
 			-- system prompt (use this to specify the persona/role of the AI)
 			system_prompt = require("parley.defaults").chat_system_prompt,
 		},
@@ -218,6 +218,14 @@ local config = {
 	style_chat_finder_margin_top = 2,
 	-- how wide should the preview be, number between 0.0 and 1.0
 	style_chat_finder_preview_ratio = 0.5,
+
+	-- lualine integration options
+	lualine = {
+		-- enable lualine integration
+		enable = true,
+		-- which section to add the component to
+		section = "lualine_x",
+	},
 
     -- TODO: what are the following are needed?
     -- command config and templates below are used by commands like GpRewrite, GpEnew, etc.
