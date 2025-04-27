@@ -480,6 +480,14 @@ M.prep_chat = function(buf, file_name)
 	
 	-- Set outline navigation keybinding
 	M.helpers.set_keymap({ buf }, "n", "<C-g>t", M.cmd.Outline, "Parley prompt Outline Navigator")
+	
+	-- Set file opening keybinding
+	local of = M.config.chat_shortcut_open_file
+	if of then
+		for _, mode in ipairs(of.modes) do
+			M.helpers.set_keymap({ buf }, mode, of.shortcut, M.cmd.OpenFileUnderCursor, "Parley open file under cursor")
+		end
+	end
 
 	-- conceal parameters in model header so it's not distracting
 	if M.config.chat_conceal_model_params then
@@ -1513,6 +1521,96 @@ M.cmd.Outline = function()
 	
 	-- Launch the question picker
 	M.outline.question_picker(M.config)
+end
+
+-- Command to extract and open a file referenced with @@ syntax
+M.cmd.OpenFileUnderCursor = function()
+	-- Check if current buffer is a chat file
+	local buf = vim.api.nvim_get_current_buf()
+	local file_name = vim.api.nvim_buf_get_name(buf)
+	if M.not_chat(buf, file_name) then
+		M.logger.warning("OpenFileUnderCursor command is only available in chat files")
+		return
+	end
+	
+	-- Get the current line
+	local cursor_pos = vim.api.nvim_win_get_cursor(0)
+	local line_num = cursor_pos[1]
+	local current_line = vim.api.nvim_buf_get_lines(buf, line_num-1, line_num, false)[1]
+	local cursor_col = cursor_pos[2]
+	
+	-- Look for file references in the line
+	local filepath = nil
+	
+	-- First check if the line begins with @@
+	if current_line:match("^@@") then
+		filepath = current_line:match("^@@(.+)$"):gsub("^%s*(.-)%s*$", "%1")
+	else
+		-- Find @@ occurrences in the line
+		local references = {}
+		
+		-- Look for instances of @@ in the line
+		local start_idx = 1
+		while true do
+			local match_start, match_end = current_line:find("@@", start_idx)
+			if not match_start then break end
+			
+			-- Find the end of this path (space, line end, or next @@)
+			local content_end = nil
+			
+			-- Look for the next @@ after this one
+			local next_marker = current_line:find("@@", match_end + 1)
+			
+			-- If there's no next marker, use the end of line
+			if not next_marker then
+				content_end = #current_line
+			else
+				content_end = next_marker - 1
+			end
+			
+			-- Extract the path
+			local path = current_line:sub(match_end + 1, content_end):gsub("^%s*(.-)%s*$", "%1")
+			
+			table.insert(references, {
+				start = match_start,
+				content = path
+			})
+			
+			start_idx = match_end + 1
+		end
+		
+		if #references == 0 then
+			M.logger.warning("No file reference (@@ syntax) found on current line")
+			return
+		end
+		
+		-- Find the closest reference to cursor position
+		local closest_ref = nil
+		local min_distance = math.huge
+		
+		for _, ref in ipairs(references) do
+			local distance = math.abs(cursor_col - ref.start)
+			if distance < min_distance then
+				min_distance = distance
+				closest_ref = ref
+			end
+		end
+		
+		filepath = closest_ref.content
+	end
+	
+	-- Expand the path (handle relative paths, ~, etc.)
+	local expanded_path = vim.fn.expand(filepath)
+	
+	-- Check if file exists
+	if vim.fn.filereadable(expanded_path) == 0 then
+		M.logger.warning("File not found: " .. expanded_path)
+		return
+	end
+	
+	-- Open the file in a new buffer
+	M.logger.info("Opening file: " .. expanded_path)
+	vim.cmd("edit " .. vim.fn.fnameescape(expanded_path))
 end
 
 M._chat_finder_opened = false
