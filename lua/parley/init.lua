@@ -496,6 +496,13 @@ M.highlight_questions = function()
 		fg = "#777777" 
 	})
 	
+	-- Add highlight for file loading syntax
+	vim.api.nvim_set_hl(0, "FileLoading", {
+		fg = "#ffffff",
+		bg = "#5c2020", -- Red background similar to warning style
+		bold = true
+	})
+	
 	return ns
 end
 
@@ -531,6 +538,11 @@ M.highlight_question_block = function(buf)
 			in_block = false
 		elseif in_block then
 			vim.api.nvim_buf_add_highlight(buf, ns, "Question", i - 1, 0, -1)
+			
+			-- Highlight file loading syntax (@@filename) if present
+			if line:match("^@@") then
+				vim.api.nvim_buf_add_highlight(buf, ns, "FileLoading", i - 1, 0, -1)
+			end
 		end
 
 		-- Highlight annotations in the format @...@
@@ -977,7 +989,32 @@ M.chat_respond = function(params)
 	for idx, exchange in ipairs(parsed_chat.exchanges) do
 		if exchange.question and exchange.question.line_start >= start_index and 
 		    idx <= exchange_idx then
-			table.insert(all_messages, { role = "user", content = exchange.question.content })
+			-- Get the question content and process any file loading directives
+			local question_content = exchange.question.content
+			local lines = vim.split(question_content, "\n")
+			
+			-- Check for file loading syntax (@@filename)
+			for i, line in ipairs(lines) do
+				if line:match("^@@") then
+					-- Extract everything after @@ until the end of the line, trimming whitespace
+					local filepath = line:match("^@@(.+)$"):gsub("^%s*(.-)%s*$", "%1")
+					M.logger.debug("Detected file loading request: " .. filepath)
+					local file_content = M.helpers.read_file_content(filepath)
+					
+					if file_content then
+						-- Replace the @@filename line with the file content
+						lines[i] = "File contents of " .. filepath .. ":\n\n```" .. (vim.filetype.match({ filename = filepath }) or "") .. "\n" .. file_content .. "\n```"
+						M.logger.debug("Loaded file: " .. filepath)
+					else
+						-- Keep the line but add error note
+						lines[i] = line .. " (File not found or couldn't be read)"
+					end
+				end
+			end
+			
+			-- Reconstruct the question with any file contents included
+			question_content = table.concat(lines, "\n")
+			table.insert(all_messages, { role = "user", content = question_content })
 			
 			if exchange.answer and exchange.answer.line_start <= end_index and idx < exchange_idx then
 		        -- insert assistant response and summary for all previous questions.

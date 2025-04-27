@@ -43,6 +43,7 @@ Each chat transcript is really just a markdown file, with some conventions.
 3. An Answer is a line prefixed by 🤖:, and all following lines until next question.
 4. Two special lines in answer section, one is for assistant's reasoning output, prefixed with 🧠:. The other is for summary of one chat exchange prefixed with 📝:.
     1. We kept those two lines in the transcript itself for simplicity really, so that one transcript file's hermetic.
+5. File inclusion: a line that starts with @@ followed by a file path will automatically load that file's content into the prompt when sending to the LLM. For example, `@@/path/to/file.txt`. This only works when the line starts with @@ and appears alone on its own line within a question. Use this, if you want LLM to help you write your blog, for example.
 
 With this, any question asked is associated with context of all questions and answers coming before this question. When the chat gets too long and the chat_memory is enabled, chat exchanges earlier in the transcript will be represented by the summary line (📝:).
 

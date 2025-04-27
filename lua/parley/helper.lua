@@ -166,6 +166,24 @@ _H.ends_with = function(str, ending)
 	return ending == "" or str:sub(-#ending) == ending
 end
 
+-- Read file contents into a string if it exists
+---@param filepath string # path to the file
+---@return string|nil # file contents or nil if file doesn't exist
+_H.read_file_content = function(filepath)
+    local expanded_path = vim.fn.expand(filepath)
+    if vim.fn.filereadable(expanded_path) == 0 then
+        logger.warning("File not found: " .. expanded_path)
+        return nil
+    end
+    
+    local lines = vim.fn.readfile(expanded_path)
+    if not lines or #lines == 0 then
+        return ""
+    end
+    
+    return table.concat(lines, "\n")
+end
+
 -- helper function to find the root directory of the current git repository
 ---@param path string | nil  # optional path to start searching from
 ---@return string # returns the path of the git root dir or an empty string if not found
