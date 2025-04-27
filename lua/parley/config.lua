@@ -219,6 +219,16 @@ local config = {
 	style_chat_finder_margin_top = 2,
 	-- how wide should the preview be, number between 0.0 and 1.0
 	style_chat_finder_preview_ratio = 0.5,
+	
+	-- highlight styling (set to nil to use defaults that match your colorscheme)
+	-- these settings override the default highlight links if provided
+	highlight = {
+		-- Use existing highlight groups by default (nil values)
+		question = nil,       -- highlight for user questions (default: links to Keyword)
+		file_reference = nil, -- highlight for file references (default: links to WarningMsg)
+		thinking = nil,       -- highlight for reasoning lines (default: links to Comment)
+		annotation = nil,     -- highlight for annotations (default: links to DiffAdd)
+	},
 
 	-- lualine integration options
 	lualine = {

@@ -291,6 +291,35 @@ After answering my question, please include a brief summary of our exchange pref
 
 When the chat grows beyond the configured limit, the plugin will automatically replace older messages with the extracted summaries.
 
+# Customizing Appearance
+
+Parley is designed to work well with all color schemes while providing clear visual distinction between different elements.
+
+## Default Highlighting
+
+By default, Parley links its highlight groups to common built-in Neovim highlight groups:
+
+- Questions (user messages): Linked to `Keyword` - stands out in most themes
+- File references (@@filename): Linked to `WarningMsg` - clearly visible in all themes
+- Thinking/reasoning lines (🧠:): Linked to `Comment` - appropriately dimmed in most themes
+- Annotations (@...@): Linked to `DiffAdd` - typically has a subtle background color
+
+## Custom Highlighting
+
+You can customize these highlight groups by adding a `highlight` section to your configuration:
+
+```lua
+highlight = {
+    -- Override with your own highlight settings
+    question = { fg = "#ffaf00", italic = true },         -- Orange text for questions
+    file_reference = { fg = "#ffffff", bg = "#5c2020" },  -- White text on red for file refs
+    thinking = { fg = "#777777" },                        -- Gray text for reasoning lines
+    annotation = { bg = "#205c2c", fg = "#ffffff" },      -- White text on green background
+},
+```
+
+Each field is optional - set only the ones you want to customize and leave the others as `nil`.
+
 # Lualine Integration
 
 Parley includes built-in integration with lualine, allowing you to display the current agent in your statusline when working with chat buffers.

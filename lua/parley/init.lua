@@ -505,29 +505,53 @@ M.highlight_questions = function()
 	-- Set up namespace
 	local ns = vim.api.nvim_create_namespace("parley_question")
 	
-	-- Set up highlight groups
-	vim.api.nvim_set_hl(0, "Question", {
-		fg = "#ffaf00",
-		bold = false,
-		italic = true,
-		sp = "#ffaa00",
-	})
+	-- Create theme-agnostic highlight groups that work in both light and dark themes
+	-- Check for user-defined highlight settings
+	local user_highlights = M.config.highlight or {}
 	
-	vim.api.nvim_set_hl(0, "Annotation", {
-		bg = "#205c2c", 
-		fg = "#ffffff" 
-	})
+	-- Questions - Create a highlight that stands out but works in both themes
+	-- Link to existing highlights when possible for theme compatibility
+	if user_highlights.question then
+		-- Use user-defined highlighting if provided
+		vim.api.nvim_set_hl(0, "ParleyQuestion", user_highlights.question)
+	else
+		vim.api.nvim_set_hl(0, "ParleyQuestion", {
+			link = "Keyword", -- Keyword is usually a standout color in most themes
+		})
+	end
 	
-	vim.api.nvim_set_hl(0, "Think", {
-		fg = "#777777" 
-	})
+	-- File references - Should stand out similar to questions but with special emphasis
+	if user_highlights.file_reference then
+		vim.api.nvim_set_hl(0, "ParleyFileReference", user_highlights.file_reference)
+	else
+		vim.api.nvim_set_hl(0, "ParleyFileReference", {
+			link = "WarningMsg", -- Use built-in warning colors which work across themes
+		})
+	end
 	
-	-- Add highlight for file loading syntax
-	vim.api.nvim_set_hl(0, "FileLoading", {
-		fg = "#ffffff",
-		bg = "#5c2020", -- Red background similar to warning style
-		bold = true
-	})
+	-- Thinking/reasoning - Should be dimmed but visible in both themes
+	if user_highlights.thinking then
+		vim.api.nvim_set_hl(0, "ParleyThinking", user_highlights.thinking)
+	else
+		vim.api.nvim_set_hl(0, "ParleyThinking", {
+			link = "Comment", -- Comments are usually appropriately dimmed in all themes
+		})
+	end
+	
+	-- Annotations - Use existing highlight groups that work across themes
+	if user_highlights.annotation then
+		vim.api.nvim_set_hl(0, "ParleyAnnotation", user_highlights.annotation)
+	else
+		vim.api.nvim_set_hl(0, "ParleyAnnotation", {
+			link = "DiffAdd", -- Usually a green background with appropriate text color
+		})
+	end
+	
+	-- Create aliases for backward compatibility
+	vim.api.nvim_set_hl(0, "Question", { link = "ParleyQuestion" })
+	vim.api.nvim_set_hl(0, "FileLoading", { link = "ParleyFileReference" })
+	vim.api.nvim_set_hl(0, "Think", { link = "ParleyThinking" })
+	vim.api.nvim_set_hl(0, "Annotation", { link = "ParleyAnnotation" })
 	
 	return ns
 end
@@ -565,9 +589,28 @@ M.highlight_question_block = function(buf)
 		elseif in_block then
 			vim.api.nvim_buf_add_highlight(buf, ns, "Question", i - 1, 0, -1)
 			
-			-- Highlight file loading syntax (@@filename) if present
-			if line:match("^@@") then
-				vim.api.nvim_buf_add_highlight(buf, ns, "FileLoading", i - 1, 0, -1)
+			-- Highlight file loading syntax (@@filename) if present anywhere in the line
+			if line:match("@@") then
+				-- If the line starts with @@, highlight the whole line
+				if line:match("^@@") then
+					vim.api.nvim_buf_add_highlight(buf, ns, "FileLoading", i - 1, 0, -1)
+				else
+					-- Otherwise, find all @@ occurrences and highlight just those segments
+					local start_idx = 1
+					while true do
+						local match_start, match_end = line:find("@@", start_idx)
+						if not match_start then break end
+						
+						-- Look for the end of the filepath (space or end of line)
+						local next_marker = line:find("@@", match_end + 1)
+						local content_end = next_marker and (next_marker - 1) or #line
+						
+						-- Highlight this section (@@filepath)
+						vim.api.nvim_buf_add_highlight(buf, ns, "FileLoading", i - 1, match_start - 1, content_end)
+						
+						start_idx = match_end + 1
+					end
+				end
 			end
 		end
 
