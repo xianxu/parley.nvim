@@ -50,7 +50,9 @@ With this, any question asked is associated with context of all questions and an
 ## Interaction
 Place cursor in the question area, and `<C-g>g`, to ask assistant about it. If the question is at the end of document, it's a new question. Otherwise, a previously asked question is asked again, and previous answer replaced by new answers. You might want to do this, for example, if upon learning, you tweaks your questions more precisely. 
 
-For more extensive revisions, you can place the cursor on a question and use `<C-g>G` to resubmit all questions from the beginning of the chat up to and including the current question. Each question will be processed in sequence, with responses replacing the existing answers at their correct positions. This is particularly useful when you've edited multiple previous questions and want to regenerate all responses to maintain conversation coherence. A visual indicator will highlight each question as it's being processed.
+For more extensive revisions, you can place the cursor on a question and use `<C-g>G` to resubmit all questions from the beginning of the chat up to and including the current question. Each question will be processed in sequence, with responses replacing the existing answers at their correct positions. This is particularly useful when you've edited multiple previous questions and want to regenerate all responses to maintain conversation coherence. 
+
+During resubmission, a visual indicator will highlight each question as it's being processed, and notifications will display progress. You can stop the resubmission at any time with the stop shortcut (`<C-g>s`). When complete, the cursor will return to your original position.
 
 Because you can update previous questions and even assistant's answers, the answers of future questions, re-asked or not, will be different, subtly influenced by all those. After all, we are dealing with a statistical machine here.
 

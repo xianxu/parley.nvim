@@ -303,6 +303,13 @@ end
 -- stop receiving gpt responses for all processes and clean the handles
 ---@param signal number | nil # signal to send to the process
 M.cmd.Stop = function(signal)
+	-- If we were in the middle of a batch resubmission, make sure to restore the cursor setting
+	if original_free_cursor_value ~= nil then
+		M.logger.debug("Stop called during resubmission - restoring chat_free_cursor to: " .. tostring(original_free_cursor_value))
+		M.config.chat_free_cursor = original_free_cursor_value
+		original_free_cursor_value = nil
+	end
+	
 	M.tasker.stop(signal)
 end
 
@@ -865,11 +872,25 @@ M.find_exchange_at_line = function(parsed_chat, line_number)
 	return nil, nil
 end
 
-M.chat_respond = function(params, callback)
+M.chat_respond = function(params, callback, override_free_cursor)
 	local buf = vim.api.nvim_get_current_buf()
 	local win = vim.api.nvim_get_current_win()
 	local cursor_pos = vim.api.nvim_win_get_cursor(0)
 	local cursor_line = cursor_pos[1]
+	
+	-- Use the user's setting by default, but allow overriding
+	-- This logic means:
+	-- 1. If override_free_cursor is true, use_free_cursor should be false (force cursor movement)
+	-- 2. If override_free_cursor is false, use_free_cursor should be true (prevent cursor movement)
+	-- 3. If override_free_cursor is nil, fall back to config setting
+	local use_free_cursor
+	if override_free_cursor ~= nil then
+		use_free_cursor = not override_free_cursor
+	else
+		use_free_cursor = M.config.chat_free_cursor
+	end
+	M.logger.debug("chat_respond configured cursor behavior - override: " .. tostring(override_free_cursor) .. 
+	               ", final setting: " .. tostring(use_free_cursor))
 
 	if M.tasker.is_busy(buf) then
 		return
@@ -1143,7 +1164,7 @@ M.chat_respond = function(params, callback)
 		buf,
 		headers.provider or agent.provider,
 		M.dispatcher.prepare_payload(messages, headers.model or agent.model, headers.provider or agent.provider),
-		M.dispatcher.create_handler(buf, win, response_line + 3, true, "", not M.config.chat_free_cursor),
+		M.dispatcher.create_handler(buf, win, response_line + 3, true, "", not use_free_cursor),
 		vim.schedule_wrap(function(qid)
 			local qt = M.tasker.get_query(qid)
 			if not qt then
@@ -1215,16 +1236,27 @@ M.chat_respond = function(params, callback)
 			end
 			
 			-- Place cursor appropriately
-			if not M.config.chat_free_cursor then
+			M.logger.debug("Cursor movement check - use_free_cursor: " .. tostring(use_free_cursor) .. 
+			               ", config.chat_free_cursor: " .. tostring(M.config.chat_free_cursor))
+			
+			if not use_free_cursor then
+				M.logger.debug("Moving cursor - exchange_idx: " .. tostring(exchange_idx) .. 
+				               ", component: " .. tostring(component) ..
+				               ", response_line: " .. tostring(response_line))
+				               
 				if exchange_idx and component == "question" then
 					-- If we replaced an answer in the middle, move cursor to that position
 					local line = response_line + 2
+					M.logger.debug("Moving cursor to middle position: " .. tostring(line))
 					M.helpers.cursor_to_line(line, buf, win)
 				else
 					-- Otherwise, move to the end of the buffer
 					local line = vim.api.nvim_buf_line_count(buf)
+					M.logger.debug("Moving cursor to end: " .. tostring(line))
 					M.helpers.cursor_to_line(line, buf, win)
 				end
+			else
+				M.logger.debug("Not moving cursor due to free_cursor setting")
 			end
 			vim.cmd("doautocmd User ParleyDone")
 			
@@ -1301,14 +1333,45 @@ M.chat_respond_all = function()
 	
 	-- Start recursive resubmission process
 	M.logger.info("Resubmitting all " .. current_exchange_idx .. " questions...")
+	
+	-- Show a notification to the user
+	vim.api.nvim_echo({
+		{"Parley: ", "Type"},
+		{"Resubmitting all " .. current_exchange_idx .. " questions...", "WarningMsg"}
+	}, true, {})
+	
 	M.resubmit_questions_recursively(parsed_chat, 1, current_exchange_idx, header_end, original_question_line, win)
 end
 
 -- Recursively resubmit questions one at a time
+-- We keep track of the original chat_free_cursor value to restore when done
+local original_free_cursor_value = nil
+
 M.resubmit_questions_recursively = function(parsed_chat, current_idx, max_idx, header_end, original_position, original_win)
+	-- Save the original value on the first call
+	if current_idx == 1 then
+		original_free_cursor_value = M.config.chat_free_cursor
+		M.logger.debug("Starting recursive resubmission - saving original chat_free_cursor: " .. tostring(original_free_cursor_value))
+	end
+	
 	-- Check if we've processed all questions
 	if current_idx > max_idx then
 		M.logger.info("Completed resubmitting all questions")
+		
+		-- Always restore original setting at the end
+		if original_free_cursor_value ~= nil then
+			M.config.chat_free_cursor = original_free_cursor_value
+			M.logger.debug("End of resubmission - restored chat_free_cursor to: " .. tostring(original_free_cursor_value))
+			
+			-- Notify user of completion
+			vim.api.nvim_echo({
+				{"Parley: ", "Type"},
+				{"Completed resubmitting all questions", "String"}
+			}, true, {})
+			
+			-- Reset tracking variable
+			original_free_cursor_value = nil
+		end
 		
 		-- Return cursor to the original position (question under cursor) after everything is done
 		local buf = vim.api.nvim_get_current_buf()
@@ -1357,6 +1420,13 @@ M.resubmit_questions_recursively = function(parsed_chat, current_idx, max_idx, h
 	-- This is key: we use a simulated fake params object
 	-- but actually we set the cursor on the right question first
 	-- so the proper context is used and answer is placed in correct position
+	-- We force free_cursor to false to ensure cursor follows during resubmission
+	-- The parameter true means "force cursor movement" - it will override chat_free_cursor setting
+	M.logger.debug("Resubmitting question " .. current_idx .. " of " .. max_idx .. " with forced cursor movement")
+	
+	-- Force cursor movement for each individual question
+	M.config.chat_free_cursor = false  -- Will be restored at the end of the resubmission
+	
 	M.chat_respond(params, function()
 		-- After this question is processed, move to the next one
 		-- We need to reparse the chat since content has changed

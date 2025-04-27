@@ -140,18 +140,34 @@ end
 ---@param buf number # buffer number
 ---@param win number | nil # window number
 _H.cursor_to_line = function(line, buf, win)
+	logger.debug("cursor_to_line called - line: " .. tostring(line) .. 
+	            ", buf: " .. tostring(buf) .. 
+	            ", win: " .. tostring(win) ..
+	            ", current_buf: " .. tostring(vim.api.nvim_get_current_buf()))
+	
 	-- don't manipulate cursor if user is elsewhere
 	if buf ~= vim.api.nvim_get_current_buf() then
+		logger.debug("cursor_to_line early return - buffer mismatch")
 		return
 	end
 
 	-- check if win is valid
 	if not win or not vim.api.nvim_win_is_valid(win) then
+		logger.debug("cursor_to_line early return - invalid window")
 		return
 	end
 
+	-- ensure line is within range
+	local line_count = vim.api.nvim_buf_line_count(buf)
+	if line > line_count then
+		logger.debug("cursor_to_line adjusting - line " .. tostring(line) .. 
+		            " out of range (max: " .. tostring(line_count) .. ")")
+		line = line_count
+	end
+	
 	-- move cursor to the line
-	vim.api.nvim_win_set_cursor(win, { line, 0 })
+	logger.debug("cursor_to_line - setting cursor position to line " .. tostring(line))
+	pcall(vim.api.nvim_win_set_cursor, win, { line, 0 })
 end
 
 ---@param str string # string to check
