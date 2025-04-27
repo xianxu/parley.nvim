@@ -211,6 +211,11 @@ M.setup = function(opts)
 		Agent = agent_completion,
 	}
 
+	-- Add ChatRespondAll command
+	M.cmd.ChatRespondAll = function()
+		M.chat_respond_all()
+	end
+	
 	-- register default commands
 	for cmd, _ in pairs(M.cmd) do
 		if M.hooks[cmd] == nil then
@@ -415,6 +420,12 @@ M.prep_chat = function(buf, file_name)
 			modes = M.config.chat_shortcut_respond.modes,
 			shortcut = M.config.chat_shortcut_respond.shortcut,
 			comment = "Parley prompt Chat Respond",
+		},
+		{
+			command = "ChatRespondAll",
+			modes = M.config.chat_shortcut_respond_all.modes,
+			shortcut = M.config.chat_shortcut_respond_all.shortcut,
+			comment = "Parley prompt Chat Respond All",
 		},
 	}
 	for _, rc in ipairs(range_commands) do
@@ -854,7 +865,7 @@ M.find_exchange_at_line = function(parsed_chat, line_number)
 	return nil, nil
 end
 
-M.chat_respond = function(params)
+M.chat_respond = function(params, callback)
 	local buf = vim.api.nvim_get_current_buf()
 	local win = vim.api.nvim_get_current_win()
 	local cursor_pos = vim.api.nvim_win_get_cursor(0)
@@ -1216,8 +1227,147 @@ M.chat_respond = function(params)
 				end
 			end
 			vim.cmd("doautocmd User ParleyDone")
+			
+			-- Call the callback if provided
+			if callback then
+				callback()
+			end
 		end)
 	)
+end
+
+-- Function to resubmit all questions up to the cursor position
+M.chat_respond_all = function()
+	local buf = vim.api.nvim_get_current_buf()
+	local win = vim.api.nvim_get_current_win()
+	local cursor_pos = vim.api.nvim_win_get_cursor(0)
+	local cursor_line = cursor_pos[1]
+	
+	if M.tasker.is_busy(buf) then
+		return
+	end
+	
+	-- Get all lines and check if this is a chat file
+	local file_name = vim.api.nvim_buf_get_name(buf)
+	local reason = M.not_chat(buf, file_name)
+	if reason then
+		M.logger.warning("File " .. vim.inspect(file_name) .. " does not look like a chat file: " .. vim.inspect(reason))
+		return
+	end
+	
+	-- Get all lines
+	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+	
+	-- Find header section end
+	local header_end = nil
+	for i, line in ipairs(lines) do
+		if line:sub(1, 3) == "---" then
+			header_end = i
+			break
+		end
+	end
+	
+	if header_end == nil then
+		M.logger.error("Error while parsing headers: --- not found. Check your chat template.")
+		return
+	end
+	
+	-- Parse chat into structured representation
+	local parsed_chat = M.parse_chat(lines, header_end)
+	
+	-- Find which exchange contains the cursor
+	local current_exchange_idx, _ = M.find_exchange_at_line(parsed_chat, cursor_line)
+	if not current_exchange_idx then
+		-- If cursor isn't on any exchange, find the last exchange before cursor
+		for i = #parsed_chat.exchanges, 1, -1 do
+			local exchange = parsed_chat.exchanges[i]
+			if exchange.question and exchange.question.line_start < cursor_line then
+				current_exchange_idx = i
+				break
+			end
+		end
+	end
+	
+	if not current_exchange_idx then
+		M.logger.warning("No questions found before cursor position")
+		return
+	end
+	
+	-- Save the original position for later restoration
+	local original_question_line = nil
+	if current_exchange_idx and parsed_chat.exchanges[current_exchange_idx] then
+		original_question_line = parsed_chat.exchanges[current_exchange_idx].question.line_start
+	end
+	
+	-- Start recursive resubmission process
+	M.logger.info("Resubmitting all " .. current_exchange_idx .. " questions...")
+	M.resubmit_questions_recursively(parsed_chat, 1, current_exchange_idx, header_end, original_question_line, win)
+end
+
+-- Recursively resubmit questions one at a time
+M.resubmit_questions_recursively = function(parsed_chat, current_idx, max_idx, header_end, original_position, original_win)
+	-- Check if we've processed all questions
+	if current_idx > max_idx then
+		M.logger.info("Completed resubmitting all questions")
+		
+		-- Return cursor to the original position (question under cursor) after everything is done
+		local buf = vim.api.nvim_get_current_buf()
+		
+		-- If we have an original position saved, restore it
+		if original_position and original_win and vim.api.nvim_win_is_valid(original_win) then
+			-- Get current lines - the line numbers may have changed during processing
+			local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+			local parsed_chat_final = M.parse_chat(lines, header_end)
+			
+			-- Find the original question's new position
+			if parsed_chat_final.exchanges[max_idx] and parsed_chat_final.exchanges[max_idx].question then
+				local new_position = parsed_chat_final.exchanges[max_idx].question.line_start
+				M.helpers.cursor_to_line(new_position, buf, original_win)
+			else
+				-- Fallback if we can't find the original question
+				M.helpers.cursor_to_line(original_position, buf, original_win)
+			end
+		end
+		
+		return
+	end
+	
+	-- Create params for the current question
+	local params = {}
+	local buf = vim.api.nvim_get_current_buf()
+	local win = vim.api.nvim_get_current_win()
+	
+	-- Highlight the current question being processed
+	local ns_id = vim.api.nvim_create_namespace("ParleyResubmitAll")
+	vim.api.nvim_buf_clear_namespace(buf, ns_id, 0, -1)
+	
+	-- Find the question and position the cursor on it to ensure the correct context
+	local question = parsed_chat.exchanges[current_idx].question
+	local highlight_start = question.line_start
+	vim.api.nvim_buf_add_highlight(buf, ns_id, "DiffAdd", highlight_start - 1, 0, -1)
+	
+	-- Set the cursor to this question to ensure proper context processing
+	M.helpers.cursor_to_line(highlight_start, buf, win)
+	
+	-- Schedule highlight to clear after processing is complete
+	vim.defer_fn(function()
+		vim.api.nvim_buf_clear_namespace(buf, ns_id, 0, -1)
+	end, 1000)
+	
+	-- This is key: we use a simulated fake params object
+	-- but actually we set the cursor on the right question first
+	-- so the proper context is used and answer is placed in correct position
+	M.chat_respond(params, function()
+		-- After this question is processed, move to the next one
+		-- We need to reparse the chat since content has changed
+		local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+		local parsed_chat_updated = M.parse_chat(lines, header_end)
+		
+		-- Continue with the next question
+		vim.defer_fn(function()
+			M.resubmit_questions_recursively(parsed_chat_updated, current_idx + 1, max_idx, header_end, original_position, original_win)
+		end, 500) -- Small delay to allow UI to update
+	end)
 end
 
 M.cmd.ChatRespond = function(params)
