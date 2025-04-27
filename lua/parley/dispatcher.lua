@@ -240,38 +240,69 @@ local query = function(buf, provider, payload, handler, on_exit, callback)
 				if line ~= "" and line ~= nil then
 					qt.raw_response = qt.raw_response .. line .. "\n"
 				end
+				
+				-- Skip empty lines
+				if line == "" or line == nil then
+					goto continue
+				end
+				
 				line = line:gsub("^data: ", "")
 				local content = ""
-				if line:match("choices") and line:match("delta") and line:match("content") then
-					line = vim.json.decode(line)
-					if line.choices[1] and line.choices[1].delta and line.choices[1].delta.content then
-						content = line.choices[1].delta.content
+				
+				-- Handle JSON parsing safely to prevent errors with malformed responses
+				local success, decoded_line = pcall(function()
+					-- Only try to decode if it looks like valid JSON
+					if line:match("^%s*{") and line:match("}%s*$") then
+						return vim.json.decode(line)
+					end
+					return nil
+				end)
+				
+				-- OpenAI format
+				if success and decoded_line and decoded_line.choices then
+					if decoded_line.choices[1] and decoded_line.choices[1].delta and decoded_line.choices[1].delta.content then
+						content = decoded_line.choices[1].delta.content
+					end
+				-- Text detection without full JSON parsing for simpler formats
+				elseif line:match("choices") and line:match("delta") and line:match("content") then
+					-- Fall back to the original approach if JSON parsing failed
+					success, decoded_line = pcall(vim.json.decode, line)
+					if success and decoded_line and decoded_line.choices and 
+						decoded_line.choices[1] and decoded_line.choices[1].delta and 
+						decoded_line.choices[1].delta.content then
+						content = decoded_line.choices[1].delta.content
 					end
 				end
 
+				-- Anthropic format
 				if qt.provider == "anthropic" and line:match('"text":') then
 					if line:match("content_block_start") or line:match("content_block_delta") then
-						line = vim.json.decode(line)
-						if line.delta and line.delta.text then
-							content = line.delta.text
-						end
-						if line.content_block and line.content_block.text then
-							content = line.content_block.text
+						success, decoded_line = pcall(vim.json.decode, line)
+						if success and decoded_line then
+							if decoded_line.delta and decoded_line.delta.text then
+								content = decoded_line.delta.text
+							end
+							if decoded_line.content_block and decoded_line.content_block.text then
+								content = decoded_line.content_block.text
+							end
 						end
 					end
 				end
 
-				if qt.provider == "googleai" then
-					if line:match('"text":') then
-						content = vim.json.decode("{" .. line .. "}").text
+				-- Google AI format
+				if qt.provider == "googleai" and line:match('"text":') then
+					success, decoded_line = pcall(vim.json.decode, "{" .. line .. "}")
+					if success and decoded_line and decoded_line.text then
+						content = decoded_line.text
 					end
 				end
-
 
 				if content and type(content) == "string" then
 					qt.response = qt.response .. content
 					handler(qid, content)
 				end
+				
+				::continue::
 			end
 		end
 

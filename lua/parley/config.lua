@@ -99,7 +99,6 @@ local config = {
 			model = { model = "gpt-4o", temperature = 1.1, top_p = 1 },
 			-- system prompt (use this to specify the persona/role of the AI)
 			system_prompt = require("parley.defaults").chat_system_prompt,
-		    disable = true,
 		},
 		{
 			provider = "openai",
