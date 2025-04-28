@@ -63,6 +63,10 @@ With this, any question asked is associated with context of all questions and an
 
 Place cursor in the question area, and `<C-g>g`, to ask assistant about it. If the question is at the end of document, it's a new question. Otherwise, a previously asked question is asked again, and previous answer replaced by the new answer. You might want to do this, for example, if upon learning, you tweaks your questions. Or you updated referenced file (with the `@@` syntax).
 
+If you see a message saying "Another Parley process is already running", you can either:
+1. Use `<C-g>s` to stop the current process and then try again
+2. Add a `!` at the end of the command (`:ParleyChatRespond!`) to force a new response even if a process is running
+
 For more extensive revisions, you can place the cursor on a question and use `<C-g>G` to resubmit all questions from the beginning of the chat up to and including the current question. Each question will be processed in sequence, with responses replacing the existing answers at their correct positions. This is particularly useful when you've edited multiple previous questions, and/or referenced files and want to update all previously asked questions.
 
 During the resubmission, a visual indicator will highlight each question as it's being processed, and notifications will display progress. You can stop the resubmission at any time with the stop shortcut (`<C-g>s`). When complete, the cursor will return to your original position.

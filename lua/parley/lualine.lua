@@ -22,6 +22,30 @@ M.create_component = function(parley_instance)
   local not_chat = parley.not_chat
   
   -- Define the parley component
+  -- Cache the busy state and only check it when events fire
+  local cached_busy_state = false
+  local last_check_time = 0
+  local check_interval = 1  -- seconds
+  
+  -- Function to check busy state with caching
+  local function check_is_busy(buf)
+    local current_time = os.time()
+    
+    -- Only check actual busy state periodically or when forced by events
+    if (current_time - last_check_time) >= check_interval then
+      cached_busy_state = parley.tasker.is_busy(buf)
+      last_check_time = current_time
+    end
+    
+    return cached_busy_state
+  end
+  
+  -- Force refresh when specific events occur
+  parley.helpers.autocmd({"User"}, {"ParleyQueryStarted", "ParleyQueryFinished", "ParleyDone"}, function()
+    -- Reset cache immediately on these events
+    last_check_time = 0
+  end)
+  
   return {
     function()
       -- Check if current buffer is a chat
@@ -35,8 +59,8 @@ M.create_component = function(parley_instance)
       -- Get current agent
       local agent_name = parley._state.agent or ""
       
-      -- Check if a response is being generated
-      local is_busy = parley.tasker.is_busy(buf)
+      -- Check if a response is being generated (using cached state)
+      local is_busy = check_is_busy(buf)
       
       -- Show agent name with icon (spinner if busy)
       if is_busy then
@@ -57,7 +81,8 @@ M.create_component = function(parley_instance)
     -- Use the hint highlight group for consistency with the in-buffer display
     color = function()
       local buf = vim.api.nvim_get_current_buf()
-      local is_busy = parley.tasker.is_busy(buf)
+      -- Use the same cached busy state for color
+      local is_busy = check_is_busy(buf)
       
       -- Use highlight group names without explicitly specifying fg
       -- This lets lualine handle the color extraction properly

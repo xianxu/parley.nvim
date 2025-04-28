@@ -923,7 +923,7 @@ M.find_exchange_at_line = function(parsed_chat, line_number)
 	return nil, nil
 end
 
-M.chat_respond = function(params, callback, override_free_cursor)
+M.chat_respond = function(params, callback, override_free_cursor, force)
 	local buf = vim.api.nvim_get_current_buf()
 	local win = vim.api.nvim_get_current_win()
 	local cursor_pos = vim.api.nvim_win_get_cursor(0)
@@ -943,7 +943,9 @@ M.chat_respond = function(params, callback, override_free_cursor)
 	M.logger.debug("chat_respond configured cursor behavior - override: " .. tostring(override_free_cursor) .. 
 	               ", final setting: " .. tostring(use_free_cursor))
 
-	if M.tasker.is_busy(buf) then
+	-- Check if there's already an active process for this buffer
+	if not force and M.tasker.is_busy(buf) then
+		M.logger.warning("A Parley process is already running. Use stop to cancel or force to override.")
 		return
 	end
 
@@ -1509,8 +1511,17 @@ M.resubmit_questions_recursively = function(parsed_chat, current_idx, max_idx, h
 end
 
 M.cmd.ChatRespond = function(params)
+	local force = false
+	
+	-- Check for force flag
+	if params.args and params.args:match("!$") then
+		force = true
+		params.args = params.args:gsub("!$", "")
+		M.logger.info("Forcing response even if another process is running")
+	end
+	
 	if params.args == "" and vim.v.count == 0 then
-		M.chat_respond(params)
+		M.chat_respond(params, nil, nil, force)
 		return
 	elseif params.args == "" and vim.v.count ~= 0 then
 		params.args = tostring(vim.v.count)
@@ -1566,7 +1577,7 @@ M.cmd.ChatRespond = function(params)
 		params.line2 = #lines
 	end
 	
-	M.chat_respond(params)
+	M.chat_respond(params, nil, nil, force)
 end
 
 -- Command for navigating questions and headers in chat documents

@@ -9,6 +9,12 @@ local uv = vim.uv or vim.loop
 local M = {}
 M._handles = {}
 M._queries = {} -- table of latest queries
+M._debug = {
+    is_busy_calls = 0,
+    warnings_suppressed = 0,
+    last_warning_time = 0,
+    warning_interval = 1 -- seconds between warnings
+}
 
 ---@param fn function # function to wrap so it only gets called once
 M.once = function(fn)
@@ -71,7 +77,15 @@ end
 ---@param pid number | string # the process id
 ---@param buf number | nil # buffer number
 M.add_handle = function(handle, pid, buf)
+    -- Check if this PID is already in the handles table
+    for _, h in ipairs(M._handles) do
+        if h.pid == pid then
+            logger.debug("Process " .. pid .. " is already in handles table, not adding duplicate")
+            return
+        end
+    end
 	table.insert(M._handles, { handle = handle, pid = pid, buf = buf })
+	logger.debug("Added handle for PID " .. pid .. ", total handles: " .. #M._handles)
 end
 
 -- remove a process handle from the _handles table using its pid
@@ -80,37 +94,132 @@ M.remove_handle = function(pid)
 	for i, h in ipairs(M._handles) do
 		if h.pid == pid then
 			table.remove(M._handles, i)
+			logger.debug("Removed handle for PID " .. pid .. ", remaining handles: " .. (#M._handles))
 			return
 		end
 	end
+	logger.debug("Attempted to remove nonexistent handle for PID " .. pid)
 end
 
 --- check if there is some pid running for the given buffer
 ---@param buf number | nil # buffer number
 ---@return boolean
 M.is_busy = function(buf)
+	-- Increment debug counter
+	M._debug.is_busy_calls = M._debug.is_busy_calls + 1
+	
 	if buf == nil then
 		return false
 	end
+	
+	-- Initialize variables to track the first active process we find
+	local active_pid = nil
+	
+	-- Count active processes for this buffer
+	local active_count = 0
+	
 	for _, h in ipairs(M._handles) do
 		if h.buf == buf then
-			logger.warning("Another Parley process [" .. h.pid .. "] is already running for buffer " .. buf)
-			return true
+			-- Check if the process is still active by sending signal 0 (doesn't kill the process, just checks existence)
+			local is_active = false
+			
+			-- Use pcall since kill might throw an error if process doesn't exist
+			pcall(function()
+				if type(h.pid) == "number" and h.pid > 0 then
+					is_active = uv.kill(h.pid, 0) == 0
+				end
+			end)
+			
+			if is_active then
+				active_count = active_count + 1
+				if active_pid == nil then
+					active_pid = h.pid -- Store the first active PID we find
+				end
+			else
+				-- Process no longer exists, remove it from handles
+				logger.debug("Removing stale process handle: " .. h.pid)
+				M.remove_handle(h.pid)
+			end
 		end
 	end
+	
+	-- After processing all handles, report the result once
+	if active_pid ~= nil then
+		-- Limit warning frequency to prevent log spam
+		local current_time = os.time()
+		if (current_time - M._debug.last_warning_time) >= M._debug.warning_interval then
+			-- Only log warning if enough time has passed since the last one
+			logger.warning("Another Parley process [" .. active_pid .. "] is already running for buffer " .. buf .. 
+						   " (found " .. active_count .. " active process(es))")
+			M._debug.last_warning_time = current_time
+		else
+			-- Count suppressed warnings
+			M._debug.warnings_suppressed = M._debug.warnings_suppressed + 1
+		end
+		return true
+	end
+	
 	return false
+end
+
+-- Report debug stats for is_busy calls
+M.report_debug_stats = function()
+	logger.debug("is_busy stats: calls=" .. M._debug.is_busy_calls .. 
+				 ", suppressed warnings=" .. M._debug.warnings_suppressed)
+	-- Reset counters after reporting
+	M._debug.is_busy_calls = 0
+	M._debug.warnings_suppressed = 0
+end
+
+-- Clean up stale process handles that are no longer running
+M.cleanup_stale_handles = function()
+	local i = 1
+	local active_count = 0
+	local removed_count = 0
+	
+	while i <= #M._handles do
+		local h = M._handles[i]
+		
+		-- Check if process still exists
+		local process_exists = false
+		pcall(function()
+			if type(h.pid) == "number" and h.pid > 0 then
+				process_exists = uv.kill(h.pid, 0) == 0
+			end
+		end)
+		
+		if not process_exists then
+			-- Process no longer exists, remove from handles
+			logger.debug("Cleanup: Removing stale process handle [" .. h.pid .. "]")
+			table.remove(M._handles, i)
+			removed_count = removed_count + 1
+		else
+			active_count = active_count + 1
+			i = i + 1
+		end
+	end
+	
+	logger.debug("Cleanup completed: " .. active_count .. " active processes, " .. 
+				 removed_count .. " stale processes removed")
+	
+	-- Report debug stats periodically
+	M.report_debug_stats()
 end
 
 -- stop receiving gpt responses for all processes and clean the handles
 ---@param signal number | nil # signal to send to the process
 M.stop = function(signal)
-	if M._handles == {} then
+	if #M._handles == 0 then
 		return
 	end
 
 	for _, h in ipairs(M._handles) do
 		if h.handle ~= nil and not h.handle:is_closing() then
-			uv.kill(h.pid, signal or 15)
+			pcall(function()
+				if type(h.pid) == "number" and h.pid > 0 then
+					uv.kill(h.pid, signal or 15)
+				end
+			end)
 		end
 	end
 
@@ -137,6 +246,9 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader)
 	local stdout_data = ""
 	local stderr_data = ""
 
+	-- Run cleanup routine to remove stale processes
+	M.cleanup_stale_handles()
+	
 	if M.is_busy(buf) then
 		return
 	end
