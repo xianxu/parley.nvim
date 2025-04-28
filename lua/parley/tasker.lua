@@ -15,6 +15,11 @@ M._debug = {
     last_warning_time = 0,
     warning_interval = 1 -- seconds between warnings
 }
+M._cache_metrics = {
+    creation = 0,   -- tokens created in cache
+    read = 0,       -- tokens read from cache
+    input = 0       -- total input tokens
+}
 
 ---@param fn function # function to wrap so it only gets called once
 M.once = function(fn)
@@ -163,6 +168,35 @@ M.is_busy = function(buf, skip_warning)
 	end
 	
 	return false
+end
+
+-- Set cache metrics
+---@param metrics table # table with creation and read fields
+M.set_cache_metrics = function(metrics)
+    if metrics then
+        if metrics.creation ~= nil then
+            M._cache_metrics.creation = metrics.creation
+        end
+        if metrics.read ~= nil then
+            M._cache_metrics.read = metrics.read
+        end
+        if metrics.input ~= nil then
+            M._cache_metrics.input = metrics.input
+        end
+        logger.debug("Cache metrics updated: input=" .. (metrics.input or M._cache_metrics.input) .. 
+                    ", creation=" .. (metrics.creation or M._cache_metrics.creation) .. 
+                    ", read=" .. (metrics.read or M._cache_metrics.read))
+    end
+end
+
+-- Get cache metrics
+---@return table # table with creation, read and input fields
+M.get_cache_metrics = function()
+    return {
+        creation = M._cache_metrics.creation,
+        read = M._cache_metrics.read,
+        input = M._cache_metrics.input
+    }
 end
 
 -- report_debug_stats function removed - only used internally

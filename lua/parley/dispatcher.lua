@@ -359,6 +359,40 @@ local query = function(buf, provider, payload, handler, on_exit, callback)
 				end
 				local raw_response = qt.raw_response
 				logger.debug(qt.provider .. " response: \n" .. vim.inspect(qt.raw_response))
+				
+				-- Check for Anthropic cache usage metrics and store them
+				if qt.provider == "anthropic" or qt.provider == "claude" then
+					-- Clean up the raw response - it often contains multiple JSON objects
+					local clean_json = raw_response:match("{.-usage.-}")
+					if clean_json then
+						-- Try to parse just the complete JSON object that contains usage info
+						local success, decoded = pcall(vim.json.decode, clean_json)
+						if not success then
+							-- If that fails, try a more aggressive clean: find just the usage object
+							local usage_json = raw_response:match('("usage":%s*{.-})')
+							if usage_json then
+								-- Create a valid JSON object around the usage
+								usage_json = "{" .. usage_json .. "}"
+								success, decoded = pcall(vim.json.decode, usage_json)
+							end
+						end
+						
+						if success and decoded and decoded.usage then
+							-- Store all available metrics
+							local metrics = {
+								input = decoded.usage.input_tokens or 0,
+								creation = decoded.usage.cache_creation_input_tokens or 0,
+								read = decoded.usage.cache_read_input_tokens or 0
+							}
+							
+							tasker.set_cache_metrics(metrics)
+							
+							logger.debug("Anthropic metrics: input=" .. metrics.input .. 
+								", creation=" .. metrics.creation .. 
+								", read=" .. metrics.read)
+						end
+					end
+				end
 
 				local content = qt.response
 				if (qt.provider == 'openai' or qt.provider == 'copilot') and content == "" and raw_response:match('choices') and raw_response:match("content") then

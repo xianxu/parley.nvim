@@ -70,10 +70,30 @@ M.create_component = function(parley_instance)
       -- Check if a response is being generated (using cached state)
       local is_busy = check_is_busy(buf)
       
+      -- Get provider info and check if it's Anthropic/Claude
+      local agent_info = nil
+      if parley.get_agent_info then
+        -- Get agent info with empty headers since we don't have any here
+        agent_info = parley.get_agent_info({}, parley.get_agent(agent_name))
+      end
+      
+      local is_anthropic = agent_info and 
+                           (agent_info.provider == "anthropic" or agent_info.provider == "claude")
+      
       -- Show agent name with icon (spinner if busy)
       if is_busy then
         return "🔄 " .. agent_name
       else
+        -- For Anthropic/Claude, show cache metrics if available
+        if is_anthropic then
+          local cache_metrics = parley.tasker.get_cache_metrics()
+          if cache_metrics.input > 0 or cache_metrics.creation > 0 or cache_metrics.read > 0 then
+            -- Format: 🤖 Claude [input/creation/read] - showing all three metrics
+            return "🤖 " .. agent_name .. " [" .. cache_metrics.input .. "/" .. cache_metrics.creation .. "/" .. cache_metrics.read .. "]"
+          end
+        end
+        
+        -- Default display without cache metrics
         return "🤖 " .. agent_name
       end
     end,

@@ -1979,7 +1979,7 @@ M.get_agent_info = function(headers, agent)
 		info.model = { model = info.model }
 	end
 	
-	M.logger.debug("Resolved agent info: " .. vim.inspect(info))
+    -- 	M.logger.debug("Resolved agent info: " .. vim.inspect(info))
 	return info
 end
 
