@@ -796,6 +796,16 @@ M.parse_chat = function(lines, header_end)
 		if key ~= nil then
 			result.headers[key] = value
 		end
+		
+		-- Parse configuration override parameters
+		local config_key, config_value = line:match("^%- ([%w_]+): (.*)")
+		if config_key ~= nil and config_key ~= "file" and config_key ~= "model" and config_key ~= "provider" and config_key ~= "role" then
+			-- Try to convert to number if possible
+			if tonumber(config_value) ~= nil then
+				config_value = tonumber(config_value)
+			end
+			result.headers["config_" .. config_key] = config_value
+		end
 	end
 	
 	-- Get prefixes
@@ -1027,7 +1037,18 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 	
 	-- prepare for summary extraction
 	local memory_enabled = M.config.chat_memory and M.config.chat_memory.enable
-	local max_exchanges = memory_enabled and M.config.chat_memory.max_full_exchanges or 999999
+	
+	-- Use header-defined max_full_exchanges if available, otherwise use config value
+	local max_exchanges = 999999
+	if memory_enabled then
+		if headers.config_max_full_exchanges then
+			max_exchanges = headers.config_max_full_exchanges
+			M.logger.debug("Using header-defined max_full_exchanges: " .. tostring(max_exchanges))
+		else
+			max_exchanges = M.config.chat_memory.max_full_exchanges
+		end
+	end
+	
 	local omit_user_text = memory_enabled and M.config.chat_memory.omit_user_text or "[Previous messages omitted]"
 
 	-- if model contains { } then it is a json string otherwise it is a model name

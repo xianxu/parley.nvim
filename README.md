@@ -39,7 +39,11 @@ Parley is a streamlined LLM chat plugin for NeoVIM, focusing exclusively on prov
 
 Each chat transcript is really just a markdown file, with some additional conventions. So think them as markdown files with benefits (of Parley).
 
-1. There is a header section. 
+1. There is a header section that contains metadata and can override configuration parameters:
+   - Standard metadata like `file: filename.md` (required)
+   - Model information like `model: {"model":"gpt-4o","temperature":1.1,"top_p":1}`
+   - Provider information like `provider: openai`
+   - Configuration overrides like `max_full_exchanges: 20` to customize behavior for this specific chat (controls how many full exchanges to keep before summarizing)
 2. User's questions and Assistant's answers take turns.
 3. A question is a line starting with 💬:, and all following lines until next answer.
 4. An Answer is a line starting with 🤖:, and all following lines until next question.
