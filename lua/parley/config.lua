@@ -206,7 +206,7 @@ local config = {
 		-- prefix for reasoning lines in assistant responses (used to ignore reasoning in subsequent requests)
 		reasoning_prefix = "🧠:", 
 		-- text to replace omitted user messages
-		omit_user_text = "Summarize previous chat",
+		omit_user_text = "Summarize our chat",
 	},
 
 	-- styling for chatfinder

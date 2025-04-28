@@ -841,12 +841,16 @@ M.parse_chat = function(lines, header_end)
 				current_exchange[current_component].content = current_exchange[current_component].content:gsub("^%s*(.-)%s*$", "%1")
 			end
 			
+			-- Extract question content
+			local question_content = line:sub(line:sub(1, #user_prefix) == user_prefix and #user_prefix + 1 or #old_user_prefix + 1)
+			
 			-- Start a new exchange
 			current_exchange = {
 				question = {
 					line_start = i,
 					line_end = nil,
-					content = line:sub(line:sub(1, #user_prefix) == user_prefix and #user_prefix + 1 or #old_user_prefix + 1)
+					content = question_content,
+					has_file_reference = question_content:match("@@") ~= nil
 				},
 				answer = nil
 			}
@@ -900,6 +904,11 @@ M.parse_chat = function(lines, header_end)
 		-- Handle content continuation
 		elseif current_exchange and current_component then
 			current_exchange[current_component].content = current_exchange[current_component].content .. "\n" .. line
+			
+			-- Check for file references in question content
+			if current_component == "question" and line:match("@@") then
+				current_exchange[current_component].has_file_reference = true
+			end
 		end
 	end
 	
@@ -1083,127 +1092,106 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 	end
 	agent_suffix = M.render.template(agent_suffix, { ["{{agent}}"] = agent_name })
 
-	-- Convert parsed_chat to messages for the model
-	local all_messages = {}
-	-- message_summaries stores the summary of corresponding exchange.
-	local message_summaries = {}
+	-- Convert parsed_chat to messages for the model using a single-pass approach
+	local messages = { { role = "", content = "" } } -- Start with empty message for system prompt
 	
-	-- Add empty first message that will be replaced with system prompt
-	table.insert(all_messages, { role = "", content = "" })
+	-- Process each exchange, determining whether to preserve or summarize
+	local total_exchanges = #parsed_chat.exchanges
 	
-	-- Extract exchanges within our processing range
+	-- Single pass through all exchanges
 	for idx, exchange in ipairs(parsed_chat.exchanges) do
-		if exchange.question and exchange.question.line_start >= start_index and 
-		    idx <= exchange_idx then
-			-- Get the question content and process any file loading directives
-			local question_content = exchange.question.content
-			local lines = vim.split(question_content, "\n")
+		if exchange.question and exchange.question.line_start >= start_index and idx <= exchange_idx then
+			-- Determine if this exchange should be preserved in full
+			local should_preserve = false
 			
-			-- Check for file loading syntax (@@filename)
-			for i, line in ipairs(lines) do
-				if line:match("^@@") then
-					-- Extract everything after @@ until the end of the line, trimming whitespace
-					local path = line:match("^@@(.+)$"):gsub("^%s*(.-)%s*$", "%1")
-					M.logger.debug("Detected file/directory loading request: " .. path)
-					
-					-- Check if this is a directory or has directory pattern markers (* or **/)
-					if M.helpers.is_directory(path) or 
-					   path:match("/$") or        -- Ends with slash
-					   path:match("/%*%*?/?") or  -- Contains /** or /**/ 
-					   path:match("/%*%.%w+$") then -- Contains /*.ext pattern
+			-- Preserve if this is the current question
+            if idx == exchange_idx then
+				should_preserve = true
+				M.logger.debug("Exchange #" .. idx .. " preserved as current question")
+	        end
+			-- Preserve if it's a recent exchange (within max_full_exchanges from the end)
+			if idx > total_exchanges - max_exchanges then
+				should_preserve = true
+				M.logger.debug("Exchange #" .. idx .. " preserved as recent exchange")
+			end
+			
+			-- Preserve if it contains file references
+			if exchange.question.has_file_reference then
+				should_preserve = true
+				M.logger.debug("Exchange #" .. idx .. " preserved due to file references")
+			end
+			
+			-- Process the question
+			if should_preserve then
+				-- Get the question content and process any file loading directives
+				local question_content = exchange.question.content
+				local lines = vim.split(question_content, "\n")
+				
+				-- Check for file loading syntax (@@filename)
+				for i, line in ipairs(lines) do
+					if line:match("^@@") then
+						-- Extract everything after @@ until the end of the line, trimming whitespace
+						local path = line:match("^@@(.+)$"):gsub("^%s*(.-)%s*$", "%1")
+						M.logger.debug("Detected file/directory loading request: " .. path)
 						
-						-- Process as a directory pattern
-						M.logger.debug("Processing as directory pattern: " .. path)
-						local directory_content = M.helpers.process_directory_pattern(path)
-						
-						-- Replace the @@directory line with the directory content
-						lines[i] = directory_content
-						M.logger.debug("Loaded directory content for: " .. path)
-					else
-						-- Process as a single file
-						local file_content = M.helpers.read_file_content(path)
-						
-						if file_content then
-							-- Replace the @@filename line with the file content
-							lines[i] = "File contents of " .. path .. ":\n\n```" .. (vim.filetype.match({ filename = path }) or "") .. "\n" .. file_content .. "\n```"
-							M.logger.debug("Loaded file: " .. path)
+						-- Check if this is a directory or has directory pattern markers (* or **/)
+						if M.helpers.is_directory(path) or 
+						   path:match("/$") or        -- Ends with slash
+						   path:match("/%*%*?/?") or  -- Contains /** or /**/ 
+						   path:match("/%*%.%w+$") then -- Contains /*.ext pattern
+							
+							-- Process as a directory pattern
+							M.logger.debug("Processing as directory pattern: " .. path)
+							local directory_content = M.helpers.process_directory_pattern(path)
+							
+							-- Replace the @@directory line with the directory content
+							lines[i] = directory_content
+							M.logger.debug("Loaded directory content for: " .. path)
 						else
-							-- Keep the line but add error note
-							lines[i] = line .. " (File not found or couldn't be read)"
+							-- Process as a single file
+							local file_content = M.helpers.read_file_content(path)
+							
+							if file_content then
+								-- Replace the @@filename line with the file content
+								lines[i] = "File contents of " .. path .. ":\n\n```" .. (vim.filetype.match({ filename = path }) or "") .. "\n" .. file_content .. "\n```"
+								M.logger.debug("Loaded file: " .. path)
+							else
+								-- Keep the line but add error note
+								lines[i] = line .. " (File not found or couldn't be read)"
+							end
 						end
 					end
 				end
-			end
-			
-			-- Reconstruct the question with any file contents included
-			question_content = table.concat(lines, "\n")
-			table.insert(all_messages, { role = "user", content = question_content })
-			
-			if exchange.answer and exchange.answer.line_start <= end_index and idx < exchange_idx then
-		        -- insert assistant response and summary for all previous questions.
-				table.insert(all_messages, { role = "assistant", content = exchange.answer.content })
 				
-				if exchange.summary then
-					table.insert(message_summaries, exchange.summary.content)
-				end
-			end
-		end
-	end
-
-	M.logger.debug("Messages: " .. vim.inspect(all_messages))
-
-	-- simplify all_messages and message_summaries into messages, by use message_summaries instead of precise exchange recorded in all_messages
-	local messages = {}
-	if memory_enabled and #all_messages > 1 then -- Skip the empty first message
-		local total_exchanges = math.floor((#all_messages - 1) / 2)
-
-		if total_exchanges > max_exchanges then
-			-- Keep only the most recent exchanges
-			local messages_to_keep = max_exchanges * 2
-			if messages_to_keep < #all_messages - 2 then
-				-- Create a summary message pair at the beginning
-				messages = {
-					{
-						role = "user",
-						content = omit_user_text
-					}
-				}
-
-				-- Compile all summary lines into one message
-				M.logger.debug("# of summaries: ".. tostring(#message_summaries) .. " and messages: " .. tostring(#all_messages))
-				if #message_summaries > 0 then
-					local summary_content = " "
-					for i = 1, #message_summaries - max_exchanges do
-						summary_content = summary_content .. message_summaries[i] .. "\n"
-					end
-
-					table.insert(messages, {
-						role = "assistant",
-						content = summary_content
-					})
-				end
-
-				-- Add the remaining messages (most recent ones)
-				for i = #all_messages - messages_to_keep, #all_messages do
-					table.insert(messages, all_messages[i])
-				end
+				-- Reconstruct the question with file contents and add to messages
+				question_content = table.concat(lines, "\n")
+				table.insert(messages, { role = "user", content = question_content })
 			else
-				-- If we don't actually have enough messages to summarize, use all of them
-				messages = all_messages
+				-- Use the placeholder text for summarized questions
+				table.insert(messages, { role = "user", content = omit_user_text })
 			end
-		else
-			-- Not enough exchanges to trigger summarization
-			messages = all_messages
+			
+			-- Process the answer if it exists and is within our range
+			if exchange.answer and exchange.answer.line_start <= end_index and idx < exchange_idx then
+				-- when we preserve due to have file inclusion in question, we still summarize the answer
+				if should_preserve and not exchange.question.has_file_reference then
+					-- Use the full answer content
+					table.insert(messages, { role = "assistant", content = exchange.answer.content })
+				else
+					-- Use the summary if available
+					if exchange.summary then
+						table.insert(messages, { role = "assistant", content = exchange.summary.content })
+					else
+						-- If no summary is available, use the full content (fallback)
+						table.insert(messages, { role = "assistant", content = exchange.answer.content })
+					end
+				end
+			end
 		end
-	else
-		-- Memory feature disabled, use all messages
-		messages = all_messages
 	end
-
-	M.logger.debug("messages to send" .. vim.inspect(messages))
 
 	-- replace first empty message with system prompt
-	content = ""
+	local content = ""
 	if headers.role and headers.role:match("%S") then
 		content = headers.role
 	else
@@ -1214,7 +1202,7 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 		content = content:gsub("\\n", "\n")
 		messages[1] = { role = "system", content = content }
 	end
-
+	
 	-- strip whitespace from ends of content
 	for _, message in ipairs(messages) do
 		message.content = message.content:gsub("^%s*(.-)%s*$", "%1")
@@ -1249,6 +1237,8 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 
 	-- Write assistant prompt with extra newline, note later insertion point is response_line + 3
 	vim.api.nvim_buf_set_lines(buf, response_line, response_line, false, { "", agent_prefix .. agent_suffix, "", "" })
+
+	M.logger.debug("messages to send: " .. vim.inspect(messages))
 
 	-- call the model and write response
 	M.dispatcher.query(

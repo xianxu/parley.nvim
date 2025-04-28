@@ -51,7 +51,10 @@ Each chat transcript is really just a markdown file, with some additional conven
     1. The first is the Assistant's reasoning output, prefixed with 🧠:. 
 	2. The second is the summary of one chat exchange prefixed with 📝:, in the format of "you asked ..., I answered ...".
     3. We keep those two lines in the transcript itself for simplicity, so that one transcript file's hermetic.
-6. File and directory inclusion: a line that starts with @@ followed by a path will automatically load content into the prompt when sending to the LLM. This works in several ways:
+6. Smart memory management:
+    1. By default, Parley keeps only a certain number of recent exchanges (controlled by `max_full_exchanges`) and summarizes older ones to maintain context within token limits.
+    2. Exchanges (both question and answer) that include file references (@@filename) are always preserved in full, regardless of their age, ensuring file content context is maintained throughout the conversation.
+7. File and directory inclusion: a line that starts with @@ followed by a path will automatically load content into the prompt when sending to the LLM. This works in several ways:
 
    - `@@/path/to/file.txt` - Include a single file
    - `@@/path/to/directory/` - Include all files in a directory (non-recursive)

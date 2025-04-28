@@ -190,6 +190,7 @@ D.prepare_payload = function(messages, model, provider)
 		output.top_p = nil
 	end
 
+	logger.debug("payload: " .. output)
 	return output
 end
 

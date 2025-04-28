@@ -3,6 +3,7 @@
 ## [Unreleased]
 ### Added
 - Header-based configuration overrides: allows setting configuration parameters like `max_full_exchanges` on a per-chat basis in the header section
+- File reference preservation: questions that include file references (@@filename) are now preserved during summarization to maintain context
 
 ### Changed
 - Removed unused spinner module (kept empty file for compatibility)
