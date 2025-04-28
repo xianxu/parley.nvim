@@ -1044,7 +1044,7 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 	-- Process headers for agent information
 	local headers = parsed_chat.headers
 	
-	-- prepare for summary extraction
+	-- Prepare for summary extraction
 	local memory_enabled = M.config.chat_memory and M.config.chat_memory.enable
 	
 	-- Use header-defined max_full_exchanges if available, otherwise use config value
@@ -1059,28 +1059,13 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 	end
 	
 	local omit_user_text = memory_enabled and M.config.chat_memory.omit_user_text or "[Previous messages omitted]"
-
-	-- if model contains { } then it is a json string otherwise it is a model name
-	if headers.model and headers.model:match("{.*}") then
-		-- unescape underscores before decoding json
-		headers.model = headers.model:gsub("\\_", "_")
-		headers.model = vim.json.decode(headers.model)
-	end
-
-	if headers.model and type(headers.model) == "table" then
-		agent_name = headers.model.model
-	elseif headers.model and headers.model:match("%S") then
-		agent_name = headers.model
-	end
-
-	if headers.role and headers.role:match("%S") then
-		agent_name = agent_name .. " & custom role"
-	end
-
-	if headers.model and not headers.provider then
-		headers.provider = "openai"
-	end
-
+	
+	-- Unescaping any JSON model specification in headers happens in get_agent_info
+	
+	-- Get combined agent information using the new helper function
+	local agent_info = M.get_agent_info(headers, agent)
+	local agent_name = agent_info.display_name
+	
 	-- Set up agent prefixes
 	local agent_prefix = M.config.chat_assistant_prefix[1]
 	local agent_suffix = config.chat_assistant_prefix[2]
@@ -1126,6 +1111,7 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 				-- Get the question content and process any file loading directives
 				local question_content = exchange.question.content
 				local lines = vim.split(question_content, "\n")
+				local file_lines = {}
 				
 				-- Check for file loading syntax (@@filename)
 				for i, line in ipairs(lines) do
@@ -1160,12 +1146,43 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 								lines[i] = line .. " (File not found or couldn't be read)"
 							end
 						end
+	                    -- keep file inclusion content separately
+	                    table.insert(file_lines, lines[i])
 					end
 				end
 				
 				-- Reconstruct the question with file contents and add to messages
 				question_content = table.concat(lines, "\n")
-				table.insert(messages, { role = "user", content = question_content })
+	            file_content = table.concat(file_lines, "\n")
+				
+				-- Handle provider-specific file reference processing for questions with file references
+				if exchange.question.has_file_reference then
+					-- Use agent_info to determine if we're using Anthropic/Claude
+					local is_anthropic = (agent_info.provider == "anthropic" or agent_info.provider == "claude")
+										
+					if is_anthropic then
+						M.logger.debug("Using Anthropic-specific handling for file references")
+						-- Create system message with extracted file contents
+						local original_question = exchange.question.content
+						
+						-- For Anthropic/Claude with file references:
+						-- 1. Insert a system message with processed file contents
+						table.insert(messages, { 
+							role = "system", 
+							content = file_content, 
+							cache_control = { type = "ephemeral" }
+						})
+						
+						-- 2. Keep the original question intact
+						table.insert(messages, { role = "user", content = original_question })
+					else
+						-- For all other providers, put the processed content in user message
+						table.insert(messages, { role = "user", content = question_content })
+					end
+				else
+					-- No file references, just add the question as user message
+					table.insert(messages, { role = "user", content = question_content })
+				end
 			else
 				-- Use the placeholder text for summarized questions
 				table.insert(messages, { role = "user", content = omit_user_text })
@@ -1190,16 +1207,9 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 		end
 	end
 
-	-- replace first empty message with system prompt
-	local content = ""
-	if headers.role and headers.role:match("%S") then
-		content = headers.role
-	else
-		content = agent.system_prompt
-	end
-	if content:match("%S") then
-		-- make it multiline again if it contains escaped newlines
-		content = content:gsub("\\n", "\n")
+	-- replace first empty message with system prompt (use agent_info which has already resolved this)
+	local content = agent_info.system_prompt
+	if content and content:match("%S") then
 		messages[1] = { role = "system", content = content }
 	end
 	
@@ -1243,8 +1253,8 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 	-- call the model and write response
 	M.dispatcher.query(
 		buf,
-		headers.provider or agent.provider,
-		M.dispatcher.prepare_payload(messages, headers.model or agent.model, headers.provider or agent.provider),
+		agent_info.provider,
+		M.dispatcher.prepare_payload(messages, agent_info.model, agent_info.provider),
 		M.dispatcher.create_handler(buf, win, response_line + 3, true, "", not use_free_cursor),
 		vim.schedule_wrap(function(qid)
 			local qt = M.tasker.get_query(qid)
@@ -1291,8 +1301,8 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 				-- call the model
 				M.dispatcher.query(
 					nil,
-					headers.provider or agent.provider,
-					M.dispatcher.prepare_payload(messages, headers.model or agent.model, headers.provider or agent.provider),
+					agent_info.provider,
+					M.dispatcher.prepare_payload(messages, agent_info.model, agent_info.provider),
 					topic_handler,
 					vim.schedule_wrap(function()
 						-- get topic from invisible buffer
@@ -1842,6 +1852,7 @@ end
 
 ---@param name string | nil
 ---@return table # { cmd_prefix, name, model, system_prompt, provider }
+-- Get basic agent information from agent configuration
 M.get_agent = function(name)
 	name = name or M._state.agent
 	if M.agents[name] == nil then
@@ -1865,5 +1876,82 @@ end
 
 -- Aliases for backwards compatibility
 M.get_chat_agent = M.get_agent
+
+-- Get combined agent information from both headers and agent config
+-- This resolves the final provider, model, and other settings by merging header overrides with agent defaults
+---@param headers table # The parsed headers from the chat file
+---@param agent table # The agent configuration obtained from get_agent()
+---@return table # A table containing the resolved agent information
+M.get_agent_info = function(headers, agent)
+	local info = {
+		name = agent.name,
+		provider = agent.provider,
+		model = agent.model,
+		system_prompt = agent.system_prompt,
+		display_name = agent.name
+	}
+	
+	-- Override with header values if they exist
+	if headers then
+		-- Provider from headers takes precedence
+		if headers.provider then
+			info.provider = headers.provider
+		end
+		
+		-- Override model from headers
+		if headers.model then
+			-- If model is a JSON string, decode it
+			if type(headers.model) == "string" and headers.model:match("{.*}") then
+				-- If headers.model is a string containing JSON, parse it
+				local success, decoded = pcall(vim.json.decode, headers.model)
+				if success then
+					info.model = decoded
+				else
+					-- If JSON parsing fails, use it as a string model name
+					info.model = headers.model
+					M.logger.warning("Failed to parse model JSON: " .. headers.model)
+				end
+			else
+				info.model = headers.model
+			end
+		end
+		
+		-- Override system prompt from headers
+		if headers.role and headers.role:match("%S") then
+			info.system_prompt = headers.role:gsub("\\n", "\n") -- Convert escaped newlines
+		end
+		
+		-- Update display name if model or role is overridden
+		if headers.model then
+			if type(info.model) == "table" and info.model.model then
+				info.display_name = info.model.model
+			else
+				info.display_name = tostring(info.model)
+			end
+			
+			if headers.role and headers.role:match("%S") then
+				info.display_name = info.display_name .. " & custom role"
+			end
+		end
+		
+		-- Set a default provider if one is specified in header model but not provider
+		if headers.model and not headers.provider then
+			info.provider = info.provider or "openai"
+		end
+	end
+	
+	-- Check model validity - if it's not a string or a table, make it a string
+	if type(info.model) ~= "string" and type(info.model) ~= "table" then
+		info.model = tostring(info.model)
+	end
+	
+	-- For OpenAI/string models, ensure they're well-formed for dispatcher.prepare_payload
+	if type(info.model) == "string" then
+		info.model = { model = info.model }
+	end
+	
+	M.logger.debug("Resolved agent info: " .. vim.inspect(info))
+	return info
+end
 
 return M

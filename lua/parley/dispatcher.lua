@@ -190,7 +190,7 @@ D.prepare_payload = function(messages, model, provider)
 		output.top_p = nil
 	end
 
-	logger.debug("payload: " .. output)
+	logger.debug("payload: " .. vim.inspect(output))
 	return output
 end
 
