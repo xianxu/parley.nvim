@@ -84,17 +84,9 @@ M.create_component = function(parley_instance)
       if is_busy then
         return "🔄 " .. agent_name
       else
-        -- For Anthropic/Claude, show cache metrics if available
-        if is_anthropic then
-          local cache_metrics = parley.tasker.get_cache_metrics()
-          if cache_metrics.input > 0 or cache_metrics.creation > 0 or cache_metrics.read > 0 then
-            -- Format: 🤖 Claude [input/creation/read] - showing all three metrics
-            return "🤖 " .. agent_name .. " [" .. cache_metrics.input .. "/" .. cache_metrics.creation .. "/" .. cache_metrics.read .. "]"
-          end
-        end
-        
-        -- Default display without cache metrics
-        return "🤖 " .. agent_name
+        -- Display cache metrics for any provider that has them
+        local cache_metrics = parley.tasker.get_cache_metrics()
+        return "🤖 " .. agent_name .. " [" .. cache_metrics.input .. "/" .. cache_metrics.creation .. "/" .. cache_metrics.read .. "]"
       end
     end,
     

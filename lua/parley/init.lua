@@ -1893,7 +1893,7 @@ M.get_agent = function(name)
 	local model = M.agents[name].model
 	local system_prompt = M.agents[name].system_prompt
 	local provider = M.agents[name].provider
-	M.logger.debug("getting agent: " .. name)
+	-- M.logger.debug("getting agent: " .. name)
 	return {
 		cmd_prefix = cmd_prefix,
 		name = name,
