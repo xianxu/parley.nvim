@@ -547,11 +547,21 @@ M.highlight_questions = function()
 		})
 	end
 	
+	-- Tags - Highlighted tags in @@tag@@ format
+	if user_highlights.tag then
+		vim.api.nvim_set_hl(0, "ParleyTag", user_highlights.tag)
+	else
+		vim.api.nvim_set_hl(0, "ParleyTag", {
+			link = "Todo", -- Link to Todo highlight group which is highly visible in most themes
+		})
+	end
+	
 	-- Create aliases for backward compatibility
 	vim.api.nvim_set_hl(0, "Question", { link = "ParleyQuestion" })
 	vim.api.nvim_set_hl(0, "FileLoading", { link = "ParleyFileReference" })
 	vim.api.nvim_set_hl(0, "Think", { link = "ParleyThinking" })
 	vim.api.nvim_set_hl(0, "Annotation", { link = "ParleyAnnotation" })
+	vim.api.nvim_set_hl(0, "Tag", { link = "ParleyTag" })
 	
 	return ns
 end
@@ -617,6 +627,22 @@ M.highlight_question_block = function(buf)
 		-- Highlight annotations in the format @...@
 		for start_idx, match_text, end_idx in line:gmatch"()@(.-)@()" do
 			vim.api.nvim_buf_add_highlight(buf, ns, "Annotation", i - 1, start_idx - 1, end_idx - 1)
+		end
+		
+		-- Highlight tags in the format @@tag@@ (make sure to handle case if the line has multiple tags)
+		local pos = 1
+		while true do
+			local tag_start, content_start = line:find("@@", pos)
+			if not tag_start then break end
+			
+			local content_end, tag_end = line:find("@@", content_start + 1)
+			if not content_end then break end
+			
+			-- Highlight the entire tag pattern including the @@ markers
+			vim.api.nvim_buf_add_highlight(buf, ns, "Tag", i - 1, tag_start - 1, tag_end)
+			
+			-- Move to position after this tag
+			pos = tag_end + 1
 		end
 	end
 end
