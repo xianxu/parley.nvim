@@ -40,11 +40,18 @@ M.create_component = function(parley_instance)
     return cached_busy_state
   end
   
-  -- Force refresh when specific events occur
-  parley.helpers.autocmd({"User"}, {"ParleyQueryStarted", "ParleyQueryFinished", "ParleyDone"}, function()
-    -- Reset cache immediately on these events
-    last_check_time = 0
-  end)
+  -- Create an augroup for our events
+  local augroup = vim.api.nvim_create_augroup("ParleyLualineComponent", { clear = true })
+  
+  -- Force refresh when specific events occur - using direct API call to avoid buffer issues
+  vim.api.nvim_create_autocmd({"User"}, {
+    pattern = {"ParleyQueryStarted", "ParleyQueryFinished", "ParleyDone"},
+    group = augroup,
+    callback = function()
+      -- Reset cache immediately on these events
+      last_check_time = 0
+    end
+  })
   
   return {
     function()
@@ -96,95 +103,84 @@ M.create_component = function(parley_instance)
 end
 
 function M.setup(parley)
-  -- Store the parley reference for external component access
+  -- Immediately assign the parley reference
   _parley = parley
   
-  local config = parley.config
+  -- Defer the lualine setup to ensure Neovim is fully initialized
+  vim.defer_fn(function()
+    local config = parley.config
 
-  -- Check if lualine is available
-  local has_lualine, lualine = pcall(require, "lualine")
-  if not has_lualine or not config.lualine or not config.lualine.enable then
-    return
-  end
-  
-  -- Create the component
-  local parley_component = M.create_component(parley)
-
-  -- Register component with lualine
-  -- Get the section from config or default to lualine_z
-  local section = config.lualine.section or "lualine_z"
-  
-  pcall(function()
-    -- Add component to the lualine config
-    -- Check if lualine.get_config() exists and use it carefully
-    local has_config, existing_config = pcall(function() return lualine.get_config() end)
-    
-    if not has_config or not existing_config then
-      -- Lualine hasn't been set up yet, create a minimal config
-      local lualine_config = {
-        sections = {
-          [section] = { parley_component }
-        }
-      }
-      lualine.setup(lualine_config)
-    else
-      -- Make sure we have a valid config object
-      existing_config = existing_config or {}
-      existing_config.sections = existing_config.sections or {}
-      
-      -- Create section if it doesn't exist
-      if not existing_config.sections[section] then
-        existing_config.sections[section] = {}
-      end
-      
-      -- Check if our component is already added (to avoid duplicates)
-      local already_added = false
-      for _, component in ipairs(existing_config.sections[section]) do
-        if component == parley_component then
-          already_added = true
-          break
-        end
-      end
-      
-      -- Add our component if it's not already there
-      if not already_added then
-		table.insert(existing_config.sections[section], 1, parley_component)
-        -- table.insert(existing_config.sections[section], parley_component)
-      end
-      
-      -- Refresh lualine with the updated config
-      pcall(function() lualine.setup(existing_config) end)
+    -- Check if lualine is available
+    local has_lualine, lualine = pcall(require, "lualine")
+    if not has_lualine or not config.lualine or not config.lualine.enable then
+      return
     end
-  end)
-  
-  -- Set up autocommands to refresh lualine when agent changes or a query starts/stops
-  pcall(function()
-    local augroup = vim.api.nvim_create_augroup("ParleyLualine", { clear = true })
     
-    -- Refresh lualine when the user switches agents
-    vim.api.nvim_create_autocmd("User", {
-      pattern = "ParleyAgentChanged",
-      group = augroup,
-      callback = function()
-        -- Force lualine to redraw
-        pcall(function()
-          require("lualine").refresh()
-        end)
-      end
-    })
+    -- Create the component
+    local parley_component = M.create_component(parley)
+
+    -- Register component with lualine
+    -- Get the section from config or default to lualine_z
+    local section = config.lualine.section or "lualine_z"
     
-    -- Refresh lualine when a query starts/finishes
-    vim.api.nvim_create_autocmd({"User"}, {
-      pattern = {"ParleyQueryStarted", "ParleyQueryFinished", "ParleyDone"},
-      group = augroup,
-      callback = function()
-        -- Force lualine to redraw
-        pcall(function()
-          require("lualine").refresh()
-        end)
+    pcall(function()
+      -- Add component to the lualine config
+      -- Check if lualine.get_config() exists and use it carefully
+      local has_config, existing_config = pcall(function() return lualine.get_config() end)
+      
+      if not has_config or not existing_config then
+        -- Lualine hasn't been set up yet, create a minimal config
+        local lualine_config = {
+          sections = {
+            [section] = { parley_component }
+          }
+        }
+        lualine.setup(lualine_config)
+      else
+        -- Make sure we have a valid config object
+        existing_config = existing_config or {}
+        existing_config.sections = existing_config.sections or {}
+        
+        -- Create section if it doesn't exist
+        if not existing_config.sections[section] then
+          existing_config.sections[section] = {}
+        end
+        
+        -- Use a simple approach - just add our component at the start
+        table.insert(existing_config.sections[section], 1, parley_component)
+        
+        -- Refresh lualine with the updated config
+        lualine.setup(existing_config)
       end
-    })
-  end)
+    end)
+    
+    -- Set up autocommands to refresh lualine when agent changes or a query starts/stops
+    pcall(function()
+      local augroup = vim.api.nvim_create_augroup("ParleyLualine", { clear = true })
+      
+      -- Refresh lualine when the user switches agents
+      vim.api.nvim_create_autocmd("User", {
+        pattern = "ParleyAgentChanged",
+        group = augroup,
+        callback = function()
+          pcall(function()
+            require("lualine").refresh()
+          end)
+        end
+      })
+      
+      -- Refresh lualine when a query starts/finishes
+      vim.api.nvim_create_autocmd({"User"}, {
+        pattern = {"ParleyQueryStarted", "ParleyQueryFinished", "ParleyDone"},
+        group = augroup,
+        callback = function()
+          pcall(function()
+            require("lualine").refresh()
+          end)
+        end
+      })
+    end)
+  end, 100) -- Delay 100ms to ensure all initialization is complete
 end
 
 return M
