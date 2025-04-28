@@ -589,6 +589,29 @@ M.highlight_question_block = function(buf)
 	end
 
 	for i, line in ipairs(lines) do
+		-- Track which parts of the line have already been highlighted as tags
+		local highlighted_regions = {}
+		
+		-- First, identify and mark all @@tag@@ patterns (closed tags)
+		local pos = 1
+		while true do
+			local tag_start, content_start = line:find("@@", pos)
+			if not tag_start then break end
+			
+			local content_end, tag_end = line:find("@@", content_start + 1)
+			if not content_end then break end
+			
+			-- Record this region as a tag
+			table.insert(highlighted_regions, {start = tag_start, finish = tag_end})
+			
+			-- Highlight the entire tag pattern including the @@ markers
+			vim.api.nvim_buf_add_highlight(buf, ns, "Tag", i - 1, tag_start - 1, tag_end)
+			
+			-- Move to position after this tag
+			pos = tag_end + 1
+		end
+		
+		-- Process line based on its type
 		if line:match("^" .. vim.pesc(reasoning_prefix)) or line:match("^" .. vim.pesc(summary_prefix)) then
 			vim.api.nvim_buf_add_highlight(buf, ns, "Think", i - 1, 0, -1)
 		elseif line:match("^" .. vim.pesc(user_prefix)) then
@@ -599,27 +622,17 @@ M.highlight_question_block = function(buf)
 		elseif in_block then
 			vim.api.nvim_buf_add_highlight(buf, ns, "Question", i - 1, 0, -1)
 			
-			-- Highlight file loading syntax (@@filename) if present anywhere in the line
-			if line:match("@@") then
-				-- If the line starts with @@, highlight the whole line
-				if line:match("^@@") then
+			-- Simplified file path handling - only if line starts with @@ and isn't a tag
+			if line:match("^@@") then
+				-- Check if the beginning of the line is already part of a tag
+				local is_tag_at_start = false
+				if #highlighted_regions > 0 and highlighted_regions[1].start == 1 then
+					is_tag_at_start = true
+				end
+				
+				-- If not a tag, highlight as file inclusion
+				if not is_tag_at_start then
 					vim.api.nvim_buf_add_highlight(buf, ns, "FileLoading", i - 1, 0, -1)
-				else
-					-- Otherwise, find all @@ occurrences and highlight just those segments
-					local start_idx = 1
-					while true do
-						local match_start, match_end = line:find("@@", start_idx)
-						if not match_start then break end
-						
-						-- Look for the end of the filepath (space or end of line)
-						local next_marker = line:find("@@", match_end + 1)
-						local content_end = next_marker and (next_marker - 1) or #line
-						
-						-- Highlight this section (@@filepath)
-						vim.api.nvim_buf_add_highlight(buf, ns, "FileLoading", i - 1, match_start - 1, content_end)
-						
-						start_idx = match_end + 1
-					end
 				end
 			end
 		end
@@ -627,22 +640,6 @@ M.highlight_question_block = function(buf)
 		-- Highlight annotations in the format @...@
 		for start_idx, match_text, end_idx in line:gmatch"()@(.-)@()" do
 			vim.api.nvim_buf_add_highlight(buf, ns, "Annotation", i - 1, start_idx - 1, end_idx - 1)
-		end
-		
-		-- Highlight tags in the format @@tag@@ (make sure to handle case if the line has multiple tags)
-		local pos = 1
-		while true do
-			local tag_start, content_start = line:find("@@", pos)
-			if not tag_start then break end
-			
-			local content_end, tag_end = line:find("@@", content_start + 1)
-			if not content_end then break end
-			
-			-- Highlight the entire tag pattern including the @@ markers
-			vim.api.nvim_buf_add_highlight(buf, ns, "Tag", i - 1, tag_start - 1, tag_end)
-			
-			-- Move to position after this tag
-			pos = tag_end + 1
 		end
 	end
 end
