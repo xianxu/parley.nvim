@@ -196,6 +196,9 @@ D.prepare_payload = function(messages, model, provider)
 		max_tokens = model.max_tokens or 4096,
 		temperature = math.max(0, math.min(2, model.temperature or 1)),
 		top_p = math.max(0, math.min(1, model.top_p or 1)),
+		stream_options = {
+			include_usage = true
+		}
 	}
 
 	if (provider == "openai" or provider == "copilot") and model.model:sub(1, 1) == "o" then
@@ -362,6 +365,12 @@ local query = function(buf, provider, payload, handler, on_exit, callback)
 				
 				-- Check for Anthropic cache usage metrics and store them
 				if qt.provider == "anthropic" or qt.provider == "claude" then
+					-- Reset metrics for Anthropic at the start of its processing
+					tasker.set_cache_metrics({
+						input = nil,
+						read = nil,
+						creation = nil
+					})
 					-- Clean up the raw response - it often contains multiple JSON objects
 					local clean_json = raw_response:match("{.-usage.-}")
 					if clean_json then
@@ -377,80 +386,183 @@ local query = function(buf, provider, payload, handler, on_exit, callback)
 							end
 						end
 						
-						if success and decoded and decoded.usage then
-							-- Store all available metrics
-							local metrics = {
-								input = decoded.usage.input_tokens or 0,
-								creation = decoded.usage.cache_creation_input_tokens or 0,
-								read = decoded.usage.cache_read_input_tokens or 0
-							}
+						if success and decoded then
+							logger.debug("Anthropic JSON decoded successfully: " .. vim.inspect(decoded))
 							
-							tasker.set_cache_metrics(metrics)
-							
-							logger.debug("Anthropic metrics: input=" .. metrics.input .. 
-								", creation=" .. metrics.creation .. 
-								", read=" .. metrics.read)
+							if decoded.usage then
+								-- Store all available metrics
+								local metrics = {
+									input = decoded.usage.input_tokens or 0,
+									creation = decoded.usage.cache_creation_input_tokens or 0,
+									read = decoded.usage.cache_read_input_tokens or 0
+								}
+								
+								tasker.set_cache_metrics(metrics)
+								
+								logger.debug("Anthropic metrics extracted: input=" .. metrics.input .. 
+									", creation=" .. metrics.creation .. 
+									", read=" .. metrics.read)
+							else
+								logger.debug("Anthropic decoded JSON does not contain usage field")
+							end
 						end
 					end
 				end
 
 				local content = qt.response
 				
+				-- Reset metrics at the start of response processing
+				if qt.provider ~= "anthropic" and qt.provider ~= "claude" then
+					-- Skip reset for Anthropic as we already process metrics earlier
+					tasker.set_cache_metrics({
+						input = nil,
+						read = nil,
+						creation = nil
+					})
+				end
+				
+				-- Handle Google AI (Gemini) usage metrics extraction
+				if qt.provider == "googleai" then
+					local usage_pattern = '"usageMetadata":%s*{[^}]*"promptTokenCount":%s*(%d+)[^}]*"candidatesTokenCount":%s*(%d+)[^}]*"totalTokenCount":%s*(%d+)[^}]*'
+					local prompt_tokens, candidates_tokens, total_tokens = raw_response:match(usage_pattern)
+					
+					if prompt_tokens then
+						local metrics = {
+							input = tonumber(prompt_tokens) or 0,
+							read = 0,  -- Gemini doesn't have a read/cache concept
+							creation = 0 -- or could set to candidates_tokens if preferred
+						}
+						
+						tasker.set_cache_metrics(metrics)
+						logger.debug("Gemini metrics extracted: input=" .. metrics.input .. 
+							", read=" .. metrics.read .. 
+							", creation=" .. metrics.creation)
+					else
+						-- Try with unescaped pattern (some responses might be escaped)
+						local escaped_pattern = '\\\"usageMetadata\\\":%s*{[^}]*\\\"promptTokenCount\\\":%s*(%d+)[^}]*\\\"candidatesTokenCount\\\":%s*(%d+)[^}]*\\\"totalTokenCount\\\":%s*(%d+)[^}]*'
+						prompt_tokens, candidates_tokens, total_tokens = raw_response:match(escaped_pattern)
+						
+						if prompt_tokens then
+							local metrics = {
+								input = tonumber(prompt_tokens) or 0,
+								read = 0,
+								creation = 0
+							}
+							
+							tasker.set_cache_metrics(metrics)
+							logger.debug("Gemini metrics extracted (escaped): input=" .. metrics.input .. 
+								", read=" .. metrics.read .. 
+								", creation=" .. metrics.creation)
+						end
+					end
+				end
+				
 				-- Handle OpenAI/Copilot specific processing
 				if (qt.provider == 'openai' or qt.provider == 'copilot') then
-					-- Check for usage information in the response - it's more likely to be in the final chunk
+					
+					-- Check for usage information in the response
 					if raw_response:match('"usage"') then
-						-- OpenAI can return multiple chunks, we need to find the one with usage
+						-- Process each line separately to find a complete JSON object with usage info
 						local usage_json = nil
 						
-						-- Try to find a complete JSON object containing usage information
-						for json_chunk in raw_response:gmatch("data: ({.-})") do
-							if json_chunk:match('"usage"') then
-								usage_json = json_chunk
-								break
+						-- Split the raw response into lines
+						for line in raw_response:gmatch("([^\n]+)") do
+							-- Check if this line has a usage field and empty choices
+							if line:match('"usage"') and line:match('"choices":%s*%[%s*%]') then
+								-- Clean up the line - remove any data: prefix
+								local clean_line = line:gsub("^data:%s*", "")
+								
+								-- Try to ensure the JSON is complete by checking for balanced braces
+								local open_count, close_count = 0, 0
+								for c in clean_line:gmatch(".") do
+									if c == "{" then open_count = open_count + 1 end
+									if c == "}" then close_count = close_count + 1 end
+								end
+								
+								-- Only use lines that have balanced braces
+								if open_count == close_count then
+									usage_json = clean_line
+									break
+								end
 							end
 						end
 						
-						-- If no match in chunks, try the whole response
+						-- If that didn't work, try to extract a JSON object with specific markers
 						if not usage_json then
-							usage_json = raw_response:match("{.-usage.-}")
+							usage_json = raw_response:match('{"id":"[^"]*","object":"chat%.completion%.chunk"[^}]*"choices":%[%][^}]*"usage":{[^}]*}}')
 						end
 						
-						-- If we found a potential JSON object with usage
+						-- If still nothing, try more aggressively to find any JSON with usage
+						if not usage_json then
+							for line in raw_response:gmatch("([^\n]+)") do
+								if line:match('"usage"') then
+									-- Just extract from the start of a JSON object to the end
+									local potential_json = line:match('({.-})')
+									if potential_json then
+										usage_json = potential_json
+										break
+									end
+								end
+							end
+						end
+						
+						-- Log the found JSON for debugging
+						logger.debug("OpenAI usage JSON found: " .. (usage_json and string.sub(usage_json, 1, 100) .. "..." or "nil"))
+						
 						if usage_json then
+							-- Try to parse the JSON, with fallbacks for potential truncation
 							local success, decoded = pcall(vim.json.decode, usage_json)
 							
+							-- Handle potential parsing issues more directly
 							if not success then
-								-- Try to extract just the usage object and parse it
-								local usage_only = raw_response:match('("usage":%s*{.-})')
-								if usage_only then
-									usage_json = "{" .. usage_only .. "}"
-									success, decoded = pcall(vim.json.decode, usage_json)
-								end
-							end
-							
-							if success and decoded and decoded.usage then
-								-- Map OpenAI metrics to our format:
-								-- prompt_tokens → input
-								-- cached_tokens → read (from prompt_tokens_details)
-								-- creation is always "-" (show as 0)
-								local metrics = {
-									input = decoded.usage.prompt_tokens or 0,
-									read = 0,
-									creation = 0
-								}
+								logger.debug("First parse attempt failed: " .. tostring(decoded))
 								
-								-- Try to get cached tokens if prompt_tokens_details exists
-								if decoded.usage.prompt_tokens_details and 
-								   decoded.usage.prompt_tokens_details.cached_tokens then
-									metrics.read = decoded.usage.prompt_tokens_details.cached_tokens
+								-- Try a crude extraction of the key values we need
+								local prompt_tokens = tonumber(usage_json:match('"prompt_tokens":%s*(%d+)'))
+								local cached_tokens = tonumber(usage_json:match('"cached_tokens":%s*(%d+)'))
+								
+								if prompt_tokens then
+									logger.debug("Fallback extraction of tokens succeeded")
+									
+									-- Create metrics from directly extracted values
+									local metrics = {
+										input = prompt_tokens or 0,
+										read = cached_tokens or 0,
+										creation = 0
+									}
+									
+									tasker.set_cache_metrics(metrics)
+									
+									logger.debug("OpenAI metrics extracted via fallback: input=" .. metrics.input .. 
+										", read=" .. metrics.read .. 
+										", creation=" .. metrics.creation)
+								else
+									logger.debug("Fallback extraction failed too")
 								end
+							else
+								-- JSON parsing succeeded
+								logger.debug("OpenAI JSON parsed successfully")
+								
+								-- Safely extract the metrics
+								if decoded and type(decoded.usage) == "table" then
+									-- Create metrics using exactly the fields from the example
+									local metrics = {
+										input = tonumber(decoded.usage.prompt_tokens) or 0,
+										read = 0,
+										creation = 0
+									}
+									
+									-- Extract cached_tokens from prompt_tokens_details if available
+									if type(decoded.usage.prompt_tokens_details) == "table" then
+										metrics.read = tonumber(decoded.usage.prompt_tokens_details.cached_tokens) or 0
+									end
 								
 								tasker.set_cache_metrics(metrics)
 								
-								logger.debug("OpenAI metrics found: input=" .. metrics.input .. 
-									", creation=" .. metrics.creation .. 
-									", read=" .. metrics.read)
+								logger.debug("OpenAI metrics extracted: input=" .. metrics.input .. 
+									", read=" .. metrics.read .. 
+									", creation=" .. metrics.creation)
+								end
 							end
 						end
 					end

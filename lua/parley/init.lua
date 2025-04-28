@@ -405,7 +405,7 @@ M.prep_chat = function(buf, file_name)
 
 	M.refresh_state({ last_chat = file_name })
 	if M._prepared_bufs[buf] then
-		M.logger.debug("buffer already prepared: " .. buf)
+	-- 	M.logger.debug("buffer already prepared: " .. buf)
 		return
 	end
 	M._prepared_bufs[buf] = true

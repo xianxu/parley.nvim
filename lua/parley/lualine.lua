@@ -86,7 +86,28 @@ M.create_component = function(parley_instance)
       else
         -- Display cache metrics for any provider that has them
         local cache_metrics = parley.tasker.get_cache_metrics()
-        return "🤖 " .. agent_name .. " [" .. cache_metrics.input .. "/" .. cache_metrics.creation .. "/" .. cache_metrics.read .. "]"
+        
+        -- Format each metric - use "-" for nil/undefined values or zeros
+        local input_display = (cache_metrics.input and cache_metrics.input > 0) and cache_metrics.input or "-"
+        local creation_display = (cache_metrics.creation and cache_metrics.creation > 0) and cache_metrics.creation or "-" 
+        local read_display = (cache_metrics.read and cache_metrics.read > 0) and cache_metrics.read or "-"
+        
+        -- Provider-specific formatting
+        local agent_info = parley.get_agent_info and parley.get_agent_info({}, parley.get_agent(agent_name))
+        if agent_info then
+          -- For OpenAI/Copilot, always show creation as "-" (not applicable)
+          if agent_info.provider == "openai" or agent_info.provider == "copilot" then
+            creation_display = "-"
+          end
+          
+          -- For Google AI/Gemini, always show read and creation as "-" (not applicable)
+          if agent_info.provider == "googleai" then
+            read_display = "-"
+            creation_display = "-"
+          end
+        end
+        
+        return "🤖 " .. agent_name .. " [" .. input_display .. "/" .. creation_display .. "/" .. read_display .. "]"
       end
     end,
     

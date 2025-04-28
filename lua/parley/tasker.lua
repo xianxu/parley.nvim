@@ -174,18 +174,19 @@ end
 ---@param metrics table # table with creation and read fields
 M.set_cache_metrics = function(metrics)
     if metrics then
-        if metrics.creation ~= nil then
-            M._cache_metrics.creation = metrics.creation
-        end
-        if metrics.read ~= nil then
-            M._cache_metrics.read = metrics.read
-        end
-        if metrics.input ~= nil then
-            M._cache_metrics.input = metrics.input
-        end
-        logger.debug("Cache metrics updated: input=" .. (metrics.input or M._cache_metrics.input) .. 
-                    ", creation=" .. (metrics.creation or M._cache_metrics.creation) .. 
-                    ", read=" .. (metrics.read or M._cache_metrics.read))
+        -- Handle nil values explicitly - this allows clearing values
+        M._cache_metrics.creation = metrics.creation
+        M._cache_metrics.read = metrics.read
+        M._cache_metrics.input = metrics.input
+        
+        -- Format log message with proper handling for nil values
+        local input_str = metrics.input ~= nil and tostring(metrics.input) or "nil"
+        local creation_str = metrics.creation ~= nil and tostring(metrics.creation) or "nil"
+        local read_str = metrics.read ~= nil and tostring(metrics.read) or "nil"
+        
+        logger.debug("Cache metrics updated: input=" .. input_str .. 
+                    ", creation=" .. creation_str .. 
+                    ", read=" .. read_str)
     end
 end
 
