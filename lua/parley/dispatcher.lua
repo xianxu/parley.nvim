@@ -138,26 +138,50 @@ D.prepare_payload = function(messages, model, provider)
 	end
 
 	if provider == "anthropic" then
-		local system = ""
+		-- Create an array for system messages with content and cache_control
+		local system_blocks = {}
+		
+		-- Extract system messages and build the system format Anthropic expects
 		local i = 1
-		while i < #messages do
+		while i <= #messages do
 			if messages[i].role == "system" then
-				system = system .. messages[i].content .. "\n"
+				-- Create a system block in Anthropic's expected format
+				local block = {
+					type = "text",
+					text = messages[i].content
+				}
+				
+				-- If this system message has cache_control, include it
+				if messages[i].cache_control then
+					block.cache_control = messages[i].cache_control
+					logger.debug("Added cache_control to system block: " .. vim.inspect(messages[i].cache_control))
+				end
+				
+				-- Add this block to our system blocks array
+				table.insert(system_blocks, block)
+				
+				-- Remove from messages array since we've processed it
 				table.remove(messages, i)
 			else
 				i = i + 1
 			end
 		end
-
+		
+		-- Create the payload with the system array if we have system blocks
 		local payload = {
 			model = model.model,
 			stream = true,
 			messages = messages,
-			system = system,
 			max_tokens = model.max_tokens or 4096,
 			temperature = math.max(0, math.min(2, model.temperature or 1)),
 			top_p = math.max(0, math.min(1, model.top_p or 1)),
 		}
+		
+		-- Only add the system array if we have system blocks
+		if #system_blocks > 0 then
+			payload.system = system_blocks
+		end
+		
 		return payload
 	end
 
@@ -334,6 +358,8 @@ local query = function(buf, provider, payload, handler, on_exit, callback)
 					process_lines(buffer)
 				end
 				local raw_response = qt.raw_response
+				logger.debug(qt.provider .. " response: \n" .. vim.inspect(qt.raw_response))
+
 				local content = qt.response
 				if (qt.provider == 'openai' or qt.provider == 'copilot') and content == "" and raw_response:match('choices') and raw_response:match("content") then
 					local response = vim.json.decode(raw_response)

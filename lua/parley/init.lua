@@ -1166,10 +1166,10 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 						local original_question = exchange.question.content
 						
 						-- For Anthropic/Claude with file references:
-						-- 1. Insert a system message with processed file contents
+						-- 1. Insert a system message with processed file contents and cache_control
 						table.insert(messages, { 
 							role = "system", 
-							content = file_content, 
+							content = file_content,
 							cache_control = { type = "ephemeral" }
 						})
 						
@@ -1210,7 +1210,13 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 	-- replace first empty message with system prompt (use agent_info which has already resolved this)
 	local content = agent_info.system_prompt
 	if content and content:match("%S") then
+		local is_anthropic = (agent_info.provider == "anthropic" or agent_info.provider == "claude")
 		messages[1] = { role = "system", content = content }
+		
+		-- For Claude specifically, we want to persist the system prompt
+		if is_anthropic then
+			messages[1].cache_control = { type = "ephemeral" }
+		end
 	end
 	
 	-- strip whitespace from ends of content
