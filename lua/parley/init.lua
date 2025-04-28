@@ -963,7 +963,7 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 	               ", final setting: " .. tostring(use_free_cursor))
 
 	-- Check if there's already an active process for this buffer
-	if not force and M.tasker.is_busy(buf) then
+	if not force and M.tasker.is_busy(buf, false) then
 		M.logger.warning("A Parley process is already running. Use stop to cancel or force to override.")
 		return
 	end
@@ -1366,7 +1366,7 @@ M.chat_respond_all = function()
 	local cursor_pos = vim.api.nvim_win_get_cursor(0)
 	local cursor_line = cursor_pos[1]
 	
-	if M.tasker.is_busy(buf) then
+	if M.tasker.is_busy(buf, false) then
 		return
 	end
 	

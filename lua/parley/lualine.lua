@@ -33,7 +33,8 @@ M.create_component = function(parley_instance)
     
     -- Only check actual busy state periodically or when forced by events
     if (current_time - last_check_time) >= check_interval then
-      cached_busy_state = parley.tasker.is_busy(buf)
+      -- Pass skip_warning=true to avoid log spam from UI components
+      cached_busy_state = parley.tasker.is_busy(buf, true)
       last_check_time = current_time
     end
     

@@ -104,7 +104,7 @@ end
 --- check if there is some pid running for the given buffer
 ---@param buf number | nil # buffer number
 ---@return boolean
-M.is_busy = function(buf)
+M.is_busy = function(buf, skip_warning)
 	-- Increment debug counter
 	M._debug.is_busy_calls = M._debug.is_busy_calls + 1
 	
@@ -145,16 +145,19 @@ M.is_busy = function(buf)
 	
 	-- After processing all handles, report the result once
 	if active_pid ~= nil then
-		-- Limit warning frequency to prevent log spam
-		local current_time = os.time()
-		if (current_time - M._debug.last_warning_time) >= M._debug.warning_interval then
-			-- Only log warning if enough time has passed since the last one
-			logger.warning("Another Parley process [" .. active_pid .. "] is already running for buffer " .. buf .. 
-						   " (found " .. active_count .. " active process(es))")
-			M._debug.last_warning_time = current_time
-		else
-			-- Count suppressed warnings
-			M._debug.warnings_suppressed = M._debug.warnings_suppressed + 1
+		-- Only log warnings if not explicitly suppressed (for UI calls)
+		if not skip_warning then
+			-- Limit warning frequency to prevent log spam
+			local current_time = os.time()
+			if (current_time - M._debug.last_warning_time) >= M._debug.warning_interval then
+				-- Only log warning if enough time has passed since the last one
+				logger.warning("Another Parley process [" .. active_pid .. "] is already running for buffer " .. buf .. 
+							" (found " .. active_count .. " active process(es))")
+				M._debug.last_warning_time = current_time
+			else
+				-- Count suppressed warnings
+				M._debug.warnings_suppressed = M._debug.warnings_suppressed + 1
+			end
 		end
 		return true
 	end
@@ -240,7 +243,7 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader)
 	-- Run cleanup routine to remove stale processes
 	M.cleanup_stale_handles()
 	
-	if M.is_busy(buf) then
+	if M.is_busy(buf, false) then
 		return
 	end
 
