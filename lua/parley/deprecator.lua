@@ -11,13 +11,7 @@ M._deprecated = {}
 
 local switch_to_agent = "Please use `agents` table and switch agents in runtime via `:ParleyAgent XY`"
 
-local nested = function(variable, prefix)
-	local new_variable = variable:gsub(prefix .. "_", "")
-	return render.template(
-		"`{{old}}`\nPlease use `{{prefix}} = { {{new}} = ... }`",
-		{ ["{{old}}"] = variable, ["{{new}}"] = new_variable, ["{{prefix}}"] = prefix }
-	)
-end
+-- nested function removed as it's not used anywhere in the codebase
 
 local deprecated = {
 	command_model = "`command_model`\n" .. switch_to_agent,

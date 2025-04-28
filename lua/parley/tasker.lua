@@ -162,14 +162,7 @@ M.is_busy = function(buf)
 	return false
 end
 
--- Report debug stats for is_busy calls
-M.report_debug_stats = function()
-	logger.debug("is_busy stats: calls=" .. M._debug.is_busy_calls .. 
-				 ", suppressed warnings=" .. M._debug.warnings_suppressed)
-	-- Reset counters after reporting
-	M._debug.is_busy_calls = 0
-	M._debug.warnings_suppressed = 0
-end
+-- report_debug_stats function removed - only used internally
 
 -- Clean up stale process handles that are no longer running
 M.cleanup_stale_handles = function()
@@ -202,8 +195,6 @@ M.cleanup_stale_handles = function()
 	logger.debug("Cleanup completed: " .. active_count .. " active processes, " .. 
 				 removed_count .. " stale processes removed")
 	
-	-- Report debug stats periodically
-	M.report_debug_stats()
 end
 
 -- stop receiving gpt responses for all processes and clean the handles
@@ -306,51 +297,6 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader)
 	end)
 end
 
----@param buf number | nil # buffer number
----@param directory string # directory to search in
----@param pattern string # pattern to search for
----@param callback function # callback function(results, regex)
--- results: table of elements with file, lnum and line
--- regex: string - final regex used for search
-M.grep_directory = function(buf, directory, pattern, callback)
-	pattern = pattern or ""
-	-- replace spaces with wildcards
-	pattern = pattern:gsub("%s+", ".*")
-	-- strip leading and trailing non alphanumeric characters
-	local re = pattern:gsub("^%W*(.-)%W*$", "%1")
-
-	M.run(buf, "grep", { "-irEn", "--null", pattern, directory }, function(c, _, stdout, _)
-		local results = {}
-		if c ~= 0 then
-			callback(results, re)
-			return
-		end
-		for _, line in ipairs(vim.split(stdout, "\n")) do
-			line = line:gsub("^%s*(.-)%s*$", "%1")
-			-- line contains non whitespace characters
-			if line:match("%S") then
-				-- extract file path (until zero byte)
-				local file = line:match("^(.-)%z")
-				-- substract dir from file
-				local filename = vim.fn.fnamemodify(file, ":t")
-				local line_number = line:match("%z(%d+):")
-				local line_text = line:match("%z%d+:(.*)")
-				table.insert(results, {
-					file = filename,
-					lnum = line_number,
-					line = line_text,
-				})
-			end
-		end
-		table.sort(results, function(a, b)
-			if a.file == b.file then
-				return a.lnum < b.lnum
-			else
-				return a.file > b.file
-			end
-		end)
-		callback(results, re)
-	end)
-end
+-- grep_directory function removed as it's not used anywhere in the codebase
 
 return M
