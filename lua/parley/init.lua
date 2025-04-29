@@ -1180,7 +1180,7 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 				
 				-- Handle provider-specific file reference processing for questions with file references
 				if exchange.question.has_file_reference then
-					-- Use agent_info to determine if we're using Anthropic/Claude
+					-- Use agent_info to determine if we're using nthropic/Claude
 					local is_anthropic = (agent_info.provider == "anthropic" or agent_info.provider == "claude")
 										
 					if is_anthropic then
@@ -1233,10 +1233,10 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 	-- replace first empty message with system prompt (use agent_info which has already resolved this)
 	local content = agent_info.system_prompt
 	if content and content:match("%S") then
-		local is_anthropic = (agent_info.provider == "anthropic" or agent_info.provider == "claude")
 		messages[1] = { role = "system", content = content }
 		
 		-- For Claude specifically, we want to persist the system prompt
+		local is_anthropic = (agent_info.provider == "anthropic" or agent_info.provider == "claude")
 		if is_anthropic then
 			messages[1].cache_control = { type = "ephemeral" }
 		end
