@@ -189,6 +189,16 @@ local config = {
 	chat_finder_pattern = "^# topic: ",
 	chat_finder_mappings = {
 		delete = { modes = { "n", "i", "v", "x" }, shortcut = "<C-d>" },
+		toggle_all = { modes = { "n", "i", "v", "x" }, shortcut = "<C-a>" },
+	},
+	-- chat finder recency filtering configuration
+	chat_finder_recency = {
+		-- Enable recency filtering by default
+		filter_by_default = true,
+		-- Default recency period in months
+		months = 3,
+		-- Use file modification time (true) or creation time (false)
+		use_mtime = true,
 	},
 	-- if true, finished ChatResponder won't move the cursor to the end of the buffer
 	chat_free_cursor = true,

@@ -1763,16 +1763,22 @@ M.cmd.OpenFileUnderCursor = function()
 	end
 end
 
-M._chat_finder_opened = false
+-- State for chat finder
+M._chat_finder = {
+	opened = false,
+	show_all = false -- Track whether we're showing all files or just recent ones
+}
+
 M.cmd.ChatFinder = function()
-	if M._chat_finder_opened then
+	if M._chat_finder.opened then
 		M.logger.warning("Chat finder is already open")
 		return
 	end
-	M._chat_finder_opened = true
+	M._chat_finder.opened = true
 
 	local dir = M.config.chat_dir
 	local delete_shortcut = M.config.chat_finder_mappings.delete or M.config.chat_shortcut_delete
+	local toggle_shortcut = M.config.chat_finder_mappings.toggle_all or { shortcut = "<C-g>h" }
 
 	-- Launch telescope finder
 	if pcall(require, "telescope") then
@@ -1791,7 +1797,37 @@ M.cmd.ChatFinder = function()
 		end
 		local entries = {}
 		
+		-- Get recency configuration
+		local recency_config = M.config.chat_finder_recency or {
+			filter_by_default = true,
+			months = 3,
+			use_mtime = true
+		}
+		
+		-- Calculate cutoff timestamp (current time - configured months)
+		local current_time = os.time()
+		local months_in_seconds = recency_config.months * 30 * 24 * 60 * 60
+		local cutoff_time = current_time - months_in_seconds
+		
+		-- For calculating the prompt title
+		local is_filtering = recency_config.filter_by_default and not M._chat_finder.show_all
+		
 		for _, file in ipairs(files) do
+			-- Get file info
+			local stat = vim.loop.fs_stat(file)
+			if not stat then
+				goto continue
+			end
+			
+			-- Get the file timestamp based on configuration (mtime or birthtime)
+			local file_time = recency_config.use_mtime and stat.mtime.sec or stat.birthtime and stat.birthtime.sec or stat.mtime.sec
+			
+			-- Skip files older than cutoff if filtering is active
+			if is_filtering and file_time < cutoff_time then
+				goto continue
+			end
+			
+			-- Get topic from the file
 			local lines = vim.fn.readfile(file, "", 5) -- Read first 5 lines to get topic
 			local topic = ""
 			for _, line in ipairs(lines) do
@@ -1802,16 +1838,32 @@ M.cmd.ChatFinder = function()
 				end
 			end
 			
+			-- Format date string
+			local date_str = os.date("%Y-%m-%d", file_time)
+			
 			local filename = vim.fn.fnamemodify(file, ":t")
 			table.insert(entries, {
 				value = file,
-				display = filename .. " - " .. topic,
+				display = filename .. " - " .. topic .. " [" .. date_str .. "]",
 				ordinal = filename .. " " .. topic,
+				timestamp = file_time,
 			})
+			
+			::continue::
 		end
 		
+		-- Sort entries by timestamp (newest first)
+		table.sort(entries, function(a, b) 
+			return a.timestamp > b.timestamp
+		end)
+		
+		-- Determine prompt title based on filtering state
+		local prompt_title = is_filtering 
+			and string.format("Chat Files (Recent: %d months)", recency_config.months) 
+			or "Chat Files (All)"
+		
 		pickers.new({}, {
-			prompt_title = "Chat Files",
+			prompt_title = prompt_title,
 			finder = finders.new_table({
 				results = entries,
 				entry_maker = function(entry)
@@ -1826,6 +1878,7 @@ M.cmd.ChatFinder = function()
 					M.open_buf(selection.value)
 				end)
 				
+				-- Map delete shortcut
 				map("i", delete_shortcut.shortcut, function()
 					local selection = action_state.get_selected_entry()
 					vim.ui.input({ prompt = "Delete " .. selection.value .. "? [y/N] " }, function(input)
@@ -1834,11 +1887,33 @@ M.cmd.ChatFinder = function()
 							actions.close(prompt_bufnr)
 							-- Reopen finder to show updated list
 							vim.defer_fn(function()
-								M._chat_finder_opened = false
+								M._chat_finder.opened = false
 								M.cmd.ChatFinder()
 							end, 100)
 						end
 					end)
+				end)
+				
+				-- Map toggle_all shortcut
+				map("i", toggle_shortcut.shortcut, function()
+					M._chat_finder.show_all = not M._chat_finder.show_all
+					actions.close(prompt_bufnr)
+					-- Reopen finder with new filter setting
+					vim.defer_fn(function()
+						M._chat_finder.opened = false
+						M.cmd.ChatFinder()
+					end, 100)
+				end)
+				
+				-- Also add normal mode mapping for toggle
+				map("n", toggle_shortcut.shortcut, function()
+					M._chat_finder.show_all = not M._chat_finder.show_all
+					actions.close(prompt_bufnr)
+					-- Reopen finder with new filter setting
+					vim.defer_fn(function()
+						M._chat_finder.opened = false
+						M.cmd.ChatFinder()
+					end, 100)
 				end)
 				
 				return true
@@ -1848,7 +1923,7 @@ M.cmd.ChatFinder = function()
 		M.logger.error("Telescope not found. ChatFinder requires telescope.nvim to be installed.")
 	end
 	
-	M._chat_finder_opened = false
+	M._chat_finder.opened = false
 end
 
 --------------------------------------------------------------------------------

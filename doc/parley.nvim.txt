@@ -261,9 +261,15 @@ subcommands for layout specification:
 - `:GpChatToggle popup` Toggle chat in a popup window.
 
 
-:GpChatFinder                                                  *:GpChatFinder*
+:ParleyChatFinder                                          *:ParleyChatFinder*
 
-Open a dialog to search through chats.
+Open a dialog to search through chats. By default, only shows chat files from the last 3 months (configurable in `chat_finder_recency.months`). 
+
+While in the dialog:
+- Press the configured toggle key (default: `<C-a>`) to switch between showing recent chats and all chats
+- The dialog title will display the current filtering state (Recent or All)
+- Chat files are sorted by modification date with newest first
+- Each entry shows the chat filename, topic, and date
 
 
 :GpChatRespond                                                *:GpChatRespond*

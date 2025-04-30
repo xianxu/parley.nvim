@@ -246,9 +246,15 @@ All commands can be configured in `config.lua`.
 
 Open a fresh chat in the current window. `<C-g>c`
 
-#### `:GpChatFinder` <!-- {doc=:GpChatFinder}  -->
+#### `:ParleyChatFinder` <!-- {doc=:ParleyChatFinder}  -->
 
 Open a dialog to search through chats. `<C-g>f`
+
+By default, this only shows chat files from the last 3 months (configurable in `chat_finder_recency.months`). While in the dialog:
+- Press the configured toggle key (default: `<C-a>`) to switch between showing recent chats and all chats
+- The dialog title displays the current filtering state (Recent or All)
+- Chat files are sorted by modification date with newest first
+- Each entry shows filename, topic, and date
 
 #### `:GpChatRespond` <!-- {doc=:GpChatRespond}  -->
 
@@ -269,6 +275,40 @@ Cycles between available agents based on the current buffer (chat agents if curr
 #### `:GpStop` <!-- {doc=:GpStop}  -->
 
 Stops all currently running responses and jobs. `<C-g>s`
+
+# Chat Finder Recency Filtering
+
+The chat finder feature includes intelligent filtering based on file recency, making it easier to find relevant chats:
+
+## Configuration
+
+```lua
+-- Chat finder recency filtering configuration
+chat_finder_recency = {
+    -- Enable recency filtering by default
+    filter_by_default = true,
+    -- Default recency period in months
+    months = 3,
+    -- Use file modification time (true) or creation time (false)
+    use_mtime = true,
+},
+
+-- Keybinding for toggling between recent and all chats in the finder
+chat_finder_mappings = {
+    delete = { modes = { "n", "i", "v", "x" }, shortcut = "<C-d>" },
+    toggle_all = { modes = { "n", "i", "v", "x" }, shortcut = "<C-a>" },
+},
+```
+
+## How It Works
+
+1. By default, the chat finder only shows files from the last 3 months (configurable)
+2. Files are sorted with newest first to quickly find recent conversations
+3. A toggle key (default: `<C-a>`) lets you switch between recent files and all files
+4. The dialog title updates to show whether you're viewing "Recent" or "All" chats
+5. Each entry displays the file's last modification date for easy reference
+
+This feature helps manage growing collections of chat files and quickly locate relevant conversations without overwhelming the finder with old, rarely used transcripts.
 
 # Chat Memory Management
 
