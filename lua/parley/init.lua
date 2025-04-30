@@ -347,6 +347,12 @@ M.not_chat = function(buf, file_name)
 		return "resolved file (" .. file_name .. ") not in chat dir (" .. chat_dir .. ")"
 	end
 
+    -- Check for parley- prefix in filename
+    local basename = vim.fn.fnamemodify(file_name, ":t")
+    if not basename:match("^parley%-") and not basename:match("^%d%d%d%d%-%d%d%-%d%d") then
+        return "file does not have parley- prefix or timestamp format"
+    end
+
 	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 	if #lines < 5 then
 		return "file too short"
@@ -708,7 +714,7 @@ end
 ---@param agent table | nil # obtained from get_agent
 ---@return number # buffer number
 M.new_chat = function(system_prompt, agent)
-	local filename = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
+	local filename = M.config.chat_dir .. "/parley-" .. M.logger.now() .. ".md"
 
 	-- encode as json if model is a table
 	local model = ""
@@ -1776,7 +1782,13 @@ M.cmd.ChatFinder = function()
 		local actions = require("telescope.actions")
 		local action_state = require("telescope.actions.state")
 		
-		local files = vim.fn.glob(dir .. "/*.md", false, true)
+		-- Update glob pattern to include both old and new format files
+		local files = vim.fn.glob(dir .. "/parley-*.md", false, true)
+		-- Also include old format files for backward compatibility
+		local old_files = vim.fn.glob(dir .. "/[0-9][0-9][0-9][0-9]-*.md", false, true)
+		for _, file in ipairs(old_files) do
+			table.insert(files, file)
+		end
 		local entries = {}
 		
 		for _, file in ipairs(files) do
