@@ -1,8 +1,6 @@
 # TODO
 
-@@~/Library/Mobile Documents/com~apple~CloudDocs/parley/2025-04-28.21-20-00.310.md: test: with emma, updated, updated again, and now
-
-@@~/Library/Mobile Documents/com~apple~CloudDocs/parley/2025-04-19.17-29-58.400.md: OnlyFans content
+@@~/Library/Mobile Documents/com~apple~CloudDocs/parley/2025-04-27.19-08-22.820.md: tech: LLM integration
 
 ## Customization for non-chat md files
 
@@ -13,6 +11,7 @@ Allow some customization for any markdown files that is not a chat.
 2. In non-chat md file, allow @@ line to refer to some chat file in a similar way as how @@ in chat file is handled. That is, line starting with @@ should be highlighted, and <C-g>o to open the chat file.
 
 3. Implement a function to insert a chat file from an interface same as Chat Finder. This should be bounded to the same <C-g>f, just that upon selecting in non-chat file, instead of opening the file from Chat Finder, insert the file path at current cursor location, in the format of @@/path/to/chat/file. Currently <C-g>f is bound only in chat window, thus won't generate conflict.
+@@
 
 4. Implement a function to create a new chat file, and insert the newly created file name as the current cursor location. in this mode, file's generated but not opened automatically. Bind this locally to non-md files as <C-g>n. This won't conflict with the search functionality <C-g>n in chat window, as that's locally bound to chat file.
 

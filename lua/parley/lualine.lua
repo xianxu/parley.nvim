@@ -181,7 +181,7 @@ function M.setup(parley)
         end
         
         -- Use a simple approach - just add our component at the start
-        table.insert(existing_config.sections[section], 1, parley_component)
+        table.insert(existing_config.sections[section], parley_component)
         
         -- Refresh lualine with the updated config
         lualine.setup(existing_config)

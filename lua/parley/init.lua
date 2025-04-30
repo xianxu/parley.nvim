@@ -771,6 +771,11 @@ M.setup_markdown_keymaps = function(buf)
 		M._chat_finder.insert_mode = true
 		M._chat_finder.insert_buf = buf
 		M._chat_finder.insert_line = cursor_pos[1]
+		
+		-- IMPORTANT: Clear and set source window immediately before opening
+		M._chat_finder.source_win = nil
+		M._chat_finder.source_win = vim.api.nvim_get_current_win()
+		M.logger.debug("NORMAL MODE: Passing window: " .. M._chat_finder.source_win)
 		M.cmd.ChatFinder()
 	end, "Parley insert chat reference")
 	
@@ -792,6 +797,11 @@ M.setup_markdown_keymaps = function(buf)
 		M._chat_finder.insert_mode = true
 		M._chat_finder.insert_buf = buf
 		M._chat_finder.insert_line = cursor_pos[1]
+		
+		-- IMPORTANT: Clear and set source window immediately before opening
+		M._chat_finder.source_win = nil
+		M._chat_finder.source_win = vim.api.nvim_get_current_win()
+		M.logger.debug("INSERT MODE: Passing window: " .. M._chat_finder.source_win)
 		
 		-- Exit insert mode before opening chat finder
 		vim.cmd("stopinsert")
@@ -914,8 +924,9 @@ M.buf_handler = function()
 end
 
 ---@param file_name string
+---@param from_chat_finder boolean | nil # whether this is called from ChatFinder
 ---@return number # buffer number
-M.open_buf = function(file_name)
+M.open_buf = function(file_name, from_chat_finder)
 	-- Is the file already open in a buffer?
 	for _, b in ipairs(vim.api.nvim_list_bufs()) do
 		if vim.api.nvim_buf_get_name(b) == file_name then
@@ -928,8 +939,36 @@ M.open_buf = function(file_name)
 		end
 	end
 
-	-- Open in new buffer
-	vim.api.nvim_command("edit " .. file_name)
+	-- Get all windows in the current tab
+	local tab_wins = vim.api.nvim_tabpage_list_wins(0)
+	
+	-- If we have exactly two splits AND we're not from ChatFinder, open in the other split
+	if #tab_wins == 2 and not from_chat_finder then
+		local current_win = vim.api.nvim_get_current_win()
+		local other_win
+		
+		-- Find the other window that's not the current one
+		for _, win in ipairs(tab_wins) do
+			if win ~= current_win then
+				other_win = win
+				break
+			end
+		end
+		
+		-- Switch to the other window and open the file
+		if other_win then
+			M.logger.debug("Opening file in other split: " .. file_name)
+			vim.api.nvim_set_current_win(other_win)
+			vim.api.nvim_command("edit " .. vim.fn.fnameescape(file_name))
+			local buf = vim.api.nvim_get_current_buf()
+			return buf
+		end
+	end
+
+	-- If from ChatFinder or not using the other split, just open in current window
+	local open_mode = from_chat_finder and "Opening file in current window (from ChatFinder)" or "Opening file in current window"
+	M.logger.debug(open_mode .. ": " .. file_name)
+	vim.api.nvim_command("edit " .. vim.fn.fnameescape(file_name))
 	local buf = vim.api.nvim_get_current_buf()
 	return buf
 end
@@ -1832,7 +1871,7 @@ M.cmd.Outline = function()
 end
 
 -- Function to open a chat reference from a markdown file
-M.open_chat_reference = function(current_line, cursor_col)
+M.open_chat_reference = function(current_line, cursor_col, in_insert_mode)
 	-- Extract the chat path
 	local chat_path
 	
@@ -1913,6 +1952,9 @@ M.open_chat_reference = function(current_line, cursor_col)
 		-- Open the chat file
 		M.logger.info("Opening chat file: " .. expanded_path)
 		M.open_buf(expanded_path)
+		
+		-- No need to explicitly handle insert mode here as M.open_buf now 
+		-- checks for two splits and the caller (OpenFileUnderCursor) handles insert mode 
 		return true
 	else
 		M.logger.warning("Chat file not found: " .. expanded_path)
@@ -1936,14 +1978,8 @@ M.cmd.OpenFileUnderCursor = function()
 	
 	-- Check if it's a markdown file (but not a chat file)
 	if M.is_markdown(buf, file_name) then
-		-- Try to open as a chat reference
-		if M.open_chat_reference(current_line, cursor_col) then
-			-- Return to insert mode if we were in it before
-			if in_insert_mode then
-				vim.schedule(function()
-					vim.cmd("startinsert")
-				end)
-			end
+		-- Try to open as a chat reference, passing insert mode status
+		if M.open_chat_reference(current_line, cursor_col, in_insert_mode) then
 			return
 		end
 	end
@@ -2035,6 +2071,39 @@ M.cmd.OpenFileUnderCursor = function()
 		
 		M.logger.info("Opening directory: " .. expanded_path)
 		
+		-- Get all windows in the current tab
+		local tab_wins = vim.api.nvim_tabpage_list_wins(0)
+		
+		-- If we have exactly two splits, open in the other split
+		if #tab_wins == 2 then
+			local current_win = vim.api.nvim_get_current_win()
+			local other_win
+			
+			-- Find the other window that's not the current one
+			for _, win in ipairs(tab_wins) do
+				if win ~= current_win then
+					other_win = win
+					break
+				end
+			end
+			
+			-- Switch to the other window and open the directory
+			if other_win then
+				M.logger.debug("Opening directory in other split: " .. expanded_path)
+				vim.api.nvim_set_current_win(other_win)
+				vim.cmd("Explore " .. vim.fn.fnameescape(expanded_path))
+				
+				-- Restore insert mode if needed
+				if in_insert_mode then
+					vim.schedule(function()
+						vim.cmd("startinsert")
+					end)
+				end
+				
+				return
+			end
+		end
+		
 		-- Use netrw (built-in file explorer) to view the directory
 		vim.cmd("Explore " .. vim.fn.fnameescape(expanded_path))
 	else
@@ -2047,6 +2116,41 @@ M.cmd.OpenFileUnderCursor = function()
 		
 		-- Open the file in a new buffer
 		M.logger.info("Opening file: " .. expanded_path)
+		
+		-- Get all windows in the current tab
+		local tab_wins = vim.api.nvim_tabpage_list_wins(0)
+		
+		-- If we have exactly two splits, open in the other split
+		if #tab_wins == 2 then
+			local current_win = vim.api.nvim_get_current_win()
+			local other_win
+			
+			-- Find the other window that's not the current one
+			for _, win in ipairs(tab_wins) do
+				if win ~= current_win then
+					other_win = win
+					break
+				end
+			end
+			
+			-- Switch to the other window and open the file
+			if other_win then
+				M.logger.debug("Opening file in other split: " .. expanded_path)
+				vim.api.nvim_set_current_win(other_win)
+				vim.cmd("edit " .. vim.fn.fnameescape(expanded_path))
+				
+				-- Restore insert mode if needed
+				if in_insert_mode then
+					vim.schedule(function()
+						vim.cmd("startinsert")
+					end)
+				end
+				
+				return
+			end
+		end
+		
+		-- Otherwise open in current window
 		vim.cmd("edit " .. vim.fn.fnameescape(expanded_path))
 	end
 	
@@ -2061,15 +2165,20 @@ end
 -- State for chat finder
 M._chat_finder = {
 	opened = false,
-	show_all = false -- Track whether we're showing all files or just recent ones
+	show_all = false, -- Track whether we're showing all files or just recent ones
+	active_window = nil, -- Track the active window that initiated ChatFinder
+	source_win = nil -- Track the source window where ChatFinder was invoked
 }
 
-M.cmd.ChatFinder = function()
+M.cmd.ChatFinder = function(options)
 	if M._chat_finder.opened then
 		M.logger.warning("Chat finder is already open")
 		return
 	end
 	M._chat_finder.opened = true
+	
+	-- IMPORTANT: The window should have been captured from the keybinding
+	M.logger.debug("ChatFinder using source_win: " .. (M._chat_finder.source_win or "nil"))
 
 	local dir = M.config.chat_dir
 	local delete_shortcut = M.config.chat_finder_mappings.delete or M.config.chat_shortcut_delete
@@ -2157,7 +2266,13 @@ M.cmd.ChatFinder = function()
 			and string.format("Chat Files (Recent: %d months)", recency_config.months) 
 			or "Chat Files (All)"
 		
-		pickers.new({}, {
+		-- We'll use the active_window saved in M._chat_finder.active_window
+			M.logger.debug("ChatFinder using active_window: " .. (M._chat_finder.active_window or "nil"))
+		
+		pickers.new({
+			-- Use default Telescope behavior which is more consistent
+			initial_mode = "insert",
+		}, {
 			prompt_title = prompt_title,
 			finder = finders.new_table({
 				results = entries,
@@ -2173,6 +2288,12 @@ M.cmd.ChatFinder = function()
 					
 					-- Check if we're in insert mode (for inserting chat references)
 					if M._chat_finder.insert_mode then
+						-- Switch to the original source window first
+						if M._chat_finder.source_win and vim.api.nvim_win_is_valid(M._chat_finder.source_win) then
+							vim.api.nvim_set_current_win(M._chat_finder.source_win)
+							M.logger.debug("Switched to source window for insert: " .. M._chat_finder.source_win)
+						end
+						
 						if M._chat_finder.insert_buf and vim.api.nvim_buf_is_valid(M._chat_finder.insert_buf) then
 							-- Extract topic from the display
 							local topic = selection.display:match(" %- (.+) %[") or "Chat"
@@ -2198,7 +2319,12 @@ M.cmd.ChatFinder = function()
 						M._chat_finder.insert_line = nil
 					else
 						-- Normal behavior - open the selected chat
-						M.open_buf(selection.value)
+						-- First switch back to the source window where ChatFinder was invoked
+						if M._chat_finder.source_win and vim.api.nvim_win_is_valid(M._chat_finder.source_win) then
+							vim.api.nvim_set_current_win(M._chat_finder.source_win)
+							M.logger.debug("Switched to source window for file open: " .. M._chat_finder.source_win)
+						end
+						M.open_buf(selection.value, true) -- Pass true to indicate this is from ChatFinder
 					end
 				end)
 				
@@ -2210,8 +2336,10 @@ M.cmd.ChatFinder = function()
 							M.helpers.delete_file(selection.value)
 							actions.close(prompt_bufnr)
 							-- Reopen finder to show updated list
+							local source_win = M._chat_finder.source_win
 							vim.defer_fn(function()
 								M._chat_finder.opened = false
+								M._chat_finder.source_win = source_win
 								M.cmd.ChatFinder()
 							end, 100)
 						end
@@ -2223,8 +2351,10 @@ M.cmd.ChatFinder = function()
 					M._chat_finder.show_all = not M._chat_finder.show_all
 					actions.close(prompt_bufnr)
 					-- Reopen finder with new filter setting
+					local source_win = M._chat_finder.source_win
 					vim.defer_fn(function()
 						M._chat_finder.opened = false
+						M._chat_finder.source_win = source_win
 						M.cmd.ChatFinder()
 					end, 100)
 				end)
@@ -2234,8 +2364,10 @@ M.cmd.ChatFinder = function()
 					M._chat_finder.show_all = not M._chat_finder.show_all
 					actions.close(prompt_bufnr)
 					-- Reopen finder with new filter setting
+					local source_win = M._chat_finder.source_win
 					vim.defer_fn(function()
 						M._chat_finder.opened = false
+						M._chat_finder.source_win = source_win
 						M.cmd.ChatFinder()
 					end, 100)
 				end)
