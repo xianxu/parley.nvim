@@ -272,12 +272,11 @@ While in the dialog:
 - Each entry shows the chat filename, topic, and date
 
 
-:GpChatRespond                                                *:GpChatRespond*
+:ParleyChatRespond                                          *:ParleyChatRespond*
 
-Request a new GPT response for the current chat. Usin`:GpChatRespond N` request
-a new GPT response with only the last N messages as context, using everything
-from the end up to the Nth instance of `🗨:..` (N=1 is like asking a question
-in a new chat).
+Request a new response for the current chat. If the cursor is on a question in the 
+middle of the document, it will replace that question's answer. If the cursor is
+at the end of the document, it will create a new answer for the last question.
 
 
 :GpChatDelete                                                  *:GpChatDelete*

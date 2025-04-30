@@ -2,24 +2,24 @@
 
 ## Customization for non-chat md files
 
-Allow some customization for any md file that's not a chat. 
+Allow some customization for any markdown files that is not a chat. 
 
-1. Parley would handle two kinds of files, all markdown based. One is chat transcript as handle previously, they are in that chat_dir. The other is any other md file. 
+1. Parley would handle two kinds of files, all markdown based. One is chat transcript as handle previously, they are in that chat_dir. The other is any other markdown file, not in the chat_dir, or following the header convention.
 
-2. In non-chat md file, allow @@ line to refer to some chat file. In non-chat md file, upon detecting "@@ " at the start of a line, bring up chat finder, for user to select which chat file name to insert. Once file name is inserted, it should be of format @@/path/to/chat/file: {topic of the chat}. in a single line.
+2. In non-chat md file, allow @@ line to refer to some chat file. In non-chat md file, upon detecting "@@ " at the start of a line, bring up chat finder, for user to select which chat file to insert. Once file name is inserted, the line should be formatted as @@/path/to/chat/file: {topic of the chat}. in a single line. 
 
-3. There should also a mode to insert new chat directly. Let's use the syntax: @@+ at start of a line. When this is detected, a new chat file name should be created and inserted at the location, replace the @@+ marker with @@/path/to/new/chat/file:, and user can input the topic of the chat in that line. Note, the new chat file is not yet created. When user opens the file, from this line with <C-g>o, we would notice the chat is not yet available, and at that moment, create it and bring up a new buffer to display that. 
+3. There should also be a mode to insert new chat directly in non-md files. Let's use the syntax: @@+ at start of a line. When this is detected, a new chat file name should be created and inserted at the location, replace the @@+ marker with @@/path/to/new/chat/file. Note, at this point, the new chat file is not yet created. When user opens the file, from this line with <C-g>o, we would notice the chat is not yet available, and at that moment, create it and bring up a new buffer to display that. 
 
-4. Use the title of the chat file for display, behind the file name for clarity of its content. 
+4. Use the title of the chat file for display, behind the file name for clarity of its content, as described before. The subject of the chat will be refreshed every time ^@@:/path/to/chat/file is parsed, in case they are updated.
 
-5. Allow same file jumping behavior, <C-g>o to open the chat file under cursor.
+5. Allow same file jumping behavior, <C-g>o to open the chat file under cursor, as described before.
 
 ## A note taking plugin
 
-I want the ability to quickly take notes. Consider the following:
+I want the ability to quickly take notes. This is not interacting with LLM, but very simple function and I decide to include in Parley. Consider the following:
 
-1. notes are just markdown files, organized under one root directory.
-2. directory under root is organized in two levels: year/month, e.g. 2025/04, 2025/05, etc.
+1. Notes are just markdown files, organized under one root directory.
+2. Directory under root is organized in two levels: year/month, e.g. 2025/04, 2025/05, etc.
 3. file names in those directory (such as 2025/04) are organized as {date}-some-subject-of-the-file.md, e.g. 30-meeting-with-mike.md. 
 4. using directory and file name together, you can determine the date of the note.
 5. the plugin would provide the following functionalities and hotkeys.
@@ -29,5 +29,3 @@ I want the ability to quickly take notes. Consider the following:
 ## Remove parameter N in ParleyChatRespond
 
 That's from past
-
-## ensure empty line at end of question

@@ -1589,63 +1589,7 @@ M.cmd.ChatRespond = function(params)
 		M.logger.info("Forcing response even if another process is running")
 	end
 	
-	if params.args == "" and vim.v.count == 0 then
-		M.chat_respond(params, nil, nil, force)
-		return
-	elseif params.args == "" and vim.v.count ~= 0 then
-		params.args = tostring(vim.v.count)
-	end
-
-	-- ensure args is a single positive number
-	local n_requests = tonumber(params.args)
-	if n_requests == nil or math.floor(n_requests) ~= n_requests or n_requests <= 0 then
-		M.logger.warning("args for ChatRespond should be a single positive number, not: " .. params.args)
-		return
-	end
-
-	-- Get all lines of the buffer
-	local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-	
-	-- Find header section end
-	local header_end = nil
-	for i, line in ipairs(lines) do
-		if line:sub(1, 3) == "---" then
-			header_end = i
-			break
-		end
-	end
-
-	if header_end == nil then
-		M.logger.error("Error while parsing headers: --- not found. Check your chat template.")
-		return
-	end
-	
-	-- Parse chat structure to find exchanges
-	local parsed_chat = M.parse_chat(lines, header_end)
-    M.logger.debug("ChatRespond: parsed chat: ".. vim.inspect(parsed_chat))
-	
-	-- Find the nth question from the end
-	if #parsed_chat.exchanges >= n_requests then
-		local exchange_idx = #parsed_chat.exchanges - n_requests + 1
-		
-		-- Set range to process everything from start up to the identified exchange
-		if parsed_chat.exchanges[exchange_idx].answer then
-			params.range = 2
-			params.line1 = header_end + 1
-			params.line2 = parsed_chat.exchanges[exchange_idx].answer.line_end
-		else
-			-- If no answer, process to the end of the file
-			params.range = 2
-			params.line1 = header_end + 1
-			params.line2 = #lines
-		end
-	else
-		-- If not enough exchanges, process everything
-		params.range = 2
-		params.line1 = header_end + 1
-		params.line2 = #lines
-	end
-	
+	-- Simply call chat_respond with the current parameters
 	M.chat_respond(params, nil, nil, force)
 end
 
