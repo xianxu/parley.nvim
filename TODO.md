@@ -1,5 +1,9 @@
 # TODO
 
+@@~/Library/Mobile Documents/com~apple~CloudDocs/parley/2025-04-28.21-20-00.310.md: test: with emma, updated, updated again, and now
+
+@@~/Library/Mobile Documents/com~apple~CloudDocs/parley/2025-04-19.17-29-58.400.md: OnlyFans content
+
 ## Customization for non-chat md files
 
 Allow some customization for any markdown files that is not a chat. 
@@ -28,6 +32,4 @@ I want the ability to quickly take notes. This is not interacting with LLM, but 
     1. <C-n>n: create a new note file. The file name would be {date}-some-subject-of-the-file.md. The user would be prompted to input the subject of the file. The file would be created under the appropriate directory. The file would be opened in a new buffer.
 	2. <C-n>f: find a note file. The user would be prompted to search for a note based on the subject of the file (part of file name) using telescope fuzzy finder. The file would be opened in a new buffer.
 
-## Remove parameter N in ParleyChatRespond
 
-That's from past

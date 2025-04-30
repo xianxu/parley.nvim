@@ -506,6 +506,49 @@ M.prep_chat = function(buf, file_name)
 	end
 end
 
+-- Check if a file is a non-chat markdown file
+M.is_markdown = function(buf, file_name)
+	-- Skip if not a valid buffer
+	if not vim.api.nvim_buf_is_valid(buf) then
+		return false
+	end
+	
+	-- Skip if it's a chat file (already handled by chat logic)
+	if M.not_chat(buf, file_name) == nil then
+		return false
+	end
+	
+	-- Check if the file has a .md extension
+	if file_name:match("%.md$") then
+		return true
+	end
+	
+	-- Check if the filetype is markdown
+	local filetype = vim.api.nvim_buf_get_option(buf, "filetype")
+	if filetype == "markdown" then
+		return true
+	end
+	
+	return false
+end
+
+-- Helper function to extract chat topic from file
+M.get_chat_topic = function(file_path)
+	if not vim.fn.filereadable(file_path) then
+		return nil
+	end
+	
+	local lines = vim.fn.readfile(file_path, "", 5) -- Read first 5 lines
+	for _, line in ipairs(lines) do
+		local topic = line:match("^# topic: (.+)")
+		if topic then
+			return topic
+		end
+	end
+	
+	return nil
+end
+
 -- Define namespace and highlighting colors for questions, annotations, and thinking
 M.highlight_questions = function()
 	-- Set up namespace
@@ -570,6 +613,59 @@ M.highlight_questions = function()
 	vim.api.nvim_set_hl(0, "Tag", { link = "ParleyTag" })
 	
 	return ns
+end
+
+-- Function to highlight chat references in non-chat markdown files
+M.highlight_markdown_chat_refs = function(buf)
+	local ns = M.highlight_questions()
+	vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+	
+	-- Track chat references to refresh topics
+	local chat_references = {}
+	
+	for i, line in ipairs(lines) do
+		-- Highlight chat file references (starts with @@/)
+		if line:match("^@@%s*[^+]") or line:match("^@@/") then
+			vim.api.nvim_buf_add_highlight(buf, ns, "FileLoading", i - 1, 0, -1)
+			
+			-- Extract chat path for topic refreshing
+			local chat_path = line:match("^@@%s*([^:]+)")
+			if chat_path then
+				table.insert(chat_references, {
+					line = i - 1,
+					path = chat_path:gsub("^%s*(.-)%s*$", "%1"),
+					line_text = line
+				})
+			end
+		end
+	end
+	
+	-- Refresh chat topics for all chat references
+	for _, ref in ipairs(chat_references) do
+		local expanded_path = vim.fn.expand(ref.path)
+		
+		-- Check if file exists and is readable
+		if vim.fn.filereadable(expanded_path) == 1 then
+			local topic = M.get_chat_topic(expanded_path)
+			
+			if topic then
+				-- Check if the line already has a topic
+				local current_topic = ref.line_text:match("^@@%s*[^:]+:%s*(.+)$")
+				
+				-- If topic changed or there wasn't one before, update it
+				if not current_topic or current_topic ~= topic then
+					-- Update the line with the new topic
+					vim.api.nvim_buf_set_lines(buf, ref.line, ref.line + 1, false, {
+						"@@" .. ref.path .. ": " .. topic
+					})
+					
+					-- Log the topic update
+					M.logger.debug("Updated chat reference topic for " .. ref.path .. " to: " .. topic)
+				end
+			end
+		end
+	end
 end
 
 -- Function to apply highlighting to chat blocks in the current buffer
@@ -650,10 +746,108 @@ M.highlight_question_block = function(buf)
 	end
 end
 
+M.setup_markdown_keymaps = function(buf)
+	-- Add <C-g>o keybinding to open chat file references
+	local of = M.config.chat_shortcut_open_file
+	if of then
+		for _, mode in ipairs(of.modes) do
+			M.helpers.set_keymap({ buf }, mode, of.shortcut, M.cmd.OpenFileUnderCursor, "Parley open chat reference under cursor")
+		end
+	end
+	
+	-- Add <C-g>f keybinding to insert chat references via ChatFinder
+	-- Normal mode implementation
+	M.helpers.set_keymap({ buf }, "n", "<C-g>f", function()
+		-- Remember cursor position
+		local cursor_pos = vim.api.nvim_win_get_cursor(0)
+		
+		-- Add an empty @@ line at the cursor position
+		vim.api.nvim_buf_set_lines(buf, cursor_pos[1] - 1, cursor_pos[1] - 1, false, {"@@"})
+		
+		-- Need to set cursor there
+		vim.api.nvim_win_set_cursor(0, {cursor_pos[1], 2})
+		
+		-- Set chat finder in insert mode and open ChatFinder
+		M._chat_finder.insert_mode = true
+		M._chat_finder.insert_buf = buf
+		M._chat_finder.insert_line = cursor_pos[1]
+		M.cmd.ChatFinder()
+	end, "Parley insert chat reference")
+	
+	-- Insert mode implementation
+	M.helpers.set_keymap({ buf }, "i", "<C-g>f", function()
+		-- Remember cursor position
+		local cursor_pos = vim.api.nvim_win_get_cursor(0)
+		local current_line = vim.api.nvim_get_current_line()
+		
+		-- Insert @@ at the current cursor position
+		local col = cursor_pos[2]
+		local new_line = current_line:sub(1, col) .. "@@" .. current_line:sub(col + 1)
+		vim.api.nvim_set_current_line(new_line)
+		
+		-- Move cursor right after @@
+		vim.api.nvim_win_set_cursor(0, {cursor_pos[1], col + 2})
+		
+		-- Set chat finder in insert mode and open ChatFinder
+		M._chat_finder.insert_mode = true
+		M._chat_finder.insert_buf = buf
+		M._chat_finder.insert_line = cursor_pos[1]
+		
+		-- Exit insert mode before opening chat finder
+		vim.cmd("stopinsert")
+		M.cmd.ChatFinder()
+	end, "Parley insert chat reference")
+	
+	-- Add <C-g>n keybinding to create and insert new chat
+	-- Normal mode implementation
+	M.helpers.set_keymap({ buf }, "n", "<C-g>n", function()
+		-- Get the current cursor position
+		local cursor_pos = vim.api.nvim_win_get_cursor(0)
+		
+		-- Create a new chat file path
+		local new_chat_file = M.config.chat_dir .. "/parley-" .. M.logger.now() .. ".md"
+		local rel_path = vim.fn.fnamemodify(new_chat_file, ":~:.")
+		
+		-- Insert the chat reference at the cursor position
+		vim.api.nvim_buf_set_lines(buf, cursor_pos[1] - 1, cursor_pos[1] - 1, false, {
+			"@@" .. rel_path .. ": New chat"
+		})
+		
+		M.logger.info("Created reference to new chat: " .. rel_path)
+	end, "Parley create and insert new chat")
+	
+	-- Insert mode implementation
+	M.helpers.set_keymap({ buf }, "i", "<C-g>n", function()
+		-- Get the current cursor position
+		local cursor_pos = vim.api.nvim_win_get_cursor(0)
+		local current_line = vim.api.nvim_get_current_line()
+		
+		-- Create a new chat file path
+		local new_chat_file = M.config.chat_dir .. "/parley-" .. M.logger.now() .. ".md"
+		local rel_path = vim.fn.fnamemodify(new_chat_file, ":~:.")
+		
+		-- Insert the chat reference at the current cursor position
+		local col = cursor_pos[2]
+		local new_line = current_line:sub(1, col) .. "@@" .. rel_path .. ": New chat" .. current_line:sub(col + 1)
+		vim.api.nvim_set_current_line(new_line)
+		
+		-- Return to insert mode at the end of the inserted reference
+		vim.api.nvim_win_set_cursor(0, {cursor_pos[1], col + #("@@" .. rel_path .. ": New chat")})
+		
+		-- Make sure we stay in insert mode
+		vim.schedule(function()
+			vim.cmd("startinsert")
+		end)
+		
+		M.logger.info("Created reference to new chat: " .. rel_path)
+	end, "Parley create and insert new chat")
+end
+
 M.buf_handler = function()
 	local gid = M.helpers.create_augroup("ParleyBufHandler", { clear = true })
 
-	M.helpers.autocmd({ "BufEnter", "TextChanged", "TextChangedI" }, nil, function(event)
+	-- Setup functions that only need to run when buffer is first loaded or entered
+	M.helpers.autocmd({ "BufEnter" }, nil, function(event)
 		local buf = event.buf
 
 		if not vim.api.nvim_buf_is_valid(buf) then
@@ -662,12 +856,39 @@ M.buf_handler = function()
 
 		local file_name = vim.api.nvim_buf_get_name(buf)
 
-		M.prep_chat(buf, file_name)
-		M.display_agent(buf, file_name)
-		
-		-- Apply highlighting to chat files
+		-- Handle chat files
+		if M.not_chat(buf, file_name) == nil then
+			M.prep_chat(buf, file_name)
+			M.display_agent(buf, file_name)
+			M.highlight_question_block(buf)
+		-- Handle non-chat markdown files
+		elseif M.is_markdown(buf, file_name) then
+			-- Set up markdown features
+			M.prep_md(buf)
+			-- Set up keymaps for chat references
+			M.setup_markdown_keymaps(buf)
+			-- Highlight chat references
+			M.highlight_markdown_chat_refs(buf)
+		end
+	end, gid)
+
+	-- Highlighting refresh that can run on text changes
+	M.helpers.autocmd({ "TextChanged", "TextChangedI" }, nil, function(event)
+		local buf = event.buf
+
+		if not vim.api.nvim_buf_is_valid(buf) then
+			return
+		end
+
+		local file_name = vim.api.nvim_buf_get_name(buf)
+
+		-- Handle chat files
 		if M.not_chat(buf, file_name) == nil then
 			M.highlight_question_block(buf)
+		-- Handle non-chat markdown files
+		elseif M.is_markdown(buf, file_name) then
+			-- Refresh markdown highlighting only
+			M.highlight_markdown_chat_refs(buf)
 		end
 	end, gid)
 
@@ -680,11 +901,14 @@ M.buf_handler = function()
 
 		local file_name = vim.api.nvim_buf_get_name(buf)
 
-		M.display_agent(buf, file_name)
-		
-		-- Apply highlighting to chat files
+		-- Handle chat files
 		if M.not_chat(buf, file_name) == nil then
+			M.display_agent(buf, file_name)
 			M.highlight_question_block(buf)
+		-- Handle non-chat markdown files
+		elseif M.is_markdown(buf, file_name) then
+			-- Refresh markdown highlighting
+			M.highlight_markdown_chat_refs(buf)
 		end
 	end, gid)
 end
@@ -1607,23 +1831,130 @@ M.cmd.Outline = function()
 	M.outline.question_picker(M.config)
 end
 
--- Command to extract and open a file referenced with @@ syntax
-M.cmd.OpenFileUnderCursor = function()
-	-- Check if current buffer is a chat file
-	local buf = vim.api.nvim_get_current_buf()
-	local file_name = vim.api.nvim_buf_get_name(buf)
-	if M.not_chat(buf, file_name) then
-		M.logger.warning("OpenFileUnderCursor command is only available in chat files")
+-- Function to open a chat reference from a markdown file
+M.open_chat_reference = function(current_line, cursor_col)
+	-- Extract the chat path
+	local chat_path
+	
+	-- First check if the line begins with @@
+	if current_line:match("^@@") then
+		-- Extract the chat path (up to the colon if present)
+		chat_path = current_line:match("^@@%s*([^:]+)")
+		if not chat_path then
+			chat_path = current_line:match("^@@(.+)$")
+		end
+		
+		-- Clean up whitespace
+		chat_path = chat_path:gsub("^%s*(.-)%s*$", "%1")
+	else
+		-- Find @@ occurrences in the line
+		local references = {}
+		
+		-- Look for instances of @@ in the line
+		local start_idx = 1
+		while true do
+			local match_start, match_end = current_line:find("@@", start_idx)
+			if not match_start then break end
+			
+			-- Find the end of this path (space, line end, or next @@)
+			local content_end = nil
+			
+			-- Look for the next @@ after this one
+			local next_marker = current_line:find("@@", match_end + 1)
+			
+			-- If there's no next marker, use the end of line
+			if not next_marker then
+				content_end = #current_line
+			else
+				content_end = next_marker - 1
+			end
+			
+			-- Extract the path
+			local path = current_line:sub(match_end + 1, content_end):gsub("^%s*(.-)%s*$", "%1")
+			
+			table.insert(references, {
+				start = match_start,
+				content = path
+			})
+			
+			start_idx = match_end + 1
+		end
+		
+		if #references == 0 then
+			M.logger.warning("No chat reference (@@ syntax) found on current line")
+			return
+		end
+		
+		-- Find the closest reference to cursor position
+		local closest_ref = nil
+		local min_distance = math.huge
+		
+		for _, ref in ipairs(references) do
+			local distance = math.abs(cursor_col - ref.start)
+			if distance < min_distance then
+				min_distance = distance
+				closest_ref = ref
+			end
+		end
+		
+		chat_path = closest_ref.content
+	end
+	
+	if not chat_path then
+		M.logger.warning("Could not extract chat path from line")
 		return
 	end
 	
-	-- Get the current line
+	-- Expand the path
+	local expanded_path = vim.fn.expand(chat_path)
+	
+	-- Check if the file exists
+	if vim.fn.filereadable(expanded_path) == 1 then
+		-- Open the chat file
+		M.logger.info("Opening chat file: " .. expanded_path)
+		M.open_buf(expanded_path)
+		return true
+	else
+		M.logger.warning("Chat file not found: " .. expanded_path)
+		return false
+	end
+end
+
+-- Command to extract and open a file referenced with @@ syntax
+M.cmd.OpenFileUnderCursor = function()
+	-- Get current buffer and line
+	local buf = vim.api.nvim_get_current_buf()
+	local file_name = vim.api.nvim_buf_get_name(buf)
 	local cursor_pos = vim.api.nvim_win_get_cursor(0)
 	local line_num = cursor_pos[1]
 	local current_line = vim.api.nvim_buf_get_lines(buf, line_num-1, line_num, false)[1]
 	local cursor_col = cursor_pos[2]
 	
-	-- Look for file references in the line
+	-- Check if we're in insert mode
+	local current_mode = vim.api.nvim_get_mode().mode
+	local in_insert_mode = current_mode:match("^i") or current_mode:match("^R")
+	
+	-- Check if it's a markdown file (but not a chat file)
+	if M.is_markdown(buf, file_name) then
+		-- Try to open as a chat reference
+		if M.open_chat_reference(current_line, cursor_col) then
+			-- Return to insert mode if we were in it before
+			if in_insert_mode then
+				vim.schedule(function()
+					vim.cmd("startinsert")
+				end)
+			end
+			return
+		end
+	end
+	
+	-- If not a markdown file or not a chat reference, check if it's a chat file
+	if M.not_chat(buf, file_name) then
+		M.logger.warning("OpenFileUnderCursor command is only available in chat files and markdown files")
+		return
+	end
+	
+	-- Process standard @@ file references in chat files
 	local filepath = nil
 	
 	-- First check if the line begins with @@
@@ -1717,6 +2048,13 @@ M.cmd.OpenFileUnderCursor = function()
 		-- Open the file in a new buffer
 		M.logger.info("Opening file: " .. expanded_path)
 		vim.cmd("edit " .. vim.fn.fnameescape(expanded_path))
+	end
+	
+	-- Return to insert mode if we were in it before
+	if in_insert_mode then
+		vim.schedule(function()
+			vim.cmd("startinsert")
+		end)
 	end
 end
 
@@ -1832,7 +2170,36 @@ M.cmd.ChatFinder = function()
 				actions.select_default:replace(function()
 					actions.close(prompt_bufnr)
 					local selection = action_state.get_selected_entry()
-					M.open_buf(selection.value)
+					
+					-- Check if we're in insert mode (for inserting chat references)
+					if M._chat_finder.insert_mode then
+						if M._chat_finder.insert_buf and vim.api.nvim_buf_is_valid(M._chat_finder.insert_buf) then
+							-- Extract topic from the display
+							local topic = selection.display:match(" %- (.+) %[") or "Chat"
+							
+							-- Get relative path for better readability
+							local rel_path = vim.fn.fnamemodify(selection.value, ":~:.")
+							
+							-- Update the placeholder @@ line with the selected chat path and topic
+							vim.api.nvim_buf_set_lines(
+								M._chat_finder.insert_buf, 
+								M._chat_finder.insert_line - 1, 
+								M._chat_finder.insert_line, 
+								false, 
+								{"@@" .. rel_path .. ": " .. topic}
+							)
+							
+							M.logger.info("Inserted chat reference: " .. rel_path)
+						end
+						
+						-- Reset insert mode flags
+						M._chat_finder.insert_mode = false
+						M._chat_finder.insert_buf = nil
+						M._chat_finder.insert_line = nil
+					else
+						-- Normal behavior - open the selected chat
+						M.open_buf(selection.value)
+					end
 				end)
 				
 				-- Map delete shortcut
