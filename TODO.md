@@ -14,14 +14,6 @@ Allow some customization for any md file that's not a chat.
 
 5. Allow same file jumping behavior, <C-g>o to open the chat file under cursor.
 
-## Chat finder handling large amount of files
-
-As user uses more of parley, the number of chat files will grow to the point it's harder for the user to find information. Let's create a feature to handle that.
-
-Chat finder should by default only allow search of recently created files. The recency should be configurable, default to three months. The age of the chat file should be the last access time. 
-
-Chat finder should have a switch to allow search of all files. Use <C-g>h to do that switch. Make this keybinding configurable.
-
 ## A note taking plugin
 
 I want the ability to quickly take notes. Consider the following:
@@ -37,3 +29,5 @@ I want the ability to quickly take notes. Consider the following:
 ## Remove parameter N in ParleyChatRespond
 
 That's from past
+
+## ensure empty line at end of question

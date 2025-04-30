@@ -1280,6 +1280,19 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 		end
 	end
 
+	-- Check if the last line of the question is empty
+	local last_question_line
+	if response_line >= 0 then
+		last_question_line = vim.api.nvim_buf_get_lines(buf, response_line, response_line + 1, false)[1]
+	end
+	
+	-- If the line isn't empty, insert an empty line to ensure proper spacing
+	if last_question_line and last_question_line:match("%S") then
+		M.logger.debug("Adding empty line after question for proper spacing")
+		vim.api.nvim_buf_set_lines(buf, response_line + 1, response_line + 1, false, {""})
+		response_line = response_line + 1
+	end
+
 	-- Write assistant prompt with extra newline, note later insertion point is response_line + 3
 	vim.api.nvim_buf_set_lines(buf, response_line, response_line, false, { "", agent_prefix .. agent_suffix, "", "" })
 
