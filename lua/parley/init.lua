@@ -1129,7 +1129,9 @@ M.new_note = function(subject)
 		M.logger.info("Using date from day pattern: " .. year .. "-" .. month .. "-" .. day)
 	end
 	
-	-- Validate and format date components
+	-- Validate and format date components with fallbacks
+	if not month or type(month) ~= "number" then month = os.date("*t").month end
+	if not day or type(day) ~= "number" then day = os.date("*t").day end
 	month = string.format("%02d", month)
 	day = string.format("%02d", day)
 	
@@ -1137,19 +1139,28 @@ M.new_note = function(subject)
 	local year_dir = M.config.notes_dir .. "/" .. year
 	local month_dir = year_dir .. "/" .. month
 	
+	-- Calculate week number and create week folder
+	local date_str = year .. "-" .. month .. "-" .. day
+	local week_number = M.helpers.get_week_number_sunday_based(date_str)
+	if not week_number or type(week_number) ~= "number" then week_number = 1 end
+	local week_folder = "W" .. string.format("%02d", week_number)
+	local week_dir = month_dir .. "/" .. week_folder
+	
 	M.helpers.prepare_dir(year_dir)
 	M.helpers.prepare_dir(month_dir)
+	M.helpers.prepare_dir(week_dir)
 	
 	-- Replace spaces with dashes in subject
 	subject = subject:gsub(" ", "-")
 	
 	-- Create filename
-	local filename = month_dir .. "/" .. day .. "-" .. subject .. ".md"
+	local filename = week_dir .. "/" .. day .. "-" .. subject .. ".md"
 	
 	-- Create empty note file with a title
 	local content = "# " .. subject:gsub("-", " ") .. "\n\n"
 	-- Always add date metadata to note content
 	content = content .. "Date: " .. year .. "-" .. month .. "-" .. day .. "\n\n"
+	content = content .. "Week: " .. week_folder .. "\n\n"
 	
 	-- Write file
 	vim.fn.writefile(vim.split(content, "\n"), filename)
@@ -1209,9 +1220,24 @@ M.note_finder = function()
 				local months = vim.fn.glob(year_path .. "/*", false, true)
 				for _, month_path in ipairs(months) do
 					if vim.fn.isdirectory(month_path) == 1 then
-						local files = vim.fn.glob(month_path .. "/*.md", false, true)
-						for _, file in ipairs(files) do
-							table.insert(all_files, file)
+						-- Check for week folders first
+						local weeks = vim.fn.glob(month_path .. "/W*", false, true)
+						if #weeks > 0 then
+							-- Has week folders - use them
+							for _, week_path in ipairs(weeks) do
+								if vim.fn.isdirectory(week_path) == 1 then
+									local files = vim.fn.glob(week_path .. "/*.md", false, true)
+									for _, file in ipairs(files) do
+										table.insert(all_files, file)
+									end
+								end
+							end
+						else
+							-- Fallback for old notes without week folders
+							local files = vim.fn.glob(month_path .. "/*.md", false, true)
+							for _, file in ipairs(files) do
+								table.insert(all_files, file)
+							end
 						end
 					end
 				end
@@ -1234,32 +1260,95 @@ M.note_finder = function()
 				goto continue
 			end
 			
-			-- Extract date from path format: year/month/day-subject.md
-			local year, month, day_subject = file:match("([^/]+)/([^/]+)/([^/]+)$")
-			local day, subject = day_subject:match("^(%d+)%-(.+)%.md$")
+			-- Extract date from path format: year/month/week/day-subject.md
+			-- Path structure is now always YYYY/MM/W##/DD-subject.md
+			local filename = vim.fn.fnamemodify(file, ":t")
+			local day, subject = filename:match("^(%d+)%-(.+)%.md$")
+			
+			-- Get directory components
+			local dir = vim.fn.fnamemodify(file, ":h")
+			local week_dir = vim.fn.fnamemodify(dir, ":t")
+			local month_dir = vim.fn.fnamemodify(vim.fn.fnamemodify(dir, ":h"), ":t")
+			local year_dir = vim.fn.fnamemodify(vim.fn.fnamemodify(vim.fn.fnamemodify(dir, ":h"), ":h"), ":t")
+			
+			local year = year_dir
+			local month = month_dir
+			local week = week_dir:match("^W%d%d$") and week_dir or nil
 			
 			-- If we couldn't extract the parts, use default display
 			if not (year and month and day and subject) then
 				subject = vim.fn.fnamemodify(file, ":t:r")
-				local date_str = os.date("%Y-%m-%d", file_time)
+				local date_parts = os.date("*t", file_time)
+				local year_str = tostring(date_parts.year)
+				local month_str = string.format("%02d", date_parts.month)
+				local day_str = string.format("%02d", date_parts.day)
+				local date_str = year_str .. "-" .. month_str .. "-" .. day_str
+				
+				-- Calculate week number for the date
+				local week_number = M.helpers.get_week_number_sunday_based(date_str)
+				if not week_number or type(week_number) ~= "number" then week_number = 1 end
+				local week_str = "W" .. string.format("%02d", week_number)
+				
+				-- Format is always W##-MM-DD
+				local display_str = week_str .. "-" .. month_str .. "-" .. day_str .. " " .. subject:gsub("%-", " ")
+				-- Sort by year, week, month, day
+				local ordinal_str = year_str .. "-" .. week_str .. "-" .. month_str .. "-" .. day_str .. " " .. subject
+				
 				table.insert(entries, {
 					value = file,
-					display = date_str .. " " .. subject:gsub("%-", " "),
-					ordinal = date_str .. " " .. subject,
+					display = display_str,
+					ordinal = ordinal_str,
 					timestamp = file_time,
+					week = week_str,
 				})
 				goto continue
 			end
 			
-			-- Format display string: YYYY-MM-DD Title
-			local display_date = year .. "-" .. month .. "-" .. day
+			-- Format display string: W##-MM-DD Title
 			local display_title = subject:gsub("%-", " ")
+			local display_string = ""
+			
+			-- Ensure correct format for dates with fallbacks
+			year = year and tostring(year) or tostring(os.date("*t").year)
+			month = month and tonumber(month) or os.date("*t").month
+			day = day and tonumber(day) or os.date("*t").day
+			
+			-- Format with zero-padding
+			month = string.format("%02d", tonumber(month) or 1)
+			day = string.format("%02d", tonumber(day) or 1)
+			local display_date = year .. "-" .. month .. "-" .. day
+			
+			-- Use week number from folder name
+			if week and week:match("^W%d%d$") then
+				display_string = week .. "-" .. month .. "-" .. day
+			else
+				-- If week is missing, calculate it
+				local week_number = M.helpers.get_week_number_sunday_based(display_date)
+				if not week_number or type(week_number) ~= "number" then week_number = 1 end
+				display_string = "W" .. string.format("%02d", week_number) .. "-" .. month .. "-" .. day
+			end
+			
+			display_string = display_string .. " " .. display_title
+			
+			-- Need to make sure ordinal sorts correctly
+			local week_number_str
+			if week and week:match("^W%d%d$") then
+				week_number_str = week
+			else
+				local week_number = M.helpers.get_week_number_sunday_based(display_date)
+				if not week_number or type(week_number) ~= "number" then week_number = 1 end
+				week_number_str = "W" .. string.format("%02d", week_number)
+			end
+			
+			-- Sort by year, week, month, day to keep week-based organization
+			local ordinal = year .. "-" .. week_number_str .. "-" .. month .. "-" .. day .. " " .. display_title
 			
 			table.insert(entries, {
 				value = file,
-				display = display_date .. " " .. display_title,
-				ordinal = display_date .. " " .. display_title,
+				display = display_string,
+				ordinal = ordinal,
 				timestamp = file_time,
+				week = week,
 			})
 			
 			::continue::
