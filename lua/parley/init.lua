@@ -380,10 +380,10 @@ M.not_chat = function(buf, file_name)
 		return "resolved file (" .. file_name .. ") not in chat dir (" .. chat_dir .. ")"
 	end
 
-    -- Check for parley- prefix in filename
+    -- Check for timestamp format in filename
     local basename = vim.fn.fnamemodify(file_name, ":t")
-    if not basename:match("^parley%-") and not basename:match("^%d%d%d%d%-%d%d%-%d%d") then
-        return "file does not have parley- prefix or timestamp format"
+    if not basename:match("^%d%d%d%d%-%d%d%-%d%d") then
+        return "file does not have timestamp format"
     end
 
 	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
@@ -846,8 +846,8 @@ M.setup_markdown_keymaps = function(buf)
 		-- Get the current cursor position
 		local cursor_pos = vim.api.nvim_win_get_cursor(0)
 		
-		-- Create a new chat file path
-		local new_chat_file = M.config.chat_dir .. "/parley-" .. M.logger.now() .. ".md"
+		-- Create a new chat file path (timestamp format only)
+		local new_chat_file = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
 		local rel_path = vim.fn.fnamemodify(new_chat_file, ":~:.")
 		
 		-- Insert the chat reference at the cursor position
@@ -864,8 +864,8 @@ M.setup_markdown_keymaps = function(buf)
 		local cursor_pos = vim.api.nvim_win_get_cursor(0)
 		local current_line = vim.api.nvim_get_current_line()
 		
-		-- Create a new chat file path
-		local new_chat_file = M.config.chat_dir .. "/parley-" .. M.logger.now() .. ".md"
+		-- Create a new chat file path (timestamp format only)
+		local new_chat_file = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
 		local rel_path = vim.fn.fnamemodify(new_chat_file, ":~:.")
 		
 		-- Insert the chat reference at the current cursor position
@@ -1009,7 +1009,7 @@ end
 ---@param agent table | nil # obtained from get_agent
 ---@return number # buffer number
 M.new_chat = function(system_prompt, agent)
-	local filename = M.config.chat_dir .. "/parley-" .. M.logger.now() .. ".md"
+	local filename = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
 
 	-- encode as json if model is a table
 	local model = ""
@@ -2392,8 +2392,8 @@ M.open_chat_reference = function(current_line, cursor_col, in_insert_mode, full_
 		-- checks for two splits and the caller (OpenFileUnderCursor) handles insert mode 
 		return true
 	else
-		-- Check if it's a chat file reference (parley-*.md)
-		if expanded_path:match("parley%-%d%d%d%d%-%d%d%-%d%d%.%d%d%-%d%d%-%d%d%.%d+%.md$") then
+		-- Check if it's a chat file reference (timestamp format)
+		if expanded_path:match("%d%d%d%d%-%d%d%-%d%d%.%d%d%-%d%d%-%d%d%.%d+%.md$") then
 			-- This is a chat file reference that doesn't exist yet - create it
 			M.logger.info("Creating new chat file: " .. expanded_path)
 			
@@ -2579,8 +2579,8 @@ M.cmd.OpenFileUnderCursor = function()
 		-- Handle as a normal file
 		-- Check if file exists
 		if vim.fn.filereadable(expanded_path) == 0 then
-			-- Check if it's a chat file reference (parley-*.md)
-			if expanded_path:match("parley%-%d%d%d%d%-%d%d%-%d%d%.%d%d%-%d%d%-%d%d%.%d+%.md$") then
+			-- Check if it's a chat file reference (timestamp format)
+			if expanded_path:match("%d%d%d%d%-%d%d%-%d%d%.%d%d%-%d%d%-%d%d%.%d+%.md$") then
 				-- This is a chat file reference that doesn't exist yet - create it
 				M.logger.info("Creating new chat file: " .. expanded_path)
 				
@@ -2696,13 +2696,8 @@ M.cmd.ChatFinder = function(options)
 		local actions = require("telescope.actions")
 		local action_state = require("telescope.actions.state")
 		
-		-- Update glob pattern to include both old and new format files
-		local files = vim.fn.glob(dir .. "/parley-*.md", false, true)
-		-- Also include old format files for backward compatibility
-		local old_files = vim.fn.glob(dir .. "/[0-9][0-9][0-9][0-9]-*.md", false, true)
-		for _, file in ipairs(old_files) do
-			table.insert(files, file)
-		end
+		-- Get all timestamp format files
+		local files = vim.fn.glob(dir .. "/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*.md", false, true)
 		local entries = {}
 		
 		-- Get recency configuration
