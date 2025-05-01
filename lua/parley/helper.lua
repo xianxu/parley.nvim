@@ -218,7 +218,16 @@ _H.format_file_content = function(filepath)
     end
     
     local filetype = vim.filetype.match({ filename = filepath }) or ""
-    return "File: " .. filepath .. "\n```" .. filetype .. "\n" .. content .. "\n```\n\n"
+    
+    -- Add line numbers to the content
+    local lines = vim.split(content, "\n")
+    local numbered_lines = {}
+    for i, line in ipairs(lines) do
+        table.insert(numbered_lines, string.format("%d: %s", i, line))
+    end
+    local numbered_content = table.concat(numbered_lines, "\n")
+    
+    return "File: " .. filepath .. "\n```" .. filetype .. "\n" .. numbered_content .. "\n```\n\n"
 end
 
 -- Find files in a directory matching a pattern

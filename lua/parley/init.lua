@@ -1862,15 +1862,16 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 							M.logger.debug("Loaded directory content for: " .. path)
 						else
 							-- Process as a single file
-							local file_content = M.helpers.read_file_content(path)
+							-- Use the helper function that already handles line numbers
+							local formatted_content = M.helpers.format_file_content(path)
 							
-							if file_content then
-								-- Replace the @@filename line with the file content
-								lines[i] = "File contents of " .. path .. ":\n\n```" .. (vim.filetype.match({ filename = path }) or "") .. "\n" .. file_content .. "\n```"
-								M.logger.debug("Loaded file: " .. path)
-							else
+							if formatted_content:match("^Error:") then
 								-- Keep the line but add error note
 								lines[i] = line .. " (File not found or couldn't be read)"
+							else
+								-- Replace the @@filename line with the formatted file content
+								lines[i] = "File contents of " .. path .. ":\n\n" .. formatted_content
+								M.logger.debug("Loaded file: " .. path)
 							end
 						end
 	                    -- keep file inclusion content separately
