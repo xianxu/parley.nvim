@@ -1238,7 +1238,12 @@ M.note_finder = function()
 			or "Notes (All)"
 		
 		-- Create picker
-		pickers.new({}, {
+		pickers.new({
+			on_close = function()
+				-- Reset the opened state when the picker is closed (e.g., by pressing Escape)
+				M._note_finder.opened = false
+			end
+		}, {
 			prompt_title = prompt_title,
 			finder = finders.new_table({
 				results = entries,
@@ -1294,7 +1299,19 @@ M.note_finder = function()
 		M._note_finder.opened = false
 	end
 end
-
+	-- Add a hook to detect when window is dismissed via Escape
+	vim.api.nvim_create_autocmd("WinLeave", {
+		pattern = "*",
+		callback = function()
+			-- Check if this is from note_finder
+			if M._note_finder.opened then
+				-- Reset after a short delay
+				vim.defer_fn(function()
+					M._note_finder.opened = false
+				end, 100)
+			end
+		end
+	})
 M.cmd.ChatDelete = function()
 	-- get buffer and file
 	local buf = vim.api.nvim_get_current_buf()
