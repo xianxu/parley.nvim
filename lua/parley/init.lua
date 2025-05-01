@@ -1092,10 +1092,46 @@ M._note_finder = {
 -- Create a new note with given subject
 M.new_note = function(subject)
 	-- Get current date
-	local date = os.date("*t")
-	local year = date.year
-	local month = string.format("%02d", date.month)
-	local day = string.format("%02d", date.day)
+	local current_date = os.date("*t")
+	local year = current_date.year
+	local month = current_date.month
+	local day = current_date.day
+	
+	-- Parse date from subject if provided in one of the formats:
+	-- "YYYY-MM-DD subject" or "MM-DD subject" or "DD subject"
+	local original_subject = subject
+	local date_pattern1 = "^(%d%d%d%d)%-(%d%d)%-(%d%d)%s+(.+)$" -- YYYY-MM-DD
+	local date_pattern2 = "^(%d%d)%-(%d%d)%s+(.+)$" -- MM-DD
+	local date_pattern3 = "^(%d%d)%s+(.+)$" -- DD
+	
+	local parsed_year, parsed_month, parsed_day, parsed_subject
+	
+	if subject:match(date_pattern1) then
+		-- Full date format: YYYY-MM-DD subject
+		parsed_year, parsed_month, parsed_day, parsed_subject = subject:match(date_pattern1)
+		year = tonumber(parsed_year)
+		month = tonumber(parsed_month)
+		day = tonumber(parsed_day)
+		subject = parsed_subject
+		M.logger.info("Using date from full pattern: " .. year .. "-" .. month .. "-" .. day)
+	elseif subject:match(date_pattern2) then
+		-- Month-day format: MM-DD subject
+		parsed_month, parsed_day, parsed_subject = subject:match(date_pattern2)
+		month = tonumber(parsed_month)
+		day = tonumber(parsed_day)
+		subject = parsed_subject
+		M.logger.info("Using date from MM-DD pattern: " .. year .. "-" .. month .. "-" .. day)
+	elseif subject:match(date_pattern3) then
+		-- Day only format: DD subject
+		parsed_day, parsed_subject = subject:match(date_pattern3)
+		day = tonumber(parsed_day)
+		subject = parsed_subject
+		M.logger.info("Using date from day pattern: " .. year .. "-" .. month .. "-" .. day)
+	end
+	
+	-- Validate and format date components
+	month = string.format("%02d", month)
+	day = string.format("%02d", day)
 	
 	-- Create directory structure if it doesn't exist
 	local year_dir = M.config.notes_dir .. "/" .. year
@@ -1112,6 +1148,8 @@ M.new_note = function(subject)
 	
 	-- Create empty note file with a title
 	local content = "# " .. subject:gsub("-", " ") .. "\n\n"
+	-- Always add date metadata to note content
+	content = content .. "Date: " .. year .. "-" .. month .. "-" .. day .. "\n\n"
 	
 	-- Write file
 	vim.fn.writefile(vim.split(content, "\n"), filename)

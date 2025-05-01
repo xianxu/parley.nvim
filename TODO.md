@@ -1,8 +1,12 @@
 # TODO
 
-@@~/Library/Mobile Documents/com~apple~CloudDocs/parley/2025-04-27.10-16-01.466.md: life: Culture of WhatsApp
+## Note names
 
-@@~/Library/Mobile Documents/com~apple~CloudDocs/parley/parley-2025-04-30.17-42-56.203.md: New chat
+Have a way to override when that note is taken. For example, sometimes I need to prepare for future meeting, and would like the note to be named based on the meeting date. One way to do that is to have convention of the following.
 
+"some meeting note": in this case, date is inferred from current date.
+"2023-04-01 some meeting note": in this case, date is taken from the string.
+"04-01 some meeting note": in this case, month and day is taken from the string, year is taken as current year.
+"01 some meeting note": in this case, day is taken from the string, year and month is taken as current year
 
 
