@@ -131,7 +131,8 @@ M.setup = function(opts)
 	-- Initialize note finder state
 	M._note_finder = {
 		opened = false,
-		source_win = nil
+		source_win = nil,
+		show_all = false
 	}
 
 	-- remove invalid agents
@@ -1085,7 +1086,8 @@ end
 -- Variable to store state for NoteFinder
 M._note_finder = {
 	opened = false,
-	source_win = nil
+	source_win = nil,
+	show_all = false  -- Track whether to show all notes or just recent ones
 }
 
 -- Create a new note with given subject
@@ -1146,6 +1148,21 @@ M.note_finder = function()
 		local actions = require("telescope.actions")
 		local action_state = require("telescope.actions.state")
 		
+		-- Get recency configuration
+		local recency_config = M.config.notes_finder_recency or {
+			filter_by_default = true,
+			months = 3,
+			use_mtime = true
+		}
+		
+		-- Calculate cutoff timestamp (current time - configured months)
+		local current_time = os.time()
+		local months_in_seconds = recency_config.months * 30 * 24 * 60 * 60
+		local cutoff_time = current_time - months_in_seconds
+		
+		-- For calculating the prompt title
+		local is_filtering = recency_config.filter_by_default and not M._note_finder.show_all
+		
 		-- Get all note files
 		local all_files = {}
 		local years = vim.fn.glob(M.config.notes_dir .. "/*", false, true)
@@ -1172,6 +1189,14 @@ M.note_finder = function()
 				goto continue
 			end
 			
+			-- Get the file timestamp based on configuration (mtime or birthtime)
+			local file_time = recency_config.use_mtime and stat.mtime.sec or stat.birthtime and stat.birthtime.sec or stat.mtime.sec
+			
+			-- Skip files older than cutoff if filtering is active
+			if is_filtering and file_time < cutoff_time then
+				goto continue
+			end
+			
 			-- Extract date from path format: year/month/day-subject.md
 			local year, month, day_subject = file:match("([^/]+)/([^/]+)/([^/]+)$")
 			local day, subject = day_subject:match("^(%d+)%-(.+)%.md$")
@@ -1179,11 +1204,12 @@ M.note_finder = function()
 			-- If we couldn't extract the parts, use default display
 			if not (year and month and day and subject) then
 				subject = vim.fn.fnamemodify(file, ":t:r")
-				local date_str = os.date("%Y-%m-%d", stat.mtime.sec)
+				local date_str = os.date("%Y-%m-%d", file_time)
 				table.insert(entries, {
 					value = file,
 					display = date_str .. " " .. subject:gsub("%-", " "),
 					ordinal = date_str .. " " .. subject,
+					timestamp = file_time,
 				})
 				goto continue
 			end
@@ -1196,6 +1222,7 @@ M.note_finder = function()
 				value = file,
 				display = display_date .. " " .. display_title,
 				ordinal = display_date .. " " .. display_title,
+				timestamp = file_time,
 			})
 			
 			::continue::
@@ -1203,12 +1230,17 @@ M.note_finder = function()
 		
 		-- Sort entries by date (latest first)
 		table.sort(entries, function(a, b)
-			return a.ordinal > b.ordinal
+			return a.timestamp > b.timestamp
 		end)
+		
+		-- Prepare prompt title with recency filter info
+		local prompt_title = is_filtering 
+			and string.format("Notes (Last %d Months)", recency_config.months)
+			or "Notes (All)"
 		
 		-- Create picker
 		pickers.new({}, {
-			prompt_title = "Notes",
+			prompt_title = prompt_title,
 			finder = finders.new_table({
 				results = entries,
 				entry_maker = function(entry)
@@ -1216,12 +1248,28 @@ M.note_finder = function()
 						value = entry.value,
 						display = entry.display,
 						ordinal = entry.ordinal,
+						timestamp = entry.timestamp,
 					}
 				end,
 			}),
 			sorter = conf.generic_sorter({}),
 			previewer = conf.file_previewer({}),
 			attach_mappings = function(prompt_bufnr, map)
+				-- Add toggle mapping for showing all vs recent
+				map("i", "<C-a>", function()
+					M._note_finder.show_all = not M._note_finder.show_all
+					actions.close(prompt_bufnr)
+					M._note_finder.opened = false
+					M.note_finder() -- Reopen with new settings
+				end)
+				
+				map("n", "<C-a>", function()
+					M._note_finder.show_all = not M._note_finder.show_all
+					actions.close(prompt_bufnr)
+					M._note_finder.opened = false
+					M.note_finder() -- Reopen with new settings
+				end)
+				
 				-- Open selected note
 				actions.select_default:replace(function()
 					actions.close(prompt_bufnr)
