@@ -1312,6 +1312,37 @@ M.note_finder = function()
 					M.note_finder() -- Reopen with new settings
 				end)
 				
+				-- Add delete mapping for notes
+				map("i", "<C-d>", function()
+					local selection = action_state.get_selected_entry()
+					vim.ui.input({ prompt = "Delete " .. selection.value .. "? [y/N] " }, function(input)
+						if input and input:lower() == "y" then
+							M.helpers.delete_file(selection.value)
+							actions.close(prompt_bufnr)
+							M._note_finder.opened = false
+							-- Reopen the note finder
+							vim.defer_fn(function()
+								M.note_finder()
+							end, 10)
+						end
+					end)
+				end)
+				
+				map("n", "<C-d>", function()
+					local selection = action_state.get_selected_entry()
+					vim.ui.input({ prompt = "Delete " .. selection.value .. "? [y/N] " }, function(input)
+						if input and input:lower() == "y" then
+							M.helpers.delete_file(selection.value)
+							actions.close(prompt_bufnr)
+							M._note_finder.opened = false
+							-- Reopen the note finder
+							vim.defer_fn(function()
+								M.note_finder()
+							end, 10)
+						end
+					end)
+				end)
+				
 				-- Open selected note
 				actions.select_default:replace(function()
 					actions.close(prompt_bufnr)
