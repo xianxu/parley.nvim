@@ -187,6 +187,8 @@ local config = {
 	-- global shortcuts (available in any buffer)
 	global_shortcut_new = { modes = { "n", "i" }, shortcut = "<C-g>c" },
 	global_shortcut_finder = { modes = { "n", "i" }, shortcut = "<C-g>f" },
+	-- shortcut for adding chat references in markdown files
+	global_shortcut_add_chat_ref = { modes = { "n", "i" }, shortcut = "<C-g>a" },
 	-- global shortcuts for note taking
 	global_shortcut_note_new = { modes = { "n", "i" }, shortcut = "<C-n>n" },
 	global_shortcut_note_finder = { modes = { "n", "i" }, shortcut = "<C-n>f" },

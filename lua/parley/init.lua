@@ -551,8 +551,8 @@ M.is_markdown = function(buf, file_name)
 		return false
 	end
 	
-	-- Check if the file has a .md extension
-	if file_name:match("%.md$") then
+	-- Check if the file has a markdown extension (.md or .markdown)
+	if file_name:match("%.md$") or file_name:match("%.markdown$") then
 		return true
 	end
 	
@@ -788,58 +788,57 @@ M.setup_markdown_keymaps = function(buf)
 		end
 	end
 	
-	-- Add <C-g>f keybinding to insert chat references via ChatFinder
-	-- Normal mode implementation
+	-- Add <C-g>f keybinding to FIND chat references
 	M.helpers.set_keymap({ buf }, "n", "<C-g>f", function()
+		-- Remember source window for returning after selection
+		M._chat_finder.insert_mode = false
+		M._chat_finder.source_win = nil
+		M._chat_finder.source_win = vim.api.nvim_get_current_win()
+		
+		M.logger.debug("FIND MODE: Passing window: " .. M._chat_finder.source_win)
+		M.cmd.ChatFinder()
+	end, "Parley find chat")
+	
+	-- Add <C-g>a keybinding to ADD chat references via ChatFinder (NORMAL MODE)
+	M.helpers.set_keymap({ buf }, "n", "<C-g>a", function()
 		-- Remember cursor position
 		local cursor_pos = vim.api.nvim_win_get_cursor(0)
 		
-		-- Add an empty @@ line at the cursor position
-		vim.api.nvim_buf_set_lines(buf, cursor_pos[1] - 1, cursor_pos[1] - 1, false, {"@@"})
-		
-		-- Need to set cursor there
-		vim.api.nvim_win_set_cursor(0, {cursor_pos[1], 2})
-		
-		-- Set chat finder in insert mode and open ChatFinder
+		-- Set chat finder in insert mode and store cursor position
 		M._chat_finder.insert_mode = true
 		M._chat_finder.insert_buf = buf
 		M._chat_finder.insert_line = cursor_pos[1]
+		M._chat_finder.insert_normal_mode = true
 		
 		-- IMPORTANT: Clear and set source window immediately before opening
 		M._chat_finder.source_win = nil
 		M._chat_finder.source_win = vim.api.nvim_get_current_win()
-		M.logger.debug("NORMAL MODE: Passing window: " .. M._chat_finder.source_win)
+		M.logger.debug("NORMAL MODE ADD: Passing window: " .. M._chat_finder.source_win)
 		M.cmd.ChatFinder()
-	end, "Parley insert chat reference")
+	end, "Parley add chat reference")
 	
-	-- Insert mode implementation
-	M.helpers.set_keymap({ buf }, "i", "<C-g>f", function()
+	-- Add <C-g>a keybinding to ADD chat references via ChatFinder (INSERT MODE)
+	M.helpers.set_keymap({ buf }, "i", "<C-g>a", function()
 		-- Remember cursor position
 		local cursor_pos = vim.api.nvim_win_get_cursor(0)
 		local current_line = vim.api.nvim_get_current_line()
 		
-		-- Insert @@ at the current cursor position
-		local col = cursor_pos[2]
-		local new_line = current_line:sub(1, col) .. "@@" .. current_line:sub(col + 1)
-		vim.api.nvim_set_current_line(new_line)
-		
-		-- Move cursor right after @@
-		vim.api.nvim_win_set_cursor(0, {cursor_pos[1], col + 2})
-		
-		-- Set chat finder in insert mode and open ChatFinder
+		-- Store position for later insertion
 		M._chat_finder.insert_mode = true
 		M._chat_finder.insert_buf = buf
 		M._chat_finder.insert_line = cursor_pos[1]
+		M._chat_finder.insert_col = cursor_pos[2]
+		M._chat_finder.insert_normal_mode = false
 		
 		-- IMPORTANT: Clear and set source window immediately before opening
 		M._chat_finder.source_win = nil
 		M._chat_finder.source_win = vim.api.nvim_get_current_win()
-		M.logger.debug("INSERT MODE: Passing window: " .. M._chat_finder.source_win)
+		M.logger.debug("INSERT MODE ADD: Passing window: " .. M._chat_finder.source_win)
 		
 		-- Exit insert mode before opening chat finder
 		vim.cmd("stopinsert")
 		M.cmd.ChatFinder()
-	end, "Parley insert chat reference")
+	end, "Parley add chat reference")
 	
 	-- Add <C-g>n keybinding to create and insert new chat
 	-- Normal mode implementation
@@ -2132,7 +2131,7 @@ M.cmd.Outline = function()
 end
 
 -- Function to open a chat reference from a markdown file
-M.open_chat_reference = function(current_line, cursor_col, in_insert_mode)
+M.open_chat_reference = function(current_line, cursor_col, in_insert_mode, full_line)
 	-- Extract the chat path
 	local chat_path
 	
@@ -2218,8 +2217,38 @@ M.open_chat_reference = function(current_line, cursor_col, in_insert_mode)
 		-- checks for two splits and the caller (OpenFileUnderCursor) handles insert mode 
 		return true
 	else
-		M.logger.warning("Chat file not found: " .. expanded_path)
-		return false
+		-- Check if it's a chat file reference (parley-*.md)
+		if expanded_path:match("parley%-%d%d%d%d%-%d%d%-%d%d%.%d%d%-%d%d%-%d%d%.%d+%.md$") then
+			-- This is a chat file reference that doesn't exist yet - create it
+			M.logger.info("Creating new chat file: " .. expanded_path)
+			
+			-- Determine agent info
+			local agent = M.get_agent()
+			
+			-- Create parent directories if they don't exist
+			local parent_dir = vim.fn.fnamemodify(expanded_path, ":h")
+			M.helpers.prepare_dir(parent_dir)
+			
+			-- Extract topic from the reference line or use default
+			local topic = "New chat"
+			if full_line and full_line:match("@@[^:]+:%s*(.+)") then
+				topic = full_line:match("@@[^:]+:%s*(.+)")
+			end
+			
+			-- Prepare template
+			local template = M.get_default_template(agent)
+			template = template:gsub("{{topic}}", topic)
+			
+			-- Make sure the file has UTF-8 encoding header
+			vim.fn.writefile(vim.split(template, "\n"), expanded_path)
+			
+			-- Open the file
+			M.open_buf(expanded_path)
+			return true
+		else
+			M.logger.warning("Chat file not found: " .. expanded_path)
+			return false
+		end
 	end
 end
 
@@ -2237,10 +2266,14 @@ M.cmd.OpenFileUnderCursor = function()
 	local current_mode = vim.api.nvim_get_mode().mode
 	local in_insert_mode = current_mode:match("^i") or current_mode:match("^R")
 	
+	-- Log the current file name for debugging
+	M.logger.debug("OpenFileUnderCursor called on file: " .. file_name)
+	
 	-- Check if it's a markdown file (but not a chat file)
 	if M.is_markdown(buf, file_name) then
+		M.logger.debug("File is recognized as markdown")
 		-- Try to open as a chat reference, passing insert mode status
-		if M.open_chat_reference(current_line, cursor_col, in_insert_mode) then
+		if M.open_chat_reference(current_line, cursor_col, in_insert_mode, current_line) then
 			return
 		end
 	end
@@ -2371,8 +2404,38 @@ M.cmd.OpenFileUnderCursor = function()
 		-- Handle as a normal file
 		-- Check if file exists
 		if vim.fn.filereadable(expanded_path) == 0 then
-			M.logger.warning("File not found: " .. expanded_path)
-			return
+			-- Check if it's a chat file reference (parley-*.md)
+			if expanded_path:match("parley%-%d%d%d%d%-%d%d%-%d%d%.%d%d%-%d%d%-%d%d%.%d+%.md$") then
+				-- This is a chat file reference that doesn't exist yet - create it
+				M.logger.info("Creating new chat file: " .. expanded_path)
+				
+				-- Determine agent info
+				local agent = M.get_agent()
+				
+				-- Create parent directories if they don't exist
+				local parent_dir = vim.fn.fnamemodify(expanded_path, ":h")
+				M.helpers.prepare_dir(parent_dir)
+				
+				-- Extract topic from the reference line or use default
+				local topic = "New chat"
+				if current_line:match("@@[^:]+:%s*(.+)") then
+					topic = current_line:match("@@[^:]+:%s*(.+)")
+				end
+				
+				-- Prepare template
+				local template = M.get_default_template(agent)
+				template = template:gsub("{{topic}}", topic)
+				
+				-- Make sure the file has UTF-8 encoding header
+				vim.fn.writefile(vim.split(template, "\n"), expanded_path)
+				
+				-- Open the file
+				M.open_buf(expanded_path)
+				return
+			else
+				M.logger.warning("File not found: " .. expanded_path)
+				return
+			end
 		end
 		
 		-- Open the file in a new buffer
@@ -2428,7 +2491,12 @@ M._chat_finder = {
 	opened = false,
 	show_all = false, -- Track whether we're showing all files or just recent ones
 	active_window = nil, -- Track the active window that initiated ChatFinder
-	source_win = nil -- Track the source window where ChatFinder was invoked
+	source_win = nil, -- Track the source window where ChatFinder was invoked
+	insert_mode = false, -- Whether we're in insert mode (inserting chat references)
+	insert_buf = nil, -- The buffer to insert into
+	insert_line = nil, -- The line to insert at
+	insert_col = nil, -- The column to insert at (for insert mode)
+	insert_normal_mode = nil -- Whether we're inserting in normal mode or insert mode
 }
 
 M.cmd.ChatFinder = function(options)
@@ -2562,14 +2630,49 @@ M.cmd.ChatFinder = function(options)
 							-- Get relative path for better readability
 							local rel_path = vim.fn.fnamemodify(selection.value, ":~:.")
 							
-							-- Update the placeholder @@ line with the selected chat path and topic
-							vim.api.nvim_buf_set_lines(
-								M._chat_finder.insert_buf, 
-								M._chat_finder.insert_line - 1, 
-								M._chat_finder.insert_line, 
-								false, 
-								{"@@" .. rel_path .. ": " .. topic}
-							)
+							-- Handle normal mode insertion
+							if M._chat_finder.insert_normal_mode then
+								-- Insert a new line with the chat reference
+								vim.api.nvim_buf_set_lines(
+									M._chat_finder.insert_buf, 
+									M._chat_finder.insert_line - 1, 
+									M._chat_finder.insert_line - 1, 
+									false, 
+									{"@@" .. rel_path .. ": " .. topic}
+								)
+							else
+								-- Handle insert mode insertion by modifying the current line
+								local current_line = vim.api.nvim_buf_get_lines(
+									M._chat_finder.insert_buf,
+									M._chat_finder.insert_line - 1,
+									M._chat_finder.insert_line,
+									false
+								)[1]
+								
+								local col = M._chat_finder.insert_col
+								local new_line = current_line:sub(1, col) .. 
+									"@@" .. rel_path .. ": " .. topic .. 
+									current_line:sub(col + 1)
+								
+								vim.api.nvim_buf_set_lines(
+									M._chat_finder.insert_buf,
+									M._chat_finder.insert_line - 1,
+									M._chat_finder.insert_line,
+									false,
+									{new_line}
+								)
+								
+								-- Move cursor to the end of the inserted reference
+								vim.api.nvim_win_set_cursor(0, {
+									M._chat_finder.insert_line, 
+									col + #("@@" .. rel_path .. ": " .. topic)
+								})
+								
+								-- Return to insert mode
+								vim.schedule(function()
+									vim.cmd("startinsert")
+								end)
+							end
 							
 							M.logger.info("Inserted chat reference: " .. rel_path)
 						end
@@ -2578,6 +2681,8 @@ M.cmd.ChatFinder = function(options)
 						M._chat_finder.insert_mode = false
 						M._chat_finder.insert_buf = nil
 						M._chat_finder.insert_line = nil
+						M._chat_finder.insert_col = nil
+						M._chat_finder.insert_normal_mode = nil
 					else
 						-- Normal behavior - open the selected chat
 						-- First switch back to the source window where ChatFinder was invoked
@@ -2715,6 +2820,53 @@ M.get_chat_agent = M.get_agent
 ---@param headers table # The parsed headers from the chat file
 ---@param agent table # The agent configuration obtained from get_agent()
 ---@return table # A table containing the resolved agent information
+-- Generate a default template for a new chat file
+M.get_default_template = function(agent)
+	local model = ""
+	local provider = ""
+	local system_prompt = ""
+	
+	-- If agent is provided, extract model and provider info
+	if agent then
+		if agent.model then
+			model = agent.model
+			if type(model) == "table" then
+				model = "- model: " .. vim.json.encode(model) .. "\n"
+			else
+				model = "- model: " .. model .. "\n"
+			end
+		end
+		
+		if agent.provider then
+			provider = "- provider: " .. agent.provider:gsub("\n", "\\n") .. "\n"
+		end
+		
+		if agent.system_prompt then
+			system_prompt = "- role: " .. agent.system_prompt:gsub("\n", "\\n") .. "\n"
+		end
+	end
+	
+	-- Generate template using the same pattern as M.new_chat
+	-- Get shortcuts, handling potentially missing values
+	local respond_shortcut = M.config.chat_shortcut_respond and M.config.chat_shortcut_respond.shortcut or "<C-g><C-g>"
+	local stop_shortcut = M.config.chat_shortcut_stop and M.config.chat_shortcut_stop.shortcut or "<C-g>s"
+	local delete_shortcut = M.config.chat_shortcut_delete and M.config.chat_shortcut_delete.shortcut or "<C-g>d"
+	local new_shortcut = M.config.global_shortcut_new and M.config.global_shortcut_new.shortcut or "<C-g>c"
+	
+	local template = M.render.template(M.config.chat_template or require("parley.defaults").chat_template, {
+		["{{filename}}"] = "{{topic}}",  -- Will be replaced later with actual topic
+		["{{optional_headers}}"] = model .. provider .. system_prompt,
+		["{{user_prefix}}"] = M.config.chat_user_prefix,
+		["{{respond_shortcut}}"] = respond_shortcut,
+		["{{cmd_prefix}}"] = M.config.cmd_prefix,
+		["{{stop_shortcut}}"] = stop_shortcut,
+		["{{delete_shortcut}}"] = delete_shortcut,
+		["{{new_shortcut}}"] = new_shortcut,
+	})
+	
+	return template
+end
+
 M.get_agent_info = function(headers, agent)
 	local info = {
 		name = agent.name,
