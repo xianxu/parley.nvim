@@ -153,6 +153,8 @@ local config = {
 	-- directory for storing chat files
 	-- chat_dir = vim.fn.stdpath("data"):gsub("/$", "") .. "/parley/chats",
     chat_dir = vim.fn.expand("~/Library/Mobile Documents/com~apple~CloudDocs/parley"),
+    -- directory for storing notes
+	notes_dir = vim.fn.expand("~/Library/Mobile Documents/com~apple~CloudDocs/notes"),
 	-- chat user prompt prefix
 	chat_user_prefix = "💬:",
 	-- chat assistant prompt prefix (static string or a table {static, template})
@@ -185,6 +187,9 @@ local config = {
 	-- global shortcuts (available in any buffer)
 	global_shortcut_new = { modes = { "n", "i" }, shortcut = "<C-g>c" },
 	global_shortcut_finder = { modes = { "n", "i" }, shortcut = "<C-g>f" },
+	-- global shortcuts for note taking
+	global_shortcut_note_new = { modes = { "n", "i" }, shortcut = "<C-n>n" },
+	global_shortcut_note_finder = { modes = { "n", "i" }, shortcut = "<C-n>f" },
 	-- default search term when using :ParleyChatFinder
 	chat_finder_pattern = "^# topic: ",
 	chat_finder_mappings = {

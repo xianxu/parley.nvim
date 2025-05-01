@@ -127,6 +127,12 @@ M.setup = function(opts)
 			M.config[k] = M.helpers.prepare_dir(v, k)
 		end
 	end
+	
+	-- Initialize note finder state
+	M._note_finder = {
+		opened = false,
+		source_win = nil
+	}
 
 	-- remove invalid agents
 	for name, agent in pairs(M.agents) do
@@ -198,6 +204,32 @@ M.setup = function(opts)
 					vim.cmd("stopinsert")
 					M.cmd.ChatNew({})
 				end, { silent = true, desc = "Create New Chat" })
+			end
+		end
+	end
+	
+	-- Set up global shortcuts for note-taking
+	if M.config.global_shortcut_note_new then
+		for _, mode in ipairs(M.config.global_shortcut_note_new.modes) do
+			if mode == "n" then
+				vim.keymap.set(mode, M.config.global_shortcut_note_new.shortcut, function()
+					M.cmd.NoteNew()
+				end, { silent = true, desc = "Create New Note" })
+			elseif mode == "i" then
+				vim.keymap.set(mode, M.config.global_shortcut_note_new.shortcut, function()
+					vim.cmd("stopinsert")
+					M.cmd.NoteNew()
+				end, { silent = true, desc = "Create New Note" })
+			end
+		end
+	end
+	
+	if M.config.global_shortcut_note_finder then
+		for _, mode in ipairs(M.config.global_shortcut_note_finder.modes) do
+			if mode == "n" then
+				vim.keymap.set(mode, M.config.global_shortcut_note_finder.shortcut, ":" .. M.config.cmd_prefix .. "NoteFinder<CR>", { silent = true, desc = "Open Note Finder" })
+			elseif mode == "i" then
+				vim.keymap.set(mode, M.config.global_shortcut_note_finder.shortcut, "<ESC>:" .. M.config.cmd_prefix .. "NoteFinder<CR>", { silent = true, desc = "Open Note Finder" })
 			end
 		end
 	end
@@ -1033,6 +1065,187 @@ end
 M.cmd.ChatNew = function(params, system_prompt, agent)
 	-- Simple version that just creates a new chat
 	return M.new_chat(system_prompt, agent)
+end
+
+-- Function to create a new note
+M.cmd.NoteNew = function()
+	-- Prompt user for note subject
+	vim.ui.input({ prompt = "Note subject: " }, function(subject)
+		if subject and subject ~= "" then
+			M.new_note(subject)
+		end
+	end)
+end
+
+-- Function to find notes using telescope
+M.cmd.NoteFinder = function()
+	M.note_finder()
+end
+
+-- Variable to store state for NoteFinder
+M._note_finder = {
+	opened = false,
+	source_win = nil
+}
+
+-- Create a new note with given subject
+M.new_note = function(subject)
+	-- Get current date
+	local date = os.date("*t")
+	local year = date.year
+	local month = string.format("%02d", date.month)
+	local day = string.format("%02d", date.day)
+	
+	-- Create directory structure if it doesn't exist
+	local year_dir = M.config.notes_dir .. "/" .. year
+	local month_dir = year_dir .. "/" .. month
+	
+	M.helpers.prepare_dir(year_dir)
+	M.helpers.prepare_dir(month_dir)
+	
+	-- Replace spaces with dashes in subject
+	subject = subject:gsub(" ", "-")
+	
+	-- Create filename
+	local filename = month_dir .. "/" .. day .. "-" .. subject .. ".md"
+	
+	-- Create empty note file with a title
+	local content = "# " .. subject:gsub("-", " ") .. "\n\n"
+	
+	-- Write file
+	vim.fn.writefile(vim.split(content, "\n"), filename)
+	
+	-- Open the file
+	local buf = M.open_buf(filename)
+	
+	-- Move cursor to end of file
+	vim.api.nvim_command("normal! G")
+	
+	-- Enter insert mode
+	vim.api.nvim_command("startinsert")
+	
+	return buf
+end
+
+-- Find notes using telescope
+M.note_finder = function()
+	if M._note_finder.opened then
+		M.logger.warning("Note finder is already open")
+		return
+	end
+	M._note_finder.opened = true
+	
+	-- Store current window
+	M._note_finder.source_win = vim.api.nvim_get_current_win()
+	
+	-- Check if telescope is available
+	if pcall(require, "telescope") then
+		local pickers = require("telescope.pickers")
+		local finders = require("telescope.finders")
+		local conf = require("telescope.config").values
+		local actions = require("telescope.actions")
+		local action_state = require("telescope.actions.state")
+		
+		-- Get all note files
+		local all_files = {}
+		local years = vim.fn.glob(M.config.notes_dir .. "/*", false, true)
+		
+		for _, year_path in ipairs(years) do
+			if vim.fn.isdirectory(year_path) == 1 then
+				local months = vim.fn.glob(year_path .. "/*", false, true)
+				for _, month_path in ipairs(months) do
+					if vim.fn.isdirectory(month_path) == 1 then
+						local files = vim.fn.glob(month_path .. "/*.md", false, true)
+						for _, file in ipairs(files) do
+							table.insert(all_files, file)
+						end
+					end
+				end
+			end
+		end
+		
+		local entries = {}
+		
+		for _, file in ipairs(all_files) do
+			local stat = vim.loop.fs_stat(file)
+			if not stat then
+				goto continue
+			end
+			
+			-- Extract date from path format: year/month/day-subject.md
+			local year, month, day_subject = file:match("([^/]+)/([^/]+)/([^/]+)$")
+			local day, subject = day_subject:match("^(%d+)%-(.+)%.md$")
+			
+			-- If we couldn't extract the parts, use default display
+			if not (year and month and day and subject) then
+				subject = vim.fn.fnamemodify(file, ":t:r")
+				local date_str = os.date("%Y-%m-%d", stat.mtime.sec)
+				table.insert(entries, {
+					value = file,
+					display = date_str .. " " .. subject:gsub("%-", " "),
+					ordinal = date_str .. " " .. subject,
+				})
+				goto continue
+			end
+			
+			-- Format display string: YYYY-MM-DD Title
+			local display_date = year .. "-" .. month .. "-" .. day
+			local display_title = subject:gsub("%-", " ")
+			
+			table.insert(entries, {
+				value = file,
+				display = display_date .. " " .. display_title,
+				ordinal = display_date .. " " .. display_title,
+			})
+			
+			::continue::
+		end
+		
+		-- Sort entries by date (latest first)
+		table.sort(entries, function(a, b)
+			return a.ordinal > b.ordinal
+		end)
+		
+		-- Create picker
+		pickers.new({}, {
+			prompt_title = "Notes",
+			finder = finders.new_table({
+				results = entries,
+				entry_maker = function(entry)
+					return {
+						value = entry.value,
+						display = entry.display,
+						ordinal = entry.ordinal,
+					}
+				end,
+			}),
+			sorter = conf.generic_sorter({}),
+			previewer = conf.file_previewer({}),
+			attach_mappings = function(prompt_bufnr, map)
+				-- Open selected note
+				actions.select_default:replace(function()
+					actions.close(prompt_bufnr)
+					local selection = action_state.get_selected_entry()
+					if selection then
+						-- Reset the opened state for next time
+						M._note_finder.opened = false
+						
+						-- Set current window to source_win if it exists
+						if M._note_finder.source_win and vim.api.nvim_win_is_valid(M._note_finder.source_win) then
+							vim.api.nvim_set_current_win(M._note_finder.source_win)
+						end
+						
+						M.open_buf(selection.value, true)
+					end
+				end)
+				
+				return true
+			end,
+		}):find()
+	else
+		M.logger.error("Telescope is required for NoteFinder")
+		M._note_finder.opened = false
+	end
 end
 
 M.cmd.ChatDelete = function()
