@@ -303,6 +303,11 @@ M.refresh_state = function(update)
 	for k, v in pairs(update) do
 		M._state[k] = v
 	end
+	
+	-- Load note finder filter mode from state if available
+	if M._state.note_finder_filter_mode then
+		M._note_finder.filter_mode = M._state.note_finder_filter_mode
+	end
 
 	if not M._state.agent or not M.agents[M._state.agent] then
 		M._state.agent = M._agents[1]
@@ -1083,10 +1088,11 @@ M.cmd.NoteFinder = function()
 end
 
 -- Variable to store state for NoteFinder
+-- Initial state for note finder, will be updated from persisted state
 M._note_finder = {
 	opened = false,
 	source_win = nil,
-	show_all = false  -- Track whether to show all notes or just recent ones
+	filter_mode = "recent" -- Filter mode: "recent" (3 months), "week" (this week), or "all"
 }
 
 -- Create a new note with given subject
@@ -1203,13 +1209,41 @@ M.note_finder = function()
 			use_mtime = true
 		}
 		
-		-- Calculate cutoff timestamp (current time - configured months)
-		local current_time = os.time()
-		local months_in_seconds = recency_config.months * 30 * 24 * 60 * 60
-		local cutoff_time = current_time - months_in_seconds
+		-- Set up filter mode variables
+		local filter_type = M._note_finder.filter_mode
+		local is_filtering = filter_type ~= "all"
 		
-		-- For calculating the prompt title
-		local is_filtering = recency_config.filter_by_default and not M._note_finder.show_all
+		-- Calculate cutoff timestamp based on filter mode
+		local current_time = os.time()
+		local cutoff_time = current_time
+		
+		if filter_type == "recent" then
+			-- For "recent", use the configured number of months
+			local months_in_seconds = recency_config.months * 30 * 24 * 60 * 60
+			cutoff_time = current_time - months_in_seconds
+		elseif filter_type == "week" then
+			-- For "week", calculate the start and end of the current week (Sunday to Saturday)
+			local current_date = os.date("*t", current_time)
+			local days_since_sunday = current_date.wday - 1 -- wday: 1=Sunday, 2=Monday, etc.
+			-- If it's Sunday, days_since_sunday will be 0
+			if days_since_sunday < 0 then days_since_sunday = 6 end -- Adjust if wday started from Monday
+			
+			-- Calculate time at 00:00:00 on the most recent Sunday (start of week)
+			local week_start_time = current_time - (days_since_sunday * 24 * 60 * 60) - 
+								  (current_date.hour * 60 * 60) - 
+								  (current_date.min * 60) - 
+								  current_date.sec
+								  
+			-- Calculate time at 23:59:59 on the coming Saturday (end of week)
+			local week_end_time = week_start_time + (6 * 24 * 60 * 60) + (23 * 60 * 60) + (59 * 60) + 59
+			
+			-- Store these in the state for filtering
+			M._note_finder.week_start_time = week_start_time
+			M._note_finder.week_end_time = week_end_time
+			
+			-- Set cutoff to the start of the week for initial filtering
+			cutoff_time = week_start_time
+		end
 		
 		-- Get all note files
 		local all_files = {}
@@ -1252,16 +1286,8 @@ M.note_finder = function()
 				goto continue
 			end
 			
-			-- Get the file timestamp based on configuration (mtime or birthtime)
-			local file_time = recency_config.use_mtime and stat.mtime.sec or stat.birthtime and stat.birthtime.sec or stat.mtime.sec
-			
-			-- Skip files older than cutoff if filtering is active
-			if is_filtering and file_time < cutoff_time then
-				goto continue
-			end
-			
-			-- Extract date from path format: year/month/week/day-subject.md
-			-- Path structure is now always YYYY/MM/W##/DD-subject.md
+			-- Extract date from file path: year/month/week/day-subject.md
+			-- Path structure is typically: YYYY/MM/W##/DD-subject.md
 			local filename = vim.fn.fnamemodify(file, ":t")
 			local day, subject = filename:match("^(%d+)%-(.+)%.md$")
 			
@@ -1271,38 +1297,69 @@ M.note_finder = function()
 			local month_dir = vim.fn.fnamemodify(vim.fn.fnamemodify(dir, ":h"), ":t")
 			local year_dir = vim.fn.fnamemodify(vim.fn.fnamemodify(vim.fn.fnamemodify(dir, ":h"), ":h"), ":t")
 			
-			local year = year_dir
-			local month = month_dir
-			local week = week_dir:match("^W%d%d$") and week_dir or nil
+			-- Get the file timestamp - prefer filename inference over mtime/birthtime
+			local file_time
 			
-			-- If we couldn't extract the parts, use default display
-			if not (year and month and day and subject) then
-				subject = vim.fn.fnamemodify(file, ":t:r")
-				local date_parts = os.date("*t", file_time)
-				local year_str = tostring(date_parts.year)
-				local month_str = string.format("%02d", date_parts.month)
-				local day_str = string.format("%02d", date_parts.day)
-				local date_str = year_str .. "-" .. month_str .. "-" .. day_str
-				
-				-- Calculate week number for the date
-				local week_number = M.helpers.get_week_number_sunday_based(date_str)
-				if not week_number or type(week_number) ~= "number" then week_number = 1 end
-				local week_str = "W" .. string.format("%02d", week_number)
-				
-				-- Format is always W##-MM-DD
-				local display_str = week_str .. "-" .. month_str .. "-" .. day_str .. " " .. subject:gsub("%-", " ")
-				-- Sort by year, week, month, day
-				local ordinal_str = year_str .. "-" .. week_str .. "-" .. month_str .. "-" .. day_str .. " " .. subject
-				
-				table.insert(entries, {
-					value = file,
-					display = display_str,
-					ordinal = ordinal_str,
-					timestamp = file_time,
-					week = week_str,
-				})
-				goto continue
+			-- Try to infer time from directory and file name first (preferred method)
+			if day and tonumber(day) and month_dir and tonumber(month_dir) and year_dir and tonumber(year_dir) then
+				-- Create date table and convert to timestamp
+				local date_table = {
+					year = tonumber(year_dir),
+					month = tonumber(month_dir),
+					day = tonumber(day),
+					hour = 12,  -- Default to noon
+					min = 0,
+					sec = 0
+				}
+				file_time = os.time(date_table)
+			else
+				-- Fallback to file system times
+				file_time = recency_config.use_mtime and stat.mtime.sec or stat.birthtime and stat.birthtime.sec or stat.mtime.sec
 			end
+			
+			-- Filter files based on the current filter mode
+			if is_filtering then
+				if filter_type == "week" then
+					-- For week filter, check if file is within the week range (Sunday to Saturday)
+					if file_time < M._note_finder.week_start_time or file_time > M._note_finder.week_end_time then
+						goto continue
+					end
+				else
+					-- For other filters (recent), just check against cutoff time
+					if file_time < cutoff_time then
+						goto continue
+					end
+				end
+			end
+			
+			-- Format the date for display using the file_time we determined
+			local date_parts = os.date("*t", file_time)
+			local year_str = tostring(date_parts.year)
+			local month_str = string.format("%02d", date_parts.month)
+			local day_str = string.format("%02d", date_parts.day)
+			local date_str = year_str .. "-" .. month_str .. "-" .. day_str
+			
+			-- Calculate week number for the date
+			local week_number = M.helpers.get_week_number_sunday_based(date_str)
+			if not week_number or type(week_number) ~= "number" then week_number = 1 end
+			local week_str = "W" .. string.format("%02d", week_number)
+			
+			-- Get subject from filename if not available
+			local subject = subject or vim.fn.fnamemodify(file, ":t:r"):match("^%d+%-(.+)$") or vim.fn.fnamemodify(file, ":t:r")
+			
+			-- Format is always W##-MM-DD
+			local display_str = week_str .. "-" .. month_str .. "-" .. day_str .. " " .. subject:gsub("%-", " ")
+			-- Sort by year, week, month, day
+			local ordinal_str = year_str .. "-" .. week_str .. "-" .. month_str .. "-" .. day_str .. " " .. subject
+			
+			table.insert(entries, {
+				value = file,
+				display = display_str,
+				ordinal = ordinal_str,
+				timestamp = file_time,
+				week = week_str,
+			})
+			goto continue
 			
 			-- Format display string: W##-MM-DD Title
 			local display_title = subject:gsub("%-", " ")
@@ -1359,10 +1416,19 @@ M.note_finder = function()
 			return a.timestamp > b.timestamp
 		end)
 		
-		-- Prepare prompt title with recency filter info
-		local prompt_title = is_filtering 
-			and string.format("Notes (Last %d Months)", recency_config.months)
-			or "Notes (All)"
+		-- Prepare prompt title with filter mode info
+		local prompt_title
+		if filter_type == "recent" then
+			prompt_title = string.format("Notes (Last %d Months)", recency_config.months)
+		elseif filter_type == "week" then
+			-- Use the same start and end times we calculated for filtering
+			local sunday_date = os.date("%b %d", M._note_finder.week_start_time)
+			local saturday_date = os.date("%b %d", M._note_finder.week_end_time)
+			
+			prompt_title = string.format("Notes (This Week: %s - %s)", sunday_date, saturday_date)
+		else
+			prompt_title = "Notes (All)"
+		end
 		
 		-- Create picker
 		pickers.new({
@@ -1386,16 +1452,42 @@ M.note_finder = function()
 			sorter = conf.generic_sorter({}),
 			previewer = conf.file_previewer({}),
 			attach_mappings = function(prompt_bufnr, map)
-				-- Add toggle mapping for showing all vs recent
+				-- Add toggle mapping to cycle through filter modes: recent -> week -> all -> recent
 				map("i", "<C-a>", function()
-					M._note_finder.show_all = not M._note_finder.show_all
+					-- Cycle through filter modes
+					if M._note_finder.filter_mode == "recent" then
+						M._note_finder.filter_mode = "week"
+					elseif M._note_finder.filter_mode == "week" then
+						M._note_finder.filter_mode = "all"
+					else
+						M._note_finder.filter_mode = "recent"
+					end
+					
+					-- Update state file to persist filter mode
+					M.refresh_state({
+						note_finder_filter_mode = M._note_finder.filter_mode
+					})
+					
 					actions.close(prompt_bufnr)
 					M._note_finder.opened = false
 					M.note_finder() -- Reopen with new settings
 				end)
 				
 				map("n", "<C-a>", function()
-					M._note_finder.show_all = not M._note_finder.show_all
+					-- Cycle through filter modes
+					if M._note_finder.filter_mode == "recent" then
+						M._note_finder.filter_mode = "week"
+					elseif M._note_finder.filter_mode == "week" then
+						M._note_finder.filter_mode = "all"
+					else
+						M._note_finder.filter_mode = "recent"
+					end
+					
+					-- Update state file to persist filter mode
+					M.refresh_state({
+						note_finder_filter_mode = M._note_finder.filter_mode
+					})
+					
 					actions.close(prompt_bufnr)
 					M._note_finder.opened = false
 					M.note_finder() -- Reopen with new settings
@@ -1450,26 +1542,27 @@ M.note_finder = function()
 				end)
 				
 				return true
-			end,
+			end
 		}):find()
 	else
 		M.logger.error("Telescope is required for NoteFinder")
 		M._note_finder.opened = false
 	end
 end
-	-- Add a hook to detect when window is dismissed via Escape
-	vim.api.nvim_create_autocmd("WinLeave", {
-		pattern = "*",
-		callback = function()
-			-- Check if this is from note_finder
-			if M._note_finder.opened then
-				-- Reset after a short delay
-				vim.defer_fn(function()
-					M._note_finder.opened = false
-				end, 100)
-			end
+
+-- Add a hook to detect when window is dismissed via Escape
+vim.api.nvim_create_autocmd("WinLeave", {
+	pattern = "*",
+	callback = function()
+		-- Check if this is from note_finder
+		if M._note_finder.opened then
+			-- Reset after a short delay
+			vim.defer_fn(function()
+				M._note_finder.opened = false
+			end, 100)
 		end
-	})
+	end
+})
 M.cmd.ChatDelete = function()
 	-- get buffer and file
 	local buf = vim.api.nvim_get_current_buf()
@@ -2723,8 +2816,27 @@ M.cmd.ChatFinder = function(options)
 				goto continue
 			end
 			
-			-- Get the file timestamp based on configuration (mtime or birthtime)
-			local file_time = recency_config.use_mtime and stat.mtime.sec or stat.birthtime and stat.birthtime.sec or stat.mtime.sec
+			-- Try to infer timestamp from chat filename first
+			-- Chat files typically have format: YYYY-MM-DD-HH-MM-SS-topic.md
+			local file_time
+			local filename = vim.fn.fnamemodify(file, ":t:r")
+			local year, month, day, hour, min, sec = filename:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)%-(%d%d)%-(%d%d)%-(%d%d)")
+			
+			if year and month and day and hour and min and sec then
+				-- Create date table and convert to timestamp
+				local date_table = {
+					year = tonumber(year),
+					month = tonumber(month),
+					day = tonumber(day),
+					hour = tonumber(hour),
+					min = tonumber(min),
+					sec = tonumber(sec)
+				}
+				file_time = os.time(date_table)
+			else
+				-- Fallback to file system times if we couldn't infer from filename
+				file_time = stat.mtime.sec or (stat.birthtime and stat.birthtime.sec) or stat.mtime.sec
+			end
 			
 			-- Skip files older than cutoff if filtering is active
 			if is_filtering and file_time < cutoff_time then

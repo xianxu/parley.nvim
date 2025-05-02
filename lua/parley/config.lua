@@ -204,8 +204,6 @@ local config = {
 		filter_by_default = true,
 		-- Default recency period in months
 		months = 3,
-		-- Use file modification time (true) or creation time (false)
-		use_mtime = true,
 	},
 	-- note finder recency filtering configuration
 	notes_finder_recency = {
@@ -213,8 +211,6 @@ local config = {
 		filter_by_default = true,
 		-- Default recency period in months
 		months = 3,
-		-- Use file modification time (true) or creation time (false)
-		use_mtime = true,
 	},
 	-- if true, finished ChatResponder won't move the cursor to the end of the buffer
 	chat_free_cursor = true,
