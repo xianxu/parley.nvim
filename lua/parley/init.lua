@@ -238,6 +238,45 @@ M.setup = function(opts)
 		end
 	end
 	
+	-- Set up global shortcut for navigating to current year's note directory
+	if M.config.global_shortcut_year_root then
+		for _, mode in ipairs(M.config.global_shortcut_year_root.modes) do
+			if mode == "n" then
+				vim.keymap.set(mode, M.config.global_shortcut_year_root.shortcut, function()
+					local current_year = os.date("%Y")
+					local year_dir = M.config.notes_dir .. "/" .. current_year
+					M.helpers.prepare_dir(year_dir, "year")
+					vim.cmd("cd " .. year_dir)
+				end, { silent = true, desc = "Change directory to current year's note directory" })
+			elseif mode == "i" then
+				vim.keymap.set(mode, M.config.global_shortcut_year_root.shortcut, function()
+					vim.cmd("stopinsert")
+					local current_year = os.date("%Y")
+					local year_dir = M.config.notes_dir .. "/" .. current_year
+					M.helpers.prepare_dir(year_dir, "year")
+					vim.cmd("cd " .. year_dir)
+				end, { silent = true, desc = "Change directory to current year's note directory" })
+			end
+		end
+	end
+	
+	-- Set up global shortcut for opening oil.nvim
+	if M.config.global_shortcut_oil then
+		for _, mode in ipairs(M.config.global_shortcut_oil.modes) do
+			if mode == "n" then
+				vim.keymap.set(mode, M.config.global_shortcut_oil.shortcut, function()
+					-- Check if oil.nvim is available
+					local ok, oil = pcall(require, "oil")
+					if ok then
+						oil.open()
+					else
+						M.logger.error("oil.nvim is not installed. Please install it with your package manager.")
+					end
+				end, { silent = true, desc = "Open oil.nvim file explorer" })
+			end
+		end
+	end
+	
 	-- Note: Agent switching is now handled in buffer-local bindings
 	
 	-- Note: Chat section navigation is now handled in the buffer-local bindings

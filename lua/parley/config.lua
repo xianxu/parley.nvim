@@ -192,6 +192,9 @@ local config = {
 	-- global shortcuts for note taking
 	global_shortcut_note_new = { modes = { "n", "i" }, shortcut = "<C-n>n" },
 	global_shortcut_note_finder = { modes = { "n", "i" }, shortcut = "<C-n>f" },
+	global_shortcut_year_root = { modes = { "n", "i" }, shortcut = "<C-n>r" },
+	-- shortcut for opening oil.nvim file explorer
+	global_shortcut_oil = { modes = { "n" }, shortcut = "<leader>fo" },
 	-- default search term when using :ParleyChatFinder
 	chat_finder_pattern = "^# topic: ",
 	chat_finder_mappings = {
