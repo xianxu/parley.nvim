@@ -1314,7 +1314,7 @@ M.parse_chat = function(lines, header_end)
 					line_start = i,
 					line_end = nil,
 					content = question_content,
-					has_file_reference = question_content:match("@@") ~= nil
+					file_references = {} -- Will store file references we find (length > 0 means has references)
 				},
 				answer = nil
 			}
@@ -1369,9 +1369,16 @@ M.parse_chat = function(lines, header_end)
 		elseif current_exchange and current_component then
 			current_exchange[current_component].content = current_exchange[current_component].content .. "\n" .. line
 			
-			-- Check for file references in question content
-			if current_component == "question" and line:match("@@") then
-				current_exchange[current_component].has_file_reference = true
+			-- Check for file references in question content - ONLY at the beginning of a line
+			local file_path = current_component == "question" and line:match("^@@%s*([^:]+)")
+
+			if file_path then
+				table.insert(current_exchange[current_component].file_references, {
+					line = line,
+					path = file_path:gsub("^%s*(.-)%s*$", "%1"),
+					original_line_index = i,
+				})
+				M.logger.debug("Found file reference at line start: " .. line .. ", extracted path: " .. file_path)
 			end
 		end
 	end
@@ -1565,7 +1572,7 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 			end
 			
 			-- Preserve if it contains file references
-			if exchange.question.has_file_reference then
+			if #exchange.question.file_references > 0 then
 				should_preserve = true
 				M.logger.debug("Exchange #" .. idx .. " preserved due to file references")
 			end
@@ -1574,54 +1581,28 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 			if should_preserve then
 				-- Get the question content and process any file loading directives
 				local question_content = exchange.question.content
-				local lines = vim.split(question_content, "\n")
-				local file_lines = {}
+				local file_content = ""
 				
-				-- Check for file loading syntax (@@filename)
-				for i, line in ipairs(lines) do
-					if line:match("^@@") then
-						-- Extract everything after @@ until the end of the line, trimming whitespace
-						local path = line:match("^@@(.+)$"):gsub("^%s*(.-)%s*$", "%1")
-						M.logger.debug("Detected file/directory loading request: " .. path)
-						
-						-- Check if this is a directory or has directory pattern markers (* or **/)
-						if M.helpers.is_directory(path) or 
-						   path:match("/$") or        -- Ends with slash
-						   path:match("/%*%*?/?") or  -- Contains /** or /**/ 
-						   path:match("/%*%.%w+$") then -- Contains /*.ext pattern
-							
-							-- Process as a directory pattern
-							M.logger.debug("Processing as directory pattern: " .. path)
-							local directory_content = M.helpers.process_directory_pattern(path)
-							
-							-- Replace the @@directory line with the directory content
-							lines[i] = directory_content
-							M.logger.debug("Loaded directory content for: " .. path)
-						else
-							-- Process as a single file
-							-- Use the helper function that already handles line numbers
-							local formatted_content = M.helpers.format_file_content(path)
-							
-							if formatted_content:match("^Error:") then
-								-- Keep the line but add error note
-								lines[i] = line .. " (File not found or couldn't be read)"
-							else
-								-- Replace the @@filename line with the formatted file content
-								lines[i] = "File contents of " .. path .. ":\n\n" .. formatted_content
-								M.logger.debug("Loaded file: " .. path)
-							end
-						end
-	                    -- keep file inclusion content separately
-	                    table.insert(file_lines, lines[i])
+				-- Use the precomputed file references instead of scanning for them again
+				for _, file_ref in ipairs(exchange.question.file_references) do
+					local path = file_ref.path
+					local original_line = file_ref.line
+					local line_index = file_ref.original_line_index
+					
+					M.logger.debug("Processing file reference: " .. path)
+					
+					-- Check if this is a directory or has directory pattern markers (* or **/)
+					if M.helpers.is_directory(path) or 
+					   path:match("/%*%*?/?") or  -- Contains /** or /**/ 
+					   path:match("/%*%.%w+$") then -- Contains /*.ext pattern
+						file_content = M.helpers.process_directory_pattern(path)
+					else
+						file_content = M.helpers.format_file_content(path)
 					end
 				end
 				
-				-- Reconstruct the question with file contents and add to messages
-				question_content = table.concat(lines, "\n")
-	            file_content = table.concat(file_lines, "\n")
-				
 				-- Handle provider-specific file reference processing for questions with file references
-				if exchange.question.has_file_reference then
+				if exchange.question.file_references and #exchange.question.file_references > 0 then
 					-- Use agent_info to determine if we're using nthropic/Claude
 					local is_anthropic = (agent_info.provider == "anthropic" or agent_info.provider == "claude")
 										
@@ -1634,7 +1615,7 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 						-- 1. Insert a system message with processed file contents and cache_control
 						table.insert(messages, { 
 							role = "system", 
-							content = file_content,
+							content = file_content .. "\n",
 							cache_control = { type = "ephemeral" }
 						})
 						
@@ -1656,7 +1637,7 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 			-- Process the answer if it exists and is within our range
 			if exchange.answer and exchange.answer.line_start <= end_index and idx < exchange_idx then
 				-- when we preserve due to have file inclusion in question, we still summarize the answer
-				if should_preserve and not exchange.question.has_file_reference then
+				if should_preserve and not (exchange.question.file_references and #exchange.question.file_references > 0) then
 					-- Use the full answer content
 					table.insert(messages, { role = "assistant", content = exchange.answer.content })
 				else

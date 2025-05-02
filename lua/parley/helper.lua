@@ -214,7 +214,7 @@ end
 _H.format_file_content = function(filepath)
     local content = _H.read_file_content(filepath)
     if not content then
-        return "Error: Could not read file " .. filepath
+        return "File: " .. filepath .. "\n[Error: Could not read file]\n\n"
     end
     
     local filetype = vim.filetype.match({ filename = filepath }) or ""
