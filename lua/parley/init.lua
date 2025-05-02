@@ -42,6 +42,9 @@ M.setup = function(opts)
 	M._setup_called = true
 
 	math.randomseed(os.time())
+	
+	-- Initialize file tracker
+	M.file_tracker = require("parley.file_tracker").init()
 
 	-- make sure opts is a table
 	opts = opts or {}
@@ -307,6 +310,11 @@ M.refresh_state = function(update)
 	-- Load note finder filter mode from state if available
 	if M._state.note_finder_filter_mode then
 		M._note_finder.filter_mode = M._state.note_finder_filter_mode
+	end
+	
+	-- Load note finder sort mode from state if available
+	if M._state.note_finder_sort_mode then
+		M._note_finder.sort_mode = M._state.note_finder_sort_mode
 	end
 
 	if not M._state.agent or not M.agents[M._state.agent] then
@@ -964,6 +972,10 @@ end
 ---@param from_chat_finder boolean | nil # whether this is called from ChatFinder
 ---@return number # buffer number
 M.open_buf = function(file_name, from_chat_finder)
+	-- Track file access when opening a file
+	local file_tracker = require("parley.file_tracker")
+	file_tracker.track_file_access(file_name)
+	
 	-- Is the file already open in a buffer?
 	for _, b in ipairs(vim.api.nvim_list_bufs()) do
 		if vim.api.nvim_buf_get_name(b) == file_name then
@@ -1092,7 +1104,8 @@ end
 M._note_finder = {
 	opened = false,
 	source_win = nil,
-	filter_mode = "recent" -- Filter mode: "recent" (3 months), "week" (this week), or "all"
+	filter_mode = "recent", -- Filter mode: "recent" (3 months), "week" (this week), or "all"
+	sort_mode = "access"    -- Sort mode: "access" (by last access time), "name" (by filename), "date" (by date in filename)
 }
 
 -- Create a new note with given subject
@@ -1411,24 +1424,65 @@ M.note_finder = function()
 			::continue::
 		end
 		
-		-- Sort entries by date (latest first)
-		table.sort(entries, function(a, b)
-			return a.timestamp > b.timestamp
-		end)
+		-- Get file tracker for sorting by access time
+		local file_tracker = require("parley.file_tracker")
 		
-		-- Prepare prompt title with filter mode info
+		-- Check if telescope-frecency is available
+		local has_frecency = pcall(require, "telescope._extensions.frecency")
+		
+		-- Sort entries based on sort mode
+		if M._note_finder.sort_mode == "access" then
+			-- Sort by access time using file_tracker
+			if has_frecency then
+				M.logger.debug("Frecency plugin detected, but using our own access tracking for consistency")
+			end
+			
+			table.sort(entries, function(a, b)
+				local a_access_time = file_tracker.get_last_access_time(a.value)
+				local b_access_time = file_tracker.get_last_access_time(b.value)
+				-- If access times are equal, fall back to timestamp
+				if a_access_time == b_access_time then
+					return a.timestamp > b.timestamp
+				end
+				return a_access_time > b_access_time
+			end)
+		elseif M._note_finder.sort_mode == "name" then
+			-- Sort by filename
+			table.sort(entries, function(a, b)
+				return a.ordinal < b.ordinal
+			end)
+		else
+			-- Default: sort by date (latest first)
+			table.sort(entries, function(a, b)
+				return a.timestamp > b.timestamp
+			end)
+		end
+		
+		-- Prepare prompt title with filter mode and sort mode info
 		local prompt_title
+		local filter_info = ""
 		if filter_type == "recent" then
-			prompt_title = string.format("Notes (Last %d Months)", recency_config.months)
+			filter_info = string.format("Last %d Months", recency_config.months)
 		elseif filter_type == "week" then
 			-- Use the same start and end times we calculated for filtering
 			local sunday_date = os.date("%b %d", M._note_finder.week_start_time)
 			local saturday_date = os.date("%b %d", M._note_finder.week_end_time)
 			
-			prompt_title = string.format("Notes (This Week: %s - %s)", sunday_date, saturday_date)
+			filter_info = string.format("This Week: %s - %s", sunday_date, saturday_date)
 		else
-			prompt_title = "Notes (All)"
+			filter_info = "All"
 		end
+		
+		local sort_info = ""
+		if M._note_finder.sort_mode == "access" then
+			sort_info = "Sort: Recent Access"
+		elseif M._note_finder.sort_mode == "name" then
+			sort_info = "Sort: Name"
+		else
+			sort_info = "Sort: Date"
+		end
+		
+		prompt_title = string.format("Notes (%s, %s)", filter_info, sort_info)
 		
 		-- Create picker
 		pickers.new({
@@ -1486,6 +1540,47 @@ M.note_finder = function()
 					-- Update state file to persist filter mode
 					M.refresh_state({
 						note_finder_filter_mode = M._note_finder.filter_mode
+					})
+					
+					actions.close(prompt_bufnr)
+					M._note_finder.opened = false
+					M.note_finder() -- Reopen with new settings
+				end)
+				
+				-- Add keybinding to toggle sort mode (<C-s>)
+				map("i", "<C-s>", function()
+					-- Cycle through sort modes
+					if M._note_finder.sort_mode == "access" then
+						M._note_finder.sort_mode = "date"
+					elseif M._note_finder.sort_mode == "date" then
+						M._note_finder.sort_mode = "name"
+					else
+						M._note_finder.sort_mode = "access"
+					end
+					
+					-- Update state file to persist sort mode
+					M.refresh_state({
+						note_finder_sort_mode = M._note_finder.sort_mode
+					})
+					
+					actions.close(prompt_bufnr)
+					M._note_finder.opened = false
+					M.note_finder() -- Reopen with new settings
+				end)
+				
+				map("n", "<C-s>", function()
+					-- Cycle through sort modes
+					if M._note_finder.sort_mode == "access" then
+						M._note_finder.sort_mode = "date"
+					elseif M._note_finder.sort_mode == "date" then
+						M._note_finder.sort_mode = "name"
+					else
+						M._note_finder.sort_mode = "access"
+					end
+					
+					-- Update state file to persist sort mode
+					M.refresh_state({
+						note_finder_sort_mode = M._note_finder.sort_mode
 					})
 					
 					actions.close(prompt_bufnr)
