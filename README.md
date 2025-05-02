@@ -312,39 +312,6 @@ chat_finder_mappings = {
 
 This feature helps manage growing collections of chat files and quickly locate relevant conversations without overwhelming the finder with old, rarely used transcripts.
 
-# Note Sorting and Access Tracking
-
-The note finder includes an intelligent sorting system to help you find your most relevant notes based on your actual usage patterns:
-
-## Configuration
-
-```lua
--- Note finder recency filtering configuration
-notes_finder_recency = {
-    -- Enable recency filtering by default
-    filter_by_default = true,
-    -- Default recency period in months
-    months = 3,
-},
-
--- Configure the initial sort mode for notes (defaults to "access")
-M._note_finder = {
-    sort_mode = "access"  -- Options: "access" (by last access time), "name" (by filename), "date" (by date in filename)
-},
-```
-
-## How It Works
-
-1. **Access Time Tracking**: The plugin automatically tracks when you open notes, helping prioritize frequently accessed notes
-2. **Intelligent Sorting**: Notes can be sorted in three ways:
-   - By access time (most recently accessed first)
-   - By filename (alphabetically)
-   - By date in the filename (newest first)
-3. **Easy Toggling**: Press `<C-s>` in the note finder to cycle between sorting modes
-4. **Filter Modes**: Just like with chat files, you can filter notes by recency with `<C-a>` to toggle between recent notes, notes from this week, and all notes
-5. **Persistent Settings**: Your preferred sort mode is saved between Neovim sessions
-
-With this feature, your most relevant notes naturally rise to the top, making it easier to maintain context and continue work on your active notes.
 
 # Chat Memory Management
 

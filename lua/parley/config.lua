@@ -191,7 +191,6 @@ local config = {
 	global_shortcut_add_chat_ref = { modes = { "n", "i" }, shortcut = "<C-g>a" },
 	-- global shortcuts for note taking
 	global_shortcut_note_new = { modes = { "n", "i" }, shortcut = "<C-n>n" },
-	global_shortcut_note_finder = { modes = { "n", "i" }, shortcut = "<C-n>f" },
 	global_shortcut_year_root = { modes = { "n", "i" }, shortcut = "<C-n>r" },
 	-- shortcut for opening oil.nvim file explorer
 	global_shortcut_oil = { modes = { "n" }, shortcut = "<leader>fo" },
@@ -208,13 +207,7 @@ local config = {
 		-- Default recency period in months
 		months = 3,
 	},
-	-- note finder recency filtering configuration
-	notes_finder_recency = {
-		-- Enable recency filtering by default
-		filter_by_default = true,
-		-- Default recency period in months
-		months = 3,
-	},
+	
 	-- if true, finished ChatResponder won't move the cursor to the end of the buffer
 	chat_free_cursor = true,
 	-- use prompt buftype for chats (:h prompt-buffer)
