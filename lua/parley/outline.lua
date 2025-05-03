@@ -12,6 +12,86 @@ local function reverse(tbl)
   return new_tbl
 end
 
+-- Function to determine if a line is inside a code block
+-- Uses a smarter approach with a memo table to avoid recalculating
+-- code block states for the same line numbers repeatedly
+local function is_in_code_block(bufnr, line_number, memo)
+  memo = memo or {}
+  
+  -- If we've already calculated this line, return the cached result
+  if memo[line_number] ~= nil then
+    return memo[line_number]
+  end
+  
+  -- Code block delimiters
+  local code_block_delimiters = {
+    ["```"] = true,
+    ["~~~"] = true,
+  }
+  
+  -- For line 1, we know we're not in a code block
+  if line_number <= 1 then
+    memo[line_number] = false
+    return false
+  end
+  
+  -- Get the state from the previous line
+  local prev_line_state = is_in_code_block(bufnr, line_number - 1, memo)
+  
+  -- Check if current line toggles the code block state
+  local line_content = vim.api.nvim_buf_get_lines(bufnr, line_number - 1, line_number, false)[1] or ""
+  local toggle_state = false
+  
+  for delimiter in pairs(code_block_delimiters) do
+    if line_content:match("^%s*" .. vim.pesc(delimiter)) then
+      toggle_state = true
+      break
+    end
+  end
+  
+  -- Calculate current state based on previous line state and toggle
+  local current_state = prev_line_state
+  if toggle_state then
+    current_state = not prev_line_state
+  end
+  
+  -- Cache the result
+  memo[line_number] = current_state
+  return current_state
+end
+
+-- Function to check if a line should be included in the outline
+-- Returns: boolean (should be included), string (type), string (formatted content)
+local function is_outline_item(bufnr, line_number, config, code_block_memo)
+  -- Skip lines in code blocks
+  if is_in_code_block(bufnr, line_number, code_block_memo) then
+    return false, nil, nil
+  end
+  
+  -- Get the line content
+  local line = vim.api.nvim_buf_get_lines(bufnr, line_number - 1, line_number, false)[1] or ""
+  
+  -- Check different types of outline items
+  local user_prefix = config.chat_user_prefix
+  
+  -- Match questions (using configured user prefix)
+  if line:match("^" .. vim.pesc(user_prefix)) then
+    return true, "question", "  " .. line
+  -- Match top-level headers
+  elseif line:match("^# ") then
+    return true, "header1", "🧭 " .. string.sub(line, 3)
+  -- Match second-level headers
+  elseif line:match("^## ") then
+    return true, "header2", "• " .. string.sub(line, 4)
+  -- Match annotations
+  elseif line:match("^@.+@$") then
+    return true, "annotation", "→ " .. string.sub(line, 2, -2)
+  end
+  
+  -- Not an outline item
+  return false, nil, nil
+end
+
 -- Create a Telescope picker to navigate questions and headings in the current buffer
 function M.question_picker(config)
   -- Check if telescope is available
@@ -53,23 +133,16 @@ function M.question_picker(config)
   -- Get configured user prefix
   local user_prefix = config.chat_user_prefix
   
+  -- Create a memo table for code block state calculations
+  local code_block_memo = {}
+  
   -- Scan the buffer for headers and questions
   local line_count = vim.api.nvim_buf_line_count(current_bufnr)
   for i = 1, line_count do
-    local line = vim.api.nvim_buf_get_lines(current_bufnr, i - 1, i, false)[1]
+    local is_item, item_type, formatted_line = is_outline_item(current_bufnr, i, config, code_block_memo)
     
-    -- Match questions (using configured user prefix)
-    if line:match("^" .. vim.pesc(user_prefix)) then
-      table.insert(lines, { line = "  " .. line, lnum = i })
-    -- Match top-level headers
-    elseif line:match("^# ") then
-      table.insert(lines, { line = "🧭 " .. string.sub(line, 3), lnum = i })
-    -- Match second-level headers
-    elseif line:match("^## ") then
-      table.insert(lines, { line = "• " .. string.sub(line, 4), lnum = i })
-    -- Match annotations
-    elseif line:match("^@.+@$") then
-      table.insert(lines, { line = "→ " .. string.sub(line, 2, -2), lnum = i })
+    if is_item then
+      table.insert(lines, { line = formatted_line, lnum = i, type = item_type })
     end
   end
 
@@ -138,6 +211,8 @@ function M.question_picker(config)
             vim.notify("Target buffer " .. target_buf .. " is no longer valid after Telescope closed", vim.log.levels.ERROR)
             return
           end
+
+		  -- TODO: this looks overly complex.
           
           -- Verify the selected line number is valid
           local line_count = vim.api.nvim_buf_line_count(target_buf)
@@ -146,11 +221,11 @@ function M.question_picker(config)
           -- Log current state
           vim.notify("Navigating to line " .. safe_lnum .. " in buffer " .. target_name, vim.log.levels.DEBUG)
           
-          -- Verify the line actually contains what we expect (heading or user prompt)
-          local line_content = vim.api.nvim_buf_get_lines(target_buf, safe_lnum - 1, safe_lnum, false)[1] or ""
-          local is_valid_line = line_content:match("^#") or 
-                               line_content:match("^" .. vim.pesc(config.chat_user_prefix)) or
-                               line_content:match("^@.+@$")
+          -- Create a memo table for code block state calculations
+          local code_block_memo = {}
+          
+          -- Check if the line is a valid outline item
+          local is_valid_line, _, _ = is_outline_item(target_buf, safe_lnum, config, code_block_memo)
           
           -- If the line doesn't match what we expect, try to find the closest match
           if not is_valid_line then
@@ -159,10 +234,9 @@ function M.question_picker(config)
               if offset ~= 0 then
                 local test_lnum = safe_lnum + offset
                 if test_lnum > 0 and test_lnum <= line_count then
-                  local test_content = vim.api.nvim_buf_get_lines(target_buf, test_lnum - 1, test_lnum, false)[1] or ""
-                  if test_content:match("^#") or 
-                     test_content:match("^" .. vim.pesc(config.chat_user_prefix)) or
-                     test_content:match("^@.+@$") then
+                  -- Check if this line is a valid outline item
+                  local is_item, _, _ = is_outline_item(target_buf, test_lnum, config, code_block_memo)
+                  if is_item then
                     safe_lnum = test_lnum
                     is_valid_line = true
                     break
