@@ -84,7 +84,7 @@ local function is_outline_item(bufnr, line_number, config, code_block_memo)
   elseif line:match("^## ") then
     return true, "header2", "• " .. string.sub(line, 4)
   -- Match annotations
-  elseif line:match("^@.+@$") then
+  elseif line:match("^@@.+@@$") then
     return true, "annotation", "→ " .. string.sub(line, 2, -2)
   end
   
