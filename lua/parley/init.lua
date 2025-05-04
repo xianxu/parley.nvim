@@ -1603,28 +1603,16 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 				
 				-- Handle provider-specific file reference processing for questions with file references
 				if exchange.question.file_references and #exchange.question.file_references > 0 then
-					-- Use agent_info to determine if we're using nthropic/Claude
-					local is_anthropic = (agent_info.provider == "anthropic" or agent_info.provider == "claude")
-										
-					if is_anthropic then
-						M.logger.debug("Using Anthropic-specific handling for file references")
-						-- Create system message with extracted file contents
-						local original_question = exchange.question.content
-						
-						-- For Anthropic/Claude with file references:
-						-- 1. Insert a system message with processed file contents and cache_control
-						table.insert(messages, { 
-							role = "system", 
-							content = file_content .. "\n",
-							cache_control = { type = "ephemeral" }
-						})
-						
-						-- 2. Keep the original question intact
-						table.insert(messages, { role = "user", content = original_question })
-					else
-						-- For all other providers, put the processed content in user message
-						table.insert(messages, { role = "user", content = question_content })
-					end
+				    -- split user question with file inclusion (@@ pattern) into two messages.
+	                -- a system message that contains file content. and a user message containing the question.
+	                -- the cache-control key is only needed for Anthropic, but since it doesn't cause problem
+	                -- with Google or OpenAI, I'll leave it here.
+					table.insert(messages, { 
+						role = "system", 
+						content = file_content .. "\n",
+						cache_control = { type = "ephemeral" }
+					})
+					table.insert(messages, { role = "user", content = question_content })
 				else
 					-- No file references, just add the question as user message
 					table.insert(messages, { role = "user", content = question_content })
