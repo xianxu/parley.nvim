@@ -398,72 +398,30 @@ _H.file_to_table = function(file_path)
 	return tbl
 end
 
----@param date_str string # Date string in format YYYY-MM-DD
----@return number # Week number (Sunday-based)
 _H.get_week_number_sunday_based = function(date_str)
-    -- Ensure we have a valid date string
-    if not date_str or type(date_str) ~= "string" then
-        logger.error("Invalid date input: " .. tostring(date_str))
-        return 1 -- Return week 1 as fallback
-    end
-    
-    -- Parse "YYYY-MM-DD" into year, month, day
-    local year, month, day = date_str:match("(%d+)%-(%d+)%-(%d+)")
-    year, month, day = tonumber(year), tonumber(month), tonumber(day)
-    
-    if not year or not month or not day then
-        logger.error("Invalid date format '" .. date_str .. "'. Expected 'YYYY-MM-DD'")
-        
-        -- Try to recover with current date as fallback
-        local current = os.date("*t")
-        year, month, day = current.year, current.month, current.day
-    end
-    
-    -- Validate date components
-    month = math.min(math.max(month, 1), 12) -- Ensure month is between 1-12
-    day = math.min(math.max(day, 1), 31)     -- Ensure day is between 1-31
-    
-    -- Convert to time with safety checks
-    -- Make sure values are valid to prevent errors
-    year = tonumber(year) or os.date("*t").year
-    month = tonumber(month) or 1
-    day = tonumber(day) or 1
-    
-    -- Clamp values to valid ranges
-    month = math.min(math.max(1, month), 12)
-    
-    -- Make sure day is valid for the given month
-    local month_days = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
-    -- Adjust for leap year
-    if month == 2 and (year % 4 == 0 and (year % 100 ~= 0 or year % 400 == 0)) then
-        month_days[2] = 29
-    end
-    day = math.min(math.max(1, day), month_days[month])
-    
-    -- Get timestamps
-    local time = os.time({year=year, month=month, day=day})
-    if not time then
-        logger.error("Invalid date: " .. year .. "-" .. month .. "-" .. day)
-        return 1 -- Default to week 1 on error
-    end
-    
-    local jan1 = os.time({year=year, month=1, day=1})
-    if not jan1 then
-        logger.error("Invalid January 1st date: " .. year .. "-1-1")
-        return 1 -- Default to week 1 on error
-    end
-    
-    local jan1_wday = tonumber(os.date("%w", jan1)) or 0  -- 0=Sunday, add fallback
-    
-    -- Sunday on or before Jan 1
-    local week1_start = jan1 - jan1_wday * 24 * 60 * 60
-    local days_since = math.floor((time - week1_start) / (24 * 60 * 60))
-    local week_number = math.floor(days_since / 7) + 1
-    
-    -- Ensure week number is positive and reasonable
-    week_number = math.max(1, math.min(53, week_number))
-    
-    return week_number
+  local function is_leap(year)
+    return (year % 4 == 0 and year % 100 ~= 0) or (year % 400 == 0)
+  end
+
+  -- parse "YYYY-MM-DD"
+  local y, m, d = date_str:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)$")
+  local year, month, day = tonumber(y), tonumber(m), tonumber(d)
+
+  -- days in each month, adjust February for leap years
+  local days_in_month = {31,28,31,30,31,30,31,31,30,31,30,31}
+  if is_leap(year) then days_in_month[2] = 29 end
+
+  -- compute zero-based day-of-year
+  local day_index = day - 1
+  for i = 1, month - 1 do
+    day_index = day_index + days_in_month[i]
+  end
+
+  -- weekday of Jan 1 (0=Sunday…6=Saturday)
+  local jan1_wday = os.date("*t", os.time{ year=year, month=1, day=1 }).wday - 1
+
+  -- week number = floor((day_index + offset) / 7) + 1
+  return math.floor((day_index + jan1_wday) / 7) + 1
 end
 
 ---@param dir string # directory to prepare
