@@ -102,12 +102,11 @@ local config = {
 		},
 		{
 			provider = "openai",
-			name = "ChatGPT-o3-mini",
+			name = "ChatGPT-4o-search",
 			-- string with model name or table with model name and parameters
-			model = { model = "o3-mini", temperature = 1.1, top_p = 1 },
+			model = { model = "gpt-4o-search-preview", temperature = 1.1, top_p = 1 },
 			-- system prompt (use this to specify the persona/role of the AI)
 			system_prompt = require("parley.defaults").chat_system_prompt,
-            disable = true,
 		},
 		{
 			provider = "anthropic",

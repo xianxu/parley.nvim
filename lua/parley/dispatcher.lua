@@ -201,7 +201,7 @@ D.prepare_payload = function(messages, model, provider)
 		}
 	}
 
-	if (provider == "openai" or provider == "copilot") and model.model:sub(1, 1) == "o" then
+	if (provider == "openai" or provider == "copilot") and (model.model:sub(1, 1) == "o" or model.model == "gpt-4o-search-preview") then
 		if model.model:sub(1, 2) == "o3" then
 			output.reasoning_effort = model.reasoning_effort or "medium"
 		end
