@@ -1108,6 +1108,22 @@ M.cmd.NoteNew = function()
 	end)
 end
 
+-- Internal helper: create a note file with a title and metadata (array of {key, value})
+M._create_note_file = function(filename, title, metadata)
+	local lines = {}
+	table.insert(lines, "# " .. title)
+	table.insert(lines, "")
+	for _, kv in ipairs(metadata) do
+		table.insert(lines, kv[1] .. ": " .. kv[2])
+		table.insert(lines, "")
+	end
+	vim.fn.writefile(lines, filename)
+	local buf = M.open_buf(filename)
+	vim.api.nvim_command("normal! G")
+	vim.api.nvim_command("startinsert")
+	return buf
+end
+
 -- Function to find notes using telescope
 
 -- Variable to store state for NoteFinder
@@ -1130,6 +1146,27 @@ M.new_note = function(subject)
 	-- Parse date from subject if provided in one of the formats:
 	-- "YYYY-MM-DD subject" or "MM-DD subject" or "DD subject"
 	local original_subject = subject
+		-- Special-case: if the first word matches a directory under notes_root (including subfolders), create note there without date prefix
+		do
+			local head, rest = original_subject:match("^(%S+)%s+(.+)$")
+			if head and rest then
+				local notes_root = M.config.notes_dir
+				local p = notes_root .. "/" .. head
+				local target_dir = nil
+				if vim.fn.isdirectory(p) == 1 then
+					target_dir = p
+				end
+				if target_dir then
+					local slug = rest:gsub(" ", "-")
+					local filename = target_dir .. "/" .. slug .. ".md"
+					-- Create the note using helper (no week metadata)
+					local y = string.format("%04d", current_date.year)
+					local mon = string.format("%02d", current_date.month)
+					local d = string.format("%02d", current_date.day)
+					return M._create_note_file(filename, rest, {{ "Date", y .. "-" .. mon .. "-" .. d }})
+				end
+			end
+		end
 	local date_pattern1 = "^(%d%d%d%d)%-(%d%d)%-(%d%d)%s+(.+)$" -- YYYY-MM-DD
 	local date_pattern2 = "^(%d%d)%-(%d%d)%s+(.+)$" -- MM-DD
 	local date_pattern3 = "^(%d%d)%s+(.+)$" -- DD
@@ -1186,25 +1223,10 @@ M.new_note = function(subject)
 	-- Create filename
 	local filename = week_dir .. "/" .. day .. "-" .. subject .. ".md"
 	
-	-- Create empty note file with a title
-	local content = "# " .. subject:gsub("-", " ") .. "\n\n"
-	-- Always add date metadata to note content
-	content = content .. "Date: " .. year .. "-" .. month .. "-" .. day .. "\n\n"
-	content = content .. "Week: " .. week_folder .. "\n\n"
-	
-	-- Write file
-	vim.fn.writefile(vim.split(content, "\n"), filename)
-	
-	-- Open the file
-	local buf = M.open_buf(filename)
-	
-	-- Move cursor to end of file
-	vim.api.nvim_command("normal! G")
-	
-	-- Enter insert mode
-	vim.api.nvim_command("startinsert")
-	
-	return buf
+    -- Create note stub with date and week metadata
+    local title = subject:gsub("-", " ")
+    local date_str = year .. "-" .. month .. "-" .. day
+    return M._create_note_file(filename, title, {{ "Date", date_str }, { "Week", week_folder }})
 end
 
 M.cmd.ChatDelete = function()
