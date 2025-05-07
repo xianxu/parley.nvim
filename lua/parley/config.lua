@@ -140,6 +140,15 @@ local config = {
 		},
 		{
 			provider = "googleai",
+			name = "Gemini2.5-Pro",
+			-- model list: https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash
+			-- string with model name or table with model name and parameters
+			model = { model = "gemini-2.5-pro-preview-05-06", temperature = 1.1, top_p = 1 },
+			-- system prompt (use this to specify the persona/role of the AI)
+			system_prompt = require("parley.defaults").chat_system_prompt,
+		},
+		{
+			provider = "googleai",
 			name = "Gemini2.5-Flash",
 			-- model list: https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash
 			-- string with model name or table with model name and parameters
@@ -189,7 +198,7 @@ local config = {
 	-- shortcut for adding chat references in markdown files
 	global_shortcut_add_chat_ref = { modes = { "n", "i" }, shortcut = "<C-g>a" },
 	-- global shortcuts for note taking
-	global_shortcut_note_new = { modes = { "n", "i" }, shortcut = "<C-n>n" },
+	global_shortcut_note_new = { modes = { "n", "i" }, shortcut = "<C-n>c" },
 	global_shortcut_year_root = { modes = { "n", "i" }, shortcut = "<C-n>r" },
 	-- shortcut for opening oil.nvim file explorer
 	global_shortcut_oil = { modes = { "n" }, shortcut = "<leader>fo" },
