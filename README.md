@@ -72,7 +72,7 @@ Each chat transcript is really just a markdown file, with some additional conven
    - Execute code block in terminal: With your cursor inside a code block, press `<leader>gx` to run the code in a split terminal window
    - Copy terminal output: After executing a code block with `<leader>gx`, press `<leader>gc` while in the terminal buffer to copy the entire terminal output to the clipboard
    - Copy terminal output from chat: Press `<leader>ge` from your chat buffer to copy the output from the last terminal session (useful when the terminal is no longer visible or you've returned to the chat)
-   - Compare code block versions: Press `<leader>gd` on a code block with a filename attribute (`file="filename"`) to compare it with a previous version of the same file in the chat
+   - Compare code block versions: Press `<leader>gd` on a code block with a filename attribute (`file="filename"`) to compare it with a previous version of the same file in the chat (press `q` to close the diff view)
    - Repeat last command: Press `<leader>g!` to repeat the last set of commands you ran with `<leader>gx` in a new terminal window
 
 With this, any question asked is associated with context of all questions and answers coming before this question. When the chat gets too long and the chat_memory is enabled, chat exchanges earlier in the transcript will be represented by the concatenation of their summary lines (📝:).

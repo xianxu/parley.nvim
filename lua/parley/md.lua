@@ -508,30 +508,49 @@ function M.display_diff()
     vim.api.nvim_buf_set_option(bufnr, "swapfile", false)
     vim.api.nvim_buf_set_option(bufnr, "modifiable", false)
     
-    -- Auto-delete the buffer when it's hidden
-    vim.api.nvim_create_autocmd("BufHidden", {
-      buffer = bufnr,
-      callback = function()
-        if vim.api.nvim_buf_is_valid(bufnr) then
-          vim.api.nvim_buf_delete(bufnr, { force = true })
-        end
-      end,
-    })
+    -- Add keymapping to close diff view with 'q'
+    vim.api.nvim_buf_set_keymap(bufnr, 'n', 'q', ':tabclose<CR>', 
+      { noremap = true, silent = true, desc = "Close diff view" })
+    
+    -- We'll rely on Neovim's built-in methods to delete these buffers
+    -- as autocmd BufHidden can cause issues when both buffers are hidden
+    -- at the same time when the tab is closed
   end
   
-  -- Clean up temp files when the tab is closed
-  local cleanup_group = vim.api.nvim_create_augroup("ParleyDiffCleanup", { clear = true })
+  -- Add a helpful message about closing the diff
+  print("✅ Showing diff for file: " .. filename .. " (press 'q' to close)")
+  
+  -- Get the current tab number for cleanup
+  local tab_nr = vim.fn.tabpagenr()
+  
+  -- Register tab-global variables to track resources for cleanup
+  vim.t.parley_diff_temp_dir = temp_dir
+  vim.t.parley_diff_file_a = file_a  
+  vim.t.parley_diff_file_b = file_b
+  vim.t.parley_diff_buffers = {buf1, buf2}
+  
+  -- Clean up temp files when the specific tab is closed
+  local cleanup_group = vim.api.nvim_create_augroup("ParleyDiffCleanup_" .. tab_nr, { clear = true })
   vim.api.nvim_create_autocmd("TabClosed", {
     group = cleanup_group,
-    pattern = "*",
+    pattern = tostring(tab_nr),
     callback = function()
+      -- Delete temp files
       vim.fn.delete(file_a)
       vim.fn.delete(file_b)
       vim.fn.delete(temp_dir, "rf")
+      
+      -- Try to delete buffers if they're still valid
+      for _, buf in ipairs({buf1, buf2}) do
+        if vim.api.nvim_buf_is_valid(buf) then
+          pcall(vim.api.nvim_buf_delete, buf, { force = true })
+        end
+      end
+      
+      -- Also remove the augroup itself since we don't need it anymore
+      pcall(vim.api.nvim_del_augroup_by_name, "ParleyDiffCleanup_" .. tab_nr)
     end,
   })
-  
-  print("✅ Showing diff for file: " .. filename)
 end
 
 return M
