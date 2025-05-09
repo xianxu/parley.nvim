@@ -56,7 +56,98 @@ M._last_cwd = nil
 M._last_term_buf = nil
 M._last_term_win = nil
 
---	Function to check if a line is a code block
+-- Helper function to extract code block content
+local function extract_code_block(bufnr, start_line, end_line)
+  if not start_line or not end_line or end_line <= start_line then
+    return nil
+  end
+  
+  -- Extract code block contents (excluding ``` lines)
+  local code_lines = {}
+  for i = start_line + 1, end_line - 1 do
+    local line = vim.api.nvim_buf_get_lines(bufnr, i - 1, i, false)[1]
+    table.insert(code_lines, line)
+  end
+  
+  return code_lines
+end
+
+-- Helper function to find a code block header and its closing marker
+local function find_code_block_bounds(bufnr, line_number, direction)
+  local lines = vim.api.nvim_buf_line_count(bufnr)
+  local start_line, end_line
+  
+  -- Find the opening marker (```language)
+  local start_pattern = "^%s*```%S+"
+  local current_line = vim.api.nvim_buf_get_lines(bufnr, line_number - 1, line_number, false)[1]
+  if current_line:match(start_pattern) then
+    start_line = line_number
+  else
+    -- Search upward for the start marker
+    for i = line_number - 1, 1, -1 do
+      local line = vim.api.nvim_buf_get_lines(bufnr, i - 1, i, false)[1]
+      if line:match(start_pattern) then
+        start_line = i
+        break
+      end
+    end
+  end
+  
+  if not start_line then
+    return nil, nil, "No code block start found"
+  end
+  
+  -- Find the closing marker (```)
+  for i = start_line + 1, lines do
+    local line = vim.api.nvim_buf_get_lines(bufnr, i - 1, i, false)[1]
+    if line:match("^%s*```%s*$") then
+      end_line = i
+      break
+    end
+  end
+  
+  if not end_line then
+    return start_line, nil, "No code block end found"
+  end
+  
+  return start_line, end_line, nil
+end
+
+-- Function to find a previous code block with the same filename
+local function find_previous_code_block(bufnr, current_start_line, filename)
+  -- Start from the line before the current code block
+  for i = current_start_line - 1, 1, -1 do
+    local line = vim.api.nvim_buf_get_lines(bufnr, i - 1, i, false)[1]
+    
+    -- Check if line is a code block start with a file attribute
+    if line:match("^%s*```%S+") and line:match('file="([^"]+)"') then
+      local block_filename = line:match('file="([^"]+)"')
+      
+      -- If the filename matches what we're looking for
+      if block_filename == filename then
+        -- Find the end of this code block
+        local prev_start_line = i
+        local prev_end_line
+        
+        for j = prev_start_line + 1, current_start_line - 1 do
+          local end_line = vim.api.nvim_buf_get_lines(bufnr, j - 1, j, false)[1]
+          if end_line:match("^%s*```%s*$") then
+            prev_end_line = j
+            break
+          end
+        end
+        
+        if prev_end_line then
+          return prev_start_line, prev_end_line
+        end
+      end
+    end
+  end
+  
+  return nil, nil
+end
+
+-- Function to check if a line is a code block
 function M.save_markdown_code_block()
   local bufnr = vim.api.nvim_get_current_buf()
   local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
@@ -307,6 +398,140 @@ function M.copy_terminal_output()
       end
     end, 200)
   end
+end
+
+-- Function to display diff between code blocks with same filename
+function M.display_diff()
+  local bufnr = vim.api.nvim_get_current_buf()
+  local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
+  
+  -- 1. Find code block under cursor and check if it has a filename
+  local current_start_line, current_end_line, error_msg = find_code_block_bounds(bufnr, cursor_line, "up")
+  
+  if error_msg then
+    print("❌ " .. error_msg)
+    return
+  end
+  
+  -- Get the first line of the code block to extract filename
+  local header_line = vim.api.nvim_buf_get_lines(bufnr, current_start_line - 1, current_start_line, false)[1]
+  local filename = header_line:match('file="([^"]+)"')
+  
+  if not filename then
+    print("❌ Current code block doesn't have a filename. Add file=\"filename\" to the code fence.")
+    return
+  end
+  
+  -- 2. Search for a previous code block with the same filename
+  local prev_start_line, prev_end_line = find_previous_code_block(bufnr, current_start_line, filename)
+  
+  if not prev_start_line or not prev_end_line then
+    print("❌ No previous code block found with filename: " .. filename)
+    return
+  end
+  
+  -- 3. Extract content from both code blocks
+  local current_content = extract_code_block(bufnr, current_start_line, current_end_line)
+  local previous_content = extract_code_block(bufnr, prev_start_line, prev_end_line)
+  
+  if not current_content or not previous_content then
+    print("❌ Failed to extract code block content")
+    return
+  end
+  
+  -- 4. Create temp files for diffing
+  local temp_dir = vim.fn.tempname()
+  vim.fn.mkdir(temp_dir, "p")
+  
+  local file_a = temp_dir .. "/previous_" .. filename
+  local file_b = temp_dir .. "/current_" .. filename
+  
+  -- Write content to temp files
+  local ok_a = pcall(function()
+    local f = io.open(file_a, "w")
+    f:write(table.concat(previous_content, "\n"))
+    f:close()
+  end)
+  
+  local ok_b = pcall(function()
+    local f = io.open(file_b, "w")
+    f:write(table.concat(current_content, "\n"))
+    f:close()
+  end)
+  
+  if not (ok_a and ok_b) then
+    print("❌ Failed to create temporary files for diff")
+    return
+  end
+  
+  -- 5. Open diff view
+  vim.cmd("tabnew")
+  local win1 = vim.api.nvim_get_current_win()
+  local buf1 = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_win_set_buf(win1, buf1)
+  
+  -- Read first file content
+  local prev_content_lines = vim.fn.readfile(file_a)
+  vim.api.nvim_buf_set_lines(buf1, 0, -1, false, prev_content_lines)
+  vim.api.nvim_buf_set_name(buf1, "Previous: " .. filename)
+  
+  -- Try to detect filetype from extension
+  local extension = filename:match("%.([^%.]+)$")
+  if extension then
+    vim.api.nvim_buf_set_option(buf1, "filetype", extension)
+  end
+  
+  vim.cmd("diffthis")
+  
+  -- Create second split and buffer
+  vim.cmd("vsplit")
+  local win2 = vim.api.nvim_get_current_win() 
+  local buf2 = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_win_set_buf(win2, buf2)
+  
+  -- Read second file content
+  local curr_content_lines = vim.fn.readfile(file_b)
+  vim.api.nvim_buf_set_lines(buf2, 0, -1, false, curr_content_lines)
+  vim.api.nvim_buf_set_name(buf2, "Current: " .. filename)
+  
+  -- Apply same filetype to second buffer
+  if extension then
+    vim.api.nvim_buf_set_option(buf2, "filetype", extension)
+  end
+  
+  vim.cmd("diffthis")
+  
+  -- Make these buffers read-only and temporary
+  for _, bufnr in ipairs({buf1, buf2}) do
+    vim.api.nvim_buf_set_option(bufnr, "readonly", true)
+    vim.api.nvim_buf_set_option(bufnr, "buftype", "nofile")
+    vim.api.nvim_buf_set_option(bufnr, "swapfile", false)
+    vim.api.nvim_buf_set_option(bufnr, "modifiable", false)
+    
+    -- Auto-delete the buffer when it's hidden
+    vim.api.nvim_create_autocmd("BufHidden", {
+      buffer = bufnr,
+      callback = function()
+        if vim.api.nvim_buf_is_valid(bufnr) then
+          vim.api.nvim_buf_delete(bufnr, { force = true })
+        end
+      end,
+    })
+  end
+  
+  -- Clean up temp files when the tab is closed
+  local cleanup_group = vim.api.nvim_create_augroup("ParleyDiffCleanup", { clear = true })
+  vim.api.nvim_create_autocmd("TabClosed", {
+    group = cleanup_group,
+    pattern = "*",
+    callback = function()
+      vim.fn.delete(file_a)
+      vim.fn.delete(file_b)
+      vim.fn.delete(temp_dir, "rf")
+    end,
+  })
+  
+  print("✅ Showing diff for file: " .. filename)
 end
 
 return M

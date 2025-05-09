@@ -31,7 +31,7 @@ Parley is a streamlined LLM chat plugin for Neovim, focusing exclusively on prov
 - **Streamlined Chat Experience**
   - Markdown-formatted chat transcripts with syntax highlighting
   - Question/response highlighting with custom colors
-  - Navigate chat Q&A exchanges using Telescope outline
+  - Navigate chat Q&A exchanges and code blocks using Telescope outline
   - Easy keybindings for creating and managing chats
 - **Streaming responses**
   - No spinner wheel and waiting for the full answer
@@ -345,6 +345,7 @@ The following local keybindings are available within chat buffers by default:
   <leader>gx   Run Code Block                    Run code block in a terminal
   <leader>gc   Copy Terminal Output              Copy entire terminal output to clipboard (used in terminal window)
   <leader>ge   Copy Terminal Output (from chat)  Copy entire terminal output to clipboard (used from chat buffer)
+  <leader>gd   Show Code Block Diff              Compare current code block with previous version of same file
   <leader>g!   Repeat Last Command               Re-run the last executed terminal commands
   ----------------------------------------------------------------------------------------------
 

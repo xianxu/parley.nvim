@@ -529,6 +529,11 @@ M.prep_chat = function(buf, file_name)
 		M.helpers.set_keymap({buf}, M.config.chat_shortcut_copy_terminal_from_chat.modes,
 			M.config.chat_shortcut_copy_terminal_from_chat.shortcut, md.copy_terminal_output, "Copy terminal output from chat")
 	end
+	
+	if M.config.chat_shortcut_display_diff then
+		M.helpers.set_keymap({buf}, M.config.chat_shortcut_display_diff.modes,
+			M.config.chat_shortcut_display_diff.shortcut, md.display_diff, "Show diff between code blocks with same filename")
+	end
 	for _, rc in ipairs(range_commands) do
 		local cmd = M.config.cmd_prefix .. rc.command .. "<cr>"
 		for _, mode in ipairs(rc.modes) do
