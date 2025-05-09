@@ -195,6 +195,9 @@ local config = {
 	chat_shortcut_copy_code_block = { modes = { "n" }, shortcut = "<leader>gy" },
 	chat_shortcut_save_code_block = { modes = { "n" }, shortcut = "<leader>gs" },
 	chat_shortcut_run_code_block = { modes = { "n" }, shortcut = "<leader>gx" },
+	chat_shortcut_copy_terminal = { modes = { "n" }, shortcut = "<leader>gc" },
+	chat_shortcut_repeat_command = { modes = { "n" }, shortcut = "<leader>g!" },
+	chat_shortcut_copy_terminal_from_chat = { modes = { "n" }, shortcut = "<leader>ge" },
 	
 	-- global shortcuts (available in any buffer)
 	global_shortcut_new = { modes = { "n", "i" }, shortcut = "<C-g>c" },

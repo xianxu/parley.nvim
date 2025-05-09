@@ -343,6 +343,9 @@ The following local keybindings are available within chat buffers by default:
   <leader>gy   Copy Code Block                   Copy markdown code block to clipboard
   <leader>gs   Save Code Block                   Save markdown code block to a file 
   <leader>gx   Run Code Block                    Run code block in a terminal
+  <leader>gc   Copy Terminal Output              Copy entire terminal output to clipboard (used in terminal window)
+  <leader>ge   Copy Terminal Output (from chat)  Copy entire terminal output to clipboard (used from chat buffer)
+  <leader>g!   Repeat Last Command               Re-run the last executed terminal commands
   ----------------------------------------------------------------------------------------------
 
 These keybindings can be customized in the config file.

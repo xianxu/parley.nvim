@@ -519,6 +519,16 @@ M.prep_chat = function(buf, file_name)
 		M.helpers.set_keymap({buf}, M.config.chat_shortcut_run_code_block.modes, 
 			M.config.chat_shortcut_run_code_block.shortcut, md.run_code_block_in_terminal, "Run code block in terminal")
 	end
+	
+	if M.config.chat_shortcut_repeat_command then
+		M.helpers.set_keymap({buf}, M.config.chat_shortcut_repeat_command.modes,
+			M.config.chat_shortcut_repeat_command.shortcut, md.repeat_last_command, "Repeat last terminal command")
+	end
+	
+	if M.config.chat_shortcut_copy_terminal_from_chat then
+		M.helpers.set_keymap({buf}, M.config.chat_shortcut_copy_terminal_from_chat.modes,
+			M.config.chat_shortcut_copy_terminal_from_chat.shortcut, md.copy_terminal_output, "Copy terminal output from chat")
+	end
 	for _, rc in ipairs(range_commands) do
 		local cmd = M.config.cmd_prefix .. rc.command .. "<cr>"
 		for _, mode in ipairs(rc.modes) do
