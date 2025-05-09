@@ -326,6 +326,27 @@ Inspects the GPT prompt plugin object in a new scratch buffer.
 There are no default global shortcuts to mess with your own config. Below are
 examples for you to adjust or just use directly.
 
+CHAT BUFFER KEYBINDINGS                            *parley.nvim-chat-keybindings*
+
+The following local keybindings are available within chat buffers by default:
+
+  ----------------------------------------------------------------------------------------------
+  Keybinding   Action                            Description
+  ------------ --------------------------------- --------------------------------------------- 
+  <C-g><C-g>   Chat Respond                      Request a response at the cursor position
+  <C-g>G       Chat Respond All                  Request a response for entire chat history
+  <C-g>d       Delete Chat                       Delete the current chat file
+  <C-g>s       Stop                              Stop generation of current response
+  <C-g>a       Agent                             Change the current agent/model
+  <C-g>n       Search                            Search within the chat
+  <C-g>o       Open File                         Open linked file reference
+  <leader>gy   Copy Code Block                   Copy markdown code block to clipboard
+  <leader>gs   Save Code Block                   Save markdown code block to a file 
+  <leader>gx   Run Code Block                    Run code block in a terminal
+  ----------------------------------------------------------------------------------------------
+
+These keybindings can be customized in the config file.
+
 
 NATIVE                                                        *parley.nvim-native*
 

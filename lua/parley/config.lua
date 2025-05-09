@@ -123,7 +123,7 @@ local config = {
 			model = { model = "claude-3-5-haiku-latest", temperature = 0.8, top_p = 1 },
 			-- system prompt (use this to specify the persona/role of the AI)
 			system_prompt = require("parley.defaults").chat_system_prompt,
-		},
+	    },
 		{
 			provider = "ollama",
 			name = "ChatOllamaLlama3.1-8B",
@@ -191,6 +191,10 @@ local config = {
 	chat_shortcut_agent = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>a" },
 	chat_shortcut_search = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>n" },
 	chat_shortcut_open_file = { modes = { "n", "i" }, shortcut = "<C-g>o" },
+	-- markdown code block shortcuts
+	chat_shortcut_copy_code_block = { modes = { "n" }, shortcut = "<leader>gy" },
+	chat_shortcut_save_code_block = { modes = { "n" }, shortcut = "<leader>gs" },
+	chat_shortcut_run_code_block = { modes = { "n" }, shortcut = "<leader>gx" },
 	
 	-- global shortcuts (available in any buffer)
 	global_shortcut_new = { modes = { "n", "i" }, shortcut = "<C-g>c" },

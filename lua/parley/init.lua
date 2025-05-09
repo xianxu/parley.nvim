@@ -501,6 +501,24 @@ M.prep_chat = function(buf, file_name)
 			comment = "Parley prompt Chat Respond All",
 		},
 	}
+	
+	-- Add markdown code block shortcuts
+	local md = require("parley.md")
+	
+	if M.config.chat_shortcut_copy_code_block then
+		M.helpers.set_keymap({buf}, M.config.chat_shortcut_copy_code_block.modes, 
+			M.config.chat_shortcut_copy_code_block.shortcut, md.copy_markdown_code_block, "Copy markdown code block")
+	end
+	
+	if M.config.chat_shortcut_save_code_block then
+		M.helpers.set_keymap({buf}, M.config.chat_shortcut_save_code_block.modes, 
+			M.config.chat_shortcut_save_code_block.shortcut, md.save_markdown_code_block, "Save markdown code block")
+	end
+	
+	if M.config.chat_shortcut_run_code_block then
+		M.helpers.set_keymap({buf}, M.config.chat_shortcut_run_code_block.modes, 
+			M.config.chat_shortcut_run_code_block.shortcut, md.run_code_block_in_terminal, "Run code block in terminal")
+	end
 	for _, rc in ipairs(range_commands) do
 		local cmd = M.config.cmd_prefix .. rc.command .. "<cr>"
 		for _, mode in ipairs(rc.modes) do

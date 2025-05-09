@@ -66,6 +66,11 @@ Each chat transcript is really just a markdown file, with some additional conven
 
    You can open referenced files or directories directly by placing the cursor on the line with the @@ syntax and pressing `<C-g>o`. For directories or glob patterns, this will open the file explorer. Use this feature when you want LLM to help you understand, debug, or improve existing code.
 
+8. Markdown code blocks: Parley provides utilities for working with code blocks in markdown:
+   - Copy code block to clipboard: Place your cursor inside a markdown code block and press `<leader>gy`
+   - Save code block to file: Position your cursor inside a code block and press `<leader>gs` (if the code block has a `file="filename"` attribute, it will use that name; otherwise, it will prompt for a filename)
+   - Execute code block in terminal: With your cursor inside a code block, press `<leader>gx` to run the code in a split terminal window
+
 With this, any question asked is associated with context of all questions and answers coming before this question. When the chat gets too long and the chat_memory is enabled, chat exchanges earlier in the transcript will be represented by the concatenation of their summary lines (📝:).
 
 ## Interaction
