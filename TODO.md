@@ -11,5 +11,7 @@ With those two, it will be much easier to iterator on parley, so that user can d
 
 # improve coding ability
 
-Have some [thoughts](https://xianxu.github.io/assets/static/2025-05-24.23-26-50.921.html).
+Have some [thoughts](https://xianxu.github.io/assets/static/2025-05-24.23-26-50.921.html), which is also in
+
+@@~/chats/2025-05-24.23-26-50.921.md: AI coding with full transcript
 
