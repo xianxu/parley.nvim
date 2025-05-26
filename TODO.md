@@ -2,7 +2,7 @@
 
 # make iterating on parley easier by allowing raw request and response, still within the context of a markdown file
 
-add two global model to change how content of markdown file's interpreted. 
+add two global modes to change how content of markdown file's interpreted. 
 
 1. the first mode would print all response from LLM (typically JSON, if not convert to JSON) as a code block enclosed with ```json ... ```
 2. the second mode would interpret user's as a single code block that contains JSON string to be sent to LLM. user will provide the actual content within ```json ...``` structure, parley will strip leading/training whitespaces, and strip the ```json and ```, before sending to LLM.
