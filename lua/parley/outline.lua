@@ -316,6 +316,15 @@ function M.question_picker(config)
               end
             end
           end
+          -- Visual highlight after jump (1 second)
+          do
+            local ns_id = vim.api.nvim_create_namespace("ParleyOutline")
+            vim.api.nvim_buf_clear_namespace(target_buf, ns_id, 0, -1)
+            vim.api.nvim_buf_add_highlight(target_buf, ns_id, "DiffAdd", safe_lnum - 1, 0, -1)
+            vim.defer_fn(function()
+              vim.api.nvim_buf_clear_namespace(target_buf, ns_id, 0, -1)
+            end, 1000)
+          end
         end)
       end)
     
