@@ -1639,6 +1639,31 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 				local question_content = exchange.question.content
 				local file_content = ""
 				
+				-- Check if we're in raw request mode
+				local parse_raw_request = require("parley").config and 
+				                          require("parley").config.raw_mode and 
+				                          require("parley").config.raw_mode.parse_raw_request
+				
+				-- Handle raw request mode - parse JSON input from code blocks
+				if parse_raw_request then
+					-- Check if content contains a JSON code block
+					local json_content = question_content:match("```json%s*(.-)%s*```")
+					
+					if json_content then
+						M.logger.debug("Found JSON content in question, using raw request mode")
+						
+						-- Try to parse the JSON
+						local success, payload = pcall(vim.json.decode, json_content)
+						if success and type(payload) == "table" then
+							-- Store the raw payload for direct use
+							exchange.question.raw_payload = payload
+							M.logger.debug("Successfully parsed JSON payload: " .. vim.inspect(payload))
+						else
+							M.logger.warning("Failed to parse JSON in raw request mode: " .. tostring(payload))
+						end
+					end
+				end
+				
 				-- Use the precomputed file references instead of scanning for them again
 				for _, file_ref in ipairs(exchange.question.file_references) do
 					local path = file_ref.path
@@ -1759,11 +1784,20 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 
 	M.logger.debug("messages to send: " .. vim.inspect(messages))
 
+	-- Check if we're in raw request mode and have a raw payload to use
+	local raw_payload = nil
+	if exchange_idx and 
+	   parsed_chat.exchanges[exchange_idx].question and 
+	   parsed_chat.exchanges[exchange_idx].question.raw_payload then
+		raw_payload = parsed_chat.exchanges[exchange_idx].question.raw_payload
+		M.logger.debug("Using raw payload for request: " .. vim.inspect(raw_payload))
+	end
+	
 	-- call the model and write response
 	M.dispatcher.query(
 		buf,
 		agent_info.provider,
-		M.dispatcher.prepare_payload(messages, agent_info.model, agent_info.provider),
+		raw_payload or M.dispatcher.prepare_payload(messages, agent_info.model, agent_info.provider),
 		M.dispatcher.create_handler(buf, win, response_line + 3, true, "", not use_free_cursor),
 		vim.schedule_wrap(function(qid)
 			local qt = M.tasker.get_query(qid)

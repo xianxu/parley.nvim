@@ -271,6 +271,16 @@ local config = {
 		-- which section to add the component to
 		section = "lualine_x",
 	},
+	
+	-- raw_mode configuration for easier debugging and iteration
+	raw_mode = {
+		-- Enable raw mode functionality
+		enable = true,
+		-- Mode 1: Show raw LLM JSON responses as code blocks
+		show_raw_response = true,
+		-- Mode 2: Parse user input as JSON to send directly to LLM
+		parse_raw_request = false,
+	},
 
     -- TODO: what are the following are needed?
     -- command config and templates below are used by commands like GpRewrite, GpEnew, etc.

@@ -44,6 +44,7 @@ Each chat transcript is really just a markdown file, with some additional conven
    - Model information like `model: {"model":"gpt-4o","temperature":1.1,"top_p":1}`
    - Provider information like `provider: openai`
    - Configuration overrides like `max_full_exchanges: 20` to customize behavior for this specific chat (controls how many full exchanges to keep before summarizing)
+   - Raw mode settings like `raw_mode.show_raw_response: true` to display raw JSON responses
 2. User's questions and Assistant's answers take turns.
 3. A question is a line starting with 💬:, and all following lines until next answer.
 4. An Answer is a line starting with 🤖:, and all following lines until next question.
@@ -325,6 +326,65 @@ chat_finder_mappings = {
 
 This feature helps manage growing collections of chat files and quickly locate relevant conversations without overwhelming the finder with old, rarely used transcripts.
 
+
+# Raw Mode for API Debugging
+
+Parley includes a "raw mode" feature for debugging and advanced use cases that makes it easier to directly interact with the LLM provider APIs:
+
+## Configuration
+
+Raw mode can be enabled in your setup or in individual chat headers:
+
+```lua
+-- In your config
+raw_mode = {
+    enable = true,                -- Master toggle for raw mode features
+    show_raw_response = true,     -- Show raw JSON API responses
+    parse_raw_request = true,     -- Parse user JSON input directly as API requests
+},
+```
+
+or in a chat file header:
+
+```
+- file: mychat.md
+- raw_mode.show_raw_response: true
+- raw_mode.parse_raw_request: true
+```
+
+## How It Works
+
+1. **Raw Response Mode** (`show_raw_response: true`):
+   - When enabled, the API's raw JSON response is displayed as a code block
+   - This reveals complete model output including usage statistics and metadata
+   - Useful for debugging and understanding the provider's response format
+
+2. **Raw Request Mode** (`parse_raw_request: true`):
+   - Allows you to craft custom JSON requests to send directly to the API
+   - Format your request as a JSON code block in your question:
+   ```
+   💬:
+   ```json
+   {
+     "model": "gpt-4o",
+     "messages": [
+       {"role": "system", "content": "You are a JSON validator."},
+       {"role": "user", "content": "Explain the structure of a valid OpenAI request."}
+     ],
+     "temperature": 0.7
+   }
+   ```
+   ```
+   
+   - The plugin will extract and use this JSON as the direct payload for the API
+   - Overrides normal message processing and allows full control of request parameters
+
+This feature is particularly useful for:
+- Testing and debugging API interactions
+- Exploring advanced model capabilities
+- Learning API formatting requirements
+- Experimenting with different request structures
+- Seeing complete token usage statistics
 
 # Chat Memory Management
 

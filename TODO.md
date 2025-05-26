@@ -1,13 +1,13 @@
 # TODO
 
-# make iterating on parley easier by allowing raw request and response, still within the context of a markdown file
+# ✅ make iterating on parley easier by allowing raw request and response, still within the context of a markdown file
 
-add two global modes to change how content of markdown file's interpreted. 
+This feature has been implemented:
 
-1. the first mode would print all response from LLM (typically JSON, if not convert to JSON) as a code block enclosed with ```json ... ```
-2. the second mode would interpret user's as a single code block that contains JSON string to be sent to LLM. user will provide the actual content within ```json ...``` structure, parley will strip leading/training whitespaces, and strip the ```json and ```, before sending to LLM.
+1. Raw response mode (`raw_mode.show_raw_response: true`) - Displays full JSON responses from LLMs as code blocks
+2. Raw request mode (`raw_mode.parse_raw_request: true`) - Allows sending custom JSON requests directly to the API
 
-With those two, it will be much easier to iterator on parley, so that user can directly debug request and response. for example, if there were MCP tool use instruction coming back, we'd notice the format and implement it in the future. 
+These modes make it easier to iterate on parley by enabling direct debugging of requests and responses. For example, when using tool-use capable models, you can see the exact format of tool use instructions and implement support for them in the future.
 
 # improve coding ability
 

@@ -264,6 +264,33 @@ local query = function(buf, provider, payload, handler, on_exit, callback)
 			end
 
 			local lines = vim.split(lines_chunk, "\n")
+			
+			-- Check if we're in raw response mode
+			local show_raw_response = require("parley").config and 
+			                          require("parley").config.raw_mode and 
+			                          require("parley").config.raw_mode.show_raw_response
+			
+			-- In raw response mode, we'll accumulate the entire raw response and return it as JSON
+			if show_raw_response then
+				for _, line in ipairs(lines) do
+					if line ~= "" and line ~= nil then
+						qt.raw_response = qt.raw_response .. line .. "\n"
+					end
+				end
+				
+				-- Format raw response as JSON code block
+				local formatted_json = "```json\n" .. qt.raw_response .. "\n```"
+				
+				-- Only update if the content has changed
+				if formatted_json ~= qt.response then
+					qt.response = formatted_json
+					handler(qid, formatted_json)
+				end
+				
+				return
+			end
+			
+			-- Standard response handling (non-raw mode)
 			for _, line in ipairs(lines) do
 				if line ~= "" and line ~= nil then
 					qt.raw_response = qt.raw_response .. line .. "\n"
