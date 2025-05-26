@@ -278,13 +278,15 @@ local query = function(buf, provider, payload, handler, on_exit, callback)
 					end
 				end
 				
-				-- Format raw response as JSON code block
-				local formatted_json = "```json\n" .. qt.raw_response .. "\n```"
-				
-				-- Only update if the content has changed
-				if formatted_json ~= qt.response then
-					qt.response = formatted_json
-					handler(qid, formatted_json)
+				-- First response should include the code block start marker
+				if qt.response == "" then
+					-- Initial response with opening code fence
+					qt.response = "```json\n" .. qt.raw_response
+					handler(qid, "```json\n" .. lines_chunk)
+				else
+					-- Subsequent responses just add the new content
+					qt.response = qt.response .. lines_chunk
+					handler(qid, lines_chunk)
 				end
 				
 				return
@@ -386,6 +388,20 @@ local query = function(buf, provider, payload, handler, on_exit, callback)
 				-- if there's remaining data in the buffer, process it
 				if #buffer > 0 then
 					process_lines(buffer)
+				end
+				
+				-- Check if this was a raw response that needs a closing marker
+				local qt = tasker.get_query(qid)
+				if qt then
+					local show_raw_response = require("parley").config and 
+											  require("parley").config.raw_mode and 
+											  require("parley").config.raw_mode.show_raw_response
+					
+					if show_raw_response and qt.response and not qt.response:match("```%s*$") then
+						-- Add closing fence for the JSON code block
+						handler(qid, "\n```")
+						qt.response = qt.response .. "\n```"
+					end
 				end
 				local raw_response = qt.raw_response
 				logger.debug(qt.provider .. " response: \n" .. vim.inspect(qt.raw_response))
