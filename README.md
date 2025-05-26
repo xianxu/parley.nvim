@@ -277,9 +277,13 @@ Delete the current chat. By default requires confirmation before delete, which c
 
 ## Agent commands
 
+#### `:ParleyAgent` <!-- {doc=:ParleyAgent}  -->
+
+Opens a Telescope picker for selecting an agent. If Telescope is not available, shows the current agent information. You can also specify a specific agent name as an argument to switch directly: `:ParleyAgent ChatGPT4o`. 
+
 #### `:GpNextAgent` <!-- {doc=:GpNextAgent}  -->
 
-Cycles between available agents based on the current buffer (chat agents if current buffer is a chat and command agents otherwise). The agent setting is persisted on disk across Neovim instances. `<C-g>a`
+Opens a Telescope picker for selecting an agent if Telescope is available. If not, cycles between available agents based on the current buffer (chat agents if current buffer is a chat and command agents otherwise). The agent setting is persisted on disk across Neovim instances. `<C-g>a`
 
 ## Other commands
 

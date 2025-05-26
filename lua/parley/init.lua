@@ -24,6 +24,7 @@ local M = {
 	tasker = require("parley.tasker"), -- tasker module
 	vault = require("parley.vault"), -- handles secrets
 	lualine = require("parley.lualine"), -- lualine integration
+	agent_picker = require("parley.agent_picker"), -- agent selection UI
 }
 
 --------------------------------------------------------------------------------
@@ -2705,11 +2706,21 @@ end
 
 M.cmd.Agent = function(params)
 	local agent_name = string.gsub(params.args, "^%s*(.-)%s*$", "%1")
+	
+	-- If no arguments provided, show the agent picker
 	if agent_name == "" then
-		M.logger.info("Current agent: " .. M._state.agent)
+		-- Launch the Telescope picker if Telescope is available
+		local ok, _ = pcall(require, "telescope")
+		if ok then
+			M.agent_picker.agent_picker(M)
+		else
+			-- Fall back to showing current agent if Telescope isn't available
+			M.logger.info("Current agent: " .. M._state.agent)
+		end
 		return
 	end
 
+	-- Handle specific agent selection by name
 	if not M.agents[agent_name] then
 		M.logger.warning("Unknown agent: " .. agent_name)
 		return
@@ -2721,6 +2732,15 @@ M.cmd.Agent = function(params)
 end
 
 M.cmd.NextAgent = function()
+	-- Check if Telescope is available
+	local ok, _ = pcall(require, "telescope")
+	if ok then
+		-- Use the Telescope picker if available
+		M.agent_picker.agent_picker(M)
+		return
+	end
+	
+	-- Fall back to cycling through agents if Telescope isn't available
 	local current_agent = M._state.agent
 	local agent_list = M._agents
 
