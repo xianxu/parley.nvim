@@ -1647,7 +1647,7 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 				-- Handle raw request mode - parse JSON input from code blocks
 				if parse_raw_request then
 					-- Check if content contains a JSON code block
-					local json_content = question_content:match("%s*```json%s*(.-)%s*```")
+					local json_content = question_content:match("%s*```json%s*(.-)\n```")
 					
 					if json_content then
 						M.logger.debug("Found JSON content in question, using raw request mode")

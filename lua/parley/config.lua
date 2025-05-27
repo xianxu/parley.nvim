@@ -279,7 +279,7 @@ local config = {
 		-- Mode 1: Show raw LLM JSON responses as code blocks
 		show_raw_response = true,
 		-- Mode 2: Parse user input as JSON to send directly to LLM
-		parse_raw_request = false,
+		parse_raw_request = true,
 	},
 
     -- TODO: what are the following are needed?
