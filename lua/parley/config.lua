@@ -277,9 +277,9 @@ local config = {
 		-- Enable raw mode functionality
 		enable = true,
 		-- Mode 1: Show raw LLM JSON responses as code blocks
-		show_raw_response = true,
+		show_raw_response = false,
 		-- Mode 2: Parse user input as JSON to send directly to LLM
-		parse_raw_request = true,
+		parse_raw_request = false,
 	},
 
     -- TODO: what are the following are needed?

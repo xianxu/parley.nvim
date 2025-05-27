@@ -277,6 +277,45 @@ M.setup = function(opts)
 		M.chat_respond_all()
 	end
 	
+	-- Toggle Raw Request mode (parse_raw_request)
+	M.cmd.ToggleRawRequest = function()
+		if M.config.raw_mode and M.config.raw_mode.enable then
+			M.config.raw_mode.parse_raw_request = not M.config.raw_mode.parse_raw_request
+			M.logger.info("Raw Request mode " .. (M.config.raw_mode.parse_raw_request and "enabled" or "disabled"))
+			vim.notify("Raw Request mode " .. (M.config.raw_mode.parse_raw_request and "enabled" or "disabled"), vim.log.levels.INFO)
+		else
+			M.logger.warning("Raw mode is disabled in configuration")
+			vim.notify("Raw mode is disabled in configuration", vim.log.levels.WARN)
+		end
+	end
+
+	-- Toggle Raw Response mode (show_raw_response)
+	M.cmd.ToggleRawResponse = function()
+		if M.config.raw_mode and M.config.raw_mode.enable then
+			M.config.raw_mode.show_raw_response = not M.config.raw_mode.show_raw_response
+			M.logger.info("Raw Response mode " .. (M.config.raw_mode.show_raw_response and "enabled" or "disabled"))
+			vim.notify("Raw Response mode " .. (M.config.raw_mode.show_raw_response and "enabled" or "disabled"), vim.log.levels.INFO)
+		else
+			M.logger.warning("Raw mode is disabled in configuration")
+			vim.notify("Raw mode is disabled in configuration", vim.log.levels.WARN)
+		end
+	end
+
+	-- Toggle both Raw Request and Raw Response modes
+	M.cmd.ToggleRaw = function()
+		if M.config.raw_mode and M.config.raw_mode.enable then
+			-- Toggle both settings to the same value (both on or both off)
+			local current_state = M.config.raw_mode.show_raw_response or M.config.raw_mode.parse_raw_request
+			M.config.raw_mode.show_raw_response = not current_state
+			M.config.raw_mode.parse_raw_request = not current_state
+			M.logger.info("Raw mode " .. (not current_state and "enabled" or "disabled") .. " (both request and response)")
+			vim.notify("Raw mode " .. (not current_state and "enabled" or "disabled") .. " (both request and response)", vim.log.levels.INFO)
+		else
+			M.logger.warning("Raw mode is disabled in configuration")
+			vim.notify("Raw mode is disabled in configuration", vim.log.levels.WARN)
+		end
+	end
+	
 	-- register default commands
 	for cmd, _ in pairs(M.cmd) do
 		if M.hooks[cmd] == nil then
