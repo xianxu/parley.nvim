@@ -237,6 +237,8 @@ local query = function(buf, provider, payload, handler, on_exit, callback)
 		return
 	end
 
+    logger.debug("query to send is: " .. vim.inspect(payload))
+
 	local qid = helpers.uuid()
 	tasker.set_query(qid, {
 		timestamp = os.time(),
