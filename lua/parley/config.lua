@@ -86,9 +86,17 @@ local config = {
 	agents = {
 		{
 			provider = "openai",
-			name = "ChatGPT4.1",
+			name = "ChatGPT4",
 			-- string with model name or table with model name and parameters
-			model = { model = "gpt-4.1", temperature = 1.1, top_p = 1 },
+			model = { model = "gpt-4", temperature = 1.1, top_p = 1 },
+			-- system prompt (use this to specify the persona/role of the AI)
+			system_prompt = require("parley.defaults").chat_system_prompt,
+		},
+		{
+			provider = "openai",
+			name = "ChatGPT5",
+			-- string with model name or table with model name and parameters
+			model = { model = "gpt-5", temperature = 1.1, top_p = 1 },
 			-- system prompt (use this to specify the persona/role of the AI)
 			system_prompt = require("parley.defaults").chat_system_prompt,
 		},

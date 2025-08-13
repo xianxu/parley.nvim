@@ -193,7 +193,6 @@ D.prepare_payload = function(messages, model, provider)
 		model = model.model,
 		stream = true,
 		messages = messages,
-		max_tokens = model.max_tokens or 4096,
 		temperature = math.max(0, math.min(2, model.temperature or 1)),
 		top_p = math.max(0, math.min(1, model.top_p or 1)),
 		stream_options = {
@@ -201,7 +200,14 @@ D.prepare_payload = function(messages, model, provider)
 		}
 	}
 
-	if (provider == "openai" or provider == "copilot") and (model.model:sub(1, 1) == "o" or model.model == "gpt-4o-search-preview") then
+	-- Use max_completion_tokens for GPT-5, max_tokens for other models
+	if model.model and model.model:find("gpt%-5") then
+		output.max_completion_tokens = model.max_tokens or 4096
+	else
+		output.max_tokens = model.max_tokens or 4096
+	end
+
+	if (provider == "openai" or provider == "copilot") and (model.model:sub(1, 1) == "o" or model.model == "gpt-4o-search-preview" or model.model:find("gpt%-5")) then
 		if model.model:sub(1, 2) == "o3" then
 			output.reasoning_effort = model.reasoning_effort or "medium"
 		end
