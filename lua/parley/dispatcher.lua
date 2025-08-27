@@ -207,9 +207,9 @@ D.prepare_payload = function(messages, model, provider)
 		output.max_tokens = model.max_tokens or 4096
 	end
 
-	if (provider == "openai" or provider == "copilot") and (model.model:sub(1, 1) == "o" or model.model == "gpt-4o-search-preview" or model.model:find("gpt%-5")) then
-		if model.model:sub(1, 2) == "o3" then
-			output.reasoning_effort = model.reasoning_effort or "medium"
+	if (provider == "openai" or provider == "copilot") and (model.model:sub(1, 1) == "o" or model.model == "gpt-4o-search-preview" or model.model == "gpt-5") then
+		if model.model:sub(1, 2) == "o3" or model.model:sub(1,5) == "gpt-5" then
+			output.reasoning_effort = model.reasoning_effort or "minimal"
 		end
 
 		for i = #messages, 1, -1 do
