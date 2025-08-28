@@ -4,6 +4,37 @@
 
 local M = {}
 
+-- Notes folder detection and formatting
+M.format_directory = function()
+  local cwd = vim.fn.getcwd()
+  local home = vim.env.HOME
+  local notes_path = home .. "/Library/Mobile Documents/com~apple~CloudDocs/notes"
+  
+  -- Check if we're in the notes folder
+  if cwd:sub(1, #notes_path) == notes_path then
+    return " NOTE"
+  end
+  
+  -- Default behavior for other folders
+  if cwd:sub(1, #home) == home then
+    cwd = "~" .. cwd:sub(#home + 1)
+  end
+  return " " .. cwd
+end
+
+-- Notes folder color function
+M.get_directory_color = function()
+  local cwd = vim.fn.getcwd()
+  local home = vim.env.HOME
+  local notes_path = home .. "/Library/Mobile Documents/com~apple~CloudDocs/notes"
+  
+  -- Return custom color when in notes folder
+  if cwd:sub(1, #notes_path) == notes_path then
+    return { fg = '#61dafb', gui = 'bold' }  -- Cyan color, bold
+  end
+  return nil  -- Default color for other folders
+end
+
 -- Store the parley reference for external component access
 local _parley = nil
 
@@ -146,46 +177,76 @@ function M.setup(parley)
 
     -- Check if lualine is available
     local has_lualine, lualine = pcall(require, "lualine")
-    if not has_lualine or not config.lualine or not config.lualine.enable then
+    if not has_lualine then
       return
     end
     
-    -- Create the component
-    local parley_component = M.create_component(parley)
+    -- Create the parley component if lualine integration is enabled
+    local parley_component = nil
+    if config.lualine and config.lualine.enable then
+      parley_component = M.create_component(parley)
+    end
 
-    -- Register component with lualine
-    -- Get the section from config or default to lualine_z
-    local section = config.lualine.section or "lualine_z"
-    
     pcall(function()
-      -- Add component to the lualine config
-      -- Check if lualine.get_config() exists and use it carefully
+      -- Get existing lualine config
       local has_config, existing_config = pcall(function() return lualine.get_config() end)
       
       if not has_config or not existing_config then
-        -- Lualine hasn't been set up yet, create a minimal config
-        local lualine_config = {
-          sections = {
-            [section] = { parley_component }
+        -- Lualine hasn't been set up yet, just add parley component if enabled
+        if parley_component then
+          local section = config.lualine.section or "lualine_z"
+          local lualine_config = {
+            sections = {
+              [section] = { parley_component }
+            }
           }
-        }
-        lualine.setup(lualine_config)
-      else
-        -- Make sure we have a valid config object
-        existing_config = existing_config or {}
-        existing_config.sections = existing_config.sections or {}
-        
+          lualine.setup(lualine_config)
+        end
+        return
+      end
+      
+      -- Make sure we have a valid config object
+      existing_config = existing_config or {}
+      existing_config.sections = existing_config.sections or {}
+      
+      -- Enhance existing directory components with notes detection
+      for section_name, section_components in pairs(existing_config.sections) do
+        if type(section_components) == "table" then
+          for i, component in ipairs(section_components) do
+            -- Look for directory display functions
+            if type(component) == "table" and type(component[1]) == "function" then
+              local func = component[1]
+              local func_str = string.dump(func)
+              
+              -- Check if this looks like a directory display function
+              if func_str:find("getcwd") and func_str:find("HOME") then
+                -- Replace with our enhanced version
+                existing_config.sections[section_name][i] = {
+                  function()
+                    return M.format_directory()
+                  end,
+                  color = function()
+                    return M.get_directory_color()
+                  end
+                }
+              end
+            end
+          end
+        end
+      end
+      
+      -- Add parley component if enabled
+      if parley_component then
+        local section = config.lualine.section or "lualine_z"
         -- Create section if it doesn't exist
         if not existing_config.sections[section] then
           existing_config.sections[section] = {}
         end
-        
-        -- Use a simple approach - just add our component at the start
         table.insert(existing_config.sections[section], parley_component)
-        
-        -- Refresh lualine with the updated config
-        lualine.setup(existing_config)
       end
+      
+      -- Refresh lualine with the updated config
+      lualine.setup(existing_config)
     end)
     
     -- Set up autocommands to refresh lualine when agent changes or a query starts/stops
