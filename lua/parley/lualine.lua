@@ -5,34 +5,64 @@
 local M = {}
 
 -- Notes folder detection and formatting
-M.format_directory = function()
+M.format_directory = function(parley_instance)
   local cwd = vim.fn.getcwd()
   local home = vim.env.HOME
   local notes_path = home .. "/Library/Mobile Documents/com~apple~CloudDocs/notes"
   
-  -- Check if we're in the notes folder
+  -- Try to get parley instance from multiple sources
+  local parley = parley_instance or _parley
+  if not parley then
+    local ok, parley_module = pcall(require, "parley")
+    if ok then
+      parley = parley_module
+    end
+  end
+  
+  -- Priority 1: If interview mode is active, always show INTERVIEW
+  if parley and parley._state and parley._state.interview_mode then
+    return " INTERVIEW"
+  end
+  
+  -- Priority 2: If in notes folder, show NOTE
   if cwd:sub(1, #notes_path) == notes_path then
     return " NOTE"
   end
   
-  -- Default behavior for other folders
+  -- Priority 3: Default behavior - show current directory
   if cwd:sub(1, #home) == home then
     cwd = "~" .. cwd:sub(#home + 1)
   end
   return " " .. cwd
 end
 
--- Notes folder color function
-M.get_directory_color = function()
+-- Directory color function
+M.get_directory_color = function(parley_instance)
   local cwd = vim.fn.getcwd()
   local home = vim.env.HOME
   local notes_path = home .. "/Library/Mobile Documents/com~apple~CloudDocs/notes"
   
-  -- Return custom color when in notes folder
-  if cwd:sub(1, #notes_path) == notes_path then
-    return { fg = '#61dafb', gui = 'bold' }  -- Cyan color, bold
+  -- Try to get parley instance from multiple sources
+  local parley = parley_instance or _parley
+  if not parley then
+    local ok, parley_module = pcall(require, "parley")
+    if ok then
+      parley = parley_module
+    end
   end
-  return nil  -- Default color for other folders
+  
+  -- Priority 1: Interview mode gets red color regardless of location
+  if parley and parley._state and parley._state.interview_mode then
+    return { fg = '#ff6b6b', gui = 'bold' }  -- Red color for interview mode
+  end
+  
+  -- Priority 2: Notes folder gets cyan color
+  if cwd:sub(1, #notes_path) == notes_path then
+    return { fg = '#61dafb', gui = 'bold' }  -- Cyan color for note mode
+  end
+  
+  -- Priority 3: Default color for other folders
+  return nil
 end
 
 -- Store the parley reference for external component access
@@ -220,13 +250,13 @@ function M.setup(parley)
               
               -- Check if this looks like a directory display function
               if func_str:find("getcwd") and func_str:find("HOME") then
-                -- Replace with our enhanced version
+                -- Replace with our enhanced version, pass parley instance
                 existing_config.sections[section_name][i] = {
                   function()
-                    return M.format_directory()
+                    return M.format_directory(parley)
                   end,
                   color = function()
-                    return M.get_directory_color()
+                    return M.get_directory_color(parley)
                   end
                 }
               end

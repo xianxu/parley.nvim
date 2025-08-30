@@ -9,7 +9,10 @@ local config = require("parley.config")
 
 local M = {
 	_Name = "Parley", -- plugin name
-	_state = {}, -- table of state variables
+	_state = {
+		interview_mode = false, -- interview mode state
+		interview_start_time = nil, -- interview start timestamp
+	}, -- table of state variables
 	agents = {}, -- table of agents
 	cmd = {}, -- default command functions
 	config = {}, -- config variables
@@ -33,6 +36,95 @@ local M = {
 
 local agent_completion = function()
 	return M._agents
+end
+
+-- Interview mode helper functions
+M.format_timestamp = function()
+	if not M._state.interview_start_time then
+		return ""
+	end
+	
+	local elapsed = os.time() - M._state.interview_start_time
+	local minutes = math.floor(elapsed / 60)
+	
+	if minutes < 10 then
+		return string.format(":0%dmin", minutes)
+	else
+		return string.format(":%dmin", minutes)
+	end
+end
+
+M.setup_interview_keymap = function()
+	print("DEBUG: Setting up interview keymap")  -- Debug print
+	M.logger.info("Setting up interview keymap")
+	
+	-- Set up insert mode keymap for Enter key globally
+	vim.keymap.set('i', '<CR>', function()
+		print("DEBUG: Enter key pressed!")  -- Debug print
+		print("DEBUG: interview_mode=" .. tostring(M._state.interview_mode))  -- Debug print
+		
+		-- Apply timestamp when interview mode is active (no folder restriction)
+		if M._state.interview_mode then
+			local timestamp = M.format_timestamp()
+			print("DEBUG: Inserting timestamp: " .. timestamp)  -- Debug print
+			M.logger.debug("Inserting timestamp: " .. timestamp)
+			-- Insert newline and timestamp
+			return '<CR>' .. timestamp .. ' '
+		else
+			print("DEBUG: Regular Enter behavior")  -- Debug print
+			-- Regular Enter behavior
+			return '<CR>'
+		end
+	end, { 
+		expr = true, 
+		desc = "Insert timestamp on new line in interview mode"
+	})
+	print("DEBUG: Keymap set up complete")  -- Debug print
+end
+
+M.remove_interview_keymap = function()
+	M.logger.info("Removing interview keymap")
+	-- Remove the insert mode keymap
+	pcall(function()
+		vim.keymap.del('i', '<CR>')
+	end)
+end
+
+-- Interview mode highlighting functions
+M.setup_interview_highlighting = function()
+	M.logger.info("Setting up interview timestamp highlighting")
+	
+	-- Create highlight group for interview timestamps (using diff add color)
+	vim.api.nvim_set_hl(0, "InterviewTimestamp", { link = "DiffAdd" })
+	
+	-- Create autocommand group for interview highlighting
+	local augroup = vim.api.nvim_create_augroup("ParleyInterviewHighlight", { clear = true })
+	
+	-- Set up syntax highlighting for timestamp lines
+	vim.api.nvim_create_autocmd({"BufEnter", "BufWinEnter", "TextChanged", "TextChangedI"}, {
+		group = augroup,
+		callback = function()
+			if M._state.interview_mode then
+				-- Match lines starting with :XXmin (where XX is one or more digits)
+				vim.fn.matchadd("InterviewTimestamp", "^:\\d\\+min.*$")
+			end
+		end,
+		desc = "Highlight interview timestamp lines"
+	})
+end
+
+M.remove_interview_highlighting = function()
+	M.logger.info("Removing interview timestamp highlighting")
+	
+	-- Clear all matches for the timestamp pattern
+	pcall(function()
+		vim.fn.clearmatches()
+	end)
+	
+	-- Remove the autocommand group
+	pcall(function()
+		vim.api.nvim_del_augroup_by_name("ParleyInterviewHighlight")
+	end)
 end
 
 -- setup function
@@ -263,6 +355,11 @@ M.setup = function(opts)
 		end
 	end
 	
+	-- Set up global keymap for interview mode toggle
+	vim.keymap.set('n', '<C-n>i', function()
+		M.cmd.ToggleInterview()
+	end, { silent = true, desc = "Toggle Interview Mode" })
+	
 	-- Note: Agent switching is now handled in buffer-local bindings
 	
 	-- Note: Chat section navigation is now handled in the buffer-local bindings
@@ -316,6 +413,47 @@ M.setup = function(opts)
 		end
 	end
 	
+	-- Toggle Interview Mode
+	M.cmd.ToggleInterview = function()
+		M._state.interview_mode = not M._state.interview_mode
+		print("DEBUG: Interview mode is now: " .. tostring(M._state.interview_mode))  -- Debug print
+		
+		if M._state.interview_mode then
+			M._state.interview_start_time = os.time()
+			M.logger.info("Interview mode enabled")
+			vim.notify("Interview mode enabled", vim.log.levels.INFO)
+			
+			-- Insert :00min marker at current cursor position
+			local mode = vim.fn.mode()
+			if mode == 'i' then
+				-- Already in insert mode, just insert the text
+				vim.api.nvim_put({':00min '}, 'c', true, true)
+			else
+				-- Enter insert mode and insert the marker
+				vim.cmd('startinsert')
+				vim.schedule(function()
+					vim.api.nvim_put({':00min '}, 'c', true, true)
+				end)
+			end
+			
+			-- Set up insert mode keymap for timestamps
+			M.setup_interview_keymap()
+			-- Set up timestamp highlighting
+			M.setup_interview_highlighting()
+		else
+			M._state.interview_start_time = nil
+			M.logger.info("Interview mode disabled")
+			vim.notify("Interview mode disabled", vim.log.levels.INFO)
+			-- Remove insert mode keymap and highlighting
+			M.remove_interview_keymap()
+			M.remove_interview_highlighting()
+		end
+		-- Refresh lualine to update display
+		pcall(function()
+			require("lualine").refresh()
+		end)
+	end
+	
 	-- register default commands
 	for cmd, _ in pairs(M.cmd) do
 		if M.hooks[cmd] == nil then
@@ -366,6 +504,10 @@ M.refresh_state = function(update)
 		M._state = vim.deepcopy(disk_state)
 	end
 	M._state.updated = os.time()
+	
+	-- Always ensure interview mode starts as false (don't persist interview mode across sessions)
+	M._state.interview_mode = false
+	M._state.interview_start_time = nil
 
 	for k, v in pairs(update) do
 		M._state[k] = v
