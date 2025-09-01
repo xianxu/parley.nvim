@@ -360,6 +360,11 @@ M.setup = function(opts)
 		M.cmd.ToggleInterview()
 	end, { silent = true, desc = "Toggle Interview Mode" })
 	
+	-- Set up global keymap for template-based note creation
+	vim.keymap.set('n', '<C-n>t', function()
+		M.cmd.NoteNewFromTemplate()
+	end, { silent = true, desc = "Create Note from Template" })
+	
 	-- Note: Agent switching is now handled in buffer-local bindings
 	
 	-- Note: Chat section navigation is now handled in the buffer-local bindings
@@ -1323,15 +1328,197 @@ M.cmd.NoteNew = function()
 	end)
 end
 
--- Internal helper: create a note file with a title and metadata (array of {key, value})
-M._create_note_file = function(filename, title, metadata)
-	local lines = {}
-	table.insert(lines, "# " .. title)
-	table.insert(lines, "")
-	for _, kv in ipairs(metadata) do
-		table.insert(lines, kv[1] .. ": " .. kv[2])
-		table.insert(lines, "")
+-- Create default templates in the templates directory
+M.create_default_templates = function(template_dir)
+	-- Meeting Notes template
+	local meeting_template = [[# {{title}}
+
+**Date:** {{date}}
+**Week:** {{week}}
+
+## Attendees
+- 
+- 
+
+## Agenda
+1. 
+2. 
+
+## Notes
+
+
+## Action Items
+- [ ] 
+- [ ] 
+
+## Next Steps
+
+]]
+
+	-- Daily Note template
+	local daily_template = [[# {{title}}
+
+**Date:** {{date}}
+**Week:** {{week}}
+
+## Today's Goals
+- [ ] 
+- [ ] 
+- [ ] 
+
+## Notes
+
+
+## Tomorrow's Priorities
+- 
+- 
+
+## Reflection
+
+]]
+
+	-- Interview template (for the interview mode feature)
+	local interview_template = [[# {{title}}
+
+**Date:** {{date}}
+**Week:** {{week}}
+
+:00min Interview started
+
+## Interview Notes
+
+
+## Key Points
+
+
+## Follow-up Actions
+- [ ] 
+- [ ] 
+
+]]
+
+	-- Basic template
+	local basic_template = [[# {{title}}
+
+**Date:** {{date}}
+**Week:** {{week}}
+
+]]
+
+	-- Write template files
+	vim.fn.writefile(vim.split(meeting_template, "\n"), template_dir .. "/meeting-notes.md")
+	vim.fn.writefile(vim.split(daily_template, "\n"), template_dir .. "/daily-note.md")
+	vim.fn.writefile(vim.split(interview_template, "\n"), template_dir .. "/interview.md")
+	vim.fn.writefile(vim.split(basic_template, "\n"), template_dir .. "/basic.md")
+end
+
+-- Function to create a new note from template
+M.cmd.NoteNewFromTemplate = function()
+	local template_dir = M.config.notes_dir .. "/templates"
+	
+	-- Check if template directory exists, create it if not
+	if vim.fn.isdirectory(template_dir) == 0 then
+		vim.notify("Creating templates directory: " .. template_dir, vim.log.levels.INFO)
+		M.logger.info("Creating templates directory: " .. template_dir)
+		
+		-- Create the templates directory
+		vim.fn.mkdir(template_dir, "p")
+		
+		-- Create some default templates
+		M.create_default_templates(template_dir)
+		
+		vim.notify("Templates directory created with default templates", vim.log.levels.INFO)
 	end
+	
+	-- Get all template files
+	local template_files = {}
+	local handle = vim.loop.fs_scandir(template_dir)
+	if handle then
+		local name, type
+		repeat
+			name, type = vim.loop.fs_scandir_next(handle)
+			if name and type == "file" and name:match("%.md$") then
+				table.insert(template_files, {
+					filename = name,
+					path = template_dir .. "/" .. name,
+					display = name:gsub("%.md$", "")
+				})
+			end
+		until not name
+	end
+	
+	if #template_files == 0 then
+		vim.notify("No template files found in: " .. template_dir, vim.log.levels.WARN)
+		return
+	end
+	
+	-- Use telescope to select template
+	local pickers = require "telescope.pickers"
+	local finders = require "telescope.finders"
+	local conf = require("telescope.config").values
+	local actions = require "telescope.actions"
+	local action_state = require "telescope.actions.state"
+	
+	pickers.new({}, {
+		prompt_title = "Select Template",
+		finder = finders.new_table {
+			results = template_files,
+			entry_maker = function(entry)
+				return {
+					value = entry,
+					display = entry.display,
+					ordinal = entry.display,
+				}
+			end,
+		},
+		sorter = conf.generic_sorter({}),
+		attach_mappings = function(prompt_bufnr, map)
+			actions.select_default:replace(function()
+				actions.close(prompt_bufnr)
+				local selection = action_state.get_selected_entry()
+				if selection then
+					-- Read template content
+					local template_content = table.concat(vim.fn.readfile(selection.value.path), "\n")
+					
+					-- Prompt for note subject
+					vim.ui.input({ prompt = "Note subject: " }, function(subject)
+						if subject and subject ~= "" then
+							M.new_note_from_template(subject, template_content)
+						end
+					end)
+				end
+			end)
+			return true
+		end,
+	}):find()
+end
+
+-- Internal helper: create a note file with a title and metadata (array of {key, value})
+M._create_note_file = function(filename, title, metadata, template_content)
+	local lines = {}
+	
+	if template_content then
+		-- If using a template, use its content instead of default format
+		-- Replace {{title}} placeholder with actual title in template
+		local content = template_content:gsub("{{title}}", title)
+		-- Replace metadata placeholders
+		for _, kv in ipairs(metadata) do
+			content = content:gsub("{{" .. kv[1]:lower() .. "}}", kv[2])
+		end
+		-- Split content into lines
+		for line in content:gmatch("[^\r\n]+") do
+			table.insert(lines, line)
+		end
+	else
+		-- Default note format
+		table.insert(lines, "# " .. title)
+		table.insert(lines, "")
+		for _, kv in ipairs(metadata) do
+			table.insert(lines, kv[1] .. ": " .. kv[2])
+			table.insert(lines, "")
+		end
+	end
+	
 	vim.fn.writefile(lines, filename)
 	local buf = M.open_buf(filename)
 	vim.api.nvim_command("normal! G")
@@ -1442,6 +1629,98 @@ M.new_note = function(subject)
     local title = subject:gsub("-", " ")
     local date_str = year .. "-" .. month .. "-" .. day
     return M._create_note_file(filename, title, {{ "Date", date_str }, { "Week", week_folder }})
+end
+
+-- Create a new note from template with given subject and template content
+M.new_note_from_template = function(subject, template_content)
+	-- Get current date
+	local current_date = os.date("*t")
+	local year = current_date.year
+	local month = current_date.month
+	local day = current_date.day
+	
+	-- Parse date from subject if provided in one of the formats (same logic as new_note)
+	local original_subject = subject
+	-- Special-case: if the first word matches a directory under notes_root (including subfolders), create note there without date prefix
+	do
+		local head, rest = original_subject:match("^(%S+)%s+(.+)$")
+		if head and rest then
+			local notes_root = M.config.notes_dir
+			local p = notes_root .. "/" .. head
+			local target_dir = nil
+			if vim.fn.isdirectory(p) == 1 then
+				target_dir = p
+			end
+			if target_dir then
+				local slug = rest:gsub(" ", "-")
+				local filename = target_dir .. "/" .. slug .. ".md"
+				-- Create the note using helper with template
+				local y = string.format("%04d", current_date.year)
+				local mon = string.format("%02d", current_date.month)
+				local d = string.format("%02d", current_date.day)
+				return M._create_note_file(filename, rest, {{ "Date", y .. "-" .. mon .. "-" .. d }}, template_content)
+			end
+		end
+	end
+	
+	-- Same date parsing logic as new_note function
+	local date_pattern1 = "^(%d%d%d%d)%-(%d%d)%-(%d%d)%s+(.+)$" -- YYYY-MM-DD
+	local date_pattern2 = "^(%d%d)%-(%d%d)%s+(.+)$" -- MM-DD
+	local date_pattern3 = "^(%d%d)%s+(.+)$" -- DD
+	
+	local parsed_year, parsed_month, parsed_day, parsed_subject
+	
+	if subject:match(date_pattern1) then
+		parsed_year, parsed_month, parsed_day, parsed_subject = subject:match(date_pattern1)
+		year = tonumber(parsed_year)
+		month = tonumber(parsed_month)
+		day = tonumber(parsed_day)
+		subject = parsed_subject
+		M.logger.info("Using date from full pattern: " .. year .. "-" .. month .. "-" .. day)
+	elseif subject:match(date_pattern2) then
+		parsed_month, parsed_day, parsed_subject = subject:match(date_pattern2)
+		month = tonumber(parsed_month)
+		day = tonumber(parsed_day)
+		subject = parsed_subject
+		M.logger.info("Using date from MM-DD pattern: " .. year .. "-" .. month .. "-" .. day)
+	elseif subject:match(date_pattern3) then
+		parsed_day, parsed_subject = subject:match(date_pattern3)
+		day = tonumber(parsed_day)
+		subject = parsed_subject
+		M.logger.info("Using date from day pattern: " .. year .. "-" .. month .. "-" .. day)
+	end
+	
+	-- Validate and format date components with fallbacks
+	if not month or type(month) ~= "number" then month = os.date("*t").month end
+	if not day or type(day) ~= "number" then day = os.date("*t").day end
+	month = string.format("%02d", month)
+	day = string.format("%02d", day)
+	
+	-- Create directory structure (same logic as new_note)
+	local year_dir = M.config.notes_dir .. "/" .. year
+	local month_dir = year_dir .. "/" .. month
+	
+	-- Calculate week number and create week folder
+	local date_str = year .. "-" .. month .. "-" .. day
+	local week_number = M.helpers.get_week_number_sunday_based(date_str)
+	if not week_number or type(week_number) ~= "number" then week_number = 1 end
+	local week_folder = "W" .. string.format("%02d", week_number)
+	local week_dir = month_dir .. "/" .. week_folder
+	
+	M.helpers.prepare_dir(year_dir)
+	M.helpers.prepare_dir(month_dir)
+	M.helpers.prepare_dir(week_dir)
+	
+	-- Replace spaces with dashes in subject
+	subject = subject:gsub(" ", "-")
+	
+	-- Create filename
+	local filename = week_dir .. "/" .. day .. "-" .. subject .. ".md"
+	
+	-- Create note with template content
+	local title = subject:gsub("-", " ")
+	local date_str = year .. "-" .. month .. "-" .. day
+	return M._create_note_file(filename, title, {{ "Date", date_str }, { "Week", week_folder }}, template_content)
 end
 
 M.cmd.ChatDelete = function()
