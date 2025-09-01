@@ -2,14 +2,13 @@
 
 <a href="https://github.com/xianxu/parley.nvim/blob/main/LICENSE"><img alt="GitHub" src="https://img.shields.io/github/license/xianxu/parley.nvim"></a>
 
-# Parley.nvim - Streamlined Chat Plugin for Neovim
+# Parley.nvim - Streamlined ChatGPT Plugin for Neovim, Among Other Small Utilities
 
 <!-- panvimdoc-ignore-end -->
 
 <br>
 
 **ChatGPT-like sessions with highlighting and navigation, focused on simplicity and readability.** 
-
 
 # Goals and Features
 
