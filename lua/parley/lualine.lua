@@ -19,9 +19,12 @@ M.format_directory = function(parley_instance)
     end
   end
   
-  -- Priority 1: If interview mode is active, always show INTERVIEW
-  if parley and parley._state and parley._state.interview_mode then
-    return " INTERVIEW"
+  -- Priority 1: If interview mode is active, always show INTERVIEW with timer
+  if parley and parley._state and parley._state.interview_mode and parley._state.interview_start_time then
+    local elapsed = os.time() - parley._state.interview_start_time
+    local minutes = math.floor(elapsed / 60)
+    local timer_text = string.format(":%02dMIN", minutes)
+    return " INTERVIEW " .. timer_text
   end
   
   -- Priority 2: If in notes folder, show NOTE

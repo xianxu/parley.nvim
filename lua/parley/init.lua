@@ -12,6 +12,7 @@ local M = {
 	_state = {
 		interview_mode = false, -- interview mode state
 		interview_start_time = nil, -- interview start timestamp
+		interview_timer = nil, -- timer handle for statusline updates
 	}, -- table of state variables
 	agents = {}, -- table of agents
 	cmd = {}, -- default command functions
@@ -105,8 +106,8 @@ M.setup_interview_highlighting = function()
 		group = augroup,
 		callback = function()
 			if M._state.interview_mode then
-				-- Match lines starting with :XXmin (where XX is one or more digits)
-				vim.fn.matchadd("InterviewTimestamp", "^:\\d\\+min.*$")
+				-- Match lines with optional leading whitespace followed by :XXmin (where XX is one or more digits)
+				vim.fn.matchadd("InterviewTimestamp", "^\\s*:\\d\\+min.*$")
 			end
 		end,
 		desc = "Highlight interview timestamp lines"
@@ -125,6 +126,37 @@ M.remove_interview_highlighting = function()
 	pcall(function()
 		vim.api.nvim_del_augroup_by_name("ParleyInterviewHighlight")
 	end)
+end
+
+-- Timer functions for interview mode statusline updates
+M.start_interview_timer = function()
+	-- Stop any existing timer first
+	M.stop_interview_timer()
+	
+	-- Create a timer that updates the statusline every 15 seconds
+	M._state.interview_timer = vim.loop.new_timer()
+	M._state.interview_timer:start(15000, 15000, vim.schedule_wrap(function()
+		if M._state.interview_mode then
+			-- Refresh lualine to update the timer display
+			pcall(function()
+				require("lualine").refresh()
+			end)
+		else
+			-- Stop timer if interview mode is no longer active
+			M.stop_interview_timer()
+		end
+	end))
+	
+	M.logger.debug("Interview timer started")
+end
+
+M.stop_interview_timer = function()
+	if M._state.interview_timer then
+		M._state.interview_timer:stop()
+		M._state.interview_timer:close()
+		M._state.interview_timer = nil
+		M.logger.debug("Interview timer stopped")
+	end
 end
 
 -- setup function
@@ -445,6 +477,8 @@ M.setup = function(opts)
 			M.setup_interview_keymap()
 			-- Set up timestamp highlighting
 			M.setup_interview_highlighting()
+			-- Start timer for statusline updates
+			M.start_interview_timer()
 		else
 			M._state.interview_start_time = nil
 			M.logger.info("Interview mode disabled")
@@ -452,6 +486,8 @@ M.setup = function(opts)
 			-- Remove insert mode keymap and highlighting
 			M.remove_interview_keymap()
 			M.remove_interview_highlighting()
+			-- Stop timer
+			M.stop_interview_timer()
 		end
 		-- Refresh lualine to update display
 		pcall(function()
@@ -513,6 +549,8 @@ M.refresh_state = function(update)
 	-- Always ensure interview mode starts as false (don't persist interview mode across sessions)
 	M._state.interview_mode = false
 	M._state.interview_start_time = nil
+	-- Stop any running interview timer
+	M.stop_interview_timer()
 
 	for k, v in pairs(update) do
 		M._state[k] = v
