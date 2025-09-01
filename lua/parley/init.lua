@@ -705,8 +705,8 @@ M.cmd.ExportHTML = function(params)
     
     local output_file = html_filename .. ".html"
     
-    -- Export directory (you can customize this)
-    local export_dir = params and params.args and params.args ~= "" and params.args or vim.fn.expand("~/")
+    -- Export directory (configurable, with CLI override)
+    local export_dir = params and params.args and params.args ~= "" and params.args or M.config.export_html_dir
     local full_output_path = export_dir .. "/" .. output_file
     
     -- Create HTML content with enhanced glow-like styling
@@ -931,6 +931,128 @@ M.cmd.ExportHTML = function(params)
     file_handle:close()
     
     M.logger.info("Exported chat to HTML: " .. full_output_path)
+    print("✅ Exported chat to: " .. full_output_path)
+end
+
+-- Export current chat buffer as Markdown for Jekyll
+M.cmd.ExportMarkdown = function(params)
+    local buf = vim.api.nvim_get_current_buf()
+    local file_name = vim.api.nvim_buf_get_name(buf)
+    
+    -- Check if this is a valid chat file
+    local validation_error = M.not_chat(buf, file_name)
+    if validation_error then
+        M.logger.error("Cannot export: " .. validation_error)
+        print("Error: Cannot export - " .. validation_error)
+        return
+    end
+    
+    -- Get all buffer lines
+    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    if #lines == 0 then
+        M.logger.error("Buffer is empty")
+        print("Error: Buffer is empty")
+        return
+    end
+    
+    -- Extract Jekyll front matter data from Parley header
+    local title = "Untitled"
+    local post_date = os.date("%Y-%m-%d")
+    local tags = "unclassified"
+    local markdown_filename = nil
+    
+    -- Extract title from first line (# topic: Title)
+    if lines[1] and lines[1]:match("^# topic: (.+)") then
+        title = lines[1]:match("^# topic: (.+)")
+    elseif lines[1] and lines[1]:match("^# (.+)") then
+        title = lines[1]:match("^# (.+)")
+    end
+    
+    -- Extract date from transcript header filename first, then fallback to current file
+    local transcript_filename = nil
+    for _, line in ipairs(lines) do
+        if line:match("^%- file:%s*(.+)") then
+            transcript_filename = line:match("^%- file:%s*(.+)")
+            break
+        end
+    end
+    
+    -- Try to extract date from transcript header filename first
+    if transcript_filename then
+        local basename = transcript_filename:gsub("%.md$", ""):gsub("%.markdown$", "")
+        local year, month, day = basename:match("^(%d%d%d%d)-(%d%d)-(%d%d)")
+        if year and month and day then
+            post_date = year .. "-" .. month .. "-" .. day
+        end
+    end
+    
+    -- Fallback: extract date from current filename if not found in header
+    if post_date == os.date("%Y-%m-%d") then
+        local current_basename = vim.fn.fnamemodify(file_name, ":t:r")
+        local year, month, day = current_basename:match("^(%d%d%d%d)-(%d%d)-(%d%d)")
+        if year and month and day then
+            post_date = year .. "-" .. month .. "-" .. day
+        end
+    end
+    
+    -- Extract tags from header lines (- tags: tag1, tag2, tag3)
+    for _, line in ipairs(lines) do
+        if line:match("^%- tags:%s*(.+)") then
+            tags = line:match("^%- tags:%s*(.+)")
+            break
+        end
+    end
+    
+    -- Clean title for filename (remove invalid characters and normalize)
+    markdown_filename = title:gsub("[^%w%s%-_]", ""):gsub("%s+", "_"):lower()
+    if #markdown_filename > 50 then
+        markdown_filename = markdown_filename:sub(1, 50)
+    end
+    
+    -- Create Jekyll front matter
+    local jekyll_header = [[---
+layout: post
+title:  "]] .. title .. [["
+date:   ]] .. post_date .. [[
+
+tags: ]] .. tags .. [[
+
+comments: true
+---
+
+]]
+    
+    -- Process content: replace 💬: with ## and remove Parley header
+    local content = table.concat(lines, "\n")
+    
+    -- Remove Parley header (everything from start until first ---)
+    content = content:gsub("^.-\n%-%-%-\n", "")
+    
+    -- Replace 💬: with ## (the main transformation for Jekyll)
+    content = content:gsub("💬:", "#### 💬:")
+    
+    -- Combine Jekyll header with processed content
+    content = jekyll_header .. content
+    
+    -- Use extracted date for Jekyll filename prefix
+    local output_file = post_date .. "-" .. markdown_filename .. ".markdown"
+    
+    -- Export directory (configurable, with CLI override)
+    local export_dir = params and params.args and params.args ~= "" and params.args or M.config.export_markdown_dir
+    local full_output_path = export_dir .. "/" .. output_file
+    
+    -- Write Markdown file
+    local file_handle = io.open(full_output_path, "w")
+    if not file_handle then
+        M.logger.error("Failed to create output file: " .. full_output_path)
+        print("Error: Failed to create output file: " .. full_output_path)
+        return
+    end
+    
+    file_handle:write(content)
+    file_handle:close()
+    
+    M.logger.info("Exported chat to Markdown: " .. full_output_path)
     print("✅ Exported chat to: " .. full_output_path)
 end
 
