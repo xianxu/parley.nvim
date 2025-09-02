@@ -233,7 +233,7 @@ local config = {
 		-- Enable recency filtering by default
 		filter_by_default = true,
 		-- Default recency period in months
-		months = 3,
+		months = 6,
 	},
 	
 	-- if true, finished ChatResponder won't move the cursor to the end of the buffer
