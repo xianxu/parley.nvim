@@ -2273,7 +2273,19 @@ M.parse_chat = function(lines, header_end)
 		local line = lines[i]
 		local key, value = line:match("^[-#] (%w+): (.*)")
 		if key ~= nil then
-			result.headers[key] = value
+			if key == "tags" then
+				-- Parse tags into individual items
+				local tags = {}
+				for tag in value:gmatch("%S+") do
+					local trimmed_tag = tag:match("^%s*(.-)%s*$")
+					if trimmed_tag and trimmed_tag ~= "" then
+						table.insert(tags, trimmed_tag)
+					end
+				end
+				result.headers[key] = tags
+			else
+				result.headers[key] = value
+			end
 		end
 		
 		-- Parse configuration override parameters
@@ -3518,25 +3530,61 @@ M.cmd.ChatFinder = function(options)
 				goto continue
 			end
 			
-			-- Get topic from the file
-			local lines = vim.fn.readfile(file, "", 5) -- Read first 5 lines to get topic
+			-- Get topic and tags from the file
+			local lines = vim.fn.readfile(file, "", 10) -- Read first 10 lines to get headers
 			local topic = ""
-			for _, line in ipairs(lines) do
-				local t = line:match("^# topic: (.+)")
-				if t then
-					topic = t
+			local tags = {}
+			
+			-- Parse the file headers to get topic and tags
+			local header_end = 0
+			for idx, line in ipairs(lines) do
+				if line == "---" then
+					header_end = idx
 					break
+				end
+			end
+			
+			-- If we found headers, parse them properly
+			if header_end > 0 then
+				local parsed_chat = M.parse_chat(lines, header_end)
+				if parsed_chat.headers.topic then
+					topic = parsed_chat.headers.topic
+				end
+				if parsed_chat.headers.tags and type(parsed_chat.headers.tags) == "table" then
+					tags = parsed_chat.headers.tags
+				end
+			else
+				-- Fallback: look for topic in old format
+				for _, line in ipairs(lines) do
+					local t = line:match("^# topic: (.+)")
+					if t then
+						topic = t
+						break
+					end
 				end
 			end
 			
 			-- Format date string
 			local date_str = os.date("%Y-%m-%d", file_time)
 			
+			-- Format tags for display
+			local tags_display = ""
+			if #tags > 0 then
+				local tag_parts = {}
+				for _, tag in ipairs(tags) do
+					table.insert(tag_parts, "[" .. tag .. "]")
+				end
+				tags_display = " " .. table.concat(tag_parts, " ")
+			end
+			
+			-- Format tags for search ordinal
+			local tags_searchable = #tags > 0 and (" " .. table.concat(tags, " ")) or ""
+			
 			local filename = vim.fn.fnamemodify(file, ":t")
 			table.insert(entries, {
 				value = file,
-				display = filename .. " - " .. topic .. " [" .. date_str .. "]",
-				ordinal = filename .. " " .. topic,
+				display = filename .. " - " .. topic .. " [" .. date_str .. "]" .. tags_display,
+				ordinal = filename .. " " .. topic .. tags_searchable,
 				timestamp = file_time,
 			})
 			
