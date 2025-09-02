@@ -91,41 +91,56 @@ M.remove_interview_keymap = function()
 	end)
 end
 
--- Interview mode highlighting functions
+-- Interview timestamp highlighting function - now works for all markdown files
+M.highlight_interview_timestamps = function(buf)
+	if not vim.api.nvim_buf_is_valid(buf) then
+		return
+	end
+	
+	local file_name = vim.api.nvim_buf_get_name(buf)
+	
+	-- Only apply to markdown files (chat files or regular markdown files)
+	if not (M.not_chat(buf, file_name) == nil or M.is_markdown(buf, file_name)) then
+		return
+	end
+	
+	-- Clear any existing matches for this pattern first
+	local matches = vim.fn.getmatches()
+	for _, match in ipairs(matches) do
+		if match.pattern and match.pattern:find(":\\d\\+min") then
+			vim.fn.matchdelete(match.id)
+		end
+	end
+	
+	-- Add highlighting for timestamp lines (pattern: :XXmin where XX is one or more digits)
+	vim.fn.matchadd("InterviewTimestamp", "^\\s*:\\d\\+min.*$")
+end
+
+-- Legacy interview mode highlighting functions - now just call the new function
 M.setup_interview_highlighting = function()
 	M.logger.info("Setting up interview timestamp highlighting")
 	
-	-- Create highlight group for interview timestamps (using diff add color)
-	vim.api.nvim_set_hl(0, "InterviewTimestamp", { link = "DiffAdd" })
-	
-	-- Create autocommand group for interview highlighting
-	local augroup = vim.api.nvim_create_augroup("ParleyInterviewHighlight", { clear = true })
-	
-	-- Set up syntax highlighting for timestamp lines
-	vim.api.nvim_create_autocmd({"BufEnter", "BufWinEnter", "TextChanged", "TextChangedI"}, {
-		group = augroup,
-		callback = function()
-			if M._state.interview_mode then
-				-- Match lines with optional leading whitespace followed by :XXmin (where XX is one or more digits)
-				vim.fn.matchadd("InterviewTimestamp", "^\\s*:\\d\\+min.*$")
-			end
-		end,
-		desc = "Highlight interview timestamp lines"
-	})
+	-- Apply highlighting to current buffer if it's markdown
+	local buf = vim.api.nvim_get_current_buf()
+	M.highlight_interview_timestamps(buf)
 end
 
 M.remove_interview_highlighting = function()
 	M.logger.info("Removing interview timestamp highlighting")
 	
-	-- Clear all matches for the timestamp pattern
-	pcall(function()
-		vim.fn.clearmatches()
-	end)
-	
-	-- Remove the autocommand group
-	pcall(function()
-		vim.api.nvim_del_augroup_by_name("ParleyInterviewHighlight")
-	end)
+	-- Clear all matches for the timestamp pattern from all buffers
+	for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+		if vim.api.nvim_buf_is_valid(buf) then
+			vim.api.nvim_buf_call(buf, function()
+				local matches = vim.fn.getmatches()
+				for _, match in ipairs(matches) do
+					if match.pattern and match.pattern:find(":\\d\\+min") then
+						pcall(vim.fn.matchdelete, match.id)
+					end
+				end
+			end)
+		end
+	end
 end
 
 -- Timer functions for interview mode statusline updates
@@ -1381,6 +1396,10 @@ M.highlight_questions = function()
 		})
 	end
 	
+	-- Interview timestamps - Highlighted timestamp lines like :15min
+	-- Always use DiffAdd which is visible and appropriate for timestamps
+	vim.api.nvim_set_hl(0, "InterviewTimestamp", { link = "DiffAdd" })
+	
 	-- Create aliases for backward compatibility
 	vim.api.nvim_set_hl(0, "Question", { link = "ParleyQuestion" })
 	vim.api.nvim_set_hl(0, "FileLoading", { link = "ParleyFileReference" })
@@ -1655,6 +1674,8 @@ M.buf_handler = function()
 			M.prep_chat(buf, file_name)
 			M.display_agent(buf, file_name)
 			M.highlight_question_block(buf)
+			-- Always highlight interview timestamps in chat files
+			M.highlight_interview_timestamps(buf)
 		-- Handle non-chat markdown files
 		elseif M.is_markdown(buf, file_name) then
 			-- Set up markdown features
@@ -1663,6 +1684,8 @@ M.buf_handler = function()
 			M.setup_markdown_keymaps(buf)
 			-- Highlight chat references
 			M.highlight_markdown_chat_refs(buf)
+			-- Always highlight interview timestamps in markdown files
+			M.highlight_interview_timestamps(buf)
 		end
 	end, gid)
 
@@ -1679,10 +1702,14 @@ M.buf_handler = function()
 		-- Handle chat files
 		if M.not_chat(buf, file_name) == nil then
 			M.highlight_question_block(buf)
+			-- Refresh interview timestamp highlighting
+			M.highlight_interview_timestamps(buf)
 		-- Handle non-chat markdown files
 		elseif M.is_markdown(buf, file_name) then
 			-- Refresh markdown highlighting only
 			M.highlight_markdown_chat_refs(buf)
+			-- Refresh interview timestamp highlighting  
+			M.highlight_interview_timestamps(buf)
 		end
 	end, gid)
 
