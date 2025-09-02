@@ -1726,10 +1726,14 @@ M.buf_handler = function()
 		if M.not_chat(buf, file_name) == nil then
 			M.display_agent(buf, file_name)
 			M.highlight_question_block(buf)
+			-- Refresh interview timestamp highlighting when entering a window
+			M.highlight_interview_timestamps(buf)
 		-- Handle non-chat markdown files
 		elseif M.is_markdown(buf, file_name) then
 			-- Refresh markdown highlighting
 			M.highlight_markdown_chat_refs(buf)
+			-- Refresh interview timestamp highlighting when entering a window
+			M.highlight_interview_timestamps(buf)
 		end
 	end, gid)
 end
