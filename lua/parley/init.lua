@@ -1451,6 +1451,7 @@ M.highlight_question_block = function(buf)
 	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 
 	local in_block = false
+	local in_code_block = false
 	
 	-- Get the configured prefix values from config
 	local user_prefix = M.config.chat_user_prefix
@@ -1468,6 +1469,11 @@ M.highlight_question_block = function(buf)
 	end
 
 	for i, line in ipairs(lines) do
+		-- Check for code block boundaries (``` at start of line)
+		if line:match("^%s*```") then
+			in_code_block = not in_code_block
+		end
+		
 		-- Track which parts of the line have already been highlighted as tags
 		local highlighted_regions = {}
 		
@@ -1500,7 +1506,7 @@ M.highlight_question_block = function(buf)
 			in_block = false
 		elseif line:match("^" .. vim.pesc(local_prefix)) then
 			in_block = false
-		elseif in_block then
+		elseif in_block and not in_code_block then
 			vim.api.nvim_buf_add_highlight(buf, ns, "Question", i - 1, 0, -1)
 			
 			-- Simplified file path handling - only if line starts with @@ and isn't a tag
