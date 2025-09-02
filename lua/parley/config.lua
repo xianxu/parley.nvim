@@ -182,6 +182,8 @@ local config = {
 	-- just a static string is legacy and the [{{agent}}] element is added automatically
 	-- if you really want just a static string, make it a table with one element { "🤖:" }
 	chat_assistant_prefix = { "🤖:", "[{{agent}}]" },
+	-- chat local section prefix (for content that should be ignored by parley processing)
+	chat_local_prefix = "🔒:",
 	-- The banner shown at the top of each chat file.
 	chat_template = require("parley.defaults").short_chat_template,
 	-- if you want more real estate in your chat files and don't need the helper text

@@ -1454,6 +1454,7 @@ M.highlight_question_block = function(buf)
 	
 	-- Get the configured prefix values from config
 	local user_prefix = M.config.chat_user_prefix
+	local local_prefix = M.config.chat_local_prefix
 	local memory_enabled = M.config.chat_memory and M.config.chat_memory.enable
 	local reasoning_prefix = memory_enabled and M.config.chat_memory.reasoning_prefix or "🧠:"
 	local summary_prefix = memory_enabled and M.config.chat_memory.summary_prefix or "📝:"
@@ -1496,6 +1497,8 @@ M.highlight_question_block = function(buf)
 			vim.api.nvim_buf_add_highlight(buf, ns, "Question", i - 1, 0, -1)
 			in_block = true
 		elseif line:match("^" .. vim.pesc(assistant_prefix)) then
+			in_block = false
+		elseif line:match("^" .. vim.pesc(local_prefix)) then
 			in_block = false
 		elseif in_block then
 			vim.api.nvim_buf_add_highlight(buf, ns, "Question", i - 1, 0, -1)
@@ -2289,6 +2292,7 @@ M.parse_chat = function(lines, header_end)
 	local summary_prefix = memory_enabled and M.config.chat_memory.summary_prefix or "📝:"
 	local reasoning_prefix = memory_enabled and M.config.chat_memory.reasoning_prefix or "🧠:"
 	local user_prefix = M.config.chat_user_prefix
+	local local_prefix = M.config.chat_local_prefix
 	local old_user_prefix = "🗨:"
 
 	M.logger.debug("memory config: " .. vim.inspect({memory_enabled, summary_prefix, reasoning_prefix}))
@@ -2304,16 +2308,24 @@ M.parse_chat = function(lines, header_end)
 	-- Track the current exchange and component being built
 	local current_exchange = nil
 	local current_component = nil
+    local line_before_local = nil
 	
 	-- Loop through content lines
 	for i = header_end + 1, #lines do
 		local line = lines[i]
 		
+		-- Check for local section (ignore content in local sections)
+		if (not line_before_local) and line:sub(1, #local_prefix) == local_prefix then
+            -- detect the first local_prefix within one question or answer, this will trigger to ignore all subsequent local line_start
+            -- until next user_prefix, or agent_prefix
+			line_before_local = i
+
 		-- Check for user message start
-		if line:sub(1, #user_prefix) == user_prefix or line:sub(1, #old_user_prefix) == old_user_prefix then
+		elseif line:sub(1, #user_prefix) == user_prefix or line:sub(1, #old_user_prefix) == old_user_prefix then
 			-- If we were building a previous exchange, finalize it
+            current_component_start = line_before_local or i
 			if current_exchange and current_component then
-				current_exchange[current_component].line_end = i - 1
+				current_exchange[current_component].line_end = current_component_start - 1
 				current_exchange[current_component].content = current_exchange[current_component].content:gsub("^%s*(.-)%s*$", "%1")
 			end
 			
@@ -2332,12 +2344,14 @@ M.parse_chat = function(lines, header_end)
 			}
 			table.insert(result.exchanges, current_exchange)
 			current_component = "question"
+	        line_before_local = nil
 		
 		-- Check for assistant message start
 		elseif line:sub(1, #agent_prefix) == agent_prefix then
 			-- If we were building a previous component, finalize it
+            current_component_start = line_before_local or i
 			if current_exchange and current_component then
-				current_exchange[current_component].line_end = i - 1
+				current_exchange[current_component].line_end = current_component_start - 1
 				current_exchange[current_component].content = current_exchange[current_component].content:gsub("^%s*(.-)%s*$", "%1")
 			end
 			
@@ -2347,7 +2361,7 @@ M.parse_chat = function(lines, header_end)
 				current_exchange = {
 					question = {
 						line_start = header_end + 1,
-						line_end = i - 1,
+						line_end = current_component_start - 1,
 						content = ""
 					},
 					answer = nil
@@ -2362,6 +2376,7 @@ M.parse_chat = function(lines, header_end)
 				content = ""
 			}
 			current_component = "answer"
+            line_before_local = nil
 			
 		-- Check for summary line
 		elseif current_component == "answer" and line:sub(1, #summary_prefix) == summary_prefix then
@@ -2377,8 +2392,9 @@ M.parse_chat = function(lines, header_end)
 				content = line:sub(#reasoning_prefix + 1):gsub("^%s*(.-)%s*$", "%1")
 			}
 			
-		-- Handle content continuation
-		elseif current_exchange and current_component then
+		-- Handle content continuation, ignore lines if we are in local_prefix section, aka line_before_local is set
+   --   -- note, in this mode, both plain text and file reference pattern @@ are ignored.
+		elseif (not line_before_local) and current_exchange and current_component then
 			current_exchange[current_component].content = current_exchange[current_component].content .. "\n" .. line
 			
 			-- Check for file references in question content - ONLY at the beginning of a line
