@@ -2008,58 +2008,71 @@ M.cmd.NoteNewFromTemplate = function()
 			end,
 		},
 		sorter = conf.generic_sorter({}),
-		attach_mappings = function(prompt_bufnr, map)
-			actions.select_default:replace(function()
-				actions.close(prompt_bufnr)
-				local selection = action_state.get_selected_entry()
-				if selection then
-					-- Read template content
-					local template_content = table.concat(vim.fn.readfile(selection.value.path), "\n")
-					
-					-- Prompt for note subject
-					vim.ui.input({ prompt = "Note subject: " }, function(subject)
-						if subject and subject ~= "" then
-							M.new_note_from_template(subject, template_content)
+			attach_mappings = function(prompt_bufnr, map)
+				actions.select_default:replace(function()
+					-- Capture selection and close picker
+					local selection = action_state.get_selected_entry()
+					actions.close(prompt_bufnr)
+					if not selection then
+						return
+					end
+					-- Schedule input after picker closes to restore proper focus
+					vim.schedule(function()
+						-- Read template lines to preserve blank lines
+						local template_lines = vim.fn.readfile(selection.value.path)
+						-- Prompt for note subject (command-line input)
+						local subject = vim.fn.input("Note subject: ")
+						-- Cancel if no title provided
+						if not subject or subject == "" then
+							return
 						end
+						M.new_note_from_template(subject, template_lines)
 					end)
-				end
-			end)
-			return true
-		end,
+				end)
+				return true
+			end,
 	}):find()
 end
 
 -- Internal helper: create a note file with a title and metadata (array of {key, value})
 M._create_note_file = function(filename, title, metadata, template_content)
-	local lines = {}
-	
-	if template_content then
-		-- If using a template, use its content instead of default format
-		-- Replace {{title}} placeholder with actual title in template
-		local content = template_content:gsub("{{title}}", title)
-		-- Replace metadata placeholders
-		for _, kv in ipairs(metadata) do
-			content = content:gsub("{{" .. kv[1]:lower() .. "}}", kv[2])
-		end
-		-- Split content into lines
-		for line in content:gmatch("[^\r\n]+") do
-			table.insert(lines, line)
-		end
-	else
-		-- Default note format
-		table.insert(lines, "# " .. title)
-		table.insert(lines, "")
-		for _, kv in ipairs(metadata) do
-			table.insert(lines, kv[1] .. ": " .. kv[2])
-			table.insert(lines, "")
-		end
-	end
-	
-	vim.fn.writefile(lines, filename)
-	local buf = M.open_buf(filename)
-	vim.api.nvim_command("normal! G")
-	vim.api.nvim_command("startinsert")
-	return buf
+    local lines = {}
+
+    if template_content then
+        -- Generate lines from template_content (string or table), preserving empty lines
+        local tlines = {}
+        if type(template_content) == "string" then
+            -- Split string on newline, keep empty entries
+            tlines = vim.split(template_content, "\n", true, false)
+        elseif type(template_content) == "table" then
+            tlines = template_content
+        end
+        -- Process each line: replace placeholders
+        for _, raw in ipairs(tlines) do
+            local ln = raw
+            -- Replace title placeholder
+            ln = ln:gsub("{{title}}", title)
+            -- Replace metadata placeholders
+            for _, kv in ipairs(metadata) do
+                ln = ln:gsub("{{" .. kv[1]:lower() .. "}}", kv[2])
+            end
+            table.insert(lines, ln)
+        end
+    else
+        -- Default note format
+        table.insert(lines, "# " .. title)
+        table.insert(lines, "")
+        for _, kv in ipairs(metadata) do
+            table.insert(lines, kv[1] .. ": " .. kv[2])
+            table.insert(lines, "")
+        end
+    end
+
+    vim.fn.writefile(lines, filename)
+    local buf = M.open_buf(filename)
+    vim.api.nvim_command("normal! G")
+    vim.api.nvim_command("startinsert")
+    return buf
 end
 
 -- Function to find notes using telescope
