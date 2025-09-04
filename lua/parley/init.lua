@@ -104,16 +104,21 @@ M.highlight_interview_timestamps = function(buf)
 		return
 	end
 	
-	-- Clear any existing matches for this pattern first
-	local matches = vim.fn.getmatches()
-	for _, match in ipairs(matches) do
-		if match.pattern and match.pattern:find(":\\d\\+min") then
-			vim.fn.matchdelete(match.id)
-		end
+	-- Use a static match ID to avoid searching through all matches
+	local match_id_key = 'parley_interview_timestamps_' .. buf
+	if not M._interview_match_ids then
+		M._interview_match_ids = {}
 	end
 	
-	-- Add highlighting for timestamp lines (pattern: :XXmin where XX is one or more digits)
-	vim.fn.matchadd("InterviewTimestamp", "^\\s*:\\d\\+min.*$")
+	-- Clear existing match for this buffer if it exists
+	if M._interview_match_ids[match_id_key] then
+		pcall(vim.fn.matchdelete, M._interview_match_ids[match_id_key])
+		M._interview_match_ids[match_id_key] = nil
+	end
+	
+	-- Add highlighting only for the timestamp part (not the whole line for better performance)
+	local match_id = vim.fn.matchadd("InterviewTimestamp", "^\\s*:\\d\\+min")
+	M._interview_match_ids[match_id_key] = match_id
 end
 
 -- Legacy interview mode highlighting functions - now just call the new function
@@ -1734,6 +1739,15 @@ M.buf_handler = function()
 			M.highlight_markdown_chat_refs(buf)
 			-- Refresh interview timestamp highlighting when entering a window
 			M.highlight_interview_timestamps(buf)
+		end
+	end, gid)
+
+	-- Clean up interview match IDs when buffers are deleted
+	M.helpers.autocmd({ "BufDelete", "BufUnload" }, nil, function(event)
+		local buf = event.buf
+		local match_id_key = 'parley_interview_timestamps_' .. buf
+		if M._interview_match_ids and M._interview_match_ids[match_id_key] then
+			M._interview_match_ids[match_id_key] = nil
 		end
 	end, gid)
 end
