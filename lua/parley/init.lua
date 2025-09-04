@@ -69,8 +69,8 @@ M.setup_interview_keymap = function()
 			local timestamp = M.format_timestamp()
 			print("DEBUG: Inserting timestamp: " .. timestamp)  -- Debug print
 			M.logger.debug("Inserting timestamp: " .. timestamp)
-			-- Insert newline and timestamp
-			return '<CR>' .. timestamp .. ' '
+			-- Insert extra newline, then timestamp  
+			return '<CR><CR>' .. timestamp .. ' '
 		else
 			print("DEBUG: Regular Enter behavior")  -- Debug print
 			-- Regular Enter behavior
@@ -116,8 +116,8 @@ M.highlight_interview_timestamps = function(buf)
 		M._interview_match_ids[match_id_key] = nil
 	end
 	
-	-- Add highlighting only for the timestamp part (not the whole line for better performance)
-	local match_id = vim.fn.matchadd("InterviewTimestamp", "^\\s*:\\d\\+min")
+	-- Add highlighting for the entire timestamp line
+	local match_id = vim.fn.matchadd("InterviewTimestamp", "^\\s*:\\d\\+min.*$")
 	M._interview_match_ids[match_id_key] = match_id
 end
 
