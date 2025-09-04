@@ -12,7 +12,7 @@
 
 # Goals and Features
 
-Parley is a streamlined LLM chat plugin for NeoVIM, focusing exclusively on providing a clean and efficient interface for conversations with AI assistants. Imagine having full transcript of a chat session with ChatGPT (or Anthropic, or Gemini) that allows editing of all questions, and answers themselves! I created this as a way to construct research report, improve my understanding of new topics. It's a researcher's notebook.
+Parley is a streamlined LLM chat plugin for NeoVIM, focusing exclusively on providing a clean and efficient interface for conversations with AI assistants. Imagine having full transcript of a chat session with ChatGPT (or Anthropic, or Gemini) that allows editing of all questions, and answers themselves! I created this as a way to construct research report, improve my understanding of new topics. It's a researcher's notebook. Later on, I stuff some other minor utilities in here, such as a set of notes organized by week/day. I use them in work, pretty decent way of keeping private notes, e.g. for conducting interviews. There's now even an interview mode, where interview time stamps automatically inserted.
 
 - **Streamlined Chat Experience**
   - Markdown-formatted chat transcripts with syntax highlighting
@@ -23,7 +23,7 @@ Parley is a streamlined LLM chat plugin for NeoVIM, focusing exclusively on prov
   - No spinner wheel and waiting for the full answer
   - Response generation can be canceled half way through
   - Properly working undo (response can be undone with a single `u`)
-- **Minimum dependencies** (`neovim`, `curl`, `grep`)
+- **Minimum dependencies** (`neovim`, `curl`, `grep`, `teleport`)
   - Zero dependencies on other lua plugins to minimize chance of breakage
 - **ChatGPT like sessions**
   - Just good old neovim buffers formatted as markdown with autosave
@@ -33,6 +33,8 @@ Parley is a streamlined LLM chat plugin for NeoVIM, focusing exclusively on prov
   - Insert questions in the middle of the transcript and expand with assistant's answers
   - You have the full NeoVIM behind you.
   - Referencing other local files, for example, to get critics for that file and ask questions about them, essentially adding context.
+- **Exporting transcript to Jekyll blog**
+  - Export to Jekyll blog post format with front matter. [Example](https://xianxu.github.io/2025/05/12/conversation_around_concurrent_programming_models.html). 
 
 # The Format of the Transcript
 
