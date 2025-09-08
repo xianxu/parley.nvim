@@ -97,13 +97,6 @@ M.highlight_interview_timestamps = function(buf)
 		return
 	end
 	
-	local file_name = vim.api.nvim_buf_get_name(buf)
-	
-	-- Only apply to markdown files (chat files or regular markdown files)
-	if not (M.not_chat(buf, file_name) == nil or M.is_markdown(buf, file_name)) then
-		return
-	end
-	
 	-- Use a static match ID to avoid searching through all matches
 	local match_id_key = 'parley_interview_timestamps_' .. buf
 	if not M._interview_match_ids then
@@ -177,7 +170,6 @@ M.setup = function(opts)
 	local curl_params = opts.curl_params or M.config.curl_params
 	local cmd_prefix = opts.cmd_prefix or M.config.cmd_prefix
 	local state_dir = opts.state_dir or M.config.state_dir
-	local openai_api_key = opts.openai_api_key or M.config.openai_api_key
 
 	M.logger.setup(opts.log_file or M.config.log_file, opts.log_sensitive)
 
@@ -209,7 +201,7 @@ M.setup = function(opts)
 	M.config.providers = nil
 	opts.providers = nil
 
-	-- merge nested tables
+	-- selectively merge some keys. this allows configuration to partially override this keys.
 	local mergeTables = { "hooks", "agents", "system_prompts" }
 	for _, tbl in ipairs(mergeTables) do
 		M[tbl] = M[tbl] or {}
@@ -240,6 +232,7 @@ M.setup = function(opts)
 		opts[tbl] = nil
 	end
 
+	-- now merge the rest of opts into M.config, this would be fully override.
 	for k, v in pairs(opts) do
 		if M.deprecator.is_valid(k, v) then
 			M.config[k] = v
@@ -253,9 +246,8 @@ M.setup = function(opts)
 			M.config[k] = M.helpers.prepare_dir(v, k)
 		end
 	end
-	
 
-	-- remove invalid agents
+	-- remove disabled agents
 	for name, agent in pairs(M.agents) do
 		if type(agent) ~= "table" or agent.disable then
 			M.agents[name] = nil
@@ -285,7 +277,7 @@ M.setup = function(opts)
 	end
 	table.sort(M._agents)
 
-	-- remove invalid system_prompts
+	-- remove disabled system_prompts
 	for name, prompt in pairs(M.system_prompts) do
 		if type(prompt) ~= "table" or prompt.disable then
 			M.system_prompts[name] = nil
@@ -327,7 +319,7 @@ M.setup = function(opts)
 		end)
 	end
 	
-	-- Set up global keymaps for commands
+	-- set up global keymaps for commands
 	if M.config.global_shortcut_finder then
 		for _, mode in ipairs(M.config.global_shortcut_finder.modes) do
 			if mode == "n" then
