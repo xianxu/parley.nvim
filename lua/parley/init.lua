@@ -57,24 +57,21 @@ M.format_timestamp = function()
 	end
 end
 
+-- In interview mode, insert timestamp and new line when Enter key is pressed
 M.setup_interview_keymap = function()
-	print("DEBUG: Setting up interview keymap")  -- Debug print
 	M.logger.info("Setting up interview keymap")
 	
 	-- Set up insert mode keymap for Enter key globally
 	vim.keymap.set('i', '<CR>', function()
-		print("DEBUG: Enter key pressed!")  -- Debug print
 		print("DEBUG: interview_mode=" .. tostring(M._state.interview_mode))  -- Debug print
 		
 		-- Apply timestamp when interview mode is active (no folder restriction)
 		if M._state.interview_mode then
 			local timestamp = M.format_timestamp()
-			print("DEBUG: Inserting timestamp: " .. timestamp)  -- Debug print
 			M.logger.debug("Inserting timestamp: " .. timestamp)
 			-- Insert extra newline, then timestamp  
 			return '<CR><CR>' .. timestamp .. ' '
 		else
-			print("DEBUG: Regular Enter behavior")  -- Debug print
 			-- Regular Enter behavior
 			return '<CR>'
 		end
@@ -93,7 +90,8 @@ M.remove_interview_keymap = function()
 	end)
 end
 
--- Interview timestamp highlighting function - now works for all markdown files
+-- Interview timestamp highlighting function, basiclaly highlight the interview timestamp pattern.
+-- Interview mode, line starts with :00min, :01min, etc.
 M.highlight_interview_timestamps = function(buf)
 	if not vim.api.nvim_buf_is_valid(buf) then
 		return
@@ -121,33 +119,6 @@ M.highlight_interview_timestamps = function(buf)
 	-- Add highlighting for the entire timestamp line
 	local match_id = vim.fn.matchadd("InterviewTimestamp", "^\\s*:\\d\\+min.*$")
 	M._interview_match_ids[match_id_key] = match_id
-end
-
--- Legacy interview mode highlighting functions - now just call the new function
-M.setup_interview_highlighting = function()
-	M.logger.info("Setting up interview timestamp highlighting")
-	
-	-- Apply highlighting to current buffer if it's markdown
-	local buf = vim.api.nvim_get_current_buf()
-	M.highlight_interview_timestamps(buf)
-end
-
-M.remove_interview_highlighting = function()
-	M.logger.info("Removing interview timestamp highlighting")
-	
-	-- Clear all matches for the timestamp pattern from all buffers
-	for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-		if vim.api.nvim_buf_is_valid(buf) then
-			vim.api.nvim_buf_call(buf, function()
-				local matches = vim.fn.getmatches()
-				for _, match in ipairs(matches) do
-					if match.pattern and match.pattern:find(":\\d\\+min") then
-						pcall(vim.fn.matchdelete, match.id)
-					end
-				end
-			end)
-		end
-	end
 end
 
 -- Timer functions for interview mode statusline updates
@@ -526,8 +497,6 @@ M.setup = function(opts)
 			
 			-- Set up insert mode keymap for timestamps
 			M.setup_interview_keymap()
-			-- Set up timestamp highlighting
-			M.setup_interview_highlighting()
 			-- Start timer for statusline updates
 			M.start_interview_timer()
 		else
@@ -536,7 +505,6 @@ M.setup = function(opts)
 			vim.notify("Interview mode disabled", vim.log.levels.INFO)
 			-- Remove insert mode keymap and highlighting
 			M.remove_interview_keymap()
-			M.remove_interview_highlighting()
 			-- Stop timer
 			M.stop_interview_timer()
 		end
