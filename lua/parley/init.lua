@@ -15,6 +15,7 @@ local M = {
 		interview_timer = nil, -- timer handle for statusline updates
 	}, -- table of state variables
 	agents = {}, -- table of agents
+	system_prompts = {}, -- table of system prompts
 	cmd = {}, -- default command functions
 	config = {}, -- config variables
 	hooks = {}, -- user defined command functions
@@ -29,6 +30,7 @@ local M = {
 	vault = require("parley.vault"), -- handles secrets
 	lualine = require("parley.lualine"), -- lualine integration
 	agent_picker = require("parley.agent_picker"), -- agent selection UI
+	system_prompt_picker = require("parley.system_prompt_picker"), -- system prompt selection UI
 }
 
 --------------------------------------------------------------------------------
@@ -237,7 +239,7 @@ M.setup = function(opts)
 	opts.providers = nil
 
 	-- merge nested tables
-	local mergeTables = { "hooks", "agents" }
+	local mergeTables = { "hooks", "agents", "system_prompts" }
 	for _, tbl in ipairs(mergeTables) do
 		M[tbl] = M[tbl] or {}
 		---@diagnostic disable-next-line
@@ -245,6 +247,9 @@ M.setup = function(opts)
 			if tbl == "hooks" then
 				M[tbl][k] = v
 			elseif tbl == "agents" then
+				---@diagnostic disable-next-line
+				M[tbl][v.name] = v
+			elseif tbl == "system_prompts" then
 				---@diagnostic disable-next-line
 				M[tbl][v.name] = v
 			end
@@ -256,6 +261,8 @@ M.setup = function(opts)
 			if tbl == "hooks" then
 				M[tbl][k] = v
 			elseif tbl == "agents" then
+				M[tbl][v.name] = v
+			elseif tbl == "system_prompts" then
 				M[tbl][v.name] = v
 			end
 		end
@@ -306,6 +313,30 @@ M.setup = function(opts)
 		end
 	end
 	table.sort(M._agents)
+
+	-- remove invalid system_prompts
+	for name, prompt in pairs(M.system_prompts) do
+		if type(prompt) ~= "table" or prompt.disable then
+			M.system_prompts[name] = nil
+		elseif not prompt.system_prompt then
+			M.logger.warning(
+				"System prompt "
+					.. name
+					.. " is missing system_prompt field\n"
+					.. "If you want to disable a system prompt, use: { name = '"
+					.. name
+					.. "', disable = true },"
+			)
+			M.system_prompts[name] = nil
+		end
+	end
+
+	-- prepare system_prompts list
+	M._system_prompts = {}
+	for name, _ in pairs(M.system_prompts) do
+		table.insert(M._system_prompts, name)
+	end
+	table.sort(M._system_prompts)
 
 	M.refresh_state()
 
@@ -578,6 +609,10 @@ M.refresh_state = function(update)
 
 	if not M._state.agent or not M.agents[M._state.agent] then
 		M._state.agent = M._agents[1]
+	end
+
+	if not M._state.system_prompt or not M.system_prompts[M._state.system_prompt] then
+		M._state.system_prompt = "default"
 	end
 
 	if M._state.last_chat and vim.fn.filereadable(M._state.last_chat) == 0 then
@@ -1267,6 +1302,9 @@ M.prep_chat = function(buf, file_name)
 	local as = M.config.chat_shortcut_agent
 	M.helpers.set_keymap({ buf }, as.modes, as.shortcut, M.cmd.NextAgent, "Parley prompt Next Agent")
 	
+	local sps = M.config.chat_shortcut_system_prompt
+	M.helpers.set_keymap({ buf }, sps.modes, sps.shortcut, M.cmd.NextSystemPrompt, "Parley prompt System Prompt Selector")
+	
 	local ss = M.config.chat_shortcut_search
 	if ss then
 		-- Create a function for searching chat sections
@@ -1834,7 +1872,13 @@ M.new_chat = function(system_prompt, agent)
 	if system_prompt then
 		system_prompt = "- role: " .. system_prompt:gsub("\n", "\\n") .. "\n"
 	else
-		system_prompt = ""
+		-- Use the selected system prompt from state
+		local selected_system_prompt = M._state.system_prompt or "default"
+		if M.system_prompts[selected_system_prompt] then
+			system_prompt = "- role: " .. M.system_prompts[selected_system_prompt].system_prompt:gsub("\n", "\\n") .. "\n"
+		else
+			system_prompt = ""
+		end
 	end
 
 	local template = M.render.template(M.config.chat_template or require("parley.defaults").chat_template, {
@@ -3880,6 +3924,63 @@ M.cmd.NextAgent = function()
 	set_agent(agent_list[1])
 end
 
+-- System prompt selection command
+M.cmd.SystemPrompt = function(params)
+	local prompt_name = params and params.args or ""
+	
+	-- If no arguments provided, show the system prompt picker
+	if prompt_name == "" then
+		-- Launch the Telescope picker if Telescope is available
+		local ok, _ = pcall(require, "telescope")
+		if ok then
+			M.system_prompt_picker.system_prompt_picker(M)
+		else
+			-- Fall back to showing current system prompt if Telescope isn't available
+			M.logger.info("Current system prompt: " .. M._state.system_prompt)
+		end
+		return
+	end
+	
+	-- Handle specific system prompt selection by name
+	if not M.system_prompts[prompt_name] then
+		M.logger.warning("Unknown system prompt: " .. prompt_name)
+		return
+	end
+
+	M.refresh_state({ system_prompt = prompt_name })
+	M.logger.info("System prompt set to: " .. M._state.system_prompt)
+	vim.cmd("doautocmd User ParleySystemPromptChanged")
+end
+
+M.cmd.NextSystemPrompt = function()
+	-- Check if Telescope is available
+	local ok, _ = pcall(require, "telescope")
+	if ok then
+		-- Use the Telescope picker if available
+		M.system_prompt_picker.system_prompt_picker(M)
+		return
+	end
+	
+	-- Fall back to cycling through system prompts if Telescope isn't available
+	local current_prompt = M._state.system_prompt
+	local prompt_list = M._system_prompts
+
+	local set_prompt = function(prompt_name)
+		M.refresh_state({ system_prompt = prompt_name })
+		M.logger.info("System prompt: " .. M._state.system_prompt)
+		vim.cmd("doautocmd User ParleySystemPromptChanged")
+	end
+
+	for i, prompt_name in ipairs(prompt_list) do
+		if prompt_name == current_prompt then
+			set_prompt(prompt_list[i % #prompt_list + 1])
+			return
+		end
+	end
+
+	set_prompt(prompt_list[1])
+end
+
 ---@param name string | nil
 ---@return table # { cmd_prefix, name, model, system_prompt, provider }
 -- Get basic agent information from agent configuration
@@ -3934,7 +4035,13 @@ M.get_default_template = function(agent)
 		end
 		
 		if agent.system_prompt then
-			system_prompt = "- role: " .. agent.system_prompt:gsub("\n", "\\n") .. "\n"
+			-- Use the selected system prompt from state instead of agent's system prompt
+			local selected_system_prompt = M._state.system_prompt or "default"
+			if M.system_prompts[selected_system_prompt] then
+				system_prompt = "- role: " .. M.system_prompts[selected_system_prompt].system_prompt:gsub("\n", "\\n") .. "\n"
+			else
+				system_prompt = "- role: " .. agent.system_prompt:gsub("\n", "\\n") .. "\n"
+			end
 		end
 	end
 	
@@ -3960,11 +4067,15 @@ M.get_default_template = function(agent)
 end
 
 M.get_agent_info = function(headers, agent)
+	-- Get the selected system prompt from state, fallback to agent's system prompt
+	local selected_system_prompt = M._state.system_prompt or "default"
+	local system_prompt = M.system_prompts[selected_system_prompt] and M.system_prompts[selected_system_prompt].system_prompt or agent.system_prompt
+	
 	local info = {
 		name = agent.name,
 		provider = agent.provider,
 		model = agent.model,
-		system_prompt = agent.system_prompt,
+		system_prompt = system_prompt,
 		display_name = agent.name
 	}
 	

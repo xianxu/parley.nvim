@@ -167,6 +167,33 @@ local config = {
 		},
 	},
 
+	-- named system prompts for reuse
+	-- name, system_prompt are mandatory fields  
+	-- to disable a system_prompt completely set it like:
+	-- system_prompts = { { name = "creative", disable = true, }, ... },
+	system_prompts = {
+		{
+			name = "default",
+			system_prompt = require("parley.defaults").chat_system_prompt,
+		},
+		{
+			name = "creative", 
+			system_prompt = "You are a creative and imaginative assistant. Think outside the box, offer unique perspectives, and help with creative problem-solving. Be expressive and engaging in your responses.",
+		},
+		{
+			name = "concise",
+			system_prompt = "You are a concise assistant. Provide brief, direct answers. No unnecessary explanations unless specifically requested. Get straight to the point.",
+		},
+		{
+			name = "teacher",
+			system_prompt = "You are a patient teacher. Break down complex concepts into simple explanations. Use examples and analogies when helpful. Encourage questions and learning.",
+		},
+		{
+			name = "code_reviewer", 
+			system_prompt = "You are a code reviewer focused on best practices, performance, security, and maintainability. Provide constructive feedback with specific improvement suggestions.",
+		},
+	},
+
 	-- directory for storing chat files
 	-- chat_dir = vim.fn.stdpath("data"):gsub("/$", "") .. "/parley/chats",
     chat_dir = vim.fn.expand("~/Library/Mobile Documents/com~apple~CloudDocs/parley"),
@@ -203,6 +230,7 @@ local config = {
 	chat_shortcut_delete = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>d" },
 	chat_shortcut_stop = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>s" },
 	chat_shortcut_agent = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>a" },
+	chat_shortcut_system_prompt = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>p" },
 	chat_shortcut_search = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>n" },
 	chat_shortcut_open_file = { modes = { "n", "i" }, shortcut = "<C-g>o" },
 	-- markdown code block shortcuts
