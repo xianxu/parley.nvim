@@ -411,10 +411,6 @@ M.setup = function(opts)
 		M.cmd.NoteNewFromTemplate()
 	end, { silent = true, desc = "Create Note from Template" })
 	
-	-- Note: Agent switching is now handled in buffer-local bindings
-	
-	-- Note: Chat section navigation is now handled in the buffer-local bindings
-
 	local completions = {
 		ChatNew = { },
 		Agent = agent_completion,
