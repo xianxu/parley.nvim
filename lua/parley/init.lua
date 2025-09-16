@@ -527,6 +527,14 @@ M.setup = function(opts)
 		M.logger.error("curl is not installed, run :checkhealth parley")
 	end
 
+	-- Set up custom Search highlight for better visibility of all matches
+	local st = vim.api.nvim_get_hl(0, { name = "PmenuSel" })
+	vim.api.nvim_set_hl(0, "Search", {
+		bg = st.bg or st.background,
+		fg = st.fg or st.foreground,
+		bold = false,
+	})
+
 	M.logger.debug("setup finished")
 end
 
@@ -1401,12 +1409,12 @@ M.highlight_questions = function()
 	
 	-- Interview timestamps - Highlighted timestamp lines like :15min
 	-- Use only background color to allow search highlights to show through
-	local diffadd_hl = vim.api.nvim_get_hl(0, { name = "DiffAdd" })
+	local diffadd_hl = vim.api.nvim_get_hl(0, { name = "StatusLine" })
 	vim.api.nvim_set_hl(0, "InterviewTimestamp", {
 		bg = diffadd_hl.bg or diffadd_hl.background,
 		-- Explicitly don't set fg to allow other highlights to show through
 	})
-	
+
 	-- Create aliases for backward compatibility
 	vim.api.nvim_set_hl(0, "Question", { link = "ParleyQuestion" })
 	vim.api.nvim_set_hl(0, "FileLoading", { link = "ParleyFileReference" })
