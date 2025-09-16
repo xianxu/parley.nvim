@@ -109,8 +109,9 @@ M.highlight_interview_timestamps = function(buf)
 		M._interview_match_ids[match_id_key] = nil
 	end
 	
-	-- Add highlighting for the entire timestamp line
-	local match_id = vim.fn.matchadd("InterviewTimestamp", "^\\s*:\\d\\+min.*$")
+	-- Add highlighting for the entire timestamp line with very low priority (-1)
+	-- to ensure all search highlights (incsearch, Search, CurSearch) can take precedence
+	local match_id = vim.fn.matchadd("InterviewTimestamp", "^\\s*:\\d\\+min.*$", -1)
 	M._interview_match_ids[match_id_key] = match_id
 end
 
@@ -1399,8 +1400,12 @@ M.highlight_questions = function()
 	end
 	
 	-- Interview timestamps - Highlighted timestamp lines like :15min
-	-- Always use DiffAdd which is visible and appropriate for timestamps
-	vim.api.nvim_set_hl(0, "InterviewTimestamp", { link = "DiffAdd" })
+	-- Use only background color to allow search highlights to show through
+	local diffadd_hl = vim.api.nvim_get_hl(0, { name = "DiffAdd" })
+	vim.api.nvim_set_hl(0, "InterviewTimestamp", {
+		bg = diffadd_hl.bg or diffadd_hl.background,
+		-- Explicitly don't set fg to allow other highlights to show through
+	})
 	
 	-- Create aliases for backward compatibility
 	vim.api.nvim_set_hl(0, "Question", { link = "ParleyQuestion" })
