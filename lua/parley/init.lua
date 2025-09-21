@@ -514,7 +514,7 @@ M.setup = function(opts)
 		end
 	end
 
-	M.buf_handler()
+	M.setup_buf_handler()
 	
 	-- Setup lualine integration if lualine is enabled
 	pcall(function()
@@ -1352,7 +1352,7 @@ M.get_chat_topic = function(file_path)
 end
 
 -- Define namespace and highlighting colors for questions, annotations, and thinking
-M.highlight_questions = function()
+M.setup_highlight = function()
 	-- Set up namespace
 	local ns = vim.api.nvim_create_namespace("parley_question")
 	
@@ -1427,7 +1427,7 @@ end
 
 -- Function to highlight chat references in non-chat markdown files
 M.highlight_markdown_chat_refs = function(buf)
-	local ns = M.highlight_questions()
+	local ns = M.setup_highlight()
 	vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
 	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 	
@@ -1480,7 +1480,7 @@ end
 
 -- Function to apply highlighting to chat blocks in the current buffer
 M.highlight_question_block = function(buf)
-	local ns = M.highlight_questions()
+	local ns = M.setup_highlight()
 	vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
 	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 
@@ -1671,7 +1671,7 @@ M.setup_markdown_keymaps = function(buf)
 	end, "Parley create and insert new chat")
 end
 
-M.buf_handler = function()
+M.setup_buf_handler = function()
 	local gid = M.helpers.create_augroup("ParleyBufHandler", { clear = true })
 
 	-- Setup functions that only need to run when buffer is first loaded or entered
