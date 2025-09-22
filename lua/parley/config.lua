@@ -74,7 +74,10 @@ local config = {
 	log_sensitive = false,
 
 	-- directory for persisting state dynamically changed by user (like model or persona)
+	-- directory for persisting state dynamically changed by user (like model or persona)
 	state_dir = vim.fn.stdpath("data"):gsub("/$", "") .. "/parley/persisted",
+  -- default per-chat: enable Claude server-side web_search tool
+  claude_web_search = true,
 
 	-- default agent name set during startup, if nil last used agent is used
 	default_agent = nil,

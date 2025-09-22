@@ -503,7 +503,27 @@ M.setup = function(opts)
 		end)
 	end
 	
-	-- register default commands
+  -- Toggle Claude server-side web_search tool per chat
+  M.cmd.ToggleClaudeWebSearch = function()
+    local agent = M._state.agent
+    local conf = M.agents[agent]
+    local provider = conf and conf.provider or nil
+    local enable = not M._state.claude_web_search
+    -- Only allow enabling for Claude (Anthropic) agents
+    if enable and provider ~= "anthropic" then
+      local msg = string.format("Agent %s does not support web_search", agent)
+      M.logger.error(msg)
+      vim.notify(msg, vim.log.levels.ERROR)
+      return
+    end
+    -- persist the toggle in chat state
+    M.refresh_state({ claude_web_search = enable })
+    local status = enable and "enabled" or "disabled"
+    local msg = string.format("Claude web_search %s", status)
+    M.logger.info(msg)
+    vim.notify(msg, vim.log.levels.INFO)
+  end
+  -- register default commands
 	for cmd, _ in pairs(M.cmd) do
 		if M.hooks[cmd] == nil then
 			M.helpers.create_user_command(M.config.cmd_prefix .. cmd, function(params)
@@ -514,7 +534,10 @@ M.setup = function(opts)
 		end
 	end
 
-	M.setup_buf_handler()
+  -- set up buffer update handler
+  M.setup_buf_handler()
+  -- bind <C-g>w to toggle Claude web_search tool
+  vim.keymap.set('n', '<C-g>w', string.format('<cmd>%sToggleClaudeWebSearch<CR>', M.config.cmd_prefix), { noremap = true, silent = true, desc = 'Toggle Claude web_search tool' })
 	
 	-- Setup lualine integration if lualine is enabled
 	pcall(function()
@@ -568,9 +591,14 @@ M.refresh_state = function(update)
 	-- Stop any running interview timer
 	M.stop_interview_timer()
 
-	for k, v in pairs(update) do
-		M._state[k] = v
-	end
+  -- apply in-memory updates
+  for k, v in pairs(update) do
+    M._state[k] = v
+  end
+  -- initialize new per-chat setting if missing
+  if M._state.claude_web_search == nil then
+    M._state.claude_web_search = M.config.claude_web_search
+  end
 
 	if not M._state.agent or not M.agents[M._state.agent] then
 		M._state.agent = M._agents[1]
@@ -1154,12 +1182,19 @@ M.display_agent = function(buf, file_name)
 	local ns_id = vim.api.nvim_create_namespace("ParleyChatExt_" .. file_name)
 	vim.api.nvim_buf_clear_namespace(buf, ns_id, 0, -1)
 
+	-- Visual indicator: append [w] for Claude web_search when enabled
+	local agent = M._state.agent
+	local display_name = agent
+	local ag_conf = M.agents[agent]
+	if ag_conf and ag_conf.provider == "anthropic" and M._state.claude_web_search then
+		display_name = display_name .. "[w]"
+	end
 	vim.api.nvim_buf_set_extmark(buf, ns_id, 0, 0, {
 		strict = false,
 		right_gravity = true,
 		virt_text_pos = "right_align",
 		virt_text = {
-			{ "Current Agent: [" .. M._state.agent .. "]", "DiagnosticHint" },
+			{ "Current Agent: [" .. display_name .. "]", "DiagnosticHint" },
 		},
 		hl_mode = "combine",
 	})

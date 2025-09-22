@@ -181,6 +181,15 @@ D.prepare_payload = function(messages, model, provider)
 		if #system_blocks > 0 then
 			payload.system = system_blocks
 		end
+		-- add Claude server-side web_search tool if enabled in chat state
+		local parley = require("parley")
+		if parley._state and parley._state.claude_web_search then
+			payload.tools = {{
+				type = "web_search_20250305",
+				name = "web_search",
+				max_uses = 5,
+			}}
+		end
 		
 		return payload
 	end
