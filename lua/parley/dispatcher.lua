@@ -181,14 +181,21 @@ D.prepare_payload = function(messages, model, provider)
 		if #system_blocks > 0 then
 			payload.system = system_blocks
 		end
-		-- add Claude server-side web_search tool if enabled in chat state
+		-- add Claude server-side web_search and web_fetch tools if enabled in chat state
 		local parley = require("parley")
 		if parley._state and parley._state.claude_web_search then
-			payload.tools = {{
-				type = "web_search_20250305",
-				name = "web_search",
-				max_uses = 5,
-			}}
+			payload.tools = {
+				{
+					type = "web_search_20250305",
+					name = "web_search",
+					max_uses = 5,
+				},
+				{
+					type = "web_fetch_20250910",
+					name = "web_fetch",
+					max_uses = 5,
+				},
+			}
 		end
 		
 		return payload
@@ -714,13 +721,23 @@ local query = function(buf, provider, payload, handler, on_exit, callback)
 		endpoint = render.template_replace(endpoint, "{{model}}", payload.model)
 		payload.model = nil
 	elseif provider == "anthropic" then
+		-- choose anthropic-beta header based on use of web_fetch tool
+		local beta_tag = "messages-2023-12-15"
+		if payload and payload.tools then
+			for _, tool in ipairs(payload.tools) do
+				if tool.name == "web_fetch" then
+					beta_tag = "web-fetch-2025-09-10"
+					break
+				end
+			end
+		end
 		headers = {
 			"-H",
 			"x-api-key: " .. bearer,
 			"-H",
 			"anthropic-version: 2023-06-01",
 			"-H",
-			"anthropic-beta: messages-2023-12-15",
+			"anthropic-beta: " .. beta_tag,
 		}
 	elseif provider == "azure" then
 		headers = {
