@@ -463,14 +463,42 @@ M.setup = function(opts)
 	
 	-- Toggle Interview Mode
 	M.cmd.ToggleInterview = function()
+		-- First check if cursor is on an interview timestamp line
+		local cursor_line = vim.api.nvim_get_current_line()
+		local timestamp_match = cursor_line:match("^%s*:(%d+)min")
+
+		if timestamp_match then
+			-- Parse the minute value from the line
+			local minutes = tonumber(timestamp_match)
+			if minutes then
+				-- Calculate the start time based on current time minus the elapsed minutes
+				M._state.interview_start_time = os.time() - (minutes * 60)
+				M._state.interview_mode = true
+				M.logger.info(string.format("Interview mode enabled with timer set to %d minutes", minutes))
+				vim.notify(string.format("Interview timer set to %d minutes", minutes), vim.log.levels.INFO)
+
+				-- Set up insert mode keymap for timestamps
+				M.setup_interview_keymap()
+				-- Start timer for statusline updates
+				M.start_interview_timer()
+
+				-- Refresh lualine to update display
+				pcall(function()
+					require("lualine").refresh()
+				end)
+				return
+			end
+		end
+
+		-- Normal toggle behavior if not on a timestamp line
 		M._state.interview_mode = not M._state.interview_mode
 		print("DEBUG: Interview mode is now: " .. tostring(M._state.interview_mode))  -- Debug print
-		
+
 		if M._state.interview_mode then
 			M._state.interview_start_time = os.time()
 			M.logger.info("Interview mode enabled")
 			vim.notify("Interview mode enabled", vim.log.levels.INFO)
-			
+
 			-- Insert :00min marker at current cursor position
 			local mode = vim.fn.mode()
 			if mode == 'i' then
@@ -483,7 +511,7 @@ M.setup = function(opts)
 					vim.api.nvim_put({':00min '}, 'c', true, true)
 				end)
 			end
-			
+
 			-- Set up insert mode keymap for timestamps
 			M.setup_interview_keymap()
 			-- Start timer for statusline updates
