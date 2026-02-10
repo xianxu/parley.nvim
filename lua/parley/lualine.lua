@@ -4,6 +4,40 @@
 
 local M = {}
 
+-- State for flashing timer
+local timer_visible = true
+local flash_timer = nil
+
+-- Function to start the flashing timer
+local function start_flash_timer()
+  -- Stop existing timer if any
+  if flash_timer then
+    flash_timer:stop()
+    flash_timer:close()
+    flash_timer = nil
+  end
+
+  -- Create a new timer that toggles visibility every second
+  flash_timer = vim.loop.new_timer()
+  flash_timer:start(0, 1000, vim.schedule_wrap(function()
+    timer_visible = not timer_visible
+    -- Refresh lualine to show the change
+    pcall(function()
+      require("lualine").refresh()
+    end)
+  end))
+end
+
+-- Function to stop the flashing timer
+local function stop_flash_timer()
+  if flash_timer then
+    flash_timer:stop()
+    flash_timer:close()
+    flash_timer = nil
+  end
+  timer_visible = true  -- Reset to visible state
+end
+
 -- Notes folder detection and formatting
 M.format_directory = function(parley_instance)
   local cwd = vim.fn.getcwd()
@@ -24,7 +58,13 @@ M.format_directory = function(parley_instance)
     local elapsed = os.time() - parley._state.interview_start_time
     local minutes = math.floor(elapsed / 60)
     local timer_text = string.format(":%02dMIN", minutes)
-    return " INTERVIEW " .. timer_text
+
+    -- Flash the timer by toggling visibility
+    if timer_visible then
+      return " INTERVIEW " .. timer_text
+    else
+      return " INTERVIEW        "  -- Same length with spaces for stable width
+    end
   end
   
   -- Priority 2: If in notes folder, show NOTE
@@ -308,6 +348,30 @@ function M.setup(parley)
           end)
         end
       })
+
+      -- Start flashing timer when interview mode is active
+      -- Check initially and then monitor for changes
+      if parley._state and parley._state.interview_mode then
+        start_flash_timer()
+      end
+
+      -- Monitor for interview mode changes
+      -- We'll use a timer to poll the state since there's no dedicated event
+      local check_timer = vim.loop.new_timer()
+      local last_interview_state = parley._state.interview_mode
+      check_timer:start(0, 500, vim.schedule_wrap(function()
+        if parley._state then
+          local current_state = parley._state.interview_mode
+          if current_state ~= last_interview_state then
+            last_interview_state = current_state
+            if current_state then
+              start_flash_timer()
+            else
+              stop_flash_timer()
+            end
+          end
+        end
+      end))
     end)
   end, 100) -- Delay 100ms to ensure all initialization is complete
 end
