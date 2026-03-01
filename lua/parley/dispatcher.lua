@@ -9,6 +9,7 @@ local render = require("parley.render")
 local helpers = require("parley.helper")
 
 local default_config = require("parley.config")
+local provider_params = require("parley.provider_params")
 
 local D = {
 	config = {},
@@ -126,12 +127,7 @@ D.prepare_payload = function(messages, model, provider)
 					threshold = "BLOCK_NONE",
 				},
 			},
-			generationConfig = {
-				temperature = math.max(0, math.min(2, model.temperature or 1)),
-				maxOutputTokens = model.max_tokens or 8192,
-				topP = math.max(0, math.min(1, model.top_p or 1)),
-				topK = model.top_k or 100,
-			},
+			generationConfig = provider_params.resolve_params("googleai", model),
 			model = model.model,
 		}
 		return payload
@@ -168,14 +164,15 @@ D.prepare_payload = function(messages, model, provider)
 		end
 		
 		-- Create the payload with the system array if we have system blocks
+		local params = provider_params.resolve_params("anthropic", model)
 		local payload = {
 			model = model.model,
 			stream = true,
 			messages = messages,
-			max_tokens = model.max_tokens or 4096,
-			temperature = math.max(0, math.min(2, model.temperature or 1)),
-			top_p = math.max(0, math.min(1, model.top_p or 1)),
 		}
+		for k, v in pairs(params) do
+			payload[k] = v
+		end
 		
 		-- Only add the system array if we have system blocks
 		if #system_blocks > 0 then
@@ -205,38 +202,26 @@ D.prepare_payload = function(messages, model, provider)
 		model.model = "gpt-4o-2024-05-13"
 	end
 
+	local params = provider_params.resolve_params(provider, model)
 	local output = {
 		model = model.model,
 		stream = true,
 		messages = messages,
-		temperature = math.max(0, math.min(2, model.temperature or 1)),
-		top_p = math.max(0, math.min(1, model.top_p or 1)),
 		stream_options = {
 			include_usage = true
 		}
 	}
-
-	-- Use max_completion_tokens for GPT-5, max_tokens for other models
-	if model.model and model.model:find("gpt%-5") then
-		output.max_completion_tokens = model.max_tokens or 4096
-	else
-		output.max_tokens = model.max_tokens or 4096
+	for k, v in pairs(params) do
+		output[k] = v
 	end
 
+	-- o-series and reasoning models: strip system messages
 	if (provider == "openai" or provider == "copilot") and (model.model:sub(1, 1) == "o" or model.model == "gpt-4o-search-preview" or model.model == "gpt-5") then
-		if model.model:sub(1, 2) == "o3" or model.model:sub(1,5) == "gpt-5" then
-			output.reasoning_effort = model.reasoning_effort or "minimal"
-		end
-
 		for i = #messages, 1, -1 do
 			if messages[i].role == "system" then
 				table.remove(messages, i)
 			end
 		end
-		-- remove max_tokens, top_p, temperature for o1 models. https://platform.openai.com/docs/guides/reasoning/beta-limitations
-		output.max_tokens = nil
-		output.temperature = nil
-		output.top_p = nil
 	end
 
 	logger.debug("payload: " .. vim.inspect(output))

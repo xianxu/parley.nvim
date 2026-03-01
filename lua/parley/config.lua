@@ -29,14 +29,14 @@ local config = {
 		-- 3. File: api_key = { "cat", "/path/to/api_key_file" }
 		-- 4. Password manager: api_key = { "pass", "show", "openai-key" }
 		-- 5. macOS Keychain: api_key = { "security", "find-generic-password", "-a", "your_username", "-s", "OPENAI_API_KEY", "-w" }
-		
+
 		openai = os.getenv("OPENAI_API_KEY"),
 		anthropic = os.getenv("ANTHROPIC_API_KEY"),
 		googleai = os.getenv("GOOGLEAI_API_KEY"),
 		ollama = "dummy_secret", -- ollama typically uses a dummy token for local instances
 		copilot = os.getenv("GITHUB_TOKEN"), -- for GitHub Copilot
 	},
-	
+
 	-- at least one working provider is required
 	-- to disable a provider set it to empty table like openai = {}
 	providers = {
@@ -76,8 +76,8 @@ local config = {
 	-- directory for persisting state dynamically changed by user (like model or persona)
 	-- directory for persisting state dynamically changed by user (like model or persona)
 	state_dir = vim.fn.stdpath("data"):gsub("/$", "") .. "/parley/persisted",
-  -- default per-chat: enable Claude server-side web_search tool
-  claude_web_search = true,
+	-- default per-chat: enable Claude server-side web_search tool
+	claude_web_search = true,
 
 	-- default agent name set during startup, if nil last used agent is used
 	default_agent = nil,
@@ -102,7 +102,7 @@ local config = {
 			model = { model = "gpt-5", temperature = 1.1, top_p = 1 },
 			-- system prompt (use this to specify the persona/role of the AI)
 			system_prompt = require("parley.defaults").chat_system_prompt,
-	        reasoning_effort = low,
+			reasoning_effort = low,
 		},
 		{
 			provider = "openai",
@@ -124,7 +124,7 @@ local config = {
 			provider = "anthropic",
 			name = "Claude-Sonnet",
 			-- string with model name or table with model name and parameters
-			model = { model = "claude-sonnet-4-20250514", temperature = 0.8, top_p = 1 },
+			model = { model = "claude-sonnet-4-6", temperature = 0.8 },
 			-- system prompt (use this to specify the persona/role of the AI)
 			system_prompt = require("parley.defaults").chat_system_prompt,
 		},
@@ -132,10 +132,10 @@ local config = {
 			provider = "anthropic",
 			name = "Claude-Haiku",
 			-- string with model name or table with model name and parameters
-			model = { model = "claude-3-5-haiku-latest", temperature = 0.8, top_p = 1 },
+			model = { model = "claude-haiku-4-5", temperature = 0.8 },
 			-- system prompt (use this to specify the persona/role of the AI)
 			system_prompt = require("parley.defaults").chat_system_prompt,
-	    },
+		},
 		{
 			provider = "ollama",
 			name = "ChatOllamaLlama3.1-8B",
@@ -171,7 +171,7 @@ local config = {
 	},
 
 	-- named system prompts for reuse
-	-- name, system_prompt are mandatory fields  
+	-- name, system_prompt are mandatory fields
 	-- to disable a system_prompt completely set it like:
 	-- system_prompts = { { name = "creative", disable = true, }, ... },
 	system_prompts = {
@@ -180,7 +180,7 @@ local config = {
 			system_prompt = require("parley.defaults").chat_system_prompt,
 		},
 		{
-			name = "creative", 
+			name = "creative",
 			system_prompt = "You are a creative and imaginative assistant. Think outside the box, offer unique perspectives, and help with creative problem-solving. Be expressive and engaging in your responses.",
 		},
 		{
@@ -192,15 +192,15 @@ local config = {
 			system_prompt = "You are a patient teacher. Break down complex concepts into simple explanations. Use examples and analogies when helpful. Encourage questions and learning.",
 		},
 		{
-			name = "code_reviewer", 
+			name = "code_reviewer",
 			system_prompt = "You are a code reviewer focused on best practices, performance, security, and maintainability. Provide constructive feedback with specific improvement suggestions.",
 		},
 	},
 
 	-- directory for storing chat files
 	-- chat_dir = vim.fn.stdpath("data"):gsub("/$", "") .. "/parley/chats",
-    chat_dir = vim.fn.expand("~/Library/Mobile Documents/com~apple~CloudDocs/parley"),
-    -- directory for storing notes
+	chat_dir = vim.fn.expand("~/Library/Mobile Documents/com~apple~CloudDocs/parley"),
+	-- directory for storing notes
 	notes_dir = vim.fn.expand("~/Library/Mobile Documents/com~apple~CloudDocs/notes"),
 	-- export directories for different formats
 	export_html_dir = vim.fn.expand("~/blogs/static"),
@@ -244,7 +244,7 @@ local config = {
 	chat_shortcut_repeat_command = { modes = { "n" }, shortcut = "<leader>g!" },
 	chat_shortcut_copy_terminal_from_chat = { modes = { "n" }, shortcut = "<leader>ge" },
 	chat_shortcut_display_diff = { modes = { "n" }, shortcut = "<leader>gd" },
-	
+
 	-- global shortcuts (available in any buffer)
 	global_shortcut_new = { modes = { "n", "i" }, shortcut = "<C-g>c" },
 	global_shortcut_finder = { modes = { "n", "i" }, shortcut = "<C-g>f" },
@@ -268,12 +268,12 @@ local config = {
 		-- Default recency period in months
 		months = 6,
 	},
-	
+
 	-- if true, finished ChatResponder won't move the cursor to the end of the buffer
 	chat_free_cursor = true,
 	-- use prompt buftype for chats (:h prompt-buffer)
 	chat_prompt_buf_type = false,
-	
+
 	-- chat memory configuration (for summarizing older messages)
 	chat_memory = {
 		-- enable summary feature for older messages
@@ -283,7 +283,7 @@ local config = {
 		-- prefix for note lines in assistant responses (used to extract summaries)
 		summary_prefix = "📝:",
 		-- prefix for reasoning lines in assistant responses (used to ignore reasoning in subsequent requests)
-		reasoning_prefix = "🧠:", 
+		reasoning_prefix = "🧠:",
 		-- text to replace omitted user messages
 		omit_user_text = "Summarize our chat",
 	},
@@ -298,15 +298,15 @@ local config = {
 	style_chat_finder_margin_top = 2,
 	-- how wide should the preview be, number between 0.0 and 1.0
 	style_chat_finder_preview_ratio = 0.5,
-	
+
 	-- highlight styling (set to nil to use defaults that match your colorscheme)
 	-- these settings override the default highlight links if provided
 	highlight = {
 		-- Use existing highlight groups by default (nil values)
-		question = nil,       -- highlight for user questions (default: links to Keyword)
+		question = nil, -- highlight for user questions (default: links to Keyword)
 		file_reference = nil, -- highlight for file references (default: links to WarningMsg)
-		thinking = nil,       -- highlight for reasoning lines (default: links to Comment)
-		annotation = nil,     -- highlight for annotations (default: links to DiffAdd)
+		thinking = nil, -- highlight for reasoning lines (default: links to Comment)
+		annotation = nil, -- highlight for annotations (default: links to DiffAdd)
 	},
 
 	-- lualine integration options
@@ -316,7 +316,7 @@ local config = {
 		-- which section to add the component to
 		section = "lualine_x",
 	},
-	
+
 	-- raw_mode configuration for easier debugging and iteration
 	raw_mode = {
 		-- Enable raw mode functionality
@@ -327,8 +327,8 @@ local config = {
 		parse_raw_request = false,
 	},
 
-    -- TODO: what are the following are needed?
-    -- command config and templates below are used by commands like GpRewrite, GpEnew, etc.
+	-- TODO: what are the following are needed?
+	-- command config and templates below are used by commands like GpRewrite, GpEnew, etc.
 	-- command prompt prefix for asking user for input (supports {{agent}} template variable)
 	command_prompt_prefix_template = "🤖 {{agent}} ~ ",
 	-- auto select command response (easier chaining of commands)
