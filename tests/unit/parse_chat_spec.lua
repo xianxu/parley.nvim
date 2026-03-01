@@ -1,21 +1,26 @@
--- Unit tests for M.parse_chat in lua/parley/init.lua
+-- Unit tests for chat_parser.parse_chat in lua/parley/chat_parser.lua
 --
--- parse_chat(lines, header_end) takes a plain Lua string table and returns a
--- structured table. It reads M.config for prefix settings, so we call
--- setup() once with a temp dir to populate those defaults.
+-- parse_chat(lines, header_end, config) is a pure function: no Neovim APIs,
+-- no setup() required. We pass a minimal config stub directly.
 
-local tmp_dir = "/tmp/parley-test-parse-chat-" .. os.time()
+local chat_parser = require("parley.chat_parser")
 
--- Bootstrap parley with a minimal config pointing at a temp dir.
--- Done once at module load time (before any describe block runs).
-local parley = require("parley")
-parley.setup({
-    chat_dir = tmp_dir,
-    state_dir = tmp_dir .. "/state",
-    -- disable all providers so dispatcher doesn't complain about missing keys
-    providers = {},
-    api_keys = {},
-})
+-- Minimal config stub — covers every field that parse_chat reads from config.
+local test_config = {
+    chat_user_prefix      = "💬:",
+    chat_local_prefix     = "🔒:",
+    chat_assistant_prefix = { "🤖:", "[{{agent}}]" },
+    chat_memory = {
+        enable            = true,
+        summary_prefix    = "📝:",
+        reasoning_prefix  = "🧠:",
+    },
+}
+
+-- Shortcut: call parse_chat with the shared test_config.
+local function parse_chat(lines, header_end)
+    return chat_parser.parse_chat(lines, header_end, test_config)
+end
 
 -- Convenience: build a minimal valid chat header block ending at the --- line.
 -- Returns lines table and header_end index.
@@ -44,19 +49,19 @@ local std_header = {
 describe("parse_chat: headers", function()
     it("parses topic from header", function()
         local lines, header_end = make_chat(std_header, {})
-        local result = parley.parse_chat(lines, header_end)
+        local result = parse_chat(lines, header_end)
         assert.equals("Test Topic", result.headers["topic"])
     end)
 
     it("parses file from header", function()
         local lines, header_end = make_chat(std_header, {})
-        local result = parley.parse_chat(lines, header_end)
+        local result = parse_chat(lines, header_end)
         assert.equals("2026-02-28.test.md", result.headers["file"])
     end)
 
     it("parses provider from header", function()
         local lines, header_end = make_chat(std_header, {})
-        local result = parley.parse_chat(lines, header_end)
+        local result = parse_chat(lines, header_end)
         assert.equals("anthropic", result.headers["provider"])
     end)
 
@@ -67,7 +72,7 @@ describe("parse_chat: headers", function()
             "- tags: lua neovim test",
         }
         local lines, header_end = make_chat(header, {})
-        local result = parley.parse_chat(lines, header_end)
+        local result = parse_chat(lines, header_end)
         assert.is_table(result.headers["tags"])
         assert.equals(3, #result.headers["tags"])
         assert.equals("lua", result.headers["tags"][1])
@@ -77,7 +82,7 @@ describe("parse_chat: headers", function()
 
     it("returns empty exchanges for header-only chat", function()
         local lines, header_end = make_chat(std_header, {})
-        local result = parley.parse_chat(lines, header_end)
+        local result = parse_chat(lines, header_end)
         assert.equals(0, #result.exchanges)
     end)
 end)
@@ -87,7 +92,7 @@ describe("parse_chat: single exchange", function()
         local lines, header_end = make_chat(std_header, {
             "💬: Hello world",
         })
-        local result = parley.parse_chat(lines, header_end)
+        local result = parse_chat(lines, header_end)
         assert.equals(1, #result.exchanges)
         assert.equals("Hello world", result.exchanges[1].question.content)
         assert.is_nil(result.exchanges[1].answer)
@@ -99,7 +104,7 @@ describe("parse_chat: single exchange", function()
             "second line",
             "third line",
         })
-        local result = parley.parse_chat(lines, header_end)
+        local result = parse_chat(lines, header_end)
         assert.equals(1, #result.exchanges)
         -- content is trimmed; lines joined by \n
         local content = result.exchanges[1].question.content
@@ -114,7 +119,7 @@ describe("parse_chat: single exchange", function()
             "🤖:[Claude] It is 4.",
             "The answer is four.",
         })
-        local result = parley.parse_chat(lines, header_end)
+        local result = parse_chat(lines, header_end)
         assert.equals(1, #result.exchanges)
         assert.equals("What is 2+2?", result.exchanges[1].question.content)
         assert.is_not_nil(result.exchanges[1].answer)
@@ -128,7 +133,7 @@ describe("parse_chat: single exchange", function()
             "",           -- blank after ---
             "💬: Hello",
         })
-        local result = parley.parse_chat(lines, header_end)
+        local result = parse_chat(lines, header_end)
         -- question line_start should point to the 💬: line
         local q_line = result.exchanges[1].question.line_start
         assert.is_truthy(q_line > header_end)
@@ -145,7 +150,7 @@ describe("parse_chat: multiple exchanges", function()
             "🤖:[Claude] ",
             "Answer two body",
         })
-        local result = parley.parse_chat(lines, header_end)
+        local result = parse_chat(lines, header_end)
         assert.equals(2, #result.exchanges)
         assert.equals("Question one", result.exchanges[1].question.content)
         -- answer content = continuation lines only (not the 🤖: prefix line)
@@ -162,7 +167,7 @@ describe("parse_chat: multiple exchanges", function()
             "🤖:[A] R2",
             "💬: Q3",
         })
-        local result = parley.parse_chat(lines, header_end)
+        local result = parse_chat(lines, header_end)
         assert.equals(3, #result.exchanges)
         assert.is_nil(result.exchanges[3].answer)
     end)
@@ -175,7 +180,7 @@ describe("parse_chat: summary and reasoning lines", function()
             "🤖:[Claude] Here is my answer.",
             "📝: you asked about something, I answered with facts",
         })
-        local result = parley.parse_chat(lines, header_end)
+        local result = parse_chat(lines, header_end)
         assert.is_not_nil(result.exchanges[1].summary)
         assert.equals(
             "you asked about something, I answered with facts",
@@ -189,7 +194,7 @@ describe("parse_chat: summary and reasoning lines", function()
             "🤖:[Claude] Due to Rayleigh scattering.",
             "🧠: the user wants a physics explanation",
         })
-        local result = parley.parse_chat(lines, header_end)
+        local result = parse_chat(lines, header_end)
         assert.is_not_nil(result.exchanges[1].reasoning)
         assert.equals(
             "the user wants a physics explanation",
@@ -203,7 +208,7 @@ describe("parse_chat: summary and reasoning lines", function()
             "💬: Question",
             "📝: this is not a summary",
         })
-        local result = parley.parse_chat(lines, header_end)
+        local result = parse_chat(lines, header_end)
         -- no answer means no summary field should be set on exchange
         assert.is_nil(result.exchanges[1].summary)
     end)
@@ -217,7 +222,7 @@ describe("parse_chat: 🔒: local prefix", function()
             "🔒: This is local and should be excluded",
             "also excluded",
         })
-        local result = parley.parse_chat(lines, header_end)
+        local result = parse_chat(lines, header_end)
         local content = result.exchanges[1].question.content
         assert.is_truthy(content:match("Visible question"))
         assert.is_truthy(content:match("more visible content"))
@@ -231,7 +236,7 @@ describe("parse_chat: 🔒: local prefix", function()
             "🔒: local stuff",
             "💬: Q2 visible",
         })
-        local result = parley.parse_chat(lines, header_end)
+        local result = parse_chat(lines, header_end)
         assert.equals(2, #result.exchanges)
         assert.equals("Q2 visible", result.exchanges[2].question.content)
     end)
@@ -243,7 +248,7 @@ describe("parse_chat: @@ file references", function()
             "💬: Check this file",
             "@@/path/to/file.lua",
         })
-        local result = parley.parse_chat(lines, header_end)
+        local result = parse_chat(lines, header_end)
         local refs = result.exchanges[1].question.file_references
         assert.equals(1, #refs)
         assert.equals("/path/to/file.lua", refs[1].path)
@@ -255,7 +260,7 @@ describe("parse_chat: @@ file references", function()
             "@@/a.lua",
             "@@/b.lua",
         })
-        local result = parley.parse_chat(lines, header_end)
+        local result = parse_chat(lines, header_end)
         local refs = result.exchanges[1].question.file_references
         assert.equals(2, #refs)
     end)
@@ -264,7 +269,7 @@ describe("parse_chat: @@ file references", function()
         local lines, header_end = make_chat(std_header, {
             "💬: See @@/inline/path.lua here",
         })
-        local result = parley.parse_chat(lines, header_end)
+        local result = parse_chat(lines, header_end)
         local refs = result.exchanges[1].question.file_references
         assert.equals(0, #refs)
     end)
@@ -274,7 +279,7 @@ describe("parse_chat: @@ file references", function()
             "💬: Question",
             "🤖:[Claude] See @@/some/file.lua",
         })
-        local result = parley.parse_chat(lines, header_end)
+        local result = parse_chat(lines, header_end)
         -- answer block has no file_references field
         assert.is_nil(result.exchanges[1].answer.file_references)
     end)
@@ -285,7 +290,7 @@ describe("parse_chat: old user prefix 🗨:", function()
         local lines, header_end = make_chat(std_header, {
             "🗨: Old style question",
         })
-        local result = parley.parse_chat(lines, header_end)
+        local result = parse_chat(lines, header_end)
         assert.equals(1, #result.exchanges)
         assert.equals("Old style question", result.exchanges[1].question.content)
     end)
@@ -297,7 +302,7 @@ describe("parse_chat: edge cases", function()
             "🤖:[Claude] Unprompted response",
         })
         -- Should not crash; an exchange is created with empty question
-        local ok, result = pcall(parley.parse_chat, lines, header_end)
+        local ok, result = pcall(chat_parser.parse_chat, lines, header_end, test_config)
         assert.is_true(ok)
         assert.is_not_nil(result)
     end)
@@ -308,7 +313,7 @@ describe("parse_chat: edge cases", function()
             "",
             "",
         })
-        local result = parley.parse_chat(lines, header_end)
+        local result = parse_chat(lines, header_end)
         assert.equals(0, #result.exchanges)
     end)
 end)
