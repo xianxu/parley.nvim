@@ -102,6 +102,10 @@ local function is_outline_item(bufnr, line_number, config, code_block_memo)
   return false, nil, nil
 end
 
+-- Expose helpers for testing (follows dispatcher._extract_sse_content convention)
+M._is_in_code_block = is_in_code_block
+M._is_outline_item = is_outline_item
+
 -- Create a Telescope picker to navigate questions and headings in the current buffer
 function M.question_picker(config)
   -- Check if telescope is available
