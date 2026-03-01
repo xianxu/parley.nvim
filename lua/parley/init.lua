@@ -2698,6 +2698,9 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 	-- Get agent to use
 	local agent = M.get_agent()
 	
+	-- Get headers for later use (needed in completion callback)
+	local headers = parsed_chat.headers
+	
 	-- Build messages array using extracted testable function
 	local messages = M._build_messages({
 		parsed_chat = parsed_chat,
@@ -2711,7 +2714,7 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 	})
 	
 	-- Get agent info for display and dispatcher
-	local agent_info = M.get_agent_info(parsed_chat.headers, agent)
+	local agent_info = M.get_agent_info(headers, agent)
 	local agent_name = agent_info.display_name
 	
 	-- Set up agent prefixes
