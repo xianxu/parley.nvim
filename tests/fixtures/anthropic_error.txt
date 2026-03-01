@@ -1,0 +1,2 @@
+event: error
+data: {"type":"error","error":{"type":"invalid_request_error","message":"model: field required"}}

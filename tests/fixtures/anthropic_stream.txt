@@ -1,0 +1,1 @@
+{"type":"error","error":{"type":"not_found_error","message":"model: claude-haiku-20240307"},"request_id":"req_011CYbuHWDNi1MMYbp7AcAmn"}

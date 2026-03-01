@@ -8,7 +8,9 @@ Parley.nvim is a Neovim plugin that provides a streamlined LLM chat interface wi
 
 ## Development Commands
 - Manual testing: Start Neovim and use `:lua require('parley').setup()` followed by `:Parley`
-- No automated testing infrastructure is currently in place
+- Run tests: `make test` (runs all unit + integration tests via plenary.nvim in headless Neovim)
+- Refresh SSE fixtures: `ANTHROPIC_API_KEY=... OPENAI_API_KEY=... make fixtures`
+- Test files live in `tests/unit/` (pure logic, no Neovim APIs) and `tests/integration/` (full Neovim runtime)
 - Lint: None specified (consider using luacheck or lua-formatter if needed)
 
 ## Code Style Guidelines
