@@ -42,6 +42,34 @@ local agent_completion = function()
 	return M._agents
 end
 
+local function stop_and_close_timer(timer)
+	if not timer then
+		return
+	end
+
+	local ok, is_closing = pcall(function()
+		return timer:is_closing()
+	end)
+	if ok and is_closing then
+		return
+	end
+
+	pcall(function()
+		timer:stop()
+	end)
+
+	ok, is_closing = pcall(function()
+		return timer:is_closing()
+	end)
+	if ok and is_closing then
+		return
+	end
+
+	pcall(function()
+		timer:close()
+	end)
+end
+
 -- Interview mode helper functions
 M.format_timestamp = function()
 	if not M._state.interview_start_time then
@@ -140,8 +168,7 @@ end
 
 M.stop_interview_timer = function()
 	if M._state.interview_timer then
-		M._state.interview_timer:stop()
-		M._state.interview_timer:close()
+		stop_and_close_timer(M._state.interview_timer)
 		M._state.interview_timer = nil
 		M.logger.debug("Interview timer stopped")
 	end
@@ -1153,13 +1180,15 @@ M.prep_md = function(buf)
 		buffer = buf,
 		callback = function()
 			if save_timer then
-				save_timer:stop()
-				save_timer:close()
+				stop_and_close_timer(save_timer)
 			end
-			save_timer = vim.uv.new_timer()
-			save_timer:start(SAVE_DEBOUNCE_MS, 0, vim.schedule_wrap(function()
-				save_timer:stop()
-				save_timer:close()
+			local timer = vim.uv.new_timer()
+			save_timer = timer
+			timer:start(SAVE_DEBOUNCE_MS, 0, vim.schedule_wrap(function()
+				stop_and_close_timer(timer)
+				if save_timer ~= timer then
+					return
+				end
 				save_timer = nil
 				if vim.api.nvim_buf_is_valid(buf) and vim.bo[buf].modified then
 					vim.api.nvim_buf_call(buf, function()
@@ -1587,11 +1616,35 @@ local function get_visible_line_ranges(buf, margin)
 	return merge_line_ranges(ranges)
 end
 
+local function clear_highlight_ranges(buf, ns, ranges)
+	for _, range in ipairs(ranges) do
+		local start_idx = math.max(0, range.start_line - 1)
+		local end_idx = math.max(start_idx, range.end_line)
+		vim.api.nvim_buf_clear_namespace(buf, ns, start_idx, end_idx)
+	end
+end
+
+local function clear_and_track_highlight_ranges(buf, ns, current_ranges)
+	M._highlighted_line_ranges = M._highlighted_line_ranges or {}
+	local previous_ranges = M._highlighted_line_ranges[buf] or {}
+	local ranges_to_clear = {}
+
+	for _, range in ipairs(previous_ranges) do
+		table.insert(ranges_to_clear, { start_line = range.start_line, end_line = range.end_line })
+	end
+	for _, range in ipairs(current_ranges) do
+		table.insert(ranges_to_clear, { start_line = range.start_line, end_line = range.end_line })
+	end
+
+	clear_highlight_ranges(buf, ns, merge_line_ranges(ranges_to_clear))
+	M._highlighted_line_ranges[buf] = current_ranges
+end
+
 -- Function to highlight chat references in non-chat markdown files
 M.highlight_markdown_chat_refs = function(buf)
 	local ns = M.setup_highlight()
-	vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
 	local ranges = get_visible_line_ranges(buf)
+	clear_and_track_highlight_ranges(buf, ns, ranges)
 	local has_chat_refs = false
 	
 	for _, range in ipairs(ranges) do
@@ -1610,8 +1663,7 @@ M.highlight_markdown_chat_refs = function(buf)
 	M._markdown_topic_timers = M._markdown_topic_timers or {}
 	local existing_timer = M._markdown_topic_timers[buf]
 	if existing_timer then
-		existing_timer:stop()
-		existing_timer:close()
+		stop_and_close_timer(existing_timer)
 		M._markdown_topic_timers[buf] = nil
 	end
 
@@ -1623,8 +1675,10 @@ M.highlight_markdown_chat_refs = function(buf)
 	local timer = vim.uv.new_timer()
 	M._markdown_topic_timers[buf] = timer
 	timer:start(TOPIC_REFRESH_DEBOUNCE_MS, 0, vim.schedule_wrap(function()
-		timer:stop()
-		timer:close()
+		stop_and_close_timer(timer)
+		if M._markdown_topic_timers[buf] ~= timer then
+			return
+		end
 		M._markdown_topic_timers[buf] = nil
 		if not vim.api.nvim_buf_is_valid(buf) then
 			return
@@ -1663,8 +1717,8 @@ end
 -- Function to apply highlighting to chat blocks in the current buffer
 M.highlight_question_block = function(buf)
 	local ns = M.setup_highlight()
-	vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
 	local ranges = get_visible_line_ranges(buf)
+	clear_and_track_highlight_ranges(buf, ns, ranges)
 	
 	-- Get the configured prefix values from config
 	local user_prefix = M.config.chat_user_prefix
@@ -1875,7 +1929,7 @@ end
 
 M.setup_buf_handler = function()
 	local gid = M.helpers.create_augroup("ParleyBufHandler", { clear = true })
-	local function refresh_highlighting(buf)
+	local function refresh_highlighting(buf, refresh_timestamps)
 		if not vim.api.nvim_buf_is_valid(buf) then
 			return
 		end
@@ -1885,14 +1939,18 @@ M.setup_buf_handler = function()
 		-- Handle chat files
 		if M.not_chat(buf, file_name) == nil then
 			M.highlight_question_block(buf)
-			-- Refresh interview timestamp highlighting
-			M.highlight_interview_timestamps(buf)
+			if refresh_timestamps then
+				-- Refresh interview timestamp highlighting
+				M.highlight_interview_timestamps(buf)
+			end
 		-- Handle non-chat markdown files
 		elseif M.is_markdown(buf, file_name) then
 			-- Refresh markdown highlighting only
 			M.highlight_markdown_chat_refs(buf)
-			-- Refresh interview timestamp highlighting
-			M.highlight_interview_timestamps(buf)
+			if refresh_timestamps then
+				-- Refresh interview timestamp highlighting
+				M.highlight_interview_timestamps(buf)
+			end
 		end
 	end
 
@@ -1910,14 +1968,14 @@ M.setup_buf_handler = function()
 		if M.not_chat(buf, file_name) == nil then
 			M.prep_chat(buf, file_name)
 			M.display_agent(buf, file_name)
-			refresh_highlighting(buf)
+			refresh_highlighting(buf, true)
 		-- Handle non-chat markdown files
 		elseif M.is_markdown(buf, file_name) then
 			-- Set up markdown features
 			M.prep_md(buf)
 			-- Set up keymaps for chat references
 			M.setup_markdown_keymaps(buf)
-			refresh_highlighting(buf)
+			refresh_highlighting(buf, true)
 		end
 	end, gid)
 
@@ -1927,6 +1985,7 @@ M.setup_buf_handler = function()
 
 	M.helpers.autocmd({ "TextChanged", "TextChangedI", "CursorMoved", "CursorMovedI", "WinScrolled" }, nil, function(event)
 		local buf = event.buf
+		local should_refresh_timestamps = event.event == "TextChanged" or event.event == "TextChangedI"
 		if not buf or buf == 0 then
 			buf = vim.api.nvim_get_current_buf()
 		end
@@ -1937,24 +1996,25 @@ M.setup_buf_handler = function()
 
 		-- Cancel any pending highlight timer for this buffer
 		if highlight_timers[buf] then
-			highlight_timers[buf]:stop()
-			highlight_timers[buf]:close()
+			stop_and_close_timer(highlight_timers[buf])
 			highlight_timers[buf] = nil
 		end
 
 		local timer = vim.uv.new_timer()
 		highlight_timers[buf] = timer
 		timer:start(HIGHLIGHT_DEBOUNCE_MS, 0, vim.schedule_wrap(function()
-			timer:stop()
-			timer:close()
-			highlight_timers[buf] = nil
+				stop_and_close_timer(timer)
+				if highlight_timers[buf] ~= timer then
+					return
+				end
+				highlight_timers[buf] = nil
 
-			if not vim.api.nvim_buf_is_valid(buf) then
-				return
-			end
+				if not vim.api.nvim_buf_is_valid(buf) then
+					return
+				end
 
-			refresh_highlighting(buf)
-		end))
+				refresh_highlighting(buf, should_refresh_timestamps)
+			end))
 	end, gid)
 
 	M.helpers.autocmd({ "WinEnter" }, nil, function(event)
@@ -1969,10 +2029,10 @@ M.setup_buf_handler = function()
 		-- Handle chat files
 		if M.not_chat(buf, file_name) == nil then
 			M.display_agent(buf, file_name)
-			refresh_highlighting(buf)
+			refresh_highlighting(buf, true)
 		-- Handle non-chat markdown files
 		elseif M.is_markdown(buf, file_name) then
-			refresh_highlighting(buf)
+			refresh_highlighting(buf, true)
 		end
 	end, gid)
 
@@ -1983,9 +2043,11 @@ M.setup_buf_handler = function()
 		if M._interview_match_ids and M._interview_match_ids[match_id_key] then
 			M._interview_match_ids[match_id_key] = nil
 		end
+		if M._highlighted_line_ranges then
+			M._highlighted_line_ranges[buf] = nil
+		end
 		if M._markdown_topic_timers and M._markdown_topic_timers[buf] then
-			M._markdown_topic_timers[buf]:stop()
-			M._markdown_topic_timers[buf]:close()
+			stop_and_close_timer(M._markdown_topic_timers[buf])
 			M._markdown_topic_timers[buf] = nil
 		end
 	end, gid)
