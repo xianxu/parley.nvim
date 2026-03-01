@@ -2432,6 +2432,174 @@ M.find_exchange_at_line = function(parsed_chat, line_number)
 	return nil, nil
 end
 
+-- Internal: Build messages array for LLM from parsed chat
+-- This is extracted for testability - pure logic with injected dependencies
+M._build_messages = function(opts)
+	local parsed_chat = opts.parsed_chat
+	local start_index = opts.start_index
+	local end_index = opts.end_index
+	local exchange_idx = opts.exchange_idx
+	local agent = opts.agent
+	local config = opts.config
+	local helpers = opts.helpers
+	local logger = opts.logger or { debug = function() end, warning = function() end }
+	
+	-- Process headers for agent information
+	local headers = parsed_chat.headers
+	
+	-- Prepare for summary extraction
+	local memory_enabled = config.chat_memory and config.chat_memory.enable
+	
+	-- Use header-defined max_full_exchanges if available, otherwise use config value
+	local max_exchanges = 999999
+	if memory_enabled then
+		if headers.config_max_full_exchanges then
+			max_exchanges = headers.config_max_full_exchanges
+			logger.debug("Using header-defined max_full_exchanges: " .. tostring(max_exchanges))
+		else
+			max_exchanges = config.chat_memory.max_full_exchanges
+		end
+	end
+	
+	local omit_user_text = memory_enabled and config.chat_memory.omit_user_text or "[Previous messages omitted]"
+	
+	-- Get combined agent information using the helper function
+	local agent_info = M.get_agent_info(headers, agent)
+	
+	-- Convert parsed_chat to messages for the model using a single-pass approach
+	local messages = { { role = "", content = "" } } -- Start with empty message for system prompt
+	
+	-- Process each exchange, determining whether to preserve or summarize
+	local total_exchanges = #parsed_chat.exchanges
+	
+	-- Single pass through all exchanges
+	for idx, exchange in ipairs(parsed_chat.exchanges) do
+		if exchange.question and exchange.question.line_start >= start_index and idx <= exchange_idx then
+			-- Determine if this exchange should be preserved in full
+			local should_preserve = false
+			
+			-- Preserve if this is the current question
+            if idx == exchange_idx then
+				should_preserve = true
+				logger.debug("Exchange #" .. idx .. " preserved as current question")
+	        end
+			-- Preserve if it's a recent exchange (within max_full_exchanges from the end)
+			if idx > total_exchanges - max_exchanges then
+				should_preserve = true
+				logger.debug("Exchange #" .. idx .. " preserved as recent exchange")
+			end
+			
+			-- Preserve if it contains file references
+			if #exchange.question.file_references > 0 then
+				should_preserve = true
+				logger.debug("Exchange #" .. idx .. " preserved due to file references")
+			end
+			
+			-- Process the question
+			if should_preserve then
+				-- Get the question content and process any file loading directives
+				local question_content = exchange.question.content
+				local file_content = ""
+				
+				-- Check if we're in raw request mode
+				local parse_raw_request = config.raw_mode and config.raw_mode.parse_raw_request
+				
+				-- Handle raw request mode - parse JSON input from code blocks
+				if parse_raw_request then
+					-- Check if content contains a JSON code block
+					local json_content = question_content:match("%s*```json%s*(.-)\n```")
+					
+					if json_content then
+						logger.debug("Found JSON content in question, using raw request mode")
+						
+						-- Try to parse the JSON
+						local success, payload = pcall(vim.json.decode, json_content)
+						if success and type(payload) == "table" then
+							-- Store the raw payload for direct use
+							exchange.question.raw_payload = payload
+							logger.debug("Successfully parsed JSON payload: " .. vim.inspect(payload))
+						else
+							logger.warning("Failed to parse JSON in raw request mode: " .. tostring(payload))
+						end
+					end
+				end
+				
+				-- Use the precomputed file references instead of scanning for them again
+				for _, file_ref in ipairs(exchange.question.file_references) do
+					local path = file_ref.path
+					
+					logger.debug("Processing file reference: " .. path)
+					
+					-- Check if this is a directory or has directory pattern markers (* or **/)
+					if helpers.is_directory(path) or 
+					   path:match("/%*%*?/?") or  -- Contains /** or /**/ 
+					   path:match("/%*%.%w+$") then -- Contains /*.ext pattern
+						file_content = helpers.process_directory_pattern(path)
+					else
+						file_content = helpers.format_file_content(path)
+					end
+				end
+				
+				-- Handle provider-specific file reference processing for questions with file references
+				if exchange.question.file_references and #exchange.question.file_references > 0 then
+				    -- split user question with file inclusion (@@ pattern) into two messages.
+	                -- a system message that contains file content. and a user message containing the question.
+	                -- the cache-control key is only needed for Anthropic, but since it doesn't cause problem
+	                -- with Google or OpenAI, I'll leave it here.
+					table.insert(messages, { 
+						role = "system", 
+						content = file_content .. "\n",
+						cache_control = { type = "ephemeral" }
+					})
+					table.insert(messages, { role = "user", content = question_content })
+				else
+					-- No file references, just add the question as user message
+					table.insert(messages, { role = "user", content = question_content })
+				end
+			else
+				-- Use the placeholder text for summarized questions
+				table.insert(messages, { role = "user", content = omit_user_text })
+			end
+			
+			-- Process the answer if it exists and is within our range
+			if exchange.answer and exchange.answer.line_start <= end_index and idx < exchange_idx then
+				-- when we preserve due to have file inclusion in question, we still summarize the answer
+				if should_preserve and not (exchange.question.file_references and #exchange.question.file_references > 0) then
+					-- Use the full answer content
+					table.insert(messages, { role = "assistant", content = exchange.answer.content })
+				else
+					-- Use the summary if available
+					if exchange.summary then
+						table.insert(messages, { role = "assistant", content = exchange.summary.content })
+					else
+						-- If no summary is available, use the full content (fallback)
+						table.insert(messages, { role = "assistant", content = exchange.answer.content })
+					end
+				end
+			end
+		end
+	end
+
+	-- replace first empty message with system prompt (use agent_info which has already resolved this)
+	local content = agent_info.system_prompt
+	if content and content:match("%S") then
+		messages[1] = { role = "system", content = content }
+		
+		-- For Claude specifically, we want to persist the system prompt
+		local is_anthropic = (agent_info.provider == "anthropic" or agent_info.provider == "claude")
+		if is_anthropic then
+			messages[1].cache_control = { type = "ephemeral" }
+		end
+	end
+	
+	-- strip whitespace from ends of content
+	for _, message in ipairs(messages) do
+		message.content = message.content:gsub("^%s*(.-)%s*$", "%1")
+	end
+	
+	return messages
+end
+
 M.chat_respond = function(params, callback, override_free_cursor, force)
 	local buf = vim.api.nvim_get_current_buf()
 	local win = vim.api.nvim_get_current_win()
@@ -2529,31 +2697,21 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 
 	-- Get agent to use
 	local agent = M.get_agent()
-	local agent_name = agent.name
 	
-	-- Process headers for agent information
-	local headers = parsed_chat.headers
+	-- Build messages array using extracted testable function
+	local messages = M._build_messages({
+		parsed_chat = parsed_chat,
+		start_index = start_index,
+		end_index = end_index,
+		exchange_idx = exchange_idx,
+		agent = agent,
+		config = M.config,
+		helpers = M.helpers,
+		logger = M.logger
+	})
 	
-	-- Prepare for summary extraction
-	local memory_enabled = M.config.chat_memory and M.config.chat_memory.enable
-	
-	-- Use header-defined max_full_exchanges if available, otherwise use config value
-	local max_exchanges = 999999
-	if memory_enabled then
-		if headers.config_max_full_exchanges then
-			max_exchanges = headers.config_max_full_exchanges
-			M.logger.debug("Using header-defined max_full_exchanges: " .. tostring(max_exchanges))
-		else
-			max_exchanges = M.config.chat_memory.max_full_exchanges
-		end
-	end
-	
-	local omit_user_text = memory_enabled and M.config.chat_memory.omit_user_text or "[Previous messages omitted]"
-	
-	-- Unescaping any JSON model specification in headers happens in get_agent_info
-	
-	-- Get combined agent information using the new helper function
-	local agent_info = M.get_agent_info(headers, agent)
+	-- Get agent info for display and dispatcher
+	local agent_info = M.get_agent_info(parsed_chat.headers, agent)
 	local agent_name = agent_info.display_name
 	
 	-- Set up agent prefixes
@@ -2566,141 +2724,6 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 		agent_suffix = M.config.chat_assistant_prefix[2] or ""
 	end
 	agent_suffix = M.render.template(agent_suffix, { ["{{agent}}"] = agent_name })
-
-	-- Convert parsed_chat to messages for the model using a single-pass approach
-	local messages = { { role = "", content = "" } } -- Start with empty message for system prompt
-	
-	-- Process each exchange, determining whether to preserve or summarize
-	local total_exchanges = #parsed_chat.exchanges
-	
-	-- Single pass through all exchanges
-	for idx, exchange in ipairs(parsed_chat.exchanges) do
-		if exchange.question and exchange.question.line_start >= start_index and idx <= exchange_idx then
-			-- Determine if this exchange should be preserved in full
-			local should_preserve = false
-			
-			-- Preserve if this is the current question
-            if idx == exchange_idx then
-				should_preserve = true
-				M.logger.debug("Exchange #" .. idx .. " preserved as current question")
-	        end
-			-- Preserve if it's a recent exchange (within max_full_exchanges from the end)
-			if idx > total_exchanges - max_exchanges then
-				should_preserve = true
-				M.logger.debug("Exchange #" .. idx .. " preserved as recent exchange")
-			end
-			
-			-- Preserve if it contains file references
-			if #exchange.question.file_references > 0 then
-				should_preserve = true
-				M.logger.debug("Exchange #" .. idx .. " preserved due to file references")
-			end
-			
-			-- Process the question
-			if should_preserve then
-				-- Get the question content and process any file loading directives
-				local question_content = exchange.question.content
-				local file_content = ""
-				
-				-- Check if we're in raw request mode
-				local parse_raw_request = require("parley").config and 
-				                          require("parley").config.raw_mode and 
-				                          require("parley").config.raw_mode.parse_raw_request
-				
-				-- Handle raw request mode - parse JSON input from code blocks
-				if parse_raw_request then
-					-- Check if content contains a JSON code block
-					local json_content = question_content:match("%s*```json%s*(.-)\n```")
-					
-					if json_content then
-						M.logger.debug("Found JSON content in question, using raw request mode")
-						
-						-- Try to parse the JSON
-						local success, payload = pcall(vim.json.decode, json_content)
-						if success and type(payload) == "table" then
-							-- Store the raw payload for direct use
-							exchange.question.raw_payload = payload
-							M.logger.debug("Successfully parsed JSON payload: " .. vim.inspect(payload))
-						else
-							M.logger.warning("Failed to parse JSON in raw request mode: " .. tostring(payload))
-						end
-					end
-				end
-				
-				-- Use the precomputed file references instead of scanning for them again
-				for _, file_ref in ipairs(exchange.question.file_references) do
-					local path = file_ref.path
-					local original_line = file_ref.line
-					local line_index = file_ref.original_line_index
-					
-					M.logger.debug("Processing file reference: " .. path)
-					
-					-- Check if this is a directory or has directory pattern markers (* or **/)
-					if M.helpers.is_directory(path) or 
-					   path:match("/%*%*?/?") or  -- Contains /** or /**/ 
-					   path:match("/%*%.%w+$") then -- Contains /*.ext pattern
-						file_content = M.helpers.process_directory_pattern(path)
-					else
-						file_content = M.helpers.format_file_content(path)
-					end
-				end
-				
-				-- Handle provider-specific file reference processing for questions with file references
-				if exchange.question.file_references and #exchange.question.file_references > 0 then
-				    -- split user question with file inclusion (@@ pattern) into two messages.
-	                -- a system message that contains file content. and a user message containing the question.
-	                -- the cache-control key is only needed for Anthropic, but since it doesn't cause problem
-	                -- with Google or OpenAI, I'll leave it here.
-					table.insert(messages, { 
-						role = "system", 
-						content = file_content .. "\n",
-						cache_control = { type = "ephemeral" }
-					})
-					table.insert(messages, { role = "user", content = question_content })
-				else
-					-- No file references, just add the question as user message
-					table.insert(messages, { role = "user", content = question_content })
-				end
-			else
-				-- Use the placeholder text for summarized questions
-				table.insert(messages, { role = "user", content = omit_user_text })
-			end
-			
-			-- Process the answer if it exists and is within our range
-			if exchange.answer and exchange.answer.line_start <= end_index and idx < exchange_idx then
-				-- when we preserve due to have file inclusion in question, we still summarize the answer
-				if should_preserve and not (exchange.question.file_references and #exchange.question.file_references > 0) then
-					-- Use the full answer content
-					table.insert(messages, { role = "assistant", content = exchange.answer.content })
-				else
-					-- Use the summary if available
-					if exchange.summary then
-						table.insert(messages, { role = "assistant", content = exchange.summary.content })
-					else
-						-- If no summary is available, use the full content (fallback)
-						table.insert(messages, { role = "assistant", content = exchange.answer.content })
-					end
-				end
-			end
-		end
-	end
-
-	-- replace first empty message with system prompt (use agent_info which has already resolved this)
-	local content = agent_info.system_prompt
-	if content and content:match("%S") then
-		messages[1] = { role = "system", content = content }
-		
-		-- For Claude specifically, we want to persist the system prompt
-		local is_anthropic = (agent_info.provider == "anthropic" or agent_info.provider == "claude")
-		if is_anthropic then
-			messages[1].cache_control = { type = "ephemeral" }
-		end
-	end
-	
-	-- strip whitespace from ends of content
-	for _, message in ipairs(messages) do
-		message.content = message.content:gsub("^%s*(.-)%s*$", "%1")
-	end
 
 	-- Find where to insert assistant response
 	local response_line = M.helpers.last_content_line(buf)
