@@ -303,8 +303,20 @@ describe("dispatcher.query internals", function()
                 return
             end
             
-            -- Feed entire fixture as one chunk then EOF
-            captured_out_reader(nil, fixture_content .. "\n")
+            -- Anthropic fixture is in SSE format with "event:" and "data:" lines
+            -- Extract only the "data:" lines (strip "data: " prefix)
+            local data_lines = {}
+            for line in fixture_content:gmatch("[^\n]+") do
+                if line:match("^data: ") then
+                    -- Strip "data: " prefix and add to data_lines
+                    -- Note: gsub returns (result, count), wrap in () to take only first value
+                    table.insert(data_lines, (line:gsub("^data: ", "")))
+                end
+            end
+            local clean_fixture = table.concat(data_lines, "\n")
+            
+            -- Feed cleaned fixture as one chunk then EOF
+            captured_out_reader(nil, clean_fixture .. "\n")
             captured_out_reader(nil, nil) -- EOF
             
             -- Check metrics (flexible assertions - exact values depend on fixture)

@@ -471,41 +471,56 @@ local query = function(buf, provider, payload, handler, on_exit, callback)
 						read = nil,
 						creation = nil
 					})
-					-- Clean up the raw response - it often contains multiple JSON objects
-					local clean_json = raw_response:match("{.-usage.-}")
-					if clean_json then
-						-- Try to parse just the complete JSON object that contains usage info
-						local success, decoded = pcall(vim.json.decode, clean_json)
-						if not success then
-							-- If that fails, try a more aggressive clean: find just the usage object
-							local usage_json = raw_response:match('("usage":%s*{.-})')
-							if usage_json then
-								-- Create a valid JSON object around the usage
-								usage_json = "{" .. usage_json .. "}"
-								success, decoded = pcall(vim.json.decode, usage_json)
+					
+					local success, decoded = false, nil
+					
+					-- Try multiple strategies to extract usage info
+					-- Strategy 1: Look for "message_delta" with usage (appears at end of stream)
+					for line in raw_response:gmatch("[^\n]+") do
+						if line:match('"type"%s*:%s*"message_delta"') and line:match('"usage"') then
+							-- Extract just the JSON from this line (strip any data: prefix)
+							local json_str = line:gsub("^data:%s*", "")
+							success, decoded = pcall(vim.json.decode, json_str)
+							if success and decoded and decoded.usage then
+								break
 							end
 						end
+					end
+					
+					-- Strategy 2: Try to match any complete JSON object with usage
+					if not (success and decoded and decoded.usage) then
+						local clean_json = raw_response:match("{.-usage.-}")
+						if clean_json then
+							success, decoded = pcall(vim.json.decode, clean_json)
+						end
+					end
+					
+					-- Strategy 3: Extract just the usage object and wrap it
+					if not (success and decoded and decoded.usage) then
+						local usage_json = raw_response:match('("usage":%s*{[^{}]*})')
+						if usage_json then
+							usage_json = "{" .. usage_json .. "}"
+							success, decoded = pcall(vim.json.decode, usage_json)
+						end
+					end
+					
+					-- If we successfully extracted usage info, store the metrics
+					if success and decoded and decoded.usage then
+						logger.debug("Anthropic JSON decoded successfully: " .. vim.inspect(decoded))
 						
-						if success and decoded then
-							logger.debug("Anthropic JSON decoded successfully: " .. vim.inspect(decoded))
-							
-							if decoded.usage then
-								-- Store all available metrics
-								local metrics = {
-									input = decoded.usage.input_tokens or 0,
-									creation = decoded.usage.cache_creation_input_tokens or 0,
-									read = decoded.usage.cache_read_input_tokens or 0
-								}
-								
-								tasker.set_cache_metrics(metrics)
-								
-								logger.debug("Anthropic metrics extracted: input=" .. metrics.input .. 
-									", creation=" .. metrics.creation .. 
-									", read=" .. metrics.read)
-							else
-								logger.debug("Anthropic decoded JSON does not contain usage field")
-							end
-						end
+						local metrics = {
+							input = decoded.usage.input_tokens or 0,
+							creation = decoded.usage.cache_creation_input_tokens or 0,
+							read = decoded.usage.cache_read_input_tokens or 0
+						}
+						
+						tasker.set_cache_metrics(metrics)
+						
+						logger.debug("Anthropic metrics extracted: input=" .. metrics.input .. 
+							", creation=" .. metrics.creation .. 
+							", read=" .. metrics.read)
+					else
+						logger.debug("Anthropic usage extraction failed - no metrics found")
 					end
 				end
 
