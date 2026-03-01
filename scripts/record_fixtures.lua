@@ -57,7 +57,7 @@ if anthropic_key == "" then
 else
     print("Recording Anthropic fixtures...")
 
-    -- Basic stream (claude-haiku, short answer)
+    -- Basic stream (claude-3.5-haiku, short answer)
     local cmd = table.concat({
         "curl https://api.anthropic.com/v1/messages",
         "-H 'x-api-key: " .. anthropic_key .. "'",
@@ -65,7 +65,7 @@ else
         "-H 'anthropic-beta: messages-2023-12-15'",
         "-H 'content-type: application/json'",
         "--no-buffer -s",
-        "-d '{\"model\":\"claude-haiku-20240307\",\"stream\":true,\"max_tokens\":40,"
+        "-d '{\"model\":\"claude-3-5-haiku-20241022\",\"stream\":true,\"max_tokens\":40,"
             .. "\"messages\":[{\"role\":\"user\",\"content\":\"Say: hello world\"}]}'"
     }, " ")
     write_fixture("anthropic_stream.txt", capture(cmd))
@@ -111,7 +111,7 @@ if googleai_key == "" then
 else
     print("Recording Google AI fixtures...")
 
-    local model = "gemini-2.0-flash"
+    local model = "gemini-2.0-flash-exp"
     local endpoint = "https://generativelanguage.googleapis.com/v1beta/models/"
         .. model .. ":streamGenerateContent?key=" .. googleai_key
 

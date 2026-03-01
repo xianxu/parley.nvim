@@ -243,6 +243,87 @@ D.prepare_payload = function(messages, model, provider)
 	return output
 end
 
+-- Extract text content from a single SSE line.
+-- This is the pure extraction logic, separated from query/process_lines for testability.
+-- Returns extracted content string, or "" if no content found or if line is malformed.
+---@param line string # a single SSE line (may have "data: " prefix which will be stripped)
+---@param provider string # provider name ("openai", "anthropic", "googleai", etc.)
+---@return string # extracted text content, or ""
+D._extract_sse_content = function(line, provider)
+	-- Strip "data: " prefix if present
+	line = line:gsub("^data: ", "")
+	
+	-- Skip empty lines and [DONE] markers
+	if line == "" or line == "[DONE]" then
+		return ""
+	end
+	
+	local content = ""
+	local success, decoded_line
+	
+	-- OpenAI / copilot / azure / ollama format (only for compatible providers)
+	local openai_compatible = (provider == "openai" or provider == "copilot" or 
+	                           provider == "azure" or provider == "ollama")
+	
+	if openai_compatible then
+		-- Try safe JSON decode first
+		success, decoded_line = pcall(function()
+			if line:match("^%s*{") and line:match("}%s*$") then
+				return vim.json.decode(line)
+			end
+			return nil
+		end)
+		
+		if success and decoded_line and decoded_line.choices then
+			if decoded_line.choices[1] and decoded_line.choices[1].delta 
+			   and decoded_line.choices[1].delta.content then
+				content = decoded_line.choices[1].delta.content
+				-- Handle JSON null (vim.NIL)
+				if content == vim.NIL then
+					content = ""
+				end
+			end
+		-- Fallback for OpenAI if first parse failed but line looks like OpenAI format
+		elseif line:match("choices") and line:match("delta") and line:match("content") then
+			success, decoded_line = pcall(vim.json.decode, line)
+			if success and decoded_line and decoded_line.choices and 
+			   decoded_line.choices[1] and decoded_line.choices[1].delta and 
+			   decoded_line.choices[1].delta.content then
+				content = decoded_line.choices[1].delta.content
+				-- Handle JSON null (vim.NIL)
+				if content == vim.NIL then
+					content = ""
+				end
+			end
+		end
+	end
+	
+	-- Anthropic format
+	if provider == "anthropic" and line:match('"text":') then
+		if line:match("content_block_start") or line:match("content_block_delta") then
+			success, decoded_line = pcall(vim.json.decode, line)
+			if success and decoded_line then
+				if decoded_line.delta and decoded_line.delta.text then
+					content = decoded_line.delta.text
+				end
+				if decoded_line.content_block and decoded_line.content_block.text then
+					content = decoded_line.content_block.text
+				end
+			end
+		end
+	end
+	
+	-- Google AI format
+	if provider == "googleai" and line:match('"text":') then
+		success, decoded_line = pcall(vim.json.decode, "{" .. line .. "}")
+		if success and decoded_line and decoded_line.text then
+			content = decoded_line.text
+		end
+	end
+	
+	return content
+end
+
 -- gpt query
 ---@param buf number | nil # buffer number
 ---@param provider string # provider name
@@ -327,58 +408,10 @@ local query = function(buf, provider, payload, handler, on_exit, callback)
 					goto continue
 				end
 				
-				line = line:gsub("^data: ", "")
-				local content = ""
+				-- Extract content using the pure extraction function
+				local content = D._extract_sse_content(line, qt.provider)
 				
-				-- Handle JSON parsing safely to prevent errors with malformed responses
-				local success, decoded_line = pcall(function()
-					-- Only try to decode if it looks like valid JSON
-					if line:match("^%s*{") and line:match("}%s*$") then
-						return vim.json.decode(line)
-					end
-					return nil
-				end)
-				
-				-- OpenAI format
-				if success and decoded_line and decoded_line.choices then
-					if decoded_line.choices[1] and decoded_line.choices[1].delta and decoded_line.choices[1].delta.content then
-						content = decoded_line.choices[1].delta.content
-					end
-				-- Text detection without full JSON parsing for simpler formats
-				elseif line:match("choices") and line:match("delta") and line:match("content") then
-					-- Fall back to the original approach if JSON parsing failed
-					success, decoded_line = pcall(vim.json.decode, line)
-					if success and decoded_line and decoded_line.choices and 
-						decoded_line.choices[1] and decoded_line.choices[1].delta and 
-						decoded_line.choices[1].delta.content then
-						content = decoded_line.choices[1].delta.content
-					end
-				end
-
-				-- Anthropic format
-				if qt.provider == "anthropic" and line:match('"text":') then
-					if line:match("content_block_start") or line:match("content_block_delta") then
-						success, decoded_line = pcall(vim.json.decode, line)
-						if success and decoded_line then
-							if decoded_line.delta and decoded_line.delta.text then
-								content = decoded_line.delta.text
-							end
-							if decoded_line.content_block and decoded_line.content_block.text then
-								content = decoded_line.content_block.text
-							end
-						end
-					end
-				end
-
-				-- Google AI format
-				if qt.provider == "googleai" and line:match('"text":') then
-					success, decoded_line = pcall(vim.json.decode, "{" .. line .. "}")
-					if success and decoded_line and decoded_line.text then
-						content = decoded_line.text
-					end
-				end
-
-				if content and type(content) == "string" then
+				if content and type(content) == "string" and content ~= "" then
 					qt.response = qt.response .. content
 					handler(qid, content)
 				end
