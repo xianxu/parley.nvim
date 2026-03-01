@@ -538,8 +538,9 @@ M.setup = function(opts)
     local conf = M.agents[agent]
     local provider = conf and conf.provider or nil
     local enable = not M._state.claude_web_search
-    -- Only allow enabling for Claude (Anthropic) agents
-    if enable and provider ~= "anthropic" then
+    -- Only allow enabling for providers that support web_search
+    local prov = require("parley.providers")
+    if enable and not prov.has_feature(provider, "web_search") then
       local msg = string.format("Agent %s does not support web_search", agent)
       M.logger.error(msg)
       vim.notify(msg, vim.log.levels.ERROR)
@@ -1215,7 +1216,8 @@ M.display_agent = function(buf, file_name)
 	local agent = M._state.agent
 	local display_name = agent
 	local ag_conf = M.agents[agent]
-	if ag_conf and ag_conf.provider == "anthropic" and M._state.claude_web_search then
+	local prov = require("parley.providers")
+	if ag_conf and prov.has_feature(ag_conf.provider, "web_search") and M._state.claude_web_search then
 		display_name = display_name .. "[w]"
 	end
 	vim.api.nvim_buf_set_extmark(buf, ns_id, 0, 0, {
@@ -2585,9 +2587,9 @@ M._build_messages = function(opts)
 	if content and content:match("%S") then
 		messages[1] = { role = "system", content = content }
 		
-		-- For Claude specifically, we want to persist the system prompt
-		local is_anthropic = (agent_info.provider == "anthropic" or agent_info.provider == "claude")
-		if is_anthropic then
+		-- For providers that support cache_control, add ephemeral caching to system prompt
+		local prov = require("parley.providers")
+		if prov.has_feature(agent_info.provider, "cache_control") then
 			messages[1].cache_control = { type = "ephemeral" }
 		end
 	end

@@ -71,21 +71,24 @@ local provider_schemas = {
 --
 -- Entries are checked in order; ALL matching entries are applied (not just first).
 local model_overrides = {
-    -- o1/o3 reasoning models: no temperature/top_p/max_tokens
+    -- o1/o3/o4-mini reasoning models: no temperature/top_p, use max_completion_tokens
     {
-        pattern = "^o[13]",
+        pattern = "^o[134]",
         override = {
             unsupported = { "temperature", "top_p", "max_tokens" },
+            traits = { "reasoning" },
             params = {
-                reasoning_effort = { default = "minimal" },
+                max_completion_tokens = { default = 4096 },
+                reasoning_effort = { default = "low" },
             },
         },
     },
-    -- gpt-4o-search-preview: no temperature/top_p/max_tokens (reasoning-like)
+    -- gpt-4o-search-preview: no temperature/top_p/max_tokens
     {
         pattern = "^gpt%-4o%-search%-preview$",
         override = {
             unsupported = { "temperature", "top_p", "max_tokens" },
+            traits = { "search" },
         },
     },
     -- gpt-5: uses max_completion_tokens, has reasoning_effort, no temperature/top_p
@@ -93,14 +96,14 @@ local model_overrides = {
         pattern = "^gpt%-5",
         override = {
             unsupported = { "temperature", "top_p" },
+            traits = { "reasoning" },
             params = {
                 max_tokens       = { api_name = "max_completion_tokens", default = 4096 },
-                reasoning_effort = { default = "minimal" },
+                reasoning_effort = { default = "low" },
             },
         },
     },
     -- Claude Sonnet 4.6+: temperature and top_p are mutually exclusive.
-    -- Adjust the pattern once the real model ID is known.
     {
         pattern = "^claude%-sonnet%-4%-6",
         override = {
@@ -120,6 +123,7 @@ local meta_keys = { model = true }
 M.get_schema = function(provider, model_name)
     local base = vim.deepcopy(provider_schemas[provider] or { params = {} })
     base.exclusive_groups = base.exclusive_groups or {}
+    base.traits = {}
 
     for _, entry in ipairs(model_overrides) do
         if model_name and model_name:find(entry.pattern) then
@@ -139,10 +143,25 @@ M.get_schema = function(provider, model_name)
                     table.insert(base.exclusive_groups, group)
                 end
             end
+            if ov.traits then
+                for _, trait in ipairs(ov.traits) do
+                    base.traits[trait] = true
+                end
+            end
         end
     end
 
     return base
+end
+
+--------------------------------------------------------------------------------
+-- get_traits(provider, model_name) → { trait_name = true, ... }
+--
+-- Returns a set of trait names that apply to the given provider+model.
+--------------------------------------------------------------------------------
+M.get_traits = function(provider, model_name)
+    local schema = M.get_schema(provider, model_name)
+    return schema.traits or {}
 end
 
 --------------------------------------------------------------------------------
