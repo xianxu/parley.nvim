@@ -99,6 +99,17 @@ M.parse_chat = function(lines, header_end, config)
 	local current_exchange = nil
 	local current_component = nil
 	local line_before_local = nil
+	-- Use table accumulation instead of string concat for content (avoids O(n²))
+	local content_parts = {}
+
+	-- Helper to finalize the current component's content from accumulated parts
+	local function finalize_component(end_line)
+		if current_exchange and current_component then
+			current_exchange[current_component].line_end = end_line
+			current_exchange[current_component].content = table.concat(content_parts, "\n"):gsub("^%s*(.-)%s*$", "%1")
+			content_parts = {}
+		end
+	end
 
 	-- Loop through content lines
 	for i = header_end + 1, #lines do
@@ -114,10 +125,7 @@ M.parse_chat = function(lines, header_end, config)
 		elseif line:sub(1, #user_prefix) == user_prefix or line:sub(1, #old_user_prefix) == old_user_prefix then
 			-- If we were building a previous exchange, finalize it
 			local current_component_start = line_before_local or i
-			if current_exchange and current_component then
-				current_exchange[current_component].line_end = current_component_start - 1
-				current_exchange[current_component].content = current_exchange[current_component].content:gsub("^%s*(.-)%s*$", "%1")
-			end
+			finalize_component(current_component_start - 1)
 
 			-- Extract question content
 			local question_content = line:sub(line:sub(1, #user_prefix) == user_prefix and #user_prefix + 1 or #old_user_prefix + 1)
@@ -127,11 +135,12 @@ M.parse_chat = function(lines, header_end, config)
 				question = {
 					line_start = i,
 					line_end = nil,
-					content = question_content,
+					content = "",
 					file_references = {} -- Will store file references we find (length > 0 means has references)
 				},
 				answer = nil
 			}
+			content_parts = { question_content }
 			table.insert(result.exchanges, current_exchange)
 			current_component = "question"
 			line_before_local = nil
@@ -140,10 +149,7 @@ M.parse_chat = function(lines, header_end, config)
 		elseif line:sub(1, #agent_prefix) == agent_prefix then
 			-- If we were building a previous component, finalize it
 			local current_component_start = line_before_local or i
-			if current_exchange and current_component then
-				current_exchange[current_component].line_end = current_component_start - 1
-				current_exchange[current_component].content = current_exchange[current_component].content:gsub("^%s*(.-)%s*$", "%1")
-			end
+			finalize_component(current_component_start - 1)
 
 			-- Make sure we have an exchange to add this answer to
 			if not current_exchange then
@@ -165,6 +171,7 @@ M.parse_chat = function(lines, header_end, config)
 				line_end = nil,
 				content = ""
 			}
+			content_parts = {}
 			current_component = "answer"
 			line_before_local = nil
 
@@ -185,7 +192,7 @@ M.parse_chat = function(lines, header_end, config)
 		-- Handle content continuation, ignore lines if we are in local_prefix section, aka line_before_local is set
 		--   note, in this mode, both plain text and file reference pattern @@ are ignored.
 		elseif (not line_before_local) and current_exchange and current_component then
-			current_exchange[current_component].content = current_exchange[current_component].content .. "\n" .. line
+			table.insert(content_parts, line)
 
 			-- Check for file references in question content - ONLY at the beginning of a line
 			local file_path = current_component == "question" and line:match("^@@%s*([^:]+)")
@@ -202,10 +209,7 @@ M.parse_chat = function(lines, header_end, config)
 	end
 
 	-- Finalize the last component if needed
-	if current_exchange and current_component then
-		current_exchange[current_component].line_end = #lines
-		current_exchange[current_component].content = current_exchange[current_component].content:gsub("^%s*(.-)%s*$", "%1")
-	end
+	finalize_component(#lines)
 
 	return result
 end

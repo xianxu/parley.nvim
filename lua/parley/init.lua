@@ -1146,8 +1146,29 @@ M.prep_md = function(buf)
 	vim.api.nvim_command("setlocal noswapfile")
 	-- better text wrapping
 	vim.api.nvim_command("setlocal wrap linebreak")
-	-- auto save on TextChanged, InsertLeave
-	vim.api.nvim_command("autocmd TextChanged,InsertLeave <buffer=" .. buf .. "> silent! write")
+	-- auto save on TextChanged, InsertLeave (debounced to avoid disk thrashing on large files)
+	local save_timer = nil
+	local SAVE_DEBOUNCE_MS = 1000
+	vim.api.nvim_create_autocmd({ "TextChanged", "InsertLeave" }, {
+		buffer = buf,
+		callback = function()
+			if save_timer then
+				save_timer:stop()
+				save_timer:close()
+			end
+			save_timer = vim.uv.new_timer()
+			save_timer:start(SAVE_DEBOUNCE_MS, 0, vim.schedule_wrap(function()
+				save_timer:stop()
+				save_timer:close()
+				save_timer = nil
+				if vim.api.nvim_buf_is_valid(buf) and vim.bo[buf].modified then
+					vim.api.nvim_buf_call(buf, function()
+						vim.cmd("silent! write")
+					end)
+				end
+			end))
+		end,
+	})
 
 	-- register shortcuts local to this buffer
 	buf = buf or vim.api.nvim_get_current_buf()
@@ -1400,19 +1421,44 @@ end
 
 -- Helper function to extract chat topic from file
 M.get_chat_topic = function(file_path)
-	if not vim.fn.filereadable(file_path) then
+	if vim.fn.filereadable(file_path) == 0 then
+		if M._chat_topic_cache then
+			M._chat_topic_cache[file_path] = nil
+		end
 		return nil
 	end
-	
-	local lines = vim.fn.readfile(file_path, "", 5) -- Read first 5 lines
-	for _, line in ipairs(lines) do
-		local topic = line:match("^# topic: (.+)")
-		if topic then
-			return topic
+
+	M._chat_topic_cache = M._chat_topic_cache or {}
+	local uv = vim.uv or vim.loop
+	local stat = uv and uv.fs_stat and uv.fs_stat(file_path) or nil
+	local cache_entry = M._chat_topic_cache[file_path]
+	local stat_mtime = stat and stat.mtime or nil
+
+	if cache_entry and stat_mtime then
+		local cache_sec = cache_entry.mtime and cache_entry.mtime.sec or 0
+		local cache_nsec = cache_entry.mtime and cache_entry.mtime.nsec or 0
+		local stat_sec = stat_mtime.sec or 0
+		local stat_nsec = stat_mtime.nsec or 0
+		if cache_sec == stat_sec and cache_nsec == stat_nsec then
+			return cache_entry.topic
 		end
 	end
 	
-	return nil
+	local lines = vim.fn.readfile(file_path, "", 5) -- Read first 5 lines
+	local topic = nil
+	for _, line in ipairs(lines) do
+		topic = line:match("^# topic: (.+)")
+		if topic then
+			break
+		end
+	end
+
+	M._chat_topic_cache[file_path] = {
+		mtime = stat_mtime or { sec = 0, nsec = 0 },
+		topic = topic,
+	}
+
+	return topic
 end
 
 -- Define namespace and highlighting colors for questions, annotations, and thinking
@@ -1494,52 +1540,64 @@ M.highlight_markdown_chat_refs = function(buf)
 	local ns = M.setup_highlight()
 	vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
 	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-	
-	-- Track chat references to refresh topics
-	local chat_references = {}
+	local has_chat_refs = false
 	
 	for i, line in ipairs(lines) do
 		-- Highlight chat file references (starts with @@/)
 		if line:match("^@@%s*[^+]") or line:match("^@@/") then
+			has_chat_refs = true
 			vim.api.nvim_buf_add_highlight(buf, ns, "FileLoading", i - 1, 0, -1)
-			
-			-- Extract chat path for topic refreshing
-			local chat_path = line:match("^@@%s*([^:]+)")
-			if chat_path then
-				table.insert(chat_references, {
-					line = i - 1,
-					path = chat_path:gsub("^%s*(.-)%s*$", "%1"),
-					line_text = line
-				})
-			end
 		end
 	end
-	
-	-- Refresh chat topics for all chat references
-	for _, ref in ipairs(chat_references) do
-		local expanded_path = vim.fn.expand(ref.path)
-		
-		-- Check if file exists and is readable
-		if vim.fn.filereadable(expanded_path) == 1 then
-			local topic = M.get_chat_topic(expanded_path)
-			
-			if topic then
-				-- Check if the line already has a topic
-				local current_topic = ref.line_text:match("^@@%s*[^:]+:%s*(.+)$")
-				
-				-- If topic changed or there wasn't one before, update it
-				if not current_topic or current_topic ~= topic then
-					-- Update the line with the new topic
-					vim.api.nvim_buf_set_lines(buf, ref.line, ref.line + 1, false, {
-						"@@" .. ref.path .. ": " .. topic
-					})
-					
-					-- Log the topic update
-					M.logger.debug("Updated chat reference topic for " .. ref.path .. " to: " .. topic)
+
+	-- Defer topic updates so editing/highlighting stays fast in large markdown files.
+	M._markdown_topic_timers = M._markdown_topic_timers or {}
+	local existing_timer = M._markdown_topic_timers[buf]
+	if existing_timer then
+		existing_timer:stop()
+		existing_timer:close()
+		M._markdown_topic_timers[buf] = nil
+	end
+
+	if not has_chat_refs then
+		return
+	end
+
+	local TOPIC_REFRESH_DEBOUNCE_MS = 500
+	local timer = vim.uv.new_timer()
+	M._markdown_topic_timers[buf] = timer
+	timer:start(TOPIC_REFRESH_DEBOUNCE_MS, 0, vim.schedule_wrap(function()
+		timer:stop()
+		timer:close()
+		M._markdown_topic_timers[buf] = nil
+		if not vim.api.nvim_buf_is_valid(buf) then
+			return
+		end
+
+		local latest_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+		for i, line in ipairs(latest_lines) do
+			-- Refresh topic only for @@ file references.
+			if line:match("^@@%s*[^+]") or line:match("^@@/") then
+				local chat_path = line:match("^@@%s*([^:]+)")
+				if chat_path then
+					local trimmed_path = chat_path:gsub("^%s*(.-)%s*$", "%1")
+					local expanded_path = vim.fn.expand(trimmed_path)
+					if vim.fn.filereadable(expanded_path) == 1 then
+						local topic = M.get_chat_topic(expanded_path)
+						if topic then
+							local current_topic = line:match("^@@%s*[^:]+:%s*(.+)$")
+							if not current_topic or current_topic ~= topic then
+								vim.api.nvim_buf_set_lines(buf, i - 1, i, false, {
+									"@@" .. trimmed_path .. ": " .. topic
+								})
+								M.logger.debug("Updated chat reference topic for " .. trimmed_path .. " to: " .. topic)
+							end
+						end
+					end
 				end
 			end
 		end
-	end
+	end))
 end
 
 -- Function to apply highlighting to chat blocks in the current buffer
@@ -1768,7 +1826,10 @@ M.setup_buf_handler = function()
 		end
 	end, gid)
 
-	-- Highlighting refresh that can run on text changes
+	-- Highlighting refresh that can run on text changes (debounced for performance)
+	local highlight_timers = {}
+	local HIGHLIGHT_DEBOUNCE_MS = 300
+
 	M.helpers.autocmd({ "TextChanged", "TextChangedI" }, nil, function(event)
 		local buf = event.buf
 
@@ -1776,20 +1837,39 @@ M.setup_buf_handler = function()
 			return
 		end
 
-		local file_name = vim.api.nvim_buf_get_name(buf)
-
-		-- Handle chat files
-		if M.not_chat(buf, file_name) == nil then
-			M.highlight_question_block(buf)
-			-- Refresh interview timestamp highlighting
-			M.highlight_interview_timestamps(buf)
-		-- Handle non-chat markdown files
-		elseif M.is_markdown(buf, file_name) then
-			-- Refresh markdown highlighting only
-			M.highlight_markdown_chat_refs(buf)
-			-- Refresh interview timestamp highlighting  
-			M.highlight_interview_timestamps(buf)
+		-- Cancel any pending highlight timer for this buffer
+		if highlight_timers[buf] then
+			highlight_timers[buf]:stop()
+			highlight_timers[buf]:close()
+			highlight_timers[buf] = nil
 		end
+
+		local timer = vim.uv.new_timer()
+		highlight_timers[buf] = timer
+		timer:start(HIGHLIGHT_DEBOUNCE_MS, 0, vim.schedule_wrap(function()
+			timer:stop()
+			timer:close()
+			highlight_timers[buf] = nil
+
+			if not vim.api.nvim_buf_is_valid(buf) then
+				return
+			end
+
+			local file_name = vim.api.nvim_buf_get_name(buf)
+
+			-- Handle chat files
+			if M.not_chat(buf, file_name) == nil then
+				M.highlight_question_block(buf)
+				-- Refresh interview timestamp highlighting
+				M.highlight_interview_timestamps(buf)
+			-- Handle non-chat markdown files
+			elseif M.is_markdown(buf, file_name) then
+				-- Refresh markdown highlighting only
+				M.highlight_markdown_chat_refs(buf)
+				-- Refresh interview timestamp highlighting
+				M.highlight_interview_timestamps(buf)
+			end
+		end))
 	end, gid)
 
 	M.helpers.autocmd({ "WinEnter" }, nil, function(event)
@@ -1822,6 +1902,11 @@ M.setup_buf_handler = function()
 		local match_id_key = 'parley_interview_timestamps_' .. buf
 		if M._interview_match_ids and M._interview_match_ids[match_id_key] then
 			M._interview_match_ids[match_id_key] = nil
+		end
+		if M._markdown_topic_timers and M._markdown_topic_timers[buf] then
+			M._markdown_topic_timers[buf]:stop()
+			M._markdown_topic_timers[buf]:close()
+			M._markdown_topic_timers[buf] = nil
 		end
 	end, gid)
 end

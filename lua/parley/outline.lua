@@ -12,59 +12,48 @@ local function reverse(tbl)
   return new_tbl
 end
 
--- Function to determine if a line is inside a code block
--- Uses a smarter approach with a memo table to avoid recalculating
--- code block states for the same line numbers repeatedly
+-- Build a code block state table for all lines in the buffer with a single bulk read.
+-- Returns a table mapping 1-based line numbers to boolean (true = inside code block).
+local function build_code_block_memo(bufnr)
+  local all_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local memo = {}
+  local in_block = false
+
+  for i, line_content in ipairs(all_lines) do
+    if line_content:match("^%s*```") or line_content:match("^%s*~~~") then
+      in_block = not in_block
+    end
+    memo[i] = in_block
+  end
+
+  return memo
+end
+
+-- Compatibility wrapper used by is_outline_item and exposed for testing.
 local function is_in_code_block(bufnr, line_number, memo)
-  memo = memo or {}
-  
-  -- If we've already calculated this line, return the cached result
   if memo[line_number] ~= nil then
     return memo[line_number]
   end
-  
-  -- Code block delimiters
-  local code_block_delimiters = {
-    ["```"] = true,
-    ["~~~"] = true,
-  }
-  
-  -- For line 1, we know we're not in a code block
-  if line_number <= 1 then
-    memo[line_number] = false
-    return false
-  end
-  
-  -- Get the state from the previous line
-  local prev_line_state = is_in_code_block(bufnr, line_number - 1, memo)
-  
-  -- Check if current line toggles the code block state
-  local line_content = vim.api.nvim_buf_get_lines(bufnr, line_number - 1, line_number, false)[1] or ""
-  local toggle_state = false
-  
-  for delimiter in pairs(code_block_delimiters) do
-    if line_content:match("^%s*" .. vim.pesc(delimiter)) then
-      toggle_state = true
-      break
+  -- Fallback: compute lazily (should rarely happen when memo is pre-built)
+  local all_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local in_block = false
+  for i = 1, line_number do
+    local lc = all_lines[i] or ""
+    if lc:match("^%s*```") or lc:match("^%s*~~~") then
+      in_block = not in_block
     end
+    memo[i] = in_block
   end
-  
-  -- Calculate current state based on previous line state and toggle
-  local current_state = prev_line_state
-  if toggle_state then
-    current_state = not prev_line_state
-  end
-  
-  -- Cache the result
-  memo[line_number] = current_state
-  return current_state
+  return memo[line_number] or false
 end
 
 -- Function to check if a line should be included in the outline
 -- Returns: boolean (should be included), string (type), string (formatted content)
-local function is_outline_item(bufnr, line_number, config, code_block_memo)
-  -- Get the line content
-  local line = vim.api.nvim_buf_get_lines(bufnr, line_number - 1, line_number, false)[1] or ""
+-- Optional all_lines parameter avoids per-line buffer reads when bulk lines are available.
+local function is_outline_item(bufnr, line_number, config, code_block_memo, all_lines)
+  -- Get the line content (use pre-fetched lines if available)
+  local line = all_lines and all_lines[line_number]
+    or vim.api.nvim_buf_get_lines(bufnr, line_number - 1, line_number, false)[1] or ""
   
   -- Check for code block start - we want to include this in the outline
   if line:match("^%s*```%S+") then
@@ -147,14 +136,14 @@ function M.question_picker(config)
   -- Get configured user prefix
   local user_prefix = config.chat_user_prefix
   
-  -- Create a memo table for code block state calculations
-  local code_block_memo = {}
-  
+  -- Bulk read all buffer lines once for both code block detection and outline scanning
+  local all_lines = vim.api.nvim_buf_get_lines(current_bufnr, 0, -1, false)
+  local code_block_memo = build_code_block_memo(current_bufnr)
+
   -- Scan the buffer for headers and questions
-  local line_count = vim.api.nvim_buf_line_count(current_bufnr)
-  for i = 1, line_count do
-    local is_item, item_type, formatted_line = is_outline_item(current_bufnr, i, config, code_block_memo)
-    
+  for i = 1, #all_lines do
+    local is_item, item_type, formatted_line = is_outline_item(current_bufnr, i, config, code_block_memo, all_lines)
+
     if is_item then
       table.insert(lines, { line = formatted_line, lnum = i, type = item_type })
     end

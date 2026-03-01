@@ -855,7 +855,7 @@ D.create_handler = function(buf, win, line, first_undojoin, prefix, cursor)
 		right_gravity = false,
 	})
 
-	local response = ""
+	local response_chunks = {}
 	return vim.schedule_wrap(function(qid, chunk)
 		local qt = tasker.get_query(qid)
 		if not qt then
@@ -883,11 +883,13 @@ D.create_handler = function(buf, win, line, first_undojoin, prefix, cursor)
 		first_line = vim.api.nvim_buf_get_extmark_by_id(buf, ns_id, ex_id, {})[1]
 
 		-- clean previous response
+		local response = table.concat(response_chunks)
 		local line_count = #vim.split(response, "\n")
 		vim.api.nvim_buf_set_lines(buf, first_line + finished_lines, first_line + line_count, false, {})
 
-		-- append new response
-		response = response .. chunk
+		-- append new chunk (table insert avoids O(n²) string concat)
+		table.insert(response_chunks, chunk)
+		response = table.concat(response_chunks)
 		helpers.undojoin(buf)
 
 		-- prepend prefix to each line
@@ -909,7 +911,7 @@ D.create_handler = function(buf, win, line, first_undojoin, prefix, cursor)
 		end
 		finished_lines = new_finished_lines
 
-		local end_line = first_line + #vim.split(response, "\n")
+		local end_line = first_line + #lines
 		qt.first_line = first_line
 		qt.last_line = end_line - 1
 
