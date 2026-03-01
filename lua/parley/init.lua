@@ -3088,6 +3088,60 @@ M.cmd.Outline = function()
 	M.outline.question_picker(M.config)
 end
 
+-- Internal: Parse @@ references from a line and return the closest one to cursor
+-- Pure function for testability
+M._parse_at_reference = function(line, cursor_col)
+	local references = {}
+	
+	-- Look for instances of @@ in the line
+	local start_idx = 1
+	while true do
+		local match_start, match_end = line:find("@@", start_idx)
+		if not match_start then break end
+		
+		-- Find the end of this path (space, line end, or next @@)
+		local content_end = nil
+		
+		-- Look for the next @@ after this one
+		local next_marker = line:find("@@", match_end + 1)
+		
+		-- If there's no next marker, use the end of line
+		if not next_marker then
+			content_end = #line
+		else
+			content_end = next_marker - 1
+		end
+		
+		-- Extract the path
+		local path = line:sub(match_end + 1, content_end):gsub("^%s*(.-)%s*$", "%1")
+		
+		table.insert(references, {
+			start = match_start,
+			content = path
+		})
+		
+		start_idx = match_end + 1
+	end
+	
+	if #references == 0 then
+		return nil
+	end
+	
+	-- Find the closest reference to cursor position
+	local closest_ref = nil
+	local min_distance = math.huge
+	
+	for _, ref in ipairs(references) do
+		local distance = math.abs(cursor_col - ref.start)
+		if distance < min_distance then
+			min_distance = distance
+			closest_ref = ref
+		end
+	end
+	
+	return closest_ref and closest_ref.content or nil
+end
+
 -- Function to open a chat reference from a markdown file
 M.open_chat_reference = function(current_line, cursor_col, in_insert_mode, full_line)
 	-- Extract the chat path
@@ -3104,57 +3158,13 @@ M.open_chat_reference = function(current_line, cursor_col, in_insert_mode, full_
 		-- Clean up whitespace
 		chat_path = chat_path:gsub("^%s*(.-)%s*$", "%1")
 	else
-		-- Find @@ occurrences in the line
-		local references = {}
+		-- Use extracted pure function to find closest @@ reference
+		chat_path = M._parse_at_reference(current_line, cursor_col)
 		
-		-- Look for instances of @@ in the line
-		local start_idx = 1
-		while true do
-			local match_start, match_end = current_line:find("@@", start_idx)
-			if not match_start then break end
-			
-			-- Find the end of this path (space, line end, or next @@)
-			local content_end = nil
-			
-			-- Look for the next @@ after this one
-			local next_marker = current_line:find("@@", match_end + 1)
-			
-			-- If there's no next marker, use the end of line
-			if not next_marker then
-				content_end = #current_line
-			else
-				content_end = next_marker - 1
-			end
-			
-			-- Extract the path
-			local path = current_line:sub(match_end + 1, content_end):gsub("^%s*(.-)%s*$", "%1")
-			
-			table.insert(references, {
-				start = match_start,
-				content = path
-			})
-			
-			start_idx = match_end + 1
-		end
-		
-		if #references == 0 then
+		if not chat_path then
 			M.logger.warning("No chat reference (@@ syntax) found on current line")
 			return
 		end
-		
-		-- Find the closest reference to cursor position
-		local closest_ref = nil
-		local min_distance = math.huge
-		
-		for _, ref in ipairs(references) do
-			local distance = math.abs(cursor_col - ref.start)
-			if distance < min_distance then
-				min_distance = distance
-				closest_ref = ref
-			end
-		end
-		
-		chat_path = closest_ref.content
 	end
 	
 	if not chat_path then
@@ -3249,57 +3259,13 @@ M.cmd.OpenFileUnderCursor = function()
 	if current_line:match("^@@") then
 		filepath = current_line:match("^@@(.+)$"):gsub("^%s*(.-)%s*$", "%1")
 	else
-		-- Find @@ occurrences in the line
-		local references = {}
+		-- Use extracted pure function to find closest @@ reference
+		filepath = M._parse_at_reference(current_line, cursor_col)
 		
-		-- Look for instances of @@ in the line
-		local start_idx = 1
-		while true do
-			local match_start, match_end = current_line:find("@@", start_idx)
-			if not match_start then break end
-			
-			-- Find the end of this path (space, line end, or next @@)
-			local content_end = nil
-			
-			-- Look for the next @@ after this one
-			local next_marker = current_line:find("@@", match_end + 1)
-			
-			-- If there's no next marker, use the end of line
-			if not next_marker then
-				content_end = #current_line
-			else
-				content_end = next_marker - 1
-			end
-			
-			-- Extract the path
-			local path = current_line:sub(match_end + 1, content_end):gsub("^%s*(.-)%s*$", "%1")
-			
-			table.insert(references, {
-				start = match_start,
-				content = path
-			})
-			
-			start_idx = match_end + 1
-		end
-		
-		if #references == 0 then
+		if not filepath then
 			M.logger.warning("No file reference (@@ syntax) found on current line")
 			return
 		end
-		
-		-- Find the closest reference to cursor position
-		local closest_ref = nil
-		local min_distance = math.huge
-		
-		for _, ref in ipairs(references) do
-			local distance = math.abs(cursor_col - ref.start)
-			if distance < min_distance then
-				min_distance = distance
-				closest_ref = ref
-			end
-		end
-		
-		filepath = closest_ref.content
 	end
 	
 	-- Expand the path (handle relative paths, ~, etc.)
