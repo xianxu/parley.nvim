@@ -77,13 +77,15 @@ describe("prepare_payload: openai provider (table model)", function()
         assert.is_true(has_system)
     end)
 
-    it("strips system messages for o3 models", function()
+    it("preserves system messages for o3 models (reasoning models now support them)", function()
         local o3 = { model = "o3-mini", temperature = 1.0, top_p = 1.0, max_tokens = 4096 }
         local m = msgs(system("You are helpful."), user("hi"))
         local payload = dispatcher.prepare_payload(m, o3, "openai")
+        local has_system = false
         for _, msg in ipairs(payload.messages) do
-            assert.not_equals("system", msg.role)
+            if msg.role == "system" then has_system = true end
         end
+        assert.is_true(has_system)
     end)
 
     it("sets reasoning_effort for o3 models", function()

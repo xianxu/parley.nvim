@@ -178,10 +178,10 @@ M.create_component = function(parley_instance)
         -- Get agent info with empty headers since we don't have any here
         agent_info = parley.get_agent_info({}, parley.get_agent(agent_name))
       end
-      local is_anthropic = agent_info and (agent_info.provider == "anthropic" or agent_info.provider == "claude")
-      -- Add [w] indicator for Claude web_search when enabled
+      local prov = require("parley.providers")
+      -- Add [w] indicator for web_search when enabled
       local display_name = agent_name
-      if is_anthropic and parley._state.claude_web_search then
+      if agent_info and prov.has_feature(agent_info.provider, "web_search") and parley._state.claude_web_search then
         display_name = display_name .. "[w]"
       end
       
@@ -197,18 +197,15 @@ M.create_component = function(parley_instance)
         local creation_display = (cache_metrics.creation and cache_metrics.creation > 0) and cache_metrics.creation or "-" 
         local read_display = (cache_metrics.read and cache_metrics.read > 0) and cache_metrics.read or "-"
         
-        -- Provider-specific formatting
+        -- Provider-specific metric formatting via adapter config
         local agent_info = parley.get_agent_info and parley.get_agent_info({}, parley.get_agent(agent_name))
         if agent_info then
-          -- For OpenAI/Copilot, always show creation as "-" (not applicable)
-          if agent_info.provider == "openai" or agent_info.provider == "copilot" then
+          local metrics_config = prov.get_cache_metrics_config(agent_info.provider)
+          if not metrics_config.creation then
             creation_display = "-"
           end
-          
-          -- For Google AI/Gemini, always show read and creation as "-" (not applicable)
-          if agent_info.provider == "googleai" then
+          if not metrics_config.read then
             read_display = "-"
-            creation_display = "-"
           end
         end
         

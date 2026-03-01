@@ -1,0 +1,653 @@
+--------------------------------------------------------------------------------
+-- Provider adapters and registry.
+--
+-- Each provider adapter encapsulates all provider-specific behavior:
+-- payload formatting, header construction, SSE parsing, and usage extraction.
+--
+-- Usage:
+--   local providers = require("parley.providers")
+--   local adapter = providers.get("anthropic")
+--   local payload = adapter.format_payload(messages, model, params, state)
+--------------------------------------------------------------------------------
+
+local logger = require("parley.logger")
+local render = require("parley.render")
+local provider_params = require("parley.provider_params")
+
+local M = {}
+
+--------------------------------------------------------------------------------
+-- Helpers shared across adapters
+--------------------------------------------------------------------------------
+
+local function safe_json_decode(str)
+    local success, decoded = pcall(vim.json.decode, str)
+    if success then
+        return decoded
+    end
+    return nil
+end
+
+local function strip_data_prefix(line)
+    return line:gsub("^data: ", "")
+end
+
+--------------------------------------------------------------------------------
+-- OpenAI adapter (base for copilot, azure, ollama)
+--------------------------------------------------------------------------------
+
+local openai = {
+    aliases = {},
+    features = {},
+    cache_metrics = { read = true, creation = false },
+}
+
+openai.format_payload = function(messages, model, provider_name)
+    local params = provider_params.resolve_params(provider_name or "openai", model)
+    local output = {
+        model = model.model,
+        stream = true,
+        messages = messages,
+        stream_options = {
+            include_usage = true,
+        },
+    }
+    for k, v in pairs(params) do
+        output[k] = v
+    end
+    return output
+end
+
+openai.format_headers = function(secret, _model, _payload, endpoint)
+    local headers = {
+        "-H",
+        "Authorization: Bearer " .. secret,
+        -- backwards compatibility with Azure-style key
+        "-H",
+        "api-key: " .. secret,
+    }
+    return headers, endpoint
+end
+
+openai.parse_sse_content = function(line)
+    line = strip_data_prefix(line)
+    if line == "" or line == "[DONE]" then
+        return ""
+    end
+
+    -- Try safe JSON decode
+    if line:match("^%s*{") and line:match("}%s*$") then
+        local decoded = safe_json_decode(line)
+        if decoded and decoded.choices and decoded.choices[1]
+            and decoded.choices[1].delta and decoded.choices[1].delta.content then
+            local content = decoded.choices[1].delta.content
+            if content == vim.NIL then
+                return ""
+            end
+            return content
+        end
+    end
+
+    -- Fallback: regex-match for OpenAI-like format
+    if line:match("choices") and line:match("delta") and line:match("content") then
+        local decoded = safe_json_decode(line)
+        if decoded and decoded.choices and decoded.choices[1]
+            and decoded.choices[1].delta and decoded.choices[1].delta.content then
+            local content = decoded.choices[1].delta.content
+            if content == vim.NIL then
+                return ""
+            end
+            return content
+        end
+    end
+
+    return ""
+end
+
+openai.parse_usage = function(raw_response)
+    local metrics = { input = nil, read = nil, creation = nil }
+
+    if not raw_response:match('"usage"') then
+        return metrics
+    end
+
+    -- Find the usage chunk: empty choices array with usage data
+    local usage_json = nil
+    for line in raw_response:gmatch("([^\n]+)") do
+        if line:match('"usage"') and line:match('"choices":%s*%[%s*%]') then
+            local clean_line = line:gsub("^data:%s*", "")
+            -- Check for balanced braces
+            local open_count, close_count = 0, 0
+            for c in clean_line:gmatch(".") do
+                if c == "{" then open_count = open_count + 1 end
+                if c == "}" then close_count = close_count + 1 end
+            end
+            if open_count == close_count then
+                usage_json = clean_line
+                break
+            end
+        end
+    end
+
+    -- Fallback: match by structure
+    if not usage_json then
+        usage_json = raw_response:match('{"id":"[^"]*","object":"chat%.completion%.chunk"[^}]*"choices":%[%][^}]*"usage":{[^}]*}}')
+    end
+
+    -- Fallback: any line with usage
+    if not usage_json then
+        for line in raw_response:gmatch("([^\n]+)") do
+            if line:match('"usage"') then
+                local potential = line:match('({.-})')
+                if potential then
+                    usage_json = potential
+                    break
+                end
+            end
+        end
+    end
+
+    if not usage_json then
+        return metrics
+    end
+
+    local decoded = safe_json_decode(usage_json)
+    if decoded and type(decoded.usage) == "table" then
+        metrics.input = tonumber(decoded.usage.prompt_tokens) or 0
+        metrics.read = 0
+        metrics.creation = 0
+
+        if type(decoded.usage.prompt_tokens_details) == "table" then
+            metrics.read = tonumber(decoded.usage.prompt_tokens_details.cached_tokens) or 0
+        end
+    else
+        -- Crude extraction fallback
+        local prompt_tokens = tonumber(usage_json:match('"prompt_tokens":%s*(%d+)'))
+        local cached_tokens = tonumber(usage_json:match('"cached_tokens":%s*(%d+)'))
+        if prompt_tokens then
+            metrics.input = prompt_tokens
+            metrics.read = cached_tokens or 0
+            metrics.creation = 0
+        end
+    end
+
+    return metrics
+end
+
+--------------------------------------------------------------------------------
+-- Anthropic adapter
+--------------------------------------------------------------------------------
+
+local anthropic = {
+    aliases = { "claude" },
+    features = { web_search = true, cache_control = true },
+    cache_metrics = { read = true, creation = true },
+}
+
+anthropic.format_payload = function(messages, model, _provider_name)
+    -- Extract system messages into top-level system array
+    local system_blocks = {}
+    local i = 1
+    while i <= #messages do
+        if messages[i].role == "system" then
+            local block = {
+                type = "text",
+                text = messages[i].content,
+            }
+            if messages[i].cache_control then
+                block.cache_control = messages[i].cache_control
+                logger.debug("Added cache_control to system block: " .. vim.inspect(messages[i].cache_control))
+            end
+            table.insert(system_blocks, block)
+            table.remove(messages, i)
+        else
+            i = i + 1
+        end
+    end
+
+    local params = provider_params.resolve_params("anthropic", model)
+    local payload = {
+        model = model.model,
+        stream = true,
+        messages = messages,
+    }
+    for k, v in pairs(params) do
+        payload[k] = v
+    end
+
+    if #system_blocks > 0 then
+        payload.system = system_blocks
+    end
+
+    -- Add Claude server-side web_search and web_fetch tools if enabled
+    local parley = require("parley")
+    if parley._state and parley._state.claude_web_search then
+        payload.tools = {
+            {
+                type = "web_search_20250305",
+                name = "web_search",
+                max_uses = 5,
+            },
+            {
+                type = "web_fetch_20250910",
+                name = "web_fetch",
+                max_uses = 5,
+            },
+        }
+    end
+
+    return payload
+end
+
+anthropic.format_headers = function(secret, _model, payload, endpoint)
+    -- Choose anthropic-beta header based on tools in payload
+    local beta_tag = "messages-2023-12-15"
+    if payload and payload.tools then
+        for _, tool in ipairs(payload.tools) do
+            if tool.name == "web_fetch" then
+                beta_tag = "web-fetch-2025-09-10"
+                break
+            end
+        end
+    end
+    local headers = {
+        "-H",
+        "x-api-key: " .. secret,
+        "-H",
+        "anthropic-version: 2023-06-01",
+        "-H",
+        "anthropic-beta: " .. beta_tag,
+    }
+    return headers, endpoint
+end
+
+anthropic.parse_sse_content = function(line)
+    line = strip_data_prefix(line)
+    if line == "" or line == "[DONE]" then
+        return ""
+    end
+
+    if not line:match('"text":') then
+        return ""
+    end
+
+    if line:match("content_block_start") or line:match("content_block_delta") then
+        local decoded = safe_json_decode(line)
+        if decoded then
+            if decoded.delta and decoded.delta.text then
+                return decoded.delta.text
+            end
+            if decoded.content_block and decoded.content_block.text then
+                return decoded.content_block.text
+            end
+        end
+    end
+
+    return ""
+end
+
+anthropic.parse_usage = function(raw_response)
+    local metrics = { input = nil, read = nil, creation = nil }
+
+    local success, decoded = false, nil
+
+    -- Strategy 1: Find "message_delta" with usage
+    for line in raw_response:gmatch("[^\n]+") do
+        if line:match('"type"%s*:%s*"message_delta"') and line:match('"usage"') then
+            local json_str = line:gsub("^data:%s*", "")
+            decoded = safe_json_decode(json_str)
+            if decoded and decoded.usage then
+                success = true
+                break
+            end
+        end
+    end
+
+    -- Strategy 2: Match any complete JSON object with usage
+    if not success then
+        local clean_json = raw_response:match("{.-usage.-}")
+        if clean_json then
+            decoded = safe_json_decode(clean_json)
+            if decoded and decoded.usage then
+                success = true
+            end
+        end
+    end
+
+    -- Strategy 3: Extract just the usage object
+    if not success then
+        local usage_json = raw_response:match('("usage":%s*{[^{}]*})')
+        if usage_json then
+            usage_json = "{" .. usage_json .. "}"
+            decoded = safe_json_decode(usage_json)
+            if decoded and decoded.usage then
+                success = true
+            end
+        end
+    end
+
+    if success and decoded and decoded.usage then
+        metrics.input = decoded.usage.input_tokens or 0
+        metrics.creation = decoded.usage.cache_creation_input_tokens or 0
+        metrics.read = decoded.usage.cache_read_input_tokens or 0
+        logger.debug("Anthropic metrics extracted: input=" .. metrics.input ..
+            ", creation=" .. metrics.creation ..
+            ", read=" .. metrics.read)
+    else
+        logger.debug("Anthropic usage extraction failed - no metrics found")
+    end
+
+    return metrics
+end
+
+--------------------------------------------------------------------------------
+-- Google AI adapter
+--------------------------------------------------------------------------------
+
+local googleai = {
+    aliases = {},
+    features = {},
+    cache_metrics = { read = false, creation = false },
+}
+
+googleai.format_payload = function(messages, model, _provider_name)
+    -- Convert roles and message format
+    for i, message in ipairs(messages) do
+        if message.role == "system" then
+            messages[i].role = "user"
+        end
+        if message.role == "assistant" then
+            messages[i].role = "model"
+        end
+        if message.content then
+            messages[i].parts = {
+                { text = message.content },
+            }
+            messages[i].content = nil
+        end
+    end
+
+    -- Merge consecutive same-role messages (Google API requirement)
+    local i = 1
+    while i < #messages do
+        if messages[i].role == messages[i + 1].role then
+            table.insert(messages[i].parts, {
+                text = messages[i + 1].parts[1].text,
+            })
+            table.remove(messages, i + 1)
+        else
+            i = i + 1
+        end
+    end
+
+    local payload = {
+        contents = messages,
+        safetySettings = {
+            {
+                category = "HARM_CATEGORY_HARASSMENT",
+                threshold = "BLOCK_NONE",
+            },
+            {
+                category = "HARM_CATEGORY_HATE_SPEECH",
+                threshold = "BLOCK_NONE",
+            },
+            {
+                category = "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                threshold = "BLOCK_NONE",
+            },
+            {
+                category = "HARM_CATEGORY_DANGEROUS_CONTENT",
+                threshold = "BLOCK_NONE",
+            },
+        },
+        generationConfig = provider_params.resolve_params("googleai", model),
+        model = model.model,
+    }
+    return payload
+end
+
+googleai.format_headers = function(secret, _model, payload, endpoint)
+    endpoint = render.template_replace(endpoint, "{{secret}}", secret)
+    endpoint = render.template_replace(endpoint, "{{model}}", payload.model)
+    payload.model = nil
+    return {}, endpoint
+end
+
+googleai.parse_sse_content = function(line)
+    line = strip_data_prefix(line)
+    if line == "" or line == "[DONE]" then
+        return ""
+    end
+
+    if not line:match('"text":') then
+        return ""
+    end
+
+    local decoded = safe_json_decode("{" .. line .. "}")
+    if decoded and decoded.text then
+        return decoded.text
+    end
+
+    return ""
+end
+
+googleai.parse_usage = function(raw_response)
+    local metrics = { input = nil, read = nil, creation = nil }
+
+    local usage_pattern = '"usageMetadata":%s*{[^}]*"promptTokenCount":%s*(%d+)[^}]*"candidatesTokenCount":%s*(%d+)[^}]*"totalTokenCount":%s*(%d+)[^}]*'
+    local prompt_tokens, _, _ = raw_response:match(usage_pattern)
+
+    if prompt_tokens then
+        metrics.input = tonumber(prompt_tokens) or 0
+        metrics.read = 0
+        metrics.creation = 0
+        logger.debug("Gemini metrics extracted: input=" .. metrics.input)
+    else
+        -- Try escaped pattern
+        local escaped_pattern = '\\\"usageMetadata\\\":%s*{[^}]*\\\"promptTokenCount\\\":%s*(%d+)[^}]*\\\"candidatesTokenCount\\\":%s*(%d+)[^}]*\\\"totalTokenCount\\\":%s*(%d+)[^}]*'
+        prompt_tokens, _, _ = raw_response:match(escaped_pattern)
+        if prompt_tokens then
+            metrics.input = tonumber(prompt_tokens) or 0
+            metrics.read = 0
+            metrics.creation = 0
+        end
+    end
+
+    return metrics
+end
+
+--------------------------------------------------------------------------------
+-- Copilot adapter (extends openai)
+--------------------------------------------------------------------------------
+
+local copilot = {
+    aliases = {},
+    features = {},
+    cache_metrics = { read = true, creation = false },
+}
+
+copilot.format_payload = function(messages, model, _provider_name)
+    -- Rewrite model name for copilot
+    if model.model == "gpt-4o" then
+        model.model = "gpt-4o-2024-05-13"
+    end
+    return openai.format_payload(messages, model, "copilot")
+end
+
+copilot.format_headers = function(secret, _model, _payload, endpoint)
+    local headers = {
+        "-H",
+        "editor-version: vscode/1.85.1",
+        "-H",
+        "Authorization: Bearer " .. secret,
+    }
+    return headers, endpoint
+end
+
+copilot.parse_sse_content = openai.parse_sse_content
+copilot.parse_usage = openai.parse_usage
+
+-- Copilot needs a pre-query step to refresh its bearer token
+copilot.pre_query = function(callback)
+    local vault = require("parley.vault")
+    vault.refresh_copilot_bearer(callback)
+end
+
+-- Copilot uses a different secret name
+copilot.secret_name = "copilot_bearer"
+
+--------------------------------------------------------------------------------
+-- Azure adapter (extends openai)
+--------------------------------------------------------------------------------
+
+local azure = {
+    aliases = {},
+    features = {},
+    cache_metrics = { read = false, creation = false },
+}
+
+azure.format_payload = openai.format_payload
+
+azure.format_headers = function(secret, _model, payload, endpoint)
+    local headers = {
+        "-H",
+        "api-key: " .. secret,
+    }
+    endpoint = render.template_replace(endpoint, "{{model}}", payload.model)
+    return headers, endpoint
+end
+
+azure.parse_sse_content = openai.parse_sse_content
+azure.parse_usage = openai.parse_usage
+
+--------------------------------------------------------------------------------
+-- Ollama adapter (extends openai, but no stream_options and different usage)
+--------------------------------------------------------------------------------
+
+local ollama = {
+    aliases = {},
+    features = {},
+    cache_metrics = { read = false, creation = false },
+}
+
+ollama.format_payload = function(messages, model, _provider_name)
+    local params = provider_params.resolve_params("ollama", model)
+    local output = {
+        model = model.model,
+        stream = true,
+        messages = messages,
+        -- Note: Ollama does NOT support stream_options.include_usage
+    }
+    for k, v in pairs(params) do
+        output[k] = v
+    end
+    return output
+end
+
+ollama.format_headers = function(secret, _model, _payload, endpoint)
+    local headers = {
+        "-H",
+        "Authorization: Bearer " .. secret,
+    }
+    return headers, endpoint
+end
+
+ollama.parse_sse_content = openai.parse_sse_content
+
+ollama.parse_usage = function(raw_response)
+    local metrics = { input = nil, read = nil, creation = nil }
+
+    if not raw_response:match('"usage"') then
+        return metrics
+    end
+
+    -- Ollama embeds usage in the final chunk (which still has choices, unlike OpenAI)
+    for line in raw_response:gmatch("([^\n]+)") do
+        if line:match('"usage"') and line:match('"finish_reason"') then
+            local clean_line = line:gsub("^data:%s*", "")
+            local decoded = safe_json_decode(clean_line)
+            if decoded and type(decoded.usage) == "table" then
+                metrics.input = tonumber(decoded.usage.prompt_tokens) or 0
+                metrics.read = 0
+                metrics.creation = 0
+                return metrics
+            end
+        end
+    end
+
+    -- Fallback: try same as OpenAI (in case Ollama behavior changes)
+    return openai.parse_usage(raw_response)
+end
+
+--------------------------------------------------------------------------------
+-- Provider registry
+--------------------------------------------------------------------------------
+
+local registry = {
+    openai = openai,
+    anthropic = anthropic,
+    googleai = googleai,
+    copilot = copilot,
+    azure = azure,
+    ollama = ollama,
+}
+
+-- Build alias lookup
+local alias_map = {}
+for name, adapter in pairs(registry) do
+    if adapter.aliases then
+        for _, alias in ipairs(adapter.aliases) do
+            alias_map[alias] = name
+        end
+    end
+end
+
+--- Get a provider adapter by name (resolves aliases).
+--- Falls back to a default OpenAI-compatible adapter for unknown providers.
+---@param name string
+---@return table adapter
+M.get = function(name)
+    local resolved = alias_map[name] or name
+    local adapter = registry[resolved]
+    if adapter then
+        return adapter
+    end
+
+    -- Unknown provider: fall back to openai-compatible behavior
+    logger.debug("Unknown provider '" .. name .. "', falling back to OpenAI-compatible adapter")
+    return openai
+end
+
+--- Resolve a provider name through aliases.
+---@param name string
+---@return string canonical provider name
+M.resolve_name = function(name)
+    return alias_map[name] or name
+end
+
+--- Check if a provider supports a specific feature.
+---@param name string provider name
+---@param feature string feature name (e.g., "web_search", "cache_control")
+---@return boolean
+M.has_feature = function(name, feature)
+    local adapter = M.get(name)
+    return adapter.features and adapter.features[feature] == true
+end
+
+--- Get cache metrics display config for a provider.
+---@param name string provider name
+---@return table {read = bool, creation = bool}
+M.get_cache_metrics_config = function(name)
+    local adapter = M.get(name)
+    return adapter.cache_metrics or { read = false, creation = false }
+end
+
+--- Get the secret name for a provider (usually the provider name itself).
+---@param name string provider name
+---@return string secret name
+M.get_secret_name = function(name)
+    local adapter = M.get(name)
+    return adapter.secret_name or name
+end
+
+return M
