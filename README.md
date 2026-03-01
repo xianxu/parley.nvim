@@ -218,7 +218,7 @@ Below is an example of the relevant configuration part enabling some of these. T
 			endpoint = "https://api.anthropic.com/v1/messages",
 			secret = os.getenv("ANTHROPIC_API_KEY"),
 		},
-	},
+	}
 ```
 
 Each of these providers has some agents preconfigured. Below is an example of how to disable predefined ChatGPT3-5 agent and create a custom one. If the `provider` field is missing, OpenAI is assumed for backward compatibility.

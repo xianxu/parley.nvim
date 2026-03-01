@@ -100,7 +100,7 @@ describe("dispatcher.query internals", function()
             table.insert(callback_calls, response)
         end
     end
-    
+
     describe("Group A: out_reader chunk reassembly", function()
         it("A1: single complete chunk emits content to handler", function()
             local handler = make_handler()
@@ -382,7 +382,7 @@ describe("dispatcher.query internals", function()
             -- Note: keeping googleai provider for other tests
         end)
     end)
-    
+
     describe("Group E: OpenAI usage metrics extraction", function()
         it("E1: openai_stream.txt fixture extracts correct input and cached tokens", function()
             local handler = make_handler()

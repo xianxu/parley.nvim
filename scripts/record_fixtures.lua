@@ -8,12 +8,17 @@
 --   1. From terminal (headless Neovim):
 --        make fixtures
 --      or directly:
---        ANTHROPIC_API_KEY=sk-... OPENAI_API_KEY=sk-... \
+--        ANTHROPIC_API_KEY=sk-... OPENAI_API_KEY=sk-... GOOGLEAI_API_KEY=... \
 --          nvim --headless --noplugin -u tests/minimal_init.vim \
 --          -c "luafile scripts/record_fixtures.lua" -c "qa!"
 --
 --   2. From inside Neovim (with API keys already in environment):
 --        :luafile scripts/record_fixtures.lua
+--
+-- Auth env vars supported:
+--   OpenAI: OPENAI_API_KEY
+--   Anthropic: ANTHROPIC_API_KEY
+--   Google AI: GOOGLEAI_API_KEY
 
 local fixtures_dir = "tests/fixtures"
 vim.fn.mkdir(fixtures_dir, "p")
@@ -103,7 +108,7 @@ else
         "-H 'anthropic-beta: messages-2023-12-15'",
         "-H 'content-type: application/json'",
         "--no-buffer -s",
-        "-d '{\"model\":\"claude-sonnet-4-20250514\",\"stream\":true,\"max_tokens\":40,"
+        "-d '{\"model\":\"claude-sonnet-4-6\",\"stream\":true,\"max_tokens\":40,"
             .. "\"messages\":[{\"role\":\"user\",\"content\":\"Say: hello world\"}]}'"
     }, " ")
     write_fixture("anthropic_stream.txt", capture(cmd))
@@ -130,13 +135,25 @@ if openai_key == "" then
 else
     print("Recording OpenAI fixtures...")
 
-    -- Basic stream (gpt-4o-mini, short answer, with usage chunk)
+    -- Use GPT-5 style token param when needed.
+    local openai_model = "gpt-5.2"
+    local stream_token_field
+    local error_token_field
+    if openai_model:match("^gpt%-5") then
+        stream_token_field = "\"max_completion_tokens\":40,"
+        error_token_field = "\"max_completion_tokens\":10,"
+    else
+        stream_token_field = "\"max_tokens\":40,"
+        error_token_field = "\"max_tokens\":10,"
+    end
+
+    -- Basic stream (short answer, with usage chunk)
     local cmd = table.concat({
         "curl https://api.openai.com/v1/chat/completions",
         "-H 'Authorization: Bearer " .. openai_key .. "'",
         "-H 'content-type: application/json'",
         "--no-buffer -s",
-        "-d '{\"model\":\"gpt-4o-mini\",\"stream\":true,\"max_tokens\":40,"
+        "-d '{\"model\":\"" .. openai_model .. "\",\"stream\":true," .. stream_token_field
             .. "\"stream_options\":{\"include_usage\":true},"
             .. "\"messages\":[{\"role\":\"user\",\"content\":\"Say: hello world\"}]}'"
     }, " ")
@@ -148,7 +165,7 @@ else
         "-H 'Authorization: Bearer " .. openai_key .. "'",
         "-H 'content-type: application/json'",
         "--no-buffer -s",
-        "-d '{\"model\":\"invalid-model-name\",\"stream\":true,\"max_tokens\":10,"
+        "-d '{\"model\":\"invalid-model-name\",\"stream\":true," .. error_token_field
             .. "\"messages\":[{\"role\":\"user\",\"content\":\"test\"}]}'"
     }, " ")
     write_fixture("openai_error.txt", capture(error_cmd), true) -- expect_error=true

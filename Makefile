@@ -1,4 +1,4 @@
-.PHONY: test fixtures
+.PHONY: test fixtures model-check
 
 PLENARY = ~/.local/share/nvim/lazy/plenary.nvim
 
@@ -15,3 +15,8 @@ fixtures:
 	nvim --headless --noplugin -u tests/minimal_init.vim \
 	  -c "luafile scripts/record_fixtures.lua" \
 	  -c "qa!"
+
+# Check latest model offerings from each provider and optionally update fixture models.
+# Requires API keys in environment.
+model-check:
+	@bash scripts/model_check.sh
