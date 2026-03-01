@@ -5,6 +5,7 @@
 local logger = require("parley.logger")
 
 local _H = {}
+local LAST_CONTENT_LINE_CHUNK_SIZE = 256
 
 ---@param keys string # string of keystrokes
 ---@param mode string # string of vim mode ('n', 'i', 'c', etc.), default is 'n'
@@ -118,16 +119,42 @@ end
 ---@return number # returns the first line with content of specified buffer
 _H.last_content_line = function(buf)
 	buf = buf or vim.api.nvim_get_current_buf()
-	-- go from end and return number of last nonwhitespace line
-	local line = vim.api.nvim_buf_line_count(buf)
-	while line > 0 do
-		local content = vim.api.nvim_buf_get_lines(buf, line - 1, line, false)[1]
-		if content:match("%S") then
-			return line
-		end
-		line = line - 1
+
+	if not vim.api.nvim_buf_is_valid(buf) then
+		return 0
 	end
-	return 0
+
+	_H._last_content_line_cache = _H._last_content_line_cache or {}
+	local changedtick = vim.api.nvim_buf_get_changedtick(buf)
+	local cached = _H._last_content_line_cache[buf]
+	if cached and cached.changedtick == changedtick then
+		return cached.line
+	end
+
+	-- Scan from the end in chunks to reduce nvim API calls on large buffers.
+	local line_count = vim.api.nvim_buf_line_count(buf)
+	local end_line = line_count
+	local found_line = 0
+	while end_line > 0 do
+		local start_line = math.max(0, end_line - LAST_CONTENT_LINE_CHUNK_SIZE)
+		local lines = vim.api.nvim_buf_get_lines(buf, start_line, end_line, false)
+		for i = #lines, 1, -1 do
+			if lines[i]:match("%S") then
+				found_line = start_line + i
+				break
+			end
+		end
+		if found_line > 0 then
+			break
+		end
+		end_line = start_line
+	end
+
+	_H._last_content_line_cache[buf] = {
+		changedtick = changedtick,
+		line = found_line,
+	}
+	return found_line
 end
 
 ---@param buf number # buffer number

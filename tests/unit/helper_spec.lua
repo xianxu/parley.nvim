@@ -80,3 +80,42 @@ describe("helper.ends_with", function()
         assert.is_false(helper.ends_with("chat.lua", ".md"))
     end)
 end)
+
+describe("helper.last_content_line", function()
+    local buf
+
+    before_each(function()
+        buf = vim.api.nvim_create_buf(false, true)
+        helper._last_content_line_cache = {}
+    end)
+
+    after_each(function()
+        if buf and vim.api.nvim_buf_is_valid(buf) then
+            pcall(vim.api.nvim_buf_delete, buf, { force = true })
+        end
+        helper._last_content_line_cache = {}
+    end)
+
+    it("returns 0 when buffer has only whitespace", function()
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "", "   ", "\t" })
+        assert.are.equal(0, helper.last_content_line(buf))
+    end)
+
+    it("returns the last non-whitespace line with trailing blanks", function()
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "first", "second", "", "   " })
+        assert.are.equal(2, helper.last_content_line(buf))
+    end)
+
+    it("returns the last line when the tail has content", function()
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "", "middle", "tail" })
+        assert.are.equal(3, helper.last_content_line(buf))
+    end)
+
+    it("invalidates cache when buffer content changes", function()
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "alpha", "", "" })
+        assert.are.equal(1, helper.last_content_line(buf))
+
+        vim.api.nvim_buf_set_lines(buf, 2, 3, false, { "omega" })
+        assert.are.equal(3, helper.last_content_line(buf))
+    end)
+end)
