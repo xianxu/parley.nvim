@@ -1,8 +1,31 @@
 [{
-  "error": {
-    "code": 404,
-    "message": "This model models/gemini-2.0-flash is no longer available to new users. Please update your code to use a newer model for the latest features and improvements.",
-    "status": "NOT_FOUND"
-  }
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "Hello world."
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 5,
+    "candidatesTokenCount": 3,
+    "totalTokenCount": 32,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 5
+      }
+    ],
+    "thoughtsTokenCount": 24
+  },
+  "modelVersion": "gemini-2.5-flash",
+  "responseId": "5AKkac20BuKX-sAP6sekiAw"
 }
 ]

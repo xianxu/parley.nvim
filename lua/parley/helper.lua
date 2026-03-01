@@ -287,9 +287,10 @@ _H.process_directory_pattern = function(dirspec)
     local dir = dirspec
     
     -- Check if this is a recursive search pattern with **
-    if dirspec:match("**/") then
+    -- Note: ** are literal characters, not Lua pattern magic, so we escape them with %
+    if dirspec:match("%*%*/") then
         recursive = true
-        dir = dirspec:gsub("/*%*%*/.*$", "") -- Remove ** and anything after
+        dir = dirspec:gsub("/%*%*/.*$", "") -- Remove /** and anything after
     end
     
     -- Extract a filename pattern if it exists

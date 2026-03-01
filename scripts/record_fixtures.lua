@@ -18,6 +18,8 @@
 local fixtures_dir = "tests/fixtures"
 vim.fn.mkdir(fixtures_dir, "p")
 
+local has_errors = false
+
 -- Run a shell command and return stdout as a string.
 local function capture(cmd)
     local handle = io.popen(cmd .. " 2>/dev/null")
@@ -27,21 +29,57 @@ local function capture(cmd)
     return out
 end
 
--- Write content to a file and print a summary line.
-local function write_fixture(name, content)
+-- Check if response contains an error
+local function is_error_response(content)
     if not content or #content == 0 then
-        print("  SKIP " .. name .. " (empty response — check your API key)")
-        return
+        return true, "empty response"
     end
+    -- Check for error patterns in JSON responses
+    if content:find('"type"%s*:%s*"error"') or 
+       content:find('"error"%s*:%s*{') then
+        return true, "API returned error"
+    end
+    return false, nil
+end
+
+-- Write content to a file and print a summary line.
+-- Returns true if successful, false if error.
+local function write_fixture(name, content, expect_error)
+    if not content or #content == 0 then
+        print("  FAIL " .. name .. " (empty response — check your API key)")
+        has_errors = true
+        return false
+    end
+    
+    local is_err, err_msg = is_error_response(content)
+    
+    -- For non-error fixtures, fail if we got an error response
+    if not expect_error and is_err then
+        print("  FAIL " .. name .. " (" .. err_msg .. ")")
+        print("       Response: " .. content:sub(1, 200))
+        has_errors = true
+        return false
+    end
+    
+    -- For error fixtures, it's OK to have an error
+    -- (but we still write it)
+    
     local path = fixtures_dir .. "/" .. name
     local f = io.open(path, "w")
     if not f then
-        print("  ERROR could not write " .. path)
-        return
+        print("  FAIL could not write " .. path)
+        has_errors = true
+        return false
     end
     f:write(content)
     f:close()
-    print("  OK   " .. path .. " (" .. #content .. " bytes)")
+    
+    if expect_error then
+        print("  OK   " .. path .. " (error fixture, " .. #content .. " bytes)")
+    else
+        print("  OK   " .. path .. " (" .. #content .. " bytes)")
+    end
+    return true
 end
 
 print("=== Recording SSE fixtures ===")
@@ -57,7 +95,7 @@ if anthropic_key == "" then
 else
     print("Recording Anthropic fixtures...")
 
-    -- Basic stream (claude-3.5-haiku, short answer)
+    -- Basic stream (claude-sonnet-4, short answer)
     local cmd = table.concat({
         "curl https://api.anthropic.com/v1/messages",
         "-H 'x-api-key: " .. anthropic_key .. "'",
@@ -65,19 +103,22 @@ else
         "-H 'anthropic-beta: messages-2023-12-15'",
         "-H 'content-type: application/json'",
         "--no-buffer -s",
-        "-d '{\"model\":\"claude-3-5-haiku-20241022\",\"stream\":true,\"max_tokens\":40,"
+        "-d '{\"model\":\"claude-sonnet-4-20250514\",\"stream\":true,\"max_tokens\":40,"
             .. "\"messages\":[{\"role\":\"user\",\"content\":\"Say: hello world\"}]}'"
     }, " ")
     write_fixture("anthropic_stream.txt", capture(cmd))
 
-    -- Error response (bad model name — no real request needed, craft one)
-    -- We record this as a static fixture rather than making a real bad request.
-    local error_content = table.concat({
-        'event: error',
-        'data: {"type":"error","error":{"type":"invalid_request_error","message":"model: field required"}}',
-        '',
-    }, "\n")
-    write_fixture("anthropic_error.txt", error_content)
+    -- Error response (intentionally use a bad model name to get real error format)
+    local error_cmd = table.concat({
+        "curl https://api.anthropic.com/v1/messages",
+        "-H 'x-api-key: " .. anthropic_key .. "'",
+        "-H 'anthropic-version: 2023-06-01'",
+        "-H 'content-type: application/json'",
+        "--no-buffer -s",
+        "-d '{\"model\":\"invalid-model-name\",\"stream\":true,\"max_tokens\":10,"
+            .. "\"messages\":[{\"role\":\"user\",\"content\":\"test\"}]}'"
+    }, " ")
+    write_fixture("anthropic_error.txt", capture(error_cmd), true) -- expect_error=true
 end
 
 -- ─── OpenAI ───────────────────────────────────────────────────────────────────
@@ -100,6 +141,17 @@ else
             .. "\"messages\":[{\"role\":\"user\",\"content\":\"Say: hello world\"}]}'"
     }, " ")
     write_fixture("openai_stream.txt", capture(cmd))
+    
+    -- Error response (intentionally use bad model name)
+    local error_cmd = table.concat({
+        "curl https://api.openai.com/v1/chat/completions",
+        "-H 'Authorization: Bearer " .. openai_key .. "'",
+        "-H 'content-type: application/json'",
+        "--no-buffer -s",
+        "-d '{\"model\":\"invalid-model-name\",\"stream\":true,\"max_tokens\":10,"
+            .. "\"messages\":[{\"role\":\"user\",\"content\":\"test\"}]}'"
+    }, " ")
+    write_fixture("openai_error.txt", capture(error_cmd), true) -- expect_error=true
 end
 
 -- ─── Google AI ────────────────────────────────────────────────────────────────
@@ -111,7 +163,7 @@ if googleai_key == "" then
 else
     print("Recording Google AI fixtures...")
 
-    local model = "gemini-2.0-flash-exp"
+    local model = "gemini-2.5-flash"
     local endpoint = "https://generativelanguage.googleapis.com/v1beta/models/"
         .. model .. ":streamGenerateContent?key=" .. googleai_key
 
@@ -123,8 +175,29 @@ else
             .. "\"generationConfig\":{\"maxOutputTokens\":40}}'"
     }, " ")
     write_fixture("googleai_stream.txt", capture(cmd))
+    
+    -- Error response (use invalid model name)
+    local error_model = "invalid-model-name"
+    local error_endpoint = "https://generativelanguage.googleapis.com/v1beta/models/"
+        .. error_model .. ":streamGenerateContent?key=" .. googleai_key
+    
+    local error_cmd = table.concat({
+        "curl '" .. error_endpoint .. "'",
+        "-H 'content-type: application/json'",
+        "--no-buffer -s",
+        "-d '{\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"test\"}]}]}'"
+    }, " ")
+    write_fixture("googleai_error.txt", capture(error_cmd), true) -- expect_error=true
 end
 
 print("")
-print("=== Done. Commit tests/fixtures/ to keep them fresh. ===")
-print("Re-run with: make fixtures")
+if has_errors then
+    print("=== FAILED: Some fixtures had errors ===")
+    print("Check your API keys and try again.")
+    print("Re-run with: make fixtures")
+    os.exit(1)
+else
+    print("=== Done. Commit tests/fixtures/ to keep them fresh. ===")
+    print("Re-run with: make fixtures")
+    os.exit(0)
+end

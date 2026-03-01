@@ -1,2 +1,1 @@
-event: error
-data: {"type":"error","error":{"type":"invalid_request_error","message":"model: field required"}}
+{"type":"error","error":{"type":"not_found_error","message":"model: invalid-model-name"},"request_id":"req_011CYc6sjmgdfgR19FQBmDYh"}

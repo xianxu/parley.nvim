@@ -155,7 +155,7 @@ local config = {
 			name = "Gemini2.5-Pro",
 			-- model list: https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash
 			-- string with model name or table with model name and parameters
-			model = { model = "gemini-2.5-pro-preview-05-06", temperature = 1.1, top_p = 1 },
+			model = { model = "gemini-2.5-pro", temperature = 1.1, top_p = 1 },
 			-- system prompt (use this to specify the persona/role of the AI)
 			system_prompt = require("parley.defaults").chat_system_prompt,
 		},
@@ -164,7 +164,7 @@ local config = {
 			name = "Gemini2.5-Flash",
 			-- model list: https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash
 			-- string with model name or table with model name and parameters
-			model = { model = "gemini-2.5-flash-preview-05-20", temperature = 1.1, top_p = 1 },
+			model = { model = "gemini-2.5-flash", temperature = 1.1, top_p = 1 },
 			-- system prompt (use this to specify the persona/role of the AI)
 			system_prompt = require("parley.defaults").chat_system_prompt,
 		},
