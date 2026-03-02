@@ -2,61 +2,73 @@
 
 <a href="https://github.com/xianxu/parley.nvim/blob/main/LICENSE"><img alt="GitHub" src="https://img.shields.io/github/license/xianxu/parley.nvim"></a>
 
-# Parley.nvim - Streamlined ChatGPT Plugin for Neovim, Among Other Small Utilities
+# Parley.nvim - Streamlined LLM Chat Plugin for Neovim
 
 <!-- panvimdoc-ignore-end -->
 
 <br>
 
-**ChatGPT-like sessions with highlighting and navigation, focused on simplicity and readability.** 
+**Multi-provider LLM chat sessions with highlighting and navigation, focused on simplicity and readability.**
 
 # Goals and Features
 
-Parley is a streamlined LLM chat plugin for NeoVIM, focusing exclusively on providing a clean and efficient interface for conversations with AI assistants. Imagine having full transcript of a chat session with ChatGPT (or Anthropic, or Gemini) that allows editing of all questions, and answers themselves! I created this as a way to construct research report, improve my understanding of new topics. It's a researcher's notebook. Later on, I stuff some other minor utilities in here, such as a set of notes organized by week/day. I use them in work, pretty decent way of keeping private notes, e.g. for conducting interviews. There's now even an interview mode, where interview time stamps automatically inserted.
+Parley is a streamlined LLM chat plugin for Neovim, focusing on providing a clean and efficient interface for conversations with AI assistants. It supports multiple providers including OpenAI, Anthropic (Claude), Google (Gemini), and Ollama. Imagine having a full transcript of a chat session that allows editing of all questions and answers! I created this as a way to construct research reports and improve my understanding of new topics. It's a researcher's notebook.
 
-- **Streamlined Chat Experience**
+Beyond chat, Parley includes utilities for note-taking organized by week/day, interview mode with automatic timestamps, and export to blog formats.
+
+- **Multi-provider support**
+  - OpenAI (GPT-4, GPT-4o, GPT-5), Anthropic (Claude Sonnet, Claude Haiku), Google (Gemini 2.5 Pro/Flash), Ollama (local models)
+  - Any OpenAI-compatible endpoint (Azure, LM Studio, etc.)
+  - Switch between agents on the fly with Telescope picker
+- **Streamlined chat experience**
   - Markdown-formatted chat transcripts with syntax highlighting
   - Question/response highlighting with custom colors
-  - Navigate chat Q&A exchanges and code blocks using Telescope outline
+  - Navigate chat Q&A exchanges and code blocks using outline navigator
   - Easy keybindings for creating and managing chats
 - **Streaming responses**
   - No spinner wheel and waiting for the full answer
-  - Response generation can be canceled half way through
+  - Response generation can be canceled halfway through
   - Properly working undo (response can be undone with a single `u`)
-- **Minimum dependencies** (`neovim`, `curl`, `grep`, `teleport`)
-  - Zero dependencies on other lua plugins to minimize chance of breakage
-- **ChatGPT like sessions**
-  - Just good old neovim buffers formatted as markdown with autosave
+- **Minimum dependencies** (`neovim`, `curl`; optional: `telescope`)
+  - Zero dependencies on other Lua plugins to minimize chance of breakage
+- **Chat sessions as files**
+  - Just good old Neovim buffers formatted as markdown with autosave
   - Chat finder - management pop-up for searching, previewing, deleting and opening chat sessions
 - **A live document**
   - Refresh answers on any questions
   - Insert questions in the middle of the transcript and expand with assistant's answers
-  - You have the full NeoVIM behind you.
-  - Referencing other local files, for example, to get critics for that file and ask questions about them, essentially adding context.
-- **Exporting transcript to Jekyll blog**
-  - Export to Jekyll blog post format with front matter. [Example](https://xianxu.github.io/2025/05/12/conversation_around_concurrent_programming_models.html). 
+  - Referencing local files and directories for context (the `@@` syntax)
+  - Resubmit all questions from the beginning to update the entire transcript
+- **Interview mode**
+  - Auto-inserted timestamps for interview tracking
+  - Flashing timer in statusline showing elapsed time
+- **Note-taking**
+  - Weekly/daily organized notes with templates
+- **Export**
+  - Export to Jekyll blog post format with front matter. [Example](https://xianxu.github.io/2025/05/12/conversation_around_concurrent_programming_models.html).
+  - Export to Markdown format
 
 # The Format of the Transcript
 
-Each chat transcript is really just a markdown file, with some additional conventions. So think them as markdown files with benefits (of Parley).
+Each chat transcript is a markdown file with some additional conventions. Think of them as markdown files with benefits.
 
 1. There is a header section that contains metadata and can override configuration parameters:
    - Standard metadata like `file: filename.md` (required)
    - Model information like `model: {"model":"gpt-4o","temperature":1.1,"top_p":1}`
    - Provider information like `provider: openai`
-   - Configuration overrides like `max_full_exchanges: 20` to customize behavior for this specific chat (controls how many full exchanges to keep before summarizing)
+   - Configuration overrides like `max_full_exchanges: 20` to customize behavior for this specific chat
    - Raw mode settings like `raw_mode.show_raw_response: true` to display raw JSON responses
-2. User's questions and Assistant's answers take turns.
-3. A question is a line starting with 💬:, and all following lines until next answer.
-4. An Answer is a line starting with 🤖:, and all following lines until next question.
-5. Two special lines in answers. Those are states maintained by Parley, and not designed for human consumption. They are grayed out by default.
-    1. The first is the Assistant's reasoning output, prefixed with 🧠:. 
-	2. The second is the summary of one chat exchange prefixed with 📝:, in the format of "you asked ..., I answered ...".
-    3. We keep those two lines in the transcript itself for simplicity, so that one transcript file's hermetic.
+2. User's questions and assistant's answers take turns.
+3. A question is a line starting with 💬:, and all following lines until the next answer.
+4. An answer is a line starting with 🤖:, and all following lines until the next question.
+5. Two special lines in answers (maintained by Parley, grayed out by default):
+    1. The assistant's reasoning output, prefixed with 🧠:.
+    2. The summary of one chat exchange prefixed with 📝:, in the format of "you asked ..., I answered ...".
+    3. We keep those in the transcript itself for simplicity, so that one transcript file is self-contained.
 6. Smart memory management:
-    1. By default, Parley keeps only a certain number of recent exchanges (controlled by `max_full_exchanges`) and summarizes older ones to maintain context within token limits.
-    2. Exchanges (both question and answer) that include file references (@@filename) are always preserved in full, regardless of their age, ensuring file content context is maintained throughout the conversation.
-7. File and directory inclusion: a line that starts with @@ followed by a path will automatically load content into the prompt when sending to the LLM. This works in several ways:
+    1. By default, Parley keeps only a certain number of recent exchanges (controlled by `max_full_exchanges`, default: 5) and summarizes older ones to maintain context within token limits.
+    2. Exchanges that include file references (@@filename) are always preserved in full, regardless of their age.
+7. File and directory inclusion: a line that starts with @@ followed by a path will automatically load content into the prompt when sending to the LLM:
 
    - `@@/path/to/file.txt` - Include a single file
    - `@@/path/to/directory/` - Include all files in a directory (non-recursive)
@@ -64,41 +76,30 @@ Each chat transcript is really just a markdown file, with some additional conven
    - `@@/path/to/directory/**/` - Include all files in a directory and its subdirectories (recursive)
    - `@@/path/to/directory/**/*.lua` - Include all matching files in a directory and its subdirectories (recursive)
 
-   All included files are displayed with line numbers for easier reference and navigation. This makes it simpler for the LLM to reference specific code locations in its responses.
+   All included files are displayed with line numbers for easier reference. You can open referenced files or directories directly by placing the cursor on the @@ line and pressing `<C-g>o`.
 
-   You can open referenced files or directories directly by placing the cursor on the line with the @@ syntax and pressing `<C-g>o`. For directories or glob patterns, this will open the file explorer. Use this feature when you want LLM to help you understand, debug, or improve existing code.
-
-8. Markdown code blocks: Parley provides utilities for working with code blocks in markdown:
-   - Copy code block to clipboard: Place your cursor inside a markdown code block and press `<leader>gy`
-   - Save code block to file: Position your cursor inside a code block and press `<leader>gs` (if the code block has a `file="filename"` attribute, it will use that name; otherwise, it will prompt for a filename)
-   - Execute code block in terminal: With your cursor inside a code block, press `<leader>gx` to run the code in a split terminal window
-   - Copy terminal output: After executing a code block with `<leader>gx`, press `<leader>gc` while in the terminal buffer to copy the entire terminal output to the clipboard
-   - Copy terminal output from chat: Press `<leader>ge` from your chat buffer to copy the output from the last terminal session (useful when the terminal is no longer visible or you've returned to the chat)
-   - Compare code block versions: Press `<leader>gd` on a code block with a filename attribute (`file="filename"`) to compare it with a previous version of the same file in the chat (press `q` to close the diff view)
-   - Repeat last command: Press `<leader>g!` to repeat the last set of commands you ran with `<leader>gx` in a new terminal window
-
-With this, any question asked is associated with context of all questions and answers coming before this question. When the chat gets too long and the chat_memory is enabled, chat exchanges earlier in the transcript will be represented by the concatenation of their summary lines (📝:).
+8. Markdown code block utilities:
+   - `<leader>gy` - Copy code block to clipboard
+   - `<leader>gs` - Save code block to file (uses `file="filename"` attribute if present)
+   - `<leader>gx` - Execute code block in a split terminal window
+   - `<leader>gc` - Copy terminal output (while in the terminal buffer)
+   - `<leader>ge` - Copy terminal output from the chat buffer
+   - `<leader>gd` - Compare code block versions (diff view, press `q` to close)
+   - `<leader>g!` - Repeat last command in a new terminal window
 
 ## Interaction
 
-Place cursor in the question area, and `<C-g>g`, to ask assistant about it. If the question is at the end of document, it's a new question. Otherwise, a previously asked question is asked again, and previous answer replaced by the new answer. You might want to do this, for example, if upon learning, you tweaks your questions. Or you updated referenced file (with the `@@` syntax).
+Place cursor in the question area and press `<C-g><C-g>` to ask the assistant. If the question is at the end of the document, it's a new question. Otherwise, a previously asked question is re-asked and the previous answer is replaced.
 
 If you see a message saying "Another Parley process is already running", you can either:
-1. Use `<C-g>s` to stop the current process and then try again
-2. Add a `!` at the end of the command (`:ParleyChatRespond!`) to force a new response even if a process is running
+1. Use `<C-g>s` to stop the current process and try again
+2. Add a `!` at the end of the command (`:ParleyChatRespond!`) to force a new response
 
-For more extensive revisions, you can place the cursor on a question and use `<C-g>G` to resubmit all questions from the beginning of the chat up to and including the current question. Each question will be processed in sequence, with responses replacing the existing answers at their correct positions. This is particularly useful when you've edited multiple previous questions, and/or referenced files and want to update all previously asked questions.
-
-During the resubmission, a visual indicator will highlight each question as it's being processed, and notifications will display progress. You can stop the resubmission at any time with the stop shortcut (`<C-g>s`). When complete, the cursor will return to your original position.
-
-Because you can update previous questions and even assistant's answers, the answers of future questions, will be different, subtly influenced by all those. After all, we are dealing with a `large scale statistical machine` here.
-
-The 🧠:, 📝: are done through system prompt. It seems to work fine, but there's no guarantee. If assistant omitted those lines, you can update the question to reinforce it: "remember to reply with 🧠: lines for your reasoning, and 📝: for your summary". Something like that.
+For more extensive revisions, place the cursor on a question and use `<C-g>G` to resubmit all questions from the beginning of the chat up to and including the current question. Each question will be processed in sequence, with responses replacing the existing answers. You can stop the resubmission at any time with `<C-g>s`.
 
 ## Manual Curation
-The transcript is really just a text document. So long the 💬:, 🤖:, 🧠:, 📝: pattern is maintained, things would work. You are free to edit any text in this transcript. For example, adding headings `#` and `##` to group your questions sections, which shows up in Table of Content with `<C-g>t`.
 
-You are free to put bold on text, as a marker so you can remember things easier. The whole thing is markdown format, so you can use `backtick`, or [link], or **bold**, each having different visual effect. I may add some customized highlighter, just to make certain text jumping out.
+The transcript is just a text document. So long as the 💬:, 🤖:, 🧠:, 📝: pattern is maintained, things work. You are free to edit any text. For example, adding headings `#` and `##` to group your questions into sections, which show up in the outline with `<C-g>t`.
 
 # Install
 
@@ -112,21 +113,18 @@ Snippets for your preferred package manager:
     "xianxu/parley.nvim",
     config = function()
         local conf = {
-            -- For customization, refer to Install > Configuration in the Documentation/Readme
-			-- Typically you should override the api_keys, e.g. if you are using Mac Keychain to store API keys.
-            -- Use the following to add api keys to Mac Keychain.
-	        -- security add-generic-password -a "your_username" -s "OPENAI_API_KEY" -w "your_api_key" -U
-			api_keys = {
+            -- For customization, refer to the Configuration section below
+            -- Typically you should override the api_keys
+            -- Example using macOS Keychain:
+            -- security add-generic-password -a "your_username" -s "OPENAI_API_KEY" -w "your_api_key" -U
+            api_keys = {
                 openai = { "security", "find-generic-password", "-a", "your_username", "-s", "OPENAI_API_KEY", "-w" },
                 anthropic = { "security", "find-generic-password", "-a", "your_username", "-s", "ANTHROPIC_API_KEY", "-w" },
                 googleai = { "security", "find-generic-password", "-a", "your_username", "-s", "GOOGLEAI_API_KEY", "-w" },
                 ollama = "dummy_secret",
             },
-
         }
         require("parley").setup(conf)
-
-        -- Setup shortcuts here (see Usage > Shortcuts in the Documentation/Readme)
     end,
 }
 ```
@@ -137,11 +135,7 @@ use({
     "xianxu/parley.nvim",
     config = function()
         local conf = {
-            -- For customization, refer to Install > Configuration in the Documentation/Readme
-			-- Typically you should override the api_keys, e.g. if you are using Mac Keychain to store API keys.
-            -- Use the following to add api keys to Mac Keychain.
-	        -- security add-generic-password -a "your_username" -s "OPENAI_API_KEY" -w "your_api_key" -U
-			api_keys = {
+            api_keys = {
                 openai = { "security", "find-generic-password", "-a", "your_username", "-s", "OPENAI_API_KEY", "-w" },
                 anthropic = { "security", "find-generic-password", "-a", "your_username", "-s", "ANTHROPIC_API_KEY", "-w" },
                 googleai = { "security", "find-generic-password", "-a", "your_username", "-s", "GOOGLEAI_API_KEY", "-w" },
@@ -149,355 +143,457 @@ use({
             },
         }
         require("parley").setup(conf)
-
-        -- Setup shortcuts here (see Usage > Shortcuts in the Documentation/Readme)
     end,
 })
 ```
 
-```lua
--- vim-plug
-Plug 'xianxu/parley.nvim'
+## 2. API Keys
 
-local conf = {
-    -- For customization, refer to Install > Configuration in the Documentation/Readme
-	-- Typically you should override the api_keys, e.g. if you are using Mac Keychain to store API keys.
-    -- Use the following to add api keys to Mac Keychain.
-    -- security add-generic-password -a "your_username" -s "OPENAI_API_KEY" -w "your_api_key" -U
-	api_keys = {
-        openai = { "security", "find-generic-password", "-a", "your_username", "-s", "OPENAI_API_KEY", "-w" },
-        anthropic = { "security", "find-generic-password", "-a", "your_username", "-s", "ANTHROPIC_API_KEY", "-w" },
-        googleai = { "security", "find-generic-password", "-a", "your_username", "-s", "GOOGLEAI_API_KEY", "-w" },
-        ollama = "dummy_secret",
-    },
-}
-require("parley").setup(conf)
-
--- Setup shortcuts here (see Usage > Shortcuts in the Documentation/Readme)
-```
-
-## 2. OpenAI API key
-
-Make sure you have OpenAI API key. [Get one here](https://platform.openai.com/account/api-keys) and use it in the [4. Configuration](#4-configuration). Also consider setting up [usage limits](https://platform.openai.com/account/billing/limits) so you won't get surprised at the end of the month.
-
-The OpenAI API key can be passed to the plugin in multiple ways:
+You need at least one provider's API key configured. The API key can be provided in multiple ways:
 
 | Method                    | Example                                                        | Security Level      |
 | ------------------------- | -------------------------------------------------------------- | ------------------- |
-| hardcoded string          | `openai_api_key: "sk-...",`                                    | Low                 |
-| default env var           | set `OPENAI_API_KEY` environment variable in shell config      | Medium              |
-| custom env var            | `openai_api_key = os.getenv("CUSTOM_ENV_NAME"),`               | Medium              |
-| read from file            | `openai_api_key = { "cat", "path_to_api_key" },`               | Medium-High         |
-| password manager          | `openai_api_key = { "bw", "get", "password", "OAI_API_KEY" },` | High                |
+| hardcoded string          | `api_keys = { openai = "sk-..." }`                             | Low                 |
+| default env var           | set `OPENAI_API_KEY` env variable in shell config              | Medium              |
+| custom env var            | `api_keys = { openai = os.getenv("CUSTOM_ENV_NAME") }`        | Medium              |
+| read from file            | `api_keys = { openai = { "cat", "path_to_api_key" } }`        | Medium-High         |
+| password manager          | `api_keys = { openai = { "bw", "get", "password", "KEY" } }`  | High                |
+| macOS Keychain            | `api_keys = { openai = { "security", "find-generic-password", "-a", "user", "-s", "OPENAI_API_KEY", "-w" } }` | High |
 
-If `openai_api_key` is a table, Parley runs it asynchronously to avoid blocking Neovim (password managers can take a second or two).
+If the value is a table, Parley runs it asynchronously to avoid blocking Neovim.
 
-## 3. Multiple providers
-The following LLM providers are currently supported besides OpenAI:
+## 3. Providers
 
-- [Ollama](https://github.com/ollama/ollama) for local/offline open-source models. The plugin assumes you have the Ollama service up and running with configured models available (the default Ollama agent uses Llama3).
-- [Anthropic](https://www.anthropic.com/api) to access Claude models, which currently outperform GPT-4 in some benchmarks.
-- [Google Gemini](https://ai.google.dev/) with a quite generous free range but some geo-restrictions (EU).
-- Any other "OpenAI chat/completions" compatible endpoint (Azure, LM Studio, etc.)
+The following LLM providers are supported:
 
-Below is an example of the relevant configuration part enabling some of these. The `secret` field has the same capabilities as `openai_api_key` (which is still supported for compatibility).
+- **OpenAI** - GPT-4, GPT-4o, GPT-5 and other OpenAI models
+- **Anthropic** - Claude Sonnet 4.6, Claude Haiku 4.5
+- **Google AI** - Gemini 2.5 Pro, Gemini 2.5 Flash
+- **Ollama** - Local/offline open-source models (disabled by default)
+- Any other OpenAI chat/completions compatible endpoint (Azure, LM Studio, etc.)
 
-```lua
-	providers = {
-		openai = {
-			endpoint = "https://api.openai.com/v1/chat/completions",
-			secret = os.getenv("OPENAI_API_KEY"),
-		},
-
-		googleai = {
-			endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{{model}}:streamGenerateContent?key={{secret}}",
-			secret = os.getenv("GOOGLEAI_API_KEY"),
-		},
-
-		anthropic = {
-			endpoint = "https://api.anthropic.com/v1/messages",
-			secret = os.getenv("ANTHROPIC_API_KEY"),
-		},
-	}
-```
-
-Each of these providers has some agents preconfigured. Below is an example of how to disable predefined ChatGPT3-5 agent and create a custom one. If the `provider` field is missing, OpenAI is assumed for backward compatibility.
+Provider configuration example:
 
 ```lua
-	agents = {
-		{
-			name = "ChatGPT3-5",
-			disable = true,
-		},
-		{
-			name = "MyCustomAgent",
-			provider = "copilot",
-			chat = true,
-			command = true,
-			model = { model = "gpt-4-turbo" },
-			system_prompt = "Answer any query with just: Sure thing..",
-		},
-	},
-
+providers = {
+    openai = {
+        endpoint = "https://api.openai.com/v1/chat/completions",
+    },
+    anthropic = {
+        endpoint = "https://api.anthropic.com/v1/messages",
+    },
+    googleai = {
+        endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{{model}}:streamGenerateContent?key={{secret}}",
+    },
+    ollama = {
+        disable = false, -- enable Ollama
+        endpoint = "http://localhost:11434/v1/chat/completions",
+    },
+}
 ```
 
-## 4. Dependencies
+## 4. Agents
 
-The core plugin only needs `curl` installed to make calls to OpenAI API and `grep` for ChatFinder. So Linux, BSD and Mac OS should be covered.
+Each agent combines a provider, model, and system prompt. Default agents:
 
-## 5. Configuration
+| Agent | Provider | Model |
+| ----- | -------- | ----- |
+| ChatGPT4 | OpenAI | gpt-4 |
+| ChatGPT5 | OpenAI | gpt-5 |
+| ChatGPT4o | OpenAI | gpt-4o |
+| ChatGPT-4o-search | OpenAI | gpt-4o-search-preview |
+| Claude-Sonnet | Anthropic | claude-sonnet-4-6 |
+| Claude-Haiku | Anthropic | claude-haiku-4-5 |
+| Gemini2.5-Pro | Google AI | gemini-2.5-pro |
+| Gemini2.5-Flash | Google AI | gemini-2.5-flash |
+| ChatOllamaLlama3.1-8B | Ollama | llama3.1 (disabled) |
 
-Expose `OPENAI_API_KEY` env and it should work. Otherwise copy `lua/parley/config.lua` to your `~/.config/nvim/lua/parley/` and update.
+You can disable or add custom agents:
+
+```lua
+agents = {
+    {
+        name = "ChatGPT4",
+        disable = true, -- disable a default agent
+    },
+    {
+        name = "MyCustomAgent",
+        provider = "openai",
+        model = { model = "gpt-4-turbo", temperature = 0.7 },
+        system_prompt = "You are a helpful assistant.",
+    },
+},
+```
+
+## 5. System Prompts
+
+Parley includes named system prompts that can be switched independently of agents: `default`, `creative`, `concise`, `teacher`, `code_reviewer`. Switch between them with `<C-g>p` or `:ParleyNextSystemPrompt`.
+
+## 6. Dependencies
+
+The core plugin only needs `curl` installed. [Telescope](https://github.com/nvim-telescope/telescope.nvim) is optional but enhances the agent picker, system prompt picker, and outline navigation.
 
 # Usage
 
-All commands can be configured in `config.lua`.
+All commands use the `:Parley` prefix (configurable via `cmd_prefix`).
 
-## Chat commands
+## Chat Commands
 
-#### `:GpChatNew` <!-- {doc=:GpChatNew}  -->
+#### `:ParleyChatNew`
 
-Open a fresh chat in the current window. `<C-g>c`
+Open a fresh chat in the current window. Global shortcut: `<C-g>c`
 
-#### `:ParleyChatFinder` <!-- {doc=:ParleyChatFinder}  -->
+#### `:ParleyChatRespond`
 
-Open a dialog to search through chats. `<C-g>f`
+Request a new response for the current question. `<C-g><C-g>`
 
-By default, this only shows chat files from the last 3 months (configurable in `chat_finder_recency.months`). While in the dialog:
-- Press the configured toggle key (default: `<C-a>`) to switch between showing recent chats and all chats
-- The dialog title displays the current filtering state (Recent or All)
-- Chat files are sorted by modification date with newest first
-- Each entry shows filename, topic, and date
+Append `!` to force a new response even if a process is already running.
 
-#### `:GpChatRespond` <!-- {doc=:GpChatRespond}  -->
+#### `:ParleyChatRespondAll`
 
-Request a new GPT response for the current chat. `<C-g>g`
+Resubmit all questions from the beginning up to the cursor position. `<C-g>G`
 
-#### `:GpChatDelete` <!-- {doc=:GpChatDelete}  -->
+#### `:ParleyChatDelete`
 
-Delete the current chat. By default requires confirmation before delete, which can be disabled in config using `chat_confirm_delete = false,`. `<C-g>d`
+Delete the current chat. Requires confirmation by default (configurable with `chat_confirm_delete = false`). `<C-g>d`
 
-## Agent commands
+#### `:ParleyChatFinder`
 
-#### `:ParleyAgent` <!-- {doc=:ParleyAgent}  -->
+Open a dialog to search through chats. Global shortcut: `<C-g>f`
 
-Opens a Telescope picker for selecting an agent. If Telescope is not available, shows the current agent information. You can also specify a specific agent name as an argument to switch directly: `:ParleyAgent ChatGPT4o`. 
+By default, shows chat files from the last 6 months (configurable via `chat_finder_recency.months`). While in the dialog:
+- `<C-a>` to toggle between recent and all chats
+- `<C-d>` to delete the selected chat
+- Files are sorted by modification date with newest first
 
-#### `:GpNextAgent` <!-- {doc=:GpNextAgent}  -->
+#### `:ParleyOutline`
 
-Opens a Telescope picker for selecting an agent if Telescope is available. If not, cycles between available agents based on the current buffer (chat agents if current buffer is a chat and command agents otherwise). The agent setting is persisted on disk across Neovim instances. `<C-g>a`
+Open an outline navigator showing questions and headings in the chat. `<C-g>t`
 
-## Other commands
+#### `:ParleyOpenFileUnderCursor`
 
-#### `:GpStop` <!-- {doc=:GpStop}  -->
+Open the file or directory referenced by `@@` syntax under the cursor. `<C-g>o`
 
-Stops all currently running responses and jobs. `<C-g>s`
+## Agent and System Prompt Commands
 
-# Chat Finder Recency Filtering
+#### `:ParleyAgent [name]`
 
-The chat finder feature includes intelligent filtering based on file recency, making it easier to find relevant chats:
+Opens a Telescope picker for selecting an agent. Optionally specify a name directly: `:ParleyAgent Claude-Sonnet`.
 
-## Configuration
+#### `:ParleyNextAgent`
 
-```lua
--- Chat finder recency filtering configuration
-chat_finder_recency = {
-    -- Enable recency filtering by default
-    filter_by_default = true,
-    -- Default recency period in months
-    months = 3,
-    -- Use file modification time (true) or creation time (false)
-    use_mtime = true,
-},
+Cycle to the next available agent. `<C-g>a`
 
--- Keybinding for toggling between recent and all chats in the finder
-chat_finder_mappings = {
-    delete = { modes = { "n", "i", "v", "x" }, shortcut = "<C-d>" },
-    toggle_all = { modes = { "n", "i", "v", "x" }, shortcut = "<C-a>" },
-},
-```
+#### `:ParleySystemPrompt [name]`
+
+Opens a Telescope picker for selecting a system prompt. Optionally specify a name directly.
+
+#### `:ParleyNextSystemPrompt`
+
+Cycle to the next available system prompt. `<C-g>p`
+
+## Toggle Commands
+
+#### `:ParleyToggleClaudeWebSearch`
+
+Toggle Claude's server-side web search tool for the current session. `<C-g>w`
+
+Only available when using a provider that supports web search (currently Anthropic).
+
+#### `:ParleyToggleInterview`
+
+Toggle interview mode. `<C-n>i`
+
+When enabled:
+- Inserts a `:00min` marker at the cursor position
+- Every time you press Enter in insert mode, a timestamp (e.g., `:05min`) is automatically inserted showing elapsed time since the interview started
+- A flashing timer appears in the lualine statusline showing the current elapsed time
+- Timestamp lines are highlighted with a distinct color
+
+If you toggle interview mode while the cursor is on an existing timestamp line (e.g., `:12min`), the timer will resume from that point instead of resetting to zero. This is useful for continuing an interview after a break.
+
+#### `:ParleyToggleRaw`
+
+Toggle both raw request and raw response modes at once.
+
+#### `:ParleyToggleRawRequest`
+
+Toggle parsing of user JSON input as direct API requests.
+
+#### `:ParleyToggleRawResponse`
+
+Toggle display of raw JSON API responses.
+
+## Export Commands
+
+#### `:ParleyExportHTML`
+
+Export the current chat to Jekyll blog post HTML format.
+
+#### `:ParleyExportMarkdown`
+
+Export the current chat to Markdown format.
+
+## Note Commands
+
+Parley includes a note-taking system that organizes notes by year, month, and week. Notes are stored in the configured `notes_dir` directory.
+
+#### `:ParleyNoteNew`
+
+Create a new note. Prompts for a subject, then creates a markdown file organized by date in the directory structure: `notes_dir/YYYY/MM/weekNN/DD-subject.md`. Global shortcut: `<C-n>c`
+
+If the first word of the subject matches a subdirectory under `notes_dir`, the note is created in that subdirectory instead (without the date prefix). This allows organizing notes by project or category.
+
+#### `:ParleyNoteNewFromTemplate`
+
+Create a new note from a template. `<C-n>t`
+
+Opens a Telescope picker (or vim.ui.select fallback) to choose from available templates in `notes_dir/templates/`. Built-in templates are created automatically on first use:
+- **meeting-notes** - Meeting notes with attendees, agenda, action items
+- **daily-note** - Daily note with tasks, notes, reflection sections
+- **interview** - Interview template with `:00min` timestamp marker (pairs with interview mode)
+- **basic** - Simple note with title and date
+
+The `<C-n>r` shortcut changes the working directory to the current year's notes folder.
+
+## Other Commands
+
+#### `:ParleyStop`
+
+Stop all currently running responses and jobs. `<C-g>s`
+
+# Keybinding Summary
+
+## Chat Buffer Shortcuts
+
+| Shortcut | Action |
+| -------- | ------ |
+| `<C-g><C-g>` | Send current question / get response |
+| `<C-g>G` | Resubmit all questions up to cursor |
+| `<C-g>d` | Delete current chat |
+| `<C-g>s` | Stop running response |
+| `<C-g>a` | Switch agent |
+| `<C-g>p` | Switch system prompt |
+| `<C-g>n` | Search chats (in-buffer) |
+| `<C-g>o` | Open file under cursor (@@) |
+| `<C-g>t` | Outline navigator |
+| `<C-g>w` | Toggle Claude web search |
+
+## Code Block Shortcuts
+
+| Shortcut | Action |
+| -------- | ------ |
+| `<leader>gy` | Copy code block to clipboard |
+| `<leader>gs` | Save code block to file |
+| `<leader>gx` | Execute code block in terminal |
+| `<leader>gc` | Copy terminal output |
+| `<leader>ge` | Copy terminal output from chat |
+| `<leader>gd` | Diff code block with previous version |
+| `<leader>g!` | Repeat last terminal command |
+
+## Global Shortcuts
+
+| Shortcut | Action |
+| -------- | ------ |
+| `<C-g>c` | New chat |
+| `<C-g>f` | Chat finder |
+| `<C-g>a` | Add chat reference (in non-chat markdown files) |
+| `<C-n>c` | New note |
+| `<C-n>t` | New note from template |
+| `<C-n>i` | Toggle interview mode |
+| `<C-n>r` | Open year root (notes) |
+| `<leader>fo` | Open oil.nvim file explorer |
+
+# Chat Memory Management
+
+The plugin supports automatic summarization of longer chat histories to maintain context while reducing token usage.
 
 ## How It Works
 
-1. By default, the chat finder only shows files from the last 3 months (configurable)
-2. Files are sorted with newest first to quickly find recent conversations
-3. A toggle key (default: `<C-a>`) lets you switch between recent files and all files
-4. The dialog title updates to show whether you're viewing "Recent" or "All" chats
-5. Each entry displays the file's last modification date for easy reference
-
-This feature helps manage growing collections of chat files and quickly locate relevant conversations without overwhelming the finder with old, rarely used transcripts.
-
-
-# Raw Mode for API Debugging
-
-Parley includes a "raw mode" feature for debugging and advanced use cases that makes it easier to directly interact with the LLM provider APIs:
+1. When chat messages exceed a configured threshold, older exchanges are replaced with their summaries
+2. Summaries are extracted from assistant responses with the 📝: prefix
+3. This allows the LLM to maintain context without the full token cost
 
 ## Configuration
 
-Raw mode can be enabled in your setup or in individual chat headers:
-
 ```lua
--- In your config
-raw_mode = {
-    enable = true,                -- Master toggle for raw mode features
-    show_raw_response = true,     -- Show raw JSON API responses
-    parse_raw_request = true,     -- Parse user JSON input directly as API requests
+chat_memory = {
+    enable = true,
+    max_full_exchanges = 5,
+    summary_prefix = "📝:",
+    reasoning_prefix = "🧠:",
+    omit_user_text = "Summarize our chat",
 },
 ```
 
-or in a chat file header:
+# Raw Mode for API Debugging
+
+Parley includes a "raw mode" for debugging and advanced use cases.
+
+## Configuration
+
+```lua
+raw_mode = {
+    enable = true,
+    show_raw_response = false,
+    parse_raw_request = false,
+},
+```
+
+Or in a chat file header:
 
 ```
-- file: mychat.md
 - raw_mode.show_raw_response: true
 - raw_mode.parse_raw_request: true
 ```
 
 ## How It Works
 
-1. **Raw Response Mode** (`show_raw_response: true`):
-   - When enabled, the API's raw JSON response is displayed as a code block
-   - This reveals complete model output including usage statistics and metadata
-   - Useful for debugging and understanding the provider's response format
+1. **Raw Response Mode** (`show_raw_response`): Displays the API's raw JSON response as a code block, revealing usage statistics and metadata.
 
-2. **Raw Request Mode** (`parse_raw_request: true`):
-   - Allows you to craft custom JSON requests to send directly to the API
-   - Format your request as a JSON code block in your question:
+2. **Raw Request Mode** (`parse_raw_request`): Allows you to craft custom JSON requests to send directly to the API. Format your request as a JSON code block in your question:
    ```
    💬:
    ```json
    {
      "model": "gpt-4o",
      "messages": [
-       {"role": "system", "content": "You are a JSON validator."},
-       {"role": "user", "content": "Explain the structure of a valid OpenAI request."}
-     ],
-     "temperature": 0.7
+       {"role": "user", "content": "Hello"}
+     ]
    }
    ```
    ```
-   
-   - The plugin will extract and use this JSON as the direct payload for the API
-   - Overrides normal message processing and allows full control of request parameters
-
-This feature is particularly useful for:
-- Testing and debugging API interactions
-- Exploring advanced model capabilities
-- Learning API formatting requirements
-- Experimenting with different request structures
-- Seeing complete token usage statistics
-
-# Chat Memory Management
-
-The plugin supports automatic summarization of longer chat histories to maintain context while reducing token usage. This feature is particularly useful for long conversations where earlier parts can be summarized instead of sending the full transcript to the API.
-
-## How It Works
-
-1. When chat messages exceed a configured threshold, older exchanges are replaced with a summary
-2. Summaries are extracted from assistant responses with a specific prefix (default: "📝:")
-3. This allows the LLM to maintain context of the conversation without the full token cost
-
-## Configuration
-
-The chat memory feature can be configured in your setup:
-
-```lua
-chat_memory = {
-    -- enable summary feature for older messages
-    enable = true,
-    -- maximum number of full exchanges to keep (a user and assistant pair)
-    max_full_exchanges = 3,
-    -- prefix for note lines in assistant responses (used to extract summaries)
-    summary_prefix = "📝:",
-    -- prefix for reasoning lines in assistant responses (used to extract summaries)
-    reasoning_prefix = "🧠:",
-    -- text to replace omitted user messages
-    omit_user_text = "Summarize previous chat",
-},
-```
-
-## Usage
-
-To take advantage of this feature, instruct your LLM in the system prompt to include summaries of the conversation. For example the following, or check defaults.lua for details, which is already included as default. If LLM is not good at following after a long session, you can add those to your question to refresh its memory.
-
-```
-When thinking through complex problems, prefix your reasoning with 🧠: for clarity.
-After answering my question, please include a brief summary of our exchange prefixed with 📝:
-```
-
-When the chat grows beyond the configured limit, the plugin will automatically replace older messages with the extracted summaries.
 
 # Customizing Appearance
 
-Parley is designed to work well with all color schemes while providing clear visual distinction between different elements.
-
-## Default Highlighting
+## Highlighting
 
 By default, Parley links its highlight groups to common built-in Neovim highlight groups:
 
-- Questions (user messages): Linked to `Keyword` - stands out in most themes
-- File references (@@filename): Linked to `WarningMsg` - clearly visible in all themes
-- Thinking/reasoning lines (🧠:): Linked to `Comment` - appropriately dimmed in most themes
-- Annotations (@...@): Linked to `DiffAdd` - typically has a subtle background color
+- Questions (user messages): Linked to `Keyword`
+- File references (@@filename): Linked to `WarningMsg`
+- Thinking/reasoning lines (🧠:): Linked to `Comment`
+- Annotations (@...@): Linked to `DiffAdd`
 
-## Custom Highlighting
-
-You can customize these highlight groups by adding a `highlight` section to your configuration:
+You can customize these:
 
 ```lua
 highlight = {
-    -- Override with your own highlight settings
-    question = { fg = "#ffaf00", italic = true },         -- Orange text for questions
-    file_reference = { fg = "#ffffff", bg = "#5c2020" },  -- White text on red for file refs
-    thinking = { fg = "#777777" },                        -- Gray text for reasoning lines
-    annotation = { bg = "#205c2c", fg = "#ffffff" },      -- White text on green background
+    question = { fg = "#ffaf00", italic = true },
+    file_reference = { fg = "#ffffff", bg = "#5c2020" },
+    thinking = { fg = "#777777" },
+    annotation = { bg = "#205c2c", fg = "#ffffff" },
 },
 ```
 
-Each field is optional - set only the ones you want to customize and leave the others as `nil`.
-
 # Lualine Integration
 
-Parley includes built-in integration with lualine, allowing you to display the current agent in your statusline when working with chat buffers.
+Parley includes built-in [lualine](https://github.com/nvim-lua/lualine.nvim) integration to display the current agent and cache metrics in your statusline.
 
 ## Configuration
 
-The lualine integration can be configured in your setup:
-
 ```lua
 lualine = {
-    -- enable lualine integration
     enable = true,
-    -- which section to add the component to
     section = "lualine_x",
 },
 ```
 
-## How It Works
-
-1. When working in a chat buffer, the lualine component will show the current agent
-2. The component will only appear when you're in a chat buffer
-3. The integration automatically registers itself with lualine if enabled
-
-To set this up, no additional configuration is needed beyond enabling it in your Parley config.
+When working in a chat buffer, the lualine component shows the current agent. No additional configuration is needed beyond enabling it.
 
 ## Manual Integration
 
-You can also manually add the Parley component to your lualine configuration if you need more control:
+For more control over positioning:
 
 ```lua
--- In your lualine setup
 require('lualine').setup {
   sections = {
     lualine_x = {
-      -- Other components...
       require('parley.lualine').create_component(),
     }
   }
 }
 ```
 
-This is useful if you want to position the component precisely within your statusline configuration.
+# Configuration Reference
+
+Below are additional configuration options beyond those covered in earlier sections. See `lua/parley/config.lua` for the full default configuration.
+
+## Directory Paths
+
+```lua
+-- directory for storing chat files
+chat_dir = vim.fn.stdpath("data"):gsub("/$", "") .. "/parley/chats",
+-- directory for storing notes
+notes_dir = vim.fn.stdpath("data"):gsub("/$", "") .. "/parley/notes",
+-- export directories
+export_html_dir = "~/blogs/static",
+export_markdown_dir = "~/blogs/_posts",
+```
+
+## Chat Behavior
+
+```lua
+-- prefix for all commands (e.g., :ParleyChatNew)
+cmd_prefix = "Parley",
+-- optional curl parameters (for proxy, etc.)
+curl_params = { "--proxy", "http://X.X.X.X:XXXX" },
+-- default agent on startup (nil = last used agent)
+default_agent = nil,
+-- enable Claude web search tool by default
+claude_web_search = true,
+-- don't move cursor to end of buffer after response completes
+chat_free_cursor = true,
+-- require confirmation before deleting a chat
+chat_confirm_delete = true,
+-- conceal model parameters in the chat header
+chat_conceal_model_params = true,
+```
+
+## Chat Prefixes
+
+These control the markers used in chat transcripts:
+
+```lua
+chat_user_prefix = "💬:",
+chat_assistant_prefix = { "🤖:", "[{{agent}}]" },
+-- local section prefix (content ignored by parley processing)
+chat_local_prefix = "🔒:",
+```
+
+## Chat Finder Styling
+
+```lua
+style_chat_finder_border = "single",  -- "single" | "double" | "rounded" | "solid" | "shadow" | "none"
+style_chat_finder_margin_bottom = 8,
+style_chat_finder_margin_left = 1,
+style_chat_finder_margin_right = 2,
+style_chat_finder_margin_top = 2,
+style_chat_finder_preview_ratio = 0.5,  -- 0.0 to 1.0
+```
+
+## Logging
+
+```lua
+log_file = vim.fn.stdpath("log"):gsub("/$", "") .. "/parley.nvim.log",
+-- write sensitive data (like api keys) to log for debugging
+log_sensitive = false,
+```
+
+## Hooks
+
+Hooks are custom Lua functions registered as commands. Two built-in hooks are provided:
+
+```lua
+hooks = {
+    -- :ParleyInspectPlugin - shows plugin state in a buffer
+    InspectPlugin = function(plugin, params) ... end,
+    -- :ParleyInspectLog - opens the log file
+    InspectLog = function(plugin, params) ... end,
+},
+```
+
+You can add your own hooks to extend functionality. Each hook becomes a `:Parley<HookName>` command.
 
 # Acknowledgement
 
