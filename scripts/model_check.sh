@@ -116,6 +116,11 @@ extract_section_model() {
         | sed 's/^\\"model\\":\\"//; s/\\"$//'
 }
 
+extract_quoted_assignment() {
+    local var_name="$1"
+    sed -nE "s/^[[:space:]]*local[[:space:]]+${var_name}[[:space:]]*=[[:space:]]*\"([^\"]+)\".*/\\1/p" "$FIXTURE_SCRIPT" | head -1
+}
+
 # Update the fixture script with new model for a provider
 update_fixture_model() {
     local provider="$1"
@@ -136,7 +141,11 @@ update_fixture_model() {
             sed -i '' "/-- ─── Anthropic/,/write_fixture(\\\"anthropic_stream.txt\\\"/ s|\\\\\"model\\\\\":\\\\\"${escaped_old}\\\\\"|\\\\\"model\\\\\":\\\\\"${escaped_new}\\\\\"|" "$FIXTURE_SCRIPT"
             ;;
         openai)
-            sed -i '' "s|local openai_model = \"${escaped_old}\"|local openai_model = \"${escaped_new}\"|" "$FIXTURE_SCRIPT"
+            if grep -q 'local openai_model = ' "$FIXTURE_SCRIPT"; then
+                sed -i '' "s|local openai_model = \"${escaped_old}\"|local openai_model = \"${escaped_new}\"|" "$FIXTURE_SCRIPT"
+            else
+                sed -i '' "/-- ─── OpenAI/,/write_fixture(\\\"openai_stream.txt\\\"/ s|\\\\\"model\\\\\":\\\\\"${escaped_old}\\\\\"|\\\\\"model\\\\\":\\\\\"${escaped_new}\\\\\"|" "$FIXTURE_SCRIPT"
+            fi
             ;;
         googleai)
             sed -i '' "s|local model = \"${escaped_old}\"|local model = \"${escaped_new}\"|" "$FIXTURE_SCRIPT"
@@ -177,7 +186,10 @@ else
         echo "$openai_raw" | head -3
     fi
 
-    openai_current=$(grep -m1 'local openai_model = ' "$FIXTURE_SCRIPT" | sed 's/.*"//; s/".*//')
+    openai_current=$(extract_quoted_assignment "openai_model")
+    if [ -z "$openai_current" ]; then
+        openai_current=$(extract_section_model '-- ─── OpenAI' 'write_fixture("openai_stream.txt"' || true)
+    fi
     openai_current=$(trim "$openai_current")
     if [ -z "$openai_current" ]; then
         openai_current="unknown"
@@ -272,7 +284,7 @@ else
         echo -e "  Found ${#googleai_models[@]} Gemini models"
     fi
 
-    googleai_current=$(grep -m1 'local model = ' "$FIXTURE_SCRIPT" | sed 's/.*"//; s/".*//')
+    googleai_current=$(extract_quoted_assignment "model")
     googleai_current=$(trim "$googleai_current")
     if [ -z "$googleai_current" ]; then
         googleai_current="unknown"

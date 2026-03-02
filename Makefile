@@ -1,4 +1,4 @@
-.PHONY: test fixtures model-check
+.PHONY: test fixtures model-check model-checker
 
 PLENARY = ~/.local/share/nvim/lazy/plenary.nvim
 
@@ -20,3 +20,6 @@ fixtures:
 # Requires API keys in environment.
 model-check:
 	@bash scripts/model_check.sh
+
+# Backward-compatible alias.
+model-checker: model-check

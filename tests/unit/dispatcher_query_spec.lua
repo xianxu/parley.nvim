@@ -398,9 +398,9 @@ describe("dispatcher.query internals", function()
             captured_out_reader(nil, fixture_content)
             captured_out_reader(nil, nil) -- EOF
             
-            -- Check metrics (from fixture: prompt_tokens=11, cached_tokens=0)
+            -- Check metrics (from fixture: prompt_tokens=10, cached_tokens=0)
             local metrics = tasker.get_cache_metrics()
-            assert.equals(11, metrics.input)
+            assert.equals(10, metrics.input)
             assert.equals(0, metrics.read) -- cached_tokens in fixture
         end)
         
