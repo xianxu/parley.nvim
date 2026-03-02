@@ -1324,38 +1324,6 @@ M.prep_chat = function(buf, file_name)
 		},
 	}
 	
-	-- Add markdown code block shortcuts
-	local md = require("parley.md")
-	
-	if M.config.chat_shortcut_copy_code_block then
-		M.helpers.set_keymap({buf}, M.config.chat_shortcut_copy_code_block.modes, 
-			M.config.chat_shortcut_copy_code_block.shortcut, md.copy_markdown_code_block, "Copy markdown code block")
-	end
-	
-	if M.config.chat_shortcut_save_code_block then
-		M.helpers.set_keymap({buf}, M.config.chat_shortcut_save_code_block.modes, 
-			M.config.chat_shortcut_save_code_block.shortcut, md.save_markdown_code_block, "Save markdown code block")
-	end
-	
-	if M.config.chat_shortcut_run_code_block then
-		M.helpers.set_keymap({buf}, M.config.chat_shortcut_run_code_block.modes, 
-			M.config.chat_shortcut_run_code_block.shortcut, md.run_code_block_in_terminal, "Run code block in terminal")
-	end
-	
-	if M.config.chat_shortcut_repeat_command then
-		M.helpers.set_keymap({buf}, M.config.chat_shortcut_repeat_command.modes,
-			M.config.chat_shortcut_repeat_command.shortcut, md.repeat_last_command, "Repeat last terminal command")
-	end
-	
-	if M.config.chat_shortcut_copy_terminal_from_chat then
-		M.helpers.set_keymap({buf}, M.config.chat_shortcut_copy_terminal_from_chat.modes,
-			M.config.chat_shortcut_copy_terminal_from_chat.shortcut, md.copy_terminal_output, "Copy terminal output from chat")
-	end
-	
-	if M.config.chat_shortcut_display_diff then
-		M.helpers.set_keymap({buf}, M.config.chat_shortcut_display_diff.modes,
-			M.config.chat_shortcut_display_diff.shortcut, md.display_diff, "Show diff between code blocks with same filename")
-	end
 	for _, rc in ipairs(range_commands) do
 		local cmd = M.config.cmd_prefix .. rc.command .. "<cr>"
 		for _, mode in ipairs(rc.modes) do

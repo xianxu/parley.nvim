@@ -55,17 +55,7 @@ local function is_outline_item(bufnr, line_number, config, code_block_memo, all_
   local line = all_lines and all_lines[line_number]
     or vim.api.nvim_buf_get_lines(bufnr, line_number - 1, line_number, false)[1] or ""
   
-  -- Check for code block start - we want to include this in the outline
-  if line:match("^%s*```%S+") then
-    -- Construct a nice outline entry for code blocks
-    -- Extract the language name after the backticks: ```python -> python
-    local rest = line:match("^%s*```(.*)")
-    local display = "📃 Code: " .. rest
-    
-    return true, "code_block", display
-  end
-  
-  -- Skip lines in code blocks (but not the opening line)
+  -- Skip lines in code blocks
   if is_in_code_block(bufnr, line_number, code_block_memo) then
     return false, nil, nil
   end
@@ -151,7 +141,7 @@ function M.question_picker(config)
 
   -- Create the picker
   pickers.new({}, {
-    prompt_title = "💬 Q&A and Code Outline",
+    prompt_title = "💬 Q&A Outline",
     finder = finders.new_table {
       results = reverse(lines),
       entry_maker = function(entry)
