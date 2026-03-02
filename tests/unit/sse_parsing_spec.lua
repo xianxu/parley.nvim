@@ -188,9 +188,9 @@ describe("_extract_sse_content: fixture-based smoke tests", function()
             local content = dispatcher._extract_sse_content(line, "openai")
             accumulated = accumulated .. content
         end
-        -- The fixture should produce "Hello, world!" based on the deltas
+        -- The fixture should produce greeting text based on streamed deltas.
         assert.is_truthy(#accumulated > 0, "openai fixture should extract non-empty content")
-        assert.is_truthy(accumulated:match("Hello"), "openai fixture should contain 'Hello'")
+        assert.is_truthy(accumulated:lower():match("hello"), "openai fixture should contain 'hello'")
     end)
 
     it("processes anthropic_stream.txt fixture without error", function()

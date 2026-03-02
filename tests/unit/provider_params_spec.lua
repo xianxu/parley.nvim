@@ -32,6 +32,12 @@ describe("get_schema", function()
         assert.is_not_nil(s.params.reasoning_effort)
     end)
 
+    it("applies gpt-5 override to gpt-5.2", function()
+        local s = pp.get_schema("openai", "gpt-5.2")
+        assert.equals("max_completion_tokens", s.params.max_tokens.api_name)
+        assert.is_not_nil(s.params.reasoning_effort)
+    end)
+
     it("applies Claude Sonnet 4.6 exclusive group override", function()
         local s = pp.get_schema("anthropic", "claude-sonnet-4-6-20260101")
         assert.equals(1, #s.exclusive_groups)
@@ -111,6 +117,13 @@ describe("resolve_params", function()
         local result = pp.resolve_params("openai", model)
         assert.equals(8192, result.max_completion_tokens)
         assert.is_nil(result.max_tokens) -- api_name overrides
+    end)
+
+    it("uses max_completion_tokens api_name for gpt-5.2", function()
+        local model = { model = "gpt-5.2", max_tokens = 4096 }
+        local result = pp.resolve_params("openai", model)
+        assert.equals(4096, result.max_completion_tokens)
+        assert.is_nil(result.max_tokens)
     end)
 end)
 
