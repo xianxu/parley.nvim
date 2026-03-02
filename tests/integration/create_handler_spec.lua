@@ -165,4 +165,64 @@ describe("create_handler: streaming behavior", function()
         assert.equals("Complete", lines[1])
         assert.equals("Partial continued", lines[2])
     end)
+
+    it("preserves trailing newline as an empty pending line", function()
+        local handler = parley.dispatcher.create_handler(buf, nil, 3, true, "", false)
+
+        handler(mock_qid, "Line A\n")
+        vim.wait(100, function()
+            local lines = vim.api.nvim_buf_get_lines(buf, 3, 5, false)
+            return lines[1] == "Line A" and lines[2] == ""
+        end, 10)
+
+        local lines = vim.api.nvim_buf_get_lines(buf, 3, 5, false)
+        assert.equals("Line A", lines[1])
+        assert.equals("", lines[2])
+
+        handler(mock_qid, "Line B")
+        vim.wait(100, function()
+            local lines_after = vim.api.nvim_buf_get_lines(buf, 3, 5, false)
+            return lines_after[1] == "Line A" and lines_after[2] == "Line B"
+        end, 10)
+
+        local lines_after = vim.api.nvim_buf_get_lines(buf, 3, 5, false)
+        assert.equals("Line A", lines_after[1])
+        assert.equals("Line B", lines_after[2])
+    end)
+
+    it("handles many tiny chunks on a single line", function()
+        local handler = parley.dispatcher.create_handler(buf, nil, 3, true, "", false)
+
+        local chunks = { "S", "t", "r", "e", "a", "m", " ", "o", "k" }
+        for _, c in ipairs(chunks) do
+            handler(mock_qid, c)
+        end
+
+        vim.wait(100, function()
+            local line = vim.api.nvim_buf_get_lines(buf, 3, 4, false)[1]
+            return line == "Stream ok"
+        end, 10)
+
+        local line = vim.api.nvim_buf_get_lines(buf, 3, 4, false)[1]
+        assert.equals("Stream ok", line)
+    end)
+
+    it("handles mixed newline boundaries across multiple chunks with prefix", function()
+        local handler = parley.dispatcher.create_handler(buf, nil, 3, true, ">> ", false)
+
+        handler(mock_qid, "A")
+        handler(mock_qid, "\nB")
+        handler(mock_qid, "\n")
+        handler(mock_qid, "C")
+
+        vim.wait(100, function()
+            local lines = vim.api.nvim_buf_get_lines(buf, 3, 6, false)
+            return lines[1] == ">> A" and lines[2] == ">> B" and lines[3] == ">> C"
+        end, 10)
+
+        local lines = vim.api.nvim_buf_get_lines(buf, 3, 6, false)
+        assert.equals(">> A", lines[1])
+        assert.equals(">> B", lines[2])
+        assert.equals(">> C", lines[3])
+    end)
 end)

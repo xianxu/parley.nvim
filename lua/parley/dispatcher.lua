@@ -375,7 +375,30 @@ D.create_handler = function(buf, win, line, first_undojoin, prefix, cursor)
 		right_gravity = false,
 	})
 
-	local response = ""
+	local has_started = false
+	local pending_line = ""
+
+	local function with_prefix(lines)
+		if prefix == "" then
+			return lines
+		end
+		local prefixed = {}
+		for i, l in ipairs(lines) do
+			prefixed[i] = prefix .. l
+		end
+		return prefixed
+	end
+
+	local function split_pending_and_completed(text)
+		local lines = vim.split(text, "\n")
+		local completed = {}
+		for i = 1, #lines - 1 do
+			completed[i] = lines[i]
+		end
+		local pending = lines[#lines] or ""
+		return completed, pending
+	end
+
 	return vim.schedule_wrap(function(qid, chunk)
 		local qt = tasker.get_query(qid)
 		if not qt then
@@ -400,36 +423,37 @@ D.create_handler = function(buf, win, line, first_undojoin, prefix, cursor)
 			qt.ex_id = ex_id
 		end
 
+		if type(chunk) ~= "string" then
+			return
+		end
+
 		first_line = vim.api.nvim_buf_get_extmark_by_id(buf, ns_id, ex_id, {})[1]
 
-		-- clean previous response
-		local line_count = #vim.split(response, "\n")
-		vim.api.nvim_buf_set_lines(buf, first_line + finished_lines, first_line + line_count, false, {})
-
-		-- append new response
-		response = response .. chunk
+		local previous_pending_index = finished_lines
+		local completed, new_pending
+		if has_started then
+			completed, new_pending = split_pending_and_completed(pending_line .. chunk)
+			table.insert(completed, new_pending)
+			local replacement = with_prefix(completed)
+			local start_line = first_line + finished_lines
+			vim.api.nvim_buf_set_lines(buf, start_line, start_line + 1, false, replacement)
+			finished_lines = finished_lines + (#completed - 1)
+		else
+			completed, new_pending = split_pending_and_completed(chunk)
+			table.insert(completed, new_pending)
+			local replacement = with_prefix(completed)
+			vim.api.nvim_buf_set_lines(buf, first_line, first_line + 1, false, replacement)
+			finished_lines = #completed - 1
+			has_started = true
+		end
+		pending_line = new_pending
 		helpers.undojoin(buf)
 
-		-- prepend prefix to each line
-		local lines = vim.split(response, "\n")
-		for i, l in ipairs(lines) do
-			lines[i] = prefix .. l
-		end
-
-		local unfinished_lines = {}
-		for i = finished_lines + 1, #lines do
-			table.insert(unfinished_lines, lines[i])
-		end
-
-		vim.api.nvim_buf_set_lines(buf, first_line + finished_lines, first_line + finished_lines, false, unfinished_lines)
-
-		local new_finished_lines = math.max(0, #lines - 1)
-		for i = finished_lines, new_finished_lines do
+		for i = previous_pending_index, finished_lines do
 			vim.api.nvim_buf_add_highlight(buf, qt.ns_id, hl_handler_group, first_line + i, 0, -1)
 		end
-		finished_lines = new_finished_lines
 
-		local end_line = first_line + #vim.split(response, "\n")
+		local end_line = first_line + finished_lines + 1
 		qt.first_line = first_line
 		qt.last_line = end_line - 1
 
