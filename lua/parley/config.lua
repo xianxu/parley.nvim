@@ -76,8 +76,8 @@ local config = {
 	-- directory for persisting state dynamically changed by user (like model or persona)
 	-- directory for persisting state dynamically changed by user (like model or persona)
 	state_dir = vim.fn.stdpath("data"):gsub("/$", "") .. "/parley/persisted",
-	-- default per-chat: enable Claude server-side web_search tool
-	claude_web_search = true,
+	-- default per-chat: enable server-side web_search tool (supported by Anthropic, GoogleAI, OpenAI)
+	web_search = true,
 
 	-- default agent name set during startup, if nil last used agent is used
 	default_agent = nil,
@@ -99,24 +99,26 @@ local config = {
 			provider = "openai",
 			name = "ChatGPT5",
 			-- string with model name or table with model name and parameters
-			model = { model = "gpt-5", temperature = 1.1, top_p = 1 },
+			-- search_model: when web_search is enabled, swap to this model
+			model = { model = "gpt-5", temperature = 1.1, top_p = 1, search_model = "gpt-5-search-api" },
 			-- system prompt (use this to specify the persona/role of the AI)
 			system_prompt = require("parley.defaults").chat_system_prompt,
-			reasoning_effort = low,
 		},
 		{
 			provider = "openai",
 			name = "ChatGPT4o",
 			-- string with model name or table with model name and parameters
-			model = { model = "gpt-4o", temperature = 1.1, top_p = 1 },
+			-- search_model: when web_search is enabled, swap to this model
+			model = { model = "gpt-4o", temperature = 1.1, top_p = 1, search_model = "gpt-4o-search-preview" },
 			-- system prompt (use this to specify the persona/role of the AI)
 			system_prompt = require("parley.defaults").chat_system_prompt,
 		},
 		{
 			provider = "openai",
-			name = "ChatGPT-4o-search",
+			name = "ChatGPT4o-mini",
 			-- string with model name or table with model name and parameters
-			model = { model = "gpt-4o-search-preview", temperature = 1.1, top_p = 1 },
+			-- search_model: when web_search is enabled, swap to this model
+			model = { model = "gpt-4o-mini", temperature = 1.1, top_p = 1, search_model = "gpt-4o-mini-search-preview" },
 			-- system prompt (use this to specify the persona/role of the AI)
 			system_prompt = require("parley.defaults").chat_system_prompt,
 		},
@@ -152,10 +154,28 @@ local config = {
 		},
 		{
 			provider = "googleai",
+			name = "Gemini3.1-Pro",
+			-- model list: https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash
+			-- string with model name or table with model name and parameters
+			model = { model = "gemini-3.1-pro-preview", temperature = 1.1, top_p = 1 },
+			-- system prompt (use this to specify the persona/role of the AI)
+			system_prompt = require("parley.defaults").chat_system_prompt,
+		},
+		{
+			provider = "googleai",
 			name = "Gemini2.5-Pro",
 			-- model list: https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash
 			-- string with model name or table with model name and parameters
 			model = { model = "gemini-2.5-pro", temperature = 1.1, top_p = 1 },
+			-- system prompt (use this to specify the persona/role of the AI)
+			system_prompt = require("parley.defaults").chat_system_prompt,
+		},
+		{
+			provider = "googleai",
+			name = "Gemini3-Flash",
+			-- model list: https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash
+			-- string with model name or table with model name and parameters
+			model = { model = "gemini-3-flash-preview", temperature = 1.1, top_p = 1 },
 			-- system prompt (use this to specify the persona/role of the AI)
 			system_prompt = require("parley.defaults").chat_system_prompt,
 		},

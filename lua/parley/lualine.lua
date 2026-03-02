@@ -179,10 +179,19 @@ M.create_component = function(parley_instance)
         agent_info = parley.get_agent_info({}, parley.get_agent(agent_name))
       end
       local prov = require("parley.providers")
-      -- Add [w] indicator for web_search when enabled
+      -- Add [w] or [w?] indicator for web_search when enabled
       local display_name = agent_name
-      if agent_info and prov.has_feature(agent_info.provider, "web_search") and parley._state.claude_web_search then
-        display_name = display_name .. "[w]"
+      if parley._state.web_search then
+        local supported = agent_info and prov.has_feature(agent_info.provider, "web_search")
+        -- For OpenAI, also require search_model to be defined
+        if supported and agent_info and prov.resolve_name(agent_info.provider) == "openai" then
+          local agent_conf = parley.agents and parley.agents[agent_name]
+          local model_conf = agent_conf and agent_conf.model
+          if type(model_conf) == "table" and not model_conf.search_model then
+            supported = false
+          end
+        end
+        display_name = display_name .. (supported and "[w]" or "[w?]")
       end
       if parley.config.raw_mode and (parley.config.raw_mode.show_raw_response or parley.config.raw_mode.parse_raw_request) then
         display_name = display_name .. "[r]"

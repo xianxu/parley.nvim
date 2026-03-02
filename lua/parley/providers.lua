@@ -38,14 +38,24 @@ end
 
 local openai = {
     aliases = {},
-    features = {},
+    features = { web_search = true },
     cache_metrics = { read = true, creation = false },
 }
 
 openai.format_payload = function(messages, model, provider_name)
-    local params = provider_params.resolve_params(provider_name or "openai", model)
+    -- Swap to search_model variant when web_search is enabled
+    local model_name = model.model
+    local parley = require("parley")
+    if parley._state and parley._state.web_search and model.search_model then
+        model_name = model.search_model
+    end
+
+    -- Resolve params using the actual model name (search models strip temperature/top_p)
+    local param_model = vim.tbl_extend("force", model, { model = model_name })
+    local params = provider_params.resolve_params(provider_name or "openai", param_model)
+
     local output = {
-        model = model.model,
+        model = model_name,
         stream = true,
         messages = messages,
         stream_options = {
@@ -55,6 +65,7 @@ openai.format_payload = function(messages, model, provider_name)
     for k, v in pairs(params) do
         output[k] = v
     end
+
     return output
 end
 
@@ -221,7 +232,7 @@ anthropic.format_payload = function(messages, model, _provider_name)
 
     -- Add Claude server-side web_search and web_fetch tools if enabled
     local parley = require("parley")
-    if parley._state and parley._state.claude_web_search then
+    if parley._state and parley._state.web_search then
         payload.tools = {
             {
                 type = "web_search_20250305",
@@ -346,7 +357,7 @@ end
 
 local googleai = {
     aliases = {},
-    features = {},
+    features = { web_search = true },
     cache_metrics = { read = false, creation = false },
 }
 
@@ -403,6 +414,13 @@ googleai.format_payload = function(messages, model, _provider_name)
         generationConfig = provider_params.resolve_params("googleai", model),
         model = model.model,
     }
+
+    -- Add Google Search grounding tool if enabled
+    local parley = require("parley")
+    if parley._state and parley._state.web_search then
+        payload.tools = { { google_search = vim.empty_dict() } }
+    end
+
     return payload
 end
 
