@@ -184,6 +184,9 @@ M.create_component = function(parley_instance)
       if agent_info and prov.has_feature(agent_info.provider, "web_search") and parley._state.claude_web_search then
         display_name = display_name .. "[w]"
       end
+      if parley.config.raw_mode and (parley.config.raw_mode.show_raw_response or parley.config.raw_mode.parse_raw_request) then
+        display_name = display_name .. "[r]"
+      end
       
       -- Show agent name with icon (spinner if busy)
       if is_busy then
