@@ -641,12 +641,18 @@ M.setup = function(opts)
 		string.format("<cmd>%sToggleWebSearch<CR>", M.config.cmd_prefix),
 		{ noremap = true, silent = true, desc = "Toggle web_search tool" }
 	)
-	-- bind <C-g>r to toggle raw request/response mode
+	-- bind <C-g>r to toggle raw request mode, <C-g>R to toggle raw response mode
 	vim.keymap.set(
 		"n",
 		"<C-g>r",
-		string.format("<cmd>%sToggleRaw<CR>", M.config.cmd_prefix),
-		{ noremap = true, silent = true, desc = "Toggle raw request/response mode" }
+		string.format("<cmd>%sToggleRawRequest<CR>", M.config.cmd_prefix),
+		{ noremap = true, silent = true, desc = "Toggle raw request mode" }
+	)
+	vim.keymap.set(
+		"n",
+		"<C-g>R",
+		string.format("<cmd>%sToggleRawResponse<CR>", M.config.cmd_prefix),
+		{ noremap = true, silent = true, desc = "Toggle raw response mode" }
 	)
 
 	-- Setup lualine integration if lualine is enabled
@@ -2802,16 +2808,14 @@ M._build_messages = function(opts)
 				local question_content = exchange.question.content
 				local file_content = ""
 
-				-- Check if we're in raw request mode
-				local parse_raw_request = config.raw_mode and config.raw_mode.parse_raw_request
-
-				-- Handle raw request mode - parse JSON input from code blocks
-				if parse_raw_request then
-					-- Check if content contains a JSON code block
-					local json_content = question_content:match("%s*```json%s*(.-)\n```")
+				-- Handle raw request mode - parse JSON from typed code fences
+				-- Look for ```json {"type": "request"} fences; when present, use as raw payload
+				-- regardless of parse_raw_request toggle (the fence metadata is authoritative)
+				do
+					local json_content = question_content:match('```json%s+{"type":%s*"request"}%s*\n(.-)\n```')
 
 					if json_content then
-						logger.debug("Found JSON content in question, using raw request mode")
+						logger.debug("Found typed JSON request block in question, using raw request mode")
 
 						-- Try to parse the JSON
 						local success, payload = pcall(vim.json.decode, json_content)
@@ -3096,26 +3100,25 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 	-- Compute payload once for both display and query
 	local final_payload = raw_payload or M.dispatcher.prepare_payload(messages, agent_info.model, agent_info.provider)
 
-	-- In raw mode, insert the request payload into the buffer before the response
+	-- In raw request mode, insert the request payload after the question, before the agent response
+	-- Skip if the question already contains a typed request fence (raw_payload was parsed from it)
 	local raw_request_offset = 0
-	if M.config.raw_mode and M.config.raw_mode.show_raw_response then
+	if M.config.raw_mode and M.config.raw_mode.parse_raw_request and not raw_payload then
 		local json_str = vim.json.encode(final_payload)
-		-- Pretty-print via vim.inspect-style manual formatting
+		-- Pretty-print via python3 json.tool
 		local ok, formatted = pcall(function()
 			return vim.fn.system({ "python3", "-m", "json.tool" }, json_str)
 		end)
 		if not ok or vim.v.shell_error ~= 0 then
 			formatted = json_str
 		end
-		local request_lines = { "**Request:**", "", "```json" }
+		local request_lines = { '', '```json {"type": "request"}' }
 		for line in formatted:gmatch("[^\n]+") do
 			table.insert(request_lines, line)
 		end
 		table.insert(request_lines, "```")
-		table.insert(request_lines, "")
-		table.insert(request_lines, "**Response:**")
-		table.insert(request_lines, "")
-		vim.api.nvim_buf_set_lines(buf, response_line + 3, response_line + 3, false, request_lines)
+		-- Insert right before the agent header (at response_line, pushing agent header down)
+		vim.api.nvim_buf_set_lines(buf, response_line, response_line, false, request_lines)
 		raw_request_offset = #request_lines
 	end
 

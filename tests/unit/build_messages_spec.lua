@@ -396,21 +396,21 @@ describe("_build_messages: header config overrides", function()
 end)
 
 describe("_build_messages: raw request mode", function()
-    it("when parse_raw_request is true and question contains JSON block, stores raw_payload", function()
+    it("when question contains typed JSON request fence, stores raw_payload", function()
         local json_question = [[
 What do you think?
-```json
+
+```json {"type": "request"}
 {"model": "gpt-4", "messages": [{"role": "user", "content": "custom"}]}
 ```
 ]]
         local ex = exchange(json_question)
         ex.question.line_start = 10
-        
+
         local pc = parsed_chat({ ex })
-        
+
         local config_with_raw = vim.deepcopy(parley.config)
-        config_with_raw.raw_mode = { parse_raw_request = true }
-        
+
         local messages = parley._build_messages({
             parsed_chat = pc,
             start_index = 1,
@@ -421,11 +421,187 @@ What do you think?
             helpers = stub_helpers,
             logger = stub_logger
         })
-        
+
         -- The raw_payload should be attached to the exchange
         assert.is_not_nil(ex.question.raw_payload)
         assert.equals("table", type(ex.question.raw_payload))
         assert.equals("gpt-4", ex.question.raw_payload.model)
+    end)
+
+    it("ignores plain JSON fences without type:request metadata", function()
+        local json_question = [[
+Here is some JSON:
+
+```json
+{"model": "gpt-4", "messages": [{"role": "user", "content": "custom"}]}
+```
+]]
+        local ex = exchange(json_question)
+        ex.question.line_start = 10
+
+        local pc = parsed_chat({ ex })
+
+        local config_with_raw = vim.deepcopy(parley.config)
+
+        local messages = parley._build_messages({
+            parsed_chat = pc,
+            start_index = 1,
+            end_index = 100,
+            exchange_idx = 1,
+            agent = agent(),
+            config = config_with_raw,
+            helpers = stub_helpers,
+            logger = stub_logger
+        })
+
+        -- No raw_payload should be set since the fence lacks type:request
+        assert.is_nil(ex.question.raw_payload)
+    end)
+
+    it("parses typed request fence even when parse_raw_request config is false", function()
+        local json_question = [[
+What do you think?
+
+```json {"type": "request"}
+{"model": "gpt-4", "messages": [{"role": "user", "content": "override"}]}
+```
+]]
+        local ex = exchange(json_question)
+        ex.question.line_start = 10
+
+        local pc = parsed_chat({ ex })
+
+        -- Explicitly set parse_raw_request to false
+        local config_no_raw = vim.deepcopy(parley.config)
+        config_no_raw.raw_mode = { parse_raw_request = false }
+
+        parley._build_messages({
+            parsed_chat = pc,
+            start_index = 1,
+            end_index = 100,
+            exchange_idx = 1,
+            agent = agent(),
+            config = config_no_raw,
+            helpers = stub_helpers,
+            logger = stub_logger
+        })
+
+        -- Typed fence should be detected regardless of parse_raw_request toggle
+        assert.is_not_nil(ex.question.raw_payload)
+        assert.equals("override", ex.question.raw_payload.messages[1].content)
+    end)
+
+    it("stores complete payload structure from typed request fence", function()
+        local json_question = [[
+Test question
+
+```json {"type": "request"}
+{"model": "gpt-4o", "messages": [{"role": "system", "content": "sys"}, {"role": "user", "content": "hello"}], "temperature": 0.5}
+```
+]]
+        local ex = exchange(json_question)
+        ex.question.line_start = 10
+
+        local pc = parsed_chat({ ex })
+
+        parley._build_messages({
+            parsed_chat = pc,
+            start_index = 1,
+            end_index = 100,
+            exchange_idx = 1,
+            agent = agent(),
+            config = vim.deepcopy(parley.config),
+            helpers = stub_helpers,
+            logger = stub_logger
+        })
+
+        assert.is_not_nil(ex.question.raw_payload)
+        assert.equals("gpt-4o", ex.question.raw_payload.model)
+        assert.equals(2, #ex.question.raw_payload.messages)
+        assert.equals("system", ex.question.raw_payload.messages[1].role)
+        assert.equals("user", ex.question.raw_payload.messages[2].role)
+        assert.equals(0.5, ex.question.raw_payload.temperature)
+    end)
+
+    it("handles invalid JSON in typed request fence gracefully", function()
+        local json_question = [[
+Test question
+
+```json {"type": "request"}
+{this is not valid json}
+```
+]]
+        local ex = exchange(json_question)
+        ex.question.line_start = 10
+
+        local pc = parsed_chat({ ex })
+
+        -- Should not error out
+        parley._build_messages({
+            parsed_chat = pc,
+            start_index = 1,
+            end_index = 100,
+            exchange_idx = 1,
+            agent = agent(),
+            config = vim.deepcopy(parley.config),
+            helpers = stub_helpers,
+            logger = stub_logger
+        })
+
+        -- raw_payload should remain nil since JSON was invalid
+        assert.is_nil(ex.question.raw_payload)
+    end)
+
+    it("ignores response type fences and only matches request type", function()
+        local json_question = [[
+Test question
+
+```json {"type": "response"}
+{"id": "chatcmpl-123", "choices": [{"message": {"content": "hello"}}]}
+```
+]]
+        local ex = exchange(json_question)
+        ex.question.line_start = 10
+
+        local pc = parsed_chat({ ex })
+
+        parley._build_messages({
+            parsed_chat = pc,
+            start_index = 1,
+            end_index = 100,
+            exchange_idx = 1,
+            agent = agent(),
+            config = vim.deepcopy(parley.config),
+            helpers = stub_helpers,
+            logger = stub_logger
+        })
+
+        -- Response type fence should not be treated as a request payload
+        assert.is_nil(ex.question.raw_payload)
+    end)
+
+    it("builds normal messages when question has no typed fence", function()
+        local ex = exchange("Just a normal question")
+        ex.question.line_start = 10
+
+        local pc = parsed_chat({ ex })
+
+        local messages = parley._build_messages({
+            parsed_chat = pc,
+            start_index = 1,
+            end_index = 100,
+            exchange_idx = 1,
+            agent = agent(),
+            config = vim.deepcopy(parley.config),
+            helpers = stub_helpers,
+            logger = stub_logger
+        })
+
+        -- No raw_payload, normal message building
+        assert.is_nil(ex.question.raw_payload)
+        assert.equals(2, #messages) -- system + user
+        assert.equals("user", messages[2].role)
+        assert.is_true(messages[2].content:find("Just a normal question") ~= nil)
     end)
 end)
 

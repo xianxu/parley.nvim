@@ -193,8 +193,16 @@ M.create_component = function(parley_instance)
         end
         display_name = display_name .. (supported and "[w]" or "[w?]")
       end
-      if parley.config.raw_mode and (parley.config.raw_mode.show_raw_response or parley.config.raw_mode.parse_raw_request) then
-        display_name = display_name .. "[r]"
+      if parley.config.raw_mode then
+        local raw_req = parley.config.raw_mode.parse_raw_request
+        local raw_resp = parley.config.raw_mode.show_raw_response
+        if raw_req and raw_resp then
+          display_name = display_name .. "[rR]"
+        elseif raw_req then
+          display_name = display_name .. "[r]"
+        elseif raw_resp then
+          display_name = display_name .. "[R]"
+        end
       end
       
       -- Show agent name with icon (spinner if busy)
