@@ -23,7 +23,7 @@ Beyond chat, Parley includes utilities for note-taking organized by week/day, in
 - **Streamlined chat experience**
   - Markdown-formatted chat transcripts with syntax highlighting
   - Question/response highlighting with custom colors
-  - Navigate chat Q&A exchanges and code blocks using outline navigator
+  - Navigate chat Q&A exchanges using outline navigator
   - Easy keybindings for creating and managing chats
 - **Streaming responses**
   - No spinner wheel and waiting for the full answer
@@ -77,15 +77,6 @@ Each chat transcript is a markdown file with some additional conventions. Think 
    - `@@/path/to/directory/**/*.lua` - Include all matching files in a directory and its subdirectories (recursive)
 
    All included files are displayed with line numbers for easier reference. You can open referenced files or directories directly by placing the cursor on the @@ line and pressing `<C-g>o`.
-
-8. Markdown code block utilities:
-   - `<leader>gy` - Copy code block to clipboard
-   - `<leader>gs` - Save code block to file (uses `file="filename"` attribute if present)
-   - `<leader>gx` - Execute code block in a split terminal window
-   - `<leader>gc` - Copy terminal output (while in the terminal buffer)
-   - `<leader>ge` - Copy terminal output from the chat buffer
-   - `<leader>gd` - Compare code block versions (diff view, press `q` to close)
-   - `<leader>g!` - Repeat last command in a new terminal window
 
 ## Interaction
 
@@ -378,18 +369,6 @@ Stop all currently running responses and jobs. `<C-g>s`
 | `<C-g>o` | Open file under cursor (@@) |
 | `<C-g>t` | Outline navigator |
 | `<C-g>w` | Toggle Claude web search |
-
-## Code Block Shortcuts
-
-| Shortcut | Action |
-| -------- | ------ |
-| `<leader>gy` | Copy code block to clipboard |
-| `<leader>gs` | Save code block to file |
-| `<leader>gx` | Execute code block in terminal |
-| `<leader>gc` | Copy terminal output |
-| `<leader>ge` | Copy terminal output from chat |
-| `<leader>gd` | Diff code block with previous version |
-| `<leader>g!` | Repeat last terminal command |
 
 ## Global Shortcuts
 
