@@ -456,6 +456,7 @@ M.setup = function(opts)
 			M.config.raw_mode.parse_raw_request = not M.config.raw_mode.parse_raw_request
 			M.logger.info("Raw Request mode " .. (M.config.raw_mode.parse_raw_request and "enabled" or "disabled"))
 			vim.notify("Raw Request mode " .. (M.config.raw_mode.parse_raw_request and "enabled" or "disabled"), vim.log.levels.INFO)
+			pcall(function() require("lualine").refresh() end)
 		else
 			M.logger.warning("Raw mode is disabled in configuration")
 			vim.notify("Raw mode is disabled in configuration", vim.log.levels.WARN)
@@ -468,6 +469,7 @@ M.setup = function(opts)
 			M.config.raw_mode.show_raw_response = not M.config.raw_mode.show_raw_response
 			M.logger.info("Raw Response mode " .. (M.config.raw_mode.show_raw_response and "enabled" or "disabled"))
 			vim.notify("Raw Response mode " .. (M.config.raw_mode.show_raw_response and "enabled" or "disabled"), vim.log.levels.INFO)
+			pcall(function() require("lualine").refresh() end)
 		else
 			M.logger.warning("Raw mode is disabled in configuration")
 			vim.notify("Raw mode is disabled in configuration", vim.log.levels.WARN)
@@ -483,6 +485,7 @@ M.setup = function(opts)
 			M.config.raw_mode.parse_raw_request = not current_state
 			M.logger.info("Raw mode " .. (not current_state and "enabled" or "disabled") .. " (both request and response)")
 			vim.notify("Raw mode " .. (not current_state and "enabled" or "disabled") .. " (both request and response)", vim.log.levels.INFO)
+			pcall(function() require("lualine").refresh() end)
 		else
 			M.logger.warning("Raw mode is disabled in configuration")
 			vim.notify("Raw mode is disabled in configuration", vim.log.levels.WARN)
@@ -595,6 +598,8 @@ M.setup = function(opts)
   M.setup_buf_handler()
   -- bind <C-g>w to toggle Claude web_search tool
   vim.keymap.set('n', '<C-g>w', string.format('<cmd>%sToggleClaudeWebSearch<CR>', M.config.cmd_prefix), { noremap = true, silent = true, desc = 'Toggle Claude web_search tool' })
+  -- bind <C-g>r to toggle raw request/response mode
+  vim.keymap.set('n', '<C-g>r', string.format('<cmd>%sToggleRaw<CR>', M.config.cmd_prefix), { noremap = true, silent = true, desc = 'Toggle raw request/response mode' })
 	
 	-- Setup lualine integration if lualine is enabled
 	pcall(function()
@@ -2972,19 +2977,45 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 
 	-- Check if we're in raw request mode and have a raw payload to use
 	local raw_payload = nil
-	if exchange_idx and 
-	   parsed_chat.exchanges[exchange_idx].question and 
+	if exchange_idx and
+	   parsed_chat.exchanges[exchange_idx].question and
 	   parsed_chat.exchanges[exchange_idx].question.raw_payload then
 		raw_payload = parsed_chat.exchanges[exchange_idx].question.raw_payload
 		M.logger.debug("Using raw payload for request: " .. vim.inspect(raw_payload))
 	end
-	
+
+	-- Compute payload once for both display and query
+	local final_payload = raw_payload or M.dispatcher.prepare_payload(messages, agent_info.model, agent_info.provider)
+
+	-- In raw mode, insert the request payload into the buffer before the response
+	local raw_request_offset = 0
+	if M.config.raw_mode and M.config.raw_mode.show_raw_response then
+		local json_str = vim.json.encode(final_payload)
+		-- Pretty-print via vim.inspect-style manual formatting
+		local ok, formatted = pcall(function()
+			return vim.fn.system({ "python3", "-m", "json.tool" }, json_str)
+		end)
+		if not ok or vim.v.shell_error ~= 0 then
+			formatted = json_str
+		end
+		local request_lines = { "**Request:**", "", "```json" }
+		for line in formatted:gmatch("[^\n]+") do
+			table.insert(request_lines, line)
+		end
+		table.insert(request_lines, "```")
+		table.insert(request_lines, "")
+		table.insert(request_lines, "**Response:**")
+		table.insert(request_lines, "")
+		vim.api.nvim_buf_set_lines(buf, response_line + 3, response_line + 3, false, request_lines)
+		raw_request_offset = #request_lines
+	end
+
 	-- call the model and write response
 	M.dispatcher.query(
 		buf,
 		agent_info.provider,
-		raw_payload or M.dispatcher.prepare_payload(messages, agent_info.model, agent_info.provider),
-		M.dispatcher.create_handler(buf, win, response_line + 3, true, "", not use_free_cursor),
+		final_payload,
+		M.dispatcher.create_handler(buf, win, response_line + 3 + raw_request_offset, true, "", not use_free_cursor),
 		vim.schedule_wrap(function(qid)
 			local qt = M.tasker.get_query(qid)
 			if not qt then
