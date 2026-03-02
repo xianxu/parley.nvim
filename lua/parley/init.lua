@@ -388,6 +388,14 @@ M.setup = function(opts)
 		end
 	end
 
+	if M.config.global_shortcut_review then
+		for _, mode in ipairs(M.config.global_shortcut_review.modes) do
+			vim.keymap.set(mode, M.config.global_shortcut_review.shortcut, function()
+				M.cmd.ChatReview({})
+			end, { silent = true, desc = "Review current file in new Chat" })
+		end
+	end
+
 	-- Set up global shortcuts for note-taking
 	if M.config.global_shortcut_note_new then
 		for _, mode in ipairs(M.config.global_shortcut_note_new.modes) do
@@ -2176,7 +2184,7 @@ end
 ---@param system_prompt string | nil # system prompt to use
 ---@param agent table | nil # obtained from get_agent
 ---@return number # buffer number
-M.new_chat = function(system_prompt, agent)
+M.new_chat = function(system_prompt, agent, initial_question)
 	local filename = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
 
 	-- encode as json if model is a table
@@ -2221,6 +2229,15 @@ M.new_chat = function(system_prompt, agent)
 	-- escape underscores (for markdown)
 	template = template:gsub("_", "\\_")
 
+	-- If an initial question is provided, append it after the user prefix
+	-- (done after underscore escaping so file paths in @@references stay intact)
+	if initial_question then
+		template = template:gsub(
+			M.config.chat_user_prefix .. "%s*$",
+			M.config.chat_user_prefix .. " " .. initial_question
+		)
+	end
+
 	-- strip leading and trailing newlines
 	template = template:gsub("^%s*(.-)%s*$", "%1") .. "\n"
 
@@ -2239,6 +2256,17 @@ end
 M.cmd.ChatNew = function(params, system_prompt, agent)
 	-- Simple version that just creates a new chat
 	return M.new_chat(system_prompt, agent)
+end
+
+-- Create a new chat pre-populated with a review question for the current file
+M.cmd.ChatReview = function(params)
+	local file_path = vim.api.nvim_buf_get_name(0)
+	if file_path == "" then
+		M.logger.warning("No file associated with current buffer")
+		return
+	end
+	local question = "proof read the following file:\n\n@@" .. file_path
+	return M.new_chat(nil, nil, question)
 end
 
 -- Function to create a new note
