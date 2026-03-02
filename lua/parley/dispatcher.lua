@@ -157,8 +157,8 @@ local query = function(buf, provider, payload, handler, on_exit, callback)
 				-- First response should include the code block start marker
 				if qt.response == "" then
 					-- Initial response with opening code fence
-					qt.response = "```json\n" .. qt.raw_response
-					handler(qid, "```json\n" .. lines_chunk)
+					qt.response = '```json {"type": "response"}\n' .. qt.raw_response
+					handler(qid, '```json {"type": "response"}\n' .. lines_chunk)
 				else
 					-- Subsequent responses just add the new content
 					qt.response = qt.response .. lines_chunk
