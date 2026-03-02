@@ -83,23 +83,28 @@ local model_overrides = {
             },
         },
     },
-    -- gpt-4o-search-preview: no temperature/top_p/max_tokens
+    -- OpenAI search models: only model+messages+stream; strip everything else
     {
-        pattern = "^gpt%-4o%-search%-preview$",
+        pattern = "search%-preview$",
         override = {
-            unsupported = { "temperature", "top_p", "max_tokens" },
+            unsupported = { "temperature", "top_p", "max_tokens", "max_completion_tokens", "reasoning_effort" },
             traits = { "search" },
         },
     },
-    -- gpt-5: uses max_completion_tokens, has reasoning_effort, no temperature/top_p
+    {
+        pattern = "search%-api$",
+        override = {
+            unsupported = { "temperature", "top_p", "max_tokens", "max_completion_tokens", "reasoning_effort" },
+            traits = { "search" },
+        },
+    },
+    -- gpt-5: uses max_completion_tokens, no temperature/top_p
     {
         pattern = "^gpt%-5",
         override = {
             unsupported = { "temperature", "top_p" },
-            traits = { "reasoning" },
             params = {
-                max_tokens       = { api_name = "max_completion_tokens", default = 4096 },
-                reasoning_effort = { default = "low" },
+                max_tokens = { api_name = "max_completion_tokens", default = 4096 },
             },
         },
     },
@@ -115,7 +120,7 @@ local model_overrides = {
 }
 
 -- Keys in the model config table that are NOT API parameters.
-local meta_keys = { model = true }
+local meta_keys = { model = true, search_model = true }
 
 --------------------------------------------------------------------------------
 -- get_schema(provider, model_name) → merged schema table

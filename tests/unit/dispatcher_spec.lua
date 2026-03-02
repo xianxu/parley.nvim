@@ -1,7 +1,7 @@
 -- Unit tests for D.prepare_payload in lua/parley/dispatcher.lua
 --
 -- prepare_payload is a pure table transformation function (no I/O, no curl).
--- It does require("parley") inside the anthropic branch to read _state.claude_web_search,
+-- It does require("parley") inside provider branches to read _state.web_search,
 -- so we set parley._state directly in test setup.
 
 local tmp_dir = "/tmp/parley-test-dispatcher-" .. os.time()
@@ -101,13 +101,39 @@ describe("prepare_payload: openai provider (table model)", function()
         assert.is_nil(payload.top_p)
         assert.is_nil(payload.max_tokens)
     end)
+
+    it("uses base model when web_search is false", function()
+        parley._state = parley._state or {}
+        parley._state.web_search = false
+        local m = { model = "gpt-4o", temperature = 0.9, top_p = 0.95, max_tokens = 2048, search_model = "gpt-4o-search-preview" }
+        local payload = dispatcher.prepare_payload(msgs(user("hi")), m, "openai")
+        assert.equals("gpt-4o", payload.model)
+    end)
+
+    it("swaps to search_model when web_search is true", function()
+        parley._state = parley._state or {}
+        parley._state.web_search = true
+        local m = { model = "gpt-4o", temperature = 0.9, top_p = 0.95, max_tokens = 2048, search_model = "gpt-4o-search-preview" }
+        local payload = dispatcher.prepare_payload(msgs(user("hi")), m, "openai")
+        assert.equals("gpt-4o-search-preview", payload.model)
+        parley._state.web_search = false
+    end)
+
+    it("does not swap model without search_model attribute", function()
+        parley._state = parley._state or {}
+        parley._state.web_search = true
+        local m = { model = "gpt-4", temperature = 1.0, top_p = 1.0, max_tokens = 4096 }
+        local payload = dispatcher.prepare_payload(msgs(user("hi")), m, "openai")
+        assert.equals("gpt-4", payload.model)
+        parley._state.web_search = false
+    end)
 end)
 
 describe("prepare_payload: anthropic provider", function()
     before_each(function()
         -- Disable web search by default for most tests
         parley._state = parley._state or {}
-        parley._state.claude_web_search = false
+        parley._state.web_search = false
     end)
 
     local model = { model = "claude-haiku-20240307", temperature = 0.8, top_p = 1.0, max_tokens = 1024 }
@@ -155,14 +181,14 @@ describe("prepare_payload: anthropic provider", function()
         assert.is_nil(payload.system)
     end)
 
-    it("does NOT add tools when claude_web_search is false", function()
-        parley._state.claude_web_search = false
+    it("does NOT add tools when web_search is false", function()
+        parley._state.web_search = false
         local payload = dispatcher.prepare_payload(msgs(user("hi")), model, "anthropic")
         assert.is_nil(payload.tools)
     end)
 
-    it("adds web_search and web_fetch tools when claude_web_search is true", function()
-        parley._state.claude_web_search = true
+    it("adds web_search and web_fetch tools when web_search is true", function()
+        parley._state.web_search = true
         local payload = dispatcher.prepare_payload(msgs(user("hi")), model, "anthropic")
         assert.is_not_nil(payload.tools)
         assert.equals(2, #payload.tools)
@@ -171,7 +197,7 @@ describe("prepare_payload: anthropic provider", function()
         assert.is_true(names["web_search"])
         assert.is_true(names["web_fetch"])
         -- reset
-        parley._state.claude_web_search = false
+        parley._state.web_search = false
     end)
 
     it("sets stream=true", function()
@@ -186,6 +212,11 @@ describe("prepare_payload: anthropic provider", function()
 end)
 
 describe("prepare_payload: googleai provider", function()
+    before_each(function()
+        parley._state = parley._state or {}
+        parley._state.web_search = false
+    end)
+
     local model = {
         model = "gemini-2.5-flash",
         temperature = 1.0,
@@ -265,6 +296,21 @@ describe("prepare_payload: googleai provider", function()
         local payload = dispatcher.prepare_payload(msgs(user("hi")), model, "googleai")
         assert.is_not_nil(payload.safetySettings)
         assert.is_true(#payload.safetySettings > 0)
+    end)
+
+    it("does NOT add tools when web_search is false", function()
+        parley._state.web_search = false
+        local payload = dispatcher.prepare_payload(msgs(user("hi")), model, "googleai")
+        assert.is_nil(payload.tools)
+    end)
+
+    it("adds google_search tool when web_search is true", function()
+        parley._state.web_search = true
+        local payload = dispatcher.prepare_payload(msgs(user("hi")), model, "googleai")
+        assert.is_not_nil(payload.tools)
+        assert.equals(1, #payload.tools)
+        assert.is_not_nil(payload.tools[1].google_search)
+        parley._state.web_search = false
     end)
 end)
 

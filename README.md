@@ -285,11 +285,11 @@ Cycle to the next available system prompt. `<C-g>p`
 
 ## Toggle Commands
 
-#### `:ParleyToggleClaudeWebSearch`
+#### `:ParleyToggleWebSearch`
 
-Toggle Claude's server-side web search tool for the current session. `<C-g>w`
+Toggle server-side web search for the current session. `<C-g>w`
 
-Only available when using a provider that supports web search (currently Anthropic).
+Supported by Anthropic (web_search tool), Google AI (google_search tool), and OpenAI (via search model variants like `gpt-4o-search-preview`). For OpenAI, the agent's model config must include a `search_model` attribute. The lualine indicator shows `[w]` when active or `[w?]` when enabled but unsupported by the current agent.
 
 #### `:ParleyToggleInterview`
 
@@ -519,8 +519,8 @@ cmd_prefix = "Parley",
 curl_params = { "--proxy", "http://X.X.X.X:XXXX" },
 -- default agent on startup (nil = last used agent)
 default_agent = nil,
--- enable Claude web search tool by default
-claude_web_search = true,
+-- enable web search by default
+web_search = true,
 -- don't move cursor to end of buffer after response completes
 chat_free_cursor = true,
 -- require confirmation before deleting a chat

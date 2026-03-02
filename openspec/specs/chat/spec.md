@@ -251,9 +251,9 @@ Model parameters in the header MUST be concealed (replaced with `…`) when `cha
 
 ### Current Agent Display
 
-When a valid chat buffer is entered, the current agent MUST be displayed as virtual text right-aligned on the first line in the format `Current Agent: [AgentName]`.
+When a valid chat buffer is entered, the current agent MUST be displayed as virtual text right-aligned on the first line in the format `[AgentName]`.
 
-For Anthropic agents with web search enabled, the display appends `[w]`: `Current Agent: [AgentName[w]]`.
+For Anthropic agents with web search enabled, the display appends `[w]`: `[AgentName[w]]`.
 
 ### Switching Agents
 
