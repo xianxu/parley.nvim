@@ -355,33 +355,60 @@ Stop all currently running responses and jobs. `<C-g>s`
 
 # Keybinding Summary
 
+All keybindings are configurable via `setup()`. The tables below show default values.
+
 ## Chat Buffer Shortcuts
 
-| Shortcut | Action |
-| -------- | ------ |
-| `<C-g><C-g>` | Send current question / get response |
-| `<C-g>G` | Resubmit all questions up to cursor |
-| `<C-g>d` | Delete current chat |
-| `<C-g>s` | Stop running response |
-| `<C-g>a` | Switch agent |
-| `<C-g>p` | Switch system prompt |
-| `<C-g>n` | Search chats (in-buffer) |
-| `<C-g>o` | Open file under cursor (@@) |
-| `<C-g>t` | Outline navigator |
-| `<C-g>w` | Toggle Claude web search |
+Active in chat files (`.md` files managed by Parley). Available in normal, insert, visual, and select modes unless noted.
+
+| Shortcut | Modes | Action | Config Key |
+| -------- | ----- | ------ | ---------- |
+| `<C-g><C-g>` | n, i, v, x | Send current question / get response | `chat_shortcut_respond` |
+| `<C-g>G` | n, i, v, x | Resubmit all questions up to cursor | `chat_shortcut_respond_all` |
+| `<C-g>d` | n, i, v, x | Delete current chat | `chat_shortcut_delete` |
+| `<C-g>s` | n, i, v, x | Stop running response | `chat_shortcut_stop` |
+| `<C-g>a` | n, i, v, x | Switch agent | `chat_shortcut_agent` |
+| `<C-g>p` | n, i, v, x | Switch system prompt | `chat_shortcut_system_prompt` |
+| `<C-g>n` | n, i, v, x | Search chats (in-buffer) | `chat_shortcut_search` |
+| `<C-g>o` | n, i | Open file under cursor (@@) | `chat_shortcut_open_file` |
+| `<C-g>t` | n | Outline navigator | — |
+| `<C-g>w` | n | Toggle web search | — |
+| `<C-g>r` | n | Toggle raw request mode | — |
+| `<C-g>R` | n | Toggle raw response mode | — |
 
 ## Global Shortcuts
 
-| Shortcut | Action |
-| -------- | ------ |
-| `<C-g>c` | New chat |
-| `<C-g>f` | Chat finder |
-| `<C-g>a` | Add chat reference (in non-chat markdown files) |
-| `<C-n>c` | New note |
-| `<C-n>t` | New note from template |
-| `<C-n>i` | Toggle interview mode |
-| `<C-n>r` | Open year root (notes) |
-| `<leader>fo` | Open oil.nvim file explorer |
+Available in any buffer.
+
+| Shortcut | Modes | Action | Config Key |
+| -------- | ----- | ------ | ---------- |
+| `<C-g>c` | n, i | New chat | `global_shortcut_new` |
+| `<C-g>C` | n | Review current file in new chat | `global_shortcut_review` |
+| `<C-g>f` | n, i | Chat finder | `global_shortcut_finder` |
+| `<C-n>c` | n, i | New note | `global_shortcut_note_new` |
+| `<C-n>t` | n | New note from template | — |
+| `<C-n>i` | n | Toggle interview mode | — |
+| `<C-n>r` | n, i | Open year root (notes) | `global_shortcut_year_root` |
+| `<leader>fo` | n | Open oil.nvim file explorer | `global_shortcut_oil` |
+
+## Markdown Buffer Shortcuts
+
+Active in non-chat markdown files for managing chat references.
+
+| Shortcut | Modes | Action | Config Key |
+| -------- | ----- | ------ | ---------- |
+| `<C-g>f` | n | Find and open chat references | — |
+| `<C-g>a` | n, i | Add chat reference | `global_shortcut_add_chat_ref` |
+| `<C-g>n` | n, i | Create new chat reference | — |
+
+## Chat Finder Shortcuts
+
+Active inside the chat finder dialog.
+
+| Shortcut | Modes | Action | Config Key |
+| -------- | ----- | ------ | ---------- |
+| `<C-d>` | n, i, v, x | Delete selected chat | `chat_finder_mappings.delete` |
+| `<C-a>` | n, i, v, x | Toggle between recent and all chats | `chat_finder_mappings.toggle_all` |
 
 # Chat Memory Management
 
