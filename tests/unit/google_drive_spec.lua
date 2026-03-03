@@ -91,3 +91,80 @@ describe("google_drive: export MIME type", function()
         assert.is_nil(gd.get_export_mime("drive_file"))
     end)
 end)
+
+describe("google_drive: OAuth URL construction", function()
+    it("D1: builds correct authorization URL", function()
+        local url = gd.build_auth_url({
+            client_id = "test-client-id.apps.googleusercontent.com",
+            scopes = { "https://www.googleapis.com/auth/drive.readonly" },
+        }, 52847)
+
+        assert.is_true(url:match("accounts%.google%.com/o/oauth2/v2/auth") ~= nil)
+        assert.is_true(url:match("client_id=test%-client%-id") ~= nil)
+        assert.is_true(url:match("redirect_uri=http") ~= nil)
+        assert.is_true(url:match("localhost%%3A52847") ~= nil)
+        assert.is_true(url:match("response_type=code") ~= nil)
+        assert.is_true(url:match("access_type=offline") ~= nil)
+        assert.is_true(url:match("scope=https") ~= nil)
+    end)
+end)
+
+describe("google_drive: token exchange curl args", function()
+    it("E1: builds correct token exchange curl arguments", function()
+        local args = gd.build_token_exchange_args({
+            client_id = "test-client-id",
+            client_secret = "test-secret",
+        }, "auth-code-123", 52847)
+
+        assert.is_true(type(args) == "table")
+        local args_str = table.concat(args, " ")
+        assert.is_true(args_str:match("oauth2%.googleapis%.com/token") ~= nil)
+        assert.is_true(args_str:match("auth%-code%-123") ~= nil)
+        assert.is_true(args_str:match("authorization_code") ~= nil)
+    end)
+end)
+
+describe("google_drive: keychain commands", function()
+    it("F1: builds macOS keychain store command", function()
+        local cmd = gd.build_keychain_store_cmd("darwin", '{"access_token":"abc"}')
+        assert.equals("security", cmd[1])
+        assert.is_true(vim.tbl_contains(cmd, "add-generic-password"))
+        assert.is_true(vim.tbl_contains(cmd, "parley-nvim-google-oauth"))
+    end)
+
+    it("F2: builds macOS keychain load command", function()
+        local cmd = gd.build_keychain_load_cmd("darwin")
+        assert.equals("security", cmd[1])
+        assert.is_true(vim.tbl_contains(cmd, "find-generic-password"))
+        assert.is_true(vim.tbl_contains(cmd, "parley-nvim-google-oauth"))
+    end)
+
+    it("F3: builds Linux keychain store command", function()
+        local cmd = gd.build_keychain_store_cmd("linux", '{"access_token":"abc"}')
+        assert.equals("secret-tool", cmd[1])
+        assert.is_true(vim.tbl_contains(cmd, "store"))
+    end)
+
+    it("F4: builds Linux keychain load command", function()
+        local cmd = gd.build_keychain_load_cmd("linux")
+        assert.equals("secret-tool", cmd[1])
+        assert.is_true(vim.tbl_contains(cmd, "lookup"))
+    end)
+end)
+
+describe("google_drive: API URL construction", function()
+    it("G1: builds metadata URL", function()
+        local url = gd.build_metadata_url("file123")
+        assert.equals("https://www.googleapis.com/drive/v3/files/file123?fields=mimeType,name", url)
+    end)
+
+    it("G2: builds export URL for Google Doc", function()
+        local url = gd.build_export_url("file123", "text/markdown")
+        assert.equals("https://www.googleapis.com/drive/v3/files/file123/export?mimeType=text/markdown", url)
+    end)
+
+    it("G3: builds download URL for Drive file", function()
+        local url = gd.build_download_url("file123")
+        assert.equals("https://www.googleapis.com/drive/v3/files/file123?alt=media", url)
+    end)
+end)
