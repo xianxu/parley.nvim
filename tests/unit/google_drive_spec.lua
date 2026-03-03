@@ -198,3 +198,17 @@ describe("google_drive: token parsing", function()
         assert.is_false(gd.is_token_expired(tokens))
     end)
 end)
+
+describe("google_drive: auth code parsing", function()
+    it("I1: parses auth code from HTTP GET request", function()
+        local request = "GET /callback?code=4/0AX4XfWh_abc123&scope=https://www.googleapis.com/auth/drive.readonly HTTP/1.1\r\nHost: localhost:52847\r\n\r\n"
+        local code = gd._parse_auth_code(request)
+        assert.equals("4/0AX4XfWh_abc123", code)
+    end)
+
+    it("I2: returns nil when no code present", function()
+        local request = "GET /callback?error=access_denied HTTP/1.1\r\n\r\n"
+        local code = gd._parse_auth_code(request)
+        assert.is_nil(code)
+    end)
+end)

@@ -1,5 +1,9 @@
 local M = {}
 
+local uv = vim.loop
+local tasker = require("parley.tasker")
+local logger = require("parley.logger")
+
 -- URL patterns for Google Drive/Docs
 local url_patterns = {
     { pattern = "docs%.google%.com/document/d/([^/&#]+)", file_type = "document" },
@@ -193,6 +197,247 @@ M.is_token_expired = function(tokens)
         return true
     end
     return os.time() >= (tokens.expires_at - 60)
+end
+
+-- In-memory token cache (loaded from keychain on first use)
+local cached_tokens = nil
+
+-- Detect platform
+---@return string # "darwin" or "linux"
+M._get_platform = function()
+    local sysname = uv.os_uname().sysname
+    if sysname == "Darwin" then
+        return "darwin"
+    end
+    return "linux"
+end
+
+-- Parse the auth code from an HTTP request line
+---@param request_data string # raw HTTP request
+---@return string|nil # the authorization code, or nil
+M._parse_auth_code = function(request_data)
+    return request_data:match("[?&]code=([^&%s]+)")
+end
+
+-- Save tokens to OS keychain
+---@param tokens table # {access_token, refresh_token, expires_at}
+---@param callback function|nil # called after save completes
+M.save_tokens = function(tokens, callback)
+    callback = callback or function() end
+    cached_tokens = tokens
+    local json_data = vim.json.encode(tokens)
+    local platform = M._get_platform()
+    local cmd_args = M.build_keychain_store_cmd(platform, json_data)
+    local cmd = table.remove(cmd_args, 1)
+
+    if platform == "linux" then
+        -- Linux secret-tool reads from stdin; use shell to pipe
+        tasker.run(nil, "sh", { "-c", "echo " .. vim.fn.shellescape(json_data) .. " | " .. cmd .. " " .. table.concat(cmd_args, " ") }, function(code)
+            if code ~= 0 then
+                logger.warning("Failed to save Google OAuth tokens to keychain")
+            end
+            callback()
+        end)
+    else
+        tasker.run(nil, cmd, cmd_args, function(code)
+            if code ~= 0 then
+                logger.warning("Failed to save Google OAuth tokens to keychain")
+            end
+            callback()
+        end)
+    end
+end
+
+-- Load tokens from OS keychain
+---@param callback function # called with tokens table or nil
+M.load_tokens = function(callback)
+    if cached_tokens and not M.is_token_expired(cached_tokens) then
+        callback(cached_tokens)
+        return
+    end
+
+    local platform = M._get_platform()
+    local cmd_args = M.build_keychain_load_cmd(platform)
+    local cmd = table.remove(cmd_args, 1)
+
+    tasker.run(nil, cmd, cmd_args, function(code, signal, stdout_data)
+        if code ~= 0 or not stdout_data or stdout_data == "" then
+            callback(nil)
+            return
+        end
+
+        local ok, tokens = pcall(vim.json.decode, stdout_data:match("^%s*(.-)%s*$"))
+        if ok and tokens and tokens.access_token then
+            cached_tokens = tokens
+            callback(tokens)
+        else
+            callback(nil)
+        end
+    end)
+end
+
+-- Refresh an expired access token using the refresh token
+---@param config table # {client_id, client_secret}
+---@param tokens table # must have refresh_token
+---@param callback function # called with new tokens table or nil
+M.refresh_token = function(config, tokens, callback)
+    if not tokens or not tokens.refresh_token then
+        callback(nil)
+        return
+    end
+
+    local args = {
+        "-s",
+        "-X", "POST",
+        "https://oauth2.googleapis.com/token",
+        "-d", "client_id=" .. config.client_id,
+        "-d", "client_secret=" .. config.client_secret,
+        "-d", "refresh_token=" .. tokens.refresh_token,
+        "-d", "grant_type=refresh_token",
+    }
+
+    tasker.run(nil, "curl", args, function(code, signal, stdout_data)
+        if code ~= 0 then
+            callback(nil)
+            return
+        end
+
+        local new_tokens = M.parse_token_response(stdout_data)
+        if new_tokens then
+            -- Preserve refresh_token (not always returned in refresh response)
+            new_tokens.refresh_token = new_tokens.refresh_token or tokens.refresh_token
+            M.save_tokens(new_tokens, function()
+                callback(new_tokens)
+            end)
+        else
+            callback(nil)
+        end
+    end)
+end
+
+-- Start OAuth flow: open browser, wait for redirect, exchange code for tokens
+---@param config table # google_drive config with client_id, client_secret, scopes
+---@param callback function # called with tokens table or nil
+M.authenticate = function(config, callback)
+    local server = uv.new_tcp()
+    server:bind("127.0.0.1", 0)
+
+    local addr = server:getsockname()
+    local port = addr.port
+
+    logger.debug("Google OAuth: starting auth server on port " .. port)
+
+    server:listen(1, function(err)
+        if err then
+            logger.error("Google OAuth: server listen error: " .. tostring(err))
+            server:close()
+            vim.schedule(function()
+                callback(nil)
+            end)
+            return
+        end
+
+        local client = uv.new_tcp()
+        server:accept(client)
+
+        client:read_start(function(read_err, data)
+            if read_err or not data then
+                client:close()
+                server:close()
+                return
+            end
+
+            local code = M._parse_auth_code(data)
+
+            -- Send response to browser
+            local response_body
+            if code then
+                response_body = "<html><body><h1>Authentication successful!</h1><p>You can close this window and return to Neovim.</p></body></html>"
+            else
+                response_body = "<html><body><h1>Authentication failed</h1><p>No authorization code received.</p></body></html>"
+            end
+            local response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n" .. response_body
+
+            client:write(response, function()
+                client:shutdown(function()
+                    client:close()
+                end)
+            end)
+            server:close()
+
+            if not code then
+                vim.schedule(function()
+                    callback(nil)
+                end)
+                return
+            end
+
+            -- Exchange auth code for tokens
+            local args = M.build_token_exchange_args(config, code, port)
+            tasker.run(nil, "curl", args, function(exit_code, signal, stdout_data)
+                if exit_code ~= 0 then
+                    callback(nil)
+                    return
+                end
+
+                local tokens = M.parse_token_response(stdout_data)
+                if tokens then
+                    M.save_tokens(tokens, function()
+                        callback(tokens)
+                    end)
+                else
+                    logger.warning("Google OAuth: failed to parse token response")
+                    callback(nil)
+                end
+            end)
+        end)
+    end)
+
+    -- Open browser for OAuth consent
+    local auth_url = M.build_auth_url(config, port)
+    local open_cmd = M._get_platform() == "darwin" and "open" or "xdg-open"
+    vim.fn.jobstart({ open_cmd, auth_url }, { detach = true })
+
+    vim.schedule(function()
+        vim.api.nvim_echo({{ "Google OAuth: Please complete authentication in your browser...", "WarningMsg" }}, true, {})
+    end)
+end
+
+-- Get a valid access token, refreshing or re-authenticating as needed
+---@param config table # google_drive config
+---@param callback function # called with access_token string or nil
+M.get_access_token = function(config, callback)
+    M.load_tokens(function(tokens)
+        if tokens and not M.is_token_expired(tokens) then
+            callback(tokens.access_token)
+            return
+        end
+
+        if tokens and tokens.refresh_token then
+            M.refresh_token(config, tokens, function(new_tokens)
+                if new_tokens then
+                    callback(new_tokens.access_token)
+                else
+                    -- Refresh failed, re-authenticate
+                    M.authenticate(config, function(auth_tokens)
+                        if auth_tokens then
+                            callback(auth_tokens.access_token)
+                        else
+                            callback(nil)
+                        end
+                    end)
+                end
+            end)
+        else
+            M.authenticate(config, function(auth_tokens)
+                if auth_tokens then
+                    callback(auth_tokens.access_token)
+                else
+                    callback(nil)
+                end
+            end)
+        end
+    end)
 end
 
 return M
