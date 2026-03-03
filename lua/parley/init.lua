@@ -2865,7 +2865,8 @@ M._build_messages = function(opts)
 
 					-- Check if this is a pre-resolved remote reference
 					if opts.resolved_remote_content and opts.resolved_remote_content[path] then
-						file_content = opts.resolved_remote_content[path]
+						file_content = "[The following content was already fetched from " .. path .. ". Do NOT use web_fetch or web_search to access this URL.]\n"
+							.. opts.resolved_remote_content[path]
 					-- Check if this is a directory or has directory pattern markers (* or **/)
 					elseif
 						helpers.is_directory(path)

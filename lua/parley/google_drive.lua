@@ -95,7 +95,8 @@ end
 ---@return string # full authorization URL
 M.build_auth_url = function(config, port)
     local base = "https://accounts.google.com/o/oauth2/v2/auth"
-    local scope = table.concat(config.scopes, " ")
+    local scopes = config.scopes or { "https://www.googleapis.com/auth/drive.readonly" }
+    local scope = table.concat(scopes, " ")
     local params = {
         "client_id=" .. M._url_encode(config.client_id),
         "redirect_uri=" .. M._url_encode("http://localhost:" .. tostring(port)),
@@ -460,8 +461,9 @@ end
 ---@param name string # document title
 ---@param file_type string # one of: document, spreadsheet, presentation, drive_file
 ---@param content string # raw file content
+---@param url string|nil # original URL for context
 ---@return string # formatted content with header and line numbers
-M.format_google_content = function(name, file_type, content)
+M.format_google_content = function(name, file_type, content, url)
     local label = type_labels[file_type] or "Google Drive File"
     local filetype = type_filetypes[file_type] or ""
 
@@ -472,7 +474,12 @@ M.format_google_content = function(name, file_type, content)
     end
     local numbered_content = table.concat(numbered_lines, "\n")
 
-    return "File: " .. label .. " - \"" .. name .. "\"\n```" .. filetype .. "\n" .. numbered_content .. "\n```\n\n"
+    local header = "File: " .. label .. " - \"" .. name .. "\""
+    if url then
+        header = header .. " (fetched from " .. url .. ")"
+    end
+
+    return header .. "\n```" .. filetype .. "\n" .. numbered_content .. "\n```\n\n"
 end
 
 -- Fetch file content from Google Drive
@@ -559,7 +566,7 @@ M.fetch_content = function(url, config, callback)
                                 callback(nil, "Google Drive API: " .. err_msg)
                                 return
                             end
-                            callback(M.format_google_content(file_name, info.file_type, fb_data))
+                            callback(M.format_google_content(file_name, info.file_type, fb_data, url))
                         end)
                         return
                     end
@@ -567,7 +574,7 @@ M.fetch_content = function(url, config, callback)
                     return
                 end
 
-                callback(M.format_google_content(file_name, info.file_type, content_data))
+                callback(M.format_google_content(file_name, info.file_type, content_data, url))
             end)
         end)
     end)

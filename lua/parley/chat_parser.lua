@@ -111,6 +111,24 @@ M.parse_chat = function(lines, header_end, config)
 		end
 	end
 
+	-- Helper to extract @@ file references from a line of text.
+	-- Supports @@ at line start, and inline @@ for URLs and absolute paths.
+	local function extract_file_refs(text)
+		local refs = {}
+		-- First check: @@ at start of line (original behavior)
+		local path = text:match("^@@%s*(https?://.+)") or text:match("^@@%s*([^:]+)")
+		if path then
+			table.insert(refs, (path:gsub("^%s*(.-)%s*$", "%1")))
+			return refs
+		end
+		-- Second check: inline @@ followed by URL (e.g., "tell me about @@https://...")
+		-- Only match URLs inline to avoid false positives with local paths
+		for url in text:gmatch("%s@@(https?://[^%s]+)") do
+			table.insert(refs, (url:gsub("^%s*(.-)%s*$", "%1")))
+		end
+		return refs
+	end
+
 	-- Loop through content lines
 	for i = header_end + 1, #lines do
 		local line = lines[i]
@@ -144,6 +162,17 @@ M.parse_chat = function(lines, header_end, config)
 			table.insert(result.exchanges, current_exchange)
 			current_component = "question"
 			line_before_local = nil
+
+			-- Check for inline @@ file references on the user prefix line itself
+			local inline_refs = extract_file_refs(question_content)
+			for _, ref_path in ipairs(inline_refs) do
+				table.insert(current_exchange.question.file_references, {
+					line = line,
+					path = ref_path,
+					original_line_index = i,
+				})
+				logger.debug("Found inline file reference on user line: " .. ref_path)
+			end
 
 		-- Check for assistant message start
 		elseif line:sub(1, #agent_prefix) == agent_prefix then
@@ -194,18 +223,17 @@ M.parse_chat = function(lines, header_end, config)
 		elseif (not line_before_local) and current_exchange and current_component then
 			table.insert(content_parts, line)
 
-			-- Check for file references in question content - ONLY at the beginning of a line
-			-- URLs (https://...) need special handling since the original [^:]+ pattern stops at ':'
-			local file_path = current_component == "question"
-				and (line:match("^@@%s*(https?://.+)") or line:match("^@@%s*([^:]+)"))
-
-			if file_path then
-				table.insert(current_exchange[current_component].file_references, {
-					line = line,
-					path = file_path:gsub("^%s*(.-)%s*$", "%1"),
-					original_line_index = i,
-				})
-				logger.debug("Found file reference at line start: " .. line .. ", extracted path: " .. file_path)
+			-- Check for file references in question content
+			if current_component == "question" then
+				local refs = extract_file_refs(line)
+				for _, ref_path in ipairs(refs) do
+					table.insert(current_exchange[current_component].file_references, {
+						line = line,
+						path = ref_path,
+						original_line_index = i,
+					})
+					logger.debug("Found file reference: " .. ref_path)
+				end
 			end
 		end
 	end
