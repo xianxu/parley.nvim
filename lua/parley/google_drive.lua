@@ -248,8 +248,12 @@ M.save_tokens = function(tokens, callback)
     local cmd = table.remove(cmd_args, 1)
 
     if platform == "linux" then
-        -- Linux secret-tool reads from stdin; use shell to pipe
-        tasker.run(nil, "sh", { "-c", "echo " .. vim.fn.shellescape(json_data) .. " | " .. cmd .. " " .. table.concat(cmd_args, " ") }, function(code)
+        -- Linux secret-tool reads from stdin via printf to avoid shell injection
+        local escaped_args = {}
+        for _, arg in ipairs(cmd_args) do
+            table.insert(escaped_args, vim.fn.shellescape(arg))
+        end
+        tasker.run(nil, "sh", { "-c", "printf '%s' " .. vim.fn.shellescape(json_data) .. " | " .. cmd .. " " .. table.concat(escaped_args, " ") }, function(code)
             if code ~= 0 then
                 logger.warning("Failed to save Google OAuth tokens to keychain")
             end
@@ -408,6 +412,20 @@ M.authenticate = function(config, callback)
                 end
             end)
         end)
+    end)
+
+    -- Timeout: close server after 2 minutes if no auth response received
+    local timeout_timer = uv.new_timer()
+    timeout_timer:start(120000, 0, function()
+        if not server:is_closing() then
+            logger.warning("Google OAuth: authentication timed out after 2 minutes")
+            server:close()
+            vim.schedule(function()
+                vim.api.nvim_echo({{ "Google OAuth: Authentication timed out.", "ErrorMsg" }}, true, {})
+                callback(nil)
+            end)
+        end
+        timeout_timer:close()
     end)
 
     -- Open browser for OAuth consent
