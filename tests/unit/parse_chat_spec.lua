@@ -274,6 +274,17 @@ describe("parse_chat: @@ file references", function()
         assert.equals(0, #refs)
     end)
 
+    it("collects @@ URL reference with full URL including colons", function()
+        local lines, header_end = make_chat(std_header, {
+            "💬: Review this doc",
+            "@@https://docs.google.com/document/d/abc123/edit",
+        })
+        local result = parse_chat(lines, header_end)
+        local refs = result.exchanges[1].question.file_references
+        assert.equals(1, #refs)
+        assert.equals("https://docs.google.com/document/d/abc123/edit", refs[1].path)
+    end)
+
     it("does not collect @@ references from answer blocks", function()
         local lines, header_end = make_chat(std_header, {
             "💬: Question",

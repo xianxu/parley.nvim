@@ -195,7 +195,9 @@ M.parse_chat = function(lines, header_end, config)
 			table.insert(content_parts, line)
 
 			-- Check for file references in question content - ONLY at the beginning of a line
-			local file_path = current_component == "question" and line:match("^@@%s*([^:]+)")
+			-- URLs (https://...) need special handling since the original [^:]+ pattern stops at ':'
+			local file_path = current_component == "question"
+				and (line:match("^@@%s*(https?://.+)") or line:match("^@@%s*([^:]+)"))
 
 			if file_path then
 				table.insert(current_exchange[current_component].file_references, {
