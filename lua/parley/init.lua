@@ -2863,8 +2863,11 @@ M._build_messages = function(opts)
 
 					logger.debug("Processing file reference: " .. path)
 
+					-- Check if this is a pre-resolved remote reference
+					if opts.resolved_remote_content and opts.resolved_remote_content[path] then
+						file_content = opts.resolved_remote_content[path]
 					-- Check if this is a directory or has directory pattern markers (* or **/)
-					if
+					elseif
 						helpers.is_directory(path)
 						or path:match("/%*%*?/?") -- Contains /** or /**/
 						or path:match("/%*%.%w+$")
@@ -2933,6 +2936,60 @@ M._build_messages = function(opts)
 	end
 
 	return messages
+end
+
+-- Resolve all remote (URL-based) file references asynchronously before building messages
+-- Calls callback with resolved_remote_content map when all fetches complete
+---@param parsed_chat table # parsed chat structure
+---@param config table # plugin config
+---@param callback function # called with resolved_remote_content table
+M._resolve_remote_references = function(parsed_chat, config, callback)
+	local helpers = require("parley.helper")
+	local google_drive = require("parley.google_drive")
+	local remote_refs = {}
+
+	-- Collect all remote URL references
+	for _, exchange in ipairs(parsed_chat.exchanges) do
+		if exchange.question and exchange.question.file_references then
+			for _, file_ref in ipairs(exchange.question.file_references) do
+				if helpers.is_remote_url(file_ref.path) then
+					table.insert(remote_refs, file_ref.path)
+				end
+			end
+		end
+	end
+
+	if #remote_refs == 0 then
+		callback({})
+		return
+	end
+
+	local resolved = {}
+	local pending = #remote_refs
+
+	for _, url in ipairs(remote_refs) do
+		if google_drive.is_google_url(url) then
+			google_drive.fetch_content(url, config.google_drive, function(content, err)
+				if content then
+					resolved[url] = content
+				else
+					resolved[url] = "File: " .. url .. "\n[Error: " .. (err or "Failed to fetch") .. "]\n\n"
+					M.logger.warning("Failed to fetch Google Drive content: " .. (err or "unknown error"))
+				end
+				pending = pending - 1
+				if pending == 0 then
+					callback(resolved)
+				end
+			end)
+		else
+			-- Unsupported remote URL type
+			resolved[url] = "File: " .. url .. "\n[Error: Unsupported URL type. Only Google Drive URLs are currently supported.]\n\n"
+			pending = pending - 1
+			if pending == 0 then
+				callback(resolved)
+			end
+		end
+	end
 end
 
 M.chat_respond = function(params, callback, override_free_cursor, force)
@@ -3042,230 +3099,234 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 	-- Get headers for later use (needed in completion callback)
 	local headers = parsed_chat.headers
 
-	-- Build messages array using extracted testable function
-	local messages = M._build_messages({
-		parsed_chat = parsed_chat,
-		start_index = start_index,
-		end_index = end_index,
-		exchange_idx = exchange_idx,
-		agent = agent,
-		config = M.config,
-		helpers = M.helpers,
-		logger = M.logger,
-	})
+	-- Resolve remote file references, then build messages and continue
+	M._resolve_remote_references(parsed_chat, M.config, function(resolved_remote_content)
+		-- Build messages array using extracted testable function
+		local messages = M._build_messages({
+			parsed_chat = parsed_chat,
+			start_index = start_index,
+			end_index = end_index,
+			exchange_idx = exchange_idx,
+			agent = agent,
+			config = M.config,
+			helpers = M.helpers,
+			logger = M.logger,
+			resolved_remote_content = resolved_remote_content,
+		})
 
-	-- Get agent info for display and dispatcher
-	local agent_info = M.get_agent_info(headers, agent)
-	local agent_name = agent_info.display_name
+		-- Get agent info for display and dispatcher
+		local agent_info = M.get_agent_info(headers, agent)
+		local agent_name = agent_info.display_name
 
-	-- Set up agent prefixes
-	local agent_prefix = M.config.chat_assistant_prefix[1]
-	local agent_suffix = config.chat_assistant_prefix[2]
-	if type(M.config.chat_assistant_prefix) == "string" then
-		agent_prefix = M.config.chat_assistant_prefix
-	elseif type(M.config.chat_assistant_prefix) == "table" then
-		agent_prefix = M.config.chat_assistant_prefix[1]
-		agent_suffix = M.config.chat_assistant_prefix[2] or ""
-	end
-	agent_suffix = M.render.template(agent_suffix, { ["{{agent}}"] = agent_name })
-
-	-- Find where to insert assistant response
-	local response_line = M.helpers.last_content_line(buf)
-
-	-- If cursor is on a question, handle insertion based on question position
-	if exchange_idx and (component == "question" or component == "answer") then
-		if parsed_chat.exchanges[exchange_idx].answer then
-			-- If question already has an answer, replace it
-			local answer = parsed_chat.exchanges[exchange_idx].answer
-
-			-- Delete the existing answer
-			vim.api.nvim_buf_set_lines(buf, answer.line_start - 1, answer.line_end, false, {})
-
-			-- Set response line to insert at answer position
-			response_line = answer.line_start - 2
-		else
-			-- New question (no answer yet)
-			-- Insert right after the question
-			local question_end = parsed_chat.exchanges[exchange_idx].question.line_end
-			response_line = question_end - 1
-
-			-- Check if this is a question in the middle (not the last one)
-			-- If so, we need to make sure we don't have to insert anything
-			-- since we'll just insert at the end of the question anyway
-			M.logger.debug("New question in middle - inserting after line " .. question_end)
+		-- Set up agent prefixes
+		local agent_prefix = M.config.chat_assistant_prefix[1]
+		local agent_suffix = config.chat_assistant_prefix[2]
+		if type(M.config.chat_assistant_prefix) == "string" then
+			agent_prefix = M.config.chat_assistant_prefix
+		elseif type(M.config.chat_assistant_prefix) == "table" then
+			agent_prefix = M.config.chat_assistant_prefix[1]
+			agent_suffix = M.config.chat_assistant_prefix[2] or ""
 		end
-	end
+		agent_suffix = M.render.template(agent_suffix, { ["{{agent}}"] = agent_name })
 
-	-- Check if the last line of the question is empty
-	local last_question_line
-	if response_line >= 0 then
-		last_question_line = vim.api.nvim_buf_get_lines(buf, response_line, response_line + 1, false)[1]
-	end
+		-- Find where to insert assistant response
+		local response_line = M.helpers.last_content_line(buf)
 
-	-- If the line isn't empty, insert an empty line to ensure proper spacing
-	if last_question_line and last_question_line:match("%S") then
-		M.logger.debug("Adding empty line after question for proper spacing")
-		vim.api.nvim_buf_set_lines(buf, response_line + 1, response_line + 1, false, { "" })
-		response_line = response_line + 1
-	end
+		-- If cursor is on a question, handle insertion based on question position
+		if exchange_idx and (component == "question" or component == "answer") then
+			if parsed_chat.exchanges[exchange_idx].answer then
+				-- If question already has an answer, replace it
+				local answer = parsed_chat.exchanges[exchange_idx].answer
 
-	-- Write assistant prompt with extra newline, note later insertion point is response_line + 3
-	vim.api.nvim_buf_set_lines(buf, response_line, response_line, false, { "", agent_prefix .. agent_suffix, "", "" })
+				-- Delete the existing answer
+				vim.api.nvim_buf_set_lines(buf, answer.line_start - 1, answer.line_end, false, {})
 
-	M.logger.debug("messages to send: " .. vim.inspect(messages))
-
-	-- Check if we're in raw request mode and have a raw payload to use
-	local raw_payload = nil
-	if
-		exchange_idx
-		and parsed_chat.exchanges[exchange_idx].question
-		and parsed_chat.exchanges[exchange_idx].question.raw_payload
-	then
-		raw_payload = parsed_chat.exchanges[exchange_idx].question.raw_payload
-		M.logger.debug("Using raw payload for request: " .. vim.inspect(raw_payload))
-	end
-
-	-- Compute payload once for both display and query
-	local final_payload = raw_payload or M.dispatcher.prepare_payload(messages, agent_info.model, agent_info.provider)
-
-	-- In raw request mode, insert the request payload after the question, before the agent response
-	-- Skip if the question already contains a typed request fence (raw_payload was parsed from it)
-	local raw_request_offset = 0
-	if M.config.raw_mode and M.config.raw_mode.parse_raw_request and not raw_payload then
-		local json_str = vim.json.encode(final_payload)
-		-- Pretty-print via python3 json.tool
-		local ok, formatted = pcall(function()
-			return vim.fn.system({ "python3", "-m", "json.tool" }, json_str)
-		end)
-		if not ok or vim.v.shell_error ~= 0 then
-			formatted = json_str
-		end
-		local request_lines = { '', '```json {"type": "request"}' }
-		for line in formatted:gmatch("[^\n]+") do
-			table.insert(request_lines, line)
-		end
-		table.insert(request_lines, "```")
-		-- Insert right before the agent header (at response_line, pushing agent header down)
-		vim.api.nvim_buf_set_lines(buf, response_line, response_line, false, request_lines)
-		raw_request_offset = #request_lines
-	end
-
-	-- call the model and write response
-	M.dispatcher.query(
-		buf,
-		agent_info.provider,
-		final_payload,
-		M.dispatcher.create_handler(buf, win, response_line + 3 + raw_request_offset, true, "", not use_free_cursor),
-		vim.schedule_wrap(function(qid)
-			local qt = M.tasker.get_query(qid)
-			if not qt then
-				return
-			end
-
-			-- Only add a new user prompt at the end if we're not in the middle of the document
-			M.logger.debug("exchange_idx: " .. tostring(exchange_idx) .. " and #parsed_chat: " .. tostring(#parsed_chat))
-
-			if exchange_idx == #parsed_chat.exchanges then
-				-- write user prompt at the end
-				last_content_line = M.helpers.last_content_line(buf)
-				M.helpers.undojoin(buf)
-				vim.api.nvim_buf_set_lines(
-					buf,
-					last_content_line,
-					last_content_line,
-					false,
-					{ "", "", M.config.chat_user_prefix, "" }
-				)
-
-				-- delete whitespace lines at the end of the file
-				last_content_line = M.helpers.last_content_line(buf)
-				M.helpers.undojoin(buf)
-				vim.api.nvim_buf_set_lines(buf, last_content_line, -1, false, {})
-				-- insert a new line at the end of the file
-				M.helpers.undojoin(buf)
-				vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "" })
-			end
-
-			-- if topic is ?, then generate it
-			if headers.topic == "?" then
-				-- insert last model response
-				table.insert(messages, { role = "assistant", content = qt.response })
-
-				-- ask model to generate topic/title for the chat
-				table.insert(messages, { role = "user", content = M.config.chat_topic_gen_prompt })
-
-				-- prepare invisible buffer for the model to write to
-				local topic_buf = vim.api.nvim_create_buf(false, true)
-				local topic_handler = M.dispatcher.create_handler(topic_buf, nil, 0, false, "", false)
-
-				-- call the model
-				M.dispatcher.query(
-					nil,
-					agent_info.provider,
-					M.dispatcher.prepare_payload(messages, agent_info.model, agent_info.provider),
-					topic_handler,
-					vim.schedule_wrap(function()
-						-- get topic from invisible buffer
-						local topic = vim.api.nvim_buf_get_lines(topic_buf, 0, -1, false)[1]
-						-- close invisible buffer
-						vim.api.nvim_buf_delete(topic_buf, { force = true })
-						-- strip whitespace from ends of topic
-						topic = topic:gsub("^%s*(.-)%s*$", "%1")
-						-- strip dot from end of topic
-						topic = topic:gsub("%.$", "")
-
-						-- if topic is empty do not replace it
-						if topic == "" then
-							return
-						end
-
-						-- replace topic in current buffer
-						M.helpers.undojoin(buf)
-						vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "# topic: " .. topic })
-					end)
-				)
-			end
-
-			-- Place cursor appropriately
-			M.logger.debug(
-				"Cursor movement check - use_free_cursor: "
-					.. tostring(use_free_cursor)
-					.. ", config.chat_free_cursor: "
-					.. tostring(M.config.chat_free_cursor)
-			)
-
-			if not use_free_cursor then
-				M.logger.debug(
-					"Moving cursor - exchange_idx: "
-						.. tostring(exchange_idx)
-						.. ", component: "
-						.. tostring(component)
-						.. ", response_line: "
-						.. tostring(response_line)
-				)
-
-				if exchange_idx and component == "question" then
-					-- If we replaced an answer in the middle, move cursor to that position
-					local line = response_line + 2
-					M.logger.debug("Moving cursor to middle position: " .. tostring(line))
-					M.helpers.cursor_to_line(line, buf, win)
-				else
-					-- Otherwise, move to the end of the buffer
-					local line = vim.api.nvim_buf_line_count(buf)
-					M.logger.debug("Moving cursor to end: " .. tostring(line))
-					M.helpers.cursor_to_line(line, buf, win)
-				end
+				-- Set response line to insert at answer position
+				response_line = answer.line_start - 2
 			else
-				M.logger.debug("Not moving cursor due to free_cursor setting")
-			end
-			vim.cmd("doautocmd User ParleyDone")
+				-- New question (no answer yet)
+				-- Insert right after the question
+				local question_end = parsed_chat.exchanges[exchange_idx].question.line_end
+				response_line = question_end - 1
 
-			-- Call the callback if provided
-			if callback then
-				callback()
+				-- Check if this is a question in the middle (not the last one)
+				-- If so, we need to make sure we don't have to insert anything
+				-- since we'll just insert at the end of the question anyway
+				M.logger.debug("New question in middle - inserting after line " .. question_end)
 			end
-		end)
-	)
+		end
+
+		-- Check if the last line of the question is empty
+		local last_question_line
+		if response_line >= 0 then
+			last_question_line = vim.api.nvim_buf_get_lines(buf, response_line, response_line + 1, false)[1]
+		end
+
+		-- If the line isn't empty, insert an empty line to ensure proper spacing
+		if last_question_line and last_question_line:match("%S") then
+			M.logger.debug("Adding empty line after question for proper spacing")
+			vim.api.nvim_buf_set_lines(buf, response_line + 1, response_line + 1, false, { "" })
+			response_line = response_line + 1
+		end
+
+		-- Write assistant prompt with extra newline, note later insertion point is response_line + 3
+		vim.api.nvim_buf_set_lines(buf, response_line, response_line, false, { "", agent_prefix .. agent_suffix, "", "" })
+
+		M.logger.debug("messages to send: " .. vim.inspect(messages))
+
+		-- Check if we're in raw request mode and have a raw payload to use
+		local raw_payload = nil
+		if
+			exchange_idx
+			and parsed_chat.exchanges[exchange_idx].question
+			and parsed_chat.exchanges[exchange_idx].question.raw_payload
+		then
+			raw_payload = parsed_chat.exchanges[exchange_idx].question.raw_payload
+			M.logger.debug("Using raw payload for request: " .. vim.inspect(raw_payload))
+		end
+
+		-- Compute payload once for both display and query
+		local final_payload = raw_payload or M.dispatcher.prepare_payload(messages, agent_info.model, agent_info.provider)
+
+		-- In raw request mode, insert the request payload after the question, before the agent response
+		-- Skip if the question already contains a typed request fence (raw_payload was parsed from it)
+		local raw_request_offset = 0
+		if M.config.raw_mode and M.config.raw_mode.parse_raw_request and not raw_payload then
+			local json_str = vim.json.encode(final_payload)
+			-- Pretty-print via python3 json.tool
+			local ok, formatted = pcall(function()
+				return vim.fn.system({ "python3", "-m", "json.tool" }, json_str)
+			end)
+			if not ok or vim.v.shell_error ~= 0 then
+				formatted = json_str
+			end
+			local request_lines = { '', '```json {"type": "request"}' }
+			for line in formatted:gmatch("[^\n]+") do
+				table.insert(request_lines, line)
+			end
+			table.insert(request_lines, "```")
+			-- Insert right before the agent header (at response_line, pushing agent header down)
+			vim.api.nvim_buf_set_lines(buf, response_line, response_line, false, request_lines)
+			raw_request_offset = #request_lines
+		end
+
+		-- call the model and write response
+		M.dispatcher.query(
+			buf,
+			agent_info.provider,
+			final_payload,
+			M.dispatcher.create_handler(buf, win, response_line + 3 + raw_request_offset, true, "", not use_free_cursor),
+			vim.schedule_wrap(function(qid)
+				local qt = M.tasker.get_query(qid)
+				if not qt then
+					return
+				end
+
+				-- Only add a new user prompt at the end if we're not in the middle of the document
+				M.logger.debug("exchange_idx: " .. tostring(exchange_idx) .. " and #parsed_chat: " .. tostring(#parsed_chat))
+
+				if exchange_idx == #parsed_chat.exchanges then
+					-- write user prompt at the end
+					last_content_line = M.helpers.last_content_line(buf)
+					M.helpers.undojoin(buf)
+					vim.api.nvim_buf_set_lines(
+						buf,
+						last_content_line,
+						last_content_line,
+						false,
+						{ "", "", M.config.chat_user_prefix, "" }
+					)
+
+					-- delete whitespace lines at the end of the file
+					last_content_line = M.helpers.last_content_line(buf)
+					M.helpers.undojoin(buf)
+					vim.api.nvim_buf_set_lines(buf, last_content_line, -1, false, {})
+					-- insert a new line at the end of the file
+					M.helpers.undojoin(buf)
+					vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "" })
+				end
+
+				-- if topic is ?, then generate it
+				if headers.topic == "?" then
+					-- insert last model response
+					table.insert(messages, { role = "assistant", content = qt.response })
+
+					-- ask model to generate topic/title for the chat
+					table.insert(messages, { role = "user", content = M.config.chat_topic_gen_prompt })
+
+					-- prepare invisible buffer for the model to write to
+					local topic_buf = vim.api.nvim_create_buf(false, true)
+					local topic_handler = M.dispatcher.create_handler(topic_buf, nil, 0, false, "", false)
+
+					-- call the model
+					M.dispatcher.query(
+						nil,
+						agent_info.provider,
+						M.dispatcher.prepare_payload(messages, agent_info.model, agent_info.provider),
+						topic_handler,
+						vim.schedule_wrap(function()
+							-- get topic from invisible buffer
+							local topic = vim.api.nvim_buf_get_lines(topic_buf, 0, -1, false)[1]
+							-- close invisible buffer
+							vim.api.nvim_buf_delete(topic_buf, { force = true })
+							-- strip whitespace from ends of topic
+							topic = topic:gsub("^%s*(.-)%s*$", "%1")
+							-- strip dot from end of topic
+							topic = topic:gsub("%.$", "")
+
+							-- if topic is empty do not replace it
+							if topic == "" then
+								return
+							end
+
+							-- replace topic in current buffer
+							M.helpers.undojoin(buf)
+							vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "# topic: " .. topic })
+						end)
+					)
+				end
+
+				-- Place cursor appropriately
+				M.logger.debug(
+					"Cursor movement check - use_free_cursor: "
+						.. tostring(use_free_cursor)
+						.. ", config.chat_free_cursor: "
+						.. tostring(M.config.chat_free_cursor)
+				)
+
+				if not use_free_cursor then
+					M.logger.debug(
+						"Moving cursor - exchange_idx: "
+							.. tostring(exchange_idx)
+							.. ", component: "
+							.. tostring(component)
+							.. ", response_line: "
+							.. tostring(response_line)
+					)
+
+					if exchange_idx and component == "question" then
+						-- If we replaced an answer in the middle, move cursor to that position
+						local line = response_line + 2
+						M.logger.debug("Moving cursor to middle position: " .. tostring(line))
+						M.helpers.cursor_to_line(line, buf, win)
+					else
+						-- Otherwise, move to the end of the buffer
+						local line = vim.api.nvim_buf_line_count(buf)
+						M.logger.debug("Moving cursor to end: " .. tostring(line))
+						M.helpers.cursor_to_line(line, buf, win)
+					end
+				else
+					M.logger.debug("Not moving cursor due to free_cursor setting")
+				end
+				vim.cmd("doautocmd User ParleyDone")
+
+				-- Call the callback if provided
+				if callback then
+					callback()
+				end
+			end)
+		)
+	end)
 end
 
 -- Function to resubmit all questions up to the cursor position
