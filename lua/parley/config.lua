@@ -37,6 +37,13 @@ local config = {
 		copilot = os.getenv("GITHUB_TOKEN"), -- for GitHub Copilot
 	},
 
+	-- Google Drive OAuth configuration for @@ URL references
+	google_drive = {
+		client_id = "",
+		client_secret = "",
+		scopes = { "https://www.googleapis.com/auth/drive.readonly" },
+	},
+
 	-- at least one working provider is required
 	-- to disable a provider set it to empty table like openai = {}
 	providers = {

@@ -735,3 +735,37 @@ describe("_build_messages: file references with preserved answer", function()
         assert.equals("user", messages[5].role)
     end)
 end)
+
+describe("_build_messages: remote file references", function()
+    it("uses resolved_remote_content for URL references", function()
+        local file_refs = {
+            { line = "@@https://docs.google.com/document/d/abc123/edit",
+              path = "https://docs.google.com/document/d/abc123/edit",
+              original_line_index = 2 }
+        }
+        local pc = parsed_chat({ exchange("Review this doc", nil, nil, file_refs) })
+
+        local resolved = {
+            ["https://docs.google.com/document/d/abc123/edit"] = 'File: Google Doc - "Test"\n```markdown\n1: Hello\n```\n\n'
+        }
+
+        local messages = parley._build_messages({
+            parsed_chat = pc,
+            start_index = 1,
+            end_index = 100,
+            exchange_idx = 1,
+            agent = agent(),
+            config = parley.config,
+            helpers = stub_helpers,
+            logger = stub_logger,
+            resolved_remote_content = resolved,
+        })
+
+        -- Should have system (prompt) + system (file content) + user (question)
+        assert.equals(3, #messages)
+        assert.equals("system", messages[2].role)
+        assert.is_true(messages[2].content:match("Google Doc") ~= nil)
+        assert.equals("user", messages[3].role)
+        assert.equals("Review this doc", messages[3].content)
+    end)
+end)

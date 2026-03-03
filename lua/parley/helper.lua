@@ -235,6 +235,13 @@ _H.is_directory = function(path)
     return vim.fn.isdirectory(expanded_path) == 1
 end
 
+-- Check if a path is a remote URL (e.g., Google Docs)
+---@param path string # path to check
+---@return boolean # true if path is a URL
+_H.is_remote_url = function(path)
+    return path:match("^https?://") ~= nil
+end
+
 -- Get a formatted representation of a file with its content
 ---@param filepath string # path to the file
 ---@return string # formatted file content with header
