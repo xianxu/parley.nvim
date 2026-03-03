@@ -212,3 +212,21 @@ describe("google_drive: auth code parsing", function()
         assert.is_nil(code)
     end)
 end)
+
+describe("google_drive: content formatting", function()
+    it("J1: formats Google Doc content like local files", function()
+        local content = "Hello world\nSecond line"
+        local formatted = gd.format_google_content("My Document", "document", content)
+        assert.is_true(formatted:match("Google Doc") ~= nil)
+        assert.is_true(formatted:match("My Document") ~= nil)
+        assert.is_true(formatted:match("1: Hello world") ~= nil)
+        assert.is_true(formatted:match("2: Second line") ~= nil)
+    end)
+
+    it("J2: formats Google Sheet content with CSV label", function()
+        local content = "a,b,c\n1,2,3"
+        local formatted = gd.format_google_content("Budget", "spreadsheet", content)
+        assert.is_true(formatted:match("Google Sheet") ~= nil)
+        assert.is_true(formatted:match("Budget") ~= nil)
+    end)
+end)

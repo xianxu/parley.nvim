@@ -19,6 +19,22 @@ local export_mimes = {
     presentation = "text/plain",
 }
 
+-- Human-readable labels for file types
+local type_labels = {
+    document = "Google Doc",
+    spreadsheet = "Google Sheet",
+    presentation = "Google Slides",
+    drive_file = "Google Drive File",
+}
+
+-- Filetype hints for syntax highlighting in code fences
+local type_filetypes = {
+    document = "markdown",
+    spreadsheet = "csv",
+    presentation = "",
+    drive_file = "",
+}
+
 -- Check if a path is a Google Drive/Docs URL
 ---@param path string|nil # the path to check
 ---@return boolean # true if path is a recognized Google URL
@@ -437,6 +453,123 @@ M.get_access_token = function(config, callback)
                 end
             end)
         end
+    end)
+end
+
+-- Format fetched Google content to match helper.format_file_content output
+---@param name string # document title
+---@param file_type string # one of: document, spreadsheet, presentation, drive_file
+---@param content string # raw file content
+---@return string # formatted content with header and line numbers
+M.format_google_content = function(name, file_type, content)
+    local label = type_labels[file_type] or "Google Drive File"
+    local filetype = type_filetypes[file_type] or ""
+
+    local lines = vim.split(content, "\n")
+    local numbered_lines = {}
+    for i, line in ipairs(lines) do
+        table.insert(numbered_lines, string.format("%d: %s", i, line))
+    end
+    local numbered_content = table.concat(numbered_lines, "\n")
+
+    return "File: " .. label .. " - \"" .. name .. "\"\n```" .. filetype .. "\n" .. numbered_content .. "\n```\n\n"
+end
+
+-- Fetch file content from Google Drive
+-- This is the main entry point called from helper.lua
+---@param url string # Google Drive/Docs URL
+---@param config table # google_drive config
+---@param callback function # called with (formatted_content_string, error_string)
+M.fetch_content = function(url, config, callback)
+    local info = M.parse_url(url)
+    if not info then
+        callback(nil, "Unsupported Google URL: " .. url)
+        return
+    end
+
+    M.get_access_token(config, function(access_token)
+        if not access_token then
+            callback(nil, "Google OAuth: failed to get access token. Try again to re-authenticate.")
+            return
+        end
+
+        -- First, get file metadata (name and MIME type)
+        local meta_url = M.build_metadata_url(info.file_id)
+        local meta_args = {
+            "-s",
+            "-H", "Authorization: Bearer " .. access_token,
+            meta_url,
+        }
+
+        tasker.run(nil, "curl", meta_args, function(code, signal, stdout_data)
+            if code ~= 0 then
+                callback(nil, "Google Drive API: failed to fetch file metadata")
+                return
+            end
+
+            local ok, meta = pcall(vim.json.decode, stdout_data)
+            if not ok or not meta or not meta.name then
+                callback(nil, "Google Drive API: invalid metadata response")
+                return
+            end
+
+            local file_name = meta.name
+
+            -- Determine how to fetch content
+            local export_mime = M.get_export_mime(info.file_type)
+            local content_url
+            if export_mime then
+                content_url = M.build_export_url(info.file_id, export_mime)
+            else
+                -- For non-native Google types, check if it's a Google type by mimeType
+                if meta.mimeType and meta.mimeType:match("google%-apps") then
+                    content_url = M.build_export_url(info.file_id, "text/plain")
+                else
+                    content_url = M.build_download_url(info.file_id)
+                end
+            end
+
+            local content_args = {
+                "-s",
+                "-H", "Authorization: Bearer " .. access_token,
+                content_url,
+            }
+
+            tasker.run(nil, "curl", content_args, function(content_code, _, content_data)
+                if content_code ~= 0 or not content_data or content_data == "" then
+                    callback(nil, "Google Drive API: failed to fetch file content for " .. file_name)
+                    return
+                end
+
+                -- Check for API error responses
+                local err_ok, err_data = pcall(vim.json.decode, content_data)
+                if err_ok and err_data and err_data.error then
+                    local err_msg = err_data.error.message or "unknown error"
+                    -- If markdown export fails, fall back to plain text
+                    if export_mime == "text/markdown" then
+                        logger.debug("Google Drive: markdown export failed, falling back to plain text")
+                        local fallback_url = M.build_export_url(info.file_id, "text/plain")
+                        local fallback_args = {
+                            "-s",
+                            "-H", "Authorization: Bearer " .. access_token,
+                            fallback_url,
+                        }
+                        tasker.run(nil, "curl", fallback_args, function(fb_code, _, fb_data)
+                            if fb_code ~= 0 or not fb_data or fb_data == "" then
+                                callback(nil, "Google Drive API: " .. err_msg)
+                                return
+                            end
+                            callback(M.format_google_content(file_name, info.file_type, fb_data))
+                        end)
+                        return
+                    end
+                    callback(nil, "Google Drive API: " .. err_msg)
+                    return
+                end
+
+                callback(M.format_google_content(file_name, info.file_type, content_data))
+            end)
+        end)
     end)
 end
 
