@@ -168,3 +168,33 @@ describe("google_drive: API URL construction", function()
         assert.equals("https://www.googleapis.com/drive/v3/files/file123?alt=media", url)
     end)
 end)
+
+describe("google_drive: token parsing", function()
+    it("H1: parses token exchange response JSON", function()
+        local json = '{"access_token":"ya29.abc","refresh_token":"1//ref","expires_in":3600,"token_type":"Bearer"}'
+        local tokens = gd.parse_token_response(json)
+        assert.equals("ya29.abc", tokens.access_token)
+        assert.equals("1//ref", tokens.refresh_token)
+        assert.is_true(tokens.expires_at > os.time())
+    end)
+
+    it("H2: parse_token_response returns nil on invalid JSON", function()
+        local tokens = gd.parse_token_response("not json")
+        assert.is_nil(tokens)
+    end)
+
+    it("H3: parse_token_response returns nil when access_token missing", function()
+        local tokens = gd.parse_token_response('{"error":"invalid_grant"}')
+        assert.is_nil(tokens)
+    end)
+
+    it("H4: is_token_expired returns true for expired token", function()
+        local tokens = { access_token = "abc", expires_at = os.time() - 100 }
+        assert.is_true(gd.is_token_expired(tokens))
+    end)
+
+    it("H5: is_token_expired returns false for valid token", function()
+        local tokens = { access_token = "abc", expires_at = os.time() + 3600 }
+        assert.is_false(gd.is_token_expired(tokens))
+    end)
+end)

@@ -170,4 +170,29 @@ M.build_download_url = function(file_id)
     return "https://www.googleapis.com/drive/v3/files/" .. file_id .. "?alt=media"
 end
 
+-- Parse OAuth token exchange response
+---@param json_str string # raw JSON response from token endpoint
+---@return table|nil # {access_token, refresh_token, expires_at} or nil on error
+M.parse_token_response = function(json_str)
+    local ok, data = pcall(vim.json.decode, json_str)
+    if not ok or not data or not data.access_token then
+        return nil
+    end
+    return {
+        access_token = data.access_token,
+        refresh_token = data.refresh_token,
+        expires_at = os.time() + (data.expires_in or 3600),
+    }
+end
+
+-- Check if an access token is expired (with 60s buffer)
+---@param tokens table # {access_token, expires_at}
+---@return boolean
+M.is_token_expired = function(tokens)
+    if not tokens or not tokens.expires_at then
+        return true
+    end
+    return os.time() >= (tokens.expires_at - 60)
+end
+
 return M
