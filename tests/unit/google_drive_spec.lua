@@ -230,3 +230,23 @@ describe("google_drive: content formatting", function()
         assert.is_true(formatted:match("Budget") ~= nil)
     end)
 end)
+
+describe("helper: URL detection", function()
+    local helpers = require("parley.helper")
+
+    it("K1: detects HTTPS URL", function()
+        assert.is_true(helpers.is_remote_url("https://docs.google.com/document/d/abc/edit"))
+    end)
+
+    it("K2: detects HTTP URL", function()
+        assert.is_true(helpers.is_remote_url("http://example.com/file"))
+    end)
+
+    it("K3: rejects local path", function()
+        assert.is_false(helpers.is_remote_url("/home/user/file.txt"))
+    end)
+
+    it("K4: rejects relative path", function()
+        assert.is_false(helpers.is_remote_url("./file.txt"))
+    end)
+end)
