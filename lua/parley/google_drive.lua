@@ -149,6 +149,25 @@ M.build_keychain_store_cmd = function(platform, json_data)
     end
 end
 
+-- Build OS keychain delete command
+---@param platform string # "darwin" or "linux"
+---@return table # command as list of arguments
+M.build_keychain_delete_cmd = function(platform)
+    if platform == "darwin" then
+        return {
+            "security", "delete-generic-password",
+            "-s", "parley-nvim-google-oauth",
+            "-a", "default",
+        }
+    else
+        return {
+            "secret-tool", "clear",
+            "service", "parley-nvim-google-oauth",
+            "account", "default",
+        }
+    end
+end
+
 -- Build OS keychain load command
 ---@param platform string # "darwin" or "linux"
 ---@return table # command as list of arguments
@@ -293,6 +312,27 @@ M.load_tokens = function(callback)
             callback(tokens)
         else
             callback(nil)
+        end
+    end)
+end
+
+-- Remove stored OAuth tokens (logout)
+---@param callback function|nil # called with boolean success
+M.logout = function(callback)
+    callback = callback or function() end
+    cached_tokens = nil
+
+    local platform = M._get_platform()
+    local cmd_args = M.build_keychain_delete_cmd(platform)
+    local cmd = table.remove(cmd_args, 1)
+
+    tasker.run(nil, cmd, cmd_args, function(code)
+        if code == 0 then
+            logger.info("Google Drive OAuth tokens removed")
+            callback(true)
+        else
+            logger.warning("No Google OAuth tokens found to remove (or removal failed)")
+            callback(false)
         end
     end)
 end

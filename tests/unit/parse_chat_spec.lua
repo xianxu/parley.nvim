@@ -265,13 +265,14 @@ describe("parse_chat: @@ file references", function()
         assert.equals(2, #refs)
     end)
 
-    it("does NOT treat @@ not at line start as a file reference", function()
+    it("collects inline @@ with local path as file reference", function()
         local lines, header_end = make_chat(std_header, {
             "💬: See @@/inline/path.lua here",
         })
         local result = parse_chat(lines, header_end)
         local refs = result.exchanges[1].question.file_references
-        assert.equals(0, #refs)
+        assert.equals(1, #refs)
+        assert.equals("/inline/path.lua", refs[1].path)
     end)
 
     it("collects @@ URL reference with full URL including colons", function()
@@ -316,13 +317,45 @@ describe("parse_chat: @@ file references", function()
         assert.equals("https://docs.google.com/document/d/abc123/edit", refs[1].path)
     end)
 
-    it("does NOT treat inline @@ with local path as file reference", function()
+    it("collects inline @@ with local path on continuation line", function()
         local lines, header_end = make_chat(std_header, {
-            "💬: See @@/inline/path.lua here",
+            "💬: Check this code",
+            "see @@/inline/path.lua for context",
         })
         local result = parse_chat(lines, header_end)
         local refs = result.exchanges[1].question.file_references
-        assert.equals(0, #refs)
+        assert.equals(1, #refs)
+        assert.equals("/inline/path.lua", refs[1].path)
+    end)
+
+    it("collects inline @@ with relative path", function()
+        local lines, header_end = make_chat(std_header, {
+            "💬: Review @@./src/main.lua please",
+        })
+        local result = parse_chat(lines, header_end)
+        local refs = result.exchanges[1].question.file_references
+        assert.equals(1, #refs)
+        assert.equals("./src/main.lua", refs[1].path)
+    end)
+
+    it("collects inline @@ with home-relative path", function()
+        local lines, header_end = make_chat(std_header, {
+            "💬: Check @@~/config.lua",
+        })
+        local result = parse_chat(lines, header_end)
+        local refs = result.exchanges[1].question.file_references
+        assert.equals(1, #refs)
+        assert.equals("~/config.lua", refs[1].path)
+    end)
+
+    it("collects inline @@ with parent-relative path", function()
+        local lines, header_end = make_chat(std_header, {
+            "💬: Review @@../other/module.lua please",
+        })
+        local result = parse_chat(lines, header_end)
+        local refs = result.exchanges[1].question.file_references
+        assert.equals(1, #refs)
+        assert.equals("../other/module.lua", refs[1].path)
     end)
 end)
 

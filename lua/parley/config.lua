@@ -38,6 +38,7 @@ local config = {
 	},
 
 	-- Google Drive OAuth configuration for @@ URL references
+	-- Users can override with plaintext values in their setup() call.
 	google_drive = {
 		client_id = "",
 		client_secret = "",

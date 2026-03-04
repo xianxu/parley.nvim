@@ -68,13 +68,19 @@ Each chat transcript is a markdown file with some additional conventions. Think 
 6. Smart memory management:
     1. By default, Parley keeps only a certain number of recent exchanges (controlled by `max_full_exchanges`, default: 5) and summarizes older ones to maintain context within token limits.
     2. Exchanges that include file references (@@filename) are always preserved in full, regardless of their age.
-7. File and directory inclusion: a line that starts with @@ followed by a path will automatically load content into the prompt when sending to the LLM:
+7. File and directory inclusion: `@@` followed by a path will automatically load content into the prompt when sending to the LLM. The `@@` reference can appear at the start of a line or inline within text:
 
    - `@@/path/to/file.txt` - Include a single file
+   - `@@./relative/file.lua` - Relative path
+   - `@@../sibling/file.lua` - Parent-relative path
+   - `@@~/config.lua` - Home-relative path
    - `@@/path/to/directory/` - Include all files in a directory (non-recursive)
    - `@@/path/to/directory/*.lua` - Include all matching files in a directory (non-recursive)
    - `@@/path/to/directory/**/` - Include all files in a directory and its subdirectories (recursive)
    - `@@/path/to/directory/**/*.lua` - Include all matching files in a directory and its subdirectories (recursive)
+   - `@@https://docs.google.com/document/d/.../edit` - Fetch Google Doc content via OAuth
+
+   Inline usage: `review @@/path/to/file.lua and suggest improvements`
 
    All included files are displayed with line numbers for easier reference. You can open referenced files or directories directly by placing the cursor on the @@ line and pressing `<C-g>o`.
 
@@ -352,6 +358,10 @@ The `<C-n>r` shortcut changes the working directory to the current year's notes 
 #### `:ParleyStop`
 
 Stop all currently running responses and jobs. `<C-g>s`
+
+#### `:ParleyGdriveLogout`
+
+Remove stored Google Drive OAuth tokens from the OS keychain. Use this to force re-authentication on the next `@@` Google Doc reference.
 
 # Keybinding Summary
 
