@@ -493,24 +493,21 @@ M.get_access_token = function(config, callback)
                 if new_tokens then
                     callback(new_tokens.access_token)
                 else
-                    -- Refresh failed, re-authenticate
-                    M.authenticate(config, function(auth_tokens)
-                        if auth_tokens then
-                            callback(auth_tokens.access_token)
-                        else
-                            callback(nil)
-                        end
-                    end)
+                    -- Refresh failed, prompt user instead of auto-opening browser
+                    M._prompt_auth(
+                        config,
+                        "Google OAuth: Token refresh failed. Please re-authenticate.",
+                        callback
+                    )
                 end
             end)
         else
-            M.authenticate(config, function(auth_tokens)
-                if auth_tokens then
-                    callback(auth_tokens.access_token)
-                else
-                    callback(nil)
-                end
-            end)
+            -- No tokens, prompt user instead of auto-opening browser
+            M._prompt_auth(
+                config,
+                "Google OAuth: No saved credentials. Please authenticate to access Google Drive files.",
+                callback
+            )
         end
     end)
 end
@@ -540,6 +537,69 @@ M.format_google_content = function(name, file_type, content, url)
     return header .. "\n```" .. filetype .. "\n" .. numbered_content .. "\n```\n\n"
 end
 
+-- Classify a Google API error code as auth-related or not.
+-- Returns "auth" for errors that may be resolved by re-authenticating.
+-- Google returns 404 for both "not found" and "no access" (privacy), so we
+-- treat it as auth-related to give the user a chance to switch accounts.
+---@param error_code number|nil # the HTTP error code from the API
+---@return string # "auth" or "other"
+M._classify_api_error = function(error_code)
+    if error_code == 401 or error_code == 403 or error_code == 404 then
+        return "auth"
+    end
+    return "other"
+end
+
+-- Prompt the user to authenticate with an OAuth provider via vim.ui.select.
+-- Extensible: add future providers (MS OAuth, etc.) to the providers table.
+---@param config table # google_drive config
+---@param reason string # human-readable reason shown to the user
+---@param callback function # called with access_token (string) or nil if cancelled
+M._prompt_auth = function(config, reason, callback)
+    vim.schedule(function()
+        vim.api.nvim_echo({{ reason, "WarningMsg" }}, true, {})
+
+        -- Provider list (add entries here for future OAuth providers)
+        local providers = {
+            { name = "Google Drive (OAuth)", provider = "google" },
+        }
+
+        local display_items = {}
+        for _, p in ipairs(providers) do
+            table.insert(display_items, p.name)
+        end
+        table.insert(display_items, "Skip")
+
+        vim.ui.select(display_items, {
+            prompt = "Authenticate to access remote file:",
+        }, function(choice, idx)
+            if not choice or choice == "Skip" then
+                callback(nil)
+                return
+            end
+
+            local selected = providers[idx]
+            if not selected then
+                callback(nil)
+                return
+            end
+
+            if selected.provider == "google" then
+                M.authenticate(config, function(tokens)
+                    if tokens then
+                        callback(tokens.access_token)
+                    else
+                        callback(nil)
+                    end
+                end)
+            else
+                logger.warning("OAuth provider " .. selected.provider .. " not yet implemented")
+                callback(nil)
+            end
+        end)
+    end)
+end
+
 -- Fetch file content from Google Drive
 -- This is the main entry point called from helper.lua
 ---@param url string # Google Drive/Docs URL
@@ -552,13 +612,9 @@ M.fetch_content = function(url, config, callback)
         return
     end
 
-    M.get_access_token(config, function(access_token)
-        if not access_token then
-            callback(nil, "Google OAuth: failed to get access token. Try again to re-authenticate.")
-            return
-        end
-
-        -- First, get file metadata (name and MIME type)
+    -- Inner function that performs the actual fetch with a given access_token.
+    -- retry_allowed prevents infinite loops: true on first attempt, false on retry.
+    local function do_fetch(access_token, retry_allowed)
         local meta_url = M.build_metadata_url(info.file_id)
         local meta_args = {
             "-s",
@@ -573,8 +629,43 @@ M.fetch_content = function(url, config, callback)
             end
 
             local ok, meta = pcall(vim.json.decode, stdout_data)
-            if not ok or not meta or not meta.name then
+            if not ok or not meta then
+                logger.warning("Google Drive API: failed to parse metadata response: " .. tostring(stdout_data))
                 callback(nil, "Google Drive API: invalid metadata response")
+                return
+            end
+
+            -- Check for API error response (e.g., 401 Unauthorized, 403 Forbidden, 404 Not Found)
+            if meta.error then
+                local err_code = meta.error.code
+                local err_msg = (meta.error.message or "unknown error")
+                    .. " (code: " .. tostring(err_code or "?") .. ")"
+                logger.warning("Google Drive API metadata error: " .. err_msg)
+
+                -- If auth-related and retry allowed, prompt user to re-authenticate
+                if retry_allowed and M._classify_api_error(err_code) == "auth" then
+                    cached_tokens = nil
+                    M._prompt_auth(
+                        config,
+                        "Google Drive API: " .. err_msg .. " — Re-authenticate with a different account?",
+                        function(new_token)
+                            if new_token then
+                                do_fetch(new_token, false)
+                            else
+                                callback(nil, "Google Drive API: " .. err_msg)
+                            end
+                        end
+                    )
+                    return
+                end
+
+                callback(nil, "Google Drive API: " .. err_msg)
+                return
+            end
+
+            if not meta.name then
+                logger.warning("Google Drive API: metadata response missing 'name' field: " .. tostring(stdout_data))
+                callback(nil, "Google Drive API: invalid metadata response (missing file name)")
                 return
             end
 
@@ -586,7 +677,6 @@ M.fetch_content = function(url, config, callback)
             if export_mime then
                 content_url = M.build_export_url(info.file_id, export_mime)
             else
-                -- For non-native Google types, check if it's a Google type by mimeType
                 if meta.mimeType and meta.mimeType:match("google%-apps") then
                     content_url = M.build_export_url(info.file_id, "text/plain")
                 else
@@ -635,6 +725,15 @@ M.fetch_content = function(url, config, callback)
                 callback(M.format_google_content(file_name, info.file_type, content_data, url))
             end)
         end)
+    end
+
+    -- Start by getting access token, then fetch
+    M.get_access_token(config, function(access_token)
+        if not access_token then
+            callback(nil, "Google OAuth: authentication cancelled or failed.")
+            return
+        end
+        do_fetch(access_token, true)
     end)
 end
 

@@ -264,3 +264,29 @@ describe("helper: URL detection", function()
         assert.is_false(helpers.is_remote_url("./file.txt"))
     end)
 end)
+
+describe("google_drive: API error classification", function()
+    it("L1: classifies 401 as auth error", function()
+        assert.equals("auth", gd._classify_api_error(401))
+    end)
+
+    it("L2: classifies 403 as auth error", function()
+        assert.equals("auth", gd._classify_api_error(403))
+    end)
+
+    it("L3: classifies 404 as auth error", function()
+        assert.equals("auth", gd._classify_api_error(404))
+    end)
+
+    it("L4: classifies 500 as other error", function()
+        assert.equals("other", gd._classify_api_error(500))
+    end)
+
+    it("L5: classifies 400 as other error", function()
+        assert.equals("other", gd._classify_api_error(400))
+    end)
+
+    it("L6: classifies nil as other error", function()
+        assert.equals("other", gd._classify_api_error(nil))
+    end)
+end)
