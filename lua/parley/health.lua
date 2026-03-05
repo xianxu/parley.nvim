@@ -45,8 +45,6 @@ function M.check()
 		vim.health.info("lualine is not installed (statusline integration unavailable)")
 	end
 
-	-- Whisper module removed in simplified version
-	require("parley.deprecator").check_health()
 end
 
 return M

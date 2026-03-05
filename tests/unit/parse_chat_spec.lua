@@ -359,16 +359,6 @@ describe("parse_chat: @@ file references", function()
     end)
 end)
 
-describe("parse_chat: old user prefix 🗨:", function()
-    it("parses old 🗨: prefix as a question", function()
-        local lines, header_end = make_chat(std_header, {
-            "🗨: Old style question",
-        })
-        local result = parse_chat(lines, header_end)
-        assert.equals(1, #result.exchanges)
-        assert.equals("Old style question", result.exchanges[1].question.content)
-    end)
-end)
 
 describe("parse_chat: edge cases", function()
     it("handles assistant message with no preceding user message", function()

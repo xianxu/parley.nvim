@@ -20,8 +20,7 @@ local M = {
 	config = {}, -- config variables
 	hooks = {}, -- user defined command functions
 	defaults = require("parley.defaults"), -- some useful defaults
-	deprecator = require("parley.deprecator"), -- handle deprecated options
-	chat_parser = require("parley.chat_parser"), -- chat file parser
+chat_parser = require("parley.chat_parser"), -- chat file parser
 	dispatcher = require("parley.dispatcher"), -- handle communication with LLM providers
 	helpers = require("parley.helper"), -- helper functions
 	logger = require("parley.logger"), -- logger module
@@ -267,11 +266,8 @@ M.setup = function(opts)
 
 	-- now merge the rest of opts into M.config, this would be fully override.
 	for k, v in pairs(opts) do
-		if M.deprecator.is_valid(k, v) then
-			M.config[k] = v
-		end
+		M.config[k] = v
 	end
-	M.deprecator.report()
 
 	-- make sure _dirs exists
 	for k, v in pairs(M.config) do
@@ -778,7 +774,7 @@ M.refresh_state = function(update)
 	M.display_agent(buf, file_name)
 end
 
--- stop receiving gpt responses for all processes and clean the handles
+-- stop receiving responses for all processes and clean the handles
 ---@param signal number | nil # signal to send to the process
 M.cmd.Stop = function(signal)
 	-- If we were in the middle of a batch resubmission, make sure to restore the cursor setting
@@ -1624,13 +1620,6 @@ M.setup_highlight = function()
 		bg = diffadd_hl.bg or diffadd_hl.background,
 		-- Explicitly don't set fg to allow other highlights to show through
 	})
-
-	-- Create aliases for backward compatibility
-	vim.api.nvim_set_hl(0, "Question", { link = "ParleyQuestion" })
-	vim.api.nvim_set_hl(0, "FileLoading", { link = "ParleyFileReference" })
-	vim.api.nvim_set_hl(0, "Think", { link = "ParleyThinking" })
-	vim.api.nvim_set_hl(0, "Annotation", { link = "ParleyAnnotation" })
-	vim.api.nvim_set_hl(0, "Tag", { link = "ParleyTag" })
 
 	return ns
 end
@@ -4318,9 +4307,6 @@ M.get_agent = function(name)
 		provider = provider,
 	}
 end
-
--- Aliases for backwards compatibility
-M.get_chat_agent = M.get_agent
 
 -- Get combined agent information from both headers and agent config
 -- This resolves the final provider, model, and other settings by merging header overrides with agent defaults

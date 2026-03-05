@@ -83,8 +83,6 @@ M.parse_chat = function(lines, header_end, config)
 	local reasoning_prefix = memory_enabled and config.chat_memory.reasoning_prefix or "🧠:"
 	local user_prefix = config.chat_user_prefix
 	local local_prefix = config.chat_local_prefix
-	local old_user_prefix = "🗨:"
-
 	logger.debug("memory config: " .. vim.inspect({memory_enabled, summary_prefix, reasoning_prefix}))
 
 	-- Determine agent prefix
@@ -151,13 +149,13 @@ M.parse_chat = function(lines, header_end, config)
 			line_before_local = i
 
 		-- Check for user message start
-		elseif line:sub(1, #user_prefix) == user_prefix or line:sub(1, #old_user_prefix) == old_user_prefix then
+		elseif line:sub(1, #user_prefix) == user_prefix then
 			-- If we were building a previous exchange, finalize it
 			local current_component_start = line_before_local or i
 			finalize_component(current_component_start - 1)
 
 			-- Extract question content
-			local question_content = line:sub(line:sub(1, #user_prefix) == user_prefix and #user_prefix + 1 or #old_user_prefix + 1)
+			local question_content = line:sub(#user_prefix + 1)
 
 			-- Start a new exchange
 			current_exchange = {
