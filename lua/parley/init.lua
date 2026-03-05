@@ -1837,20 +1837,18 @@ M.highlight_markdown_chat_refs = function(buf)
 	)
 end
 
--- Function to apply highlighting to chat blocks in the current buffer
-M.highlight_question_block = function(buf)
-	local ns = M.setup_highlight()
-	local ranges = get_visible_line_ranges(buf)
-	local desired = {}
+-- Compute desired chat highlights for a 1-indexed line range.
+-- Returns a table keyed by 0-indexed row: { [row] = { {hl_group, col_start, col_end}, ... } }
+-- Scans HIGHLIGHT_CONTEXT_LINES above start_line for block state context.
+local function compute_chat_highlights(buf, start_line, end_line)
+	local result = {}
 
-	-- Get the configured prefix values from config
 	local user_prefix = M.config.chat_user_prefix
 	local local_prefix = M.config.chat_local_prefix
 	local memory_enabled = M.config.chat_memory and M.config.chat_memory.enable
 	local reasoning_prefix = memory_enabled and M.config.chat_memory.reasoning_prefix or "🧠:"
 	local summary_prefix = memory_enabled and M.config.chat_memory.summary_prefix or "📝:"
 
-	-- Get the assistant prefix (first part)
 	local assistant_prefix
 	if type(M.config.chat_assistant_prefix) == "string" then
 		assistant_prefix = M.config.chat_assistant_prefix
@@ -1863,86 +1861,104 @@ M.highlight_question_block = function(buf)
 	local assistant_pattern = "^" .. vim.pesc(assistant_prefix)
 	local local_pattern = "^" .. vim.pesc(local_prefix)
 
+	local scan_start = math.max(1, start_line - HIGHLIGHT_CONTEXT_LINES)
+	local lines = vim.api.nvim_buf_get_lines(buf, scan_start - 1, end_line, false)
+	local in_block = false
+	local in_code_block = false
+
+	for offset, line in ipairs(lines) do
+		local line_nr = scan_start + offset - 1
+		if line:match("^%s*```") then
+			in_code_block = not in_code_block
+		end
+
+		local should_paint = line_nr >= start_line
+		local highlighted_regions = {}
+		local row = line_nr - 1
+
+		if should_paint then
+			result[row] = result[row] or {}
+
+			local pos = 1
+			while true do
+				local tag_start, content_start = line:find("@@", pos)
+				if not tag_start then break end
+				local content_end, tag_end = line:find("@@", content_start + 1)
+				if not content_end then break end
+				table.insert(highlighted_regions, { start = tag_start, finish = tag_end })
+				table.insert(result[row], { hl_group = "Tag", col_start = tag_start - 1, col_end = tag_end })
+				pos = tag_end + 1
+			end
+		end
+
+		if line:match(reasoning_pattern) or line:match(summary_pattern) then
+			if should_paint then
+				table.insert(result[row], { hl_group = "Think", col_start = 0, col_end = -1 })
+			end
+		elseif line:match(user_pattern) then
+			if should_paint then
+				table.insert(result[row], { hl_group = "Question", col_start = 0, col_end = -1 })
+			end
+			in_block = true
+		elseif line:match(assistant_pattern) then
+			in_block = false
+		elseif line:match(local_pattern) then
+			in_block = false
+		elseif in_block and not in_code_block then
+			if should_paint then
+				table.insert(result[row], { hl_group = "Question", col_start = 0, col_end = -1 })
+				if line:match("^@@") then
+					local is_tag_at_start = false
+					if #highlighted_regions > 0 and highlighted_regions[1].start == 1 then
+						is_tag_at_start = true
+					end
+					if not is_tag_at_start then
+						table.insert(result[row], { hl_group = "FileLoading", col_start = 0, col_end = -1 })
+					end
+				end
+			end
+		end
+
+		if should_paint then
+			for start_idx, _, end_idx in line:gmatch("()@(.-)@()") do
+				table.insert(result[row], { hl_group = "Annotation", col_start = start_idx - 1, col_end = end_idx - 1 })
+			end
+		end
+	end
+
+	return result
+end
+
+-- Compute desired markdown highlights for a 1-indexed line range.
+-- Returns a table keyed by 0-indexed row: { [row] = { {hl_group, col_start, col_end}, ... } }
+local function compute_markdown_highlights(buf, start_line, end_line)
+	local result = {}
+	local lines = vim.api.nvim_buf_get_lines(buf, start_line - 1, end_line, false)
+	for offset, line in ipairs(lines) do
+		local row = start_line + offset - 2
+		if line:match("^@@%s*[^+]") or line:match("^@@/") then
+			result[row] = result[row] or {}
+			table.insert(result[row], { hl_group = "FileLoading", col_start = 0, col_end = -1 })
+		end
+	end
+	return result
+end
+
+-- Buffers tracked for decoration provider: { [bufnr] = "chat" | "markdown" }
+M._parley_bufs = {}
+
+-- Function to apply highlighting to chat blocks in the current buffer.
+-- Used by tests (scratch buffers not tracked in _parley_bufs).
+M.highlight_question_block = function(buf)
+	local ns = M.setup_highlight()
+	local ranges = get_visible_line_ranges(buf)
+	local desired = {}
+
 	for _, range in ipairs(ranges) do
-		local scan_start = math.max(1, range.start_line - HIGHLIGHT_CONTEXT_LINES)
-		local lines = vim.api.nvim_buf_get_lines(buf, scan_start - 1, range.end_line, false)
-		local in_block = false
-		local in_code_block = false
-
-		for offset, line in ipairs(lines) do
-			local line_nr = scan_start + offset - 1
-			-- Check for code block boundaries (``` at start of line)
-			if line:match("^%s*```") then
-				in_code_block = not in_code_block
-			end
-
-			local should_paint = line_nr >= range.start_line
-			local highlighted_regions = {}
-
-			if should_paint then
-				-- First, identify and mark all @@tag@@ patterns (closed tags)
-				local pos = 1
-				while true do
-					local tag_start, content_start = line:find("@@", pos)
-					if not tag_start then
-						break
-					end
-
-					local content_end, tag_end = line:find("@@", content_start + 1)
-					if not content_end then
-						break
-					end
-
-					-- Record this region as a tag
-					table.insert(highlighted_regions, { start = tag_start, finish = tag_end })
-
-					-- Collect tag highlight (partial range)
-					table.insert(desired, { line_nr = line_nr - 1, hl_group = "Tag", col_start = tag_start - 1, col_end = tag_end })
-
-					-- Move to position after this tag
-					pos = tag_end + 1
-				end
-			end
-
-			-- Process line based on its type
-			if line:match(reasoning_pattern) or line:match(summary_pattern) then
-				if should_paint then
-					table.insert(desired, { line_nr = line_nr - 1, hl_group = "Think", col_start = 0, col_end = -1 })
-				end
-			elseif line:match(user_pattern) then
-				if should_paint then
-					table.insert(desired, { line_nr = line_nr - 1, hl_group = "Question", col_start = 0, col_end = -1 })
-				end
-				in_block = true
-			elseif line:match(assistant_pattern) then
-				in_block = false
-			elseif line:match(local_pattern) then
-				in_block = false
-			elseif in_block and not in_code_block then
-				if should_paint then
-					table.insert(desired, { line_nr = line_nr - 1, hl_group = "Question", col_start = 0, col_end = -1 })
-
-					-- Simplified file path handling - only if line starts with @@ and isn't a tag
-					if line:match("^@@") then
-						-- Check if the beginning of the line is already part of a tag
-						local is_tag_at_start = false
-						if #highlighted_regions > 0 and highlighted_regions[1].start == 1 then
-							is_tag_at_start = true
-						end
-
-						-- If not a tag, highlight as file inclusion
-						if not is_tag_at_start then
-							table.insert(desired, { line_nr = line_nr - 1, hl_group = "FileLoading", col_start = 0, col_end = -1 })
-						end
-					end
-				end
-			end
-
-			-- Highlight annotations in the format @...@
-			if should_paint then
-				for start_idx, _, end_idx in line:gmatch("()@(.-)@()") do
-					table.insert(desired, { line_nr = line_nr - 1, hl_group = "Annotation", col_start = start_idx - 1, col_end = end_idx - 1 })
-				end
+		local row_map = compute_chat_highlights(buf, range.start_line, range.end_line)
+		for row, hls in pairs(row_map) do
+			for _, hl in ipairs(hls) do
+				table.insert(desired, { line_nr = row, hl_group = hl.hl_group, col_start = hl.col_start, col_end = hl.col_end })
 			end
 		end
 	end
@@ -2064,30 +2080,55 @@ end
 
 M.setup_buf_handler = function()
 	local gid = M.helpers.create_augroup("ParleyBufHandler", { clear = true })
-	local function refresh_highlighting(buf, refresh_timestamps)
-		if not vim.api.nvim_buf_is_valid(buf) then
-			return
-		end
 
-		local file_name = vim.api.nvim_buf_get_name(buf)
+	-- Register decoration provider: highlights are computed synchronously
+	-- during Neovim's redraw cycle using ephemeral extmarks, just like
+	-- built-in syntax highlighting. Zero flicker, always up-to-date.
+	local decor_ns = M.setup_highlight()
+	local _decor_cache = {} -- bufnr → { [row] = { {hl_group, col_start, col_end}, ... } }
 
-		-- Handle chat files
-		if M.not_chat(buf, file_name) == nil then
-			M.highlight_question_block(buf)
-			if refresh_timestamps then
-				-- Refresh interview timestamp highlighting
-				M.highlight_interview_timestamps(buf)
+	vim.api.nvim_set_decoration_provider(decor_ns, {
+		on_buf = function(_, bufnr, _)
+			if not M._parley_bufs[bufnr] then
+				return false
 			end
-		-- Handle non-chat markdown files
-		elseif M.is_markdown(buf, file_name) then
-			-- Refresh markdown highlighting only
-			M.highlight_markdown_chat_refs(buf)
-			if refresh_timestamps then
-				-- Refresh interview timestamp highlighting
-				M.highlight_interview_timestamps(buf)
+		end,
+		on_win = function(_, _, bufnr, toprow, botrow)
+			if not M._parley_bufs[bufnr] then
+				return false
 			end
-		end
-	end
+			local buf_type = M._parley_bufs[bufnr]
+			local start_line = toprow + 1
+			local line_count = vim.api.nvim_buf_line_count(bufnr)
+			local end_line = math.min(botrow + 1 + HIGHLIGHT_VIEWPORT_MARGIN, line_count)
+
+			if buf_type == "chat" then
+				_decor_cache[bufnr] = compute_chat_highlights(bufnr, start_line, end_line)
+			elseif buf_type == "markdown" then
+				_decor_cache[bufnr] = compute_markdown_highlights(bufnr, start_line, end_line)
+			end
+		end,
+		on_line = function(_, _, bufnr, row)
+			local cache = _decor_cache[bufnr]
+			if not cache then return end
+			local highlights = cache[row]
+			if not highlights then return end
+			for _, hl in ipairs(highlights) do
+				local end_col = hl.col_end
+				if end_col == -1 then
+					local lines = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)
+					end_col = lines[1] and #lines[1] or 0
+				end
+				pcall(vim.api.nvim_buf_set_extmark, bufnr, decor_ns, row, hl.col_start, {
+					end_row = row,
+					end_col = end_col,
+					hl_group = hl.hl_group,
+					ephemeral = true,
+					priority = 100,
+				})
+			end
+		end,
+	})
 
 	-- Setup functions that only need to run when buffer is first loaded or entered
 	M.helpers.autocmd({ "BufEnter" }, nil, function(event)
@@ -2101,27 +2142,17 @@ M.setup_buf_handler = function()
 
 		-- Handle chat files
 		if M.not_chat(buf, file_name) == nil then
+			M._parley_bufs[buf] = "chat"
 			M.prep_chat(buf, file_name)
 			M.display_agent(buf, file_name)
-			refresh_highlighting(buf, true)
+			M.highlight_interview_timestamps(buf)
 		-- Handle non-chat markdown files
 		elseif M.is_markdown(buf, file_name) then
-			-- Set up markdown features
+			M._parley_bufs[buf] = "markdown"
 			M.prep_md(buf)
-			-- Set up keymaps for chat references
 			M.setup_markdown_keymaps(buf)
-			refresh_highlighting(buf, true)
-		end
-	end, gid)
-
-	-- Refresh highlights when scrolling (viewport-based highlighting only paints visible lines)
-	M.helpers.autocmd({ "WinScrolled" }, nil, function(event)
-		local buf = event.buf
-		if not buf or buf == 0 then
-			buf = vim.api.nvim_get_current_buf()
-		end
-		if vim.api.nvim_buf_is_valid(buf) then
-			refresh_highlighting(buf, false)
+			M.highlight_markdown_chat_refs(buf)
+			M.highlight_interview_timestamps(buf)
 		end
 	end, gid)
 
@@ -2137,16 +2168,18 @@ M.setup_buf_handler = function()
 		-- Handle chat files
 		if M.not_chat(buf, file_name) == nil then
 			M.display_agent(buf, file_name)
-			refresh_highlighting(buf, true)
+			M.highlight_interview_timestamps(buf)
 		-- Handle non-chat markdown files
 		elseif M.is_markdown(buf, file_name) then
-			refresh_highlighting(buf, true)
+			M.highlight_interview_timestamps(buf)
 		end
 	end, gid)
 
-	-- Clean up interview match IDs when buffers are deleted
+	-- Clean up when buffers are deleted
 	M.helpers.autocmd({ "BufDelete", "BufUnload" }, nil, function(event)
 		local buf = event.buf
+		M._parley_bufs[buf] = nil
+		_decor_cache[buf] = nil
 		local match_id_key = "parley_interview_timestamps_" .. buf
 		if M._interview_match_ids and M._interview_match_ids[match_id_key] then
 			M._interview_match_ids[match_id_key] = nil
@@ -3354,8 +3387,7 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 				else
 					M.logger.debug("Not moving cursor due to free_cursor setting")
 				end
-				-- Refresh highlights now that the exchange is complete
-				M.highlight_question_block(buf)
+				-- Refresh interview timestamps (decoration provider handles chat highlights)
 				M.highlight_interview_timestamps(buf)
 
 				vim.cmd("doautocmd User ParleyDone")
