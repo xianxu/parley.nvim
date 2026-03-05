@@ -1757,28 +1757,24 @@ local function apply_highlight_incremental(buf, ns, ranges, desired_highlights)
 	end
 end
 
--- Function to highlight chat references in non-chat markdown files
+-- Refresh topic labels for chat references in non-chat markdown files.
+-- Highlighting is handled by the decoration provider; this only does topic updates.
 M.highlight_markdown_chat_refs = function(buf)
-	local ns = M.setup_highlight()
 	local ranges = get_visible_line_ranges(buf)
 	local has_chat_refs = false
-	local desired = {}
 
 	for _, range in ipairs(ranges) do
 		local lines = vim.api.nvim_buf_get_lines(buf, range.start_line - 1, range.end_line, false)
-		for offset, line in ipairs(lines) do
-			local line_nr = range.start_line + offset - 1
-			-- Highlight chat file references (starts with @@/)
+		for _, line in ipairs(lines) do
 			if line:match("^@@%s*[^+]") or line:match("^@@/") then
 				has_chat_refs = true
-				table.insert(desired, { line_nr = line_nr - 1, hl_group = "FileLoading", col_start = 0, col_end = -1 })
+				break
 			end
 		end
+		if has_chat_refs then break end
 	end
 
-	apply_highlight_incremental(buf, ns, ranges, desired)
-
-	-- Defer topic updates so editing/highlighting stays fast in large markdown files.
+	-- Defer topic updates so editing stays fast in large markdown files.
 	M._markdown_topic_timers = M._markdown_topic_timers or {}
 	local existing_timer = M._markdown_topic_timers[buf]
 	if existing_timer then
@@ -2183,9 +2179,6 @@ M.setup_buf_handler = function()
 		local match_id_key = "parley_interview_timestamps_" .. buf
 		if M._interview_match_ids and M._interview_match_ids[match_id_key] then
 			M._interview_match_ids[match_id_key] = nil
-		end
-		if M._highlighted_line_ranges then
-			M._highlighted_line_ranges[buf] = nil
 		end
 		if M._markdown_topic_timers and M._markdown_topic_timers[buf] then
 			stop_and_close_timer(M._markdown_topic_timers[buf])
