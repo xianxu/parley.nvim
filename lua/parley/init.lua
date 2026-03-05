@@ -1687,76 +1687,6 @@ local function get_visible_line_ranges(buf, margin)
 	return merge_line_ranges(ranges)
 end
 
--- Apply highlights incrementally by diffing against existing extmarks.
--- Reads current extmark positions from the buffer (which reflect line shifts
--- from streaming insertions) and only modifies what changed.
--- No nvim_buf_clear_namespace = no flicker.
---
--- desired_highlights: list of { line_nr = 0-indexed, hl_group = string,
---                                col_start = number, col_end = number }
--- col_end = -1 means full-line (highlight to end of line text).
-local function apply_highlight_incremental(buf, ns, ranges, desired_highlights)
-	-- 1. Query existing extmarks in visible ranges.
-	--    Key by (row, hl_group, col_start) — uniquely identifies each highlight.
-	local existing = {} -- key → { id = number, end_col = number }
-	for _, range in ipairs(ranges) do
-		local start_idx = math.max(0, range.start_line - 1)
-		local end_idx = math.max(start_idx, range.end_line)
-		local ok, marks = pcall(vim.api.nvim_buf_get_extmarks,
-			buf, ns, { start_idx, 0 }, { end_idx - 1, -1 }, { details = true })
-		if ok then
-			for _, mark in ipairs(marks) do
-				local id, row, col = mark[1], mark[2], mark[3]
-				local details = mark[4]
-				if details and details.hl_group then
-					local key = string.format("%d:%s:%d", row, details.hl_group, col)
-					existing[key] = { id = id, end_col = details.end_col }
-				end
-			end
-		end
-	end
-
-	-- 2. Match desired highlights against existing extmarks.
-	local matched = {} -- keys that should be kept
-	for _, hl in ipairs(desired_highlights) do
-		local key = string.format("%d:%s:%d", hl.line_nr, hl.hl_group, hl.col_start)
-		matched[key] = true
-		local ex = existing[key]
-
-		if hl.col_end == -1 then
-			-- Full-line highlight: always update in-place so end_col
-			-- stays current as line text changes during streaming.
-			local line_text = vim.api.nvim_buf_get_lines(buf, hl.line_nr, hl.line_nr + 1, false)
-			local actual_end = line_text[1] and #line_text[1] or 0
-			local opts = {
-				end_row = hl.line_nr,
-				end_col = actual_end,
-				hl_group = hl.hl_group,
-				priority = 100,
-			}
-			if ex then
-				opts.id = ex.id -- Reuse extmark ID → no delete/recreate → no flicker
-			end
-			pcall(vim.api.nvim_buf_set_extmark, buf, ns, hl.line_nr, hl.col_start, opts)
-		elseif not ex then
-			-- Partial highlight (Tag, Annotation): create only if new.
-			pcall(vim.api.nvim_buf_set_extmark, buf, ns, hl.line_nr, hl.col_start, {
-				end_row = hl.line_nr,
-				end_col = hl.col_end,
-				hl_group = hl.hl_group,
-				priority = 100,
-			})
-		end
-	end
-
-	-- 3. Delete extmarks that are no longer desired.
-	for key, ex in pairs(existing) do
-		if not matched[key] then
-			pcall(vim.api.nvim_buf_del_extmark, buf, ns, ex.id)
-		end
-	end
-end
-
 -- Refresh topic labels for chat references in non-chat markdown files.
 -- Highlighting is handled by the decoration provider; this only does topic updates.
 M.highlight_markdown_chat_refs = function(buf)
@@ -1943,23 +1873,25 @@ end
 -- Buffers tracked for decoration provider: { [bufnr] = "chat" | "markdown" }
 M._parley_bufs = {}
 
--- Function to apply highlighting to chat blocks in the current buffer.
--- Used by tests (scratch buffers not tracked in _parley_bufs).
+-- Apply highlighting to chat blocks in the current buffer.
+-- Simple clear-and-apply; used by tests on scratch buffers.
+-- Production highlighting is handled by the decoration provider.
 M.highlight_question_block = function(buf)
 	local ns = M.setup_highlight()
 	local ranges = get_visible_line_ranges(buf)
-	local desired = {}
+
+	for _, range in ipairs(ranges) do
+		vim.api.nvim_buf_clear_namespace(buf, ns, range.start_line - 1, range.end_line)
+	end
 
 	for _, range in ipairs(ranges) do
 		local row_map = compute_chat_highlights(buf, range.start_line, range.end_line)
 		for row, hls in pairs(row_map) do
 			for _, hl in ipairs(hls) do
-				table.insert(desired, { line_nr = row, hl_group = hl.hl_group, col_start = hl.col_start, col_end = hl.col_end })
+				vim.api.nvim_buf_add_highlight(buf, ns, hl.hl_group, row, hl.col_start, hl.col_end)
 			end
 		end
 	end
-
-	apply_highlight_incremental(buf, ns, ranges, desired)
 end
 
 M.setup_markdown_keymaps = function(buf)
