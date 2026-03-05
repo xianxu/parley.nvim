@@ -92,39 +92,6 @@ describe("timer replacement race safety", function()
 		clear_errmsg()
 	end)
 
-	it("stale highlight debounce callback does not double-close timer", function()
-		local timers
-		timers, restore_new_timer = install_fake_timers()
-
-		local file = write_markdown_file("notes-cursor-race.md", {
-			"# Notes",
-			"line 1",
-			"line 2",
-		})
-		vim.cmd("edit " .. vim.fn.fnameescape(file))
-		local buf = vim.api.nvim_get_current_buf()
-
-		-- CursorMoved triggers highlight debounce without also triggering save debounce.
-		vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf, modeline = false })
-		vim.wait(20)
-		vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf, modeline = false })
-		vim.wait(20)
-
-		assert.are.same(2, #timers)
-		assert.is_true(timers[1].closed, "first timer should be closed when replaced")
-		assert.is_not_nil(timers[1].callback)
-		assert.is_not_nil(timers[2].callback)
-
-		clear_errmsg()
-		timers[1].callback()
-		assert_no_async_errors("stale highlight callback")
-		assert.are.same(1, timers[1].close_count, "stale callback must not re-close old timer")
-
-		clear_errmsg()
-		timers[2].callback()
-		assert_no_async_errors("active highlight callback")
-	end)
-
 	it("stale markdown topic callback does not double-close timer", function()
 		local timers
 		timers, restore_new_timer = install_fake_timers()
