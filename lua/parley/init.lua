@@ -2114,46 +2114,15 @@ M.setup_buf_handler = function()
 		end
 	end, gid)
 
-	-- Highlighting refresh that can run on text changes (debounced for performance)
-	local highlight_timers = {}
-	local HIGHLIGHT_DEBOUNCE_MS = 300
-
-	M.helpers.autocmd({ "TextChanged", "TextChangedI", "CursorMoved", "CursorMovedI", "WinScrolled" }, nil, function(event)
+	-- Refresh highlights when scrolling (viewport-based highlighting only paints visible lines)
+	M.helpers.autocmd({ "WinScrolled" }, nil, function(event)
 		local buf = event.buf
-		local should_refresh_timestamps = event.event == "TextChanged" or event.event == "TextChangedI"
 		if not buf or buf == 0 then
 			buf = vim.api.nvim_get_current_buf()
 		end
-
-		if not vim.api.nvim_buf_is_valid(buf) then
-			return
+		if vim.api.nvim_buf_is_valid(buf) then
+			refresh_highlighting(buf, false)
 		end
-
-		-- Cancel any pending highlight timer for this buffer
-		if highlight_timers[buf] then
-			stop_and_close_timer(highlight_timers[buf])
-			highlight_timers[buf] = nil
-		end
-
-		local timer = vim.uv.new_timer()
-		highlight_timers[buf] = timer
-		timer:start(
-			HIGHLIGHT_DEBOUNCE_MS,
-			0,
-			vim.schedule_wrap(function()
-				stop_and_close_timer(timer)
-				if highlight_timers[buf] ~= timer then
-					return
-				end
-				highlight_timers[buf] = nil
-
-				if not vim.api.nvim_buf_is_valid(buf) then
-					return
-				end
-
-				refresh_highlighting(buf, should_refresh_timestamps)
-			end)
-		)
 	end, gid)
 
 	M.helpers.autocmd({ "WinEnter" }, nil, function(event)
@@ -3385,6 +3354,10 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 				else
 					M.logger.debug("Not moving cursor due to free_cursor setting")
 				end
+				-- Refresh highlights now that the exchange is complete
+				M.highlight_question_block(buf)
+				M.highlight_interview_timestamps(buf)
+
 				vim.cmd("doautocmd User ParleyDone")
 
 				-- Call the callback if provided
