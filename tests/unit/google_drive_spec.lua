@@ -265,6 +265,36 @@ describe("helper: URL detection", function()
     end)
 end)
 
+describe("google_drive: auto-detect OAuth provider from URL", function()
+    it("M1: detects Google for docs.google.com URL", function()
+        assert.equals("google", gd._detect_provider_for_url("https://docs.google.com/document/d/abc123/edit"))
+    end)
+
+    it("M2: detects Google for drive.google.com URL", function()
+        assert.equals("google", gd._detect_provider_for_url("https://drive.google.com/file/d/abc123/view"))
+    end)
+
+    it("M3: detects Google for Google Sheets URL", function()
+        assert.equals("google", gd._detect_provider_for_url("https://docs.google.com/spreadsheets/d/abc123/edit"))
+    end)
+
+    it("M4: detects Google for Google Slides URL", function()
+        assert.equals("google", gd._detect_provider_for_url("https://docs.google.com/presentation/d/abc123/edit"))
+    end)
+
+    it("M5: returns nil for unknown URL", function()
+        assert.is_nil(gd._detect_provider_for_url("https://example.com/file.txt"))
+    end)
+
+    it("M6: returns nil for nil input", function()
+        assert.is_nil(gd._detect_provider_for_url(nil))
+    end)
+
+    it("M7: returns nil for non-string input", function()
+        assert.is_nil(gd._detect_provider_for_url(123))
+    end)
+end)
+
 describe("google_drive: API error classification", function()
     it("L1: classifies 401 as auth error", function()
         assert.equals("auth", gd._classify_api_error(401))
