@@ -481,7 +481,7 @@ end
 -- Get a valid access token, refreshing or re-authenticating as needed
 ---@param config table # google_drive config
 ---@param callback function # called with access_token string or nil
-M.get_access_token = function(config, callback)
+M.get_access_token = function(config, callback, url)
     M.load_tokens(function(tokens)
         if tokens and not M.is_token_expired(tokens) then
             callback(tokens.access_token)
@@ -497,7 +497,8 @@ M.get_access_token = function(config, callback)
                     M._prompt_auth(
                         config,
                         "Google OAuth: Token refresh failed. Please re-authenticate.",
-                        callback
+                        callback,
+                        url
                     )
                 end
             end)
@@ -506,7 +507,8 @@ M.get_access_token = function(config, callback)
             M._prompt_auth(
                 config,
                 "Google OAuth: No saved credentials. Please authenticate to access Google Drive files.",
-                callback
+                callback,
+                url
             )
         end
     end)
@@ -550,19 +552,75 @@ M._classify_api_error = function(error_code)
     return "other"
 end
 
+-- Map of URL host patterns to OAuth provider names.
+-- Used to auto-select the correct provider without prompting the user.
+local url_provider_map = {
+    { pattern = "docs%.google%.com/", provider = "google" },
+    { pattern = "drive%.google%.com/", provider = "google" },
+}
+
+-- Detect the OAuth provider for a URL based on well-known host patterns.
+---@param url string|nil # the URL to check
+---@return string|nil # provider name (e.g. "google") or nil if unknown
+M._detect_provider_for_url = function(url)
+    if not url or type(url) ~= "string" then
+        return nil
+    end
+    for _, entry in ipairs(url_provider_map) do
+        if url:match(entry.pattern) then
+            return entry.provider
+        end
+    end
+    return nil
+end
+
 -- Prompt the user to authenticate with an OAuth provider via vim.ui.select.
+-- When a url is provided and matches a well-known provider, skips the picker.
 -- Extensible: add future providers (MS OAuth, etc.) to the providers table.
 ---@param config table # google_drive config
 ---@param reason string # human-readable reason shown to the user
 ---@param callback function # called with access_token (string) or nil if cancelled
-M._prompt_auth = function(config, reason, callback)
+---@param url string|nil # optional URL to auto-detect provider
+M._prompt_auth = function(config, reason, callback, url)
+    -- Provider list (add entries here for future OAuth providers)
+    local providers = {
+        { name = "Google Drive (OAuth)", provider = "google" },
+    }
+
+    -- Helper: authenticate with a given provider entry
+    local function auth_with_provider(selected)
+        if selected.provider == "google" then
+            M.authenticate(config, function(tokens)
+                if tokens then
+                    callback(tokens.access_token)
+                else
+                    callback(nil)
+                end
+            end)
+        else
+            logger.warning("OAuth provider " .. selected.provider .. " not yet implemented")
+            callback(nil)
+        end
+    end
+
+    -- Auto-detect provider from URL
+    local detected = M._detect_provider_for_url(url)
+    if detected then
+        for _, p in ipairs(providers) do
+            if p.provider == detected then
+                vim.schedule(function()
+                    vim.api.nvim_echo({{ reason, "WarningMsg" }}, true, {})
+                    logger.debug("Auto-selected OAuth provider: " .. p.name)
+                    auth_with_provider(p)
+                end)
+                return
+            end
+        end
+    end
+
+    -- Fall back to picker when provider can't be auto-detected
     vim.schedule(function()
         vim.api.nvim_echo({{ reason, "WarningMsg" }}, true, {})
-
-        -- Provider list (add entries here for future OAuth providers)
-        local providers = {
-            { name = "Google Drive (OAuth)", provider = "google" },
-        }
 
         local display_items = {}
         for _, p in ipairs(providers) do
@@ -584,18 +642,7 @@ M._prompt_auth = function(config, reason, callback)
                 return
             end
 
-            if selected.provider == "google" then
-                M.authenticate(config, function(tokens)
-                    if tokens then
-                        callback(tokens.access_token)
-                    else
-                        callback(nil)
-                    end
-                end)
-            else
-                logger.warning("OAuth provider " .. selected.provider .. " not yet implemented")
-                callback(nil)
-            end
+            auth_with_provider(selected)
         end)
     end)
 end
@@ -654,7 +701,8 @@ M.fetch_content = function(url, config, callback)
                             else
                                 callback(nil, "Google Drive API: " .. err_msg)
                             end
-                        end
+                        end,
+                        url
                     )
                     return
                 end
@@ -734,7 +782,7 @@ M.fetch_content = function(url, config, callback)
             return
         end
         do_fetch(access_token, true)
-    end)
+    end, url)
 end
 
 return M
