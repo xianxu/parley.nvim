@@ -95,7 +95,7 @@ D._extract_sse_content = function(line, provider)
 	return adapter.parse_sse_content(line)
 end
 
--- gpt query
+-- LLM query
 ---@param buf number | nil # buffer number
 ---@param provider string # provider name
 ---@param payload table # payload for api
@@ -330,7 +330,7 @@ local query = function(buf, provider, payload, handler, on_exit, callback)
 	tasker.run(buf, "curl", curl_params, nil, out_reader(), nil)
 end
 
--- gpt query
+-- LLM query
 ---@param buf number | nil # buffer number
 ---@param provider string # provider name
 ---@param payload table # payload for api

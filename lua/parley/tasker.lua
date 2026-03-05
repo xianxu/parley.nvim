@@ -235,7 +235,7 @@ M.cleanup_stale_handles = function()
 	
 end
 
--- stop receiving gpt responses for all processes and clean the handles
+-- stop receiving responses for all processes and clean the handles
 ---@param signal number | nil # signal to send to the process
 M.stop = function(signal)
 	if #M._handles == 0 then

@@ -15,11 +15,6 @@ local V = {
 
 local secrets = {} -- private secretes accessible only via vault.get_secret
 
--- backwards compatibility
-local alias = {
-	openai = "openai_api_key",
-}
-
 ---@param opts table # user config
 V.setup = function(opts)
 	logger.debug("vault setup started\n" .. vim.inspect(opts), true)
@@ -35,7 +30,6 @@ end
 ---@param name string # provider name
 ---@param secret string | table | nil # secret or command to retrieve it
 V.add_secret = function(name, secret)
-	name = alias[name] or name
 	if secrets[name] then
 		logger.debug("vault secret " .. name .. " already exists", true)
 		return
@@ -49,8 +43,6 @@ end
 ---@param name string # secret name
 ---@return string | nil # secret or nil if not found
 V.get_secret = function(name)
-	name = alias[name] or name
-
 	local secret = secrets[name]
 	logger.debug("vault get_secret:" .. name .. ": " .. vim.inspect(secret), true)
 
@@ -71,7 +63,6 @@ end
 ---@param callback function | nil # callback to run after secret is resolved
 V.resolve_secret = function(name, secret, callback)
 	logger.debug("vault resolver started for " .. name .. ": " .. vim.inspect(secret), true)
-	name = alias[name] or name
 	callback = callback or function() end
 	if secrets[name] and type(secrets[name]) ~= "table" then
 		logger.debug("vault resolver secret " .. name .. " already resolved", true)
@@ -197,7 +188,6 @@ end
 ---@param name string # secret name
 ---@param callback function # function to run after secret is resolved
 V.run_with_secret = function(name, callback)
-	name = alias[name] or name
 	if not secrets[name] then
 		logger.warning("vault secret " .. name .. " not found", true)
 		return

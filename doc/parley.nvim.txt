@@ -215,7 +215,7 @@ options might get deprecated and so on - it's better to change only things
 where the default doesn't fit your needs.
 
 
-https://github.com/xianxu/parley.nvim/blob/main/lua/gp/config.lua
+https://github.com/xianxu/parley.nvim/blob/main/lua/parley/config.lua
 
 
 ==============================================================================

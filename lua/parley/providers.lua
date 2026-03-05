@@ -73,9 +73,6 @@ openai.format_headers = function(secret, _model, _payload, endpoint)
     local headers = {
         "-H",
         "Authorization: Bearer " .. secret,
-        -- backwards compatibility with Azure-style key
-        "-H",
-        "api-key: " .. secret,
     }
     return headers, endpoint
 end
