@@ -299,7 +299,7 @@ local config = {
 		-- enable summary feature for older messages
 		enable = true,
 		-- maximum number of full exchanges to keep (a user and assistant pair)
-		max_full_exchanges = 5,
+		max_full_exchanges = 20,
 		-- prefix for note lines in assistant responses (used to extract summaries)
 		summary_prefix = "📝:",
 		-- prefix for reasoning lines in assistant responses (used to ignore reasoning in subsequent requests)
