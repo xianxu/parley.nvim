@@ -225,6 +225,18 @@ describe("google_drive: auth code parsing", function()
         local code = gd._parse_auth_code(request)
         assert.is_nil(code)
     end)
+
+    it("I3: parses OAuth denial from HTTP GET request", function()
+        local request = "GET /callback?error=access_denied&state=abc123 HTTP/1.1\r\nHost: localhost:52847\r\n\r\n"
+        local err = gd._parse_auth_error(request)
+        assert.equals("access_denied", err)
+    end)
+
+    it("I4: returns nil when no OAuth error is present", function()
+        local request = "GET /callback?code=4/0AX4XfWh_abc123 HTTP/1.1\r\nHost: localhost:52847\r\n\r\n"
+        local err = gd._parse_auth_error(request)
+        assert.is_nil(err)
+    end)
 end)
 
 describe("google_drive: content formatting", function()

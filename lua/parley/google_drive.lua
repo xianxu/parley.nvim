@@ -253,8 +253,25 @@ end
 -- Parse the auth code from an HTTP request line
 ---@param request_data string # raw HTTP request
 ---@return string|nil # the authorization code, or nil
+local function parse_auth_query_param(request_data, key)
+    if not request_data or not key then
+        return nil
+    end
+    return request_data:match("[?&]" .. key .. "=([^&%s]+)")
+end
+
+-- Parse the auth code from an HTTP request line
+---@param request_data string # raw HTTP request
+---@return string|nil # the authorization code, or nil
 M._parse_auth_code = function(request_data)
-    return request_data:match("[?&]code=([^&%s]+)")
+    return parse_auth_query_param(request_data, "code")
+end
+
+-- Parse an OAuth error from an HTTP request line.
+---@param request_data string # raw HTTP request
+---@return string|nil # the OAuth error value, or nil
+M._parse_auth_error = function(request_data)
+    return parse_auth_query_param(request_data, "error")
 end
 
 -- Save tokens to OS keychain
@@ -411,11 +428,14 @@ M.authenticate = function(config, callback)
             end
 
             local code = M._parse_auth_code(data)
+            local auth_error = M._parse_auth_error(data)
 
             -- Send response to browser
             local response_body
             if code then
                 response_body = "<html><body><h1>Authentication successful!</h1><p>You can close this window and return to Neovim.</p></body></html>"
+            elseif auth_error == "access_denied" then
+                response_body = "<html><body><h1>Authentication cancelled</h1><p>You cancelled the OAuth request. Return to Neovim to continue.</p></body></html>"
             else
                 response_body = "<html><body><h1>Authentication failed</h1><p>No authorization code received.</p></body></html>"
             end
@@ -430,6 +450,9 @@ M.authenticate = function(config, callback)
 
             if not code then
                 vim.schedule(function()
+                    if auth_error == "access_denied" then
+                        vim.api.nvim_echo({{ "Google OAuth: Authentication was cancelled in the browser.", "WarningMsg" }}, true, {})
+                    end
                     callback(nil)
                 end)
                 return
