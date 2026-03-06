@@ -39,11 +39,29 @@ local config = {
 
 	-- Google Drive OAuth configuration for @@ URL references
 	-- Users can override with plaintext values in their setup() call.
-	google_drive = {
-		client_id = "",
-		client_secret = "",
-		scopes = { "https://www.googleapis.com/auth/drive.readonly" },
-	},
+		google_drive = {
+			client_id = "",
+			client_secret = "",
+			scopes = { "https://www.googleapis.com/auth/drive.readonly" },
+		},
+
+		-- Provider-neutral OAuth configuration for remote @@ URL references.
+		-- New provider integrations should be added here. The legacy
+		-- `google_drive` config above remains supported for backward compatibility.
+		oauth = {
+			dropbox = {
+				client_id = "",
+				client_secret = "",
+				redirect_port = nil,
+				scopes = { "sharing.read" },
+			},
+			google = {
+				client_id = "",
+				client_secret = "",
+				redirect_port = nil,
+				scopes = { "https://www.googleapis.com/auth/drive.readonly" },
+			},
+		},
 
 	-- at least one working provider is required
 	-- to disable a provider set it to empty table like openai = {}

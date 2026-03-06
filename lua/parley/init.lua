@@ -627,18 +627,18 @@ M.setup = function(opts)
 	end
 	-- Logout from Google Drive OAuth (remove stored tokens)
 	M.cmd.GdriveLogout = function()
-		local google_drive = require("parley.google_drive")
-		google_drive.logout(function(success)
-			if success then
-				vim.schedule(function()
-					vim.notify("Google Drive OAuth tokens removed", vim.log.levels.INFO)
+		local oauth = require("parley.oauth")
+				oauth.logout(function(success)
+					if success then
+						vim.schedule(function()
+							vim.notify("Google Drive OAuth accounts removed", vim.log.levels.INFO)
+						end)
+					else
+						vim.schedule(function()
+							vim.notify("No Google Drive OAuth accounts found", vim.log.levels.WARN)
+						end)
+					end
 				end)
-			else
-				vim.schedule(function()
-					vim.notify("No Google Drive OAuth tokens found", vim.log.levels.WARN)
-				end)
-			end
-		end)
 	end
 
 	-- register default commands
@@ -772,6 +772,59 @@ M.refresh_state = function(update)
 	local buf = vim.api.nvim_get_current_buf()
 	local file_name = vim.api.nvim_buf_get_name(buf)
 	M.display_agent(buf, file_name)
+end
+
+---@return string
+M._remote_reference_cache_file = function()
+	return M.config.state_dir .. "/remote_reference_cache.json"
+end
+
+---@return table
+M._load_remote_reference_cache = function()
+	if M._remote_reference_cache ~= nil then
+		return M._remote_reference_cache
+	end
+
+	local cache_file = M._remote_reference_cache_file()
+	local cache = {}
+	if vim.fn.filereadable(cache_file) ~= 0 then
+		cache = M.helpers.file_to_table(cache_file) or {}
+	end
+
+	cache.chats = cache.chats or {}
+	M._remote_reference_cache = cache
+	return M._remote_reference_cache
+end
+
+M._save_remote_reference_cache = function()
+	local cache = M._load_remote_reference_cache()
+	M.helpers.prepare_dir(M.config.state_dir, "state")
+	M.helpers.table_to_file(cache, M._remote_reference_cache_file())
+end
+
+---@param chat_file string|nil
+---@return table
+M._get_chat_remote_reference_cache = function(chat_file)
+	local cache = M._load_remote_reference_cache()
+	local chat_key = chat_file or ""
+	cache.chats[chat_key] = cache.chats[chat_key] or {}
+	return cache.chats[chat_key]
+end
+
+---@param url string
+---@param err string|nil
+---@return string
+M._format_remote_reference_error_content = function(url, err)
+	return "File: " .. url .. "\n[Error: " .. (err or "Failed to fetch") .. "]\n\n"
+end
+
+---@param url string
+---@return string
+M._format_missing_remote_reference_cache_content = function(url)
+	return M._format_remote_reference_error_content(
+		url,
+		"Remote URL content is not cached. Refresh the question that introduced this URL to fetch it again."
+	)
 end
 
 -- stop receiving responses for all processes and clean the handles
@@ -2809,71 +2862,78 @@ M._build_messages = function(opts)
 				logger.debug("Exchange #" .. idx .. " preserved due to file references")
 			end
 
-			-- Process the question
-			if should_preserve then
-				-- Get the question content and process any file loading directives
-				local question_content = exchange.question.content
-				local file_content = ""
+				-- Process the question
+				if should_preserve then
+					-- Get the question content and process any file loading directives
+					local question_content = exchange.question.content
+					local file_content_parts = {}
 
-				-- Handle raw request mode - parse JSON from typed code fences
-				-- Look for ```json {"type": "request"} fences; when present, use as raw payload
-				-- regardless of parse_raw_request toggle (the fence metadata is authoritative)
-				do
-					local json_content = question_content:match('```json%s+{"type":%s*"request"}%s*\n(.-)\n```')
+					-- Handle raw request mode - parse JSON from typed code fences
+					-- Look for ```json {"type": "request"} fences; when present, use as raw payload
+					-- regardless of parse_raw_request toggle (the fence metadata is authoritative)
+					do
+						local json_content = question_content:match('```json%s+{"type":%s*"request"}%s*\n(.-)\n```')
 
-					if json_content then
-						logger.debug("Found typed JSON request block in question, using raw request mode")
+						if json_content then
+							logger.debug("Found typed JSON request block in question, using raw request mode")
 
-						-- Try to parse the JSON
-						local success, payload = pcall(vim.json.decode, json_content)
-						if success and type(payload) == "table" then
-							-- Store the raw payload for direct use
-							exchange.question.raw_payload = payload
-							logger.debug("Successfully parsed JSON payload: " .. vim.inspect(payload))
-						else
-							logger.warning("Failed to parse JSON in raw request mode: " .. tostring(payload))
+							-- Try to parse the JSON
+							local success, payload = pcall(vim.json.decode, json_content)
+							if success and type(payload) == "table" then
+								-- Store the raw payload for direct use
+								exchange.question.raw_payload = payload
+								logger.debug("Successfully parsed JSON payload: " .. vim.inspect(payload))
+							else
+								logger.warning("Failed to parse JSON in raw request mode: " .. tostring(payload))
+							end
 						end
 					end
-				end
 
-				-- Use the precomputed file references instead of scanning for them again
-				for _, file_ref in ipairs(exchange.question.file_references) do
-					local path = file_ref.path
+					-- Use the precomputed file references instead of scanning for them again
+					for _, file_ref in ipairs(exchange.question.file_references) do
+						local path = file_ref.path
 
-					logger.debug("Processing file reference: " .. path)
+						logger.debug("Processing file reference: " .. path)
 
-					-- Check if this is a pre-resolved remote reference
-					if opts.resolved_remote_content and opts.resolved_remote_content[path] then
-						file_content = "[The following content was already fetched from " .. path .. ". Do NOT use web_fetch or web_search to access this URL.]\n"
-							.. opts.resolved_remote_content[path]
-					-- Check if this is a directory or has directory pattern markers (* or **/)
-					elseif
-						helpers.is_directory(path)
-						or path:match("/%*%*?/?") -- Contains /** or /**/
-						or path:match("/%*%.%w+$")
-					then -- Contains /*.ext pattern
-						file_content = helpers.process_directory_pattern(path)
-					else
-						file_content = helpers.format_file_content(path)
+						-- Check if this is a pre-resolved remote reference
+						if opts.resolved_remote_content and opts.resolved_remote_content[path] then
+							table.insert(
+								file_content_parts,
+								"[The following content was already fetched from "
+									.. path
+									.. ". Do NOT use web_fetch or web_search to access this URL.]\n"
+									.. opts.resolved_remote_content[path]
+							)
+						elseif helpers.is_remote_url and helpers.is_remote_url(path) then
+							table.insert(file_content_parts, M._format_missing_remote_reference_cache_content(path))
+						-- Check if this is a directory or has directory pattern markers (* or **/)
+						elseif
+							helpers.is_directory(path)
+							or path:match("/%*%*?/?") -- Contains /** or /**/
+							or path:match("/%*%.%w+$")
+						then -- Contains /*.ext pattern
+							table.insert(file_content_parts, helpers.process_directory_pattern(path))
+						else
+							table.insert(file_content_parts, helpers.format_file_content(path))
+						end
 					end
-				end
 
-				-- Handle provider-specific file reference processing for questions with file references
-				if exchange.question.file_references and #exchange.question.file_references > 0 then
-					-- split user question with file inclusion (@@ pattern) into two messages.
-					-- a system message that contains file content. and a user message containing the question.
-					-- the cache-control key is only needed for Anthropic, but since it doesn't cause problem
-					-- with Google or OpenAI, I'll leave it here.
-					table.insert(messages, {
-						role = "system",
-						content = file_content .. "\n",
-						cache_control = { type = "ephemeral" },
-					})
-					table.insert(messages, { role = "user", content = question_content })
-				else
-					-- No file references, just add the question as user message
-					table.insert(messages, { role = "user", content = question_content })
-				end
+					-- Handle provider-specific file reference processing for questions with file references
+					if exchange.question.file_references and #exchange.question.file_references > 0 then
+						-- split user question with file inclusion (@@ pattern) into two messages.
+						-- a system message that contains file content. and a user message containing the question.
+						-- the cache-control key is only needed for Anthropic, but since it doesn't cause problem
+						-- with Google or OpenAI, I'll leave it here.
+						table.insert(messages, {
+							role = "system",
+							content = table.concat(file_content_parts, "\n") .. "\n",
+							cache_control = { type = "ephemeral" },
+						})
+						table.insert(messages, { role = "user", content = question_content })
+					else
+						-- No file references, just add the question as user message
+						table.insert(messages, { role = "user", content = question_content })
+					end
 			else
 				-- Use the placeholder text for summarized questions
 				table.insert(messages, { role = "user", content = omit_user_text })
@@ -2920,53 +2980,74 @@ end
 
 -- Resolve all remote (URL-based) file references asynchronously before building messages
 -- Calls callback with resolved_remote_content map when all fetches complete
----@param parsed_chat table # parsed chat structure
----@param config table # plugin config
+---@param opts table # { parsed_chat, config, chat_file, exchange_idx }
 ---@param callback function # called with resolved_remote_content table
-M._resolve_remote_references = function(parsed_chat, config, callback)
+M._resolve_remote_references = function(opts, callback)
 	local helpers = require("parley.helper")
-	local google_drive = require("parley.google_drive")
-	local remote_refs = {}
+	local oauth = require("parley.oauth")
+	local parsed_chat = opts.parsed_chat
+	local config = opts.config
+	local chat_file = opts.chat_file or ""
+	local exchange_idx = opts.exchange_idx or #parsed_chat.exchanges
+	local resolved = {}
+	local seen_prior = {}
+	local seen_current = {}
+	local queued_fetches = {}
+	local urls_to_fetch = {}
+	local chat_cache = M._get_chat_remote_reference_cache(chat_file)
 
-	-- Collect all remote URL references
-	for _, exchange in ipairs(parsed_chat.exchanges) do
+	local function queue_fetch(url)
+		if not queued_fetches[url] then
+			queued_fetches[url] = true
+			table.insert(urls_to_fetch, url)
+		end
+	end
+
+	for idx, exchange in ipairs(parsed_chat.exchanges) do
+		if idx > exchange_idx then
+			break
+		end
+
 		if exchange.question and exchange.question.file_references then
 			for _, file_ref in ipairs(exchange.question.file_references) do
-				if helpers.is_remote_url(file_ref.path) then
-					table.insert(remote_refs, file_ref.path)
+				local url = file_ref.path
+				if helpers.is_remote_url(url) then
+					if idx == exchange_idx and not seen_current[url] then
+						seen_current[url] = true
+						queue_fetch(url)
+					elseif idx < exchange_idx and not seen_prior[url] then
+						seen_prior[url] = true
+						if chat_cache[url] then
+							resolved[url] = chat_cache[url]
+						else
+							queue_fetch(url)
+						end
+					end
 				end
 			end
 		end
 	end
 
-	-- Deduplicate URLs: each unique URL only needs to be fetched once
-	local unique_urls = {}
-	local seen = {}
-	for _, url in ipairs(remote_refs) do
-		if not seen[url] then
-			seen[url] = true
-			table.insert(unique_urls, url)
-		end
-	end
-
-	if #unique_urls == 0 then
-		callback({})
+	if #urls_to_fetch == 0 then
+		callback(resolved)
 		return
 	end
 
-	local resolved = {}
-	local pending = #unique_urls
+	local pending = #urls_to_fetch
 
-	for _, url in ipairs(unique_urls) do
+	for _, url in ipairs(urls_to_fetch) do
 		-- Delegate remote URL handling to the OAuth fetcher. It owns provider
 		-- detection and can fall back to the auth picker for unknown patterns.
-		google_drive.fetch_content(url, config.google_drive, function(content, err)
-			if content then
-				resolved[url] = content
-			else
-				resolved[url] = "File: " .. url .. "\n[Error: " .. (err or "Failed to fetch") .. "]\n\n"
+			oauth.fetch_content(url, config.oauth or config.google_drive, function(content, err)
+			local cached_content = content
+			if not cached_content then
+				cached_content = M._format_remote_reference_error_content(url, err)
 				M.logger.warning("Failed to fetch remote content: " .. (err or "unknown error"))
 			end
+
+			resolved[url] = cached_content
+			chat_cache[url] = cached_content
+			M._save_remote_reference_cache()
 			pending = pending - 1
 			if pending == 0 then
 				callback(resolved)
@@ -3083,7 +3164,12 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 	local headers = parsed_chat.headers
 
 	-- Resolve remote file references, then build messages and continue
-	M._resolve_remote_references(parsed_chat, M.config, function(resolved_remote_content)
+	M._resolve_remote_references({
+		parsed_chat = parsed_chat,
+		config = M.config,
+		chat_file = file_name,
+		exchange_idx = exchange_idx,
+	}, function(resolved_remote_content)
 		-- Build messages array using extracted testable function
 		local messages = M._build_messages({
 			parsed_chat = parsed_chat,
