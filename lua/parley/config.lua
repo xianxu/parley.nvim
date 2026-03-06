@@ -49,9 +49,16 @@ local config = {
 		-- New provider integrations should be added here. The legacy
 		-- `google_drive` config above remains supported for backward compatibility.
 		oauth = {
+			dropbox = {
+				client_id = "",
+				client_secret = "",
+				redirect_port = nil,
+				scopes = { "sharing.read" },
+			},
 			google = {
 				client_id = "",
 				client_secret = "",
+				redirect_port = nil,
 				scopes = { "https://www.googleapis.com/auth/drive.readonly" },
 			},
 		},

@@ -12,6 +12,13 @@ local url_patterns = {
     { pattern = "drive%.google%.com/file/d/([^/&#]+)", file_type = "drive_file" },
 }
 
+local dropbox_url_patterns = {
+    { pattern = "dropbox%.com/s/[^/?#]+/([^?#]+)", link_type = "file" },
+    { pattern = "dropbox%.com/scl/fi/[^/?#]+/([^?#]+)", link_type = "file" },
+    { pattern = "dropbox%.com/sh/[^/?#]+/([^?#]+)", link_type = "folder" },
+    { pattern = "dropbox%.com/scl/fo/[^/?#]+/([^?#]+)", link_type = "folder" },
+}
+
 -- Export MIME types for Google Workspace file types
 local export_mimes = {
     document = "text/markdown",
@@ -37,6 +44,30 @@ local type_filetypes = {
 
 local public_fetch_meta_marker = "__PARLEY_REMOTE_FETCH_META__"
 local provider_definitions
+
+local function normalize_dropbox_shared_link(url)
+    if not url or type(url) ~= "string" then
+        return url
+    end
+
+    local base, query = url:match("^([^?#]+)%??([^#]*)")
+    if not query or query == "" then
+        return base or url
+    end
+
+    local kept = {}
+    for pair in query:gmatch("[^&]+") do
+        local key = pair:match("^([^=]+)")
+        if key ~= "dl" and key ~= "raw" then
+            table.insert(kept, pair)
+        end
+    end
+
+    if #kept == 0 then
+        return base
+    end
+    return base .. "?" .. table.concat(kept, "&")
+end
 
 -- Check if a path is a Google Drive/Docs URL
 ---@param path string|nil # the path to check
@@ -72,6 +103,39 @@ M.parse_url = function(url)
     return nil
 end
 
+---@param path string|nil
+---@return boolean
+M.is_dropbox_url = function(path)
+    if not path or type(path) ~= "string" then
+        return false
+    end
+    for _, entry in ipairs(dropbox_url_patterns) do
+        if path:match(entry.pattern) then
+            return true
+        end
+    end
+    return false
+end
+
+---@param url string
+---@return table|nil
+M.parse_dropbox_url = function(url)
+    if not url or type(url) ~= "string" then
+        return nil
+    end
+    for _, entry in ipairs(dropbox_url_patterns) do
+        local name = url:match(entry.pattern)
+        if name then
+            return {
+                shared_link = normalize_dropbox_shared_link(url),
+                file_name = name,
+                file_type = entry.link_type,
+            }
+        end
+    end
+    return nil
+end
+
 -- Get the export MIME type for a Google Workspace file type
 ---@param file_type string # one of: document, spreadsheet, presentation, drive_file
 ---@return string|nil # MIME type for export, or nil for direct download types
@@ -92,13 +156,56 @@ M._url_encode = function(str)
     return str
 end
 
+---@param config table|nil
+---@param port number
+---@return string
+M._build_redirect_uri = function(config, port)
+    if type(config) == "table" then
+        local explicit_uri = config.redirect_uri or config.redirect_url
+        if explicit_uri and explicit_uri ~= "" then
+            return explicit_uri
+        end
+    end
+    return "http://localhost:" .. tostring(port)
+end
+
+---@param config table|nil
+---@return number
+M._get_redirect_port = function(config)
+    if type(config) ~= "table" then
+        return 0
+    end
+
+    local redirect_port = config.redirect_port
+    if type(redirect_port) == "string" and redirect_port ~= "" then
+        redirect_port = tonumber(redirect_port)
+    end
+    if type(redirect_port) == "number" then
+        return redirect_port
+    end
+
+    local explicit_uri = config.redirect_uri or config.redirect_url
+    if type(explicit_uri) == "string" then
+        local uri_port = explicit_uri:match("^https?://[^:/]+:(%d+)")
+        if uri_port then
+            local parsed = tonumber(uri_port)
+            if parsed then
+                return parsed
+            end
+        end
+    end
+
+    return 0
+end
+
 local function build_google_auth_url(config, port)
     local base = "https://accounts.google.com/o/oauth2/v2/auth"
     local scopes = config.scopes or { "https://www.googleapis.com/auth/drive.readonly" }
     local scope = table.concat(scopes, " ")
+    local redirect_uri = M._build_redirect_uri(config, port)
     local params = {
         "client_id=" .. M._url_encode(config.client_id),
-        "redirect_uri=" .. M._url_encode("http://localhost:" .. tostring(port)),
+        "redirect_uri=" .. M._url_encode(redirect_uri),
         "response_type=code",
         "scope=" .. M._url_encode(scope),
         "access_type=offline",
@@ -108,6 +215,7 @@ local function build_google_auth_url(config, port)
 end
 
 local function build_google_token_exchange_args(config, auth_code, port)
+    local redirect_uri = M._build_redirect_uri(config, port)
     return {
         "-s",
         "-X", "POST",
@@ -115,7 +223,7 @@ local function build_google_token_exchange_args(config, auth_code, port)
         "-d", "code=" .. M._url_encode(auth_code),
         "-d", "client_id=" .. M._url_encode(config.client_id),
         "-d", "client_secret=" .. M._url_encode(config.client_secret),
-        "-d", "redirect_uri=" .. M._url_encode("http://localhost:" .. tostring(port)),
+        "-d", "redirect_uri=" .. M._url_encode(redirect_uri),
         "-d", "grant_type=authorization_code",
     }
 end
@@ -132,6 +240,47 @@ local function build_google_refresh_token_args(config, account)
     }
 end
 
+local function build_dropbox_auth_url(config, port)
+    local base = "https://www.dropbox.com/oauth2/authorize"
+    local scopes = config.scopes or { "sharing.read" }
+    local scope = table.concat(scopes, " ")
+    local redirect_uri = M._build_redirect_uri(config, port)
+    local params = {
+        "client_id=" .. M._url_encode(config.client_id),
+        "redirect_uri=" .. M._url_encode(redirect_uri),
+        "response_type=code",
+        "token_access_type=offline",
+        "scope=" .. M._url_encode(scope),
+    }
+    return base .. "?" .. table.concat(params, "&")
+end
+
+local function build_dropbox_token_exchange_args(config, auth_code, port)
+    local redirect_uri = M._build_redirect_uri(config, port)
+    return {
+        "-s",
+        "-X", "POST",
+        "https://api.dropboxapi.com/oauth2/token",
+        "-d", "code=" .. M._url_encode(auth_code),
+        "-d", "client_id=" .. M._url_encode(config.client_id),
+        "-d", "client_secret=" .. M._url_encode(config.client_secret),
+        "-d", "redirect_uri=" .. M._url_encode(redirect_uri),
+        "-d", "grant_type=authorization_code",
+    }
+end
+
+local function build_dropbox_refresh_token_args(config, account)
+    return {
+        "-s",
+        "-X", "POST",
+        "https://api.dropboxapi.com/oauth2/token",
+        "-d", "client_id=" .. M._url_encode(config.client_id),
+        "-d", "client_secret=" .. M._url_encode(config.client_secret),
+        "-d", "refresh_token=" .. M._url_encode(account.refresh_token),
+        "-d", "grant_type=refresh_token",
+    }
+end
+
 -- Build OAuth authorization URL.
 ---@param config table # provider config or provider config map
 ---@param port number # local server port for redirect_uri
@@ -141,6 +290,8 @@ M.build_auth_url = function(config, port, provider)
     provider = provider or "google"
     if provider == "google" then
         return build_google_auth_url(config, port)
+    elseif provider == "dropbox" then
+        return build_dropbox_auth_url(config, port)
     end
     error("OAuth provider " .. tostring(provider) .. " does not implement build_auth_url")
 end
@@ -155,6 +306,8 @@ M.build_token_exchange_args = function(config, auth_code, port, provider)
     provider = provider or "google"
     if provider == "google" then
         return build_google_token_exchange_args(config, auth_code, port)
+    elseif provider == "dropbox" then
+        return build_dropbox_token_exchange_args(config, auth_code, port)
     end
     error("OAuth provider " .. tostring(provider) .. " does not implement build_token_exchange_args")
 end
@@ -255,6 +408,7 @@ M.parse_token_response = function(json_str)
         access_token = data.access_token,
         refresh_token = data.refresh_token,
         expires_at = os.time() + (data.expires_in or 3600),
+        account_id = data.account_id,
     }
 end
 
@@ -746,7 +900,7 @@ M.authenticate = function(config, provider, callback)
     provider = provider or "google"
     local provider_config = M._get_provider_config(config, provider)
     local server = uv.new_tcp()
-    server:bind("127.0.0.1", 0)
+    server:bind("127.0.0.1", M._get_redirect_port(provider_config))
 
     local addr = server:getsockname()
     local port = addr.port
@@ -1378,7 +1532,209 @@ M._fetch_google_api_once = function(url, info, access_token, callback)
     end)
 end
 
+---@param error_code number|nil
+---@param error_body table|nil
+---@return string
+M._classify_dropbox_api_error = function(error_code, error_body)
+    if error_code == 401 or error_code == 403 then
+        return "auth"
+    end
+
+    local summary = ""
+    if type(error_body) == "table" then
+        summary = tostring(error_body.error_summary or error_body.error or "")
+    end
+    summary = summary:lower()
+
+    if summary:match("access_denied") or summary:match("expired_access_token") or summary:match("invalid_access_token") then
+        return "auth"
+    end
+
+    return "other"
+end
+
+---@param error table
+---@return string
+M._format_dropbox_api_error_message = function(error)
+    local message = error.message or error.error_summary or "unknown error"
+    if error.code ~= nil then
+        return "Dropbox API: " .. message .. " (code: " .. tostring(error.code) .. ")"
+    end
+    return "Dropbox API: " .. message
+end
+
+---@param error_body table|nil
+---@return boolean
+M._is_dropbox_unsupported_link_type = function(error_body)
+    if type(error_body) ~= "table" then
+        return false
+    end
+    local summary = tostring(error_body.error_summary or error_body.error or ""):lower()
+    return summary:match("unsupported_link_type") ~= nil
+end
+
+---@param access_token string
+---@param info table
+---@param callback function
+M._run_dropbox_metadata_request = function(access_token, info, callback)
+    local args = {
+        "-s",
+        "-X", "POST",
+        "https://api.dropboxapi.com/2/sharing/get_shared_link_metadata",
+        "-H", "Authorization: Bearer " .. access_token,
+        "-H", "Content-Type: application/json",
+        "--data", vim.json.encode({ url = info.shared_link }),
+    }
+    tasker.run(nil, "curl", args, callback)
+end
+
+---@param access_token string
+---@param info table
+---@param callback function
+M._run_dropbox_file_request = function(access_token, info, callback)
+    local args = {
+        "-s",
+        "-X", "POST",
+        "-w",
+        "\n" .. public_fetch_meta_marker .. "\n"
+            .. "HTTP_STATUS:%{http_code}\n"
+            .. "CONTENT_TYPE:%{content_type}\n",
+        "https://content.dropboxapi.com/2/sharing/get_shared_link_file",
+        "-H", "Authorization: Bearer " .. access_token,
+        "-H", "Dropbox-API-Arg: " .. vim.json.encode({ url = info.shared_link }),
+    }
+    tasker.run(nil, "curl", args, callback)
+end
+
+---@param url string
+---@param info table
+---@param access_token string
+---@param callback function
+M._fetch_dropbox_api_once = function(url, info, access_token, callback)
+    if info and info.file_name and info.file_name:lower():match("%.paper$") then
+        callback({ kind = "other", error = "Dropbox API: Dropbox Paper shared links are not supported yet." })
+        return
+    end
+
+    M._run_dropbox_metadata_request(access_token, info, function(code, _, stdout_data)
+        if code ~= 0 then
+            callback({ kind = "other", error = "Dropbox API: failed to fetch shared link metadata" })
+            return
+        end
+
+        local ok, meta = pcall(vim.json.decode, stdout_data)
+        if not ok or not meta then
+            callback({ kind = "other", error = "Dropbox API: invalid shared link metadata response" })
+            return
+        end
+
+        if meta.error_summary or meta.error then
+            if M._is_dropbox_unsupported_link_type(meta) then
+                callback({ kind = "other", error = "Dropbox API: this Dropbox shared link type is not supported yet." })
+                return
+            end
+            local err = {
+                code = meta.error and meta.error.code or nil,
+                error_summary = meta.error_summary,
+                message = meta.error_summary or (meta.error and meta.error[".tag"]) or "unknown error",
+            }
+            callback({
+                kind = M._classify_dropbox_api_error(err.code, meta),
+                error = M._format_dropbox_api_error_message(err),
+            })
+            return
+        end
+
+        local tag = meta[".tag"]
+        if tag == "folder" or info.file_type == "folder" then
+            callback({ kind = "other", error = "Dropbox API: shared folders are not supported yet." })
+            return
+        end
+
+        local file_name = meta.name or info.file_name or M._display_name_for_url(url)
+        M._run_dropbox_file_request(access_token, info, function(file_code, _, file_stdout)
+            if file_code ~= 0 then
+                callback({ kind = "other", error = "Dropbox API: failed to fetch shared file content for " .. file_name })
+                return
+            end
+
+            local parsed = M._parse_public_fetch_response(file_stdout)
+            if not parsed or not parsed.status_code then
+                callback({ kind = "other", error = "Dropbox API: invalid file download response" })
+                return
+            end
+
+            if parsed.status_code < 200 or parsed.status_code >= 300 then
+                local err_ok, err_data = pcall(vim.json.decode, parsed.body)
+                if err_ok and M._is_dropbox_unsupported_link_type(err_data) then
+                    callback({ kind = "other", error = "Dropbox API: this Dropbox shared link type is not supported yet." })
+                    return
+                end
+                local err = {
+                    code = parsed.status_code,
+                    error_summary = err_ok and err_data and err_data.error_summary or nil,
+                    message = err_ok and err_data and (err_data.error_summary or err_data.error) or "failed to fetch shared file content",
+                }
+                callback({
+                    kind = M._classify_dropbox_api_error(parsed.status_code, err_ok and err_data or nil),
+                    error = M._format_dropbox_api_error_message(err),
+                })
+                return
+            end
+
+            callback({
+                kind = "success",
+                content = M.format_remote_content(file_name, parsed.body, url, parsed.content_type, url),
+            })
+        end)
+    end)
+end
+
 provider_definitions = {
+    dropbox = {
+        display_name = "Dropbox (OAuth)",
+        detect_patterns = {
+            "dropbox%.com/s/",
+            "dropbox%.com/scl/fi/",
+            "dropbox%.com/sh/",
+            "dropbox%.com/scl/fo/",
+        },
+        parse_url = function(url)
+            return M.parse_dropbox_url(url)
+        end,
+        build_auth_url = function(config, port)
+            return build_dropbox_auth_url(config, port)
+        end,
+        build_token_exchange_args = function(config, code, port)
+            return build_dropbox_token_exchange_args(config, code, port)
+        end,
+        build_refresh_token_args = function(config, account)
+            return build_dropbox_refresh_token_args(config, account)
+        end,
+        classify_api_error = function(error_code, error_body)
+            return M._classify_dropbox_api_error(error_code, error_body)
+        end,
+        format_api_error = function(error)
+            return M._format_dropbox_api_error_message(error)
+        end,
+        fetch_with_access_token = function(url, info, access_token, callback)
+            return M._fetch_dropbox_api_once(url, info, access_token, callback)
+        end,
+        missing_url_message = function(url)
+            return "Public access failed and Dropbox OAuth does not support this URL format: " .. url
+        end,
+        prompt_reason = function(kind, details)
+            if kind == "no_credentials" then
+                return "Dropbox OAuth: No saved credentials. Please authenticate to access Dropbox shared files."
+            end
+            if kind == "reauth" and details and details ~= "" then
+                return details .. " — Re-authenticate with a different Dropbox account?"
+            end
+            return "Dropbox OAuth: authentication cancelled or failed."
+        end,
+        refresh_failure_message = "Dropbox OAuth: token refresh failed for this account.",
+        missing_refresh_token_message = "Dropbox OAuth: no refresh token available for this account.",
+    },
     google = {
         display_name = "Google Drive (OAuth)",
         detect_patterns = {

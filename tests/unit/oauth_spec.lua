@@ -19,6 +19,10 @@ describe("oauth: URL detection", function()
         assert.is_true(oauth.is_google_url("https://drive.google.com/file/d/abc123/view"))
     end)
 
+    it("A4b: detects Dropbox shared file URL", function()
+        assert.is_true(oauth.is_dropbox_url("https://www.dropbox.com/s/abc123/report.txt?dl=0"))
+    end)
+
     it("A5: rejects non-Google URL", function()
         assert.is_false(oauth.is_google_url("https://example.com/file.txt"))
     end)
@@ -72,6 +76,18 @@ describe("oauth: URL parsing", function()
         local info = oauth.parse_url("https://example.com/file.txt")
         assert.is_nil(info)
     end)
+
+    it("B8: parses Dropbox shared file URL", function()
+        local info = oauth.parse_dropbox_url("https://www.dropbox.com/s/abc123/report.txt?dl=0")
+        assert.equals("https://www.dropbox.com/s/abc123/report.txt", info.shared_link)
+        assert.equals("report.txt", info.file_name)
+        assert.equals("file", info.file_type)
+    end)
+
+    it("B9: parses Dropbox shared folder URL", function()
+        local info = oauth.parse_dropbox_url("https://www.dropbox.com/sh/abc123/foldername?dl=0")
+        assert.equals("folder", info.file_type)
+    end)
 end)
 
 describe("oauth: export MIME type", function()
@@ -93,6 +109,22 @@ describe("oauth: export MIME type", function()
 end)
 
 describe("oauth: OAuth URL construction", function()
+    it("D0: builds localhost redirect URI from runtime port by default", function()
+        assert.equals("http://localhost:52847", oauth._build_redirect_uri({}, 52847))
+        assert.equals(0, oauth._get_redirect_port({}))
+    end)
+
+    it("D0b: derives redirect port from configured redirect URI", function()
+        assert.equals("http://localhost:53682", oauth._build_redirect_uri({ redirect_uri = "http://localhost:53682" }, 52847))
+        assert.equals(53682, oauth._get_redirect_port({ redirect_uri = "http://localhost:53682" }))
+    end)
+
+    it("D0c: accepts redirect_url alias and string redirect_port", function()
+        assert.equals("http://localhost:53682", oauth._build_redirect_uri({ redirect_url = "http://localhost:53682" }, 52847))
+        assert.equals(53682, oauth._get_redirect_port({ redirect_url = "http://localhost:53682" }))
+        assert.equals(53682, oauth._get_redirect_port({ redirect_port = "53682" }))
+    end)
+
     it("D1: builds correct authorization URL", function()
         local url = oauth.build_auth_url({
             client_id = "test-client-id.apps.googleusercontent.com",
@@ -106,6 +138,20 @@ describe("oauth: OAuth URL construction", function()
         assert.is_true(url:match("response_type=code") ~= nil)
         assert.is_true(url:match("access_type=offline") ~= nil)
         assert.is_true(url:match("scope=https") ~= nil)
+    end)
+
+    it("D2: builds Dropbox authorization URL", function()
+        local url = oauth.build_auth_url({
+            client_id = "dropbox-client-id",
+            redirect_port = 53682,
+            scopes = { "sharing.read" },
+        }, 53682, "dropbox")
+
+        assert.is_true(url:match("dropbox%.com/oauth2/authorize") ~= nil)
+        assert.is_true(url:match("client_id=dropbox%-client%-id") ~= nil)
+        assert.is_true(url:match("localhost%%3A53682") ~= nil)
+        assert.is_true(url:match("token_access_type=offline") ~= nil)
+        assert.is_true(url:match("scope=sharing%.read") ~= nil)
     end)
 end)
 
@@ -185,10 +231,11 @@ end)
 
 describe("oauth: token parsing", function()
     it("H1: parses token exchange response JSON", function()
-        local json = '{"access_token":"ya29.abc","refresh_token":"1//ref","expires_in":3600,"token_type":"Bearer"}'
+        local json = '{"access_token":"ya29.abc","refresh_token":"1//ref","expires_in":3600,"token_type":"Bearer","account_id":"dbid:test"}'
         local tokens = oauth.parse_token_response(json)
         assert.equals("ya29.abc", tokens.access_token)
         assert.equals("1//ref", tokens.refresh_token)
+        assert.equals("dbid:test", tokens.account_id)
         assert.is_true(tokens.expires_at > os.time())
     end)
 
@@ -524,6 +571,93 @@ describe("oauth: content formatting", function()
     end)
 end)
 
+describe("oauth: dropbox fetch helper", function()
+    local original_run_dropbox_metadata_request
+    local original_run_dropbox_file_request
+
+    before_each(function()
+        original_run_dropbox_metadata_request = oauth._run_dropbox_metadata_request
+        original_run_dropbox_file_request = oauth._run_dropbox_file_request
+    end)
+
+    after_each(function()
+        oauth._run_dropbox_metadata_request = original_run_dropbox_metadata_request
+        oauth._run_dropbox_file_request = original_run_dropbox_file_request
+    end)
+
+    it("K1: fetches Dropbox shared file content after metadata lookup", function()
+        oauth._run_dropbox_metadata_request = function(access_token, info, callback)
+            callback(0, 0, '{"name":"report.txt",".tag":"file"}')
+        end
+        oauth._run_dropbox_file_request = function(access_token, info, callback)
+            callback(0, 0, "hello from dropbox\n" .. "__PARLEY_REMOTE_FETCH_META__" .. "\nHTTP_STATUS:200\nCONTENT_TYPE:text/plain\n")
+        end
+
+        local result
+        oauth._fetch_dropbox_api_once("https://www.dropbox.com/s/abc123/report.txt?dl=0", {
+            shared_link = "https://www.dropbox.com/s/abc123/report.txt",
+            file_name = "report.txt",
+            file_type = "file",
+        }, "dropbox-token", function(res)
+            result = res
+        end)
+
+        assert.equals("success", result.kind)
+        assert.is_true(result.content:match('report%.txt') ~= nil)
+        assert.is_true(result.content:match("1: hello from dropbox") ~= nil)
+    end)
+
+    it("K2: rejects Dropbox shared folders for now", function()
+        oauth._run_dropbox_metadata_request = function(access_token, info, callback)
+            callback(0, 0, '{"name":"folder",".tag":"folder"}')
+        end
+
+        local result
+        oauth._fetch_dropbox_api_once("https://www.dropbox.com/sh/abc123/folder", {
+            shared_link = "https://www.dropbox.com/sh/abc123/folder",
+            file_name = "folder",
+            file_type = "folder",
+        }, "dropbox-token", function(res)
+            result = res
+        end)
+
+        assert.equals("other", result.kind)
+        assert.equals("Dropbox API: shared folders are not supported yet.", result.error)
+    end)
+
+    it("K3: rejects Dropbox Paper shared links explicitly", function()
+        local result
+        oauth._fetch_dropbox_api_once("https://www.dropbox.com/scl/fi/abc123/Hello-World.paper?rlkey=key", {
+            shared_link = "https://www.dropbox.com/scl/fi/abc123/Hello-World.paper?rlkey=key",
+            file_name = "Hello-World.paper",
+            file_type = "file",
+        }, "dropbox-token", function(res)
+            result = res
+        end)
+
+        assert.equals("other", result.kind)
+        assert.equals("Dropbox API: Dropbox Paper shared links are not supported yet.", result.error)
+    end)
+
+    it("K4: maps unsupported_link_type responses to a clear Dropbox error", function()
+        oauth._run_dropbox_metadata_request = function(access_token, info, callback)
+            callback(0, 0, '{"error_summary":"unsupported_link_type/..."}')
+        end
+
+        local result
+        oauth._fetch_dropbox_api_once("https://www.dropbox.com/s/abc123/report.txt?dl=0", {
+            shared_link = "https://www.dropbox.com/s/abc123/report.txt",
+            file_name = "report.txt",
+            file_type = "file",
+        }, "dropbox-token", function(res)
+            result = res
+        end)
+
+        assert.equals("other", result.kind)
+        assert.equals("Dropbox API: this Dropbox shared link type is not supported yet.", result.error)
+    end)
+end)
+
 describe("helper: URL detection", function()
     local helpers = require("parley.helper")
 
@@ -561,15 +695,19 @@ describe("oauth: auto-detect OAuth provider from URL", function()
         assert.equals("google", oauth._detect_provider_for_url("https://docs.google.com/presentation/d/abc123/edit"))
     end)
 
-    it("M5: returns nil for unknown URL", function()
+    it("M5: detects Dropbox shared file URL", function()
+        assert.equals("dropbox", oauth._detect_provider_for_url("https://www.dropbox.com/s/abc123/report.txt?dl=0"))
+    end)
+
+    it("M6: returns nil for unknown URL", function()
         assert.is_nil(oauth._detect_provider_for_url("https://example.com/file.txt"))
     end)
 
-    it("M6: returns nil for nil input", function()
+    it("M7: returns nil for nil input", function()
         assert.is_nil(oauth._detect_provider_for_url(nil))
     end)
 
-    it("M7: returns nil for non-string input", function()
+    it("M8: returns nil for non-string input", function()
         assert.is_nil(oauth._detect_provider_for_url(123))
     end)
 end)
