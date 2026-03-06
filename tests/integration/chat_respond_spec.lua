@@ -502,11 +502,15 @@ describe("chat_respond_all", function()
     local test_file
     local original_query
     local original_defer_fn
+    local original_fetch_content
+    local google_drive
     
     before_each(function()
         test_file = make_chat_filename()
         original_query = parley.dispatcher.query
         original_defer_fn = vim.defer_fn
+        google_drive = require("parley.google_drive")
+        original_fetch_content = google_drive.fetch_content
     end)
     
     after_each(function()
@@ -515,6 +519,9 @@ describe("chat_respond_all", function()
         end
         if original_defer_fn then
             vim.defer_fn = original_defer_fn
+        end
+        if original_fetch_content then
+            google_drive.fetch_content = original_fetch_content
         end
         if test_file and vim.fn.filereadable(test_file) == 1 then
             vim.fn.delete(test_file)
@@ -577,6 +584,61 @@ describe("chat_respond_all", function()
         
         -- Should have called dispatcher twice (once for each question)
         assert.equals(2, call_count, "Dispatcher should be called once per exchange")
+    end)
+
+    it("reuses remote content fetched in earlier batch steps instead of refetching it later", function()
+        local chat_content = [[
+# topic: Test
+- file: test.md
+---
+
+💬: First question @@https://example.com/one.txt
+
+🤖: First answer
+
+💬: Second question
+]]
+
+        vim.fn.writefile(vim.split(chat_content, "\n"), test_file)
+        vim.cmd("edit " .. test_file)
+
+        -- Position cursor on second question.
+        vim.api.nvim_win_set_cursor(0, {10, 0})
+
+        local fetch_calls = {}
+        local call_count = 0
+        local all_completed = false
+
+        vim.defer_fn = function(fn, delay)
+            vim.schedule(fn)
+        end
+
+        google_drive.fetch_content = function(url, config, callback)
+            table.insert(fetch_calls, url)
+            callback('File: Remote URL - "one.txt"' .. "\n```text\n1: fetched once\n```\n\n", nil)
+        end
+
+        parley.dispatcher.query = function(buf, provider, payload, handler, completion_callback)
+            call_count = call_count + 1
+            local mock_qid = "qid_remote_" .. call_count
+            parley.tasker.set_query(mock_qid, {
+                response = "Response " .. call_count,
+                buf = buf
+            })
+
+            vim.schedule(function()
+                completion_callback(mock_qid)
+                if call_count == 2 then
+                    all_completed = true
+                end
+            end)
+        end
+
+        parley.chat_respond_all()
+        vim.wait(500, function() return all_completed end, 10)
+
+        assert.equals(2, call_count, "Dispatcher should still run once per exchange")
+        assert.same({ "https://example.com/one.txt" }, fetch_calls)
     end)
     
     it("returns early without calling dispatcher for non-chat file", function()

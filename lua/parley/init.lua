@@ -2992,8 +2992,16 @@ M._resolve_remote_references = function(opts, callback)
 	local resolved = {}
 	local seen_prior = {}
 	local seen_current = {}
+	local queued_fetches = {}
 	local urls_to_fetch = {}
 	local chat_cache = M._get_chat_remote_reference_cache(chat_file)
+
+	local function queue_fetch(url)
+		if not queued_fetches[url] then
+			queued_fetches[url] = true
+			table.insert(urls_to_fetch, url)
+		end
+	end
 
 	for idx, exchange in ipairs(parsed_chat.exchanges) do
 		if idx > exchange_idx then
@@ -3006,10 +3014,14 @@ M._resolve_remote_references = function(opts, callback)
 				if helpers.is_remote_url(url) then
 					if idx == exchange_idx and not seen_current[url] then
 						seen_current[url] = true
-						table.insert(urls_to_fetch, url)
+						queue_fetch(url)
 					elseif idx < exchange_idx and not seen_prior[url] then
 						seen_prior[url] = true
-						resolved[url] = chat_cache[url] or M._format_missing_remote_reference_cache_content(url)
+						if chat_cache[url] then
+							resolved[url] = chat_cache[url]
+						else
+							queue_fetch(url)
+						end
 					end
 				end
 			end

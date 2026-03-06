@@ -120,6 +120,53 @@ describe("_resolve_remote_references", function()
         assert.is_nil(resolved[future_url])
     end)
 
+    it("replenishes missing cache entries from earlier questions before building later context", function()
+        local calls = {}
+        local prior_url = "https://example.com/prior-missing.txt"
+        local current_url = "https://example.com/current.txt"
+
+        google_drive.fetch_content = function(url, config, callback)
+            table.insert(calls, url)
+            callback("File: " .. url .. "\nreplenished\n\n", nil)
+        end
+
+        local parsed_chat = {
+            exchanges = {
+                {
+                    question = {
+                        content = "Earlier question",
+                        file_references = {
+                            { path = prior_url },
+                        },
+                    },
+                },
+                {
+                    question = {
+                        content = "Current question",
+                        file_references = {
+                            { path = current_url },
+                        },
+                    },
+                },
+            },
+        }
+
+        local resolved
+        parley._resolve_remote_references({
+            parsed_chat = parsed_chat,
+            config = parley.config,
+            chat_file = chat_file,
+            exchange_idx = 2,
+        }, function(result)
+            resolved = result
+        end)
+
+        assert.same({ prior_url, current_url }, calls)
+        assert.equals("File: " .. prior_url .. "\nreplenished\n\n", resolved[prior_url])
+        assert.equals("File: " .. current_url .. "\nreplenished\n\n", resolved[current_url])
+        assert.equals("File: " .. prior_url .. "\nreplenished\n\n", parley._get_chat_remote_reference_cache(chat_file)[prior_url])
+    end)
+
     it("caches fetch errors as content and reuses them for earlier questions until that question is refreshed", function()
         local url = "https://example.com/doc.txt"
         local calls = 0
