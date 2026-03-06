@@ -35,6 +35,8 @@ local type_filetypes = {
     drive_file = "",
 }
 
+local public_fetch_meta_marker = "__PARLEY_REMOTE_FETCH_META__"
+
 -- Check if a path is a Google Drive/Docs URL
 ---@param path string|nil # the path to check
 ---@return boolean # true if path is a recognized Google URL
@@ -454,11 +456,11 @@ M.authenticate = function(config, callback)
         end)
     end)
 
-    -- Timeout: close server after 2 minutes if no auth response received
+    -- Timeout: close server after 30 seconds if no auth response received
     local timeout_timer = uv.new_timer()
-    timeout_timer:start(120000, 0, function()
+    timeout_timer:start(30000, 0, function()
         if not server:is_closing() then
-            logger.warning("Google OAuth: authentication timed out after 2 minutes")
+            logger.warning("Google OAuth: authentication timed out after 30 seconds")
             server:close()
             vim.schedule(function()
                 vim.api.nvim_echo({{ "Google OAuth: Authentication timed out.", "ErrorMsg" }}, true, {})
@@ -537,6 +539,255 @@ M.format_google_content = function(name, file_type, content, url)
     end
 
     return header .. "\n```" .. filetype .. "\n" .. numbered_content .. "\n```\n\n"
+end
+
+---@param url string
+---@return string
+M._display_name_for_url = function(url)
+    if not url or url == "" then
+        return "remote-url"
+    end
+
+    local without_fragment = url:gsub("#.*$", "")
+    local name = without_fragment:match("/([^/?]+)[^/]*$") or without_fragment
+    if name == "" then
+        return without_fragment
+    end
+    return name
+end
+
+---@param content_type string|nil
+---@param fallback_name string|nil
+---@return string
+M._guess_remote_filetype = function(content_type, fallback_name)
+    local lowered = (content_type or ""):lower()
+    if lowered:match("json") then
+        return "json"
+    end
+    if lowered:match("html") then
+        return "html"
+    end
+    if lowered:match("markdown") then
+        return "markdown"
+    end
+    if lowered:match("csv") then
+        return "csv"
+    end
+    if lowered:match("xml") then
+        return "xml"
+    end
+    if fallback_name and fallback_name ~= "" then
+        return vim.filetype.match({ filename = fallback_name }) or ""
+    end
+    return ""
+end
+
+---@param body string|nil
+---@return string
+M._sanitize_public_body = function(body)
+    if not body or body == "" then
+        return body or ""
+    end
+
+    local sanitized = body
+    sanitized = sanitized:gsub('("content_access_token"%s*:%s*)"[^"]+"', '%1"[REDACTED]"')
+    sanitized = sanitized:gsub('("access_token"%s*:%s*)"[^"]+"', '%1"[REDACTED]"')
+    sanitized = sanitized:gsub('("refresh_token"%s*:%s*)"[^"]+"', '%1"[REDACTED]"')
+    return sanitized
+end
+
+---@param url string
+---@param parsed table
+---@return table|nil, table|nil
+M._finalize_public_response = function(url, parsed)
+    local effective_url = (parsed.effective_url and parsed.effective_url ~= "") and parsed.effective_url or url
+    local lowered_type = (parsed.content_type or ""):lower()
+
+    if not parsed.body or parsed.body == "" then
+        return nil, {
+            kind = "other",
+            message = "Remote URL fetch failed: empty response body from " .. effective_url,
+        }
+    end
+
+    if lowered_type:match("text/html") then
+        return nil, {
+            kind = "auth",
+            message = "Remote URL fetch failed: received HTML page instead of file content from " .. effective_url,
+        }
+    end
+
+    if parsed.body:match('"content_access_token"%s*:') and parsed.body:match('"url"%s*:') then
+        return nil, {
+            kind = "auth",
+            message = "Remote URL fetch failed: public URL returned an access handoff payload instead of file content for " .. effective_url,
+        }
+    end
+
+    parsed.body = M._sanitize_public_body(parsed.body)
+    return parsed, nil
+end
+
+---@param name string
+---@param content string
+---@param url string
+---@param content_type string|nil
+---@param effective_url string|nil
+---@return string
+M.format_remote_content = function(name, content, url, content_type, effective_url)
+    local filetype = M._guess_remote_filetype(content_type, name)
+    local lines = vim.split(content, "\n")
+    local numbered_lines = {}
+    for i, line in ipairs(lines) do
+        table.insert(numbered_lines, string.format("%d: %s", i, line))
+    end
+
+    local header = 'File: Remote URL - "' .. name .. '"'
+    local source_url = effective_url or url
+    if source_url and source_url ~= "" then
+        header = header .. " (fetched from " .. source_url .. ")"
+    end
+    if content_type and content_type ~= "" then
+        header = header .. " [" .. content_type .. "]"
+    end
+
+    return header .. "\n```" .. filetype .. "\n" .. table.concat(numbered_lines, "\n") .. "\n```\n\n"
+end
+
+---@param status_code number|nil
+---@return string
+M._classify_public_fetch_status = function(status_code)
+    if status_code == 401 or status_code == 403 or status_code == 404 then
+        return "auth"
+    end
+    if status_code and status_code >= 200 and status_code < 400 then
+        return "success"
+    end
+    return "other"
+end
+
+---@param raw_response string|nil
+---@return table|nil
+M._parse_public_fetch_response = function(raw_response)
+    if not raw_response or raw_response == "" then
+        return nil
+    end
+
+    local marker_start = "\n" .. public_fetch_meta_marker .. "\n"
+    local start_pos = raw_response:find(marker_start, 1, true)
+    if not start_pos then
+        return nil
+    end
+
+    local body = raw_response:sub(1, start_pos - 1)
+    local meta = raw_response:sub(start_pos + #marker_start)
+    local status_code = tonumber(meta:match("HTTP_STATUS:(%d+)"))
+    local content_type = meta:match("CONTENT_TYPE:(.-)\n") or ""
+    local effective_url = meta:match("EFFECTIVE_URL:(.-)\n") or ""
+
+    return {
+        body = body,
+        status_code = status_code,
+        content_type = content_type,
+        effective_url = effective_url,
+    }
+end
+
+---@param url string
+---@param callback function
+M._fetch_public_content = function(url, callback)
+    local args = {
+        "-L",
+        "-s",
+        "-w",
+        "\n" .. public_fetch_meta_marker .. "\n"
+            .. "HTTP_STATUS:%{http_code}\n"
+            .. "CONTENT_TYPE:%{content_type}\n"
+            .. "EFFECTIVE_URL:%{url_effective}\n",
+        url,
+    }
+
+    tasker.run(nil, "curl", args, function(code, _, stdout_data)
+        if code ~= 0 then
+            callback(nil, {
+                kind = "transport",
+                message = "Remote URL fetch failed: curl exited with code " .. tostring(code) .. " for " .. url,
+            })
+            return
+        end
+
+        local parsed = M._parse_public_fetch_response(stdout_data)
+        if not parsed or not parsed.status_code then
+            callback(nil, {
+                kind = "transport",
+                message = "Remote URL fetch failed: invalid response while accessing " .. url,
+            })
+            return
+        end
+
+        local kind = M._classify_public_fetch_status(parsed.status_code)
+        if kind == "success" then
+            local finalized, finalize_err = M._finalize_public_response(url, parsed)
+            if finalize_err then
+                callback(nil, finalize_err)
+                return
+            end
+            callback(finalized, nil)
+            return
+        end
+
+        callback(nil, {
+            kind = kind,
+            status_code = parsed.status_code,
+            effective_url = parsed.effective_url,
+            message = "Remote URL fetch failed: HTTP "
+                .. tostring(parsed.status_code)
+                .. " for "
+                .. (parsed.effective_url ~= "" and parsed.effective_url or url),
+        })
+    end)
+end
+
+---@param url string
+---@param public_result table|nil
+---@param public_err table|nil
+---@param provider string|nil
+---@param info table|nil
+---@return table
+M._decide_fetch_action = function(url, public_result, public_err, provider, info)
+    if public_result then
+        local source_url = public_result.effective_url ~= "" and public_result.effective_url or url
+        return {
+            action = "public",
+            display_name = M._display_name_for_url(source_url),
+            source_url = source_url,
+        }
+    end
+
+    if not public_err or public_err.kind ~= "auth" then
+        return {
+            action = "error",
+            message = public_err and public_err.message or ("Remote URL fetch failed for " .. url),
+        }
+    end
+
+    if provider ~= "google" then
+        return {
+            action = "error",
+            message = public_err.message,
+        }
+    end
+
+    if not info then
+        return {
+            action = "error",
+            message = "Public access failed and Google OAuth does not support this URL format: " .. url,
+        }
+    end
+
+    return {
+        action = "oauth",
+    }
 end
 
 -- Classify a Google API error code as auth-related or not.
@@ -654,10 +905,7 @@ end
 ---@param callback function # called with (formatted_content_string, error_string)
 M.fetch_content = function(url, config, callback)
     local info = M.parse_url(url)
-    if not info then
-        callback(nil, "Unsupported Google URL: " .. url)
-        return
-    end
+    local provider = M._detect_provider_for_url(url)
 
     -- Inner function that performs the actual fetch with a given access_token.
     -- retry_allowed prevents infinite loops: true on first attempt, false on retry.
@@ -689,21 +937,45 @@ M.fetch_content = function(url, config, callback)
                     .. " (code: " .. tostring(err_code or "?") .. ")"
                 logger.warning("Google Drive API metadata error: " .. err_msg)
 
-                -- If auth-related and retry allowed, prompt user to re-authenticate
+                -- If auth-related and retry allowed, try refreshing the token first
+                -- (the access_token may have been revoked or expired mid-request).
+                -- Only fall back to full browser re-auth if refresh fails.
                 if retry_allowed and M._classify_api_error(err_code) == "auth" then
-                    cached_tokens = nil
-                    M._prompt_auth(
-                        config,
-                        "Google Drive API: " .. err_msg .. " — Re-authenticate with a different account?",
-                        function(new_token)
-                            if new_token then
-                                do_fetch(new_token, false)
-                            else
-                                callback(nil, "Google Drive API: " .. err_msg)
-                            end
-                        end,
-                        url
-                    )
+                    M.load_tokens(function(tokens)
+                        if tokens and tokens.refresh_token then
+                            M.refresh_token(config, tokens, function(new_tokens)
+                                if new_tokens then
+                                    do_fetch(new_tokens.access_token, false)
+                                else
+                                    M._prompt_auth(
+                                        config,
+                                        "Google Drive API: " .. err_msg .. " — Re-authenticate with a different account?",
+                                        function(new_token)
+                                            if new_token then
+                                                do_fetch(new_token, false)
+                                            else
+                                                callback(nil, "Google Drive API: " .. err_msg)
+                                            end
+                                        end,
+                                        url
+                                    )
+                                end
+                            end)
+                        else
+                            M._prompt_auth(
+                                config,
+                                "Google Drive API: " .. err_msg .. " — Re-authenticate with a different account?",
+                                function(new_token)
+                                    if new_token then
+                                        do_fetch(new_token, false)
+                                    else
+                                        callback(nil, "Google Drive API: " .. err_msg)
+                                    end
+                                end,
+                                url
+                            )
+                        end
+                    end)
                     return
                 end
 
@@ -775,14 +1047,35 @@ M.fetch_content = function(url, config, callback)
         end)
     end
 
-    -- Start by getting access token, then fetch
-    M.get_access_token(config, function(access_token)
-        if not access_token then
-            callback(nil, "Google OAuth: authentication cancelled or failed.")
+    -- Public access comes first. Only attempt OAuth after a public auth-style
+    -- failure and only for providers we can actually identify.
+    M._fetch_public_content(url, function(public_result, public_err)
+        local decision = M._decide_fetch_action(url, public_result, public_err, provider, info)
+
+        if decision.action == "public" then
+            callback(M.format_remote_content(
+                decision.display_name,
+                public_result.body,
+                url,
+                public_result.content_type,
+                public_result.effective_url
+            ))
             return
         end
-        do_fetch(access_token, true)
-    end, url)
+
+        if decision.action == "error" then
+            callback(nil, decision.message)
+            return
+        end
+
+        M.get_access_token(config, function(access_token)
+            if not access_token then
+                callback(nil, "Google OAuth: authentication cancelled or failed.")
+                return
+            end
+            do_fetch(access_token, true)
+        end, url)
+    end)
 end
 
 return M
