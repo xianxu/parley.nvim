@@ -293,18 +293,21 @@ end)
 
 describe("google_drive.fetch_content", function()
     local google_drive
-    local original_get_access_token
     local original_fetch_public_content
+    local original_try_saved_accounts
+    local original_prompt_auth
 
     before_each(function()
         google_drive = require("parley.google_drive")
-        original_get_access_token = google_drive.get_access_token
         original_fetch_public_content = google_drive._fetch_public_content
+        original_try_saved_accounts = google_drive._try_saved_accounts
+        original_prompt_auth = google_drive._prompt_auth
     end)
 
     after_each(function()
-        google_drive.get_access_token = original_get_access_token
         google_drive._fetch_public_content = original_fetch_public_content
+        google_drive._try_saved_accounts = original_try_saved_accounts
+        google_drive._prompt_auth = original_prompt_auth
     end)
 
     it("uses direct public content without requesting OAuth", function()
@@ -317,9 +320,8 @@ describe("google_drive.fetch_content", function()
                 status_code = 200,
             }, nil)
         end
-        google_drive.get_access_token = function(config, callback, url)
+        google_drive._try_saved_accounts = function()
             auth_requested = true
-            callback(nil)
         end
 
         local content
@@ -443,9 +445,8 @@ describe("google_drive.fetch_content", function()
                 message = "Remote URL fetch failed: HTTP 404 for " .. url,
             })
         end
-        google_drive.get_access_token = function(config, callback, url)
+        google_drive._try_saved_accounts = function()
             auth_requested = true
-            callback(nil)
         end
 
         local content, err
@@ -467,7 +468,10 @@ describe("google_drive.fetch_content", function()
                 message = "Remote URL fetch failed: HTTP 404 for " .. url,
             })
         end
-        google_drive.get_access_token = function(config, callback, url)
+        google_drive._try_saved_accounts = function(config, url, info, callback)
+            callback({ kind = "none" })
+        end
+        google_drive._prompt_auth = function(config, reason, callback, url)
             requested_url = url
             callback(nil)
         end

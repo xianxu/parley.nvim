@@ -628,17 +628,17 @@ M.setup = function(opts)
 	-- Logout from Google Drive OAuth (remove stored tokens)
 	M.cmd.GdriveLogout = function()
 		local google_drive = require("parley.google_drive")
-		google_drive.logout(function(success)
-			if success then
-				vim.schedule(function()
-					vim.notify("Google Drive OAuth tokens removed", vim.log.levels.INFO)
+				google_drive.logout(function(success)
+					if success then
+						vim.schedule(function()
+							vim.notify("Google Drive OAuth accounts removed", vim.log.levels.INFO)
+						end)
+					else
+						vim.schedule(function()
+							vim.notify("No Google Drive OAuth accounts found", vim.log.levels.WARN)
+						end)
+					end
 				end)
-			else
-				vim.schedule(function()
-					vim.notify("No Google Drive OAuth tokens found", vim.log.levels.WARN)
-				end)
-			end
-		end)
 	end
 
 	-- register default commands

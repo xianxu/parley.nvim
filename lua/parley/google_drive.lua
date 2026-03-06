@@ -237,8 +237,9 @@ M.is_token_expired = function(tokens)
     return os.time() >= (tokens.expires_at - 60)
 end
 
--- In-memory token cache (loaded from keychain on first use)
-local cached_tokens = nil
+-- In-memory OAuth account store (loaded from keychain on first use).
+-- Shape: { version = 2, preferred_account_id = "...", accounts = { ... } }
+local cached_account_store = nil
 
 -- Detect platform
 ---@return string # "darwin" or "linux"
@@ -274,44 +275,189 @@ M._parse_auth_error = function(request_data)
     return parse_auth_query_param(request_data, "error")
 end
 
--- Save tokens to OS keychain
----@param tokens table # {access_token, refresh_token, expires_at}
+---@return table
+M._new_account_store = function()
+    return {
+        version = 2,
+        preferred_account_id = nil,
+        accounts = {},
+    }
+end
+
+---@param tokens table|nil
+---@return string
+M._make_account_id = function(tokens)
+    local source = (tokens and (tokens.refresh_token or tokens.access_token)) or tostring(os.time())
+    source = tostring(source):gsub("[^%w]", "")
+    if source == "" then
+        source = tostring(os.time())
+    end
+    return "google_" .. source:sub(1, 24)
+end
+
+---@param tokens table|nil
+---@return table
+M._normalize_account = function(tokens)
+    local account = vim.deepcopy(tokens or {})
+    account.account_id = account.account_id or M._make_account_id(account)
+    account.invalid = account.invalid == true
+    account.label = account.label or ("Google Account " .. account.account_id:sub(-6))
+    return account
+end
+
+---@param store table|nil
+---@return table
+M._normalize_account_store = function(store)
+    local normalized = M._new_account_store()
+    if type(store) ~= "table" then
+        return normalized
+    end
+
+    if type(store.accounts) == "table" then
+        normalized.version = store.version or 2
+        normalized.preferred_account_id = store.preferred_account_id
+        for _, account in ipairs(store.accounts) do
+            if type(account) == "table" and account.access_token then
+                table.insert(normalized.accounts, M._normalize_account(account))
+            end
+        end
+    elseif store.access_token then
+        local account = M._normalize_account(store)
+        normalized.accounts = { account }
+        normalized.preferred_account_id = account.account_id
+    end
+
+    if not normalized.preferred_account_id and normalized.accounts[1] then
+        normalized.preferred_account_id = normalized.accounts[1].account_id
+    end
+
+    return normalized
+end
+
+---@param store table
+---@param account table
+---@return integer|nil
+M._find_account_index = function(store, account)
+    if not store or type(store.accounts) ~= "table" or type(account) ~= "table" then
+        return nil
+    end
+
+    for idx, existing in ipairs(store.accounts) do
+        if account.account_id and existing.account_id == account.account_id then
+            return idx
+        end
+        if account.refresh_token and existing.refresh_token == account.refresh_token then
+            return idx
+        end
+    end
+
+    return nil
+end
+
+---@param store table
+---@param account table
+---@return table
+M._upsert_account = function(store, account)
+    local normalized = M._normalize_account(account)
+    local idx = M._find_account_index(store, normalized)
+
+    if idx then
+        store.accounts[idx] = vim.tbl_extend("force", store.accounts[idx], normalized)
+        return store.accounts[idx]
+    end
+
+    while M._find_account_index(store, normalized) do
+        normalized.account_id = normalized.account_id .. "_" .. tostring(#store.accounts + 1)
+    end
+
+    table.insert(store.accounts, normalized)
+    return normalized
+end
+
+---@param store table|nil
+---@return table|nil
+M._get_preferred_account = function(store)
+    if not store or type(store.accounts) ~= "table" then
+        return nil
+    end
+
+    if store.preferred_account_id then
+        for _, account in ipairs(store.accounts) do
+            if account.account_id == store.preferred_account_id then
+                return account
+            end
+        end
+    end
+
+    return store.accounts[1]
+end
+
+---@param store table|nil
+---@return table
+M._get_candidate_accounts = function(store)
+    local ordered = {}
+    if not store or type(store.accounts) ~= "table" then
+        return ordered
+    end
+
+    local preferred = M._get_preferred_account(store)
+    local seen = {}
+
+    local function maybe_insert(account)
+        if not account or seen[account.account_id] then
+            return
+        end
+        seen[account.account_id] = true
+        if not account.invalid and (account.refresh_token or account.access_token) then
+            table.insert(ordered, account)
+        end
+    end
+
+    maybe_insert(preferred)
+    for _, account in ipairs(store.accounts) do
+        maybe_insert(account)
+    end
+
+    return ordered
+end
+
+-- Save OAuth account store to OS keychain.
+---@param store table
 ---@param callback function|nil # called after save completes
-M.save_tokens = function(tokens, callback)
+M.save_account_store = function(store, callback)
     callback = callback or function() end
-    cached_tokens = tokens
-    local json_data = vim.json.encode(tokens)
+    cached_account_store = M._normalize_account_store(store)
+    local json_data = vim.json.encode(cached_account_store)
     local platform = M._get_platform()
     local cmd_args = M.build_keychain_store_cmd(platform, json_data)
     local cmd = table.remove(cmd_args, 1)
 
     if platform == "linux" then
-        -- Linux secret-tool reads from stdin via printf to avoid shell injection
         local escaped_args = {}
         for _, arg in ipairs(cmd_args) do
             table.insert(escaped_args, vim.fn.shellescape(arg))
         end
         tasker.run(nil, "sh", { "-c", "printf '%s' " .. vim.fn.shellescape(json_data) .. " | " .. cmd .. " " .. table.concat(escaped_args, " ") }, function(code)
             if code ~= 0 then
-                logger.warning("Failed to save Google OAuth tokens to keychain")
+                logger.warning("Failed to save Google OAuth account store to keychain")
             end
             callback()
         end)
     else
         tasker.run(nil, cmd, cmd_args, function(code)
             if code ~= 0 then
-                logger.warning("Failed to save Google OAuth tokens to keychain")
+                logger.warning("Failed to save Google OAuth account store to keychain")
             end
             callback()
         end)
     end
 end
 
--- Load tokens from OS keychain
----@param callback function # called with tokens table or nil
-M.load_tokens = function(callback)
-    if cached_tokens and not M.is_token_expired(cached_tokens) then
-        callback(cached_tokens)
+-- Load OAuth account store from OS keychain.
+---@param callback function # called with account store table
+M.load_account_store = function(callback)
+    if cached_account_store ~= nil then
+        callback(cached_account_store)
         return
     end
 
@@ -321,17 +467,34 @@ M.load_tokens = function(callback)
 
     tasker.run(nil, cmd, cmd_args, function(code, signal, stdout_data)
         if code ~= 0 or not stdout_data or stdout_data == "" then
-            callback(nil)
+            cached_account_store = M._new_account_store()
+            callback(cached_account_store)
             return
         end
 
-        local ok, tokens = pcall(vim.json.decode, stdout_data:match("^%s*(.-)%s*$"))
-        if ok and tokens and tokens.access_token then
-            cached_tokens = tokens
-            callback(tokens)
-        else
-            callback(nil)
-        end
+        local ok, decoded = pcall(vim.json.decode, stdout_data:match("^%s*(.-)%s*$"))
+        cached_account_store = ok and M._normalize_account_store(decoded) or M._new_account_store()
+        callback(cached_account_store)
+    end)
+end
+
+-- Backward-compatible token save wrapper.
+---@param tokens table # {access_token, refresh_token, expires_at}
+---@param callback function|nil # called after save completes
+M.save_tokens = function(tokens, callback)
+    callback = callback or function() end
+    M.load_account_store(function(store)
+        local account = M._upsert_account(store, tokens)
+        store.preferred_account_id = account.account_id
+        M.save_account_store(store, callback)
+    end)
+end
+
+-- Backward-compatible token load wrapper.
+---@param callback function # called with tokens table or nil
+M.load_tokens = function(callback)
+    M.load_account_store(function(store)
+        callback(M._get_preferred_account(store))
     end)
 end
 
@@ -339,7 +502,7 @@ end
 ---@param callback function|nil # called with boolean success
 M.logout = function(callback)
     callback = callback or function() end
-    cached_tokens = nil
+    cached_account_store = nil
 
     local platform = M._get_platform()
     local cmd_args = M.build_keychain_delete_cmd(platform)
@@ -347,21 +510,22 @@ M.logout = function(callback)
 
     tasker.run(nil, cmd, cmd_args, function(code)
         if code == 0 then
-            logger.info("Google Drive OAuth tokens removed")
+            logger.info("Google Drive OAuth accounts removed")
             callback(true)
         else
-            logger.warning("No Google OAuth tokens found to remove (or removal failed)")
+            logger.warning("No Google OAuth accounts found to remove (or removal failed)")
             callback(false)
         end
     end)
 end
 
--- Refresh an expired access token using the refresh token
+-- Refresh one stored account using its refresh token.
 ---@param config table # {client_id, client_secret}
----@param tokens table # must have refresh_token
----@param callback function # called with new tokens table or nil
-M.refresh_token = function(config, tokens, callback)
-    if not tokens or not tokens.refresh_token then
+---@param store table
+---@param account table # must have refresh_token
+---@param callback function # called with updated account table or nil
+M._refresh_account = function(config, store, account, callback)
+    if not account or not account.refresh_token then
         callback(nil)
         return
     end
@@ -372,7 +536,7 @@ M.refresh_token = function(config, tokens, callback)
         "https://oauth2.googleapis.com/token",
         "-d", "client_id=" .. config.client_id,
         "-d", "client_secret=" .. config.client_secret,
-        "-d", "refresh_token=" .. tokens.refresh_token,
+        "-d", "refresh_token=" .. account.refresh_token,
         "-d", "grant_type=refresh_token",
     }
 
@@ -384,10 +548,13 @@ M.refresh_token = function(config, tokens, callback)
 
         local new_tokens = M.parse_token_response(stdout_data)
         if new_tokens then
-            -- Preserve refresh_token (not always returned in refresh response)
-            new_tokens.refresh_token = new_tokens.refresh_token or tokens.refresh_token
-            M.save_tokens(new_tokens, function()
-                callback(new_tokens)
+            new_tokens.refresh_token = new_tokens.refresh_token or account.refresh_token
+            new_tokens.account_id = account.account_id
+            new_tokens.label = account.label
+            new_tokens.invalid = false
+            local updated_account = M._upsert_account(store, new_tokens)
+            M.save_account_store(store, function()
+                callback(updated_account)
             end)
         else
             callback(nil)
@@ -395,9 +562,26 @@ M.refresh_token = function(config, tokens, callback)
     end)
 end
 
--- Start OAuth flow: open browser, wait for redirect, exchange code for tokens
+-- Refresh an expired access token using the refresh token.
+-- Backward-compatible wrapper around the account-store refresh path.
+---@param config table # {client_id, client_secret}
+---@param tokens table # must have refresh_token
+---@param callback function # called with new tokens table or nil
+M.refresh_token = function(config, tokens, callback)
+    if not tokens or not tokens.refresh_token then
+        callback(nil)
+        return
+    end
+
+    M.load_account_store(function(store)
+        local account = M._upsert_account(store, tokens)
+        M._refresh_account(config, store, account, callback)
+    end)
+end
+
+-- Start OAuth flow: open browser, wait for redirect, exchange code for tokens.
 ---@param config table # google_drive config with client_id, client_secret, scopes
----@param callback function # called with tokens table or nil
+---@param callback function # called with account table or nil
 M.authenticate = function(config, callback)
     local server = uv.new_tcp()
     server:bind("127.0.0.1", 0)
@@ -468,8 +652,12 @@ M.authenticate = function(config, callback)
 
                 local tokens = M.parse_token_response(stdout_data)
                 if tokens then
-                    M.save_tokens(tokens, function()
-                        callback(tokens)
+                    M.load_account_store(function(store)
+                        local account = M._upsert_account(store, tokens)
+                        store.preferred_account_id = account.account_id
+                        M.save_account_store(store, function()
+                            callback(account)
+                        end)
                     end)
                 else
                     logger.warning("Google OAuth: failed to parse token response")
@@ -503,36 +691,43 @@ M.authenticate = function(config, callback)
     end)
 end
 
--- Get a valid access token, refreshing or re-authenticating as needed
+-- Get a valid access token from the preferred account, refreshing or re-authenticating as needed.
+-- Backward-compatible helper for older call sites.
 ---@param config table # google_drive config
 ---@param callback function # called with access_token string or nil
 M.get_access_token = function(config, callback, url)
-    M.load_tokens(function(tokens)
-        if tokens and not M.is_token_expired(tokens) then
-            callback(tokens.access_token)
+    M.load_account_store(function(store)
+        local account = M._get_preferred_account(store)
+        if account and not M.is_token_expired(account) then
+            callback(account.access_token)
             return
         end
 
-        if tokens and tokens.refresh_token then
-            M.refresh_token(config, tokens, function(new_tokens)
-                if new_tokens then
-                    callback(new_tokens.access_token)
+        if account and account.refresh_token then
+            M._refresh_account(config, store, account, function(updated_account)
+                if updated_account then
+                    store.preferred_account_id = updated_account.account_id
+                    M.save_account_store(store, function()
+                        callback(updated_account.access_token)
+                    end)
                 else
-                    -- Refresh failed, prompt user instead of auto-opening browser
                     M._prompt_auth(
                         config,
                         "Google OAuth: Token refresh failed. Please re-authenticate.",
-                        callback,
+                        function(new_account)
+                            callback(new_account and new_account.access_token or nil)
+                        end,
                         url
                     )
                 end
             end)
         else
-            -- No tokens, prompt user instead of auto-opening browser
             M._prompt_auth(
                 config,
                 "Google OAuth: No saved credentials. Please authenticate to access Google Drive files.",
-                callback,
+                function(new_account)
+                    callback(new_account and new_account.access_token or nil)
+                end,
                 url
             )
         end
@@ -853,7 +1048,7 @@ end
 -- Extensible: add future providers (MS OAuth, etc.) to the providers table.
 ---@param config table # google_drive config
 ---@param reason string # human-readable reason shown to the user
----@param callback function # called with access_token (string) or nil if cancelled
+---@param callback function # called with account table or nil if cancelled
 ---@param url string|nil # optional URL to auto-detect provider
 M._prompt_auth = function(config, reason, callback, url)
     -- Provider list (add entries here for future OAuth providers)
@@ -864,9 +1059,9 @@ M._prompt_auth = function(config, reason, callback, url)
     -- Helper: authenticate with a given provider entry
     local function auth_with_provider(selected)
         if selected.provider == "google" then
-            M.authenticate(config, function(tokens)
-                if tokens then
-                    callback(tokens.access_token)
+            M.authenticate(config, function(account)
+                if account then
+                    callback(account)
                 else
                     callback(nil)
                 end
@@ -921,6 +1116,244 @@ M._prompt_auth = function(config, reason, callback, url)
     end)
 end
 
+---@param error table
+---@return string
+M._format_api_error_message = function(error)
+    local message = error.message or "unknown error"
+    if error.code ~= nil then
+        return "Google Drive API: " .. message .. " (code: " .. tostring(error.code) .. ")"
+    end
+    return "Google Drive API: " .. message
+end
+
+---@param url string
+---@param info table
+---@param access_token string
+---@param callback function
+M._fetch_google_api_once = function(url, info, access_token, callback)
+    local meta_url = M.build_metadata_url(info.file_id)
+    local meta_args = {
+        "-s",
+        "-H", "Authorization: Bearer " .. access_token,
+        meta_url,
+    }
+
+    tasker.run(nil, "curl", meta_args, function(code, signal, stdout_data)
+        if code ~= 0 then
+            callback({ kind = "other", error = "Google Drive API: failed to fetch file metadata" })
+            return
+        end
+
+        local ok, meta = pcall(vim.json.decode, stdout_data)
+        if not ok or not meta then
+            logger.warning("Google Drive API: failed to parse metadata response: " .. tostring(stdout_data))
+            callback({ kind = "other", error = "Google Drive API: invalid metadata response" })
+            return
+        end
+
+        if meta.error then
+            local err = {
+                code = meta.error.code,
+                message = meta.error.message or "unknown error",
+            }
+            logger.warning("Google Drive API metadata error: " .. M._format_api_error_message(err))
+            callback({
+                kind = M._classify_api_error(err.code),
+                error = M._format_api_error_message(err),
+            })
+            return
+        end
+
+        if not meta.name then
+            logger.warning("Google Drive API: metadata response missing 'name' field: " .. tostring(stdout_data))
+            callback({ kind = "other", error = "Google Drive API: invalid metadata response (missing file name)" })
+            return
+        end
+
+        local file_name = meta.name
+        local export_mime = M.get_export_mime(info.file_type)
+        local content_url
+        if export_mime then
+            content_url = M.build_export_url(info.file_id, export_mime)
+        elseif meta.mimeType and meta.mimeType:match("google%-apps") then
+            content_url = M.build_export_url(info.file_id, "text/plain")
+        else
+            content_url = M.build_download_url(info.file_id)
+        end
+
+        local content_args = {
+            "-s",
+            "-H", "Authorization: Bearer " .. access_token,
+            content_url,
+        }
+
+        tasker.run(nil, "curl", content_args, function(content_code, _, content_data)
+            if content_code ~= 0 or not content_data or content_data == "" then
+                callback({ kind = "other", error = "Google Drive API: failed to fetch file content for " .. file_name })
+                return
+            end
+
+            local err_ok, err_data = pcall(vim.json.decode, content_data)
+            if err_ok and err_data and err_data.error then
+                local err = {
+                    code = err_data.error.code,
+                    message = err_data.error.message or "unknown error",
+                }
+
+                if M._classify_api_error(err.code) == "auth" then
+                    callback({ kind = "auth", error = M._format_api_error_message(err) })
+                    return
+                end
+
+                if export_mime == "text/markdown" then
+                    logger.debug("Google Drive: markdown export failed, falling back to plain text")
+                    local fallback_url = M.build_export_url(info.file_id, "text/plain")
+                    local fallback_args = {
+                        "-s",
+                        "-H", "Authorization: Bearer " .. access_token,
+                        fallback_url,
+                    }
+                    tasker.run(nil, "curl", fallback_args, function(fb_code, _, fb_data)
+                        if fb_code ~= 0 or not fb_data or fb_data == "" then
+                            callback({ kind = "other", error = M._format_api_error_message(err) })
+                            return
+                        end
+
+                        local fb_ok, fb_err = pcall(vim.json.decode, fb_data)
+                        if fb_ok and fb_err and fb_err.error then
+                            local fallback_error = {
+                                code = fb_err.error.code,
+                                message = fb_err.error.message or "unknown error",
+                            }
+                            callback({
+                                kind = M._classify_api_error(fallback_error.code),
+                                error = M._format_api_error_message(fallback_error),
+                            })
+                            return
+                        end
+
+                        callback({
+                            kind = "success",
+                            content = M.format_google_content(file_name, info.file_type, fb_data, url),
+                        })
+                    end)
+                    return
+                end
+
+                callback({ kind = "other", error = M._format_api_error_message(err) })
+                return
+            end
+
+            callback({
+                kind = "success",
+                content = M.format_google_content(file_name, info.file_type, content_data, url),
+            })
+        end)
+    end)
+end
+
+---@param config table
+---@param store table
+---@param url string
+---@param info table
+---@param account table
+---@param callback function
+M._try_account_fetch = function(config, store, url, info, account, callback)
+    local function attempt(current_account, allow_refresh_on_auth)
+        if not current_account.access_token or M.is_token_expired(current_account) then
+            if not current_account.refresh_token then
+                callback({
+                    kind = "auth",
+                    error = "Google OAuth: no refresh token available for this account.",
+                    account = current_account,
+                })
+                return
+            end
+
+            M._refresh_account(config, store, current_account, function(updated_account)
+                if not updated_account then
+                    callback({
+                        kind = "auth",
+                        error = "Google OAuth: token refresh failed for this account.",
+                        account = current_account,
+                    })
+                    return
+                end
+                attempt(updated_account, false)
+            end)
+            return
+        end
+
+        M._fetch_google_api_once(url, info, current_account.access_token, function(result)
+            result.account = current_account
+            if result.kind == "auth" and allow_refresh_on_auth and current_account.refresh_token then
+                M._refresh_account(config, store, current_account, function(updated_account)
+                    if not updated_account then
+                        callback(result)
+                        return
+                    end
+                    attempt(updated_account, false)
+                end)
+                return
+            end
+
+            callback(result)
+        end)
+    end
+
+    attempt(account, true)
+end
+
+---@param config table
+---@param url string
+---@param info table
+---@param callback function
+M._try_saved_accounts = function(config, url, info, callback)
+    M.load_account_store(function(store)
+        local candidates = M._get_candidate_accounts(store)
+        if #candidates == 0 then
+            callback({ kind = "none" })
+            return
+        end
+
+        local idx = 1
+        local last_auth_error = nil
+
+        local function try_next()
+            local account = candidates[idx]
+            idx = idx + 1
+
+            if not account then
+                callback({ kind = "exhausted", error = last_auth_error })
+                return
+            end
+
+            M._try_account_fetch(config, store, url, info, account, function(result)
+                if result.kind == "success" then
+                    local saved_account = M._upsert_account(store, result.account)
+                    saved_account.last_used_at = os.time()
+                    saved_account.invalid = false
+                    store.preferred_account_id = saved_account.account_id
+                    M.save_account_store(store, function()
+                        callback({
+                            kind = "success",
+                            content = result.content,
+                            account = saved_account,
+                        })
+                    end)
+                elseif result.kind == "auth" then
+                    last_auth_error = result.error
+                    try_next()
+                else
+                    callback(result)
+                end
+            end)
+        end
+
+        try_next()
+    end)
+end
+
 -- Fetch file content from Google Drive
 -- This is the main entry point called from helper.lua
 ---@param url string # Google Drive/Docs URL
@@ -930,148 +1363,6 @@ M.fetch_content = function(url, config, callback)
     local info = M.parse_url(url)
     local provider = M._detect_provider_for_url(url)
 
-    -- Inner function that performs the actual fetch with a given access_token.
-    -- retry_allowed prevents infinite loops: true on first attempt, false on retry.
-    local function do_fetch(access_token, retry_allowed)
-        local meta_url = M.build_metadata_url(info.file_id)
-        local meta_args = {
-            "-s",
-            "-H", "Authorization: Bearer " .. access_token,
-            meta_url,
-        }
-
-        tasker.run(nil, "curl", meta_args, function(code, signal, stdout_data)
-            if code ~= 0 then
-                callback(nil, "Google Drive API: failed to fetch file metadata")
-                return
-            end
-
-            local ok, meta = pcall(vim.json.decode, stdout_data)
-            if not ok or not meta then
-                logger.warning("Google Drive API: failed to parse metadata response: " .. tostring(stdout_data))
-                callback(nil, "Google Drive API: invalid metadata response")
-                return
-            end
-
-            -- Check for API error response (e.g., 401 Unauthorized, 403 Forbidden, 404 Not Found)
-            if meta.error then
-                local err_code = meta.error.code
-                local err_msg = (meta.error.message or "unknown error")
-                    .. " (code: " .. tostring(err_code or "?") .. ")"
-                logger.warning("Google Drive API metadata error: " .. err_msg)
-
-                -- If auth-related and retry allowed, try refreshing the token first
-                -- (the access_token may have been revoked or expired mid-request).
-                -- Only fall back to full browser re-auth if refresh fails.
-                if retry_allowed and M._classify_api_error(err_code) == "auth" then
-                    M.load_tokens(function(tokens)
-                        if tokens and tokens.refresh_token then
-                            M.refresh_token(config, tokens, function(new_tokens)
-                                if new_tokens then
-                                    do_fetch(new_tokens.access_token, false)
-                                else
-                                    M._prompt_auth(
-                                        config,
-                                        "Google Drive API: " .. err_msg .. " — Re-authenticate with a different account?",
-                                        function(new_token)
-                                            if new_token then
-                                                do_fetch(new_token, false)
-                                            else
-                                                callback(nil, "Google Drive API: " .. err_msg)
-                                            end
-                                        end,
-                                        url
-                                    )
-                                end
-                            end)
-                        else
-                            M._prompt_auth(
-                                config,
-                                "Google Drive API: " .. err_msg .. " — Re-authenticate with a different account?",
-                                function(new_token)
-                                    if new_token then
-                                        do_fetch(new_token, false)
-                                    else
-                                        callback(nil, "Google Drive API: " .. err_msg)
-                                    end
-                                end,
-                                url
-                            )
-                        end
-                    end)
-                    return
-                end
-
-                callback(nil, "Google Drive API: " .. err_msg)
-                return
-            end
-
-            if not meta.name then
-                logger.warning("Google Drive API: metadata response missing 'name' field: " .. tostring(stdout_data))
-                callback(nil, "Google Drive API: invalid metadata response (missing file name)")
-                return
-            end
-
-            local file_name = meta.name
-
-            -- Determine how to fetch content
-            local export_mime = M.get_export_mime(info.file_type)
-            local content_url
-            if export_mime then
-                content_url = M.build_export_url(info.file_id, export_mime)
-            else
-                if meta.mimeType and meta.mimeType:match("google%-apps") then
-                    content_url = M.build_export_url(info.file_id, "text/plain")
-                else
-                    content_url = M.build_download_url(info.file_id)
-                end
-            end
-
-            local content_args = {
-                "-s",
-                "-H", "Authorization: Bearer " .. access_token,
-                content_url,
-            }
-
-            tasker.run(nil, "curl", content_args, function(content_code, _, content_data)
-                if content_code ~= 0 or not content_data or content_data == "" then
-                    callback(nil, "Google Drive API: failed to fetch file content for " .. file_name)
-                    return
-                end
-
-                -- Check for API error responses
-                local err_ok, err_data = pcall(vim.json.decode, content_data)
-                if err_ok and err_data and err_data.error then
-                    local err_msg = err_data.error.message or "unknown error"
-                    -- If markdown export fails, fall back to plain text
-                    if export_mime == "text/markdown" then
-                        logger.debug("Google Drive: markdown export failed, falling back to plain text")
-                        local fallback_url = M.build_export_url(info.file_id, "text/plain")
-                        local fallback_args = {
-                            "-s",
-                            "-H", "Authorization: Bearer " .. access_token,
-                            fallback_url,
-                        }
-                        tasker.run(nil, "curl", fallback_args, function(fb_code, _, fb_data)
-                            if fb_code ~= 0 or not fb_data or fb_data == "" then
-                                callback(nil, "Google Drive API: " .. err_msg)
-                                return
-                            end
-                            callback(M.format_google_content(file_name, info.file_type, fb_data, url))
-                        end)
-                        return
-                    end
-                    callback(nil, "Google Drive API: " .. err_msg)
-                    return
-                end
-
-                callback(M.format_google_content(file_name, info.file_type, content_data, url))
-            end)
-        end)
-    end
-
-    -- Public access comes first. Only attempt OAuth after a public auth-style
-    -- failure and only for providers we can actually identify.
     M._fetch_public_content(url, function(public_result, public_err)
         local decision = M._decide_fetch_action(url, public_result, public_err, provider, info)
 
@@ -1091,13 +1382,49 @@ M.fetch_content = function(url, config, callback)
             return
         end
 
-        M.get_access_token(config, function(access_token)
-            if not access_token then
-                callback(nil, "Google OAuth: authentication cancelled or failed.")
+        M._try_saved_accounts(config, url, info, function(result)
+            if result.kind == "success" then
+                callback(result.content)
                 return
             end
-            do_fetch(access_token, true)
-        end, url)
+
+            if result.kind == "other" then
+                callback(nil, result.error)
+                return
+            end
+
+            local reason = "Google OAuth: No saved credentials. Please authenticate to access Google Drive files."
+            if result.kind == "exhausted" and result.error then
+                reason = result.error .. " — Re-authenticate with a different account?"
+            end
+
+            M._prompt_auth(config, reason, function(new_account)
+                if not new_account then
+                    callback(nil, "Google OAuth: authentication cancelled or failed.")
+                    return
+                end
+
+                M.load_account_store(function(store)
+                    local account = M._upsert_account(store, new_account)
+                    store.preferred_account_id = account.account_id
+                    M.save_account_store(store, function()
+                        M._try_account_fetch(config, store, url, info, account, function(auth_result)
+                            if auth_result.kind == "success" then
+                                local saved_account = M._upsert_account(store, auth_result.account)
+                                saved_account.last_used_at = os.time()
+                                saved_account.invalid = false
+                                store.preferred_account_id = saved_account.account_id
+                                M.save_account_store(store, function()
+                                    callback(auth_result.content)
+                                end)
+                            else
+                                callback(nil, auth_result.error or "Google OAuth: authentication cancelled or failed.")
+                            end
+                        end)
+                    end)
+                end)
+            end, url)
+        end)
     end)
 end
 

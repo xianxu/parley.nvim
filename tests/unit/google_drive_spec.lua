@@ -213,6 +213,142 @@ describe("google_drive: token parsing", function()
     end)
 end)
 
+describe("google_drive: account store helpers", function()
+    it("H6: migrates legacy single-token storage into a multi-account store", function()
+        local store = gd._normalize_account_store({
+            access_token = "ya29.legacy",
+            refresh_token = "1//legacy",
+            expires_at = 12345,
+        })
+
+        assert.equals(2, store.version)
+        assert.equals(1, #store.accounts)
+        assert.equals("ya29.legacy", store.accounts[1].access_token)
+        assert.equals("1//legacy", store.accounts[1].refresh_token)
+        assert.equals(store.accounts[1].account_id, store.preferred_account_id)
+    end)
+
+    it("H7: upserts accounts by refresh token instead of duplicating them", function()
+        local store = gd._new_account_store()
+        local first = gd._upsert_account(store, {
+            access_token = "ya29.first",
+            refresh_token = "1//same",
+            expires_at = 100,
+        })
+        local updated = gd._upsert_account(store, {
+            access_token = "ya29.updated",
+            refresh_token = "1//same",
+            expires_at = 200,
+        })
+
+        assert.equals(1, #store.accounts)
+        assert.equals(first.account_id, updated.account_id)
+        assert.equals("ya29.updated", store.accounts[1].access_token)
+        assert.equals(200, store.accounts[1].expires_at)
+    end)
+
+    it("H8: returns preferred non-invalid account first when ordering candidates", function()
+        local store = gd._normalize_account_store({
+            preferred_account_id = "acct_c",
+            accounts = {
+                { account_id = "acct_a", access_token = "a", refresh_token = "ra", expires_at = 100 },
+                { account_id = "acct_b", access_token = "b", refresh_token = "rb", expires_at = 100, invalid = true },
+                { account_id = "acct_c", access_token = "c", refresh_token = "rc", expires_at = 100 },
+            },
+        })
+
+        local candidates = gd._get_candidate_accounts(store)
+        assert.equals(2, #candidates)
+        assert.equals("acct_c", candidates[1].account_id)
+        assert.equals("acct_a", candidates[2].account_id)
+    end)
+end)
+
+describe("google_drive: saved account iteration", function()
+    local original_load_account_store
+    local original_try_account_fetch
+    local original_save_account_store
+
+    before_each(function()
+        original_load_account_store = gd.load_account_store
+        original_try_account_fetch = gd._try_account_fetch
+        original_save_account_store = gd.save_account_store
+    end)
+
+    after_each(function()
+        gd.load_account_store = original_load_account_store
+        gd._try_account_fetch = original_try_account_fetch
+        gd.save_account_store = original_save_account_store
+    end)
+
+    it("H9: tries accounts in order until one succeeds", function()
+        local tried = {}
+        gd.load_account_store = function(callback)
+            callback(gd._normalize_account_store({
+                preferred_account_id = "acct_a",
+                accounts = {
+                    { account_id = "acct_a", access_token = "a", refresh_token = "ra", expires_at = 100 },
+                    { account_id = "acct_b", access_token = "b", refresh_token = "rb", expires_at = 100 },
+                },
+            }))
+        end
+        gd.save_account_store = function(store, callback)
+            callback()
+        end
+        gd._try_account_fetch = function(config, store, url, info, account, callback)
+            table.insert(tried, account.account_id)
+            if account.account_id == "acct_a" then
+                callback({ kind = "auth", error = "Google Drive API: forbidden", account = account })
+            else
+                callback({ kind = "success", content = "ok", account = account })
+            end
+        end
+
+        local result
+        gd._try_saved_accounts({}, "https://docs.google.com/document/d/abc123/edit", { file_id = "abc123" }, function(res)
+            result = res
+        end)
+
+        assert.same({ "acct_a", "acct_b" }, tried)
+        assert.equals("success", result.kind)
+        assert.equals("ok", result.content)
+        assert.equals("acct_b", result.account.account_id)
+    end)
+
+    it("H10: stops on non-auth error without trying later accounts", function()
+        local tried = {}
+        gd.load_account_store = function(callback)
+            callback(gd._normalize_account_store({
+                preferred_account_id = "acct_a",
+                accounts = {
+                    { account_id = "acct_a", access_token = "a", refresh_token = "ra", expires_at = 100 },
+                    { account_id = "acct_b", access_token = "b", refresh_token = "rb", expires_at = 100 },
+                },
+            }))
+        end
+        gd.save_account_store = function(store, callback)
+            callback()
+        end
+        gd._try_account_fetch = function(config, store, url, info, account, callback)
+            table.insert(tried, account.account_id)
+            if account.account_id == "acct_a" then
+                callback({ kind = "other", error = "Google Drive API: invalid metadata response", account = account })
+            else
+                callback({ kind = "success", content = "unexpected", account = account })
+            end
+        end
+
+        local result
+        gd._try_saved_accounts({}, "https://docs.google.com/document/d/abc123/edit", { file_id = "abc123" }, function(res)
+            result = res
+        end)
+
+        assert.same({ "acct_a" }, tried)
+        assert.equals("other", result.kind)
+        assert.equals("Google Drive API: invalid metadata response", result.error)
+    end)
+end)
+
 describe("google_drive: auth code parsing", function()
     it("I1: parses auth code from HTTP GET request", function()
         local request = "GET /callback?code=4/0AX4XfWh_abc123&scope=https://www.googleapis.com/auth/drive.readonly HTTP/1.1\r\nHost: localhost:52847\r\n\r\n"
