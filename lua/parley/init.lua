@@ -627,8 +627,8 @@ M.setup = function(opts)
 	end
 	-- Logout from Google Drive OAuth (remove stored tokens)
 	M.cmd.GdriveLogout = function()
-		local google_drive = require("parley.google_drive")
-				google_drive.logout(function(success)
+		local oauth = require("parley.oauth")
+				oauth.logout(function(success)
 					if success then
 						vim.schedule(function()
 							vim.notify("Google Drive OAuth accounts removed", vim.log.levels.INFO)
@@ -2984,7 +2984,7 @@ end
 ---@param callback function # called with resolved_remote_content table
 M._resolve_remote_references = function(opts, callback)
 	local helpers = require("parley.helper")
-	local google_drive = require("parley.google_drive")
+	local oauth = require("parley.oauth")
 	local parsed_chat = opts.parsed_chat
 	local config = opts.config
 	local chat_file = opts.chat_file or ""
@@ -3038,7 +3038,7 @@ M._resolve_remote_references = function(opts, callback)
 	for _, url in ipairs(urls_to_fetch) do
 		-- Delegate remote URL handling to the OAuth fetcher. It owns provider
 		-- detection and can fall back to the auth picker for unknown patterns.
-		google_drive.fetch_content(url, config.google_drive, function(content, err)
+			oauth.fetch_content(url, config.google_drive, function(content, err)
 			local cached_content = content
 			if not cached_content then
 				cached_content = M._format_remote_reference_error_content(url, err)

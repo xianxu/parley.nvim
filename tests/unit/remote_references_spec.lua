@@ -14,7 +14,7 @@ describe("_resolve_remote_references", function()
     local chat_file = tmp_dir .. "/chat.md"
 
     before_each(function()
-        google_drive = require("parley.google_drive")
+        google_drive = require("parley.oauth")
         original_fetch_content = google_drive.fetch_content
         parley._remote_reference_cache = nil
         os.remove(parley._remote_reference_cache_file())
@@ -298,7 +298,7 @@ describe("google_drive.fetch_content", function()
     local original_prompt_auth
 
     before_each(function()
-        google_drive = require("parley.google_drive")
+        google_drive = require("parley.oauth")
         original_fetch_public_content = google_drive._fetch_public_content
         original_try_saved_accounts = google_drive._try_saved_accounts
         original_prompt_auth = google_drive._prompt_auth

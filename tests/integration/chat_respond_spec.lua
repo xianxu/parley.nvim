@@ -509,7 +509,7 @@ describe("chat_respond_all", function()
         test_file = make_chat_filename()
         original_query = parley.dispatcher.query
         original_defer_fn = vim.defer_fn
-        google_drive = require("parley.google_drive")
+        google_drive = require("parley.oauth")
         original_fetch_content = google_drive.fetch_content
     end)
     
