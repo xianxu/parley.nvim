@@ -221,11 +221,12 @@ describe("oauth: account store helpers", function()
             expires_at = 12345,
         })
 
-        assert.equals(2, store.version)
+        assert.equals(3, store.version)
         assert.equals(1, #store.accounts)
         assert.equals("ya29.legacy", store.accounts[1].access_token)
         assert.equals("1//legacy", store.accounts[1].refresh_token)
-        assert.equals(store.accounts[1].account_id, store.preferred_account_id)
+        assert.equals("google", store.accounts[1].provider)
+        assert.equals(store.accounts[1].account_id, store.preferred_account_ids.google)
     end)
 
     it("H7: upserts accounts by refresh token instead of duplicating them", function()
@@ -261,6 +262,30 @@ describe("oauth: account store helpers", function()
         assert.equals(2, #candidates)
         assert.equals("acct_c", candidates[1].account_id)
         assert.equals("acct_a", candidates[2].account_id)
+    end)
+
+    it("H8b: filters candidate accounts by provider", function()
+        local store = oauth._normalize_account_store({
+            preferred_account_ids = {
+                google = "google_b",
+                dropbox = "dropbox_a",
+            },
+            accounts = {
+                { provider = "google", account_id = "google_a", access_token = "ga", refresh_token = "gra", expires_at = 100 },
+                { provider = "google", account_id = "google_b", access_token = "gb", refresh_token = "grb", expires_at = 100 },
+                { provider = "dropbox", account_id = "dropbox_a", access_token = "da", refresh_token = "dra", expires_at = 100 },
+            },
+        })
+
+        local google_candidates = oauth._get_candidate_accounts(store, "google")
+        local dropbox_candidates = oauth._get_candidate_accounts(store, "dropbox")
+
+        assert.same({ "google_b", "google_a" }, vim.tbl_map(function(account)
+            return account.account_id
+        end, google_candidates))
+        assert.same({ "dropbox_a" }, vim.tbl_map(function(account)
+            return account.account_id
+        end, dropbox_candidates))
     end)
 end)
 
@@ -450,7 +475,7 @@ describe("oauth: auth code exchange", function()
         assert.is_not_nil(account)
         assert.equals("ya29.abc", account.access_token)
         assert.equals("1//ref", account.refresh_token)
-        assert.equals(account.account_id, saved_store.preferred_account_id)
+        assert.equals(account.account_id, saved_store.preferred_account_ids.google)
         assert.equals(1, #saved_store.accounts)
     end)
 

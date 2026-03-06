@@ -36,6 +36,7 @@ local type_filetypes = {
 }
 
 local public_fetch_meta_marker = "__PARLEY_REMOTE_FETCH_META__"
+local provider_definitions
 
 -- Check if a path is a Google Drive/Docs URL
 ---@param path string|nil # the path to check
@@ -91,11 +92,7 @@ M._url_encode = function(str)
     return str
 end
 
--- Build Google OAuth authorization URL
----@param config table # config with client_id, scopes fields
----@param port number # local server port for redirect_uri
----@return string # full authorization URL
-M.build_auth_url = function(config, port)
+local function build_google_auth_url(config, port)
     local base = "https://accounts.google.com/o/oauth2/v2/auth"
     local scopes = config.scopes or { "https://www.googleapis.com/auth/drive.readonly" }
     local scope = table.concat(scopes, " ")
@@ -110,12 +107,7 @@ M.build_auth_url = function(config, port)
     return base .. "?" .. table.concat(params, "&")
 end
 
--- Build curl args for exchanging an auth code for tokens
----@param config table # config with client_id, client_secret fields
----@param auth_code string # the authorization code from the OAuth redirect
----@param port number # local server port used as redirect_uri
----@return table # list of curl arguments
-M.build_token_exchange_args = function(config, auth_code, port)
+local function build_google_token_exchange_args(config, auth_code, port)
     return {
         "-s",
         "-X", "POST",
@@ -126,6 +118,45 @@ M.build_token_exchange_args = function(config, auth_code, port)
         "-d", "redirect_uri=" .. M._url_encode("http://localhost:" .. tostring(port)),
         "-d", "grant_type=authorization_code",
     }
+end
+
+local function build_google_refresh_token_args(config, account)
+    return {
+        "-s",
+        "-X", "POST",
+        "https://oauth2.googleapis.com/token",
+        "-d", "client_id=" .. config.client_id,
+        "-d", "client_secret=" .. config.client_secret,
+        "-d", "refresh_token=" .. account.refresh_token,
+        "-d", "grant_type=refresh_token",
+    }
+end
+
+-- Build OAuth authorization URL.
+---@param config table # provider config or provider config map
+---@param port number # local server port for redirect_uri
+---@param provider string|nil
+---@return string # full authorization URL
+M.build_auth_url = function(config, port, provider)
+    provider = provider or "google"
+    if provider == "google" then
+        return build_google_auth_url(config, port)
+    end
+    error("OAuth provider " .. tostring(provider) .. " does not implement build_auth_url")
+end
+
+-- Build curl args for exchanging an auth code for tokens.
+---@param config table # provider config or provider config map
+---@param auth_code string # the authorization code from the OAuth redirect
+---@param port number # local server port used as redirect_uri
+---@param provider string|nil
+---@return table # list of curl arguments
+M.build_token_exchange_args = function(config, auth_code, port, provider)
+    provider = provider or "google"
+    if provider == "google" then
+        return build_google_token_exchange_args(config, auth_code, port)
+    end
+    error("OAuth provider " .. tostring(provider) .. " does not implement build_token_exchange_args")
 end
 
 -- Build OS keychain store command
@@ -302,30 +333,38 @@ end
 ---@return table
 M._new_account_store = function()
     return {
-        version = 2,
+        version = 3,
         preferred_account_id = nil,
+        preferred_account_ids = {},
         accounts = {},
     }
 end
 
 ---@param tokens table|nil
+---@param provider string|nil
 ---@return string
-M._make_account_id = function(tokens)
+M._make_account_id = function(tokens, provider)
+    provider = provider or (tokens and tokens.provider) or "google"
     local source = (tokens and (tokens.refresh_token or tokens.access_token)) or tostring(os.time())
     source = tostring(source):gsub("[^%w]", "")
     if source == "" then
         source = tostring(os.time())
     end
-    return "google_" .. source:sub(1, 24)
+    return provider .. "_" .. source:sub(1, 24)
 end
 
 ---@param tokens table|nil
+---@param provider string|nil
 ---@return table
-M._normalize_account = function(tokens)
+M._normalize_account = function(tokens, provider)
     local account = vim.deepcopy(tokens or {})
-    account.account_id = account.account_id or M._make_account_id(account)
+    account.provider = provider or account.provider or "google"
+    account.account_id = account.account_id or M._make_account_id(account, account.provider)
     account.invalid = account.invalid == true
-    account.label = account.label or ("Google Account " .. account.account_id:sub(-6))
+    if not account.label then
+        local provider_label = account.provider:gsub("^%l", string.upper)
+        account.label = provider_label .. " Account " .. account.account_id:sub(-6)
+    end
     return account
 end
 
@@ -338,22 +377,33 @@ M._normalize_account_store = function(store)
     end
 
     if type(store.accounts) == "table" then
-        normalized.version = store.version or 2
-        normalized.preferred_account_id = store.preferred_account_id
+        normalized.version = store.version or 3
+        if type(store.preferred_account_ids) == "table" then
+            normalized.preferred_account_ids = vim.deepcopy(store.preferred_account_ids)
+        elseif store.preferred_account_id then
+            normalized.preferred_account_ids.google = store.preferred_account_id
+        end
         for _, account in ipairs(store.accounts) do
             if type(account) == "table" and account.access_token then
                 table.insert(normalized.accounts, M._normalize_account(account))
             end
         end
     elseif store.access_token then
-        local account = M._normalize_account(store)
+        local account = M._normalize_account(store, "google")
         normalized.accounts = { account }
-        normalized.preferred_account_id = account.account_id
+        normalized.preferred_account_ids.google = account.account_id
     end
 
-    if not normalized.preferred_account_id and normalized.accounts[1] then
-        normalized.preferred_account_id = normalized.accounts[1].account_id
+    if not normalized.preferred_account_ids.google then
+        for _, account in ipairs(normalized.accounts) do
+            if account.provider == "google" then
+                normalized.preferred_account_ids.google = account.account_id
+                break
+            end
+        end
     end
+
+    normalized.preferred_account_id = normalized.preferred_account_ids.google
 
     return normalized
 end
@@ -367,10 +417,10 @@ M._find_account_index = function(store, account)
     end
 
     for idx, existing in ipairs(store.accounts) do
-        if account.account_id and existing.account_id == account.account_id then
+        if existing.provider == account.provider and account.account_id and existing.account_id == account.account_id then
             return idx
         end
-        if account.refresh_token and existing.refresh_token == account.refresh_token then
+        if existing.provider == account.provider and account.refresh_token and existing.refresh_token == account.refresh_token then
             return idx
         end
     end
@@ -380,9 +430,10 @@ end
 
 ---@param store table
 ---@param account table
+---@param provider string|nil
 ---@return table
-M._upsert_account = function(store, account)
-    local normalized = M._normalize_account(account)
+M._upsert_account = function(store, account, provider)
+    local normalized = M._normalize_account(account, provider)
     local idx = M._find_account_index(store, normalized)
 
     if idx then
@@ -399,32 +450,49 @@ M._upsert_account = function(store, account)
 end
 
 ---@param store table|nil
+---@param provider string|nil
 ---@return table|nil
-M._get_preferred_account = function(store)
+M._get_preferred_account = function(store, provider)
+    provider = provider or "google"
     if not store or type(store.accounts) ~= "table" then
         return nil
     end
 
-    if store.preferred_account_id then
+    local preferred_account_id = nil
+    if type(store.preferred_account_ids) == "table" then
+        preferred_account_id = store.preferred_account_ids[provider]
+    elseif provider == "google" then
+        preferred_account_id = store.preferred_account_id
+    end
+
+    if preferred_account_id then
         for _, account in ipairs(store.accounts) do
-            if account.account_id == store.preferred_account_id then
+            if account.provider == provider and account.account_id == preferred_account_id then
                 return account
             end
         end
     end
 
-    return store.accounts[1]
+    for _, account in ipairs(store.accounts) do
+        if account.provider == provider then
+            return account
+        end
+    end
+
+    return nil
 end
 
 ---@param store table|nil
+---@param provider string|nil
 ---@return table
-M._get_candidate_accounts = function(store)
+M._get_candidate_accounts = function(store, provider)
+    provider = provider or "google"
     local ordered = {}
     if not store or type(store.accounts) ~= "table" then
         return ordered
     end
 
-    local preferred = M._get_preferred_account(store)
+    local preferred = M._get_preferred_account(store, provider)
     local seen = {}
 
     local function maybe_insert(account)
@@ -432,7 +500,7 @@ M._get_candidate_accounts = function(store)
             return
         end
         seen[account.account_id] = true
-        if not account.invalid and (account.refresh_token or account.access_token) then
+        if account.provider == provider and not account.invalid and (account.refresh_token or account.access_token) then
             table.insert(ordered, account)
         end
     end
@@ -508,8 +576,9 @@ end
 M.save_tokens = function(tokens, callback)
     callback = callback or function() end
     M.load_account_store(function(store)
-        local account = M._upsert_account(store, tokens)
-        store.preferred_account_id = account.account_id
+        local provider = (tokens and tokens.provider) or "google"
+        local account = M._upsert_account(store, tokens, provider)
+        store.preferred_account_ids[provider] = account.account_id
         M.save_account_store(store, callback)
     end)
 end
@@ -518,7 +587,7 @@ end
 ---@param callback function # called with tokens table or nil
 M.load_tokens = function(callback)
     M.load_account_store(function(store)
-        callback(M._get_preferred_account(store))
+        callback(M._get_preferred_account(store, "google"))
     end)
 end
 
@@ -544,25 +613,26 @@ M.logout = function(callback)
 end
 
 -- Refresh one stored account using its refresh token.
----@param config table # {client_id, client_secret}
+---@param config table # provider config or provider config map
+---@param provider string|nil
 ---@param store table
 ---@param account table # must have refresh_token
 ---@param callback function # called with updated account table or nil
-M._refresh_account = function(config, store, account, callback)
+M._refresh_account = function(config, provider, store, account, callback)
+    provider = provider or (account and account.provider) or "google"
     if not account or not account.refresh_token then
         callback(nil)
         return
     end
 
-    local args = {
-        "-s",
-        "-X", "POST",
-        "https://oauth2.googleapis.com/token",
-        "-d", "client_id=" .. config.client_id,
-        "-d", "client_secret=" .. config.client_secret,
-        "-d", "refresh_token=" .. account.refresh_token,
-        "-d", "grant_type=refresh_token",
-    }
+    local provider_definition = M._get_provider_definition(provider)
+    local provider_config = M._get_provider_config(config, provider)
+    if not provider_definition or not provider_config or not provider_definition.build_refresh_token_args then
+        callback(nil)
+        return
+    end
+
+    local args = provider_definition.build_refresh_token_args(provider_config, account)
 
     tasker.run(nil, "curl", args, function(code, signal, stdout_data)
         if code ~= 0 then
@@ -575,8 +645,9 @@ M._refresh_account = function(config, store, account, callback)
             new_tokens.refresh_token = new_tokens.refresh_token or account.refresh_token
             new_tokens.account_id = account.account_id
             new_tokens.label = account.label
+            new_tokens.provider = provider
             new_tokens.invalid = false
-            local updated_account = M._upsert_account(store, new_tokens)
+            local updated_account = M._upsert_account(store, new_tokens, provider)
             M.save_account_store(store, function()
                 callback(updated_account)
             end)
@@ -588,33 +659,37 @@ end
 
 -- Refresh an expired access token using the refresh token.
 -- Backward-compatible wrapper around the account-store refresh path.
----@param config table # {client_id, client_secret}
+---@param config table # provider config or provider config map
 ---@param tokens table # must have refresh_token
 ---@param callback function # called with new tokens table or nil
-M.refresh_token = function(config, tokens, callback)
+---@param provider string|nil
+M.refresh_token = function(config, tokens, callback, provider)
+    provider = provider or (tokens and tokens.provider) or "google"
     if not tokens or not tokens.refresh_token then
         callback(nil)
         return
     end
 
     M.load_account_store(function(store)
-        local account = M._upsert_account(store, tokens)
-        M._refresh_account(config, store, account, callback)
+        local account = M._upsert_account(store, tokens, provider)
+        M._refresh_account(config, provider, store, account, callback)
     end)
 end
 
 -- Save newly authenticated OAuth tokens into the account store.
 ---@param tokens table|nil
+---@param provider string|nil
 ---@param callback function # called with saved account table or nil
-M._persist_authenticated_account = function(tokens, callback)
+M._persist_authenticated_account = function(tokens, provider, callback)
+    provider = provider or (tokens and tokens.provider) or "google"
     if not tokens then
         callback(nil)
         return
     end
 
     M.load_account_store(function(store)
-        local account = M._upsert_account(store, tokens)
-        store.preferred_account_id = account.account_id
+        local account = M._upsert_account(store, tokens, provider)
+        store.preferred_account_ids[provider] = account.account_id
         M.save_account_store(store, function()
             callback(account)
         end)
@@ -626,8 +701,10 @@ end
 ---@param code string
 ---@param port number
 ---@param callback function # called with (exit_code, signal, stdout_data)
-M._run_auth_code_exchange = function(config, code, port, callback)
-    local args = M.build_token_exchange_args(config, code, port)
+---@param provider string|nil
+M._run_auth_code_exchange = function(config, code, port, callback, provider)
+    local provider_config = M._get_provider_config(config, provider)
+    local args = M.build_token_exchange_args(provider_config or config, code, port, provider)
     tasker.run(nil, "curl", args, callback)
 end
 
@@ -636,7 +713,9 @@ end
 ---@param code string
 ---@param port number
 ---@param callback function # called with account table or nil
-M._exchange_auth_code = function(config, code, port, callback)
+---@param provider string|nil
+M._exchange_auth_code = function(config, code, port, callback, provider)
+    provider = provider or "google"
     M._run_auth_code_exchange(config, code, port, function(exit_code, signal, stdout_data)
         if exit_code ~= 0 then
             callback(nil)
@@ -645,30 +724,38 @@ M._exchange_auth_code = function(config, code, port, callback)
 
         local tokens = M.parse_token_response(stdout_data)
         if not tokens then
-            logger.warning("Google OAuth: failed to parse token response")
+            logger.warning(M._get_provider_display_name(provider) .. ": failed to parse token response")
             callback(nil)
             return
         end
+        tokens.provider = provider
 
-        M._persist_authenticated_account(tokens, callback)
-    end)
+        M._persist_authenticated_account(tokens, provider, callback)
+    end, provider)
 end
 
 -- Start OAuth flow: open browser, wait for redirect, exchange code for tokens.
----@param config table # OAuth provider config with client_id, client_secret, scopes
+---@param config table # OAuth provider config or provider config map
+---@param provider string|function|nil
 ---@param callback function # called with account table or nil
-M.authenticate = function(config, callback)
+M.authenticate = function(config, provider, callback)
+    if type(provider) == "function" and callback == nil then
+        callback = provider
+        provider = "google"
+    end
+    provider = provider or "google"
+    local provider_config = M._get_provider_config(config, provider)
     local server = uv.new_tcp()
     server:bind("127.0.0.1", 0)
 
     local addr = server:getsockname()
     local port = addr.port
 
-    logger.debug("Google OAuth: starting auth server on port " .. port)
+    logger.debug(M._get_provider_display_name(provider) .. ": starting auth server on port " .. port)
 
     server:listen(1, function(err)
         if err then
-            logger.error("Google OAuth: server listen error: " .. tostring(err))
+            logger.error(M._get_provider_display_name(provider) .. ": server listen error: " .. tostring(err))
             server:close()
             vim.schedule(function()
                 callback(nil)
@@ -698,14 +785,14 @@ M.authenticate = function(config, callback)
             if not callback_result.code then
                 vim.schedule(function()
                     if callback_result.is_cancelled then
-                        vim.api.nvim_echo({{ "Google OAuth: Authentication was cancelled in the browser.", "WarningMsg" }}, true, {})
+                        vim.api.nvim_echo({{ M._get_provider_display_name(provider) .. ": Authentication was cancelled in the browser.", "WarningMsg" }}, true, {})
                     end
                     callback(nil)
                 end)
                 return
             end
 
-            M._exchange_auth_code(config, callback_result.code, port, callback)
+            M._exchange_auth_code(config, callback_result.code, port, callback, provider)
         end)
     end)
 
@@ -713,10 +800,10 @@ M.authenticate = function(config, callback)
     local timeout_timer = uv.new_timer()
     timeout_timer:start(30000, 0, function()
         if not server:is_closing() then
-            logger.warning("Google OAuth: authentication timed out after 30 seconds")
+            logger.warning(M._get_provider_display_name(provider) .. ": authentication timed out after 30 seconds")
             server:close()
             vim.schedule(function()
-                vim.api.nvim_echo({{ "Google OAuth: Authentication timed out.", "ErrorMsg" }}, true, {})
+                vim.api.nvim_echo({{ M._get_provider_display_name(provider) .. ": Authentication timed out.", "ErrorMsg" }}, true, {})
                 callback(nil)
             end)
         end
@@ -724,38 +811,41 @@ M.authenticate = function(config, callback)
     end)
 
     -- Open browser for OAuth consent
-    local auth_url = M.build_auth_url(config, port)
+    local auth_url = M.build_auth_url(provider_config or config, port, provider)
     local open_cmd = M._get_platform() == "darwin" and "open" or "xdg-open"
     vim.fn.jobstart({ open_cmd, auth_url }, { detach = true })
 
     vim.schedule(function()
-        vim.api.nvim_echo({{ "Google OAuth: Please complete authentication in your browser...", "WarningMsg" }}, true, {})
+        vim.api.nvim_echo({{ M._get_provider_display_name(provider) .. ": Please complete authentication in your browser...", "WarningMsg" }}, true, {})
     end)
 end
 
 -- Get a valid access token from the preferred account, refreshing or re-authenticating as needed.
 -- Backward-compatible helper for older call sites.
----@param config table # OAuth provider config
+---@param config table # OAuth provider config or provider config map
 ---@param callback function # called with access_token string or nil
-M.get_access_token = function(config, callback, url)
+---@param url string|nil
+---@param provider string|nil
+M.get_access_token = function(config, callback, url, provider)
+    provider = provider or "google"
     M.load_account_store(function(store)
-        local account = M._get_preferred_account(store)
+        local account = M._get_preferred_account(store, provider)
         if account and not M.is_token_expired(account) then
             callback(account.access_token)
             return
         end
 
         if account and account.refresh_token then
-            M._refresh_account(config, store, account, function(updated_account)
+            M._refresh_account(config, provider, store, account, function(updated_account)
                 if updated_account then
-                    store.preferred_account_id = updated_account.account_id
+                    store.preferred_account_ids[provider] = updated_account.account_id
                     M.save_account_store(store, function()
                         callback(updated_account.access_token)
                     end)
                 else
                     M._prompt_auth(
                         config,
-                        "Google OAuth: Token refresh failed. Please re-authenticate.",
+                        M._refresh_failure_message(provider, account),
                         function(new_account)
                             callback(new_account and new_account.access_token or nil)
                         end,
@@ -766,7 +856,7 @@ M.get_access_token = function(config, callback, url)
         else
             M._prompt_auth(
                 config,
-                "Google OAuth: No saved credentials. Please authenticate to access Google Drive files.",
+                provider_definitions[provider] and provider_definitions[provider].prompt_reason("no_credentials") or "OAuth: no saved credentials.",
                 function(new_account)
                     callback(new_account and new_account.access_token or nil)
                 end,
@@ -1031,7 +1121,8 @@ M._decide_fetch_action = function(url, public_result, public_err, provider, info
         }
     end
 
-    if provider ~= "google" then
+    local provider_definition = M._get_provider_definition(provider)
+    if not provider_definition then
         return {
             action = "error",
             message = public_err.message,
@@ -1041,7 +1132,7 @@ M._decide_fetch_action = function(url, public_result, public_err, provider, info
     if not info then
         return {
             action = "error",
-            message = "Public access failed and Google OAuth does not support this URL format: " .. url,
+            message = provider_definition.missing_url_message and provider_definition.missing_url_message(url) or public_err.message,
         }
     end
 
@@ -1063,13 +1154,6 @@ M._classify_api_error = function(error_code)
     return "other"
 end
 
--- Map of URL host patterns to OAuth provider names.
--- Used to auto-select the correct provider without prompting the user.
-local url_provider_map = {
-    { pattern = "docs%.google%.com/", provider = "google" },
-    { pattern = "drive%.google%.com/", provider = "google" },
-}
-
 -- Detect the OAuth provider for a URL based on well-known host patterns.
 ---@param url string|nil # the URL to check
 ---@return string|nil # provider name (e.g. "google") or nil if unknown
@@ -1077,9 +1161,11 @@ M._detect_provider_for_url = function(url)
     if not url or type(url) ~= "string" then
         return nil
     end
-    for _, entry in ipairs(url_provider_map) do
-        if url:match(entry.pattern) then
-            return entry.provider
+    for provider_name, definition in pairs(provider_definitions or {}) do
+        for _, pattern in ipairs(definition.detect_patterns or {}) do
+            if url:match(pattern) then
+                return provider_name
+            end
         end
     end
     return nil
@@ -1093,29 +1179,27 @@ end
 ---@param callback function # called with account table or nil if cancelled
 ---@param url string|nil # optional URL to auto-detect provider
 M._prompt_auth = function(config, reason, callback, url)
-    -- Provider list (add entries here for future OAuth providers)
-    local providers = {
-        { name = "Google Drive (OAuth)", provider = "google" },
-    }
+    local detected = M._detect_provider_for_url(url)
+    local providers = M._get_provider_prompt_choices(detected)
 
     -- Helper: authenticate with a given provider entry
     local function auth_with_provider(selected)
-        if selected.provider == "google" then
-            M.authenticate(config, function(account)
-                if account then
-                    callback(account)
-                else
-                    callback(nil)
-                end
-            end)
-        else
-            logger.warning("OAuth provider " .. selected.provider .. " not yet implemented")
+        if not M._has_provider_config(selected.provider, config) then
+            logger.warning(M._get_provider_display_name(selected.provider) .. ": missing OAuth client configuration")
             callback(nil)
+            return
         end
+
+        M.authenticate(config, selected.provider, function(account)
+            if account then
+                callback(account)
+            else
+                callback(nil)
+            end
+        end)
     end
 
     -- Auto-detect provider from URL
-    local detected = M._detect_provider_for_url(url)
     if detected then
         for _, p in ipairs(providers) do
             if p.provider == detected then
@@ -1294,29 +1378,193 @@ M._fetch_google_api_once = function(url, info, access_token, callback)
     end)
 end
 
+provider_definitions = {
+    google = {
+        display_name = "Google Drive (OAuth)",
+        detect_patterns = {
+            "docs%.google%.com/",
+            "drive%.google%.com/",
+        },
+        parse_url = function(url)
+            return M.parse_url(url)
+        end,
+        build_auth_url = function(config, port)
+            return build_google_auth_url(config, port)
+        end,
+        build_token_exchange_args = function(config, code, port)
+            return build_google_token_exchange_args(config, code, port)
+        end,
+        build_refresh_token_args = function(config, account)
+            return build_google_refresh_token_args(config, account)
+        end,
+        classify_api_error = function(error_code)
+            return M._classify_api_error(error_code)
+        end,
+        format_api_error = function(error)
+            return M._format_api_error_message(error)
+        end,
+        fetch_with_access_token = function(url, info, access_token, callback)
+            return M._fetch_google_api_once(url, info, access_token, callback)
+        end,
+        missing_url_message = function(url)
+            return "Public access failed and Google OAuth does not support this URL format: " .. url
+        end,
+        prompt_reason = function(kind, details)
+            if kind == "no_credentials" then
+                return "Google OAuth: No saved credentials. Please authenticate to access Google Drive files."
+            end
+            if kind == "reauth" and details and details ~= "" then
+                return details .. " — Re-authenticate with a different account?"
+            end
+            return "Google OAuth: authentication cancelled or failed."
+        end,
+        refresh_failure_message = "Google OAuth: token refresh failed for this account.",
+        missing_refresh_token_message = "Google OAuth: no refresh token available for this account.",
+    },
+}
+
+---@param provider string|nil
+---@return table|nil
+M._get_provider_definition = function(provider)
+    if not provider then
+        return nil
+    end
+    return provider_definitions[provider]
+end
+
+---@param provider string|nil
+---@return string
+M._get_provider_display_name = function(provider)
+    local definition = M._get_provider_definition(provider)
+    return definition and definition.display_name or tostring(provider or "OAuth")
+end
+
+---@param provider string|nil
+---@return table
+M._get_provider_prompt_choices = function(provider)
+    local choices = {}
+    if provider then
+        local definition = M._get_provider_definition(provider)
+        if definition then
+            table.insert(choices, {
+                provider = provider,
+                name = definition.display_name,
+            })
+        end
+        return choices
+    end
+
+    for provider_name, definition in pairs(provider_definitions) do
+        table.insert(choices, {
+            provider = provider_name,
+            name = definition.display_name,
+        })
+    end
+    table.sort(choices, function(a, b)
+        return a.name < b.name
+    end)
+    return choices
+end
+
+---@param provider string|nil
+---@param url string
+---@return table|nil
+M._parse_provider_url = function(provider, url)
+    local definition = M._get_provider_definition(provider)
+    if not definition or not definition.parse_url then
+        return nil
+    end
+    return definition.parse_url(url)
+end
+
+---@param config table|nil
+---@param provider string|nil
+---@return table|nil
+M._get_provider_config = function(config, provider)
+    provider = provider or "google"
+    if type(config) ~= "table" then
+        return nil
+    end
+    if config.client_id or config.client_secret or config.scopes then
+        return provider == "google" and config or nil
+    end
+    if type(config.oauth) == "table" then
+        local nested = M._get_provider_config(config.oauth, provider)
+        if nested then
+            return nested
+        end
+    end
+    if type(config.providers) == "table" then
+        return config.providers[provider]
+    end
+    if type(config[provider]) == "table" then
+        return config[provider]
+    end
+    return nil
+end
+
+---@param provider string|nil
+---@param config table|nil
+---@return boolean
+M._has_provider_config = function(provider, config)
+    local provider_config = M._get_provider_config(config, provider)
+    return type(provider_config) == "table"
+        and provider_config.client_id ~= nil
+        and provider_config.client_id ~= ""
+        and provider_config.client_secret ~= nil
+        and provider_config.client_secret ~= ""
+end
+
+---@param provider string|nil
+---@param account table
+---@return string
+M._missing_refresh_token_message = function(provider, account)
+    local definition = M._get_provider_definition(provider)
+    return (definition and definition.missing_refresh_token_message) or "OAuth: no refresh token available for this account."
+end
+
+---@param provider string|nil
+---@param account table
+---@return string
+M._refresh_failure_message = function(provider, account)
+    local definition = M._get_provider_definition(provider)
+    return (definition and definition.refresh_failure_message) or "OAuth: token refresh failed for this account."
+end
+
 ---@param config table
 ---@param store table
 ---@param url string
 ---@param info table
 ---@param account table
 ---@param callback function
-M._try_account_fetch = function(config, store, url, info, account, callback)
+---@param provider string|nil
+M._try_account_fetch = function(config, store, url, info, account, callback, provider)
+    provider = provider or (account and account.provider) or "google"
+    local provider_definition = M._get_provider_definition(provider)
+    if not provider_definition or not provider_definition.fetch_with_access_token then
+        callback({
+            kind = "other",
+            error = "OAuth provider " .. tostring(provider) .. " does not implement authenticated fetch.",
+            account = account,
+        })
+        return
+    end
     local function attempt(current_account, allow_refresh_on_auth)
         if not current_account.access_token or M.is_token_expired(current_account) then
             if not current_account.refresh_token then
                 callback({
                     kind = "auth",
-                    error = "Google OAuth: no refresh token available for this account.",
+                    error = M._missing_refresh_token_message(provider, current_account),
                     account = current_account,
                 })
                 return
             end
 
-            M._refresh_account(config, store, current_account, function(updated_account)
+            M._refresh_account(config, provider, store, current_account, function(updated_account)
                 if not updated_account then
                     callback({
                         kind = "auth",
-                        error = "Google OAuth: token refresh failed for this account.",
+                        error = M._refresh_failure_message(provider, current_account),
                         account = current_account,
                     })
                     return
@@ -1326,10 +1574,10 @@ M._try_account_fetch = function(config, store, url, info, account, callback)
             return
         end
 
-        M._fetch_google_api_once(url, info, current_account.access_token, function(result)
+        provider_definition.fetch_with_access_token(url, info, current_account.access_token, function(result)
             result.account = current_account
             if result.kind == "auth" and allow_refresh_on_auth and current_account.refresh_token then
-                M._refresh_account(config, store, current_account, function(updated_account)
+                M._refresh_account(config, provider, store, current_account, function(updated_account)
                     if not updated_account then
                         callback(result)
                         return
@@ -1350,9 +1598,11 @@ end
 ---@param url string
 ---@param info table
 ---@param callback function
-M._try_saved_accounts = function(config, url, info, callback)
+---@param provider string|nil
+M._try_saved_accounts = function(config, url, info, callback, provider)
+    provider = provider or "google"
     M.load_account_store(function(store)
-        local candidates = M._get_candidate_accounts(store)
+        local candidates = M._get_candidate_accounts(store, provider)
         if #candidates == 0 then
             callback({ kind = "none" })
             return
@@ -1372,10 +1622,10 @@ M._try_saved_accounts = function(config, url, info, callback)
 
             M._try_account_fetch(config, store, url, info, account, function(result)
                 if result.kind == "success" then
-                    local saved_account = M._upsert_account(store, result.account)
+                    local saved_account = M._upsert_account(store, result.account, provider)
                     saved_account.last_used_at = os.time()
                     saved_account.invalid = false
-                    store.preferred_account_id = saved_account.account_id
+                    store.preferred_account_ids[provider] = saved_account.account_id
                     M.save_account_store(store, function()
                         callback({
                             kind = "success",
@@ -1389,7 +1639,7 @@ M._try_saved_accounts = function(config, url, info, callback)
                 else
                     callback(result)
                 end
-            end)
+            end, provider)
         end
 
         try_next()
@@ -1399,11 +1649,12 @@ end
 -- Fetch file content from Google Drive
 -- This is the main entry point called from helper.lua
 ---@param url string # Google Drive/Docs URL
----@param config table # OAuth provider config
+---@param config table # OAuth provider config or provider config map
 ---@param callback function # called with (formatted_content_string, error_string)
 M.fetch_content = function(url, config, callback)
-    local info = M.parse_url(url)
     local provider = M._detect_provider_for_url(url)
+    local info = M._parse_provider_url(provider, url)
+    local provider_definition = M._get_provider_definition(provider)
 
     M._fetch_public_content(url, function(public_result, public_err)
         local decision = M._decide_fetch_action(url, public_result, public_err, provider, info)
@@ -1424,6 +1675,11 @@ M.fetch_content = function(url, config, callback)
             return
         end
 
+        if not M._has_provider_config(provider, config) then
+            callback(nil, M._get_provider_display_name(provider) .. ": missing OAuth client configuration.")
+            return
+        end
+
         M._try_saved_accounts(config, url, info, function(result)
             if result.kind == "success" then
                 callback(result.content)
@@ -1435,38 +1691,42 @@ M.fetch_content = function(url, config, callback)
                 return
             end
 
-            local reason = "Google OAuth: No saved credentials. Please authenticate to access Google Drive files."
+            local reason = provider_definition and provider_definition.prompt_reason("no_credentials")
+                or "OAuth: no saved credentials."
             if result.kind == "exhausted" and result.error then
-                reason = result.error .. " — Re-authenticate with a different account?"
+                reason = provider_definition and provider_definition.prompt_reason("reauth", result.error)
+                    or (result.error .. " — Re-authenticate with a different account?")
             end
 
             M._prompt_auth(config, reason, function(new_account)
                 if not new_account then
-                    callback(nil, "Google OAuth: authentication cancelled or failed.")
+                    callback(nil, provider_definition and provider_definition.prompt_reason("cancelled")
+                        or "OAuth: authentication cancelled or failed.")
                     return
                 end
 
                 M.load_account_store(function(store)
-                    local account = M._upsert_account(store, new_account)
-                    store.preferred_account_id = account.account_id
+                    local account = M._upsert_account(store, new_account, provider)
+                    store.preferred_account_ids[provider] = account.account_id
                     M.save_account_store(store, function()
                         M._try_account_fetch(config, store, url, info, account, function(auth_result)
                             if auth_result.kind == "success" then
-                                local saved_account = M._upsert_account(store, auth_result.account)
+                                local saved_account = M._upsert_account(store, auth_result.account, provider)
                                 saved_account.last_used_at = os.time()
                                 saved_account.invalid = false
-                                store.preferred_account_id = saved_account.account_id
+                                store.preferred_account_ids[provider] = saved_account.account_id
                                 M.save_account_store(store, function()
                                     callback(auth_result.content)
                                 end)
                             else
-                                callback(nil, auth_result.error or "Google OAuth: authentication cancelled or failed.")
+                                callback(nil, auth_result.error or (provider_definition and provider_definition.prompt_reason("cancelled")
+                                    or "OAuth: authentication cancelled or failed."))
                             end
-                        end)
+                        end, provider)
                     end)
                 end)
             end, url)
-        end)
+        end, provider)
     end)
 end
 

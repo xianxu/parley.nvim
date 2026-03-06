@@ -3038,7 +3038,7 @@ M._resolve_remote_references = function(opts, callback)
 	for _, url in ipairs(urls_to_fetch) do
 		-- Delegate remote URL handling to the OAuth fetcher. It owns provider
 		-- detection and can fall back to the auth picker for unknown patterns.
-			oauth.fetch_content(url, config.google_drive, function(content, err)
+			oauth.fetch_content(url, config.oauth or config.google_drive, function(content, err)
 			local cached_content = content
 			if not cached_content then
 				cached_content = M._format_remote_reference_error_content(url, err)

@@ -477,7 +477,10 @@ describe("google_drive.fetch_content", function()
         end
 
         local content, err
-        google_drive.fetch_content("https://docs.google.com/document/d/abc123/edit", parley.config.google_drive or {}, function(result, result_err)
+        google_drive.fetch_content("https://docs.google.com/document/d/abc123/edit", {
+            client_id = "test-client-id",
+            client_secret = "test-client-secret",
+        }, function(result, result_err)
             content = result
             err = result_err
         end)
