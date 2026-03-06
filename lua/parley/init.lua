@@ -2942,36 +2942,39 @@ M._resolve_remote_references = function(parsed_chat, config, callback)
 		end
 	end
 
-	if #remote_refs == 0 then
+	-- Deduplicate URLs: each unique URL only needs to be fetched once
+	local unique_urls = {}
+	local seen = {}
+	for _, url in ipairs(remote_refs) do
+		if not seen[url] then
+			seen[url] = true
+			table.insert(unique_urls, url)
+		end
+	end
+
+	if #unique_urls == 0 then
 		callback({})
 		return
 	end
 
 	local resolved = {}
-	local pending = #remote_refs
+	local pending = #unique_urls
 
-	for _, url in ipairs(remote_refs) do
-		if google_drive.is_google_url(url) then
-			google_drive.fetch_content(url, config.google_drive, function(content, err)
-				if content then
-					resolved[url] = content
-				else
-					resolved[url] = "File: " .. url .. "\n[Error: " .. (err or "Failed to fetch") .. "]\n\n"
-					M.logger.warning("Failed to fetch Google Drive content: " .. (err or "unknown error"))
-				end
-				pending = pending - 1
-				if pending == 0 then
-					callback(resolved)
-				end
-			end)
-		else
-			-- Unsupported remote URL type
-			resolved[url] = "File: " .. url .. "\n[Error: Unsupported URL type. Only Google Drive URLs are currently supported.]\n\n"
+	for _, url in ipairs(unique_urls) do
+		-- Delegate remote URL handling to the OAuth fetcher. It owns provider
+		-- detection and can fall back to the auth picker for unknown patterns.
+		google_drive.fetch_content(url, config.google_drive, function(content, err)
+			if content then
+				resolved[url] = content
+			else
+				resolved[url] = "File: " .. url .. "\n[Error: " .. (err or "Failed to fetch") .. "]\n\n"
+				M.logger.warning("Failed to fetch remote content: " .. (err or "unknown error"))
+			end
 			pending = pending - 1
 			if pending == 0 then
 				callback(resolved)
 			end
-		end
+		end)
 	end
 end
 
