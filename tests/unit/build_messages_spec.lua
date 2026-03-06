@@ -68,6 +68,7 @@ end
 
 -- Stub helpers for file I/O
 local stub_helpers = {
+    is_remote_url = function(path) return path:match("^https?://") ~= nil end,
     is_directory = function(path) return false end,
     format_file_content = function(path) return "File content: " .. path end,
     process_directory_pattern = function(path) return "Directory content: " .. path end
@@ -284,6 +285,7 @@ describe("_build_messages: file references", function()
         assert.equals(3, #messages)
         assert.equals("system", messages[2].role)
         -- Both files should be in the same system message
+        assert.is_true(messages[2].content:find("File content: /path/to/file1.lua") ~= nil)
         assert.is_true(messages[2].content:find("File content: /path/to/file2.lua") ~= nil)
     end)
 
@@ -767,5 +769,29 @@ describe("_build_messages: remote file references", function()
         assert.is_true(messages[2].content:match("Google Doc") ~= nil)
         assert.equals("user", messages[3].role)
         assert.equals("Review this doc", messages[3].content)
+    end)
+
+    it("uses cached-miss placeholder for unresolved remote URL references", function()
+        local file_refs = {
+            { line = "@@https://docs.google.com/document/d/abc123/edit",
+              path = "https://docs.google.com/document/d/abc123/edit",
+              original_line_index = 2 }
+        }
+        local pc = parsed_chat({ exchange("Review this doc", nil, nil, file_refs) })
+
+        local messages = parley._build_messages({
+            parsed_chat = pc,
+            start_index = 1,
+            end_index = 100,
+            exchange_idx = 1,
+            agent = agent(),
+            config = parley.config,
+            helpers = stub_helpers,
+            logger = stub_logger,
+        })
+
+        assert.equals(3, #messages)
+        assert.equals("system", messages[2].role)
+        assert.is_true(messages[2].content:match("Remote URL content is not cached") ~= nil)
     end)
 end)
