@@ -737,3 +737,323 @@ describe("oauth: API error classification", function()
         assert.equals("other", oauth._classify_api_error(nil))
     end)
 end)
+
+describe("oauth: OneDrive URL detection", function()
+    it("N1: detects OneDrive live URL", function()
+        assert.is_true(oauth.is_onedrive_url("https://onedrive.live.com/edit?id=ABC123"))
+    end)
+
+    it("N2: detects 1drv.ms short URL", function()
+        assert.is_true(oauth.is_onedrive_url("https://1drv.ms/w/s!AmX_abc123"))
+    end)
+
+    it("N3: rejects non-OneDrive URL", function()
+        assert.is_false(oauth.is_onedrive_url("https://example.com/file.txt"))
+    end)
+
+    it("N4: rejects nil", function()
+        assert.is_false(oauth.is_onedrive_url(nil))
+    end)
+
+    it("N5: rejects Google Drive URL", function()
+        assert.is_false(oauth.is_onedrive_url("https://drive.google.com/file/d/abc123/view"))
+    end)
+end)
+
+describe("oauth: OneDrive URL parsing", function()
+    it("N6: parses OneDrive live URL", function()
+        local info = oauth.parse_onedrive_url("https://onedrive.live.com/edit?id=ABC123")
+        assert.is_not_nil(info)
+        assert.equals("https://onedrive.live.com/edit?id=ABC123", info.shared_url)
+    end)
+
+    it("N7: parses 1drv.ms short URL", function()
+        local info = oauth.parse_onedrive_url("https://1drv.ms/w/s!AmX_abc123")
+        assert.is_not_nil(info)
+        assert.equals("https://1drv.ms/w/s!AmX_abc123", info.shared_url)
+    end)
+
+    it("N8: returns nil for non-OneDrive URL", function()
+        assert.is_nil(oauth.parse_onedrive_url("https://example.com/file.txt"))
+    end)
+
+    it("N9: returns nil for nil input", function()
+        assert.is_nil(oauth.parse_onedrive_url(nil))
+    end)
+end)
+
+describe("oauth: OneDrive sharing URL encoding", function()
+    it("N10: encodes URL with u! prefix and base64url", function()
+        local encoded = oauth._encode_sharing_url("https://onedrive.live.com/edit?id=ABC123")
+        assert.is_true(encoded:match("^u!") ~= nil)
+        -- Should not contain +, /, or = (base64url encoding)
+        local b64part = encoded:sub(3)
+        assert.is_nil(b64part:match("+"))
+        assert.is_nil(b64part:match("/"))
+        assert.is_nil(b64part:match("=$"))
+    end)
+
+    it("N11: encoded URL can be decoded back", function()
+        local url = "https://1drv.ms/w/s!AmX_abc123"
+        local encoded = oauth._encode_sharing_url(url)
+        local b64part = encoded:sub(3)
+        -- Restore standard base64 padding and chars
+        b64part = b64part:gsub("-", "+"):gsub("_", "/")
+        local remainder = #b64part % 4
+        if remainder == 2 then
+            b64part = b64part .. "=="
+        elseif remainder == 3 then
+            b64part = b64part .. "="
+        end
+        local decoded = vim.base64.decode(b64part)
+        assert.equals(url, decoded)
+    end)
+end)
+
+describe("oauth: Microsoft OAuth URL construction", function()
+    it("N12: builds correct Microsoft authorization URL", function()
+        local url = oauth.build_auth_url({
+            client_id = "ms-client-id",
+            client_secret = "ms-secret",
+            scopes = { "Files.Read", "Files.Read.All", "offline_access" },
+        }, 52847, "microsoft")
+
+        assert.is_true(url:match("login%.microsoftonline%.com/consumers/oauth2/v2%.0/authorize") ~= nil)
+        assert.is_true(url:match("client_id=ms%-client%-id") ~= nil)
+        assert.is_true(url:match("localhost%%3A52847") ~= nil)
+        assert.is_true(url:match("response_type=code") ~= nil)
+        assert.is_true(url:match("prompt=consent") ~= nil)
+        assert.is_true(url:match("offline_access") ~= nil)
+    end)
+
+    it("N13: auto-includes offline_access scope if missing", function()
+        local url = oauth.build_auth_url({
+            client_id = "ms-client-id",
+            client_secret = "ms-secret",
+            scopes = { "Files.Read" },
+        }, 52847, "microsoft")
+
+        assert.is_true(url:match("offline_access") ~= nil)
+    end)
+end)
+
+describe("oauth: Microsoft token exchange args", function()
+    it("N14: builds correct token exchange curl arguments with scope", function()
+        local args = oauth.build_token_exchange_args({
+            client_id = "ms-client-id",
+            client_secret = "ms-secret",
+        }, "ms-auth-code-123", 52847, "microsoft")
+
+        assert.is_true(type(args) == "table")
+        local args_str = table.concat(args, " ")
+        assert.is_true(args_str:match("login%.microsoftonline%.com/consumers/oauth2/v2%.0/token") ~= nil)
+        assert.is_true(args_str:match("ms%-auth%-code%-123") ~= nil)
+        assert.is_true(args_str:match("ms%-client%-id") ~= nil)
+        assert.is_true(args_str:match("ms%-secret") ~= nil)
+        assert.is_true(args_str:match("authorization_code") ~= nil)
+        assert.is_true(args_str:match("scope=") ~= nil)
+        assert.is_true(args_str:match("Files%.Read") ~= nil)
+        assert.is_true(args_str:match("offline_access") ~= nil)
+    end)
+end)
+
+describe("oauth: Microsoft API error classification", function()
+    it("N15: classifies 401 as auth error", function()
+        assert.equals("auth", oauth._classify_microsoft_api_error(401))
+    end)
+
+    it("N16: classifies 403 as auth error", function()
+        assert.equals("auth", oauth._classify_microsoft_api_error(403))
+    end)
+
+    it("N17: classifies 400 as other error", function()
+        assert.equals("other", oauth._classify_microsoft_api_error(400))
+    end)
+
+    it("N18: classifies 500 as other error", function()
+        assert.equals("other", oauth._classify_microsoft_api_error(500))
+    end)
+
+    it("N19: classifies nil as other error", function()
+        assert.equals("other", oauth._classify_microsoft_api_error(nil))
+    end)
+end)
+
+describe("oauth: auto-detect Microsoft provider from URL", function()
+    it("N20: detects Microsoft for onedrive.live.com URL", function()
+        assert.equals("microsoft", oauth._detect_provider_for_url("https://onedrive.live.com/edit?id=ABC123"))
+    end)
+
+    it("N21: detects Microsoft for 1drv.ms URL", function()
+        assert.equals("microsoft", oauth._detect_provider_for_url("https://1drv.ms/w/s!AmX_abc123"))
+    end)
+end)
+
+describe("oauth: Microsoft OneDrive fetch helper", function()
+    local original_run_microsoft_metadata_request
+    local original_run_microsoft_content_request
+
+    before_each(function()
+        original_run_microsoft_metadata_request = oauth._run_microsoft_metadata_request
+        original_run_microsoft_content_request = oauth._run_microsoft_content_request
+    end)
+
+    after_each(function()
+        oauth._run_microsoft_metadata_request = original_run_microsoft_metadata_request
+        oauth._run_microsoft_content_request = original_run_microsoft_content_request
+    end)
+
+    it("N22: fetches OneDrive shared file content after metadata lookup", function()
+        oauth._run_microsoft_metadata_request = function(access_token, encoded_share, callback)
+            callback(0, 0, '{"name":"document.txt","size":1234}')
+        end
+        oauth._run_microsoft_content_request = function(access_token, encoded_share, callback)
+            callback(0, 0, "hello from onedrive\n" .. "__PARLEY_REMOTE_FETCH_META__" .. "\nHTTP_STATUS:200\nCONTENT_TYPE:text/plain\n")
+        end
+
+        local result
+        oauth._fetch_microsoft_api_once("https://onedrive.live.com/edit?id=ABC123", {
+            shared_url = "https://onedrive.live.com/edit?id=ABC123",
+        }, "ms-token", function(res)
+            result = res
+        end)
+
+        assert.equals("success", result.kind)
+        assert.is_true(result.content:match("document%.txt") ~= nil)
+        assert.is_true(result.content:match("1: hello from onedrive") ~= nil)
+    end)
+
+    it("N23: rejects OneDrive shared folders", function()
+        oauth._run_microsoft_metadata_request = function(access_token, encoded_share, callback)
+            callback(0, 0, '{"name":"My Folder","folder":{"childCount":5}}')
+        end
+
+        local result
+        oauth._fetch_microsoft_api_once("https://onedrive.live.com/edit?id=ABC123", {
+            shared_url = "https://onedrive.live.com/edit?id=ABC123",
+        }, "ms-token", function(res)
+            result = res
+        end)
+
+        assert.equals("other", result.kind)
+        assert.equals("OneDrive API: shared folders are not supported yet.", result.error)
+    end)
+
+    it("N24: handles metadata API error response", function()
+        oauth._run_microsoft_metadata_request = function(access_token, encoded_share, callback)
+            callback(0, 0, '{"error":{"code":"unauthenticated","message":"Token expired"}}')
+        end
+
+        local result
+        oauth._fetch_microsoft_api_once("https://onedrive.live.com/edit?id=ABC123", {
+            shared_url = "https://onedrive.live.com/edit?id=ABC123",
+        }, "ms-token", function(res)
+            result = res
+        end)
+
+        assert.equals("auth", result.kind)
+        assert.is_true(result.error:match("Token expired") ~= nil)
+    end)
+
+    it("N25: handles curl failure gracefully", function()
+        oauth._run_microsoft_metadata_request = function(access_token, encoded_share, callback)
+            callback(1, 0, "")
+        end
+
+        local result
+        oauth._fetch_microsoft_api_once("https://onedrive.live.com/edit?id=ABC123", {
+            shared_url = "https://onedrive.live.com/edit?id=ABC123",
+        }, "ms-token", function(res)
+            result = res
+        end)
+
+        assert.equals("other", result.kind)
+        assert.equals("OneDrive API: failed to fetch file metadata", result.error)
+    end)
+
+    it("N26: detects binary Office MIME types", function()
+        assert.equals("docx", oauth._get_office_extension("application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
+        assert.equals("xlsx", oauth._get_office_extension("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+        assert.equals("pptx", oauth._get_office_extension("application/vnd.openxmlformats-officedocument.presentationml.presentation"))
+        assert.equals("doc", oauth._get_office_extension("application/msword"))
+        assert.is_nil(oauth._get_office_extension("text/plain"))
+        assert.is_nil(oauth._get_office_extension("application/json"))
+        assert.is_nil(oauth._get_office_extension(nil))
+    end)
+
+    it("N27: converts binary Office content via conversion and returns text", function()
+        -- Mock metadata to include a docx mimeType
+        oauth._run_microsoft_metadata_request = function(_, _, callback)
+            callback(0, 0, vim.json.encode({
+                name = "Report.docx",
+                file = { mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
+            }))
+        end
+        -- Mock content download returning binary data
+        oauth._run_microsoft_content_request = function(_, _, callback)
+            callback(0, 0, "PK\003\004binary-docx-data\n__PARLEY_REMOTE_FETCH_META__\nHTTP_STATUS:200\nCONTENT_TYPE:application/vnd.openxmlformats-officedocument.wordprocessingml.document\n")
+        end
+        -- Mock the conversion function to return plain text
+        oauth._convert_office_to_text = function(_, _, cb)
+            cb("Hello, this is the document content.")
+        end
+
+        local result
+        oauth._fetch_microsoft_api_once("https://1drv.ms/w/c/abc123", {
+            shared_url = "https://1drv.ms/w/c/abc123",
+        }, "ms-token", function(res)
+            result = res
+        end)
+
+        assert.equals("success", result.kind)
+        assert.truthy(result.content:match("Report%.docx"))
+        assert.truthy(result.content:match("Hello, this is the document content"))
+    end)
+
+    it("N28: returns error when Office conversion fails", function()
+        oauth._run_microsoft_metadata_request = function(_, _, callback)
+            callback(0, 0, vim.json.encode({
+                name = "Report.docx",
+                file = { mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
+            }))
+        end
+        oauth._run_microsoft_content_request = function(_, _, callback)
+            callback(0, 0, "PK\003\004binary-docx-data\n__PARLEY_REMOTE_FETCH_META__\nHTTP_STATUS:200\nCONTENT_TYPE:application/vnd.openxmlformats-officedocument.wordprocessingml.document\n")
+        end
+        oauth._convert_office_to_text = function(_, _, cb)
+            cb(nil, "cannot convert .docx to text. Install pandoc: https://pandoc.org/installing.html")
+        end
+
+        local result
+        oauth._fetch_microsoft_api_once("https://1drv.ms/w/c/abc123", {
+            shared_url = "https://1drv.ms/w/c/abc123",
+        }, "ms-token", function(res)
+            result = res
+        end)
+
+        assert.equals("other", result.kind)
+        assert.truthy(result.error:match("pandoc"))
+    end)
+
+    it("N29: passes through text content without conversion", function()
+        oauth._run_microsoft_metadata_request = function(_, _, callback)
+            callback(0, 0, vim.json.encode({
+                name = "notes.txt",
+                file = { mimeType = "text/plain" },
+            }))
+        end
+        oauth._run_microsoft_content_request = function(_, _, callback)
+            callback(0, 0, "Plain text file content\n__PARLEY_REMOTE_FETCH_META__\nHTTP_STATUS:200\nCONTENT_TYPE:text/plain\n")
+        end
+
+        local result
+        oauth._fetch_microsoft_api_once("https://1drv.ms/t/c/abc123", {
+            shared_url = "https://1drv.ms/t/c/abc123",
+        }, "ms-token", function(res)
+            result = res
+        end)
+
+        assert.equals("success", result.kind)
+        assert.truthy(result.content:match("Plain text file content"))
+    end)
+end)

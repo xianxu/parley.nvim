@@ -19,6 +19,11 @@ local dropbox_url_patterns = {
     { pattern = "dropbox%.com/scl/fo/[^/?#]+/([^?#]+)", link_type = "folder" },
 }
 
+local onedrive_url_patterns = {
+    "onedrive%.live%.com/",
+    "1drv%.ms/",
+}
+
 -- Export MIME types for Google Workspace file types
 local export_mimes = {
     document = "text/markdown",
@@ -40,6 +45,16 @@ local type_filetypes = {
     spreadsheet = "csv",
     presentation = "",
     drive_file = "",
+}
+
+-- MIME types that indicate binary Office formats needing conversion to text
+local office_binary_mimes = {
+    ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"] = "docx",
+    ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"] = "xlsx",
+    ["application/vnd.openxmlformats-officedocument.presentationml.presentation"] = "pptx",
+    ["application/msword"] = "doc",
+    ["application/vnd.ms-excel"] = "xls",
+    ["application/vnd.ms-powerpoint"] = "ppt",
 }
 
 local public_fetch_meta_marker = "__PARLEY_REMOTE_FETCH_META__"
@@ -136,6 +151,46 @@ M.parse_dropbox_url = function(url)
     return nil
 end
 
+---@param path string|nil
+---@return boolean
+M.is_onedrive_url = function(path)
+    if not path or type(path) ~= "string" then
+        return false
+    end
+    for _, pattern in ipairs(onedrive_url_patterns) do
+        if path:match(pattern) then
+            return true
+        end
+    end
+    return false
+end
+
+-- Encode a sharing URL for the Microsoft Graph shares API.
+-- Format: "u!" followed by base64url-encoded URL (no padding).
+---@param url string
+---@return string
+M._encode_sharing_url = function(url)
+    -- base64 encode
+    local encoded = vim.base64.encode(url)
+    -- convert to base64url: replace + with -, / with _, remove trailing =
+    encoded = encoded:gsub("+", "-"):gsub("/", "_"):gsub("=+$", "")
+    return "u!" .. encoded
+end
+
+---@param url string
+---@return table|nil
+M.parse_onedrive_url = function(url)
+    if not url or type(url) ~= "string" then
+        return nil
+    end
+    if not M.is_onedrive_url(url) then
+        return nil
+    end
+    return {
+        shared_url = url,
+    }
+end
+
 -- Get the export MIME type for a Google Workspace file type
 ---@param file_type string # one of: document, spreadsheet, presentation, drive_file
 ---@return string|nil # MIME type for export, or nil for direct download types
@@ -154,6 +209,45 @@ M._url_encode = function(str)
         return string.format("%%%02X", string.byte(c))
     end)
     return str
+end
+
+-- URL-decode a percent-encoded string (%XX -> character)
+---@param str string|nil
+---@return string
+M._url_decode = function(str)
+    if not str then
+        return ""
+    end
+    return str:gsub("%%(%x%x)", function(hex)
+        return string.char(tonumber(hex, 16))
+    end)
+end
+
+-- Resolve scopes for a provider: config overrides > defaults, plus required scopes.
+---@param config table|nil
+---@param provider string|nil
+---@return string # space-separated scope string
+M._get_provider_scope_string = function(config, provider)
+    local definition = M._get_provider_definition(provider)
+    local default_scopes = definition and definition.default_scopes or {}
+    local required_scopes = definition and definition.required_scopes or {}
+    local scopes = (type(config) == "table" and config.scopes) or default_scopes
+
+    -- Ensure required scopes are present
+    for _, req in ipairs(required_scopes) do
+        local found = false
+        for _, s in ipairs(scopes) do
+            if s == req then
+                found = true
+                break
+            end
+        end
+        if not found then
+            scopes = vim.list_extend(vim.deepcopy(scopes), { req })
+        end
+    end
+
+    return table.concat(scopes, " ")
 end
 
 ---@param config table|nil
@@ -200,8 +294,7 @@ end
 
 local function build_google_auth_url(config, port)
     local base = "https://accounts.google.com/o/oauth2/v2/auth"
-    local scopes = config.scopes or { "https://www.googleapis.com/auth/drive.readonly" }
-    local scope = table.concat(scopes, " ")
+    local scope = M._get_provider_scope_string(config, "google")
     local redirect_uri = M._build_redirect_uri(config, port)
     local params = {
         "client_id=" .. M._url_encode(config.client_id),
@@ -242,8 +335,7 @@ end
 
 local function build_dropbox_auth_url(config, port)
     local base = "https://www.dropbox.com/oauth2/authorize"
-    local scopes = config.scopes or { "sharing.read" }
-    local scope = table.concat(scopes, " ")
+    local scope = M._get_provider_scope_string(config, "dropbox")
     local redirect_uri = M._build_redirect_uri(config, port)
     local params = {
         "client_id=" .. M._url_encode(config.client_id),
@@ -281,6 +373,50 @@ local function build_dropbox_refresh_token_args(config, account)
     }
 end
 
+local function build_microsoft_auth_url(config, port)
+    local base = "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize"
+    local scope = M._get_provider_scope_string(config, "microsoft")
+    local redirect_uri = M._build_redirect_uri(config, port)
+    local params = {
+        "client_id=" .. M._url_encode(config.client_id),
+        "redirect_uri=" .. M._url_encode(redirect_uri),
+        "response_type=code",
+        "scope=" .. M._url_encode(scope),
+        "prompt=consent",
+    }
+    return base .. "?" .. table.concat(params, "&")
+end
+
+local function build_microsoft_token_exchange_args(config, auth_code, port)
+    local redirect_uri = M._build_redirect_uri(config, port)
+    local scope = M._get_provider_scope_string(config, "microsoft")
+    return {
+        "-s",
+        "-X", "POST",
+        "https://login.microsoftonline.com/consumers/oauth2/v2.0/token",
+        "-d", "code=" .. M._url_encode(auth_code),
+        "-d", "client_id=" .. M._url_encode(config.client_id),
+        "-d", "client_secret=" .. M._url_encode(config.client_secret),
+        "-d", "redirect_uri=" .. M._url_encode(redirect_uri),
+        "-d", "grant_type=authorization_code",
+        "-d", "scope=" .. M._url_encode(scope),
+    }
+end
+
+local function build_microsoft_refresh_token_args(config, account)
+    local scope = M._get_provider_scope_string(config, "microsoft")
+    return {
+        "-s",
+        "-X", "POST",
+        "https://login.microsoftonline.com/consumers/oauth2/v2.0/token",
+        "-d", "client_id=" .. M._url_encode(config.client_id),
+        "-d", "client_secret=" .. M._url_encode(config.client_secret),
+        "-d", "refresh_token=" .. M._url_encode(account.refresh_token),
+        "-d", "grant_type=refresh_token",
+        "-d", "scope=" .. M._url_encode(scope),
+    }
+end
+
 -- Build OAuth authorization URL.
 ---@param config table # provider config or provider config map
 ---@param port number # local server port for redirect_uri
@@ -292,6 +428,8 @@ M.build_auth_url = function(config, port, provider)
         return build_google_auth_url(config, port)
     elseif provider == "dropbox" then
         return build_dropbox_auth_url(config, port)
+    elseif provider == "microsoft" then
+        return build_microsoft_auth_url(config, port)
     end
     error("OAuth provider " .. tostring(provider) .. " does not implement build_auth_url")
 end
@@ -308,6 +446,8 @@ M.build_token_exchange_args = function(config, auth_code, port, provider)
         return build_google_token_exchange_args(config, auth_code, port)
     elseif provider == "dropbox" then
         return build_dropbox_token_exchange_args(config, auth_code, port)
+    elseif provider == "microsoft" then
+        return build_microsoft_token_exchange_args(config, auth_code, port)
     end
     error("OAuth provider " .. tostring(provider) .. " does not implement build_token_exchange_args")
 end
@@ -443,7 +583,11 @@ local function parse_auth_query_param(request_data, key)
     if not request_data or not key then
         return nil
     end
-    return request_data:match("[?&]" .. key .. "=([^&%s]+)")
+    local value = request_data:match("[?&]" .. key .. "=([^&%s]+)")
+    if value then
+        return M._url_decode(value)
+    end
+    return nil
 end
 
 -- Parse the auth code from an HTTP request line
@@ -872,13 +1016,14 @@ M._exchange_auth_code = function(config, code, port, callback, provider)
     provider = provider or "google"
     M._run_auth_code_exchange(config, code, port, function(exit_code, signal, stdout_data)
         if exit_code ~= 0 then
+            logger.warning(M._get_provider_display_name(provider) .. ": token exchange curl failed (exit " .. tostring(exit_code) .. "): " .. tostring(stdout_data))
             callback(nil)
             return
         end
 
         local tokens = M.parse_token_response(stdout_data)
         if not tokens then
-            logger.warning(M._get_provider_display_name(provider) .. ": failed to parse token response")
+            logger.warning(M._get_provider_display_name(provider) .. ": failed to parse token response: " .. tostring(stdout_data))
             callback(nil)
             return
         end
@@ -1156,6 +1301,49 @@ M.format_remote_content = function(name, content, url, content_type, effective_u
     end
 
     return header .. "\n```" .. filetype .. "\n" .. table.concat(numbered_lines, "\n") .. "\n```\n\n"
+end
+
+-- Detect if a MIME type is a binary Office format that needs conversion
+---@param mime_type string|nil
+---@return string|nil # file extension if binary Office format, nil otherwise
+M._get_office_extension = function(mime_type)
+    if not mime_type then return nil end
+    return office_binary_mimes[mime_type:lower():match("^%s*(.-)%s*$")]
+end
+
+-- Convert binary Office content to plain text using pandoc or textutil
+---@param binary_data string # raw binary content
+---@param extension string # file extension (docx, xlsx, etc.)
+---@param callback function # callback(text_content, error_message)
+M._convert_office_to_text = function(binary_data, extension, callback)
+    local tmp_path = os.tmpname() .. "." .. extension
+    local f = io.open(tmp_path, "wb")
+    if not f then
+        callback(nil, "failed to create temp file for Office conversion")
+        return
+    end
+    f:write(binary_data)
+    f:close()
+
+    -- Try pandoc first (cross-platform)
+    tasker.run(nil, "pandoc", { "-t", "plain", "--wrap=none", tmp_path }, function(code, _, stdout)
+        if code == 0 and stdout and stdout ~= "" then
+            os.remove(tmp_path)
+            callback(stdout)
+            return
+        end
+
+        -- Try textutil (macOS built-in)
+        tasker.run(nil, "textutil", { "-convert", "txt", "-stdout", tmp_path }, function(code2, _, stdout2)
+            os.remove(tmp_path)
+            if code2 == 0 and stdout2 and stdout2 ~= "" then
+                callback(stdout2)
+                return
+            end
+
+            callback(nil, "cannot convert ." .. extension .. " to text. Install pandoc: https://pandoc.org/installing.html")
+        end)
+    end)
 end
 
 ---@param status_code number|nil
@@ -1690,9 +1878,151 @@ M._fetch_dropbox_api_once = function(url, info, access_token, callback)
     end)
 end
 
+---@param error_code number|nil
+---@return string
+M._classify_microsoft_api_error = function(error_code)
+    if error_code == 401 or error_code == 403 then
+        return "auth"
+    end
+    return "other"
+end
+
+---@param error table
+---@return string
+M._format_microsoft_api_error_message = function(error)
+    local message = error.message or "unknown error"
+    if error.code ~= nil then
+        return "OneDrive API: " .. message .. " (code: " .. tostring(error.code) .. ")"
+    end
+    return "OneDrive API: " .. message
+end
+
+---@param access_token string
+---@param encoded_share string
+---@param callback function
+M._run_microsoft_metadata_request = function(access_token, encoded_share, callback)
+    local args = {
+        "-s",
+        "-H", "Authorization: Bearer " .. access_token,
+        "https://graph.microsoft.com/v1.0/shares/" .. encoded_share .. "/driveItem",
+    }
+    tasker.run(nil, "curl", args, callback)
+end
+
+---@param access_token string
+---@param encoded_share string
+---@param callback function
+M._run_microsoft_content_request = function(access_token, encoded_share, callback)
+    local args = {
+        "-s",
+        "-L",
+        "-w",
+        "\n" .. public_fetch_meta_marker .. "\n"
+            .. "HTTP_STATUS:%{http_code}\n"
+            .. "CONTENT_TYPE:%{content_type}\n",
+        "-H", "Authorization: Bearer " .. access_token,
+        "https://graph.microsoft.com/v1.0/shares/" .. encoded_share .. "/driveItem/content",
+    }
+    tasker.run(nil, "curl", args, callback)
+end
+
+---@param url string
+---@param info table
+---@param access_token string
+---@param callback function
+M._fetch_microsoft_api_once = function(url, info, access_token, callback)
+    local encoded_share = M._encode_sharing_url(info.shared_url or url)
+
+    M._run_microsoft_metadata_request(access_token, encoded_share, function(code, _, stdout_data)
+        if code ~= 0 then
+            callback({ kind = "other", error = "OneDrive API: failed to fetch file metadata" })
+            return
+        end
+
+        local ok, meta = pcall(vim.json.decode, stdout_data)
+        if not ok or not meta then
+            callback({ kind = "other", error = "OneDrive API: invalid metadata response" })
+            return
+        end
+
+        if meta.error then
+            local err = {
+                code = meta.error.code,
+                message = meta.error.message or "unknown error",
+            }
+            callback({
+                kind = M._classify_microsoft_api_error(
+                    type(meta.error.code) == "number" and meta.error.code or
+                    (meta.error.code == "unauthenticated" and 401 or
+                     meta.error.code == "accessDenied" and 403 or 400)
+                ),
+                error = M._format_microsoft_api_error_message(err),
+            })
+            return
+        end
+
+        if meta.folder then
+            callback({ kind = "other", error = "OneDrive API: shared folders are not supported yet." })
+            return
+        end
+
+        local file_name = meta.name or M._display_name_for_url(url)
+
+        M._run_microsoft_content_request(access_token, encoded_share, function(content_code, _, content_stdout)
+            if content_code ~= 0 then
+                callback({ kind = "other", error = "OneDrive API: failed to fetch file content for " .. file_name })
+                return
+            end
+
+            local parsed = M._parse_public_fetch_response(content_stdout)
+            if not parsed or not parsed.status_code then
+                callback({ kind = "other", error = "OneDrive API: invalid file download response" })
+                return
+            end
+
+            if parsed.status_code < 200 or parsed.status_code >= 300 then
+                local err_ok, err_data = pcall(vim.json.decode, parsed.body)
+                local err = {
+                    code = parsed.status_code,
+                    message = err_ok and err_data and (err_data.error and err_data.error.message or err_data.error_description)
+                        or "failed to fetch file content",
+                }
+                callback({
+                    kind = M._classify_microsoft_api_error(parsed.status_code),
+                    error = M._format_microsoft_api_error_message(err),
+                })
+                return
+            end
+
+            -- Check if content is a binary Office format that needs conversion
+            local mime_type = meta.file and meta.file.mimeType or parsed.content_type
+            local office_ext = M._get_office_extension(mime_type)
+            if office_ext then
+                M._convert_office_to_text(parsed.body, office_ext, function(text, err)
+                    if text then
+                        callback({
+                            kind = "success",
+                            content = M.format_remote_content(file_name, text, url, "text/plain", url),
+                        })
+                    else
+                        callback({ kind = "other", error = "OneDrive API: " .. (err or "failed to convert Office document") })
+                    end
+                end)
+                return
+            end
+
+            callback({
+                kind = "success",
+                content = M.format_remote_content(file_name, parsed.body, url, parsed.content_type, url),
+            })
+        end)
+    end)
+end
+
 provider_definitions = {
     dropbox = {
         display_name = "Dropbox (OAuth)",
+        default_scopes = { "sharing.read" },
         detect_patterns = {
             "dropbox%.com/s/",
             "dropbox%.com/scl/fi/",
@@ -1737,6 +2067,7 @@ provider_definitions = {
     },
     google = {
         display_name = "Google Drive (OAuth)",
+        default_scopes = { "https://www.googleapis.com/auth/drive.readonly" },
         detect_patterns = {
             "docs%.google%.com/",
             "drive%.google%.com/",
@@ -1776,6 +2107,50 @@ provider_definitions = {
         end,
         refresh_failure_message = "Google OAuth: token refresh failed for this account.",
         missing_refresh_token_message = "Google OAuth: no refresh token available for this account.",
+    },
+    microsoft = {
+        display_name = "OneDrive (OAuth)",
+        default_scopes = { "Files.Read", "Files.Read.All" },
+        required_scopes = { "offline_access" },
+        detect_patterns = {
+            "onedrive%.live%.com/",
+            "1drv%.ms/",
+        },
+        parse_url = function(url)
+            return M.parse_onedrive_url(url)
+        end,
+        build_auth_url = function(config, port)
+            return build_microsoft_auth_url(config, port)
+        end,
+        build_token_exchange_args = function(config, code, port)
+            return build_microsoft_token_exchange_args(config, code, port)
+        end,
+        build_refresh_token_args = function(config, account)
+            return build_microsoft_refresh_token_args(config, account)
+        end,
+        classify_api_error = function(error_code)
+            return M._classify_microsoft_api_error(error_code)
+        end,
+        format_api_error = function(error)
+            return M._format_microsoft_api_error_message(error)
+        end,
+        fetch_with_access_token = function(url, info, access_token, callback)
+            return M._fetch_microsoft_api_once(url, info, access_token, callback)
+        end,
+        missing_url_message = function(url)
+            return "Public access failed and OneDrive OAuth does not support this URL format: " .. url
+        end,
+        prompt_reason = function(kind, details)
+            if kind == "no_credentials" then
+                return "OneDrive OAuth: No saved credentials. Please authenticate to access OneDrive files."
+            end
+            if kind == "reauth" and details and details ~= "" then
+                return details .. " — Re-authenticate with a different Microsoft account?"
+            end
+            return "OneDrive OAuth: authentication cancelled or failed."
+        end,
+        refresh_failure_message = "OneDrive OAuth: token refresh failed for this account.",
+        missing_refresh_token_message = "OneDrive OAuth: no refresh token available for this account.",
     },
 }
 
