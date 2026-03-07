@@ -1,0 +1,34 @@
+# Spec: Chat Lifecycle
+
+## Overview
+The chat lifecycle includes creation, sending questions, receiving responses, resubmission, and deletion.
+
+## Creation
+### Command: `:ParleyChatNew` (Global Shortcut: `<C-g>c`)
+- Generates a new `.md` file in `chat_dir` with a `YYYY-MM-DD` timestamp.
+- Writes the default template, substituting: filename, model/provider headers, and initial system prompt.
+- Opens the file in a Neovim buffer and moves the cursor to the first question area.
+
+## Response Generation
+### Command: `:ParleyChatRespond` (Buffer Shortcut: `<C-g><C-g>`)
+- Validates that the buffer is a valid chat file.
+- Identifies the current question based on cursor position.
+- Assembles conversation history, applying memory summarization if enabled.
+- Sends the request to the configured LLM provider via `curl`.
+- Streams the response directly into the buffer beneath the answer prefix.
+
+### Concurrent Process Guard
+- Subsequent `:ParleyChatRespond` calls are ignored if a response is running.
+- Force a new response with `:ParleyChatRespond!`.
+
+## Resubmitting Questions
+### Command: `:ParleyChatRespondAll` (Buffer Shortcut: `<C-g>G`)
+- Sequential resubmission of all questions from the beginning up to the cursor position.
+- Existing answers are replaced in order.
+- Can be terminated at any time with `:ParleyStop` (`<C-g>s`).
+
+## Deletion
+### Command: `:ParleyChatDelete` (Buffer Shortcut: `<C-g>d`)
+- Deletes the current chat file from disk.
+- If `chat_confirm_delete` is `true`, a confirmation prompt MUST be shown.
+- Associated memory and cached metrics for the chat are purged.
