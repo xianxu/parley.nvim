@@ -27,7 +27,7 @@ The plugin uses specific markers to distinguish between roles and special conten
 |---|---|---|
 | `chat_user_prefix` | `💬:` | User's question |
 | `chat_assistant_prefix`| `🤖:` | Assistant's answer |
-| `chat_local_prefix` | `🔒:` | Local section (ignored by LLM) |
+| `chat_local_prefix` | `🔒:` | Local section (ignored by LLM), user can use this to make notes to themselves without submitting them |
 | `thinking_prefix` | `🧠:` | Assistant's internal reasoning |
 | `summary_prefix` | `📝:` | Summary of the exchange (for memory) |
 
