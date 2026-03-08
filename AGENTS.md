@@ -8,6 +8,7 @@
 - Use plan mode for verification steps, not just building
 - Write detailed specs in specs/ upfront to reduce ambiguity
 - Read specs/index.md to get a sense of the features
+- Work for you is in `tasks/issue.md`, you should make plan in `tasks/todo.md`
 
 ### 2. Subagent Strategy
 - Use subagents liberally to keep main context window clean
