@@ -7,7 +7,7 @@ The chat transcript is a Markdown-compatible file with specific conventions for 
 Every chat file MUST contain a header section before the first `---` separator.
 
 ### Required Fields
-- `# topic: <topic>`: The first line of the file. 
+- `# topic: <topic>`: The first line of the file.
 - `- file: <filename>`: Within the first 10 lines.
 
 ### Optional Configuration Overrides
