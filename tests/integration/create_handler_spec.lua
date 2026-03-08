@@ -226,6 +226,22 @@ describe("create_handler: streaming behavior", function()
         assert.equals(">> C", lines[3])
     end)
 
+    it("strips leading newlines from first chunk for consistent spacing", function()
+        local handler = parley.dispatcher.create_handler(buf, nil, 3, true, "", false)
+
+        -- Simulate a model response that starts with leading newlines (e.g., Claude Opus)
+        handler(mock_qid, "\n\n🧠: some reasoning")
+        vim.wait(100, function()
+            local line = vim.api.nvim_buf_get_lines(buf, 3, 4, false)[1]
+            return line == "🧠: some reasoning"
+        end, 10)
+
+        local lines = vim.api.nvim_buf_get_lines(buf, 3, 5, false)
+        assert.equals("🧠: some reasoning", lines[1])
+        -- Line 4 (original "Line 4") should be unchanged, no extra blank lines inserted
+        assert.equals("Line 4", lines[2])
+    end)
+
     it("does not move cursor when cursor callback returns false", function()
         -- Use current window and switch to test buffer so cursor movement is observable.
         local win = vim.api.nvim_get_current_win()

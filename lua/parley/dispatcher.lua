@@ -442,6 +442,8 @@ D.create_handler = function(buf, win, line, first_undojoin, prefix, cursor)
 			vim.api.nvim_buf_set_lines(buf, start_line, start_line + 1, false, replacement)
 			finished_lines = finished_lines + (#completed - 1)
 		else
+			-- Strip leading newlines from the first chunk for consistent spacing across providers
+			chunk = chunk:gsub("^\n+", "")
 			completed, new_pending = split_pending_and_completed(chunk)
 			table.insert(completed, new_pending)
 			local replacement = with_prefix(completed)
