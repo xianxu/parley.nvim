@@ -4440,8 +4440,10 @@ M.cmd.ChatFinder = function(_options)
 		end)
 
 		-- Determine prompt title based on filtering state
-		local prompt_title = is_filtering and string.format("Chat Files (Recent: %d months)", recency_config.months)
-			or "Chat Files (All)"
+		local toggle_key = toggle_shortcut.shortcut
+		local prompt_title = is_filtering
+			and string.format("Chat Files (Recent: %d months Toggle: %s)", recency_config.months, toggle_key)
+			or string.format("Chat Files (All Toggle: %s)", toggle_key)
 
 		-- We'll use the active_window saved in M._chat_finder.active_window
 		M.logger.debug("ChatFinder using active_window: " .. (M._chat_finder.active_window or "nil"))
