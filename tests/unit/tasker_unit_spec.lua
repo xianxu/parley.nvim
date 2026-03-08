@@ -113,6 +113,26 @@ describe("tasker", function()
             local result = tasker.get_query("nonexistent")
             assert.is_nil(result)
         end)
+
+        it("C4: get_active_query_by_buf returns newest query for a buffer", function()
+            local now = os.time()
+            tasker._queries = {
+                old = { buf = 3, timestamp = now - 10 },
+                new = { buf = 3, timestamp = now },
+                other = { buf = 7, timestamp = now + 1 },
+            }
+            local result = tasker.get_active_query_by_buf(3)
+            assert.is_not_nil(result)
+            assert.equals(now, result.timestamp)
+        end)
+
+        it("C5: get_active_query_by_buf returns nil when no query matches", function()
+            tasker._queries = {
+                q1 = { buf = 2, timestamp = os.time() },
+            }
+            local result = tasker.get_active_query_by_buf(9)
+            assert.is_nil(result)
+        end)
     end)
 
     describe("Group D: set_cache_metrics + get_cache_metrics", function()

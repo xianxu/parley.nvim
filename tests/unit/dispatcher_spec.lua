@@ -193,10 +193,41 @@ describe("prepare_payload: anthropic provider", function()
         assert.is_not_nil(payload.tools)
         assert.equals(2, #payload.tools)
         local names = {}
-        for _, t in ipairs(payload.tools) do names[t.name] = true end
+        local types = {}
+        for _, t in ipairs(payload.tools) do
+            names[t.name] = true
+            types[t.name] = t.type
+        end
         assert.is_true(names["web_search"])
         assert.is_true(names["web_fetch"])
+        assert.equals("web_search_20260209", types["web_search"])
+        assert.equals("web_fetch_20260209", types["web_fetch"])
         -- reset
+        parley._state.web_search = false
+    end)
+
+    it("sets allowed_callers={direct} for claude-haiku-4-5 web tools", function()
+        parley._state.web_search = true
+        local haiku45 = { model = "claude-haiku-4-5-20251001", temperature = 0.8, top_p = 1.0, max_tokens = 1024 }
+        local payload = dispatcher.prepare_payload(msgs(user("hi")), haiku45, "anthropic")
+        assert.is_not_nil(payload.tools)
+        assert.equals(2, #payload.tools)
+        for _, t in ipairs(payload.tools) do
+            assert.is_not_nil(t.allowed_callers)
+            assert.equals(1, #t.allowed_callers)
+            assert.equals("direct", t.allowed_callers[1])
+        end
+        parley._state.web_search = false
+    end)
+
+    it("does not set allowed_callers for non-haiku-4-5 models", function()
+        parley._state.web_search = true
+        local sonnet = { model = "claude-sonnet-4-6-20251105", temperature = 0.8, top_p = 1.0, max_tokens = 1024 }
+        local payload = dispatcher.prepare_payload(msgs(user("hi")), sonnet, "anthropic")
+        assert.is_not_nil(payload.tools)
+        for _, t in ipairs(payload.tools) do
+            assert.is_nil(t.allowed_callers)
+        end
         parley._state.web_search = false
     end)
 

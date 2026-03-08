@@ -61,6 +61,29 @@ local provider_schemas = {
     },
 }
 
+-- Tool capability overrides by provider+model.
+-- Keys are provider -> tool_name -> array of { pattern, override }.
+local tool_overrides = {
+    anthropic = {
+        web_search = {
+            {
+                pattern = "^claude%-haiku%-4%-5",
+                override = {
+                    allowed_callers = { "direct" },
+                },
+            },
+        },
+        web_fetch = {
+            {
+                pattern = "^claude%-haiku%-4%-5",
+                override = {
+                    allowed_callers = { "direct" },
+                },
+            },
+        },
+    },
+}
+
 -- Model-specific overrides, applied on top of the provider base schema.
 -- Each entry: { pattern = <lua pattern>, override = { ... } }
 --
@@ -203,6 +226,30 @@ M.resolve_params = function(provider, model_config)
         if value ~= nil then
             local api_name = spec.api_name or param_name
             result[api_name] = value
+        end
+    end
+
+    return result
+end
+
+--------------------------------------------------------------------------------
+-- resolve_tool_overrides(provider, model_config, tool_name) → table
+--
+-- Produces provider/model-specific tool override fields.
+--------------------------------------------------------------------------------
+M.resolve_tool_overrides = function(provider, model_config, tool_name)
+    local model_name = ""
+    if type(model_config) == "table" then
+        model_name = model_config.model or ""
+    end
+
+    local provider_rules = tool_overrides[provider] or {}
+    local rules = provider_rules[tool_name] or {}
+    local result = {}
+
+    for _, entry in ipairs(rules) do
+        if model_name:find(entry.pattern) then
+            result = vim.tbl_extend("force", result, entry.override or {})
         end
     end
 

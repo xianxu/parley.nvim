@@ -9,15 +9,17 @@ Parley supports server-side web search for providers that offer it.
 
 ## Provider Support
 ### Anthropic (Claude)
-- Includes `web_search_20250305` and `web_fetch_20250910` tools.
+- Includes `web_search_20260209` and `web_fetch_20260209` tools.
 - `x-api-key` and `anthropic-beta` headers MUST be updated.
+- For `claude-haiku-4-5*`, web tools MUST include `allowed_callers: ["direct"]`.
 
 ### Google AI (Gemini)
 - Includes the `google_search` tool in the request body.
 
 ### OpenAI
-- Supported via search model variants (e.g., `gpt-4o-search-preview`).
-- The agent's model config MUST include a `search_model` attribute.
+- OpenAI's current native tool type is `web_search` (Responses API).
+- Parley's OpenAI adapter currently uses search-model swapping (Chat Completions path).
+- The agent's model config MUST include a `search_model` attribute for OpenAI web search in Parley.
 
 ## UI Indicators
 - Lualine displays `[w]` when active.

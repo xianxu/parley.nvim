@@ -114,6 +114,40 @@ local function set_chat_topic_line(buf, lines, topic)
 	vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "# topic: " .. topic })
 end
 
+local function is_follow_cursor_enabled(override_free_cursor)
+	if override_free_cursor ~= nil then
+		return override_free_cursor
+	end
+	if M._state.follow_cursor ~= nil then
+		return M._state.follow_cursor
+	end
+	return not M.config.chat_free_cursor
+end
+
+local function jump_to_active_response(buf, win)
+	if not M.tasker.is_busy(buf, true) then
+		return false
+	end
+
+	local qt = M.tasker.get_active_query_by_buf(buf)
+	if not qt then
+		return false
+	end
+
+	local line = nil
+	if type(qt.last_line) == "number" and qt.last_line >= 0 then
+		line = qt.last_line + 1
+	elseif type(qt.first_line) == "number" and qt.first_line >= 0 then
+		line = qt.first_line + 1
+	end
+	if not line then
+		return false
+	end
+
+	M.helpers.cursor_to_line(line, buf, win)
+	return true
+end
+
 -- Interview mode helper functions
 M.format_timestamp = function()
 	if not M._state.interview_start_time then
@@ -670,6 +704,23 @@ M.setup = function(opts)
 		M.logger.info(msg)
 		vim.notify(msg, vim.log.levels.INFO)
 	end
+
+	M.cmd.ToggleFollowCursor = function()
+		local buf = vim.api.nvim_get_current_buf()
+		local win = vim.api.nvim_get_current_win()
+		local enable = not is_follow_cursor_enabled(nil)
+
+		M.refresh_state({ follow_cursor = enable })
+
+		if enable then
+			jump_to_active_response(buf, win)
+		end
+
+		local status = enable and "enabled" or "disabled"
+		local msg = string.format("follow cursor %s", status)
+		M.logger.info(msg)
+		vim.notify(msg, vim.log.levels.INFO)
+	end
 	-- Logout from Google Drive OAuth (remove stored tokens)
 	M.cmd.GdriveLogout = function()
 		local oauth = require("parley.oauth")
@@ -784,6 +835,10 @@ M.refresh_state = function(update)
 		else
 			M._state.web_search = M.config.web_search
 		end
+	end
+
+	if M._state.follow_cursor == nil then
+		M._state.follow_cursor = not M.config.chat_free_cursor
 	end
 
 	if not M._state.agent or not M.agents[M._state.agent] then
@@ -1549,6 +1604,11 @@ M.prep_chat = function(buf, file_name)
 
 	local sps = M.config.chat_shortcut_system_prompt
 	M.helpers.set_keymap({ buf }, sps.modes, sps.shortcut, M.cmd.NextSystemPrompt, "Parley prompt System Prompt Selector")
+
+	local fcs = M.config.chat_shortcut_follow_cursor
+	if fcs then
+		M.helpers.set_keymap({ buf }, fcs.modes, fcs.shortcut, M.cmd.ToggleFollowCursor, "Parley prompt Toggle Follow Cursor")
+	end
 
 	local ss = M.config.chat_shortcut_search
 	if ss then
@@ -3103,22 +3163,12 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 	local cursor_pos = vim.api.nvim_win_get_cursor(0)
 	local cursor_line = cursor_pos[1]
 
-	-- Use the user's setting by default, but allow overriding
-	-- This logic means:
-	-- 1. If override_free_cursor is true, use_free_cursor should be false (force cursor movement)
-	-- 2. If override_free_cursor is false, use_free_cursor should be true (prevent cursor movement)
-	-- 3. If override_free_cursor is nil, fall back to config setting
-	local use_free_cursor
-	if override_free_cursor ~= nil then
-		use_free_cursor = not override_free_cursor
-	else
-		use_free_cursor = M.config.chat_free_cursor
-	end
+	local use_free_cursor = not is_follow_cursor_enabled(override_free_cursor)
 	M.logger.debug(
 		"chat_respond configured cursor behavior - override: "
 			.. tostring(override_free_cursor)
-			.. ", final setting: "
-			.. tostring(use_free_cursor)
+			.. ", final follow_cursor: "
+			.. tostring(not use_free_cursor)
 	)
 
 	-- Check if there's already an active process for this buffer
@@ -3319,7 +3369,9 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 			buf,
 			agent_info.provider,
 			final_payload,
-			M.dispatcher.create_handler(buf, win, response_line + 3 + raw_request_offset, true, "", not use_free_cursor),
+			M.dispatcher.create_handler(buf, win, response_line + 3 + raw_request_offset, true, "", function()
+				return is_follow_cursor_enabled(override_free_cursor)
+			end),
 			vim.schedule_wrap(function(qid)
 				local qt = M.tasker.get_query(qid)
 				if not qt then
@@ -3399,7 +3451,7 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 						.. tostring(M.config.chat_free_cursor)
 				)
 
-				if not use_free_cursor then
+				if is_follow_cursor_enabled(override_free_cursor) then
 					M.logger.debug(
 						"Moving cursor - exchange_idx: "
 							.. tostring(exchange_idx)

@@ -225,4 +225,24 @@ describe("create_handler: streaming behavior", function()
         assert.equals(">> B", lines[2])
         assert.equals(">> C", lines[3])
     end)
+
+    it("does not move cursor when cursor callback returns false", function()
+        -- Use current window and switch to test buffer so cursor movement is observable.
+        local win = vim.api.nvim_get_current_win()
+        vim.api.nvim_set_current_buf(buf)
+        vim.api.nvim_win_set_cursor(win, { 1, 0 })
+
+        local handler = parley.dispatcher.create_handler(buf, win, 3, true, "", function()
+            return false
+        end)
+
+        handler(mock_qid, "Streaming text")
+        vim.wait(100, function()
+            local line = vim.api.nvim_buf_get_lines(buf, 3, 4, false)[1]
+            return line == "Streaming text"
+        end, 10)
+
+        local cursor = vim.api.nvim_win_get_cursor(win)
+        assert.equals(1, cursor[1])
+    end)
 end)

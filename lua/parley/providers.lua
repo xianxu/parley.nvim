@@ -16,6 +16,11 @@ local provider_params = require("parley.provider_params")
 
 local M = {}
 
+-- Server tool revisions verified against provider docs on 2026-03-08.
+local ANTHROPIC_WEB_SEARCH_TOOL_TYPE = "web_search_20260209"
+local ANTHROPIC_WEB_FETCH_TOOL_TYPE = "web_fetch_20260209"
+local ANTHROPIC_WEB_FETCH_BETA_TAG = "web-fetch-2025-09-10"
+
 --------------------------------------------------------------------------------
 -- Helpers shared across adapters
 --------------------------------------------------------------------------------
@@ -230,17 +235,19 @@ anthropic.format_payload = function(messages, model, _provider_name)
     -- Add Claude server-side web_search and web_fetch tools if enabled
     local parley = require("parley")
     if parley._state and parley._state.web_search then
+        local web_search_overrides = provider_params.resolve_tool_overrides("anthropic", model, "web_search")
+        local web_fetch_overrides = provider_params.resolve_tool_overrides("anthropic", model, "web_fetch")
         payload.tools = {
-            {
-                type = "web_search_20250305",
+            vim.tbl_extend("force", {
+                type = ANTHROPIC_WEB_SEARCH_TOOL_TYPE,
                 name = "web_search",
                 max_uses = 5,
-            },
-            {
-                type = "web_fetch_20250910",
+            }, web_search_overrides),
+            vim.tbl_extend("force", {
+                type = ANTHROPIC_WEB_FETCH_TOOL_TYPE,
                 name = "web_fetch",
                 max_uses = 5,
-            },
+            }, web_fetch_overrides),
         }
     end
 
@@ -253,7 +260,7 @@ anthropic.format_headers = function(secret, _model, payload, endpoint)
     if payload and payload.tools then
         for _, tool in ipairs(payload.tools) do
             if tool.name == "web_fetch" then
-                beta_tag = "web-fetch-2025-09-10"
+                beta_tag = ANTHROPIC_WEB_FETCH_BETA_TAG
                 break
             end
         end

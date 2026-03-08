@@ -16,9 +16,10 @@ Anthropic's provider for Claude Sonnet, Haiku, and Opus models.
 - `top_p`: Clamped to `[0, 1]`.
 
 ### Web Search & Fetch Tools
-- Appended if `claude_web_search` is active.
-- `web_search`: `type: web_search_20250305`.
-- `web_fetch`: `type: web_fetch_20250910`.
+- Appended if `web_search` is active.
+- `web_search`: `type: web_search_20260209`.
+- `web_fetch`: `type: web_fetch_20260209`.
+- Model capability override: `claude-haiku-4-5*` MUST set `allowed_callers: ["direct"]` on both web tools.
 
 ## Headers
 - `x-api-key: <secret>`.
