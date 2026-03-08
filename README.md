@@ -121,6 +121,11 @@ Common options live in `setup()`:
 - `notes_dir`
 - `web_search`
 
+Merge behavior in `setup(opts)`:
+- `agents`, `system_prompts`, and `hooks` are merged by key/name, so you can override only selected entries.
+- Most other top-level keys are replaced when provided (for example `chat_dir`, `notes_dir`, `chat_template`, `raw_mode`, `highlight`, `chat_memory`, `providers`, `api_keys`).
+- Practical rule: for non-merged tables, provide the full table you want, not just one nested field.
+
 For full defaults and examples, see [`lua/parley/config.lua`](lua/parley/config.lua).
 
 ## Detailed Docs (Specs)

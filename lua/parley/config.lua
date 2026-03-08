@@ -115,36 +115,36 @@ local config = {
 	agents = {
 		{
 			provider = "openai",
-			name = "ChatGPT4",
+			name = "GPT5.4",
 			-- string with model name or table with model name and parameters
-			model = { model = "gpt-4", temperature = 1.1, top_p = 1 },
+			-- search_model: when web_search is enabled, swap to this model
+			model = { model = "gpt-5.4", temperature = 0.8, top_p = 1, search_model = "gpt-5-search-api" },
 			-- system prompt (use this to specify the persona/role of the AI)
 			system_prompt = require("parley.defaults").chat_system_prompt,
 		},
 		{
 			provider = "openai",
-			name = "ChatGPT5",
+			name = "GPT5.4-pro",
 			-- string with model name or table with model name and parameters
 			-- search_model: when web_search is enabled, swap to this model
-			model = { model = "gpt-5", temperature = 1.1, top_p = 1, search_model = "gpt-5-search-api" },
+			model = { model = "gpt-5.4-pro", temperature = 0.8, top_p = 1, search_model = "gpt-5-search-api" },
 			-- system prompt (use this to specify the persona/role of the AI)
 			system_prompt = require("parley.defaults").chat_system_prompt,
 		},
 		{
 			provider = "openai",
-			name = "ChatGPT4o",
+			name = "GPT5-mini",
 			-- string with model name or table with model name and parameters
 			-- search_model: when web_search is enabled, swap to this model
-			model = { model = "gpt-4o", temperature = 1.1, top_p = 1, search_model = "gpt-4o-search-preview" },
+			model = { model = "gpt-5-mini", temperature = 0.8, top_p = 1, search_model = "gpt-5-search-api" },
 			-- system prompt (use this to specify the persona/role of the AI)
 			system_prompt = require("parley.defaults").chat_system_prompt,
 		},
 		{
-			provider = "openai",
-			name = "ChatGPT4o-mini",
+			provider = "anthropic",
+			name = "Claude-Opus",
 			-- string with model name or table with model name and parameters
-			-- search_model: when web_search is enabled, swap to this model
-			model = { model = "gpt-4o-mini", temperature = 1.1, top_p = 1, search_model = "gpt-4o-mini-search-preview" },
+			model = { model = "claude-opus-4-6", temperature = 0.8 },
 			-- system prompt (use this to specify the persona/role of the AI)
 			system_prompt = require("parley.defaults").chat_system_prompt,
 		},
