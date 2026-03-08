@@ -79,6 +79,13 @@ merge:
 		echo "Error: run this from a worktree branch, not main"; \
 		exit 1; \
 	fi; \
+	uncommitted=$$(git status --porcelain); \
+	if [ -n "$$uncommitted" ]; then \
+		echo "Error: you have uncommitted changes:"; \
+		git status --short; \
+		echo "Commit or stash them before merging."; \
+		exit 1; \
+	fi; \
 	wt_path=$$(git rev-parse --show-toplevel); \
 	main_path=$$(git worktree list | grep '\[main\]' | awk '{print $$1}'); \
 	repo=$$(git remote get-url origin | sed 's|.*github.com[:/]\(.*\)\.git|\1|;s|.*github.com[:/]\(.*\)$$|\1|'); \
@@ -90,7 +97,7 @@ merge:
 		git -C "$$main_path" pull; \
 	else \
 		echo "No open PR for $$branch."; \
-		unmerged=$$(git log "$$main_path/main..HEAD" --oneline 2>/dev/null); \
+		unmerged=$$(git log "main..HEAD" --oneline 2>/dev/null); \
 		if [ -n "$$unmerged" ]; then \
 			echo "Warning: branch has local commits not in main:"; \
 			echo "$$unmerged"; \
