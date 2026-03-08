@@ -5,8 +5,10 @@ Parley parses chat buffers to identify conversation turns (questions and answers
 
 ## Buffer Segmentation
 A chat buffer is divided into two primary sections:
-1. **Header Section**: All lines before the first `---`.
-2. **Transcript Section**: All lines after the first `---`.
+1. **Header Section**:
+   - Front matter format: lines between opening `---` and closing `---`.
+   - Legacy format: lines before the first `---`.
+2. **Transcript Section**: All lines after the header closing separator.
 
 ## Identifying Conversation Turns
 - **Question (User)**: Begins with `chat_user_prefix` (default `💬:`). Ends at the next assistant prefix or end of file.
@@ -24,5 +26,5 @@ A chat buffer is divided into two primary sections:
 The plugin performs a series of checks to validate a chat buffer:
 1. Resolved path MUST start with `chat_dir`.
 2. Filename MUST follow the `YYYY-MM-DD` timestamp pattern.
-3. First line MUST start with `# topic:`.
-4. Header MUST contain `- file: <filename>`.
+3. Header MUST contain `topic`.
+4. Header MUST contain `file`.

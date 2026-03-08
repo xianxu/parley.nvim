@@ -69,6 +69,51 @@ local function stop_and_close_timer(timer)
 	end)
 end
 
+local function find_chat_header_end(lines)
+	return M.chat_parser.find_header_end(lines)
+end
+
+local function parse_chat_headers(lines)
+	local header_end = find_chat_header_end(lines)
+	if not header_end then
+		return nil, nil
+	end
+	local cfg = M.config or {}
+	local parse_config = {
+		chat_user_prefix = cfg.chat_user_prefix or "💬:",
+		chat_local_prefix = cfg.chat_local_prefix or "🔒:",
+		chat_assistant_prefix = cfg.chat_assistant_prefix or { "🤖:" },
+		chat_memory = cfg.chat_memory or {
+			enable = true,
+			summary_prefix = "📝:",
+			reasoning_prefix = "🧠:",
+		},
+	}
+	local parsed = M.chat_parser.parse_chat(lines, header_end, parse_config)
+	return parsed.headers, header_end
+end
+
+local function set_chat_topic_line(buf, lines, topic)
+	local header_end = find_chat_header_end(lines)
+	if not header_end then
+		vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "# topic: " .. topic })
+		return
+	end
+
+	if lines[1] and lines[1]:gsub("^%s*(.-)%s*$", "%1") == "---" then
+		for i = 2, header_end - 1 do
+			if lines[i]:match("^%s*topic:%s*") then
+				vim.api.nvim_buf_set_lines(buf, i - 1, i, false, { "topic: " .. topic })
+				return
+			end
+		end
+		vim.api.nvim_buf_set_lines(buf, 1, 1, false, { "topic: " .. topic })
+		return
+	end
+
+	vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "# topic: " .. topic })
+end
+
 -- Interview mode helper functions
 M.format_timestamp = function()
 	if not M._state.interview_start_time then
@@ -1199,27 +1244,26 @@ M.cmd.ExportMarkdown = function(params)
 		return
 	end
 
+	local headers, header_end = parse_chat_headers(lines)
+	if not header_end then
+		M.logger.error("Cannot export: invalid chat header format")
+		print("Error: Cannot export - invalid chat header format")
+		return
+	end
+
 	-- Extract Jekyll front matter data from Parley header
 	local title = "Untitled"
 	local post_date = os.date("%Y-%m-%d")
 	local tags = "unclassified"
 	local markdown_filename = nil
 
-	-- Extract title from first line (# topic: Title)
-	if lines[1] and lines[1]:match("^# topic: (.+)") then
-		title = lines[1]:match("^# topic: (.+)")
-	elseif lines[1] and lines[1]:match("^# (.+)") then
-		title = lines[1]:match("^# (.+)")
+	-- Extract title from parsed headers
+	if headers and headers.topic and headers.topic ~= "" then
+		title = headers.topic
 	end
 
 	-- Extract date from transcript header filename first, then fallback to current file
-	local transcript_filename = nil
-	for _, line in ipairs(lines) do
-		if line:match("^%- file:%s*(.+)") then
-			transcript_filename = line:match("^%- file:%s*(.+)")
-			break
-		end
-	end
+	local transcript_filename = headers and headers.file or nil
 
 	-- Try to extract date from transcript header filename first
 	if transcript_filename then
@@ -1239,11 +1283,14 @@ M.cmd.ExportMarkdown = function(params)
 		end
 	end
 
-	-- Extract tags from header lines (- tags: tag1, tag2, tag3)
-	for _, line in ipairs(lines) do
-		if line:match("^%- tags:%s*(.+)") then
-			tags = line:match("^%- tags:%s*(.+)")
-			break
+	-- Extract tags from parsed headers
+	if headers and headers.tags then
+		if type(headers.tags) == "table" then
+			if #headers.tags > 0 then
+				tags = table.concat(headers.tags, ", ")
+			end
+		elseif type(headers.tags) == "string" and headers.tags ~= "" then
+			tags = headers.tags
 		end
 	end
 
@@ -1267,10 +1314,11 @@ comments: true
 ]]
 
 	-- Process content: replace 💬: with ## and remove Parley header
-	local content = table.concat(lines, "\n")
-
-	-- Remove Parley header (everything from start until first ---)
-	content = content:gsub("^.-\n%-%-%-\n", "")
+	local body_lines = {}
+	for i = header_end + 1, #lines do
+		table.insert(body_lines, lines[i])
+	end
+	local content = table.concat(body_lines, "\n")
 
 	-- Replace 💬: with ## (the main transformation for Jekyll)
 	content = content:gsub("💬:", "#### 💬:")
@@ -1352,7 +1400,7 @@ M.prep_md = function(buf)
 end
 
 --- Checks if a file should be considered a chat transcript, it enforces that a file needs to be in chat_dir
---- and have header portion. Also first line needs to start with # (for the topic)
+--- and have a valid header portion.
 ---@param buf number # buffer number
 ---@param file_name string # file name
 ---@return string | nil # reason for not being a chat or nil if it is a chat
@@ -1375,18 +1423,16 @@ M.not_chat = function(buf, file_name)
 		return "file too short"
 	end
 
-	if not lines[1]:match("^# ") then
+	local headers, header_end = parse_chat_headers(lines)
+	if not header_end then
+		return "missing header separator"
+	end
+
+	if not headers or not headers.topic or headers.topic == "" then
 		return "missing topic header"
 	end
 
-	local header_found = nil
-	for i = 1, 10 do
-		if i < #lines and lines[i]:match("^- file: ") then
-			header_found = true
-			break
-		end
-	end
-	if not header_found then
+	if not headers.file or headers.file == "" then
 		return "missing file header"
 	end
 
@@ -1590,14 +1636,9 @@ M.get_chat_topic = function(file_path)
 		end
 	end
 
-	local lines = vim.fn.readfile(file_path, "", 5) -- Read first 5 lines
-	local topic = nil
-	for _, line in ipairs(lines) do
-		topic = line:match("^# topic: (.+)")
-		if topic then
-			break
-		end
-	end
+	local lines = vim.fn.readfile(file_path, "", 20)
+	local headers = parse_chat_headers(lines)
+	local topic = headers and headers.topic or nil
 
 	M._chat_topic_cache[file_path] = {
 		mtime = stat_mtime or { sec = 0, nsec = 0 },
@@ -2226,22 +2267,22 @@ M.new_chat = function(system_prompt, agent, initial_question)
 		model = agent.model
 		provider = agent.provider
 		if type(model) == "table" then
-			model = "- model: " .. vim.json.encode(model) .. "\n"
+			model = "model: " .. vim.json.encode(model) .. "\n"
 		else
-			model = "- model: " .. model .. "\n"
+			model = "model: " .. model .. "\n"
 		end
 
-		provider = "- provider: " .. provider:gsub("\n", "\\n") .. "\n"
+		provider = "provider: " .. provider:gsub("\n", "\\n") .. "\n"
 	end
 
 	-- display system prompt as single line with escaped newlines
 	if system_prompt then
-		system_prompt = "- role: " .. system_prompt:gsub("\n", "\\n") .. "\n"
+		system_prompt = "role: " .. system_prompt:gsub("\n", "\\n") .. "\n"
 	else
 		-- Use the selected system prompt from state
 		local selected_system_prompt = M._state.system_prompt or "default"
 		if M.system_prompts[selected_system_prompt] then
-			system_prompt = "- role: " .. M.system_prompts[selected_system_prompt].system_prompt:gsub("\n", "\\n") .. "\n"
+			system_prompt = "role: " .. M.system_prompts[selected_system_prompt].system_prompt:gsub("\n", "\\n") .. "\n"
 		else
 			system_prompt = ""
 		end
@@ -3101,13 +3142,7 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 	end
 
 	-- Find header section end
-	local header_end = nil
-	for i, line in ipairs(lines) do
-		if line:sub(1, 3) == "---" then
-			header_end = i
-			break
-		end
-	end
+	local header_end = find_chat_header_end(lines)
 
 	if header_end == nil then
 		M.logger.error("Error while parsing headers: --- not found. Check your chat template.")
@@ -3350,7 +3385,8 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 
 							-- replace topic in current buffer
 							M.helpers.undojoin(buf)
-							vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "# topic: " .. topic })
+							local all_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+							set_chat_topic_line(buf, all_lines, topic)
 						end)
 					)
 				end
@@ -3424,13 +3460,7 @@ M.chat_respond_all = function()
 	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 
 	-- Find header section end
-	local header_end = nil
-	for i, line in ipairs(lines) do
-		if line:sub(1, 3) == "---" then
-			header_end = i
-			break
-		end
-	end
+	local header_end = find_chat_header_end(lines)
 
 	if header_end == nil then
 		M.logger.error("Error while parsing headers: --- not found. Check your chat template.")
@@ -4037,16 +4067,8 @@ M.cmd.ChatFinder = function(options)
 			local tags = {}
 
 			-- Parse the file headers to get topic and tags
-			local header_end = 0
-			for idx, line in ipairs(lines) do
-				if line == "---" then
-					header_end = idx
-					break
-				end
-			end
-
-			-- If we found headers, parse them properly
-			if header_end > 0 then
+			local header_end = find_chat_header_end(lines)
+			if header_end then
 				local parsed_chat = M.parse_chat(lines, header_end)
 				if parsed_chat.headers.topic then
 					topic = parsed_chat.headers.topic
