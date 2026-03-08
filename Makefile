@@ -111,9 +111,7 @@ merge:
 	rm -f "$$main_path/tasks/todo.md" && touch "$$main_path/tasks/todo.md"; \
 	echo "Removing worktree at $$wt_path..."; \
 	git -C "$$main_path" worktree remove "$$wt_path"; \
-	if [ -z "$$pr_number" ]; then \
-		git -C "$$main_path" branch -D "$$branch"; \
-	fi; \
+	git -C "$$main_path" branch -D "$$branch" 2>/dev/null || true; \
 	echo "Done. Run: cd $$main_path"
 
 PLENARY = ~/.local/share/nvim/lazy/plenary.nvim
