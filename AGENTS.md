@@ -45,6 +45,11 @@
 - Maintain a specs/index.md that links to all spec files with brief descriptions of their contents.
 - When unsure, ask user which spec file to update.
 
+### 8. Pay attention to User Questions
+- When user poses question, answer the question as clearly and directly as possible
+- DO NOT proceed to change code, when user asks a question
+- Only start making changes when user instruct you to do so. Asking questions is a sign user want answers, not changing code.
+
 ## Task Management
 1. **Plan First**: Write plan to `tasks/todo.md` with checkable items
 2. **Verify Plan**: Check in before starting implementation
