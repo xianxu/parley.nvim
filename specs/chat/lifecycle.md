@@ -17,6 +17,11 @@ The chat lifecycle includes creation, sending questions, receiving responses, re
 - Sends the request to the configured LLM provider via `curl`.
 - Streams the response directly into the buffer beneath the answer prefix.
 
+### Command: `:ParleyToggleFollowCursor` (Buffer Shortcut: `<C-g>l`)
+- Toggles whether cursor/view follows the active streamed insertion point.
+- When toggled on during an active response, cursor MUST jump to the current insertion location and continue following.
+- When toggled off, streaming continues but cursor/view MUST stop auto-following.
+
 ### Concurrent Process Guard
 - Subsequent `:ParleyChatRespond` calls are ignored if a response is running.
 - Force a new response with `:ParleyChatRespond!`.

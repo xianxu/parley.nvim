@@ -64,6 +64,25 @@ M.get_query = function(qid)
 	return M._queries[qid]
 end
 
+---@param buf number | nil # buffer number
+---@return table | nil # newest query for this buffer
+M.get_active_query_by_buf = function(buf)
+	if buf == nil then
+		return nil
+	end
+
+	local active_query = nil
+	for _, query_data in pairs(M._queries) do
+		if query_data.buf == buf then
+			if not active_query or (query_data.timestamp or 0) > (active_query.timestamp or 0) then
+				active_query = query_data
+			end
+		end
+	end
+
+	return active_query
+end
+
 ---@param qid string # query id
 ---@param payload table # query payload
 M.set_query = function(qid, payload)

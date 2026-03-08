@@ -280,6 +280,7 @@ local config = {
 	chat_shortcut_stop = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>s" },
 	chat_shortcut_agent = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>a" },
 	chat_shortcut_system_prompt = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>p" },
+	chat_shortcut_follow_cursor = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>l" },
 	chat_shortcut_search = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>n" },
 	chat_shortcut_open_file = { modes = { "n", "i" }, shortcut = "<C-g>o" },
 	-- global shortcuts (available in any buffer)

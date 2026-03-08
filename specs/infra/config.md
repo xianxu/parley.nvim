@@ -25,6 +25,7 @@ Notable replace-on-set behavior:
 - `providers`: List of LLM backends.
 - `agents`, `system_prompts`: Active sets for chats.
 - `hooks`: Custom user-defined commands.
+- `chat_free_cursor`: Default cursor-follow behavior (runtime state toggle can override).
 
 ## Selective Merging
 - Tables like `hooks`, `agents`, and `system_prompts` MUST be merged by key to allow partial overrides of default sets.

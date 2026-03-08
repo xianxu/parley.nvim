@@ -357,7 +357,7 @@ end
 ---@param line number | nil # line to insert response into
 ---@param first_undojoin boolean | nil # whether to skip first undojoin
 ---@param prefix string | nil # prefix to insert before each response line
----@param cursor boolean # whether to move cursor to the end of the response
+---@param cursor boolean | function # whether to move cursor to the end of the response
 D.create_handler = function(buf, win, line, first_undojoin, prefix, cursor)
 	buf = buf or vim.api.nvim_get_current_buf()
 	prefix = prefix or ""
@@ -458,7 +458,13 @@ D.create_handler = function(buf, win, line, first_undojoin, prefix, cursor)
 		qt.last_line = end_line - 1
 
 		-- move cursor to the end of the response
-		if cursor then
+		local should_move_cursor
+		if type(cursor) == "function" then
+			should_move_cursor = cursor()
+		else
+			should_move_cursor = cursor
+		end
+		if should_move_cursor then
 			helpers.cursor_to_line(end_line, buf, win)
 		end
 	end)

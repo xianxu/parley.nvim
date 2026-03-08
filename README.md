@@ -92,6 +92,7 @@ A Parley chat is a normal markdown file with a header and alternating `💬:` / 
 - `:ParleyChatFinder` find/open/delete chat files.
 - `:ParleyAgent` switch agent.
 - `:ParleySystemPrompt` switch system prompt.
+- `:ParleyToggleFollowCursor` toggle live cursor-follow during streaming.
 
 Most-used defaults:
 - `<C-g>c` new chat
@@ -101,6 +102,7 @@ Most-used defaults:
 - `<C-g>f` chat finder
 - `<C-g>a` change agent
 - `<C-g>p` next system prompt
+- `<C-g>l` toggle follow cursor
 
 ## What Parley Supports
 
