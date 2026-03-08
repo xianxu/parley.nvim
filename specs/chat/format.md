@@ -27,7 +27,7 @@ The plugin uses specific markers to distinguish between roles and special conten
 |---|---|---|
 | `chat_user_prefix` | `💬:` | User's question |
 | `chat_assistant_prefix`| `🤖:` | Assistant's answer |
-| `chat_local_prefix` | `🔒:` | Local section (ignored by LLM), user can use this to make notes to themselves without submitting them |
+| `chat_local_prefix` | `🔒:` | Local section (ignored by LLM) |
 | `thinking_prefix` | `🧠:` | Assistant's internal reasoning |
 | `summary_prefix` | `📝:` | Summary of the exchange (for memory) |
 
@@ -37,4 +37,4 @@ The assistant prefix line may include an agent identifier: `🤖: [AgentName]`.
 ## Local Sections
 - Lines starting with `🔒:` begin a local section.
 - Content in these sections is excluded from the context sent to the LLM.
-- A local section ends when the next user or assistant prefix is encountered.
+- A local section ends when the next user or assistant prefix is encountered. This algorithm is greedy.
