@@ -60,8 +60,8 @@ pull-request:
 	repo=$$(git remote get-url origin | sed 's|.*github.com[:/]\(.*\)\.git|\1|;s|.*github.com[:/]\(.*\)$$|\1|'); \
 	gh pr create --repo "$$repo" --base main --head "$$branch" --fill
 
-# Merge the current worktree branch into main, then clean up the worktree and branch.
-# Must be run from inside a worktree (not from main).
+# Merge the current worktree branch into main (if a PR exists), close any linked issue,
+# then clean up the worktree. Must be run from inside a worktree (not from main).
 merge:
 	@branch=$$(git branch --show-current); \
 	if [ -z "$$branch" ] || [ "$$branch" = "main" ]; then \
@@ -71,14 +71,38 @@ merge:
 	wt_path=$$(git rev-parse --show-toplevel); \
 	main_path=$$(git worktree list | grep '\[main\]' | awk '{print $$1}'); \
 	repo=$$(git remote get-url origin | sed 's|.*github.com[:/]\(.*\)\.git|\1|;s|.*github.com[:/]\(.*\)$$|\1|'); \
-	echo "Merging $$branch into main via GitHub..."; \
-	gh pr merge --repo "$$repo" --merge --delete-branch "$$branch"; \
-	echo "Pulling main..."; \
-	git -C "$$main_path" pull; \
+	pr_number=$$(gh pr list --repo "$$repo" --head "$$branch" --json number --jq '.[0].number' 2>/dev/null); \
+	if [ -n "$$pr_number" ]; then \
+		echo "Merging PR #$$pr_number ($$branch) into main via GitHub..."; \
+		gh pr merge --repo "$$repo" --merge --delete-branch "$$branch"; \
+		echo "Pulling main..."; \
+		git -C "$$main_path" pull; \
+	else \
+		echo "No open PR for $$branch, skipping merge."; \
+		unmerged=$$(git log "$$main_path/main..HEAD" --oneline 2>/dev/null); \
+		if [ -n "$$unmerged" ]; then \
+			echo "Warning: branch has committed changes not in main:"; \
+			echo "$$unmerged"; \
+			printf "Remove worktree without merging? [y/N] "; \
+			read answer; \
+			if [ "$$answer" != "y" ] && [ "$$answer" != "Y" ]; then \
+				echo "Aborted."; \
+				exit 1; \
+			fi; \
+		fi; \
+	fi; \
+	issue_num=$$(echo "$$branch" | grep -oE 'issue-[0-9]+$$' | grep -oE '[0-9]+$$'); \
+	if [ -n "$$issue_num" ]; then \
+		echo "Closing issue #$$issue_num..."; \
+		gh issue close "$$issue_num" --repo "$$repo"; \
+	fi; \
 	echo "Cleaning up tasks/todo.md..."; \
 	rm -f "$$main_path/tasks/todo.md" && touch "$$main_path/tasks/todo.md"; \
 	echo "Removing worktree at $$wt_path..."; \
 	git -C "$$main_path" worktree remove "$$wt_path"; \
+	if [ -z "$$pr_number" ]; then \
+		git -C "$$main_path" branch -D "$$branch"; \
+	fi; \
 	echo "Done. Run: cd $$main_path"
 
 PLENARY = ~/.local/share/nvim/lazy/plenary.nvim
