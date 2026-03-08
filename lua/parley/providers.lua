@@ -37,6 +37,55 @@ local function strip_data_prefix(line)
     return line:gsub("^data: ", "")
 end
 
+local function get_cliproxy_strategy(model_config)
+    if type(model_config) == "table" then
+        local model_strategy = model_config.web_search_strategy
+        if model_strategy == "openai_search_model" or model_strategy == "openai_tools_route" or model_strategy == "anthropic_tools_route" then
+            return model_strategy
+        end
+    end
+
+    local ok, parley = pcall(require, "parley")
+    if not ok or not parley or not parley.dispatcher or not parley.dispatcher.providers then
+        return "none"
+    end
+
+    local config = parley.dispatcher.providers.cliproxyapi or {}
+    local strategy = config.web_search_strategy
+    if strategy == "openai_search_model" or strategy == "openai_tools_route" or strategy == "anthropic_tools_route" then
+        return strategy
+    end
+    return "none"
+end
+
+local function cliproxy_anthropic_endpoint(endpoint)
+    if type(endpoint) ~= "string" then
+        return endpoint
+    end
+    if endpoint:find("/api/provider/anthropic/v1/messages", 1, true) then
+        return endpoint
+    end
+
+    local swapped = endpoint:gsub("/v1/chat/completions$", "/api/provider/anthropic/v1/messages")
+    if swapped ~= endpoint then
+        return swapped
+    end
+
+    swapped = endpoint:gsub("/v1/responses$", "/api/provider/anthropic/v1/messages")
+    if swapped ~= endpoint then
+        return swapped
+    end
+
+    return endpoint
+end
+
+local function is_cliproxy_anthropic_route_model(model_name)
+    if type(model_name) ~= "string" then
+        return false
+    end
+    return model_name:find("^claude%-") ~= nil or model_name:find("^code_execution_") ~= nil
+end
+
 --------------------------------------------------------------------------------
 -- OpenAI adapter (base for copilot, azure, ollama)
 --------------------------------------------------------------------------------
@@ -519,6 +568,106 @@ end
 copilot.secret_name = "copilot_bearer"
 
 --------------------------------------------------------------------------------
+-- CLIProxyAPI adapter (OpenAI-compatible proxy)
+--------------------------------------------------------------------------------
+
+local cliproxyapi = {
+    aliases = { "cliproxy" },
+    features = {},
+    cache_metrics = { read = true, creation = false },
+}
+
+local function cliproxy_openai_payload(messages, model, strategy)
+    local model_name = model.model
+    local parley = require("parley")
+    local web_search_enabled = parley._state and parley._state.web_search
+    if strategy == "openai_search_model" and web_search_enabled and model.search_model then
+        model_name = model.search_model
+    end
+
+    local param_model = vim.tbl_extend("force", model, { model = model_name })
+    local params = provider_params.resolve_params("cliproxyapi", param_model)
+
+    local output = {
+        model = model_name,
+        stream = true,
+        messages = messages,
+        stream_options = {
+            include_usage = true,
+        },
+    }
+    for k, v in pairs(params) do
+        output[k] = v
+    end
+    if web_search_enabled and strategy == "openai_tools_route" then
+        output.tools = {
+            { type = "web_search" },
+        }
+        output.tool_choice = "auto"
+    end
+
+    return output
+end
+
+cliproxyapi.format_payload = function(messages, model, _provider_name)
+    local strategy = get_cliproxy_strategy(model)
+    local model_name = type(model) == "table" and model.model or nil
+    local use_anthropic_route = is_cliproxy_anthropic_route_model(model_name)
+    local use_code_execution_model = type(model_name) == "string" and model_name:find("^code_execution_") ~= nil
+
+    if strategy == "anthropic_tools_route" and use_anthropic_route then
+        local parley = require("parley")
+        local payload = anthropic.format_payload(messages, model, "anthropic")
+        -- CLIProxy may require direct tool callers for model-invoked web tools.
+        -- Set allowed_callers on web tools to keep model-side calls valid.
+        if parley._state and parley._state.web_search and payload.tools then
+            for _, tool in ipairs(payload.tools) do
+                if (tool.name == "web_search" or tool.name == "web_fetch") and tool.allowed_callers == nil then
+                    tool.allowed_callers = { "direct" }
+                end
+            end
+            -- For code_execution models, require explicit web_search tool invocation.
+            if use_code_execution_model then
+                payload.tool_choice = { type = "tool", name = "web_search" }
+            end
+        end
+        payload._parley_route = "anthropic"
+        return payload
+    end
+
+    return cliproxy_openai_payload(messages, model, strategy)
+end
+
+cliproxyapi.format_headers = function(secret, model, payload, endpoint)
+    local route = payload and payload._parley_route or "openai"
+    if payload then
+        payload._parley_route = nil
+    end
+
+    if route == "anthropic" then
+        return anthropic.format_headers(secret, model, payload, cliproxy_anthropic_endpoint(endpoint))
+    end
+
+    return openai.format_headers(secret, model, payload, endpoint)
+end
+
+cliproxyapi.parse_sse_content = function(line)
+    local content = openai.parse_sse_content(line)
+    if content ~= "" then
+        return content
+    end
+    return anthropic.parse_sse_content(line)
+end
+
+cliproxyapi.parse_usage = function(raw_response)
+    local metrics = openai.parse_usage(raw_response)
+    if metrics.input ~= nil then
+        return metrics
+    end
+    return anthropic.parse_usage(raw_response)
+end
+
+--------------------------------------------------------------------------------
 -- Azure adapter (extends openai)
 --------------------------------------------------------------------------------
 
@@ -610,6 +759,7 @@ local registry = {
     anthropic = anthropic,
     googleai = googleai,
     copilot = copilot,
+    cliproxyapi = cliproxyapi,
     azure = azure,
     ollama = ollama,
 }
@@ -650,10 +800,35 @@ end
 --- Check if a provider supports a specific feature.
 ---@param name string provider name
 ---@param feature string feature name (e.g., "web_search", "cache_control")
+---@param model_config table|nil
 ---@return boolean
-M.has_feature = function(name, feature)
+M.has_feature = function(name, feature, model_config)
+    local resolved = M.resolve_name(name)
+    if resolved == "cliproxyapi" and feature == "web_search" then
+        local strategy = get_cliproxy_strategy(model_config)
+        if strategy == "none" then
+            return false
+        end
+        if strategy == "anthropic_tools_route" then
+            local model_name = type(model_config) == "table" and model_config.model or nil
+            return is_cliproxy_anthropic_route_model(model_name)
+        end
+        return true
+    end
     local adapter = M.get(name)
     return adapter.features and adapter.features[feature] == true
+end
+
+--- Resolve provider/model-specific web search strategy.
+---@param name string provider name
+---@param model_config table|nil
+---@return string|nil
+M.get_web_search_strategy = function(name, model_config)
+    local resolved = M.resolve_name(name)
+    if resolved ~= "cliproxyapi" then
+        return nil
+    end
+    return get_cliproxy_strategy(model_config)
 end
 
 --- Get cache metrics display config for a provider.

@@ -13,9 +13,13 @@ An agent combines a provider, a model, and a system prompt.
 ## Default Agents
 | Agent | Provider | Model |
 |---|---|---|
-| ChatGPT4 | openai | gpt-4 |
+| GPT5.4 | openai | gpt-5.4 |
 | Claude-Sonnet | anthropic | claude-sonnet-4-6 |
 | Gemini2.5-Pro | googleai | gemini-2.5-pro |
+| Proxy-GPT5.4 | cliproxyapi | gpt-5.4 |
+| Claude-Code | cliproxyapi | code_execution_20260120 |
+
+Default config includes `Proxy-*` variants for major model families through `cliproxyapi`.
 
 ## Agent Selection
 - `:ParleyAgent [name]`: Selects an agent via Telescope picker or name argument.

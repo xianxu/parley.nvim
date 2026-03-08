@@ -35,6 +35,7 @@ local config = {
 		googleai = os.getenv("GOOGLEAI_API_KEY"),
 		ollama = "dummy_secret", -- ollama typically uses a dummy token for local instances
 		copilot = os.getenv("GITHUB_TOKEN"), -- for GitHub Copilot
+		cliproxyapi = os.getenv("CLIPROXYAPI_API_KEY"),
 	},
 
 	-- Google Drive OAuth configuration for @@ URL references
@@ -85,6 +86,14 @@ local config = {
 			disable = true,
 			endpoint = "http://localhost:11434/v1/chat/completions",
 			-- secret will be loaded from api_keys.ollama
+		},
+		cliproxyapi = {
+			disable = false,
+			endpoint = "http://127.0.0.1:8317/v1/chat/completions",
+			-- default strategy; model.web_search_strategy can override per agent/model
+			-- none | openai_search_model | openai_tools_route | anthropic_tools_route
+			web_search_strategy = "openai_tools_route",
+			-- secret will be loaded from api_keys.cliproxyapi
 		},
 	},
 
@@ -212,6 +221,30 @@ local config = {
 			-- string with model name or table with model name and parameters
 			model = { model = "gemini-2.5-flash", temperature = 1.1, top_p = 1 },
 			-- system prompt (use this to specify the persona/role of the AI)
+			system_prompt = require("parley.defaults").chat_system_prompt,
+		},
+		{
+			provider = "cliproxyapi",
+			name = "Codex",
+			model = {
+				model = "gpt-5.4",
+				temperature = 0.8,
+				top_p = 1,
+				web_search_strategy = "openai_tools_route",
+			},
+			system_prompt = require("parley.defaults").chat_system_prompt,
+		},
+		{
+			provider = "cliproxyapi",
+			name = "Claude-Code",
+			-- CLIProxy web-search tool access currently requires code_execution model family.
+			model = { model = "code_execution_20260120", temperature = 0.8, web_search_strategy = "anthropic_tools_route" },
+			system_prompt = require("parley.defaults").chat_system_prompt,
+		},
+		{
+			provider = "cliproxyapi",
+			name = "Gemini-CLI",
+			model = { model = "gemini-3-flash", temperature = 0.8, top_p = 1, web_search_strategy = "none" },
 			system_prompt = require("parley.defaults").chat_system_prompt,
 		},
 	},

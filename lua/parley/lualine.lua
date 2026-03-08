@@ -181,12 +181,19 @@ M.create_component = function(parley_instance)
       -- Add [w] or [w?] indicator for web_search when enabled
       local display_name = agent_name
       if parley._state.web_search then
-        local supported = agent_info and prov.has_feature(agent_info.provider, "web_search")
+        local model_conf = agent_info and agent_info.model or nil
+        local supported = agent_info and prov.has_feature(agent_info.provider, "web_search", model_conf)
         -- For OpenAI, also require search_model to be defined
         if supported and agent_info and prov.resolve_name(agent_info.provider) == "openai" then
           local agent_conf = parley.agents and parley.agents[agent_name]
-          local model_conf = agent_conf and agent_conf.model
-          if type(model_conf) == "table" and not model_conf.search_model then
+          local agent_model_conf = agent_conf and agent_conf.model
+          if type(agent_model_conf) == "table" and not agent_model_conf.search_model then
+            supported = false
+          end
+        end
+        if supported and agent_info and prov.resolve_name(agent_info.provider) == "cliproxyapi" then
+          local strategy = prov.get_web_search_strategy(agent_info.provider, model_conf) or "none"
+          if strategy == "openai_search_model" and type(model_conf) == "table" and not model_conf.search_model then
             supported = false
           end
         end

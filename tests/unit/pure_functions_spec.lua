@@ -260,3 +260,93 @@ describe("simple_markdown_to_html", function()
         assert.is_true(count >= 2) -- At least 2 closing p tags
     end)
 end)
+
+describe("agent_display_name_with_web_search", function()
+    before_each(function()
+        parley._state = parley._state or {}
+        parley._state.web_search = false
+        parley.dispatcher = parley.dispatcher or {}
+        parley.dispatcher.providers = parley.dispatcher.providers or {}
+        parley.dispatcher.providers.cliproxyapi = parley.dispatcher.providers.cliproxyapi or {}
+        parley.dispatcher.providers.cliproxyapi.web_search_strategy = "none"
+    end)
+
+    it("returns plain agent name when web_search is disabled", function()
+        local name = parley.agent_display_name_with_web_search("Proxy-Claude-Sonnet", {
+            provider = "cliproxyapi",
+            model = { model = "claude-sonnet-4-6" },
+        })
+        assert.equals("Proxy-Claude-Sonnet", name)
+    end)
+
+    it("returns [w] for openai model with search_model when web_search is enabled", function()
+        parley._state.web_search = true
+        local name = parley.agent_display_name_with_web_search("GPT5.4", {
+            provider = "openai",
+            model = { model = "gpt-5.4", search_model = "gpt-5-search-api" },
+        })
+        assert.equals("GPT5.4[w]", name)
+    end)
+
+    it("returns [w?] for openai model without search_model when web_search is enabled", function()
+        parley._state.web_search = true
+        local name = parley.agent_display_name_with_web_search("GPT5.4", {
+            provider = "openai",
+            model = { model = "gpt-5.4" },
+        })
+        assert.equals("GPT5.4[w?]", name)
+    end)
+
+    it("returns [w?] for cliproxyapi when strategy is none", function()
+        parley._state.web_search = true
+        parley.dispatcher.providers.cliproxyapi.web_search_strategy = "none"
+        local name = parley.agent_display_name_with_web_search("Proxy-Claude-Sonnet", {
+            provider = "cliproxyapi",
+            model = { model = "claude-sonnet-4-6" },
+        })
+        assert.equals("Proxy-Claude-Sonnet[w?]", name)
+    end)
+
+    it("returns [w] for cliproxyapi claude model in anthropic_tools_route", function()
+        parley._state.web_search = true
+        parley.dispatcher.providers.cliproxyapi.web_search_strategy = "anthropic_tools_route"
+        local name = parley.agent_display_name_with_web_search("Proxy-Claude-Sonnet", {
+            provider = "cliproxyapi",
+            model = { model = "claude-sonnet-4-6" },
+        })
+        assert.equals("Proxy-Claude-Sonnet[w]", name)
+    end)
+
+    it("uses per-model strategy override for cliproxyapi labels", function()
+        parley._state.web_search = true
+        parley.dispatcher.providers.cliproxyapi.web_search_strategy = "none"
+        local name = parley.agent_display_name_with_web_search("Proxy-Claude-Sonnet", {
+            provider = "cliproxyapi",
+            model = {
+                model = "claude-sonnet-4-6",
+                web_search_strategy = "anthropic_tools_route",
+            },
+        })
+        assert.equals("Proxy-Claude-Sonnet[w]", name)
+    end)
+
+    it("returns [w?] for cliproxyapi openai_search_model without search_model", function()
+        parley._state.web_search = true
+        parley.dispatcher.providers.cliproxyapi.web_search_strategy = "openai_search_model"
+        local name = parley.agent_display_name_with_web_search("Proxy-GPT5.4", {
+            provider = "cliproxyapi",
+            model = { model = "gpt-5.4" },
+        })
+        assert.equals("Proxy-GPT5.4[w?]", name)
+    end)
+
+    it("returns [w] for cliproxyapi openai_tools_route without search_model", function()
+        parley._state.web_search = true
+        parley.dispatcher.providers.cliproxyapi.web_search_strategy = "openai_tools_route"
+        local name = parley.agent_display_name_with_web_search("Proxy-GPT5.4", {
+            provider = "cliproxyapi",
+            model = { model = "gpt-5.4" },
+        })
+        assert.equals("Proxy-GPT5.4[w]", name)
+    end)
+end)

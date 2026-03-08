@@ -358,3 +358,104 @@ describe("prepare_payload: copilot provider", function()
         assert.equals("claude-3-sonnet", payload.model)
     end)
 end)
+
+describe("prepare_payload: cliproxyapi provider", function()
+    local function set_strategy(strategy)
+        dispatcher.providers = dispatcher.providers or {}
+        dispatcher.providers.cliproxyapi = dispatcher.providers.cliproxyapi or {}
+        dispatcher.providers.cliproxyapi.web_search_strategy = strategy
+    end
+
+    before_each(function()
+        set_strategy("none")
+        parley._state = parley._state or {}
+        parley._state.web_search = false
+    end)
+
+    it("uses openai-compatible streaming payload shape", function()
+        local model = { model = "gpt-4o", temperature = 1.0, top_p = 1.0, max_tokens = 1024 }
+        local payload = dispatcher.prepare_payload(msgs(user("hi")), model, "cliproxyapi")
+        assert.equals("gpt-4o", payload.model)
+        assert.is_true(payload.stream)
+        assert.is_not_nil(payload.stream_options)
+        assert.is_true(payload.stream_options.include_usage)
+    end)
+
+    it("applies gpt-5 max_completion_tokens mapping", function()
+        local model = { model = "gpt-5.4", max_tokens = 3072 }
+        local payload = dispatcher.prepare_payload(msgs(user("hi")), model, "cliproxyapi")
+        assert.equals(3072, payload.max_completion_tokens)
+        assert.is_nil(payload.max_tokens)
+    end)
+
+    it("does not swap to search_model when strategy is none", function()
+        parley._state.web_search = true
+        local model = { model = "gpt-5.4", search_model = "gpt-5-search-api" }
+        local payload = dispatcher.prepare_payload(msgs(user("hi")), model, "cliproxyapi")
+        assert.equals("gpt-5.4", payload.model)
+    end)
+
+    it("swaps to search_model in openai_search_model strategy", function()
+        set_strategy("openai_search_model")
+        parley._state.web_search = true
+        local model = { model = "gpt-5.4", search_model = "gpt-5-search-api" }
+        local payload = dispatcher.prepare_payload(msgs(user("hi")), model, "cliproxyapi")
+        assert.equals("gpt-5-search-api", payload.model)
+    end)
+
+    it("uses openai web_search tools without model swap in openai_tools_route strategy", function()
+        set_strategy("openai_tools_route")
+        parley._state.web_search = true
+        local model = { model = "gpt-5.4", search_model = "gpt-5-search-api" }
+        local payload = dispatcher.prepare_payload(msgs(user("hi")), model, "cliproxyapi")
+        assert.equals("gpt-5.4", payload.model)
+        assert.is_not_nil(payload.tools)
+        assert.equals(1, #payload.tools)
+        assert.equals("web_search", payload.tools[1].type)
+        assert.equals("auto", payload.tool_choice)
+    end)
+
+    it("uses anthropic payload route for claude models in anthropic_tools_route strategy", function()
+        set_strategy("anthropic_tools_route")
+        parley._state.web_search = true
+        local model = { model = "claude-sonnet-4-6", temperature = 0.8, max_tokens = 1024 }
+        local payload = dispatcher.prepare_payload(msgs(system("sys"), user("hi")), model, "cliproxyapi")
+        assert.equals("claude-sonnet-4-6", payload.model)
+        assert.is_not_nil(payload.tools)
+        assert.equals(2, #payload.tools)
+        assert.is_nil(payload.tool_choice)
+        assert.same({ "direct" }, payload.tools[1].allowed_callers)
+        assert.same({ "direct" }, payload.tools[2].allowed_callers)
+        assert.equals("anthropic", payload._parley_route)
+    end)
+
+    it("forces web_search tool_choice for code_execution models in anthropic_tools_route strategy", function()
+        set_strategy("anthropic_tools_route")
+        parley._state.web_search = true
+        local model = { model = "code_execution_20260120", temperature = 0.8, max_tokens = 1024 }
+        local payload = dispatcher.prepare_payload(msgs(system("sys"), user("hi")), model, "cliproxyapi")
+        assert.equals("code_execution_20260120", payload.model)
+        assert.is_not_nil(payload.tools)
+        assert.equals(2, #payload.tools)
+        assert.same({ "direct" }, payload.tools[1].allowed_callers)
+        assert.same({ "direct" }, payload.tools[2].allowed_callers)
+        assert.is_not_nil(payload.tool_choice)
+        assert.equals("tool", payload.tool_choice.type)
+        assert.equals("web_search", payload.tool_choice.name)
+        assert.equals("anthropic", payload._parley_route)
+    end)
+
+    it("allows per-model strategy override over provider default", function()
+        set_strategy("none")
+        parley._state.web_search = true
+        local model = {
+            model = "claude-sonnet-4-6",
+            temperature = 0.8,
+            max_tokens = 1024,
+            web_search_strategy = "anthropic_tools_route",
+        }
+        local payload = dispatcher.prepare_payload(msgs(system("sys"), user("hi")), model, "cliproxyapi")
+        assert.is_not_nil(payload.tools)
+        assert.equals("anthropic", payload._parley_route)
+    end)
+end)

@@ -160,6 +160,17 @@ specs:
       - tests/unit/sse_parsing_spec.lua
       - tests/unit/build_messages_spec.lua
 
+  providers/cliproxyapi:
+    code:
+      - lua/parley/providers.lua
+      - lua/parley/provider_params.lua
+      - lua/parley/config.lua
+      - lua/parley/init.lua
+    tests:
+      - tests/unit/dispatcher_spec.lua
+      - tests/unit/provider_params_spec.lua
+      - tests/unit/pure_functions_spec.lua
+
   providers/anthropic:
     code:
       - lua/parley/providers.lua

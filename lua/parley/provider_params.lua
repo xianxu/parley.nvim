@@ -29,6 +29,13 @@ local provider_schemas = {
             max_tokens  = { default = 4096 },
         },
     },
+    cliproxyapi = {
+        params = {
+            temperature = { range = { 0, 2 } },
+            top_p       = { range = { 0, 1 } },
+            max_tokens  = { default = 4096 },
+        },
+    },
     anthropic = {
         params = {
             temperature = { range = { 0, 2 } },
@@ -143,7 +150,7 @@ local model_overrides = {
 }
 
 -- Keys in the model config table that are NOT API parameters.
-local meta_keys = { model = true, search_model = true }
+local meta_keys = { model = true, search_model = true, web_search_strategy = true }
 
 --------------------------------------------------------------------------------
 -- get_schema(provider, model_name) → merged schema table
