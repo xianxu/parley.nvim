@@ -79,28 +79,35 @@ merge:
 		echo "Error: run this from a worktree branch, not main"; \
 		exit 1; \
 	fi; \
+	echo "==> Branch: $$branch"; \
 	uncommitted=$$(git status --porcelain); \
 	if [ -n "$$uncommitted" ]; then \
-		echo "Error: you have uncommitted changes:"; \
+		echo "  [x] Uncommitted changes found — cannot merge"; \
 		git status --short; \
 		echo "Commit or stash them before merging."; \
 		exit 1; \
 	fi; \
+	echo "  [ok] No uncommitted changes"; \
 	wt_path=$$(git rev-parse --show-toplevel); \
 	main_path=$$(git worktree list | grep '\[main\]' | awk '{print $$1}'); \
 	repo=$$(git remote get-url origin | sed 's|.*github.com[:/]\(.*\)\.git|\1|;s|.*github.com[:/]\(.*\)$$|\1|'); \
+	unmerged=$$(git log "main..HEAD" --oneline 2>/dev/null); \
+	if [ -n "$$unmerged" ]; then \
+		echo "  [ok] Unmerged local commits found:"; \
+		echo "$$unmerged" | sed 's/^/       /'; \
+	else \
+		echo "  [ok] No unmerged local commits (branch is clean)"; \
+	fi; \
 	pr_number=$$(gh pr list --repo "$$repo" --head "$$branch" --json number --jq '.[0].number' 2>/dev/null); \
 	if [ -n "$$pr_number" ]; then \
-		echo "Merging PR #$$pr_number ($$branch) into main via GitHub..."; \
+		echo "  [ok] Open PR found: #$$pr_number"; \
+		echo "==> Merging PR #$$pr_number ($$branch) into main via GitHub..."; \
 		gh pr merge --repo "$$repo" --merge --delete-branch "$$branch"; \
-		echo "Pulling main..."; \
+		echo "==> Pulling main..."; \
 		git -C "$$main_path" pull; \
 	else \
-		echo "No open PR for $$branch."; \
-		unmerged=$$(git log "main..HEAD" --oneline 2>/dev/null); \
+		echo "  [--] No open PR for branch $$branch"; \
 		if [ -n "$$unmerged" ]; then \
-			echo "Warning: branch has local commits not in main:"; \
-			echo "$$unmerged"; \
 			printf "Would you like to create a pull request first? [Y/n] "; \
 			read answer; \
 			if [ "$$answer" != "n" ] && [ "$$answer" != "N" ]; then \
@@ -117,12 +124,14 @@ merge:
 	fi; \
 	issue_num=$$(echo "$$branch" | grep -oE '[0-9]+$$'); \
 	if [ -n "$$issue_num" ]; then \
-		echo "Closing issue #$$issue_num..."; \
+		echo "==> Closing issue #$$issue_num..."; \
 		gh issue close "$$issue_num" --repo "$$repo"; \
+	else \
+		echo "  [--] No issue number in branch name, skipping issue close"; \
 	fi; \
-	echo "Cleaning up tasks/todo.md..."; \
+	echo "==> Cleaning up tasks/todo.md..."; \
 	rm -f "$$main_path/tasks/todo.md" && touch "$$main_path/tasks/todo.md"; \
-	echo "Removing worktree at $$wt_path..."; \
+	echo "==> Removing worktree at $$wt_path..."; \
 	cd "$$main_path" && git worktree remove "$$wt_path" 2>/dev/null; \
 	git branch -D "$$branch" 2>/dev/null || true; \
 	echo "Done. Run: cd $$main_path"
