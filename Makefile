@@ -1,4 +1,55 @@
-.PHONY: test test-spec test-changed lint fixtures model-check model-checker test-clean-env
+.PHONY: test test-spec test-changed lint fixtures model-check model-checker test-clean-env new-worktree pull-request merge
+
+# Worktree management targets
+# Capture extra argument after new-worktree (e.g. make new-worktree feature-x)
+ifeq (new-worktree,$(firstword $(MAKECMDGOALS)))
+  WT_NAME := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
+  ifneq ($(WT_NAME),)
+    $(eval $(WT_NAME):;@:)
+  endif
+endif
+
+# Create a new git worktree in the parent directory.
+# Usage: make new-worktree <name>
+new-worktree:
+	@if [ -z "$(WT_NAME)" ]; then \
+		echo "Usage: make new-worktree <name>"; \
+		exit 1; \
+	fi
+	@name="$(WT_NAME)"; \
+	git worktree add -b "$$name" "../$$name" HEAD
+	@echo "Worktree created at ../$(WT_NAME) on branch $(WT_NAME)"
+
+# Create a GitHub pull request from the current worktree branch to main.
+# Must be run from inside a worktree (not from main).
+pull-request:
+	@branch=$$(git branch --show-current); \
+	if [ -z "$$branch" ] || [ "$$branch" = "main" ]; then \
+		echo "Error: run this from a worktree branch, not main"; \
+		exit 1; \
+	fi; \
+	git push -u origin "$$branch"; \
+	repo=$$(git remote get-url origin | sed 's|.*github.com[:/]\(.*\)\.git|\1|;s|.*github.com[:/]\(.*\)$$|\1|'); \
+	gh pr create --repo "$$repo" --base main --head "$$branch" --fill
+
+# Merge the current worktree branch into main, then clean up the worktree and branch.
+# Must be run from inside a worktree (not from main).
+merge:
+	@branch=$$(git branch --show-current); \
+	if [ -z "$$branch" ] || [ "$$branch" = "main" ]; then \
+		echo "Error: run this from a worktree branch, not main"; \
+		exit 1; \
+	fi; \
+	wt_path=$$(git rev-parse --show-toplevel); \
+	main_path=$$(git worktree list | grep '\[main\]' | awk '{print $$1}'); \
+	repo=$$(git remote get-url origin | sed 's|.*github.com[:/]\(.*\)\.git|\1|;s|.*github.com[:/]\(.*\)$$|\1|'); \
+	echo "Merging $$branch into main via GitHub..."; \
+	gh pr merge --repo "$$repo" --merge --delete-branch "$$branch"; \
+	echo "Pulling main..."; \
+	git -C "$$main_path" pull; \
+	echo "Removing worktree at $$wt_path..."; \
+	git -C "$$main_path" worktree remove "$$wt_path"; \
+	echo "Done. Run: cd $$main_path"
 
 PLENARY = ~/.local/share/nvim/lazy/plenary.nvim
 REAL_HOME = $(HOME)
