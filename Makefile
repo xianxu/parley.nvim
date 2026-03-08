@@ -36,7 +36,7 @@ issue:
 		exit 1; \
 	fi
 	@repo_name=$$(basename "$$(git rev-parse --show-toplevel)"); \
-	branch="$$repo_name-issue-$(ISSUE_NUM)"; \
+	branch="$$repo_name-$(ISSUE_NUM)"; \
 	wt_path="../$$branch"; \
 	if git show-ref --verify --quiet "refs/heads/$$branch"; then \
 		if [ -d "$$wt_path" ]; then \
@@ -115,7 +115,7 @@ merge:
 			fi; \
 		fi; \
 	fi; \
-	issue_num=$$(echo "$$branch" | grep -oE 'issue-[0-9]+$$' | grep -oE '[0-9]+$$'); \
+	issue_num=$$(echo "$$branch" | grep -oE '[0-9]+$$'); \
 	if [ -n "$$issue_num" ]; then \
 		echo "Closing issue #$$issue_num..."; \
 		gh issue close "$$issue_num" --repo "$$repo"; \
