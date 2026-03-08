@@ -1,4 +1,4 @@
-.PHONY: test test-spec test-changed lint fixtures model-check model-checker test-clean-env new-worktree pull-request merge
+.PHONY: test test-spec test-changed lint fixtures model-check model-checker test-clean-env new-worktree new-issue pull-request merge
 
 # Worktree management targets
 # Capture extra argument after new-worktree (e.g. make new-worktree feature-x)
@@ -6,6 +6,14 @@ ifeq (new-worktree,$(firstword $(MAKECMDGOALS)))
   WT_NAME := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
   ifneq ($(WT_NAME),)
     $(eval $(WT_NAME):;@:)
+  endif
+endif
+
+# Capture issue number after new-issue (e.g. make new-issue 42)
+ifeq (new-issue,$(firstword $(MAKECMDGOALS)))
+  ISSUE_NUM := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
+  ifneq ($(ISSUE_NUM),)
+    $(eval $(ISSUE_NUM):;@:)
   endif
 endif
 
@@ -19,6 +27,26 @@ new-worktree:
 	@name="$(WT_NAME)"; \
 	git worktree add -b "$$name" "../$$name" HEAD
 	@echo "Worktree created at ../$(WT_NAME) on branch $(WT_NAME)"
+
+# Create a new git worktree for a GitHub issue, fetch the issue into tasks/issue.md.
+# Usage: make new-issue <number>
+new-issue:
+	@if [ -z "$(ISSUE_NUM)" ]; then \
+		echo "Usage: make new-issue <number>"; \
+		exit 1; \
+	fi
+	@repo_name=$$(basename "$$(git rev-parse --show-toplevel)"); \
+	branch="$$repo_name-issue-$(ISSUE_NUM)"; \
+	wt_path="../$$branch"; \
+	git worktree add -b "$$branch" "$$wt_path" HEAD; \
+	repo=$$(git remote get-url origin | sed 's|.*github.com[:/]\(.*\)\.git|\1|;s|.*github.com[:/]\(.*\)$$|\1|'); \
+	mkdir -p "$$wt_path/tasks"; \
+	gh issue view "$(ISSUE_NUM)" --repo "$$repo" --json number,title,body,labels,assignees,state \
+		| jq -r '"# Issue #\(.number): \(.title)\n\n**State:** \(.state)\n**Labels:** \([.labels[].name] | join(", "))\n**Assignees:** \([.assignees[].login] | join(", "))\n\n## Description\n\n\(.body)"' \
+		> "$$wt_path/tasks/issue.md"; \
+	echo "Worktree created at $$wt_path on branch $$branch"; \
+	echo "Issue #$(ISSUE_NUM) saved to $$wt_path/tasks/issue.md"; \
+	echo "Run: cd $$wt_path"
 
 # Create a GitHub pull request from the current worktree branch to main.
 # Must be run from inside a worktree (not from main).
