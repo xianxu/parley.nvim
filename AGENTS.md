@@ -40,27 +40,13 @@
 - Go fix failing CI tests without being told how
 
 ### 7. Maintenance of Specs and Documentation
-- After changes, update corresponding specs in specs/ folder
-- Specs should be organized into subfolders by feature or component for easy navigation.
+- As you update `tasks/todo.md` and code, continuously update corresponding specs in specs/ folder
 - Maintain a specs/index.md that links to all spec files with brief descriptions of their contents.
-- Synthesize what we just built into a reusable spec document. Not a formal spec — a practical reference I can hand to an AI (or myself) next time I build something similar.
-- Structure it as:
-  1. **Context & Boundaries** — what's in scope, what's out, key constraints we discovered
-  2. **Data Shape** — the core entities, fields, types, and any non-obvious column/field matching rules
-  3. **Validation & Error Handling** — the rules we landed on, IN ORDER of priority, including thresholds and edge cases we hit
-  4. **Key Implementation Details** — specific libraries, patterns, or approaches we chose AND WHY, especially where the obvious choice was wrong
-  5. **Non-obvious Lessons** — things that broke, surprised us, or that you initially got wrong. Frame these as warnings for next time.
-  6. **Prompt Patterns That Worked** — which instructions I gave you that produced good results vs. ones that led you astray. Be self-aware here.
-- Guidelines:
-  1. Be concrete: use actual field names, actual thresholds, actual error messages
-  2. Include negative knowledge: what NOT to do matters more than what to do
-  3. Keep it in markdown, informal tone — this is a working document, not a deliverable
-  4. If we made a decision that could reasonably go either way, note the tradeoff, don't just state the choice
+- Synthesize what we just built into a reusable spec document. Not a formal spec — a practical way pointers I can hand to an AI (or myself) next time I build something similar.
 
 ### 8. Pay attention to User Questions
 - When user poses question, answer the question as clearly and directly as possible
 - DO NOT proceed to change code, when user asks a question
-- Only start making changes when user instruct you to do so. Asking questions is a sign user want answers, not changing code.
 
 ## Task Management
 1. **Note starting point**: save current state before making changes (e.g. git commit or branch)
@@ -86,9 +72,7 @@ Parley.nvim is a Neovim plugin that provides a streamlined LLM chat interface wi
 - Manual testing: Start Neovim and use `:lua require('parley').setup()` followed by `:Parley`
 - Run tests: `make test` (runs all unit + integration tests via plenary.nvim in headless Neovim)
 - Run tests for one spec: `make test-spec SPEC=chat/lifecycle` (uses `specs/traceability.yaml` mapping)
-- Run tests for changed specs: `make test-changed` (runs mapped tests for changed `specs/*/*.md` files)
-- For minor spec-scoped changes, prefer `test-spec`/`test-changed` first; run full `make test` before merge when risk is broader.
-- Clean hermetic test env artifacts: `make test-clean-env`
+- Run tests for changed specs: `make test-changed` (runs mapped tests for changed `specs/*/*.md` files), this is faster than full test run
 - Refresh SSE fixtures: `ANTHROPIC_API_KEY=... OPENAI_API_KEY=... make fixtures`
 - Test files live in `tests/unit/` (pure logic, no Neovim APIs) and `tests/integration/` (full Neovim runtime)
 - Lint: None specified (consider using luacheck or lua-formatter if needed)

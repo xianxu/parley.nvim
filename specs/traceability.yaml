@@ -90,6 +90,13 @@ specs:
     tests:
       - tests/unit/logger_spec.lua
 
+  infra/linting:
+    code:
+      - .luacheckrc
+      - Makefile
+    tests:
+      - tests/unit/pure_functions_spec.lua
+
   infra/vault:
     code:
       - lua/parley/vault.lua

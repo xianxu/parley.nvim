@@ -1,4 +1,4 @@
-.PHONY: test test-spec test-changed fixtures model-check model-checker test-clean-env
+.PHONY: test test-spec test-changed lint fixtures model-check model-checker test-clean-env
 
 PLENARY = ~/.local/share/nvim/lazy/plenary.nvim
 REAL_HOME = $(HOME)
@@ -75,6 +75,14 @@ test-changed:
 		  -c "PlenaryBustedFile $$test_file" \
 		  -c "qa!" || exit $$?; \
 	done
+
+# Run static analysis for Lua code and tests.
+lint:
+	@command -v luacheck >/dev/null 2>&1 || { \
+		echo "luacheck not found. Install with: luarocks install luacheck"; \
+		exit 1; \
+	}
+	@luacheck lua tests
 
 # Refresh SSE fixture files from real APIs.
 # Requires ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLEAI_API_KEY in environment.
