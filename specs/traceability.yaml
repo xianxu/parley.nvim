@@ -1,0 +1,203 @@
+version: 1
+
+# Maps a feature spec to the code and tests that verify it.
+# Key format intentionally omits the leading "specs/" and trailing ".md".
+specs:
+  chat/format:
+    code:
+      - lua/parley/render.lua
+      - lua/parley/chat_parser.lua
+    tests:
+      - tests/unit/parse_chat_spec.lua
+      - tests/integration/chat_respond_spec.lua
+
+  chat/lifecycle:
+    code:
+      - lua/parley/init.lua
+      - lua/parley/dispatcher.lua
+      - lua/parley/render.lua
+    tests:
+      - tests/integration/create_handler_spec.lua
+      - tests/integration/new_chat_spec.lua
+      - tests/integration/chat_respond_spec.lua
+      - tests/integration/not_chat_spec.lua
+      - tests/integration/timer_race_spec.lua
+
+  chat/memory:
+    code:
+      - lua/parley/init.lua
+      - lua/parley/chat_parser.lua
+    tests:
+      - tests/unit/build_messages_spec.lua
+      - tests/integration/chat_respond_spec.lua
+
+  chat/parsing:
+    code:
+      - lua/parley/chat_parser.lua
+      - lua/parley/helper.lua
+    tests:
+      - tests/unit/parse_chat_spec.lua
+      - tests/unit/chat_finder_logic_spec.lua
+
+  context/file_references:
+    code:
+      - lua/parley/file_tracker.lua
+      - lua/parley/helper.lua
+    tests:
+      - tests/unit/parse_at_reference_spec.lua
+      - tests/unit/process_directory_pattern_spec.lua
+      - tests/unit/file_tracker_spec.lua
+
+  context/google_drive:
+    code:
+      - lua/parley/google_drive.lua
+      - lua/parley/oauth.lua
+      - lua/parley/helper.lua
+    tests:
+      - tests/unit/remote_references_spec.lua
+      - tests/unit/oauth_spec.lua
+      - tests/unit/helper_io_spec.lua
+      - tests/unit/build_messages_spec.lua
+
+  context/web_search:
+    code:
+      - lua/parley/provider_params.lua
+      - lua/parley/dispatcher.lua
+    tests:
+      - tests/unit/provider_params_spec.lua
+      - tests/unit/dispatcher_query_spec.lua
+      - tests/unit/build_messages_spec.lua
+
+  export/formats:
+    code:
+      - lua/parley/init.lua
+      - lua/parley/render.lua
+    tests:
+      - tests/integration/export_spec.lua
+
+  infra/config:
+    code:
+      - lua/parley/config.lua
+      - lua/parley/defaults.lua
+    tests:
+      - tests/unit/helper_spec.lua
+      - tests/unit/provider_params_spec.lua
+      - tests/unit/pure_functions_spec.lua
+
+  infra/logging:
+    code:
+      - lua/parley/logger.lua
+    tests:
+      - tests/unit/logger_spec.lua
+
+  infra/vault:
+    code:
+      - lua/parley/vault.lua
+    tests:
+      - tests/unit/vault_spec.lua
+
+  modes/interview:
+    code:
+      - lua/parley/render.lua
+      - lua/parley/init.lua
+    tests:
+      - tests/unit/parse_chat_spec.lua
+      - tests/integration/chat_respond_spec.lua
+
+  modes/raw_mode:
+    code:
+      - lua/parley/dispatcher.lua
+      - lua/parley/providers.lua
+    tests:
+      - tests/unit/dispatcher_query_spec.lua
+      - tests/unit/dispatcher_spec.lua
+
+  notes/structure:
+    code:
+      - lua/parley/tasker.lua
+    tests:
+      - tests/unit/get_week_number_spec.lua
+      - tests/unit/tasker_unit_spec.lua
+
+  notes/templates:
+    code:
+      - lua/parley/tasker.lua
+      - lua/parley/helper.lua
+    tests:
+      - tests/unit/tasker_unit_spec.lua
+      - tests/integration/tasker_run_spec.lua
+
+  providers/agents:
+    code:
+      - lua/parley/agent_picker.lua
+      - lua/parley/provider_params.lua
+    tests:
+      - tests/unit/provider_params_spec.lua
+      - tests/unit/helper_spec.lua
+
+  providers/architecture:
+    code:
+      - lua/parley/dispatcher.lua
+      - lua/parley/providers.lua
+    tests:
+      - tests/unit/dispatcher_spec.lua
+      - tests/unit/dispatcher_query_spec.lua
+      - tests/unit/sse_parsing_spec.lua
+
+  providers/openai:
+    code:
+      - lua/parley/providers.lua
+      - lua/parley/dispatcher.lua
+    tests:
+      - tests/unit/dispatcher_query_spec.lua
+      - tests/unit/sse_parsing_spec.lua
+      - tests/unit/build_messages_spec.lua
+
+  providers/anthropic:
+    code:
+      - lua/parley/providers.lua
+      - lua/parley/dispatcher.lua
+    tests:
+      - tests/unit/dispatcher_query_spec.lua
+      - tests/unit/sse_parsing_spec.lua
+      - tests/unit/build_messages_spec.lua
+
+  providers/googleai:
+    code:
+      - lua/parley/providers.lua
+      - lua/parley/dispatcher.lua
+    tests:
+      - tests/unit/dispatcher_query_spec.lua
+      - tests/unit/sse_parsing_spec.lua
+      - tests/unit/build_messages_spec.lua
+
+  ui/highlights:
+    code:
+      - lua/parley/render.lua
+    tests:
+      - tests/integration/highlighting_spec.lua
+      - tests/unit/render_spec.lua
+
+  ui/lualine:
+    code:
+      - lua/parley/lualine.lua
+    tests:
+      - tests/unit/render_spec.lua
+      - tests/unit/pure_functions_spec.lua
+
+  ui/outline:
+    code:
+      - lua/parley/outline.lua
+      - lua/parley/chat_parser.lua
+    tests:
+      - tests/unit/chat_finder_logic_spec.lua
+      - tests/unit/parse_chat_spec.lua
+
+  ui/pickers:
+    code:
+      - lua/parley/agent_picker.lua
+      - lua/parley/system_prompt_picker.lua
+      - lua/parley/test_agent_picker.lua
+    tests:
+      - tests/unit/chat_finder_logic_spec.lua
+      - tests/unit/pure_functions_spec.lua
