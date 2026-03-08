@@ -30,7 +30,8 @@ test-spec:
 	done
 
 # Run tests mapped to changed spec files under specs/*/*.md.
-# Uses tracked and untracked file changes compared to HEAD.
+# Uses tracked and untracked file changes since feature-branch base
+# (default base ref: remote/main, fallback origin/main, then main).
 test-changed:
 	@changed_specs="$$(scripts/spec_test_map.sh list-changed-specs)"; \
 	if [ -z "$$changed_specs" ]; then \

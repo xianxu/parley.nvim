@@ -3,6 +3,31 @@ set -euo pipefail
 
 MAP_FILE="${MAP_FILE:-specs/traceability.yaml}"
 
+resolve_base_ref() {
+    if [ -n "${BASE_REF:-}" ]; then
+        printf '%s\n' "$BASE_REF"
+        return
+    fi
+
+    if git rev-parse --verify remote/main >/dev/null 2>&1; then
+        printf '%s\n' "remote/main"
+        return
+    fi
+
+    if git rev-parse --verify origin/main >/dev/null 2>&1; then
+        printf '%s\n' "origin/main"
+        return
+    fi
+
+    if git rev-parse --verify main >/dev/null 2>&1; then
+        printf '%s\n' "main"
+        return
+    fi
+
+    echo "Unable to resolve base ref. Set BASE_REF=<ref> (e.g. remote/main)." >&2
+    exit 1
+}
+
 normalize_spec_key() {
     local input="$1"
     local key="${input#./}"
@@ -65,8 +90,13 @@ list_tests_for_spec() {
 }
 
 list_changed_specs() {
+    local base_ref
+    local merge_base
+    base_ref="$(resolve_base_ref)"
+    merge_base="$(git merge-base HEAD "$base_ref")"
+
     {
-        git diff --name-only --diff-filter=ACMR HEAD -- specs
+        git diff --name-only --diff-filter=ACMR "$merge_base" -- specs
         git ls-files --others --exclude-standard -- specs
     } | awk '/^specs\/.+\/.+\.md$/ { print }' | sort -u
 }
@@ -108,6 +138,8 @@ Usage:
   scripts/spec_test_map.sh list-tests <spec-key-or-path> [more...]
   scripts/spec_test_map.sh list-changed-specs
   scripts/spec_test_map.sh list-tests-from-changed-specs
+Env:
+  BASE_REF=<git ref>    Override base branch ref (default: remote/main, fallback origin/main, then main)
 USAGE
         exit 1
         ;;

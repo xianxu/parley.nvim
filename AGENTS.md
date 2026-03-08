@@ -51,12 +51,14 @@
 - Only start making changes when user instruct you to do so. Asking questions is a sign user want answers, not changing code.
 
 ## Task Management
-1. **Plan First**: Write plan to `tasks/todo.md` with checkable items
-2. **Verify Plan**: Check in before starting implementation
-3. **Track Progress**: Mark items complete as you go
-4. **Explain Changes**: High-level summary at each step
-5. **Document Results**: Add review section to `tasks/todo.md`
-6. **Capture Lessons**: Update `tasks/lessons.md` after corrections
+1. **Note starting point**: save current state before making changes (e.g. git commit or branch)
+2. **Plan First**: Write plan to `tasks/todo.md` with checkable items
+3. **Update Spec**: Reflect	changes in `specs/` files as you go, not after the fact
+4. **Verify Plan**: Check in before starting implementation
+5. **Track Progress**: Mark items complete as you go
+6. **Explain Changes**: High-level summary at each step
+7. **Document Results**: Add review section to `tasks/todo.md`
+8. **Capture Lessons**: Update `tasks/lessons.md` after corrections
 
 ## Core Principles
 - **Simplicity First**: Make every change as simple as possible. Minimal impact.
