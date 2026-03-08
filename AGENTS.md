@@ -40,7 +40,7 @@
 - Go fix failing CI tests without being told how
 
 ### 7. Maintenance of Specs and Documentation
-- After significant changes, update corresponding specs in specs/ folder.
+- After changes, update corresponding specs in specs/ folder
 - Specs should be organized into subfolders by feature or component for easy navigation.
 - Maintain a specs/index.md that links to all spec files with brief descriptions of their contents.
 - When unsure, ask user which spec file to update.
