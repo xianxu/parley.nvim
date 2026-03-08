@@ -123,8 +123,8 @@ merge:
 	echo "Cleaning up tasks/todo.md..."; \
 	rm -f "$$main_path/tasks/todo.md" && touch "$$main_path/tasks/todo.md"; \
 	echo "Removing worktree at $$wt_path..."; \
-	git -C "$$main_path" worktree remove "$$wt_path"; \
-	git -C "$$main_path" branch -D "$$branch" 2>/dev/null || true; \
+	cd "$$main_path" && git worktree remove "$$wt_path" 2>/dev/null; \
+	git branch -D "$$branch" 2>/dev/null || true; \
 	echo "Done. Run: cd $$main_path"
 
 PLENARY = ~/.local/share/nvim/lazy/plenary.nvim
