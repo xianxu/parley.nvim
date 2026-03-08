@@ -38,12 +38,23 @@ new-issue:
 	@repo_name=$$(basename "$$(git rev-parse --show-toplevel)"); \
 	branch="$$repo_name-issue-$(ISSUE_NUM)"; \
 	wt_path="../$$branch"; \
-	git worktree add -b "$$branch" "$$wt_path" HEAD; \
+	if git show-ref --verify --quiet "refs/heads/$$branch"; then \
+		if [ -d "$$wt_path" ]; then \
+			echo "Worktree already exists at $$wt_path, refreshing issue file..."; \
+		else \
+			echo "Cleaning up stale worktree for branch $$branch..."; \
+			git worktree prune; \
+			git branch -d "$$branch"; \
+			git worktree add -b "$$branch" "$$wt_path" HEAD || exit 1; \
+		fi; \
+	else \
+		git worktree add -b "$$branch" "$$wt_path" HEAD || exit 1; \
+	fi; \
 	repo=$$(git remote get-url origin | sed 's|.*github.com[:/]\(.*\)\.git|\1|;s|.*github.com[:/]\(.*\)$$|\1|'); \
-	mkdir -p "$$wt_path/tasks"; \
+	mkdir -p "$$wt_path/tasks" && \
 	gh issue view "$(ISSUE_NUM)" --repo "$$repo" --json number,title,body,labels,assignees,state \
 		| jq -r '"# Issue #\(.number): \(.title)\n\n**State:** \(.state)\n**Labels:** \([.labels[].name] | join(", "))\n**Assignees:** \([.assignees[].login] | join(", "))\n\n## Description\n\n\(.body)"' \
-		> "$$wt_path/tasks/issue.md"; \
+		> "$$wt_path/tasks/issue.md" || { git worktree remove "$$wt_path"; exit 1; }; \
 	echo "Worktree created at $$wt_path on branch $$branch"; \
 	echo "Issue #$(ISSUE_NUM) saved to $$wt_path/tasks/issue.md"; \
 	echo "Run: cd $$wt_path"
