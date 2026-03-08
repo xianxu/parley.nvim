@@ -19,7 +19,7 @@ endif
 
 # Create a new git worktree in the parent directory.
 # Usage: make new-worktree <name>
-new-worktree:
+worktree:
 	@if [ -z "$(WT_NAME)" ]; then \
 		echo "Usage: make new-worktree <name>"; \
 		exit 1; \
@@ -30,7 +30,7 @@ new-worktree:
 
 # Create a new git worktree for a GitHub issue, fetch the issue into tasks/issue.md.
 # Usage: make new-issue <number>
-new-issue:
+issue:
 	@if [ -z "$(ISSUE_NUM)" ]; then \
 		echo "Usage: make new-issue <number>"; \
 		exit 1; \
