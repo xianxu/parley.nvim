@@ -186,8 +186,8 @@ M.create_component = function(parley_instance)
         -- For OpenAI, also require search_model to be defined
         if supported and agent_info and prov.resolve_name(agent_info.provider) == "openai" then
           local agent_conf = parley.agents and parley.agents[agent_name]
-          local model_conf = agent_conf and agent_conf.model
-          if type(model_conf) == "table" and not model_conf.search_model then
+          local agent_model_conf = agent_conf and agent_conf.model
+          if type(agent_model_conf) == "table" and not agent_model_conf.search_model then
             supported = false
           end
         end
