@@ -10,6 +10,7 @@ Parley is a Neovim chat notebook for LLM conversations.
 
 The philosophy is simple:
 - Keep chats as plain Markdown files you can edit anytime.
+- Highly configurable but also have good default out of box.
 - Keep the workflow keyboard-first and fast.
 - Keep behavior predictable across providers.
 
