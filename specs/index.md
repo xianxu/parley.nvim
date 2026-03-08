@@ -12,6 +12,7 @@ This index provides a central directory for all specifications of the `parley.nv
 ## 2. LLM Providers & Agents
 - [Provider Architecture](providers/architecture.md): Transport layer, payload construction, and streaming.
 - [OpenAI Provider](providers/openai.md): Implementation for OpenAI-compatible backends.
+- [CLIProxyAPI Provider](providers/cliproxyapi.md): OpenAI-compatible local proxy provider for multi-vendor models.
 - [Anthropic Provider](providers/anthropic.md): Implementation for Claude models.
 - [Google AI Provider](providers/googleai.md): Implementation for Gemini models.
 - [Agents](providers/agents.md): Agent configuration and selection mechanisms.
@@ -46,4 +47,4 @@ This index provides a central directory for all specifications of the `parley.nv
 - [Export Formats](export/formats.md): Jekyll HTML and Markdown export logic.
 
 ## 9. Spec Traceability
-- [Traceability Map](traceability.yaml): Mapping from each feature spec to implementation files and related tests.
+- [Traceability Map](traceability.yaml): Mapping from each feature spec to implementation files and related tests. 

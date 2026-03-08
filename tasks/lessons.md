@@ -9,3 +9,4 @@
 - When spec docs are changed, always run `make test-changed` before closing the task and report the result explicitly.
 - For provider tool revisions, verify against the provider's own platform docs (not secondary references) and include exact revision strings before changing code/docs.
 - Keep provider/model capability rules in `lua/parley/provider_params.lua` (or capability layer), not in `providers.lua` transport assembly code.
+- For any non-trivial or multi-step request, write the concrete execution plan into `tasks/todo.md` before further implementation or reporting.

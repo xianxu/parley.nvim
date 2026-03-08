@@ -15,6 +15,8 @@ The dispatcher module builds API payloads for different providers.
 - **Messages**: Conversation history as `{role, content}`.
 - **Parameters**: `model`, `temperature`, `top_p`, `max_tokens` (or `max_completion_tokens`).
 - **Streaming**: All requests MUST enable streaming.
+- OpenAI-compatible adapters (OpenAI/Copilot/Azure/Ollama/CLIProxyAPI) share common payload and SSE parsing behavior with provider-specific header and endpoint handling.
+- CLIProxyAPI can dynamically select OpenAI-compatible or Anthropic-compatible payload/endpoint behavior based on configured strategy and model family.
 
 ## Query Cache Management
 - Queries are saved in `query_dir`.

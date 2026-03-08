@@ -27,6 +27,14 @@ Notable replace-on-set behavior:
 - `hooks`: Custom user-defined commands.
 - `chat_free_cursor`: Default cursor-follow behavior (runtime state toggle can override).
 
+### Provider-Specific Keys
+- `providers.cliproxyapi.web_search_strategy`:
+  - `none` (default), `openai_search_model`, `openai_tools_route`, or `anthropic_tools_route`.
+  - Controls whether web-search is unavailable, uses search-model swapping, uses OpenAI-style tool injection, or uses Anthropic-style tool routing for Claude/code_execution models.
+- `agent.model.web_search_strategy`:
+  - Optional per-agent/per-model override for CLIProxyAPI strategy.
+  - If set, it takes precedence over `providers.cliproxyapi.web_search_strategy`.
+
 ## Selective Merging
 - Tables like `hooks`, `agents`, and `system_prompts` MUST be merged by key to allow partial overrides of default sets.
 - `setup()` options MUST take priority over global config values.

@@ -8,7 +8,8 @@
 - Use plan mode for verification steps, not just building
 - Write detailed specs in specs/ upfront to reduce ambiguity
 - Read specs/index.md to get a sense of the features
-- Work for you is in `tasks/issue.md`, you should make plan in `tasks/todo.md`
+- Work for you is in `tasks/issue.md`, you MUST make plan in `tasks/todo.md`
+- When making the plan, add checkpoints user should manually verify before you proceed to next step
 
 ### 2. Subagent Strategy
 - Use subagents liberally to keep main context window clean
@@ -51,7 +52,7 @@
 
 ## Task Management
 1. **Note starting point**: save current state before making changes (e.g. git commit or branch)
-2. **Plan First**: Write plan to `tasks/todo.md` with checkable items
+2. **Plan First**: Write plan to `tasks/todo.md` with checkable items, use numerical bullets for steps
 3. **Update Spec**: Reflect	changes in `specs/` files as you go, not after the fact
 4. **Verify Plan**: Check in before starting implementation
 5. **Track Progress**: Mark items complete as you go

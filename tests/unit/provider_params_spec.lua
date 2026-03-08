@@ -18,6 +18,13 @@ describe("get_schema", function()
         assert.same({}, s.params)
     end)
 
+    it("returns openai-compatible schema for cliproxyapi provider", function()
+        local s = pp.get_schema("cliproxyapi", "gpt-4o")
+        assert.is_not_nil(s.params.temperature)
+        assert.is_not_nil(s.params.top_p)
+        assert.is_not_nil(s.params.max_tokens)
+    end)
+
     it("applies o-series override: removes temperature/top_p/max_tokens, adds reasoning_effort", function()
         local s = pp.get_schema("openai", "o3-mini")
         assert.is_nil(s.params.temperature)
@@ -123,6 +130,13 @@ describe("resolve_params", function()
         local model = { model = "gpt-5.2", max_tokens = 4096 }
         local result = pp.resolve_params("openai", model)
         assert.equals(4096, result.max_completion_tokens)
+        assert.is_nil(result.max_tokens)
+    end)
+
+    it("applies gpt-5 param mapping for cliproxyapi provider", function()
+        local model = { model = "gpt-5.4", max_tokens = 2048 }
+        local result = pp.resolve_params("cliproxyapi", model)
+        assert.equals(2048, result.max_completion_tokens)
         assert.is_nil(result.max_tokens)
     end)
 end)

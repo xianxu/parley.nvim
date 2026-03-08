@@ -910,10 +910,11 @@ M.setup = function(opts)
 		local agent = M._state.agent
 		local conf = M.agents[agent]
 		local provider = conf and conf.provider or nil
+		local model_conf = conf and conf.model or nil
 		local enable = not M._state.web_search
 		-- Only allow enabling for providers that support web_search
 		local prov = require("parley.providers")
-		if enable and not prov.has_feature(provider, "web_search") then
+		if enable and not prov.has_feature(provider, "web_search", model_conf) then
 			local msg = string.format("Agent %s does not support web_search", agent)
 			M.logger.error(msg)
 			vim.notify(msg, vim.log.levels.ERROR)
@@ -921,12 +922,23 @@ M.setup = function(opts)
 		end
 		-- For OpenAI, require search_model to be defined on the model config
 		if enable and prov.resolve_name(provider) == "openai" then
-			local model_conf = conf and conf.model
 			if type(model_conf) == "table" and not model_conf.search_model then
 				local msg = string.format("Agent %s has no search_model defined", agent)
 				M.logger.error(msg)
 				vim.notify(msg, vim.log.levels.ERROR)
 				return
+			end
+		end
+		-- For CLIProxyAPI in openai_search_model mode, also require search_model.
+		if enable and prov.resolve_name(provider) == "cliproxyapi" then
+			local strategy = prov.get_web_search_strategy(provider, model_conf) or "none"
+			if strategy == "openai_search_model" then
+				if type(model_conf) == "table" and not model_conf.search_model then
+					local msg = string.format("Agent %s has no search_model defined", agent)
+					M.logger.error(msg)
+					vim.notify(msg, vim.log.levels.ERROR)
+					return
+				end
 			end
 		end
 		-- persist the toggle in chat state
@@ -1778,21 +1790,9 @@ M.display_agent = function(buf, file_name)
 	local ns_id = vim.api.nvim_create_namespace("ParleyChatExt_" .. file_name)
 	vim.api.nvim_buf_clear_namespace(buf, ns_id, 0, -1)
 
-	-- Visual indicator: append [w] or [w?] for web_search
 	local agent = M._state.agent
-	local display_name = agent
 	local ag_conf = M.agents[agent]
-	local prov = require("parley.providers")
-	if M._state.web_search then
-		local supported = ag_conf and prov.has_feature(ag_conf.provider, "web_search")
-		if supported and ag_conf and prov.resolve_name(ag_conf.provider) == "openai" then
-			local model_conf = ag_conf.model
-			if type(model_conf) == "table" and not model_conf.search_model then
-				supported = false
-			end
-		end
-		display_name = display_name .. (supported and "[w]" or "[w?]")
-	end
+	local display_name = M.agent_display_name_with_web_search(agent, ag_conf)
 	vim.api.nvim_buf_set_extmark(buf, ns_id, 0, 0, {
 		strict = false,
 		right_gravity = true,
@@ -1802,6 +1802,37 @@ M.display_agent = function(buf, file_name)
 		},
 		hl_mode = "combine",
 	})
+end
+
+--- Build display label for an agent, including web_search indicator suffix.
+---@param agent_name string
+---@param ag_conf table|nil
+---@return string
+M.agent_display_name_with_web_search = function(agent_name, ag_conf)
+	local display_name = agent_name
+	if not M._state.web_search then
+		return display_name
+	end
+
+	local prov = require("parley.providers")
+	local model_conf = ag_conf and ag_conf.model or nil
+	local supported = ag_conf and prov.has_feature(ag_conf.provider, "web_search", model_conf)
+	local resolved_provider = ag_conf and prov.resolve_name(ag_conf.provider) or nil
+	local requires_search_model = false
+	if resolved_provider == "openai" then
+		requires_search_model = true
+	elseif resolved_provider == "cliproxyapi" then
+		local strategy = prov.get_web_search_strategy(ag_conf.provider, model_conf) or "none"
+		requires_search_model = strategy == "openai_search_model"
+	end
+
+	if supported and requires_search_model then
+		if type(model_conf) == "table" and not model_conf.search_model then
+			supported = false
+		end
+	end
+
+	return display_name .. (supported and "[w]" or "[w?]")
 end
 
 M._prepared_bufs = {}
