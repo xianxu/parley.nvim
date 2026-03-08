@@ -6,10 +6,10 @@
 
 <!-- panvimdoc-ignore-end -->
 
-Parley is a Neovim chat notebook for LLM conversations.
+Parley is a Neovim chat notebook for LLM conversations. You have all the power of Neovim at your fingertips in your LLM chat, thus making comprehensive research easier. All your chat history also lives in plain markdown files, you can easily search through using local tools.
 
 The philosophy is simple:
-- Keep chats as plain Markdown files you can edit anytime.
+- Keep chats as plain Markdown files you can edit anytime. The chat transcript file has the full state of LLM chat.
 - Highly configurable but also have good default out of box.
 - Keep the workflow keyboard-first and fast.
 - Keep behavior predictable across providers.
@@ -23,7 +23,7 @@ Requirements:
 
 Optional dependencies:
 - [`telescope.nvim`](https://github.com/nvim-telescope/telescope.nvim) for pickers and finder UI.
-- [`lualine.nvim`](https://github.com/nvim-lualine/lualine.nvim) for statusline integration.
+- [`lualine.nvim`](https://github.com/nvim-lualine/lualine.nvim) for status line integration.
 
 Example with `lazy.nvim`:
 
