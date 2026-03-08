@@ -47,6 +47,8 @@ merge:
 	gh pr merge --repo "$$repo" --merge --delete-branch "$$branch"; \
 	echo "Pulling main..."; \
 	git -C "$$main_path" pull; \
+	echo "Cleaning up tasks/todo.md..."; \
+	rm -f "$$main_path/tasks/todo.md" && touch "$$main_path/tasks/todo.md"; \
 	echo "Removing worktree at $$wt_path..."; \
 	git -C "$$main_path" worktree remove "$$wt_path"; \
 	echo "Done. Run: cd $$main_path"
