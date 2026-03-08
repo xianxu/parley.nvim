@@ -7,6 +7,10 @@
 
 local M = {}
 
+local function is_test_mode()
+    return vim.g and vim.g.parley_test_mode == true
+end
+
 -- Structure to store file access information
 -- Keys are file paths, values are tables with:
 -- { 
@@ -28,6 +32,11 @@ end
 
 -- Load file access data from disk
 function M.load_data()
+    if is_test_mode() then
+        M._file_access = {}
+        return false
+    end
+
     ensure_dir_exists(access_data_file)
     
     -- Check if the file exists
@@ -50,6 +59,10 @@ end
 
 -- Save file access data to disk
 function M.save_data()
+    if is_test_mode() then
+        return true
+    end
+
     ensure_dir_exists(access_data_file)
     
     local ok, json_str = pcall(vim.fn.json_encode, M._file_access)
@@ -64,7 +77,7 @@ end
 -- Track file access
 function M.track_file_access(file_path)
     -- Load data if it's the first time
-    if next(M._file_access) == nil then
+    if not is_test_mode() and next(M._file_access) == nil then
         M.load_data()
     end
     
@@ -80,14 +93,14 @@ function M.track_file_access(file_path)
         M._file_access[file_path].access_count = (M._file_access[file_path].access_count or 0) + 1
     end
     
-    -- Save data to disk
+    -- Save data to disk (skipped in test mode)
     M.save_data()
 end
 
 -- Get last access time for a file
 function M.get_last_access_time(file_path)
     -- Load data if it's the first time
-    if next(M._file_access) == nil then
+    if not is_test_mode() and next(M._file_access) == nil then
         M.load_data()
     end
     
@@ -108,7 +121,7 @@ end
 -- Get access count for a file
 function M.get_access_count(file_path)
     -- Load data if it's the first time
-    if next(M._file_access) == nil then
+    if not is_test_mode() and next(M._file_access) == nil then
         M.load_data()
     end
     
@@ -155,7 +168,9 @@ end
 
 -- Initialize the tracker
 function M.init()
-    M.load_data()
+    if not is_test_mode() then
+        M.load_data()
+    end
     
     -- Run cleanup on startup to remove stale entries
     M.cleanup()

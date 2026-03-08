@@ -85,6 +85,26 @@ describe("parse_chat: headers", function()
         local result = parse_chat(lines, header_end)
         assert.equals(0, #result.exchanges)
     end)
+
+    it("parses front matter style headers", function()
+        local lines = {
+            "---",
+            "topic: Front Matter Topic",
+            "file: 2026-02-28.frontmatter.md",
+            "provider: openai",
+            "tags: lua, neovim",
+            "---",
+            "",
+            "💬: Hello",
+        }
+        local header_end = chat_parser.find_header_end(lines)
+        local result = parse_chat(lines, header_end)
+        assert.equals("Front Matter Topic", result.headers["topic"])
+        assert.equals("2026-02-28.frontmatter.md", result.headers["file"])
+        assert.equals("openai", result.headers["provider"])
+        assert.equals("lua", result.headers["tags"][1])
+        assert.equals("neovim", result.headers["tags"][2])
+    end)
 end)
 
 describe("parse_chat: single exchange", function()

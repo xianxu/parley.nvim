@@ -4,7 +4,7 @@
 This index provides a central directory for all specifications of the `parley.nvim` plugin.
 
 ## 1. Core Chat System
-- [Chat Format](chat/format.md): Transcript prefixes and header metadata.
+- [Chat Format](chat/format.md): Transcript prefixes and front matter header metadata.
 - [Chat Lifecycle](chat/lifecycle.md): Creation, response, resubmission, and deletion.
 - [Chat Memory](chat/memory.md): History management, summarization, and preservation.
 - [Chat Parsing](chat/parsing.md): Buffer segmentation and turn identification.

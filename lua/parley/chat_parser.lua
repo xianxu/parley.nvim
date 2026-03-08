@@ -21,6 +21,53 @@ local logger = require("parley.logger")
 
 local M = {}
 
+local function trim(str)
+	return (str:gsub("^%s*(.-)%s*$", "%1"))
+end
+
+---Find the header/trancript separator index.
+---Supports:
+---1) Legacy format: metadata lines followed by a single `---`.
+---2) Front matter format: opening `---`, metadata, closing `---`.
+---@param lines table
+---@return number|nil
+M.find_header_end = function(lines)
+	if not lines or #lines == 0 then
+		return nil
+	end
+
+	if trim(lines[1]) == "---" then
+		for i = 2, #lines do
+			if trim(lines[i]) == "---" then
+				return i
+			end
+		end
+		return nil
+	end
+
+	for i, line in ipairs(lines) do
+		if trim(line) == "---" then
+			return i
+		end
+	end
+
+	return nil
+end
+
+local function parse_header_key_value(line)
+	local content = trim(line)
+	if content == "" or content == "---" then
+		return nil, nil
+	end
+
+	local key, value = content:match("^[-#]%s*([%w_%.]+):%s*(.*)$")
+	if key then
+		return key, value
+	end
+
+	return content:match("^([%w_%.]+):%s*(.*)$")
+end
+
 -- Structure to represent a parsed chat:
 -- {
 --   headers = { key-value pairs },
@@ -49,13 +96,13 @@ M.parse_chat = function(lines, header_end, config)
 	-- Parse headers
 	for i = 1, header_end do
 		local line = lines[i]
-		local key, value = line:match("^[-#] (%w+): (.*)")
+		local key, value = parse_header_key_value(line)
 		if key ~= nil then
 			if key == "tags" then
 				-- Parse tags into individual items
 				local tags = {}
-				for tag in value:gmatch("%S+") do
-					local trimmed_tag = tag:match("^%s*(.-)%s*$")
+				for tag in value:gmatch("[^,%s]+") do
+					local trimmed_tag = trim(tag)
 					if trimmed_tag and trimmed_tag ~= "" then
 						table.insert(tags, trimmed_tag)
 					end
@@ -64,16 +111,19 @@ M.parse_chat = function(lines, header_end, config)
 			else
 				result.headers[key] = value
 			end
-		end
 
-		-- Parse configuration override parameters
-		local config_key, config_value = line:match("^%- ([%w_]+): (.*)")
-		if config_key ~= nil and config_key ~= "file" and config_key ~= "model" and config_key ~= "provider" and config_key ~= "role" then
-			-- Try to convert to number if possible
-			if tonumber(config_value) ~= nil then
-				config_value = tonumber(config_value)
+			-- Parse configuration override parameters
+			if key ~= "file" and key ~= "model" and key ~= "provider" and key ~= "role" and key ~= "topic" and key ~= "tags" then
+				local config_value = value
+				if tonumber(config_value) ~= nil then
+					config_value = tonumber(config_value)
+				elseif config_value == "true" then
+					config_value = true
+				elseif config_value == "false" then
+					config_value = false
+				end
+				result.headers["config_" .. key] = config_value
 			end
-			result.headers["config_" .. config_key] = config_value
 		end
 	end
 

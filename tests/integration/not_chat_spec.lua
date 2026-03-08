@@ -19,10 +19,11 @@ parley.setup({
 local function make_chat_buf(filename)
     local path = tmp_dir .. "/" .. filename
     local lines = {
-        "# topic: Test",
-        "- file: " .. filename,
-        "- model: test-model",
-        "- provider: openai",
+        "---",
+        "topic: Test",
+        "file: " .. filename,
+        "model: test-model",
+        "provider: openai",
         "---",
         "",
         "💬: Hello",
@@ -70,10 +71,11 @@ describe("not_chat: invalid files", function()
     it("returns a reason for a file in chat_dir without timestamp format", function()
         local path = tmp_dir .. "/no-timestamp.md"
         local lines = {
-            "# topic: Test",
-            "- file: no-timestamp.md",
-            "- model: test",
-            "- provider: openai",
+            "---",
+            "topic: Test",
+            "file: no-timestamp.md",
+            "model: test",
+            "provider: openai",
             "---",
             "",
             "💬: hi",
@@ -88,7 +90,7 @@ describe("not_chat: invalid files", function()
 
     it("returns a reason for a file that is too short (< 5 lines)", function()
         local path = tmp_dir .. "/2026-02-28.short.md"
-        local lines = { "# topic: Short", "---" }
+        local lines = { "---", "topic: Short", "---" }
         vim.fn.writefile(lines, path)
         local buf = vim.api.nvim_create_buf(false, true)
         vim.api.nvim_buf_set_name(buf, path)
@@ -100,10 +102,11 @@ describe("not_chat: invalid files", function()
     it("returns a reason for a file missing the topic header", function()
         local path = tmp_dir .. "/2026-02-28.no-topic.md"
         local lines = {
+            "---",
             "not a topic line",
-            "- file: 2026-02-28.no-topic.md",
-            "- model: test",
-            "- provider: openai",
+            "file: 2026-02-28.no-topic.md",
+            "model: test",
+            "provider: openai",
             "---",
             "",
             "💬: hi",
@@ -119,10 +122,11 @@ describe("not_chat: invalid files", function()
     it("returns a reason for a file missing the file header", function()
         local path = tmp_dir .. "/2026-02-28.no-file-header.md"
         local lines = {
-            "# topic: Test",
+            "---",
+            "topic: Test",
             "no file header here",
-            "- model: test",
-            "- provider: openai",
+            "model: test",
+            "provider: openai",
             "---",
             "",
             "💬: hi",

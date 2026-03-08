@@ -4,21 +4,22 @@
 The chat transcript is a Markdown-compatible file with specific conventions for marking turns, metadata, and special content.
 
 ## File Header Section
-Every chat file MUST contain a header section before the first `---` separator.
+Every chat file MUST contain a header section before the transcript body.
+Preferred format is Markdown front matter (`---` opening + `---` closing). Legacy header style remains supported for existing files.
 
 ### Required Fields
-- `# topic: <topic>`: The first line of the file.
-- `- file: <filename>`: Within the first 10 lines.
+- `topic: <topic>`
+- `file: <filename>`
 
 ### Optional Configuration Overrides
 The header MAY contain YAML-like keys to override global configurations for the specific chat:
-- `- model: <string|json>`: Model parameters.
-- `- provider: <provider_name>`: LLM provider.
-- `- role: <system_prompt>`: System prompt (newlines escaped as `\n`).
-- `- tags: <space_separated_tags>`: Tags for organization.
-- `- max_full_exchanges: <number>`: Memory threshold override.
-- `- raw_mode.show_raw_response: <boolean>`: Display raw JSON response.
-- `- raw_mode.parse_raw_request: <boolean>`: Parse user JSON as request.
+- `model: <string|json>`: Model parameters.
+- `provider: <provider_name>`: LLM provider.
+- `role: <system_prompt>`: System prompt (newlines escaped as `\n`).
+- `tags: <space_or_comma_separated_tags>`: Tags for organization.
+- `max_full_exchanges: <number>`: Memory threshold override.
+- `raw_mode.show_raw_response: <boolean>`: Display raw JSON response.
+- `raw_mode.parse_raw_request: <boolean>`: Parse user JSON as request.
 
 ## Conversation Prefixes
 The plugin uses specific markers to distinguish between roles and special content.

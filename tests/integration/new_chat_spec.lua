@@ -66,28 +66,35 @@ describe("ChatNew", function()
             "file should contain a --- separator line")
     end)
 
-    it("created file contains the topic header line", function()
+    it("created file starts with front matter and contains topic line", function()
         parley.cmd.ChatNew({})
         local files = vim.fn.glob(tmp_dir .. "/*.md", false, true)
         assert.is_true(#files >= 1)
         local lines = vim.fn.readfile(files[#files])
-        assert.is_truthy(lines[1]:match("^# topic:"), 
-            "first line should be '# topic: ...', got: " .. tostring(lines[1]))
+        assert.equals("---", lines[1], "first line should be front matter opener")
+        local has_topic = false
+        for i = 1, math.min(#lines, 10) do
+            if lines[i]:match("^topic:") then
+                has_topic = true
+                break
+            end
+        end
+        assert.is_true(has_topic, "front matter should contain 'topic:' line")
     end)
 
-    it("created file contains a - file: header line", function()
+    it("created file contains a file: front matter line", function()
         parley.cmd.ChatNew({})
         local files = vim.fn.glob(tmp_dir .. "/*.md", false, true)
         assert.is_true(#files >= 1)
         local lines = vim.fn.readfile(files[#files])
         local has_file_header = false
         for _, line in ipairs(lines) do
-            if line:match("^%- file:") then
+            if line:match("^file:") then
                 has_file_header = true
                 break
             end
         end
-        assert.is_true(has_file_header, "file should contain a '- file:' header line")
+        assert.is_true(has_file_header, "file should contain a 'file:' front matter line")
     end)
 
     it("the new chat buffer passes not_chat validation", function()

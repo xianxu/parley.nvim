@@ -294,7 +294,7 @@ local config = {
 	-- shortcut for opening oil.nvim file explorer
 	global_shortcut_oil = { modes = { "n" }, shortcut = "<leader>fo" },
 	-- default search term when using :ParleyChatFinder
-	chat_finder_pattern = "^# topic: ",
+	chat_finder_pattern = "",
 	chat_finder_mappings = {
 		delete = { modes = { "n", "i", "v", "x" }, shortcut = "<C-d>" },
 		toggle_all = { modes = { "n", "i", "v", "x" }, shortcut = "<C-a>" },

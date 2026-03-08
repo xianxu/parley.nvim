@@ -2,3 +2,4 @@
 .aider*
 tasks/*
 !tasks/lessons.md
+.nvimlog
