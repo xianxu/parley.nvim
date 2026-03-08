@@ -14,6 +14,13 @@ The philosophy is simple:
 - Keep the workflow keyboard-first and fast.
 - Keep behavior predictable across providers.
 
+Why is it better than official UI?
+- You can access your private local file, and private Google Drive file through oauth.
+- All you chat history in one place locally, you can search and do many other things with it.
+- Pick models from different vendors.
+- Tweak system prompts to best suit your needs.
+- Also a good learning tool for LLM interactions, e.g. in raw modes, you see all request/response details.
+
 ## Quick Install
 
 Requirements:
