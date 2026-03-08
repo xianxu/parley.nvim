@@ -42,13 +42,14 @@ merge:
 	fi; \
 	wt_path=$$(git rev-parse --show-toplevel); \
 	main_path=$$(git worktree list | grep '\[main\]' | awk '{print $$1}'); \
-	echo "Merging $$branch into main..."; \
-	git -C "$$main_path" merge "$$branch"; \
+	repo=$$(git remote get-url origin | sed 's|.*github.com[:/]\(.*\)\.git|\1|;s|.*github.com[:/]\(.*\)$$|\1|'); \
+	echo "Merging $$branch into main via GitHub..."; \
+	gh pr merge --repo "$$repo" --merge --delete-branch "$$branch"; \
+	echo "Pulling main..."; \
+	git -C "$$main_path" pull; \
 	echo "Removing worktree at $$wt_path..."; \
 	git -C "$$main_path" worktree remove "$$wt_path"; \
-	echo "Deleting branch $$branch..."; \
-	git -C "$$main_path" branch -d "$$branch"; \
-	echo "Done."
+	echo "Done. Run: cd $$main_path"
 
 PLENARY = ~/.local/share/nvim/lazy/plenary.nvim
 REAL_HOME = $(HOME)
