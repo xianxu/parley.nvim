@@ -89,14 +89,20 @@ merge:
 		echo "Pulling main..."; \
 		git -C "$$main_path" pull; \
 	else \
-		echo "No open PR for $$branch, skipping merge."; \
+		echo "No open PR for $$branch."; \
 		unmerged=$$(git log "$$main_path/main..HEAD" --oneline 2>/dev/null); \
 		if [ -n "$$unmerged" ]; then \
-			echo "Warning: branch has committed changes not in main:"; \
+			echo "Warning: branch has local commits not in main:"; \
 			echo "$$unmerged"; \
-			printf "Remove worktree without merging? [y/N] "; \
+			printf "Would you like to create a pull request first? [Y/n] "; \
 			read answer; \
-			if [ "$$answer" != "y" ] && [ "$$answer" != "Y" ]; then \
+			if [ "$$answer" != "n" ] && [ "$$answer" != "N" ]; then \
+				echo "Run 'make pull-request' to create a PR."; \
+				exit 1; \
+			fi; \
+			printf "Remove worktree without merging? [y/N] "; \
+			read answer2; \
+			if [ "$$answer2" != "y" ] && [ "$$answer2" != "Y" ]; then \
 				echo "Aborted."; \
 				exit 1; \
 			fi; \
