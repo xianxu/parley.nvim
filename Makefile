@@ -1,16 +1,16 @@
-.PHONY: test test-spec test-changed lint fixtures model-check model-checker test-clean-env new-worktree new-issue pull-request merge
+.PHONY: test test-spec test-changed lint fixtures model-check model-checker test-clean-env worktree issue pull-request merge
 
 # Worktree management targets
-# Capture extra argument after new-worktree (e.g. make new-worktree feature-x)
-ifeq (new-worktree,$(firstword $(MAKECMDGOALS)))
+# Capture extra argument after worktree (e.g. make worktree feature-x)
+ifeq (worktree,$(firstword $(MAKECMDGOALS)))
   WT_NAME := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
   ifneq ($(WT_NAME),)
     $(eval $(WT_NAME):;@:)
   endif
 endif
 
-# Capture issue number after new-issue (e.g. make new-issue 42)
-ifeq (new-issue,$(firstword $(MAKECMDGOALS)))
+# Capture issue number after issue (e.g. make issue 42)
+ifeq (issue,$(firstword $(MAKECMDGOALS)))
   ISSUE_NUM := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
   ifneq ($(ISSUE_NUM),)
     $(eval $(ISSUE_NUM):;@:)
@@ -18,10 +18,10 @@ ifeq (new-issue,$(firstword $(MAKECMDGOALS)))
 endif
 
 # Create a new git worktree in the parent directory.
-# Usage: make new-worktree <name>
-new-worktree:
+# Usage: make worktree <name>
+worktree:
 	@if [ -z "$(WT_NAME)" ]; then \
-		echo "Usage: make new-worktree <name>"; \
+		echo "Usage: make worktree <name>"; \
 		exit 1; \
 	fi
 	@name="$(WT_NAME)"; \
@@ -29,10 +29,10 @@ new-worktree:
 	@echo "Worktree created at ../$(WT_NAME) on branch $(WT_NAME)"
 
 # Create a new git worktree for a GitHub issue, fetch the issue into tasks/issue.md.
-# Usage: make new-issue <number>
-new-issue:
+# Usage: make issue <number>
+issue:
 	@if [ -z "$(ISSUE_NUM)" ]; then \
-		echo "Usage: make new-issue <number>"; \
+		echo "Usage: make issue <number>"; \
 		exit 1; \
 	fi
 	@repo_name=$$(basename "$$(git rev-parse --show-toplevel)"); \
