@@ -7,3 +7,4 @@
 
 ## 2026-03-08
 - When spec docs are changed, always run `make test-changed` before closing the task and report the result explicitly.
+- For provider tool revisions, verify against the provider's own platform docs (not secondary references) and include exact revision strings before changing code/docs.

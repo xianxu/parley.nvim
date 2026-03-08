@@ -193,9 +193,15 @@ describe("prepare_payload: anthropic provider", function()
         assert.is_not_nil(payload.tools)
         assert.equals(2, #payload.tools)
         local names = {}
-        for _, t in ipairs(payload.tools) do names[t.name] = true end
+        local types = {}
+        for _, t in ipairs(payload.tools) do
+            names[t.name] = true
+            types[t.name] = t.type
+        end
         assert.is_true(names["web_search"])
         assert.is_true(names["web_fetch"])
+        assert.equals("web_search_20260209", types["web_search"])
+        assert.equals("web_fetch_20260209", types["web_fetch"])
         -- reset
         parley._state.web_search = false
     end)
