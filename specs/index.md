@@ -27,6 +27,7 @@ This index provides a central directory for all specifications of the `parley.nv
 
 ## 5. UI & UX Components
 - [UI Pickers](ui/pickers.md): Telescope integrations for agents, prompts, and finder.
+- [Key Bindings Help](ui/keybindings.md): Shortcut reference command and default mapping.
 - [Outline Navigation](ui/outline.md): Buffer navigation and outline logic.
 - [Lualine Integration](ui/lualine.md): Statusline component and indicators.
 - [Syntax Highlighting](ui/highlights.md): Highlighting groups and rules.

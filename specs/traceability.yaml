@@ -208,3 +208,10 @@ specs:
     tests:
       - tests/unit/chat_finder_logic_spec.lua
       - tests/unit/pure_functions_spec.lua
+
+  ui/keybindings:
+    code:
+      - lua/parley/init.lua
+      - lua/parley/config.lua
+    tests:
+      - tests/unit/keybindings_spec.lua

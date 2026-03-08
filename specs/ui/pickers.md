@@ -17,6 +17,7 @@ Parley integrates with Telescope to provide searchable pickers for agent selecti
 - **Mappings**:
     - `<C-a>`: Toggle between recent and all files.
     - `<C-d>`: Delete the selected chat file.
+    - `<C-g>?`: Open Parley key bindings help from within the finder.
     - Files are sorted by modification date, newest first.
 
 ## Navigation Picker

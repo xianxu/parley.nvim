@@ -152,6 +152,220 @@ local function jump_to_active_response(buf, win)
 	return true
 end
 
+local function shortcut_value(shortcut_config, fallback)
+	if type(shortcut_config) == "table" and type(shortcut_config.shortcut) == "string" and shortcut_config.shortcut ~= "" then
+		return shortcut_config.shortcut
+	end
+	return fallback
+end
+
+local function shortcut_modes(shortcut_config, fallback)
+	if type(shortcut_config) == "table" and type(shortcut_config.modes) == "table" and #shortcut_config.modes > 0 then
+		return shortcut_config.modes
+	end
+	return fallback
+end
+
+local function keymaps_for_mode(mode, bufnr)
+	local opts = nil
+	if bufnr ~= nil then
+		opts = { buffer = bufnr }
+	end
+	local ok, maps = pcall(vim.keymap.get, mode, nil, opts)
+	if ok and type(maps) == "table" then
+		return maps
+	end
+	return {}
+end
+
+local function find_mapping_lhs_by_desc(desc, modes, bufnr)
+	for _, mode in ipairs(modes) do
+		if bufnr ~= nil then
+			for _, map in ipairs(keymaps_for_mode(mode, bufnr)) do
+				if map.desc == desc and type(map.lhs) == "string" and map.lhs ~= "" then
+					return map.lhs
+				end
+			end
+		end
+		for _, map in ipairs(keymaps_for_mode(mode, nil)) do
+			if map.desc == desc and type(map.lhs) == "string" and map.lhs ~= "" then
+				return map.lhs
+			end
+		end
+	end
+	return nil
+end
+
+local function resolve_shortcut(descs, modes, shortcut_config, fallback, bufnr)
+	local descriptions = type(descs) == "table" and descs or { descs }
+	for _, desc in ipairs(descriptions) do
+		local lhs = find_mapping_lhs_by_desc(desc, modes, bufnr)
+		if lhs then
+			return lhs
+		end
+	end
+	return shortcut_value(shortcut_config, fallback)
+end
+
+M._keybinding_help_lines = function()
+	local cfg = M.config or {}
+	local current_buf = vim.api.nvim_get_current_buf()
+	local lines = {
+		"Parley Key Bindings",
+		"",
+		"Global",
+	}
+
+	local function add(shortcut, description)
+		table.insert(lines, string.format("  %-12s %s", shortcut, description))
+	end
+
+	add(
+		resolve_shortcut(
+			"Show Parley key bindings",
+			shortcut_modes(cfg.global_shortcut_keybindings, { "n", "i" }),
+			cfg.global_shortcut_keybindings,
+			"<C-g>?",
+			current_buf
+		),
+		"Show key bindings"
+	)
+	add(
+		resolve_shortcut("Create New Chat", shortcut_modes(cfg.global_shortcut_new, { "n", "i" }), cfg.global_shortcut_new, "<C-g>c", current_buf),
+		"New chat"
+	)
+	add(
+		resolve_shortcut(
+			"Review current file in new Chat",
+			shortcut_modes(cfg.global_shortcut_review, { "n" }),
+			cfg.global_shortcut_review,
+			"<C-g>C",
+			current_buf
+		),
+		"Review current file in chat"
+	)
+	add(
+		resolve_shortcut("Open Chat Finder", shortcut_modes(cfg.global_shortcut_finder, { "n", "i" }), cfg.global_shortcut_finder, "<C-g>f", current_buf),
+		"Open chat finder"
+	)
+	add(
+		resolve_shortcut("Create New Note", shortcut_modes(cfg.global_shortcut_note_new, { "n", "i" }), cfg.global_shortcut_note_new, "<C-n>c", current_buf),
+		"New note"
+	)
+	add(
+		resolve_shortcut(
+			"Change directory to current year's note directory",
+			shortcut_modes(cfg.global_shortcut_year_root, { "n", "i" }),
+			cfg.global_shortcut_year_root,
+			"<C-n>r",
+			current_buf
+		),
+		"Jump to note year root"
+	)
+	add(
+		resolve_shortcut("Open oil.nvim file explorer", shortcut_modes(cfg.global_shortcut_oil, { "n" }), cfg.global_shortcut_oil, "<leader>fo", current_buf),
+		"Open oil file explorer"
+	)
+	add(resolve_shortcut("Toggle Interview Mode", { "n" }, nil, "<C-n>i", current_buf), "Toggle interview mode")
+	add(resolve_shortcut("Create Note from Template", { "n" }, nil, "<C-n>t", current_buf), "New note from template")
+	add(resolve_shortcut("Toggle web_search tool", { "n" }, nil, "<C-g>w", current_buf), "Toggle web_search")
+	add(resolve_shortcut("Toggle raw request mode", { "n" }, nil, "<C-g>r", current_buf), "Toggle raw request mode")
+	add(resolve_shortcut("Toggle raw response mode", { "n" }, nil, "<C-g>R", current_buf), "Toggle raw response mode")
+
+	table.insert(lines, "")
+	table.insert(lines, "Chat / Markdown")
+	add(
+		resolve_shortcut("Parley prompt Chat Respond", shortcut_modes(cfg.chat_shortcut_respond, { "n", "i", "v", "x" }), cfg.chat_shortcut_respond, "<C-g><C-g>", current_buf),
+		"Respond"
+	)
+	add(
+		resolve_shortcut(
+			"Parley prompt Chat Respond All",
+			shortcut_modes(cfg.chat_shortcut_respond_all, { "n", "i", "v", "x" }),
+			cfg.chat_shortcut_respond_all,
+			"<C-g>G",
+			current_buf
+		),
+		"Respond all"
+	)
+	add(
+		resolve_shortcut("Parley prompt Chat Stop", shortcut_modes(cfg.chat_shortcut_stop, { "n", "i", "v", "x" }), cfg.chat_shortcut_stop, "<C-g>s", current_buf),
+		"Stop active response"
+	)
+	add(
+		resolve_shortcut(
+			"Parley prompt Chat Delete",
+			shortcut_modes(cfg.chat_shortcut_delete, { "n", "i", "v", "x" }),
+			cfg.chat_shortcut_delete,
+			"<C-g>d",
+			current_buf
+		),
+		"Delete chat"
+	)
+	add(
+		resolve_shortcut(
+			{ "Parley prompt Next Agent", "Parley add chat reference" },
+			shortcut_modes(cfg.chat_shortcut_agent, { "n", "i", "v", "x" }),
+			cfg.chat_shortcut_agent,
+			"<C-g>a",
+			current_buf
+		),
+		"Next agent / add chat reference"
+	)
+	add(
+		resolve_shortcut(
+			"Parley prompt System Prompt Selector",
+			shortcut_modes(cfg.chat_shortcut_system_prompt, { "n", "i", "v", "x" }),
+			cfg.chat_shortcut_system_prompt,
+			"<C-g>p",
+			current_buf
+		),
+		"Next system prompt"
+	)
+	add(
+		resolve_shortcut(
+			"Parley prompt Toggle Follow Cursor",
+			shortcut_modes(cfg.chat_shortcut_follow_cursor, { "n", "i", "v", "x" }),
+			cfg.chat_shortcut_follow_cursor,
+			"<C-g>l",
+			current_buf
+		),
+		"Toggle follow cursor"
+	)
+	add(
+		resolve_shortcut(
+			{ "Parley prompt Search Chat Sections", "Parley create and insert new chat" },
+			shortcut_modes(cfg.chat_shortcut_search, { "n", "i", "v", "x" }),
+			cfg.chat_shortcut_search,
+			"<C-g>n",
+			current_buf
+		),
+		"Search chat sections / insert chat reference"
+	)
+	add(
+		resolve_shortcut(
+			"Parley open file under cursor",
+			shortcut_modes(cfg.chat_shortcut_open_file, { "n", "i" }),
+			cfg.chat_shortcut_open_file,
+			"<C-g>o",
+			current_buf
+		),
+		"Open @@ file reference"
+	)
+	add(resolve_shortcut("Parley prompt Outline Navigator", { "n" }, nil, "<C-g>t", current_buf), "Outline picker")
+
+	table.insert(lines, "")
+	table.insert(lines, "Chat Finder")
+	local finder_mappings = cfg.chat_finder_mappings or {}
+	add(shortcut_value(finder_mappings.toggle_all, "<C-a>"), "Toggle recent/all chats")
+	add(shortcut_value(finder_mappings.delete, "<C-d>"), "Delete selected chat")
+	table.insert(lines, string.format("  %-12s %s", "", "(Recent window default: last " .. tostring((cfg.chat_finder_recency or {}).months or 6) .. " months)"))
+
+	table.insert(lines, "")
+	table.insert(lines, "Close: q or <Esc>")
+	return lines
+end
+
 -- Interview mode helper functions
 M.format_timestamp = function()
 	if not M._state.interview_start_time then
@@ -466,6 +680,21 @@ M.setup = function(opts)
 		end
 	end
 
+	if M.config.global_shortcut_keybindings then
+		for _, mode in ipairs(M.config.global_shortcut_keybindings.modes) do
+			if mode == "n" then
+				vim.keymap.set(mode, M.config.global_shortcut_keybindings.shortcut, function()
+					M.cmd.KeyBindings()
+				end, { silent = true, desc = "Show Parley key bindings" })
+			elseif mode == "i" then
+				vim.keymap.set(mode, M.config.global_shortcut_keybindings.shortcut, function()
+					vim.cmd("stopinsert")
+					M.cmd.KeyBindings()
+				end, { silent = true, desc = "Show Parley key bindings" })
+			end
+		end
+	end
+
 	if M.config.global_shortcut_review then
 		for _, mode in ipairs(M.config.global_shortcut_review.modes) do
 			vim.keymap.set(mode, M.config.global_shortcut_review.shortcut, function()
@@ -723,6 +952,46 @@ M.setup = function(opts)
 		local msg = string.format("follow cursor %s", status)
 		M.logger.info(msg)
 		vim.notify(msg, vim.log.levels.INFO)
+	end
+
+	M.cmd.KeyBindings = function()
+		local lines = M._keybinding_help_lines()
+		local width = 0
+		for _, line in ipairs(lines) do
+			width = math.max(width, vim.fn.strdisplaywidth(line))
+		end
+		width = math.min(math.max(width + 4, 40), math.max(vim.o.columns - 4, 40))
+		local height = math.min(#lines + 2, math.max(vim.o.lines - 4, 8))
+		local row = math.max(math.floor((vim.o.lines - height) / 2 - 1), 0)
+		local col = math.max(math.floor((vim.o.columns - width) / 2), 0)
+
+		local buf = vim.api.nvim_create_buf(false, true)
+		vim.bo[buf].buftype = "nofile"
+		vim.bo[buf].bufhidden = "wipe"
+		vim.bo[buf].swapfile = false
+		vim.bo[buf].modifiable = true
+		vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+		vim.bo[buf].modifiable = false
+
+		local win = vim.api.nvim_open_win(buf, true, {
+			relative = "editor",
+			width = width,
+			height = height,
+			row = row,
+			col = col,
+			style = "minimal",
+			border = "rounded",
+		})
+
+		local function close_window()
+			if vim.api.nvim_win_is_valid(win) then
+				vim.api.nvim_win_close(win, true)
+			end
+		end
+
+		vim.keymap.set("n", "q", close_window, { buffer = buf, silent = true })
+		vim.keymap.set("n", "<Esc>", close_window, { buffer = buf, silent = true })
+		vim.keymap.set("i", "<Esc>", close_window, { buffer = buf, silent = true })
 	end
 	-- Logout from Google Drive OAuth (remove stored tokens)
 	M.cmd.GdriveLogout = function()
@@ -4046,8 +4315,9 @@ M.cmd.ChatFinder = function(_options)
 	M.logger.debug("ChatFinder using source_win: " .. (M._chat_finder.source_win or "nil"))
 
 	local dir = M.config.chat_dir
-	local delete_shortcut = M.config.chat_finder_mappings.delete or M.config.chat_shortcut_delete
-	local toggle_shortcut = M.config.chat_finder_mappings.toggle_all or { shortcut = "<C-g>h" }
+		local delete_shortcut = M.config.chat_finder_mappings.delete or M.config.chat_shortcut_delete
+		local toggle_shortcut = M.config.chat_finder_mappings.toggle_all or { shortcut = "<C-g>h" }
+		local keybindings_shortcut = M.config.global_shortcut_keybindings or { shortcut = "<C-g>?" }
 
 	-- Launch telescope finder
 	if pcall(require, "telescope") then
@@ -4302,8 +4572,8 @@ M.cmd.ChatFinder = function(_options)
 						end, 100)
 					end)
 
-					-- Also add normal mode mapping for toggle
-					map("n", toggle_shortcut.shortcut, function()
+						-- Also add normal mode mapping for toggle
+						map("n", toggle_shortcut.shortcut, function()
 						M._chat_finder.show_all = not M._chat_finder.show_all
 						actions.close(prompt_bufnr)
 						-- Reopen finder with new filter setting
@@ -4313,10 +4583,22 @@ M.cmd.ChatFinder = function(_options)
 							M._chat_finder.source_win = source_win
 							M.cmd.ChatFinder()
 						end, 100)
-					end)
+						end)
 
-					return true
-				end,
+						-- Show key bindings help while ChatFinder is open
+						map("i", keybindings_shortcut.shortcut, function()
+							vim.schedule(function()
+								M.cmd.KeyBindings()
+							end)
+						end)
+						map("n", keybindings_shortcut.shortcut, function()
+							vim.schedule(function()
+								M.cmd.KeyBindings()
+							end)
+						end)
+
+						return true
+					end,
 			})
 			:find()
 	else

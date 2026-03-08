@@ -90,12 +90,14 @@ A Parley chat is a normal markdown file with a header and alternating `💬:` / 
 - `:ParleyChatRespondAll` regenerate from start to cursor.
 - `:ParleyStop` stop running generation.
 - `:ParleyChatFinder` find/open/delete chat files.
+- `:ParleyKeyBindings` show active Parley keyboard shortcuts.
 - `:ParleyAgent` switch agent.
 - `:ParleySystemPrompt` switch system prompt.
 - `:ParleyToggleFollowCursor` toggle live cursor-follow during streaming.
 
 Most-used defaults:
 - `<C-g>c` new chat
+- `<C-g>?` show key bindings
 - `<C-g><C-g>` respond
 - `<C-g>G` respond all
 - `<C-g>s` stop
@@ -152,6 +154,7 @@ Advanced behavior is intentionally kept out of this README and documented in spe
   - [`specs/context/web_search.md`](specs/context/web_search.md)
 - UI/features:
   - [`specs/ui/pickers.md`](specs/ui/pickers.md)
+  - [`specs/ui/keybindings.md`](specs/ui/keybindings.md)
   - [`specs/ui/outline.md`](specs/ui/outline.md)
   - [`specs/ui/highlights.md`](specs/ui/highlights.md)
   - [`specs/ui/lualine.md`](specs/ui/lualine.md)
