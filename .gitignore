@@ -1,3 +1,4 @@
 **/.claude/settings.local.json
 .aider*
-tasks/todo.md
+tasks/*
+!tasks/lessons.md
