@@ -11,6 +11,7 @@ Parley supports server-side web search for providers that offer it.
 ### Anthropic (Claude)
 - Includes `web_search_20260209` and `web_fetch_20260209` tools.
 - `x-api-key` and `anthropic-beta` headers MUST be updated.
+- For `claude-haiku-4-5*`, web tools MUST include `allowed_callers: ["direct"]`.
 
 ### Google AI (Gemini)
 - Includes the `google_search` tool in the request body.

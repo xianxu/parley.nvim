@@ -128,6 +128,39 @@ describe("resolve_params", function()
 end)
 
 --------------------------------------------------------------------------------
+-- resolve_tool_overrides
+--------------------------------------------------------------------------------
+describe("resolve_tool_overrides", function()
+    it("returns allowed_callers={direct} for anthropic haiku 4.5 web_search", function()
+        local model = { model = "claude-haiku-4-5-20251001" }
+        local result = pp.resolve_tool_overrides("anthropic", model, "web_search")
+        assert.is_not_nil(result.allowed_callers)
+        assert.equals(1, #result.allowed_callers)
+        assert.equals("direct", result.allowed_callers[1])
+    end)
+
+    it("returns allowed_callers={direct} for anthropic haiku 4.5 web_fetch", function()
+        local model = { model = "claude-haiku-4-5-20251001" }
+        local result = pp.resolve_tool_overrides("anthropic", model, "web_fetch")
+        assert.is_not_nil(result.allowed_callers)
+        assert.equals(1, #result.allowed_callers)
+        assert.equals("direct", result.allowed_callers[1])
+    end)
+
+    it("returns empty overrides for non-haiku models", function()
+        local model = { model = "claude-sonnet-4-6-20251105" }
+        local result = pp.resolve_tool_overrides("anthropic", model, "web_search")
+        assert.same({}, result)
+    end)
+
+    it("returns empty overrides for unknown provider/tool", function()
+        local model = { model = "gpt-4o" }
+        local result = pp.resolve_tool_overrides("openai", model, "web_search")
+        assert.same({}, result)
+    end)
+end)
+
+--------------------------------------------------------------------------------
 -- validate_agent
 --------------------------------------------------------------------------------
 describe("validate_agent", function()

@@ -235,17 +235,19 @@ anthropic.format_payload = function(messages, model, _provider_name)
     -- Add Claude server-side web_search and web_fetch tools if enabled
     local parley = require("parley")
     if parley._state and parley._state.web_search then
+        local web_search_overrides = provider_params.resolve_tool_overrides("anthropic", model, "web_search")
+        local web_fetch_overrides = provider_params.resolve_tool_overrides("anthropic", model, "web_fetch")
         payload.tools = {
-            {
+            vim.tbl_extend("force", {
                 type = ANTHROPIC_WEB_SEARCH_TOOL_TYPE,
                 name = "web_search",
                 max_uses = 5,
-            },
-            {
+            }, web_search_overrides),
+            vim.tbl_extend("force", {
                 type = ANTHROPIC_WEB_FETCH_TOOL_TYPE,
                 name = "web_fetch",
                 max_uses = 5,
-            },
+            }, web_fetch_overrides),
         }
     end
 
