@@ -167,11 +167,11 @@ end
 ---@param buf number # buffer number
 ---@param win number | nil # window number
 _H.cursor_to_line = function(line, buf, win)
-	logger.debug("cursor_to_line called - line: " .. tostring(line) .. 
-	            ", buf: " .. tostring(buf) .. 
+	logger.debug("cursor_to_line called - line: " .. tostring(line) ..
+	            ", buf: " .. tostring(buf) ..
 	            ", win: " .. tostring(win) ..
 	            ", current_buf: " .. tostring(vim.api.nvim_get_current_buf()))
-	
+
 	-- don't manipulate cursor if user is elsewhere
 	if buf ~= vim.api.nvim_get_current_buf() then
 		logger.debug("cursor_to_line early return - buffer mismatch")
@@ -187,11 +187,11 @@ _H.cursor_to_line = function(line, buf, win)
 	-- ensure line is within range
 	local line_count = vim.api.nvim_buf_line_count(buf)
 	if line > line_count then
-		logger.debug("cursor_to_line adjusting - line " .. tostring(line) .. 
+		logger.debug("cursor_to_line adjusting - line " .. tostring(line) ..
 		            " out of range (max: " .. tostring(line_count) .. ")")
 		line = line_count
 	end
-	
+
 	-- move cursor to the line
 	logger.debug("cursor_to_line - setting cursor position to line " .. tostring(line))
 	pcall(vim.api.nvim_win_set_cursor, win, { line, 0 })
@@ -218,12 +218,12 @@ _H.read_file_content = function(filepath)
         logger.warning("File not found: " .. expanded_path)
         return nil
     end
-    
+
     local lines = vim.fn.readfile(expanded_path)
     if not lines or #lines == 0 then
         return ""
     end
-    
+
     return table.concat(lines, "\n")
 end
 
@@ -250,9 +250,9 @@ _H.format_file_content = function(filepath)
     if not content then
         return "File: " .. filepath .. "\n[Error: Could not read file]\n\n"
     end
-    
+
     local filetype = vim.filetype.match({ filename = filepath }) or ""
-    
+
     -- Add line numbers to the content
     local lines = vim.split(content, "\n")
     local numbered_lines = {}
@@ -260,7 +260,7 @@ _H.format_file_content = function(filepath)
         table.insert(numbered_lines, string.format("%d: %s", i, line))
     end
     local numbered_content = table.concat(numbered_lines, "\n")
-    
+
     return "File: " .. filepath .. "\n```" .. filetype .. "\n" .. numbered_content .. "\n```\n\n"
 end
 
@@ -275,7 +275,7 @@ _H.find_files = function(dirpath, pattern, recursive)
         logger.warning("Directory not found: " .. expanded_dir)
         return {}
     end
-    
+
     -- Construct glob pattern based on parameters
     local glob_pattern
     if recursive then
@@ -293,20 +293,20 @@ _H.find_files = function(dirpath, pattern, recursive)
             glob_pattern = expanded_dir .. "/*"
         end
     end
-    
+
     logger.debug("Searching with glob pattern: " .. glob_pattern)
-    
+
     -- Use vim's glob() to find matching files
     local matches = vim.fn.glob(glob_pattern, false, true)
     local files = {}
-    
+
     -- Filter to include only files, not directories
     for _, match in ipairs(matches) do
         if vim.fn.isdirectory(match) == 0 then
             table.insert(files, match)
         end
     end
-    
+
     logger.debug("Found " .. #files .. " matching files")
     return files
 end
@@ -319,43 +319,43 @@ _H.process_directory_pattern = function(dirspec)
     local recursive = false
     local pattern = nil
     local dir = dirspec
-    
+
     -- Check if this is a recursive search pattern with **
     -- Note: ** are literal characters, not Lua pattern magic, so we escape them with %
     if dirspec:match("%*%*/") then
         recursive = true
         dir = dirspec:gsub("/%*%*/.*$", "") -- Remove /** and anything after
     end
-    
+
     -- Extract a filename pattern if it exists
     if dirspec:match("/%*%*?/?.*%.%w+$") or dirspec:match("/%*%.%w+$") then
         pattern = dirspec:match(".*/(%*%*?/?.*%.%w+)$") or dirspec:match(".*/(%*%.%w+)$")
         dir = dirspec:gsub("/%*%*?/?.*%.%w+$", ""):gsub("/%*%.%w+$", "")
     end
-    
+
     -- If it ends with a trailing slash, it's a directory without pattern
     if dirspec:match("/$") then
         dir = dirspec:gsub("/$", "")
     end
-    
-    logger.debug("Processed directory pattern: dir=" .. dir .. 
-                ", pattern=" .. (pattern or "nil") .. 
+
+    logger.debug("Processed directory pattern: dir=" .. dir ..
+                ", pattern=" .. (pattern or "nil") ..
                 ", recursive=" .. tostring(recursive))
-    
+
     -- Find all matching files
     local files = _H.find_files(dir, pattern, recursive)
-    
+
     -- Collect content from all files
     if #files > 0 then
         table.insert(result, "Directory listing for " .. dirspec .. " (" .. #files .. " files):\n")
-        
+
         for _, file in ipairs(files) do
             table.insert(result, _H.format_file_content(file))
         end
     else
         table.insert(result, "No files found matching pattern: " .. dirspec)
     end
-    
+
     return table.concat(result, "\n")
 end
 

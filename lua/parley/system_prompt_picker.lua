@@ -22,17 +22,17 @@ function M.system_prompt_picker(plugin)
   local system_prompts = {}
   for _, prompt_name in ipairs(plugin._system_prompts) do
     local prompt = plugin.system_prompts[prompt_name]
-    
+
     -- Create a truncated description of the system prompt
     local description = prompt.system_prompt:gsub("\n", " "):gsub("%s+", " ")
     if #description > 80 then
       description = description:sub(1, 80) .. "..."
     end
-    
+
     -- Check if this is the current system prompt
     local is_current = prompt_name == plugin._state.system_prompt
     local display = (is_current and "✓ " or "  ") .. prompt_name .. " - " .. description
-    
+
     table.insert(system_prompts, {
       name = prompt_name,
       display = display,
@@ -40,7 +40,7 @@ function M.system_prompt_picker(plugin)
       is_current = is_current
     })
   end
-  
+
   -- Sort the system prompts alphabetically
   table.sort(system_prompts, function(a, b)
     -- Current system prompt always goes first
@@ -68,16 +68,16 @@ function M.system_prompt_picker(plugin)
         -- Get the selected entry
         local selection = action_state.get_selected_entry()
         local prompt_name = selection.value.name
-        
+
         -- Close the picker
         actions.close(prompt_bufnr)
-        
+
         -- Set the selected system prompt
         plugin.refresh_state({ system_prompt = prompt_name })
         plugin.logger.info("System prompt set to: " .. prompt_name)
         vim.cmd("doautocmd User ParleySystemPromptChanged")
       end)
-      
+
       return true
     end,
   }):find()

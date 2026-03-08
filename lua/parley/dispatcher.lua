@@ -219,7 +219,6 @@ local query = function(buf, provider, payload, handler, on_exit, callback)
 				end
 
 				-- Check if this was a raw response that needs a closing marker
-				local qt = tasker.get_query(qid)
 				if qt then
 					local show_raw_response = require("parley").config and
 											  require("parley").config.raw_mode and
@@ -243,16 +242,20 @@ local query = function(buf, provider, payload, handler, on_exit, callback)
 
 				-- Handle content extraction for empty OpenAI-compatible responses
 				if content == "" and raw_response:match('choices') and raw_response:match("content") then
-					local response
-					local success, decoded = pcall(vim.json.decode, raw_response)
-					if success then
-						response = decoded
-					else
-						local json_str = raw_response:match("{.-choices.-}")
-						if json_str then
-							success, response = pcall(vim.json.decode, json_str)
+						local response
+						local ok, decoded = pcall(vim.json.decode, raw_response)
+						if ok then
+							response = decoded
+						else
+							local json_str = raw_response:match("{.-choices.-}")
+							if json_str then
+								local fallback_ok
+								fallback_ok, response = pcall(vim.json.decode, json_str)
+								if not fallback_ok then
+									response = nil
+								end
+							end
 						end
-					end
 
 					if response and response.choices and
 					   response.choices[1] and response.choices[1].message and

@@ -45,7 +45,7 @@ describe("ChatNew", function()
         local files = vim.fn.glob(tmp_dir .. "/*.md", false, true)
         assert.is_true(#files >= 1)
         local basename = vim.fn.fnamemodify(files[#files], ":t")
-        assert.is_truthy(basename:match("^%d%d%d%d%-%d%d%-%d%d"), 
+        assert.is_truthy(basename:match("^%d%d%d%d%-%d%d%-%d%d"),
             "filename should start with YYYY-MM-DD, got: " .. basename)
     end)
 

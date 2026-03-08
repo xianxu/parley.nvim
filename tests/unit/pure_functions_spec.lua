@@ -40,7 +40,7 @@ describe("find_exchange_at_line", function()
         local pc = parsed_chat_with_exchanges({
             exchange(10, 15, 20, 25)
         })
-        
+
         local idx, kind = parley.find_exchange_at_line(pc, 12)
         assert.equals(1, idx)
         assert.equals("question", kind)
@@ -50,7 +50,7 @@ describe("find_exchange_at_line", function()
         local pc = parsed_chat_with_exchanges({
             exchange(10, 15, 20, 25)
         })
-        
+
         local idx, kind = parley.find_exchange_at_line(pc, 22)
         assert.equals(1, idx)
         assert.equals("answer", kind)
@@ -61,7 +61,7 @@ describe("find_exchange_at_line", function()
             exchange(10, 15, 20, 25),
             exchange(30, 35, 40, 45)
         })
-        
+
         local idx, kind = parley.find_exchange_at_line(pc, 27)
         assert.is_nil(idx)
         assert.is_nil(kind)
@@ -71,7 +71,7 @@ describe("find_exchange_at_line", function()
         local pc = parsed_chat_with_exchanges({
             exchange(10, 15, 20, 25)
         })
-        
+
         local idx, kind = parley.find_exchange_at_line(pc, 5)
         assert.is_nil(idx)
         assert.is_nil(kind)
@@ -81,7 +81,7 @@ describe("find_exchange_at_line", function()
         local pc = parsed_chat_with_exchanges({
             exchange(10, 15, 20, 25)
         })
-        
+
         local idx, kind = parley.find_exchange_at_line(pc, 30)
         assert.is_nil(idx)
         assert.is_nil(kind)
@@ -93,7 +93,7 @@ describe("find_exchange_at_line", function()
             exchange(30, 35, 40, 45),
             exchange(50, 55, 60, 65)
         })
-        
+
         local idx, kind = parley.find_exchange_at_line(pc, 42)
         assert.equals(2, idx)
         assert.equals("answer", kind)
@@ -103,7 +103,7 @@ describe("find_exchange_at_line", function()
         local pc = parsed_chat_with_exchanges({
             exchange(10, 15) -- No answer
         })
-        
+
         local idx, kind = parley.find_exchange_at_line(pc, 17)
         assert.is_nil(idx)
         assert.is_nil(kind)
@@ -113,7 +113,7 @@ describe("find_exchange_at_line", function()
         local pc = parsed_chat_with_exchanges({
             exchange(10, 15, 20, 25)
         })
-        
+
         local idx, kind = parley.find_exchange_at_line(pc, 10)
         assert.equals(1, idx)
         assert.equals("question", kind)
@@ -123,7 +123,7 @@ describe("find_exchange_at_line", function()
         local pc = parsed_chat_with_exchanges({
             exchange(10, 15, 20, 25)
         })
-        
+
         local idx, kind = parley.find_exchange_at_line(pc, 15)
         assert.equals(1, idx)
         assert.equals("question", kind)
@@ -133,7 +133,7 @@ describe("find_exchange_at_line", function()
         local pc = parsed_chat_with_exchanges({
             exchange(10, 15, 20, 25)
         })
-        
+
         local idx, kind = parley.find_exchange_at_line(pc, 20)
         assert.equals(1, idx)
         assert.equals("answer", kind)
@@ -143,7 +143,7 @@ describe("find_exchange_at_line", function()
         local pc = parsed_chat_with_exchanges({
             exchange(10, 15, 20, 25)
         })
-        
+
         local idx, kind = parley.find_exchange_at_line(pc, 25)
         assert.equals(1, idx)
         assert.equals("answer", kind)

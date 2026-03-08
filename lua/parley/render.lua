@@ -2,10 +2,6 @@
 -- Render module for logic related to visualization
 --------------------------------------------------------------------------------
 
-local logger = require("parley.logger")
-local helpers = require("parley.helper")
-local tasker = require("parley.tasker")
-
 local M = {}
 
 ---@param template string # template string

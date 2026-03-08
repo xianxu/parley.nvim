@@ -855,7 +855,7 @@ M.load_account_store = function(callback)
     local cmd_args = M.build_keychain_load_cmd(platform)
     local cmd = table.remove(cmd_args, 1)
 
-    tasker.run(nil, cmd, cmd_args, function(code, signal, stdout_data)
+    tasker.run(nil, cmd, cmd_args, function(code, _signal, stdout_data)
         if code ~= 0 or not stdout_data or stdout_data == "" then
             cached_account_store = M._new_account_store()
             callback(cached_account_store)
@@ -932,7 +932,7 @@ M._refresh_account = function(config, provider, store, account, callback)
 
     local args = provider_definition.build_refresh_token_args(provider_config, account)
 
-    tasker.run(nil, "curl", args, function(code, signal, stdout_data)
+    tasker.run(nil, "curl", args, function(code, _signal, stdout_data)
         if code ~= 0 then
             callback(nil)
             return
@@ -1014,7 +1014,7 @@ end
 ---@param provider string|nil
 M._exchange_auth_code = function(config, code, port, callback, provider)
     provider = provider or "google"
-    M._run_auth_code_exchange(config, code, port, function(exit_code, signal, stdout_data)
+    M._run_auth_code_exchange(config, code, port, function(exit_code, _signal, stdout_data)
         if exit_code ~= 0 then
             logger.warning(M._get_provider_display_name(provider) .. ": token exchange curl failed (exit " .. tostring(exit_code) .. "): " .. tostring(stdout_data))
             callback(nil)
@@ -1606,7 +1606,7 @@ M._fetch_google_api_once = function(url, info, access_token, callback)
         meta_url,
     }
 
-    tasker.run(nil, "curl", meta_args, function(code, signal, stdout_data)
+    tasker.run(nil, "curl", meta_args, function(code, _signal, stdout_data)
         if code ~= 0 then
             callback({ kind = "other", error = "Google Drive API: failed to fetch file metadata" })
             return
@@ -2249,7 +2249,7 @@ end
 ---@param provider string|nil
 ---@param account table
 ---@return string
-M._missing_refresh_token_message = function(provider, account)
+M._missing_refresh_token_message = function(provider, _account)
     local definition = M._get_provider_definition(provider)
     return (definition and definition.missing_refresh_token_message) or "OAuth: no refresh token available for this account."
 end
@@ -2257,7 +2257,7 @@ end
 ---@param provider string|nil
 ---@param account table
 ---@return string
-M._refresh_failure_message = function(provider, account)
+M._refresh_failure_message = function(provider, _account)
     local definition = M._get_provider_definition(provider)
     return (definition and definition.refresh_failure_message) or "OAuth: token refresh failed for this account."
 end

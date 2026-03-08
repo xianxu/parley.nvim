@@ -93,6 +93,10 @@ local function parse_chat_headers(lines)
 	return parsed.headers, header_end
 end
 
+-- State shared between async callbacks while responding.
+local original_free_cursor_value = nil
+local last_content_line = nil
+
 local function set_chat_topic_line(buf, lines, topic)
 	local header_end = find_chat_header_end(lines)
 	if not header_end then
@@ -279,8 +283,7 @@ M.setup = function(opts)
 	M.config = vim.deepcopy(config)
 
 	local curl_params = opts.curl_params or M.config.curl_params
-	local cmd_prefix = opts.cmd_prefix or M.config.cmd_prefix
-	local state_dir = opts.state_dir or M.config.state_dir
+		local state_dir = opts.state_dir or M.config.state_dir
 
 	M.logger.setup(opts.log_file or M.config.log_file, opts.log_sensitive)
 
@@ -374,7 +377,7 @@ M.setup = function(opts)
 
 	-- prepare agent list
 	M._agents = {}
-	for name, agent in pairs(M.agents) do
+	for name, _ in pairs(M.agents) do
 		M.agents[name].provider = M.agents[name].provider or "openai"
 
 		if M.dispatcher.providers[M.agents[name].provider] then
@@ -1031,7 +1034,7 @@ M.cmd.ExportHTML = function(params)
 
 	-- Extract title from first line for filename and HTML title
 	local title = "Untitled"
-	local html_filename = nil
+	local html_filename
 
 	if lines[1] and lines[1]:match("^# (.+)") then
 		title = lines[1]:match("^# (.+)")
@@ -1087,7 +1090,7 @@ M.cmd.ExportHTML = function(params)
             border-bottom: 3px solid #4299e1;
             text-shadow: 0 1px 2px rgba(0,0,0,0.1);
         }
-        
+
         .section-header {
             font-size: 2rem;
             font-weight: 600;
@@ -1097,13 +1100,13 @@ M.cmd.ExportHTML = function(params)
             border-bottom: 2px solid #bee3f8;
             position: relative;
         }
-        
+
         .section-header::before {
             content: '📋';
             margin-right: 0.5rem;
             font-size: 1.5rem;
         }
-        
+
         .sub-header {
             font-size: 1.5rem;
             font-weight: 600;
@@ -1129,7 +1132,7 @@ M.cmd.ExportHTML = function(params)
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
             border: 1px solid #e2e8f0;
         }
-        
+
         .code-block pre {
             margin: 0;
             padding: 1.5rem;
@@ -1139,7 +1142,7 @@ M.cmd.ExportHTML = function(params)
             font-size: 0.9rem;
             line-height: 1.5;
         }
-        
+
         .code-block code {
             font-family: 'Fira Code', 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
             background: none;
@@ -1164,7 +1167,7 @@ M.cmd.ExportHTML = function(params)
             color: #2d3748;
             font-weight: 700;
         }
-        
+
         .italic-text {
             color: #4a5568;
             font-style: italic;
@@ -1176,14 +1179,14 @@ M.cmd.ExportHTML = function(params)
             padding-left: 0;
             list-style: none;
         }
-        
+
         .list-item {
             position: relative;
             padding-left: 2rem;
             margin: 0.5rem 0;
             color: #4a5568;
         }
-        
+
         .list-item::before {
             content: '•';
             color: #4299e1;
@@ -1215,7 +1218,7 @@ M.cmd.ExportHTML = function(params)
             position: relative;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
-        
+
         .chat-question::before {
             content: '💬';
             position: absolute;
@@ -1249,7 +1252,7 @@ M.cmd.ExportHTML = function(params)
         .hljs {
             background: transparent !important;
         }
-        
+
         .hljs-keyword { color: #d73a49; font-weight: 600; }
         .hljs-string { color: #032f62; }
         .hljs-comment { color: #6a737d; font-style: italic; }
@@ -1310,7 +1313,7 @@ M.cmd.ExportMarkdown = function(params)
 	local title = "Untitled"
 	local post_date = os.date("%Y-%m-%d")
 	local tags = "unclassified"
-	local markdown_filename = nil
+	local markdown_filename
 
 	-- Extract title from parsed headers
 	if headers and headers.topic and headers.topic ~= "" then
@@ -1610,16 +1613,16 @@ M.prep_chat = function(buf, file_name)
 		M.helpers.set_keymap({ buf }, fcs.modes, fcs.shortcut, M.cmd.ToggleFollowCursor, "Parley prompt Toggle Follow Cursor")
 	end
 
-	local ss = M.config.chat_shortcut_search
-	if ss then
+	local search_shortcut = M.config.chat_shortcut_search
+	if search_shortcut then
 		-- Create a function for searching chat sections (questions only)
 		local function search_chat_sections()
 			local user_prefix = M.config.chat_user_prefix
 			vim.cmd("/^" .. vim.pesc(user_prefix))
 		end
 
-		for _, mode in ipairs(ss.modes) do
-			M.helpers.set_keymap({ buf }, mode, ss.shortcut, search_chat_sections, "Parley prompt Search Chat Sections")
+		for _, mode in ipairs(search_shortcut.modes) do
+			M.helpers.set_keymap({ buf }, mode, search_shortcut.shortcut, search_chat_sections, "Parley prompt Search Chat Sections")
 		end
 	end
 
@@ -2078,13 +2081,12 @@ M.setup_markdown_keymaps = function(buf)
 		M.cmd.ChatFinder()
 	end, "Parley add chat reference")
 
-	-- Add <C-g>a keybinding to ADD chat references via ChatFinder (INSERT MODE)
-	M.helpers.set_keymap({ buf }, "i", "<C-g>a", function()
-		-- Remember cursor position
-		local cursor_pos = vim.api.nvim_win_get_cursor(0)
-		local current_line = vim.api.nvim_get_current_line()
+		-- Add <C-g>a keybinding to ADD chat references via ChatFinder (INSERT MODE)
+		M.helpers.set_keymap({ buf }, "i", "<C-g>a", function()
+			-- Remember cursor position
+			local cursor_pos = vim.api.nvim_win_get_cursor(0)
 
-		-- Store position for later insertion
+			-- Store position for later insertion
 		M._chat_finder.insert_mode = true
 		M._chat_finder.insert_buf = buf
 		M._chat_finder.insert_line = cursor_pos[1]
@@ -2386,13 +2388,13 @@ end
 ---@param system_prompt string | nil
 ---@param agent table | nil # obtained from get_agent
 ---@return number # buffer number
-M.cmd.ChatNew = function(params, system_prompt, agent)
+M.cmd.ChatNew = function(_params, system_prompt, agent)
 	-- Simple version that just creates a new chat
 	return M.new_chat(system_prompt, agent)
 end
 
 -- Create a new chat pre-populated with a review question for the current file
-M.cmd.ChatReview = function(params)
+M.cmd.ChatReview = function(_params)
 	local file_path = vim.api.nvim_buf_get_name(0)
 	if file_path == "" then
 		M.logger.warning("No file associated with current buffer")
@@ -2421,19 +2423,19 @@ M.create_default_templates = function(template_dir)
 **Week:** {{week}}
 
 ## Attendees
-- 
-- 
+-
+-
 
 ## Agenda
-1. 
-2. 
+1.
+2.
 
 ## Notes
 
 
 ## Action Items
-- [ ] 
-- [ ] 
+- [ ]
+- [ ]
 
 ## Next Steps
 
@@ -2446,16 +2448,16 @@ M.create_default_templates = function(template_dir)
 **Week:** {{week}}
 
 ## Today's Goals
-- [ ] 
-- [ ] 
-- [ ] 
+- [ ]
+- [ ]
+- [ ]
 
 ## Notes
 
 
 ## Tomorrow's Priorities
-- 
-- 
+-
+-
 
 ## Reflection
 
@@ -2476,8 +2478,8 @@ M.create_default_templates = function(template_dir)
 
 
 ## Follow-up Actions
-- [ ] 
-- [ ] 
+- [ ]
+- [ ]
 
 ]]
 
@@ -2557,7 +2559,7 @@ M.cmd.NoteNewFromTemplate = function()
 				end,
 			}),
 			sorter = conf.generic_sorter({}),
-			attach_mappings = function(prompt_bufnr, map)
+			attach_mappings = function(prompt_bufnr, _map)
 				actions.select_default:replace(function()
 					-- Capture selection and close picker
 					local selection = action_state.get_selected_entry()
@@ -2732,8 +2734,8 @@ M.new_note = function(subject)
 
 	-- Create note stub with date and week metadata
 	local title = subject:gsub("-", " ")
-	local date_str = year .. "-" .. month .. "-" .. day
-	return M._create_note_file(filename, title, { { "Date", date_str }, { "Week", week_folder } })
+	local note_date = year .. "-" .. month .. "-" .. day
+	return M._create_note_file(filename, title, { { "Date", note_date }, { "Week", week_folder } })
 end
 
 -- Create a new note from template with given subject and template content
@@ -2830,8 +2832,8 @@ M.new_note_from_template = function(subject, template_content)
 
 	-- Create note with template content
 	local title = subject:gsub("-", " ")
-	local date_str = year .. "-" .. month .. "-" .. day
-	return M._create_note_file(filename, title, { { "Date", date_str }, { "Week", week_folder } }, template_content)
+	local note_date = year .. "-" .. month .. "-" .. day
+	return M._create_note_file(filename, title, { { "Date", note_date }, { "Week", week_folder } }, template_content)
 end
 
 M.cmd.ChatDelete = function()
@@ -2908,7 +2910,7 @@ M._build_messages = function(opts)
 	local end_index = opts.end_index
 	local exchange_idx = opts.exchange_idx
 	local agent = opts.agent
-	local config = opts.config
+	local opts_config = opts.config
 	local helpers = opts.helpers
 	local logger = opts.logger or { debug = function() end, warning = function() end }
 
@@ -2916,7 +2918,7 @@ M._build_messages = function(opts)
 	local headers = parsed_chat.headers
 
 	-- Prepare for summary extraction
-	local memory_enabled = config.chat_memory and config.chat_memory.enable
+	local memory_enabled = opts_config.chat_memory and opts_config.chat_memory.enable
 
 	-- Use header-defined max_full_exchanges if available, otherwise use config value
 	local max_exchanges = 999999
@@ -2925,11 +2927,11 @@ M._build_messages = function(opts)
 			max_exchanges = headers.config_max_full_exchanges
 			logger.debug("Using header-defined max_full_exchanges: " .. tostring(max_exchanges))
 		else
-			max_exchanges = config.chat_memory.max_full_exchanges
+			max_exchanges = opts_config.chat_memory.max_full_exchanges
 		end
 	end
 
-	local omit_user_text = memory_enabled and config.chat_memory.omit_user_text or "[Previous messages omitted]"
+	local omit_user_text = memory_enabled and opts_config.chat_memory.omit_user_text or "[Previous messages omitted]"
 
 	-- Get combined agent information using the helper function
 	local agent_info = M.get_agent_info(headers, agent)
@@ -3087,7 +3089,7 @@ M._resolve_remote_references = function(opts, callback)
 	local helpers = require("parley.helper")
 	local oauth = require("parley.oauth")
 	local parsed_chat = opts.parsed_chat
-	local config = opts.config
+	local opts_config = opts.config
 	local chat_file = opts.chat_file or ""
 	local exchange_idx = opts.exchange_idx or #parsed_chat.exchanges
 	local resolved = {}
@@ -3139,7 +3141,7 @@ M._resolve_remote_references = function(opts, callback)
 	for _, url in ipairs(urls_to_fetch) do
 		-- Delegate remote URL handling to the OAuth fetcher. It owns provider
 		-- detection and can fall back to the auth picker for unknown patterns.
-			oauth.fetch_content(url, config.oauth or config.google_drive, function(content, err)
+		oauth.fetch_content(url, opts_config.oauth or opts_config.google_drive, function(content, err)
 			local cached_content = content
 			if not cached_content then
 				cached_content = M._format_remote_reference_error_content(url, err)
@@ -3558,10 +3560,6 @@ M.chat_respond_all = function()
 	M.resubmit_questions_recursively(parsed_chat, 1, current_exchange_idx, header_end, original_question_line, win)
 end
 
--- Recursively resubmit questions one at a time
--- We keep track of the original chat_free_cursor value to restore when done
-local original_free_cursor_value = nil
-
 M.resubmit_questions_recursively = function(
 	parsed_chat,
 	current_idx,
@@ -3713,7 +3711,7 @@ M._parse_at_reference = function(line, cursor_col)
 		end
 
 		-- Find the end of this path (space, line end, or next @@)
-		local content_end = nil
+		local content_end
 
 		-- Look for the next @@ after this one
 		local next_marker = line:find("@@", match_end + 1)
@@ -3756,7 +3754,7 @@ M._parse_at_reference = function(line, cursor_col)
 end
 
 -- Function to open a chat reference from a markdown file
-M.open_chat_reference = function(current_line, cursor_col, in_insert_mode, full_line)
+M.open_chat_reference = function(current_line, cursor_col, _in_insert_mode, full_line)
 	-- Extract the chat path
 	local chat_path
 
@@ -3866,7 +3864,7 @@ M.cmd.OpenFileUnderCursor = function()
 	end
 
 	-- Process standard @@ file references in chat files
-	local filepath = nil
+	local filepath
 
 	-- First check if the line begins with @@
 	if current_line:match("^@@") then
@@ -4037,7 +4035,7 @@ M._chat_finder = {
 	insert_normal_mode = nil, -- Whether we're inserting in normal mode or insert mode
 }
 
-M.cmd.ChatFinder = function(options)
+M.cmd.ChatFinder = function(_options)
 	if M._chat_finder.opened then
 		M.logger.warning("Chat finder is already open")
 		return
@@ -4155,11 +4153,11 @@ M.cmd.ChatFinder = function(options)
 			-- Format tags for search ordinal
 			local tags_searchable = #tags > 0 and (" " .. table.concat(tags, " ")) or ""
 
-			local filename = vim.fn.fnamemodify(file, ":t")
+			local display_filename = vim.fn.fnamemodify(file, ":t")
 			table.insert(entries, {
 				value = file,
-				display = filename .. " - " .. topic .. " [" .. date_str .. "]" .. tags_display,
-				ordinal = filename .. " " .. topic .. tags_searchable,
+				display = display_filename .. " - " .. topic .. " [" .. date_str .. "]" .. tags_display,
+				ordinal = display_filename .. " " .. topic .. tags_searchable,
 				timestamp = file_time,
 			})
 

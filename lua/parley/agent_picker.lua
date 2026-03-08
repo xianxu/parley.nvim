@@ -24,14 +24,14 @@ function M.agent_picker(plugin)
     local agent = plugin.agents[agent_name]
     local provider = agent.provider or "openai"
     local model_name = type(agent.model) == "table" and agent.model.model or agent.model
-    
+
     -- Create a description that includes the model and provider
     local description = model_name .. " (" .. provider .. ")"
-    
+
     -- Check if this is the current agent
     local is_current = agent_name == plugin._state.agent
     local display = (is_current and "✓ " or "  ") .. agent_name .. " - " .. description
-    
+
     table.insert(agents, {
       name = agent_name,
       display = display,
@@ -40,7 +40,7 @@ function M.agent_picker(plugin)
       is_current = is_current
     })
   end
-  
+
   -- Sort the agents alphabetically
   table.sort(agents, function(a, b)
     -- Current agent always goes first
@@ -68,16 +68,16 @@ function M.agent_picker(plugin)
         -- Get the selected entry
         local selection = action_state.get_selected_entry()
         local agent_name = selection.value.name
-        
+
         -- Close the picker
         actions.close(prompt_bufnr)
-        
+
         -- Set the selected agent
         plugin.refresh_state({ agent = agent_name })
         plugin.logger.info("Agent set to: " .. agent_name)
         vim.cmd("doautocmd User ParleyAgentChanged")
       end)
-      
+
       return true
     end,
   }):find()

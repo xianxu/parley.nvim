@@ -93,7 +93,7 @@ describe("_build_messages: basic structure", function()
             helpers = stub_helpers,
             logger = stub_logger
         })
-        
+
         assert.equals(2, #messages)
         assert.equals("system", messages[1].role)
         assert.is_true(#messages[1].content > 0) -- Has some system prompt content
@@ -104,7 +104,7 @@ describe("_build_messages: basic structure", function()
     it("single exchange with answer produces system + user + assistant", function()
         local pc = parsed_chat({ exchange("What is Lua?", "Lua is a scripting language.") })
         pc.exchanges[1].answer.line_start = 12
-        
+
         local messages = parley._build_messages({
             parsed_chat = pc,
             start_index = 1,
@@ -115,7 +115,7 @@ describe("_build_messages: basic structure", function()
             helpers = stub_helpers,
             logger = stub_logger
         })
-        
+
         -- Should have: system, user (Q1), assistant (A1)
         assert.equals(3, #messages)
         assert.equals("system", messages[1].role)
@@ -135,7 +135,7 @@ describe("_build_messages: memory truncation", function()
             exchange("Question 3", "Answer 3"),
             exchange("Question 4") -- current question
         })
-        
+
         -- Set line_start for each exchange
         pc.exchanges[1].question.line_start = 10
         pc.exchanges[1].answer.line_start = 12
@@ -144,7 +144,7 @@ describe("_build_messages: memory truncation", function()
         pc.exchanges[3].question.line_start = 18
         pc.exchanges[3].answer.line_start = 20
         pc.exchanges[4].question.line_start = 22
-        
+
         local messages = parley._build_messages({
             parsed_chat = pc,
             start_index = 1,
@@ -155,7 +155,7 @@ describe("_build_messages: memory truncation", function()
             helpers = stub_helpers,
             logger = stub_logger
         })
-        
+
         -- Should have: system, placeholder (Q1), assistant (A1), user (Q2), assistant (A2), user (Q3), assistant (A3), user (Q4)
         -- Actually, with max_full_exchanges=2, exchanges 3 and 4 are preserved (last 2)
         -- Exchange 1 and 2 should be summarized
@@ -181,10 +181,10 @@ describe("_build_messages: summary usage", function()
         local ex = exchange("What is Lua?", "Lua is a scripting language designed for embedded use in applications.", "Summary: Lua is a scripting language.")
         ex.question.line_start = 10
         ex.answer.line_start = 12
-        
+
         local pc = parsed_chat({ ex, exchange("Next question") })
         pc.exchanges[2].question.line_start = 14
-        
+
         local messages = parley._build_messages({
             parsed_chat = pc,
             start_index = 1,
@@ -195,20 +195,20 @@ describe("_build_messages: summary usage", function()
             helpers = stub_helpers,
             logger = stub_logger
         })
-        
+
         -- Should use summary for first answer since it's not fully preserved
         -- Exchange 1 is old (beyond max_full_exchanges=2 from idx=2), but it's the only one before current
         -- Actually with 2 exchanges and exchange_idx=2, exchange 1 should be within range
         -- Let me adjust: with max_full_exchanges=2 and total=2, all are preserved
         -- But if exchange has file references, answer is summarized
         -- Let me create a clearer test
-        
+
         -- Add a third exchange to push the first one out
         table.insert(pc.exchanges, 2, exchange("Middle question", "Middle answer"))
         pc.exchanges[2].question.line_start = 13
         pc.exchanges[2].answer.line_start = 14
         pc.exchanges[3].question.line_start = 15
-        
+
         messages = parley._build_messages({
             parsed_chat = pc,
             start_index = 1,
@@ -219,7 +219,7 @@ describe("_build_messages: summary usage", function()
             helpers = stub_helpers,
             logger = stub_logger
         })
-        
+
         -- With 3 exchanges and max_full_exchanges=2, exchanges 2 and 3 are preserved
         -- Exchange 1 should be summarized (not preserved)
         -- Since ex1 has summary, it should use the summary
@@ -235,9 +235,9 @@ describe("_build_messages: file references", function()
         local file_refs = {{ path = "/path/to/file.lua", line = "@@/path/to/file.lua", original_line_index = 1 }}
         local ex = exchange("Explain this code", nil, nil, file_refs)
         ex.question.line_start = 10
-        
+
         local pc = parsed_chat({ ex })
-        
+
         local messages = parley._build_messages({
             parsed_chat = pc,
             start_index = 1,
@@ -248,7 +248,7 @@ describe("_build_messages: file references", function()
             helpers = stub_helpers,
             logger = stub_logger
         })
-        
+
         assert.equals(3, #messages) -- system prompt, file content (system), user question
         assert.equals("system", messages[1].role)
         assert.is_true(#messages[1].content > 0) -- Has system prompt
@@ -268,9 +268,9 @@ describe("_build_messages: file references", function()
         }
         local ex = exchange("Compare these files", nil, nil, file_refs)
         ex.question.line_start = 10
-        
+
         local pc = parsed_chat({ ex })
-        
+
         local messages = parley._build_messages({
             parsed_chat = pc,
             start_index = 1,
@@ -281,7 +281,7 @@ describe("_build_messages: file references", function()
             helpers = stub_helpers,
             logger = stub_logger
         })
-        
+
         assert.equals(3, #messages)
         assert.equals("system", messages[2].role)
         -- Both files should be in the same system message
@@ -295,13 +295,13 @@ describe("_build_messages: file references", function()
             format_file_content = function(path) return "Single file: " .. path end,
             process_directory_pattern = function(path) return "Directory pattern: " .. path end
         }
-        
+
         local file_refs = {{ path = "/path/**/*.lua", line = "@@/path/**/*.lua", original_line_index = 1 }}
         local ex = exchange("Analyze all Lua files", nil, nil, file_refs)
         ex.question.line_start = 10
-        
+
         local pc = parsed_chat({ ex })
-        
+
         local messages = parley._build_messages({
             parsed_chat = pc,
             start_index = 1,
@@ -312,7 +312,7 @@ describe("_build_messages: file references", function()
             helpers = custom_helpers,
             logger = stub_logger
         })
-        
+
         assert.equals(3, #messages)
         assert.is_true(messages[2].content:match("^Directory pattern: /path/%*%*/%*%.lua") ~= nil)
     end)
@@ -321,7 +321,7 @@ end)
 describe("_build_messages: Anthropic cache_control", function()
     it("system prompt gets cache_control for anthropic provider", function()
         local pc = parsed_chat({ exchange("Hello") })
-        
+
         local messages = parley._build_messages({
             parsed_chat = pc,
             start_index = 1,
@@ -332,7 +332,7 @@ describe("_build_messages: Anthropic cache_control", function()
             helpers = stub_helpers,
             logger = stub_logger
         })
-        
+
         assert.equals("system", messages[1].role)
         assert.is_not_nil(messages[1].cache_control)
         assert.equals("ephemeral", messages[1].cache_control.type)
@@ -340,7 +340,7 @@ describe("_build_messages: Anthropic cache_control", function()
 
     it("system prompt does NOT get cache_control for openai provider", function()
         local pc = parsed_chat({ exchange("Hello") })
-        
+
         local messages = parley._build_messages({
             parsed_chat = pc,
             start_index = 1,
@@ -351,7 +351,7 @@ describe("_build_messages: Anthropic cache_control", function()
             helpers = stub_helpers,
             logger = stub_logger
         })
-        
+
         assert.equals("system", messages[1].role)
         assert.is_nil(messages[1].cache_control)
     end)
@@ -365,7 +365,7 @@ describe("_build_messages: header config overrides", function()
             exchange("Question 3", "Answer 3"),
             exchange("Question 4") -- current
         }, { config_max_full_exchanges = 1 }) -- Override to only preserve 1
-        
+
         pc.exchanges[1].question.line_start = 10
         pc.exchanges[1].answer.line_start = 12
         pc.exchanges[2].question.line_start = 14
@@ -373,7 +373,7 @@ describe("_build_messages: header config overrides", function()
         pc.exchanges[3].question.line_start = 18
         pc.exchanges[3].answer.line_start = 20
         pc.exchanges[4].question.line_start = 22
-        
+
         local messages = parley._build_messages({
             parsed_chat = pc,
             start_index = 1,
@@ -384,7 +384,7 @@ describe("_build_messages: header config overrides", function()
             helpers = stub_helpers,
             logger = stub_logger
         })
-        
+
         -- With max_full_exchanges=1 and total_exchanges=4, exchange_idx=4:
         -- Preserve if idx > (4 - 1) = 3, so only idx=4 is preserved by "recent" rule
         -- But idx=4 is also the current question, so it's always preserved
@@ -614,13 +614,13 @@ describe("_build_messages: range filtering", function()
             exchange("Question 2", "Answer 2"), -- line_start = 15
             exchange("Question 3")              -- line_start = 25, current
         })
-        
+
         pc.exchanges[1].question.line_start = 5
         pc.exchanges[1].answer.line_start = 7
         pc.exchanges[2].question.line_start = 15
         pc.exchanges[2].answer.line_start = 17
         pc.exchanges[3].question.line_start = 25
-        
+
         local messages = parley._build_messages({
             parsed_chat = pc,
             start_index = 10, -- Skip first exchange
@@ -631,7 +631,7 @@ describe("_build_messages: range filtering", function()
             helpers = stub_helpers,
             logger = stub_logger
         })
-        
+
         -- Should only have system + Q2 + A2 + Q3
         assert.equals(4, #messages)
         assert.equals("system", messages[1].role)
@@ -646,13 +646,13 @@ describe("_build_messages: range filtering", function()
             exchange("Question 2", "Answer 2"), -- answer at line 22
             exchange("Question 3")              -- current, line 32
         })
-        
+
         pc.exchanges[1].question.line_start = 10
         pc.exchanges[1].answer.line_start = 12
         pc.exchanges[2].question.line_start = 20
         pc.exchanges[2].answer.line_start = 22
         pc.exchanges[3].question.line_start = 32
-        
+
         local messages = parley._build_messages({
             parsed_chat = pc,
             start_index = 1,
@@ -663,7 +663,7 @@ describe("_build_messages: range filtering", function()
             helpers = stub_helpers,
             logger = stub_logger
         })
-        
+
         -- Should have system + Q1 + A1 + Q2 (no A2 because line_start=22 > end_index=15) + Q3
         assert.equals(5, #messages)
         assert.equals("Answer 1", messages[3].content)
@@ -677,15 +677,15 @@ describe("_build_messages: whitespace trimming", function()
         local ex = exchange("  Question with spaces  ", "  Answer with spaces  ")
         ex.question.line_start = 10
         ex.answer.line_start = 12
-        
+
         local pc = parsed_chat({ ex, exchange("Next") })
         pc.exchanges[2].question.line_start = 14
-        
+
         -- Use custom agent with spaces in system prompt
         local custom_agent = agent("test", "openai", "  Custom prompt  ")
         -- Override the system_prompt via headers.role (that's how get_agent_info reads it)
         pc.headers.role = "  Custom prompt  "
-        
+
         local messages = parley._build_messages({
             parsed_chat = pc,
             start_index = 1,
@@ -696,7 +696,7 @@ describe("_build_messages: whitespace trimming", function()
             helpers = stub_helpers,
             logger = stub_logger
         })
-        
+
         -- Check that whitespace is trimmed
         assert.equals("Custom prompt", messages[1].content)
         assert.equals("Question with spaces", messages[2].content)
@@ -711,10 +711,10 @@ describe("_build_messages: file references with preserved answer", function()
         ex.question.file_references = file_refs
         ex.question.line_start = 10
         ex.answer.line_start = 12
-        
+
         local pc = parsed_chat({ ex, exchange("Next question") })
         pc.exchanges[2].question.line_start = 14
-        
+
         local messages = parley._build_messages({
             parsed_chat = pc,
             start_index = 1,
@@ -725,7 +725,7 @@ describe("_build_messages: file references with preserved answer", function()
             helpers = stub_helpers,
             logger = stub_logger
         })
-        
+
         -- Exchange 1 should be preserved (recent), but because it has file refs, answer is summarized
         assert.equals(5, #messages) -- system, file content, Q1, A1(summary), Q2
         assert.equals("system", messages[1].role)

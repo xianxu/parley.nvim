@@ -35,8 +35,8 @@ function M.check()
 	-- Check for optional dependencies
 	local has_lualine, _ = pcall(require, "lualine")
 	if has_lualine then
-		local parley_ok, parley = pcall(require, "parley")
-		if parley_ok and parley.config and parley.config.lualine and parley.config.lualine.enable then
+		local parley_ok, parley_module = pcall(require, "parley")
+		if parley_ok and parley_module.config and parley_module.config.lualine and parley_module.config.lualine.enable then
 			vim.health.ok("lualine is installed and integration is enabled")
 		else
 			vim.health.info("lualine is installed but integration is disabled (enable in config)")

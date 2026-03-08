@@ -14,18 +14,18 @@ describe("tasker.run integration", function()
         tasker._handles = {}
         tasker._queries = {}
     end)
-    
+
     after_each(function()
         -- Stop any running processes
         tasker.stop()
         tasker._handles = {}
     end)
-    
+
     describe("Group A: Basic subprocess execution", function()
         it("A1: spawns process and captures stdout", function()
             local stdout_captured = nil
             local exit_called = false
-            
+
             tasker.run(
                 nil, -- buf
                 "echo", -- cmd
@@ -37,21 +37,21 @@ describe("tasker.run integration", function()
                 nil, -- out_reader
                 nil  -- err_reader
             )
-            
+
             -- Wait for process to complete
             vim.wait(1000, function()
                 return exit_called
             end, 10)
-            
+
             assert.is_true(exit_called, "Exit callback should be called")
-            assert.is_true(stdout_captured:find("hello world") ~= nil, 
+            assert.is_true(stdout_captured:find("hello world") ~= nil,
                 "Stdout should contain 'hello world', got: " .. tostring(stdout_captured))
         end)
-        
+
         it("A2: spawns process and captures stderr", function()
             local stderr_captured = nil
             local exit_called = false
-            
+
             -- Use a command that writes to stderr
             -- sh -c 'echo error >&2' redirects to stderr
             tasker.run(
@@ -65,20 +65,20 @@ describe("tasker.run integration", function()
                 nil,
                 nil
             )
-            
+
             vim.wait(1000, function()
                 return exit_called
             end, 10)
-            
+
             assert.is_true(exit_called)
             assert.is_true(stderr_captured:find("error") ~= nil,
                 "Stderr should contain 'error', got: " .. tostring(stderr_captured))
         end)
-        
+
         it("A3: exit callback receives exit code", function()
             local exit_code = nil
             local exit_called = false
-            
+
             -- Use 'false' command which exits with code 1
             tasker.run(
                 nil,
@@ -91,21 +91,21 @@ describe("tasker.run integration", function()
                 nil,
                 nil
             )
-            
+
             vim.wait(1000, function()
                 return exit_called
             end, 10)
-            
+
             assert.is_true(exit_called)
             assert.equals(42, exit_code)
         end)
     end)
-    
+
     describe("Group B: Stream readers (out_reader, err_reader)", function()
         it("B1: out_reader is called with stdout chunks", function()
             local chunks = {}
             local exit_called = false
-            
+
             tasker.run(
                 nil,
                 "echo",
@@ -120,21 +120,21 @@ describe("tasker.run integration", function()
                 end,
                 nil
             )
-            
+
             vim.wait(1000, function()
                 return exit_called
             end, 10)
-            
+
             assert.is_true(#chunks > 0, "out_reader should receive at least one chunk")
             local combined = table.concat(chunks, "")
             assert.is_true(combined:find("test output") ~= nil,
                 "Combined chunks should contain 'test output', got: " .. combined)
         end)
-        
+
         it("B2: err_reader is called with stderr chunks", function()
             local err_chunks = {}
             local exit_called = false
-            
+
             tasker.run(
                 nil,
                 "sh",
@@ -149,20 +149,20 @@ describe("tasker.run integration", function()
                     end
                 end
             )
-            
+
             vim.wait(1000, function()
                 return exit_called
             end, 10)
-            
+
             assert.is_true(#err_chunks > 0, "err_reader should receive chunks")
             local combined = table.concat(err_chunks, "")
             assert.is_true(combined:find("stderr test") ~= nil)
         end)
-        
+
         it("B3: out_reader receives nil on EOF", function()
             local got_nil = false
             local exit_called = false
-            
+
             tasker.run(
                 nil,
                 "echo",
@@ -177,20 +177,20 @@ describe("tasker.run integration", function()
                 end,
                 nil
             )
-            
+
             vim.wait(1000, function()
                 return exit_called
             end, 10)
-            
+
             assert.is_true(got_nil, "out_reader should receive nil on EOF")
         end)
     end)
-    
+
     describe("Group C: PID tracking and handle management", function()
         it("C1: adds handle with PID to _handles table", function()
             local initial_count = #tasker._handles
             local exit_called = false
-            
+
             tasker.run(
                 nil,
                 "sleep",
@@ -201,24 +201,24 @@ describe("tasker.run integration", function()
                 nil,
                 nil
             )
-            
+
             -- Check that handle was added (before process exits)
             vim.wait(100, function()
                 return #tasker._handles > initial_count
             end, 10)
-            
-            assert.is_true(#tasker._handles > initial_count, 
+
+            assert.is_true(#tasker._handles > initial_count,
                 "Handle should be added to _handles")
-            
+
             -- Wait for completion
             vim.wait(1000, function()
                 return exit_called
             end, 10)
         end)
-        
+
         it("C2: removes handle from _handles on exit", function()
             local exit_called = false
-            
+
             tasker.run(
                 nil,
                 "echo",
@@ -229,21 +229,21 @@ describe("tasker.run integration", function()
                 nil,
                 nil
             )
-            
+
             -- Wait for process to complete
             vim.wait(1000, function()
                 return exit_called
             end, 10)
-            
+
             -- Handle should be removed after exit
-            assert.equals(0, #tasker._handles, 
+            assert.equals(0, #tasker._handles,
                 "Handle should be removed from _handles after exit")
         end)
-        
+
         it("C3: tracks buffer association in handle", function()
             local test_buf = vim.api.nvim_create_buf(false, true)
             local exit_called = false
-            
+
             tasker.run(
                 test_buf,
                 "echo",
@@ -254,7 +254,7 @@ describe("tasker.run integration", function()
                 nil,
                 nil
             )
-            
+
             -- Check handle has correct buffer
             vim.wait(100, function()
                 for _, h in ipairs(tasker._handles) do
@@ -264,7 +264,7 @@ describe("tasker.run integration", function()
                 end
                 return false
             end, 10)
-            
+
             local found_buf = false
             for _, h in ipairs(tasker._handles) do
                 if h.buf == test_buf then
@@ -272,24 +272,24 @@ describe("tasker.run integration", function()
                     break
                 end
             end
-            
+
             assert.is_true(found_buf, "Handle should track buffer number")
-            
+
             -- Wait for cleanup
             vim.wait(1000, function()
                 return exit_called
             end, 10)
-            
+
             vim.api.nvim_buf_delete(test_buf, {force = true})
         end)
     end)
-    
+
     describe("Group D: Busy state prevention", function()
         it("D1: prevents multiple runs for same buffer", function()
             local test_buf = vim.api.nvim_create_buf(false, true)
             local first_exit = false
             local second_started = false
-            
+
             -- Start first process (long-running)
             tasker.run(
                 test_buf,
@@ -301,10 +301,10 @@ describe("tasker.run integration", function()
                 nil,
                 nil
             )
-            
+
             -- Wait a bit to ensure first process started
             vim.wait(100, function() return false end, 10)
-            
+
             -- Try to start second process for same buffer
             tasker.run(
                 test_buf,
@@ -316,24 +316,24 @@ describe("tasker.run integration", function()
                 nil,
                 nil
             )
-            
+
             -- Second process should not start
-            assert.is_false(second_started, 
+            assert.is_false(second_started,
                 "Second process should not start when buffer is busy")
-            
+
             -- Wait for first process to complete
             vim.wait(2000, function()
                 return first_exit
             end, 10)
-            
+
             vim.api.nvim_buf_delete(test_buf, {force = true})
         end)
-        
+
         it("D2: allows run after previous process exits", function()
             local test_buf = vim.api.nvim_create_buf(false, true)
             local first_exit = false
             local second_exit = false
-            
+
             -- Start and wait for first process
             tasker.run(
                 test_buf,
@@ -345,13 +345,13 @@ describe("tasker.run integration", function()
                 nil,
                 nil
             )
-            
+
             vim.wait(1000, function()
                 return first_exit
             end, 10)
-            
+
             assert.is_true(first_exit, "First process should complete")
-            
+
             -- Now start second process
             tasker.run(
                 test_buf,
@@ -363,23 +363,23 @@ describe("tasker.run integration", function()
                 nil,
                 nil
             )
-            
+
             vim.wait(1000, function()
                 return second_exit
             end, 10)
-            
-            assert.is_true(second_exit, 
+
+            assert.is_true(second_exit,
                 "Second process should run after first completes")
-            
+
             vim.api.nvim_buf_delete(test_buf, {force = true})
         end)
     end)
-    
+
     describe("Group E: Data accumulation", function()
         it("E1: accumulates stdout data across multiple chunks", function()
             local stdout_data = nil
             local exit_called = false
-            
+
             -- Output multiple lines to generate multiple chunks
             tasker.run(
                 nil,
@@ -392,21 +392,21 @@ describe("tasker.run integration", function()
                 nil,
                 nil
             )
-            
+
             vim.wait(1000, function()
                 return exit_called
             end, 10)
-            
+
             assert.is_true(stdout_data:find("line1") ~= nil)
             assert.is_true(stdout_data:find("line2") ~= nil)
             assert.is_true(stdout_data:find("line3") ~= nil)
         end)
-        
+
         it("E2: accumulates stderr data independently from stdout", function()
             local stdout_data = nil
             local stderr_data = nil
             local exit_called = false
-            
+
             -- Write to both stdout and stderr
             tasker.run(
                 nil,
@@ -420,11 +420,11 @@ describe("tasker.run integration", function()
                 nil,
                 nil
             )
-            
+
             vim.wait(1000, function()
                 return exit_called
             end, 10)
-            
+
             assert.is_true(stdout_data:find("to stdout") ~= nil)
             assert.is_true(stderr_data:find("to stderr") ~= nil)
             -- Ensure separation
@@ -432,7 +432,7 @@ describe("tasker.run integration", function()
             assert.is_true(stderr_data:find("to stdout") == nil)
         end)
     end)
-    
+
     describe("Group F: Cleanup and edge cases", function()
         it("F1: cleans up stale handles before spawning", function()
             -- This is tested implicitly by cleanup_stale_handles being called
@@ -447,18 +447,18 @@ describe("tasker.run integration", function()
                     nil
                 )
             end)
-            
+
             assert.is_true(success, "Should not error during cleanup")
-            
+
             -- Wait for process to complete
             vim.wait(1000, function()
                 return #tasker._handles == 0
             end, 10)
         end)
-        
+
         it("F2: handles nil callback gracefully", function()
             local completed = false
-            
+
             -- No callback provided
             tasker.run(
                 nil,
@@ -468,20 +468,20 @@ describe("tasker.run integration", function()
                 nil,
                 nil
             )
-            
+
             -- Wait for process to complete (we can't check callback, but handles should clear)
             vim.wait(1000, function()
                 return #tasker._handles == 0
             end, 10)
-            
+
             -- If we get here without error, test passes
             completed = true
             assert.is_true(completed)
         end)
-        
+
         it("F3: handles nil out_reader and err_reader gracefully", function()
             local exit_called = false
-            
+
             tasker.run(
                 nil,
                 "echo",
@@ -492,11 +492,11 @@ describe("tasker.run integration", function()
                 nil, -- nil out_reader
                 nil  -- nil err_reader
             )
-            
+
             vim.wait(1000, function()
                 return exit_called
             end, 10)
-            
+
             assert.is_true(exit_called, "Should complete without out_reader/err_reader")
         end)
     end)

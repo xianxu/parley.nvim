@@ -89,7 +89,7 @@ M.set_query = function(qid, payload)
 	M._queries[qid] = payload
 	M._queries[qid].timestamp = os.time()
 	M.cleanup_old_queries(10, 60)
-	
+
 	-- Trigger event for lualine update
 	vim.schedule(function()
 		vim.cmd("doautocmd User ParleyQueryStarted")
@@ -131,29 +131,29 @@ end
 M.is_busy = function(buf, skip_warning)
 	-- Increment debug counter
 	M._debug.is_busy_calls = M._debug.is_busy_calls + 1
-	
+
 	if buf == nil then
 		return false
 	end
-	
+
 	-- Initialize variables to track the first active process we find
 	local active_pid = nil
-	
+
 	-- Count active processes for this buffer
 	local active_count = 0
-	
+
 	for _, h in ipairs(M._handles) do
 		if h.buf == buf then
 			-- Check if the process is still active by sending signal 0 (doesn't kill the process, just checks existence)
 			local is_active = false
-			
+
 			-- Use pcall since kill might throw an error if process doesn't exist
 			pcall(function()
 				if type(h.pid) == "number" and h.pid > 0 then
 					is_active = uv.kill(h.pid, 0) == 0
 				end
 			end)
-			
+
 			if is_active then
 				active_count = active_count + 1
 				if active_pid == nil then
@@ -166,7 +166,7 @@ M.is_busy = function(buf, skip_warning)
 			end
 		end
 	end
-	
+
 	-- After processing all handles, report the result once
 	if active_pid ~= nil then
 		-- Only log warnings if not explicitly suppressed (for UI calls)
@@ -175,7 +175,7 @@ M.is_busy = function(buf, skip_warning)
 			local current_time = os.time()
 			if (current_time - M._debug.last_warning_time) >= M._debug.warning_interval then
 				-- Only log warning if enough time has passed since the last one
-				logger.warning("Another Parley process [" .. active_pid .. "] is already running for buffer " .. buf .. 
+				logger.warning("Another Parley process [" .. active_pid .. "] is already running for buffer " .. buf ..
 							" (found " .. active_count .. " active process(es))")
 				M._debug.last_warning_time = current_time
 			else
@@ -185,7 +185,7 @@ M.is_busy = function(buf, skip_warning)
 		end
 		return true
 	end
-	
+
 	return false
 end
 
@@ -197,14 +197,14 @@ M.set_cache_metrics = function(metrics)
         M._cache_metrics.creation = metrics.creation
         M._cache_metrics.read = metrics.read
         M._cache_metrics.input = metrics.input
-        
+
         -- Format log message with proper handling for nil values
         local input_str = metrics.input ~= nil and tostring(metrics.input) or "nil"
         local creation_str = metrics.creation ~= nil and tostring(metrics.creation) or "nil"
         local read_str = metrics.read ~= nil and tostring(metrics.read) or "nil"
-        
-        logger.debug("Cache metrics updated: input=" .. input_str .. 
-                    ", creation=" .. creation_str .. 
+
+        logger.debug("Cache metrics updated: input=" .. input_str ..
+                    ", creation=" .. creation_str ..
                     ", read=" .. read_str)
     end
 end
@@ -226,10 +226,10 @@ M.cleanup_stale_handles = function()
 	local i = 1
 	local active_count = 0
 	local removed_count = 0
-	
+
 	while i <= #M._handles do
 		local h = M._handles[i]
-		
+
 		-- Check if process still exists
 		local process_exists = false
 		pcall(function()
@@ -237,7 +237,7 @@ M.cleanup_stale_handles = function()
 				process_exists = uv.kill(h.pid, 0) == 0
 			end
 		end)
-		
+
 		if not process_exists then
 			-- Process no longer exists, remove from handles
 			logger.debug("Cleanup: Removing stale process handle [" .. h.pid .. "]")
@@ -248,10 +248,10 @@ M.cleanup_stale_handles = function()
 			i = i + 1
 		end
 	end
-	
-	logger.debug("Cleanup completed: " .. active_count .. " active processes, " .. 
+
+	logger.debug("Cleanup completed: " .. active_count .. " active processes, " ..
 				 removed_count .. " stale processes removed")
-	
+
 end
 
 -- stop receiving responses for all processes and clean the handles
@@ -272,7 +272,7 @@ M.stop = function(signal)
 	end
 
 	M._handles = {}
-	
+
 	-- Trigger event for lualine update when stopping queries
 	vim.schedule(function()
 		vim.cmd("doautocmd User ParleyQueryFinished")
@@ -296,7 +296,7 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader)
 
 	-- Run cleanup routine to remove stale processes
 	M.cleanup_stale_handles()
-	
+
 	if M.is_busy(buf, false) then
 		return
 	end
@@ -313,7 +313,7 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader)
 			callback(code, signal, stdout_data, stderr_data)
 		end
 		M.remove_handle(pid)
-		
+
 		-- Trigger event for lualine update
 		vim.cmd("doautocmd User ParleyQueryFinished")
 	end))

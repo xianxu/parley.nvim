@@ -390,7 +390,7 @@ local config = {
 		end,
 
 		-- ParleyInspectLog for checking the log file
-		InspectLog = function(plugin, params)
+		InspectLog = function(plugin, _params)
 			local log_file = plugin.config.log_file
 			local buffer = plugin.helpers.get_buffer(log_file)
 			if not buffer then
