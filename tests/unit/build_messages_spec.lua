@@ -683,8 +683,8 @@ describe("_build_messages: whitespace trimming", function()
 
         -- Use custom agent with spaces in system prompt
         local custom_agent = agent("test", "openai", "  Custom prompt  ")
-        -- Override the system_prompt via headers.role (that's how get_agent_info reads it)
-        pc.headers.role = "  Custom prompt  "
+        -- Override the system_prompt via headers.system_prompt
+        pc.headers.system_prompt = "  Custom prompt  "
 
         local messages = parley._build_messages({
             parsed_chat = pc,
@@ -701,6 +701,75 @@ describe("_build_messages: whitespace trimming", function()
         assert.equals("Custom prompt", messages[1].content)
         assert.equals("Question with spaces", messages[2].content)
         assert.equals("Answer with spaces", messages[3].content)
+    end)
+end)
+
+describe("_build_messages: system_prompt+ header appends", function()
+    it("appends system_prompt+ to selected/default system prompt", function()
+        local pc = parsed_chat({ exchange("Q1") }, {
+            role = nil,
+            _append = { system_prompt = { "Extra sentence one.", "Extra sentence two." } }
+        })
+
+        local messages = parley._build_messages({
+            parsed_chat = pc,
+            start_index = 1,
+            end_index = 100,
+            exchange_idx = 1,
+            agent = agent("test-agent", "openai", "Base prompt."),
+            config = parley.config,
+            helpers = stub_helpers,
+            logger = stub_logger
+        })
+
+        local selected = parley._state.system_prompt or "default"
+        local base_prompt = parley.system_prompts[selected] and parley.system_prompts[selected].system_prompt or "Base prompt."
+        local expected = base_prompt
+        if expected:sub(-1) ~= "\n" then
+            expected = expected .. "\n"
+        end
+        expected = expected .. "Extra sentence one.\nExtra sentence two.\n"
+        assert.equals(expected, messages[1].content)
+    end)
+
+    it("uses system_prompt override then appends system_prompt+ values", function()
+        local pc = parsed_chat({ exchange("Q1") }, {
+            system_prompt = "Header base\\nline",
+            _append = { system_prompt = { "Append one", "Append two" } }
+        })
+
+        local messages = parley._build_messages({
+            parsed_chat = pc,
+            start_index = 1,
+            end_index = 100,
+            exchange_idx = 1,
+            agent = agent("test-agent", "openai", "Agent base"),
+            config = parley.config,
+            helpers = stub_helpers,
+            logger = stub_logger
+        })
+
+        assert.equals("Header base\nline\nAppend one\nAppend two\n", messages[1].content)
+    end)
+
+    it("supports legacy role and role+ aliases", function()
+        local pc = parsed_chat({ exchange("Q1") }, {
+            role = "Legacy base",
+            _append = { role = { "Legacy append" } }
+        })
+
+        local messages = parley._build_messages({
+            parsed_chat = pc,
+            start_index = 1,
+            end_index = 100,
+            exchange_idx = 1,
+            agent = agent("test-agent", "openai", "Agent base"),
+            config = parley.config,
+            helpers = stub_helpers,
+            logger = stub_logger
+        })
+
+        assert.equals("Legacy base\nLegacy append\n", messages[1].content)
     end)
 end)
 

@@ -19,3 +19,5 @@
 - When users ask to show actual server-event text, propagate raw progress text as a dedicated field (e.g. `progress_event.text`) and render from that, instead of only showing coarse event type/label strings.
 - Apply the same raw-text rendering rule to tool progress events, not only reasoning events, so users can see tool query/url/input evolution in the status cue.
 - When a user reports behavior changed after `git stash`, treat that as a strong causality signal: compare exact stash diff and affected runtime paths before concluding the issue is only model-side randomness
+- For user-facing header names, prefer explicit semantic keys (e.g. `system_prompt`) over overloaded/internal terms (e.g. `role`), and preserve aliases for backward compatibility during transitions.
+- If message assembly has a global whitespace trim pass, add explicit post-trim handling for fields that require terminal newlines (e.g. appended `system_prompt+` content), and assert that in tests.

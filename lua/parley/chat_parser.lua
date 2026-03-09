@@ -60,12 +60,24 @@ local function parse_header_key_value(line)
 		return nil, nil
 	end
 
-	local key, value = content:match("^[-#]%s*([%w_%.]+):%s*(.*)$")
+	local key, value = content:match("^[-#]%s*([%w_%.%+]+):%s*(.*)$")
 	if key then
 		return key, value
 	end
 
-	return content:match("^([%w_%.]+):%s*(.*)$")
+	return content:match("^([%w_%.%+]+):%s*(.*)$")
+end
+
+local function parse_header_config_value(value)
+	if tonumber(value) ~= nil then
+		return tonumber(value)
+	elseif value == "true" then
+		return true
+	elseif value == "false" then
+		return false
+	end
+
+	return value
 end
 
 -- Structure to represent a parsed chat:
@@ -98,7 +110,33 @@ M.parse_chat = function(lines, header_end, config)
 		local line = lines[i]
 		local key, value = parse_header_key_value(line)
 		if key ~= nil then
-			if key == "tags" then
+			local is_append = key:sub(-1) == "+"
+			local base_key = is_append and key:sub(1, -2) or key
+			-- Backward-compat alias: role -> system_prompt.
+			if base_key == "role" then
+				base_key = "system_prompt"
+			end
+			if base_key == "" then
+				goto continue
+			end
+
+			if is_append then
+				result.headers._append = result.headers._append or {}
+				result.headers._append[base_key] = result.headers._append[base_key] or {}
+
+				local append_value = value
+				if base_key == "tags" then
+					local tags = {}
+					for tag in value:gmatch("[^,%s]+") do
+						local trimmed_tag = trim(tag)
+						if trimmed_tag and trimmed_tag ~= "" then
+							table.insert(tags, trimmed_tag)
+						end
+					end
+					append_value = tags
+				end
+				table.insert(result.headers._append[base_key], append_value)
+			elseif base_key == "tags" then
 				-- Parse tags into individual items
 				local tags = {}
 				for tag in value:gmatch("[^,%s]+") do
@@ -107,24 +145,25 @@ M.parse_chat = function(lines, header_end, config)
 						table.insert(tags, trimmed_tag)
 					end
 				end
-				result.headers[key] = tags
+				result.headers[base_key] = tags
 			else
-				result.headers[key] = value
+				result.headers[base_key] = value
 			end
 
 			-- Parse configuration override parameters
-			if key ~= "file" and key ~= "model" and key ~= "provider" and key ~= "role" and key ~= "topic" and key ~= "tags" then
-				local config_value = value
-				if tonumber(config_value) ~= nil then
-					config_value = tonumber(config_value)
-				elseif config_value == "true" then
-					config_value = true
-				elseif config_value == "false" then
-					config_value = false
+			if base_key ~= "file" and base_key ~= "model" and base_key ~= "provider" and base_key ~= "system_prompt" and base_key ~= "topic" and base_key ~= "tags" then
+				local config_value = parse_header_config_value(value)
+				if is_append then
+					result.headers._append = result.headers._append or {}
+					local append_config_key = "config_" .. base_key
+					result.headers._append[append_config_key] = result.headers._append[append_config_key] or {}
+					table.insert(result.headers._append[append_config_key], config_value)
+				else
+					result.headers["config_" .. base_key] = config_value
 				end
-				result.headers["config_" .. key] = config_value
 			end
 		end
+		::continue::
 	end
 
 	-- Get prefixes

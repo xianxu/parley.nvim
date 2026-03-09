@@ -1943,6 +1943,9 @@ M.prep_chat = function(buf, file_name)
 		vim.opt_local.concealcursor = ""
 		vim.fn.matchadd("Conceal", [[^- model: .*model.:.[^"]*\zs".*\ze]], 10, -1, { conceal = "…" })
 		vim.fn.matchadd("Conceal", [[^- model: \zs.*model.:.\ze.*]], 10, -1, { conceal = "…" })
+		vim.fn.matchadd("Conceal", [[^- system_prompt: .\{64,64\}\zs.*\ze]], 10, -1, { conceal = "…" })
+		vim.fn.matchadd("Conceal", [[^- system_prompt: .[^\\]*\zs\\.*\ze]], 10, -1, { conceal = "…" })
+		-- Backward compatibility for old headers.
 		vim.fn.matchadd("Conceal", [[^- role: .\{64,64\}\zs.*\ze]], 10, -1, { conceal = "…" })
 		vim.fn.matchadd("Conceal", [[^- role: .[^\\]*\zs\\.*\ze]], 10, -1, { conceal = "…" })
 	end
@@ -2639,12 +2642,12 @@ M.new_chat = function(system_prompt, agent, initial_question)
 
 	-- display system prompt as single line with escaped newlines
 	if system_prompt then
-		system_prompt = "role: " .. system_prompt:gsub("\n", "\\n") .. "\n"
+		system_prompt = "system_prompt: " .. system_prompt:gsub("\n", "\\n") .. "\n"
 	else
 		-- Use the selected system prompt from state
 		local selected_system_prompt = M._state.system_prompt or "default"
 		if M.system_prompts[selected_system_prompt] then
-			system_prompt = "role: " .. M.system_prompts[selected_system_prompt].system_prompt:gsub("\n", "\\n") .. "\n"
+			system_prompt = "system_prompt: " .. M.system_prompts[selected_system_prompt].system_prompt:gsub("\n", "\\n") .. "\n"
 		else
 			system_prompt = ""
 		end
@@ -3376,6 +3379,19 @@ M._build_messages = function(opts)
 	-- strip whitespace from ends of content
 	for _, message in ipairs(messages) do
 		message.content = message.content:gsub("^%s*(.-)%s*$", "%1")
+	end
+
+	-- Preserve a trailing newline for appended system prompt lines.
+	local has_system_prompt_append = false
+	if type(headers) == "table" and type(headers._append) == "table" then
+		local canonical = headers._append.system_prompt
+		local legacy = headers._append.role
+		has_system_prompt_append = (type(canonical) == "table" and #canonical > 0) or (type(legacy) == "table" and #legacy > 0)
+	end
+	if has_system_prompt_append and messages[1] and messages[1].role == "system" and messages[1].content ~= "" then
+		if messages[1].content:sub(-1) ~= "\n" then
+			messages[1].content = messages[1].content .. "\n"
+		end
 	end
 
 	return messages
@@ -4963,9 +4979,9 @@ M.get_default_template = function(agent)
 			-- Use the selected system prompt from state instead of agent's system prompt
 			local selected_system_prompt = M._state.system_prompt or "default"
 			if M.system_prompts[selected_system_prompt] then
-				system_prompt = "- role: " .. M.system_prompts[selected_system_prompt].system_prompt:gsub("\n", "\\n") .. "\n"
+				system_prompt = "- system_prompt: " .. M.system_prompts[selected_system_prompt].system_prompt:gsub("\n", "\\n") .. "\n"
 			else
-				system_prompt = "- role: " .. agent.system_prompt:gsub("\n", "\\n") .. "\n"
+				system_prompt = "- system_prompt: " .. agent.system_prompt:gsub("\n", "\\n") .. "\n"
 			end
 		end
 	end
@@ -4992,6 +5008,37 @@ M.get_default_template = function(agent)
 end
 
 M.get_agent_info = function(headers, agent)
+	local function parse_prompt_header(value)
+		if type(value) ~= "string" then
+			return nil
+		end
+		if not value:match("%S") then
+			return nil
+		end
+		return value:gsub("\\n", "\n")
+	end
+
+	local function collect_appended_header_values(key)
+		if type(headers) ~= "table" or type(headers._append) ~= "table" then
+			return {}
+		end
+		local values = headers._append[key]
+		if type(values) ~= "table" then
+			return {}
+		end
+		return values
+	end
+
+	local function append_prompt_line(base, extra)
+		if not base or base == "" then
+			return extra .. "\n"
+		end
+		if base:sub(-1) ~= "\n" then
+			base = base .. "\n"
+		end
+		return base .. extra .. "\n"
+	end
+
 	-- Get the selected system prompt from state, fallback to agent's system prompt
 	local selected_system_prompt = M._state.system_prompt or "default"
 	local system_prompt = M.system_prompts[selected_system_prompt]
@@ -5031,9 +5078,23 @@ M.get_agent_info = function(headers, agent)
 			end
 		end
 
-		-- Override system prompt from headers
-		if headers.role and headers.role:match("%S") then
-			info.system_prompt = headers.role:gsub("\\n", "\n") -- Convert escaped newlines
+		-- Override system prompt from headers.
+		-- Canonical key: system_prompt; role is kept as backward-compatible alias.
+		local header_system_prompt = parse_prompt_header(headers.system_prompt) or parse_prompt_header(headers.role)
+		if header_system_prompt then
+			info.system_prompt = header_system_prompt
+		end
+
+		-- Append system prompt additions in-order.
+		local append_values = collect_appended_header_values("system_prompt")
+		if #append_values == 0 then
+			append_values = collect_appended_header_values("role")
+		end
+		for _, prompt_append in ipairs(append_values) do
+			local parsed_append = parse_prompt_header(prompt_append)
+			if parsed_append then
+				info.system_prompt = append_prompt_line(info.system_prompt, parsed_append)
+			end
 		end
 
 		-- Update display name if model or role is overridden
@@ -5044,10 +5105,10 @@ M.get_agent_info = function(headers, agent)
 				info.display_name = tostring(info.model)
 			end
 
-			if headers.role and headers.role:match("%S") then
-				info.display_name = info.display_name .. " & custom role"
+				if header_system_prompt or #append_values > 0 then
+					info.display_name = info.display_name .. " & custom system prompt"
+				end
 			end
-		end
 
 		-- Set a default provider if one is specified in header model but not provider
 		if headers.model and not headers.provider then
