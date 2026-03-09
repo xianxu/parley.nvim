@@ -111,6 +111,12 @@ merge:
 	else \
 		echo "  [ok] No unmerged local commits (branch is clean)"; \
 	fi; \
+	printf "Final confirmation: proceed with irreversible merge/cleanup actions? [y/N] "; \
+	read final_answer; \
+	if [ "$$final_answer" != "y" ] && [ "$$final_answer" != "Y" ]; then \
+		echo "Aborted."; \
+		exit 1; \
+	fi; \
 	pr_number=$$(gh pr list --repo "$$repo" --head "$$branch" --json number --jq '.[0].number' 2>/dev/null); \
 	if [ -n "$$pr_number" ]; then \
 		echo "  [ok] Open PR found: #$$pr_number"; \
@@ -134,12 +140,6 @@ merge:
 				exit 1; \
 			fi; \
 		fi; \
-	fi; \
-	printf "Final confirmation: proceed with irreversible merge/cleanup actions? [y/N] "; \
-	read final_answer; \
-	if [ "$$final_answer" != "y" ] && [ "$$final_answer" != "Y" ]; then \
-		echo "Aborted."; \
-		exit 1; \
 	fi; \
 	issue_num=$$(echo "$$branch" | grep -oE '[0-9]+$$'); \
 	if [ -n "$$issue_num" ]; then \
