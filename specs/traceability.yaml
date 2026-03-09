@@ -7,8 +7,10 @@ specs:
     code:
       - lua/parley/render.lua
       - lua/parley/chat_parser.lua
+      - lua/parley/init.lua
     tests:
       - tests/unit/parse_chat_spec.lua
+      - tests/unit/build_messages_spec.lua
       - tests/integration/chat_respond_spec.lua
 
   chat/lifecycle:

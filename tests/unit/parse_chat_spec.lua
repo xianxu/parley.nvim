@@ -105,6 +105,62 @@ describe("parse_chat: headers", function()
         assert.equals("lua", result.headers["tags"][1])
         assert.equals("neovim", result.headers["tags"][2])
     end)
+
+    it("captures repeated system_prompt+ values in order", function()
+        local lines = {
+            "---",
+            "topic: Append Topic",
+            "system_prompt+: First addition",
+            "system_prompt+: Second addition",
+            "max_full_exchanges+: 2",
+            "max_full_exchanges+: 4",
+            "---",
+            "",
+            "💬: Hello",
+        }
+        local header_end = chat_parser.find_header_end(lines)
+        local result = parse_chat(lines, header_end)
+
+        assert.is_table(result.headers._append)
+        assert.equals("First addition", result.headers._append.system_prompt[1])
+        assert.equals("Second addition", result.headers._append.system_prompt[2])
+        assert.equals(2, result.headers._append.config_max_full_exchanges[1])
+        assert.equals(4, result.headers._append.config_max_full_exchanges[2])
+    end)
+
+    it("keeps system_prompt override and system_prompt+ additions separately", function()
+        local lines = {
+            "---",
+            "system_prompt: Base prompt",
+            "system_prompt+: Added prompt",
+            "---",
+            "",
+            "💬: Hello",
+        }
+        local header_end = chat_parser.find_header_end(lines)
+        local result = parse_chat(lines, header_end)
+
+        assert.equals("Base prompt", result.headers.system_prompt)
+        assert.equals("Added prompt", result.headers._append.system_prompt[1])
+    end)
+
+    it("maps legacy role/role+ headers to system_prompt keys", function()
+        local lines = {
+            "---",
+            "role: Legacy base",
+            "role+: Legacy append",
+            "---",
+            "",
+            "💬: Hello",
+        }
+        local header_end = chat_parser.find_header_end(lines)
+        local result = parse_chat(lines, header_end)
+
+        assert.equals("Legacy base", result.headers.system_prompt)
+        assert.equals("Legacy append", result.headers._append.system_prompt[1])
+        assert.is_nil(result.headers.role)
+        assert.is_nil(result.headers._append.role)
+    end)
 end)
 
 describe("parse_chat: single exchange", function()

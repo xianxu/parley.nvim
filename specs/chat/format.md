@@ -15,11 +15,18 @@ Preferred format is Markdown front matter (`---` opening + `---` closing). Legac
 The header MAY contain YAML-like keys to override global configurations for the specific chat:
 - `model: <string|json>`: Model parameters.
 - `provider: <provider_name>`: LLM provider.
-- `role: <system_prompt>`: System prompt (newlines escaped as `\n`).
+- `system_prompt: <system_prompt>`: System prompt (newlines escaped as `\n`).
+- `system_prompt+: <system_prompt_suffix>`: Append text to the resolved system prompt (`system_prompt+` MAY be repeated; entries apply in order).
+- `role` / `role+`: Backward-compatible aliases for `system_prompt` / `system_prompt+`.
 - `tags: <space_or_comma_separated_tags>`: Tags for organization.
 - `max_full_exchanges: <number>`: Memory threshold override.
 - `raw_mode.show_raw_response: <boolean>`: Display raw JSON response.
 - `raw_mode.parse_raw_request: <boolean>`: Parse user JSON as request.
+
+### Append Syntax (`key+`)
+- Header keys ending with `+` MUST be treated as append directives for the base key.
+- Repeated `key+` entries MUST be preserved and applied in file order.
+- `key` remains replace semantics; if both `key` and `key+` are present, Parley MUST apply replacement first, then append values.
 
 ## Conversation Prefixes
 The plugin uses specific markers to distinguish between roles and special content.
