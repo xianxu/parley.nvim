@@ -24,3 +24,13 @@ Parley supports server-side web search for providers that offer it.
 ## UI Indicators
 - Lualine displays `[w]` when active.
 - If web search is enabled but unsupported by the agent, lualine MUST display `[w?]`.
+- During `:ParleyChatRespond`, when web search is enabled, the pending assistant area MUST show an in-buffer animated spinner line (`🔎 <spinner> Searching web...`) before first response tokens.
+- The spinner MUST animate locally (timer-driven) even when no new SSE events arrive.
+- If provider SSE includes tool progress signals, the in-buffer progress line MUST update accordingly.
+- Anthropic/Anthropic-route streams MUST treat `content_block_start` tool-related types as progress signals, including known types such as:
+  - `tool_use`
+  - `server_tool_use`
+  - `web_search_tool_result`
+  - `web_fetch_tool_result`
+- For unknown tool-like `content_block.type` values, the UI SHOULD still show a generic progress message using that type string.
+- The in-buffer progress line MUST clear automatically once answer text starts streaming, or when the query exits without streamed text.

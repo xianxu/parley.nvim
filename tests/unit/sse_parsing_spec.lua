@@ -176,6 +176,49 @@ describe("_extract_sse_content: provider isolation", function()
     end)
 end)
 
+describe("_extract_sse_progress_event", function()
+    it("returns anthropic tool progress event for web_search tool_use start", function()
+        local line = 'data: {"type":"content_block_start","content_block":{"type":"tool_use","name":"web_search"}}'
+        local event = dispatcher._extract_sse_progress_event(line, "anthropic")
+        assert.is_not_nil(event)
+        assert.equals("content_block_start", event.type)
+        assert.equals("tool_use", event.block_type)
+        assert.equals("web_search", event.tool)
+        assert.equals("Searching web...", event.message)
+    end)
+
+    it("returns anthropic progress event for server_tool_use web_search start", function()
+        local line = 'data: {"type":"content_block_start","content_block":{"type":"server_tool_use","name":"web_search"}}'
+        local event = dispatcher._extract_sse_progress_event(line, "anthropic")
+        assert.is_not_nil(event)
+        assert.equals("content_block_start", event.type)
+        assert.equals("server_tool_use", event.block_type)
+        assert.equals("web_search", event.tool)
+        assert.equals("Searching web...", event.message)
+    end)
+
+    it("returns anthropic progress event for web_search_tool_result start", function()
+        local line = 'data: {"type":"content_block_start","content_block":{"type":"web_search_tool_result"}}'
+        local event = dispatcher._extract_sse_progress_event(line, "anthropic")
+        assert.is_not_nil(event)
+        assert.equals("content_block_start", event.type)
+        assert.equals("web_search_tool_result", event.block_type)
+        assert.equals("Search results received...", event.message)
+    end)
+
+    it("returns nil for anthropic text delta line", function()
+        local line = 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"hello"}}'
+        local event = dispatcher._extract_sse_progress_event(line, "anthropic")
+        assert.is_nil(event)
+    end)
+
+    it("returns nil for openai content chunk", function()
+        local line = 'data: {"choices":[{"delta":{"content":"Hello"}}]}'
+        local event = dispatcher._extract_sse_progress_event(line, "openai")
+        assert.is_nil(event)
+    end)
+end)
+
 describe("_extract_sse_content: fixture-based smoke tests", function()
     it("processes openai_stream.txt fixture without error", function()
         local fixture_path = "tests/fixtures/openai_stream.txt"

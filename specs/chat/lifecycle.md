@@ -16,6 +16,7 @@ The chat lifecycle includes creation, sending questions, receiving responses, re
 - Assembles conversation history, applying memory summarization if enabled.
 - Sends the request to the configured LLM provider via `curl`.
 - Streams the response directly into the buffer beneath the answer prefix.
+- When web search is enabled, shows a temporary animated in-buffer spinner indicator until first streamed answer text (or exit).
 
 ### Command: `:ParleyToggleFollowCursor` (Buffer Shortcut: `<C-g>l`)
 - Toggles whether cursor/view follows the active streamed insertion point.

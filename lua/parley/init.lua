@@ -3625,8 +3625,24 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 			response_line = response_line + 1
 		end
 
+		local spinner_frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
+		local spinner_message = "Searching web..."
+		local spinner_frame_index = 1
+		local spinner_timer = nil
+		local spinner_active = M._state.web_search and true or false
+		local initial_progress_text = ""
+		if spinner_active then
+			initial_progress_text = "🔎 " .. spinner_frames[spinner_frame_index] .. " " .. spinner_message
+		end
+
 		-- Write assistant prompt with extra newline, note later insertion point is response_line + 3
-		vim.api.nvim_buf_set_lines(buf, response_line, response_line, false, { "", agent_prefix .. agent_suffix, "", "" })
+		vim.api.nvim_buf_set_lines(
+			buf,
+			response_line,
+			response_line,
+			false,
+			{ "", agent_prefix .. agent_suffix, "", initial_progress_text }
+		)
 
 		M.logger.debug("messages to send: " .. vim.inspect(messages))
 
@@ -3666,19 +3682,101 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 			raw_request_offset = #request_lines
 		end
 
+		local progress_line = response_line + 3 + raw_request_offset
+
+		local function render_spinner_line()
+			if not spinner_active then
+				return
+			end
+			if vim.in_fast_event() then
+				vim.schedule(render_spinner_line)
+				return
+			end
+			if not vim.api.nvim_buf_is_valid(buf) then
+				return
+			end
+			local existing = vim.api.nvim_buf_get_lines(buf, progress_line, progress_line + 1, false)[1]
+			if existing == nil then
+				return
+			end
+			local text = "🔎 " .. spinner_frames[spinner_frame_index] .. " " .. spinner_message
+			vim.api.nvim_buf_set_lines(buf, progress_line, progress_line + 1, false, { text })
+		end
+
+		local function stop_spinner()
+			if not spinner_active then
+				return
+			end
+			spinner_active = false
+			stop_and_close_timer(spinner_timer)
+			spinner_timer = nil
+		end
+
+		local function clear_progress_indicator()
+			if not spinner_active then
+				return
+			end
+			if vim.in_fast_event() then
+				vim.schedule(clear_progress_indicator)
+				return
+			end
+			stop_spinner()
+			if vim.api.nvim_buf_is_valid(buf) then
+				local existing = vim.api.nvim_buf_get_lines(buf, progress_line, progress_line + 1, false)[1]
+				if existing ~= nil then
+					vim.api.nvim_buf_set_lines(buf, progress_line, progress_line + 1, false, { "" })
+				end
+			end
+		end
+
+		local function start_spinner()
+			if not spinner_active then
+				return
+			end
+			render_spinner_line()
+			spinner_timer = vim.loop.new_timer()
+			spinner_timer:start(
+				90,
+				90,
+				vim.schedule_wrap(function()
+					if not spinner_active then
+						return
+					end
+					spinner_frame_index = spinner_frame_index + 1
+					if spinner_frame_index > #spinner_frames then
+						spinner_frame_index = 1
+					end
+					render_spinner_line()
+				end)
+			)
+		end
+
+		start_spinner()
+
+		local base_handler = M.dispatcher.create_handler(buf, win, progress_line, true, "", function()
+			return is_follow_cursor_enabled(override_free_cursor)
+		end)
+		local first_content_seen = false
+		local response_handler = function(qid, chunk)
+			if not first_content_seen and type(chunk) == "string" and chunk ~= "" then
+				first_content_seen = true
+				clear_progress_indicator()
+			end
+			base_handler(qid, chunk)
+		end
+
 		-- call the model and write response
 		M.dispatcher.query(
 			buf,
 			agent_info.provider,
 			final_payload,
-			M.dispatcher.create_handler(buf, win, response_line + 3 + raw_request_offset, true, "", function()
-				return is_follow_cursor_enabled(override_free_cursor)
-			end),
+			response_handler,
 			vim.schedule_wrap(function(qid)
 				local qt = M.tasker.get_query(qid)
 				if not qt then
 					return
 				end
+				clear_progress_indicator()
 
 				-- Only add a new user prompt at the end if we're not in the middle of the document
 				M.logger.debug("exchange_idx: " .. tostring(exchange_idx) .. " and #parsed_chat: " .. tostring(#parsed_chat))
@@ -3785,6 +3883,17 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 				-- Call the callback if provided
 				if callback then
 					callback()
+				end
+			end),
+			nil,
+			vim.schedule_wrap(function(_, progress_event)
+				if not progress_event or type(progress_event) ~= "table" then
+					return
+				end
+				local message = progress_event.message
+				if type(message) == "string" and message ~= "" then
+					spinner_message = message
+					render_spinner_line()
 				end
 			end)
 		)

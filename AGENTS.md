@@ -49,6 +49,7 @@
 ### 8. Pay attention to User Questions
 - When user poses question, answer the question as clearly and directly as possible
 - DO NOT proceed to change code, when user asks a question
+- Write new work items or changed work items in `tasks/todo.md`. Keep it updated as you receive additional instructions from user.
 
 ## Task Management
 1. **Note starting point**: save current state before making changes (e.g. git commit or branch)

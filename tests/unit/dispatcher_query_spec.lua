@@ -26,6 +26,7 @@ describe("dispatcher.query internals", function()
     local handler_calls
     local on_exit_calls
     local callback_calls
+    local on_progress_calls
 
     before_each(function()
         -- Save originals
@@ -40,6 +41,7 @@ describe("dispatcher.query internals", function()
         handler_calls = {}
         on_exit_calls = {}
         callback_calls = {}
+        on_progress_calls = {}
 
         -- Mock vault functions
         vault.get_secret = function(provider)
@@ -98,6 +100,12 @@ describe("dispatcher.query internals", function()
     local function make_callback()
         return function(response)
             table.insert(callback_calls, response)
+        end
+    end
+
+    local function make_on_progress()
+        return function(_qid, event)
+            table.insert(on_progress_calls, event)
         end
     end
 
@@ -479,6 +487,41 @@ describe("dispatcher.query internals", function()
 
             -- Should not crash
             assert.is_true(success)
+        end)
+    end)
+
+    describe("Group G: progress callback", function()
+        it("G1: calls on_progress for anthropic tool_use events", function()
+            local handler = make_handler()
+            local on_progress = make_on_progress()
+            local payload = { model = "claude-3", messages = {} }
+
+            dispatcher.providers["anthropic"] = dispatcher.providers["anthropic"] or {}
+            dispatcher.providers["anthropic"].endpoint = "http://fake.anthropic.test/v1/messages"
+
+            dispatcher.query(nil, "anthropic", payload, handler, nil, nil, on_progress)
+
+            local tool_event = 'data: {"type":"content_block_start","content_block":{"type":"tool_use","name":"web_search"}}\n'
+            captured_out_reader(nil, tool_event)
+
+            assert.equals(1, #on_progress_calls)
+            assert.equals("content_block_start", on_progress_calls[1].type)
+            assert.equals("tool_use", on_progress_calls[1].block_type)
+            assert.equals("web_search", on_progress_calls[1].tool)
+            assert.equals("Searching web...", on_progress_calls[1].message)
+        end)
+
+        it("G2: does not call on_progress for plain text chunks", function()
+            local handler = make_handler()
+            local on_progress = make_on_progress()
+            local payload = { model = "gpt-4", messages = {} }
+
+            dispatcher.query(nil, "openai", payload, handler, nil, nil, on_progress)
+
+            local chunk = 'data: {"choices":[{"delta":{"content":"Hello"}}]}\n'
+            captured_out_reader(nil, chunk)
+
+            assert.equals(0, #on_progress_calls)
         end)
     end)
 end)

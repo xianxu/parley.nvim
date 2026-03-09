@@ -166,6 +166,10 @@ openai.parse_sse_content = function(line)
     return ""
 end
 
+openai.parse_sse_progress_event = function(_line)
+    return nil
+end
+
 openai.parse_usage = function(raw_response)
     local metrics = { input = nil, read = nil, creation = nil }
 
@@ -350,6 +354,62 @@ anthropic.parse_sse_content = function(line)
     return ""
 end
 
+anthropic.parse_sse_progress_event = function(line)
+    line = strip_data_prefix(line)
+    if line == "" or line == "[DONE]" then
+        return nil
+    end
+
+    local decoded = safe_json_decode(line)
+    if not decoded or type(decoded) ~= "table" then
+        return nil
+    end
+
+    if decoded.type ~= "content_block_start" then
+        return nil
+    end
+
+    local block = decoded.content_block
+    if type(block) ~= "table" then
+        return nil
+    end
+
+    local block_type = block.type
+    if type(block_type) ~= "string" or block_type == "" then
+        return nil
+    end
+
+    local tool_name = type(block.name) == "string" and block.name or nil
+
+    local message
+    if block_type == "tool_use" or block_type == "server_tool_use" then
+        if tool_name == "web_search" then
+            message = "Searching web..."
+        elseif tool_name == "web_fetch" then
+            message = "Fetching web page..."
+        elseif tool_name and tool_name ~= "" then
+            message = "Running " .. tool_name .. "..."
+        else
+            message = "Running " .. block_type .. "..."
+        end
+    elseif block_type == "web_search_tool_result" then
+        message = "Search results received..."
+    elseif block_type == "web_fetch_tool_result" then
+        message = "Fetched page content..."
+    elseif block_type:find("tool", 1, true) then
+        message = "Processing " .. block_type .. "..."
+    else
+        return nil
+    end
+
+    return {
+        type = "content_block_start",
+        block_type = block_type,
+        tool = tool_name,
+        message = message,
+    }
+end
+
 anthropic.parse_usage = function(raw_response)
     local metrics = { input = nil, read = nil, creation = nil }
 
@@ -502,6 +562,10 @@ googleai.parse_sse_content = function(line)
     return ""
 end
 
+googleai.parse_sse_progress_event = function(_line)
+    return nil
+end
+
 googleai.parse_usage = function(raw_response)
     local metrics = { input = nil, read = nil, creation = nil }
 
@@ -556,6 +620,7 @@ copilot.format_headers = function(secret, _model, _payload, endpoint)
 end
 
 copilot.parse_sse_content = openai.parse_sse_content
+copilot.parse_sse_progress_event = openai.parse_sse_progress_event
 copilot.parse_usage = openai.parse_usage
 
 -- Copilot needs a pre-query step to refresh its bearer token
@@ -659,6 +724,15 @@ cliproxyapi.parse_sse_content = function(line)
     return anthropic.parse_sse_content(line)
 end
 
+cliproxyapi.parse_sse_progress_event = function(line)
+    -- For anthropic_tools_route, tool progress events are anthropic SSE messages.
+    local strategy = get_cliproxy_strategy(nil)
+    if strategy == "anthropic_tools_route" then
+        return anthropic.parse_sse_progress_event(line)
+    end
+    return nil
+end
+
 cliproxyapi.parse_usage = function(raw_response)
     local metrics = openai.parse_usage(raw_response)
     if metrics.input ~= nil then
@@ -689,6 +763,7 @@ azure.format_headers = function(secret, _model, payload, endpoint)
 end
 
 azure.parse_sse_content = openai.parse_sse_content
+azure.parse_sse_progress_event = openai.parse_sse_progress_event
 azure.parse_usage = openai.parse_usage
 
 --------------------------------------------------------------------------------
@@ -724,6 +799,7 @@ ollama.format_headers = function(secret, _model, _payload, endpoint)
 end
 
 ollama.parse_sse_content = openai.parse_sse_content
+ollama.parse_sse_progress_event = openai.parse_sse_progress_event
 
 ollama.parse_usage = function(raw_response)
     local metrics = { input = nil, read = nil, creation = nil }

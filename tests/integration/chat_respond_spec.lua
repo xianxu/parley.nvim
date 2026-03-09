@@ -395,6 +395,164 @@ describe("chat_respond: buffer state after completion", function()
         -- Should still have exactly 2 user prompts (not 3)
         assert.equals(2, user_prompt_count, "Should not append new user prompt in middle of document")
     end)
+
+    it("shows and clears web-search progress indicator while waiting for first tokens", function()
+        local chat_content = [[
+# topic: Test Topic
+- file: test.md
+---
+
+💬: Find latest release notes.
+]]
+
+        vim.fn.writefile(vim.split(chat_content, "\n"), test_file)
+        vim.cmd("edit " .. test_file)
+        local buf = vim.api.nvim_get_current_buf()
+        vim.api.nvim_win_set_cursor(0, {6, 0})
+
+        local original_web_search = parley._state.web_search
+        parley._state.web_search = true
+
+        local completion_called = false
+        local saw_initial_indicator = false
+        parley.dispatcher.query = function(buf_arg, provider, payload, handler, completion_callback, _callback, progress_callback)
+            local mock_qid = "qid_web_progress"
+            parley.tasker.set_query(mock_qid, {
+                response = "Release notes summary",
+                buf = buf_arg
+            })
+
+            local before_lines = vim.api.nvim_buf_get_lines(buf_arg, 0, -1, false)
+            for _, line in ipairs(before_lines) do
+                if line:match("^🔎 %S+ Searching web%.%.%.$") then
+                    saw_initial_indicator = true
+                    break
+                end
+            end
+
+            if progress_callback then
+                progress_callback(mock_qid, { message = "Searching web..." })
+            end
+            if handler then
+                handler(mock_qid, "Release notes summary")
+            end
+
+            vim.schedule(function()
+                completion_callback(mock_qid)
+                completion_called = true
+            end)
+        end
+
+        parley.chat_respond({ range = 0 })
+        vim.wait(300, function()
+            return completion_called
+        end, 10)
+
+        parley._state.web_search = original_web_search
+
+        assert.is_true(saw_initial_indicator, "Expected initial web-search progress indicator to be present")
+        local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+        local has_progress_line = false
+        local has_answer_text = false
+        for _, line in ipairs(lines) do
+            if line:find("Searching web...", 1, true) then
+                has_progress_line = true
+            end
+            if line:find("Release notes summary", 1, true) then
+                has_answer_text = true
+            end
+        end
+        assert.is_false(has_progress_line, "Progress indicator should be cleared after response starts")
+        assert.is_true(has_answer_text, "Expected streamed answer text to be present")
+    end)
+
+    it("animates spinner locally while waiting without SSE events", function()
+        local chat_content = [[
+# topic: Test Topic
+- file: test.md
+---
+
+💬: Search for docs.
+]]
+
+        vim.fn.writefile(vim.split(chat_content, "\n"), test_file)
+        vim.cmd("edit " .. test_file)
+        local buf = vim.api.nvim_get_current_buf()
+        vim.api.nvim_win_set_cursor(0, {6, 0})
+
+        local original_web_search = parley._state.web_search
+        parley._state.web_search = true
+
+        local completion_called = false
+        parley.dispatcher.query = function(buf_arg, provider, payload, handler, completion_callback)
+            local mock_qid = "qid_spinner_wait"
+            parley.tasker.set_query(mock_qid, {
+                response = "",
+                buf = buf_arg
+            })
+            vim.defer_fn(function()
+                vim.schedule(function()
+                    completion_callback(mock_qid)
+                    completion_called = true
+                end)
+            end, 260)
+        end
+
+        parley.chat_respond({ range = 0 })
+
+        vim.wait(120, function()
+            local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+            for _, line in ipairs(lines) do
+                if line:match("^🔎 %S+ Searching web%.%.%.$") then
+                    return true
+                end
+            end
+            return false
+        end, 10)
+
+        local first_spinner_line = nil
+        for _, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+            if line:match("^🔎 %S+ Searching web%.%.%.$") then
+                first_spinner_line = line
+                break
+            end
+        end
+        assert.is_not_nil(first_spinner_line, "Expected spinner line while waiting")
+
+        vim.wait(140, function()
+            local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+            for _, line in ipairs(lines) do
+                if line:match("^🔎 %S+ Searching web%.%.%.$") and line ~= first_spinner_line then
+                    return true
+                end
+            end
+            return false
+        end, 10)
+
+        local spinner_changed = false
+        for _, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+            if line:match("^🔎 %S+ Searching web%.%.%.$") and line ~= first_spinner_line then
+                spinner_changed = true
+                break
+            end
+        end
+        assert.is_true(spinner_changed, "Expected spinner frame to advance locally")
+
+        vim.wait(500, function()
+            return completion_called
+        end, 10)
+
+        parley._state.web_search = original_web_search
+
+        local has_spinner = false
+        for _, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+            if line:find("Searching web...", 1, true) then
+                has_spinner = true
+                break
+            end
+        end
+        assert.is_false(has_spinner, "Spinner line should clear on completion")
+    end)
 end)
 
 describe("chat_respond: guard branches", function()

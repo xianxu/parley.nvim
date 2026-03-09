@@ -11,3 +11,6 @@
 - Keep provider/model capability rules in `lua/parley/provider_params.lua` (or capability layer), not in `providers.lua` transport assembly code.
 - For any non-trivial or multi-step request, write the concrete execution plan into `tasks/todo.md` before further implementation or reporting.
 - After every code/config change, run `make lint` before handing back results; treat lint warnings as failures.
+
+## 2026-03-09
+- When a callback may run in Neovim fast-event context, never call direct `vim.api.nvim_*` buffer/window APIs there; gate with `vim.in_fast_event()` and defer UI updates via `vim.schedule`.
