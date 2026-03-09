@@ -88,6 +88,19 @@ merge:
 		exit 1; \
 	fi; \
 	echo "  [ok] No uncommitted changes"; \
+	upstream=$$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || true); \
+	if [ -z "$$upstream" ]; then \
+		echo "  [x] No upstream configured for $$branch"; \
+		echo "Push the branch first (e.g. make pull-request or git push -u origin $$branch)."; \
+		exit 1; \
+	fi; \
+	ahead=$$(git rev-list --count "$$upstream..HEAD" 2>/dev/null || echo 0); \
+	if [ "$$ahead" -gt 0 ]; then \
+		echo "  [x] Unpushed local commits detected: $$ahead commit(s) ahead of $$upstream"; \
+		echo "Push your branch before merging."; \
+		exit 1; \
+	fi; \
+	echo "  [ok] No unpushed local commits (HEAD synced with $$upstream)"; \
 	wt_path=$$(git rev-parse --show-toplevel); \
 	main_path=$$(git worktree list | grep '\[main\]' | awk '{print $$1}'); \
 	repo=$$(git remote get-url origin | sed 's|.*github.com[:/]\(.*\)\.git|\1|;s|.*github.com[:/]\(.*\)$$|\1|'); \
@@ -121,6 +134,12 @@ merge:
 				exit 1; \
 			fi; \
 		fi; \
+	fi; \
+	printf "Final confirmation: proceed with irreversible merge/cleanup actions? [y/N] "; \
+	read final_answer; \
+	if [ "$$final_answer" != "y" ] && [ "$$final_answer" != "Y" ]; then \
+		echo "Aborted."; \
+		exit 1; \
 	fi; \
 	issue_num=$$(echo "$$branch" | grep -oE '[0-9]+$$'); \
 	if [ -n "$$issue_num" ]; then \
