@@ -14,3 +14,7 @@
 
 ## 2026-03-09
 - When a callback may run in Neovim fast-event context, never call direct `vim.api.nvim_*` buffer/window APIs there; gate with `vim.in_fast_event()` and defer UI updates via `vim.schedule`.
+- For OpenAI/Codex streams, `reasoning_content` can be the only early activity while tool-call events are absent; progress UI must parse and surface reasoning-state cues, not only tool events.
+- Normalize provider progress events to a shared shape (`kind`/`phase`/`message`) so UI logic stays provider-agnostic and avoids duplicated event-specific branching.
+- When users ask to show actual server-event text, propagate raw progress text as a dedicated field (e.g. `progress_event.text`) and render from that, instead of only showing coarse event type/label strings.
+- Apply the same raw-text rendering rule to tool progress events, not only reasoning events, so users can see tool query/url/input evolution in the status cue.

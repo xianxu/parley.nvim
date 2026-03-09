@@ -3627,6 +3627,8 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 
 		local spinner_frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
 		local spinner_message = "Searching web..."
+		local progress_detail_text = ""
+		local progress_detail_key = nil
 		local spinner_frame_index = 1
 		local spinner_timer = nil
 		local spinner_active = M._state.web_search and true or false
@@ -3890,8 +3892,41 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 				if not progress_event or type(progress_event) ~= "table" then
 					return
 				end
+				if not spinner_active then
+					return
+				end
+
 				local message = progress_event.message
-				if type(message) == "string" and message ~= "" then
+				local detail = progress_event.text
+				if type(detail) == "string" and detail ~= "" then
+					local detail_key = table.concat({
+						tostring(progress_event.phase or ""),
+						tostring(progress_event.kind or ""),
+						tostring(progress_event.tool or ""),
+						tostring(progress_event.block_type or ""),
+					}, ":")
+					if progress_detail_key ~= detail_key then
+						progress_detail_key = detail_key
+						progress_detail_text = ""
+					end
+					progress_detail_text = progress_detail_text .. detail
+					local compact = progress_detail_text:gsub("%s+", " "):gsub("^%s+", "")
+					if compact ~= "" then
+						if progress_event.kind == "reasoning" then
+							message = "Reasoning: " .. compact
+						else
+							local base = (type(progress_event.message) == "string" and progress_event.message ~= "")
+							    and progress_event.message
+							    or "Working..."
+							message = base .. " " .. compact
+						end
+					end
+				else
+					progress_detail_text = ""
+					progress_detail_key = nil
+				end
+
+				if type(message) == "string" and message ~= "" and message ~= spinner_message then
 					spinner_message = message
 					render_spinner_line()
 				end

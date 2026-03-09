@@ -523,5 +523,41 @@ describe("dispatcher.query internals", function()
 
             assert.equals(0, #on_progress_calls)
         end)
+
+        it("G3: calls on_progress for openai chat-completions tool_calls events", function()
+            local handler = make_handler()
+            local on_progress = make_on_progress()
+            local payload = { model = "gpt-4", messages = {} }
+
+            dispatcher.query(nil, "openai", payload, handler, nil, nil, on_progress)
+
+            local tool_event = 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"web_search","arguments":"{"}}]}}]}\n'
+            captured_out_reader(nil, tool_event)
+
+            assert.equals(1, #on_progress_calls)
+            assert.equals("tool_call_delta", on_progress_calls[1].type)
+            assert.equals("tool_calls_delta", on_progress_calls[1].block_type)
+            assert.equals("web_search", on_progress_calls[1].tool)
+            assert.equals("Searching web...", on_progress_calls[1].message)
+            assert.equals("{", on_progress_calls[1].text)
+        end)
+
+        it("G4: calls on_progress for openai reasoning_content events", function()
+            local handler = make_handler()
+            local on_progress = make_on_progress()
+            local payload = { model = "gpt-4", messages = {} }
+
+            dispatcher.query(nil, "openai", payload, handler, nil, nil, on_progress)
+
+            local reasoning_event = 'data: {"choices":[{"delta":{"reasoning_content":"Thinking..."}}]}\n'
+            captured_out_reader(nil, reasoning_event)
+
+            assert.equals(1, #on_progress_calls)
+            assert.equals("reasoning_delta", on_progress_calls[1].type)
+            assert.equals("reasoning", on_progress_calls[1].kind)
+            assert.equals("reasoning", on_progress_calls[1].phase)
+            assert.equals("Reasoning...", on_progress_calls[1].message)
+            assert.equals("Thinking...", on_progress_calls[1].text)
+        end)
     end)
 end)

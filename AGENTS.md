@@ -53,7 +53,7 @@
 
 ## Task Management
 1. **Note starting point**: save current state before making changes (e.g. git commit or branch)
-2. **Plan First**: Write plan to `tasks/todo.md` with checkable items, use numerical bullets for steps
+2. **Plan First**: Write plan to `tasks/todo.md` with checkable items
 3. **Update Spec**: Reflect	changes in `specs/` files as you go, not after the fact
 4. **Verify Plan**: Check in before starting implementation
 5. **Track Progress**: Mark items complete as you go
