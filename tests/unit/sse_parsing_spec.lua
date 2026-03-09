@@ -176,6 +176,168 @@ describe("_extract_sse_content: provider isolation", function()
     end)
 end)
 
+describe("_extract_sse_progress_event", function()
+    it("returns anthropic tool progress event for web_search tool_use start", function()
+        local line = 'data: {"type":"content_block_start","content_block":{"type":"tool_use","name":"web_search"}}'
+        local event = dispatcher._extract_sse_progress_event(line, "anthropic")
+        assert.is_not_nil(event)
+        assert.equals("content_block_start", event.type)
+        assert.equals("tool_use", event.block_type)
+        assert.equals("web_search", event.tool)
+        assert.equals("Searching web...", event.message)
+    end)
+
+    it("returns anthropic progress event for server_tool_use web_search start", function()
+        local line = 'data: {"type":"content_block_start","content_block":{"type":"server_tool_use","name":"web_search"}}'
+        local event = dispatcher._extract_sse_progress_event(line, "anthropic")
+        assert.is_not_nil(event)
+        assert.equals("content_block_start", event.type)
+        assert.equals("server_tool_use", event.block_type)
+        assert.equals("web_search", event.tool)
+        assert.equals("Searching web...", event.message)
+    end)
+
+    it("returns anthropic progress event for web_search_tool_result start", function()
+        local line = 'data: {"type":"content_block_start","content_block":{"type":"web_search_tool_result"}}'
+        local event = dispatcher._extract_sse_progress_event(line, "anthropic")
+        assert.is_not_nil(event)
+        assert.equals("content_block_start", event.type)
+        assert.equals("web_search_tool_result", event.block_type)
+        assert.equals("Search results received...", event.message)
+    end)
+
+    it("returns nil for anthropic text delta line", function()
+        local line = 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"hello"}}'
+        local event = dispatcher._extract_sse_progress_event(line, "anthropic")
+        assert.is_nil(event)
+    end)
+
+    it("returns nil for openai content chunk", function()
+        local line = 'data: {"choices":[{"delta":{"content":"Hello"}}]}'
+        local event = dispatcher._extract_sse_progress_event(line, "openai")
+        assert.is_nil(event)
+    end)
+
+    it("returns openai reasoning progress event for reasoning_content delta", function()
+        local line = 'data: {"choices":[{"delta":{"reasoning_content":"Thinking..."}}]}'
+        local event = dispatcher._extract_sse_progress_event(line, "openai")
+        assert.is_not_nil(event)
+        assert.equals("reasoning_delta", event.type)
+        assert.equals("reasoning_content", event.block_type)
+        assert.equals("reasoning", event.kind)
+        assert.equals("reasoning", event.phase)
+        assert.equals("Reasoning...", event.message)
+        assert.equals("Thinking...", event.text)
+    end)
+
+    it("returns openai progress event for chat-completions tool_calls delta", function()
+        local line = 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"web_search","arguments":"{"}}]}}]}'
+        local event = dispatcher._extract_sse_progress_event(line, "openai")
+        assert.is_not_nil(event)
+        assert.equals("tool_call_delta", event.type)
+        assert.equals("tool_calls_delta", event.block_type)
+        assert.equals("web_search", event.tool)
+        assert.equals("tool_update", event.kind)
+        assert.equals("tooling", event.phase)
+        assert.equals("Searching web...", event.message)
+        assert.equals("{", event.text)
+    end)
+
+    it("returns openai progress event for responses output_item web_search_call added", function()
+        local line = 'data: {"type":"response.output_item.added","item":{"type":"web_search_call","id":"ws_1","query":"latest ai news"}}'
+        local event = dispatcher._extract_sse_progress_event(line, "openai")
+        assert.is_not_nil(event)
+        assert.equals("response.output_item.added", event.type)
+        assert.equals("web_search_call", event.block_type)
+        assert.equals("web_search", event.tool)
+        assert.equals("Searching web...", event.message)
+        assert.equals("latest ai news", event.text)
+    end)
+
+    it("returns openai progress event for responses output_item web_search_call done", function()
+        local line = 'data: {"type":"response.output_item.done","item":{"type":"web_search_call","id":"ws_1","status":"completed"}}'
+        local event = dispatcher._extract_sse_progress_event(line, "openai")
+        assert.is_not_nil(event)
+        assert.equals("response.output_item.done", event.type)
+        assert.equals("web_search_call", event.block_type)
+        assert.equals("web_search", event.tool)
+        assert.equals("Search results received...", event.message)
+    end)
+
+    it("returns anthropic tool progress event with input query text", function()
+        local line = 'data: {"type":"content_block_start","content_block":{"type":"tool_use","name":"web_search","input":{"query":"lua nvim events"}}}'
+        local event = dispatcher._extract_sse_progress_event(line, "anthropic")
+        assert.is_not_nil(event)
+        assert.equals("tool_start", event.kind)
+        assert.equals("Searching web...", event.message)
+        assert.equals("lua nvim events", event.text)
+    end)
+
+    it("returns anthropic tool input_json_delta progress text", function()
+        local line = 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{\\"query\\":\\"lua"}}'
+        local event = dispatcher._extract_sse_progress_event(line, "anthropic")
+        assert.is_not_nil(event)
+        assert.equals("tool_update", event.kind)
+        assert.equals("Running tool...", event.message)
+        assert.equals('{"query":"lua', event.text)
+    end)
+
+    it("keeps expected cue behavior across anthropic tool_start to input_json_delta transition", function()
+        local start_line =
+            'data: {"type":"content_block_start","content_block":{"type":"tool_use","name":"web_search","input":{"query":"lua nvim events"}}}'
+        local delta_line = 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{\\"query\\":\\"lua"}}'
+        local start_event = dispatcher._extract_sse_progress_event(start_line, "anthropic")
+        local delta_event = dispatcher._extract_sse_progress_event(delta_line, "anthropic")
+        assert.is_not_nil(start_event)
+        assert.is_not_nil(delta_event)
+        assert.equals("tool_start", start_event.kind)
+        assert.equals("Searching web...", start_event.message)
+        assert.equals("tool_update", delta_event.kind)
+        assert.equals("Running tool...", delta_event.message)
+        assert.equals('{"query":"lua', delta_event.text)
+    end)
+
+    it("returns googleai progress event for grounding webSearchQueries fragment", function()
+        local line = 'data: "webSearchQueries": ["latest gemini release notes"]'
+        local event = dispatcher._extract_sse_progress_event(line, "googleai")
+        assert.is_not_nil(event)
+        assert.equals("grounding_metadata", event.type)
+        assert.equals("web_search_queries", event.block_type)
+        assert.equals("web_search", event.tool)
+        assert.equals("tool_update", event.kind)
+        assert.equals("tooling", event.phase)
+        assert.equals("Searching web...", event.message)
+        assert.equals("latest gemini release notes", event.text)
+    end)
+
+    it("returns googleai progress event for webSearchQueries with empty first item", function()
+        local line = 'data: "webSearchQueries": ["", "latest gemini release notes"]'
+        local event = dispatcher._extract_sse_progress_event(line, "googleai")
+        assert.is_not_nil(event)
+        assert.equals("web_search_queries", event.block_type)
+        assert.equals("latest gemini release notes", event.text)
+    end)
+
+    it("returns googleai progress event for escaped grounding uri fragment", function()
+        local line = 'data: \\"uri\\": \\"https://example.com/article\\"'
+        local event = dispatcher._extract_sse_progress_event(line, "googleai")
+        assert.is_not_nil(event)
+        assert.equals("grounding_metadata", event.type)
+        assert.equals("grounding_uri", event.block_type)
+        assert.equals("web_search", event.tool)
+        assert.equals("tool_update", event.kind)
+        assert.equals("tooling", event.phase)
+        assert.equals("Search results received...", event.message)
+        assert.equals("https://example.com/article", event.text)
+    end)
+
+    it("returns nil for googleai escaped full payload blob without explicit fragments", function()
+        local line = 'data: "[{\\"candidates\\":[{\\"content\\":{\\"parts\\":[{\\"text\\":\\"hello\\"}]}}]}]"'
+        local event = dispatcher._extract_sse_progress_event(line, "googleai")
+        assert.is_nil(event)
+    end)
+end)
+
 describe("_extract_sse_content: fixture-based smoke tests", function()
     it("processes openai_stream.txt fixture without error", function()
         local fixture_path = "tests/fixtures/openai_stream.txt"

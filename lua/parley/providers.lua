@@ -37,6 +37,68 @@ local function strip_data_prefix(line)
     return line:gsub("^data: ", "")
 end
 
+local function tool_progress_message(tool_name)
+    if tool_name == "web_search" or tool_name == "web_search_call" then
+        return "Searching web..."
+    end
+    if tool_name == "web_fetch" then
+        return "Fetching web page..."
+    end
+    if type(tool_name) == "string" and tool_name ~= "" then
+        return "Running " .. tool_name .. "..."
+    end
+    return "Running tool..."
+end
+
+local function tool_result_message(tool_name)
+    if tool_name == "web_search" or tool_name == "web_search_call" then
+        return "Search results received..."
+    end
+    if tool_name == "web_fetch" then
+        return "Fetched page content..."
+    end
+    if type(tool_name) == "string" and tool_name ~= "" then
+        return "Completed " .. tool_name .. "..."
+    end
+    return "Tool result received..."
+end
+
+local function reasoning_progress_message()
+    return "Reasoning..."
+end
+
+local function make_progress_event(event_type, block_type, tool_name, kind, phase, message, text)
+    return {
+        type = event_type,
+        block_type = block_type,
+        tool = tool_name,
+        kind = kind,
+        phase = phase,
+        message = message,
+        text = text,
+    }
+end
+
+local function pick_tool_detail_text(value)
+    if type(value) ~= "table" then
+        return nil
+    end
+    local candidates = {
+        value.query,
+        value.url,
+        value.search_query,
+        value.web_query,
+        value.prompt,
+        value.path,
+    }
+    for _, candidate in ipairs(candidates) do
+        if type(candidate) == "string" and candidate ~= "" then
+            return candidate
+        end
+    end
+    return nil
+end
+
 local function get_cliproxy_strategy(model_config)
     if type(model_config) == "table" then
         local model_strategy = model_config.web_search_strategy
@@ -164,6 +226,104 @@ openai.parse_sse_content = function(line)
     end
 
     return ""
+end
+
+openai.parse_sse_progress_event = function(line)
+    line = strip_data_prefix(line)
+    if line == "" or line == "[DONE]" then
+        return nil
+    end
+
+    local decoded = safe_json_decode(line)
+    if not decoded or type(decoded) ~= "table" then
+        return nil
+    end
+
+    -- Chat Completions style: delta.tool_calls
+    if type(decoded.choices) == "table" and type(decoded.choices[1]) == "table" then
+        local delta = decoded.choices[1].delta
+        if type(delta) == "table" and type(delta.reasoning_content) == "string" and delta.reasoning_content ~= "" then
+            return make_progress_event(
+                "reasoning_delta",
+                "reasoning_content",
+                nil,
+                "reasoning",
+                "reasoning",
+                reasoning_progress_message(),
+                delta.reasoning_content
+            )
+        end
+        if type(delta) == "table" and type(delta.tool_calls) == "table" and type(delta.tool_calls[1]) == "table" then
+            local call = delta.tool_calls[1]
+            local fn = call["function"]
+            local tool_name = nil
+            local tool_text = nil
+            if type(fn) == "table" and type(fn.name) == "string" and fn.name ~= "" then
+                tool_name = fn.name
+                if type(fn.arguments) == "string" and fn.arguments ~= "" then
+                    tool_text = fn.arguments
+                end
+            elseif type(call.name) == "string" and call.name ~= "" then
+                tool_name = call.name
+            elseif call.type == "web_search" then
+                tool_name = "web_search"
+            end
+            return make_progress_event(
+                "tool_call_delta",
+                "tool_calls_delta",
+                tool_name,
+                "tool_update",
+                "tooling",
+                tool_progress_message(tool_name),
+                tool_text
+            )
+        end
+    end
+
+    -- Responses API style events (for future-compatible OpenAI streams)
+    if type(decoded.type) ~= "string" then
+        return nil
+    end
+
+    local event_type = decoded.type
+    local item = decoded.item
+    if type(item) ~= "table" then
+        item = decoded.output_item
+    end
+
+    if event_type == "response.output_item.added" and type(item) == "table" then
+        local item_type = item.type
+        if item_type == "web_search_call" then
+            local tool_text = pick_tool_detail_text(item)
+            return make_progress_event(
+                event_type,
+                item_type,
+                "web_search",
+                "tool_start",
+                "tooling",
+                tool_progress_message("web_search"),
+                tool_text
+            )
+        end
+    end
+
+    if event_type == "response.output_item.done" and type(item) == "table" then
+        local item_type = item.type
+        if item_type == "web_search_call" then
+            local tool_text = pick_tool_detail_text(item)
+            return make_progress_event(
+                event_type,
+                item_type,
+                "web_search",
+                "tool_result",
+                "tooling",
+                tool_result_message("web_search"),
+                tool_text
+            )
+        end
+    end
+
+    return nil
 end
 
 openai.parse_usage = function(raw_response)
@@ -350,6 +510,94 @@ anthropic.parse_sse_content = function(line)
     return ""
 end
 
+anthropic.parse_sse_progress_event = function(line)
+    line = strip_data_prefix(line)
+    if line == "" or line == "[DONE]" then
+        return nil
+    end
+
+    local decoded = safe_json_decode(line)
+    if not decoded or type(decoded) ~= "table" then
+        return nil
+    end
+
+    if decoded.type == "content_block_delta" and type(decoded.delta) == "table" then
+        local delta_type = decoded.delta.type
+        if delta_type == "thinking_delta" and type(decoded.delta.thinking) == "string" and decoded.delta.thinking ~= "" then
+            return make_progress_event(
+                "content_block_delta",
+                delta_type,
+                nil,
+                "reasoning",
+                "reasoning",
+                reasoning_progress_message(),
+                decoded.delta.thinking
+            )
+        end
+        if delta_type == "input_json_delta" and type(decoded.delta.partial_json) == "string" and decoded.delta.partial_json ~= "" then
+            return make_progress_event(
+                "content_block_delta",
+                delta_type,
+                nil,
+                "tool_update",
+                "tooling",
+                tool_progress_message(nil),
+                decoded.delta.partial_json
+            )
+        end
+    end
+
+    if decoded.type ~= "content_block_start" then
+        return nil
+    end
+
+    local block = decoded.content_block
+    if type(block) ~= "table" then
+        return nil
+    end
+
+    local block_type = block.type
+    if type(block_type) ~= "string" or block_type == "" then
+        return nil
+    end
+
+    local tool_name = type(block.name) == "string" and block.name or nil
+    local progress_text = nil
+    local message
+    local kind = "tool_update"
+    if block_type == "tool_use" or block_type == "server_tool_use" then
+        message = tool_progress_message(tool_name)
+        kind = "tool_start"
+        progress_text = pick_tool_detail_text(block.input)
+    elseif block_type == "web_search_tool_result" then
+        message = tool_result_message("web_search")
+        kind = "tool_result"
+    elseif block_type == "web_fetch_tool_result" then
+        message = tool_result_message("web_fetch")
+        kind = "tool_result"
+    elseif block_type == "thinking" then
+        message = reasoning_progress_message()
+        kind = "reasoning"
+        if type(block.thinking) == "string" and block.thinking ~= "" then
+            progress_text = block.thinking
+        end
+    elseif block_type:find("tool", 1, true) then
+        message = "Processing " .. block_type .. "..."
+    else
+        return nil
+    end
+
+    return make_progress_event(
+        "content_block_start",
+        block_type,
+        tool_name,
+        kind,
+        kind == "reasoning" and "reasoning" or "tooling",
+        message,
+        progress_text
+    )
+end
+
 anthropic.parse_usage = function(raw_response)
     local metrics = { input = nil, read = nil, creation = nil }
 
@@ -502,6 +750,76 @@ googleai.parse_sse_content = function(line)
     return ""
 end
 
+googleai.parse_sse_progress_event = function(line)
+    line = strip_data_prefix(line)
+    if line == "" or line == "[DONE]" then
+        return nil
+    end
+
+    -- Keep progress parsing lightweight and fragment-based only.
+    -- Do not decode full payload blobs here to avoid impacting main content flow.
+    local query = nil
+    local query_array = line:match('"webSearchQueries"%s*:%s*(%b[])')
+    if query_array then
+        for candidate in query_array:gmatch('"(.-)"') do
+            if candidate ~= "" then
+                query = candidate
+                break
+            end
+        end
+    end
+    if not query then
+        local escaped_query_array = line:match('\\"webSearchQueries\\"%s*:%s*(%b[])')
+        if escaped_query_array then
+            for candidate in escaped_query_array:gmatch('\\"(.-)\\"') do
+                if candidate ~= "" then
+                    query = candidate
+                    break
+                end
+            end
+        end
+    end
+    -- Intentionally surface the first non-empty query as a compact cue.
+    if query and query ~= "" then
+        return make_progress_event(
+            "grounding_metadata",
+            "web_search_queries",
+            "web_search",
+            "tool_update",
+            "tooling",
+            tool_progress_message("web_search"),
+            query
+        )
+    end
+
+    local uri = line:match('"uri"%s*:%s*"([^"]+)"') or line:match('\\"uri\\"%s*:%s*\\"([^"]+)\\"')
+    if uri and uri ~= "" then
+        return make_progress_event(
+            "grounding_metadata",
+            "grounding_uri",
+            "web_search",
+            "tool_update",
+            "tooling",
+            tool_result_message("web_search"),
+            uri
+        )
+    end
+
+    if line:match('"groundingMetadata"%s*:') or line:match('"searchEntryPoint"%s*:')
+        or line:match('\\"groundingMetadata\\"%s*:') or line:match('\\"searchEntryPoint\\"%s*:') then
+        return make_progress_event(
+            "grounding_metadata",
+            "grounding",
+            "web_search",
+            "tool_start",
+            "tooling",
+            tool_progress_message("web_search")
+        )
+    end
+
+    return nil
+end
+
 googleai.parse_usage = function(raw_response)
     local metrics = { input = nil, read = nil, creation = nil }
 
@@ -556,6 +874,7 @@ copilot.format_headers = function(secret, _model, _payload, endpoint)
 end
 
 copilot.parse_sse_content = openai.parse_sse_content
+copilot.parse_sse_progress_event = openai.parse_sse_progress_event
 copilot.parse_usage = openai.parse_usage
 
 -- Copilot needs a pre-query step to refresh its bearer token
@@ -659,6 +978,22 @@ cliproxyapi.parse_sse_content = function(line)
     return anthropic.parse_sse_content(line)
 end
 
+cliproxyapi.parse_sse_progress_event = function(line)
+    -- For anthropic_tools_route, progress events are anthropic SSE messages.
+    -- For OpenAI route/search model, progress events are OpenAI-style SSE messages.
+    -- Progress parsing is stateless and does not receive model context here;
+    -- intentionally use config-level strategy fallback.
+    local strategy = get_cliproxy_strategy(nil)
+    if strategy == "anthropic_tools_route" then
+        return anthropic.parse_sse_progress_event(line)
+    end
+    local event = openai.parse_sse_progress_event(line)
+    if event then
+        return event
+    end
+    return anthropic.parse_sse_progress_event(line)
+end
+
 cliproxyapi.parse_usage = function(raw_response)
     local metrics = openai.parse_usage(raw_response)
     if metrics.input ~= nil then
@@ -689,6 +1024,7 @@ azure.format_headers = function(secret, _model, payload, endpoint)
 end
 
 azure.parse_sse_content = openai.parse_sse_content
+azure.parse_sse_progress_event = openai.parse_sse_progress_event
 azure.parse_usage = openai.parse_usage
 
 --------------------------------------------------------------------------------
@@ -724,6 +1060,7 @@ ollama.format_headers = function(secret, _model, _payload, endpoint)
 end
 
 ollama.parse_sse_content = openai.parse_sse_content
+ollama.parse_sse_progress_event = openai.parse_sse_progress_event
 
 ollama.parse_usage = function(raw_response)
     local metrics = { input = nil, read = nil, creation = nil }

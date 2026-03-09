@@ -95,6 +95,19 @@ D._extract_sse_content = function(line, provider)
 	return adapter.parse_sse_content(line)
 end
 
+-- Extract progress/status metadata from a single SSE line.
+-- Returns nil if no progress event is available for the provider/line.
+---@param line string
+---@param provider string
+---@return table | nil
+D._extract_sse_progress_event = function(line, provider)
+	local adapter = providers.get(provider)
+	if type(adapter.parse_sse_progress_event) ~= "function" then
+		return nil
+	end
+	return adapter.parse_sse_progress_event(line)
+end
+
 -- LLM query
 ---@param buf number | nil # buffer number
 ---@param provider string # provider name
@@ -102,7 +115,8 @@ end
 ---@param handler function # response handler
 ---@param on_exit function | nil # optional on_exit handler
 ---@param callback function | nil # optional callback handler
-local query = function(buf, provider, payload, handler, on_exit, callback)
+---@param on_progress function | nil # optional progress/status handler
+local query = function(buf, provider, payload, handler, on_exit, callback, on_progress)
 	-- make sure handler is a function
 	if type(handler) ~= "function" then
 		logger.error(
@@ -177,6 +191,11 @@ local query = function(buf, provider, payload, handler, on_exit, callback)
 				-- Skip empty lines
 				if line == "" or line == nil then
 					goto continue
+				end
+
+				local progress_event = D._extract_sse_progress_event(line, qt.provider)
+				if progress_event and type(on_progress) == "function" then
+					on_progress(qid, progress_event)
 				end
 
 				-- Extract content using the provider adapter
@@ -340,17 +359,18 @@ end
 ---@param handler function # response handler
 ---@param on_exit function | nil # optional on_exit handler
 ---@param callback function | nil # optional callback handler
-D.query = function(buf, provider, payload, handler, on_exit, callback)
+---@param on_progress function | nil # optional progress/status handler
+D.query = function(buf, provider, payload, handler, on_exit, callback, on_progress)
 	local adapter = providers.get(provider)
 	if adapter.pre_query then
 		return vault.run_with_secret(provider, function()
 			adapter.pre_query(function()
-				query(buf, provider, payload, handler, on_exit, callback)
+				query(buf, provider, payload, handler, on_exit, callback, on_progress)
 			end)
 		end)
 	end
 	vault.run_with_secret(provider, function()
-		query(buf, provider, payload, handler, on_exit, callback)
+		query(buf, provider, payload, handler, on_exit, callback, on_progress)
 	end)
 end
 

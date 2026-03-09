@@ -11,3 +11,11 @@
 - Keep provider/model capability rules in `lua/parley/provider_params.lua` (or capability layer), not in `providers.lua` transport assembly code.
 - For any non-trivial or multi-step request, write the concrete execution plan into `tasks/todo.md` before further implementation or reporting.
 - After every code/config change, run `make lint` before handing back results; treat lint warnings as failures.
+
+## 2026-03-09
+- When a callback may run in Neovim fast-event context, never call direct `vim.api.nvim_*` buffer/window APIs there; gate with `vim.in_fast_event()` and defer UI updates via `vim.schedule`.
+- For OpenAI/Codex streams, `reasoning_content` can be the only early activity while tool-call events are absent; progress UI must parse and surface reasoning-state cues, not only tool events.
+- Normalize provider progress events to a shared shape (`kind`/`phase`/`message`) so UI logic stays provider-agnostic and avoids duplicated event-specific branching.
+- When users ask to show actual server-event text, propagate raw progress text as a dedicated field (e.g. `progress_event.text`) and render from that, instead of only showing coarse event type/label strings.
+- Apply the same raw-text rendering rule to tool progress events, not only reasoning events, so users can see tool query/url/input evolution in the status cue.
+- When a user reports behavior changed after `git stash`, treat that as a strong causality signal: compare exact stash diff and affected runtime paths before concluding the issue is only model-side randomness

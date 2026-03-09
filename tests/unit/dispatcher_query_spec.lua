@@ -26,6 +26,7 @@ describe("dispatcher.query internals", function()
     local handler_calls
     local on_exit_calls
     local callback_calls
+    local on_progress_calls
 
     before_each(function()
         -- Save originals
@@ -40,6 +41,7 @@ describe("dispatcher.query internals", function()
         handler_calls = {}
         on_exit_calls = {}
         callback_calls = {}
+        on_progress_calls = {}
 
         -- Mock vault functions
         vault.get_secret = function(provider)
@@ -98,6 +100,12 @@ describe("dispatcher.query internals", function()
     local function make_callback()
         return function(response)
             table.insert(callback_calls, response)
+        end
+    end
+
+    local function make_on_progress()
+        return function(_qid, event)
+            table.insert(on_progress_calls, event)
         end
     end
 
@@ -479,6 +487,112 @@ describe("dispatcher.query internals", function()
 
             -- Should not crash
             assert.is_true(success)
+        end)
+    end)
+
+    describe("Group G: progress callback", function()
+        it("G1: calls on_progress for anthropic tool_use events", function()
+            local handler = make_handler()
+            local on_progress = make_on_progress()
+            local payload = { model = "claude-3", messages = {} }
+
+            dispatcher.providers["anthropic"] = dispatcher.providers["anthropic"] or {}
+            dispatcher.providers["anthropic"].endpoint = "http://fake.anthropic.test/v1/messages"
+
+            dispatcher.query(nil, "anthropic", payload, handler, nil, nil, on_progress)
+
+            local tool_event = 'data: {"type":"content_block_start","content_block":{"type":"tool_use","name":"web_search"}}\n'
+            captured_out_reader(nil, tool_event)
+
+            assert.equals(1, #on_progress_calls)
+            assert.equals("content_block_start", on_progress_calls[1].type)
+            assert.equals("tool_use", on_progress_calls[1].block_type)
+            assert.equals("web_search", on_progress_calls[1].tool)
+            assert.equals("Searching web...", on_progress_calls[1].message)
+        end)
+
+        it("G2: does not call on_progress for plain text chunks", function()
+            local handler = make_handler()
+            local on_progress = make_on_progress()
+            local payload = { model = "gpt-4", messages = {} }
+
+            dispatcher.query(nil, "openai", payload, handler, nil, nil, on_progress)
+
+            local chunk = 'data: {"choices":[{"delta":{"content":"Hello"}}]}\n'
+            captured_out_reader(nil, chunk)
+
+            assert.equals(0, #on_progress_calls)
+        end)
+
+        it("G3: calls on_progress for openai chat-completions tool_calls events", function()
+            local handler = make_handler()
+            local on_progress = make_on_progress()
+            local payload = { model = "gpt-4", messages = {} }
+
+            dispatcher.query(nil, "openai", payload, handler, nil, nil, on_progress)
+
+            local tool_event = 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"web_search","arguments":"{"}}]}}]}\n'
+            captured_out_reader(nil, tool_event)
+
+            assert.equals(1, #on_progress_calls)
+            assert.equals("tool_call_delta", on_progress_calls[1].type)
+            assert.equals("tool_calls_delta", on_progress_calls[1].block_type)
+            assert.equals("web_search", on_progress_calls[1].tool)
+            assert.equals("Searching web...", on_progress_calls[1].message)
+            assert.equals("{", on_progress_calls[1].text)
+        end)
+
+        it("G4: calls on_progress for openai reasoning_content events", function()
+            local handler = make_handler()
+            local on_progress = make_on_progress()
+            local payload = { model = "gpt-4", messages = {} }
+
+            dispatcher.query(nil, "openai", payload, handler, nil, nil, on_progress)
+
+            local reasoning_event = 'data: {"choices":[{"delta":{"reasoning_content":"Thinking..."}}]}\n'
+            captured_out_reader(nil, reasoning_event)
+
+            assert.equals(1, #on_progress_calls)
+            assert.equals("reasoning_delta", on_progress_calls[1].type)
+            assert.equals("reasoning", on_progress_calls[1].kind)
+            assert.equals("reasoning", on_progress_calls[1].phase)
+            assert.equals("Reasoning...", on_progress_calls[1].message)
+            assert.equals("Thinking...", on_progress_calls[1].text)
+        end)
+
+        it("G5: calls on_progress for googleai grounding webSearchQueries fragments", function()
+            local handler = make_handler()
+            local on_progress = make_on_progress()
+            local payload = { model = "gemini-2.5-flash", messages = {} }
+
+            dispatcher.query(nil, "googleai", payload, handler, nil, nil, on_progress)
+
+            local grounding_event = 'data: "webSearchQueries": ["neovim gemini plugin update"]\n'
+            captured_out_reader(nil, grounding_event)
+
+            assert.equals(1, #on_progress_calls)
+            assert.equals("grounding_metadata", on_progress_calls[1].type)
+            assert.equals("web_search_queries", on_progress_calls[1].block_type)
+            assert.equals("web_search", on_progress_calls[1].tool)
+            assert.equals("tool_update", on_progress_calls[1].kind)
+            assert.equals("tooling", on_progress_calls[1].phase)
+            assert.equals("Searching web...", on_progress_calls[1].message)
+            assert.equals("neovim gemini plugin update", on_progress_calls[1].text)
+        end)
+
+        it("G6: picks first non-empty query for googleai webSearchQueries arrays", function()
+            local handler = make_handler()
+            local on_progress = make_on_progress()
+            local payload = { model = "gemini-2.5-flash", messages = {} }
+
+            dispatcher.query(nil, "googleai", payload, handler, nil, nil, on_progress)
+
+            local grounding_event = 'data: "webSearchQueries": ["", "second query"]\n'
+            captured_out_reader(nil, grounding_event)
+
+            assert.equals(1, #on_progress_calls)
+            assert.equals("web_search_queries", on_progress_calls[1].block_type)
+            assert.equals("second query", on_progress_calls[1].text)
         end)
     end)
 end)

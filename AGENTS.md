@@ -49,10 +49,11 @@
 ### 8. Pay attention to User Questions
 - When user poses question, answer the question as clearly and directly as possible
 - DO NOT proceed to change code, when user asks a question
+- Write new work items or changed work items in `tasks/todo.md`. Keep it updated as you receive additional instructions from user.
 
 ## Task Management
 1. **Note starting point**: save current state before making changes (e.g. git commit or branch)
-2. **Plan First**: Write plan to `tasks/todo.md` with checkable items, use numerical bullets for steps
+2. **Plan First**: Write plan to `tasks/todo.md` with checkable items
 3. **Update Spec**: Reflect	changes in `specs/` files as you go, not after the fact
 4. **Verify Plan**: Check in before starting implementation
 5. **Track Progress**: Mark items complete as you go
@@ -65,7 +66,7 @@
 - **No Laziness**: Find root causes. No temporary fixes. Senior developer standards.
 - **Minimal Impact**: Changes should only touch what’s necessary. Avoid introducing bugs.
 - **Keep It DRY**: Don’t Repeat Yourself. Refactor to reuse existing code when possible.
-- **Design for Testability**: Write code that’s easy to unit test. Add tests for new functionality. Organize tests in a clear hierarchical structure to test corresponding components or features. 
+- **Design for Testability**: Refactor code to be easily testable. Always write regression tests for bugs.
 
 ## Project Overview
 Parley.nvim is a Neovim plugin that provides a streamlined LLM chat interface with highlighting and navigation features. It supports multiple AI providers (OpenAI, Anthropic, Google AI, Ollama).
