@@ -281,6 +281,38 @@ describe("_extract_sse_progress_event", function()
         assert.equals("Running tool...", event.message)
         assert.equals('{"query":"lua', event.text)
     end)
+
+    it("returns googleai progress event for grounding webSearchQueries fragment", function()
+        local line = 'data: "webSearchQueries": ["latest gemini release notes"]'
+        local event = dispatcher._extract_sse_progress_event(line, "googleai")
+        assert.is_not_nil(event)
+        assert.equals("grounding_metadata", event.type)
+        assert.equals("web_search_queries", event.block_type)
+        assert.equals("web_search", event.tool)
+        assert.equals("tool_update", event.kind)
+        assert.equals("tooling", event.phase)
+        assert.equals("Searching web...", event.message)
+        assert.equals("latest gemini release notes", event.text)
+    end)
+
+    it("returns googleai progress event for escaped grounding uri fragment", function()
+        local line = 'data: \\"uri\\": \\"https://example.com/article\\"'
+        local event = dispatcher._extract_sse_progress_event(line, "googleai")
+        assert.is_not_nil(event)
+        assert.equals("grounding_metadata", event.type)
+        assert.equals("grounding_uri", event.block_type)
+        assert.equals("web_search", event.tool)
+        assert.equals("tool_update", event.kind)
+        assert.equals("tooling", event.phase)
+        assert.equals("Search results received...", event.message)
+        assert.equals("https://example.com/article", event.text)
+    end)
+
+    it("returns nil for googleai escaped full payload blob without explicit fragments", function()
+        local line = 'data: "[{\\"candidates\\":[{\\"content\\":{\\"parts\\":[{\\"text\\":\\"hello\\"}]}}]}]"'
+        local event = dispatcher._extract_sse_progress_event(line, "googleai")
+        assert.is_nil(event)
+    end)
 end)
 
 describe("_extract_sse_content: fixture-based smoke tests", function()

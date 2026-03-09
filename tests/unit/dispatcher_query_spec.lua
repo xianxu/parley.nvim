@@ -559,5 +559,25 @@ describe("dispatcher.query internals", function()
             assert.equals("Reasoning...", on_progress_calls[1].message)
             assert.equals("Thinking...", on_progress_calls[1].text)
         end)
+
+        it("G5: calls on_progress for googleai grounding webSearchQueries fragments", function()
+            local handler = make_handler()
+            local on_progress = make_on_progress()
+            local payload = { model = "gemini-2.5-flash", messages = {} }
+
+            dispatcher.query(nil, "googleai", payload, handler, nil, nil, on_progress)
+
+            local grounding_event = 'data: "webSearchQueries": ["neovim gemini plugin update"]\n'
+            captured_out_reader(nil, grounding_event)
+
+            assert.equals(1, #on_progress_calls)
+            assert.equals("grounding_metadata", on_progress_calls[1].type)
+            assert.equals("web_search_queries", on_progress_calls[1].block_type)
+            assert.equals("web_search", on_progress_calls[1].tool)
+            assert.equals("tool_update", on_progress_calls[1].kind)
+            assert.equals("tooling", on_progress_calls[1].phase)
+            assert.equals("Searching web...", on_progress_calls[1].message)
+            assert.equals("neovim gemini plugin update", on_progress_calls[1].text)
+        end)
     end)
 end)

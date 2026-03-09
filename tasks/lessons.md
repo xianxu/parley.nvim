@@ -18,3 +18,4 @@
 - Normalize provider progress events to a shared shape (`kind`/`phase`/`message`) so UI logic stays provider-agnostic and avoids duplicated event-specific branching.
 - When users ask to show actual server-event text, propagate raw progress text as a dedicated field (e.g. `progress_event.text`) and render from that, instead of only showing coarse event type/label strings.
 - Apply the same raw-text rendering rule to tool progress events, not only reasoning events, so users can see tool query/url/input evolution in the status cue.
+- When a user reports behavior changed after `git stash`, treat that as a strong causality signal: compare exact stash diff and affected runtime paths before concluding the issue is only model-side randomness

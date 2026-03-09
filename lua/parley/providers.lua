@@ -750,7 +750,53 @@ googleai.parse_sse_content = function(line)
     return ""
 end
 
-googleai.parse_sse_progress_event = function(_line)
+googleai.parse_sse_progress_event = function(line)
+    line = strip_data_prefix(line)
+    if line == "" or line == "[DONE]" then
+        return nil
+    end
+
+    -- Keep progress parsing lightweight and fragment-based only.
+    -- Do not decode full payload blobs here to avoid impacting main content flow.
+    local query = line:match('"webSearchQueries"%s*:%s*%[%s*"([^"]+)"')
+        or line:match('\\"webSearchQueries\\"%s*:%s*%[%s*\\"([^"]+)\\"')
+    if query and query ~= "" then
+        return make_progress_event(
+            "grounding_metadata",
+            "web_search_queries",
+            "web_search",
+            "tool_update",
+            "tooling",
+            tool_progress_message("web_search"),
+            query
+        )
+    end
+
+    local uri = line:match('"uri"%s*:%s*"([^"]+)"') or line:match('\\"uri\\"%s*:%s*\\"([^"]+)\\"')
+    if uri and uri ~= "" then
+        return make_progress_event(
+            "grounding_metadata",
+            "grounding_uri",
+            "web_search",
+            "tool_update",
+            "tooling",
+            tool_result_message("web_search"),
+            uri
+        )
+    end
+
+    if line:match('"groundingMetadata"%s*:') or line:match('"searchEntryPoint"%s*:')
+        or line:match('\\"groundingMetadata\\"%s*:') or line:match('\\"searchEntryPoint\\"%s*:') then
+        return make_progress_event(
+            "grounding_metadata",
+            "grounding",
+            "web_search",
+            "tool_start",
+            "tooling",
+            tool_progress_message("web_search")
+        )
+    end
+
     return nil
 end
 
