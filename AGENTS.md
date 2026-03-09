@@ -66,7 +66,7 @@
 - **No Laziness**: Find root causes. No temporary fixes. Senior developer standards.
 - **Minimal Impact**: Changes should only touch what’s necessary. Avoid introducing bugs.
 - **Keep It DRY**: Don’t Repeat Yourself. Refactor to reuse existing code when possible.
-- **Design for Testability**: Write code that’s easy to unit test. Add tests for new functionality. Organize tests in a clear hierarchical structure to test corresponding components or features. 
+- **Design for Testability**: Refactor code to be easily testable. Always write regression tests for bugs.
 
 ## Project Overview
 Parley.nvim is a Neovim plugin that provides a streamlined LLM chat interface with highlighting and navigation features. It supports multiple AI providers (OpenAI, Anthropic, Google AI, Ollama).

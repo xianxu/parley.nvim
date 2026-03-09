@@ -3637,10 +3637,11 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 			initial_progress_text = "🔎 " .. spinner_frames[spinner_frame_index] .. " " .. spinner_message
 		end
 
-		-- Write assistant prompt with extra newline, note later insertion point is response_line + 3
-		vim.api.nvim_buf_set_lines(
-			buf,
-			response_line,
+			-- Write assistant prompt with extra newline; progress line starts at
+			-- response_line + 3 and may shift by raw_request_offset.
+			vim.api.nvim_buf_set_lines(
+				buf,
+				response_line,
 			response_line,
 			false,
 			{ "", agent_prefix .. agent_suffix, "", initial_progress_text }
@@ -3758,14 +3759,21 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 		local base_handler = M.dispatcher.create_handler(buf, win, progress_line, true, "", function()
 			return is_follow_cursor_enabled(override_free_cursor)
 		end)
-		local first_content_seen = false
-		local response_handler = function(qid, chunk)
-			if not first_content_seen and type(chunk) == "string" and chunk ~= "" then
-				first_content_seen = true
+			local first_content_seen = false
+			local function request_clear_progress_indicator()
+				if vim.in_fast_event() then
+					vim.schedule(clear_progress_indicator)
+					return
+				end
 				clear_progress_indicator()
 			end
-			base_handler(qid, chunk)
-		end
+			local response_handler = function(qid, chunk)
+				if not first_content_seen and type(chunk) == "string" and chunk ~= "" then
+					first_content_seen = true
+					request_clear_progress_indicator()
+				end
+				base_handler(qid, chunk)
+			end
 
 		-- call the model and write response
 		M.dispatcher.query(
@@ -3778,7 +3786,7 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 				if not qt then
 					return
 				end
-				clear_progress_indicator()
+					request_clear_progress_indicator()
 
 				-- Only add a new user prompt at the end if we're not in the middle of the document
 				M.logger.debug("exchange_idx: " .. tostring(exchange_idx) .. " and #parsed_chat: " .. tostring(#parsed_chat))

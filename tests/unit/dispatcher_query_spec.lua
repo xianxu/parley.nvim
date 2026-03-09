@@ -579,5 +579,20 @@ describe("dispatcher.query internals", function()
             assert.equals("Searching web...", on_progress_calls[1].message)
             assert.equals("neovim gemini plugin update", on_progress_calls[1].text)
         end)
+
+        it("G6: picks first non-empty query for googleai webSearchQueries arrays", function()
+            local handler = make_handler()
+            local on_progress = make_on_progress()
+            local payload = { model = "gemini-2.5-flash", messages = {} }
+
+            dispatcher.query(nil, "googleai", payload, handler, nil, nil, on_progress)
+
+            local grounding_event = 'data: "webSearchQueries": ["", "second query"]\n'
+            captured_out_reader(nil, grounding_event)
+
+            assert.equals(1, #on_progress_calls)
+            assert.equals("web_search_queries", on_progress_calls[1].block_type)
+            assert.equals("second query", on_progress_calls[1].text)
+        end)
     end)
 end)

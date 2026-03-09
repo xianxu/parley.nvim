@@ -282,6 +282,21 @@ describe("_extract_sse_progress_event", function()
         assert.equals('{"query":"lua', event.text)
     end)
 
+    it("keeps expected cue behavior across anthropic tool_start to input_json_delta transition", function()
+        local start_line =
+            'data: {"type":"content_block_start","content_block":{"type":"tool_use","name":"web_search","input":{"query":"lua nvim events"}}}'
+        local delta_line = 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{\\"query\\":\\"lua"}}'
+        local start_event = dispatcher._extract_sse_progress_event(start_line, "anthropic")
+        local delta_event = dispatcher._extract_sse_progress_event(delta_line, "anthropic")
+        assert.is_not_nil(start_event)
+        assert.is_not_nil(delta_event)
+        assert.equals("tool_start", start_event.kind)
+        assert.equals("Searching web...", start_event.message)
+        assert.equals("tool_update", delta_event.kind)
+        assert.equals("Running tool...", delta_event.message)
+        assert.equals('{"query":"lua', delta_event.text)
+    end)
+
     it("returns googleai progress event for grounding webSearchQueries fragment", function()
         local line = 'data: "webSearchQueries": ["latest gemini release notes"]'
         local event = dispatcher._extract_sse_progress_event(line, "googleai")
@@ -292,6 +307,14 @@ describe("_extract_sse_progress_event", function()
         assert.equals("tool_update", event.kind)
         assert.equals("tooling", event.phase)
         assert.equals("Searching web...", event.message)
+        assert.equals("latest gemini release notes", event.text)
+    end)
+
+    it("returns googleai progress event for webSearchQueries with empty first item", function()
+        local line = 'data: "webSearchQueries": ["", "latest gemini release notes"]'
+        local event = dispatcher._extract_sse_progress_event(line, "googleai")
+        assert.is_not_nil(event)
+        assert.equals("web_search_queries", event.block_type)
         assert.equals("latest gemini release notes", event.text)
     end)
 

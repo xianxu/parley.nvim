@@ -758,8 +758,28 @@ googleai.parse_sse_progress_event = function(line)
 
     -- Keep progress parsing lightweight and fragment-based only.
     -- Do not decode full payload blobs here to avoid impacting main content flow.
-    local query = line:match('"webSearchQueries"%s*:%s*%[%s*"([^"]+)"')
-        or line:match('\\"webSearchQueries\\"%s*:%s*%[%s*\\"([^"]+)\\"')
+    local query = nil
+    local query_array = line:match('"webSearchQueries"%s*:%s*(%b[])')
+    if query_array then
+        for candidate in query_array:gmatch('"(.-)"') do
+            if candidate ~= "" then
+                query = candidate
+                break
+            end
+        end
+    end
+    if not query then
+        local escaped_query_array = line:match('\\"webSearchQueries\\"%s*:%s*(%b[])')
+        if escaped_query_array then
+            for candidate in escaped_query_array:gmatch('\\"(.-)\\"') do
+                if candidate ~= "" then
+                    query = candidate
+                    break
+                end
+            end
+        end
+    end
+    -- Intentionally surface the first non-empty query as a compact cue.
     if query and query ~= "" then
         return make_progress_event(
             "grounding_metadata",
@@ -961,6 +981,8 @@ end
 cliproxyapi.parse_sse_progress_event = function(line)
     -- For anthropic_tools_route, progress events are anthropic SSE messages.
     -- For OpenAI route/search model, progress events are OpenAI-style SSE messages.
+    -- Progress parsing is stateless and does not receive model context here;
+    -- intentionally use config-level strategy fallback.
     local strategy = get_cliproxy_strategy(nil)
     if strategy == "anthropic_tools_route" then
         return anthropic.parse_sse_progress_event(line)
