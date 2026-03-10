@@ -210,6 +210,7 @@ specs:
       - lua/parley/outline.lua
       - lua/parley/chat_parser.lua
     tests:
+      - tests/unit/outline_spec.lua
       - tests/unit/chat_finder_logic_spec.lua
       - tests/unit/parse_chat_spec.lua
 

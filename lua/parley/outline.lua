@@ -85,6 +85,104 @@ end
 M._is_in_code_block = is_in_code_block
 M._is_outline_item = is_outline_item
 
+local function find_nearest_outline_line(target_buf, lnum, config)
+  local line_count = vim.api.nvim_buf_line_count(target_buf)
+  local safe_lnum = math.min(lnum, line_count)
+  local all_lines = vim.api.nvim_buf_get_lines(target_buf, 0, -1, false)
+  local code_block_memo = build_code_block_memo(target_buf)
+  local is_valid_line = is_outline_item(target_buf, safe_lnum, config, code_block_memo, all_lines)
+
+  if is_valid_line then
+    return safe_lnum
+  end
+
+  for offset = 1, 5 do
+    local previous_lnum = safe_lnum - offset
+    if previous_lnum > 0 then
+      local previous_is_item = is_outline_item(target_buf, previous_lnum, config, code_block_memo, all_lines)
+      if previous_is_item then
+        return previous_lnum
+      end
+    end
+
+    local next_lnum = safe_lnum + offset
+    if next_lnum <= line_count then
+      local next_is_item = is_outline_item(target_buf, next_lnum, config, code_block_memo, all_lines)
+      if next_is_item then
+        return next_lnum
+      end
+    end
+  end
+
+  return safe_lnum
+end
+
+local function focus_buffer_line(target_buf, target_name, preferred_windows, lnum)
+  for _, win in ipairs(preferred_windows or {}) do
+    if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == target_buf then
+      vim.api.nvim_set_current_win(win)
+      vim.api.nvim_win_set_cursor(win, { lnum, 0 })
+      vim.cmd("normal! zz")
+      return true
+    end
+  end
+
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == target_buf then
+      vim.api.nvim_set_current_win(win)
+      vim.api.nvim_win_set_cursor(win, { lnum, 0 })
+      vim.cmd("normal! zz")
+      return true
+    end
+  end
+
+  if vim.fn.filereadable(target_name) == 1 then
+    vim.cmd("split " .. vim.fn.fnameescape(target_name))
+    vim.api.nvim_win_set_cursor(0, { lnum, 0 })
+    vim.cmd("normal! zz")
+    return true
+  end
+
+  if vim.api.nvim_buf_is_valid(target_buf) then
+    vim.cmd("sbuffer " .. target_buf)
+    vim.api.nvim_win_set_cursor(0, { lnum, 0 })
+    vim.cmd("normal! zz")
+    return true
+  end
+
+  return false
+end
+
+local function jump_to_outline_location(selection, config)
+  local target_buf = selection.bufnr
+  local target_name = selection.name
+
+  if not vim.api.nvim_buf_is_valid(target_buf) then
+    vim.notify("Buffer " .. target_buf .. " is no longer valid - cannot navigate", vim.log.levels.ERROR)
+    return false
+  end
+
+  local safe_lnum = find_nearest_outline_line(target_buf, selection.lnum or 1, config)
+  local focused = focus_buffer_line(target_buf, target_name, selection.windows, safe_lnum)
+  if not focused then
+    vim.notify("Could not navigate to outline selection", vim.log.levels.WARN)
+    return false
+  end
+
+  local ns_id = vim.api.nvim_create_namespace("ParleyOutline")
+  vim.api.nvim_buf_clear_namespace(target_buf, ns_id, 0, -1)
+  vim.api.nvim_buf_add_highlight(target_buf, ns_id, "DiffAdd", safe_lnum - 1, 0, -1)
+  vim.defer_fn(function()
+    if vim.api.nvim_buf_is_valid(target_buf) then
+      vim.api.nvim_buf_clear_namespace(target_buf, ns_id, 0, -1)
+    end
+  end, 1000)
+
+  return true, safe_lnum
+end
+
+M._jump_to_outline_location = jump_to_outline_location
+
 -- Create a Telescope picker to navigate questions and headings in the current buffer
 function M.question_picker(config)
   -- Check if telescope is available
@@ -106,11 +204,6 @@ function M.question_picker(config)
     name = buf_name,
     filetype = vim.api.nvim_buf_get_option(current_bufnr, 'filetype'),
   }
-
-  -- Log buffer information for debugging
-  vim.schedule(function()
-    vim.notify("Opening outline for buffer " .. buffer_info.bufnr .. " (" .. buffer_info.name .. ")", vim.log.levels.DEBUG)
-  end)
 
   -- Ensure buffer is saved to disk to reflect latest changes
   local modified = vim.api.nvim_buf_get_option(current_bufnr, 'modified')
@@ -170,11 +263,6 @@ function M.question_picker(config)
           return
         end
 
-        -- Log navigation intent
-        vim.schedule(function()
-          vim.notify("Will navigate to line " .. lnum .. " in buffer " .. target_buf, vim.log.levels.DEBUG)
-        end)
-
         -- Store the windows that have this buffer open
         local windows = {}
         for _, win in ipairs(vim.api.nvim_list_wins()) do
@@ -188,114 +276,12 @@ function M.question_picker(config)
 
         -- Schedule the cursor movement to ensure telescope cleanup is done
         vim.schedule(function()
-          -- Double-check the buffer is still valid
-          if not vim.api.nvim_buf_is_valid(target_buf) then
-            vim.notify("Target buffer " .. target_buf .. " is no longer valid after Telescope closed", vim.log.levels.ERROR)
-            return
-          end
-
-		  -- TODO: this looks overly complex.
-
-          -- Verify the selected line number is valid
-          local line_count = vim.api.nvim_buf_line_count(target_buf)
-          local safe_lnum = math.min(lnum, line_count)
-
-          -- Log current state
-          vim.notify("Navigating to line " .. safe_lnum .. " in buffer " .. target_name, vim.log.levels.DEBUG)
-
-          -- Create a memo table for code block state calculations
-          local line_memo = {}
-
-          -- Check if the line is a valid outline item
-          local is_valid_line, _, _ = is_outline_item(target_buf, safe_lnum, config, line_memo)
-
-          -- If the line doesn't match what we expect, try to find the closest match
-          if not is_valid_line then
-            -- Search for neighboring lines that might be headers or questions
-            for offset = -5, 5 do
-              if offset ~= 0 then
-                local test_lnum = safe_lnum + offset
-                if test_lnum > 0 and test_lnum <= line_count then
-                  -- Check if this line is a valid outline item
-                  local is_item, _, _ = is_outline_item(target_buf, test_lnum, config, line_memo)
-                  if is_item then
-                    safe_lnum = test_lnum
-                    break
-                  end
-                end
-              end
-            end
-          end
-
-          -- Create a safety check for the target buffer name using the buffer name
-          local current_buf_name = vim.api.nvim_buf_get_name(target_buf)
-          if current_buf_name ~= target_name then
-            vim.notify("Warning: Buffer name mismatch. Expected: " .. target_name .. " Got: " .. current_buf_name, vim.log.levels.WARN)
-          end
-
-          -- Find a valid window containing our target buffer
-          local target_win = nil
-          for _, win in ipairs(windows) do
-            if vim.api.nvim_win_is_valid(win) and
-               vim.api.nvim_win_get_buf(win) == target_buf then
-              target_win = win
-              break
-            end
-          end
-
-          -- If we found a valid window, set the cursor there
-          if target_win then
-            vim.notify("Using existing window for navigation", vim.log.levels.DEBUG)
-            vim.api.nvim_set_current_win(target_win)
-            vim.api.nvim_win_set_cursor(target_win, { safe_lnum, 0 })
-
-            -- Center the cursor in view
-            vim.cmd("normal! zz")
-          else
-            -- Fall back to trying to find the buffer in any window
-            local found = false
-            for _, win in ipairs(vim.api.nvim_list_wins()) do
-              if vim.api.nvim_win_is_valid(win) and
-                 vim.api.nvim_win_get_buf(win) == target_buf then
-                vim.notify("Found buffer in different window", vim.log.levels.DEBUG)
-                vim.api.nvim_set_current_win(win)
-                vim.api.nvim_win_set_cursor(win, { safe_lnum, 0 })
-                vim.cmd("normal! zz")
-                found = true
-                break
-              end
-            end
-
-            -- If buffer isn't visible in any window, try to show it specifically by file path
-            if not found then
-              vim.notify("Buffer not visible in any window, opening by path: " .. target_name, vim.log.levels.DEBUG)
-
-              -- Use the specific file path rather than buffer number
-              if vim.fn.filereadable(target_name) == 1 then
-                vim.cmd("split " .. vim.fn.fnameescape(target_name))
-                vim.api.nvim_win_set_cursor(0, { safe_lnum, 0 })
-                vim.cmd("normal! zz")
-              else
-                vim.notify("Warning: Could not open file - " .. target_name, vim.log.levels.WARN)
-
-                -- Fall back to buffer number if file isn't readable
-                if vim.api.nvim_buf_is_valid(target_buf) then
-                  vim.cmd("sbuffer " .. target_buf)
-                  vim.api.nvim_win_set_cursor(0, { safe_lnum, 0 })
-                  vim.cmd("normal! zz")
-                end
-              end
-            end
-          end
-          -- Visual highlight after jump (1 second)
-          do
-            local ns_id = vim.api.nvim_create_namespace("ParleyOutline")
-            vim.api.nvim_buf_clear_namespace(target_buf, ns_id, 0, -1)
-            vim.api.nvim_buf_add_highlight(target_buf, ns_id, "DiffAdd", safe_lnum - 1, 0, -1)
-            vim.defer_fn(function()
-              vim.api.nvim_buf_clear_namespace(target_buf, ns_id, 0, -1)
-            end, 1000)
-          end
+          jump_to_outline_location({
+            bufnr = target_buf,
+            name = target_name,
+            windows = windows,
+            lnum = lnum,
+          }, config)
         end)
       end)
 
