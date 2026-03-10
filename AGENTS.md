@@ -10,7 +10,7 @@
 - Read specs/index.md to get a sense of the features
 - Work for you is in `tasks/issue.md`, you MUST make plan in `tasks/todo.md`
 - ALWAYS keep `tasks/todo.md` up to date, including its review section
-- When making the plan, add checkpoints user should manually verify before you proceed to next step
+- When making the plan, add task for manual verification steps
 
 ### 2. Subagent Strategy
 - Use subagents liberally to keep main context window clean

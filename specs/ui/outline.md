@@ -4,13 +4,14 @@
 Parley provides an outline navigator to easily navigate through chat turns and Markdown headings.
 
 ## Command
-- `:ParleyOutline` (`<C-g>t`): Opens a Telescope picker with headings and conversation turns.
+- `:ParleyOutline` (`<C-g>t`): Opens a floating picker with headings and conversation turns.
 
 ## Logic
 - Identifies user questions (`💬:`) and assistant answers (`🤖:`).
 - Identifies Markdown headings (`#`, `##`, etc.) used for organization.
-- Items are listed in the order they appear in the buffer.
+- Items are listed most-recent-first.
 
-## Telescope Integration
-- Selecting an item in the picker jumps the cursor to that line in the buffer.
-- Preview MUST show the content around the selected heading or turn.
+## Picker Interaction
+- Selecting an item jumps the cursor to that line in the buffer with a brief highlight flash.
+- Single click selects an item; double-click or Enter confirms and navigates.
+- Use native `/` to search within the outline list.

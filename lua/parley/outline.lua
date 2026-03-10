@@ -3,15 +3,6 @@
 
 local M = {}
 
--- Reverse the order of elements in a table
-local function reverse(tbl)
-  local new_tbl = {}
-  for i = #tbl, 1, -1 do
-    table.insert(new_tbl, tbl[i])
-  end
-  return new_tbl
-end
-
 -- Build a code block state table for all lines in the buffer with a single bulk read.
 -- Returns a table mapping 1-based line numbers to boolean (true = inside code block).
 local function build_code_block_memo(bufnr)
@@ -183,27 +174,28 @@ end
 
 M._jump_to_outline_location = jump_to_outline_location
 
--- Create a Telescope picker to navigate questions and headings in the current buffer
-function M.question_picker(config)
-  -- Check if telescope is available
-  local ok, _ = pcall(require, "telescope")
-  if not ok then
-    vim.notify("Telescope is required for this feature", vim.log.levels.ERROR)
-    return
+-- Build the list of picker items from a buffer. Exposed for testing.
+-- Returns items in document order: { display: string, value: { lnum: number } }
+function M._build_picker_items(bufnr, config)
+  local all_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local code_block_memo = build_code_block_memo(bufnr)
+  local items = {}
+  for i = 1, #all_lines do
+    local is_item, _, formatted_line = is_outline_item(bufnr, i, config, code_block_memo, all_lines)
+    if is_item then
+      table.insert(items, { display = formatted_line, value = { lnum = i } })
+    end
   end
+  return items
+end
 
-  local pickers = require("telescope.pickers")
-  local finders = require("telescope.finders")
-  -- Get the current buffer and filename - important to track exactly which buffer we're working with
+-- Create a floating picker to navigate questions and headings in the current buffer
+function M.question_picker(config)
+  local float_picker = require("parley.float_picker")
+
+  -- Get the current buffer and filename
   local current_bufnr = vim.api.nvim_get_current_buf()
   local buf_name = vim.api.nvim_buf_get_name(current_bufnr)
-
-  -- Store important buffer info for later use
-  local buffer_info = {
-    bufnr = current_bufnr,
-    name = buf_name,
-    filetype = vim.api.nvim_buf_get_option(current_bufnr, 'filetype'),
-  }
 
   -- Ensure buffer is saved to disk to reflect latest changes
   local modified = vim.api.nvim_buf_get_option(current_bufnr, 'modified')
@@ -211,83 +203,33 @@ function M.question_picker(config)
     vim.cmd('silent! write')
   end
 
-  -- Create lines table with fresh buffer content
-  local lines = {}
-
-  -- Get configured user prefix
-  -- Bulk read all buffer lines once for both code block detection and outline scanning
-  local all_lines = vim.api.nvim_buf_get_lines(current_bufnr, 0, -1, false)
-  local code_block_memo = build_code_block_memo(current_bufnr)
-
-  -- Scan the buffer for headers and questions
-  for i = 1, #all_lines do
-    local is_item, item_type, formatted_line = is_outline_item(current_bufnr, i, config, code_block_memo, all_lines)
-
-    if is_item then
-      table.insert(lines, { line = formatted_line, lnum = i, type = item_type })
+  -- Capture windows showing the target buffer before the picker opens
+  local target_windows = {}
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    if vim.api.nvim_win_get_buf(win) == current_bufnr then
+      table.insert(target_windows, win)
     end
   end
 
-  -- Create the picker
-  pickers.new({}, {
-    prompt_title = "💬 Q&A Outline",
-    finder = finders.new_table {
-      results = reverse(lines),
-      entry_maker = function(entry)
-        return {
-          value = entry,
-          display = entry.line,
-          ordinal = entry.line,
-          lnum = entry.lnum,
-        }
-      end,
-    },
-    sorter = require("telescope.sorters").get_fuzzy_file(),
-    attach_mappings = function(_, map)
-      local actions = require("telescope.actions")
-      local action_state = require("telescope.actions.state")
+  local items = M._build_picker_items(current_bufnr, config)
 
-      map("i", "<CR>", function(prompt_bufnr)
-        -- Store current state before closing
-        local entry = action_state.get_selected_entry()
-        local lnum = entry.value and entry.value.lnum or 1
-
-        -- Pass explicit buffer details rather than relying on implicit buffer references
-        local target_buf = buffer_info.bufnr
-        local target_name = buffer_info.name
-
-        -- Verify buffer is valid before proceeding
-        if not vim.api.nvim_buf_is_valid(target_buf) then
-          vim.notify("Buffer " .. target_buf .. " is no longer valid - cannot navigate", vim.log.levels.ERROR)
-          actions.close(prompt_bufnr)
-          return
-        end
-
-        -- Store the windows that have this buffer open
-        local windows = {}
-        for _, win in ipairs(vim.api.nvim_list_wins()) do
-          if vim.api.nvim_win_get_buf(win) == target_buf then
-            table.insert(windows, win)
-          end
-        end
-
-        -- Close the prompt
-        actions.close(prompt_bufnr)
-
-        -- Schedule the cursor movement to ensure telescope cleanup is done
-        vim.schedule(function()
-          jump_to_outline_location({
-            bufnr = target_buf,
-            name = target_name,
-            windows = windows,
-            lnum = lnum,
-          }, config)
-        end)
-      end)
-
-      return true
+  float_picker.open({
+    title = "💬 Q&A Outline",
+    items = items,
+    on_select = function(item)
+      local entry = item.value
+      if not vim.api.nvim_buf_is_valid(current_bufnr) then
+        vim.notify("Buffer is no longer valid - cannot navigate", vim.log.levels.ERROR)
+        return
+      end
+      jump_to_outline_location({
+        bufnr = current_bufnr,
+        name = buf_name,
+        windows = target_windows,
+        lnum = entry.lnum,
+      }, config)
     end,
-  }):find()
+  })
 end
 
 return M

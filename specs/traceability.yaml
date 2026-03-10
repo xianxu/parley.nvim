@@ -211,15 +211,19 @@ specs:
       - lua/parley/chat_parser.lua
     tests:
       - tests/unit/outline_spec.lua
+      - tests/unit/picker_items_spec.lua
       - tests/unit/chat_finder_logic_spec.lua
       - tests/unit/parse_chat_spec.lua
 
   ui/pickers:
     code:
+      - lua/parley/float_picker.lua
       - lua/parley/agent_picker.lua
       - lua/parley/system_prompt_picker.lua
       - lua/parley/test_agent_picker.lua
     tests:
+      - tests/unit/float_picker_spec.lua
+      - tests/unit/picker_items_spec.lua
       - tests/unit/chat_finder_logic_spec.lua
       - tests/unit/pure_functions_spec.lua
 

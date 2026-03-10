@@ -6,21 +6,69 @@
 -- Keyboard: j/k / Up/Down navigate, <CR> confirms, <Esc>/q cancels.
 -- Use native '/' to search/filter within the item list.
 -- Extra key mappings: opts.mappings = { { key=..., fn=function(item, close_fn) end } }
+--
+-- Sizing rules
+--   Desired width  = max(title width + 4, longest item display + 2), or opts.width if given.
+--   Desired height = number of items, or opts.height if given.
+--   Actual size    = desired size clamped to (screen - margins), never below MIN_W / MIN_H.
+--   Margins        = MARGIN_H cols on each side, MARGIN_V rows on top and bottom.
+--   VimResized     = window is repositioned and resized whenever the terminal resizes.
 
 local M = {}
+
+local MIN_W   = 20  -- minimum picker width  (chars)
+local MIN_H   = 1   -- minimum picker height (lines)
+local MARGIN_H = 4  -- cols kept clear on each horizontal edge
+local MARGIN_V = 3  -- rows kept clear on each vertical edge
+
+-- Compute actual window width, height, row, col from desired dimensions and screen size.
+local function compute_layout(desired_w, desired_h, ui)
+    local screen_w = ui.width
+    local screen_h = ui.height
+    local win_w = math.max(MIN_W, math.min(desired_w, screen_w - MARGIN_H * 2))
+    local win_h = math.max(MIN_H, math.min(desired_h, screen_h - MARGIN_V * 2))
+    local row   = math.floor((screen_h - win_h) / 2)
+    local col   = math.floor((screen_w - win_w) / 2)
+    return win_w, win_h, row, col
+end
+
+-- Truncate a display string to fit within max_w display columns, appending "…".
+local function truncate(text, max_w)
+    if vim.fn.strdisplaywidth(text) <= max_w then
+        return text
+    end
+    local result = ""
+    local w = 0
+    local n = 0
+    local char_count = vim.fn.strchars(text)
+    while n < char_count do
+        local char = vim.fn.strcharpart(text, n, 1)
+        local cw   = vim.fn.strdisplaywidth(char)
+        if w + cw + 1 > max_w then   -- +1 reserved for "…"
+            result = result .. "…"
+            break
+        end
+        result = result .. char
+        w = w + cw
+        n = n + 1
+    end
+    return result
+end
 
 --- Open a floating picker.
 --- @param opts table:
 ---   title      string   – window title
 ---   items      table    – list of { display: string, value: any }
+---   width      number   – desired window width  (optional, content-driven by default)
+---   height     number   – desired window height (optional, #items by default)
 ---   on_select  function(item) – called on confirmation
 ---   on_cancel  function()    – called on cancel/dismiss (optional)
 ---   mappings   table    – list of { key: string, fn: function(item, close_fn) }
 function M.open(opts)
-    local items = opts.items or {}
-    local title = opts.title or "Select"
-    local on_select = opts.on_select or function() end
-    local on_cancel = opts.on_cancel or function() end
+    local items         = opts.items or {}
+    local title         = opts.title or "Select"
+    local on_select     = opts.on_select or function() end
+    local on_cancel     = opts.on_cancel or function() end
     local extra_mappings = opts.mappings or {}
 
     if #items == 0 then
@@ -28,86 +76,61 @@ function M.open(opts)
         return
     end
 
-    -- Compute window dimensions
-    local max_w = vim.fn.strdisplaywidth(title) + 4
-    for _, item in ipairs(items) do
-        local w = vim.fn.strdisplaywidth(item.display) + 2
-        if w > max_w then
-            max_w = w
+    -- Desired dimensions (content-driven unless caller overrides)
+    local desired_w = opts.width or (function()
+        local w = vim.fn.strdisplaywidth(title) + 4
+        for _, item in ipairs(items) do
+            local iw = vim.fn.strdisplaywidth(item.display) + 2
+            if iw > w then w = iw end
         end
-    end
+        return w
+    end)()
+    local desired_h = opts.height or #items
 
+    -- Initial layout
     local ui = vim.api.nvim_list_uis()[1] or { width = 80, height = 24 }
-    local win_w = math.min(max_w, math.floor(ui.width * 0.85))
-    local win_h = math.min(#items, math.floor(ui.height * 0.75))
-    local row = math.floor((ui.height - win_h) / 2)
-    local col = math.floor((ui.width - win_w) / 2)
+    local win_w, win_h, row, col = compute_layout(desired_w, desired_h, ui)
 
-    -- Scratch buffer
+    -- Scratch buffer – populate with (potentially truncated) display lines
     local buf = vim.api.nvim_create_buf(false, true)
     vim.bo[buf].bufhidden = "wipe"
-    vim.bo[buf].buftype = "nofile"
+    vim.bo[buf].buftype   = "nofile"
 
-    -- Truncate display text to fit window width (leave 1 char margin)
-    local trunc_w = win_w - 1
     local lines = {}
     for _, item in ipairs(items) do
-        local text = " " .. item.display
-        if vim.fn.strdisplaywidth(text) > trunc_w then
-            -- Truncate with ellipsis using strcharpart for correct UTF-8 iteration
-            local truncated = ""
-            local w = 0
-            local n = 0
-            local char_count = vim.fn.strchars(text)
-            while n < char_count do
-                local char = vim.fn.strcharpart(text, n, 1)
-                local cw = vim.fn.strdisplaywidth(char)
-                if w + cw + 1 > trunc_w then
-                    truncated = truncated .. "…"
-                    break
-                end
-                truncated = truncated .. char
-                w = w + cw
-                n = n + 1
-            end
-            text = truncated
-        end
-        table.insert(lines, text)
+        table.insert(lines, truncate(" " .. item.display, win_w - 1))
     end
-
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
     vim.bo[buf].modifiable = false
 
-    -- Build window config; title requires nvim 0.9+
+    -- Build initial window config; title field requires nvim 0.9+
     local win_cfg = {
         relative = "editor",
-        row = row,
-        col = col,
-        width = win_w,
-        height = win_h,
-        style = "minimal",
-        border = "rounded",
+        row      = row,
+        col      = col,
+        width    = win_w,
+        height   = win_h,
+        style    = "minimal",
+        border   = "rounded",
     }
     if vim.fn.has("nvim-0.9") == 1 then
-        win_cfg.title = " " .. title .. " "
+        win_cfg.title     = " " .. title .. " "
         win_cfg.title_pos = "center"
     end
 
     local win = vim.api.nvim_open_win(buf, true, win_cfg)
-    vim.wo[win].cursorline = true
-    vim.wo[win].wrap = false
-    vim.wo[win].scrolloff = 3
-    vim.wo[win].number = false
+    vim.wo[win].cursorline     = true
+    vim.wo[win].wrap           = false
+    vim.wo[win].scrolloff      = 3
+    vim.wo[win].number         = false
     vim.wo[win].relativenumber = false
-    vim.wo[win].signcolumn = "no"
+    vim.wo[win].signcolumn     = "no"
 
     -- Closed-state guard to prevent double-close / double-callback
     local closed = false
 
     local function close_win()
-        if closed then
-            return
-        end
+        if closed then return end
         closed = true
         if vim.api.nvim_win_is_valid(win) then
             vim.api.nvim_win_close(win, true)
@@ -115,9 +138,7 @@ function M.open(opts)
     end
 
     local function get_item()
-        if not vim.api.nvim_win_is_valid(win) then
-            return nil
-        end
+        if not vim.api.nvim_win_is_valid(win) then return nil end
         local idx = vim.api.nvim_win_get_cursor(win)[1]
         return items[idx]
     end
@@ -126,9 +147,7 @@ function M.open(opts)
         local item = get_item()
         close_win()
         if item then
-            vim.schedule(function()
-                on_select(item)
-            end)
+            vim.schedule(function() on_select(item) end)
         end
     end
 
@@ -145,11 +164,10 @@ function M.open(opts)
     nmap("<CR>", confirm)
     nmap("<Esc>", cancel)
     nmap("q", cancel)
-    -- Single click: cursor moves natively; we just suppress any default action
-    -- that might close the window, so the pick remains open.
+    -- Single click: cursor moves natively; suppress any action that might close the window.
     nmap("<LeftMouse>", function()
-        -- Move cursor to click position and stay open
-        vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<LeftMouse>", true, false, true), "n", false)
+        vim.api.nvim_feedkeys(
+            vim.api.nvim_replace_termcodes("<LeftMouse>", true, false, true), "n", false)
     end)
     -- Double-click confirms
     nmap("<2-LeftMouse>", confirm)
@@ -157,17 +175,34 @@ function M.open(opts)
     -- Extra caller-supplied mappings
     for _, m in ipairs(extra_mappings) do
         local key = m.key
-        local fn = m.fn
+        local fn  = m.fn
         nmap(key, function()
             local item = get_item()
             fn(item, close_win)
         end)
     end
 
+    -- Reposition and resize when the terminal window is resized
+    vim.api.nvim_create_autocmd("VimResized", {
+        buffer   = buf,
+        callback = function()
+            if not vim.api.nvim_win_is_valid(win) then return end
+            local new_ui = vim.api.nvim_list_uis()[1] or { width = 80, height = 24 }
+            local nw, nh, nr, nc = compute_layout(desired_w, desired_h, new_ui)
+            vim.api.nvim_win_set_config(win, {
+                relative = "editor",
+                row      = nr,
+                col      = nc,
+                width    = nw,
+                height   = nh,
+            })
+        end,
+    })
+
     -- Dismiss on WinLeave (user clicked outside or used another command)
     vim.api.nvim_create_autocmd("WinLeave", {
-        buffer = buf,
-        once = true,
+        buffer   = buf,
+        once     = true,
         callback = function()
             vim.schedule(function()
                 if not closed then

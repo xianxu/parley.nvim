@@ -11,6 +11,12 @@ local function find_float_win()
     return nil
 end
 
+-- Helper: return {width, height, row, col} for the float window config.
+local function float_layout(win)
+    local cfg = vim.api.nvim_win_get_config(win)
+    return { width = cfg.width, height = cfg.height, row = cfg.row, col = cfg.col }
+end
+
 -- Helper: close any open float windows between tests.
 local function close_floats()
     for _, win in ipairs(vim.api.nvim_list_wins()) do
@@ -201,6 +207,127 @@ describe("float_picker", function()
 
             assert.is_true(closed_via_mapping)
             assert.is_nil(find_float_win(), "window should be closed by mapping close_fn")
+        end)
+    end)
+
+    -- -------------------------------------------------------------------------
+    -- Sizing and layout
+    -- -------------------------------------------------------------------------
+    describe("sizing and layout", function()
+        local ui
+
+        before_each(function()
+            ui = vim.api.nvim_list_uis()[1] or { width = 80, height = 24 }
+        end)
+
+        it("height equals number of items when fewer than screen allows", function()
+            float_picker.open({
+                title = "Test",
+                items = {
+                    { display = "a", value = 1 },
+                    { display = "b", value = 2 },
+                    { display = "c", value = 3 },
+                },
+                on_select = function() end,
+            })
+            local win = find_float_win()
+            assert.is_not_nil(win)
+            assert.equals(3, float_layout(win).height)
+        end)
+
+        it("opts.height overrides the item-count default", function()
+            float_picker.open({
+                title  = "Test",
+                height = 2,
+                items  = {
+                    { display = "a", value = 1 },
+                    { display = "b", value = 2 },
+                    { display = "c", value = 3 },
+                    { display = "d", value = 4 },
+                },
+                on_select = function() end,
+            })
+            local win = find_float_win()
+            assert.is_not_nil(win)
+            assert.equals(2, float_layout(win).height)
+        end)
+
+        it("opts.width overrides the content-driven default", function()
+            float_picker.open({
+                title = "Test",
+                width = 40,
+                items = { { display = "short", value = 1 } },
+                on_select = function() end,
+            })
+            local win = find_float_win()
+            assert.is_not_nil(win)
+            assert.equals(40, float_layout(win).width)
+        end)
+
+        it("width is capped so the window stays within screen bounds", function()
+            -- Request a window wider than the screen
+            float_picker.open({
+                title = "Test",
+                width = 9999,
+                items = { { display = "item", value = 1 } },
+                on_select = function() end,
+            })
+            local win = find_float_win()
+            assert.is_not_nil(win)
+            -- Must fit inside the screen with at least MARGIN_H (4) on each side
+            assert.is_true(float_layout(win).width <= ui.width - 8,
+                "width should leave at least 4-col margin on each side")
+        end)
+
+        it("height is capped so the window stays within screen bounds", function()
+            -- Request more items than the screen can show
+            local many_items = {}
+            for i = 1, 999 do
+                table.insert(many_items, { display = "item " .. i, value = i })
+            end
+            float_picker.open({
+                title = "Test",
+                items = many_items,
+                on_select = function() end,
+            })
+            local win = find_float_win()
+            assert.is_not_nil(win)
+            -- Must fit inside the screen with at least MARGIN_V (3) on each side
+            assert.is_true(float_layout(win).height <= ui.height - 6,
+                "height should leave at least 3-row margin on each side")
+        end)
+
+        it("window is centered horizontally and vertically", function()
+            float_picker.open({
+                title = "Test",
+                items = { { display = "item", value = 1 } },
+                on_select = function() end,
+            })
+            local win = find_float_win()
+            assert.is_not_nil(win)
+            local layout = float_layout(win)
+            -- col should be approximately (screen_w - win_w) / 2
+            local expected_col = math.floor((ui.width  - layout.width)  / 2)
+            local expected_row = math.floor((ui.height - layout.height) / 2)
+            assert.equals(expected_col, layout.col)
+            assert.equals(expected_row, layout.row)
+        end)
+
+        it("VimResized repositions the window without closing it", function()
+            float_picker.open({
+                title = "Test",
+                items = { { display = "item", value = 1 } },
+                on_select = function() end,
+            })
+            local win = find_float_win()
+            assert.is_not_nil(win)
+
+            -- Fire VimResized while the picker is open
+            vim.api.nvim_command("doautocmd VimResized")
+
+            -- Window should still be valid
+            assert.is_true(vim.api.nvim_win_is_valid(win),
+                "window should remain open after VimResized")
         end)
     end)
 end)
