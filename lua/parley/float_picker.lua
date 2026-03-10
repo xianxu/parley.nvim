@@ -128,10 +128,15 @@ function M.open(opts)
 
     -- Closed-state guard to prevent double-close / double-callback
     local closed = false
+    local resize_autocmd_id = nil
 
     local function close_win()
         if closed then return end
         closed = true
+        if resize_autocmd_id then
+            pcall(vim.api.nvim_del_autocmd, resize_autocmd_id)
+            resize_autocmd_id = nil
+        end
         if vim.api.nvim_win_is_valid(win) then
             vim.api.nvim_win_close(win, true)
         end
@@ -182,11 +187,19 @@ function M.open(opts)
         end)
     end
 
-    -- Reposition and resize when the terminal window is resized
-    vim.api.nvim_create_autocmd("VimResized", {
-        buffer   = buf,
+    -- Reposition and resize when the terminal window is resized.
+    -- Must be a global autocmd (no buffer= filter) because VimResized is a
+    -- global event and does not fire for buffer-local autocmds.
+    resize_autocmd_id = vim.api.nvim_create_autocmd("VimResized", {
         callback = function()
-            if not vim.api.nvim_win_is_valid(win) then return end
+            if not vim.api.nvim_win_is_valid(win) then
+                -- Window already gone; clean up this autocmd
+                if resize_autocmd_id then
+                    pcall(vim.api.nvim_del_autocmd, resize_autocmd_id)
+                    resize_autocmd_id = nil
+                end
+                return
+            end
             local new_ui = vim.api.nvim_list_uis()[1] or { width = 80, height = 24 }
             local nw, nh, nr, nc = compute_layout(desired_w, desired_h, new_ui)
             vim.api.nvim_win_set_config(win, {
