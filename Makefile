@@ -1,4 +1,4 @@
-.PHONY: test test-spec test-changed lint fixtures model-check model-checker test-clean-env worktree issue fetch pull-request merge
+.PHONY: test test-spec test-changed lint fixtures model-check model-checker test-clean-env worktree issue fetch push pull-request merge
 
 # Worktree management targets
 # Capture extra argument after worktree (e.g. make worktree feature-x)
@@ -81,6 +81,31 @@ fetch:
 		| jq -r '"# Issue #\(.number): \(.title)\n\n**State:** \(.state)\n**Labels:** \([.labels[].name] | join(", "))\n**Assignees:** \([.assignees[].login] | join(", "))\n\n## Description\n\n\(.body)"' \
 		>> tasks/issue.md && \
 	echo "Issue #$(FETCH_NUM) appended to tasks/issue.md"
+
+# Push to remote and close any issues listed in tasks/issue.md.
+# Works from main — the direct-on-main workflow counterpart to merge.
+# Usage: make push
+push:
+	@uncommitted=$$(git status --porcelain); \
+	if [ -n "$$uncommitted" ]; then \
+		echo "  [x] Uncommitted changes found — commit first"; \
+		git status --short; \
+		exit 1; \
+	fi; \
+	git push || exit 1; \
+	repo=$$(git remote get-url origin | sed 's|.*github.com[:/]\(.*\)\.git|\1|;s|.*github.com[:/]\(.*\)$$|\1|'); \
+	if [ -f tasks/issue.md ]; then \
+		nums=$$(grep -oE '^# Issue #[0-9]+' tasks/issue.md | grep -oE '[0-9]+'); \
+		if [ -n "$$nums" ]; then \
+			for num in $$nums; do \
+				echo "==> Closing issue #$$num..."; \
+				gh issue close "$$num" --repo "$$repo" --comment "Fixed on main."; \
+			done; \
+			echo "==> Clearing tasks/issue.md..."; \
+			: > tasks/issue.md; \
+		fi; \
+	fi; \
+	echo "Done."
 
 # Create a GitHub pull request from the current worktree branch to main.
 # Reads tasks/issue.md for "# Issue #NN" lines and adds "Fixes #NN, ..." to the PR body.
