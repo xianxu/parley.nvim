@@ -121,6 +121,22 @@ function M._fuzzy_score(query, haystack)
     return total
 end
 
+function M._visual_row_for_index(idx, filtered_count, total_rows)
+    if filtered_count <= 0 then
+        return total_rows
+    end
+    return total_rows - math.max(1, math.min(idx, filtered_count)) + 1
+end
+
+function M._index_for_visual_row(visual_row, filtered_count, total_rows)
+    if filtered_count <= 0 then
+        return 1
+    end
+    local first_row = math.max(1, total_rows - filtered_count + 1)
+    local clamped = math.max(first_row, math.min(visual_row, total_rows))
+    return math.max(1, math.min(total_rows - clamped + 1, filtered_count))
+end
+
 -- ---------------------------------------------------------------------------
 -- Layout helpers
 -- ---------------------------------------------------------------------------
@@ -347,18 +363,11 @@ function M.open(opts)
     end
 
     local function visual_row_for_index(idx)
-        if #filtered == 0 then
-            return results_row_count()
-        end
-        return results_row_count() - math.max(1, math.min(idx, #filtered)) + 1
+        return M._visual_row_for_index(idx, #filtered, results_row_count())
     end
 
     local function index_for_visual_row(visual_row)
-        if #filtered == 0 then
-            return 1
-        end
-        local clamped = math.max(first_content_row(), math.min(visual_row, results_row_count()))
-        return (#filtered - clamped) + 1
+        return M._index_for_visual_row(visual_row, #filtered, results_row_count())
     end
 
     local function is_content_row(visual_row)
@@ -406,6 +415,26 @@ function M.open(opts)
                 vim.api.nvim_win_call(results_win, function()
                     vim.fn.winrestview(view)
                 end)
+            elseif selection_opts.ensure_visible then
+                local view = vim.api.nvim_win_call(results_win, vim.fn.winsaveview)
+                local total_rows = results_row_count()
+                local win_rows = vim.api.nvim_win_get_height(results_win)
+                local max_topline = math.max(1, total_rows - win_rows + 1)
+                local topline = view.topline
+                local bottomline = topline + win_rows - 1
+
+                if target_row < topline then
+                    topline = target_row
+                elseif target_row > bottomline then
+                    topline = target_row - win_rows + 1
+                end
+
+                topline = math.max(1, math.min(topline, max_topline))
+
+                vim.api.nvim_win_set_cursor(results_win, { target_row, 0 })
+                vim.api.nvim_win_call(results_win, function()
+                    vim.fn.winrestview({ topline = topline, leftcol = view.leftcol or 0 })
+                end)
             else
                 local total_rows = results_row_count()
                 local win_rows = vim.api.nvim_win_get_height(results_win)
@@ -426,7 +455,7 @@ function M.open(opts)
         end
         local current_row = visual_row_for_index(sel_idx)
         local next_row = math.max(first_content_row(), math.min(current_row + delta_rows, results_row_count()))
-        set_selection(index_for_visual_row(next_row))
+        set_selection(index_for_visual_row(next_row), { ensure_visible = true })
     end
 
     local function confirm()

@@ -308,6 +308,14 @@ describe("float_picker", function()
             assert.equals("ctrl_d_val", mapped_item.value)
         end)
 
+        it("maps short bottom-padded visual rows back to logical indices", function()
+            assert.equals(5, float_picker._visual_row_for_index(1, 2, 5))
+            assert.equals(4, float_picker._visual_row_for_index(2, 2, 5))
+            assert.equals(1, float_picker._index_for_visual_row(5, 2, 5))
+            assert.equals(2, float_picker._index_for_visual_row(4, 2, 5))
+            assert.equals(2, float_picker._index_for_visual_row(3, 2, 5))
+        end)
+
     end)
 
     -- -------------------------------------------------------------------------
