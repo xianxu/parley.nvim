@@ -209,10 +209,12 @@ function M.open(opts)
     vim.fn.prompt_setprompt(prompt_buf, PROMPT_PREFIX)
 
     local filtered = vim.deepcopy(items)
-    local sel_idx = 1
+    local initial_index = math.max(1, tonumber(opts.initial_index) or 1)
+    local sel_idx = initial_index
     local query_text = ""
     local query_cursor = 0
     local closed = false
+    local external_ui_active = false
     local resize_autocmd_id = nil
     local on_key_ns = vim.api.nvim_create_namespace("float_picker_on_key")
 
@@ -440,6 +442,14 @@ function M.open(opts)
         vim.schedule(on_cancel)
     end
 
+    local function suspend_for_external_ui()
+        external_ui_active = true
+    end
+
+    local function resume_after_external_ui()
+        external_ui_active = false
+    end
+
     local function highlight_matches(query)
         vim.api.nvim_buf_clear_namespace(results_buf, MATCH_NS, 0, -1)
         if not query or query == "" then return end
@@ -481,6 +491,9 @@ function M.open(opts)
         refresh_results()
         if reset_selection == false then
             set_selection(sel_idx)
+        elseif initial_index and query == "" then
+            set_selection(initial_index)
+            initial_index = nil
         else
             set_selection(1)
         end
@@ -488,7 +501,14 @@ function M.open(opts)
     end
 
     local function invoke_extra_mapping(fn)
-        fn(get_selected_item(), close_all)
+        local context = {
+            suspend_for_external_ui = suspend_for_external_ui,
+            resume_after_external_ui = resume_after_external_ui,
+            focus_prompt = focus_prompt,
+            skip_focus_restore = false,
+        }
+        fn(get_selected_item(), close_all, context)
+        return context
     end
 
     render_prompt()
@@ -580,14 +600,22 @@ function M.open(opts)
         focus_prompt()
     end)
 
-    local extra_key_handlers = {}
+    local function run_extra_mapping(fn)
+        local context = invoke_extra_mapping(fn)
+        if not closed and not context.skip_focus_restore and not external_ui_active then
+            focus_prompt()
+        end
+    end
+
     for _, m in ipairs(extra_mappings) do
-        extra_key_handlers[keycode(m.key)] = m.fn
+        imap_p(m.key, function()
+            run_extra_mapping(m.fn)
+        end)
         nmap_p(m.key, function()
-            invoke_extra_mapping(m.fn)
+            run_extra_mapping(m.fn)
         end)
         nmap_r(m.key, function()
-            invoke_extra_mapping(m.fn)
+            run_extra_mapping(m.fn)
         end)
     end
 
@@ -637,18 +665,6 @@ function M.open(opts)
         end
 
         if cur_win ~= prompt_win then
-            return
-        end
-
-        local extra_fn = extra_key_handlers[key]
-        if extra_fn then
-            vim.schedule(function()
-                if closed then return end
-                invoke_extra_mapping(extra_fn)
-                if not closed then
-                    focus_prompt()
-                end
-            end)
             return
         end
 
@@ -713,6 +729,9 @@ function M.open(opts)
     local function on_win_leave()
         vim.schedule(function()
             if closed then return end
+            if external_ui_active then
+                return
+            end
             local cur = vim.api.nvim_get_current_win()
             if cur == results_win or cur == prompt_win then
                 return

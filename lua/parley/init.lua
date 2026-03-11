@@ -4472,12 +4472,69 @@ M._chat_finder = {
 	show_all = false, -- Track whether we're showing all files or just recent ones
 	active_window = nil, -- Track the active window that initiated ChatFinder
 	source_win = nil, -- Track the source window where ChatFinder was invoked
+	initial_index = nil, -- Optional selection index to restore when reopening the picker
 	insert_mode = false, -- Whether we're in insert mode (inserting chat references)
 	insert_buf = nil, -- The buffer to insert into
 	insert_line = nil, -- The line to insert at
 	insert_col = nil, -- The column to insert at (for insert mode)
 	insert_normal_mode = nil, -- Whether we're inserting in normal mode or insert mode
 }
+
+M._reopen_chat_finder = function(source_win, selection_index)
+	vim.defer_fn(function()
+		M._chat_finder.opened = false
+		M._chat_finder.source_win = source_win
+		M._chat_finder.initial_index = selection_index
+		M.cmd.ChatFinder()
+	end, 100)
+end
+
+M._handle_chat_finder_delete_response = function(input, item_value, selected_index, items_count, source_win, close_fn, context)
+	if input and input:lower() == "y" then
+		M.helpers.delete_file(item_value)
+		if close_fn then
+			close_fn()
+		end
+		local next_index = math.min(selected_index, math.max(1, items_count - 1))
+		M._reopen_chat_finder(source_win, next_index)
+		return
+	end
+
+	if context then
+		context.resume_after_external_ui()
+		vim.schedule(function()
+			if context.focus_prompt then
+				context.focus_prompt()
+			end
+		end)
+		vim.defer_fn(function()
+			if context.focus_prompt then
+				context.focus_prompt()
+			end
+		end, 10)
+		return
+	end
+
+	M._reopen_chat_finder(source_win, selected_index)
+end
+
+M._prompt_chat_finder_delete_confirmation = function(item_value, selected_index, items_count, source_win, close_fn, context)
+	if source_win and vim.api.nvim_win_is_valid(source_win) then
+		vim.api.nvim_set_current_win(source_win)
+	end
+
+	vim.ui.input({ prompt = "Delete " .. item_value .. "? [y/N] " }, function(input)
+		M._handle_chat_finder_delete_response(
+			input,
+			item_value,
+			selected_index,
+			items_count,
+			source_win,
+			close_fn,
+			context
+		)
+	end)
+end
 
 M.cmd.ChatFinder = function(_options)
 	if M._chat_finder.opened then
@@ -4623,10 +4680,16 @@ M.cmd.ChatFinder = function(_options)
 		end
 
 		local source_win = M._chat_finder.source_win
+		if not (source_win and vim.api.nvim_win_is_valid(source_win)) then
+			source_win = vim.api.nvim_get_current_win()
+			M._chat_finder.source_win = source_win
+			M.logger.debug("ChatFinder captured fallback source_win: " .. source_win)
+		end
 
 		M.float_picker.open({
 			title = prompt_title,
 			items = items,
+			initial_index = M._chat_finder.initial_index,
 			on_select = function(item)
 				local file_path = item.value
 				local display = item.display
@@ -4707,27 +4770,36 @@ M.cmd.ChatFinder = function(_options)
 			end,
 			on_cancel = function()
 				M._chat_finder.opened = false
+				M._chat_finder.initial_index = nil
 			end,
 			mappings = {
 				-- Delete selected chat file
 				{
 					key = delete_shortcut.shortcut,
-					fn = function(item, close_fn)
+					fn = function(item, close_fn, context)
 						if not item then
 							return
 						end
-						vim.ui.input({ prompt = "Delete " .. item.value .. "? [y/N] " }, function(input)
-							if input and input:lower() == "y" then
-								M.helpers.delete_file(item.value)
-								close_fn()
-								-- Reopen finder to show updated list
-								vim.defer_fn(function()
-									M._chat_finder.opened = false
-									M._chat_finder.source_win = source_win
-									M.cmd.ChatFinder()
-								end, 100)
+						local selected_index = 1
+						for idx, picker_item in ipairs(items) do
+							if picker_item.value == item.value then
+								selected_index = idx
+								break
 							end
-						end)
+						end
+
+						context.skip_focus_restore = true
+						context.suspend_for_external_ui()
+						vim.defer_fn(function()
+							M._prompt_chat_finder_delete_confirmation(
+								item.value,
+								selected_index,
+								#items,
+								source_win,
+								close_fn,
+								context
+							)
+						end, 20)
 					end,
 				},
 				-- Toggle recent/all filter
@@ -4753,9 +4825,10 @@ M.cmd.ChatFinder = function(_options)
 					end,
 				},
 			},
-		})
+	})
 	end
 
+	M._chat_finder.initial_index = nil
 	M._chat_finder.opened = false
 end
 

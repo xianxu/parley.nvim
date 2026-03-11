@@ -63,6 +63,7 @@ The picker closes if focus moves to any window that is neither the results nor t
 - **Extra mappings** (insert mode in prompt):
     - Toggle key (`<C-g>a` by default): Toggle between recent and all files.
     - Delete key (`<C-d>` by default): Delete the selected chat file.
+      The confirmation prompt is opened from the source window after the picker closes. If it is cancelled with `Esc` or answered negatively, ChatFinder reopens instead of being dismissed.
     - `<C-g>?`: Open Parley key-bindings help.
 - Files are sorted by modification date, newest first.
 

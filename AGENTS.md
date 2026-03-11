@@ -3,18 +3,17 @@
 ## Workflow Orchestration
 
 ### 1. Plan Mode By Default
-- Enter plan mode for ANY non-trivial task (3+ steps or architectural decisions or change more than 2 files, 100 lines)
-- If something goes sideways (user rejected your change more than twice), STOP and re-plan immediately: don’t keep pushing
+- Enter plan mode for ANY non-trivial task (3+ steps, architectural decisions, change more than 2 files, 100 lines)
+- If something goes sideways, STOP and re-plan immediately: don’t keep pushing
 - Use plan mode for verification steps, not just building
 - Work for you is in `tasks/issue.md`, you MUST make plan in `tasks/todo.md`
-- Keep specs in specs/ updated
-- Keep `tasks/todo.md` up to date, including its review section
-- Plan for manual verification steps if necessary, but automate verification as much as possible, add temporary logging if needed to verify code path triggered before calling it done
+- Keep specs in specs/*, `tasks/todo.md` up to date during your work
+- Plan for manual verification steps if necessary, but automate verification as much as possible, add temporary tracing if needed to verify code path triggered before calling it done
+- If your fix to a bug had no effect, STOP and work with user to trace to identify root cause. Clean up trace when you are done with the bug.
 
 ### 2. Subagent Strategy
-- Use subagents liberally to keep main context window clean
+- Use subagents to keep main context window clean
 - Offload research, exploration, and parallel analysis to subagents
-- For complex problems, throw more compute at it via subagents
 - One task per subagent for focused execution
 
 ### 3. Self-Improvement Loop
