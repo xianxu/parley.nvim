@@ -1,4 +1,4 @@
-.PHONY: test test-spec test-changed lint fixtures model-check model-checker test-clean-env worktree issue pull-request merge
+.PHONY: test test-spec test-changed lint fixtures model-check model-checker test-clean-env worktree issue fetch pull-request merge
 
 # Worktree management targets
 # Capture extra argument after worktree (e.g. make worktree feature-x)
@@ -14,6 +14,14 @@ ifeq (issue,$(firstword $(MAKECMDGOALS)))
   ISSUE_NUM := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
   ifneq ($(ISSUE_NUM),)
     $(eval $(ISSUE_NUM):;@:)
+  endif
+endif
+
+# Capture issue number after fetch (e.g. make fetch 42)
+ifeq (fetch,$(firstword $(MAKECMDGOALS)))
+  FETCH_NUM := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
+  ifneq ($(FETCH_NUM),)
+    $(eval $(FETCH_NUM):;@:)
   endif
 endif
 
@@ -58,6 +66,21 @@ issue:
 	echo "Worktree created at $$wt_path on branch $$branch"; \
 	echo "Issue #$(ISSUE_NUM) saved to $$wt_path/tasks/issue.md"; \
 	echo "Run: cd $$wt_path"
+
+# Fetch a GitHub issue and append it to tasks/issue.md in the current directory.
+# Usage: make fetch <number>
+fetch:
+	@if [ -z "$(FETCH_NUM)" ]; then \
+		echo "Usage: make fetch <number>"; \
+		exit 1; \
+	fi
+	@repo=$$(git remote get-url origin | sed 's|.*github.com[:/]\(.*\)\.git|\1|;s|.*github.com[:/]\(.*\)$$|\1|'); \
+	mkdir -p tasks && \
+	echo "" >> tasks/issue.md && \
+	gh issue view "$(FETCH_NUM)" --repo "$$repo" --json number,title,body,labels,assignees,state \
+		| jq -r '"# Issue #\(.number): \(.title)\n\n**State:** \(.state)\n**Labels:** \([.labels[].name] | join(", "))\n**Assignees:** \([.assignees[].login] | join(", "))\n\n## Description\n\n\(.body)"' \
+		>> tasks/issue.md && \
+	echo "Issue #$(FETCH_NUM) appended to tasks/issue.md"
 
 # Create a GitHub pull request from the current worktree branch to main.
 # Must be run from inside a worktree (not from main).
