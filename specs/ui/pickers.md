@@ -11,6 +11,8 @@ Each picker opens two stacked floating windows:
 
 Both windows share the same width and are centered as a unit. Actual dimensions are clamped to the screen with `MARGIN_H = 4` cols and `MARGIN_V = 3` rows on each side. The prompt window adds a fixed overhead of 5 rows (two sets of borders + 1 content row) to the total vertical height.
 
+Items are displayed bottom-anchored relative to the prompt: the logical first item is shown on the bottom row nearest the prompt, later items extend upward, and any unused rows in a taller results window remain as blank padding above the visible items.
+
 `VimResized` repositions both windows (cleaned up on close).
 
 ## Fuzzy Search
@@ -34,8 +36,8 @@ Typing in the prompt filters and re-ranks the results live on every keystroke:
 |-----|--------|
 | `<CR>` | Confirm selected item |
 | `<Esc>` / `<C-c>` | Cancel and close |
-| `<C-j>` / `<Down>` | Move selection down |
-| `<C-k>` / `<Up>` | Move selection up |
+| `<C-j>` / `<Down>` | Move selection visually downward toward the prompt |
+| `<C-k>` / `<Up>` | Move selection visually upward away from the prompt |
 | Extra mappings such as `<C-d>` / `<C-a>` | Routed through picker-local key handling so control keys work inside the prompt buffer without being treated as text edits |
 
 ## Sizing

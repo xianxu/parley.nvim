@@ -87,7 +87,7 @@ describe("float_picker", function()
             assert.equals(3, #lines)
         end)
 
-        it("preserves item order (top-to-bottom)", function()
+        it("renders logical item order from bottom to top", function()
             float_picker.open({
                 title = "Test",
                 items = {
@@ -99,9 +99,49 @@ describe("float_picker", function()
             })
             local win = find_float_win()
             local lines = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(win), 0, -1, false)
-            assert.truthy(lines[1]:find("first",  1, true))
+            assert.truthy(lines[1]:find("third",  1, true))
             assert.truthy(lines[2]:find("second", 1, true))
-            assert.truthy(lines[3]:find("third",  1, true))
+            assert.truthy(lines[3]:find("first",  1, true))
+        end)
+
+        it("selects the first logical item on the bottom row by default", function()
+            float_picker.open({
+                title = "Test",
+                items = {
+                    { display = "first",  value = 1 },
+                    { display = "second", value = 2 },
+                    { display = "third",  value = 3 },
+                },
+                on_select = function() end,
+            })
+
+            local win = find_float_win()
+            local cursor = vim.api.nvim_win_get_cursor(win)
+            assert.equals(3, cursor[1])
+        end)
+
+        it("keeps short filtered lists pinned to the bottom of a taller window", function()
+            float_picker.open({
+                title = "Test",
+                height = 5,
+                items = {
+                    { display = "alpha", value = 1 },
+                    { display = "beta",  value = 2 },
+                },
+                on_select = function() end,
+            })
+
+            local win = find_float_win()
+            local lines = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(win), 0, -1, false)
+            local cursor = vim.api.nvim_win_get_cursor(win)
+
+            assert.equals(5, #lines)
+            assert.equals("", lines[1])
+            assert.equals("", lines[2])
+            assert.equals("", lines[3])
+            assert.truthy(lines[4]:find("beta", 1, true))
+            assert.truthy(lines[5]:find("alpha", 1, true))
+            assert.equals(5, cursor[1])
         end)
 
         it("does not open a window when items list is empty", function()

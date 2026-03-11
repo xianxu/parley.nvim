@@ -314,14 +314,52 @@ function M.open(opts)
     local function refresh_results()
         vim.bo[results_buf].modifiable = true
         local lines = {}
-        for _, item in ipairs(filtered) do
-            table.insert(lines, truncate(" " .. item.display, win_w - 1))
+        local total_rows = vim.api.nvim_win_is_valid(results_win) and vim.api.nvim_win_get_height(results_win) or win_h
+        for i = #filtered, 1, -1 do
+            table.insert(lines, truncate(" " .. filtered[i].display, win_w - 1))
         end
         if #lines == 0 then
             lines = { "  (no matches)" }
         end
+        while #lines < total_rows do
+            table.insert(lines, 1, "")
+        end
         vim.api.nvim_buf_set_lines(results_buf, 0, -1, false, lines)
         vim.bo[results_buf].modifiable = false
+    end
+
+    local function results_row_count()
+        if vim.api.nvim_win_is_valid(results_win) then
+            return vim.api.nvim_win_get_height(results_win)
+        end
+        return win_h
+    end
+
+    local function first_content_row()
+        local content_count = math.max(1, #filtered)
+        return math.max(1, results_row_count() - content_count + 1)
+    end
+
+    local function visual_row_for_index(idx)
+        if #filtered == 0 then
+            return results_row_count()
+        end
+        return results_row_count() - math.max(1, math.min(idx, #filtered)) + 1
+    end
+
+    local function index_for_visual_row(visual_row)
+        if #filtered == 0 then
+            return 1
+        end
+        local clamped = math.max(first_content_row(), math.min(visual_row, results_row_count()))
+        return (#filtered - clamped) + 1
+    end
+
+    local function is_content_row(visual_row)
+        if #filtered == 0 then
+            return visual_row == results_row_count()
+        end
+        return visual_row >= first_content_row() and visual_row <= results_row_count()
     end
 
     local function close_all()
@@ -352,8 +390,17 @@ function M.open(opts)
     local function set_selection(idx)
         sel_idx = math.max(1, math.min(idx, math.max(1, #filtered)))
         if vim.api.nvim_win_is_valid(results_win) then
-            vim.api.nvim_win_set_cursor(results_win, { sel_idx, 0 })
+            vim.api.nvim_win_set_cursor(results_win, { visual_row_for_index(sel_idx), 0 })
         end
+    end
+
+    local function move_selection(delta_rows)
+        if #filtered == 0 then
+            return
+        end
+        local current_row = visual_row_for_index(sel_idx)
+        local next_row = math.max(first_content_row(), math.min(current_row + delta_rows, results_row_count()))
+        set_selection(index_for_visual_row(next_row))
     end
 
     local function confirm()
@@ -373,15 +420,16 @@ function M.open(opts)
         vim.api.nvim_buf_clear_namespace(results_buf, MATCH_NS, 0, -1)
         if not query or query == "" then return end
         local buf_lines = vim.api.nvim_buf_get_lines(results_buf, 0, -1, false)
-        for i, _ in ipairs(filtered) do
-            local line = buf_lines[i]
+        for idx, _ in ipairs(filtered) do
+            local visual_row = visual_row_for_index(idx)
+            local line = buf_lines[visual_row]
             if not line then break end
             for word in query:gmatch("%S+") do
                 local positions = match_positions(word, line)
                 if positions then
                     for _, pos in ipairs(positions) do
                         vim.api.nvim_buf_add_highlight(
-                            results_buf, MATCH_NS, "Search", i - 1, pos - 1, pos)
+                            results_buf, MATCH_NS, "Search", visual_row - 1, pos - 1, pos)
                     end
                 end
             end
@@ -450,23 +498,23 @@ function M.open(opts)
 
     local function prompt_click()
         local pos = vim.fn.getmousepos()
-        if pos.winid == results_win and pos.line >= 1 then
-            set_selection(pos.line)
+        if pos.winid == results_win and is_content_row(pos.line) then
+            set_selection(index_for_visual_row(pos.line))
             focus_prompt()
         end
     end
 
     local function prompt_dblclick()
         local pos = vim.fn.getmousepos()
-        if pos.winid == results_win and pos.line >= 1 then
-            set_selection(pos.line)
+        if pos.winid == results_win and is_content_row(pos.line) then
+            set_selection(index_for_visual_row(pos.line))
             confirm()
         end
     end
 
     nmap_r("<LeftMouse>", function()
         if vim.api.nvim_win_is_valid(results_win) then
-            sel_idx = vim.api.nvim_win_get_cursor(results_win)[1]
+            sel_idx = index_for_visual_row(vim.api.nvim_win_get_cursor(results_win)[1])
         end
         vim.schedule(function()
             focus_prompt()
@@ -476,7 +524,7 @@ function M.open(opts)
     nmap_r("<LeftRelease>", function() end)
     nmap_r("<2-LeftMouse>", function()
         if vim.api.nvim_win_is_valid(results_win) then
-            sel_idx = vim.api.nvim_win_get_cursor(results_win)[1]
+            sel_idx = index_for_visual_row(vim.api.nvim_win_get_cursor(results_win)[1])
         end
         confirm()
     end)
@@ -492,11 +540,11 @@ function M.open(opts)
     imap_p("<LeftMouse>", prompt_click)
     imap_p("<2-LeftMouse>", prompt_dblclick)
     imap_p("<Up>", function()
-        set_selection(sel_idx - 1)
+        move_selection(-1)
         focus_prompt()
     end)
     imap_p("<Down>", function()
-        set_selection(sel_idx + 1)
+        move_selection(1)
         focus_prompt()
     end)
     imap_p("<Left>", function()
@@ -531,11 +579,11 @@ function M.open(opts)
             cancel()
         end,
         ["<C-j>"] = function()
-            set_selection(sel_idx + 1)
+            move_selection(1)
             focus_prompt()
         end,
         ["<C-k>"] = function()
-            set_selection(sel_idx - 1)
+            move_selection(-1)
             focus_prompt()
         end,
     }
@@ -547,17 +595,17 @@ function M.open(opts)
         local mouse = vim.fn.getmousepos()
         local translated = key_name(key)
         if cur_win == prompt_win and mouse.winid == results_win then
-            if translated == "<LeftMouse>" then
+            if translated == "<LeftMouse>" and is_content_row(mouse.line) then
                 vim.schedule(function()
                     if closed then return end
-                    set_selection(mouse.line)
+                    set_selection(index_for_visual_row(mouse.line))
                     focus_prompt()
                 end)
                 return
-            elseif translated == "<2-LeftMouse>" then
+            elseif translated == "<2-LeftMouse>" and is_content_row(mouse.line) then
                 vim.schedule(function()
                     if closed then return end
-                    set_selection(mouse.line)
+                    set_selection(index_for_visual_row(mouse.line))
                     confirm()
                 end)
                 return
