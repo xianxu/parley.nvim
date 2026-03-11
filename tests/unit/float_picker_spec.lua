@@ -1,7 +1,24 @@
 local float_picker = require("parley.float_picker")
 
--- Helper: find the current floating window (relative ~= ""), or nil.
+-- PROMPT_OVERHEAD: 5 rows consumed by prompt window borders + content.
+-- Must match the constant in float_picker.lua.
+local PROMPT_OVERHEAD = 5
+
+-- Helper: find the results window (the float that is NOT currently focused).
+-- After M.open(), the prompt window is focused, so results is the other float.
 local function find_float_win()
+    local cur = vim.api.nvim_get_current_win()
+    for _, win in ipairs(vim.api.nvim_list_wins()) do
+        local ok, cfg = pcall(vim.api.nvim_win_get_config, win)
+        if ok and cfg.relative ~= "" and win ~= cur then
+            return win
+        end
+    end
+    return nil
+end
+
+-- Helper: find ANY floating window (used to verify all floats are closed).
+local function find_any_float_win()
     for _, win in ipairs(vim.api.nvim_list_wins()) do
         local ok, cfg = pcall(vim.api.nvim_win_get_config, win)
         if ok and cfg.relative ~= "" then
@@ -51,7 +68,7 @@ describe("float_picker", function()
                 items = { { display = "item", value = 1 } },
                 on_select = function() end,
             })
-            assert.is_not_nil(find_float_win(), "expected a floating window to be open")
+            assert.is_not_nil(find_float_win(), "expected a results floating window to be open")
         end)
 
         it("creates one line per item", function()
@@ -130,7 +147,7 @@ describe("float_picker", function()
 
             assert.is_not_nil(selected)
             assert.equals("the_value", selected.value)
-            assert.is_nil(find_float_win(), "window should be closed after confirm")
+            assert.is_nil(find_any_float_win(), "window should be closed after confirm")
         end)
 
         it("<Esc> calls on_cancel and closes the window", function()
@@ -148,7 +165,7 @@ describe("float_picker", function()
             vim.wait(200, function() return cancelled end)
 
             assert.is_true(cancelled)
-            assert.is_nil(find_float_win(), "window should be closed after cancel")
+            assert.is_nil(find_any_float_win(), "window should be closed after cancel")
         end)
 
         it("q calls on_cancel and closes the window", function()
@@ -164,7 +181,7 @@ describe("float_picker", function()
             vim.wait(200, function() return cancelled end)
 
             assert.is_true(cancelled)
-            assert.is_nil(find_float_win(), "window should be closed after cancel")
+            assert.is_nil(find_any_float_win(), "window should be closed after cancel")
         end)
 
         it("extra mappings are called with the current item", function()
@@ -206,7 +223,7 @@ describe("float_picker", function()
             vim.wait(200, function() return closed_via_mapping end)
 
             assert.is_true(closed_via_mapping)
-            assert.is_nil(find_float_win(), "window should be closed by mapping close_fn")
+            assert.is_nil(find_any_float_win(), "window should be closed by mapping close_fn")
         end)
     end)
 
@@ -292,9 +309,9 @@ describe("float_picker", function()
             })
             local win = find_float_win()
             assert.is_not_nil(win)
-            -- Must fit inside the screen with at least MARGIN_V (3) on each side
-            assert.is_true(float_layout(win).height <= ui.height - 6,
-                "height should leave at least 3-row margin on each side")
+            -- Must fit inside the screen accounting for margins and prompt overhead
+            assert.is_true(float_layout(win).height <= ui.height - 6 - PROMPT_OVERHEAD,
+                "height should leave room for margins and prompt")
         end)
 
         it("window is centered horizontally and vertically", function()
@@ -306,9 +323,10 @@ describe("float_picker", function()
             local win = find_float_win()
             assert.is_not_nil(win)
             local layout = float_layout(win)
-            -- col should be approximately (screen_w - win_w) / 2
+            -- col is centered on win_w
             local expected_col = math.floor((ui.width  - layout.width)  / 2)
-            local expected_row = math.floor((ui.height - layout.height) / 2)
+            -- row is centered on total height (results + prompt overhead)
+            local expected_row = math.floor((ui.height - (layout.height + PROMPT_OVERHEAD)) / 2)
             assert.equals(expected_col, layout.col)
             assert.equals(expected_row, layout.row)
         end)
@@ -328,6 +346,64 @@ describe("float_picker", function()
             -- Window should still be valid
             assert.is_true(vim.api.nvim_win_is_valid(win),
                 "window should remain open after VimResized")
+        end)
+    end)
+
+    -- -------------------------------------------------------------------------
+    -- Fuzzy scoring
+    -- -------------------------------------------------------------------------
+    describe("_fuzzy_score", function()
+        it("returns 0 for empty query", function()
+            assert.equals(0, float_picker._fuzzy_score("", "anything"))
+        end)
+
+        it("matches a simple subsequence (case-insensitive)", function()
+            local s = float_picker._fuzzy_score("gpt", "gpt-4")
+            assert.is_not_nil(s)
+            assert.is_true(s >= 0)
+        end)
+
+        it("returns nil when word is not a subsequence", function()
+            assert.is_nil(float_picker._fuzzy_score("xyz", "abc"))
+        end)
+
+        it("is case-insensitive", function()
+            local s1 = float_picker._fuzzy_score("GPT", "gpt-4")
+            local s2 = float_picker._fuzzy_score("gpt", "GPT-4")
+            assert.is_not_nil(s1)
+            assert.is_not_nil(s2)
+        end)
+
+        it("requires ALL words to match (AND logic)", function()
+            -- 'gpt' matches but 'xyz' does not
+            assert.is_nil(float_picker._fuzzy_score("gpt xyz", "gpt-4 openai"))
+        end)
+
+        it("word order in query does not matter", function()
+            local s1 = float_picker._fuzzy_score("gpt open", "openai gpt-4")
+            local s2 = float_picker._fuzzy_score("open gpt", "openai gpt-4")
+            assert.is_not_nil(s1)
+            assert.is_not_nil(s2)
+        end)
+
+        it("prefix match scores higher than mid-string match", function()
+            -- 'ag' at start of 'agent' should score higher than 'ag' inside 'diagram'
+            local s_prefix = float_picker._fuzzy_score("ag", "agent-a")
+            local s_mid    = float_picker._fuzzy_score("ag", "diagram")
+            assert.is_not_nil(s_prefix)
+            assert.is_not_nil(s_mid)
+            assert.is_true(s_prefix > s_mid,
+                "prefix match should outscore mid-string match")
+        end)
+
+        it("consecutive characters score higher than scattered", function()
+            -- 'gpt' consecutive in 'gpt-4' vs scattered in 'g_p_t_model'
+            local s_consec = float_picker._fuzzy_score("gpt", "gpt-4")
+            local s_spread = float_picker._fuzzy_score("gpt", "a-g-path-tool")
+            assert.is_not_nil(s_consec)
+            assert.is_not_nil(s_spread)
+            assert.is_true(s_consec >= s_spread,
+                "consecutive match should score at least as high as spread")
         end)
     end)
 end)
