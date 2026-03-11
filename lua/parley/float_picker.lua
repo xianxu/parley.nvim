@@ -240,8 +240,9 @@ function M.open(opts)
 
     local results_win = vim.api.nvim_open_win(results_buf, false, results_cfg)
     vim.wo[results_win].cursorline = true
+    vim.wo[results_win].winhighlight = "CursorLine:PmenuSel"
     vim.wo[results_win].wrap = false
-    vim.wo[results_win].scrolloff = 3
+    vim.wo[results_win].scrolloff = 0
     vim.wo[results_win].number = false
     vim.wo[results_win].relativenumber = false
     vim.wo[results_win].signcolumn = "no"
@@ -329,8 +330,11 @@ function M.open(opts)
     end
 
     local function results_row_count()
+        if vim.api.nvim_buf_is_valid(results_buf) then
+            return math.max(1, vim.api.nvim_buf_line_count(results_buf))
+        end
         if vim.api.nvim_win_is_valid(results_win) then
-            return vim.api.nvim_win_get_height(results_win)
+            return math.max(1, vim.api.nvim_win_get_height(results_win))
         end
         return win_h
     end
@@ -390,7 +394,16 @@ function M.open(opts)
     local function set_selection(idx)
         sel_idx = math.max(1, math.min(idx, math.max(1, #filtered)))
         if vim.api.nvim_win_is_valid(results_win) then
-            vim.api.nvim_win_set_cursor(results_win, { visual_row_for_index(sel_idx), 0 })
+            local target_row = visual_row_for_index(sel_idx)
+            local total_rows = results_row_count()
+            local win_rows = vim.api.nvim_win_get_height(results_win)
+            local max_topline = math.max(1, total_rows - win_rows + 1)
+            local topline = math.max(1, math.min(target_row - win_rows + 1, max_topline))
+
+            vim.api.nvim_win_set_cursor(results_win, { target_row, 0 })
+            vim.api.nvim_win_call(results_win, function()
+                vim.fn.winrestview({ topline = topline, leftcol = 0 })
+            end)
         end
     end
 
@@ -680,6 +693,9 @@ function M.open(opts)
                     height = 1,
                 })
             end
+            refresh_results()
+            set_selection(sel_idx)
+            highlight_matches(query_text:gsub("^%s+", ""))
         end,
     })
 

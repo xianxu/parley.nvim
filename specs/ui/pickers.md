@@ -6,12 +6,12 @@ No external dependencies (Telescope or similar) are required.
 
 ## Layout
 Each picker opens two stacked floating windows:
-- **Results window** (top): read-only list of items, `cursorline` shows the current selection.
+- **Results window** (top): read-only list of items, `cursorline` shows the current selection, linked through `PmenuSel` for stronger theme-driven contrast.
 - **Prompt window** (bottom, 1 line): focused on open, implemented with a prompt buffer. The user types a fuzzy query here.
 
 Both windows share the same width and are centered as a unit. Actual dimensions are clamped to the screen with `MARGIN_H = 4` cols and `MARGIN_V = 3` rows on each side. The prompt window adds a fixed overhead of 5 rows (two sets of borders + 1 content row) to the total vertical height.
 
-Items are displayed bottom-anchored relative to the prompt: the logical first item is shown on the bottom row nearest the prompt, later items extend upward, and any unused rows in a taller results window remain as blank padding above the visible items.
+Items are displayed bottom-anchored relative to the prompt: the logical first item is shown on the bottom row nearest the prompt, later items extend upward, any unused rows in a taller results window remain as blank padding above the visible items, and the selected row stays on the bottom edge when the list is taller than the window.
 
 `VimResized` repositions both windows (cleaned up on close).
 

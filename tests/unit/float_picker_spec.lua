@@ -120,6 +120,28 @@ describe("float_picker", function()
             assert.equals(3, cursor[1])
         end)
 
+        it("keeps the selected row on the bottom edge when the list exceeds window height", function()
+            float_picker.open({
+                title = "Test",
+                height = 3,
+                items = {
+                    { display = "one", value = 1 },
+                    { display = "two", value = 2 },
+                    { display = "three", value = 3 },
+                    { display = "four", value = 4 },
+                    { display = "five", value = 5 },
+                },
+                on_select = function() end,
+            })
+
+            local win = find_float_win()
+            local cursor = vim.api.nvim_win_get_cursor(win)
+            local view = vim.api.nvim_win_call(win, vim.fn.winsaveview)
+
+            assert.equals(5, cursor[1])
+            assert.equals(3, view.topline)
+        end)
+
         it("keeps short filtered lists pinned to the bottom of a taller window", function()
             float_picker.open({
                 title = "Test",

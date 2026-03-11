@@ -22,3 +22,4 @@
 - For user-facing header names, prefer explicit semantic keys (e.g. `system_prompt`) over overloaded/internal terms (e.g. `role`), and preserve aliases for backward compatibility during transitions.
 - If message assembly has a global whitespace trim pass, add explicit post-trim handling for fields that require terminal newlines (e.g. appended `system_prompt+` content), and assert that in tests.
 - When live validation updates the status of one interaction path (for example, left/right now works), record that correction immediately and narrow the next change to the still-failing paths instead of treating the whole area as still broken.
+- When anchoring picker content to a window edge, verify both the visual window options (for example `scrolloff`) and the actual buffer line count; row math based only on window height can look correct in tests but drift in live UI.
