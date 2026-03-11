@@ -66,29 +66,29 @@ describe("highlight_question_block: question lines", function()
             "💬: What is the answer?",
             "🤖:[Agent] 42.",
         })
-        assert.is_true(has_highlight(buf, 0, "Question"),
-            "Expected 'Question' highlight on 💬: line")
+        assert.is_true(has_highlight(buf, 0, "ParleyQuestion"),
+            "Expected 'ParleyQuestion' highlight on 💬: line")
     end)
 
-    it("applies Question highlight to continuation lines of a question block", function()
+    it("applies ParleyQuestion highlight to continuation lines of a question block", function()
         local buf = highlighted_buf({
             "💬: First line of question",
             "Continuation of question",
             "🤖:[Agent] Answer here.",
         })
         -- row 0 = question prefix, row 1 = continuation
-        assert.is_true(has_highlight(buf, 0, "Question"))
-        assert.is_true(has_highlight(buf, 1, "Question"),
-            "Expected 'Question' highlight on continuation line")
+        assert.is_true(has_highlight(buf, 0, "ParleyQuestion"))
+        assert.is_true(has_highlight(buf, 1, "ParleyQuestion"),
+            "Expected 'ParleyQuestion' highlight on continuation line")
     end)
 
-    it("does NOT apply Question highlight to 🤖: answer lines", function()
+    it("does NOT apply ParleyQuestion highlight to 🤖: answer lines", function()
         local buf = highlighted_buf({
             "💬: Question",
             "🤖:[Agent] Answer",
         })
-        assert.is_false(has_highlight(buf, 1, "Question"),
-            "Answer line should NOT have Question highlight")
+        assert.is_false(has_highlight(buf, 1, "ParleyQuestion"),
+            "Answer line should NOT have ParleyQuestion highlight")
     end)
 end)
 
@@ -101,18 +101,18 @@ describe("highlight_question_block: thinking lines", function()
             "🤖:[Agent] Answer.",
             "📝: you asked about x, I answered with y",
         })
-        assert.is_true(has_highlight(buf, 2, "Think"),
-            "Expected 'Think' highlight on 📝: line")
+        assert.is_true(has_highlight(buf, 2, "ParleyThinking"),
+            "Expected 'ParleyThinking' highlight on 📝: line")
     end)
 
-    it("applies Think highlight to 🧠: reasoning line", function()
+    it("applies ParleyThinking highlight to 🧠: reasoning line", function()
         local buf = highlighted_buf({
             "💬: Question",
             "🤖:[Agent] Answer.",
             "🧠: user wants to understand topic",
         })
-        assert.is_true(has_highlight(buf, 2, "Think"),
-            "Expected 'Think' highlight on 🧠: line")
+        assert.is_true(has_highlight(buf, 2, "ParleyThinking"),
+            "Expected 'ParleyThinking' highlight on 🧠: line")
     end)
 end)
 
@@ -125,16 +125,16 @@ describe("highlight_question_block: file reference lines", function()
             "@@/path/to/some/file.lua",
             "🤖:[Agent] Done.",
         })
-        assert.is_true(has_highlight(buf, 1, "FileLoading"),
-            "Expected 'FileLoading' highlight on @@ file reference line")
+        assert.is_true(has_highlight(buf, 1, "ParleyFileReference"),
+            "Expected 'ParleyFileReference' highlight on @@ file reference line")
     end)
 
-    it("does NOT apply FileLoading highlight to @@ lines outside question blocks", function()
+    it("does NOT apply ParleyFileReference highlight to @@ lines outside question blocks", function()
         local buf = highlighted_buf({
             "🤖:[Agent] See @@/some/file.lua here",
         })
-        -- Row 0 is an answer line; FileLoading should not be applied
-        assert.is_false(has_highlight(buf, 0, "FileLoading"),
-            "FileLoading should not appear on answer lines")
+        -- Row 0 is an answer line; ParleyFileReference should not be applied
+        assert.is_false(has_highlight(buf, 0, "ParleyFileReference"),
+            "ParleyFileReference should not appear on answer lines")
     end)
 end)

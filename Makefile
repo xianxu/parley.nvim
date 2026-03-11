@@ -88,11 +88,16 @@ fetch:
 # Works from main — the direct-on-main workflow counterpart to merge.
 # Usage: make push
 push:
-	@uncommitted=$$(git status --porcelain); \
-	if [ -n "$$uncommitted" ]; then \
-		echo "  [x] Uncommitted changes found — commit first"; \
-		git status --short; \
+	@untracked=$$(git ls-files --others --exclude-standard); \
+	if [ -n "$$untracked" ]; then \
+		echo "  [x] Untracked files found — add or .gitignore them first"; \
+		echo "$$untracked" | sed 's/^/       /'; \
 		exit 1; \
+	fi; \
+	dirty=$$(git status --porcelain); \
+	if [ -n "$$dirty" ]; then \
+		echo "==> Auto-committing tracked changes..."; \
+		git commit -a -m "auto-commit before push" || exit 1; \
 	fi; \
 	git push || exit 1; \
 	repo=$$(git remote get-url origin | sed 's|.*github.com[:/]\(.*\)\.git|\1|;s|.*github.com[:/]\(.*\)$$|\1|'); \

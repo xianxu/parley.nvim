@@ -2259,18 +2259,18 @@ local function compute_chat_highlights(buf, start_line, end_line)
 				local content_end, tag_end = line:find("@@", content_start + 1)
 				if not content_end then break end
 				table.insert(highlighted_regions, { start = tag_start, finish = tag_end })
-				table.insert(result[row], { hl_group = "Tag", col_start = tag_start - 1, col_end = tag_end })
+				table.insert(result[row], { hl_group = "ParleyTag", col_start = tag_start - 1, col_end = tag_end })
 				pos = tag_end + 1
 			end
 		end
 
 		if line:match(reasoning_pattern) or line:match(summary_pattern) then
 			if should_paint then
-				table.insert(result[row], { hl_group = "Think", col_start = 0, col_end = -1 })
+				table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
 			end
 		elseif line:match(user_pattern) then
 			if should_paint then
-				table.insert(result[row], { hl_group = "Question", col_start = 0, col_end = -1 })
+				table.insert(result[row], { hl_group = "ParleyQuestion", col_start = 0, col_end = -1 })
 			end
 			in_block = true
 		elseif line:match(assistant_pattern) then
@@ -2279,14 +2279,14 @@ local function compute_chat_highlights(buf, start_line, end_line)
 			in_block = false
 		elseif in_block and not in_code_block then
 			if should_paint then
-				table.insert(result[row], { hl_group = "Question", col_start = 0, col_end = -1 })
+				table.insert(result[row], { hl_group = "ParleyQuestion", col_start = 0, col_end = -1 })
 				if line:match("^@@") then
 					local is_tag_at_start = false
 					if #highlighted_regions > 0 and highlighted_regions[1].start == 1 then
 						is_tag_at_start = true
 					end
 					if not is_tag_at_start then
-						table.insert(result[row], { hl_group = "FileLoading", col_start = 0, col_end = -1 })
+						table.insert(result[row], { hl_group = "ParleyFileReference", col_start = 0, col_end = -1 })
 					end
 				end
 			end
@@ -2294,7 +2294,7 @@ local function compute_chat_highlights(buf, start_line, end_line)
 
 		if should_paint then
 			for start_idx, _, end_idx in line:gmatch("()@(.-)@()") do
-				table.insert(result[row], { hl_group = "Annotation", col_start = start_idx - 1, col_end = end_idx - 1 })
+				table.insert(result[row], { hl_group = "ParleyAnnotation", col_start = start_idx - 1, col_end = end_idx - 1 })
 			end
 		end
 	end
@@ -2311,7 +2311,7 @@ local function compute_markdown_highlights(buf, start_line, end_line)
 		local row = start_line + offset - 2
 		if line:match("^@@%s*[^+]") or line:match("^@@/") then
 			result[row] = result[row] or {}
-			table.insert(result[row], { hl_group = "FileLoading", col_start = 0, col_end = -1 })
+			table.insert(result[row], { hl_group = "ParleyFileReference", col_start = 0, col_end = -1 })
 		end
 	end
 	return result
