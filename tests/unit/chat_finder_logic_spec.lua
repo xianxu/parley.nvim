@@ -11,10 +11,24 @@ local M = require("parley")
 describe("ChatFinder logic", function()
     local tmpdir
     local original_config
+    local original_float_picker_open
+    local original_ui_input
+    local original_defer_fn
+    local original_schedule
+    local original_reopen_chat_finder
+    local original_delete_file
+    local original_prompt_delete_confirmation
 
     before_each(function()
         -- Save original config
         original_config = vim.deepcopy(M.config)
+        original_float_picker_open = M.float_picker.open
+        original_ui_input = vim.ui.input
+        original_defer_fn = vim.defer_fn
+        original_schedule = vim.schedule
+        original_reopen_chat_finder = M._reopen_chat_finder
+        original_delete_file = M.helpers.delete_file
+        original_prompt_delete_confirmation = M._prompt_chat_finder_delete_confirmation
 
         -- Create a temp directory for chat files
         local random_suffix = string.format("%x", math.random(0, 0xFFFFFF))
@@ -23,6 +37,11 @@ describe("ChatFinder logic", function()
 
         -- Set config to use temp directory
         M.config.chat_dir = tmpdir
+        M.config.chat_finder_mappings = {
+            delete = { shortcut = "<C-d>" },
+            toggle_all = { shortcut = "<C-a>" },
+        }
+        M.config.global_shortcut_keybindings = { shortcut = "<C-g>?" }
 
         -- Reset chat finder state
         M._chat_finder = {
@@ -31,6 +50,7 @@ describe("ChatFinder logic", function()
             source_win = nil,
             active_window = nil,
             insert_mode = false,
+            initial_index = nil,
         }
     end)
 
@@ -42,6 +62,13 @@ describe("ChatFinder logic", function()
 
         -- Restore original config
         M.config = original_config
+        M.float_picker.open = original_float_picker_open
+        vim.ui.input = original_ui_input
+        vim.defer_fn = original_defer_fn
+        vim.schedule = original_schedule
+        M._reopen_chat_finder = original_reopen_chat_finder
+        M.helpers.delete_file = original_delete_file
+        M._prompt_chat_finder_delete_confirmation = original_prompt_delete_confirmation
     end)
 
     describe("Group A: Timestamp parsing from filename", function()
@@ -266,6 +293,55 @@ describe("ChatFinder logic", function()
             local ordinal = filename .. " " .. topic .. tags_searchable
 
             assert.equals("test.md Topic", ordinal)
+        end)
+    end)
+
+    describe("Group E: Delete confirmation reopen behavior", function()
+        it("reopens ChatFinder on Esc during delete confirmation", function()
+            local reopen_calls = {}
+            M._reopen_chat_finder = function(source_win, selection_index)
+                table.insert(reopen_calls, {
+                    source_win = source_win,
+                    selection_index = selection_index,
+                })
+            end
+
+            local deleted = nil
+            M.helpers.delete_file = function(path)
+                deleted = path
+            end
+
+            M._handle_chat_finder_delete_response(nil, "/tmp/chat.md", 3, 7, 42)
+
+            assert.equals(nil, deleted)
+            assert.equals(1, #reopen_calls)
+            assert.equals(42, reopen_calls[1].source_win)
+            assert.equals(3, reopen_calls[1].selection_index)
+        end)
+
+        it("opens delete confirmation from the source window", function()
+            local prompt_seen = nil
+            local callback_value = nil
+            local source_win = vim.api.nvim_get_current_win()
+
+            vim.ui.input = function(opts, cb)
+                prompt_seen = opts.prompt
+                callback_value = vim.api.nvim_get_current_win()
+                cb("n")
+            end
+
+            local reopen_calls = {}
+            M._reopen_chat_finder = function(win, selection_index)
+                table.insert(reopen_calls, { win = win, selection_index = selection_index })
+            end
+
+            M._prompt_chat_finder_delete_confirmation("/tmp/chat.md", 2, 5, source_win)
+
+            assert.equals("Delete /tmp/chat.md? [y/N] ", prompt_seen)
+            assert.equals(source_win, callback_value)
+            assert.equals(1, #reopen_calls)
+            assert.equals(source_win, reopen_calls[1].win)
+            assert.equals(2, reopen_calls[1].selection_index)
         end)
     end)
 end)

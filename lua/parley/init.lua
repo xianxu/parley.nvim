@@ -31,6 +31,7 @@ chat_parser = require("parley.chat_parser"), -- chat file parser
 	lualine = require("parley.lualine"), -- lualine integration
 	agent_picker = require("parley.agent_picker"), -- agent selection UI
 	system_prompt_picker = require("parley.system_prompt_picker"), -- system prompt selection UI
+	float_picker = require("parley.float_picker"), -- shared floating window picker
 }
 
 --------------------------------------------------------------------------------
@@ -2841,52 +2842,27 @@ M.cmd.NoteNewFromTemplate = function()
 		return
 	end
 
-	-- Use telescope to select template
-	local pickers = require("telescope.pickers")
-	local finders = require("telescope.finders")
-	local conf = require("telescope.config").values
-	local actions = require("telescope.actions")
-	local action_state = require("telescope.actions.state")
+	-- Use float picker to select template
+	local items = {}
+	for _, tfile in ipairs(template_files) do
+		table.insert(items, { display = tfile.display, value = tfile })
+	end
 
-	pickers
-		.new({}, {
-			prompt_title = "Select Template",
-			finder = finders.new_table({
-				results = template_files,
-				entry_maker = function(entry)
-					return {
-						value = entry,
-						display = entry.display,
-						ordinal = entry.display,
-					}
-				end,
-			}),
-			sorter = conf.generic_sorter({}),
-			attach_mappings = function(prompt_bufnr, _map)
-				actions.select_default:replace(function()
-					-- Capture selection and close picker
-					local selection = action_state.get_selected_entry()
-					actions.close(prompt_bufnr)
-					if not selection then
-						return
-					end
-					-- Schedule input after picker closes to restore proper focus
-					vim.schedule(function()
-						-- Read template lines to preserve blank lines
-						local template_lines = vim.fn.readfile(selection.value.path)
-						-- Prompt for note subject (command-line input)
-						local subject = vim.fn.input("Note subject: ")
-						-- Cancel if no title provided
-						if not subject or subject == "" then
-							return
-						end
-						M.new_note_from_template(subject, template_lines)
-					end)
-				end)
-				return true
-			end,
-		})
-		:find()
+	M.float_picker.open({
+		title = "Select Template",
+		items = items,
+		on_select = function(item)
+			-- Read template lines to preserve blank lines
+			local template_lines = vim.fn.readfile(item.value.path)
+			-- Prompt for note subject (command-line input)
+			local subject = vim.fn.input("Note subject: ")
+			-- Cancel if no title provided
+			if not subject or subject == "" then
+				return
+			end
+			M.new_note_from_template(subject, template_lines)
+		end,
+	})
 end
 
 -- Internal helper: create a note file with a title and metadata (array of {key, value})
@@ -4496,12 +4472,69 @@ M._chat_finder = {
 	show_all = false, -- Track whether we're showing all files or just recent ones
 	active_window = nil, -- Track the active window that initiated ChatFinder
 	source_win = nil, -- Track the source window where ChatFinder was invoked
+	initial_index = nil, -- Optional selection index to restore when reopening the picker
 	insert_mode = false, -- Whether we're in insert mode (inserting chat references)
 	insert_buf = nil, -- The buffer to insert into
 	insert_line = nil, -- The line to insert at
 	insert_col = nil, -- The column to insert at (for insert mode)
 	insert_normal_mode = nil, -- Whether we're inserting in normal mode or insert mode
 }
+
+M._reopen_chat_finder = function(source_win, selection_index)
+	vim.defer_fn(function()
+		M._chat_finder.opened = false
+		M._chat_finder.source_win = source_win
+		M._chat_finder.initial_index = selection_index
+		M.cmd.ChatFinder()
+	end, 100)
+end
+
+M._handle_chat_finder_delete_response = function(input, item_value, selected_index, items_count, source_win, close_fn, context)
+	if input and input:lower() == "y" then
+		M.helpers.delete_file(item_value)
+		if close_fn then
+			close_fn()
+		end
+		local next_index = math.min(selected_index, math.max(1, items_count - 1))
+		M._reopen_chat_finder(source_win, next_index)
+		return
+	end
+
+	if context then
+		context.resume_after_external_ui()
+		vim.schedule(function()
+			if context.focus_prompt then
+				context.focus_prompt()
+			end
+		end)
+		vim.defer_fn(function()
+			if context.focus_prompt then
+				context.focus_prompt()
+			end
+		end, 10)
+		return
+	end
+
+	M._reopen_chat_finder(source_win, selected_index)
+end
+
+M._prompt_chat_finder_delete_confirmation = function(item_value, selected_index, items_count, source_win, close_fn, context)
+	if source_win and vim.api.nvim_win_is_valid(source_win) then
+		vim.api.nvim_set_current_win(source_win)
+	end
+
+	vim.ui.input({ prompt = "Delete " .. item_value .. "? [y/N] " }, function(input)
+		M._handle_chat_finder_delete_response(
+			input,
+			item_value,
+			selected_index,
+			items_count,
+			source_win,
+			close_fn,
+			context
+		)
+	end)
+end
 
 M.cmd.ChatFinder = function(_options)
 	if M._chat_finder.opened then
@@ -4518,14 +4551,8 @@ M.cmd.ChatFinder = function(_options)
 		local toggle_shortcut = M.config.chat_finder_mappings.toggle_all or { shortcut = "<C-g>h" }
 		local keybindings_shortcut = M.config.global_shortcut_keybindings or { shortcut = "<C-g>?" }
 
-	-- Launch telescope finder
-	if pcall(require, "telescope") then
-		local pickers = require("telescope.pickers")
-		local finders = require("telescope.finders")
-		local conf = require("telescope.config").values
-		local actions = require("telescope.actions")
-		local action_state = require("telescope.actions.state")
-
+	-- Launch float picker for chat finder
+	do
 		-- Get all timestamp format files
 		local files = vim.fn.glob(dir .. "/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*.md", false, true)
 		local entries = {}
@@ -4641,171 +4668,167 @@ M.cmd.ChatFinder = function(_options)
 		-- Determine prompt title based on filtering state
 		local toggle_key = toggle_shortcut.shortcut
 		local prompt_title = is_filtering
-			and string.format("Chat Files (Recent: %d months Toggle: %s)", recency_config.months, toggle_key)
-			or string.format("Chat Files (All Toggle: %s)", toggle_key)
+			and string.format("Chat Files (Recent: %d months  %s: toggle)", recency_config.months, toggle_key)
+			or string.format("Chat Files (All  %s: toggle)", toggle_key)
 
-		-- We'll use the active_window saved in M._chat_finder.active_window
 		M.logger.debug("ChatFinder using active_window: " .. (M._chat_finder.active_window or "nil"))
 
-		pickers
-			.new({
-				-- Use default Telescope behavior which is more consistent
-				initial_mode = "insert",
-			}, {
-				prompt_title = prompt_title,
-				finder = finders.new_table({
-					results = entries,
-					entry_maker = function(entry)
-						return entry
-					end,
-				}),
-				sorter = conf.generic_sorter({}),
-				attach_mappings = function(prompt_bufnr, map)
-					actions.select_default:replace(function()
-						actions.close(prompt_bufnr)
-						local selection = action_state.get_selected_entry()
+		-- Build float-picker items from sorted entries
+		local items = {}
+		for _, entry in ipairs(entries) do
+			table.insert(items, { display = entry.display, value = entry.value })
+		end
 
-						-- Check if we're in insert mode (for inserting chat references)
-						if M._chat_finder.insert_mode then
-							-- Switch to the original source window first
-							if M._chat_finder.source_win and vim.api.nvim_win_is_valid(M._chat_finder.source_win) then
-								vim.api.nvim_set_current_win(M._chat_finder.source_win)
-								M.logger.debug("Switched to source window for insert: " .. M._chat_finder.source_win)
-							end
+		local source_win = M._chat_finder.source_win
+		if not (source_win and vim.api.nvim_win_is_valid(source_win)) then
+			source_win = vim.api.nvim_get_current_win()
+			M._chat_finder.source_win = source_win
+			M.logger.debug("ChatFinder captured fallback source_win: " .. source_win)
+		end
 
-							if M._chat_finder.insert_buf and vim.api.nvim_buf_is_valid(M._chat_finder.insert_buf) then
-								-- Extract topic from the display
-								local topic = selection.display:match(" %- (.+) %[") or "Chat"
+		M.float_picker.open({
+			title = prompt_title,
+			items = items,
+			initial_index = M._chat_finder.initial_index,
+			on_select = function(item)
+				local file_path = item.value
+				local display = item.display
 
-								-- Get relative path for better readability
-								local rel_path = vim.fn.fnamemodify(selection.value, ":~:.")
+				-- Check if we're in insert mode (for inserting chat references)
+				if M._chat_finder.insert_mode then
+					-- Switch to the original source window first
+					if source_win and vim.api.nvim_win_is_valid(source_win) then
+						vim.api.nvim_set_current_win(source_win)
+						M.logger.debug("Switched to source window for insert: " .. source_win)
+					end
 
-								-- Handle normal mode insertion
-								if M._chat_finder.insert_normal_mode then
-									-- Insert a new line with the chat reference
-									vim.api.nvim_buf_set_lines(
-										M._chat_finder.insert_buf,
-										M._chat_finder.insert_line - 1,
-										M._chat_finder.insert_line - 1,
-										false,
-										{ "@@" .. rel_path .. ": " .. topic }
-									)
-								else
-									-- Handle insert mode insertion by modifying the current line
-									local current_line = vim.api.nvim_buf_get_lines(
-										M._chat_finder.insert_buf,
-										M._chat_finder.insert_line - 1,
-										M._chat_finder.insert_line,
-										false
-									)[1]
+					if M._chat_finder.insert_buf and vim.api.nvim_buf_is_valid(M._chat_finder.insert_buf) then
+						-- Extract topic from the display
+						local topic = display:match(" %- (.+) %[") or "Chat"
 
-									local col = M._chat_finder.insert_col
-									local new_line = current_line:sub(1, col) .. "@@" .. rel_path .. ": " .. topic .. current_line:sub(col + 1)
+						-- Get relative path for better readability
+						local rel_path = vim.fn.fnamemodify(file_path, ":~:.")
 
-									vim.api.nvim_buf_set_lines(
-										M._chat_finder.insert_buf,
-										M._chat_finder.insert_line - 1,
-										M._chat_finder.insert_line,
-										false,
-										{ new_line }
-									)
-
-									-- Move cursor to the end of the inserted reference
-									vim.api.nvim_win_set_cursor(0, {
-										M._chat_finder.insert_line,
-										col + #("@@" .. rel_path .. ": " .. topic),
-									})
-
-									-- Return to insert mode
-									vim.schedule(function()
-										vim.cmd("startinsert")
-									end)
-								end
-
-								M.logger.info("Inserted chat reference: " .. rel_path)
-							end
-
-							-- Reset insert mode flags
-							M._chat_finder.insert_mode = false
-							M._chat_finder.insert_buf = nil
-							M._chat_finder.insert_line = nil
-							M._chat_finder.insert_col = nil
-							M._chat_finder.insert_normal_mode = nil
+						-- Handle normal mode insertion
+						if M._chat_finder.insert_normal_mode then
+							vim.api.nvim_buf_set_lines(
+								M._chat_finder.insert_buf,
+								M._chat_finder.insert_line - 1,
+								M._chat_finder.insert_line - 1,
+								false,
+								{ "@@" .. rel_path .. ": " .. topic }
+							)
 						else
-							-- Normal behavior - open the selected chat
-							-- First switch back to the source window where ChatFinder was invoked
-							if M._chat_finder.source_win and vim.api.nvim_win_is_valid(M._chat_finder.source_win) then
-								vim.api.nvim_set_current_win(M._chat_finder.source_win)
-								M.logger.debug("Switched to source window for file open: " .. M._chat_finder.source_win)
-							end
-							M.open_buf(selection.value, true) -- Pass true to indicate this is from ChatFinder
+							-- Handle insert mode insertion by modifying the current line
+							local current_line = vim.api.nvim_buf_get_lines(
+								M._chat_finder.insert_buf,
+								M._chat_finder.insert_line - 1,
+								M._chat_finder.insert_line,
+								false
+							)[1]
+
+							local col = M._chat_finder.insert_col
+							local new_line = current_line:sub(1, col) .. "@@" .. rel_path .. ": " .. topic .. current_line:sub(col + 1)
+
+							vim.api.nvim_buf_set_lines(
+								M._chat_finder.insert_buf,
+								M._chat_finder.insert_line - 1,
+								M._chat_finder.insert_line,
+								false,
+								{ new_line }
+							)
+
+							-- Move cursor to the end of the inserted reference
+							vim.api.nvim_win_set_cursor(0, {
+								M._chat_finder.insert_line,
+								col + #("@@" .. rel_path .. ": " .. topic),
+							})
+
+							-- Return to insert mode
+							vim.schedule(function()
+								vim.cmd("startinsert")
+							end)
 						end
-					end)
 
-					-- Map delete shortcut
-					map("i", delete_shortcut.shortcut, function()
-						local selection = action_state.get_selected_entry()
-						vim.ui.input({ prompt = "Delete " .. selection.value .. "? [y/N] " }, function(input)
-							if input and input:lower() == "y" then
-								M.helpers.delete_file(selection.value)
-								actions.close(prompt_bufnr)
-								-- Reopen finder to show updated list
-								local source_win = M._chat_finder.source_win
-								vim.defer_fn(function()
-									M._chat_finder.opened = false
-									M._chat_finder.source_win = source_win
-									M.cmd.ChatFinder()
-								end, 100)
+						M.logger.info("Inserted chat reference: " .. rel_path)
+					end
+
+					-- Reset insert mode flags
+					M._chat_finder.insert_mode = false
+					M._chat_finder.insert_buf = nil
+					M._chat_finder.insert_line = nil
+					M._chat_finder.insert_col = nil
+					M._chat_finder.insert_normal_mode = nil
+				else
+					-- Normal behavior - open the selected chat
+					if source_win and vim.api.nvim_win_is_valid(source_win) then
+						vim.api.nvim_set_current_win(source_win)
+						M.logger.debug("Switched to source window for file open: " .. source_win)
+					end
+					M.open_buf(file_path, true)
+				end
+			end,
+			on_cancel = function()
+				M._chat_finder.opened = false
+				M._chat_finder.initial_index = nil
+			end,
+			mappings = {
+				-- Delete selected chat file
+				{
+					key = delete_shortcut.shortcut,
+					fn = function(item, close_fn, context)
+						if not item then
+							return
+						end
+						local selected_index = 1
+						for idx, picker_item in ipairs(items) do
+							if picker_item.value == item.value then
+								selected_index = idx
+								break
 							end
-						end)
-					end)
+						end
 
-					-- Map toggle_all shortcut
-					map("i", toggle_shortcut.shortcut, function()
-						M._chat_finder.show_all = not M._chat_finder.show_all
-						actions.close(prompt_bufnr)
-						-- Reopen finder with new filter setting
-						local source_win = M._chat_finder.source_win
+						context.skip_focus_restore = true
+						context.suspend_for_external_ui()
 						vim.defer_fn(function()
-							M._chat_finder.opened = false
-							M._chat_finder.source_win = source_win
-							M.cmd.ChatFinder()
-						end, 100)
-					end)
-
-						-- Also add normal mode mapping for toggle
-						map("n", toggle_shortcut.shortcut, function()
-						M._chat_finder.show_all = not M._chat_finder.show_all
-						actions.close(prompt_bufnr)
-						-- Reopen finder with new filter setting
-						local source_win = M._chat_finder.source_win
-						vim.defer_fn(function()
-							M._chat_finder.opened = false
-							M._chat_finder.source_win = source_win
-							M.cmd.ChatFinder()
-						end, 100)
-						end)
-
-						-- Show key bindings help while ChatFinder is open
-						map("i", keybindings_shortcut.shortcut, function()
-							vim.schedule(function()
-								M.cmd.KeyBindings()
-							end)
-						end)
-						map("n", keybindings_shortcut.shortcut, function()
-							vim.schedule(function()
-								M.cmd.KeyBindings()
-							end)
-						end)
-
-						return true
+							M._prompt_chat_finder_delete_confirmation(
+								item.value,
+								selected_index,
+								#items,
+								source_win,
+								close_fn,
+								context
+							)
+						end, 20)
 					end,
-			})
-			:find()
-	else
-		M.logger.error("Telescope not found. ChatFinder requires telescope.nvim to be installed.")
+				},
+				-- Toggle recent/all filter
+				{
+					key = toggle_shortcut.shortcut,
+					fn = function(_, close_fn)
+						M._chat_finder.show_all = not M._chat_finder.show_all
+						close_fn()
+						vim.defer_fn(function()
+							M._chat_finder.opened = false
+							M._chat_finder.source_win = source_win
+							M.cmd.ChatFinder()
+						end, 100)
+					end,
+				},
+				-- Show key bindings help
+				{
+					key = keybindings_shortcut.shortcut,
+					fn = function(_, _)
+						vim.schedule(function()
+							M.cmd.KeyBindings()
+						end)
+					end,
+				},
+			},
+	})
 	end
 
+	M._chat_finder.initial_index = nil
 	M._chat_finder.opened = false
 end
 
@@ -4818,14 +4841,7 @@ M.cmd.Agent = function(params)
 
 	-- If no arguments provided, show the agent picker
 	if agent_name == "" then
-		-- Launch the Telescope picker if Telescope is available
-		local ok, _ = pcall(require, "telescope")
-		if ok then
-			M.agent_picker.agent_picker(M)
-		else
-			-- Fall back to showing current agent if Telescope isn't available
-			M.logger.info("Current agent: " .. M._state.agent)
-		end
+		M.agent_picker.agent_picker(M)
 		return
 	end
 
@@ -4841,31 +4857,7 @@ M.cmd.Agent = function(params)
 end
 
 M.cmd.NextAgent = function()
-	-- Check if Telescope is available
-	local ok, _ = pcall(require, "telescope")
-	if ok then
-		-- Use the Telescope picker if available
-		M.agent_picker.agent_picker(M)
-		return
-	end
-
-	-- Fall back to cycling through agents if Telescope isn't available
-	local current_agent = M._state.agent
-	local agent_list = M._agents
-
-	local set_agent = function(agent_name)
-		M.refresh_state({ agent = agent_name })
-		M.logger.info("Agent: " .. M._state.agent)
-		vim.cmd("doautocmd User ParleyAgentChanged")
-	end
-
-	for i, agent_name in ipairs(agent_list) do
-		if agent_name == current_agent then
-			set_agent(agent_list[i % #agent_list + 1])
-			return
-		end
-	end
-	set_agent(agent_list[1])
+	M.agent_picker.agent_picker(M)
 end
 
 -- System prompt selection command
@@ -4874,14 +4866,7 @@ M.cmd.SystemPrompt = function(params)
 
 	-- If no arguments provided, show the system prompt picker
 	if prompt_name == "" then
-		-- Launch the Telescope picker if Telescope is available
-		local ok, _ = pcall(require, "telescope")
-		if ok then
-			M.system_prompt_picker.system_prompt_picker(M)
-		else
-			-- Fall back to showing current system prompt if Telescope isn't available
-			M.logger.info("Current system prompt: " .. M._state.system_prompt)
-		end
+		M.system_prompt_picker.system_prompt_picker(M)
 		return
 	end
 
@@ -4897,32 +4882,7 @@ M.cmd.SystemPrompt = function(params)
 end
 
 M.cmd.NextSystemPrompt = function()
-	-- Check if Telescope is available
-	local ok, _ = pcall(require, "telescope")
-	if ok then
-		-- Use the Telescope picker if available
-		M.system_prompt_picker.system_prompt_picker(M)
-		return
-	end
-
-	-- Fall back to cycling through system prompts if Telescope isn't available
-	local current_prompt = M._state.system_prompt
-	local prompt_list = M._system_prompts
-
-	local set_prompt = function(prompt_name)
-		M.refresh_state({ system_prompt = prompt_name })
-		M.logger.info("System prompt: " .. M._state.system_prompt)
-		vim.cmd("doautocmd User ParleySystemPromptChanged")
-	end
-
-	for i, prompt_name in ipairs(prompt_list) do
-		if prompt_name == current_prompt then
-			set_prompt(prompt_list[i % #prompt_list + 1])
-			return
-		end
-	end
-
-	set_prompt(prompt_list[1])
+	M.system_prompt_picker.system_prompt_picker(M)
 end
 
 ---@param name string | nil
