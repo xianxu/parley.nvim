@@ -43,7 +43,8 @@ issue:
 		echo "Usage: make issue <number>"; \
 		exit 1; \
 	fi
-	@repo_name=$$(basename "$$(git rev-parse --show-toplevel)"); \
+	@set -o pipefail; \
+	repo_name=$$(basename "$$(git rev-parse --show-toplevel)"); \
 	branch="$$repo_name-$(ISSUE_NUM)"; \
 	wt_path="../$$branch"; \
 	if git show-ref --verify --quiet "refs/heads/$$branch"; then \
@@ -62,7 +63,7 @@ issue:
 	mkdir -p "$$wt_path/tasks" && \
 	gh issue view "$(ISSUE_NUM)" --repo "$$repo" --json number,title,body,labels,assignees,state \
 		| jq -r '"# Issue #\(.number): \(.title)\n\n**State:** \(.state)\n**Labels:** \([.labels[].name] | join(", "))\n**Assignees:** \([.assignees[].login] | join(", "))\n\n## Description\n\n\(.body)"' \
-		> "$$wt_path/tasks/issue.md" || { git worktree remove "$$wt_path"; exit 1; }; \
+		> "$$wt_path/tasks/issue.md" || { git worktree remove "$$wt_path" 2>/dev/null; exit 1; }; \
 	echo "Worktree created at $$wt_path on branch $$branch"; \
 	echo "Issue #$(ISSUE_NUM) saved to $$wt_path/tasks/issue.md"; \
 	echo "Run: cd $$wt_path"
@@ -74,12 +75,13 @@ fetch:
 		echo "Usage: make fetch <number>"; \
 		exit 1; \
 	fi
-	@repo=$$(git remote get-url origin | sed 's|.*github.com[:/]\(.*\)\.git|\1|;s|.*github.com[:/]\(.*\)$$|\1|'); \
+	@set -o pipefail; \
+	repo=$$(git remote get-url origin | sed 's|.*github.com[:/]\(.*\)\.git|\1|;s|.*github.com[:/]\(.*\)$$|\1|'); \
 	mkdir -p tasks && \
+	content=$$(gh issue view "$(FETCH_NUM)" --repo "$$repo" --json number,title,body,labels,assignees,state \
+		| jq -r '"# Issue #\(.number): \(.title)\n\n**State:** \(.state)\n**Labels:** \([.labels[].name] | join(", "))\n**Assignees:** \([.assignees[].login] | join(", "))\n\n## Description\n\n\(.body)"') || exit 1; \
 	echo "" >> tasks/issue.md && \
-	gh issue view "$(FETCH_NUM)" --repo "$$repo" --json number,title,body,labels,assignees,state \
-		| jq -r '"# Issue #\(.number): \(.title)\n\n**State:** \(.state)\n**Labels:** \([.labels[].name] | join(", "))\n**Assignees:** \([.assignees[].login] | join(", "))\n\n## Description\n\n\(.body)"' \
-		>> tasks/issue.md && \
+	echo "$$content" >> tasks/issue.md && \
 	echo "Issue #$(FETCH_NUM) appended to tasks/issue.md"
 
 # Push to remote and close any issues listed in tasks/issue.md.
@@ -97,10 +99,15 @@ push:
 	if [ -f tasks/issue.md ]; then \
 		nums=$$(grep -oE '^# Issue #[0-9]+' tasks/issue.md | grep -oE '[0-9]+'); \
 		if [ -n "$$nums" ]; then \
+			failed=0; \
 			for num in $$nums; do \
 				echo "==> Closing issue #$$num..."; \
-				gh issue close "$$num" --repo "$$repo" --comment "Fixed on main."; \
+				gh issue close "$$num" --repo "$$repo" --comment "Fixed on main." || failed=1; \
 			done; \
+			if [ "$$failed" -ne 0 ]; then \
+				echo "  [x] Some issues failed to close — keeping tasks/issue.md"; \
+				exit 1; \
+			fi; \
 			echo "==> Clearing tasks/issue.md..."; \
 			: > tasks/issue.md; \
 		fi; \
@@ -116,7 +123,7 @@ pull-request:
 		echo "Error: run this from a worktree branch, not main"; \
 		exit 1; \
 	fi; \
-	git push -u origin "$$branch"; \
+	git push -u origin "$$branch" || exit 1; \
 	repo=$$(git remote get-url origin | sed 's|.*github.com[:/]\(.*\)\.git|\1|;s|.*github.com[:/]\(.*\)$$|\1|'); \
 	fixes=""; \
 	if [ -f tasks/issue.md ]; then \
@@ -128,7 +135,14 @@ pull-request:
 	fi; \
 	if [ -n "$$fixes" ]; then \
 		echo "Including in PR body: $$fixes"; \
-		gh pr create --repo "$$repo" --base main --head "$$branch" --fill --body "$$fixes"; \
+		commits=$$(git log main..HEAD --pretty=format:'- %s' 2>/dev/null); \
+		body="$$commits"; \
+		if [ -n "$$body" ]; then \
+			body="$$body"$$'\n\n'"$$fixes"; \
+		else \
+			body="$$fixes"; \
+		fi; \
+		gh pr create --repo "$$repo" --base main --head "$$branch" --fill-first --body "$$body"; \
 	else \
 		gh pr create --repo "$$repo" --base main --head "$$branch" --fill; \
 	fi
@@ -165,6 +179,10 @@ merge:
 	echo "  [ok] No unpushed local commits (HEAD synced with $$upstream)"; \
 	wt_path=$$(git rev-parse --show-toplevel); \
 	main_path=$$(git worktree list | grep '\[main\]' | awk '{print $$1}'); \
+	if [ -z "$$main_path" ]; then \
+		echo "  [x] Could not find main worktree — is main checked out?"; \
+		exit 1; \
+	fi; \
 	repo=$$(git remote get-url origin | sed 's|.*github.com[:/]\(.*\)\.git|\1|;s|.*github.com[:/]\(.*\)$$|\1|'); \
 	unmerged=$$(git log "main..HEAD" --oneline 2>/dev/null); \
 	if [ -n "$$unmerged" ]; then \
@@ -183,9 +201,9 @@ merge:
 	if [ -n "$$pr_number" ]; then \
 		echo "  [ok] Open PR found: #$$pr_number"; \
 		echo "==> Merging PR #$$pr_number ($$branch) into main via GitHub..."; \
-		gh pr merge --repo "$$repo" --merge --delete-branch "$$branch"; \
+		gh pr merge --repo "$$repo" --merge --delete-branch "$$branch" || exit 1; \
 		echo "==> Pulling main..."; \
-		git -C "$$main_path" pull; \
+		git -C "$$main_path" pull || exit 1; \
 	else \
 		echo "  [--] No open PR for branch $$branch"; \
 		if [ -n "$$unmerged" ]; then \
