@@ -22,11 +22,12 @@ Typing in the prompt filters and re-ranks the results live on every keystroke:
 - Items are scored and sorted by match quality (consecutive runs, word-boundary hits, prefix matches score higher).
 - Matched characters are highlighted in the results window using the `Search` highlight group.
 - Empty query shows all items in their original order with no highlights.
+- Prompt text changes are driven by prompt-buffer `TextChangedI` / `TextChanged` updates, while control-key actions are handled separately so non-text inputs do not reset selection.
 
 ## Mouse Interaction
 - **Single click** in results: moves selection to clicked row; focus stays in the prompt (insert mode).
 - **Double-click** in results: confirms the selection and closes the picker.
-- Clicking results updates selection and returns focus to the prompt window.
+- Insert-mode prompt mouse mappings intercept result clicks via `getmousepos()`, update the selection, and restore prompt focus without leaving the picker active state.
 
 ## Keyboard (from prompt)
 | Key | Action |
@@ -35,7 +36,7 @@ Typing in the prompt filters and re-ranks the results live on every keystroke:
 | `<Esc>` / `<C-c>` | Cancel and close |
 | `<C-j>` / `<Down>` | Move selection down |
 | `<C-k>` / `<Up>` | Move selection up |
-| Extra mappings such as `<C-d>` / `<C-a>` | Routed through picker-local key handling so control keys work inside the prompt buffer |
+| Extra mappings such as `<C-d>` / `<C-a>` | Routed through picker-local key handling so control keys work inside the prompt buffer without being treated as text edits |
 
 ## Sizing
 - `desired_w` = max of title width + 4 and longest item width + 2, or `opts.width` if provided.

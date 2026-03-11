@@ -27,7 +27,7 @@ This index provides a central directory for all specifications of the `parley.nv
 - [Note Templates](notes/templates.md): Template system for new notes.
 
 ## 5. UI & UX Components
-- [UI Pickers](ui/pickers.md): Telescope integrations for agents, prompts, and finder.
+- [UI Pickers](ui/pickers.md): Custom floating-window pickers for agents, prompts, finder, and outline navigation.
 - [Key Bindings Help](ui/keybindings.md): Shortcut reference command and default mapping.
 - [Outline Navigation](ui/outline.md): Buffer navigation and outline logic.
 - [Lualine Integration](ui/lualine.md): Statusline component and indicators.
