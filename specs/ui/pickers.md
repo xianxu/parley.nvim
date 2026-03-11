@@ -27,7 +27,7 @@ Typing in the prompt filters and re-ranks the results live on every keystroke:
 - Prompt text changes are driven by prompt-buffer `TextChangedI` / `TextChanged` updates, while control-key actions are handled separately so non-text inputs do not reset selection.
 
 ## Mouse Interaction
-- **Single click** in results: moves selection to clicked row; focus stays in the prompt (insert mode).
+- **Single click** in results: moves selection to clicked row without changing the current list view; focus stays in the prompt (insert mode).
 - **Double-click** in results: confirms the selection and closes the picker.
 - Insert-mode prompt mouse mappings intercept result clicks via `getmousepos()`, update the selection, and restore prompt focus without leaving the picker active state.
 

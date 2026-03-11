@@ -391,19 +391,30 @@ function M.open(opts)
         return filtered[math.max(1, math.min(sel_idx, #filtered))]
     end
 
-    local function set_selection(idx)
+    local function set_selection(idx, selection_opts)
+        selection_opts = selection_opts or {}
         sel_idx = math.max(1, math.min(idx, math.max(1, #filtered)))
         if vim.api.nvim_win_is_valid(results_win) then
             local target_row = visual_row_for_index(sel_idx)
-            local total_rows = results_row_count()
-            local win_rows = vim.api.nvim_win_get_height(results_win)
-            local max_topline = math.max(1, total_rows - win_rows + 1)
-            local topline = math.max(1, math.min(target_row - win_rows + 1, max_topline))
+            if selection_opts.preserve_view then
+                local view = vim.api.nvim_win_call(results_win, vim.fn.winsaveview)
+                vim.api.nvim_win_set_cursor(results_win, { target_row, 0 })
+                view.lnum = target_row
+                view.col = 0
+                vim.api.nvim_win_call(results_win, function()
+                    vim.fn.winrestview(view)
+                end)
+            else
+                local total_rows = results_row_count()
+                local win_rows = vim.api.nvim_win_get_height(results_win)
+                local max_topline = math.max(1, total_rows - win_rows + 1)
+                local topline = math.max(1, math.min(target_row - win_rows + 1, max_topline))
 
-            vim.api.nvim_win_set_cursor(results_win, { target_row, 0 })
-            vim.api.nvim_win_call(results_win, function()
-                vim.fn.winrestview({ topline = topline, leftcol = 0 })
-            end)
+                vim.api.nvim_win_set_cursor(results_win, { target_row, 0 })
+                vim.api.nvim_win_call(results_win, function()
+                    vim.fn.winrestview({ topline = topline, leftcol = 0 })
+                end)
+            end
         end
     end
 
@@ -512,7 +523,7 @@ function M.open(opts)
     local function prompt_click()
         local pos = vim.fn.getmousepos()
         if pos.winid == results_win and is_content_row(pos.line) then
-            set_selection(index_for_visual_row(pos.line))
+            set_selection(index_for_visual_row(pos.line), { preserve_view = true })
             focus_prompt()
         end
     end
@@ -527,7 +538,7 @@ function M.open(opts)
 
     nmap_r("<LeftMouse>", function()
         if vim.api.nvim_win_is_valid(results_win) then
-            sel_idx = index_for_visual_row(vim.api.nvim_win_get_cursor(results_win)[1])
+            set_selection(index_for_visual_row(vim.api.nvim_win_get_cursor(results_win)[1]), { preserve_view = true })
         end
         vim.schedule(function()
             focus_prompt()
@@ -611,7 +622,7 @@ function M.open(opts)
             if translated == "<LeftMouse>" and is_content_row(mouse.line) then
                 vim.schedule(function()
                     if closed then return end
-                    set_selection(index_for_visual_row(mouse.line))
+                    set_selection(index_for_visual_row(mouse.line), { preserve_view = true })
                     focus_prompt()
                 end)
                 return
