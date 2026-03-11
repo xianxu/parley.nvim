@@ -83,6 +83,7 @@ fetch:
 	echo "Issue #$(FETCH_NUM) appended to tasks/issue.md"
 
 # Create a GitHub pull request from the current worktree branch to main.
+# Reads tasks/issue.md for "# Issue #NN" lines and adds "Fixes #NN, ..." to the PR body.
 # Must be run from inside a worktree (not from main).
 pull-request:
 	@branch=$$(git branch --show-current); \
@@ -92,7 +93,20 @@ pull-request:
 	fi; \
 	git push -u origin "$$branch"; \
 	repo=$$(git remote get-url origin | sed 's|.*github.com[:/]\(.*\)\.git|\1|;s|.*github.com[:/]\(.*\)$$|\1|'); \
-	gh pr create --repo "$$repo" --base main --head "$$branch" --fill
+	fixes=""; \
+	if [ -f tasks/issue.md ]; then \
+		nums=$$(grep -oE '^# Issue #[0-9]+' tasks/issue.md | grep -oE '[0-9]+'); \
+		if [ -n "$$nums" ]; then \
+			fixes=$$(echo "$$nums" | sed 's/^/#/' | paste -sd ', ' -); \
+			fixes="Fixes $$fixes"; \
+		fi; \
+	fi; \
+	if [ -n "$$fixes" ]; then \
+		echo "Including in PR body: $$fixes"; \
+		gh pr create --repo "$$repo" --base main --head "$$branch" --fill --body "$$fixes"; \
+	else \
+		gh pr create --repo "$$repo" --base main --head "$$branch" --fill; \
+	fi
 
 # Merge the current worktree branch into main (if a PR exists), close any linked issue,
 # then clean up the worktree. Must be run from inside a worktree (not from main).
@@ -163,13 +177,6 @@ merge:
 				exit 1; \
 			fi; \
 		fi; \
-	fi; \
-	issue_num=$$(echo "$$branch" | grep -oE '[0-9]+$$'); \
-	if [ -n "$$issue_num" ]; then \
-		echo "==> Closing issue #$$issue_num..."; \
-		gh issue close "$$issue_num" --repo "$$repo"; \
-	else \
-		echo "  [--] No issue number in branch name, skipping issue close"; \
 	fi; \
 	echo "==> Cleaning up tasks/todo.md..."; \
 	rm -f "$$main_path/tasks/todo.md" && touch "$$main_path/tasks/todo.md"; \
