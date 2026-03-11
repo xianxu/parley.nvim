@@ -7,7 +7,7 @@ No external dependencies (Telescope or similar) are required.
 ## Layout
 Each picker opens two stacked floating windows:
 - **Results window** (top): read-only list of items, `cursorline` shows the current selection.
-- **Prompt window** (bottom, 1 line): focused on open, always in insert mode. The user types a fuzzy query here.
+- **Prompt window** (bottom, 1 line): focused on open, implemented with a prompt buffer. The user types a fuzzy query here.
 
 Both windows share the same width and are centered as a unit. Actual dimensions are clamped to the screen with `MARGIN_H = 4` cols and `MARGIN_V = 3` rows on each side. The prompt window adds a fixed overhead of 5 rows (two sets of borders + 1 content row) to the total vertical height.
 
@@ -26,7 +26,7 @@ Typing in the prompt filters and re-ranks the results live on every keystroke:
 ## Mouse Interaction
 - **Single click** in results: moves selection to clicked row; focus stays in the prompt (insert mode).
 - **Double-click** in results: confirms the selection and closes the picker.
-- Clicking while the prompt is in insert mode is handled by a prompt-side `<LeftMouse>` mapping that calls `getmousepos()` — this prevents Neovim's default insert-mode click behavior (exit-insert + window-switch) from stealing focus.
+- Clicking results updates selection and returns focus to the prompt window.
 
 ## Keyboard (from prompt)
 | Key | Action |
@@ -35,6 +35,7 @@ Typing in the prompt filters and re-ranks the results live on every keystroke:
 | `<Esc>` / `<C-c>` | Cancel and close |
 | `<C-j>` / `<Down>` | Move selection down |
 | `<C-k>` / `<Up>` | Move selection up |
+| Extra mappings such as `<C-d>` / `<C-a>` | Routed through picker-local key handling so control keys work inside the prompt buffer |
 
 ## Sizing
 - `desired_w` = max of title width + 4 and longest item width + 2, or `opts.width` if provided.

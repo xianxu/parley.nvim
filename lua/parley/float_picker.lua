@@ -30,11 +30,11 @@
 --   VimResized repositions both windows (global autocmd, cleaned up on close).
 
 local M = {}
-
 local MIN_W    = 20  -- minimum picker width  (chars)
 local MIN_H    = 1   -- minimum results height (lines)
 local MARGIN_H = 4   -- cols kept clear on each horizontal edge
 local MARGIN_V = 3   -- rows kept clear on each vertical edge
+local PROMPT_PREFIX = "> "
 -- Rows consumed by borders of both windows + 1 prompt content row:
 --   results top-border(1) + results bottom-border(1) +
 --   prompt  top-border(1) + prompt  content(1) + prompt bottom-border(1) = 5
@@ -177,16 +177,15 @@ end
 function M.open(opts)
     local items          = opts.items or {}
     local title          = opts.title or "Select"
-    local on_select      = opts.on_select  or function() end
-    local on_cancel      = opts.on_cancel  or function() end
-    local extra_mappings = opts.mappings   or {}
+    local on_select      = opts.on_select or function() end
+    local on_cancel      = opts.on_cancel or function() end
+    local extra_mappings = opts.mappings or {}
 
     if #items == 0 then
         vim.notify("No items to pick from", vim.log.levels.WARN)
         return
     end
 
-    -- Desired dimensions (content-driven unless caller overrides)
     local desired_w = opts.width or (function()
         local w = vim.fn.strdisplaywidth(title) + 4
         for _, item in ipairs(items) do
@@ -197,29 +196,121 @@ function M.open(opts)
     end)()
     local desired_h = opts.height or #items
 
-    -- Initial layout
     local ui = vim.api.nvim_list_uis()[1] or { width = 80, height = 24 }
     local win_w, win_h, row, col, prompt_row = compute_layout(desired_w, desired_h, ui)
 
-    -- -----------------------------------------------------------------------
-    -- Buffers
-    -- -----------------------------------------------------------------------
     local results_buf = vim.api.nvim_create_buf(false, true)
     vim.bo[results_buf].bufhidden = "wipe"
-    vim.bo[results_buf].buftype   = "nofile"
+    vim.bo[results_buf].buftype = "nofile"
 
     local prompt_buf = vim.api.nvim_create_buf(false, true)
     vim.bo[prompt_buf].bufhidden = "wipe"
-    vim.bo[prompt_buf].buftype   = "nofile"
-    vim.api.nvim_buf_set_lines(prompt_buf, 0, -1, false, { "" })
+    vim.bo[prompt_buf].buftype = "prompt"
+    vim.fn.prompt_setprompt(prompt_buf, PROMPT_PREFIX)
 
-    -- -----------------------------------------------------------------------
-    -- Filtered items + selection state
-    -- -----------------------------------------------------------------------
-    local filtered = vim.deepcopy(items)  -- current filtered+sorted subset
-    local sel_idx  = 1                    -- 1-based index into filtered
+    local filtered = vim.deepcopy(items)
+    local sel_idx = 1
+    local query_text = ""
+    local query_cursor = 0
+    local closed = false
+    local resize_autocmd_id = nil
+    local on_key_ns = vim.api.nvim_create_namespace("float_picker_on_key")
 
-    -- Rewrite results buffer from current `filtered` list.
+    local function keycode(key)
+        return vim.api.nvim_replace_termcodes(key, true, false, true)
+    end
+    local function key_name(key)
+        return vim.fn.keytrans(key)
+    end
+
+    local results_cfg = {
+        relative = "editor",
+        row = row,
+        col = col,
+        width = win_w,
+        height = win_h,
+        style = "minimal",
+        border = "rounded",
+        focusable = true,
+    }
+    if vim.fn.has("nvim-0.9") == 1 then
+        results_cfg.title = " " .. title .. " "
+        results_cfg.title_pos = "center"
+    end
+
+    local results_win = vim.api.nvim_open_win(results_buf, false, results_cfg)
+    vim.wo[results_win].cursorline = true
+    vim.wo[results_win].wrap = false
+    vim.wo[results_win].scrolloff = 3
+    vim.wo[results_win].number = false
+    vim.wo[results_win].relativenumber = false
+    vim.wo[results_win].signcolumn = "no"
+    vim.wo[results_win].spell = false
+
+    local prompt_cfg = {
+        relative = "editor",
+        row = prompt_row,
+        col = col,
+        width = win_w,
+        height = 1,
+        style = "minimal",
+        border = "rounded",
+        focusable = true,
+    }
+    local prompt_win = vim.api.nvim_open_win(prompt_buf, true, prompt_cfg)
+    vim.wo[prompt_win].wrap = false
+    vim.wo[prompt_win].number = false
+    vim.wo[prompt_win].relativenumber = false
+    vim.wo[prompt_win].signcolumn = "no"
+
+    local function prompt_line()
+        if not vim.api.nvim_buf_is_valid(prompt_buf) then
+            return PROMPT_PREFIX
+        end
+        return vim.api.nvim_buf_get_lines(prompt_buf, 0, 1, false)[1] or PROMPT_PREFIX
+    end
+
+    local function current_query_from_buffer()
+        local line = prompt_line()
+        if line:sub(1, #PROMPT_PREFIX) == PROMPT_PREFIX then
+            return line:sub(#PROMPT_PREFIX + 1)
+        end
+        return line
+    end
+
+    local function render_prompt()
+        if closed then return end
+        if not vim.api.nvim_buf_is_valid(prompt_buf) then
+            return
+        end
+        vim.api.nvim_buf_set_lines(prompt_buf, 0, -1, false, { PROMPT_PREFIX .. query_text })
+        if vim.api.nvim_win_is_valid(prompt_win) then
+            vim.api.nvim_win_set_cursor(prompt_win, { 1, #PROMPT_PREFIX + query_cursor })
+        end
+    end
+
+    local function focus_prompt()
+        if closed or not vim.api.nvim_win_is_valid(prompt_win) then
+            return
+        end
+        vim.api.nvim_set_current_win(prompt_win)
+        vim.api.nvim_win_set_cursor(prompt_win, { 1, #PROMPT_PREFIX + query_cursor })
+        local mode = vim.api.nvim_get_mode().mode
+        if mode ~= "i" and mode ~= "ic" then
+            vim.cmd("startinsert!")
+        end
+    end
+
+    local function sync_query_from_prompt()
+        query_text = current_query_from_buffer()
+        if vim.api.nvim_win_is_valid(prompt_win) then
+            local prompt_col = vim.api.nvim_win_get_cursor(prompt_win)[2] - #PROMPT_PREFIX
+            query_cursor = math.max(0, math.min(prompt_col, #query_text))
+        else
+            query_cursor = math.min(query_cursor, #query_text)
+        end
+    end
+
     local function refresh_results()
         vim.bo[results_buf].modifiable = true
         local lines = {}
@@ -232,55 +323,6 @@ function M.open(opts)
         vim.api.nvim_buf_set_lines(results_buf, 0, -1, false, lines)
         vim.bo[results_buf].modifiable = false
     end
-    refresh_results()
-
-    -- -----------------------------------------------------------------------
-    -- Windows
-    -- -----------------------------------------------------------------------
-    local results_cfg = {
-        relative  = "editor",
-        row = row, col = col, width = win_w, height = win_h,
-        style     = "minimal",
-        border    = "rounded",
-        focusable = true,
-    }
-    if vim.fn.has("nvim-0.9") == 1 then
-        results_cfg.title     = " " .. title .. " "
-        results_cfg.title_pos = "center"
-    end
-
-    -- Results window is NOT focused on open (false = don't enter it)
-    local results_win = vim.api.nvim_open_win(results_buf, false, results_cfg)
-    vim.wo[results_win].cursorline     = true
-    vim.wo[results_win].wrap           = false
-    vim.wo[results_win].scrolloff      = 3
-    vim.wo[results_win].number         = false
-    vim.wo[results_win].relativenumber = false
-    vim.wo[results_win].signcolumn     = "no"
-    vim.wo[results_win].spell          = false
-
-    local prompt_cfg = {
-        relative  = "editor",
-        row = prompt_row, col = col, width = win_w, height = 1,
-        style     = "minimal",
-        border    = "rounded",
-        focusable = true,
-    }
-    -- Prompt window IS focused (true = enter it)
-    local prompt_win = vim.api.nvim_open_win(prompt_buf, true, prompt_cfg)
-    vim.wo[prompt_win].wrap           = false
-    vim.wo[prompt_win].number         = false
-    vim.wo[prompt_win].relativenumber = false
-    vim.wo[prompt_win].signcolumn     = "no"
-
-    -- Enter insert mode immediately
-    vim.cmd("startinsert!")
-
-    -- -----------------------------------------------------------------------
-    -- Close / confirm / cancel helpers
-    -- -----------------------------------------------------------------------
-    local closed            = false
-    local resize_autocmd_id = nil
 
     local function close_all()
         if closed then return end
@@ -289,11 +331,10 @@ function M.open(opts)
             pcall(vim.api.nvim_del_autocmd, resize_autocmd_id)
             resize_autocmd_id = nil
         end
-        -- Exit insert mode before closing windows
+        vim.on_key(nil, on_key_ns)
         local mode = vim.api.nvim_get_mode().mode
         if mode == "i" or mode == "ic" then
-            vim.api.nvim_feedkeys(
-                vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "n", true)
+            vim.api.nvim_feedkeys(keycode("<Esc>"), "n", true)
         end
         if vim.api.nvim_win_is_valid(prompt_win) then
             vim.api.nvim_win_close(prompt_win, true)
@@ -328,14 +369,6 @@ function M.open(opts)
         vim.schedule(on_cancel)
     end
 
-    -- -----------------------------------------------------------------------
-    -- Match highlighting
-    -- -----------------------------------------------------------------------
-
-    -- Highlight matched characters for every visible result row.
-    -- Operates on the actual buffer lines so truncation is respected automatically.
-    -- ASCII query chars cannot alias into multi-byte UTF-8 sequences, so byte
-    -- positions are always valid column boundaries for nvim_buf_add_highlight.
     local function highlight_matches(query)
         vim.api.nvim_buf_clear_namespace(results_buf, MATCH_NS, 0, -1)
         if not query or query == "" then return end
@@ -347,7 +380,6 @@ function M.open(opts)
                 local positions = match_positions(word, line)
                 if positions then
                     for _, pos in ipairs(positions) do
-                        -- pos is 1-based byte offset in `line`; convert to 0-based col range
                         vim.api.nvim_buf_add_highlight(
                             results_buf, MATCH_NS, "Search", i - 1, pos - 1, pos)
                     end
@@ -356,20 +388,16 @@ function M.open(opts)
         end
     end
 
-    -- -----------------------------------------------------------------------
-    -- Live filtering
-    -- -----------------------------------------------------------------------
-    local function apply_filter()
-        local query = (vim.api.nvim_buf_get_lines(prompt_buf, 0, 1, false)[1] or ""):gsub("^%s+", "")
-
+    local function apply_filter(reset_selection)
+        local query = query_text:gsub("^%s+", "")
         if query == "" then
             filtered = vim.deepcopy(items)
         else
             local scored = {}
             for _, item in ipairs(items) do
-                local s = M._fuzzy_score(query, item.display)
-                if s then
-                    table.insert(scored, { item = item, score = s })
+                local score = M._fuzzy_score(query, item.display)
+                if score then
+                    table.insert(scored, { item = item, score = score })
                 end
             end
             table.sort(scored, function(a, b) return a.score > b.score end)
@@ -378,71 +406,56 @@ function M.open(opts)
                 table.insert(filtered, entry.item)
             end
         end
-
         refresh_results()
-        set_selection(1)
+        if reset_selection == false then
+            set_selection(sel_idx)
+        else
+            set_selection(1)
+        end
         highlight_matches(query)
     end
 
-    -- -----------------------------------------------------------------------
-    -- Key mappings – results window
-    -- -----------------------------------------------------------------------
+    local function invoke_extra_mapping(fn)
+        fn(get_selected_item(), close_all)
+    end
+
+    render_prompt()
+    apply_filter(true)
+
     local function nmap_r(key, fn)
-        vim.keymap.set("n", key, fn,
-            { buffer = results_buf, noremap = true, silent = true, nowait = true })
+        vim.keymap.set("n", key, fn, {
+            buffer = results_buf,
+            noremap = true,
+            silent = true,
+            nowait = true,
+        })
     end
 
-    -- Single click reaching results (only possible when prompt is in normal mode and
-    -- the user clicked results directly): sync sel_idx and return to prompt.
-    nmap_r("<LeftMouse>", function()
-        if vim.api.nvim_win_is_valid(results_win) then
-            sel_idx = vim.api.nvim_win_get_cursor(results_win)[1]
-        end
-        vim.schedule(function()
-            if not closed and vim.api.nvim_win_is_valid(prompt_win) then
-                vim.api.nvim_set_current_win(prompt_win)
-            end
-        end)
-    end)
-
-    -- Suppress drag and release so clicking never starts a visual selection.
-    nmap_r("<LeftDrag>",    function() end)
-    nmap_r("<LeftRelease>", function() end)
-
-    -- Double-click: confirm immediately.
-    nmap_r("<2-LeftMouse>", function()
-        if vim.api.nvim_win_is_valid(results_win) then
-            sel_idx = vim.api.nvim_win_get_cursor(results_win)[1]
-        end
-        confirm()
-    end)
-
-    -- Keyboard fallback if focus somehow lands in results.
-    nmap_r("<CR>",  confirm)
-    nmap_r("<Esc>", cancel)
-    nmap_r("q",     cancel)
-
-    -- -----------------------------------------------------------------------
-    -- Key mappings – prompt (insert + normal mode)
-    -- -----------------------------------------------------------------------
-    local function imap(key, fn)
-        vim.keymap.set("i", key, fn,
-            { buffer = prompt_buf, noremap = true, silent = true, nowait = true })
-    end
     local function nmap_p(key, fn)
-        vim.keymap.set("n", key, fn,
-            { buffer = prompt_buf, noremap = true, silent = true, nowait = true })
+        vim.keymap.set("n", key, fn, {
+            buffer = prompt_buf,
+            noremap = true,
+            silent = true,
+            nowait = true,
+        })
+    end
+    local function imap_p(key, fn)
+        vim.keymap.set("i", key, fn, {
+            buffer = prompt_buf,
+            noremap = true,
+            silent = true,
+            nowait = true,
+        })
     end
 
-    -- Mouse in prompt: <LeftMouse> from insert mode is consumed here BEFORE Neovim's
-    -- default insert-mode click behavior (exit-insert + window-switch). We update
-    -- the selection and stay in prompt insert mode — no focus change at all.
     local function prompt_click()
         local pos = vim.fn.getmousepos()
         if pos.winid == results_win and pos.line >= 1 then
             set_selection(pos.line)
+            focus_prompt()
         end
     end
+
     local function prompt_dblclick()
         local pos = vim.fn.getmousepos()
         if pos.winid == results_win and pos.line >= 1 then
@@ -450,47 +463,148 @@ function M.open(opts)
             confirm()
         end
     end
-    imap("<LeftMouse>",    prompt_click)
-    imap("<2-LeftMouse>",  prompt_dblclick)
-    nmap_p("<LeftMouse>",   prompt_click)
-    nmap_p("<2-LeftMouse>", prompt_dblclick)
 
-    imap("<CR>",   confirm)
-    imap("<Esc>",  cancel)
-    imap("<C-c>",  cancel)
-    imap("<C-j>",  function() set_selection(sel_idx + 1) end)
-    imap("<Down>", function() set_selection(sel_idx + 1) end)
-    imap("<C-k>",  function() set_selection(sel_idx - 1) end)
-    imap("<Up>",   function() set_selection(sel_idx - 1) end)
-    nmap_p("<CR>",  confirm)
-    nmap_p("<Esc>", cancel)
-    nmap_p("q",     cancel)
-
-    -- Extra caller-supplied mappings (e.g. delete, toggle in ChatFinder)
-    for _, m in ipairs(extra_mappings) do
-        local key = m.key
-        local fn  = m.fn
-        imap(key, function()
-            local item = get_selected_item()
-            fn(item, close_all)
+    nmap_r("<LeftMouse>", function()
+        if vim.api.nvim_win_is_valid(results_win) then
+            sel_idx = vim.api.nvim_win_get_cursor(results_win)[1]
+        end
+        vim.schedule(function()
+            focus_prompt()
         end)
-        nmap_p(key, function()
-            local item = get_selected_item()
-            fn(item, close_all)
+    end)
+    nmap_r("<LeftDrag>", function() end)
+    nmap_r("<LeftRelease>", function() end)
+    nmap_r("<2-LeftMouse>", function()
+        if vim.api.nvim_win_is_valid(results_win) then
+            sel_idx = vim.api.nvim_win_get_cursor(results_win)[1]
+        end
+        confirm()
+    end)
+    nmap_r("<CR>", confirm)
+    nmap_r("<Esc>", cancel)
+    nmap_r("q", cancel)
+
+    nmap_p("<LeftMouse>", prompt_click)
+    nmap_p("<2-LeftMouse>", prompt_dblclick)
+    nmap_p("<CR>", confirm)
+    nmap_p("<Esc>", cancel)
+    nmap_p("q", cancel)
+    imap_p("<LeftMouse>", prompt_click)
+    imap_p("<2-LeftMouse>", prompt_dblclick)
+    imap_p("<Up>", function()
+        set_selection(sel_idx - 1)
+        focus_prompt()
+    end)
+    imap_p("<Down>", function()
+        set_selection(sel_idx + 1)
+        focus_prompt()
+    end)
+    imap_p("<Left>", function()
+        query_cursor = math.max(0, query_cursor - 1)
+        focus_prompt()
+    end)
+    imap_p("<Right>", function()
+        query_cursor = math.min(#query_text, query_cursor + 1)
+        focus_prompt()
+    end)
+
+    local extra_key_handlers = {}
+    for _, m in ipairs(extra_mappings) do
+        extra_key_handlers[keycode(m.key)] = m.fn
+        nmap_p(m.key, function()
+            invoke_extra_mapping(m.fn)
+        end)
+        nmap_r(m.key, function()
+            invoke_extra_mapping(m.fn)
         end)
     end
 
-    -- -----------------------------------------------------------------------
-    -- TextChangedI – trigger live filter on every keystroke
-    -- -----------------------------------------------------------------------
+    vim.fn.prompt_setcallback(prompt_buf, function()
+        confirm()
+    end)
+    vim.fn.prompt_setinterrupt(prompt_buf, function()
+        cancel()
+    end)
+
+    local special_keys = {
+        ["<Esc>"] = function()
+            cancel()
+        end,
+        ["<C-j>"] = function()
+            set_selection(sel_idx + 1)
+            focus_prompt()
+        end,
+        ["<C-k>"] = function()
+            set_selection(sel_idx - 1)
+            focus_prompt()
+        end,
+    }
+
+    vim.on_key(function(key)
+        if closed then return end
+
+        local cur_win = vim.api.nvim_get_current_win()
+        local mouse = vim.fn.getmousepos()
+        local translated = key_name(key)
+        if cur_win == prompt_win and mouse.winid == results_win then
+            if translated == "<LeftMouse>" then
+                vim.schedule(function()
+                    if closed then return end
+                    set_selection(mouse.line)
+                    focus_prompt()
+                end)
+                return
+            elseif translated == "<2-LeftMouse>" then
+                vim.schedule(function()
+                    if closed then return end
+                    set_selection(mouse.line)
+                    confirm()
+                end)
+                return
+            end
+        end
+
+        if cur_win ~= prompt_win then
+            return
+        end
+
+        local extra_fn = extra_key_handlers[key]
+        if extra_fn then
+            vim.schedule(function()
+                if closed then return end
+                invoke_extra_mapping(extra_fn)
+                if not closed then
+                    focus_prompt()
+                end
+            end)
+            return
+        end
+
+        local special = special_keys[translated]
+        if special then
+            vim.schedule(function()
+                if closed then return end
+                special()
+            end)
+            return
+        end
+
+        if translated == "<CR>" then
+            return
+        end
+    end, on_key_ns)
+
     vim.api.nvim_create_autocmd({ "TextChangedI", "TextChanged" }, {
-        buffer   = prompt_buf,
-        callback = apply_filter,
+        buffer = prompt_buf,
+        callback = function()
+            if closed or not vim.api.nvim_buf_is_valid(prompt_buf) then
+                return
+            end
+            sync_query_from_prompt()
+            apply_filter(true)
+        end,
     })
 
-    -- -----------------------------------------------------------------------
-    -- VimResized – reposition both windows (global autocmd)
-    -- -----------------------------------------------------------------------
     resize_autocmd_id = vim.api.nvim_create_autocmd("VimResized", {
         callback = function()
             if not vim.api.nvim_win_is_valid(results_win) then
@@ -503,36 +617,45 @@ function M.open(opts)
             local new_ui = vim.api.nvim_list_uis()[1] or { width = 80, height = 24 }
             local nw, nh, nr, nc, npr = compute_layout(desired_w, desired_h, new_ui)
             vim.api.nvim_win_set_config(results_win, {
-                relative = "editor", row = nr,  col = nc, width = nw, height = nh,
+                relative = "editor",
+                row = nr,
+                col = nc,
+                width = nw,
+                height = nh,
             })
             if vim.api.nvim_win_is_valid(prompt_win) then
                 vim.api.nvim_win_set_config(prompt_win, {
-                    relative = "editor", row = npr, col = nc, width = nw, height = 1,
+                    relative = "editor",
+                    row = npr,
+                    col = nc,
+                    width = nw,
+                    height = 1,
                 })
             end
         end,
     })
 
-    -- -----------------------------------------------------------------------
-    -- WinLeave – dismiss picker when focus leaves both picker windows
-    -- -----------------------------------------------------------------------
     local function on_win_leave()
         vim.schedule(function()
             if closed then return end
             local cur = vim.api.nvim_get_current_win()
-            if cur == results_win or cur == prompt_win then return end
+            if cur == results_win or cur == prompt_win then
+                return
+            end
             cancel()
         end)
     end
 
     vim.api.nvim_create_autocmd("WinLeave", {
-        buffer   = prompt_buf,
+        buffer = prompt_buf,
         callback = on_win_leave,
     })
     vim.api.nvim_create_autocmd("WinLeave", {
-        buffer   = results_buf,
+        buffer = results_buf,
         callback = on_win_leave,
     })
+
+    focus_prompt()
 end
 
 return M
