@@ -40,6 +40,9 @@ local MARGIN_V = 3   -- rows kept clear on each vertical edge
 --   prompt  top-border(1) + prompt  content(1) + prompt bottom-border(1) = 5
 local PROMPT_OVERHEAD = 5
 
+-- Highlight namespace for fuzzy match characters in results.
+local MATCH_NS = vim.api.nvim_create_namespace("float_picker_match")
+
 -- ---------------------------------------------------------------------------
 -- Fuzzy scoring
 -- ---------------------------------------------------------------------------
@@ -85,6 +88,23 @@ local function score_word(word, haystack)
     end
 
     return score
+end
+
+-- Return the 1-based byte positions in `text` where the characters of `word`
+-- matched (same greedy left-to-right scan as score_word), or nil on no match.
+local function match_positions(word, text)
+    local hw = text:lower()
+    local ww = word:lower()
+    if #ww == 0 then return {} end
+    local positions = {}
+    local hi = 1
+    for wi = 1, #ww do
+        local found = hw:find(ww:sub(wi, wi), hi, true)
+        if not found then return nil end
+        table.insert(positions, found)
+        hi = found + 1
+    end
+    return positions
 end
 
 -- Score a multi-word query against a haystack.
@@ -309,6 +329,34 @@ function M.open(opts)
     end
 
     -- -----------------------------------------------------------------------
+    -- Match highlighting
+    -- -----------------------------------------------------------------------
+
+    -- Highlight matched characters for every visible result row.
+    -- Operates on the actual buffer lines so truncation is respected automatically.
+    -- ASCII query chars cannot alias into multi-byte UTF-8 sequences, so byte
+    -- positions are always valid column boundaries for nvim_buf_add_highlight.
+    local function highlight_matches(query)
+        vim.api.nvim_buf_clear_namespace(results_buf, MATCH_NS, 0, -1)
+        if not query or query == "" then return end
+        local buf_lines = vim.api.nvim_buf_get_lines(results_buf, 0, -1, false)
+        for i, _ in ipairs(filtered) do
+            local line = buf_lines[i]
+            if not line then break end
+            for word in query:gmatch("%S+") do
+                local positions = match_positions(word, line)
+                if positions then
+                    for _, pos in ipairs(positions) do
+                        -- pos is 1-based byte offset in `line`; convert to 0-based col range
+                        vim.api.nvim_buf_add_highlight(
+                            results_buf, MATCH_NS, "Search", i - 1, pos - 1, pos)
+                    end
+                end
+            end
+        end
+    end
+
+    -- -----------------------------------------------------------------------
     -- Live filtering
     -- -----------------------------------------------------------------------
     local function apply_filter()
@@ -333,6 +381,7 @@ function M.open(opts)
 
         refresh_results()
         set_selection(1)
+        highlight_matches(query)
     end
 
     -- -----------------------------------------------------------------------
