@@ -1,4 +1,39 @@
-.PHONY: test test-spec test-changed lint fixtures model-check model-checker test-clean-env worktree issue fetch push pull-request merge
+.PHONY: help test test-spec test-changed lint fixtures model-check model-checker test-clean-env worktree issue fetch push pull-request merge
+
+help:
+	@printf '%s\n' \
+	"AI Workflow" \
+	"" \
+	"Work on main:" \
+	"  make fetch 42" \
+	"    Fetch GitHub issue 42 and append it to tasks/issue.md." \
+	"  make fetch 60" \
+	"    Fetch another issue and append it to tasks/issue.md." \
+	"  make push" \
+	"    Auto-commit tracked changes if needed, git push, then close all issues" \
+	"    mentioned in tasks/issue.md and clear that file." \
+	"" \
+	"Work on a larger issue:" \
+	"  make issue 42" \
+	"    Fetch GitHub issue 42 into tasks/issue.md, create a sibling worktree" \
+	"    named {current-dir}-42, and use that worktree for isolated changes." \
+	"  make pull-request" \
+	"    Push the current worktree branch and open a PR that fixes all issues" \
+	"    mentioned in tasks/issue.md." \
+	"  make merge" \
+	"    Merge the PR, sync main, and clean up the worktree/branch." \
+	"" \
+	"Alternate setup:" \
+	"  make worktree a-banana-tree" \
+	"    Create a sibling worktree/branch with that name." \
+	"  make fetch 42" \
+	"    Fetch issue 42 into tasks/issue.md in the current directory." \
+	"" \
+	"Typical agent flow:" \
+	"  1. Prepare work with one of the commands above." \
+	"  2. Open the repo or worktree." \
+	"  3. Tell the coding agent: go" \
+	"     The agent will read tasks/issue.md and continue from there."
 
 # Worktree management targets
 # Capture extra argument after worktree (e.g. make worktree feature-x)
