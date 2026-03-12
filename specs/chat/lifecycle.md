@@ -32,6 +32,7 @@ The chat lifecycle includes creation, sending questions, receiving responses, re
 - Toggles whether cursor/view follows the active streamed insertion point.
 - When toggled on during an active response, cursor MUST jump to the current insertion location and continue following.
 - When toggled off, streaming continues but cursor/view MUST stop auto-following.
+- When a followed response finishes, completion-time buffer edits (for example appending the next prompt) MUST NOT move the cursor past the final streamed response text.
 
 ### Concurrent Process Guard
 - Subsequent `:ParleyChatRespond` calls are ignored if a response is running.

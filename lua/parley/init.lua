@@ -275,6 +275,21 @@ local function is_follow_cursor_enabled(override_free_cursor)
 	return not M.config.chat_free_cursor
 end
 
+local function query_cursor_line(qt)
+	if not qt then
+		return nil
+	end
+
+	if type(qt.last_line) == "number" and qt.last_line >= 0 then
+		return qt.last_line + 1
+	end
+	if type(qt.first_line) == "number" and qt.first_line >= 0 then
+		return qt.first_line + 1
+	end
+
+	return nil
+end
+
 local function jump_to_active_response(buf, win)
 	if not M.tasker.is_busy(buf, true) then
 		return false
@@ -285,12 +300,7 @@ local function jump_to_active_response(buf, win)
 		return false
 	end
 
-	local line = nil
-	if type(qt.last_line) == "number" and qt.last_line >= 0 then
-		line = qt.last_line + 1
-	elseif type(qt.first_line) == "number" and qt.first_line >= 0 then
-		line = qt.first_line + 1
-	end
+	local line = query_cursor_line(qt)
 	if not line then
 		return false
 	end
@@ -4084,6 +4094,7 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 				if not qt then
 					return
 				end
+				local streamed_cursor_line = query_cursor_line(qt)
 					request_clear_progress_indicator()
 
 				-- Only add a new user prompt at the end if we're not in the middle of the document
@@ -4165,21 +4176,20 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 							.. tostring(exchange_idx)
 							.. ", component: "
 							.. tostring(component)
-							.. ", response_line: "
-							.. tostring(response_line)
+							.. ", streamed_cursor_line: "
+							.. tostring(streamed_cursor_line)
 					)
 
-					if exchange_idx and component == "question" then
-						-- If we replaced an answer in the middle, move cursor to that position
-						local line = response_line + 2
-						M.logger.debug("Moving cursor to middle position: " .. tostring(line))
-						M.helpers.cursor_to_line(line, buf, win)
-					else
-						-- Otherwise, move to the end of the buffer
-						local line = vim.api.nvim_buf_line_count(buf)
-						M.logger.debug("Moving cursor to end: " .. tostring(line))
-						M.helpers.cursor_to_line(line, buf, win)
+					local line = streamed_cursor_line
+					if not line then
+						if exchange_idx and component == "question" then
+							line = response_line + 2
+						else
+							line = vim.api.nvim_buf_line_count(buf)
+						end
 					end
+					M.logger.debug("Moving cursor to completion position: " .. tostring(line))
+					M.helpers.cursor_to_line(line, buf, win)
 				else
 					M.logger.debug("Not moving cursor due to free_cursor setting")
 				end

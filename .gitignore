@@ -4,3 +4,4 @@ tasks/*
 !tasks/lessons.md
 .nvimlog
 .test-xdg/
+.test-tmp/

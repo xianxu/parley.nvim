@@ -205,16 +205,19 @@ end)
 describe("chat_respond: buffer state after completion", function()
     local test_file
     local original_query
+    local original_follow_cursor
 
     before_each(function()
         test_file = make_chat_filename()
         original_query = parley.dispatcher.query
+        original_follow_cursor = parley._state.follow_cursor
     end)
 
     after_each(function()
         if original_query then
             parley.dispatcher.query = original_query
         end
+        parley._state.follow_cursor = original_follow_cursor
         if test_file and vim.fn.filereadable(test_file) == 1 then
             vim.fn.delete(test_file)
         end
@@ -275,6 +278,57 @@ describe("chat_respond: buffer state after completion", function()
         end
 
         assert.is_true(has_new_prompt, "New user prompt should be added after response")
+    end)
+
+    it("keeps follow cursor on the last streamed answer line after completion", function()
+        local chat_content = [[
+# topic: Test Topic
+- file: test.md
+---
+
+💬: What is Lua?
+]]
+
+        vim.fn.writefile(vim.split(chat_content, "\n"), test_file)
+        vim.cmd("edit " .. test_file)
+        local buf = vim.api.nvim_get_current_buf()
+        parley._state.follow_cursor = true
+        vim.api.nvim_win_set_cursor(0, {6, 0})
+
+        local completion_called = false
+        parley.dispatcher.query = function(buf_arg, provider, payload, handler, completion_callback)
+            local mock_qid = "qid_follow_cursor"
+            parley.tasker.set_query(mock_qid, {
+                response = "Lua is lightweight.\nIt embeds easily.",
+                buf = buf_arg,
+            })
+
+            if handler then
+                handler(mock_qid, "Lua is lightweight.\n")
+                handler(mock_qid, "It embeds easily.")
+            end
+
+            vim.schedule(function()
+                completion_callback(mock_qid)
+                completion_called = true
+            end)
+        end
+
+        parley.chat_respond({ range = 0 })
+        vim.wait(300, function()
+            return completion_called
+        end, 10)
+
+        local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+        local answer_end_line = nil
+        for i, line in ipairs(lines) do
+            if line == "It embeds easily." then
+                answer_end_line = i
+            end
+        end
+
+        assert.is_not_nil(answer_end_line, "Expected streamed answer text in buffer")
+        assert.same({ answer_end_line, 0 }, vim.api.nvim_win_get_cursor(0))
     end)
 
     it("topic generation writes updated header to line 0", function()
