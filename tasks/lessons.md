@@ -24,3 +24,7 @@
 - When live validation updates the status of one interaction path (for example, left/right now works), record that correction immediately and narrow the next change to the still-failing paths instead of treating the whole area as still broken.
 - When anchoring picker content to a window edge, verify both the visual window options (for example `scrolloff`) and the actual buffer line count; row math based only on window height can look correct in tests but drift in live UI.
 - Distinguish bottom-anchored initial placement from keyboard navigation behavior: selection reset may pin to the edge, but arrow-key movement should preserve the current view and only scroll when crossing a visible boundary.
+
+## 2026-03-11
+- When a UI bug reproduces only in live interaction, do not stop at helper-level or state-only tests; add runtime tracing on the actual event path before claiming the root cause.
+- For bottom-anchored pickers, verify visual-row semantics against the real rendered selection path before mapping “next item” onto logical list indices.

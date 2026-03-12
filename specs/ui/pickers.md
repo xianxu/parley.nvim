@@ -65,6 +65,7 @@ The picker closes if focus moves to any window that is neither the results nor t
     - Previous recency key (`<C-s>` by default): Move right through configured recency windows toward larger cutoffs and `All`.
     - Delete key (`<C-d>` by default): Delete the selected chat file.
       The confirmation prompt is opened from the source window after the picker closes. If it is cancelled with `Esc` or answered negatively, ChatFinder reopens instead of being dismissed.
+      After a confirmed delete, ChatFinder preserves the same visual row in the bottom-anchored list: it prefers the older surviving neighbor that slides into the deleted row, and falls back to the newer neighbor only when deleting the oldest visible entry.
     - `<C-g>?`: Open Parley key-bindings help.
 - Files are sorted by modification date, newest first.
 

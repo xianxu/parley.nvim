@@ -30,6 +30,7 @@
 --   VimResized repositions both windows (global autocmd, cleaned up on close).
 
 local M = {}
+local logger = require("parley.logger")
 local MIN_W    = 20  -- minimum picker width  (chars)
 local MIN_H    = 1   -- minimum results height (lines)
 local MARGIN_H = 4   -- cols kept clear on each horizontal edge
@@ -520,11 +521,44 @@ function M.open(opts)
         refresh_results()
         if reset_selection == false then
             set_selection(sel_idx)
+            if title:match("^Chat Files") then
+                local selected = get_selected_item()
+                logger.debug(string.format(
+                    "float_picker chat trace: apply_filter keep sel_idx=%s selected_value=%s filtered_count=%s query=%q",
+                    tostring(sel_idx),
+                    selected and selected.value or "nil",
+                    tostring(#filtered),
+                    query
+                ))
+            end
         elseif initial_index and query == "" then
             set_selection(initial_index)
+            if title:match("^Chat Files") then
+                local selected = get_selected_item()
+                logger.debug(string.format(
+                    "float_picker chat trace: apply_filter initial_index=%s resolved_sel_idx=%s selected_value=%s filtered_count=%s",
+                    tostring(initial_index),
+                    tostring(sel_idx),
+                    selected and selected.value or "nil",
+                    tostring(#filtered)
+                ))
+            end
             initial_index = nil
         else
-            set_selection(1)
+            local target_index = query == "" and math.max(1, math.min(sel_idx, #filtered)) or 1
+            set_selection(target_index)
+            if title:match("^Chat Files") then
+                local selected = get_selected_item()
+                logger.debug(string.format(
+                    "float_picker chat trace: apply_filter default target_index=%s sel_idx=%s selected_value=%s filtered_count=%s query=%q initial_index=%s",
+                    tostring(target_index),
+                    tostring(sel_idx),
+                    selected and selected.value or "nil",
+                    tostring(#filtered),
+                    query,
+                    tostring(initial_index)
+                ))
+            end
         end
         highlight_matches(query)
     end
@@ -536,7 +570,17 @@ function M.open(opts)
             focus_prompt = focus_prompt,
             skip_focus_restore = false,
         }
-        fn(get_selected_item(), close_all, context)
+        local selected = get_selected_item()
+        if title:match("^Chat Files") then
+            logger.debug(string.format(
+                "float_picker chat trace: extra_mapping sel_idx=%s selected_value=%s filtered_count=%s query=%q",
+                tostring(sel_idx),
+                selected and selected.value or "nil",
+                tostring(#filtered),
+                query_text
+            ))
+        end
+        fn(selected, close_all, context)
         return context
     end
 

@@ -9,7 +9,7 @@
 - Work for you is in `tasks/issue.md`, you MUST make plan in `tasks/todo.md`
 - Keep specs in specs/*, `tasks/todo.md` up to date during your work
 - Plan for manual verification steps if necessary, but automate verification as much as possible, add temporary tracing if needed to verify code path triggered before calling it done
-- If your fix to a bug had no effect, STOP and work with user to trace to identify root cause. Clean up trace when you are done with the bug.
+- Leverage trace-driven debugging when your fix had no effect. Produce clear repro steps for user to follow.
 
 ### 2. Subagent Strategy
 - Use subagents to keep main context window clean

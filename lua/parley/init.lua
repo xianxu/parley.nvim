@@ -4475,6 +4475,7 @@ M._chat_finder = {
 	active_window = nil, -- Track the active window that initiated ChatFinder
 	source_win = nil, -- Track the source window where ChatFinder was invoked
 	initial_index = nil, -- Optional selection index to restore when reopening the picker
+	initial_value = nil, -- Preferred item value to restore when reopening after list changes
 	insert_mode = false, -- Whether we're in insert mode (inserting chat references)
 	insert_buf = nil, -- The buffer to insert into
 	insert_line = nil, -- The line to insert at
@@ -4560,23 +4561,93 @@ M._cycle_chat_finder_recency = function(recency_config, recency_index, direction
 	return next_index, resolved.states[next_index]
 end
 
-M._reopen_chat_finder = function(source_win, selection_index)
+local function resolve_chat_finder_initial_index(items)
+	local initial_value = M._chat_finder.initial_value
+	if initial_value then
+		for idx, item in ipairs(items) do
+			if item.value == initial_value then
+				M.logger.debug(string.format(
+					"ChatFinder trace: resolve initial by value matched idx=%s value=%s fallback_index=%s item_count=%s",
+					tostring(idx),
+					initial_value,
+					tostring(M._chat_finder.initial_index),
+					tostring(#items)
+				))
+				return idx
+			end
+		end
+		M.logger.debug(string.format(
+			"ChatFinder trace: resolve initial by value missed value=%s fallback_index=%s item_count=%s",
+			initial_value,
+			tostring(M._chat_finder.initial_index),
+			tostring(#items)
+		))
+	end
+
+	M.logger.debug(string.format(
+		"ChatFinder trace: resolve initial by fallback index=%s item_count=%s",
+		tostring(M._chat_finder.initial_index),
+		tostring(#items)
+	))
+	return M._chat_finder.initial_index
+end
+
+M._reopen_chat_finder = function(source_win, selection_index, selection_value)
+	M.logger.debug(string.format(
+		"ChatFinder trace: schedule reopen source_win=%s selection_index=%s selection_value=%s",
+		tostring(source_win),
+		tostring(selection_index),
+		tostring(selection_value)
+	))
 	vim.defer_fn(function()
 		M._chat_finder.opened = false
 		M._chat_finder.source_win = source_win
 		M._chat_finder.initial_index = selection_index
+		M._chat_finder.initial_value = selection_value
+		M.logger.debug(string.format(
+			"ChatFinder trace: executing reopen source_win=%s initial_index=%s initial_value=%s",
+			tostring(source_win),
+			tostring(M._chat_finder.initial_index),
+			tostring(M._chat_finder.initial_value)
+		))
 		M.cmd.ChatFinder()
 	end, 100)
 end
 
 M._handle_chat_finder_delete_response = function(input, item_value, selected_index, items_count, source_win, close_fn, context)
+	M.logger.debug(string.format(
+		"ChatFinder trace: delete response input=%s item=%s selected_index=%s items_count=%s source_win=%s",
+		tostring(input),
+		tostring(item_value),
+		tostring(selected_index),
+		tostring(items_count),
+		tostring(source_win)
+	))
 	if input and input:lower() == "y" then
 		M.helpers.delete_file(item_value)
 		if close_fn then
 			close_fn()
 		end
 		local next_index = math.min(selected_index, math.max(1, items_count - 1))
-		M._reopen_chat_finder(source_win, next_index)
+		local next_value = nil
+		local items = context and context.chat_finder_items or nil
+		if type(items) == "table" then
+			-- ChatFinder items are stored newest-first but rendered bottom-up, so the
+			-- item that stays in the same visual row after delete is the next logical
+			-- item (older entry). Fall back to the previous item when deleting the
+			-- oldest visible entry.
+			local next_item = items[selected_index + 1] or items[selected_index - 1]
+			next_value = next_item and next_item.value or nil
+			M.logger.debug(string.format(
+				"ChatFinder trace: confirmed delete selected_item=%s next_item=%s selected_index=%s next_index=%s item_count=%s",
+				tostring(item_value),
+				tostring(next_value),
+				tostring(selected_index),
+				tostring(next_index),
+				tostring(#items)
+			))
+		end
+		M._reopen_chat_finder(source_win, next_index, next_value)
 		return
 	end
 
@@ -4595,10 +4666,17 @@ M._handle_chat_finder_delete_response = function(input, item_value, selected_ind
 		return
 	end
 
-	M._reopen_chat_finder(source_win, selected_index)
+	M._reopen_chat_finder(source_win, selected_index, item_value)
 end
 
 M._prompt_chat_finder_delete_confirmation = function(item_value, selected_index, items_count, source_win, close_fn, context)
+	M.logger.debug(string.format(
+		"ChatFinder trace: prompt delete item=%s selected_index=%s items_count=%s source_win=%s",
+		tostring(item_value),
+		tostring(selected_index),
+		tostring(items_count),
+		tostring(source_win)
+	))
 	if source_win and vim.api.nvim_win_is_valid(source_win) then
 		vim.api.nvim_set_current_win(source_win)
 	end
@@ -4773,10 +4851,18 @@ M.cmd.ChatFinder = function(_options)
 			M.logger.debug("ChatFinder captured fallback source_win: " .. source_win)
 		end
 
+		M.logger.debug(string.format(
+			"ChatFinder trace: opening picker item_count=%s initial_index=%s initial_value=%s first_item=%s",
+			tostring(#items),
+			tostring(M._chat_finder.initial_index),
+			tostring(M._chat_finder.initial_value),
+			items[1] and items[1].value or "nil"
+		))
+
 		M.float_picker.open({
 			title = prompt_title,
 			items = items,
-			initial_index = M._chat_finder.initial_index,
+			initial_index = resolve_chat_finder_initial_index(items),
 			on_select = function(item)
 				local file_path = item.value
 				local display = item.display
@@ -4858,6 +4944,7 @@ M.cmd.ChatFinder = function(_options)
 			on_cancel = function()
 				M._chat_finder.opened = false
 				M._chat_finder.initial_index = nil
+				M._chat_finder.initial_value = nil
 			end,
 			mappings = {
 				-- Delete selected chat file
@@ -4865,6 +4952,7 @@ M.cmd.ChatFinder = function(_options)
 					key = delete_shortcut.shortcut,
 					fn = function(item, close_fn, context)
 						if not item then
+							M.logger.debug("ChatFinder trace: delete mapping invoked with nil item")
 							return
 						end
 						local selected_index = 1
@@ -4875,7 +4963,16 @@ M.cmd.ChatFinder = function(_options)
 							end
 						end
 
+						M.logger.debug(string.format(
+							"ChatFinder trace: delete mapping item=%s selected_index=%s item_count=%s first_item=%s",
+							tostring(item.value),
+							tostring(selected_index),
+							tostring(#items),
+							items[1] and items[1].value or "nil"
+						))
+
 						context.skip_focus_restore = true
+						context.chat_finder_items = items
 						context.suspend_for_external_ui()
 						vim.defer_fn(function()
 							M._prompt_chat_finder_delete_confirmation(
@@ -4941,6 +5038,7 @@ M.cmd.ChatFinder = function(_options)
 	end
 
 	M._chat_finder.initial_index = nil
+	M._chat_finder.initial_value = nil
 	M._chat_finder.opened = false
 end
 

@@ -288,6 +288,36 @@ describe("float_picker", function()
             assert.is_nil(find_any_float_win(), "window should be closed by mapping close_fn")
         end)
 
+        it("extra mapping close_fn does not trigger on_cancel", function()
+            local cancelled = false
+            local closed_via_mapping = false
+            float_picker.open({
+                title = "Test",
+                items = { { display = "item", value = 1 } },
+                on_select = function() end,
+                on_cancel = function() cancelled = true end,
+                mappings = {
+                    {
+                        key = "<C-d>",
+                        fn = function(_, close_fn)
+                            close_fn()
+                            closed_via_mapping = true
+                        end,
+                    },
+                },
+            })
+
+            vim.api.nvim_feedkeys(
+                vim.api.nvim_replace_termcodes("<C-d>", true, false, true), "x", true
+            )
+            vim.wait(200, function() return closed_via_mapping end)
+            vim.wait(50)
+
+            assert.is_true(closed_via_mapping)
+            assert.is_false(cancelled)
+            assert.is_nil(find_any_float_win(), "window should be closed by mapping close_fn")
+        end)
+
         it("control-key extra mappings are called from the prompt buffer", function()
             local mapped_item = nil
             float_picker.open({

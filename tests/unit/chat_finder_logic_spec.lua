@@ -18,6 +18,29 @@ describe("ChatFinder logic", function()
     local original_reopen_chat_finder
     local original_delete_file
     local original_prompt_delete_confirmation
+    local original_open_buf
+
+    local function find_results_float_win()
+        local current = vim.api.nvim_get_current_win()
+        for _, win in ipairs(vim.api.nvim_list_wins()) do
+            local ok, cfg = pcall(vim.api.nvim_win_get_config, win)
+            if ok and cfg.relative ~= "" and win ~= current then
+                return win
+            end
+        end
+        return nil
+    end
+
+    local function find_float_wins()
+        local wins = {}
+        for _, win in ipairs(vim.api.nvim_list_wins()) do
+            local ok, cfg = pcall(vim.api.nvim_win_get_config, win)
+            if ok and cfg.relative ~= "" then
+                table.insert(wins, win)
+            end
+        end
+        return wins
+    end
 
     before_each(function()
         -- Save original config
@@ -29,6 +52,7 @@ describe("ChatFinder logic", function()
         original_reopen_chat_finder = M._reopen_chat_finder
         original_delete_file = M.helpers.delete_file
         original_prompt_delete_confirmation = M._prompt_chat_finder_delete_confirmation
+        original_open_buf = M.open_buf
 
         -- Create a temp directory for chat files
         local random_suffix = string.format("%x", math.random(0, 0xFFFFFF))
@@ -58,6 +82,7 @@ describe("ChatFinder logic", function()
             active_window = nil,
             insert_mode = false,
             initial_index = nil,
+            initial_value = nil,
         }
     end)
 
@@ -76,6 +101,7 @@ describe("ChatFinder logic", function()
         M._reopen_chat_finder = original_reopen_chat_finder
         M.helpers.delete_file = original_delete_file
         M._prompt_chat_finder_delete_confirmation = original_prompt_delete_confirmation
+        M.open_buf = original_open_buf
     end)
 
     describe("Group A: Timestamp parsing from filename", function()
@@ -355,10 +381,11 @@ describe("ChatFinder logic", function()
     describe("Group E: Delete confirmation reopen behavior", function()
         it("reopens ChatFinder on Esc during delete confirmation", function()
             local reopen_calls = {}
-            M._reopen_chat_finder = function(source_win, selection_index)
+            M._reopen_chat_finder = function(source_win, selection_index, selection_value)
                 table.insert(reopen_calls, {
                     source_win = source_win,
                     selection_index = selection_index,
+                    selection_value = selection_value,
                 })
             end
 
@@ -373,6 +400,38 @@ describe("ChatFinder logic", function()
             assert.equals(1, #reopen_calls)
             assert.equals(42, reopen_calls[1].source_win)
             assert.equals(3, reopen_calls[1].selection_index)
+            assert.equals("/tmp/chat.md", reopen_calls[1].selection_value)
+        end)
+
+        it("reopens on the item that moves into the deleted visual row", function()
+            local reopen_calls = {}
+            M._reopen_chat_finder = function(source_win, selection_index, selection_value)
+                table.insert(reopen_calls, {
+                    source_win = source_win,
+                    selection_index = selection_index,
+                    selection_value = selection_value,
+                })
+            end
+
+            local deleted = nil
+            M.helpers.delete_file = function(path)
+                deleted = path
+            end
+
+            M._handle_chat_finder_delete_response("y", "/tmp/chat-b.md", 2, 4, 42, nil, {
+                chat_finder_items = {
+                    { value = "/tmp/chat-a.md" },
+                    { value = "/tmp/chat-b.md" },
+                    { value = "/tmp/chat-c.md" },
+                    { value = "/tmp/chat-d.md" },
+                },
+            })
+
+            assert.equals("/tmp/chat-b.md", deleted)
+            assert.equals(1, #reopen_calls)
+            assert.equals(42, reopen_calls[1].source_win)
+            assert.equals(2, reopen_calls[1].selection_index)
+            assert.equals("/tmp/chat-c.md", reopen_calls[1].selection_value)
         end)
 
         it("opens delete confirmation from the source window", function()
@@ -387,8 +446,12 @@ describe("ChatFinder logic", function()
             end
 
             local reopen_calls = {}
-            M._reopen_chat_finder = function(win, selection_index)
-                table.insert(reopen_calls, { win = win, selection_index = selection_index })
+            M._reopen_chat_finder = function(win, selection_index, selection_value)
+                table.insert(reopen_calls, {
+                    win = win,
+                    selection_index = selection_index,
+                    selection_value = selection_value,
+                })
             end
 
             M._prompt_chat_finder_delete_confirmation("/tmp/chat.md", 2, 5, source_win)
@@ -398,6 +461,7 @@ describe("ChatFinder logic", function()
             assert.equals(1, #reopen_calls)
             assert.equals(source_win, reopen_calls[1].win)
             assert.equals(2, reopen_calls[1].selection_index)
+            assert.equals("/tmp/chat.md", reopen_calls[1].selection_value)
         end)
     end)
 
@@ -420,6 +484,64 @@ describe("ChatFinder logic", function()
             assert.equals("Chat Files (Recent: 12 months  <C-a>/<C-s>: cycle)", captured.title)
             assert.equals("<C-a>", captured.mappings[2].key)
             assert.equals("<C-s>", captured.mappings[3].key)
+        end)
+
+        it("prefers restoring selection by item value when reopening after delete", function()
+            local captured = nil
+            M.float_picker.open = function(opts)
+                captured = opts
+            end
+
+            local filenames = {
+                "2026-02-04-10-00-00-alpha.md",
+                "2026-02-03-10-00-00-beta.md",
+                "2026-02-02-10-00-00-gamma.md",
+            }
+            for _, filename in ipairs(filenames) do
+                local filepath = tmpdir .. "/" .. filename
+                local f = io.open(filepath, "w")
+                f:write("# topic: " .. filename .. "\n")
+                f:close()
+            end
+
+            M._chat_finder.initial_index = 3
+            M._chat_finder.initial_value = tmpdir .. "/2026-02-03-10-00-00-beta.md"
+
+            M.cmd.ChatFinder()
+
+            assert.is_truthy(captured)
+            assert.equals(tmpdir .. "/2026-02-03-10-00-00-beta.md", captured.items[2].value)
+            assert.equals(2, captured.initial_index)
+        end)
+
+        it("falls back to the newer visual neighbor when deleting the oldest item", function()
+            local reopen_calls = {}
+            M._reopen_chat_finder = function(source_win, selection_index, selection_value)
+                table.insert(reopen_calls, {
+                    source_win = source_win,
+                    selection_index = selection_index,
+                    selection_value = selection_value,
+                })
+            end
+
+            local deleted = nil
+            M.helpers.delete_file = function(path)
+                deleted = path
+            end
+
+            M._handle_chat_finder_delete_response("y", "/tmp/chat-c.md", 3, 3, 42, nil, {
+                chat_finder_items = {
+                    { value = "/tmp/chat-a.md" },
+                    { value = "/tmp/chat-b.md" },
+                    { value = "/tmp/chat-c.md" },
+                },
+            })
+
+            assert.equals("/tmp/chat-c.md", deleted)
+            assert.equals(1, #reopen_calls)
+            assert.equals(42, reopen_calls[1].source_win)
+            assert.equals(2, reopen_calls[1].selection_index)
+            assert.equals("/tmp/chat-b.md", reopen_calls[1].selection_value)
         end)
     end)
 end)
