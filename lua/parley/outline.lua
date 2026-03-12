@@ -216,6 +216,7 @@ function M.question_picker(config)
   float_picker.open({
     title = "💬 Q&A Outline",
     items = items,
+    anchor = "top",
     on_select = function(item)
       local entry = item.value
       if not vim.api.nvim_buf_is_valid(current_bufnr) then

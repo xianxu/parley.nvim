@@ -46,6 +46,7 @@ function M.system_prompt_picker(plugin)
     float_picker.open({
         title = "💬 Parley System Prompts",
         items = items,
+        anchor = "top",
         on_select = function(item)
             plugin.refresh_state({ system_prompt = item.name })
             plugin.logger.info("System prompt set to: " .. item.name)

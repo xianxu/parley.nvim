@@ -44,6 +44,7 @@ function M.agent_picker(plugin)
     float_picker.open({
         title = "🤖 Parley Agents",
         items = items,
+        anchor = "top",
         on_select = function(item)
             plugin.refresh_state({ agent = item.name })
             plugin.logger.info("Agent set to: " .. item.name)

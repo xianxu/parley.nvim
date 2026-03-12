@@ -2900,6 +2900,7 @@ M.prompt_chat_move = function(file_name, on_complete, on_cancel)
 	M.float_picker.open({
 		title = "Move Chat To",
 		items = items,
+		anchor = "top",
 		on_select = function(item)
 			local new_file, err = M.move_chat(resolved_file, item.value)
 			if not new_file then
@@ -3155,6 +3156,7 @@ M.cmd.NoteNewFromTemplate = function()
 	M.float_picker.open({
 		title = "Select Template",
 		items = items,
+		anchor = "top",
 		on_select = function(item)
 			-- Read template lines to preserve blank lines
 			local template_lines = vim.fn.readfile(item.value.path)

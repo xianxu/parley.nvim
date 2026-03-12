@@ -44,6 +44,7 @@ function M.chat_dir_picker(plugin, initial_dir)
     float_picker.open({
         title = "Parley Chat Roots  <C-n>: add  <C-d>: remove",
         items = items,
+        anchor = "top",
         initial_index = item_index_by_dir(items, initial_dir) or 1,
         on_select = function()
         end,

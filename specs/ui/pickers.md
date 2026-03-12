@@ -11,7 +11,11 @@ Each picker opens two stacked floating windows:
 
 Both windows share the same width and are centered as a unit. Actual dimensions are clamped to the screen with `MARGIN_H = 4` cols and `MARGIN_V = 3` rows on each side. The prompt window adds a fixed overhead of 5 rows (two sets of borders + 1 content row) to the total vertical height.
 
-Items are displayed bottom-anchored relative to the prompt: the logical first item is shown on the bottom row nearest the prompt, later items extend upward, and any unused rows in a taller results window remain as blank padding above the visible items. Keyboard navigation preserves the current view until selection crosses a visible edge, then scrolls just enough to keep the selected row visible.
+Item display order is controlled by the `anchor` option passed to `float_picker.open()`:
+- `"bottom"` (default): the logical first item (index 1) is shown on the bottom row nearest the prompt; later items extend upward; unused rows pad above. Used by Chat Finder so newest files stay closest to the prompt.
+- `"top"`: the logical first item is shown on the top row; later items extend downward; unused rows pad below. Used by all other pickers (agent, system prompt, outline, etc.) for natural document order.
+
+Keyboard navigation preserves the current view until selection crosses a visible edge, then scrolls just enough to keep the selected row visible.
 
 `VimResized` repositions both windows (cleaned up on close).
 

@@ -122,16 +122,24 @@ function M._fuzzy_score(query, haystack)
     return total
 end
 
-function M._visual_row_for_index(idx, filtered_count, total_rows)
+-- anchor: "bottom" (default) places index 1 at the bottom row (closest to prompt).
+--         "top" places index 1 at the top row (natural document order).
+function M._visual_row_for_index(idx, filtered_count, total_rows, anchor)
     if filtered_count <= 0 then
-        return total_rows
+        return anchor == "top" and 1 or total_rows
+    end
+    if anchor == "top" then
+        return math.max(1, math.min(idx, filtered_count))
     end
     return total_rows - math.max(1, math.min(idx, filtered_count)) + 1
 end
 
-function M._index_for_visual_row(visual_row, filtered_count, total_rows)
+function M._index_for_visual_row(visual_row, filtered_count, total_rows, anchor)
     if filtered_count <= 0 then
         return 1
+    end
+    if anchor == "top" then
+        return math.max(1, math.min(visual_row, filtered_count))
     end
     local first_row = math.max(1, total_rows - filtered_count + 1)
     local clamped = math.max(first_row, math.min(visual_row, total_rows))
@@ -225,6 +233,7 @@ function M.open(opts)
     vim.bo[prompt_buf].buftype = "prompt"
     vim.fn.prompt_setprompt(prompt_buf, PROMPT_PREFIX)
 
+    local anchor = opts.anchor or "bottom"
     local filtered = vim.deepcopy(items)
     local initial_index = math.max(1, tonumber(opts.initial_index) or 1)
     local sel_idx = initial_index
@@ -335,14 +344,24 @@ function M.open(opts)
         vim.bo[results_buf].modifiable = true
         local lines = {}
         local total_rows = vim.api.nvim_win_is_valid(results_win) and vim.api.nvim_win_get_height(results_win) or win_h
-        for i = #filtered, 1, -1 do
-            table.insert(lines, truncate(" " .. filtered[i].display, win_w - 1))
+        if anchor == "top" then
+            for i = 1, #filtered do
+                table.insert(lines, truncate(" " .. filtered[i].display, win_w - 1))
+            end
+        else
+            for i = #filtered, 1, -1 do
+                table.insert(lines, truncate(" " .. filtered[i].display, win_w - 1))
+            end
         end
         if #lines == 0 then
             lines = { "  (no matches)" }
         end
         while #lines < total_rows do
-            table.insert(lines, 1, "")
+            if anchor == "top" then
+                table.insert(lines, "")        -- pad at bottom
+            else
+                table.insert(lines, 1, "")     -- pad at top
+            end
         end
         vim.api.nvim_buf_set_lines(results_buf, 0, -1, false, lines)
         vim.bo[results_buf].modifiable = false
@@ -359,23 +378,33 @@ function M.open(opts)
     end
 
     local function first_content_row()
+        if anchor == "top" then
+            return 1
+        end
         local content_count = math.max(1, #filtered)
         return math.max(1, results_row_count() - content_count + 1)
     end
 
     local function visual_row_for_index(idx)
-        return M._visual_row_for_index(idx, #filtered, results_row_count())
+        return M._visual_row_for_index(idx, #filtered, results_row_count(), anchor)
     end
 
     local function index_for_visual_row(visual_row)
-        return M._index_for_visual_row(visual_row, #filtered, results_row_count())
+        return M._index_for_visual_row(visual_row, #filtered, results_row_count(), anchor)
+    end
+
+    local function last_content_row()
+        if anchor == "top" then
+            return math.min(math.max(1, #filtered), results_row_count())
+        end
+        return results_row_count()
     end
 
     local function is_content_row(visual_row)
         if #filtered == 0 then
-            return visual_row == results_row_count()
+            return anchor == "top" and visual_row == 1 or visual_row == results_row_count()
         end
-        return visual_row >= first_content_row() and visual_row <= results_row_count()
+        return visual_row >= first_content_row() and visual_row <= last_content_row()
     end
 
     local function close_all()
@@ -440,7 +469,12 @@ function M.open(opts)
                 local total_rows = results_row_count()
                 local win_rows = vim.api.nvim_win_get_height(results_win)
                 local max_topline = math.max(1, total_rows - win_rows + 1)
-                local topline = math.max(1, math.min(target_row - win_rows + 1, max_topline))
+                local topline
+                if anchor == "top" then
+                    topline = 1
+                else
+                    topline = math.max(1, math.min(target_row - win_rows + 1, max_topline))
+                end
 
                 vim.api.nvim_win_set_cursor(results_win, { target_row, 0 })
                 vim.api.nvim_win_call(results_win, function()
@@ -455,7 +489,7 @@ function M.open(opts)
             return
         end
         local current_row = visual_row_for_index(sel_idx)
-        local next_row = math.max(first_content_row(), math.min(current_row + delta_rows, results_row_count()))
+        local next_row = math.max(first_content_row(), math.min(current_row + delta_rows, last_content_row()))
         set_selection(index_for_visual_row(next_row), { ensure_visible = true })
     end
 

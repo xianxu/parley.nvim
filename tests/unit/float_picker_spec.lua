@@ -339,13 +339,86 @@ describe("float_picker", function()
         end)
 
         it("maps short bottom-padded visual rows back to logical indices", function()
-            assert.equals(5, float_picker._visual_row_for_index(1, 2, 5))
-            assert.equals(4, float_picker._visual_row_for_index(2, 2, 5))
-            assert.equals(1, float_picker._index_for_visual_row(5, 2, 5))
-            assert.equals(2, float_picker._index_for_visual_row(4, 2, 5))
-            assert.equals(2, float_picker._index_for_visual_row(3, 2, 5))
+            assert.equals(5, float_picker._visual_row_for_index(1, 2, 5, "bottom"))
+            assert.equals(4, float_picker._visual_row_for_index(2, 2, 5, "bottom"))
+            assert.equals(1, float_picker._index_for_visual_row(5, 2, 5, "bottom"))
+            assert.equals(2, float_picker._index_for_visual_row(4, 2, 5, "bottom"))
+            assert.equals(2, float_picker._index_for_visual_row(3, 2, 5, "bottom"))
         end)
 
+        it("maps top-anchored visual rows back to logical indices", function()
+            assert.equals(1, float_picker._visual_row_for_index(1, 2, 5, "top"))
+            assert.equals(2, float_picker._visual_row_for_index(2, 2, 5, "top"))
+            assert.equals(1, float_picker._index_for_visual_row(1, 2, 5, "top"))
+            assert.equals(2, float_picker._index_for_visual_row(2, 2, 5, "top"))
+            -- rows beyond content count clamp to last item
+            assert.equals(2, float_picker._index_for_visual_row(3, 2, 5, "top"))
+            assert.equals(2, float_picker._index_for_visual_row(5, 2, 5, "top"))
+        end)
+
+    end)
+
+    -- -------------------------------------------------------------------------
+    -- Top-anchored picker
+    -- -------------------------------------------------------------------------
+    describe("anchor=top", function()
+        it("renders logical item order from top to bottom", function()
+            float_picker.open({
+                title = "Test",
+                anchor = "top",
+                items = {
+                    { display = "first",  value = 1 },
+                    { display = "second", value = 2 },
+                    { display = "third",  value = 3 },
+                },
+                on_select = function() end,
+            })
+            local win = find_float_win()
+            local lines = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(win), 0, -1, false)
+            assert.truthy(lines[1]:find("first",  1, true))
+            assert.truthy(lines[2]:find("second", 1, true))
+            assert.truthy(lines[3]:find("third",  1, true))
+        end)
+
+        it("selects the first logical item on the top row by default", function()
+            float_picker.open({
+                title = "Test",
+                anchor = "top",
+                items = {
+                    { display = "first",  value = 1 },
+                    { display = "second", value = 2 },
+                    { display = "third",  value = 3 },
+                },
+                on_select = function() end,
+            })
+            local win = find_float_win()
+            local cursor = vim.api.nvim_win_get_cursor(win)
+            assert.equals(1, cursor[1])
+        end)
+
+        it("keeps short lists pinned to the top of a taller window", function()
+            float_picker.open({
+                title = "Test",
+                height = 5,
+                anchor = "top",
+                items = {
+                    { display = "alpha", value = 1 },
+                    { display = "beta",  value = 2 },
+                },
+                on_select = function() end,
+            })
+            local win = find_float_win()
+            local lines = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(win), 0, -1, false)
+            local cursor = vim.api.nvim_win_get_cursor(win)
+
+            assert.equals(5, #lines)
+            assert.truthy(lines[1]:find("alpha", 1, true))
+            assert.truthy(lines[2]:find("beta",  1, true))
+            assert.equals("", lines[3])
+            assert.equals("", lines[4])
+            assert.equals("", lines[5])
+            assert.equals(1, cursor[1])
+        end)
     end)
 
     -- -------------------------------------------------------------------------
