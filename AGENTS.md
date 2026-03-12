@@ -17,7 +17,7 @@
 - One task per subagent for focused execution
 
 ### 3. Self-Improvement Loop
-- When user needs to involve in manual debugging with you, update `tasks/lessons-{agent}.md` with the pattern what went wrong in the first place.
+- When user needs to involve in manual debugging with you, update `tasks/lessons.md` with the pattern what went wrong in the first place.
 - Write rules for yourself that prevent the same mistake
 - Review lessons at session start for relevant project
 
@@ -56,7 +56,7 @@
 5. **Track Progress**: Mark items complete as you go
 6. **Explain Changes**: High-level summary at each step
 7. **Document Results**: Add review section to `tasks/todo.md`
-8. **Capture Lessons**: Update `tasks/lessons-{agent}.md` after corrections
+8. **Capture Lessons**: Update `tasks/lessons.md` after corrections
 
 ## Core Principles
 - **Simplicity First**: Make every change as simple as possible. Minimal impact.
