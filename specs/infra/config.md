@@ -27,6 +27,11 @@ Notable replace-on-set behavior:
 - `hooks`: Custom user-defined commands.
 - `chat_free_cursor`: Default cursor-follow behavior (runtime state toggle can override).
 
+### Chat Finder Recency
+- `chat_finder_recency.months`: Default filtered month window when Chat Finder opens in recent mode.
+- `chat_finder_recency.presets`: Additional month cutoffs that Chat Finder cycles through before `All`.
+- `chat_finder_mappings.next_recency` and `chat_finder_mappings.previous_recency`: Picker-local shortcuts for moving left toward smaller cutoffs or right toward larger cutoffs and `All`.
+
 ### Provider-Specific Keys
 - `providers.cliproxyapi.web_search_strategy`:
   - `none` (default), `openai_search_model`, `openai_tools_route`, or `anthropic_tools_route`.

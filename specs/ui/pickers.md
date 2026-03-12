@@ -59,9 +59,10 @@ The picker closes if focus moves to any window that is neither the results nor t
 
 ## Chat Finder
 - `:ParleyChatFinder` (`<C-g>f`): Browse and open chat files.
-- **Recency Filter**: By default shows files from the last `chat_finder_recency.months`.
+- **Recency Filter**: By default shows files from the configured `chat_finder_recency.months`, and can cycle through additional `chat_finder_recency.presets` before reaching `All`.
 - **Extra mappings** (insert mode in prompt):
-    - Toggle key (`<C-g>a` by default): Toggle between recent and all files.
+    - Next recency key (`<C-a>` by default): Move left through configured recency windows toward smaller cutoffs.
+    - Previous recency key (`<C-s>` by default): Move right through configured recency windows toward larger cutoffs and `All`.
     - Delete key (`<C-d>` by default): Delete the selected chat file.
       The confirmation prompt is opened from the source window after the picker closes. If it is cancelled with `Esc` or answered negatively, ChatFinder reopens instead of being dismissed.
     - `<C-g>?`: Open Parley key-bindings help.

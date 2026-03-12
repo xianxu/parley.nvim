@@ -358,7 +358,8 @@ M._keybinding_help_lines = function()
 	table.insert(lines, "")
 	table.insert(lines, "Chat Finder")
 	local finder_mappings = cfg.chat_finder_mappings or {}
-	add(shortcut_value(finder_mappings.toggle_all, "<C-a>"), "Toggle recent/all chats")
+	add(shortcut_value(finder_mappings.next_recency, "<C-a>"), "Cycle chat recency window left")
+	add(shortcut_value(finder_mappings.previous_recency, "<C-s>"), "Cycle chat recency window right")
 	add(shortcut_value(finder_mappings.delete, "<C-d>"), "Delete selected chat")
 	table.insert(lines, string.format("  %-12s %s", "", "(Recent window default: last " .. tostring((cfg.chat_finder_recency or {}).months or 6) .. " months)"))
 
@@ -4469,7 +4470,8 @@ end
 -- State for chat finder
 M._chat_finder = {
 	opened = false,
-	show_all = false, -- Track whether we're showing all files or just recent ones
+	show_all = false, -- Compatibility mirror for the active recency state
+	recency_index = nil, -- Current index within the configured recency cycle
 	active_window = nil, -- Track the active window that initiated ChatFinder
 	source_win = nil, -- Track the source window where ChatFinder was invoked
 	initial_index = nil, -- Optional selection index to restore when reopening the picker
@@ -4479,6 +4481,84 @@ M._chat_finder = {
 	insert_col = nil, -- The column to insert at (for insert mode)
 	insert_normal_mode = nil, -- Whether we're inserting in normal mode or insert mode
 }
+
+local function unique_positive_months(values)
+	local dedup = {}
+	local months = {}
+	for _, value in ipairs(values) do
+		if type(value) == "number" and value > 0 then
+			local normalized = math.floor(value)
+			if normalized > 0 and not dedup[normalized] then
+				dedup[normalized] = true
+				table.insert(months, normalized)
+			end
+		end
+	end
+	table.sort(months)
+	return months
+end
+
+M._resolve_chat_finder_recency = function(recency_config, recency_index)
+	recency_config = recency_config or {}
+
+	local configured_months = {}
+	if type(recency_config.presets) == "table" then
+		vim.list_extend(configured_months, recency_config.presets)
+	end
+	if type(recency_config.months) == "number" then
+		table.insert(configured_months, recency_config.months)
+	end
+
+	local presets = unique_positive_months(configured_months)
+	if #presets == 0 then
+		presets = { 3 }
+	end
+
+	local states = {}
+	for _, months in ipairs(presets) do
+		table.insert(states, {
+			label = string.format("Recent: %d months", months),
+			months = months,
+			is_all = false,
+		})
+	end
+	table.insert(states, {
+		label = "All",
+		months = nil,
+		is_all = true,
+	})
+
+	local resolved_index = recency_index
+	if type(resolved_index) ~= "number" or resolved_index < 1 or resolved_index > #states then
+		if recency_config.filter_by_default == false then
+			resolved_index = #states
+		else
+			resolved_index = 1
+			local default_months = type(recency_config.months) == "number" and math.floor(recency_config.months) or nil
+			if default_months then
+				for idx, state in ipairs(states) do
+					if state.months == default_months then
+						resolved_index = idx
+						break
+					end
+				end
+			end
+		end
+	end
+
+	return {
+		states = states,
+		index = resolved_index,
+		current = states[resolved_index],
+	}
+end
+
+M._cycle_chat_finder_recency = function(recency_config, recency_index, direction)
+	local resolved = M._resolve_chat_finder_recency(recency_config, recency_index)
+	local step = direction == "previous" and -1 or 1
+	local next_index = ((resolved.index - 1 + step) % #resolved.states) + 1
+	return next_index, resolved.states[next_index]
+end
 
 M._reopen_chat_finder = function(source_win, selection_index)
 	vim.defer_fn(function()
@@ -4548,7 +4628,8 @@ M.cmd.ChatFinder = function(_options)
 
 	local dir = M.config.chat_dir
 		local delete_shortcut = M.config.chat_finder_mappings.delete or M.config.chat_shortcut_delete
-		local toggle_shortcut = M.config.chat_finder_mappings.toggle_all or { shortcut = "<C-g>h" }
+		local next_recency_shortcut = M.config.chat_finder_mappings.next_recency or { shortcut = "<C-a>" }
+		local previous_recency_shortcut = M.config.chat_finder_mappings.previous_recency or { shortcut = "<C-s>" }
 		local keybindings_shortcut = M.config.global_shortcut_keybindings or { shortcut = "<C-g>?" }
 
 	-- Launch float picker for chat finder
@@ -4564,14 +4645,18 @@ M.cmd.ChatFinder = function(_options)
 				months = 3,
 				use_mtime = true,
 			}
+		local resolved_recency = M._resolve_chat_finder_recency(recency_config, M._chat_finder.recency_index)
+		M._chat_finder.recency_index = resolved_recency.index
+		M._chat_finder.show_all = resolved_recency.current.is_all
 
-		-- Calculate cutoff timestamp (current time - configured months)
-		local current_time = os.time()
-		local months_in_seconds = recency_config.months * 30 * 24 * 60 * 60
-		local cutoff_time = current_time - months_in_seconds
+		local cutoff_time = nil
+		if resolved_recency.current.months then
+			local current_time = os.time()
+			local months_in_seconds = resolved_recency.current.months * 30 * 24 * 60 * 60
+			cutoff_time = current_time - months_in_seconds
+		end
 
-		-- For calculating the prompt title
-		local is_filtering = recency_config.filter_by_default and not M._chat_finder.show_all
+		local is_filtering = not resolved_recency.current.is_all
 
 		for _, file in ipairs(files) do
 			-- Get file info
@@ -4666,10 +4751,12 @@ M.cmd.ChatFinder = function(_options)
 		end)
 
 		-- Determine prompt title based on filtering state
-		local toggle_key = toggle_shortcut.shortcut
-		local prompt_title = is_filtering
-			and string.format("Chat Files (Recent: %d months  %s: toggle)", recency_config.months, toggle_key)
-			or string.format("Chat Files (All  %s: toggle)", toggle_key)
+		local prompt_title = string.format(
+			"Chat Files (%s  %s/%s: cycle)",
+			resolved_recency.current.label,
+			next_recency_shortcut.shortcut,
+			previous_recency_shortcut.shortcut
+		)
 
 		M.logger.debug("ChatFinder using active_window: " .. (M._chat_finder.active_window or "nil"))
 
@@ -4802,11 +4889,36 @@ M.cmd.ChatFinder = function(_options)
 						end, 20)
 					end,
 				},
-				-- Toggle recent/all filter
+				-- Move left through recency presets
 				{
-					key = toggle_shortcut.shortcut,
+					key = next_recency_shortcut.shortcut,
 					fn = function(_, close_fn)
-						M._chat_finder.show_all = not M._chat_finder.show_all
+						local next_index, next_state = M._cycle_chat_finder_recency(
+							recency_config,
+							M._chat_finder.recency_index,
+							"previous"
+						)
+						M._chat_finder.recency_index = next_index
+						M._chat_finder.show_all = next_state.is_all
+						close_fn()
+						vim.defer_fn(function()
+							M._chat_finder.opened = false
+							M._chat_finder.source_win = source_win
+							M.cmd.ChatFinder()
+						end, 100)
+					end,
+				},
+				-- Move right through recency presets and "All"
+				{
+					key = previous_recency_shortcut.shortcut,
+					fn = function(_, close_fn)
+						local next_index, next_state = M._cycle_chat_finder_recency(
+							recency_config,
+							M._chat_finder.recency_index,
+							"next"
+						)
+						M._chat_finder.recency_index = next_index
+						M._chat_finder.show_all = next_state.is_all
 						close_fn()
 						vim.defer_fn(function()
 							M._chat_finder.opened = false

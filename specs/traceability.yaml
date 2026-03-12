@@ -81,10 +81,12 @@ specs:
     code:
       - lua/parley/config.lua
       - lua/parley/defaults.lua
+      - lua/parley/init.lua
     tests:
       - tests/unit/helper_spec.lua
       - tests/unit/provider_params_spec.lua
       - tests/unit/pure_functions_spec.lua
+      - tests/unit/chat_finder_logic_spec.lua
 
   infra/logging:
     code:
@@ -218,6 +220,8 @@ specs:
   ui/pickers:
     code:
       - lua/parley/float_picker.lua
+      - lua/parley/init.lua
+      - lua/parley/config.lua
       - lua/parley/agent_picker.lua
       - lua/parley/system_prompt_picker.lua
       - lua/parley/test_agent_picker.lua

@@ -332,7 +332,8 @@ local config = {
 	chat_finder_pattern = "",
 	chat_finder_mappings = {
 		delete = { modes = { "n", "i", "v", "x" }, shortcut = "<C-d>" },
-		toggle_all = { modes = { "n", "i", "v", "x" }, shortcut = "<C-a>" },
+		next_recency = { modes = { "n", "i", "v", "x" }, shortcut = "<C-a>" },
+		previous_recency = { modes = { "n", "i", "v", "x" }, shortcut = "<C-s>" },
 	},
 	-- chat finder recency filtering configuration
 	chat_finder_recency = {
@@ -340,6 +341,8 @@ local config = {
 		filter_by_default = true,
 		-- Default recency period in months
 		months = 12,
+		-- Additional recency presets cycled in the finder before "All"
+		presets = { 6, 12 },
 	},
 
 	-- if true, finished ChatResponder won't move the cursor to the end of the buffer

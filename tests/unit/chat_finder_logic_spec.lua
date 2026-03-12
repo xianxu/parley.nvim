@@ -39,7 +39,13 @@ describe("ChatFinder logic", function()
         M.config.chat_dir = tmpdir
         M.config.chat_finder_mappings = {
             delete = { shortcut = "<C-d>" },
-            toggle_all = { shortcut = "<C-a>" },
+            next_recency = { shortcut = "<C-a>" },
+            previous_recency = { shortcut = "<C-s>" },
+        }
+        M.config.chat_finder_recency = {
+            filter_by_default = true,
+            months = 12,
+            presets = { 6, 12 },
         }
         M.config.global_shortcut_keybindings = { shortcut = "<C-g>?" }
 
@@ -47,6 +53,7 @@ describe("ChatFinder logic", function()
         M._chat_finder = {
             opened = false,
             show_all = false,
+            recency_index = nil,
             source_win = nil,
             active_window = nil,
             insert_mode = false,
@@ -122,8 +129,57 @@ describe("ChatFinder logic", function()
         end)
     end)
 
-    describe("Group B: Recency filtering", function()
-        it("B1: files within recency cutoff are included", function()
+    describe("Group B: Recency cycling", function()
+        it("B1: resolves configured presets and keeps all as the final state", function()
+            local resolved = M._resolve_chat_finder_recency({
+                filter_by_default = true,
+                months = 12,
+                presets = { 12, 6, 6 },
+            })
+
+            assert.equals(2, resolved.index)
+            assert.same({ 6, 12 }, vim.tbl_map(function(state)
+                return state.months
+            end, { resolved.states[1], resolved.states[2] }))
+            assert.equals("Recent: 6 months", resolved.states[1].label)
+            assert.equals("Recent: 12 months", resolved.states[2].label)
+            assert.is_true(resolved.states[3].is_all)
+            assert.equals("All", resolved.states[3].label)
+        end)
+
+        it("B2: uses configured default month when opening in filtered mode", function()
+            local resolved = M._resolve_chat_finder_recency({
+                filter_by_default = true,
+                months = 12,
+                presets = { 6, 12 },
+            })
+
+            assert.equals(2, resolved.index)
+            assert.equals(12, resolved.current.months)
+            assert.is_false(resolved.current.is_all)
+        end)
+
+        it("B3: cycles left and right across presets and all", function()
+            local recency = {
+                filter_by_default = true,
+                months = 6,
+                presets = { 6, 12 },
+            }
+
+            local next_index, next_state = M._cycle_chat_finder_recency(recency, 2, "previous")
+            assert.equals(1, next_index)
+            assert.equals(6, next_state.months)
+
+            next_index, next_state = M._cycle_chat_finder_recency(recency, next_index, "next")
+            assert.equals(2, next_index)
+            assert.equals(12, next_state.months)
+
+            next_index, next_state = M._cycle_chat_finder_recency(recency, next_index, "next")
+            assert.equals(3, next_index)
+            assert.is_true(next_state.is_all)
+        end)
+
+        it("B4: files within recency cutoff are included", function()
             -- Create a recent file (1 month ago)
             local one_month_ago = os.time() - (30 * 24 * 60 * 60)
             local date_table = os.date("*t", one_month_ago)
@@ -155,7 +211,7 @@ describe("ChatFinder logic", function()
             assert.is_true(file_time >= cutoff_time)
         end)
 
-        it("B2: files older than recency cutoff are excluded", function()
+        it("B5: files older than recency cutoff are excluded", function()
             -- Create an old file (6 months ago)
             local six_months_ago = os.time() - (6 * 30 * 24 * 60 * 60)
             local date_table = os.date("*t", six_months_ago)
@@ -342,6 +398,28 @@ describe("ChatFinder logic", function()
             assert.equals(1, #reopen_calls)
             assert.equals(source_win, reopen_calls[1].win)
             assert.equals(2, reopen_calls[1].selection_index)
+        end)
+    end)
+
+    describe("Group F: Chat finder picker mappings", function()
+        it("opens with the active recency label and both cycle mappings", function()
+            local captured = nil
+            M.float_picker.open = function(opts)
+                captured = opts
+            end
+
+            local filename = "2026-02-01-10-00-00-recent.md"
+            local filepath = tmpdir .. "/" .. filename
+            local f = io.open(filepath, "w")
+            f:write("# topic: Recent\n")
+            f:close()
+
+            M.cmd.ChatFinder()
+
+            assert.is_truthy(captured)
+            assert.equals("Chat Files (Recent: 12 months  <C-a>/<C-s>: cycle)", captured.title)
+            assert.equals("<C-a>", captured.mappings[2].key)
+            assert.equals("<C-s>", captured.mappings[3].key)
         end)
     end)
 end)
