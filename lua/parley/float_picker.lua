@@ -250,6 +250,10 @@ function M.open(opts)
     local function key_name(key)
         return vim.fn.keytrans(key)
     end
+    local reserved_keys = {
+        [key_name(keycode("<CR>"))] = "<CR>",
+        [key_name(keycode("<Esc>"))] = "<Esc>",
+    }
 
     local results_cfg = {
         relative = "editor",
@@ -715,15 +719,25 @@ function M.open(opts)
     end
 
     for _, m in ipairs(extra_mappings) do
-        imap_p(m.key, function()
-            run_extra_mapping(m.fn)
-        end)
-        nmap_p(m.key, function()
-            run_extra_mapping(m.fn)
-        end)
-        nmap_r(m.key, function()
-            run_extra_mapping(m.fn)
-        end)
+        local normalized_key = key_name(keycode(m.key))
+        local reserved_key = reserved_keys[normalized_key]
+        if reserved_key then
+            logger.warning(string.format(
+                "float_picker mapping %s skipped because it conflicts with reserved key %s",
+                tostring(m.key),
+                reserved_key
+            ))
+        else
+            imap_p(m.key, function()
+                run_extra_mapping(m.fn)
+            end)
+            nmap_p(m.key, function()
+                run_extra_mapping(m.fn)
+            end)
+            nmap_r(m.key, function()
+                run_extra_mapping(m.fn)
+            end)
+        end
     end
 
     vim.fn.prompt_setcallback(prompt_buf, function()

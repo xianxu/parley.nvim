@@ -37,7 +37,7 @@ Parley is a streamlined LLM chat plugin for Neovim, focusing exclusively on prov
   - No spinner wheel and waiting for the full answer
   - Response generation can be canceled half way through
   - Properly working undo (response can be undone with a single `u`)
-- **Minimum dependencies** (`neovim`, `curl`, `grep`)
+- **Minimum dependencies** (`neovim`, `curl`)
   - Zero dependencies on other lua plugins to minimize chance of breakage
 - **ChatGPT like sessions**
   - Just good old neovim buffers formated as markdown with autosave
@@ -202,8 +202,8 @@ how to disable predefined ChatGPT3-5 agent and create a custom one. If the
 
 4. DEPENDENCIES                                      *parley.nvim-4.-dependencies*
 
-The core plugin only needs `curl` installed to make calls to OpenAI API and
-`grep` for ChatFinder. So Linux, BSD and Mac OS should be covered.
+The core plugin only needs `curl` installed for provider requests and remote
+content fetching. So Linux, BSD and Mac OS should be covered.
 
 
 5. CONFIGURATION                                    *parley.nvim-5.-configuration*

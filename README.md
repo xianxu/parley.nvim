@@ -8,29 +8,28 @@
 
 Parley is a Neovim chat notebook for LLM conversations. You have all the power of Neovim at your fingertips in your LLM chat, thus making comprehensive research easier. All your chat history also lives in plain markdown files, you can easily search through using local tools.
 
-The philosophy is simple:
-- Keep chats as plain Markdown files you can edit anytime. The chat transcript file has the full state of LLM chat.
-- Highly configurable but also have good default out of box.
-- Keep the workflow keyboard-first and fast.
-- Keep behavior predictable across providers.
+The philosophy is Keep Things Simple:
+- Keep chats as plain Markdown files you can edit any place, including agent responses
+- The chat transcript file has the full state of LLM chat
+- Highly configurable but also have good default out of box
+- Keep the workflow keyboard-first and fast
+- Keep behavior predictable across providers
+- Leverage Neovim
+- Minimal dependencies, actually no hard dependencies
 
-Why is it better than official UI?
-- You can access your private local file, and private Google Drive file through oauth.
-- All you chat history in one place locally, you can search and do many other things with it.
-- Pick models from different vendors.
-- Tweak system prompts to best suit your needs.
-- Also a good learning tool for LLM interactions, e.g. in raw modes, you see all request/response details.
+Why it can be better than official UI for some use cases:
+- You can access your private local file, and private Google Drive file through oauth
+- All you chat history in one place locally
+- Pick models from different vendors, and mix them in a single conversation
+- Tweak system prompts to best suit your needs
+- Easily switch between different chat threads
+- Also a good learning tool for LLM interactions, e.g. in raw request/response modes, you see all request/response details
 
 ## Quick Install
 
-Requirements:
-- Neovim
-- `curl`
-- `grep`
-
 Optional dependencies:
-- [`telescope.nvim`](https://github.com/nvim-telescope/telescope.nvim) for pickers and finder UI.
 - [`lualine.nvim`](https://github.com/nvim-lualine/lualine.nvim) for status line integration.
+- `curl` for oauth and fetching web content
 
 Example with `lazy.nvim`:
 
@@ -84,10 +83,10 @@ Notes:
 
 ## First 60 Seconds
 
-1. Run `:ParleyChatNew` (default shortcut: `<C-g>c`).
-2. Type your prompt after `💬:`.
-3. Run `:ParleyChatRespond` (default shortcut: `<C-g><C-g>`).
-4. Edit any part of the transcript and ask again.
+1. Run `:ParleyChatNew` (default shortcut: `<C-g>c`) to create a new chat.
+2. Type your question after `💬:`.
+3. Run `:ParleyChatRespond` (default shortcut: `<C-g><C-g>`) with mouse on the question line.
+4. Get response from the agent after `🤖:`, streaming in real time.
 
 A Parley chat is a normal markdown file with a header and alternating `💬:` / `🤖:` blocks.
 

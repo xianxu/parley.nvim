@@ -264,6 +264,29 @@ describe("float_picker", function()
             assert.equals("extra_val", mapped_item.value)
         end)
 
+        it("does not let a <C-m> extra mapping override <CR> confirm", function()
+            local selected = nil
+            local extra_mapping_called = false
+            float_picker.open({
+                title = "Test",
+                items = { { display = "item", value = "the_value" } },
+                on_select = function(item) selected = item end,
+                mappings = {
+                    { key = "<C-m>", fn = function() extra_mapping_called = true end },
+                },
+            })
+
+            vim.api.nvim_feedkeys(
+                vim.api.nvim_replace_termcodes("<CR>", true, false, true), "x", true
+            )
+            vim.wait(200, function() return selected ~= nil end)
+
+            assert.is_not_nil(selected)
+            assert.equals("the_value", selected.value)
+            assert.is_false(extra_mapping_called)
+            assert.is_nil(find_any_float_win(), "window should be closed after confirm")
+        end)
+
         it("extra mapping close_fn closes the window", function()
             local closed_via_mapping = false
             float_picker.open({

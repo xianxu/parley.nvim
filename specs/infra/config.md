@@ -32,7 +32,7 @@ Notable replace-on-set behavior:
 ### Chat Finder Recency
 - `chat_finder_recency.months`: Default filtered month window when Chat Finder opens in recent mode.
 - `chat_finder_recency.presets`: Additional month cutoffs that Chat Finder cycles through before `All`.
-- `chat_finder_mappings.move`: Picker-local shortcut (default `<C-m>`) for moving the selected chat to another registered chat root.
+- `chat_finder_mappings.move`: Picker-local shortcut (default `<C-g>m`) for moving the selected chat to another registered chat root without colliding with picker confirm on `<CR>`.
 - `chat_finder_mappings.next_recency` and `chat_finder_mappings.previous_recency`: Picker-local shortcuts for moving left toward smaller cutoffs or right toward larger cutoffs and `All`.
 
 ### Provider-Specific Keys

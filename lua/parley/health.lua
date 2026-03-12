@@ -26,12 +26,6 @@ function M.check()
 		vim.health.error("curl is not installed")
 	end
 
-	if vim.fn.executable("grep") == 1 then
-		vim.health.ok("grep is installed")
-	else
-		vim.health.error("grep is not installed")
-	end
-
 	-- Check for optional dependencies
 	local has_lualine, _ = pcall(require, "lualine")
 	if has_lualine then
