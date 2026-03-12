@@ -31,6 +31,7 @@ chat_parser = require("parley.chat_parser"), -- chat file parser
 	lualine = require("parley.lualine"), -- lualine integration
 	agent_picker = require("parley.agent_picker"), -- agent selection UI
 	system_prompt_picker = require("parley.system_prompt_picker"), -- system prompt selection UI
+	chat_dir_picker = require("parley.chat_dir_picker"), -- chat root management UI
 	float_picker = require("parley.float_picker"), -- shared floating window picker
 }
 
@@ -40,6 +41,21 @@ chat_parser = require("parley.chat_parser"), -- chat file parser
 
 local agent_completion = function()
 	return M._agents
+end
+
+local function dir_completion(arg_lead)
+	return vim.fn.getcompletion(arg_lead or "", "dir")
+end
+
+local function chat_dir_completion(arg_lead)
+	local lead = (arg_lead or ""):lower()
+	local matches = {}
+	for _, dir in ipairs(M.get_chat_dirs()) do
+		if lead == "" or dir:lower():find(lead, 1, true) == 1 then
+			table.insert(matches, dir)
+		end
+	end
+	return matches
 end
 
 local function stop_and_close_timer(timer)
@@ -100,6 +116,10 @@ local function path_within_dir(path, dir)
 	return resolved_path == resolved_dir or M.helpers.starts_with(resolved_path, resolved_dir .. "/")
 end
 
+local function resolve_dir_key(dir)
+	return vim.fn.resolve(vim.fn.expand(dir)):gsub("/+$", "")
+end
+
 local function normalize_chat_dirs(chat_dir, chat_dirs)
 	local dirs = {}
 	local seen = {}
@@ -110,7 +130,7 @@ local function normalize_chat_dirs(chat_dir, chat_dirs)
 		end
 
 		local prepared = M.helpers.prepare_dir(dir, "chat")
-		local resolved = vim.fn.resolve(prepared):gsub("/+$", "")
+		local resolved = resolve_dir_key(prepared)
 		if seen[resolved] then
 			return
 		end
@@ -143,13 +163,81 @@ M.get_chat_dirs = function()
 end
 
 local function find_chat_root(file_name)
-	local resolved_file = vim.fn.resolve(vim.fn.expand(file_name)):gsub("/+$", "")
+	local resolved_file = resolve_dir_key(file_name)
 	for _, dir in ipairs(M.get_chat_dirs()) do
 		if path_within_dir(resolved_file, dir) then
 			return dir, resolved_file
 		end
 	end
 	return nil, resolved_file
+end
+
+local function apply_chat_dirs(chat_dirs)
+	if type(chat_dirs) ~= "table" or #chat_dirs == 0 then
+		return nil, "at least one chat directory is required"
+	end
+
+	local primary = chat_dirs[1]
+	local additional = {}
+	for i = 2, #chat_dirs do
+		table.insert(additional, chat_dirs[i])
+	end
+
+	local normalized = normalize_chat_dirs(primary, additional)
+	if #normalized == 0 then
+		return nil, "at least one chat directory is required"
+	end
+
+	M.config.chat_dir = normalized[1]
+	M.config.chat_dirs = normalized
+	return normalized
+end
+
+M.set_chat_dirs = function(chat_dirs, persist)
+	local normalized, err = apply_chat_dirs(chat_dirs)
+	if not normalized then
+		return nil, err
+	end
+
+	if persist ~= false then
+		M.refresh_state({ chat_dirs = vim.deepcopy(normalized) })
+	end
+
+	return normalized
+end
+
+M.add_chat_dir = function(chat_dir, persist)
+	local dirs = vim.deepcopy(M.get_chat_dirs())
+	table.insert(dirs, chat_dir)
+	return M.set_chat_dirs(dirs, persist)
+end
+
+M.remove_chat_dir = function(chat_dir, persist)
+	local target = resolve_dir_key(chat_dir)
+	local current_dirs = M.get_chat_dirs()
+	if #current_dirs > 0 and resolve_dir_key(current_dirs[1]) == target then
+		return nil, "cannot remove the primary chat directory"
+	end
+	local remaining = {}
+	local removed = false
+
+	for _, dir in ipairs(current_dirs) do
+		if resolve_dir_key(dir) == target then
+			removed = true
+		else
+			table.insert(remaining, dir)
+		end
+	end
+
+	if not removed then
+		return nil, "chat directory not found: " .. chat_dir
+	end
+
+	if #remaining == 0 then
+		return nil, "at least one chat directory is required"
+	end
+
+	return M.set_chat_dirs(remaining, persist)
 end
 
 -- State shared between async callbacks while responding.
@@ -308,6 +396,16 @@ M._keybinding_help_lines = function()
 		"Open chat finder"
 	)
 	add(
+		resolve_shortcut(
+			"Manage chat roots",
+			shortcut_modes(cfg.global_shortcut_chat_dirs, { "n", "i" }),
+			cfg.global_shortcut_chat_dirs,
+			"<C-g>h",
+			current_buf
+		),
+		"Manage chat roots"
+	)
+	add(
 		resolve_shortcut("Create New Note", shortcut_modes(cfg.global_shortcut_note_new, { "n", "i" }), cfg.global_shortcut_note_new, "<C-n>c", current_buf),
 		"New note"
 	)
@@ -413,13 +511,14 @@ M._keybinding_help_lines = function()
 	)
 	add(resolve_shortcut("Parley prompt Outline Navigator", { "n" }, nil, "<C-g>t", current_buf), "Outline picker")
 
-	table.insert(lines, "")
-	table.insert(lines, "Chat Finder")
-	local finder_mappings = cfg.chat_finder_mappings or {}
-	add(shortcut_value(finder_mappings.next_recency, "<C-a>"), "Cycle chat recency window left")
-	add(shortcut_value(finder_mappings.previous_recency, "<C-s>"), "Cycle chat recency window right")
-	add(shortcut_value(finder_mappings.delete, "<C-d>"), "Delete selected chat")
-	table.insert(lines, string.format("  %-12s %s", "", "(Recent window default: last " .. tostring((cfg.chat_finder_recency or {}).months or 6) .. " months)"))
+table.insert(lines, "")
+table.insert(lines, "Chat Finder")
+local finder_mappings = cfg.chat_finder_mappings or {}
+add(shortcut_value(finder_mappings.next_recency, "<C-a>"), "Cycle chat recency window left")
+add(shortcut_value(finder_mappings.previous_recency, "<C-s>"), "Cycle chat recency window right")
+add(shortcut_value(finder_mappings.delete, "<C-d>"), "Delete selected chat")
+add(shortcut_value(finder_mappings.move, "<C-m>"), "Move selected chat")
+table.insert(lines, string.format("  %-12s %s", "", "(Recent window default: last " .. tostring((cfg.chat_finder_recency or {}).months or 6) .. " months)"))
 
 	table.insert(lines, "")
 	table.insert(lines, "Close: q or <Esc>")
@@ -625,11 +724,7 @@ M.setup = function(opts)
 		M.config[k] = v
 	end
 
-	local chat_dirs = normalize_chat_dirs(M.config.chat_dir, M.config.chat_dirs)
-	if #chat_dirs > 0 then
-		M.config.chat_dir = chat_dirs[1]
-		M.config.chat_dirs = chat_dirs
-	end
+	apply_chat_dirs(normalize_chat_dirs(M.config.chat_dir, M.config.chat_dirs))
 
 	-- make sure _dirs exists
 	for k, v in pairs(M.config) do
@@ -746,6 +841,21 @@ M.setup = function(opts)
 		end
 	end
 
+	if M.config.global_shortcut_chat_dirs then
+		for _, mode in ipairs(M.config.global_shortcut_chat_dirs.modes) do
+			if mode == "n" then
+				vim.keymap.set(mode, M.config.global_shortcut_chat_dirs.shortcut, function()
+					M.cmd.ChatDirs({})
+				end, { silent = true, desc = "Manage chat roots" })
+			elseif mode == "i" then
+				vim.keymap.set(mode, M.config.global_shortcut_chat_dirs.shortcut, function()
+					vim.cmd("stopinsert")
+					M.cmd.ChatDirs({})
+				end, { silent = true, desc = "Manage chat roots" })
+			end
+		end
+	end
+
 	if M.config.global_shortcut_keybindings then
 		for _, mode in ipairs(M.config.global_shortcut_keybindings.modes) do
 			if mode == "n" then
@@ -837,6 +947,9 @@ M.setup = function(opts)
 	local completions = {
 		ChatNew = {},
 		Agent = agent_completion,
+		ChatDirAdd = dir_completion,
+		ChatDirRemove = chat_dir_completion,
+		ChatMove = chat_dir_completion,
 	}
 
 	-- Add ChatRespondAll command
@@ -1190,6 +1303,12 @@ M.refresh_state = function(update)
 
 	if M._state.follow_cursor == nil then
 		M._state.follow_cursor = not M.config.chat_free_cursor
+	end
+
+	if type(M._state.chat_dirs) == "table" and #M._state.chat_dirs > 0 then
+		apply_chat_dirs(M._state.chat_dirs)
+	else
+		M._state.chat_dirs = vim.deepcopy(M.get_chat_dirs())
 	end
 
 	if not M._state.agent or not M.agents[M._state.agent] then
@@ -2682,6 +2801,127 @@ M.open_buf = function(file_name, from_chat_finder)
 	vim.api.nvim_command("edit " .. vim.fn.fnameescape(file_name))
 	local buf = vim.api.nvim_get_current_buf()
 	return buf
+end
+
+local function registered_chat_dir(dir)
+	local resolved = resolve_dir_key(dir)
+	for _, candidate in ipairs(M.get_chat_dirs()) do
+		if resolve_dir_key(candidate) == resolved then
+			return candidate
+		end
+	end
+	return nil
+end
+
+local function sync_moved_chat_buffers(old_path, new_path)
+	local resolved_old = resolve_dir_key(old_path)
+	for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+		if vim.api.nvim_buf_is_valid(buf) and resolve_dir_key(vim.api.nvim_buf_get_name(buf)) == resolved_old then
+			if vim.bo[buf].modified then
+				vim.api.nvim_buf_call(buf, function()
+					vim.cmd("silent! write")
+				end)
+			end
+			if new_path and new_path ~= "" and resolve_dir_key(new_path) ~= resolved_old then
+				vim.api.nvim_buf_set_name(buf, new_path)
+			end
+		end
+	end
+end
+
+M.move_chat = function(file_name, target_dir)
+	local current_root, resolved_file = find_chat_root(file_name)
+	if not current_root then
+		return nil, "file is not in configured chat roots: " .. file_name
+	end
+
+	local target_root = registered_chat_dir(target_dir)
+	if not target_root then
+		return nil, "target is not a registered chat directory: " .. target_dir
+	end
+
+	if resolve_dir_key(current_root) == resolve_dir_key(target_root) then
+		return nil, "chat is already in that directory"
+	end
+
+	local basename = vim.fn.fnamemodify(resolved_file, ":t")
+	local target_file = target_root .. "/" .. basename
+	if vim.fn.filereadable(target_file) == 1 then
+		return nil, "target chat already exists: " .. target_file
+	end
+
+	sync_moved_chat_buffers(resolved_file, nil)
+
+	local ok, err = os.rename(resolved_file, target_file)
+	if not ok then
+		return nil, "failed to move chat: " .. tostring(err)
+	end
+
+	sync_moved_chat_buffers(resolved_file, target_file)
+
+	if M._state.last_chat and resolve_dir_key(M._state.last_chat) == resolved_file then
+		M.refresh_state({ last_chat = target_file })
+	end
+
+	require("parley.file_tracker").track_file_access(target_file)
+	return target_file
+end
+
+M.prompt_chat_move = function(file_name, on_complete, on_cancel)
+	local current_root, resolved_file = find_chat_root(file_name)
+	if not current_root then
+		local err = "file is not in configured chat roots: " .. file_name
+		vim.notify(err, vim.log.levels.WARN)
+		if on_cancel then
+			on_cancel()
+		end
+		return
+	end
+
+	local items = {}
+	for index, dir in ipairs(M.get_chat_dirs()) do
+		if resolve_dir_key(dir) ~= resolve_dir_key(current_root) then
+			local label = index == 1 and "* primary" or "  extra  "
+			table.insert(items, {
+				display = string.format("%s %s", label, dir),
+				value = dir,
+			})
+		end
+	end
+
+	if #items == 0 then
+		vim.notify("No alternate chat directories are registered", vim.log.levels.WARN)
+		if on_cancel then
+			on_cancel()
+		end
+		return
+	end
+
+	M.float_picker.open({
+		title = "Move Chat To",
+		items = items,
+		on_select = function(item)
+			local new_file, err = M.move_chat(resolved_file, item.value)
+			if not new_file then
+				vim.notify("Failed to move chat: " .. err, vim.log.levels.WARN)
+				if on_cancel then
+					on_cancel()
+				end
+				return
+			end
+
+			M.logger.info("Moved chat to: " .. new_file)
+			vim.notify("Moved chat to: " .. new_file, vim.log.levels.INFO)
+			if on_complete then
+				on_complete(new_file, item.value)
+			end
+		end,
+		on_cancel = function()
+			if on_cancel then
+				on_cancel()
+			end
+		end,
+	})
 end
 
 ---@param system_prompt string | nil # system prompt to use
@@ -4769,6 +5009,7 @@ M.cmd.ChatFinder = function(_options)
 
 	local chat_dirs = M.get_chat_dirs()
 	local delete_shortcut = M.config.chat_finder_mappings.delete or M.config.chat_shortcut_delete
+	local move_shortcut = M.config.chat_finder_mappings.move or { shortcut = "<C-m>" }
 	local next_recency_shortcut = M.config.chat_finder_mappings.next_recency or { shortcut = "<C-a>" }
 	local previous_recency_shortcut = M.config.chat_finder_mappings.previous_recency or { shortcut = "<C-s>" }
 	local keybindings_shortcut = M.config.global_shortcut_keybindings or { shortcut = "<C-g>?" }
@@ -5059,6 +5300,28 @@ M.cmd.ChatFinder = function(_options)
 						end, 20)
 					end,
 				},
+				-- Move selected chat file to another registered chat root
+				{
+					key = move_shortcut.shortcut,
+					fn = function(item, close_fn)
+						if not item then
+							return
+						end
+
+						close_fn()
+						vim.schedule(function()
+							M.prompt_chat_move(item.value, function(new_file)
+								M._chat_finder.opened = false
+								M._chat_finder.source_win = source_win
+								M._reopen_chat_finder(source_win, nil, new_file)
+							end, function()
+								M._chat_finder.opened = false
+								M._chat_finder.source_win = source_win
+								M._reopen_chat_finder(source_win, nil, item.value)
+							end)
+						end)
+					end,
+				},
 				-- Move left through recency presets
 				{
 					key = next_recency_shortcut.shortcut,
@@ -5113,6 +5376,71 @@ M.cmd.ChatFinder = function(_options)
 	M._chat_finder.initial_index = nil
 	M._chat_finder.initial_value = nil
 	M._chat_finder.opened = false
+end
+
+M.cmd.ChatDirs = function(_params)
+	M.chat_dir_picker.chat_dir_picker(M)
+end
+
+M.cmd.ChatMove = function(params)
+	local file_name = vim.api.nvim_buf_get_name(0)
+	local target_dir = params and params.args or ""
+
+	if target_dir ~= "" then
+		local new_file, err = M.move_chat(file_name, target_dir)
+		if not new_file then
+			vim.notify("Failed to move chat: " .. err, vim.log.levels.WARN)
+			return
+		end
+
+		vim.notify("Moved chat to: " .. new_file, vim.log.levels.INFO)
+		return
+	end
+
+	M.prompt_chat_move(file_name)
+end
+
+M.cmd.ChatDirAdd = function(params)
+	local dir = params and params.args or ""
+	if dir == "" then
+		dir = vim.fn.input({
+			prompt = "Add chat dir: ",
+			default = vim.fn.getcwd() .. "/",
+			completion = "dir",
+		})
+		vim.cmd("redraw")
+	end
+
+	if not dir or dir == "" then
+		return
+	end
+
+	local normalized, err = M.add_chat_dir(dir, true)
+	if not normalized then
+		vim.notify("Failed to add chat dir: " .. err, vim.log.levels.WARN)
+		return
+	end
+
+	local added_dir = normalized[#normalized]
+	M.logger.info("Added chat dir: " .. added_dir)
+	vim.notify("Added chat dir: " .. added_dir, vim.log.levels.INFO)
+end
+
+M.cmd.ChatDirRemove = function(params)
+	local dir = params and params.args or ""
+	if dir == "" then
+		vim.notify("Usage: :" .. M.config.cmd_prefix .. "ChatDirRemove <dir>", vim.log.levels.WARN)
+		return
+	end
+
+	local normalized, err = M.remove_chat_dir(dir, true)
+	if not normalized then
+		vim.notify("Failed to remove chat dir: " .. err, vim.log.levels.WARN)
+		return
+	end
+
+	M.logger.info("Removed chat dir: " .. dir)
+	vim.notify("Removed chat dir: " .. dir, vim.log.levels.INFO)
 end
 
 --------------------------------------------------------------------------------

@@ -32,6 +32,7 @@ Notable replace-on-set behavior:
 ### Chat Finder Recency
 - `chat_finder_recency.months`: Default filtered month window when Chat Finder opens in recent mode.
 - `chat_finder_recency.presets`: Additional month cutoffs that Chat Finder cycles through before `All`.
+- `chat_finder_mappings.move`: Picker-local shortcut (default `<C-m>`) for moving the selected chat to another registered chat root.
 - `chat_finder_mappings.next_recency` and `chat_finder_mappings.previous_recency`: Picker-local shortcuts for moving left toward smaller cutoffs or right toward larger cutoffs and `All`.
 
 ### Provider-Specific Keys
@@ -50,3 +51,8 @@ Notable replace-on-set behavior:
 - Directories specified in configuration MUST be prepared (created if they don't exist) during `setup()`.
 - `chat_dir` MUST remain the first entry in the normalized chat root list.
 - `chat_dirs` MUST be normalized into a de-duplicated list of prepared directories that includes `chat_dir`.
+
+## Runtime Overrides
+- Runtime chat-root changes made through Parley commands or UI MUST persist in `state_dir/state.json`.
+- Persisted `chat_dirs` MUST override the setup-time chat-root list on later startups.
+- The primary `chat_dir` MUST NOT be removable through runtime management commands or UI.

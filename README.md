@@ -97,7 +97,7 @@ A Parley chat is a normal markdown file with a header and alternating `💬:` / 
 - `:ParleyChatRespond` answer current question.
 - `:ParleyChatRespondAll` regenerate from start to cursor.
 - `:ParleyStop` stop running generation.
-- `:ParleyChatFinder` find/open/delete chat files.
+- `:ParleyChatFinder` find/open/delete/move chat files.
 - `:ParleyKeyBindings` show active Parley keyboard shortcuts.
 - `:ParleyAgent` switch agent.
 - `:ParleySystemPrompt` switch system prompt.
@@ -142,6 +142,12 @@ Merge behavior in `setup(opts)`:
 Chat storage roots:
 - `chat_dir` is the primary writable root used for new chats.
 - `chat_dirs` is an optional list of additional roots that Chat Finder, chat validation, and chat-aware commands will scan alongside `chat_dir`.
+- `:ParleyChatDirs` opens a picker to add or remove chat roots at runtime.
+- `:ParleyChatDirAdd {dir}` adds a root directly, with directory completion.
+- `:ParleyChatDirRemove {dir}` removes a configured root directly.
+- `:ParleyChatMove {dir}` moves the current chat to another registered chat root.
+- The primary `chat_dir` cannot be removed at runtime.
+- The default shortcut for chat-root management is `<C-g>h`.
 
 For full defaults and examples, see [`lua/parley/config.lua`](lua/parley/config.lua).
 

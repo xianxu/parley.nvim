@@ -9,6 +9,7 @@ Parley exposes a key-bindings help command that lists active default shortcuts d
 
 ## Default Shortcut
 - `global_shortcut_keybindings` defaults to `<C-g>?` in normal and insert modes.
+- `global_shortcut_chat_dirs` defaults to `<C-g>h` in normal and insert modes.
 - In insert mode, Parley exits insert mode before showing the key-bindings window.
 
 ## Content Requirements
@@ -16,6 +17,6 @@ Parley exposes a key-bindings help command that lists active default shortcuts d
   - global chat/note shortcuts,
   - chat/markdown shortcuts,
   - mode toggles (`web_search`, `raw request`, `raw response`, interview mode).
-- The Chat Finder section MUST include both left and right recency-cycle shortcuts, plus delete.
+- The Chat Finder section MUST include both left and right recency-cycle shortcuts, plus delete and move.
 - Displayed shortcuts MUST be resolved from active runtime keymaps when available.
 - If a runtime keymap cannot be found, Parley falls back to configured/default shortcut values.

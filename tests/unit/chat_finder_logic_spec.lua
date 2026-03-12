@@ -67,6 +67,7 @@ describe("ChatFinder logic", function()
         M.config.chat_dirs = { tmpdir, secondary_tmpdir }
         M.config.chat_finder_mappings = {
             delete = { shortcut = "<C-d>" },
+            move = { shortcut = "<C-m>" },
             next_recency = { shortcut = "<C-a>" },
             previous_recency = { shortcut = "<C-s>" },
         }
@@ -489,8 +490,9 @@ describe("ChatFinder logic", function()
 
             assert.is_truthy(captured)
             assert.equals("Chat Files (Recent: 12 months  <C-a>/<C-s>: cycle)", captured.title)
-            assert.equals("<C-a>", captured.mappings[2].key)
-            assert.equals("<C-s>", captured.mappings[3].key)
+            assert.equals("<C-m>", captured.mappings[2].key)
+            assert.equals("<C-a>", captured.mappings[3].key)
+            assert.equals("<C-s>", captured.mappings[4].key)
         end)
 
         it("prefers restoring selection by item value when reopening after delete", function()

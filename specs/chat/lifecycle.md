@@ -14,6 +14,11 @@ The chat lifecycle includes creation, sending questions, receiving responses, re
 - When `chat_dirs` is configured, Chat Finder MUST include matching chat files from every configured root.
 - New chat creation MUST still use only the primary `chat_dir`.
 
+### Command: `:ParleyChatMove`
+- Moves the current chat file to another registered chat root.
+- The destination MUST already be present in the normalized chat-root list.
+- Moving a chat MUST keep the current filename and update any open chat buffer to the new path.
+
 ## Response Generation
 ### Command: `:ParleyChatRespond` (Buffer Shortcut: `<C-g><C-g>`)
 - Validates that the buffer is a valid chat file.
