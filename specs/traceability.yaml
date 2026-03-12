@@ -65,10 +65,12 @@ specs:
     code:
       - lua/parley/provider_params.lua
       - lua/parley/dispatcher.lua
+      - lua/parley/init.lua
     tests:
       - tests/unit/provider_params_spec.lua
       - tests/unit/dispatcher_query_spec.lua
       - tests/unit/build_messages_spec.lua
+      - tests/integration/chat_respond_spec.lua
 
   export/formats:
     code:

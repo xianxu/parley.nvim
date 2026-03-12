@@ -424,7 +424,7 @@ describe("chat_respond: buffer state after completion", function()
 
             local before_lines = vim.api.nvim_buf_get_lines(buf_arg, 0, -1, false)
             for _, line in ipairs(before_lines) do
-                if line:match("^🔎 %S+ Searching web%.%.%.$") then
+                if line:match("^🔎 %S+ Submitting%.%.%.$") then
                     saw_initial_indicator = true
                     break
                 end
@@ -450,7 +450,7 @@ describe("chat_respond: buffer state after completion", function()
 
         parley._state.web_search = original_web_search
 
-        assert.is_true(saw_initial_indicator, "Expected initial web-search progress indicator to be present")
+        assert.is_true(saw_initial_indicator, "Expected initial submitting progress indicator to be present")
         local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
         local has_progress_line = false
         local has_answer_text = false
@@ -503,7 +503,7 @@ describe("chat_respond: buffer state after completion", function()
         vim.wait(120, function()
             local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
             for _, line in ipairs(lines) do
-                if line:match("^🔎 %S+ Searching web%.%.%.$") then
+                if line:match("^🔎 %S+ Submitting%.%.%.$") then
                     return true
                 end
             end
@@ -512,7 +512,7 @@ describe("chat_respond: buffer state after completion", function()
 
         local first_spinner_line = nil
         for _, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
-            if line:match("^🔎 %S+ Searching web%.%.%.$") then
+            if line:match("^🔎 %S+ Submitting%.%.%.$") then
                 first_spinner_line = line
                 break
             end
@@ -522,7 +522,7 @@ describe("chat_respond: buffer state after completion", function()
         vim.wait(140, function()
             local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
             for _, line in ipairs(lines) do
-                if line:match("^🔎 %S+ Searching web%.%.%.$") and line ~= first_spinner_line then
+                if line:match("^🔎 %S+ Submitting%.%.%.$") and line ~= first_spinner_line then
                     return true
                 end
             end
@@ -531,7 +531,7 @@ describe("chat_respond: buffer state after completion", function()
 
         local spinner_changed = false
         for _, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
-            if line:match("^🔎 %S+ Searching web%.%.%.$") and line ~= first_spinner_line then
+            if line:match("^🔎 %S+ Submitting%.%.%.$") and line ~= first_spinner_line then
                 spinner_changed = true
                 break
             end
@@ -546,7 +546,7 @@ describe("chat_respond: buffer state after completion", function()
 
         local has_spinner = false
         for _, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
-            if line:find("Searching web...", 1, true) then
+            if line:find("Submitting...", 1, true) then
                 has_spinner = true
                 break
             end

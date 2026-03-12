@@ -3619,7 +3619,7 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 		end
 
 		local spinner_frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
-		local spinner_message = "Searching web..."
+		local spinner_message = "Submitting..."
 		local progress_detail_text = ""
 		local progress_detail_key = nil
 		local spinner_frame_index = 1
