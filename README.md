@@ -97,7 +97,7 @@ A Parley chat is a normal markdown file with a header and alternating `💬:` / 
 - `:ParleyChatRespond` answer current question.
 - `:ParleyChatRespondAll` regenerate from start to cursor.
 - `:ParleyStop` stop running generation.
-- `:ParleyChatFinder` find/open/delete chat files.
+- `:ParleyChatFinder` find/open/delete/move chat files.
 - `:ParleyKeyBindings` show active Parley keyboard shortcuts.
 - `:ParleyAgent` switch agent.
 - `:ParleySystemPrompt` switch system prompt.
@@ -130,13 +130,24 @@ Common options live in `setup()`:
 - `providers`
 - `agents`
 - `chat_dir`
+- `chat_dirs`
 - `notes_dir`
 - `web_search`
 
 Merge behavior in `setup(opts)`:
 - `agents`, `system_prompts`, and `hooks` are merged by key/name, so you can override only selected entries.
-- Most other top-level keys are replaced when provided (for example `chat_dir`, `notes_dir`, `chat_template`, `raw_mode`, `highlight`, `chat_memory`, `providers`, `api_keys`).
+- Most other top-level keys are replaced when provided (for example `chat_dir`, `chat_dirs`, `notes_dir`, `chat_template`, `raw_mode`, `highlight`, `chat_memory`, `providers`, `api_keys`).
 - Practical rule: for non-merged tables, provide the full table you want, not just one nested field.
+
+Chat storage roots:
+- `chat_dir` is the primary writable root used for new chats.
+- `chat_dirs` is an optional list of additional roots that Chat Finder, chat validation, and chat-aware commands will scan alongside `chat_dir`.
+- `:ParleyChatDirs` opens a picker to add or remove chat roots at runtime.
+- `:ParleyChatDirAdd {dir}` adds a root directly, with directory completion.
+- `:ParleyChatDirRemove {dir}` removes a configured root directly.
+- `:ParleyChatMove {dir}` moves the current chat to another registered chat root.
+- The primary `chat_dir` cannot be removed at runtime.
+- The default shortcut for chat-root management is `<C-g>h`.
 
 For full defaults and examples, see [`lua/parley/config.lua`](lua/parley/config.lua).
 

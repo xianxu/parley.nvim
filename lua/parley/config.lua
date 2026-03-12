@@ -279,6 +279,8 @@ local config = {
 	-- directory for storing chat files
 	-- chat_dir = vim.fn.stdpath("data"):gsub("/$", "") .. "/parley/chats",
 	chat_dir = vim.fn.expand("~/Library/Mobile Documents/com~apple~CloudDocs/parley"),
+	-- additional chat roots searched by chat-aware features; new chats still use chat_dir
+	chat_dirs = {},
 	-- directory for storing notes
 	notes_dir = vim.fn.expand("~/Library/Mobile Documents/com~apple~CloudDocs/notes"),
 	-- export directories for different formats
@@ -320,6 +322,7 @@ local config = {
 	global_shortcut_new = { modes = { "n", "i" }, shortcut = "<C-g>c" },
 	global_shortcut_review = { modes = { "n" }, shortcut = "<C-g>C" },
 	global_shortcut_finder = { modes = { "n", "i" }, shortcut = "<C-g>f" },
+	global_shortcut_chat_dirs = { modes = { "n", "i" }, shortcut = "<C-g>h" },
 	global_shortcut_keybindings = { modes = { "n", "i" }, shortcut = "<C-g>?" },
 	-- shortcut for adding chat references in markdown files
 	global_shortcut_add_chat_ref = { modes = { "n", "i" }, shortcut = "<C-g>a" },
@@ -332,6 +335,7 @@ local config = {
 	chat_finder_pattern = "",
 	chat_finder_mappings = {
 		delete = { modes = { "n", "i", "v", "x" }, shortcut = "<C-d>" },
+		move = { modes = { "n", "i", "v", "x" }, shortcut = "<C-m>" },
 		next_recency = { modes = { "n", "i", "v", "x" }, shortcut = "<C-a>" },
 		previous_recency = { modes = { "n", "i", "v", "x" }, shortcut = "<C-s>" },
 	},

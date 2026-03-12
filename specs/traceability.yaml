@@ -19,6 +19,7 @@ specs:
       - lua/parley/dispatcher.lua
       - lua/parley/render.lua
     tests:
+      - tests/integration/chat_move_spec.lua
       - tests/integration/create_handler_spec.lua
       - tests/integration/new_chat_spec.lua
       - tests/integration/chat_respond_spec.lua
@@ -85,6 +86,7 @@ specs:
       - lua/parley/defaults.lua
       - lua/parley/init.lua
     tests:
+      - tests/unit/chat_dirs_spec.lua
       - tests/unit/helper_spec.lua
       - tests/unit/provider_params_spec.lua
       - tests/unit/pure_functions_spec.lua
@@ -221,6 +223,7 @@ specs:
 
   ui/pickers:
     code:
+      - lua/parley/chat_dir_picker.lua
       - lua/parley/float_picker.lua
       - lua/parley/init.lua
       - lua/parley/config.lua
@@ -228,6 +231,8 @@ specs:
       - lua/parley/system_prompt_picker.lua
       - lua/parley/test_agent_picker.lua
     tests:
+      - tests/integration/chat_move_spec.lua
+      - tests/unit/chat_dirs_spec.lua
       - tests/unit/float_picker_spec.lua
       - tests/unit/picker_items_spec.lua
       - tests/unit/chat_finder_logic_spec.lua

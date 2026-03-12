@@ -5,19 +5,23 @@
 -- Requires the Neovim runtime (vim.api, vim.fn).
 
 local tmp_dir = vim.fn.tempname() .. "-parley-not-chat"
+local secondary_dir = vim.fn.tempname() .. "-parley-not-chat-secondary"
 vim.fn.mkdir(tmp_dir, "p")
+vim.fn.mkdir(secondary_dir, "p")
 
 local parley = require("parley")
 parley.setup({
     chat_dir = tmp_dir,
+    chat_dirs = { secondary_dir },
     state_dir = tmp_dir .. "/state",
     providers = {},
     api_keys = {},
 })
 
 -- Build a minimal valid chat buffer in tmp_dir and return (buf, file_path).
-local function make_chat_buf(filename)
-    local path = tmp_dir .. "/" .. filename
+local function make_chat_buf(filename, dir)
+    dir = dir or tmp_dir
+    local path = dir .. "/" .. filename
     local lines = {
         "---",
         "topic: Test",
@@ -50,6 +54,12 @@ describe("not_chat: valid chat files", function()
     after_each(cleanup_bufs)
     it("returns nil for a properly formatted chat file in chat_dir", function()
         local buf, path = make_chat_buf("2026-02-28.test.md")
+        local result = parley.not_chat(buf, path)
+        assert.is_nil(result)
+    end)
+
+    it("returns nil for a properly formatted chat file in a secondary chat root", function()
+        local buf, path = make_chat_buf("2026-02-28.secondary.md", secondary_dir)
         local result = parley.not_chat(buf, path)
         assert.is_nil(result)
     end)

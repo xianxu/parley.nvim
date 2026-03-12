@@ -5,9 +5,19 @@ The chat lifecycle includes creation, sending questions, receiving responses, re
 
 ## Creation
 ### Command: `:ParleyChatNew` (Global Shortcut: `<C-g>c`)
-- Generates a new `.md` file in `chat_dir` with a `YYYY-MM-DD` timestamp.
+- Generates a new `.md` file in the primary `chat_dir` with a `YYYY-MM-DD` timestamp.
 - Writes the default template, substituting: filename, model/provider headers, and initial system prompt.
 - Opens the file in a Neovim buffer and moves the cursor to the first question area.
+
+### Multi-Root Discovery
+- Chat-aware discovery features MAY scan multiple configured chat roots.
+- When `chat_dirs` is configured, Chat Finder MUST include matching chat files from every configured root.
+- New chat creation MUST still use only the primary `chat_dir`.
+
+### Command: `:ParleyChatMove`
+- Moves the current chat file to another registered chat root.
+- The destination MUST already be present in the normalized chat-root list.
+- Moving a chat MUST keep the current filename and update any open chat buffer to the new path.
 
 ## Response Generation
 ### Command: `:ParleyChatRespond` (Buffer Shortcut: `<C-g><C-g>`)
