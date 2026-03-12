@@ -130,13 +130,18 @@ Common options live in `setup()`:
 - `providers`
 - `agents`
 - `chat_dir`
+- `chat_dirs`
 - `notes_dir`
 - `web_search`
 
 Merge behavior in `setup(opts)`:
 - `agents`, `system_prompts`, and `hooks` are merged by key/name, so you can override only selected entries.
-- Most other top-level keys are replaced when provided (for example `chat_dir`, `notes_dir`, `chat_template`, `raw_mode`, `highlight`, `chat_memory`, `providers`, `api_keys`).
+- Most other top-level keys are replaced when provided (for example `chat_dir`, `chat_dirs`, `notes_dir`, `chat_template`, `raw_mode`, `highlight`, `chat_memory`, `providers`, `api_keys`).
 - Practical rule: for non-merged tables, provide the full table you want, not just one nested field.
+
+Chat storage roots:
+- `chat_dir` is the primary writable root used for new chats.
+- `chat_dirs` is an optional list of additional roots that Chat Finder, chat validation, and chat-aware commands will scan alongside `chat_dir`.
 
 For full defaults and examples, see [`lua/parley/config.lua`](lua/parley/config.lua).
 

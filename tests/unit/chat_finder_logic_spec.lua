@@ -10,6 +10,7 @@ local M = require("parley")
 
 describe("ChatFinder logic", function()
     local tmpdir
+    local secondary_tmpdir
     local original_config
     local original_float_picker_open
     local original_ui_input
@@ -57,10 +58,13 @@ describe("ChatFinder logic", function()
         -- Create a temp directory for chat files
         local random_suffix = string.format("%x", math.random(0, 0xFFFFFF))
         tmpdir = "/tmp/parley-test-chatfinder-" .. random_suffix
+        secondary_tmpdir = "/tmp/parley-test-chatfinder-secondary-" .. random_suffix
         vim.fn.mkdir(tmpdir, "p")
+        vim.fn.mkdir(secondary_tmpdir, "p")
 
         -- Set config to use temp directory
         M.config.chat_dir = tmpdir
+        M.config.chat_dirs = { tmpdir, secondary_tmpdir }
         M.config.chat_finder_mappings = {
             delete = { shortcut = "<C-d>" },
             next_recency = { shortcut = "<C-a>" },
@@ -90,6 +94,9 @@ describe("ChatFinder logic", function()
         -- Clean up temp directory
         if tmpdir then
             vim.fn.delete(tmpdir, "rf")
+        end
+        if secondary_tmpdir then
+            vim.fn.delete(secondary_tmpdir, "rf")
         end
 
         -- Restore original config
@@ -512,6 +519,32 @@ describe("ChatFinder logic", function()
             assert.is_truthy(captured)
             assert.equals(tmpdir .. "/2026-02-03-10-00-00-beta.md", captured.items[2].value)
             assert.equals(2, captured.initial_index)
+        end)
+
+        it("includes chat files from secondary chat roots", function()
+            local captured = nil
+            M.float_picker.open = function(opts)
+                captured = opts
+            end
+
+            local primary_path = tmpdir .. "/2026-02-04-10-00-00-primary.md"
+            local secondary_path = secondary_tmpdir .. "/2026-02-03-10-00-00-secondary.md"
+
+            local primary_file = io.open(primary_path, "w")
+            primary_file:write("# topic: Primary\n")
+            primary_file:close()
+
+            local secondary_file = io.open(secondary_path, "w")
+            secondary_file:write("# topic: Secondary\n")
+            secondary_file:close()
+
+            M.cmd.ChatFinder()
+
+            assert.is_truthy(captured)
+            local values = vim.tbl_map(function(item)
+                return item.value
+            end, captured.items)
+            assert.same({ primary_path, secondary_path }, values)
         end)
 
         it("falls back to the newer visual neighbor when deleting the oldest item", function()

@@ -20,7 +20,9 @@ Notable replace-on-set behavior:
 - Nested config tables like `raw_mode`, `highlight`, and `chat_memory` are replaced as full tables when provided in `opts`.
 
 ## Configuration Areas
-- `chat_dir`, `notes_dir`: Storage directories.
+- `chat_dir`: Primary writable chat directory used for new chats and default state markers.
+- `chat_dirs`: Optional additional chat roots scanned by chat-aware features alongside `chat_dir`.
+- `notes_dir`: Notes storage directory.
 - `api_keys`: Table of API secrets.
 - `providers`: List of LLM backends.
 - `agents`, `system_prompts`: Active sets for chats.
@@ -46,3 +48,5 @@ Notable replace-on-set behavior:
 
 ## Directory Preparation
 - Directories specified in configuration MUST be prepared (created if they don't exist) during `setup()`.
+- `chat_dir` MUST remain the first entry in the normalized chat root list.
+- `chat_dirs` MUST be normalized into a de-duplicated list of prepared directories that includes `chat_dir`.

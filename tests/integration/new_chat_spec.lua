@@ -6,11 +6,14 @@
 -- 3. The resulting buffer is loaded
 
 local tmp_dir = vim.fn.tempname() .. "-parley-new-chat"
+local secondary_dir = vim.fn.tempname() .. "-parley-new-chat-secondary"
 vim.fn.mkdir(tmp_dir, "p")
+vim.fn.mkdir(secondary_dir, "p")
 
 local parley = require("parley")
 parley.setup({
     chat_dir = tmp_dir,
+    chat_dirs = { secondary_dir },
     state_dir = tmp_dir .. "/state",
     providers = {},
     api_keys = {},
@@ -27,6 +30,10 @@ local function cleanup()
     end
     local files = vim.fn.glob(tmp_dir .. "/*.md", false, true)
     for _, f in ipairs(files) do
+        vim.fn.delete(f)
+    end
+    local secondary_files = vim.fn.glob(secondary_dir .. "/*.md", false, true)
+    for _, f in ipairs(secondary_files) do
         vim.fn.delete(f)
     end
 end
@@ -117,5 +124,13 @@ describe("ChatNew", function()
         assert.is_not_nil(chat_buf, "chat buffer should be loaded (looked for: " .. resolved_path .. ")")
         local reason = parley.not_chat(chat_buf, resolved_path)
         assert.is_nil(reason, "not_chat should return nil for new chat, got: " .. tostring(reason))
+    end)
+
+    it("creates new chats only in the primary chat_dir when secondary roots are configured", function()
+        parley.cmd.ChatNew({})
+        local primary_files = vim.fn.glob(tmp_dir .. "/*.md", false, true)
+        local secondary_files = vim.fn.glob(secondary_dir .. "/*.md", false, true)
+        assert.equals(1, #primary_files)
+        assert.equals(0, #secondary_files)
     end)
 end)

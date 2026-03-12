@@ -94,6 +94,64 @@ local function parse_chat_headers(lines)
 	return parsed.headers, header_end
 end
 
+local function path_within_dir(path, dir)
+	local resolved_path = vim.fn.resolve(vim.fn.expand(path)):gsub("/+$", "")
+	local resolved_dir = vim.fn.resolve(vim.fn.expand(dir)):gsub("/+$", "")
+	return resolved_path == resolved_dir or M.helpers.starts_with(resolved_path, resolved_dir .. "/")
+end
+
+local function normalize_chat_dirs(chat_dir, chat_dirs)
+	local dirs = {}
+	local seen = {}
+
+	local function add_dir(dir)
+		if type(dir) ~= "string" or dir == "" then
+			return
+		end
+
+		local prepared = M.helpers.prepare_dir(dir, "chat")
+		local resolved = vim.fn.resolve(prepared):gsub("/+$", "")
+		if seen[resolved] then
+			return
+		end
+
+		seen[resolved] = true
+		table.insert(dirs, prepared)
+	end
+
+	add_dir(chat_dir)
+
+	if type(chat_dirs) == "string" then
+		add_dir(chat_dirs)
+	elseif type(chat_dirs) == "table" then
+		for _, dir in ipairs(chat_dirs) do
+			add_dir(dir)
+		end
+	end
+
+	return dirs
+end
+
+M.get_chat_dirs = function()
+	if type(M.config.chat_dirs) == "table" and #M.config.chat_dirs > 0 then
+		return M.config.chat_dirs
+	end
+	if type(M.config.chat_dir) == "string" and M.config.chat_dir ~= "" then
+		return { M.config.chat_dir }
+	end
+	return {}
+end
+
+local function find_chat_root(file_name)
+	local resolved_file = vim.fn.resolve(vim.fn.expand(file_name)):gsub("/+$", "")
+	for _, dir in ipairs(M.get_chat_dirs()) do
+		if path_within_dir(resolved_file, dir) then
+			return dir, resolved_file
+		end
+	end
+	return nil, resolved_file
+end
+
 -- State shared between async callbacks while responding.
 local original_free_cursor_value = nil
 local last_content_line = nil
@@ -567,9 +625,15 @@ M.setup = function(opts)
 		M.config[k] = v
 	end
 
+	local chat_dirs = normalize_chat_dirs(M.config.chat_dir, M.config.chat_dirs)
+	if #chat_dirs > 0 then
+		M.config.chat_dir = chat_dirs[1]
+		M.config.chat_dirs = chat_dirs
+	end
+
 	-- make sure _dirs exists
 	for k, v in pairs(M.config) do
-		if k:match("_dir$") and type(v) == "string" then
+		if k ~= "chat_dir" and k:match("_dir$") and type(v) == "string" then
 			M.config[k] = M.helpers.prepare_dir(v, k)
 		end
 	end
@@ -1092,8 +1156,9 @@ M.refresh_state = function(update)
 	end
 
 	if not disk_state.updated then
-		local last = M.config.chat_dir .. "/last.md"
-		if vim.fn.filereadable(last) == 1 then
+		local primary_chat_dir = M.get_chat_dirs()[1]
+		local last = primary_chat_dir and (primary_chat_dir .. "/last.md") or nil
+		if last and vim.fn.filereadable(last) == 1 then
 			os.remove(last)
 		end
 	end
@@ -1740,21 +1805,19 @@ M.prep_md = function(buf)
 	M.helpers.feedkeys("<esc>", "xn")
 end
 
---- Checks if a file should be considered a chat transcript, it enforces that a file needs to be in chat_dir
+--- Checks if a file should be considered a chat transcript, it enforces that a file needs to be in one configured chat root
 --- and have a valid header portion.
 ---@param buf number # buffer number
 ---@param file_name string # file name
 ---@return string | nil # reason for not being a chat or nil if it is a chat
 M.not_chat = function(buf, file_name)
-	file_name = vim.fn.resolve(file_name)
-	local chat_dir = vim.fn.resolve(M.config.chat_dir)
-
-	if not M.helpers.starts_with(file_name, chat_dir) then
-		return "resolved file (" .. file_name .. ") not in chat dir (" .. chat_dir .. ")"
+	local chat_dir, resolved_file = find_chat_root(file_name)
+	if not chat_dir then
+		return "resolved file (" .. resolved_file .. ") not in configured chat roots (" .. table.concat(M.get_chat_dirs(), ", ") .. ")"
 	end
 
 	-- Check for timestamp format in filename
-	local basename = vim.fn.fnamemodify(file_name, ":t")
+	local basename = vim.fn.fnamemodify(resolved_file, ":t")
 	if not basename:match("^%d%d%d%d%-%d%d%-%d%d") then
 		return "file does not have timestamp format"
 	end
@@ -3122,8 +3185,8 @@ M.cmd.ChatDelete = function()
 	local file_name = vim.api.nvim_buf_get_name(buf)
 
 	-- check if file is in the chat dir
-	if not M.helpers.starts_with(file_name, vim.fn.resolve(M.config.chat_dir)) then
-		M.logger.warning("File " .. vim.inspect(file_name) .. " is not in chat dir")
+	if not find_chat_root(file_name) then
+		M.logger.warning("File " .. vim.inspect(file_name) .. " is not in configured chat roots")
 		return
 	end
 
@@ -4704,16 +4767,26 @@ M.cmd.ChatFinder = function(_options)
 	-- IMPORTANT: The window should have been captured from the keybinding
 	M.logger.debug("ChatFinder using source_win: " .. (M._chat_finder.source_win or "nil"))
 
-	local dir = M.config.chat_dir
-		local delete_shortcut = M.config.chat_finder_mappings.delete or M.config.chat_shortcut_delete
-		local next_recency_shortcut = M.config.chat_finder_mappings.next_recency or { shortcut = "<C-a>" }
-		local previous_recency_shortcut = M.config.chat_finder_mappings.previous_recency or { shortcut = "<C-s>" }
-		local keybindings_shortcut = M.config.global_shortcut_keybindings or { shortcut = "<C-g>?" }
+	local chat_dirs = M.get_chat_dirs()
+	local delete_shortcut = M.config.chat_finder_mappings.delete or M.config.chat_shortcut_delete
+	local next_recency_shortcut = M.config.chat_finder_mappings.next_recency or { shortcut = "<C-a>" }
+	local previous_recency_shortcut = M.config.chat_finder_mappings.previous_recency or { shortcut = "<C-s>" }
+	local keybindings_shortcut = M.config.global_shortcut_keybindings or { shortcut = "<C-g>?" }
 
 	-- Launch float picker for chat finder
 	do
 		-- Get all timestamp format files
-		local files = vim.fn.glob(dir .. "/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*.md", false, true)
+		local files = {}
+		local seen_files = {}
+		for _, dir in ipairs(chat_dirs) do
+			for _, file in ipairs(vim.fn.glob(dir .. "/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*.md", false, true)) do
+				local resolved = vim.fn.resolve(file)
+				if not seen_files[resolved] then
+					seen_files[resolved] = true
+					table.insert(files, file)
+				end
+			end
+		end
 		local entries = {}
 
 		-- Get recency configuration

@@ -24,7 +24,7 @@ A chat buffer is divided into two primary sections:
 
 ## Contextual Validation
 The plugin performs a series of checks to validate a chat buffer:
-1. Resolved path MUST start with `chat_dir`.
+1. Resolved path MUST be inside one configured chat root (`chat_dir` or an entry from `chat_dirs`).
 2. Filename MUST follow the `YYYY-MM-DD` timestamp pattern.
 3. Header MUST contain `topic`.
 4. Header MUST contain `file`.

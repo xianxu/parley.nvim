@@ -279,6 +279,8 @@ local config = {
 	-- directory for storing chat files
 	-- chat_dir = vim.fn.stdpath("data"):gsub("/$", "") .. "/parley/chats",
 	chat_dir = vim.fn.expand("~/Library/Mobile Documents/com~apple~CloudDocs/parley"),
+	-- additional chat roots searched by chat-aware features; new chats still use chat_dir
+	chat_dirs = {},
 	-- directory for storing notes
 	notes_dir = vim.fn.expand("~/Library/Mobile Documents/com~apple~CloudDocs/notes"),
 	-- export directories for different formats
