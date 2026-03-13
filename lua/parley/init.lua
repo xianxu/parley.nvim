@@ -5132,7 +5132,7 @@ M.cmd.ChatFinder = function(_options)
 				for _, tag in ipairs(tags) do
 					table.insert(tag_parts, "[" .. tag .. "]")
 				end
-				tags_display = " " .. table.concat(tag_parts, " ")
+				tags_display = table.concat(tag_parts, " ") .. " "
 			end
 
 			-- Format tags for search ordinal
@@ -5141,8 +5141,8 @@ M.cmd.ChatFinder = function(_options)
 			local display_filename = vim.fn.fnamemodify(file, ":t")
 			table.insert(entries, {
 				value = file,
-				display = display_filename .. " - " .. topic .. " [" .. date_str .. "]" .. tags_display,
-				ordinal = display_filename .. " " .. topic .. tags_searchable,
+				display = display_filename .. " - " .. tags_display .. topic .. " [" .. date_str .. "]",
+				ordinal = display_filename .. " " .. tags_searchable .. " " .. topic,
 				timestamp = file_time,
 			})
 

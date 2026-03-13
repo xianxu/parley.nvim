@@ -40,6 +40,7 @@ M.chat_template = [[
 ---
 topic: ?
 file: {{filename}}
+tags:
 {{optional_headers}}
 Write your queries after {{user_prefix}}. Use `{{respond_shortcut}}` or :{{cmd_prefix}}ChatRespond to generate a response.
 Response generation can be terminated by using `{{stop_shortcut}}` or :{{cmd_prefix}}ChatStop command.
@@ -54,6 +55,7 @@ M.short_chat_template = [[
 ---
 topic: ?
 file: {{filename}}
+tags:
 ---
 
 {{user_prefix}}
