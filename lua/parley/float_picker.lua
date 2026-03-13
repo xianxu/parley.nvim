@@ -66,7 +66,10 @@ end
 local function tokenize_query(query)
     local tokens = {}
     for token in (query or ""):lower():gmatch("%S+") do
-        table.insert(tokens, token)
+        local normalized = token:gsub("^%[+", ""):gsub("%]+$", "")
+        if normalized ~= "" then
+            table.insert(tokens, normalized)
+        end
     end
     return tokens
 end
@@ -471,10 +474,12 @@ end
 --- @param opts table:
 ---   title      string   – window title (shown on results window)
 ---   items      table    – list of { display: string, value: any, search_text?: string }
+---   initial_query string – initial prompt text used to pre-filter items (optional)
 ---   width      number   – desired window width  (optional, content-driven by default)
 ---   height     number   – desired results height (optional, #items by default)
 ---   on_select  function(item) – called on confirmation
 ---   on_cancel  function()    – called on cancel/dismiss (optional)
+---   on_query_change function(query) – called when prompt text changes (optional)
 ---   mappings   table    – list of { key: string, fn: function(item, close_fn) }
 ---                         keys are mapped in the prompt (insert mode)
 function M.open(opts)
@@ -482,6 +487,7 @@ function M.open(opts)
     local title          = opts.title or "Select"
     local on_select      = opts.on_select or function() end
     local on_cancel      = opts.on_cancel or function() end
+    local on_query_change = opts.on_query_change or function() end
     local extra_mappings = opts.mappings or {}
 
     if #items == 0 then
@@ -515,8 +521,8 @@ function M.open(opts)
     local filtered = vim.deepcopy(items)
     local initial_index = math.max(1, tonumber(opts.initial_index) or 1)
     local sel_idx = initial_index
-    local query_text = ""
-    local query_cursor = 0
+    local query_text = type(opts.initial_query) == "string" and opts.initial_query or ""
+    local query_cursor = #query_text
     local closed = false
     local external_ui_active = false
     local resize_autocmd_id = nil
@@ -614,6 +620,7 @@ function M.open(opts)
 
     local function sync_query_from_prompt()
         query_text = current_query_from_buffer()
+        on_query_change(query_text)
         if vim.api.nvim_win_is_valid(prompt_win) then
             local prompt_col = vim.api.nvim_win_get_cursor(prompt_win)[2] - #PROMPT_PREFIX
             query_cursor = math.max(0, math.min(prompt_col, #query_text))
@@ -949,6 +956,7 @@ function M.open(opts)
 
     render_prompt()
     apply_filter(true)
+    on_query_change(query_text)
 
     local function nmap_r(key, fn)
         vim.keymap.set("n", key, fn, {

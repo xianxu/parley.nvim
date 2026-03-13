@@ -4803,12 +4803,41 @@ M._chat_finder = {
 	source_win = nil, -- Track the source window where ChatFinder was invoked
 	initial_index = nil, -- Optional selection index to restore when reopening the picker
 	initial_value = nil, -- Preferred item value to restore when reopening after list changes
+	sticky_query = nil, -- Preserved bracket-tag filter fragment carried across invocations
 	insert_mode = false, -- Whether we're in insert mode (inserting chat references)
 	insert_buf = nil, -- The buffer to insert into
 	insert_line = nil, -- The line to insert at
 	insert_col = nil, -- The column to insert at (for insert mode)
 	insert_normal_mode = nil, -- Whether we're inserting in normal mode or insert mode
 }
+
+local function extract_chat_finder_sticky_query(query)
+	if type(query) ~= "string" or query == "" then
+		return nil
+	end
+
+	local tags = {}
+	for bracketed in query:gmatch("%b[]") do
+		local tag = vim.trim(bracketed:sub(2, -2))
+		if tag ~= "" and not tag:find("[%[%]]") then
+			table.insert(tags, "[" .. tag .. "]")
+		end
+	end
+
+	if #tags == 0 then
+		return nil
+	end
+
+	return table.concat(tags, " ")
+end
+
+local function format_chat_finder_initial_query(sticky_query)
+	if type(sticky_query) ~= "string" or sticky_query == "" then
+		return nil
+	end
+
+	return sticky_query .. " "
+end
 
 local function unique_positive_months(values)
 	local dedup = {}
@@ -5205,6 +5234,10 @@ M.cmd.ChatFinder = function(_options)
 			title = prompt_title,
 			items = items,
 			initial_index = resolve_chat_finder_initial_index(items),
+			initial_query = format_chat_finder_initial_query(M._chat_finder.sticky_query),
+			on_query_change = function(query)
+				M._chat_finder.sticky_query = extract_chat_finder_sticky_query(query)
+			end,
 			on_select = function(item)
 				local file_path = item.value
 				local display = item.display

@@ -88,6 +88,7 @@ describe("ChatFinder logic", function()
             insert_mode = false,
             initial_index = nil,
             initial_value = nil,
+            sticky_query = nil,
         }
     end)
 
@@ -582,6 +583,48 @@ describe("ChatFinder logic", function()
             assert.matches("roadmap", captured.items[1].search_text)
             assert.matches("launch", captured.items[1].search_text)
             assert.matches("Shipping notes", captured.items[1].search_text)
+        end)
+
+        it("passes preserved tag filters back into the picker prompt", function()
+            local captured = nil
+            M.float_picker.open = function(opts)
+                captured = opts
+            end
+
+            M._chat_finder.sticky_query = "[workspace] [client-a]"
+
+            local filepath = tmpdir .. "/2026-02-04-10-00-00-sticky.md"
+            local file = io.open(filepath, "w")
+            file:write("# topic: Sticky\n")
+            file:close()
+
+            M.cmd.ChatFinder()
+
+            assert.is_truthy(captured)
+            assert.equals("[workspace] [client-a] ", captured.initial_query)
+            assert.is_function(captured.on_query_change)
+        end)
+
+        it("preserves only bracket-tag fragments from finder queries", function()
+            local captured = nil
+            M.float_picker.open = function(opts)
+                captured = opts
+            end
+
+            local filepath = tmpdir .. "/2026-02-04-10-00-00-tags.md"
+            local file = io.open(filepath, "w")
+            file:write("# topic: Tagged\n")
+            file:close()
+
+            M.cmd.ChatFinder()
+
+            assert.is_truthy(captured)
+
+            captured.on_query_change("[workspace] shipping [client-a]")
+            assert.equals("[workspace] [client-a]", M._chat_finder.sticky_query)
+
+            captured.on_query_change("shipping")
+            assert.is_nil(M._chat_finder.sticky_query)
         end)
 
         it("falls back to the newer visual neighbor when deleting the oldest item", function()

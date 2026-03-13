@@ -188,6 +188,27 @@ describe("float_picker", function()
             assert.is_true(#lines[1] < 200, "line should be truncated")
             assert.truthy(lines[1]:find("…", 1, true), "truncated line should end with ellipsis")
         end)
+
+        it("seeds the prompt and filtered results from initial_query", function()
+            float_picker.open({
+                title = "Test",
+                initial_query = "beta",
+                items = {
+                    { display = "alpha", value = 1 },
+                    { display = "beta", value = 2 },
+                },
+                on_select = function() end,
+            })
+
+            local prompt_line = vim.api.nvim_buf_get_lines(0, 0, 1, false)[1]
+            local win = find_float_win()
+            local lines = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(win), 0, -1, false)
+
+            assert.equals("> beta", prompt_line)
+            assert.equals(2, #lines)
+            assert.equals("", lines[1])
+            assert.truthy(lines[2]:find("beta", 1, true))
+        end)
     end)
 
     -- -------------------------------------------------------------------------
@@ -640,6 +661,11 @@ describe("float_picker", function()
             assert.is_not_nil(prefix_score)
             assert.is_not_nil(scattered_score)
             assert.is_true(prefix_score > scattered_score)
+        end)
+
+        it("treats bracketed query tokens as plain tag text", function()
+            local score = float_picker._fuzzy_score("[tech]", "release notes tech roadmap")
+            assert.is_not_nil(score)
         end)
     end)
 
