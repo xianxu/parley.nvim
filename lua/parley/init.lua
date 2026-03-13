@@ -1262,6 +1262,9 @@ M.setup = function(opts)
 		fg = st.fg or st.foreground,
 		bold = false,
 	})
+	vim.api.nvim_set_hl(0, "ParleyPickerApproximateMatch", {
+		link = "IncSearch",
+	})
 
 	M.logger.debug("setup finished")
 end
@@ -2261,6 +2264,15 @@ M.setup_highlight = function()
 	else
 		vim.api.nvim_set_hl(0, "ParleyTag", {
 			link = "Todo", -- Link to Todo highlight group which is highly visible in most themes
+		})
+	end
+
+	-- Picker typo-tolerance edits - distinct from exact Search highlights
+	if user_highlights.approximate_match then
+		vim.api.nvim_set_hl(0, "ParleyPickerApproximateMatch", user_highlights.approximate_match)
+	else
+		vim.api.nvim_set_hl(0, "ParleyPickerApproximateMatch", {
+			link = "IncSearch",
 		})
 	end
 

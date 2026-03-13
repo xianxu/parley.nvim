@@ -10,6 +10,7 @@ Parley provides custom syntax highlighting for chat buffers to distinguish betwe
 | `ParleyFileReference`| `WarningMsg` | `@@` file and directory references |
 | `ParleyThinking` | `Comment` | `🧠:` thinking and `📝:` summary lines |
 | `ParleyAnnotation` | `DiffAdd` | `@...@` inline annotations |
+| `ParleyPickerApproximateMatch` | `IncSearch` | Picker positions that were accepted through typo-tolerance edit operations |
 | `InterviewTimestamp` | `DiffAdd` | `:NNmin` interview timestamps |
 
 ## Highlighting Logic

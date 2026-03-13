@@ -28,7 +28,8 @@ Typing in the prompt filters and re-ranks the results live on every keystroke:
 - Small typos are tolerated on token prefixes with bounded edit distance, so near-prefixes like `"anthrpic"` still match `"anthropic"`.
 - A lower-ranked whole-string subsequence fallback keeps the picker feeling `fzf`-like instead of requiring strict prefix-only matches.
 - Items are scored and sorted by match quality (prefix, early boundary, and consecutive compact matches score higher).
-- Matched characters are highlighted in the results window using the `Search` highlight group.
+- Exact matched characters are highlighted with `Search`.
+- Candidate positions consumed by typo-tolerance edits are highlighted with `ParleyPickerApproximateMatch`, so approximate hits show where the edits were applied.
 - Empty query shows all items in their original order with no highlights.
 - Prompt text changes are driven by prompt-buffer `TextChangedI` / `TextChanged` updates, while control-key actions are handled separately so non-text inputs do not reset selection.
 

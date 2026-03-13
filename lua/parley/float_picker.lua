@@ -36,6 +36,7 @@ local MIN_H    = 1   -- minimum results height (lines)
 local MARGIN_H = 4   -- cols kept clear on each horizontal edge
 local MARGIN_V = 3   -- rows kept clear on each vertical edge
 local PROMPT_PREFIX = "> "
+local APPROXIMATE_MATCH_HL = "ParleyPickerApproximateMatch"
 -- Rows consumed by borders of both windows + 1 prompt content row:
 --   results top-border(1) + results bottom-border(1) +
 --   prompt  top-border(1) + prompt  content(1) + prompt bottom-border(1) = 5
@@ -94,7 +95,15 @@ local function tokenize_haystack(haystack)
     return tokens
 end
 
-local function bounded_levenshtein(a, b, max_distance)
+local function reverse_list(list)
+    local reversed = {}
+    for idx = #list, 1, -1 do
+        table.insert(reversed, list[idx])
+    end
+    return reversed
+end
+
+local function levenshtein_alignment(a, b, max_distance)
     local a_len = #a
     local b_len = #b
 
@@ -102,40 +111,84 @@ local function bounded_levenshtein(a, b, max_distance)
         return nil
     end
 
-    local previous = {}
+    local dp = {}
+    for i = 0, a_len do
+        dp[i] = {}
+    end
+    for i = 0, a_len do
+        dp[i][0] = i
+    end
     for j = 0, b_len do
-        previous[j] = j
+        dp[0][j] = j
     end
 
     for i = 1, a_len do
-        local current = { [0] = i }
-        local row_min = current[0]
+        local row_min = dp[i][0]
         local a_char = a:sub(i, i)
-
         for j = 1, b_len do
             local cost = (a_char == b:sub(j, j)) and 0 or 1
-            local value = math.min(
-                previous[j] + 1,
-                current[j - 1] + 1,
-                previous[j - 1] + cost
+            dp[i][j] = math.min(
+                dp[i - 1][j] + 1,
+                dp[i][j - 1] + 1,
+                dp[i - 1][j - 1] + cost
             )
-            current[j] = value
-            if value < row_min then
-                row_min = value
+            if dp[i][j] < row_min then
+                row_min = dp[i][j]
             end
         end
 
         if row_min > max_distance then
             return nil
         end
-        previous = current
     end
 
-    if previous[b_len] > max_distance then
+    if dp[a_len][b_len] > max_distance then
         return nil
     end
 
-    return previous[b_len]
+    local matched_positions = {}
+    local edit_positions = {}
+    local i = a_len
+    local j = b_len
+
+    while i > 0 or j > 0 do
+        local moved = false
+
+        if i > 0 and j > 0 then
+            local cost = (a:sub(i, i) == b:sub(j, j)) and 0 or 1
+            if dp[i][j] == dp[i - 1][j - 1] + cost then
+                if cost == 0 then
+                    table.insert(matched_positions, j)
+                else
+                    table.insert(edit_positions, j)
+                end
+                i = i - 1
+                j = j - 1
+                moved = true
+            end
+        end
+
+        if not moved and j > 0 and dp[i][j] == dp[i][j - 1] + 1 then
+            table.insert(edit_positions, j)
+            j = j - 1
+            moved = true
+        end
+
+        if not moved and i > 0 and dp[i][j] == dp[i - 1][j] + 1 then
+            i = i - 1
+            moved = true
+        end
+
+        if not moved then
+            break
+        end
+    end
+
+    return {
+        distance = dp[a_len][b_len],
+        edit_positions = reverse_list(edit_positions),
+        matched_positions = reverse_list(matched_positions),
+    }
 end
 
 local function bounded_prefix_distance(query_token, candidate_token, max_distance)
@@ -147,20 +200,23 @@ local function bounded_prefix_distance(query_token, candidate_token, max_distanc
     local max_prefix_len = math.min(#candidate_token, #query_token + max_distance)
     local best_distance = nil
     local best_prefix_len = nil
+    local best_alignment = nil
 
     for prefix_len = min_prefix_len, max_prefix_len do
         local prefix = candidate_token:sub(1, prefix_len)
-        local distance = bounded_levenshtein(query_token, prefix, max_distance)
+        local alignment = levenshtein_alignment(query_token, prefix, max_distance)
+        local distance = alignment and alignment.distance or nil
         if distance ~= nil and (best_distance == nil or distance < best_distance) then
             best_distance = distance
             best_prefix_len = prefix_len
+            best_alignment = alignment
             if distance == 0 and prefix_len == #query_token then
                 break
             end
         end
     end
 
-    return best_distance, best_prefix_len
+    return best_distance, best_prefix_len, best_alignment
 end
 
 -- Return a subsequence score and positions for `word` inside `haystack`.
@@ -236,13 +292,75 @@ local function score_token_prefix(query_token, token_info)
     return score
 end
 
--- Return the 1-based byte positions in `text` where the characters of `word`
--- matched using the subsequence matcher, or nil on no match.
-local function match_positions(word, text)
-    local _, positions = score_subsequence(word, text)
-    return positions
+local function prefix_match_details(query_token, token_info)
+    local distance, prefix_len, alignment = bounded_prefix_distance(query_token, token_info.text, MAX_PREFIX_TYPO_DISTANCE)
+    if distance == nil or prefix_len == nil or alignment == nil then
+        return nil
+    end
+
+    local exact_positions = {}
+    for _, pos in ipairs(alignment.matched_positions or {}) do
+        table.insert(exact_positions, token_info.start_idx + pos - 1)
+    end
+
+    local edit_positions = {}
+    for _, pos in ipairs(alignment.edit_positions or {}) do
+        table.insert(edit_positions, token_info.start_idx + pos - 1)
+    end
+
+    return {
+        approximate = distance > 0,
+        edit_positions = edit_positions,
+        positions = exact_positions,
+        prefix_len = prefix_len,
+        score = score_token_prefix(query_token, token_info),
+    }
 end
 
+local function best_match_for_token(query_token, haystack)
+    local lowered_haystack = (haystack or ""):lower()
+    local haystack_tokens = tokenize_haystack(lowered_haystack)
+    local best_match = nil
+
+    local function consider(candidate)
+        if not candidate or candidate.score == nil then
+            return
+        end
+        if best_match == nil or candidate.score > best_match.score then
+            best_match = candidate
+        end
+    end
+
+    for _, token_info in ipairs(haystack_tokens) do
+        consider(prefix_match_details(query_token, token_info))
+
+        local token_subsequence_score, token_positions = score_subsequence(query_token, token_info.text)
+        if token_subsequence_score then
+            local absolute_positions = {}
+            for _, pos in ipairs(token_positions) do
+                table.insert(absolute_positions, token_info.start_idx + pos - 1)
+            end
+            consider({
+                approximate = false,
+                edit_positions = {},
+                positions = absolute_positions,
+                score = token_subsequence_score,
+            })
+        end
+    end
+
+    local whole_subsequence_score, whole_positions = score_subsequence(query_token, lowered_haystack)
+    if whole_subsequence_score then
+        consider({
+            approximate = false,
+            edit_positions = {},
+            positions = whole_positions,
+            score = whole_subsequence_score - 60,
+        })
+    end
+
+    return best_match
+end
 -- Score a multi-word query against a haystack.
 -- Splits query on whitespace; ALL words must match (order irrelevant).
 -- Returns total score (sum of per-word scores) or nil if any word fails.
@@ -252,40 +370,34 @@ function M._fuzzy_score(query, haystack)
         return 0
     end
 
-    local lowered_haystack = (haystack or ""):lower()
-    local haystack_tokens = tokenize_haystack(lowered_haystack)
     local total = 0
 
     for _, query_token in ipairs(query_tokens) do
-        local best_score = nil
-
-        for _, token_info in ipairs(haystack_tokens) do
-            local prefix_score = score_token_prefix(query_token, token_info)
-            if prefix_score and (best_score == nil or prefix_score > best_score) then
-                best_score = prefix_score
-            end
-
-            local token_subsequence_score = score_subsequence(query_token, token_info.text)
-            if token_subsequence_score and (best_score == nil or token_subsequence_score > best_score) then
-                best_score = token_subsequence_score
-            end
-        end
-
-        local whole_subsequence_score = score_subsequence(query_token, lowered_haystack)
-        if whole_subsequence_score then
-            whole_subsequence_score = whole_subsequence_score - 60
-            if best_score == nil or whole_subsequence_score > best_score then
-                best_score = whole_subsequence_score
-            end
-        end
-
-        if best_score == nil then
+        local best_match = best_match_for_token(query_token, haystack)
+        if best_match == nil then
             return nil
         end
-        total = total + best_score
+        total = total + best_match.score
     end
 
     return total
+end
+
+function M._fuzzy_match_details(query, haystack)
+    local query_tokens = tokenize_query(query)
+    if #query_tokens == 0 then
+        return {}
+    end
+
+    local details = {}
+    for _, query_token in ipairs(query_tokens) do
+        local best_match = best_match_for_token(query_token, haystack)
+        if best_match == nil then
+            return nil
+        end
+        table.insert(details, best_match)
+    end
+    return details
 end
 
 -- anchor: "bottom" (default) places index 1 at the bottom row (closest to prompt).
@@ -685,19 +797,36 @@ function M.open(opts)
     end
 
     local function highlight_matches(query)
+        local display_col_offset = 1
         vim.api.nvim_buf_clear_namespace(results_buf, MATCH_NS, 0, -1)
         if not query or query == "" then return end
         local buf_lines = vim.api.nvim_buf_get_lines(results_buf, 0, -1, false)
-        for idx, _ in ipairs(filtered) do
+        for idx, item in ipairs(filtered) do
             local visual_row = visual_row_for_index(idx)
             local line = buf_lines[visual_row]
             if not line then break end
-            for word in query:gmatch("%S+") do
-                local positions = match_positions(word, line)
-                if positions then
-                    for _, pos in ipairs(positions) do
+            local details = M._fuzzy_match_details(query, item.display)
+            if details then
+                for _, detail in ipairs(details) do
+                    for _, pos in ipairs(detail.positions or {}) do
                         vim.api.nvim_buf_add_highlight(
-                            results_buf, MATCH_NS, "Search", visual_row - 1, pos - 1, pos)
+                            results_buf,
+                            MATCH_NS,
+                            "Search",
+                            visual_row - 1,
+                            pos - 1 + display_col_offset,
+                            pos + display_col_offset
+                        )
+                    end
+                    for _, pos in ipairs(detail.edit_positions or {}) do
+                        vim.api.nvim_buf_add_highlight(
+                            results_buf,
+                            MATCH_NS,
+                            APPROXIMATE_MATCH_HL,
+                            visual_row - 1,
+                            pos - 1 + display_col_offset,
+                            pos + display_col_offset
+                        )
                     end
                 end
             end

@@ -387,6 +387,7 @@ local config = {
 		file_reference = nil, -- highlight for file references (default: links to WarningMsg)
 		thinking = nil, -- highlight for reasoning lines (default: links to Comment)
 		annotation = nil, -- highlight for annotations (default: links to DiffAdd)
+		approximate_match = nil, -- highlight for typo-tolerance edit positions in picker matches (default: links to IncSearch)
 	},
 
 	-- lualine integration options
