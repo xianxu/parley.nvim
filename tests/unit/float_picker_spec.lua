@@ -630,6 +630,10 @@ describe("float_picker", function()
             assert.is_nil(float_picker._fuzzy_score("zzzz", "anthropic claude"))
         end)
 
+        it("does not match by collapsing to a too-short prefix", function()
+            assert.is_nil(float_picker._fuzzy_score("tech", "Family Chores App"))
+        end)
+
         it("prefers token prefix matches over whole-string scattered matches", function()
             local prefix_score = float_picker._fuzzy_score("cla", "claude sonnet")
             local scattered_score = float_picker._fuzzy_score("cla", "specical layout")

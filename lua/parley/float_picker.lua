@@ -143,7 +143,7 @@ local function bounded_prefix_distance(query_token, candidate_token, max_distanc
         return nil, nil
     end
 
-    local min_prefix_len = math.max(1, #query_token - max_distance)
+    local min_prefix_len = #query_token
     local max_prefix_len = math.min(#candidate_token, #query_token + max_distance)
     local best_distance = nil
     local best_prefix_len = nil
@@ -715,6 +715,7 @@ function M.open(opts)
                 local score = M._fuzzy_score(query, haystack)
                 if score then
                     table.insert(scored, {
+                        haystack = haystack,
                         item = item,
                         index = index,
                         score = score,
@@ -730,6 +731,25 @@ function M.open(opts)
             filtered = {}
             for _, entry in ipairs(scored) do
                 table.insert(filtered, entry.item)
+            end
+            if title:match("^Chat Files") then
+                local preview = {}
+                for idx = 1, math.min(8, #scored) do
+                    local entry = scored[idx]
+                    table.insert(preview, string.format(
+                        "#%d score=%s display=%q search_text=%q",
+                        idx,
+                        tostring(entry.score),
+                        entry.item.display,
+                        entry.haystack
+                    ))
+                end
+                logger.debug(string.format(
+                    "float_picker chat trace: query=%q matched=%d items=[%s]",
+                    query,
+                    #scored,
+                    table.concat(preview, "; ")
+                ))
             end
         end
         refresh_results()
