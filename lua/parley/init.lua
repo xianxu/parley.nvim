@@ -5167,7 +5167,11 @@ M.cmd.ChatFinder = function(_options)
 		-- Build float-picker items from sorted entries
 		local items = {}
 		for _, entry in ipairs(entries) do
-			table.insert(items, { display = entry.display, value = entry.value })
+			table.insert(items, {
+				display = entry.display,
+				search_text = entry.ordinal,
+				value = entry.value,
+			})
 		end
 
 		local source_win = M._chat_finder.source_win

@@ -48,63 +48,198 @@ local MATCH_NS = vim.api.nvim_create_namespace("float_picker_match")
 -- Fuzzy scoring
 -- ---------------------------------------------------------------------------
 
--- Score a single word (query fragment) against a haystack string.
--- Returns a numeric score if every character in `word` appears in order
--- in `haystack` (case-insensitive), or nil if there is no match.
--- Scoring bonuses:
---   +5  for each character that immediately follows the previous match (consecutive run)
---   +10 for a match at a word boundary (space, '-', '_', '.' precedes it)
---   +15 for a match at position 1 (prefix of the whole string)
-local function score_word(word, haystack)
-    local hw = haystack:lower()
-    local ww = word:lower()
-    local wlen = #ww
-    if wlen == 0 then return 0 end
+local MAX_PREFIX_TYPO_DISTANCE = 2
 
-    local hi = 1       -- current position in haystack (1-based byte index)
-    local prev_hi = nil
-    local score = 0
+local function is_word_char(char)
+    return char ~= "" and char:match("[%w]") ~= nil
+end
 
-    for wi = 1, wlen do
-        local wchar = ww:sub(wi, wi)
-        local found = hw:find(wchar, hi, true)
-        if not found then return nil end  -- word is not a subsequence
+local function is_boundary(text, index)
+    if index <= 1 then
+        return true
+    end
+    local preceding = text:sub(index - 1, index - 1)
+    return not is_word_char(preceding)
+end
 
-        -- Consecutive bonus
-        if prev_hi and found == prev_hi + 1 then
-            score = score + 5
+local function tokenize_query(query)
+    local tokens = {}
+    for token in (query or ""):lower():gmatch("%S+") do
+        table.insert(tokens, token)
+    end
+    return tokens
+end
+
+local function tokenize_haystack(haystack)
+    local text = (haystack or ""):lower()
+    local tokens = {}
+    local search_from = 1
+
+    while search_from <= #text do
+        local start_idx, end_idx = text:find("[%w]+", search_from)
+        if not start_idx then
+            break
         end
-        -- Word-boundary bonus
-        if found == 1 then
-            score = score + 15
-        elseif found > 1 then
-            local preceding = hw:sub(found - 1, found - 1)
-            if preceding == " " or preceding == "-" or preceding == "_" or preceding == "." then
-                score = score + 10
+        table.insert(tokens, {
+            text = text:sub(start_idx, end_idx),
+            start_idx = start_idx,
+        })
+        search_from = end_idx + 1
+    end
+
+    if #tokens == 0 and text ~= "" then
+        table.insert(tokens, { text = text, start_idx = 1 })
+    end
+
+    return tokens
+end
+
+local function bounded_levenshtein(a, b, max_distance)
+    local a_len = #a
+    local b_len = #b
+
+    if math.abs(a_len - b_len) > max_distance then
+        return nil
+    end
+
+    local previous = {}
+    for j = 0, b_len do
+        previous[j] = j
+    end
+
+    for i = 1, a_len do
+        local current = { [0] = i }
+        local row_min = current[0]
+        local a_char = a:sub(i, i)
+
+        for j = 1, b_len do
+            local cost = (a_char == b:sub(j, j)) and 0 or 1
+            local value = math.min(
+                previous[j] + 1,
+                current[j - 1] + 1,
+                previous[j - 1] + cost
+            )
+            current[j] = value
+            if value < row_min then
+                row_min = value
             end
         end
 
-        prev_hi = found
-        hi = found + 1
+        if row_min > max_distance then
+            return nil
+        end
+        previous = current
+    end
+
+    if previous[b_len] > max_distance then
+        return nil
+    end
+
+    return previous[b_len]
+end
+
+local function bounded_prefix_distance(query_token, candidate_token, max_distance)
+    if query_token == "" or candidate_token == "" then
+        return nil, nil
+    end
+
+    local min_prefix_len = math.max(1, #query_token - max_distance)
+    local max_prefix_len = math.min(#candidate_token, #query_token + max_distance)
+    local best_distance = nil
+    local best_prefix_len = nil
+
+    for prefix_len = min_prefix_len, max_prefix_len do
+        local prefix = candidate_token:sub(1, prefix_len)
+        local distance = bounded_levenshtein(query_token, prefix, max_distance)
+        if distance ~= nil and (best_distance == nil or distance < best_distance) then
+            best_distance = distance
+            best_prefix_len = prefix_len
+            if distance == 0 and prefix_len == #query_token then
+                break
+            end
+        end
+    end
+
+    return best_distance, best_prefix_len
+end
+
+-- Return a subsequence score and positions for `word` inside `haystack`.
+-- The score rewards early, boundary, and consecutive matches while penalizing gaps.
+local function score_subsequence(word, haystack)
+    local hw = (haystack or ""):lower()
+    local ww = (word or ""):lower()
+    if ww == "" then
+        return 0, {}
+    end
+
+    local positions = {}
+    local search_from = 1
+    for wi = 1, #ww do
+        local found = hw:find(ww:sub(wi, wi), search_from, true)
+        if not found then
+            return nil, nil
+        end
+        table.insert(positions, found)
+        search_from = found + 1
+    end
+
+    local score = #ww * 10
+    local first = positions[1]
+    local last = positions[#positions]
+    score = score - (first - 1) * 3
+    score = score - math.max(0, (last - first + 1) - #ww) * 2
+
+    local previous = nil
+    for _, pos in ipairs(positions) do
+        if pos == 1 then
+            score = score + 30
+        elseif is_boundary(hw, pos) then
+            score = score + 18
+        end
+
+        if previous then
+            if pos == previous + 1 then
+                score = score + 14
+            else
+                score = score - math.min(6, pos - previous - 1)
+            end
+        end
+        previous = pos
+    end
+
+    return score, positions
+end
+
+local function score_token_prefix(query_token, token_info)
+    local token = token_info.text
+    if token == "" then
+        return nil
+    end
+
+    local distance, prefix_len = bounded_prefix_distance(query_token, token, MAX_PREFIX_TYPO_DISTANCE)
+    if distance == nil then
+        return nil
+    end
+
+    local score = 220
+        - (distance * 45)
+        - math.abs((prefix_len or #query_token) - #query_token) * 8
+        - (token_info.start_idx - 1)
+
+    if distance == 0 and token:sub(1, #query_token) == query_token then
+        score = score + 80
+    end
+    if token_info.start_idx == 1 then
+        score = score + 20
     end
 
     return score
 end
 
 -- Return the 1-based byte positions in `text` where the characters of `word`
--- matched (same greedy left-to-right scan as score_word), or nil on no match.
+-- matched using the subsequence matcher, or nil on no match.
 local function match_positions(word, text)
-    local hw = text:lower()
-    local ww = word:lower()
-    if #ww == 0 then return {} end
-    local positions = {}
-    local hi = 1
-    for wi = 1, #ww do
-        local found = hw:find(ww:sub(wi, wi), hi, true)
-        if not found then return nil end
-        table.insert(positions, found)
-        hi = found + 1
-    end
+    local _, positions = score_subsequence(word, text)
     return positions
 end
 
@@ -112,13 +247,44 @@ end
 -- Splits query on whitespace; ALL words must match (order irrelevant).
 -- Returns total score (sum of per-word scores) or nil if any word fails.
 function M._fuzzy_score(query, haystack)
-    if not query or query == "" then return 0 end
-    local total = 0
-    for word in query:gmatch("%S+") do
-        local s = score_word(word, haystack)
-        if s == nil then return nil end
-        total = total + s
+    local query_tokens = tokenize_query(query)
+    if #query_tokens == 0 then
+        return 0
     end
+
+    local lowered_haystack = (haystack or ""):lower()
+    local haystack_tokens = tokenize_haystack(lowered_haystack)
+    local total = 0
+
+    for _, query_token in ipairs(query_tokens) do
+        local best_score = nil
+
+        for _, token_info in ipairs(haystack_tokens) do
+            local prefix_score = score_token_prefix(query_token, token_info)
+            if prefix_score and (best_score == nil or prefix_score > best_score) then
+                best_score = prefix_score
+            end
+
+            local token_subsequence_score = score_subsequence(query_token, token_info.text)
+            if token_subsequence_score and (best_score == nil or token_subsequence_score > best_score) then
+                best_score = token_subsequence_score
+            end
+        end
+
+        local whole_subsequence_score = score_subsequence(query_token, lowered_haystack)
+        if whole_subsequence_score then
+            whole_subsequence_score = whole_subsequence_score - 60
+            if best_score == nil or whole_subsequence_score > best_score then
+                best_score = whole_subsequence_score
+            end
+        end
+
+        if best_score == nil then
+            return nil
+        end
+        total = total + best_score
+    end
+
     return total
 end
 
@@ -192,7 +358,7 @@ end
 --- Open a floating picker.
 --- @param opts table:
 ---   title      string   – window title (shown on results window)
----   items      table    – list of { display: string, value: any }
+---   items      table    – list of { display: string, value: any, search_text?: string }
 ---   width      number   – desired window width  (optional, content-driven by default)
 ---   height     number   – desired results height (optional, #items by default)
 ---   on_select  function(item) – called on confirmation
@@ -544,13 +710,23 @@ function M.open(opts)
             filtered = vim.deepcopy(items)
         else
             local scored = {}
-            for _, item in ipairs(items) do
-                local score = M._fuzzy_score(query, item.display)
+            for index, item in ipairs(items) do
+                local haystack = item.search_text or item.display
+                local score = M._fuzzy_score(query, haystack)
                 if score then
-                    table.insert(scored, { item = item, score = score })
+                    table.insert(scored, {
+                        item = item,
+                        index = index,
+                        score = score,
+                    })
                 end
             end
-            table.sort(scored, function(a, b) return a.score > b.score end)
+            table.sort(scored, function(a, b)
+                if a.score == b.score then
+                    return a.index < b.index
+                end
+                return a.score > b.score
+            end)
             filtered = {}
             for _, entry in ipairs(scored) do
                 table.insert(filtered, entry.item)

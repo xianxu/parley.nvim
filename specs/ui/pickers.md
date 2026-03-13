@@ -24,8 +24,10 @@ Typing in the prompt filters and re-ranks the results live on every keystroke:
 - Query is split on whitespace into **words**.
 - **All words must match** for an item to be included (AND logic).
 - **Word order does not matter** — `"gpt open"` matches `"openai gpt-4"`.
-- Within each word, characters must appear **in order** in the item (subsequence match, case-insensitive).
-- Items are scored and sorted by match quality (consecutive runs, word-boundary hits, prefix matches score higher).
+- Matching is **word-aware**: candidate text is tokenized on non-word separators, and token-prefix matches score highest.
+- Small typos are tolerated on token prefixes with bounded edit distance, so near-prefixes like `"anthrpic"` still match `"anthropic"`.
+- A lower-ranked whole-string subsequence fallback keeps the picker feeling `fzf`-like instead of requiring strict prefix-only matches.
+- Items are scored and sorted by match quality (prefix, early boundary, and consecutive compact matches score higher).
 - Matched characters are highlighted in the results window using the `Search` highlight group.
 - Empty query shows all items in their original order with no highlights.
 - Prompt text changes are driven by prompt-buffer `TextChangedI` / `TextChanged` updates, while control-key actions are handled separately so non-text inputs do not reset selection.
@@ -64,6 +66,7 @@ The picker closes if focus moves to any window that is neither the results nor t
 ## Chat Finder
 - `:ParleyChatFinder` (`<C-g>f`): Browse and open chat files.
 - **Recency Filter**: By default shows files from the configured `chat_finder_recency.months`, and can cycle through additional `chat_finder_recency.presets` before reaching `All`.
+- Finder search is ranked against a dedicated search string built from the chat filename, tags, and topic instead of the fully formatted display row.
 - **Extra mappings** (insert mode in prompt):
     - Next recency key (`<C-a>` by default): Move left through configured recency windows toward smaller cutoffs.
     - Previous recency key (`<C-s>` by default): Move right through configured recency windows toward larger cutoffs and `All`.

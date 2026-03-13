@@ -549,6 +549,41 @@ describe("ChatFinder logic", function()
             assert.same({ primary_path, secondary_path }, values)
         end)
 
+        it("passes filename, tags, and topic as search text for matcher ranking", function()
+            local captured = nil
+            M.float_picker.open = function(opts)
+                captured = opts
+            end
+            M.config.chat_assistant_prefix = { "🤖:" }
+            M.config.chat_user_prefix = "💬:"
+            M.config.chat_local_prefix = "📎:"
+            M.config.chat_memory = {
+                enable = false,
+                summary_prefix = "📝:",
+                reasoning_prefix = "🧠:",
+            }
+
+            local filepath = tmpdir .. "/2026-02-04-10-00-00-release-notes.md"
+            local file = io.open(filepath, "w")
+            file:write(table.concat({
+                "---",
+                "topic: Shipping notes",
+                "tags: roadmap, launch",
+                "---",
+                "",
+            }, "\n"))
+            file:close()
+
+            M.cmd.ChatFinder()
+
+            assert.is_truthy(captured)
+            assert.equals(filepath, captured.items[1].value)
+            assert.matches("2026%-02%-04%-10%-00%-00%-release%-notes%.md", captured.items[1].search_text)
+            assert.matches("roadmap", captured.items[1].search_text)
+            assert.matches("launch", captured.items[1].search_text)
+            assert.matches("Shipping notes", captured.items[1].search_text)
+        end)
+
         it("falls back to the newer visual neighbor when deleting the oldest item", function()
             local reopen_calls = {}
             M._reopen_chat_finder = function(source_win, selection_index, selection_value)

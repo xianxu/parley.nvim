@@ -603,10 +603,9 @@ describe("float_picker", function()
             assert.is_not_nil(s2)
         end)
 
-        it("prefix match scores higher than mid-string match", function()
-            -- 'ag' at start of 'agent' should score higher than 'ag' inside 'diagram'
+        it("prefix match scores higher than mid-string token match", function()
             local s_prefix = float_picker._fuzzy_score("ag", "agent-a")
-            local s_mid    = float_picker._fuzzy_score("ag", "diagram")
+            local s_mid = float_picker._fuzzy_score("ag", "tools agent")
             assert.is_not_nil(s_prefix)
             assert.is_not_nil(s_mid)
             assert.is_true(s_prefix > s_mid,
@@ -614,13 +613,29 @@ describe("float_picker", function()
         end)
 
         it("consecutive characters score higher than scattered", function()
-            -- 'gpt' consecutive in 'gpt-4' vs scattered in 'g_p_t_model'
             local s_consec = float_picker._fuzzy_score("gpt", "gpt-4")
             local s_spread = float_picker._fuzzy_score("gpt", "a-g-path-tool")
             assert.is_not_nil(s_consec)
             assert.is_not_nil(s_spread)
             assert.is_true(s_consec >= s_spread,
                 "consecutive match should score at least as high as spread")
+        end)
+
+        it("accepts small typos in token prefixes", function()
+            local score = float_picker._fuzzy_score("anthrpic", "anthropic claude")
+            assert.is_not_nil(score)
+        end)
+
+        it("rejects tokens that are too far from any candidate prefix", function()
+            assert.is_nil(float_picker._fuzzy_score("zzzz", "anthropic claude"))
+        end)
+
+        it("prefers token prefix matches over whole-string scattered matches", function()
+            local prefix_score = float_picker._fuzzy_score("cla", "claude sonnet")
+            local scattered_score = float_picker._fuzzy_score("cla", "specical layout")
+            assert.is_not_nil(prefix_score)
+            assert.is_not_nil(scattered_score)
+            assert.is_true(prefix_score > scattered_score)
         end)
     end)
 end)
