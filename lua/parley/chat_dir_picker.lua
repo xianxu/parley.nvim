@@ -7,15 +7,20 @@ local float_picker = require("parley.float_picker")
 
 function M._build_items(plugin)
     local items = {}
-    local dirs = plugin.get_chat_dirs()
+    local roots = plugin.get_chat_roots()
 
-    for index, dir in ipairs(dirs) do
-        local is_primary = index == 1
-        local display = string.format("%s %s", is_primary and "* primary" or "  extra  ", dir)
+    for _, root in ipairs(roots) do
+        local display = string.format(
+            "%s [%s] %s",
+            root.is_primary and "* primary" or "  extra  ",
+            root.label,
+            root.dir
+        )
         table.insert(items, {
-            dir = dir,
+            dir = root.dir,
+            label = root.label,
             display = display,
-            is_primary = is_primary,
+            is_primary = root.is_primary,
         })
     end
 
@@ -42,7 +47,7 @@ function M.chat_dir_picker(plugin, initial_dir)
     local items = M._build_items(plugin)
 
     float_picker.open({
-        title = "Parley Chat Roots  <C-n>: add  <C-d>: remove",
+        title = "Parley Chat Roots  <C-n>: add  <C-r>: label  <C-d>: remove",
         items = items,
         anchor = "top",
         initial_index = item_index_by_dir(items, initial_dir) or 1,
@@ -66,17 +71,66 @@ function M.chat_dir_picker(plugin, initial_dir)
                             return
                         end
 
-                        local normalized, err = plugin.add_chat_dir(dir, true)
-                        if not normalized then
-                            vim.notify("Failed to add chat dir: " .. err, vim.log.levels.WARN)
-                            M.chat_dir_picker(plugin, initial_dir)
-                            return
-                        end
+                        local default_label = vim.fn.fnamemodify(vim.fn.resolve(vim.fn.expand(dir)), ":t")
+                        vim.ui.input({
+                            prompt = "Label for chat dir (optional): ",
+                            default = default_label,
+                        }, function(label)
+                            local final_label = label
+                            if final_label == nil or final_label == "" then
+                                final_label = default_label
+                            end
 
-                        local added_dir = normalized[#normalized]
-                        plugin.logger.info("Added chat dir: " .. added_dir)
-                        vim.notify("Added chat dir: " .. added_dir, vim.log.levels.INFO)
-                        M.chat_dir_picker(plugin, added_dir)
+                            local normalized, err = plugin.add_chat_dir(dir, true, final_label)
+                            if not normalized then
+                                vim.notify("Failed to add chat dir: " .. err, vim.log.levels.WARN)
+                                M.chat_dir_picker(plugin, initial_dir)
+                                return
+                            end
+
+                            local added_dir = normalized[#normalized]
+                            plugin.logger.info("Added chat dir: " .. added_dir)
+                            vim.notify("Added chat dir: " .. added_dir, vim.log.levels.INFO)
+                            M.chat_dir_picker(plugin, added_dir)
+                        end)
+                    end)
+                end,
+            },
+            {
+                key = "<C-r>",
+                fn = function(item, _, context)
+                    if not item then
+                        return
+                    end
+
+                    if item.is_primary then
+                        vim.notify("Use config to rename the primary chat directory label", vim.log.levels.WARN)
+                        return
+                    end
+
+                    context.skip_focus_restore = true
+                    context.suspend_for_external_ui()
+
+                    vim.schedule(function()
+                        vim.ui.input({
+                            prompt = "Label for chat dir: ",
+                            default = item.label or vim.fn.fnamemodify(item.dir, ":t"),
+                        }, function(label)
+                            context.resume_after_external_ui()
+                            if label == nil then
+                                context.focus_prompt()
+                                return
+                            end
+
+                            local normalized, err = plugin.rename_chat_dir(item.dir, label, true)
+                            if not normalized then
+                                vim.notify("Failed to rename chat dir label: " .. err, vim.log.levels.WARN)
+                                context.focus_prompt()
+                                return
+                            end
+
+                            M.chat_dir_picker(plugin, item.dir)
+                        end)
                     end)
                 end,
             },

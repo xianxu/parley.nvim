@@ -21,6 +21,7 @@ Notable replace-on-set behavior:
 
 ## Configuration Areas
 - `chat_dir`: Primary writable chat directory used for new chats and default state markers.
+- `chat_roots`: Optional structured chat-root metadata, where each root can declare a `dir` and user-facing `label`.
 - `chat_dirs`: Optional additional chat roots scanned by chat-aware features alongside `chat_dir`.
 - `notes_dir`: Notes storage directory.
 - `api_keys`: Table of API secrets.
@@ -51,8 +52,11 @@ Notable replace-on-set behavior:
 - Directories specified in configuration MUST be prepared (created if they don't exist) during `setup()`.
 - `chat_dir` MUST remain the first entry in the normalized chat root list.
 - `chat_dirs` MUST be normalized into a de-duplicated list of prepared directories that includes `chat_dir`.
+- `chat_roots` MUST normalize into a de-duplicated metadata list where the first root is the primary root and every root has a resolved directory path plus a user-facing label.
+- Tilde-prefixed root paths MUST be expanded before directory creation or persistence.
 
 ## Runtime Overrides
 - Runtime chat-root changes made through Parley commands or UI MUST persist in `state_dir/state.json`.
+- Persisted `chat_roots` metadata MUST override the setup-time chat-root list on later startups when present.
 - Persisted `chat_dirs` MUST override the setup-time chat-root list on later startups.
 - The primary `chat_dir` MUST NOT be removable through runtime management commands or UI.

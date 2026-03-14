@@ -69,6 +69,10 @@ describe("ChatFinder logic", function()
         -- Set config to use temp directory
         M.config.chat_dir = tmpdir
         M.config.chat_dirs = { tmpdir, secondary_tmpdir }
+        M.config.chat_roots = {
+            { dir = tmpdir, label = "main" },
+            { dir = secondary_tmpdir, label = "secondary" },
+        }
         M.config.chat_finder_mappings = {
             delete = { shortcut = "<C-d>" },
             move = { shortcut = "<C-r>" },
@@ -556,6 +560,7 @@ describe("ChatFinder logic", function()
                 return item.value
             end, captured.items)
             assert.same({ primary_path, secondary_path }, values)
+            assert.matches("^2026%-02%-03%-10%-00%-00%-secondary%.md %- {%s*secondary%s*}", captured.items[2].display)
         end)
 
         it("keeps a moved chat visible when moving it from ChatFinder", function()
@@ -604,6 +609,10 @@ describe("ChatFinder logic", function()
             require("parley.file_tracker").track_file_access = function() end
             vim.fn.mkdir(special_tmpdir, "p")
             M.config.chat_dirs = { tmpdir, special_tmpdir }
+            M.config.chat_roots = {
+                { dir = tmpdir, label = "main" },
+                { dir = special_tmpdir, label = "archive" },
+            }
             vim.schedule = function(fn)
                 fn()
             end
@@ -642,6 +651,10 @@ describe("ChatFinder logic", function()
             require("parley.file_tracker").track_file_access = function() end
             vim.fn.mkdir(special_tmpdir, "p")
             M.config.chat_dirs = { tmpdir, tilde_root }
+            M.config.chat_roots = {
+                { dir = tmpdir, label = "main" },
+                { dir = tilde_root, label = "family" },
+            }
             vim.schedule = function(fn)
                 fn()
             end
@@ -670,6 +683,7 @@ describe("ChatFinder logic", function()
             assert.equals(0, vim.fn.filereadable(old_path))
             assert.equals(1, vim.fn.filereadable(new_path))
             assert.equals(new_path, picker_calls[3].items[1].value)
+            assert.matches("^2026%-02%-04%-10%-00%-00%-tilde%-root%.md %- {%s*family%s*}", picker_calls[3].items[1].display)
         end)
 
         it("passes filename, tags, and topic as search text for matcher ranking", function()
@@ -705,6 +719,24 @@ describe("ChatFinder logic", function()
             assert.matches("roadmap", captured.items[1].search_text)
             assert.matches("launch", captured.items[1].search_text)
             assert.matches("Shipping notes", captured.items[1].search_text)
+        end)
+
+        it("includes extra-root labels in finder search text", function()
+            local captured = nil
+            M.float_picker.open = function(opts)
+                captured = opts
+            end
+
+            local secondary_path = secondary_tmpdir .. "/2026-02-03-10-00-00-secondary.md"
+            local secondary_file = io.open(secondary_path, "w")
+            secondary_file:write("# topic: Secondary\n")
+            secondary_file:close()
+
+            M.cmd.ChatFinder()
+
+            assert.is_truthy(captured)
+            assert.equals(secondary_path, captured.items[1].value)
+            assert.matches("secondary", captured.items[1].search_text)
         end)
 
         it("passes preserved tag filters back into the picker prompt", function()

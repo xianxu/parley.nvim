@@ -10,6 +10,7 @@ describe("chat dir management", function()
     local state_dir
     local original_float_picker_open
     local original_ui_input
+    local original_fn_input
 
     local function read_state()
         local state_file = state_dir .. "/state.json"
@@ -22,6 +23,7 @@ describe("chat dir management", function()
     before_each(function()
         original_float_picker_open = float_picker.open
         original_ui_input = vim.ui.input
+        original_fn_input = vim.fn.input
         base_dir = vim.fn.tempname() .. "-parley-chat-dirs"
         primary_dir = base_dir .. "/primary"
         secondary_dir = base_dir .. "/secondary"
@@ -42,6 +44,7 @@ describe("chat dir management", function()
     after_each(function()
         float_picker.open = original_float_picker_open
         vim.ui.input = original_ui_input
+        vim.fn.input = original_fn_input
         if base_dir then
             vim.fn.delete(base_dir, "rf")
         end
@@ -99,11 +102,45 @@ describe("chat dir management", function()
 
         local items = chat_dir_picker._build_items(parley)
 
-        assert.equals("* primary " .. vim.fn.resolve(primary_dir), items[1].display)
+        assert.equals("* primary [main] " .. vim.fn.resolve(primary_dir), items[1].display)
         assert.is_true(items[1].is_primary)
-        assert.equals("  extra   " .. vim.fn.resolve(secondary_dir), items[2].display)
+        assert.equals("secondary", items[2].label)
+        assert.equals("  extra   [secondary] " .. vim.fn.resolve(secondary_dir), items[2].display)
         assert.is_false(items[2].is_primary)
         assert.equals(vim.fn.resolve(third_dir), items[3].dir)
+    end)
+
+    it("adds a chat dir with a prompted label", function()
+        local captured = nil
+        float_picker.open = function(opts)
+            captured = opts
+        end
+
+        vim.fn.input = function(opts)
+            assert.equals("Add chat dir: ", opts.prompt)
+            return third_dir
+        end
+
+        local label_prompt = nil
+        vim.ui.input = function(opts, cb)
+            label_prompt = opts
+            cb("family")
+        end
+
+        chat_dir_picker.chat_dir_picker(parley, secondary_dir)
+        assert.is_truthy(captured)
+
+        captured.mappings[1].fn(nil, function() end)
+        vim.wait(200, function()
+            return label_prompt ~= nil
+        end)
+        assert.equals("Label for chat dir (optional): ", label_prompt.prompt)
+        assert.same({
+            vim.fn.resolve(primary_dir),
+            vim.fn.resolve(secondary_dir),
+            vim.fn.resolve(third_dir),
+        }, parley.get_chat_dirs())
+        assert.equals("family", parley.get_chat_roots()[3].label)
     end)
 
     it("keeps the picker open while confirming secondary root removal", function()
@@ -128,7 +165,7 @@ describe("chat dir management", function()
         chat_dir_picker.chat_dir_picker(parley, secondary_dir)
 
         assert.is_truthy(captured)
-        captured.mappings[2].fn(captured.items[2], function()
+        captured.mappings[3].fn(captured.items[2], function()
             close_calls = close_calls + 1
         end, {
             suspend_for_external_ui = function()

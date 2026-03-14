@@ -70,6 +70,8 @@ The picker closes if focus moves to any window that is neither the results nor t
 - `:ParleyChatFinder` (`<C-g>f`): Browse and open chat files.
 - **Recency Filter**: By default shows files from the configured `chat_finder_recency.months`, and can cycle through additional `chat_finder_recency.presets` before reaching `All`.
 - Finder search is ranked against a dedicated search string built from the chat filename, tags, and topic instead of the fully formatted display row.
+- Chats from extra chat roots show a compact `{label}` marker between the filename and the tag/title portion so users can distinguish them from primary-root chats at a glance.
+- Finder search text MUST include the extra-root label so users can filter by root name.
 - When the prompt contains bracket-tag filters such as `[workspace] [client-a]`, Chat Finder preserves those tag fragments between invocations and internal reopen flows (delete/move/recency cycling). Reopened prompts seed the preserved tags with a trailing space so users can immediately continue with free-text filtering. Non-tag free-text terms are not preserved.
 - **Extra mappings** (insert mode in prompt):
     - Next recency key (`<C-a>` by default): Move left through configured recency windows toward smaller cutoffs.
@@ -78,15 +80,17 @@ The picker closes if focus moves to any window that is neither the results nor t
       The confirmation prompt is opened from the source window after the picker closes. If it is cancelled with `Esc` or answered negatively, ChatFinder reopens instead of being dismissed.
       After a confirmed delete, ChatFinder preserves the same visual row in the bottom-anchored list: it prefers the older surviving neighbor that slides into the deleted row, and falls back to the newer neighbor only when deleting the oldest visible entry.
     - Move key (`<C-r>` by default): Move the selected chat file to another registered chat root.
-      The move picker opens after ChatFinder closes. If it is cancelled, ChatFinder reopens on the original chat.
+      The move picker opens after ChatFinder closes. Destination rows show primary/extra status, label, and directory path. If it is cancelled, ChatFinder reopens on the original chat.
     - `<C-g>?`: Open Parley key-bindings help.
 - Files are sorted by modification date, newest first.
 
 ## Chat Roots Picker
 - `:ParleyChatDirs` (`<C-g>h`): Opens a picker showing the configured chat roots in order.
 - The first item is the primary writable root used for new chats; later items are additional discovery roots.
+- Every row shows the root role plus a user-facing label.
 - Extra mappings:
-  - `<C-n>`: Prompt for a new root and add it using directory completion.
+  - `<C-n>`: Prompt for a new root, then prompt for a label (defaulting to the directory basename), and add it as an extra root.
+  - `<C-r>`: Rename the selected extra-root label.
   - `<C-d>`: Remove the selected root after confirmation. The confirmation prompt opens while the picker stays visible; cancelling returns focus to the same picker instance.
 - The primary root MUST NOT be removable from the picker.
 
