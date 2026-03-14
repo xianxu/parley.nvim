@@ -72,7 +72,7 @@ The picker closes if focus moves to any window that is neither the results nor t
 - Finder search is ranked against a dedicated search string built from the chat filename, tags, and topic instead of the fully formatted display row.
 - Chats from extra chat roots show a compact `{label}` marker between the filename and the tag/title portion so users can distinguish them from primary-root chats at a glance.
 - Finder search text MUST include the extra-root label so users can filter by root name.
-- When the prompt contains bracket-tag filters such as `[workspace] [client-a]`, Chat Finder preserves those tag fragments between invocations and internal reopen flows (delete/move/recency cycling). Reopened prompts seed the preserved tags with a trailing space so users can immediately continue with free-text filtering. Non-tag free-text terms are not preserved.
+- When the prompt contains sticky filter fragments such as `[workspace] [client-a]` or `{family}`, Chat Finder preserves those fragments between invocations and internal reopen flows (delete/move/recency cycling). Reopened prompts seed the preserved fragments with a trailing space so users can immediately continue with free-text filtering. Non-fragment free-text terms are not preserved.
 - **Extra mappings** (insert mode in prompt):
     - Next recency key (`<C-a>` by default): Move left through configured recency windows toward smaller cutoffs.
     - Previous recency key (`<C-s>` by default): Move right through configured recency windows toward larger cutoffs and `All`.

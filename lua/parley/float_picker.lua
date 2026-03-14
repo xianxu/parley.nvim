@@ -67,6 +67,7 @@ local function tokenize_query(query)
     local tokens = {}
     for token in (query or ""):lower():gmatch("%S+") do
         local normalized = token:gsub("^%[+", ""):gsub("%]+$", "")
+        normalized = normalized:gsub("^%{+", ""):gsub("%}+$", "")
         if normalized ~= "" then
             table.insert(tokens, normalized)
         end

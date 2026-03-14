@@ -745,7 +745,7 @@ describe("ChatFinder logic", function()
                 captured = opts
             end
 
-            M._chat_finder.sticky_query = "[workspace] [client-a]"
+            M._chat_finder.sticky_query = "[workspace] {secondary} [client-a]"
 
             local filepath = tmpdir .. "/2026-02-04-10-00-00-sticky.md"
             local file = io.open(filepath, "w")
@@ -755,11 +755,11 @@ describe("ChatFinder logic", function()
             M.cmd.ChatFinder()
 
             assert.is_truthy(captured)
-            assert.equals("[workspace] [client-a] ", captured.initial_query)
+            assert.equals("[workspace] {secondary} [client-a] ", captured.initial_query)
             assert.is_function(captured.on_query_change)
         end)
 
-        it("preserves only bracket-tag fragments from finder queries", function()
+        it("preserves only bracket-tag and brace-label fragments from finder queries", function()
             local captured = nil
             M.float_picker.open = function(opts)
                 captured = opts
@@ -774,11 +774,35 @@ describe("ChatFinder logic", function()
 
             assert.is_truthy(captured)
 
-            captured.on_query_change("[workspace] shipping [client-a]")
-            assert.equals("[workspace] [client-a]", M._chat_finder.sticky_query)
+            captured.on_query_change("[workspace] {secondary} shipping [client-a]")
+            assert.equals("[workspace] {secondary} [client-a]", M._chat_finder.sticky_query)
 
             captured.on_query_change("shipping")
             assert.is_nil(M._chat_finder.sticky_query)
+        end)
+
+        it("matches extra-root labels when the query uses brace syntax", function()
+            local captured = nil
+            M.float_picker.open = function(opts)
+                captured = opts
+            end
+
+            local primary_path = tmpdir .. "/2026-02-04-10-00-00-primary.md"
+            local secondary_path = secondary_tmpdir .. "/2026-02-03-10-00-00-secondary.md"
+
+            local primary_file = io.open(primary_path, "w")
+            primary_file:write("# topic: Primary\n")
+            primary_file:close()
+
+            local secondary_file = io.open(secondary_path, "w")
+            secondary_file:write("# topic: Secondary\n")
+            secondary_file:close()
+
+            M.cmd.ChatFinder()
+
+            assert.is_truthy(captured)
+            captured.on_query_change("{secondary}")
+            assert.equals("{secondary}", M._chat_finder.sticky_query)
         end)
 
         it("falls back to the newer visual neighbor when deleting the oldest item", function()

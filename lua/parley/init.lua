@@ -4960,7 +4960,7 @@ M._chat_finder = {
 	source_win = nil, -- Track the source window where ChatFinder was invoked
 	initial_index = nil, -- Optional selection index to restore when reopening the picker
 	initial_value = nil, -- Preferred item value to restore when reopening after list changes
-	sticky_query = nil, -- Preserved bracket-tag filter fragment carried across invocations
+	sticky_query = nil, -- Preserved [tag] / {root-label} filter fragments carried across invocations
 	insert_mode = false, -- Whether we're in insert mode (inserting chat references)
 	insert_buf = nil, -- The buffer to insert into
 	insert_line = nil, -- The line to insert at
@@ -4973,19 +4973,26 @@ local function extract_chat_finder_sticky_query(query)
 		return nil
 	end
 
-	local tags = {}
-	for bracketed in query:gmatch("%b[]") do
-		local tag = vim.trim(bracketed:sub(2, -2))
-		if tag ~= "" and not tag:find("[%[%]]") then
-			table.insert(tags, "[" .. tag .. "]")
+	local fragments = {}
+	for token in query:gmatch("%S+") do
+		if token:match("^%b[]$") then
+			local value = vim.trim(token:sub(2, -2))
+			if value ~= "" and not value:find("[%[%]]") then
+				table.insert(fragments, "[" .. value .. "]")
+			end
+		elseif token:match("^%b{}$") then
+			local value = vim.trim(token:sub(2, -2))
+			if value ~= "" and not value:find("[{}]") then
+				table.insert(fragments, "{" .. value .. "}")
+			end
 		end
 	end
 
-	if #tags == 0 then
+	if #fragments == 0 then
 		return nil
 	end
 
-	return table.concat(tags, " ")
+	return table.concat(fragments, " ")
 end
 
 local function format_chat_finder_initial_query(sticky_query)
