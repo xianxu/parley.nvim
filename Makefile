@@ -11,7 +11,7 @@ help:
 	"    Fetch another issue and append it to tasks/issue.md." \
 	"  make push" \
 	"    Auto-commit tracked changes if needed, git push, then close all issues" \
-	"    mentioned in tasks/issue.md and clear that file." \
+	"    mentioned in tasks/issue.md and clear tasks/issue.md and tasks/todo.md." \
 	"" \
 	"Work on a larger issue:" \
 	"  make issue 42" \
@@ -152,6 +152,8 @@ push:
 			: > tasks/issue.md; \
 		fi; \
 	fi; \
+	echo "==> Clearing tasks/todo.md..."; \
+	: > tasks/todo.md; \
 	echo "Done."
 
 # Create a GitHub pull request from the current worktree branch to main.
