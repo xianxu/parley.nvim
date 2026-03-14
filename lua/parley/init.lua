@@ -5348,11 +5348,11 @@ M.cmd.ChatFinder = function(_options)
 			end
 
 			-- Format tags for search ordinal
-			local tags_searchable = #tags > 0 and (" " .. table.concat(tags, " ")) or ""
+			local tags_searchable = #tags > 0 and (" [" .. table.concat(tags, "] [") .. "]") or ""
 
 			local display_filename = vim.fn.fnamemodify(file, ":t")
 			local root_prefix = root.is_primary and "" or string.format("{%s} ", root.label)
-			local root_searchable = root.is_primary and "" or (" " .. root.label)
+			local root_searchable = root.is_primary and "" or (" {" .. root.label .. "}")
 			table.insert(entries, {
 				value = file,
 				display = display_filename .. " - " .. root_prefix .. tags_display .. topic .. " [" .. date_str .. "]",

@@ -663,9 +663,16 @@ describe("float_picker", function()
             assert.is_true(prefix_score > scattered_score)
         end)
 
-        it("treats bracketed query tokens as plain tag text", function()
-            local score = float_picker._fuzzy_score("[tech]", "release notes tech roadmap")
+        it("matches bracketed query tokens only against bracketed haystack tags", function()
+            local score = float_picker._fuzzy_score("[tech]", "release notes [tech] roadmap")
             assert.is_not_nil(score)
+            assert.is_nil(float_picker._fuzzy_score("[tech]", "release notes tech roadmap"))
+        end)
+
+        it("matches braced query tokens only against braced haystack labels", function()
+            local score = float_picker._fuzzy_score("{family}", "{family} release notes")
+            assert.is_not_nil(score)
+            assert.is_nil(float_picker._fuzzy_score("{family}", "family release notes"))
         end)
     end)
 

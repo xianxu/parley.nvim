@@ -66,10 +66,20 @@ end
 local function tokenize_query(query)
     local tokens = {}
     for token in (query or ""):lower():gmatch("%S+") do
-        local normalized = token:gsub("^%[+", ""):gsub("%]+$", "")
-        normalized = normalized:gsub("^%{+", ""):gsub("%}+$", "")
+        local normalized = token
+        local kind = "plain"
+        if token:match("^%b[]$") then
+            normalized = token:sub(2, -2)
+            kind = "tag"
+        elseif token:match("^%b{}$") then
+            normalized = token:sub(2, -2)
+            kind = "root"
+        end
         if normalized ~= "" then
-            table.insert(tokens, normalized)
+            table.insert(tokens, {
+                kind = kind,
+                text = normalized,
+            })
         end
     end
     return tokens
@@ -78,6 +88,23 @@ end
 local function tokenize_haystack(haystack)
     local text = (haystack or ""):lower()
     local tokens = {}
+    local wrapped_search_from = 1
+
+    while wrapped_search_from <= #text do
+        local start_idx, end_idx = text:find("[%[%{][^%]%}]+[%]%}]", wrapped_search_from)
+        if not start_idx then
+            break
+        end
+        local wrapped = text:sub(start_idx, end_idx)
+        local kind = wrapped:sub(1, 1) == "[" and "tag" or "root"
+        table.insert(tokens, {
+            kind = kind,
+            text = wrapped:sub(2, -2),
+            start_idx = start_idx + 1,
+        })
+        wrapped_search_from = end_idx + 1
+    end
+
     local search_from = 1
 
     while search_from <= #text do
@@ -86,6 +113,7 @@ local function tokenize_haystack(haystack)
             break
         end
         table.insert(tokens, {
+            kind = "plain",
             text = text:sub(start_idx, end_idx),
             start_idx = start_idx,
         })
@@ -93,7 +121,7 @@ local function tokenize_haystack(haystack)
     end
 
     if #tokens == 0 and text ~= "" then
-        table.insert(tokens, { text = text, start_idx = 1 })
+        table.insert(tokens, { kind = "plain", text = text, start_idx = 1 })
     end
 
     return tokens
@@ -276,17 +304,17 @@ local function score_token_prefix(query_token, token_info)
         return nil
     end
 
-    local distance, prefix_len = bounded_prefix_distance(query_token, token, MAX_PREFIX_TYPO_DISTANCE)
+    local distance, prefix_len = bounded_prefix_distance(query_token.text, token, MAX_PREFIX_TYPO_DISTANCE)
     if distance == nil then
         return nil
     end
 
     local score = 220
         - (distance * 45)
-        - math.abs((prefix_len or #query_token) - #query_token) * 8
+        - math.abs((prefix_len or #query_token.text) - #query_token.text) * 8
         - (token_info.start_idx - 1)
 
-    if distance == 0 and token:sub(1, #query_token) == query_token then
+    if distance == 0 and token:sub(1, #query_token.text) == query_token.text then
         score = score + 80
     end
     if token_info.start_idx == 1 then
@@ -297,7 +325,7 @@ local function score_token_prefix(query_token, token_info)
 end
 
 local function prefix_match_details(query_token, token_info)
-    local distance, prefix_len, alignment = bounded_prefix_distance(query_token, token_info.text, MAX_PREFIX_TYPO_DISTANCE)
+    local distance, prefix_len, alignment = bounded_prefix_distance(query_token.text, token_info.text, MAX_PREFIX_TYPO_DISTANCE)
     if distance == nil or prefix_len == nil or alignment == nil then
         return nil
     end
@@ -336,9 +364,10 @@ local function best_match_for_token(query_token, haystack)
     end
 
     for _, token_info in ipairs(haystack_tokens) do
+        if query_token.kind == "plain" or token_info.kind == query_token.kind then
         consider(prefix_match_details(query_token, token_info))
 
-        local token_subsequence_score, token_positions = score_subsequence(query_token, token_info.text)
+        local token_subsequence_score, token_positions = score_subsequence(query_token.text, token_info.text)
         if token_subsequence_score then
             local absolute_positions = {}
             for _, pos in ipairs(token_positions) do
@@ -351,10 +380,11 @@ local function best_match_for_token(query_token, haystack)
                 score = token_subsequence_score,
             })
         end
+        end
     end
 
-    local whole_subsequence_score, whole_positions = score_subsequence(query_token, lowered_haystack)
-    if whole_subsequence_score then
+    local whole_subsequence_score, whole_positions = score_subsequence(query_token.text, lowered_haystack)
+    if query_token.kind == "plain" and whole_subsequence_score then
         consider({
             approximate = false,
             edit_positions = {},
