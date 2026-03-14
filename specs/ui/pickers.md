@@ -77,7 +77,7 @@ The picker closes if focus moves to any window that is neither the results nor t
     - Delete key (`<C-d>` by default): Delete the selected chat file.
       The confirmation prompt is opened from the source window after the picker closes. If it is cancelled with `Esc` or answered negatively, ChatFinder reopens instead of being dismissed.
       After a confirmed delete, ChatFinder preserves the same visual row in the bottom-anchored list: it prefers the older surviving neighbor that slides into the deleted row, and falls back to the newer neighbor only when deleting the oldest visible entry.
-    - Move key (`<C-g>m` by default): Move the selected chat file to another registered chat root.
+    - Move key (`<C-r>` by default): Move the selected chat file to another registered chat root.
       The move picker opens after ChatFinder closes. If it is cancelled, ChatFinder reopens on the original chat.
     - `<C-g>?`: Open Parley key-bindings help.
 - Files are sorted by modification date, newest first.

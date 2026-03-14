@@ -527,7 +527,7 @@ local finder_mappings = cfg.chat_finder_mappings or {}
 add(shortcut_value(finder_mappings.next_recency, "<C-a>"), "Cycle chat recency window left")
 add(shortcut_value(finder_mappings.previous_recency, "<C-s>"), "Cycle chat recency window right")
 add(shortcut_value(finder_mappings.delete, "<C-d>"), "Delete selected chat")
-	add(shortcut_value(finder_mappings.move, "<C-g>m"), "Move selected chat")
+	add(shortcut_value(finder_mappings.move, "<C-r>"), "Move selected chat")
 table.insert(lines, string.format("  %-12s %s", "", "(Recent window default: last " .. tostring((cfg.chat_finder_recency or {}).months or 6) .. " months)"))
 
 	table.insert(lines, "")
@@ -5062,7 +5062,7 @@ M.cmd.ChatFinder = function(_options)
 
 	local chat_dirs = M.get_chat_dirs()
 	local delete_shortcut = M.config.chat_finder_mappings.delete or M.config.chat_shortcut_delete
-	local move_shortcut = M.config.chat_finder_mappings.move or { shortcut = "<C-g>m" }
+	local move_shortcut = M.config.chat_finder_mappings.move or { shortcut = "<C-r>" }
 	local next_recency_shortcut = M.config.chat_finder_mappings.next_recency or { shortcut = "<C-a>" }
 	local previous_recency_shortcut = M.config.chat_finder_mappings.previous_recency or { shortcut = "<C-s>" }
 	local keybindings_shortcut = M.config.global_shortcut_keybindings or { shortcut = "<C-g>?" }

@@ -26,7 +26,7 @@ describe("key bindings help", function()
         assert.is_true(has_line(lines, "<C-g>h", "Manage chat roots"))
         assert.is_true(has_line(lines, "<C-a>", "Cycle chat recency window left"))
         assert.is_true(has_line(lines, "<C-s>", "Cycle chat recency window right"))
-        assert.is_true(has_line(lines, "<C-g>m", "Move selected chat"))
+        assert.is_true(has_line(lines, "<C-r>", "Move selected chat"))
     end)
 
     it("uses configured shortcut for key bindings help", function()
