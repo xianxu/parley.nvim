@@ -1,5 +1,6 @@
 local parley = require("parley")
 local chat_dir_picker = require("parley.chat_dir_picker")
+local float_picker = require("parley.float_picker")
 
 describe("chat dir management", function()
     local base_dir
@@ -7,6 +8,8 @@ describe("chat dir management", function()
     local secondary_dir
     local third_dir
     local state_dir
+    local original_float_picker_open
+    local original_ui_input
 
     local function read_state()
         local state_file = state_dir .. "/state.json"
@@ -17,6 +20,8 @@ describe("chat dir management", function()
     end
 
     before_each(function()
+        original_float_picker_open = float_picker.open
+        original_ui_input = vim.ui.input
         base_dir = vim.fn.tempname() .. "-parley-chat-dirs"
         primary_dir = base_dir .. "/primary"
         secondary_dir = base_dir .. "/secondary"
@@ -35,6 +40,8 @@ describe("chat dir management", function()
     end)
 
     after_each(function()
+        float_picker.open = original_float_picker_open
+        vim.ui.input = original_ui_input
         if base_dir then
             vim.fn.delete(base_dir, "rf")
         end
@@ -97,5 +104,56 @@ describe("chat dir management", function()
         assert.equals("  extra   " .. vim.fn.resolve(secondary_dir), items[2].display)
         assert.is_false(items[2].is_primary)
         assert.equals(vim.fn.resolve(third_dir), items[3].dir)
+    end)
+
+    it("keeps the picker open while confirming secondary root removal", function()
+        local captured = nil
+        float_picker.open = function(opts)
+            captured = opts
+        end
+
+        local prompt_seen = nil
+        local close_calls = 0
+        local focus_calls = 0
+        local suspended = false
+        local resumed = false
+
+        vim.ui.input = function(opts, cb)
+            prompt_seen = opts.prompt
+            assert.is_true(suspended)
+            assert.equals(0, close_calls)
+            cb(nil)
+        end
+
+        chat_dir_picker.chat_dir_picker(parley, secondary_dir)
+
+        assert.is_truthy(captured)
+        captured.mappings[2].fn(captured.items[2], function()
+            close_calls = close_calls + 1
+        end, {
+            suspend_for_external_ui = function()
+                suspended = true
+            end,
+            resume_after_external_ui = function()
+                resumed = true
+            end,
+            focus_prompt = function()
+                focus_calls = focus_calls + 1
+            end,
+            skip_focus_restore = false,
+        })
+
+        vim.wait(200, function()
+            return prompt_seen ~= nil
+        end)
+
+        assert.equals("Remove chat dir " .. vim.fn.resolve(secondary_dir) .. "? [y/N] ", prompt_seen)
+        assert.equals(0, close_calls)
+        assert.is_true(resumed)
+        assert.equals(1, focus_calls)
+        assert.same({
+            vim.fn.resolve(primary_dir),
+            vim.fn.resolve(secondary_dir),
+        }, parley.get_chat_dirs())
     end)
 end)

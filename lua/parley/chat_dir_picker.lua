@@ -94,12 +94,12 @@ function M.chat_dir_picker(plugin, initial_dir)
 
                     context.skip_focus_restore = true
                     context.suspend_for_external_ui()
-                    close_fn()
 
                     vim.schedule(function()
                         vim.ui.input({
                             prompt = "Remove chat dir " .. item.dir .. "? [y/N] ",
                         }, function(input)
+                            context.resume_after_external_ui()
                             local next_dir = nil
                             for _, dir in ipairs(plugin.get_chat_dirs()) do
                                 if dir ~= item.dir then
@@ -112,17 +112,18 @@ function M.chat_dir_picker(plugin, initial_dir)
                                 local normalized, err = plugin.remove_chat_dir(item.dir, true)
                                 if not normalized then
                                     vim.notify("Failed to remove chat dir: " .. err, vim.log.levels.WARN)
-                                    M.chat_dir_picker(plugin, item.dir)
+                                    context.focus_prompt()
                                     return
                                 end
 
+                                close_fn()
                                 plugin.logger.info("Removed chat dir: " .. item.dir)
                                 vim.notify("Removed chat dir: " .. item.dir, vim.log.levels.INFO)
                                 M.chat_dir_picker(plugin, next_dir or plugin.get_chat_dirs()[1])
                                 return
                             end
 
-                            M.chat_dir_picker(plugin, item.dir)
+                            context.focus_prompt()
                         end)
                     end)
                 end,

@@ -87,7 +87,7 @@ The picker closes if focus moves to any window that is neither the results nor t
 - The first item is the primary writable root used for new chats; later items are additional discovery roots.
 - Extra mappings:
   - `<C-n>`: Prompt for a new root and add it using directory completion.
-  - `<C-d>`: Remove the selected root after confirmation.
+  - `<C-d>`: Remove the selected root after confirmation. The confirmation prompt opens while the picker stays visible; cancelling returns focus to the same picker instance.
 - The primary root MUST NOT be removable from the picker.
 
 ## Navigation / Outline Picker
