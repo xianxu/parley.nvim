@@ -11,6 +11,7 @@ local M = require("parley")
 describe("ChatFinder logic", function()
     local tmpdir
     local secondary_tmpdir
+    local special_tmpdir
     local original_config
     local original_float_picker_open
     local original_ui_input
@@ -20,6 +21,7 @@ describe("ChatFinder logic", function()
     local original_delete_file
     local original_prompt_delete_confirmation
     local original_open_buf
+    local original_track_file_access
 
     local function find_results_float_win()
         local current = vim.api.nvim_get_current_win()
@@ -54,11 +56,13 @@ describe("ChatFinder logic", function()
         original_delete_file = M.helpers.delete_file
         original_prompt_delete_confirmation = M._prompt_chat_finder_delete_confirmation
         original_open_buf = M.open_buf
+        original_track_file_access = require("parley.file_tracker").track_file_access
 
         -- Create a temp directory for chat files
         local random_suffix = string.format("%x", math.random(0, 0xFFFFFF))
         tmpdir = "/tmp/parley-test-chatfinder-" .. random_suffix
         secondary_tmpdir = "/tmp/parley-test-chatfinder-secondary-" .. random_suffix
+        special_tmpdir = nil
         vim.fn.mkdir(tmpdir, "p")
         vim.fn.mkdir(secondary_tmpdir, "p")
 
@@ -100,6 +104,9 @@ describe("ChatFinder logic", function()
         if secondary_tmpdir then
             vim.fn.delete(secondary_tmpdir, "rf")
         end
+        if special_tmpdir then
+            vim.fn.delete(special_tmpdir, "rf")
+        end
 
         -- Restore original config
         M.config = original_config
@@ -111,6 +118,7 @@ describe("ChatFinder logic", function()
         M.helpers.delete_file = original_delete_file
         M._prompt_chat_finder_delete_confirmation = original_prompt_delete_confirmation
         M.open_buf = original_open_buf
+        require("parley.file_tracker").track_file_access = original_track_file_access
     end)
 
     describe("Group A: Timestamp parsing from filename", function()
@@ -548,6 +556,120 @@ describe("ChatFinder logic", function()
                 return item.value
             end, captured.items)
             assert.same({ primary_path, secondary_path }, values)
+        end)
+
+        it("keeps a moved chat visible when moving it from ChatFinder", function()
+            local picker_calls = {}
+            require("parley.file_tracker").track_file_access = function() end
+            vim.schedule = function(fn)
+                fn()
+            end
+            vim.defer_fn = function(fn, _)
+                fn()
+            end
+
+            M.float_picker.open = function(opts)
+                table.insert(picker_calls, opts)
+                if opts.title == "Move Chat To" then
+                    assert.equals(1, #opts.items)
+                    opts.on_select(opts.items[1])
+                end
+            end
+
+            local filename = "2026-02-04-10-00-00-move-me.md"
+            local old_path = tmpdir .. "/" .. filename
+            local new_path = secondary_tmpdir .. "/" .. filename
+            local file = io.open(old_path, "w")
+            file:write("# topic: Move me\n")
+            file:close()
+
+            M.cmd.ChatFinder()
+
+            assert.is_truthy(picker_calls[1])
+            assert.equals("Chat Files (Recent: 12 months  <C-a>/<C-s>: cycle)", picker_calls[1].title)
+            assert.equals(old_path, picker_calls[1].items[1].value)
+
+            picker_calls[1].mappings[2].fn(picker_calls[1].items[1], function() end)
+
+            assert.equals(0, vim.fn.filereadable(old_path))
+            assert.equals(1, vim.fn.filereadable(new_path))
+            assert.equals("Move Chat To", picker_calls[2].title)
+            assert.equals("Chat Files (Recent: 12 months  <C-a>/<C-s>: cycle)", picker_calls[3].title)
+            assert.equals(new_path, picker_calls[3].items[1].value)
+        end)
+
+        it("finds moved chats in roots whose paths contain glob characters", function()
+            special_tmpdir = "/tmp/parley-test-chatfinder-[archive]-" .. string.format("%x", math.random(0, 0xFFFFFF))
+            local picker_calls = {}
+            require("parley.file_tracker").track_file_access = function() end
+            vim.fn.mkdir(special_tmpdir, "p")
+            M.config.chat_dirs = { tmpdir, special_tmpdir }
+            vim.schedule = function(fn)
+                fn()
+            end
+            vim.defer_fn = function(fn, _)
+                fn()
+            end
+
+            M.float_picker.open = function(opts)
+                table.insert(picker_calls, opts)
+                if opts.title == "Move Chat To" then
+                    assert.equals(special_tmpdir, opts.items[1].value)
+                    opts.on_select(opts.items[1])
+                end
+            end
+
+            local filename = "2026-02-04-10-00-00-escaped-root.md"
+            local old_path = tmpdir .. "/" .. filename
+            local new_path = special_tmpdir .. "/" .. filename
+            local file = io.open(old_path, "w")
+            file:write("# topic: Escaped root\n")
+            file:close()
+
+            M.cmd.ChatFinder()
+            picker_calls[1].mappings[2].fn(picker_calls[1].items[1], function() end)
+
+            assert.equals(0, vim.fn.filereadable(old_path))
+            assert.equals(1, vim.fn.filereadable(new_path))
+            assert.equals("Chat Files (Recent: 12 months  <C-a>/<C-s>: cycle)", picker_calls[3].title)
+            assert.equals(new_path, picker_calls[3].items[1].value)
+        end)
+
+        it("reopens on moved chats when the destination root was configured with a tilde path", function()
+            special_tmpdir = "/tmp/parley-test-chatfinder-tilde-" .. string.format("%x", math.random(0, 0xFFFFFF))
+            local tilde_root = special_tmpdir:gsub("^" .. vim.pesc(vim.env.HOME), "~")
+            local picker_calls = {}
+            require("parley.file_tracker").track_file_access = function() end
+            vim.fn.mkdir(special_tmpdir, "p")
+            M.config.chat_dirs = { tmpdir, tilde_root }
+            vim.schedule = function(fn)
+                fn()
+            end
+            vim.defer_fn = function(fn, _)
+                fn()
+            end
+
+            M.float_picker.open = function(opts)
+                table.insert(picker_calls, opts)
+                if opts.title == "Move Chat To" then
+                    assert.equals(tilde_root, opts.items[1].value)
+                    opts.on_select(opts.items[1])
+                end
+            end
+
+            local filename = "2026-02-04-10-00-00-tilde-root.md"
+            local old_path = tmpdir .. "/" .. filename
+            local new_path = special_tmpdir .. "/" .. filename
+            local file = io.open(old_path, "w")
+            file:write("# topic: Tilde root\n")
+            file:close()
+
+            M.cmd.ChatFinder()
+            picker_calls[1].mappings[2].fn(picker_calls[1].items[1], function() end)
+
+            assert.equals(0, vim.fn.filereadable(old_path))
+            assert.equals(1, vim.fn.filereadable(new_path))
+            assert.equals(new_path, picker_calls[3].items[1].value)
         end)
 
         it("passes filename, tags, and topic as search text for matcher ranking", function()

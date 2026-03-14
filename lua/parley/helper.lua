@@ -464,6 +464,7 @@ end
 ---@return string # returns resolved directory path
 _H.prepare_dir = function(dir, name)
 	local odir = dir
+	dir = vim.fn.expand(dir)
 	dir = dir:gsub("/$", "")
 	name = name and name .. " " or ""
 	if vim.fn.isdirectory(dir) == 0 then

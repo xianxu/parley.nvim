@@ -2829,7 +2829,7 @@ local function registered_chat_dir(dir)
 	local resolved = resolve_dir_key(dir)
 	for _, candidate in ipairs(M.get_chat_dirs()) do
 		if resolve_dir_key(candidate) == resolved then
-			return candidate
+			return resolved
 		end
 	end
 	return nil
@@ -5073,7 +5073,8 @@ M.cmd.ChatFinder = function(_options)
 		local files = {}
 		local seen_files = {}
 		for _, dir in ipairs(chat_dirs) do
-			for _, file in ipairs(vim.fn.glob(dir .. "/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*.md", false, true)) do
+			local pattern = vim.fn.fnameescape(dir) .. "/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*.md"
+			for _, file in ipairs(vim.fn.glob(pattern, false, true)) do
 				local resolved = vim.fn.resolve(file)
 				if not seen_files[resolved] then
 					seen_files[resolved] = true

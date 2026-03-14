@@ -28,3 +28,6 @@
 ## 2026-03-11
 - When a UI bug reproduces only in live interaction, do not stop at helper-level or state-only tests; add runtime tracing on the actual event path before claiming the root cause.
 - For bottom-anchored pickers, verify visual-row semantics against the real rendered selection path before mapping “next item” onto logical list indices.
+
+## 2026-03-13
+- When a ChatFinder bug is reported after a seemingly successful move, instrument the full move lifecycle in the live path: selected item, destination root list, pre/post-rename file existence, buffer rename, and the refreshed finder scan/result list. Helper tests alone can miss path-specific runtime mismatches.

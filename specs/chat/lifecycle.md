@@ -12,6 +12,7 @@ The chat lifecycle includes creation, sending questions, receiving responses, re
 ### Multi-Root Discovery
 - Chat-aware discovery features MAY scan multiple configured chat roots.
 - When `chat_dirs` is configured, Chat Finder MUST include matching chat files from every configured root.
+- Chat Finder MUST continue discovering chats from configured roots whose paths contain glob metacharacters.
 - New chat creation MUST still use only the primary `chat_dir`.
 
 ### Command: `:ParleyChatMove`

@@ -258,5 +258,20 @@ describe("helper I/O functions", function()
             local result = helper.prepare_dir(dir, "test")
             assert.is_string(result)
         end)
+
+        it("G5: expands tilde paths before creating directories", function()
+            local fake_home = tmpdir .. "/fake-home"
+            local original_home = vim.env.HOME
+            vim.env.HOME = fake_home
+
+            local ok, result = pcall(helper.prepare_dir, "~/nested/path", "test")
+
+            vim.env.HOME = original_home
+
+            assert.is_true(ok)
+            assert.equals(vim.fn.resolve(fake_home .. "/nested/path"), result)
+            assert.is_true(helper.is_directory(vim.fn.resolve(fake_home .. "/nested/path")))
+            assert.is_false(helper.is_directory(tmpdir .. "/~/nested/path"))
+        end)
     end)
 end)
