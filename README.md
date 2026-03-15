@@ -166,34 +166,7 @@ For full defaults and examples, see [`lua/parley/config.lua`](lua/parley/config.
 Advanced behavior is intentionally kept out of this README and documented in specs:
 
 - Overview index: [`specs/index.md`](specs/index.md)
-- Chat format/parsing/lifecycle:
-  - [`specs/chat/format.md`](specs/chat/format.md)
-  - [`specs/chat/parsing.md`](specs/chat/parsing.md)
-  - [`specs/chat/lifecycle.md`](specs/chat/lifecycle.md)
-  - [`specs/chat/memory.md`](specs/chat/memory.md)
-- Providers and agents:
-  - [`specs/providers/architecture.md`](specs/providers/architecture.md)
-  - [`specs/providers/openai.md`](specs/providers/openai.md)
-  - [`specs/providers/anthropic.md`](specs/providers/anthropic.md)
-  - [`specs/providers/googleai.md`](specs/providers/googleai.md)
-  - [`specs/providers/agents.md`](specs/providers/agents.md)
-- Context tools:
-  - [`specs/context/file_references.md`](specs/context/file_references.md)
-  - [`specs/context/google_drive.md`](specs/context/google_drive.md)
-  - [`specs/context/web_search.md`](specs/context/web_search.md)
-- UI/features:
-  - [`specs/ui/pickers.md`](specs/ui/pickers.md)
-  - [`specs/ui/keybindings.md`](specs/ui/keybindings.md)
-  - [`specs/ui/outline.md`](specs/ui/outline.md)
-  - [`specs/ui/highlights.md`](specs/ui/highlights.md)
-  - [`specs/ui/lualine.md`](specs/ui/lualine.md)
-- Notes/modes/export:
-  - [`specs/notes/structure.md`](specs/notes/structure.md)
-  - [`specs/notes/templates.md`](specs/notes/templates.md)
-  - [`specs/modes/interview.md`](specs/modes/interview.md)
-  - [`specs/modes/raw_mode.md`](specs/modes/raw_mode.md)
-  - [`specs/export/formats.md`](specs/export/formats.md)
 
 ## Acknowledgement
 
-Parley was adapted from [gp.nvim](https://github.com/Robitx/gp.nvim).
+Parley was adapted from [gp.nvim](https://github.com/Robitx/gp.nvim), but has since been largely redesigned and rewritten.
