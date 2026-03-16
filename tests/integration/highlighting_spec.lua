@@ -223,4 +223,51 @@ describe("decoration provider cache", function()
         assert.is_true(saw_top, "expected first split to keep its own viewport highlight cache")
         assert.is_true(saw_bottom, "expected second split to keep its own viewport highlight cache")
     end)
+
+    it("restores question highlights when redraw starts inside a long unanswered question", function()
+        local provider = capture_decoration_provider()
+        assert.is_table(provider)
+        assert.is_function(provider.on_win)
+        assert.is_function(provider.on_line)
+
+        local buf = vim.api.nvim_create_buf(false, true)
+        local lines = { "💬: long question header" }
+        for i = 1, 260 do
+            lines[#lines + 1] = ("Question continuation line %03d. Another sentence to keep the row long enough."):format(i)
+        end
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+
+        local win = vim.api.nvim_get_current_win()
+        vim.api.nvim_win_set_buf(win, buf)
+        parley._parley_bufs[buf] = "chat"
+
+        provider.on_win(nil, win, buf, 220, 240)
+
+        local original_set_extmark = vim.api.nvim_buf_set_extmark
+        local extmarks = {}
+        vim.api.nvim_buf_set_extmark = function(_, _, row, _, opts)
+            table.insert(extmarks, {
+                row = row,
+                hl_group = opts.hl_group,
+            })
+            return #extmarks
+        end
+
+        provider.on_line(nil, win, buf, 220)
+        provider.on_line(nil, win, buf, 235)
+
+        vim.api.nvim_buf_set_extmark = original_set_extmark
+
+        local highlighted_rows = {}
+        for _, mark in ipairs(extmarks) do
+            if mark.hl_group == "ParleyQuestion" then
+                highlighted_rows[mark.row] = true
+            end
+        end
+
+        assert.is_true(highlighted_rows[220] == true,
+            "expected question highlight when redraw begins inside a long unanswered question")
+        assert.is_true(highlighted_rows[235] == true,
+            "expected continuation lines in the viewport to keep question highlight state")
+    end)
 end)

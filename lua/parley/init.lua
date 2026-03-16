@@ -2439,6 +2439,74 @@ end
 local HIGHLIGHT_VIEWPORT_MARGIN = 20
 local HIGHLIGHT_CONTEXT_LINES = 200
 
+local function get_chat_highlight_prefix_patterns()
+	local user_prefix = M.config.chat_user_prefix
+	local local_prefix = M.config.chat_local_prefix
+	local memory_enabled = M.config.chat_memory and M.config.chat_memory.enable
+	local reasoning_prefix = memory_enabled and M.config.chat_memory.reasoning_prefix or "🧠:"
+	local summary_prefix = memory_enabled and M.config.chat_memory.summary_prefix or "📝:"
+
+	local assistant_prefix
+	if type(M.config.chat_assistant_prefix) == "string" then
+		assistant_prefix = M.config.chat_assistant_prefix
+	elseif type(M.config.chat_assistant_prefix) == "table" then
+		assistant_prefix = M.config.chat_assistant_prefix[1]
+	end
+
+	return {
+		reasoning_pattern = "^" .. vim.pesc(reasoning_prefix),
+		summary_pattern = "^" .. vim.pesc(summary_prefix),
+		user_pattern = "^" .. vim.pesc(user_prefix),
+		assistant_pattern = "^" .. vim.pesc(assistant_prefix),
+		local_pattern = "^" .. vim.pesc(local_prefix),
+	}
+end
+
+local function bootstrap_chat_highlight_state(buf, start_line, patterns)
+	if start_line <= 1 then
+		return false, false
+	end
+
+	local scan_start = math.max(1, start_line - HIGHLIGHT_CONTEXT_LINES)
+	local bootstrap_start = scan_start
+	local bootstrap_in_block = false
+
+	while bootstrap_start > 1 do
+		local previous_lines = vim.api.nvim_buf_get_lines(buf, bootstrap_start - 2, bootstrap_start - 1, false)
+		local previous_line = previous_lines[1] or ""
+		if previous_line:match(patterns.user_pattern) then
+			bootstrap_in_block = true
+			break
+		end
+		if previous_line:match(patterns.assistant_pattern) or previous_line:match(patterns.local_pattern) then
+			bootstrap_in_block = false
+			break
+		end
+		bootstrap_start = bootstrap_start - 1
+	end
+
+	local in_block = bootstrap_in_block
+	local in_code_block = false
+	if start_line <= bootstrap_start then
+		return in_block, in_code_block
+	end
+
+	local prefix_lines = vim.api.nvim_buf_get_lines(buf, bootstrap_start - 1, start_line - 1, false)
+	for _, line in ipairs(prefix_lines) do
+		if line:match("^%s*```") then
+			in_code_block = not in_code_block
+		end
+
+		if line:match(patterns.user_pattern) then
+			in_block = true
+		elseif line:match(patterns.assistant_pattern) or line:match(patterns.local_pattern) then
+			in_block = false
+		end
+	end
+
+	return in_block, in_code_block
+end
+
 local function merge_line_ranges(ranges)
 	if #ranges <= 1 then
 		return ranges
@@ -2569,87 +2637,56 @@ end
 -- Scans HIGHLIGHT_CONTEXT_LINES above start_line for block state context.
 local function compute_chat_highlights(buf, start_line, end_line)
 	local result = {}
-
-	local user_prefix = M.config.chat_user_prefix
-	local local_prefix = M.config.chat_local_prefix
-	local memory_enabled = M.config.chat_memory and M.config.chat_memory.enable
-	local reasoning_prefix = memory_enabled and M.config.chat_memory.reasoning_prefix or "🧠:"
-	local summary_prefix = memory_enabled and M.config.chat_memory.summary_prefix or "📝:"
-
-	local assistant_prefix
-	if type(M.config.chat_assistant_prefix) == "string" then
-		assistant_prefix = M.config.chat_assistant_prefix
-	elseif type(M.config.chat_assistant_prefix) == "table" then
-		assistant_prefix = M.config.chat_assistant_prefix[1]
-	end
-	local reasoning_pattern = "^" .. vim.pesc(reasoning_prefix)
-	local summary_pattern = "^" .. vim.pesc(summary_prefix)
-	local user_pattern = "^" .. vim.pesc(user_prefix)
-	local assistant_pattern = "^" .. vim.pesc(assistant_prefix)
-	local local_pattern = "^" .. vim.pesc(local_prefix)
-
-	local scan_start = math.max(1, start_line - HIGHLIGHT_CONTEXT_LINES)
-	local lines = vim.api.nvim_buf_get_lines(buf, scan_start - 1, end_line, false)
-	local in_block = false
-	local in_code_block = false
+	local patterns = get_chat_highlight_prefix_patterns()
+	local lines = vim.api.nvim_buf_get_lines(buf, start_line - 1, end_line, false)
+	local in_block, in_code_block = bootstrap_chat_highlight_state(buf, start_line, patterns)
 
 	for offset, line in ipairs(lines) do
-		local line_nr = scan_start + offset - 1
+		local line_nr = start_line + offset - 1
 		if line:match("^%s*```") then
 			in_code_block = not in_code_block
 		end
 
-		local should_paint = line_nr >= start_line
 		local highlighted_regions = {}
 		local row = line_nr - 1
 
-		if should_paint then
-			result[row] = result[row] or {}
+		result[row] = result[row] or {}
 
-			local pos = 1
-			while true do
-				local tag_start, content_start = line:find("@@", pos)
-				if not tag_start then break end
-				local content_end, tag_end = line:find("@@", content_start + 1)
-				if not content_end then break end
-				table.insert(highlighted_regions, { start = tag_start, finish = tag_end })
-				table.insert(result[row], { hl_group = "ParleyTag", col_start = tag_start - 1, col_end = tag_end })
-				pos = tag_end + 1
-			end
+		local pos = 1
+		while true do
+			local tag_start, content_start = line:find("@@", pos)
+			if not tag_start then break end
+			local content_end, tag_end = line:find("@@", content_start + 1)
+			if not content_end then break end
+			table.insert(highlighted_regions, { start = tag_start, finish = tag_end })
+			table.insert(result[row], { hl_group = "ParleyTag", col_start = tag_start - 1, col_end = tag_end })
+			pos = tag_end + 1
 		end
 
-		if line:match(reasoning_pattern) or line:match(summary_pattern) then
-			if should_paint then
-				table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
-			end
-		elseif line:match(user_pattern) then
-			if should_paint then
-				table.insert(result[row], { hl_group = "ParleyQuestion", col_start = 0, col_end = -1 })
-			end
+		if line:match(patterns.reasoning_pattern) or line:match(patterns.summary_pattern) then
+			table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
+		elseif line:match(patterns.user_pattern) then
+			table.insert(result[row], { hl_group = "ParleyQuestion", col_start = 0, col_end = -1 })
 			in_block = true
-		elseif line:match(assistant_pattern) then
+		elseif line:match(patterns.assistant_pattern) then
 			in_block = false
-		elseif line:match(local_pattern) then
+		elseif line:match(patterns.local_pattern) then
 			in_block = false
 		elseif in_block and not in_code_block then
-			if should_paint then
-				table.insert(result[row], { hl_group = "ParleyQuestion", col_start = 0, col_end = -1 })
-				if line:match("^@@") then
-					local is_tag_at_start = false
-					if #highlighted_regions > 0 and highlighted_regions[1].start == 1 then
-						is_tag_at_start = true
-					end
-					if not is_tag_at_start then
-						table.insert(result[row], { hl_group = "ParleyFileReference", col_start = 0, col_end = -1 })
-					end
+			table.insert(result[row], { hl_group = "ParleyQuestion", col_start = 0, col_end = -1 })
+			if line:match("^@@") then
+				local is_tag_at_start = false
+				if #highlighted_regions > 0 and highlighted_regions[1].start == 1 then
+					is_tag_at_start = true
+				end
+				if not is_tag_at_start then
+					table.insert(result[row], { hl_group = "ParleyFileReference", col_start = 0, col_end = -1 })
 				end
 			end
 		end
 
-		if should_paint then
-			for start_idx, _, end_idx in line:gmatch("()@(.-)@()") do
-				table.insert(result[row], { hl_group = "ParleyAnnotation", col_start = start_idx - 1, col_end = end_idx - 1 })
-			end
+		for start_idx, _, end_idx in line:gmatch("()@(.-)@()") do
+			table.insert(result[row], { hl_group = "ParleyAnnotation", col_start = start_idx - 1, col_end = end_idx - 1 })
 		end
 	end
 
