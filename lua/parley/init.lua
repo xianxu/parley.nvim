@@ -2813,7 +2813,7 @@ M.setup_buf_handler = function()
 	-- during Neovim's redraw cycle using ephemeral extmarks, just like
 	-- built-in syntax highlighting. Zero flicker, always up-to-date.
 	local decor_ns = M.setup_highlight()
-	local _decor_cache = {} -- bufnr → { [row] = { {hl_group, col_start, col_end}, ... } }
+	local _decor_cache = {} -- winid → { bufnr = number, rows = { [row] = { ... } } }
 
 	vim.api.nvim_set_decoration_provider(decor_ns, {
 		on_buf = function(_, bufnr, _)
@@ -2821,7 +2821,7 @@ M.setup_buf_handler = function()
 				return false
 			end
 		end,
-		on_win = function(_, _, bufnr, toprow, botrow)
+		on_win = function(_, winid, bufnr, toprow, botrow)
 			if not M._parley_bufs[bufnr] then
 				return false
 			end
@@ -2829,17 +2829,23 @@ M.setup_buf_handler = function()
 			local start_line = toprow + 1
 			local line_count = vim.api.nvim_buf_line_count(bufnr)
 			local end_line = math.min(botrow + 1 + HIGHLIGHT_VIEWPORT_MARGIN, line_count)
+			local row_map = nil
 
 			if buf_type == "chat" then
-				_decor_cache[bufnr] = compute_chat_highlights(bufnr, start_line, end_line)
+				row_map = compute_chat_highlights(bufnr, start_line, end_line)
 			elseif buf_type == "markdown" then
-				_decor_cache[bufnr] = compute_markdown_highlights(bufnr, start_line, end_line)
+				row_map = compute_markdown_highlights(bufnr, start_line, end_line)
 			end
+
+			_decor_cache[winid] = {
+				bufnr = bufnr,
+				rows = row_map or {},
+			}
 		end,
-		on_line = function(_, _, bufnr, row)
-			local cache = _decor_cache[bufnr]
-			if not cache then return end
-			local highlights = cache[row]
+		on_line = function(_, winid, bufnr, row)
+			local cache = _decor_cache[winid]
+			if not cache or cache.bufnr ~= bufnr then return end
+			local highlights = cache.rows[row]
 			if not highlights then return end
 			for _, hl in ipairs(highlights) do
 				local end_col = hl.col_end
@@ -2907,7 +2913,11 @@ M.setup_buf_handler = function()
 	M.helpers.autocmd({ "BufDelete", "BufUnload" }, nil, function(event)
 		local buf = event.buf
 		M._parley_bufs[buf] = nil
-		_decor_cache[buf] = nil
+		for winid, cache in pairs(_decor_cache) do
+			if cache.bufnr == buf then
+				_decor_cache[winid] = nil
+			end
+		end
 		local match_id_key = "parley_interview_timestamps_" .. buf
 		if M._interview_match_ids and M._interview_match_ids[match_id_key] then
 			M._interview_match_ids[match_id_key] = nil

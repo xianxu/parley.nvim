@@ -59,6 +59,29 @@ local function cleanup_bufs()
     end
 end
 
+local function cleanup_extra_windows()
+    local current = vim.api.nvim_get_current_win()
+    for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+        if win ~= current and vim.api.nvim_win_is_valid(win) then
+            pcall(vim.api.nvim_win_close, win, true)
+        end
+    end
+end
+
+local function capture_decoration_provider()
+    local original = vim.api.nvim_set_decoration_provider
+    local captured_provider = nil
+
+    vim.api.nvim_set_decoration_provider = function(_, provider)
+        captured_provider = provider
+    end
+
+    parley.setup_buf_handler()
+    vim.api.nvim_set_decoration_provider = original
+
+    return captured_provider
+end
+
 describe("highlight_question_block: question lines", function()
     after_each(cleanup_bufs)
     it("applies Question highlight to 💬: line (row 0)", function()
@@ -136,5 +159,68 @@ describe("highlight_question_block: file reference lines", function()
         -- Row 0 is an answer line; ParleyFileReference should not be applied
         assert.is_false(has_highlight(buf, 0, "ParleyFileReference"),
             "ParleyFileReference should not appear on answer lines")
+    end)
+end)
+
+describe("decoration provider cache", function()
+    after_each(function()
+        cleanup_extra_windows()
+        cleanup_bufs()
+    end)
+
+    it("keeps highlight caches isolated per window for the same buffer", function()
+        local provider = capture_decoration_provider()
+        assert.is_table(provider)
+        assert.is_function(provider.on_win)
+        assert.is_function(provider.on_line)
+
+        local buf = vim.api.nvim_create_buf(false, true)
+        local lines = {}
+        for i = 1, 120 do
+            lines[i] = ("filler line %03d"):format(i)
+        end
+        lines[1] = "💬: top question"
+        lines[71] = "💬: lower question"
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+
+        vim.cmd("vsplit")
+        local wins = vim.api.nvim_tabpage_list_wins(0)
+        assert.are.same(2, #wins)
+        vim.api.nvim_win_set_buf(wins[1], buf)
+        vim.api.nvim_win_set_buf(wins[2], buf)
+
+        parley._parley_bufs[buf] = "chat"
+
+        provider.on_win(nil, wins[1], buf, 0, 0)
+        provider.on_win(nil, wins[2], buf, 70, 70)
+
+        local original_set_extmark = vim.api.nvim_buf_set_extmark
+        local extmarks = {}
+        vim.api.nvim_buf_set_extmark = function(_, _, row, _, opts)
+            table.insert(extmarks, {
+                row = row,
+                hl_group = opts.hl_group,
+            })
+            return #extmarks
+        end
+
+        provider.on_line(nil, wins[1], buf, 0)
+        provider.on_line(nil, wins[2], buf, 70)
+
+        vim.api.nvim_buf_set_extmark = original_set_extmark
+
+        local saw_top = false
+        local saw_bottom = false
+        for _, mark in ipairs(extmarks) do
+            if mark.row == 0 and mark.hl_group == "ParleyQuestion" then
+                saw_top = true
+            end
+            if mark.row == 70 and mark.hl_group == "ParleyQuestion" then
+                saw_bottom = true
+            end
+        end
+
+        assert.is_true(saw_top, "expected first split to keep its own viewport highlight cache")
+        assert.is_true(saw_bottom, "expected second split to keep its own viewport highlight cache")
     end)
 end)

@@ -16,6 +16,8 @@ Parley provides custom syntax highlighting for chat buffers to distinguish betwe
 ## Highlighting Logic
 - Applied on `BufEnter`, `WinEnter`, `TextChanged`, and `TextChangedI`.
 - MUST be efficient to avoid lag in large chat files.
+- Redraw-time markdown/chat highlighting uses Neovim decoration providers with ephemeral extmarks scoped to each window viewport.
+- When the same buffer is visible in multiple windows or splits, each window MUST keep independent redraw cache state so one viewport redraw does not clear or overwrite another window's highlights.
 - **Header Concealment**: Model parameters in the header MAY be concealed if `chat_conceal_model_params` is `true`.
 
 ## Interview Mode
