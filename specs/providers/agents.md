@@ -22,7 +22,7 @@ An agent combines a provider, a model, and a system prompt.
 Default config includes `Proxy-*` variants for major model families through `cliproxyapi`.
 
 ## Agent Selection
-- `:ParleyAgent [name]`: Selects an agent via Telescope picker or name argument.
+- `:ParleyAgent [name]`: Selects an agent via Parley's floating picker or by explicit name argument.
 - `:ParleyNextAgent` (`<C-g>a`): Cycles to the next available agent.
 - Persisted selection to `state_dir/last_agent`.
 

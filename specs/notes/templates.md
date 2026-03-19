@@ -15,7 +15,7 @@ Parley's template system allows creating notes with pre-defined structures.
 
 ## Selection
 ### Command: `:ParleyNoteNewFromTemplate` (`<C-n>t`)
-- Opens a Telescope picker (or `vim.ui.select` fallback).
+- Opens Parley's floating picker for available templates.
 - Selects from available `.md` files in the templates folder.
 
 ## Substitution

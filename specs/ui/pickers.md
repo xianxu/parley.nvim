@@ -2,7 +2,7 @@
 
 ## Overview
 Parley uses a single custom floating-window picker (`float_picker`) for all selection UIs.
-No external dependencies (Telescope or similar) are required.
+No external picker dependency is required.
 Pickers may seed the prompt via `initial_query`; that text is rendered immediately and used for the first filter pass before the user types.
 
 ## Layout

@@ -3471,7 +3471,7 @@ M._create_note_file = function(filename, title, metadata, template_content)
 	return buf
 end
 
--- Function to find notes using telescope
+-- Note finder state and helpers
 
 -- Variable to store state for NoteFinder
 -- Initial state for note finder, will be updated from persisted state

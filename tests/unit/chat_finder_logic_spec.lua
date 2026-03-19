@@ -1,10 +1,10 @@
 -- Unit tests for ChatFinder pure logic
 --
--- ChatFinder is a large UI feature (~300 lines) with complex Telescope integration.
+-- ChatFinder is a large UI feature (~300 lines) built on the custom float picker.
 -- These tests focus on the testable pure logic: timestamp parsing, filtering, sorting.
 --
--- Note: Full UI integration (Telescope picker, keymappings, buffer manipulation)
--- is not tested here as it requires a full Neovim instance with Telescope installed.
+-- Note: Full UI integration (floating picker, keymappings, buffer manipulation)
+-- is not tested here; these specs stay focused on logic that can be verified headlessly.
 
 local M = require("parley")
 
