@@ -3486,7 +3486,7 @@ M._note_finder = {
 }
 
 local function try_create_top_level_note(subject, current_date, template_content)
-	if subject:match("^%{%}%s+") then
+	if subject == "{}" or subject:match("^%{%}%s+") then
 		return nil, "Bare {} is reserved for Note Finder filters and cannot be used during note creation"
 	end
 

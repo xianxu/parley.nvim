@@ -353,6 +353,26 @@ describe("NoteFinder logic", function()
         assert.equals(vim.log.levels.WARN, notify_calls[1].level)
     end)
 
+    it("rejects exact bare braces during direct note creation", function()
+        local created = false
+        local notify_calls = {}
+
+        M._create_note_file = function()
+            created = true
+        end
+        vim.notify = function(msg, level)
+            table.insert(notify_calls, { msg = msg, level = level })
+        end
+
+        local buf = M.new_note("{}")
+
+        assert.is_nil(buf)
+        assert.is_false(created)
+        assert.equals(1, #notify_calls)
+        assert.matches("Bare %{%} is reserved for Note Finder filters", notify_calls[1].msg)
+        assert.equals(vim.log.levels.WARN, notify_calls[1].level)
+    end)
+
     it("rejects repeated leading braced segments during direct note creation", function()
         local created = false
         local notify_calls = {}
@@ -412,6 +432,26 @@ describe("NoteFinder logic", function()
         end
 
         local buf = M.new_note_from_template("{} test", { "# {{title}}" })
+
+        assert.is_nil(buf)
+        assert.is_false(created)
+        assert.equals(1, #notify_calls)
+        assert.matches("Bare %{%} is reserved for Note Finder filters", notify_calls[1].msg)
+        assert.equals(vim.log.levels.WARN, notify_calls[1].level)
+    end)
+
+    it("rejects exact bare braces during template note creation", function()
+        local created = false
+        local notify_calls = {}
+
+        M._create_note_file = function()
+            created = true
+        end
+        vim.notify = function(msg, level)
+            table.insert(notify_calls, { msg = msg, level = level })
+        end
+
+        local buf = M.new_note_from_template("{}", { "# {{title}}" })
 
         assert.is_nil(buf)
         assert.is_false(created)
