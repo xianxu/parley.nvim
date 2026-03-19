@@ -10,6 +10,7 @@ describe("NoteFinder logic", function()
     local original_reopen_note_finder
     local original_delete_file
     local original_open_buf
+    local original_create_note_file
 
     local function write_file(path, lines)
         vim.fn.mkdir(vim.fn.fnamemodify(path, ":h"), "p")
@@ -28,6 +29,7 @@ describe("NoteFinder logic", function()
         original_reopen_note_finder = M._reopen_note_finder
         original_delete_file = M.helpers.delete_file
         original_open_buf = M.open_buf
+        original_create_note_file = M._create_note_file
 
         notes_dir = "/tmp/parley-test-notefinder-" .. string.format("%x", math.random(0, 0xFFFFFF))
         vim.fn.mkdir(notes_dir, "p")
@@ -69,6 +71,7 @@ describe("NoteFinder logic", function()
         M._reopen_note_finder = original_reopen_note_finder
         M.helpers.delete_file = original_delete_file
         M.open_buf = original_open_buf
+        M._create_note_file = original_create_note_file
     end)
 
     it("resolves and cycles note recency presets", function()
@@ -263,6 +266,95 @@ describe("NoteFinder logic", function()
 
         M.cmd.NoteFinder()
         assert.equals("{} ", captured.initial_query)
+    end)
+
+    it("creates braced top-level notes directly under notes_dir", function()
+        local current_date = os.date("*t")
+        local captured = nil
+
+        M._create_note_file = function(filename, title, metadata, template_content)
+            captured = {
+                filename = filename,
+                title = title,
+                metadata = metadata,
+                template_content = template_content,
+            }
+            return 42
+        end
+
+        local buf = M.new_note("{K} some document title")
+
+        assert.equals(42, buf)
+        assert.equals(notes_dir .. "/K/some-document-title.md", captured.filename)
+        assert.equals("some document title", captured.title)
+        assert.is_nil(captured.template_content)
+        assert.same({
+            { "Date", string.format("%04d-%02d-%02d", current_date.year, current_date.month, current_date.day) },
+        }, captured.metadata)
+        assert.equals(1, vim.fn.isdirectory(notes_dir .. "/K"))
+    end)
+
+    it("treats plain folder-looking prefixes as normal dated note titles", function()
+        local current_date = os.date("*t")
+        local year = current_date.year
+        local month = string.format("%02d", current_date.month)
+        local day = string.format("%02d", current_date.day)
+        local week_number = M.helpers.get_week_number_sunday_based(string.format("%04d-%s-%s", year, month, day))
+        local week_folder = "W" .. string.format("%02d", week_number)
+        local captured = nil
+
+        vim.fn.mkdir(notes_dir .. "/K", "p")
+
+        M._create_note_file = function(filename, title, metadata, template_content)
+            captured = {
+                filename = filename,
+                title = title,
+                metadata = metadata,
+                template_content = template_content,
+            }
+            return 55
+        end
+
+        local buf = M.new_note("K something this")
+
+        assert.equals(55, buf)
+        assert.equals(
+            string.format("%s/%04d/%s/%s/%s-K-something-this.md", notes_dir, year, month, week_folder, day),
+            captured.filename
+        )
+        assert.equals("K something this", captured.title)
+        assert.is_nil(captured.template_content)
+        assert.same({
+            { "Date", string.format("%04d-%s-%s", year, month, day) },
+            { "Week", week_folder },
+        }, captured.metadata)
+    end)
+
+    it("creates braced top-level notes from templates directly under notes_dir", function()
+        local current_date = os.date("*t")
+        local captured = nil
+        local template = { "# {{title}}", "", "Date: {{date}}" }
+
+        M._create_note_file = function(filename, title, metadata, template_content)
+            captured = {
+                filename = filename,
+                title = title,
+                metadata = metadata,
+                template_content = template_content,
+            }
+            return 77
+        end
+
+        local buf = M.new_note_from_template("{K} template note", template)
+
+        assert.equals(77, buf)
+        assert.equals(notes_dir .. "/K/template-note.md", captured.filename)
+        assert.equals("template note", captured.title)
+        assert.same(template, captured.template_content)
+        assert.same({
+            { "Date", string.format("%04d-%02d-%02d", current_date.year, current_date.month, current_date.day) },
+        }, captured.metadata)
+        assert.equals(1, vim.fn.isdirectory(notes_dir .. "/K"))
     end)
 
     it("reopens note finder on cancelled delete and keeps the moved visual row on confirm", function()

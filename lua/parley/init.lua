@@ -3485,6 +3485,28 @@ M._note_finder = {
 	sticky_query = nil,
 }
 
+local function try_create_top_level_note(subject, current_date, template_content)
+	local folder, rest = subject:match("^%{([^{}%s/]+)%}%s+(.+)$")
+
+	if not folder or not rest then
+		return nil
+	end
+
+	local target_dir = M.config.notes_dir .. "/" .. folder
+	M.helpers.prepare_dir(target_dir)
+	local slug = rest:gsub("%s+", "-")
+	local filename = target_dir .. "/" .. slug .. ".md"
+	local y = string.format("%04d", current_date.year)
+	local mon = string.format("%02d", current_date.month)
+	local d = string.format("%02d", current_date.day)
+	return M._create_note_file(
+		filename,
+		rest,
+		{ { "Date", y .. "-" .. mon .. "-" .. d } },
+		template_content
+	)
+end
+
 -- Create a new note with given subject
 M.new_note = function(subject)
 	-- Get current date
@@ -3495,26 +3517,10 @@ M.new_note = function(subject)
 
 	-- Parse date from subject if provided in one of the formats:
 	-- "YYYY-MM-DD subject" or "MM-DD subject" or "DD subject"
-	local original_subject = subject
-	-- Special-case: if the first word matches a directory under notes_root (including subfolders), create note there without date prefix
 	do
-		local head, rest = original_subject:match("^(%S+)%s+(.+)$")
-		if head and rest then
-			local notes_root = M.config.notes_dir
-			local p = notes_root .. "/" .. head
-			local target_dir = nil
-			if vim.fn.isdirectory(p) == 1 then
-				target_dir = p
-			end
-			if target_dir then
-				local slug = rest:gsub(" ", "-")
-				local filename = target_dir .. "/" .. slug .. ".md"
-				-- Create the note using helper (no week metadata)
-				local y = string.format("%04d", current_date.year)
-				local mon = string.format("%02d", current_date.month)
-				local d = string.format("%02d", current_date.day)
-				return M._create_note_file(filename, rest, { { "Date", y .. "-" .. mon .. "-" .. d } })
-			end
+		local top_level_note = try_create_top_level_note(subject, current_date)
+		if top_level_note then
+			return top_level_note
 		end
 	end
 	local date_pattern1 = "^(%d%d%d%d)%-(%d%d)%-(%d%d)%s+(.+)$" -- YYYY-MM-DD
@@ -3594,26 +3600,10 @@ M.new_note_from_template = function(subject, template_content)
 	local day = current_date.day
 
 	-- Parse date from subject if provided in one of the formats (same logic as new_note)
-	local original_subject = subject
-	-- Special-case: if the first word matches a directory under notes_root (including subfolders), create note there without date prefix
 	do
-		local head, rest = original_subject:match("^(%S+)%s+(.+)$")
-		if head and rest then
-			local notes_root = M.config.notes_dir
-			local p = notes_root .. "/" .. head
-			local target_dir = nil
-			if vim.fn.isdirectory(p) == 1 then
-				target_dir = p
-			end
-			if target_dir then
-				local slug = rest:gsub(" ", "-")
-				local filename = target_dir .. "/" .. slug .. ".md"
-				-- Create the note using helper with template
-				local y = string.format("%04d", current_date.year)
-				local mon = string.format("%02d", current_date.month)
-				local d = string.format("%02d", current_date.day)
-				return M._create_note_file(filename, rest, { { "Date", y .. "-" .. mon .. "-" .. d } }, template_content)
-			end
+		local top_level_note = try_create_top_level_note(subject, current_date, template_content)
+		if top_level_note then
+			return top_level_note
 		end
 	end
 

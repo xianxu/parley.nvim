@@ -14,9 +14,9 @@ Parley organizes notes within `notes_dir` by date (Year/Month/Week).
 - Opens the new note in a Neovim buffer.
 
 ### Subject-Based Organization
-- If the first word of the subject matches a sub-directory in `notes_dir`, the note is created there (without the date prefix).
-- Example: `notes/project-name/task-description.md`.
-- In practice, first-level folders such as `K/` can be used as named evergreen buckets. A subject like `K task-description` is written to `notes_dir/K/task-description.md` instead of the dated Year/Month/Week layout.
+- Plain subjects are always treated as normal note titles, even if the first word matches a first-level folder name under `notes_dir`.
+- Example: `K task-description` MUST create a dated note such as `notes/YYYY/MM/WNN/DD-K-task-description.md`.
+- Only the explicit braced top-level folder syntax from Note Finder labels may bypass the dated Year/Month/Week layout. A subject like `{K} some document title` MUST create `notes_dir/K/some-document-title.md`.
 
 ## Navigation
 - `:ParleyNoteFinder` (`<C-n>f`): Opens a recursive note picker rooted at `notes_dir`.
