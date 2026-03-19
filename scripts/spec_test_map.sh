@@ -91,12 +91,16 @@ list_tests_for_spec() {
 
 list_changed_specs() {
     local base_ref
-    local merge_base
+    local current_branch
     base_ref="$(resolve_base_ref)"
-    merge_base="$(git merge-base HEAD "$base_ref")"
+    current_branch="$(git branch --show-current)"
 
     {
-        git diff --name-only --diff-filter=ACMR "$merge_base" -- specs
+        if [ "$current_branch" = "main" ]; then
+            git diff --name-only --diff-filter=ACMR "$base_ref..HEAD" -- specs
+        else
+            git diff --name-only --diff-filter=ACMR "$(git merge-base HEAD "$base_ref")" -- specs
+        fi
         git ls-files --others --exclude-standard -- specs
     } | awk '/^specs\/.+\/.+\.md$/ { print }' | sort -u
 }
