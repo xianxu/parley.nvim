@@ -566,6 +566,16 @@ M._keybinding_help_lines = function()
 	)
 	add(
 		resolve_shortcut(
+			"Open Note Finder",
+			shortcut_modes(cfg.global_shortcut_note_finder, { "n", "i" }),
+			cfg.global_shortcut_note_finder,
+			"<C-n>f",
+			current_buf
+		),
+		"Open note finder"
+	)
+	add(
+		resolve_shortcut(
 			"Change directory to current year's note directory",
 			shortcut_modes(cfg.global_shortcut_year_root, { "n", "i" }),
 			cfg.global_shortcut_year_root,
@@ -674,6 +684,14 @@ add(shortcut_value(finder_mappings.previous_recency, "<C-s>"), "Cycle chat recen
 add(shortcut_value(finder_mappings.delete, "<C-d>"), "Delete selected chat")
 	add(shortcut_value(finder_mappings.move, "<C-r>"), "Move selected chat")
 table.insert(lines, string.format("  %-12s %s", "", "(Recent window default: last " .. tostring((cfg.chat_finder_recency or {}).months or 6) .. " months)"))
+
+	table.insert(lines, "")
+	table.insert(lines, "Note Finder")
+	local note_finder_mappings = cfg.note_finder_mappings or {}
+	add(shortcut_value(note_finder_mappings.next_recency, "<C-a>"), "Cycle note recency window left")
+	add(shortcut_value(note_finder_mappings.previous_recency, "<C-s>"), "Cycle note recency window right")
+	add(shortcut_value(note_finder_mappings.delete, "<C-d>"), "Delete selected note")
+	table.insert(lines, string.format("  %-12s %s", "", "(Recent window default: last " .. tostring((cfg.note_finder_recency or {}).months or 6) .. " months)"))
 
 	table.insert(lines, "")
 	table.insert(lines, "Close: q or <Esc>")
@@ -1046,6 +1064,21 @@ M.setup = function(opts)
 					vim.cmd("stopinsert")
 					M.cmd.NoteNew()
 				end, { silent = true, desc = "Create New Note" })
+			end
+		end
+	end
+
+	if M.config.global_shortcut_note_finder then
+		for _, mode in ipairs(M.config.global_shortcut_note_finder.modes) do
+			if mode == "n" then
+				vim.keymap.set(mode, M.config.global_shortcut_note_finder.shortcut, function()
+					M.cmd.NoteFinder({})
+				end, { silent = true, desc = "Open Note Finder" })
+			elseif mode == "i" then
+				vim.keymap.set(mode, M.config.global_shortcut_note_finder.shortcut, function()
+					vim.cmd("stopinsert")
+					M.cmd.NoteFinder({})
+				end, { silent = true, desc = "Open Note Finder" })
 			end
 		end
 	end
@@ -3438,15 +3471,18 @@ M._create_note_file = function(filename, title, metadata, template_content)
 	return buf
 end
 
--- Function to find notes using telescope
+-- Note finder state and helpers
 
 -- Variable to store state for NoteFinder
 -- Initial state for note finder, will be updated from persisted state
 M._note_finder = {
 	opened = false,
 	source_win = nil,
-	filter_mode = "recent", -- Filter mode: "recent" (3 months), "week" (this week), or "all"
-	sort_mode = "access", -- Sort mode: "access" (by last access time), "name" (by filename), "date" (by date in filename)
+	show_all = false,
+	recency_index = nil,
+	initial_index = nil,
+	initial_value = nil,
+	sticky_query = nil,
 }
 
 -- Create a new note with given subject
@@ -5057,7 +5093,9 @@ local function extract_chat_finder_sticky_query(query)
 			end
 		elseif token:match("^%b{}$") then
 			local value = vim.trim(token:sub(2, -2))
-			if value ~= "" and not value:find("[{}]") then
+			if value == "" then
+				table.insert(fragments, "{}")
+			elseif not value:find("[{}]") then
 				table.insert(fragments, "{" .. value .. "}")
 			end
 		end
@@ -5070,7 +5108,31 @@ local function extract_chat_finder_sticky_query(query)
 	return table.concat(fragments, " ")
 end
 
-local function format_chat_finder_initial_query(sticky_query)
+local function extract_note_finder_sticky_query(query)
+	if type(query) ~= "string" or query == "" then
+		return nil
+	end
+
+	local fragments = {}
+	for token in query:gmatch("%S+") do
+		if token:match("^%b{}$") then
+			local value = vim.trim(token:sub(2, -2))
+			if value == "" then
+				table.insert(fragments, "{}")
+			elseif not value:find("[{}]") then
+				table.insert(fragments, "{" .. value .. "}")
+			end
+		end
+	end
+
+	if #fragments == 0 then
+		return nil
+	end
+
+	return table.concat(fragments, " ")
+end
+
+local function format_finder_initial_query(sticky_query)
 	if type(sticky_query) ~= "string" or sticky_query == "" then
 		return nil
 	end
@@ -5094,7 +5156,7 @@ local function unique_positive_months(values)
 	return months
 end
 
-M._resolve_chat_finder_recency = function(recency_config, recency_index)
+local function resolve_finder_recency(recency_config, recency_index)
 	recency_config = recency_config or {}
 
 	local configured_months = {}
@@ -5149,42 +5211,130 @@ M._resolve_chat_finder_recency = function(recency_config, recency_index)
 	}
 end
 
-M._cycle_chat_finder_recency = function(recency_config, recency_index, direction)
-	local resolved = M._resolve_chat_finder_recency(recency_config, recency_index)
+local function cycle_finder_recency(recency_config, recency_index, direction)
+	local resolved = resolve_finder_recency(recency_config, recency_index)
 	local step = direction == "previous" and -1 or 1
 	local next_index = ((resolved.index - 1 + step) % #resolved.states) + 1
 	return next_index, resolved.states[next_index]
 end
 
-local function resolve_chat_finder_initial_index(items)
-	local initial_value = M._chat_finder.initial_value
+M._resolve_chat_finder_recency = resolve_finder_recency
+M._resolve_note_finder_recency = resolve_finder_recency
+M._cycle_chat_finder_recency = cycle_finder_recency
+M._cycle_note_finder_recency = cycle_finder_recency
+
+local function resolve_finder_initial_index(state, items, label)
+	local initial_value = state.initial_value
 	if initial_value then
 		for idx, item in ipairs(items) do
 			if item.value == initial_value then
 				M.logger.debug(string.format(
-					"ChatFinder trace: resolve initial by value matched idx=%s value=%s fallback_index=%s item_count=%s",
+					"%s trace: resolve initial by value matched idx=%s value=%s fallback_index=%s item_count=%s",
+					label,
 					tostring(idx),
 					initial_value,
-					tostring(M._chat_finder.initial_index),
+					tostring(state.initial_index),
 					tostring(#items)
 				))
 				return idx
 			end
 		end
 		M.logger.debug(string.format(
-			"ChatFinder trace: resolve initial by value missed value=%s fallback_index=%s item_count=%s",
+			"%s trace: resolve initial by value missed value=%s fallback_index=%s item_count=%s",
+			label,
 			initial_value,
-			tostring(M._chat_finder.initial_index),
+			tostring(state.initial_index),
 			tostring(#items)
 		))
 	end
 
 	M.logger.debug(string.format(
-		"ChatFinder trace: resolve initial by fallback index=%s item_count=%s",
-		tostring(M._chat_finder.initial_index),
+		"%s trace: resolve initial by fallback index=%s item_count=%s",
+		label,
+		tostring(state.initial_index),
 		tostring(#items)
 	))
-	return M._chat_finder.initial_index
+	return state.initial_index
+end
+
+local function infer_note_directory_cutoff_time(file_path, notes_root)
+	local expanded_root = vim.fn.resolve(vim.fn.fnamemodify(vim.fn.expand(notes_root), ":p")):gsub("/+$", "")
+	local absolute_path = vim.fn.resolve(vim.fn.fnamemodify(file_path, ":p")):gsub("/+$", "")
+	local relative = absolute_path
+	local prefix = expanded_root .. "/"
+	if absolute_path:sub(1, #prefix) == prefix then
+		relative = absolute_path:sub(#prefix + 1)
+	end
+
+	local parts = vim.split(relative, "/", { plain = true, trimempty = true })
+	local year = tonumber(parts[1] and parts[1]:match("^(%d%d%d%d)$"))
+	local month = tonumber(parts[2] and parts[2]:match("^(%d%d)$"))
+	local day = tonumber(vim.fn.fnamemodify(file_path, ":t"):match("^(%d%d)%-"))
+
+	if year and month and day then
+		return os.time({
+			year = year,
+			month = month,
+			day = day,
+			hour = 23,
+			min = 59,
+			sec = 59,
+		})
+	end
+
+	if year and month then
+		return os.time({
+			year = year,
+			month = month + 1,
+			day = 0,
+			hour = 23,
+			min = 59,
+			sec = 59,
+		})
+	end
+
+	if year then
+		return os.time({
+			year = year,
+			month = 12,
+			day = 31,
+			hour = 23,
+			min = 59,
+			sec = 59,
+		})
+	end
+
+	return nil
+end
+
+local function classify_note_finder_path(file_path, notes_root)
+	local expanded_root = vim.fn.resolve(vim.fn.fnamemodify(vim.fn.expand(notes_root), ":p")):gsub("/+$", "")
+	local absolute_path = vim.fn.resolve(vim.fn.fnamemodify(file_path, ":p")):gsub("/+$", "")
+	local relative = absolute_path
+	local prefix = expanded_root .. "/"
+	if absolute_path:sub(1, #prefix) == prefix then
+		relative = absolute_path:sub(#prefix + 1)
+	end
+
+	local parts = vim.split(relative, "/", { plain = true, trimempty = true })
+	local first_part = parts[1]
+	if not first_part or first_part == "templates" then
+		return {
+			is_template = first_part == "templates",
+			relative_path = relative,
+		}
+	end
+
+	local is_year = first_part:match("^%d%d%d%d$") ~= nil
+	local base_folder = nil
+	if not is_year then
+		base_folder = first_part
+	end
+	return {
+		is_template = false,
+		relative_path = relative,
+		base_folder = base_folder,
+	}
 end
 
 M._reopen_chat_finder = function(source_win, selection_index, selection_value)
@@ -5289,6 +5439,96 @@ M._prompt_chat_finder_delete_confirmation = function(item_value, selected_index,
 	end)
 end
 
+M._reopen_note_finder = function(source_win, selection_index, selection_value)
+	M.logger.debug(string.format(
+		"NoteFinder trace: schedule reopen source_win=%s selection_index=%s selection_value=%s",
+		tostring(source_win),
+		tostring(selection_index),
+		tostring(selection_value)
+	))
+	vim.defer_fn(function()
+		M._note_finder.opened = false
+		M._note_finder.source_win = source_win
+		M._note_finder.initial_index = selection_index
+		M._note_finder.initial_value = selection_value
+		M.logger.debug(string.format(
+			"NoteFinder trace: executing reopen source_win=%s initial_index=%s initial_value=%s",
+			tostring(source_win),
+			tostring(M._note_finder.initial_index),
+			tostring(M._note_finder.initial_value)
+		))
+		M.cmd.NoteFinder()
+	end, 100)
+end
+
+M._handle_note_finder_delete_response = function(input, item_value, selected_index, items_count, source_win, close_fn, context)
+	M.logger.debug(string.format(
+		"NoteFinder trace: delete response input=%s item=%s selected_index=%s items_count=%s source_win=%s",
+		tostring(input),
+		tostring(item_value),
+		tostring(selected_index),
+		tostring(items_count),
+		tostring(source_win)
+	))
+	if input and input:lower() == "y" then
+		M.helpers.delete_file(item_value)
+		if close_fn then
+			close_fn()
+		end
+		local next_index = math.min(selected_index, math.max(1, items_count - 1))
+		local next_value = nil
+		local items = context and context.note_finder_items or nil
+		if type(items) == "table" then
+			local next_item = items[selected_index + 1] or items[selected_index - 1]
+			next_value = next_item and next_item.value or nil
+		end
+		M._reopen_note_finder(source_win, next_index, next_value)
+		return
+	end
+
+	if context then
+		context.resume_after_external_ui()
+		vim.schedule(function()
+			if context.focus_prompt then
+				context.focus_prompt()
+			end
+		end)
+		vim.defer_fn(function()
+			if context.focus_prompt then
+				context.focus_prompt()
+			end
+		end, 10)
+		return
+	end
+
+	M._reopen_note_finder(source_win, selected_index, item_value)
+end
+
+M._prompt_note_finder_delete_confirmation = function(item_value, selected_index, items_count, source_win, close_fn, context)
+	M.logger.debug(string.format(
+		"NoteFinder trace: prompt delete item=%s selected_index=%s items_count=%s source_win=%s",
+		tostring(item_value),
+		tostring(selected_index),
+		tostring(items_count),
+		tostring(source_win)
+	))
+	if source_win and vim.api.nvim_win_is_valid(source_win) then
+		vim.api.nvim_set_current_win(source_win)
+	end
+
+	vim.ui.input({ prompt = "Delete " .. item_value .. "? [y/N] " }, function(input)
+		M._handle_note_finder_delete_response(
+			input,
+			item_value,
+			selected_index,
+			items_count,
+			source_win,
+			close_fn,
+			context
+		)
+	end)
+end
+
 M.cmd.ChatFinder = function(_options)
 	if M._chat_finder.opened then
 		M.logger.warning("Chat finder is already open")
@@ -5350,6 +5590,9 @@ M.cmd.ChatFinder = function(_options)
 		for _, item in ipairs(files) do
 			local file = item.path
 			local root = item.root
+			local resolved_root_dir = vim.fn.resolve(vim.fn.fnamemodify(vim.fn.expand(root.dir), ":p"))
+			local resolved_primary_dir = vim.fn.resolve(vim.fn.fnamemodify(vim.fn.expand(M.config.chat_dir), ":p"))
+			local is_primary_root = root.is_primary or resolved_root_dir == resolved_primary_dir
 			-- Get file info
 			local stat = vim.loop.fs_stat(file)
 			if not stat then
@@ -5426,8 +5669,8 @@ M.cmd.ChatFinder = function(_options)
 			local tags_searchable = #tags > 0 and (" [" .. table.concat(tags, "] [") .. "]") or ""
 
 			local display_filename = vim.fn.fnamemodify(file, ":t")
-			local root_prefix = root.is_primary and "" or string.format("{%s} ", root.label)
-			local root_searchable = root.is_primary and "" or (" {" .. root.label .. "}")
+			local root_prefix = is_primary_root and "" or string.format("{%s} ", root.label)
+			local root_searchable = is_primary_root and " {}" or (" {" .. root.label .. "}")
 			table.insert(entries, {
 				value = file,
 				display = display_filename .. " - " .. root_prefix .. tags_display .. topic .. " [" .. date_str .. "]",
@@ -5481,8 +5724,8 @@ M.cmd.ChatFinder = function(_options)
 		M.float_picker.open({
 			title = prompt_title,
 			items = items,
-			initial_index = resolve_chat_finder_initial_index(items),
-			initial_query = format_chat_finder_initial_query(M._chat_finder.sticky_query),
+			initial_index = resolve_finder_initial_index(M._chat_finder, items, "ChatFinder"),
+			initial_query = format_finder_initial_query(M._chat_finder.sticky_query),
 			on_query_change = function(query)
 				M._chat_finder.sticky_query = extract_chat_finder_sticky_query(query)
 			end,
@@ -5685,6 +5928,202 @@ M.cmd.ChatFinder = function(_options)
 	M._chat_finder.initial_index = nil
 	M._chat_finder.initial_value = nil
 	M._chat_finder.opened = false
+end
+
+M.cmd.NoteFinder = function(_options)
+	if M._note_finder.opened then
+		M.logger.warning("Note finder is already open")
+		return
+	end
+	M._note_finder.opened = true
+
+	local note_finder_mappings = M.config.note_finder_mappings or {}
+	local delete_shortcut = note_finder_mappings.delete or M.config.chat_shortcut_delete
+	local next_recency_shortcut = note_finder_mappings.next_recency or { shortcut = "<C-a>" }
+	local previous_recency_shortcut = note_finder_mappings.previous_recency or { shortcut = "<C-s>" }
+	local keybindings_shortcut = M.config.global_shortcut_keybindings or { shortcut = "<C-g>?" }
+	local notes_root = vim.fn.expand(M.config.notes_dir)
+	local files = M.helpers.find_files(notes_root, "*.md", true)
+	local entries = {}
+	local recency_config = M.config.note_finder_recency or {
+		filter_by_default = true,
+		months = 3,
+	}
+	local resolved_recency = M._resolve_note_finder_recency(recency_config, M._note_finder.recency_index)
+	M._note_finder.recency_index = resolved_recency.index
+	M._note_finder.show_all = resolved_recency.current.is_all
+
+	local cutoff_time = nil
+	if resolved_recency.current.months then
+		cutoff_time = os.time() - (resolved_recency.current.months * 30 * 24 * 60 * 60)
+	end
+
+	for _, file in ipairs(files) do
+		local classification = classify_note_finder_path(file, notes_root)
+		if not classification.is_template then
+			local stat = vim.loop.fs_stat(file)
+			if stat then
+				local inferred_time = infer_note_directory_cutoff_time(file, notes_root)
+				local modified_time = stat.mtime.sec
+				local sort_time = inferred_time or modified_time
+				local range_time = inferred_time or modified_time
+				local is_special_folder = classification.base_folder ~= nil
+				if is_special_folder or not cutoff_time or range_time >= cutoff_time then
+					local display
+					local search_text
+					if is_special_folder then
+						local file_name = vim.fn.fnamemodify(file, ":t")
+						display = string.format("{%s} %s [%s]", classification.base_folder, file_name, os.date("%Y-%m-%d", sort_time))
+						search_text = string.format("{%s} %s %s", classification.base_folder, file_name, classification.relative_path:gsub("%-", " "))
+					else
+						display = classification.relative_path .. " [" .. os.date("%Y-%m-%d", sort_time) .. "]"
+						search_text = "{} " .. classification.relative_path:gsub("%-", " ")
+					end
+					table.insert(entries, {
+						value = file,
+						display = display,
+						ordinal = search_text,
+						timestamp = sort_time,
+						modified_time = modified_time,
+						base_folder = classification.base_folder,
+					})
+				end
+			end
+		end
+	end
+
+	table.sort(entries, function(a, b)
+		if a.timestamp == b.timestamp then
+			if a.modified_time ~= b.modified_time then
+				return a.modified_time > b.modified_time
+			end
+			return a.value < b.value
+		end
+		return a.timestamp > b.timestamp
+	end)
+
+	local items = {}
+	for _, entry in ipairs(entries) do
+		table.insert(items, {
+			display = entry.display,
+			search_text = entry.ordinal,
+			value = entry.value,
+		})
+	end
+
+	local source_win = M._note_finder.source_win
+	if not (source_win and vim.api.nvim_win_is_valid(source_win)) then
+		source_win = vim.api.nvim_get_current_win()
+		M._note_finder.source_win = source_win
+	end
+
+	local prompt_title = string.format(
+		"Note Files (%s  %s/%s: cycle)",
+		resolved_recency.current.label,
+		next_recency_shortcut.shortcut,
+		previous_recency_shortcut.shortcut
+	)
+
+	M.float_picker.open({
+		title = prompt_title,
+		items = items,
+		initial_index = resolve_finder_initial_index(M._note_finder, items, "NoteFinder"),
+		initial_query = format_finder_initial_query(M._note_finder.sticky_query),
+		anchor = "bottom",
+		on_query_change = function(query)
+			M._note_finder.sticky_query = extract_note_finder_sticky_query(query)
+		end,
+		on_select = function(item)
+			if source_win and vim.api.nvim_win_is_valid(source_win) then
+				vim.api.nvim_set_current_win(source_win)
+			end
+			M.open_buf(item.value, true)
+		end,
+		on_cancel = function()
+			M._note_finder.opened = false
+			M._note_finder.initial_index = nil
+			M._note_finder.initial_value = nil
+		end,
+		mappings = {
+			{
+				key = delete_shortcut.shortcut,
+				fn = function(item, close_fn, context)
+					if not item then
+						return
+					end
+					local selected_index = 1
+					for idx, picker_item in ipairs(items) do
+						if picker_item.value == item.value then
+							selected_index = idx
+							break
+						end
+					end
+
+					context.skip_focus_restore = true
+					context.note_finder_items = items
+					context.suspend_for_external_ui()
+					vim.defer_fn(function()
+						M._prompt_note_finder_delete_confirmation(
+							item.value,
+							selected_index,
+							#items,
+							source_win,
+							close_fn,
+							context
+						)
+					end, 20)
+				end,
+			},
+			{
+				key = next_recency_shortcut.shortcut,
+				fn = function(_, close_fn)
+					local next_index, next_state = M._cycle_note_finder_recency(
+						recency_config,
+						M._note_finder.recency_index,
+						"previous"
+					)
+					M._note_finder.recency_index = next_index
+					M._note_finder.show_all = next_state.is_all
+					close_fn()
+					vim.defer_fn(function()
+						M._note_finder.opened = false
+						M._note_finder.source_win = source_win
+						M.cmd.NoteFinder()
+					end, 100)
+				end,
+			},
+			{
+				key = previous_recency_shortcut.shortcut,
+				fn = function(_, close_fn)
+					local next_index, next_state = M._cycle_note_finder_recency(
+						recency_config,
+						M._note_finder.recency_index,
+						"next"
+					)
+					M._note_finder.recency_index = next_index
+					M._note_finder.show_all = next_state.is_all
+					close_fn()
+					vim.defer_fn(function()
+						M._note_finder.opened = false
+						M._note_finder.source_win = source_win
+						M.cmd.NoteFinder()
+					end, 100)
+				end,
+			},
+			{
+				key = keybindings_shortcut.shortcut,
+				fn = function(_, _)
+					vim.schedule(function()
+						M.cmd.KeyBindings()
+					end)
+				end,
+			},
+		},
+	})
+
+	M._note_finder.initial_index = nil
+	M._note_finder.initial_value = nil
+	M._note_finder.opened = false
 end
 
 M.cmd.ChatDirs = function(_params)

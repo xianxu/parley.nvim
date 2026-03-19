@@ -2,7 +2,7 @@
 
 ## Overview
 Parley uses a single custom floating-window picker (`float_picker`) for all selection UIs.
-No external dependencies (Telescope or similar) are required.
+No external picker dependency is required.
 Pickers may seed the prompt via `initial_query`; that text is rendered immediately and used for the first filter pass before the user types.
 
 ## Layout
@@ -72,7 +72,9 @@ The picker closes if focus moves to any window that is neither the results nor t
 - Finder search is ranked against a dedicated search string built from the chat filename, tags, and topic instead of the fully formatted display row.
 - Chats from extra chat roots show a compact `{label}` marker between the filename and the tag/title portion so users can distinguish them from primary-root chats at a glance.
 - Finder search text MUST include the extra-root label so users can filter by root name.
+- Bare `{}` in Chat Finder MUST match only chats from the primary chat root.
 - When the prompt contains sticky filter fragments such as `[workspace] [client-a]` or `{family}`, Chat Finder preserves those fragments between invocations and internal reopen flows (delete/move/recency cycling). Reopened prompts seed the preserved fragments with a trailing space so users can immediately continue with free-text filtering. Non-fragment free-text terms are not preserved.
+- Bare `{}` MUST be preserved by the same sticky-filter mechanism.
 - Bracketed filters MUST match only tag entities, and braced filters MUST match only root-label entities; they MUST NOT fall back to plain word matching elsewhere in the row text.
 - **Extra mappings** (insert mode in prompt):
     - Next recency key (`<C-a>` by default): Move left through configured recency windows toward smaller cutoffs.
@@ -84,6 +86,24 @@ The picker closes if focus moves to any window that is neither the results nor t
       The move picker opens after ChatFinder closes. Destination rows show primary/extra status, label, and directory path. If it is cancelled, ChatFinder reopens on the original chat.
     - `<C-g>?`: Open Parley key-bindings help.
 - Files are sorted by modification date, newest first.
+
+## Note Finder
+- `:ParleyNoteFinder` (`<C-n>f`): Browse and open note files under `notes_dir`.
+- Note Finder uses the same floating-picker mechanics as Chat Finder, including bottom anchoring and picker-local control-key mappings.
+- The scan MUST be recursive and MUST exclude files under `notes_dir/templates/`.
+- **Recency Filter**: By default shows files from `note_finder_recency.months`, and can cycle through additional `note_finder_recency.presets` before reaching `All`.
+- For notes in dated directory trees, recency filtering MUST use directory-derived date ranges as a coarse inclusion heuristic rather than relying only on filesystem mtime.
+- Notes under first-level non-date, non-template folders MUST bypass the recency filter and stay visible in all note-finder windows.
+- Those special-folder notes MUST display a compact `{base_folder}` prefix ahead of the filename, and Note Finder search text MUST include the same braced folder label.
+- Bare `{}` in Note Finder MUST match only notes from the dated Year/Month/Week tree.
+- When the prompt contains sticky folder fragments such as `{K}`, Note Finder preserves those fragments between invocations and internal reopen flows. Non-fragment free-text terms are not preserved.
+- Bare `{}` MUST be preserved by the same sticky-filter mechanism.
+- Braced Note Finder filters MUST match only these special first-level folder labels.
+- **Extra mappings**:
+  - Next recency key (`<C-a>` by default): Move left through configured recency windows toward smaller cutoffs.
+  - Previous recency key (`<C-s>` by default): Move right through configured recency windows toward larger cutoffs and `All`.
+  - Delete key (`<C-d>` by default): Delete the selected note after confirmation, then reopen Note Finder on the surviving item that stays in the same visual row when possible.
+  - `<C-g>?`: Open Parley key-bindings help.
 
 ## Chat Roots Picker
 - `:ParleyChatDirs` (`<C-g>h`): Opens a picker showing the configured chat roots in order.

@@ -1,10 +1,10 @@
 -- Unit tests for ChatFinder pure logic
 --
--- ChatFinder is a large UI feature (~300 lines) with complex Telescope integration.
+-- ChatFinder is a large UI feature (~300 lines) built on the custom float picker.
 -- These tests focus on the testable pure logic: timestamp parsing, filtering, sorting.
 --
--- Note: Full UI integration (Telescope picker, keymappings, buffer manipulation)
--- is not tested here as it requires a full Neovim instance with Telescope installed.
+-- Note: Full UI integration (floating picker, keymappings, buffer manipulation)
+-- is not tested here; these specs stay focused on logic that can be verified headlessly.
 
 local M = require("parley")
 
@@ -739,6 +739,24 @@ describe("ChatFinder logic", function()
             assert.matches("secondary", captured.items[1].search_text)
         end)
 
+        it("includes empty braces in primary-root search text", function()
+            local captured = nil
+            M.float_picker.open = function(opts)
+                captured = opts
+            end
+
+            local primary_path = tmpdir .. "/2026-02-04-10-00-00-primary.md"
+            local primary_file = io.open(primary_path, "w")
+            primary_file:write("# topic: Primary\n")
+            primary_file:close()
+
+            M.cmd.ChatFinder()
+
+            assert.is_truthy(captured)
+            assert.equals(primary_path, captured.items[1].value)
+            assert.matches("%{%}", captured.items[1].search_text)
+        end)
+
         it("passes preserved tag filters back into the picker prompt", function()
             local captured = nil
             M.float_picker.open = function(opts)
@@ -803,6 +821,24 @@ describe("ChatFinder logic", function()
             assert.is_truthy(captured)
             captured.on_query_change("{secondary}")
             assert.equals("{secondary}", M._chat_finder.sticky_query)
+        end)
+
+        it("preserves empty brace filters for the primary root", function()
+            local captured = nil
+            M.float_picker.open = function(opts)
+                captured = opts
+            end
+
+            local filepath = tmpdir .. "/2026-02-04-10-00-00-primary.md"
+            local file = io.open(filepath, "w")
+            file:write("# topic: Primary\n")
+            file:close()
+
+            M.cmd.ChatFinder()
+
+            assert.is_truthy(captured)
+            captured.on_query_change("{} primary")
+            assert.equals("{}", M._chat_finder.sticky_query)
         end)
 
         it("falls back to the newer visual neighbor when deleting the oldest item", function()

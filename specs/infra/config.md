@@ -36,6 +36,13 @@ Notable replace-on-set behavior:
 - `chat_finder_mappings.move`: Picker-local shortcut (default `<C-r>`) for moving the selected chat to another registered chat root.
 - `chat_finder_mappings.next_recency` and `chat_finder_mappings.previous_recency`: Picker-local shortcuts for moving left toward smaller cutoffs or right toward larger cutoffs and `All`.
 
+### Note Finder Recency
+- `global_shortcut_note_finder`: Global shortcut for `:ParleyNoteFinder` (default `<C-n>f` in normal and insert modes).
+- `note_finder_recency.months`: Default filtered month window when Note Finder opens in recent mode.
+- `note_finder_recency.presets`: Additional month cutoffs that Note Finder cycles through before `All`.
+- `note_finder_mappings.delete`: Picker-local shortcut (default `<C-d>`) for deleting the selected note.
+- `note_finder_mappings.next_recency` and `note_finder_mappings.previous_recency`: Picker-local shortcuts for moving left toward smaller cutoffs or right toward larger cutoffs and `All`.
+
 ### Provider-Specific Keys
 - `providers.cliproxyapi.web_search_strategy`:
   - `none` (default), `openai_search_model`, `openai_tools_route`, or `anthropic_tools_route`.

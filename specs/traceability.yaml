@@ -129,18 +129,25 @@ specs:
 
   notes/structure:
     code:
-      - lua/parley/tasker.lua
+      - lua/parley/init.lua
     tests:
       - tests/unit/get_week_number_spec.lua
-      - tests/unit/tasker_unit_spec.lua
+      - tests/unit/note_finder_logic_spec.lua
+
+  notes/finder:
+    code:
+      - lua/parley/init.lua
+      - lua/parley/config.lua
+      - lua/parley/float_picker.lua
+    tests:
+      - tests/unit/note_finder_logic_spec.lua
+      - tests/unit/keybindings_spec.lua
 
   notes/templates:
     code:
-      - lua/parley/tasker.lua
-      - lua/parley/helper.lua
+      - lua/parley/init.lua
     tests:
-      - tests/unit/tasker_unit_spec.lua
-      - tests/integration/tasker_run_spec.lua
+      - tests/unit/note_finder_logic_spec.lua
 
   providers/agents:
     code:
@@ -236,6 +243,7 @@ specs:
       - tests/unit/float_picker_spec.lua
       - tests/unit/picker_items_spec.lua
       - tests/unit/chat_finder_logic_spec.lua
+      - tests/unit/note_finder_logic_spec.lua
       - tests/unit/pure_functions_spec.lua
 
   ui/keybindings:

@@ -75,7 +75,7 @@ local function tokenize_query(query)
             normalized = token:sub(2, -2)
             kind = "root"
         end
-        if normalized ~= "" then
+        if normalized ~= "" or (kind == "root" and token == "{}") then
             table.insert(tokens, {
                 kind = kind,
                 text = normalized,
@@ -91,7 +91,7 @@ local function tokenize_haystack(haystack)
     local wrapped_search_from = 1
 
     while wrapped_search_from <= #text do
-        local start_idx, end_idx = text:find("[%[%{][^%]%}]+[%]%}]", wrapped_search_from)
+        local start_idx, end_idx = text:find("[%[%{][^%]%}]*[%]%}]", wrapped_search_from)
         if not start_idx then
             break
         end
@@ -353,6 +353,20 @@ local function best_match_for_token(query_token, haystack)
     local lowered_haystack = (haystack or ""):lower()
     local haystack_tokens = tokenize_haystack(lowered_haystack)
     local best_match = nil
+
+    if query_token.kind == "root" and query_token.text == "" then
+        for _, token_info in ipairs(haystack_tokens) do
+            if token_info.kind == "root" and token_info.text == "" then
+                return {
+                    approximate = false,
+                    edit_positions = {},
+                    positions = {},
+                    score = 500,
+                }
+            end
+        end
+        return nil
+    end
 
     local function consider(candidate)
         if not candidate or candidate.score == nil then
