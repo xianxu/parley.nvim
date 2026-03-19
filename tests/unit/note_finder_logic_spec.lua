@@ -134,6 +134,11 @@ describe("NoteFinder logic", function()
         assert.is_true(vim.tbl_contains(values, nested_project_note))
         assert.is_false(vim.tbl_contains(values, old_note))
         assert.is_false(vim.tbl_contains(values, template_note))
+        for _, item in ipairs(captured.items) do
+            if item.value == current_month_note then
+                assert.matches("%{%}", item.search_text)
+            end
+        end
     end)
 
     it("always includes special first-level folders and labels them in display/search text", function()
@@ -238,6 +243,26 @@ describe("NoteFinder logic", function()
 
         captured.on_query_change("evergreen")
         assert.is_nil(M._note_finder.sticky_query)
+    end)
+
+    it("preserves empty brace filters for dated note trees", function()
+        local now = os.date("*t")
+        local dated_note = string.format("%s/%04d/%02d/W01/05-dated.md", notes_dir, now.year, now.month)
+        write_file(dated_note, { "# Dated" })
+
+        local captured = nil
+        M.float_picker.open = function(opts)
+            captured = opts
+        end
+
+        M.cmd.NoteFinder()
+
+        assert.is_truthy(captured)
+        captured.on_query_change("{} dated")
+        assert.equals("{}", M._note_finder.sticky_query)
+
+        M.cmd.NoteFinder()
+        assert.equals("{} ", captured.initial_query)
     end)
 
     it("reopens note finder on cancelled delete and keeps the moved visual row on confirm", function()

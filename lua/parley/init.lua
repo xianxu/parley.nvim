@@ -5093,7 +5093,9 @@ local function extract_chat_finder_sticky_query(query)
 			end
 		elseif token:match("^%b{}$") then
 			local value = vim.trim(token:sub(2, -2))
-			if value ~= "" and not value:find("[{}]") then
+			if value == "" then
+				table.insert(fragments, "{}")
+			elseif not value:find("[{}]") then
 				table.insert(fragments, "{" .. value .. "}")
 			end
 		end
@@ -5115,7 +5117,9 @@ local function extract_note_finder_sticky_query(query)
 	for token in query:gmatch("%S+") do
 		if token:match("^%b{}$") then
 			local value = vim.trim(token:sub(2, -2))
-			if value ~= "" and not value:find("[{}]") then
+			if value == "" then
+				table.insert(fragments, "{}")
+			elseif not value:find("[{}]") then
 				table.insert(fragments, "{" .. value .. "}")
 			end
 		end
@@ -5586,6 +5590,9 @@ M.cmd.ChatFinder = function(_options)
 		for _, item in ipairs(files) do
 			local file = item.path
 			local root = item.root
+			local resolved_root_dir = vim.fn.resolve(vim.fn.fnamemodify(vim.fn.expand(root.dir), ":p"))
+			local resolved_primary_dir = vim.fn.resolve(vim.fn.fnamemodify(vim.fn.expand(M.config.chat_dir), ":p"))
+			local is_primary_root = root.is_primary or resolved_root_dir == resolved_primary_dir
 			-- Get file info
 			local stat = vim.loop.fs_stat(file)
 			if not stat then
@@ -5662,8 +5669,8 @@ M.cmd.ChatFinder = function(_options)
 			local tags_searchable = #tags > 0 and (" [" .. table.concat(tags, "] [") .. "]") or ""
 
 			local display_filename = vim.fn.fnamemodify(file, ":t")
-			local root_prefix = root.is_primary and "" or string.format("{%s} ", root.label)
-			local root_searchable = root.is_primary and "" or (" {" .. root.label .. "}")
+			local root_prefix = is_primary_root and "" or string.format("{%s} ", root.label)
+			local root_searchable = is_primary_root and " {}" or (" {" .. root.label .. "}")
 			table.insert(entries, {
 				value = file,
 				display = display_filename .. " - " .. root_prefix .. tags_display .. topic .. " [" .. date_str .. "]",
@@ -5970,7 +5977,7 @@ M.cmd.NoteFinder = function(_options)
 						search_text = string.format("{%s} %s %s", classification.base_folder, file_name, classification.relative_path:gsub("%-", " "))
 					else
 						display = classification.relative_path .. " [" .. os.date("%Y-%m-%d", sort_time) .. "]"
-						search_text = classification.relative_path:gsub("%-", " ")
+						search_text = "{} " .. classification.relative_path:gsub("%-", " ")
 					end
 					table.insert(entries, {
 						value = file,

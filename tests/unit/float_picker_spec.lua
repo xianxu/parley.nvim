@@ -674,6 +674,13 @@ describe("float_picker", function()
             assert.is_not_nil(score)
             assert.is_nil(float_picker._fuzzy_score("{family}", "family release notes"))
         end)
+
+        it("matches empty braced query tokens only against empty braced haystack labels", function()
+            local score = float_picker._fuzzy_score("{}", "{} release notes")
+            assert.is_not_nil(score)
+            assert.is_nil(float_picker._fuzzy_score("{}", "{family} release notes"))
+            assert.is_nil(float_picker._fuzzy_score("{}", "release notes"))
+        end)
     end)
 
     describe("_fuzzy_match_details", function()

@@ -22,6 +22,7 @@ Parley provides a note finder for browsing and opening notes stored under `notes
 ## Folder Labels
 - Notes stored under special first-level folders MUST display with a braced folder prefix, for example `{K} evergreen-note.md`.
 - Note Finder search text MUST include the braced folder label so users can filter by `{base_folder}`.
+- Bare `{}` MUST filter only notes from the dated Year/Month/Week tree.
 - Braced Note Finder filters MUST target only these special first-level folder labels; they MUST NOT fall back to plain word matching elsewhere in the row text.
 - When the prompt contains braced folder filters such as `{K}`, Note Finder MUST preserve those fragments between invocations and internal reopen flows. Reopened prompts seed the preserved fragments with a trailing space so users can immediately continue with free-text filtering.
 
