@@ -3486,10 +3486,17 @@ M._note_finder = {
 }
 
 local function try_create_top_level_note(subject, current_date, template_content)
+	if subject:match("^%{%}%s+") then
+		return nil, "Bare {} is reserved for Note Finder filters and cannot be used during note creation"
+	end
+
 	local folder, rest = subject:match("^%{([^{}%s/]+)%}%s+(.+)$")
 
 	if not folder or not rest then
-		return nil
+		return nil, nil
+	end
+	if rest:match("^%b{}%s+") then
+		return nil, "Only a single leading {dir} segment is supported during note creation"
 	end
 
 	local target_dir = M.config.notes_dir .. "/" .. folder
@@ -3518,7 +3525,11 @@ M.new_note = function(subject)
 	-- Parse date from subject if provided in one of the formats:
 	-- "YYYY-MM-DD subject" or "MM-DD subject" or "DD subject"
 	do
-		local top_level_note = try_create_top_level_note(subject, current_date)
+		local top_level_note, top_level_note_err = try_create_top_level_note(subject, current_date)
+		if top_level_note_err then
+			vim.notify(top_level_note_err, vim.log.levels.WARN)
+			return nil
+		end
 		if top_level_note then
 			return top_level_note
 		end
@@ -3601,7 +3612,11 @@ M.new_note_from_template = function(subject, template_content)
 
 	-- Parse date from subject if provided in one of the formats (same logic as new_note)
 	do
-		local top_level_note = try_create_top_level_note(subject, current_date, template_content)
+		local top_level_note, top_level_note_err = try_create_top_level_note(subject, current_date, template_content)
+		if top_level_note_err then
+			vim.notify(top_level_note_err, vim.log.levels.WARN)
+			return nil
+		end
 		if top_level_note then
 			return top_level_note
 		end

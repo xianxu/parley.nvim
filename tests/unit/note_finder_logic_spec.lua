@@ -11,6 +11,7 @@ describe("NoteFinder logic", function()
     local original_delete_file
     local original_open_buf
     local original_create_note_file
+    local original_notify
 
     local function write_file(path, lines)
         vim.fn.mkdir(vim.fn.fnamemodify(path, ":h"), "p")
@@ -30,6 +31,7 @@ describe("NoteFinder logic", function()
         original_delete_file = M.helpers.delete_file
         original_open_buf = M.open_buf
         original_create_note_file = M._create_note_file
+        original_notify = vim.notify
 
         notes_dir = "/tmp/parley-test-notefinder-" .. string.format("%x", math.random(0, 0xFFFFFF))
         vim.fn.mkdir(notes_dir, "p")
@@ -72,6 +74,7 @@ describe("NoteFinder logic", function()
         M.helpers.delete_file = original_delete_file
         M.open_buf = original_open_buf
         M._create_note_file = original_create_note_file
+        vim.notify = original_notify
     end)
 
     it("resolves and cycles note recency presets", function()
@@ -330,6 +333,46 @@ describe("NoteFinder logic", function()
         }, captured.metadata)
     end)
 
+    it("rejects bare brace filters during direct note creation", function()
+        local created = false
+        local notify_calls = {}
+
+        M._create_note_file = function()
+            created = true
+        end
+        vim.notify = function(msg, level)
+            table.insert(notify_calls, { msg = msg, level = level })
+        end
+
+        local buf = M.new_note("{} test")
+
+        assert.is_nil(buf)
+        assert.is_false(created)
+        assert.equals(1, #notify_calls)
+        assert.matches("Bare %{%} is reserved for Note Finder filters", notify_calls[1].msg)
+        assert.equals(vim.log.levels.WARN, notify_calls[1].level)
+    end)
+
+    it("rejects repeated leading braced segments during direct note creation", function()
+        local created = false
+        local notify_calls = {}
+
+        M._create_note_file = function()
+            created = true
+        end
+        vim.notify = function(msg, level)
+            table.insert(notify_calls, { msg = msg, level = level })
+        end
+
+        local buf = M.new_note("{K} {another} love")
+
+        assert.is_nil(buf)
+        assert.is_false(created)
+        assert.equals(1, #notify_calls)
+        assert.matches("Only a single leading %{%w+%} segment is supported", notify_calls[1].msg)
+        assert.equals(vim.log.levels.WARN, notify_calls[1].level)
+    end)
+
     it("creates braced top-level notes from templates directly under notes_dir", function()
         local current_date = os.date("*t")
         local captured = nil
@@ -355,6 +398,46 @@ describe("NoteFinder logic", function()
             { "Date", string.format("%04d-%02d-%02d", current_date.year, current_date.month, current_date.day) },
         }, captured.metadata)
         assert.equals(1, vim.fn.isdirectory(notes_dir .. "/K"))
+    end)
+
+    it("rejects bare brace filters during template note creation", function()
+        local created = false
+        local notify_calls = {}
+
+        M._create_note_file = function()
+            created = true
+        end
+        vim.notify = function(msg, level)
+            table.insert(notify_calls, { msg = msg, level = level })
+        end
+
+        local buf = M.new_note_from_template("{} test", { "# {{title}}" })
+
+        assert.is_nil(buf)
+        assert.is_false(created)
+        assert.equals(1, #notify_calls)
+        assert.matches("Bare %{%} is reserved for Note Finder filters", notify_calls[1].msg)
+        assert.equals(vim.log.levels.WARN, notify_calls[1].level)
+    end)
+
+    it("rejects repeated leading braced segments during template note creation", function()
+        local created = false
+        local notify_calls = {}
+
+        M._create_note_file = function()
+            created = true
+        end
+        vim.notify = function(msg, level)
+            table.insert(notify_calls, { msg = msg, level = level })
+        end
+
+        local buf = M.new_note_from_template("{K} {another} love", { "# {{title}}" })
+
+        assert.is_nil(buf)
+        assert.is_false(created)
+        assert.equals(1, #notify_calls)
+        assert.matches("Only a single leading %{%w+%} segment is supported", notify_calls[1].msg)
+        assert.equals(vim.log.levels.WARN, notify_calls[1].level)
     end)
 
     it("reopens note finder on cancelled delete and keeps the moved visual row on confirm", function()

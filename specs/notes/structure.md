@@ -17,6 +17,8 @@ Parley organizes notes within `notes_dir` by date (Year/Month/Week).
 - Plain subjects are always treated as normal note titles, even if the first word matches a first-level folder name under `notes_dir`.
 - Example: `K task-description` MUST create a dated note such as `notes/YYYY/MM/WNN/DD-K-task-description.md`.
 - Only the explicit braced top-level folder syntax from Note Finder labels may bypass the dated Year/Month/Week layout. A subject like `{K} some document title` MUST create `notes_dir/K/some-document-title.md`.
+- Bare `{}` MUST be rejected during note creation; it is reserved for Note Finder's dated-tree filter semantics and must not create a note.
+- Only one leading braced top-level folder segment is supported during note creation. Inputs such as `{K} {another} love` MUST be rejected.
 
 ## Navigation
 - `:ParleyNoteFinder` (`<C-n>f`): Opens a recursive note picker rooted at `notes_dir`.
