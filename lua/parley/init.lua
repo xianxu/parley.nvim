@@ -4156,20 +4156,20 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 		local spinner_frame_index = 1
 		local spinner_timer = nil
 		local spinner_active = M._state.web_search and true or false
+		local spinner_running = false
 		local initial_progress_text = ""
 		if spinner_active then
 			initial_progress_text = "🔎 " .. spinner_frames[spinner_frame_index] .. " " .. spinner_message
 		end
 
-			-- Write assistant prompt with extra newline; progress line starts at
-			-- response_line + 3 and may shift by raw_request_offset.
-			vim.api.nvim_buf_set_lines(
-				buf,
-				response_line,
-			response_line,
-			false,
-			{ "", agent_prefix .. agent_suffix, "", initial_progress_text }
-		)
+		local response_block_lines = { "", agent_prefix .. agent_suffix, "", initial_progress_text }
+		if spinner_active then
+			table.insert(response_block_lines, "")
+		end
+
+		-- Write assistant prompt with extra newline; progress line starts at
+		-- response_line + 3 and may shift by raw_request_offset.
+		vim.api.nvim_buf_set_lines(buf, response_line, response_line, false, response_block_lines)
 
 		M.logger.debug("messages to send: " .. vim.inspect(messages))
 
@@ -4210,13 +4210,16 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 		end
 
 		local progress_line = response_line + 3 + raw_request_offset
+		local response_start_line = spinner_active and (progress_line + 2) or progress_line
 
-		local function render_spinner_line()
+		local function set_progress_indicator_line(text)
 			if not spinner_active then
 				return
 			end
 			if vim.in_fast_event() then
-				vim.schedule(render_spinner_line)
+				vim.schedule(function()
+					set_progress_indicator_line(text)
+				end)
 				return
 			end
 			if not vim.api.nvim_buf_is_valid(buf) then
@@ -4226,32 +4229,57 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 			if existing == nil then
 				return
 			end
-			local text = "🔎 " .. spinner_frames[spinner_frame_index] .. " " .. spinner_message
-			vim.api.nvim_buf_set_lines(buf, progress_line, progress_line + 1, false, { text })
+			vim.api.nvim_buf_set_lines(buf, progress_line, progress_line + 1, false, { text or "" })
 		end
 
-		local function stop_spinner()
-			if not spinner_active then
-				return
-			end
-			spinner_active = false
-			stop_and_close_timer(spinner_timer)
-			spinner_timer = nil
-		end
-
-		local function clear_progress_indicator()
+		local function render_spinner_line()
 			if not spinner_active then
 				return
 			end
 			if vim.in_fast_event() then
-				vim.schedule(clear_progress_indicator)
+				vim.schedule(render_spinner_line)
+				return
+			end
+			local text = "🔎 " .. spinner_frames[spinner_frame_index] .. " " .. spinner_message
+			set_progress_indicator_line(text)
+		end
+
+		local function stop_spinner()
+			if not spinner_running then
+				return
+			end
+			spinner_running = false
+			stop_and_close_timer(spinner_timer)
+			spinner_timer = nil
+		end
+
+		local function clear_progress_indicator(qt)
+			if not spinner_active then
+				return
+			end
+			if vim.in_fast_event() then
+				vim.schedule(function()
+					clear_progress_indicator(qt)
+				end)
 				return
 			end
 			stop_spinner()
+			spinner_active = false
 			if vim.api.nvim_buf_is_valid(buf) then
-				local existing = vim.api.nvim_buf_get_lines(buf, progress_line, progress_line + 1, false)[1]
-				if existing ~= nil then
-					vim.api.nvim_buf_set_lines(buf, progress_line, progress_line + 1, false, { "" })
+				local line_count = vim.api.nvim_buf_line_count(buf)
+				local delete_end = math.min(progress_line + 2, line_count)
+				local existing = vim.api.nvim_buf_get_lines(buf, progress_line, delete_end, false)
+				if #existing > 0 then
+					local deleted_line_count = delete_end - progress_line
+					vim.api.nvim_buf_set_lines(buf, progress_line, delete_end, false, {})
+					if qt then
+						if type(qt.first_line) == "number" and qt.first_line >= progress_line then
+							qt.first_line = qt.first_line - deleted_line_count
+						end
+						if type(qt.last_line) == "number" and qt.last_line >= progress_line then
+							qt.last_line = qt.last_line - deleted_line_count
+						end
+					end
 				end
 			end
 		end
@@ -4260,13 +4288,14 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 			if not spinner_active then
 				return
 			end
+			spinner_running = true
 			render_spinner_line()
 			spinner_timer = vim.loop.new_timer()
 			spinner_timer:start(
 				90,
 				90,
 				vim.schedule_wrap(function()
-					if not spinner_active then
+					if not spinner_running then
 						return
 					end
 					spinner_frame_index = spinner_frame_index + 1
@@ -4280,24 +4309,24 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 
 		start_spinner()
 
-		local base_handler = M.dispatcher.create_handler(buf, win, progress_line, true, "", function()
+		local base_handler = M.dispatcher.create_handler(buf, win, response_start_line, true, "", function()
 			return is_follow_cursor_enabled(override_free_cursor)
 		end)
-			local first_content_seen = false
-			local function request_clear_progress_indicator()
-				if vim.in_fast_event() then
-					vim.schedule(clear_progress_indicator)
-					return
-				end
-				clear_progress_indicator()
+		local function request_clear_progress_indicator(qt)
+			if vim.in_fast_event() then
+				vim.schedule(function()
+					clear_progress_indicator(qt)
+				end)
+				return
 			end
-			local response_handler = function(qid, chunk)
-				if not first_content_seen and type(chunk) == "string" and chunk ~= "" then
-					first_content_seen = true
-					request_clear_progress_indicator()
-				end
-				base_handler(qid, chunk)
+			clear_progress_indicator(qt)
+		end
+		local response_handler = function(qid, chunk)
+			if type(chunk) == "string" and chunk ~= "" then
+				stop_spinner()
 			end
+			base_handler(qid, chunk)
+		end
 
 		-- call the model and write response
 		M.dispatcher.query(
@@ -4310,8 +4339,8 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 				if not qt then
 					return
 				end
+				request_clear_progress_indicator(qt)
 				local streamed_cursor_line = query_cursor_line(qt)
-					request_clear_progress_indicator()
 
 				-- Only add a new user prompt at the end if we're not in the middle of the document
 				M.logger.debug("exchange_idx: " .. tostring(exchange_idx) .. " and #parsed_chat: " .. tostring(#parsed_chat))
@@ -4325,7 +4354,7 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 						last_content_line,
 						last_content_line,
 						false,
-						{ "", "", M.config.chat_user_prefix, "" }
+						{ "", M.config.chat_user_prefix, "" }
 					)
 
 					-- delete whitespace lines at the end of the file
@@ -4427,7 +4456,6 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 				if not spinner_active then
 					return
 				end
-
 				local message = progress_event.message
 				local detail = progress_event.text
 				if type(detail) == "string" and detail ~= "" then

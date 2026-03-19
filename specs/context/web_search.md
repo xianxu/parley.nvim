@@ -47,4 +47,6 @@ Parley supports server-side web search for providers that offer it.
 - For unknown tool-like `content_block.type` values, the UI SHOULD still show a generic progress message using that type string.
 - OpenAI tool progress parsing SHOULD map unknown tool names to a generic `Running <tool>...` message.
 - For cliproxy OpenAI-route streams, progress parsing SHOULD reuse OpenAI progress parsing so reasoning/tooling cues are not dropped.
-- The in-buffer progress line MUST clear automatically once answer text starts streaming, or when the query exits without streamed text.
+- The in-buffer progress line MUST remain visible while the response is still streaming, even if answer text has already started.
+- If later tool-progress SSE arrives after answer text, the in-buffer progress line MUST continue updating until the response completes.
+- The in-buffer progress line MUST clear automatically when the query completes or exits.

@@ -250,6 +250,10 @@ describe("chat_respond: buffer state after completion", function()
                 buf = buf
             })
 
+            if handler then
+                handler(mock_qid, "Lua is a scripting language.")
+            end
+
             vim.schedule(function()
                 completion_callback(mock_qid)
                 completion_called = true
@@ -259,16 +263,22 @@ describe("chat_respond: buffer state after completion", function()
         parley.chat_respond({range = 0})
         vim.wait(200, function() return completion_called end, 10)
 
-        -- Read buffer back and check for new user prompt
         local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
         local has_new_prompt = false
+        local previous_prompt_index = nil
+        local next_prompt_index = nil
         for _, line in ipairs(lines) do
             if line:match("^💬:") then
                 -- Count how many user prompts we have
                 local count = 0
-                for _, l in ipairs(lines) do
+                for idx, l in ipairs(lines) do
                     if l:match("^💬:") then
                         count = count + 1
+                        if not previous_prompt_index then
+                            previous_prompt_index = idx
+                        else
+                            next_prompt_index = idx
+                        end
                     end
                 end
                 -- Should have original + new prompt = 2
@@ -278,6 +288,14 @@ describe("chat_respond: buffer state after completion", function()
         end
 
         assert.is_true(has_new_prompt, "New user prompt should be added after response")
+        assert.is_not_nil(previous_prompt_index)
+        assert.is_not_nil(next_prompt_index)
+        assert.equals("", lines[next_prompt_index - 1], "Expected a blank separator line before the next user prompt")
+        assert.equals(
+            "Lua is a scripting language.",
+            lines[next_prompt_index - 2],
+            "Expected the previous answer to end immediately before the blank separator line"
+        )
     end)
 
     it("keeps follow cursor on the last streamed answer line after completion", function()
@@ -315,7 +333,7 @@ describe("chat_respond: buffer state after completion", function()
         end
 
         parley.chat_respond({ range = 0 })
-        vim.wait(300, function()
+        vim.wait(700, function()
             return completion_called
         end, 10)
 
@@ -450,7 +468,7 @@ describe("chat_respond: buffer state after completion", function()
         assert.equals(2, user_prompt_count, "Should not append new user prompt in middle of document")
     end)
 
-    it("shows and clears web-search progress indicator while waiting for first tokens", function()
+    it("keeps web-search progress visible while response streams and clears it on completion", function()
         local chat_content = [[
 # topic: Test Topic
 - file: test.md
@@ -491,20 +509,140 @@ describe("chat_respond: buffer state after completion", function()
                 handler(mock_qid, "Release notes summary")
             end
 
-            vim.schedule(function()
-                completion_callback(mock_qid)
-                completion_called = true
-            end)
+            vim.defer_fn(function()
+                vim.schedule(function()
+                    completion_callback(mock_qid)
+                    completion_called = true
+                end)
+            end, 500)
         end
 
         parley.chat_respond({ range = 0 })
+
         vim.wait(300, function()
+            local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+            local has_progress_line = false
+            local has_answer_text = false
+            for _, line in ipairs(lines) do
+                if line:match("^🔎 %S+ ") then
+                    has_progress_line = true
+                end
+                if line:find("Release notes summary", 1, true) then
+                    has_answer_text = true
+                end
+            end
+            return has_progress_line and has_answer_text
+        end, 10)
+
+        local active_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+        local has_active_progress_line = false
+        local has_active_answer_text = false
+        for _, line in ipairs(active_lines) do
+            if line:match("^🔎 %S+ ") then
+                has_active_progress_line = true
+            end
+            if line:find("Release notes summary", 1, true) then
+                has_active_answer_text = true
+            end
+        end
+
+        vim.wait(700, function()
             return completion_called
         end, 10)
 
         parley._state.web_search = original_web_search
 
         assert.is_true(saw_initial_indicator, "Expected initial submitting progress indicator to be present")
+        assert.is_true(has_active_progress_line, "Progress indicator should remain visible while response text streams")
+        assert.is_true(has_active_answer_text, "Expected streamed answer text to be present before completion")
+        local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+        local has_progress_line = false
+        local has_answer_text = false
+        for _, line in ipairs(lines) do
+            if line:match("^🔎 %S+ ") then
+                has_progress_line = true
+            end
+            if line:find("Release notes summary", 1, true) then
+                has_answer_text = true
+            end
+        end
+        assert.is_false(has_progress_line, "Progress indicator should be cleared after response completes")
+        assert.is_true(has_answer_text, "Expected streamed answer text to be present")
+    end)
+
+    it("keeps late tool progress visible when it arrives after answer text", function()
+        local chat_content = [[
+# topic: Test Topic
+- file: test.md
+---
+
+💬: Find latest release notes.
+]]
+
+        vim.fn.writefile(vim.split(chat_content, "\n"), test_file)
+        vim.cmd("edit " .. test_file)
+        local buf = vim.api.nvim_get_current_buf()
+        vim.api.nvim_win_set_cursor(0, {6, 0})
+
+        local original_web_search = parley._state.web_search
+        parley._state.web_search = true
+
+        local completion_called = false
+        parley.dispatcher.query = function(buf_arg, provider, payload, handler, completion_callback, _callback, progress_callback)
+            local mock_qid = "qid_web_progress_late_tool"
+            parley.tasker.set_query(mock_qid, {
+                response = "Release notes summary",
+                buf = buf_arg
+            })
+
+            if handler then
+                handler(mock_qid, "Release notes summary")
+            end
+
+            vim.defer_fn(function()
+                vim.schedule(function()
+                    if progress_callback then
+                        progress_callback(mock_qid, {
+                            message = "Searching web...",
+                            text = "latest neovim release notes",
+                        })
+                    end
+                end)
+            end, 30)
+
+            vim.defer_fn(function()
+                vim.schedule(function()
+                    completion_callback(mock_qid)
+                    completion_called = true
+                end)
+            end, 500)
+        end
+
+        parley.chat_respond({ range = 0 })
+
+        local saw_late_progress_with_answer = vim.wait(300, function()
+            local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+            local has_progress_line = false
+            local has_answer_text = false
+            for _, line in ipairs(lines) do
+                if line:find("Searching web... latest neovim release notes", 1, true) then
+                    has_progress_line = true
+                end
+                if line:find("Release notes summary", 1, true) then
+                    has_answer_text = true
+                end
+            end
+            return has_progress_line and has_answer_text
+        end, 10)
+
+        vim.wait(700, function()
+            return completion_called
+        end, 10)
+
+        parley._state.web_search = original_web_search
+
+        assert.is_true(saw_late_progress_with_answer, "Late tool progress should remain visible even after answer text starts")
+
         local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
         local has_progress_line = false
         local has_answer_text = false
@@ -516,8 +654,8 @@ describe("chat_respond: buffer state after completion", function()
                 has_answer_text = true
             end
         end
-        assert.is_false(has_progress_line, "Progress indicator should be cleared after response starts")
-        assert.is_true(has_answer_text, "Expected streamed answer text to be present")
+        assert.is_false(has_progress_line, "Late tool progress indicator should clear on completion")
+        assert.is_true(has_answer_text, "Expected streamed answer text to remain after completion")
     end)
 
     it("animates spinner locally while waiting without SSE events", function()
