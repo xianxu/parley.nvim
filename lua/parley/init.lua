@@ -4118,8 +4118,8 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 				-- If question already has an answer, replace it
 				local answer = parsed_chat.exchanges[exchange_idx].answer
 
-				-- Delete the existing answer
-				vim.api.nvim_buf_set_lines(buf, answer.line_start - 1, answer.line_end, false, {})
+				-- Delete the existing answer, keeping one blank line as separator before next question
+				vim.api.nvim_buf_set_lines(buf, answer.line_start - 1, answer.line_end, false, { "" })
 
 				-- Set response line to insert at answer position
 				response_line = answer.line_start - 2
