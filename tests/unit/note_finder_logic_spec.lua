@@ -52,6 +52,7 @@ describe("NoteFinder logic", function()
             source_win = nil,
             initial_index = nil,
             initial_value = nil,
+            sticky_query = nil,
         }
     end)
 
@@ -135,6 +136,33 @@ describe("NoteFinder logic", function()
         assert.is_false(vim.tbl_contains(values, template_note))
     end)
 
+    it("always includes special first-level folders and labels them in display/search text", function()
+        local now = os.date("*t")
+        local regular_old_note = string.format("%s/%04d/01/W01/03-archive.md", notes_dir, now.year - 3)
+        local special_old_note = notes_dir .. "/K/evergreen-note.md"
+
+        write_file(regular_old_note, { "# Archive" })
+        write_file(special_old_note, { "# Evergreen" })
+
+        local old_mtime = os.time() - (5 * 365 * 24 * 60 * 60)
+        vim.loop.fs_utime(regular_old_note, old_mtime, old_mtime)
+        vim.loop.fs_utime(special_old_note, old_mtime, old_mtime)
+
+        local captured = nil
+        M.float_picker.open = function(opts)
+            captured = opts
+        end
+
+        M.cmd.NoteFinder()
+
+        assert.is_truthy(captured)
+        assert.equals(1, #captured.items)
+        assert.equals(special_old_note, captured.items[1].value)
+        assert.matches("^%{K%} evergreen%-note%.md", captured.items[1].display)
+        assert.matches("%{K%}", captured.items[1].search_text)
+        assert.matches("evergreen%-note%.md", captured.items[1].search_text)
+    end)
+
     it("restores selection by note path and opens the selected note", function()
         local now = os.date("*t")
         local alpha = string.format("%s/%04d/%02d/W01/02-alpha.md", notes_dir, now.year, now.month)
@@ -186,6 +214,30 @@ describe("NoteFinder logic", function()
         assert.is_truthy(captured)
         assert.equals(newer_name, captured.items[1].value)
         assert.equals(older_name, captured.items[2].value)
+    end)
+
+    it("preserves only brace folder filters across note finder invocations", function()
+        local special_note = notes_dir .. "/K/evergreen-note.md"
+        write_file(special_note, { "# Evergreen" })
+
+        local captured = nil
+        M.float_picker.open = function(opts)
+            captured = opts
+        end
+
+        M.cmd.NoteFinder()
+
+        assert.is_truthy(captured)
+        assert.is_function(captured.on_query_change)
+
+        captured.on_query_change("{K} evergreen")
+        assert.equals("{K}", M._note_finder.sticky_query)
+
+        M.cmd.NoteFinder()
+        assert.equals("{K} ", captured.initial_query)
+
+        captured.on_query_change("evergreen")
+        assert.is_nil(M._note_finder.sticky_query)
     end)
 
     it("reopens note finder on cancelled delete and keeps the moved visual row on confirm", function()

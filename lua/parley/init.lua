@@ -3482,6 +3482,7 @@ M._note_finder = {
 	recency_index = nil,
 	initial_index = nil,
 	initial_value = nil,
+	sticky_query = nil,
 }
 
 -- Create a new note with given subject
@@ -5105,7 +5106,29 @@ local function extract_chat_finder_sticky_query(query)
 	return table.concat(fragments, " ")
 end
 
-local function format_chat_finder_initial_query(sticky_query)
+local function extract_note_finder_sticky_query(query)
+	if type(query) ~= "string" or query == "" then
+		return nil
+	end
+
+	local fragments = {}
+	for token in query:gmatch("%S+") do
+		if token:match("^%b{}$") then
+			local value = vim.trim(token:sub(2, -2))
+			if value ~= "" and not value:find("[{}]") then
+				table.insert(fragments, "{" .. value .. "}")
+			end
+		end
+	end
+
+	if #fragments == 0 then
+		return nil
+	end
+
+	return table.concat(fragments, " ")
+end
+
+local function format_finder_initial_query(sticky_query)
 	if type(sticky_query) ~= "string" or sticky_query == "" then
 		return nil
 	end
@@ -5231,8 +5254,8 @@ local function resolve_finder_initial_index(state, items, label)
 end
 
 local function infer_note_directory_cutoff_time(file_path, notes_root)
-	local expanded_root = vim.fn.expand(notes_root):gsub("/+$", "")
-	local absolute_path = vim.fn.fnamemodify(file_path, ":p"):gsub("/+$", "")
+	local expanded_root = vim.fn.resolve(vim.fn.fnamemodify(vim.fn.expand(notes_root), ":p")):gsub("/+$", "")
+	local absolute_path = vim.fn.resolve(vim.fn.fnamemodify(file_path, ":p")):gsub("/+$", "")
 	local relative = absolute_path
 	local prefix = expanded_root .. "/"
 	if absolute_path:sub(1, #prefix) == prefix then
@@ -5278,6 +5301,36 @@ local function infer_note_directory_cutoff_time(file_path, notes_root)
 	end
 
 	return nil
+end
+
+local function classify_note_finder_path(file_path, notes_root)
+	local expanded_root = vim.fn.resolve(vim.fn.fnamemodify(vim.fn.expand(notes_root), ":p")):gsub("/+$", "")
+	local absolute_path = vim.fn.resolve(vim.fn.fnamemodify(file_path, ":p")):gsub("/+$", "")
+	local relative = absolute_path
+	local prefix = expanded_root .. "/"
+	if absolute_path:sub(1, #prefix) == prefix then
+		relative = absolute_path:sub(#prefix + 1)
+	end
+
+	local parts = vim.split(relative, "/", { plain = true, trimempty = true })
+	local first_part = parts[1]
+	if not first_part or first_part == "templates" then
+		return {
+			is_template = first_part == "templates",
+			relative_path = relative,
+		}
+	end
+
+	local is_year = first_part:match("^%d%d%d%d$") ~= nil
+	local base_folder = nil
+	if not is_year then
+		base_folder = first_part
+	end
+	return {
+		is_template = false,
+		relative_path = relative,
+		base_folder = base_folder,
+	}
 end
 
 M._reopen_chat_finder = function(source_win, selection_index, selection_value)
@@ -5665,7 +5718,7 @@ M.cmd.ChatFinder = function(_options)
 			title = prompt_title,
 			items = items,
 			initial_index = resolve_finder_initial_index(M._chat_finder, items, "ChatFinder"),
-			initial_query = format_chat_finder_initial_query(M._chat_finder.sticky_query),
+			initial_query = format_finder_initial_query(M._chat_finder.sticky_query),
 			on_query_change = function(query)
 				M._chat_finder.sticky_query = extract_chat_finder_sticky_query(query)
 			end,
@@ -5899,24 +5952,33 @@ M.cmd.NoteFinder = function(_options)
 	end
 
 	for _, file in ipairs(files) do
-		if file:sub(1, #(notes_root .. "/templates/")) ~= (notes_root .. "/templates/") then
+		local classification = classify_note_finder_path(file, notes_root)
+		if not classification.is_template then
 			local stat = vim.loop.fs_stat(file)
 			if stat then
 				local inferred_time = infer_note_directory_cutoff_time(file, notes_root)
 				local modified_time = stat.mtime.sec
 				local sort_time = inferred_time or modified_time
 				local range_time = inferred_time or modified_time
-				if not cutoff_time or range_time >= cutoff_time then
-					local relative_path = file
-					if file:sub(1, #notes_root + 1) == (notes_root .. "/") then
-						relative_path = file:sub(#notes_root + 2)
+				local is_special_folder = classification.base_folder ~= nil
+				if is_special_folder or not cutoff_time or range_time >= cutoff_time then
+					local display
+					local search_text
+					if is_special_folder then
+						local file_name = vim.fn.fnamemodify(file, ":t")
+						display = string.format("{%s} %s [%s]", classification.base_folder, file_name, os.date("%Y-%m-%d", sort_time))
+						search_text = string.format("{%s} %s %s", classification.base_folder, file_name, classification.relative_path:gsub("%-", " "))
+					else
+						display = classification.relative_path .. " [" .. os.date("%Y-%m-%d", sort_time) .. "]"
+						search_text = classification.relative_path:gsub("%-", " ")
 					end
 					table.insert(entries, {
 						value = file,
-						display = relative_path .. " [" .. os.date("%Y-%m-%d", sort_time) .. "]",
-						ordinal = relative_path:gsub("%-", " "),
+						display = display,
+						ordinal = search_text,
 						timestamp = sort_time,
 						modified_time = modified_time,
+						base_folder = classification.base_folder,
 					})
 				end
 			end
@@ -5959,7 +6021,11 @@ M.cmd.NoteFinder = function(_options)
 		title = prompt_title,
 		items = items,
 		initial_index = resolve_finder_initial_index(M._note_finder, items, "NoteFinder"),
+		initial_query = format_finder_initial_query(M._note_finder.sticky_query),
 		anchor = "bottom",
+		on_query_change = function(query)
+			M._note_finder.sticky_query = extract_note_finder_sticky_query(query)
+		end,
 		on_select = function(item)
 			if source_win and vim.api.nvim_win_is_valid(source_win) then
 				vim.api.nvim_set_current_win(source_win)

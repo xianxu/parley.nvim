@@ -91,6 +91,10 @@ The picker closes if focus moves to any window that is neither the results nor t
 - The scan MUST be recursive and MUST exclude files under `notes_dir/templates/`.
 - **Recency Filter**: By default shows files from `note_finder_recency.months`, and can cycle through additional `note_finder_recency.presets` before reaching `All`.
 - For notes in dated directory trees, recency filtering MUST use directory-derived date ranges as a coarse inclusion heuristic rather than relying only on filesystem mtime.
+- Notes under first-level non-date, non-template folders MUST bypass the recency filter and stay visible in all note-finder windows.
+- Those special-folder notes MUST display a compact `{base_folder}` prefix ahead of the filename, and Note Finder search text MUST include the same braced folder label.
+- When the prompt contains sticky folder fragments such as `{K}`, Note Finder preserves those fragments between invocations and internal reopen flows. Non-fragment free-text terms are not preserved.
+- Braced Note Finder filters MUST match only these special first-level folder labels.
 - **Extra mappings**:
   - Next recency key (`<C-a>` by default): Move left through configured recency windows toward smaller cutoffs.
   - Previous recency key (`<C-s>` by default): Move right through configured recency windows toward larger cutoffs and `All`.
