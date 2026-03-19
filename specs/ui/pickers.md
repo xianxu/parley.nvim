@@ -85,6 +85,18 @@ The picker closes if focus moves to any window that is neither the results nor t
     - `<C-g>?`: Open Parley key-bindings help.
 - Files are sorted by modification date, newest first.
 
+## Note Finder
+- `:ParleyNoteFinder` (`<C-n>f`): Browse and open note files under `notes_dir`.
+- Note Finder uses the same floating-picker mechanics as Chat Finder, including bottom anchoring and picker-local control-key mappings.
+- The scan MUST be recursive and MUST exclude files under `notes_dir/templates/`.
+- **Recency Filter**: By default shows files from `note_finder_recency.months`, and can cycle through additional `note_finder_recency.presets` before reaching `All`.
+- For notes in dated directory trees, recency filtering MUST use directory-derived date ranges as a coarse inclusion heuristic rather than relying only on filesystem mtime.
+- **Extra mappings**:
+  - Next recency key (`<C-a>` by default): Move left through configured recency windows toward smaller cutoffs.
+  - Previous recency key (`<C-s>` by default): Move right through configured recency windows toward larger cutoffs and `All`.
+  - Delete key (`<C-d>` by default): Delete the selected note after confirmation, then reopen Note Finder on the surviving item that stays in the same visual row when possible.
+  - `<C-g>?`: Open Parley key-bindings help.
+
 ## Chat Roots Picker
 - `:ParleyChatDirs` (`<C-g>h`): Opens a picker showing the configured chat roots in order.
 - The first item is the primary writable root used for new chats; later items are additional discovery roots.

@@ -18,5 +18,6 @@ Parley exposes a key-bindings help command that lists active default shortcuts d
   - chat/markdown shortcuts,
   - mode toggles (`web_search`, `raw request`, `raw response`, interview mode).
 - The Chat Finder section MUST include both left and right recency-cycle shortcuts, plus delete and move.
+- The Note Finder section MUST include both left and right recency-cycle shortcuts, plus delete.
 - Displayed shortcuts MUST be resolved from active runtime keymaps when available.
 - If a runtime keymap cannot be found, Parley falls back to configured/default shortcut values.

@@ -320,6 +320,7 @@ local config = {
 	global_shortcut_add_chat_ref = { modes = { "n", "i" }, shortcut = "<C-g>a" },
 	-- global shortcuts for note taking
 	global_shortcut_note_new = { modes = { "n", "i" }, shortcut = "<C-n>c" },
+	global_shortcut_note_finder = { modes = { "n", "i" }, shortcut = "<C-n>f" },
 	global_shortcut_year_root = { modes = { "n", "i" }, shortcut = "<C-n>r" },
 	-- shortcut for opening oil.nvim file explorer
 	global_shortcut_oil = { modes = { "n" }, shortcut = "<leader>fo" },
@@ -339,6 +340,16 @@ local config = {
 		months = 12,
 		-- Additional recency presets cycled in the finder before "All"
 		presets = { 6, 12 },
+	},
+	note_finder_mappings = {
+		delete = { modes = { "n", "i", "v", "x" }, shortcut = "<C-d>" },
+		next_recency = { modes = { "n", "i", "v", "x" }, shortcut = "<C-a>" },
+		previous_recency = { modes = { "n", "i", "v", "x" }, shortcut = "<C-s>" },
+	},
+	note_finder_recency = {
+		filter_by_default = true,
+		months = 3,
+		presets = { 3, 6, 12 },
 	},
 
 	-- if true, finished ChatResponder won't move the cursor to the end of the buffer

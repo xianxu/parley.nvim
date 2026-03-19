@@ -23,6 +23,7 @@ This index provides a central directory for all specifications of the `parley.nv
 - [Web Search](context/web_search.md): Provider-specific web search tools.
 
 ## 4. Notes & Templates
+- [Note Finder](notes/finder.md): Recursive note picker with recency filtering and deletion.
 - [Notes Structure](notes/structure.md): Year/Month/Week organization logic.
 - [Note Templates](notes/templates.md): Template system for new notes.
 

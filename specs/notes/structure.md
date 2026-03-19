@@ -18,4 +18,5 @@ Parley organizes notes within `notes_dir` by date (Year/Month/Week).
 - Example: `notes/project-name/task-description.md`.
 
 ## Navigation
+- `:ParleyNoteFinder` (`<C-n>f`): Opens a recursive note picker rooted at `notes_dir`.
 - `:ParleyYearRoot` (`<C-n>r`): Changes the Neovim working directory to the current year's notes folder.
