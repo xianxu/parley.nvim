@@ -40,29 +40,29 @@ local config = {
 
 	-- Google Drive OAuth configuration for @@ URL references
 	-- Users can override with plaintext values in their setup() call.
-		google_drive = {
+	google_drive = {
+		client_id = "",
+		client_secret = "",
+		scopes = { "https://www.googleapis.com/auth/drive.readonly" },
+	},
+
+	-- Provider-neutral OAuth configuration for remote @@ URL references.
+	-- New provider integrations should be added here. The legacy
+	-- `google_drive` config above remains supported for backward compatibility.
+	oauth = {
+		dropbox = {
 			client_id = "",
 			client_secret = "",
+			redirect_port = nil,
+			scopes = { "sharing.read" },
+		},
+		google = {
+			client_id = "",
+			client_secret = "",
+			redirect_port = nil,
 			scopes = { "https://www.googleapis.com/auth/drive.readonly" },
 		},
-
-		-- Provider-neutral OAuth configuration for remote @@ URL references.
-		-- New provider integrations should be added here. The legacy
-		-- `google_drive` config above remains supported for backward compatibility.
-		oauth = {
-			dropbox = {
-				client_id = "",
-				client_secret = "",
-				redirect_port = nil,
-				scopes = { "sharing.read" },
-			},
-			google = {
-				client_id = "",
-				client_secret = "",
-				redirect_port = nil,
-				scopes = { "https://www.googleapis.com/auth/drive.readonly" },
-			},
-		},
+	},
 
 	-- at least one working provider is required
 	-- to disable a provider set it to empty table like openai = {}
@@ -149,44 +149,44 @@ local config = {
 			-- system prompt (use this to specify the persona/role of the AI)
 			system_prompt = require("parley.defaults").chat_system_prompt,
 		},
-		{
-			provider = "anthropic",
-			name = "Claude-Opus",
-			-- string with model name or table with model name and parameters
-			model = { model = "claude-opus-4-6", temperature = 0.8 },
-			-- system prompt (use this to specify the persona/role of the AI)
-			system_prompt = require("parley.defaults").chat_system_prompt,
-		},
-		{
-			provider = "anthropic",
-			name = "Claude-Sonnet",
-			-- string with model name or table with model name and parameters
-			model = { model = "claude-sonnet-4-6", temperature = 0.8 },
-			-- system prompt (use this to specify the persona/role of the AI)
-			system_prompt = require("parley.defaults").chat_system_prompt,
-		},
-		{
-			provider = "anthropic",
-			name = "Claude-Haiku",
-			-- string with model name or table with model name and parameters
-			model = { model = "claude-haiku-4-5", temperature = 0.8 },
-			-- system prompt (use this to specify the persona/role of the AI)
-			system_prompt = require("parley.defaults").chat_system_prompt,
-		},
-		{
-			provider = "ollama",
-			name = "ChatOllamaLlama3.1-8B",
-			-- string with model name or table with model name and parameters
-			model = {
-				model = "llama3.1",
-				temperature = 0.6,
-				top_p = 1,
-				min_p = 0.05,
-			},
-			-- system prompt (use this to specify the persona/role of the AI)
-			system_prompt = require("parley.defaults").chat_system_prompt,
-			disable = true,
-		},
+		-- {
+		-- 	provider = "anthropic",
+		-- 	name = "Claude-Opus",
+		-- 	-- string with model name or table with model name and parameters
+		-- 	model = { model = "claude-opus-4-6", temperature = 0.8 },
+		-- 	-- system prompt (use this to specify the persona/role of the AI)
+		-- 	system_prompt = require("parley.defaults").chat_system_prompt,
+		-- },
+		-- {
+		-- 	provider = "anthropic",
+		-- 	name = "Claude-Sonnet",
+		-- 	-- string with model name or table with model name and parameters
+		-- 	model = { model = "claude-sonnet-4-6", temperature = 0.8 },
+		-- 	-- system prompt (use this to specify the persona/role of the AI)
+		-- 	system_prompt = require("parley.defaults").chat_system_prompt,
+		-- },
+		-- {
+		-- 	provider = "anthropic",
+		-- 	name = "Claude-Haiku",
+		-- 	-- string with model name or table with model name and parameters
+		-- 	model = { model = "claude-haiku-4-5", temperature = 0.8 },
+		-- 	-- system prompt (use this to specify the persona/role of the AI)
+		-- 	system_prompt = require("parley.defaults").chat_system_prompt,
+		-- },
+		-- {
+		-- 	provider = "ollama",
+		-- 	name = "ChatOllamaLlama3.1-8B",
+		-- 	-- string with model name or table with model name and parameters
+		-- 	model = {
+		-- 		model = "llama3.1",
+		-- 		temperature = 0.6,
+		-- 		top_p = 1,
+		-- 		min_p = 0.05,
+		-- 	},
+		-- 	-- system prompt (use this to specify the persona/role of the AI)
+		-- 	system_prompt = require("parley.defaults").chat_system_prompt,
+		-- 	disable = true,
+		-- },
 		{
 			provider = "googleai",
 			name = "Gemini3.1-Pro",
@@ -225,26 +225,16 @@ local config = {
 		},
 		{
 			provider = "cliproxyapi",
-			name = "Codex",
-			model = {
-				model = "gpt-5.4",
-				temperature = 0.8,
-				top_p = 1,
-				web_search_strategy = "openai_tools_route",
-			},
-			system_prompt = require("parley.defaults").chat_system_prompt,
-		},
-		{
-			provider = "cliproxyapi",
-			name = "Claude-Code",
+			name = "Claude-Code-Sonnet",
 			-- CLIProxy web-search tool access currently requires code_execution model family.
-			model = { model = "code_execution_20260120", temperature = 0.8, web_search_strategy = "anthropic_tools_route" },
+			model = { model = "claude-sonnet-4-6", temperature = 0.8, web_search_strategy = "anthropic_tools_route" },
 			system_prompt = require("parley.defaults").chat_system_prompt,
 		},
 		{
 			provider = "cliproxyapi",
-			name = "Gemini-CLI",
-			model = { model = "gemini-3-flash", temperature = 0.8, top_p = 1, web_search_strategy = "none" },
+			name = "Claude-Code-Opus",
+			-- CLIProxy web-search tool access currently requires code_execution model family.
+			model = { model = "claude-opus-4-6", temperature = 0.8, web_search_strategy = "anthropic_tools_route" },
 			system_prompt = require("parley.defaults").chat_system_prompt,
 		},
 	},
