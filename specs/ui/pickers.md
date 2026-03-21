@@ -27,8 +27,8 @@ Typing in the prompt filters and re-ranks the results live on every keystroke:
 - **All words must match** for an item to be included (AND logic).
 - **Word order does not matter** — `"gpt open"` matches `"openai gpt-4"`.
 - Matching is **word-aware**: candidate text is tokenized on non-word separators, and token-prefix matches score highest.
-- Small typos are tolerated on token prefixes with bounded edit distance, so near-prefixes like `"anthrpic"` still match `"anthropic"`.
-- A lower-ranked whole-string subsequence fallback keeps the picker feeling `fzf`-like instead of requiring strict prefix-only matches.
+- Small typos are tolerated on token prefixes with bounded edit distance, so near-prefixes like `"anthrpic"` still match `"anthropic"`, but approximate prefix matching still requires the first query character to match the candidate token.
+- A lower-ranked whole-string subsequence fallback keeps the picker feeling `fzf`-like for short plain fragments, but full-word plain queries must match within a single token rather than spanning word boundaries.
 - Items are scored and sorted by match quality (prefix, early boundary, and consecutive compact matches score higher).
 - Exact matched characters are highlighted with `Search`.
 - Candidate positions consumed by typo-tolerance edits are highlighted with `ParleyPickerApproximateMatch`, so approximate hits show where the edits were applied.

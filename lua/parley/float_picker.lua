@@ -228,6 +228,10 @@ local function bounded_prefix_distance(query_token, candidate_token, max_distanc
         return nil, nil
     end
 
+    if query_token:sub(1, 1) ~= candidate_token:sub(1, 1) then
+        return nil, nil
+    end
+
     local min_prefix_len = #query_token
     local max_prefix_len = math.min(#candidate_token, #query_token + max_distance)
     local best_distance = nil
@@ -398,7 +402,7 @@ local function best_match_for_token(query_token, haystack)
     end
 
     local whole_subsequence_score, whole_positions = score_subsequence(query_token.text, lowered_haystack)
-    if query_token.kind == "plain" and whole_subsequence_score then
+    if query_token.kind == "plain" and #query_token.text <= 3 and whole_subsequence_score then
         consider({
             approximate = false,
             edit_positions = {},

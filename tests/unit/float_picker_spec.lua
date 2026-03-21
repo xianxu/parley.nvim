@@ -647,6 +647,10 @@ describe("float_picker", function()
             assert.is_not_nil(score)
         end)
 
+        it("requires approximate prefix matches to keep the first query character", function()
+            assert.is_nil(float_picker._fuzzy_score("bnthrpic", "anthropic claude"))
+        end)
+
         it("rejects tokens that are too far from any candidate prefix", function()
             assert.is_nil(float_picker._fuzzy_score("zzzz", "anthropic claude"))
         end)
@@ -661,6 +665,10 @@ describe("float_picker", function()
             assert.is_not_nil(prefix_score)
             assert.is_not_nil(scattered_score)
             assert.is_true(prefix_score > scattered_score)
+        end)
+
+        it("does not match full plain words across word boundaries", function()
+            assert.is_nil(float_picker._fuzzy_score("open", "only pen"))
         end)
 
         it("matches bracketed query tokens only against bracketed haystack tags", function()
@@ -691,6 +699,11 @@ describe("float_picker", function()
             assert.is_true(details[1].approximate)
             assert.same({ 1, 2 }, details[1].positions)
             assert.same({ 3, 4 }, details[1].edit_positions)
+        end)
+
+        it("rejects approximate prefix details when the first query character differs", function()
+            local details = float_picker._fuzzy_match_details("behc", "tech stack")
+            assert.is_nil(details)
         end)
 
         it("keeps exact prefix matches on the exact highlight path only", function()
