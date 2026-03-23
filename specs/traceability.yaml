@@ -85,6 +85,7 @@ specs:
     code:
       - lua/parley/config.lua
       - lua/parley/defaults.lua
+      - lua/parley/chat_dirs.lua
       - lua/parley/init.lua
     tests:
       - tests/unit/chat_dirs_spec.lua
@@ -236,6 +237,7 @@ specs:
   ui/pickers:
     code:
       - lua/parley/chat_dir_picker.lua
+      - lua/parley/chat_dirs.lua
       - lua/parley/float_picker.lua
       - lua/parley/init.lua
       - lua/parley/config.lua
