@@ -35,6 +35,13 @@ chat_parser = require("parley.chat_parser"), -- chat file parser
 	float_picker = require("parley.float_picker"), -- shared floating window picker
 }
 
+-- Interview mode module (loaded here; wired up via interview.setup() inside M.setup())
+local interview = require("parley.interview")
+
+-- Exporter module (loaded here; wired up at module-load time with M reference)
+local exporter = require("parley.exporter")
+exporter.setup(M)
+
 --------------------------------------------------------------------------------
 -- Module helper functions and variables
 --------------------------------------------------------------------------------
@@ -454,358 +461,6 @@ local function jump_to_active_response(buf, win)
 	return true
 end
 
-local function shortcut_value(shortcut_config, fallback)
-	if type(shortcut_config) == "table" and type(shortcut_config.shortcut) == "string" and shortcut_config.shortcut ~= "" then
-		return shortcut_config.shortcut
-	end
-	return fallback
-end
-
-local function shortcut_modes(shortcut_config, fallback)
-	if type(shortcut_config) == "table" and type(shortcut_config.modes) == "table" and #shortcut_config.modes > 0 then
-		return shortcut_config.modes
-	end
-	return fallback
-end
-
-local function keymaps_for_mode(mode, bufnr)
-	local opts = nil
-	if bufnr ~= nil then
-		opts = { buffer = bufnr }
-	end
-	local ok, maps = pcall(vim.keymap.get, mode, nil, opts)
-	if ok and type(maps) == "table" then
-		return maps
-	end
-	return {}
-end
-
-local function find_mapping_lhs_by_desc(desc, modes, bufnr)
-	for _, mode in ipairs(modes) do
-		if bufnr ~= nil then
-			for _, map in ipairs(keymaps_for_mode(mode, bufnr)) do
-				if map.desc == desc and type(map.lhs) == "string" and map.lhs ~= "" then
-					return map.lhs
-				end
-			end
-		end
-		for _, map in ipairs(keymaps_for_mode(mode, nil)) do
-			if map.desc == desc and type(map.lhs) == "string" and map.lhs ~= "" then
-				return map.lhs
-			end
-		end
-	end
-	return nil
-end
-
-local function resolve_shortcut(descs, modes, shortcut_config, fallback, bufnr)
-	local descriptions = type(descs) == "table" and descs or { descs }
-	for _, desc in ipairs(descriptions) do
-		local lhs = find_mapping_lhs_by_desc(desc, modes, bufnr)
-		if lhs then
-			return lhs
-		end
-	end
-	return shortcut_value(shortcut_config, fallback)
-end
-
-M._keybinding_help_lines = function()
-	local cfg = M.config or {}
-	local current_buf = vim.api.nvim_get_current_buf()
-	local lines = {
-		"Parley Key Bindings",
-		"",
-		"Global",
-	}
-
-	local function add(shortcut, description)
-		table.insert(lines, string.format("  %-12s %s", shortcut, description))
-	end
-
-	add(
-		resolve_shortcut(
-			"Show Parley key bindings",
-			shortcut_modes(cfg.global_shortcut_keybindings, { "n", "i" }),
-			cfg.global_shortcut_keybindings,
-			"<C-g>?",
-			current_buf
-		),
-		"Show key bindings"
-	)
-	add(
-		resolve_shortcut("Create New Chat", shortcut_modes(cfg.global_shortcut_new, { "n", "i" }), cfg.global_shortcut_new, "<C-g>c", current_buf),
-		"New chat"
-	)
-	add(
-		resolve_shortcut(
-			"Review current file in new Chat",
-			shortcut_modes(cfg.global_shortcut_review, { "n" }),
-			cfg.global_shortcut_review,
-			"<C-g>C",
-			current_buf
-		),
-		"Review current file in chat"
-	)
-	add(
-		resolve_shortcut("Open Chat Finder", shortcut_modes(cfg.global_shortcut_finder, { "n", "i" }), cfg.global_shortcut_finder, "<C-g>f", current_buf),
-		"Open chat finder"
-	)
-	add(
-		resolve_shortcut(
-			"Manage chat roots",
-			shortcut_modes(cfg.global_shortcut_chat_dirs, { "n", "i" }),
-			cfg.global_shortcut_chat_dirs,
-			"<C-g>h",
-			current_buf
-		),
-		"Manage chat roots"
-	)
-	add(
-		resolve_shortcut("Create New Note", shortcut_modes(cfg.global_shortcut_note_new, { "n", "i" }), cfg.global_shortcut_note_new, "<C-n>c", current_buf),
-		"New note"
-	)
-	add(
-		resolve_shortcut(
-			"Open Note Finder",
-			shortcut_modes(cfg.global_shortcut_note_finder, { "n", "i" }),
-			cfg.global_shortcut_note_finder,
-			"<C-n>f",
-			current_buf
-		),
-		"Open note finder"
-	)
-	add(
-		resolve_shortcut(
-			"Change directory to current year's note directory",
-			shortcut_modes(cfg.global_shortcut_year_root, { "n", "i" }),
-			cfg.global_shortcut_year_root,
-			"<C-n>r",
-			current_buf
-		),
-		"Jump to note year root"
-	)
-	add(
-		resolve_shortcut("Open oil.nvim file explorer", shortcut_modes(cfg.global_shortcut_oil, { "n" }), cfg.global_shortcut_oil, "<leader>fo", current_buf),
-		"Open oil file explorer"
-	)
-	add(resolve_shortcut("Toggle Interview Mode", { "n" }, nil, "<C-n>i", current_buf), "Toggle interview mode")
-	add(resolve_shortcut("Create Note from Template", { "n" }, nil, "<C-n>t", current_buf), "New note from template")
-	add(resolve_shortcut("Toggle web_search tool", { "n" }, nil, "<C-g>w", current_buf), "Toggle web_search")
-	add(resolve_shortcut("Toggle raw request mode", { "n" }, nil, "<C-g>r", current_buf), "Toggle raw request mode")
-	add(resolve_shortcut("Toggle raw response mode", { "n" }, nil, "<C-g>R", current_buf), "Toggle raw response mode")
-
-	table.insert(lines, "")
-	table.insert(lines, "Chat / Markdown")
-	add(
-		resolve_shortcut("Parley prompt Chat Respond", shortcut_modes(cfg.chat_shortcut_respond, { "n", "i", "v", "x" }), cfg.chat_shortcut_respond, "<C-g><C-g>", current_buf),
-		"Respond"
-	)
-	add(
-		resolve_shortcut(
-			"Parley prompt Chat Respond All",
-			shortcut_modes(cfg.chat_shortcut_respond_all, { "n", "i", "v", "x" }),
-			cfg.chat_shortcut_respond_all,
-			"<C-g>G",
-			current_buf
-		),
-		"Respond all"
-	)
-	add(
-		resolve_shortcut("Parley prompt Chat Stop", shortcut_modes(cfg.chat_shortcut_stop, { "n", "i", "v", "x" }), cfg.chat_shortcut_stop, "<C-g>s", current_buf),
-		"Stop active response"
-	)
-	add(
-		resolve_shortcut(
-			"Parley prompt Chat Delete",
-			shortcut_modes(cfg.chat_shortcut_delete, { "n", "i", "v", "x" }),
-			cfg.chat_shortcut_delete,
-			"<C-g>d",
-			current_buf
-		),
-		"Delete chat"
-	)
-	add(
-		resolve_shortcut(
-			{ "Parley prompt Next Agent", "Parley add chat reference" },
-			shortcut_modes(cfg.chat_shortcut_agent, { "n", "i", "v", "x" }),
-			cfg.chat_shortcut_agent,
-			"<C-g>a",
-			current_buf
-		),
-		"Next agent / add chat reference"
-	)
-	add(
-		resolve_shortcut(
-			"Parley prompt System Prompt Selector",
-			shortcut_modes(cfg.chat_shortcut_system_prompt, { "n", "i", "v", "x" }),
-			cfg.chat_shortcut_system_prompt,
-			"<C-g>p",
-			current_buf
-		),
-		"Next system prompt"
-	)
-	add(
-		resolve_shortcut(
-			"Parley prompt Toggle Follow Cursor",
-			shortcut_modes(cfg.chat_shortcut_follow_cursor, { "n", "i", "v", "x" }),
-			cfg.chat_shortcut_follow_cursor,
-			"<C-g>l",
-			current_buf
-		),
-		"Toggle follow cursor"
-	)
-	add(
-		resolve_shortcut(
-			{ "Parley prompt Search Chat Sections", "Parley create and insert new chat" },
-			shortcut_modes(cfg.chat_shortcut_search, { "n", "i", "v", "x" }),
-			cfg.chat_shortcut_search,
-			"<C-g>n",
-			current_buf
-		),
-		"Search chat sections / insert chat reference"
-	)
-	add(
-		resolve_shortcut(
-			"Parley open file under cursor",
-			shortcut_modes(cfg.chat_shortcut_open_file, { "n", "i" }),
-			cfg.chat_shortcut_open_file,
-			"<C-g>o",
-			current_buf
-		),
-		"Open @@ file reference"
-	)
-	add(resolve_shortcut("Parley prompt Outline Navigator", { "n" }, nil, "<C-g>t", current_buf), "Outline picker")
-
-table.insert(lines, "")
-table.insert(lines, "Chat Finder")
-local finder_mappings = cfg.chat_finder_mappings or {}
-add(shortcut_value(finder_mappings.next_recency, "<C-a>"), "Cycle chat recency window left")
-add(shortcut_value(finder_mappings.previous_recency, "<C-s>"), "Cycle chat recency window right")
-add(shortcut_value(finder_mappings.delete, "<C-d>"), "Delete selected chat")
-	add(shortcut_value(finder_mappings.move, "<C-r>"), "Move selected chat")
-table.insert(lines, string.format("  %-12s %s", "", "(Recent window default: last " .. tostring((cfg.chat_finder_recency or {}).months or 6) .. " months)"))
-
-	table.insert(lines, "")
-	table.insert(lines, "Note Finder")
-	local note_finder_mappings = cfg.note_finder_mappings or {}
-	add(shortcut_value(note_finder_mappings.next_recency, "<C-a>"), "Cycle note recency window left")
-	add(shortcut_value(note_finder_mappings.previous_recency, "<C-s>"), "Cycle note recency window right")
-	add(shortcut_value(note_finder_mappings.delete, "<C-d>"), "Delete selected note")
-	table.insert(lines, string.format("  %-12s %s", "", "(Recent window default: last " .. tostring((cfg.note_finder_recency or {}).months or 6) .. " months)"))
-
-	table.insert(lines, "")
-	table.insert(lines, "Close: q or <Esc>")
-	return lines
-end
-
--- Interview mode helper functions
-M.format_timestamp = function()
-	if not M._state.interview_start_time then
-		return ""
-	end
-
-	local elapsed = os.time() - M._state.interview_start_time
-	local minutes = math.floor(elapsed / 60)
-
-	if minutes < 10 then
-		return string.format(":0%dmin", minutes)
-	else
-		return string.format(":%dmin", minutes)
-	end
-end
-
--- In interview mode, insert timestamp and new line when Enter key is pressed
-M.setup_interview_keymap = function()
-	M.logger.info("Setting up interview keymap")
-
-	-- Set up insert mode keymap for Enter key globally
-	vim.keymap.set("i", "<CR>", function()
-		print("DEBUG: interview_mode=" .. tostring(M._state.interview_mode)) -- Debug print
-
-		-- Apply timestamp when interview mode is active (no folder restriction)
-		if M._state.interview_mode then
-			local timestamp = M.format_timestamp()
-			M.logger.debug("Inserting timestamp: " .. timestamp)
-			-- Insert extra newline, then timestamp
-			return "<CR><CR>" .. timestamp .. " "
-		else
-			-- Regular Enter behavior
-			return "<CR>"
-		end
-	end, {
-		expr = true,
-		desc = "Insert timestamp on new line in interview mode",
-	})
-	print("DEBUG: Keymap set up complete") -- Debug print
-end
-
-M.remove_interview_keymap = function()
-	M.logger.info("Removing interview keymap")
-	-- Remove the insert mode keymap
-	pcall(function()
-		vim.keymap.del("i", "<CR>")
-	end)
-end
-
--- Interview timestamp highlighting function, basiclaly highlight the interview timestamp pattern.
--- Interview mode, line starts with :00min, :01min, etc.
-M.highlight_interview_timestamps = function(buf)
-	if not vim.api.nvim_buf_is_valid(buf) then
-		return
-	end
-
-	-- Use a static match ID to avoid searching through all matches
-	local match_id_key = "parley_interview_timestamps_" .. buf
-	if not M._interview_match_ids then
-		M._interview_match_ids = {}
-	end
-
-	-- Clear existing match for this buffer if it exists
-	if M._interview_match_ids[match_id_key] then
-		pcall(vim.fn.matchdelete, M._interview_match_ids[match_id_key])
-		M._interview_match_ids[match_id_key] = nil
-	end
-
-	-- Add highlighting for the entire timestamp line with very low priority (-1)
-	-- to ensure all search highlights (incsearch, Search, CurSearch) can take precedence
-	local match_id = vim.fn.matchadd("InterviewTimestamp", "^\\s*:\\d\\+min.*$", -1)
-	M._interview_match_ids[match_id_key] = match_id
-end
-
--- Timer functions for interview mode statusline updates
-M.start_interview_timer = function()
-	-- Stop any existing timer first
-	M.stop_interview_timer()
-
-	-- Create a timer that updates the statusline every 15 seconds
-	M._state.interview_timer = vim.loop.new_timer()
-	M._state.interview_timer:start(
-		15000,
-		15000,
-		vim.schedule_wrap(function()
-			if M._state.interview_mode then
-				-- Refresh lualine to update the timer display
-				pcall(function()
-					require("lualine").refresh()
-				end)
-			else
-				-- Stop timer if interview mode is no longer active
-				M.stop_interview_timer()
-			end
-		end)
-	)
-
-	M.logger.debug("Interview timer started")
-end
-
-M.stop_interview_timer = function()
-	if M._state.interview_timer then
-		stop_and_close_timer(M._state.interview_timer)
-		M._state.interview_timer = nil
-		M.logger.debug("Interview timer stopped")
-	end
-end
-
 -- setup function
 M._setup_called = false
 ---@param opts the one returned from config.lua, it can come from several sources, either fully specified
@@ -814,6 +469,9 @@ M.setup = function(opts)
 	M._setup_called = true
 
 	math.randomseed(os.time())
+
+	-- Wire up interview module with shared state/logger references
+	interview.setup(M, M.logger)
 
 	-- Initialize file tracker
 	M.file_tracker = require("parley.file_tracker").init()
@@ -1204,72 +862,7 @@ M.setup = function(opts)
 
 	-- Toggle Interview Mode
 	M.cmd.ToggleInterview = function()
-		-- First check if cursor is on an interview timestamp line
-		local cursor_line = vim.api.nvim_get_current_line()
-		local timestamp_match = cursor_line:match("^%s*:(%d+)min")
-
-		if timestamp_match then
-			-- Parse the minute value from the line
-			local minutes = tonumber(timestamp_match)
-			if minutes then
-				-- Calculate the start time based on current time minus the elapsed minutes
-				M._state.interview_start_time = os.time() - (minutes * 60)
-				M._state.interview_mode = true
-				M.logger.info(string.format("Interview mode enabled with timer set to %d minutes", minutes))
-				vim.notify(string.format("Interview timer set to %d minutes", minutes), vim.log.levels.INFO)
-
-				-- Set up insert mode keymap for timestamps
-				M.setup_interview_keymap()
-				-- Start timer for statusline updates
-				M.start_interview_timer()
-
-				-- Refresh lualine to update display
-				pcall(function()
-					require("lualine").refresh()
-				end)
-				return
-			end
-		end
-
-		-- Normal toggle behavior if not on a timestamp line
-		M._state.interview_mode = not M._state.interview_mode
-		print("DEBUG: Interview mode is now: " .. tostring(M._state.interview_mode)) -- Debug print
-
-		if M._state.interview_mode then
-			M._state.interview_start_time = os.time()
-			M.logger.info("Interview mode enabled")
-			vim.notify("Interview mode enabled", vim.log.levels.INFO)
-
-			-- Insert :00min marker at current cursor position
-			local mode = vim.fn.mode()
-			if mode == "i" then
-				-- Already in insert mode, just insert the text
-				vim.api.nvim_put({ ":00min " }, "c", true, true)
-			else
-				-- Enter insert mode and insert the marker
-				vim.cmd("startinsert")
-				vim.schedule(function()
-					vim.api.nvim_put({ ":00min " }, "c", true, true)
-				end)
-			end
-
-			-- Set up insert mode keymap for timestamps
-			M.setup_interview_keymap()
-			-- Start timer for statusline updates
-			M.start_interview_timer()
-		else
-			M._state.interview_start_time = nil
-			M.logger.info("Interview mode disabled")
-			vim.notify("Interview mode disabled", vim.log.levels.INFO)
-			-- Remove insert mode keymap and highlighting
-			M.remove_interview_keymap()
-			-- Stop timer
-			M.stop_interview_timer()
-		end
-		-- Refresh lualine to update display
-		pcall(function()
-			require("lualine").refresh()
-		end)
+		interview.toggle()
 	end
 
 	-- Toggle server-side web_search tool per chat
@@ -1334,43 +927,7 @@ M.setup = function(opts)
 	end
 
 	M.cmd.KeyBindings = function()
-		local lines = M._keybinding_help_lines()
-		local width = 0
-		for _, line in ipairs(lines) do
-			width = math.max(width, vim.fn.strdisplaywidth(line))
-		end
-		width = math.min(math.max(width + 4, 40), math.max(vim.o.columns - 4, 40))
-		local height = math.min(#lines + 2, math.max(vim.o.lines - 4, 8))
-		local row = math.max(math.floor((vim.o.lines - height) / 2 - 1), 0)
-		local col = math.max(math.floor((vim.o.columns - width) / 2), 0)
-
-		local buf = vim.api.nvim_create_buf(false, true)
-		vim.bo[buf].buftype = "nofile"
-		vim.bo[buf].bufhidden = "wipe"
-		vim.bo[buf].swapfile = false
-		vim.bo[buf].modifiable = true
-		vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-		vim.bo[buf].modifiable = false
-
-		local win = vim.api.nvim_open_win(buf, true, {
-			relative = "editor",
-			width = width,
-			height = height,
-			row = row,
-			col = col,
-			style = "minimal",
-			border = "rounded",
-		})
-
-		local function close_window()
-			if vim.api.nvim_win_is_valid(win) then
-				vim.api.nvim_win_close(win, true)
-			end
-		end
-
-		vim.keymap.set("n", "q", close_window, { buffer = buf, silent = true })
-		vim.keymap.set("n", "<Esc>", close_window, { buffer = buf, silent = true })
-		vim.keymap.set("i", "<Esc>", close_window, { buffer = buf, silent = true })
+		show_keybindings()
 	end
 	-- Logout from Google Drive OAuth (remove stored tokens)
 	M.cmd.GdriveLogout = function()
@@ -1476,7 +1033,7 @@ M.refresh_state = function(update)
 	M._state.interview_mode = false
 	M._state.interview_start_time = nil
 	-- Stop any running interview timer
-	M.stop_interview_timer()
+	interview.stop_timer()
 
 	-- apply in-memory updates
 	for k, v in pairs(update) do
@@ -1607,468 +1164,312 @@ M.cmd.Stop = function(signal)
 	M.tasker.stop(signal)
 end
 
--- Enhanced markdown to HTML converter with glow-like styling
-M.simple_markdown_to_html = function(markdown)
-	local html = markdown
+--------------------------------------------------------------------------------
+-- Keybinding help
+--------------------------------------------------------------------------------
 
-	-- Escape HTML special characters first
-	html = html:gsub("&", "&amp;")
-	html = html:gsub("<", "&lt;")
-	html = html:gsub(">", "&gt;")
-
-	-- Convert code blocks with language-specific styling
-	html = html:gsub("```([^\n]*)\n(.-)\n```", function(lang, code)
-		local class_attr = ""
-		if lang and lang ~= "" then
-			class_attr = ' class="language-' .. lang .. '"'
-		end
-		return '\n<div class="code-block"><pre><code' .. class_attr .. ">" .. code .. "</code></pre></div>\n"
-	end)
-
-	-- Convert inline code
-	html = html:gsub("`([^`\n]+)`", '<code class="inline-code">%1</code>')
-
-	-- Convert headers with proper spacing
-	html = html:gsub("^# ([^\n]+)", '<h1 class="main-header">%1</h1>')
-	html = html:gsub("\n# ([^\n]+)", '\n<h1 class="main-header">%1</h1>')
-	html = html:gsub("^## ([^\n]+)", '<h2 class="section-header">%1</h2>')
-	html = html:gsub("\n## ([^\n]+)", '\n<h2 class="section-header">%1</h2>')
-	html = html:gsub("^### ([^\n]+)", '<h3 class="sub-header">%1</h3>')
-	html = html:gsub("\n### ([^\n]+)", '\n<h3 class="sub-header">%1</h3>')
-
-	-- Convert bold and italic text
-	html = html:gsub("%*%*([^%*\n]+)%*%*", '<strong class="bold-text">%1</strong>')
-	html = html:gsub("__([^_\n]+)__", '<strong class="bold-text">%1</strong>')
-	html = html:gsub("%*([^%*\n]+)%*", '<em class="italic-text">%1</em>')
-	html = html:gsub("_([^_\n]+)_", '<em class="italic-text">%1</em>')
-
-	-- Convert lists
-	html = html:gsub("\n%- ([^\n]+)", '\n<li class="list-item">%1</li>')
-	html = html:gsub("(<li[^>]*>.-</li>)", '<ul class="bullet-list">%1</ul>')
-
-	-- Convert blockquotes
-	html = html:gsub("\n> ([^\n]+)", '\n<blockquote class="quote">%1</blockquote>')
-
-	-- Handle paragraphs more carefully
-	html = html:gsub("\n\n+", "\n</p>\n<p class='paragraph'>\n")
-	html = '<p class="paragraph">' .. html .. "</p>"
-
-	-- Clean up and fix paragraph wrapping around block elements
-	html = html:gsub("<p[^>]*>%s*<h", "<h")
-	html = html:gsub("</h([123])>%s*</p>", "</h%1>")
-	html = html:gsub("<p[^>]*>%s*<div", "<div")
-	html = html:gsub("</div>%s*</p>", "</div>")
-	html = html:gsub("<p[^>]*>%s*<ul", "<ul")
-	html = html:gsub("</ul>%s*</p>", "</ul>")
-	html = html:gsub("<p[^>]*>%s*<blockquote", "<blockquote")
-	html = html:gsub("</blockquote>%s*</p>", "</blockquote>")
-	html = html:gsub("<p[^>]*>%s*</p>", "")
-
-	return html
+local function shortcut_value(shortcut_config, fallback)
+	if type(shortcut_config) == "table" and type(shortcut_config.shortcut) == "string" and shortcut_config.shortcut ~= "" then
+		return shortcut_config.shortcut
+	end
+	return fallback
 end
 
--- Export current chat buffer as HTML
-M.cmd.ExportHTML = function(params)
-	local buf = vim.api.nvim_get_current_buf()
-	local file_name = vim.api.nvim_buf_get_name(buf)
-
-	-- Check if this is a valid chat file
-	local validation_error = M.not_chat(buf, file_name)
-	if validation_error then
-		M.logger.error("Cannot export: " .. validation_error)
-		print("Error: Cannot export - " .. validation_error)
-		return
+local function shortcut_modes(shortcut_config, fallback)
+	if type(shortcut_config) == "table" and type(shortcut_config.modes) == "table" and #shortcut_config.modes > 0 then
+		return shortcut_config.modes
 	end
-
-	-- Get all buffer lines
-	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-	if #lines == 0 then
-		M.logger.error("Buffer is empty")
-		print("Error: Buffer is empty")
-		return
-	end
-
-	-- Convert content to markdown format suitable for processing
-	local content = table.concat(lines, "\n")
-
-	-- Replace 💬: with ## Question (similar to your sed command)
-	content = content:gsub("💬:", "## Question\n\n")
-
-	-- Extract title from first line for filename and HTML title
-	local title = "Untitled"
-	local html_filename
-
-	if lines[1] and lines[1]:match("^# (.+)") then
-		title = lines[1]:match("^# (.+)")
-		-- Clean title for filename (remove invalid characters and normalize)
-		html_filename = title:gsub("[^%w%s%-_]", ""):gsub("%s+", "_"):lower()
-		-- Limit filename length
-		if #html_filename > 50 then
-			html_filename = html_filename:sub(1, 50)
-		end
-	else
-		-- Fallback to timestamp-based filename if no title found
-		local basename = vim.fn.fnamemodify(file_name, ":t:r")
-		html_filename = basename
-	end
-
-	local output_file = html_filename .. ".html"
-
-	-- Export directory (configurable, with CLI override)
-	local export_dir = params and params.args and params.args ~= "" and params.args or M.config.export_html_dir
-	local full_output_path = export_dir .. "/" .. output_file
-
-	-- Create HTML content with enhanced glow-like styling
-	local html_template = [[
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>]] .. title .. [[</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-    <script>hljs.highlightAll();</script>
-    <style>
-        /* Base styling inspired by glow */
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
-            line-height: 1.6;
-            max-width: 900px;
-            margin: 0 auto;
-            padding: 40px 20px;
-            background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
-            color: #2d3748;
-            font-size: 16px;
-        }
-
-        /* Headers with glow-like styling */
-        .main-header {
-            font-size: 2.5rem;
-            font-weight: 700;
-            color: #1a365d;
-            margin: 2rem 0 1.5rem 0;
-            padding-bottom: 0.5rem;
-            border-bottom: 3px solid #4299e1;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.1);
-        }
-
-        .section-header {
-            font-size: 2rem;
-            font-weight: 600;
-            color: #2b6cb0;
-            margin: 2.5rem 0 1rem 0;
-            padding-bottom: 0.3rem;
-            border-bottom: 2px solid #bee3f8;
-            position: relative;
-        }
-
-        .section-header::before {
-            content: '📋';
-            margin-right: 0.5rem;
-            font-size: 1.5rem;
-        }
-
-        .sub-header {
-            font-size: 1.5rem;
-            font-weight: 600;
-            color: #3182ce;
-            margin: 2rem 0 0.8rem 0;
-            padding-left: 1rem;
-            border-left: 4px solid #90cdf4;
-        }
-
-        /* Enhanced paragraphs */
-        .paragraph {
-            margin: 1.2rem 0;
-            color: #4a5568;
-            text-align: justify;
-            text-justify: inter-word;
-        }
-
-        /* Code blocks with enhanced styling */
-        .code-block {
-            margin: 1.5rem 0;
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-            border: 1px solid #e2e8f0;
-        }
-
-        .code-block pre {
-            margin: 0;
-            padding: 1.5rem;
-            background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);
-            border: none;
-            overflow-x: auto;
-            font-size: 0.9rem;
-            line-height: 1.5;
-        }
-
-        .code-block code {
-            font-family: 'Fira Code', 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
-            background: none;
-            padding: 0;
-            color: #2d3748;
-        }
-
-        /* Inline code with better styling */
-        .inline-code {
-            background: linear-gradient(135deg, #fed7e2 0%, #fbb6ce 100%);
-            color: #97266d;
-            padding: 0.2rem 0.4rem;
-            border-radius: 6px;
-            font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
-            font-size: 0.9em;
-            font-weight: 500;
-            border: 1px solid #f687b3;
-        }
-
-        /* Text formatting */
-        .bold-text {
-            color: #2d3748;
-            font-weight: 700;
-        }
-
-        .italic-text {
-            color: #4a5568;
-            font-style: italic;
-        }
-
-        /* Lists with better styling */
-        .bullet-list {
-            margin: 1rem 0;
-            padding-left: 0;
-            list-style: none;
-        }
-
-        .list-item {
-            position: relative;
-            padding-left: 2rem;
-            margin: 0.5rem 0;
-            color: #4a5568;
-        }
-
-        .list-item::before {
-            content: '•';
-            color: #4299e1;
-            font-weight: bold;
-            position: absolute;
-            left: 0.5rem;
-            font-size: 1.2em;
-        }
-
-        /* Enhanced blockquotes */
-        .quote {
-            background: linear-gradient(135deg, #e6fffa 0%, #b2f5ea 100%);
-            border-left: 4px solid #38b2ac;
-            margin: 1.5rem 0;
-            padding: 1rem 1.5rem;
-            border-radius: 0 8px 8px 0;
-            color: #234e52;
-            font-style: italic;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        /* Special styling for chat elements */
-        .chat-question {
-            background: linear-gradient(135deg, #ebf8ff 0%, #bee3f8 100%);
-            border-left: 4px solid #3182ce;
-            border-radius: 0 12px 12px 0;
-            padding: 1.5rem;
-            margin: 2rem 0;
-            position: relative;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        }
-
-        .chat-question::before {
-            content: '💬';
-            position: absolute;
-            left: -0.5rem;
-            top: 1rem;
-            background: white;
-            padding: 0.3rem;
-            border-radius: 50%;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        /* Responsive design */
-        @media (max-width: 768px) {
-            body {
-                padding: 20px 15px;
-                font-size: 15px;
-            }
-            .main-header {
-                font-size: 2rem;
-            }
-            .section-header {
-                font-size: 1.6rem;
-            }
-            .code-block pre {
-                padding: 1rem;
-                font-size: 0.8rem;
-            }
-        }
-
-        /* Syntax highlighting overrides */
-        .hljs {
-            background: transparent !important;
-        }
-
-        .hljs-keyword { color: #d73a49; font-weight: 600; }
-        .hljs-string { color: #032f62; }
-        .hljs-comment { color: #6a737d; font-style: italic; }
-        .hljs-function { color: #6f42c1; }
-        .hljs-number { color: #005cc5; }
-        .hljs-variable { color: #e36209; }
-    </style>
-</head>
-<body>
-]] .. M.simple_markdown_to_html(content) .. [[
-</body>
-</html>]]
-
-	-- Write HTML file
-	local file_handle = io.open(full_output_path, "w")
-	if not file_handle then
-		M.logger.error("Failed to create output file: " .. full_output_path)
-		print("Error: Failed to create output file: " .. full_output_path)
-		return
-	end
-
-	file_handle:write(html_template)
-	file_handle:close()
-
-	M.logger.info("Exported chat to HTML: " .. full_output_path)
-	print("✅ Exported chat to: " .. full_output_path)
+	return fallback
 end
 
--- Export current chat buffer as Markdown for Jekyll
-M.cmd.ExportMarkdown = function(params)
-	local buf = vim.api.nvim_get_current_buf()
-	local file_name = vim.api.nvim_buf_get_name(buf)
-
-	-- Check if this is a valid chat file
-	local validation_error = M.not_chat(buf, file_name)
-	if validation_error then
-		M.logger.error("Cannot export: " .. validation_error)
-		print("Error: Cannot export - " .. validation_error)
-		return
+local function keymaps_for_mode(mode, bufnr)
+	local opts = nil
+	if bufnr ~= nil then
+		opts = { buffer = bufnr }
 	end
-
-	-- Get all buffer lines
-	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-	if #lines == 0 then
-		M.logger.error("Buffer is empty")
-		print("Error: Buffer is empty")
-		return
+	local ok, maps = pcall(vim.keymap.get, mode, nil, opts)
+	if ok and type(maps) == "table" then
+		return maps
 	end
+	return {}
+end
 
-	local headers, header_end = parse_chat_headers(lines)
-	if not header_end then
-		M.logger.error("Cannot export: invalid chat header format")
-		print("Error: Cannot export - invalid chat header format")
-		return
-	end
-
-	-- Extract Jekyll front matter data from Parley header
-	local title = "Untitled"
-	local post_date = os.date("%Y-%m-%d")
-	local tags = "unclassified"
-	local markdown_filename
-
-	-- Extract title from parsed headers
-	if headers and headers.topic and headers.topic ~= "" then
-		title = headers.topic
-	end
-
-	-- Extract date from transcript header filename first, then fallback to current file
-	local transcript_filename = headers and headers.file or nil
-
-	-- Try to extract date from transcript header filename first
-	if transcript_filename then
-		local basename = transcript_filename:gsub("%.md$", ""):gsub("%.markdown$", "")
-		local year, month, day = basename:match("^(%d%d%d%d)-(%d%d)-(%d%d)")
-		if year and month and day then
-			post_date = year .. "-" .. month .. "-" .. day
-		end
-	end
-
-	-- Fallback: extract date from current filename if not found in header
-	if post_date == os.date("%Y-%m-%d") then
-		local current_basename = vim.fn.fnamemodify(file_name, ":t:r")
-		local year, month, day = current_basename:match("^(%d%d%d%d)-(%d%d)-(%d%d)")
-		if year and month and day then
-			post_date = year .. "-" .. month .. "-" .. day
-		end
-	end
-
-	-- Extract tags from parsed headers
-	if headers and headers.tags then
-		if type(headers.tags) == "table" then
-			if #headers.tags > 0 then
-				tags = table.concat(headers.tags, ", ")
+local function find_mapping_lhs_by_desc(desc, modes, bufnr)
+	for _, mode in ipairs(modes) do
+		if bufnr ~= nil then
+			for _, map in ipairs(keymaps_for_mode(mode, bufnr)) do
+				if map.desc == desc and type(map.lhs) == "string" and map.lhs ~= "" then
+					return map.lhs
+				end
 			end
-		elseif type(headers.tags) == "string" and headers.tags ~= "" then
-			tags = headers.tags
+		end
+		for _, map in ipairs(keymaps_for_mode(mode, nil)) do
+			if map.desc == desc and type(map.lhs) == "string" and map.lhs ~= "" then
+				return map.lhs
+			end
+		end
+	end
+	return nil
+end
+
+local function resolve_shortcut(descs, modes, shortcut_config, fallback, bufnr)
+	local descriptions = type(descs) == "table" and descs or { descs }
+	for _, desc in ipairs(descriptions) do
+		local lhs = find_mapping_lhs_by_desc(desc, modes, bufnr)
+		if lhs then
+			return lhs
+		end
+	end
+	return shortcut_value(shortcut_config, fallback)
+end
+
+local function keybinding_help_lines()
+	local cfg = M.config or {}
+	local current_buf = vim.api.nvim_get_current_buf()
+	local lines = {
+		"Parley Key Bindings",
+		"",
+		"Global",
+	}
+
+	local function add(shortcut, description)
+		table.insert(lines, string.format("  %-12s %s", shortcut, description))
+	end
+
+	add(
+		resolve_shortcut(
+			"Show Parley key bindings",
+			shortcut_modes(cfg.global_shortcut_keybindings, { "n", "i" }),
+			cfg.global_shortcut_keybindings,
+			"<C-g>?",
+			current_buf
+		),
+		"Show key bindings"
+	)
+	add(
+		resolve_shortcut("Create New Chat", shortcut_modes(cfg.global_shortcut_new, { "n", "i" }), cfg.global_shortcut_new, "<C-g>c", current_buf),
+		"New chat"
+	)
+	add(
+		resolve_shortcut(
+			"Review current file in new Chat",
+			shortcut_modes(cfg.global_shortcut_review, { "n" }),
+			cfg.global_shortcut_review,
+			"<C-g>C",
+			current_buf
+		),
+		"Review current file in chat"
+	)
+	add(
+		resolve_shortcut("Open Chat Finder", shortcut_modes(cfg.global_shortcut_finder, { "n", "i" }), cfg.global_shortcut_finder, "<C-g>f", current_buf),
+		"Open chat finder"
+	)
+	add(
+		resolve_shortcut(
+			"Manage chat roots",
+			shortcut_modes(cfg.global_shortcut_chat_dirs, { "n", "i" }),
+			cfg.global_shortcut_chat_dirs,
+			"<C-g>h",
+			current_buf
+		),
+		"Manage chat roots"
+	)
+	add(
+		resolve_shortcut("Create New Note", shortcut_modes(cfg.global_shortcut_note_new, { "n", "i" }), cfg.global_shortcut_note_new, "<C-n>c", current_buf),
+		"New note"
+	)
+	add(
+		resolve_shortcut(
+			"Open Note Finder",
+			shortcut_modes(cfg.global_shortcut_note_finder, { "n", "i" }),
+			cfg.global_shortcut_note_finder,
+			"<C-n>f",
+			current_buf
+		),
+		"Open note finder"
+	)
+	add(
+		resolve_shortcut(
+			"Change directory to current year's note directory",
+			shortcut_modes(cfg.global_shortcut_year_root, { "n", "i" }),
+			cfg.global_shortcut_year_root,
+			"<C-n>r",
+			current_buf
+		),
+		"Jump to note year root"
+	)
+	add(
+		resolve_shortcut("Open oil.nvim file explorer", shortcut_modes(cfg.global_shortcut_oil, { "n" }), cfg.global_shortcut_oil, "<leader>fo", current_buf),
+		"Open oil file explorer"
+	)
+	add(resolve_shortcut("Toggle Interview Mode", { "n" }, nil, "<C-n>i", current_buf), "Toggle interview mode")
+	add(resolve_shortcut("Create Note from Template", { "n" }, nil, "<C-n>t", current_buf), "New note from template")
+	add(resolve_shortcut("Toggle web_search tool", { "n" }, nil, "<C-g>w", current_buf), "Toggle web_search")
+	add(resolve_shortcut("Toggle raw request mode", { "n" }, nil, "<C-g>r", current_buf), "Toggle raw request mode")
+	add(resolve_shortcut("Toggle raw response mode", { "n" }, nil, "<C-g>R", current_buf), "Toggle raw response mode")
+
+	table.insert(lines, "")
+	table.insert(lines, "Chat / Markdown")
+	add(
+		resolve_shortcut("Parley prompt Chat Respond", shortcut_modes(cfg.chat_shortcut_respond, { "n", "i", "v", "x" }), cfg.chat_shortcut_respond, "<C-g><C-g>", current_buf),
+		"Respond"
+	)
+	add(
+		resolve_shortcut(
+			"Parley prompt Chat Respond All",
+			shortcut_modes(cfg.chat_shortcut_respond_all, { "n", "i", "v", "x" }),
+			cfg.chat_shortcut_respond_all,
+			"<C-g>G",
+			current_buf
+		),
+		"Respond all"
+	)
+	add(
+		resolve_shortcut("Parley prompt Chat Stop", shortcut_modes(cfg.chat_shortcut_stop, { "n", "i", "v", "x" }), cfg.chat_shortcut_stop, "<C-g>s", current_buf),
+		"Stop active response"
+	)
+	add(
+		resolve_shortcut(
+			"Parley prompt Chat Delete",
+			shortcut_modes(cfg.chat_shortcut_delete, { "n", "i", "v", "x" }),
+			cfg.chat_shortcut_delete,
+			"<C-g>d",
+			current_buf
+		),
+		"Delete chat"
+	)
+	add(
+		resolve_shortcut(
+			{ "Parley prompt Next Agent", "Parley add chat reference" },
+			shortcut_modes(cfg.chat_shortcut_agent, { "n", "i", "v", "x" }),
+			cfg.chat_shortcut_agent,
+			"<C-g>a",
+			current_buf
+		),
+		"Next agent / add chat reference"
+	)
+	add(
+		resolve_shortcut(
+			"Parley prompt System Prompt Selector",
+			shortcut_modes(cfg.chat_shortcut_system_prompt, { "n", "i", "v", "x" }),
+			cfg.chat_shortcut_system_prompt,
+			"<C-g>p",
+			current_buf
+		),
+		"Next system prompt"
+	)
+	add(
+		resolve_shortcut(
+			"Parley prompt Toggle Follow Cursor",
+			shortcut_modes(cfg.chat_shortcut_follow_cursor, { "n", "i", "v", "x" }),
+			cfg.chat_shortcut_follow_cursor,
+			"<C-g>l",
+			current_buf
+		),
+		"Toggle follow cursor"
+	)
+	add(
+		resolve_shortcut(
+			{ "Parley prompt Search Chat Sections", "Parley create and insert new chat" },
+			shortcut_modes(cfg.chat_shortcut_search, { "n", "i", "v", "x" }),
+			cfg.chat_shortcut_search,
+			"<C-g>n",
+			current_buf
+		),
+		"Search chat sections / insert chat reference"
+	)
+	add(
+		resolve_shortcut(
+			"Parley open file under cursor",
+			shortcut_modes(cfg.chat_shortcut_open_file, { "n", "i" }),
+			cfg.chat_shortcut_open_file,
+			"<C-g>o",
+			current_buf
+		),
+		"Open @@ file reference"
+	)
+	add(resolve_shortcut("Parley prompt Outline Navigator", { "n" }, nil, "<C-g>t", current_buf), "Outline picker")
+
+	table.insert(lines, "")
+	table.insert(lines, "Chat Finder")
+	local finder_mappings = cfg.chat_finder_mappings or {}
+	add(shortcut_value(finder_mappings.next_recency, "<C-a>"), "Cycle chat recency window left")
+	add(shortcut_value(finder_mappings.previous_recency, "<C-s>"), "Cycle chat recency window right")
+	add(shortcut_value(finder_mappings.delete, "<C-d>"), "Delete selected chat")
+	add(shortcut_value(finder_mappings.move, "<C-r>"), "Move selected chat")
+	table.insert(lines, string.format("  %-12s %s", "", "(Recent window default: last " .. tostring((cfg.chat_finder_recency or {}).months or 6) .. " months)"))
+
+	table.insert(lines, "")
+	table.insert(lines, "Note Finder")
+	local note_finder_mappings = cfg.note_finder_mappings or {}
+	add(shortcut_value(note_finder_mappings.next_recency, "<C-a>"), "Cycle note recency window left")
+	add(shortcut_value(note_finder_mappings.previous_recency, "<C-s>"), "Cycle note recency window right")
+	add(shortcut_value(note_finder_mappings.delete, "<C-d>"), "Delete selected note")
+	table.insert(lines, string.format("  %-12s %s", "", "(Recent window default: last " .. tostring((cfg.note_finder_recency or {}).months or 6) .. " months)"))
+
+	table.insert(lines, "")
+	table.insert(lines, "Close: q or <Esc>")
+	return lines
+end
+
+M._keybinding_help_lines = function()
+	return keybinding_help_lines()
+end
+
+local function show_keybindings()
+	local lines = keybinding_help_lines()
+	local width = 0
+	for _, line in ipairs(lines) do
+		width = math.max(width, vim.fn.strdisplaywidth(line))
+	end
+	width = math.min(math.max(width + 4, 40), math.max(vim.o.columns - 4, 40))
+	local height = math.min(#lines + 2, math.max(vim.o.lines - 4, 8))
+	local row = math.max(math.floor((vim.o.lines - height) / 2 - 1), 0)
+	local col = math.max(math.floor((vim.o.columns - width) / 2), 0)
+
+	local buf = vim.api.nvim_create_buf(false, true)
+	vim.bo[buf].buftype = "nofile"
+	vim.bo[buf].bufhidden = "wipe"
+	vim.bo[buf].swapfile = false
+	vim.bo[buf].modifiable = true
+	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+	vim.bo[buf].modifiable = false
+
+	local win = vim.api.nvim_open_win(buf, true, {
+		relative = "editor",
+		width = width,
+		height = height,
+		row = row,
+		col = col,
+		style = "minimal",
+		border = "rounded",
+	})
+
+	local function close_window()
+		if vim.api.nvim_win_is_valid(win) then
+			vim.api.nvim_win_close(win, true)
 		end
 	end
 
-	-- Clean title for filename (remove invalid characters and normalize)
-	markdown_filename = title:gsub("[^%w%s%-_]", ""):gsub("%s+", "_"):lower()
-	if #markdown_filename > 50 then
-		markdown_filename = markdown_filename:sub(1, 50)
-	end
+	vim.keymap.set("n", "q", close_window, { buffer = buf, silent = true })
+	vim.keymap.set("n", "<Esc>", close_window, { buffer = buf, silent = true })
+	vim.keymap.set("i", "<Esc>", close_window, { buffer = buf, silent = true })
+end
 
-	-- Create Jekyll front matter
-	local jekyll_header = [[---
-layout: post
-title:  "]] .. title .. [["
-date:   ]] .. post_date .. [[
+-- Enhanced markdown to HTML converter with glow-like styling (delegated to exporter)
+M.simple_markdown_to_html = function(markdown)
+	return exporter.simple_markdown_to_html(markdown)
+end
 
-tags: ]] .. tags .. [[
+-- Export current chat buffer as HTML (delegated to exporter)
+M.cmd.ExportHTML = function(params)
+	exporter.export_html(params)
+end
 
-comments: true
----
 
-]]
-
-	-- Process content: replace 💬: with ## and remove Parley header
-	local body_lines = {}
-	for i = header_end + 1, #lines do
-		table.insert(body_lines, lines[i])
-	end
-	local content = table.concat(body_lines, "\n")
-
-	-- Replace 💬: with ## (the main transformation for Jekyll)
-	content = content:gsub("💬:", "#### 💬:")
-
-	-- Add watermark after Jekyll header
-	local watermark = "This transcript is generated by [parley.nvim](https://github.com/xianxu/parley.nvim).\n\n"
-
-	-- Combine Jekyll header with watermark and processed content
-	content = jekyll_header .. watermark .. content
-
-	-- Use extracted date for Jekyll filename prefix
-	local output_file = post_date .. "-" .. markdown_filename .. ".markdown"
-
-	-- Export directory (configurable, with CLI override)
-	local export_dir = params and params.args and params.args ~= "" and params.args or M.config.export_markdown_dir
-	local full_output_path = export_dir .. "/" .. output_file
-
-	-- Write Markdown file
-	local file_handle = io.open(full_output_path, "w")
-	if not file_handle then
-		M.logger.error("Failed to create output file: " .. full_output_path)
-		print("Error: Failed to create output file: " .. full_output_path)
-		return
-	end
-
-	file_handle:write(content)
-	file_handle:close()
-
-	M.logger.info("Exported chat to Markdown: " .. full_output_path)
-	print("✅ Exported chat to: " .. full_output_path)
+-- Export current chat buffer as Markdown for Jekyll (delegated to exporter)
+M.cmd.ExportMarkdown = function(params)
+	exporter.export_markdown(params)
 end
 
 --------------------------------------------------------------------------------
@@ -2949,14 +2350,14 @@ M.setup_buf_handler = function()
 			M._parley_bufs[buf] = "chat"
 			M.prep_chat(buf, file_name)
 			M.display_agent(buf, file_name)
-			M.highlight_interview_timestamps(buf)
+			interview.highlight_timestamps(buf)
 		-- Handle non-chat markdown files
 		elseif M.is_markdown(buf, file_name) then
 			M._parley_bufs[buf] = "markdown"
 			M.prep_md(buf)
 			M.setup_markdown_keymaps(buf)
 			M.highlight_markdown_chat_refs(buf)
-			M.highlight_interview_timestamps(buf)
+			interview.highlight_timestamps(buf)
 		end
 	end, gid)
 
@@ -2972,10 +2373,10 @@ M.setup_buf_handler = function()
 		-- Handle chat files
 		if M.not_chat(buf, file_name) == nil then
 			M.display_agent(buf, file_name)
-			M.highlight_interview_timestamps(buf)
+			interview.highlight_timestamps(buf)
 		-- Handle non-chat markdown files
 		elseif M.is_markdown(buf, file_name) then
-			M.highlight_interview_timestamps(buf)
+			interview.highlight_timestamps(buf)
 		end
 	end, gid)
 
@@ -2988,10 +2389,7 @@ M.setup_buf_handler = function()
 				_decor_cache[winid] = nil
 			end
 		end
-		local match_id_key = "parley_interview_timestamps_" .. buf
-		if M._interview_match_ids and M._interview_match_ids[match_id_key] then
-			M._interview_match_ids[match_id_key] = nil
-		end
+		interview.clear_match_cache(buf)
 		if M._markdown_topic_timers and M._markdown_topic_timers[buf] then
 			stop_and_close_timer(M._markdown_topic_timers[buf])
 			M._markdown_topic_timers[buf] = nil
@@ -4480,7 +3878,7 @@ M.chat_respond = function(params, callback, override_free_cursor, force)
 					M.logger.debug("Not moving cursor due to free_cursor setting")
 				end
 				-- Refresh interview timestamps (decoration provider handles chat highlights)
-				M.highlight_interview_timestamps(buf)
+				interview.highlight_timestamps(buf)
 
 				vim.cmd("doautocmd User ParleyDone")
 

@@ -277,7 +277,7 @@ local config = {
 	notes_dir = vim.fn.expand("~/Library/Mobile Documents/com~apple~CloudDocs/notes"),
 	-- export directories for different formats
 	export_html_dir = vim.fn.expand("~/blogs/static"),
-	export_markdown_dir = vim.fn.expand("~/blogs/_posts"),
+	export_markdown_dir = vim.fn.expand("~/blogs/posts"),
 	-- chat user prompt prefix
 	chat_user_prefix = "💬:",
 	-- chat assistant prompt prefix (static string or a table {static, template})
