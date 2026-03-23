@@ -75,6 +75,7 @@ specs:
 
   export/formats:
     code:
+      - lua/parley/exporter.lua
       - lua/parley/init.lua
       - lua/parley/render.lua
     tests:
@@ -113,6 +114,7 @@ specs:
 
   modes/interview:
     code:
+      - lua/parley/interview.lua
       - lua/parley/render.lua
       - lua/parley/init.lua
     tests:
@@ -129,6 +131,7 @@ specs:
 
   notes/structure:
     code:
+      - lua/parley/notes.lua
       - lua/parley/init.lua
     tests:
       - tests/unit/get_week_number_spec.lua
@@ -136,6 +139,7 @@ specs:
 
   notes/finder:
     code:
+      - lua/parley/notes.lua
       - lua/parley/init.lua
       - lua/parley/config.lua
       - lua/parley/float_picker.lua
@@ -145,6 +149,7 @@ specs:
 
   notes/templates:
     code:
+      - lua/parley/notes.lua
       - lua/parley/init.lua
     tests:
       - tests/unit/note_finder_logic_spec.lua
