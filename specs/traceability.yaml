@@ -16,6 +16,8 @@ specs:
   chat/lifecycle:
     code:
       - lua/parley/init.lua
+      - lua/parley/chat_dirs.lua
+      - lua/parley/chat_finder.lua
       - lua/parley/dispatcher.lua
       - lua/parley/render.lua
     tests:
@@ -37,7 +39,6 @@ specs:
   chat/parsing:
     code:
       - lua/parley/chat_parser.lua
-      - lua/parley/chat_finder.lua
       - lua/parley/helper.lua
     tests:
       - tests/unit/parse_chat_spec.lua
@@ -87,8 +88,6 @@ specs:
       - lua/parley/config.lua
       - lua/parley/defaults.lua
       - lua/parley/chat_dirs.lua
-      - lua/parley/chat_finder.lua
-      - lua/parley/note_finder.lua
       - lua/parley/init.lua
     tests:
       - tests/unit/chat_dirs_spec.lua
@@ -217,6 +216,7 @@ specs:
   ui/highlights:
     code:
       - lua/parley/render.lua
+      - lua/parley/highlighter.lua
     tests:
       - tests/integration/highlighting_spec.lua
       - tests/unit/render_spec.lua
