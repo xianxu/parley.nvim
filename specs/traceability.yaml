@@ -16,6 +16,7 @@ specs:
   chat/lifecycle:
     code:
       - lua/parley/init.lua
+      - lua/parley/chat_respond.lua
       - lua/parley/chat_dirs.lua
       - lua/parley/chat_finder.lua
       - lua/parley/dispatcher.lua
@@ -31,6 +32,7 @@ specs:
   chat/memory:
     code:
       - lua/parley/init.lua
+      - lua/parley/chat_respond.lua
       - lua/parley/chat_parser.lua
     tests:
       - tests/unit/build_messages_spec.lua
@@ -58,6 +60,7 @@ specs:
       - lua/parley/google_drive.lua
       - lua/parley/oauth.lua
       - lua/parley/helper.lua
+      - lua/parley/chat_respond.lua
     tests:
       - tests/unit/remote_references_spec.lua
       - tests/unit/oauth_spec.lua
@@ -69,6 +72,7 @@ specs:
       - lua/parley/provider_params.lua
       - lua/parley/dispatcher.lua
       - lua/parley/init.lua
+      - lua/parley/chat_respond.lua
     tests:
       - tests/unit/provider_params_spec.lua
       - tests/unit/dispatcher_query_spec.lua
