@@ -9,6 +9,7 @@ Parley exports chat buffers to blog-ready formats like Jekyll HTML and Markdown.
 - **Title**: Extracted from the `# topic:` line.
 - **Styling**: Inline CSS for syntax highlighting and layout.
 - **Output**: Written to `export_html_dir` or the provided argument.
+- **Clipboard**: Full path of the generated file is copied to the system clipboard (`+` register).
 
 ## Export to Markdown (Jekyll)
 ### Command: `:ParleyExportMarkdown [dir]`
@@ -18,6 +19,7 @@ Parley exports chat buffers to blog-ready formats like Jekyll HTML and Markdown.
 - **Date**: Extracted from the timestamp prefix in the `- file:` header.
 - **Tags**: Extracted from the `- tags:` header (defaults to `"unclassified"`).
 - **Output**: Written to `export_markdown_dir` or the provided argument.
+- **Clipboard**: Full path of the generated file is copied to the system clipboard (`+` register).
 
 ## Content Cleaning
 - Excludes `🧠:` thinking lines and `📝:` summary lines from the exported file.

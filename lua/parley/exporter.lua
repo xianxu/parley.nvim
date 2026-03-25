@@ -341,8 +341,9 @@ M.export_html = function(params)
 	file_handle:write(html_template)
 	file_handle:close()
 
+	vim.fn.setreg("+", full_output_path)
 	_parley.logger.info("Exported chat to HTML: " .. full_output_path)
-	print("✅ Exported chat to: " .. full_output_path)
+	print("✅ Exported chat to: " .. full_output_path .. " (path copied to clipboard)")
 end
 
 -- Export current chat buffer as Markdown for Jekyll
@@ -483,8 +484,9 @@ comments: true
 	file_handle:write(content)
 	file_handle:close()
 
+	vim.fn.setreg("+", full_output_path)
 	_parley.logger.info("Exported chat to Markdown: " .. full_output_path)
-	print("✅ Exported chat to: " .. full_output_path)
+	print("✅ Exported chat to: " .. full_output_path .. " (path copied to clipboard)")
 end
 
 return M

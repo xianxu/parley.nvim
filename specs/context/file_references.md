@@ -1,19 +1,26 @@
 # Spec: File References (@@)
 
 ## Overview
-Parley's `@@` syntax allows including local file or directory contents directly in LLM prompts.
+Parley's `@@` syntax allows including local file or remote URL contents directly in LLM prompts.
 
 ## Syntax Rules
-- **Single File**: `@@/path/to/file.txt` (absolute, relative, or home-relative).
-- **Directory**: `@@/path/to/dir/` (all files in a directory, non-recursive).
-- **Glob Pattern**: `@@/path/to/dir/*.lua`.
-- **Recursive Directory**: `@@/path/to/dir/**/`.
-- **Recursive Glob**: `@@/path/to/dir/**/*.lua`.
+**Canonical form:** `@@<ref>@@` — explicit open and close markers.
+
+Supported `<ref>` types:
+- `@@https://...@@` — remote URL
+- `@@/absolute/path@@` — absolute path
+- `@@~/home/relative@@` — home-relative path (`~` is expanded)
+- `@@./relative/path@@` — explicitly relative path
+
+Dropped forms (no longer supported):
+- `@@path: topic` colon syntax
+- Bare filenames (`@@name.lua`) — too ambiguous
+- End-at-whitespace shorthand
 
 ## Inline and Block Usage
-- Reference can be at the start of a line or inline within text.
-- `review @@./file.lua and improve it`.
-- Markdown notes MAY also use wrapped chat references like `@@2026-03-24.12-34-56.123.md@@`.
+- Reference can appear anywhere inline within text.
+- `review @@./file.lua@@ and improve it`.
+- Chat file references use the same form: `@@2026-03-24.12-34-56.123.md@@`.
 
 ## Content Loading
 - Files are loaded, prepended with their filename and line numbers.
