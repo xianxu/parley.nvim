@@ -69,9 +69,8 @@ describe("Export commands", function()
             -- Export to HTML
             M.cmd.ExportHTML()
 
-            -- Check that HTML file was created
-            -- Note: filename is derived from full title "topic: Test Chat" -> "topic_test_chat"
-            local html_file = export_html_dir .. "/topic_test_chat.html"
+            -- Check that HTML file was created with Jekyll date prefix
+            local html_file = export_html_dir .. "/2024-03-15-test_chat.html"
             local exists = vim.fn.filereadable(html_file) == 1
 
             assert.is_true(exists, "HTML file should be created at " .. html_file)
@@ -80,7 +79,7 @@ describe("Export commands", function()
             if exists then
                 local content = table.concat(vim.fn.readfile(html_file), "\n")
                 assert.is_true(content:find("<!DOCTYPE html>") ~= nil, "Should have DOCTYPE")
-                assert.is_true(content:find("<title>topic: Test Chat</title>") ~= nil, "Should have title")
+                assert.is_true(content:find("<title>Test Chat</title>") ~= nil, "Should have title")
                 assert.is_true(content:find("Question") ~= nil, "Should transform 💬: to Question")
             end
 
@@ -109,7 +108,7 @@ def hello():
             local buf = vim.api.nvim_get_current_buf()
             M.cmd.ExportHTML()
 
-            local html_file = export_html_dir .. "/topic_code_example.html"
+            local html_file = export_html_dir .. "/2024-03-15-code_example.html"
             assert.is_true(vim.fn.filereadable(html_file) == 1)
 
             local content = table.concat(vim.fn.readfile(html_file), "\n")
@@ -186,7 +185,7 @@ def hello():
             M.cmd.ExportHTML({ args = custom_dir })
 
             -- Check file was created in custom directory
-            local html_file = custom_dir .. "/topic_custom_dir_test.html"
+            local html_file = custom_dir .. "/2024-03-15-custom_dir_test.html"
             assert.is_true(vim.fn.filereadable(html_file) == 1,
                 "Should create HTML in custom directory")
 
@@ -263,8 +262,8 @@ def hello():
             if #md_files > 0 then
                 local content = table.concat(vim.fn.readfile(md_files[1]), "\n")
                 -- Verify transformation
-                assert.is_true(content:find("#### 💬:") ~= nil,
-                    "Should transform 💬: to #### 💬:")
+                assert.is_true(content:find("## Question") ~= nil,
+                    "Should transform 💬: to ## Question")
             end
 
             -- Close buffer if valid
@@ -399,7 +398,7 @@ def hello():
             if #html_files > 0 then
                 local filename = vim.fn.fnamemodify(html_files[1], ":t")
                 -- Should only contain safe characters
-                assert.is_true(filename:match("^[%w_]+%.html$") ~= nil,
+                assert.is_true(filename:match("^[%w%-%_]+%.html$") ~= nil,
                     "Filename should be sanitized: " .. filename)
             end
 
@@ -450,9 +449,10 @@ def hello():
             local html_files = vim.fn.glob(export_html_dir .. "/*.html", false, true)
             if #html_files > 0 then
                 local filename = vim.fn.fnamemodify(html_files[1], ":t:r") -- without .html
-                -- Should be truncated to 50 chars
-                assert.is_true(#filename <= 50,
-                    "Filename length should be <= 50, got " .. #filename)
+                -- Title part (after YYYY-MM-DD- prefix of 11 chars) should be truncated to 50 chars
+                local title_part = filename:gsub("^%d%d%d%d%-%d%d%-%d%d%-", "")
+                assert.is_true(#title_part <= 50,
+                    "Title portion of filename should be <= 50, got " .. #title_part)
             end
 
             -- Close buffer if valid
