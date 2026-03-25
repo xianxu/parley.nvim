@@ -2,25 +2,26 @@
 
 ## Workflow Orchestration
 
-### 1. Plan Mode By Default
-- Enter plan mode for ANY non-trivial task (3+ steps, architectural decisions, change more than 2 files, 100 lines)
+### 1. Overall
+- Enter plan mode for ANY non-trivial task (3+ steps, architectural decisions, change more than 2 files, 50 lines)
+- Work for you is in `tasks/issue.md`, you MUST make plan in `tasks/todo.md`
 - Wait for user	approval before implementation for ANY non-trivial task
 - If something goes sideways, STOP and re-plan immediately: don’t keep pushing
 - Use plan mode for verification steps, not just building
-- Work for you is in `tasks/issue.md`, you MUST make plan in `tasks/todo.md`
-- Keep specs in specs/*, `tasks/todo.md` up to date during your work
-- Plan for manual verification steps if necessary, but automate verification as much as possible, add temporary tracing if needed to verify code path triggered before calling it done
-- Leverage trace-driven debugging when your fix had no effect. Produce clear repro steps for user to follow.
+- Keep specs in `specs/*` and `tasks/todo.md` up to date during your work
+- Automate verification steps wherever possible: either by having end to end test; or by adding temporary tracing to mimic manual test
+- Failing automated verification, plan for manual verification steps in `tasks/todo.md`
+- Leverage trace-driven debugging when your fix had no effect, then produce clear repro steps for user to follow.
 
 ### 2. Subagent Strategy
 - Use subagents to keep main context window clean
-- Offload research, exploration, and parallel analysis to subagents
+- Offload research, brainstorming, exploration, and parallel analysis to subagents
 - One task per subagent for focused execution
 
 ### 3. Self-Improvement Loop
 - When user needs to involve in manual debugging with you, update `tasks/lessons.md` with the pattern what went wrong in the first place.
 - Write rules for yourself that prevent the same mistake
-- Review lessons at session start for relevant project
+- You MUST Review lessons at session start for relevant project
 
 ### 4. Verification Before Done
 - Never mark a task complete without proving it works
@@ -41,8 +42,8 @@
 - Zero context switching required from the user
 
 ### 7. Maintenance of Specs and Documentation
-- As you update `tasks/todo.md` and code, continuously update corresponding specs in specs/ folder
-- Maintain a specs/index.md that links to all spec files with brief descriptions of their contents.
+- As you update `tasks/todo.md` and code, continuously update corresponding specs in `specs/` folder
+- Maintain the `specs/index.md` that links to all spec files with brief descriptions of their contents.
 - Synthesize what we just built into a reusable spec document. DO NOT over specify — `specs/` is a practical way pointer for future developers to know the sketch of functionalities, history and intention behind them. Details should live in the cod
 
 ### 8. Pay attention to User Questions
@@ -69,6 +70,6 @@
 ---
 
 ## Repo-Specific References
-- **[TOOLING.md](constitution/TOOLING.md)** — development commands, test running, fixture refresh
-- **[STYLE.md](constitution/STYLE.md)** — code style and Lua conventions
-- **[ARCH.md](constitution/ARCH.md)** — project overview and module architecture
+- **[TOOLING.md](TOOLING.md)** — development commands, test running, fixture refresh
+- **[STYLE.md](STYLE.md)** — code style and Lua conventions
+- **[ARCH.md](ARCH.md)** — project overview and module architecture
