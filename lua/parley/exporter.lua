@@ -90,31 +90,54 @@ M.export_html = function(params)
 		return
 	end
 
+	-- Parse headers to extract topic/title
+	local cfg = _parley.config or {}
+	local chat_parser = _parley.chat_parser
+	local header_end = chat_parser.find_header_end(lines)
+	if not header_end then
+		_parley.logger.error("Cannot export: invalid chat header format")
+		print("Error: Cannot export - invalid chat header format")
+		return
+	end
+	local parse_config = {
+		chat_user_prefix = cfg.chat_user_prefix or "💬:",
+		chat_local_prefix = cfg.chat_local_prefix or "🔒:",
+		chat_assistant_prefix = cfg.chat_assistant_prefix or { "🤖:" },
+		chat_memory = cfg.chat_memory or { enable = true, summary_prefix = "📝:", reasoning_prefix = "🧠:" },
+	}
+	local parsed = chat_parser.parse_chat(lines, header_end, parse_config)
+	local headers = parsed.headers
+
+	-- Extract title from parsed headers
+	local title = "Untitled"
+	if headers and headers.topic and headers.topic ~= "" then
+		title = headers.topic
+	end
+
 	-- Convert content to markdown format suitable for processing
 	local content = table.concat(lines, "\n")
 
 	-- Replace 💬: with ## Question (similar to your sed command)
 	content = content:gsub("💬:", "## Question\n\n")
 
-	-- Extract title from first line for filename and HTML title
-	local title = "Untitled"
-	local html_filename
-
-	if lines[1] and lines[1]:match("^# (.+)") then
-		title = lines[1]:match("^# (.+)")
-		-- Clean title for filename (remove invalid characters and normalize)
-		html_filename = title:gsub("[^%w%s%-_]", ""):gsub("%s+", "_"):lower()
-		-- Limit filename length
-		if #html_filename > 50 then
-			html_filename = html_filename:sub(1, 50)
-		end
-	else
-		-- Fallback to timestamp-based filename if no title found
-		local basename = vim.fn.fnamemodify(file_name, ":t:r")
-		html_filename = basename
+	-- Clean title for filename
+	local html_filename = title:gsub("[^%w%s%-_]", ""):gsub("%s+", "_"):lower()
+	if #html_filename > 50 then
+		html_filename = html_filename:sub(1, 50)
+	end
+	if html_filename == "" then
+		html_filename = vim.fn.fnamemodify(file_name, ":t:r")
 	end
 
-	local output_file = html_filename .. ".html"
+	-- Extract date prefix from buffer filename (Jekyll convention: YYYY-MM-DD-title.html)
+	local post_date = os.date("%Y-%m-%d")
+	local basename = vim.fn.fnamemodify(file_name, ":t:r")
+	local year, month, day = basename:match("^(%d%d%d%d)-(%d%d)-(%d%d)")
+	if year and month and day then
+		post_date = year .. "-" .. month .. "-" .. day
+	end
+
+	local output_file = post_date .. "-" .. html_filename .. ".html"
 
 	-- Export directory (configurable, with CLI override)
 	local export_dir = params and params.args and params.args ~= "" and params.args or _parley.config.export_html_dir
