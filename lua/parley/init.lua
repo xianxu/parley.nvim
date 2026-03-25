@@ -2066,20 +2066,13 @@ M.open_chat_reference = function(current_line, cursor_col, _in_insert_mode, full
 
 	-- First check if the line begins with @@
 	if current_line:match("^@@") then
-		local wrapped_ref = current_line:match("^@@%s*(.-)%s*@@")
-		if wrapped_ref then
-			chat_path = wrapped_ref:match("^%s*([^:]+)")
-		end
+		-- Extract the chat path: prefer @@ref@@ form, then @@path: topic (strip topic), then rest of line
+		chat_path = current_line:match("^@@%s*([^@]+)@@")
+			or current_line:match("^@@%s*([^:]+):")
+			or current_line:match("^@@(.+)$")
 
-		-- Extract the chat path (up to the colon if present)
-		if not chat_path then
-			chat_path = current_line:match("^@@%s*([^:]+)")
-		end
-		if not chat_path then
-			chat_path = current_line:match("^@@(.+)$")
-		end
-		-- Extract the chat path: prefer @@ref@@ form, fall back to rest of line
-		chat_path = current_line:match("^@@%s*([^@]+)@@") or current_line:match("^@@(.+)$")
+		-- Clean up whitespace
+		chat_path = chat_path:gsub("^%s*(.-)%s*$", "%1")
 	else
 		-- Use extracted pure function to find closest @@ reference
 		chat_path = M._parse_at_reference(current_line, cursor_col)
