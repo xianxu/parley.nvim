@@ -232,7 +232,7 @@ end)
 
 describe("_build_messages: file references", function()
     it("file reference injects system message with file content before user message", function()
-        local file_refs = {{ path = "/path/to/file.lua", line = "@@/path/to/file.lua", original_line_index = 1 }}
+        local file_refs = {{ path = "/path/to/file.lua", line = "@@/path/to/file.lua@@", original_line_index = 1 }}
         local ex = exchange("Explain this code", nil, nil, file_refs)
         ex.question.line_start = 10
 
@@ -263,8 +263,8 @@ describe("_build_messages: file references", function()
 
     it("multiple file references accumulate file_content", function()
         local file_refs = {
-            { path = "/path/to/file1.lua", line = "@@/path/to/file1.lua", original_line_index = 1 },
-            { path = "/path/to/file2.lua", line = "@@/path/to/file2.lua", original_line_index = 2 }
+            { path = "/path/to/file1.lua", line = "@@/path/to/file1.lua@@", original_line_index = 1 },
+            { path = "/path/to/file2.lua", line = "@@/path/to/file2.lua@@", original_line_index = 2 }
         }
         local ex = exchange("Compare these files", nil, nil, file_refs)
         ex.question.line_start = 10
@@ -296,7 +296,7 @@ describe("_build_messages: file references", function()
             process_directory_pattern = function(path) return "Directory pattern: " .. path end
         }
 
-        local file_refs = {{ path = "/path/**/*.lua", line = "@@/path/**/*.lua", original_line_index = 1 }}
+        local file_refs = {{ path = "/path/**/*.lua", line = "@@/path/**/*.lua@@", original_line_index = 1 }}
         local ex = exchange("Analyze all Lua files", nil, nil, file_refs)
         ex.question.line_start = 10
 
@@ -775,7 +775,7 @@ end)
 
 describe("_build_messages: file references with preserved answer", function()
     it("when exchange has file references, answer is summarized even if should_preserve", function()
-        local file_refs = {{ path = "/file.lua", line = "@@/file.lua", original_line_index = 1 }}
+        local file_refs = {{ path = "/file.lua", line = "@@/file.lua@@", original_line_index = 1 }}
         local ex = exchange("Explain this", "Long answer content", "Short summary")
         ex.question.file_references = file_refs
         ex.question.line_start = 10
@@ -810,7 +810,7 @@ end)
 describe("_build_messages: remote file references", function()
     it("uses resolved_remote_content for URL references", function()
         local file_refs = {
-            { line = "@@https://docs.google.com/document/d/abc123/edit",
+            { line = "@@https://docs.google.com/document/d/abc123/edit@@",
               path = "https://docs.google.com/document/d/abc123/edit",
               original_line_index = 2 }
         }
@@ -842,7 +842,7 @@ describe("_build_messages: remote file references", function()
 
     it("uses cached-miss placeholder for unresolved remote URL references", function()
         local file_refs = {
-            { line = "@@https://docs.google.com/document/d/abc123/edit",
+            { line = "@@https://docs.google.com/document/d/abc123/edit@@",
               path = "https://docs.google.com/document/d/abc123/edit",
               original_line_index = 2 }
         }

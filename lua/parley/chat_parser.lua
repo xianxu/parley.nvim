@@ -198,31 +198,19 @@ M.parse_chat = function(lines, header_end, config)
 		end
 	end
 
-	-- Helper to extract @@ file references from a line of text.
-	-- Supports @@ anywhere in the line for URLs, absolute paths, and relative paths.
+	-- Helper to extract @@ref@@ file references from a line of text.
+	-- Canonical form: @@<ref>@@ where ref starts with https://, /, ~/, or ./
 	local function extract_file_refs(text)
 		local refs = {}
-		-- First check: @@ at start of line (original behavior, supports "@@path: topic" syntax)
-		local path = text:match("^@@%s*(https?://.+)") or text:match("^@@%s*([^:]+)")
-		if path then
-			table.insert(refs, (path:gsub("^%s*(.-)%s*$", "%1")))
-			return refs
-		end
-		-- Second check: inline @@ followed by URL or file path
-		-- Match @@<path> where path starts with http(s)://, /, ./, or ~/ and ends at whitespace
 		local seen = {}
-		for ref in text:gmatch("%s@@(https?://[^%s]+)") do
+		for ref in text:gmatch("@@([^@]+)@@") do
 			ref = ref:gsub("^%s*(.-)%s*$", "%1")
-			if not seen[ref] then seen[ref] = true; table.insert(refs, ref) end
-		end
-		for ref in text:gmatch("%s@@([~/%.][^%s]+)") do
-			ref = ref:gsub("^%s*(.-)%s*$", "%1")
-			if not seen[ref] then seen[ref] = true; table.insert(refs, ref) end
-		end
-		-- Also match at start of text (no leading whitespace) for inline refs
-		local start_ref = text:match("^@@(https?://[^%s]+)") or text:match("^@@([~/%.][^%s]+)")
-		if start_ref and not seen[start_ref] then
-			table.insert(refs, (start_ref:gsub("^%s*(.-)%s*$", "%1")))
+			if ref:match("^https?://") or ref:match("^/") or ref:match("^~/") or ref:match("^%./") then
+				if not seen[ref] then
+					seen[ref] = true
+					table.insert(refs, ref)
+				end
+			end
 		end
 		return refs
 	end

@@ -942,7 +942,7 @@ describe("chat_respond_all", function()
 - file: test.md
 ---
 
-💬: First question @@https://example.com/one.txt
+💬: First question @@https://example.com/one.txt@@
 
 🤖: First answer
 

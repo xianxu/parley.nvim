@@ -1587,7 +1587,7 @@ M.setup_markdown_keymaps = function(buf)
 
 		-- Insert the chat reference at the cursor position
 		vim.api.nvim_buf_set_lines(buf, cursor_pos[1] - 1, cursor_pos[1] - 1, false, {
-			"@@" .. rel_path .. ": New chat",
+			"@@" .. rel_path .. "@@",
 		})
 
 		M.logger.info("Created reference to new chat: " .. rel_path)
@@ -1605,11 +1605,11 @@ M.setup_markdown_keymaps = function(buf)
 
 		-- Insert the chat reference at the current cursor position
 		local col = cursor_pos[2]
-		local new_line = current_line:sub(1, col) .. "@@" .. rel_path .. ": New chat" .. current_line:sub(col + 1)
+		local new_line = current_line:sub(1, col) .. "@@" .. rel_path .. "@@" .. current_line:sub(col + 1)
 		vim.api.nvim_set_current_line(new_line)
 
 		-- Return to insert mode at the end of the inserted reference
-		vim.api.nvim_win_set_cursor(0, { cursor_pos[1], col + #("@@" .. rel_path .. ": New chat") })
+		vim.api.nvim_win_set_cursor(0, { cursor_pos[1], col + #("@@" .. rel_path .. "@@") })
 
 		-- Make sure we stay in insert mode
 		vim.schedule(function()
@@ -1888,7 +1888,7 @@ M.cmd.ChatReview = function(_params)
 		M.logger.warning("No file associated with current buffer")
 		return
 	end
-	local question = "proof read the following file:\n\n@@" .. file_path
+	local question = "proof read the following file:\n\n@@" .. file_path .. "@@"
 	return M.new_chat(nil, nil, question)
 end
 
@@ -2028,51 +2028,27 @@ M.cmd.Outline = function()
 	M.outline.question_picker(M.config)
 end
 
--- Internal: Parse @@ references from a line and return the closest one to cursor
--- Pure function for testability
+-- Internal: Parse @@ref@@ references from a line and return the closest one to cursor.
+-- Canonical form: @@<ref>@@ with explicit closing marker. Pure function for testability.
 M._parse_at_reference = function(line, cursor_col)
 	local references = {}
-
-	-- Look for instances of @@ in the line
 	local start_idx = 1
 	while true do
-		local match_start, match_end = line:find("@@", start_idx)
-		if not match_start then
-			break
+		local open_start, open_end = line:find("@@", start_idx, true)
+		if not open_start then break end
+		local close_start, close_end = line:find("@@", open_end + 1, true)
+		if not close_start then break end
+		local content = line:sub(open_end + 1, close_start - 1):gsub("^%s*(.-)%s*$", "%1")
+		if content ~= "" then
+			table.insert(references, { start = open_start, content = content })
 		end
-
-		-- Find the end of this path (space, line end, or next @@)
-		local content_end
-
-		-- Look for the next @@ after this one
-		local next_marker = line:find("@@", match_end + 1)
-
-		-- If there's no next marker, use the end of line
-		if not next_marker then
-			content_end = #line
-		else
-			content_end = next_marker - 1
-		end
-
-		-- Extract the path
-		local path = line:sub(match_end + 1, content_end):gsub("^%s*(.-)%s*$", "%1")
-
-		table.insert(references, {
-			start = match_start,
-			content = path,
-		})
-
-		start_idx = match_end + 1
+		start_idx = close_end + 1
 	end
 
-	if #references == 0 then
-		return nil
-	end
+	if #references == 0 then return nil end
 
-	-- Find the closest reference to cursor position
 	local closest_ref = nil
 	local min_distance = math.huge
-
 	for _, ref in ipairs(references) do
 		local distance = math.abs(cursor_col - ref.start)
 		if distance < min_distance then
@@ -2080,7 +2056,6 @@ M._parse_at_reference = function(line, cursor_col)
 			closest_ref = ref
 		end
 	end
-
 	return closest_ref and closest_ref.content or nil
 end
 
@@ -2103,9 +2078,8 @@ M.open_chat_reference = function(current_line, cursor_col, _in_insert_mode, full
 		if not chat_path then
 			chat_path = current_line:match("^@@(.+)$")
 		end
-
-		-- Clean up whitespace
-		chat_path = chat_path:gsub("^%s*(.-)%s*$", "%1")
+		-- Extract the chat path: prefer @@ref@@ form, fall back to rest of line
+		chat_path = current_line:match("^@@%s*([^@]+)@@") or current_line:match("^@@(.+)$")
 	else
 		-- Use extracted pure function to find closest @@ reference
 		chat_path = M._parse_at_reference(current_line, cursor_col)
@@ -2189,10 +2163,10 @@ M.cmd.OpenFileUnderCursor = function()
 	-- Check if it's a markdown file (but not a chat file)
 	if M.is_markdown(buf, file_name) then
 		M.logger.debug("File is recognized as markdown")
-		-- Try to open as a chat reference, passing insert mode status
-		if M.open_chat_reference(current_line, cursor_col, in_insert_mode, current_line) then
-			return
-		end
+		-- Try to open as a chat reference; return regardless (success or not) since
+		-- the markdown handler owns this case
+		M.open_chat_reference(current_line, cursor_col, in_insert_mode, current_line)
+		return
 	end
 
 	-- If not a markdown file or not a chat reference, check if it's a chat file
@@ -2206,7 +2180,7 @@ M.cmd.OpenFileUnderCursor = function()
 
 	-- First check if the line begins with @@
 	if current_line:match("^@@") then
-		filepath = current_line:match("^@@(.+)$"):gsub("^%s*(.-)%s*$", "%1")
+		filepath = (current_line:match("^@@(.+)@@") or current_line:match("^@@(.+)$")):gsub("^%s*(.-)%s*$", "%1")
 	else
 		-- Use extracted pure function to find closest @@ reference
 		filepath = M._parse_at_reference(current_line, cursor_col)
