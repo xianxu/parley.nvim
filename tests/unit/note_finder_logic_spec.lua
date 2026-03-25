@@ -21,6 +21,10 @@ describe("NoteFinder logic", function()
         file:close()
     end
 
+    local function write_template(name)
+        write_file(notes_dir .. "/templates/" .. name, { "# template" })
+    end
+
     before_each(function()
         original_config = vim.deepcopy(M.config)
         original_float_picker_open = M.float_picker.open
@@ -418,6 +422,134 @@ describe("NoteFinder logic", function()
             { "Date", string.format("%04d-%02d-%02d", current_date.year, current_date.month, current_date.day) },
         }, captured.metadata)
         assert.equals(1, vim.fn.isdirectory(notes_dir .. "/K"))
+    end)
+
+    it("appends a normalized template slug for top-level template notes", function()
+        local current_date = os.date("*t")
+        local captured = nil
+        local template = { "# {{title}}", "", "Date: {{date}}" }
+
+        write_template("hiring-ai-affinity.md")
+        write_template("hiring-ai-engineers.md")
+        write_template("hiring-ref-check.md")
+        write_template("hiring-HMS-Hiring-Manager-Phone-Screen.md")
+
+        M._create_note_file = function(filename, title, metadata, template_content)
+            captured = {
+                filename = filename,
+                title = title,
+                metadata = metadata,
+                template_content = template_content,
+            }
+            return 88
+        end
+
+        local buf = M.new_note_from_template(
+            "{K} xian xu",
+            template,
+            "hiring-HMS-Hiring-Manager-Phone-Screen.md"
+        )
+
+        assert.equals(88, buf)
+        assert.equals(notes_dir .. "/K/xian-xu-hms-manager-phone-screen.md", captured.filename)
+        assert.equals("xian xu", captured.title)
+        assert.same(template, captured.template_content)
+        assert.same({
+            { "Date", string.format("%04d-%02d-%02d", current_date.year, current_date.month, current_date.day) },
+        }, captured.metadata)
+    end)
+
+    it("appends a normalized template slug for dated template notes", function()
+        local current_date = os.date("*t")
+        local year = current_date.year
+        local month = string.format("%02d", current_date.month)
+        local day = string.format("%02d", current_date.day)
+        local week_number = M.helpers.get_week_number_sunday_based(string.format("%04d-%s-%s", year, month, day))
+        local week_folder = "W" .. string.format("%02d", week_number)
+        local captured = nil
+        local template = { "# {{title}}", "", "Date: {{date}}" }
+
+        write_template("hiring-ai-affinity.md")
+        write_template("hiring-ai-engineers.md")
+        write_template("hiring-ref-check.md")
+        write_template("hiring-HMS-Hiring-Manager-Phone-Screen.md")
+
+        M._create_note_file = function(filename, title, metadata, template_content)
+            captured = {
+                filename = filename,
+                title = title,
+                metadata = metadata,
+                template_content = template_content,
+            }
+            return 89
+        end
+
+        local buf = M.new_note_from_template(
+            "Xian Xu",
+            template,
+            "hiring-HMS-Hiring-Manager-Phone-Screen.md"
+        )
+
+        assert.equals(89, buf)
+        assert.equals(
+            string.format(
+                "%s/%04d/%s/%s/%s-xian-xu-hms-manager-phone-screen.md",
+                notes_dir,
+                year,
+                month,
+                week_folder,
+                day
+            ),
+            captured.filename
+        )
+        assert.equals("Xian Xu", captured.title)
+        assert.same(template, captured.template_content)
+        assert.same({
+            { "Date", string.format("%04d-%s-%s", year, month, day) },
+            { "Week", week_folder },
+        }, captured.metadata)
+    end)
+
+    it("keeps uncommon template slugs in template note filenames", function()
+        local current_date = os.date("*t")
+        local year = current_date.year
+        local month = string.format("%02d", current_date.month)
+        local day = string.format("%02d", current_date.day)
+        local week_number = M.helpers.get_week_number_sunday_based(string.format("%04d-%s-%s", year, month, day))
+        local week_folder = "W" .. string.format("%02d", week_number)
+        local captured = nil
+        local template = { "# {{title}}", "", "Date: {{date}}" }
+
+        write_template("brief-phone-screen.md")
+        write_template("candidate-summary.md")
+        write_template("hms-manager-phone-screen.md")
+
+        M._create_note_file = function(filename, title, metadata, template_content)
+            captured = {
+                filename = filename,
+                title = title,
+                metadata = metadata,
+                template_content = template_content,
+            }
+            return 90
+        end
+
+        local buf = M.new_note_from_template("Xian Xu", template, "hms-manager-phone-screen.md")
+
+        assert.equals(90, buf)
+        assert.equals(
+            string.format(
+                "%s/%04d/%s/%s/%s-xian-xu-hms-manager-phone-screen.md",
+                notes_dir,
+                year,
+                month,
+                week_folder,
+                day
+            ),
+            captured.filename
+        )
+        assert.equals("Xian Xu", captured.title)
+        assert.same(template, captured.template_content)
     end)
 
     it("rejects bare brace filters during template note creation", function()

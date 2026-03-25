@@ -1894,8 +1894,8 @@ M.new_note = function(subject)
 end
 
 -- Create a new note from template with given subject and template content
-M.new_note_from_template = function(subject, template_content)
-	return notes.new_note_from_template(subject, template_content)
+M.new_note_from_template = function(subject, template_content, template_filename)
+	return notes.new_note_from_template(subject, template_content, template_filename)
 end
 
 M.cmd.ChatDelete = function()

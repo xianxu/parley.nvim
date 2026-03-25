@@ -56,8 +56,79 @@ M._create_note_file_impl = function(filename, title, metadata, template_content)
     return buf
 end
 
+local function slugify_filename_part(text)
+    local slug = (text or ""):lower()
+    slug = slug:gsub("%.md$", "")
+    slug = slug:gsub("[_%s]+", "-")
+    slug = slug:gsub("[^%w%-]", "-")
+    slug = slug:gsub("%-+", "-")
+    slug = slug:gsub("^%-+", "")
+    slug = slug:gsub("%-+$", "")
+    return slug
+end
+
+local function get_template_dir()
+    return _parley.config.notes_dir .. "/templates"
+end
+
+local function get_template_slug_counts(template_dir)
+    local counts = {}
+    local handle = vim.loop.fs_scandir(template_dir)
+
+    if not handle then
+        return counts
+    end
+
+    local name, kind
+    repeat
+        name, kind = vim.loop.fs_scandir_next(handle)
+        if name and kind == "file" and name:match("%.md$") then
+            local stem = vim.fn.fnamemodify(name, ":t:r")
+            local normalized = slugify_filename_part(stem)
+            local parts = vim.split(normalized, "-", { trimempty = true })
+
+            for _, part in ipairs(parts) do
+                counts[part] = (counts[part] or 0) + 1
+            end
+        end
+    until not name
+
+    return counts
+end
+
+local function build_template_suffix(template_filename)
+    if not template_filename or template_filename == "" then
+        return ""
+    end
+
+    local counts = get_template_slug_counts(get_template_dir())
+    local stem = vim.fn.fnamemodify(template_filename, ":t:r")
+    local normalized = slugify_filename_part(stem)
+    local parts = vim.split(normalized, "-", { trimempty = true })
+    local filtered = {}
+
+    for _, part in ipairs(parts) do
+        if (counts[part] or 0) <= 3 then
+            table.insert(filtered, part)
+        end
+    end
+
+    return table.concat(filtered, "-")
+end
+
+local function build_template_note_slug(subject, template_filename)
+    local subject_slug = slugify_filename_part(subject)
+    local template_suffix = build_template_suffix(template_filename)
+
+    if template_suffix == "" then
+        return subject_slug
+    end
+
+    return subject_slug .. "-" .. template_suffix
+end
+
 -- Local helper: try to create a top-level note with {folder} syntax
-local function try_create_top_level_note(subject, current_date, template_content)
+local function try_create_top_level_note(subject, current_date, template_content, template_filename)
     if subject == "{}" or subject:match("^%{%}%s+") then
         return nil, "Bare {} is reserved for Note Finder filters and cannot be used during note creation"
     end
@@ -73,7 +144,7 @@ local function try_create_top_level_note(subject, current_date, template_content
 
     local target_dir = _parley.config.notes_dir .. "/" .. folder
     _parley.helpers.prepare_dir(target_dir)
-    local slug = rest:gsub("%s+", "-")
+    local slug = template_content and build_template_note_slug(rest, template_filename) or rest:gsub("%s+", "-")
     local filename = target_dir .. "/" .. slug .. ".md"
     local y = string.format("%04d", current_date.year)
     local mon = string.format("%02d", current_date.month)
@@ -259,7 +330,7 @@ M.new_note = function(subject)
 end
 
 -- Create a new note from template with given subject and template content
-M.new_note_from_template = function(subject, template_content)
+M.new_note_from_template = function(subject, template_content, template_filename)
     -- Get current date
     local current_date = os.date("*t")
     local year = current_date.year
@@ -268,7 +339,12 @@ M.new_note_from_template = function(subject, template_content)
 
     -- Parse date from subject if provided in one of the formats (same logic as new_note)
     do
-        local top_level_note, top_level_note_err = try_create_top_level_note(subject, current_date, template_content)
+        local top_level_note, top_level_note_err = try_create_top_level_note(
+            subject,
+            current_date,
+            template_content,
+            template_filename
+        )
         if top_level_note_err then
             vim.notify(top_level_note_err, vim.log.levels.WARN)
             return nil
@@ -332,14 +408,11 @@ M.new_note_from_template = function(subject, template_content)
     _parley.helpers.prepare_dir(month_dir)
     _parley.helpers.prepare_dir(week_dir)
 
-    -- Replace spaces with dashes in subject
-    subject = subject:gsub(" ", "-")
-
     -- Create filename
-    local filename = week_dir .. "/" .. day .. "-" .. subject .. ".md"
+    local filename = week_dir .. "/" .. day .. "-" .. build_template_note_slug(subject, template_filename) .. ".md"
 
     -- Create note with template content
-    local title = subject:gsub("-", " ")
+    local title = subject
     local note_date = year .. "-" .. month .. "-" .. day
     return M.create_note_file(filename, title, { { "Date", note_date }, { "Week", week_folder } }, template_content)
 end
@@ -413,7 +486,7 @@ M.cmd_note_new_from_template = function()
             if not subject or subject == "" then
                 return
             end
-            M.new_note_from_template(subject, template_lines)
+            M.new_note_from_template(subject, template_lines, item.value.filename)
         end,
     })
 end
