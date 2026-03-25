@@ -68,27 +68,7 @@
 
 ---
 
-## Project Overview
-Parley.nvim is a Neovim plugin that provides a streamlined LLM chat interface with highlighting and navigation features. It supports multiple AI providers (OpenAI, Anthropic, Google AI, Ollama).
-
-## Development Commands
-- Manual testing: Start Neovim and use `:lua require('parley').setup()` followed by `:Parley`
-- Run tests: `make test` (runs all unit + integration tests via plenary.nvim in headless Neovim)
-- Lint: `make lint`
-- Run tests for one spec: `make test-spec SPEC=chat/lifecycle` (uses `specs/traceability.yaml` mapping)
-- Run tests for changed specs: `make test-changed` (runs mapped tests for changed `specs/*/*.md` files), this is faster than full test run
-- Refresh SSE fixtures: `ANTHROPIC_API_KEY=... OPENAI_API_KEY=... make fixtures`
-- Test files live in `tests/unit/` (pure logic, no Neovim APIs) and `tests/integration/` (full Neovim runtime)
-- Lint: None specified (consider using luacheck or lua-formatter if needed)
-
-## Code Style Guidelines
-- Use 4-space indentation consistently
-- Follow Lua module pattern with `local M = {}` and `return M`
-- Prefer local functions: `local function name()` or `M.name = function()`
-- Use descriptive variable and function names (snake_case)
-- Wrap Neovim API calls with pcall for error handling
-- Prefer vim.api for Neovim API calls
-- Use local variables to avoid polluting global namespace
-- Use multi-line strings with `[[...]]` syntax for templates
-- Document functions with inline comments explaining purpose and parameters
-- Follow existing patterns for config handling and error messaging
+## Repo-Specific References
+- **[TOOLING.md](constitution/TOOLING.md)** — development commands, test running, fixture refresh
+- **[STYLE.md](constitution/STYLE.md)** — code style and Lua conventions
+- **[ARCH.md](constitution/ARCH.md)** — project overview and module architecture
