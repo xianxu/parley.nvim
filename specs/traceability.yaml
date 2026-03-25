@@ -48,9 +48,12 @@ specs:
 
   context/file_references:
     code:
+      - lua/parley/init.lua
+      - lua/parley/highlighter.lua
       - lua/parley/file_tracker.lua
       - lua/parley/helper.lua
     tests:
+      - tests/unit/open_chat_reference_spec.lua
       - tests/unit/parse_at_reference_spec.lua
       - tests/unit/process_directory_pattern_spec.lua
       - tests/unit/file_tracker_spec.lua
@@ -221,6 +224,7 @@ specs:
     code:
       - lua/parley/render.lua
       - lua/parley/highlighter.lua
+      - lua/parley/init.lua
     tests:
       - tests/integration/highlighting_spec.lua
       - tests/unit/render_spec.lua

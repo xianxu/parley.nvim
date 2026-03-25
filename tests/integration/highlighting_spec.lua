@@ -271,3 +271,102 @@ describe("decoration provider cache", function()
             "expected continuation lines in the viewport to keep question highlight state")
     end)
 end)
+
+describe("markdown chat reference rendering", function()
+    after_each(function()
+        cleanup_extra_windows()
+        cleanup_bufs()
+    end)
+
+    it("refreshes @@chat-file@@ lines with the chat topic in markdown buffers", function()
+        local chat_path = tmp_dir .. "/2026-03-24.12-34-56.123.md"
+        vim.fn.writefile({
+            "---",
+            "topic: Rendered Topic",
+            "file: 2026-03-24.12-34-56.123.md",
+            "---",
+            "",
+            "💬: hi",
+            "🤖:[Agent] hello",
+        }, chat_path)
+
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+            "@@" .. chat_path .. ": New chat",
+        })
+        vim.api.nvim_win_set_buf(0, buf)
+        parley._parley_bufs[buf] = "markdown"
+
+        parley.highlight_markdown_chat_refs(buf)
+        vim.wait(700, function()
+            local line = vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1]
+            return line == "@@" .. chat_path .. ": Rendered Topic"
+        end)
+
+        local line = vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1]
+        assert.equals("@@" .. chat_path .. ": Rendered Topic", line)
+    end)
+
+    it("does not rewrite non-chat @@file@@ references in markdown buffers", function()
+        local plain_path = tmp_dir .. "/plain-note.md"
+        vim.fn.writefile({
+            "# Plain note",
+            "",
+            "topic: not a chat transcript",
+        }, plain_path)
+
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+            "@@" .. plain_path .. ": New chat",
+        })
+        vim.api.nvim_win_set_buf(0, buf)
+        parley._parley_bufs[buf] = "markdown"
+
+        parley.highlight_markdown_chat_refs(buf)
+        vim.wait(700)
+
+        local line = vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1]
+        assert.equals("@@" .. plain_path .. ": New chat", line)
+    end)
+
+    it("refreshes from the updated topic in an open unsaved chat buffer", function()
+        local chat_path = tmp_dir .. "/2026-03-24.12-34-56.456.md"
+        vim.fn.writefile({
+            "---",
+            "topic: New chat",
+            "file: 2026-03-24.12-34-56.456.md",
+            "---",
+            "",
+            "💬: hi",
+            "🤖:[Agent] hello",
+        }, chat_path)
+
+        local chat_buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_name(chat_buf, chat_path)
+        vim.api.nvim_buf_set_lines(chat_buf, 0, -1, false, {
+            "---",
+            "topic: Actual topic",
+            "file: 2026-03-24.12-34-56.456.md",
+            "---",
+            "",
+            "💬: hi",
+            "🤖:[Agent] hello",
+        })
+
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+            "@@" .. chat_path .. ": New chat",
+        })
+        vim.api.nvim_win_set_buf(0, buf)
+        parley._parley_bufs[buf] = "markdown"
+
+        parley.highlight_markdown_chat_refs(buf)
+        vim.wait(700, function()
+            local line = vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1]
+            return line == "@@" .. chat_path .. ": Actual topic"
+        end)
+
+        local line = vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1]
+        assert.equals("@@" .. chat_path .. ": Actual topic", line)
+    end)
+end)

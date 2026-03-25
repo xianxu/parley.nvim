@@ -43,6 +43,30 @@ end
 local HIGHLIGHT_VIEWPORT_MARGIN = 20
 local HIGHLIGHT_CONTEXT_LINES = 200
 
+local function split_chat_reference_content(content)
+    local path, topic = content:match("^%s*([^:]+)%s*:%s*(.-)%s*$")
+    if path then
+        return path, topic
+    end
+
+    return content:gsub("^%s*(.-)%s*$", "%1"), nil
+end
+
+local function render_chat_reference_label(path, current_topic)
+    local trimmed_path = path and path:gsub("^%s*(.-)%s*$", "%1") or ""
+    if trimmed_path == "" then
+        return nil
+    end
+
+    local expanded_path = vim.fn.expand(trimmed_path)
+    local topic = _parley.get_chat_topic(expanded_path)
+    if not topic or topic == "" or topic == current_topic then
+        return nil
+    end
+
+    return "@@" .. trimmed_path .. ": " .. topic
+end
+
 local function get_chat_highlight_prefix_patterns()
     local user_prefix = _parley.config.chat_user_prefix
     local local_prefix = _parley.config.chat_local_prefix
@@ -422,31 +446,44 @@ M.highlight_markdown_chat_refs = function(buf)
             for _, range in ipairs(refresh_ranges) do
                 local latest_lines = vim.api.nvim_buf_get_lines(buf, range.start_line - 1, range.end_line, false)
                 for offset, line in ipairs(latest_lines) do
-                    local line_nr = range.start_line + offset - 1
-                    -- Refresh topic only for @@ file references.
-                    if line:match("^@@%s*[^+]") or line:match("^@@/") then
-                        local chat_path = line:match("^@@%s*([^:]+)")
-                        if chat_path then
-                            local trimmed_path = chat_path:gsub("^%s*(.-)%s*$", "%1")
-                            local expanded_path = vim.fn.expand(trimmed_path)
-                            if vim.fn.filereadable(expanded_path) == 1 then
-                                local topic = _parley.get_chat_topic(expanded_path)
-                                if topic then
-                                    local current_topic = line:match("^@@%s*[^:]+:%s*(.+)$")
-                                    if not current_topic or current_topic ~= topic then
-                                        vim.api.nvim_buf_set_lines(buf, line_nr - 1, line_nr, false, {
-                                            "@@" .. trimmed_path .. ": " .. topic,
-                                        })
-                                        _parley.logger.debug("Updated chat reference topic for " .. trimmed_path .. " to: " .. topic)
-                                    end
-                                end
-                            end
-                        end
+                    local updated_line = M.render_markdown_chat_reference_line(line)
+                    if updated_line ~= line then
+                        local line_nr = range.start_line + offset - 1
+                        vim.api.nvim_buf_set_lines(buf, line_nr - 1, line_nr, false, { updated_line })
                     end
                 end
             end
+
+            vim.cmd("redraw")
         end)
     )
+end
+
+M.render_markdown_chat_reference_line = function(line)
+    local rendered_line = line
+
+    rendered_line = rendered_line:gsub("@@(.-)@@", function(content)
+        local path, current_topic = split_chat_reference_content(content)
+        local rendered = render_chat_reference_label(path, current_topic)
+        if rendered then
+            return rendered .. "@@"
+        end
+
+        return "@@" .. content .. "@@"
+    end)
+
+    if rendered_line:match("^@@") and not rendered_line:find("@@.-@@") then
+        local content = rendered_line:match("^@@%s*(.-)%s*$")
+        if content then
+            local path, current_topic = split_chat_reference_content(content)
+            local rendered = render_chat_reference_label(path, current_topic)
+            if rendered then
+                return rendered
+            end
+        end
+    end
+
+    return rendered_line
 end
 
 -- Apply highlighting to chat blocks in the current buffer.
@@ -511,20 +548,23 @@ M.setup_buf_handler = function()
             local cache = _decor_cache[winid]
             if not cache or cache.bufnr ~= bufnr then return end
             local highlights = cache.rows[row]
-            if not highlights then return end
-            for _, hl in ipairs(highlights) do
-                local end_col = hl.col_end
-                if end_col == -1 then
-                    local lines = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)
-                    end_col = lines[1] and #lines[1] or 0
+            local lines = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)
+            local line = lines[1] or ""
+
+            if highlights then
+                for _, hl in ipairs(highlights) do
+                    local end_col = hl.col_end
+                    if end_col == -1 then
+                        end_col = #line
+                    end
+                    pcall(vim.api.nvim_buf_set_extmark, bufnr, decor_ns, row, hl.col_start, {
+                        end_row = row,
+                        end_col = end_col,
+                        hl_group = hl.hl_group,
+                        ephemeral = true,
+                        priority = 100,
+                    })
                 end
-                pcall(vim.api.nvim_buf_set_extmark, bufnr, decor_ns, row, hl.col_start, {
-                    end_row = row,
-                    end_col = end_col,
-                    hl_group = hl.hl_group,
-                    ephemeral = true,
-                    priority = 100,
-                })
             end
         end,
     })

@@ -1440,24 +1440,50 @@ M.get_chat_topic = function(file_path)
 	local stat = uv and uv.fs_stat and uv.fs_stat(file_path) or nil
 	local cache_entry = M._chat_topic_cache[file_path]
 	local stat_mtime = stat and stat.mtime or nil
+	local basename = vim.fn.fnamemodify(file_path, ":t")
+
+	if not basename:match("^%d%d%d%d%-%d%d%-%d%d") then
+		return nil
+	end
+
+	local function get_open_buf_lines()
+		local target = vim.fn.resolve(file_path)
+		for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+			if vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_buf_is_loaded(buf) then
+				local buf_name = vim.api.nvim_buf_get_name(buf)
+				if buf_name ~= "" and vim.fn.resolve(buf_name) == target then
+					return vim.api.nvim_buf_get_lines(buf, 0, 20, false), true
+				end
+			end
+		end
+		return nil, false
+	end
 
 	if cache_entry and stat_mtime then
 		local cache_sec = cache_entry.mtime and cache_entry.mtime.sec or 0
 		local cache_nsec = cache_entry.mtime and cache_entry.mtime.nsec or 0
 		local stat_sec = stat_mtime.sec or 0
 		local stat_nsec = stat_mtime.nsec or 0
-		if cache_sec == stat_sec and cache_nsec == stat_nsec then
+		if cache_sec == stat_sec and cache_nsec == stat_nsec and not cache_entry.from_buffer then
 			return cache_entry.topic
 		end
 	end
 
-	local lines = vim.fn.readfile(file_path, "", 20)
+	local lines, from_buffer = get_open_buf_lines()
+	if not lines then
+		lines = vim.fn.readfile(file_path, "", 20)
+		from_buffer = false
+	end
 	local headers = parse_chat_headers(lines)
-	local topic = headers and headers.topic or nil
+	local topic = nil
+	if headers and headers.topic and headers.topic ~= "" and headers.file and headers.file ~= "" then
+		topic = headers.topic
+	end
 
 	M._chat_topic_cache[file_path] = {
 		mtime = stat_mtime or { sec = 0, nsec = 0 },
 		topic = topic,
+		from_buffer = from_buffer,
 	}
 
 	return topic
@@ -2065,8 +2091,15 @@ M.open_chat_reference = function(current_line, cursor_col, _in_insert_mode, full
 
 	-- First check if the line begins with @@
 	if current_line:match("^@@") then
+		local wrapped_ref = current_line:match("^@@%s*(.-)%s*@@")
+		if wrapped_ref then
+			chat_path = wrapped_ref:match("^%s*([^:]+)")
+		end
+
 		-- Extract the chat path (up to the colon if present)
-		chat_path = current_line:match("^@@%s*([^:]+)")
+		if not chat_path then
+			chat_path = current_line:match("^@@%s*([^:]+)")
+		end
 		if not chat_path then
 			chat_path = current_line:match("^@@(.+)$")
 		end
@@ -2120,7 +2153,7 @@ M.open_chat_reference = function(current_line, cursor_col, _in_insert_mode, full
 			end
 
 			-- Prepare template
-			local template = M.get_default_template(agent)
+			local template = M.get_default_template(agent, expanded_path)
 			template = template:gsub("{{topic}}", topic)
 
 			-- Make sure the file has UTF-8 encoding header
@@ -2264,7 +2297,7 @@ M.cmd.OpenFileUnderCursor = function()
 				end
 
 				-- Prepare template
-				local template = M.get_default_template(agent)
+				local template = M.get_default_template(agent, expanded_path)
 				template = template:gsub("{{topic}}", topic)
 
 				-- Make sure the file has UTF-8 encoding header
@@ -2468,10 +2501,11 @@ end
 ---@param agent table # The agent configuration obtained from get_agent()
 ---@return table # A table containing the resolved agent information
 -- Generate a default template for a new chat file
-M.get_default_template = function(agent)
+M.get_default_template = function(agent, file_path)
 	local model = ""
 	local provider = ""
 	local system_prompt = ""
+	local basename = file_path and vim.fn.fnamemodify(file_path, ":t") or "{{filename}}"
 
 	-- If agent is provided, extract model and provider info
 	if agent then
@@ -2507,7 +2541,7 @@ M.get_default_template = function(agent)
 	local new_shortcut = M.config.global_shortcut_new and M.config.global_shortcut_new.shortcut or "<C-g>c"
 
 	local template = M.render.template(M.config.chat_template or require("parley.defaults").chat_template, {
-		["{{filename}}"] = "{{topic}}", -- Will be replaced later with actual topic
+		["{{filename}}"] = basename,
 		["{{optional_headers}}"] = model .. provider .. system_prompt,
 		["{{user_prefix}}"] = M.config.chat_user_prefix,
 		["{{respond_shortcut}}"] = respond_shortcut,

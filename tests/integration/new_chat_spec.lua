@@ -93,15 +93,18 @@ describe("ChatNew", function()
         parley.cmd.ChatNew({})
         local files = vim.fn.glob(tmp_dir .. "/*.md", false, true)
         assert.is_true(#files >= 1)
-        local lines = vim.fn.readfile(files[#files])
-        local has_file_header = false
+        local path = files[#files]
+        local basename = vim.fn.fnamemodify(path, ":t")
+        local lines = vim.fn.readfile(path)
+        local file_header = nil
         for _, line in ipairs(lines) do
             if line:match("^file:") then
-                has_file_header = true
+                file_header = line
                 break
             end
         end
-        assert.is_true(has_file_header, "file should contain a 'file:' front matter line")
+        assert.is_not_nil(file_header, "file should contain a 'file:' front matter line")
+        assert.equals("file: " .. basename, file_header)
     end)
 
     it("the new chat buffer passes not_chat validation", function()
