@@ -1050,7 +1050,7 @@ local function keybinding_help_lines()
 			"<C-g>d",
 			current_buf
 		),
-		"Delete chat"
+		"Delete chat / file"
 	)
 	add(
 		resolve_shortcut(
@@ -1592,6 +1592,18 @@ M.setup_markdown_keymaps = function(buf)
 
 		M.logger.info("Created reference to new chat: " .. rel_path)
 	end, "Parley create and insert new chat")
+
+	-- Add <C-g>d keybinding to delete current file and buffer
+	M.helpers.set_keymap({ buf }, "n", "<C-g>d", function()
+		local file = vim.api.nvim_buf_get_name(buf)
+		if file ~= "" then
+			local rel = vim.fn.fnamemodify(file, ":~:.")
+			local choice = vim.fn.confirm("Delete " .. rel .. "?", "&Yes\n&No", 2)
+			if choice == 1 then
+				M.helpers.delete_file(file)
+			end
+		end
+	end, "Parley delete current file and buffer")
 end
 
 M.setup_buf_handler = function()
