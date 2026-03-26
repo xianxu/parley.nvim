@@ -16,9 +16,17 @@ The chat lifecycle includes creation, sending questions, receiving responses, re
 - New chat creation MUST still use only the primary `chat_dir`.
 
 ### Command: `:ParleyChatMove`
-- Moves the current chat file to another registered chat root.
+- Moves the **entire chat tree** (root + all descendants linked via `🌿:`) to another registered chat root.
 - The destination MUST already be present in the normalized chat-root list.
-- Moving a chat MUST keep the current filename and update any open chat buffer to the new path.
+- Moving a chat MUST keep filenames and update any open chat buffers to the new paths.
+- All `🌿:` references within moved files MUST be rewritten to reflect the new locations.
+
+### Pruning: `<C-g>p`
+- Moves the exchange under the cursor and all following exchanges into a new child chat file.
+- Inserts a `🌿: child_path: ` reference at the cursor position in the parent.
+- Copies the parent's header (patching `topic: ?` and `file:`) and inserts a parent back-link (`🌿: parent: topic`) as the first transcript line in the child.
+- Triggers async LLM topic generation from the pruned exchanges; updates child header and parent `🌿:` line on completion.
+- A spinner animates the `topic: ?` line while topic generation is in progress.
 
 ## Response Generation
 ### Command: `:ParleyChatRespond` (Buffer Shortcut: `<C-g><C-g>`)
@@ -45,10 +53,17 @@ The chat lifecycle includes creation, sending questions, receiving responses, re
 ### Command: `:ParleyChatRespondAll` (Buffer Shortcut: `<C-g>G`)
 - Sequential resubmission of all questions from the beginning up to the cursor position.
 - Existing answers are replaced in order.
-- Can be terminated at any time with `:ParleyStop` (`<C-g>s`).
+- Can be terminated at any time with `:ParleyStop` (`<C-g>x`).
+
+## Context Assembly (Tree of Chat)
+- When submitting from a child chat (one that has a `🌿:` parent back-link), ancestor context is injected.
+- The system walks the parent chain to the root, collecting Q+A exchanges at each level up to the branch point.
+- Ancestor messages are inserted after the system prompt and before the current chat's messages.
+- Summaries are used in place of full answers when available.
 
 ## Deletion
 ### Command: `:ParleyChatDelete` (Buffer Shortcut: `<C-g>d`)
-- Deletes the current chat file from disk.
+- Deletes only the current chat file from disk (does NOT delete child branches).
+- Dangling `🌿:` references in parent/sibling files are left as-is; they display `⚠️` via the auto-render cycle.
 - If `chat_confirm_delete` is `true`, a confirmation prompt MUST be shown.
 - Associated memory and cached metrics for the chat are purged.

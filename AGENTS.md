@@ -5,6 +5,7 @@
 ### 1. Overall
 - Enter plan mode for ANY non-trivial task (3+ steps, architectural decisions, change more than 2 files, 50 lines)
 - Work for you is in `tasks/issue.md`, you MUST make plan in `tasks/todo.md`
+- IGNORE history/*`, they are for history records only
 - Wait for user	approval before implementation for ANY non-trivial task
 - If something goes sideways, STOP and re-plan immediately: don’t keep pushing
 - Use plan mode for verification steps, not just building
@@ -19,7 +20,7 @@
 - One task per subagent for focused execution
 
 ### 3. Self-Improvement Loop
-- When user needs to involve in manual debugging with you, update `tasks/lessons.md` with the pattern what went wrong in the first place.
+- You MUST update `tasks/lessons.md` with the pattern what went wrong when you make mistakes
 - Write rules for yourself that prevent the same mistake
 - You MUST Review lessons at session start for relevant project
 
@@ -65,7 +66,7 @@
 - **No Laziness**: Find root causes. No temporary fixes. Senior developer standards.
 - **Minimal Impact**: Changes should only touch what’s necessary. Avoid introducing bugs.
 - **Keep It DRY**: Don’t Repeat Yourself. Refactor to reuse existing code when possible.
-- **Design for Testability**: Refactor code to be easily testable. Always write regression tests for bugs.
+- **Design for Testability**: Refactor code to be easily testable. This means to write pure functions for business logic that testable in unit tests, then some integration code to connect to UI and IO. Always write regression tests for bugs.
 
 ---
 

@@ -22,6 +22,13 @@ A chat buffer is divided into two primary sections:
 ### Local Sections
 - `🔒:`: Segments that are excluded from LLM context but remain in the transcript.
 
+### Branch Links
+- `🌿:`: Chat tree links with format `🌿: filename.md: topic`.
+- Excluded from LLM context and preserved across answer regeneration (same mechanism as `🔒:`).
+- First `🌿:` line before the first `💬:` is parsed as `parent_link = { path, topic, line }`.
+- Subsequent `🌿:` lines (before or after questions) are parsed as `branches = [{ path, topic, line, after_exchange }]`.
+- `after_exchange` records how many exchanges precede the branch, used for context assembly.
+
 ## Contextual Validation
 The plugin performs a series of checks to validate a chat buffer:
 1. Resolved path MUST be inside one configured chat root (`chat_dir` or an entry from `chat_dirs`).

@@ -329,13 +329,13 @@ M.cmd_chat_move = function(params)
     local target_dir = params and params.args or ""
 
     if target_dir ~= "" then
-        local new_file, err = _parley.move_chat(file_name, target_dir)
+        local new_file, err = _parley.move_chat_tree(file_name, target_dir)
         if not new_file then
-            vim.notify("Failed to move chat: " .. err, vim.log.levels.WARN)
+            vim.notify("Failed to move chat tree: " .. err, vim.log.levels.WARN)
             return
         end
 
-        vim.notify("Moved chat to: " .. new_file, vim.log.levels.INFO)
+        vim.notify("Moved chat tree to: " .. new_file, vim.log.levels.INFO)
         return
     end
 

@@ -123,7 +123,12 @@ fetch:
 # Works from main — the direct-on-main workflow counterpart to merge.
 # Usage: make push
 push:
-	@untracked=$$(git ls-files --others --exclude-standard); \
+	@branch=$$(git branch --show-current); \
+	if [ "$$branch" != "main" ]; then \
+		echo "Error: make push must be run from main (current branch: $$branch)"; \
+		exit 1; \
+	fi; \
+	untracked=$$(git ls-files --others --exclude-standard); \
 	if [ -n "$$untracked" ]; then \
 		echo "  [x] Untracked files found — add or .gitignore them first"; \
 		echo "$$untracked" | sed 's/^/       /'; \
@@ -148,6 +153,11 @@ push:
 				echo "  [x] Some issues failed to close — keeping tasks/issue.md"; \
 				exit 1; \
 			fi; \
+			slug=$$(echo "$$nums" | paste -sd ',' -); \
+			mkdir -p history; \
+			echo "==> Archiving tasks to history/issue-$$slug.md ..."; \
+			cp tasks/issue.md "history/issue-$$slug.md"; \
+			cp tasks/todo.md "history/issue-$$slug-record.md"; \
 			echo "==> Clearing tasks/issue.md..."; \
 			: > tasks/issue.md; \
 		fi; \
@@ -261,6 +271,16 @@ merge:
 				echo "Aborted."; \
 				exit 1; \
 			fi; \
+		fi; \
+	fi; \
+	echo "==> Archiving tasks to history/..."; \
+	if [ -f tasks/issue.md ]; then \
+		nums=$$(grep -oE '^# Issue #[0-9]+' tasks/issue.md | grep -oE '[0-9]+'); \
+		if [ -n "$$nums" ]; then \
+			slug=$$(echo "$$nums" | paste -sd ',' -); \
+			mkdir -p "$$main_path/history"; \
+			cp tasks/issue.md "$$main_path/history/issue-$$slug.md"; \
+			cp tasks/todo.md "$$main_path/history/issue-$$slug-record.md"; \
 		fi; \
 	fi; \
 	echo "==> Cleaning up tasks/todo.md..."; \

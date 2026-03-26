@@ -9,6 +9,7 @@ local chat_parser = require("parley.chat_parser")
 local test_config = {
     chat_user_prefix      = "💬:",
     chat_local_prefix     = "🔒:",
+    chat_branch_prefix    = "🌿:",
     chat_assistant_prefix = { "🤖:", "[{{agent}}]" },
     chat_memory = {
         enable            = true,
@@ -463,5 +464,77 @@ describe("parse_chat: edge cases", function()
         })
         local result = parse_chat(lines, header_end)
         assert.equals(0, #result.exchanges)
+    end)
+end)
+
+describe("parse_chat: 🌿: branch links", function()
+    it("first 🌿: line becomes parent_link", function()
+        local lines, header_end = make_chat(std_header, {
+            "🌿: parent.md: Parent Topic",
+            "💬: Q1",
+        })
+        local result = parse_chat(lines, header_end)
+        assert.is_not_nil(result.parent_link)
+        assert.equals("parent.md", result.parent_link.path)
+        assert.equals("Parent Topic", result.parent_link.topic)
+    end)
+
+    it("second 🌿: before first question becomes a child branch, not parent", function()
+        local lines, header_end = make_chat(std_header, {
+            "🌿: parent.md: Parent Topic",
+            "🌿: child0.md: Child Zero",
+            "💬: Q1",
+        })
+        local result = parse_chat(lines, header_end)
+        assert.equals("parent.md", result.parent_link.path)
+        assert.equals(1, #result.branches)
+        assert.equals("child0.md", result.branches[1].path)
+        assert.equals("Child Zero", result.branches[1].topic)
+    end)
+
+    it("🌿: after an exchange is a child branch with correct after_exchange index", function()
+        local lines, header_end = make_chat(std_header, {
+            "💬: Q1",
+            "🤖: A1",
+            "🌿: child1.md: After Q1",
+            "💬: Q2",
+        })
+        local result = parse_chat(lines, header_end)
+        assert.is_nil(result.parent_link)
+        assert.equals(1, #result.branches)
+        assert.equals("child1.md", result.branches[1].path)
+        assert.equals(1, result.branches[1].after_exchange)
+    end)
+
+    it("🌿: lines are excluded from exchange content", function()
+        local lines, header_end = make_chat(std_header, {
+            "💬: Q1",
+            "🤖: Answer text",
+            "🌿: child.md: Branch",
+            "💬: Q2",
+        })
+        local result = parse_chat(lines, header_end)
+        assert.is_falsy(result.exchanges[1].answer.content:match("🌿"))
+        assert.is_falsy(result.exchanges[1].answer.content:match("Branch"))
+    end)
+
+    it("no parent_link when no 🌿: lines present", function()
+        local lines, header_end = make_chat(std_header, {
+            "💬: Q1",
+            "🤖: A1",
+        })
+        local result = parse_chat(lines, header_end)
+        assert.is_nil(result.parent_link)
+        assert.equals(0, #result.branches)
+    end)
+
+    it("handles 🌿: line with no topic", function()
+        local lines, header_end = make_chat(std_header, {
+            "🌿: parent.md",
+            "💬: Q1",
+        })
+        local result = parse_chat(lines, header_end)
+        assert.equals("parent.md", result.parent_link.path)
+        assert.equals("", result.parent_link.topic)
     end)
 end)

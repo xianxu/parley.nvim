@@ -31,3 +31,13 @@
 
 ## 2026-03-13
 - When a ChatFinder bug is reported after a seemingly successful move, instrument the full move lifecycle in the live path: selected item, destination root list, pre/post-rename file existence, buffer rename, and the refreshed finder scan/result list. Helper tests alone can miss path-specific runtime mismatches.
+
+## 2026-03-25
+- When implementing a new variant of existing behavior, read the full existing implementation — not just the parts that differ.
+- When resolving file paths from user-facing references, always handle `~/` expansion (via `vim.fn.expand`) — not just `/` absolute and relative paths. Chat files commonly use `~/` paths.
+- When injecting messages into an LLM payload, strip whitespace and filter out empty-content messages. Providers (especially Anthropic) reject empty text blocks, particularly when `cache_control` is set.
+- When building a reusable function from extracted inline code (e.g. `generate_topic`), sanitize inputs (strip `cache_control`, empty content) rather than passing deep-copied messages that carry provider-specific metadata.
+- After inserting content into a buffer programmatically, trigger any relevant debounced render timers — `BufEnter` won't fire for in-buffer changes.
+- When a function uses `default = x or {}` for an optional parameter, passing `nil` to mean "special behavior" won't work — the default replaces `nil` before the check. Use an explicit sentinel or skip the defaulting.
+- For cross-file navigation in pickers, use `edit` (same window) not `split`, and clamp cursor positions to `max(1, min(lnum, line_count))` after opening. The target buffer may have fewer lines than expected.
+- When applying highlights after cross-file navigation, use `nvim_get_current_buf()` (the actual buffer after `edit`) not the original `target_buf` variable which may reference the pre-navigation buffer.

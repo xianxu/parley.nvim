@@ -56,6 +56,103 @@ local function find_chat_header_end(lines)
     return _parley.chat_parser.find_header_end(lines)
 end
 
+-- Pure function: given an ordered ancestor chain (oldest first), build a flat
+-- message list of Q+A pairs up to each level's branch point.
+--
+-- ancestor_chain: array of { exchanges, branch_after } where:
+--   exchanges    = parsed_chat.exchanges from that ancestor file
+--   branch_after = number of exchanges to include (exchanges[1..branch_after])
+--
+-- Returns a flat array of {role, content} tables (no system prompt).
+M.build_ancestor_messages = function(ancestor_chain)
+    local msgs = {}
+    for _, level in ipairs(ancestor_chain) do
+        for idx, exchange in ipairs(level.exchanges) do
+            if idx > level.branch_after then
+                break
+            end
+            if exchange.question then
+                local content = (exchange.question.content or ""):gsub("^%s*(.-)%s*$", "%1")
+                if content ~= "" then
+                    table.insert(msgs, { role = "user", content = content })
+                end
+            end
+            if exchange.answer then
+                -- Use summary when available (mirrors memory-aware answer handling)
+                local raw = exchange.summary and exchange.summary.content or exchange.answer.content
+                local content = (raw or ""):gsub("^%s*(.-)%s*$", "%1")
+                if content ~= "" then
+                    table.insert(msgs, { role = "assistant", content = content })
+                end
+            end
+        end
+    end
+    return msgs
+end
+
+-- Resolve a path that may be absolute, ~-prefixed, or relative to base_dir.
+local function resolve_path(path, base_dir)
+    if path:match("^~/") or path == "~" then
+        return vim.fn.resolve(vim.fn.expand(path))
+    elseif path:sub(1, 1) == "/" then
+        return vim.fn.resolve(path)
+    else
+        return vim.fn.resolve(base_dir .. "/" .. path)
+    end
+end
+
+-- Walk the ancestor chain via parent_link, building an ordered list of
+-- { exchanges, branch_after } records (oldest ancestor first).
+-- Returns an empty table when there is no parent or the parent is unreadable.
+local function collect_ancestor_chain(current_file, parsed_chat, depth)
+    depth = depth or 0
+    if depth > 20 then
+        _parley.logger.warning("collect_ancestor_chain: max depth reached, stopping")
+        return {}
+    end
+
+    if not parsed_chat.parent_link then
+        return {}
+    end
+
+    local current_dir = vim.fn.fnamemodify(current_file, ":h")
+    local abs_parent = resolve_path(parsed_chat.parent_link.path, current_dir)
+
+    if vim.fn.filereadable(abs_parent) == 0 then
+        _parley.logger.warning("collect_ancestor_chain: parent file not readable: " .. abs_parent)
+        return {}
+    end
+
+    local parent_lines = vim.fn.readfile(abs_parent)
+    local parent_header_end = find_chat_header_end(parent_lines)
+    if not parent_header_end then
+        return {}
+    end
+
+    local parent_parsed = _parley.parse_chat(parent_lines, parent_header_end)
+
+    -- Find which branch in the parent points back to current_file
+    local branch_after = 0
+    local current_abs = vim.fn.resolve(current_file)
+    local parent_dir = vim.fn.fnamemodify(abs_parent, ":h")
+    for _, branch in ipairs(parent_parsed.branches) do
+        if resolve_path(branch.path, parent_dir) == current_abs then
+            branch_after = branch.after_exchange
+            break
+        end
+    end
+
+    -- Recurse upward first so the chain is ordered oldest → newest
+    local chain = collect_ancestor_chain(abs_parent, parent_parsed, depth + 1)
+    table.insert(chain, { exchanges = parent_parsed.exchanges, branch_after = branch_after })
+    return chain
+end
+
+local function collect_ancestor_messages(current_file, parsed_chat)
+    local chain = collect_ancestor_chain(current_file, parsed_chat)
+    return M.build_ancestor_messages(chain)
+end
+
 local function set_chat_topic_line(buf, lines, topic)
     local header_end = find_chat_header_end(lines)
     if not header_end then
@@ -371,6 +468,88 @@ M.build_messages = function(opts)
     return messages
 end
 
+-- Find the 0-indexed line number of the `topic:` header line in a buffer.
+-- Returns nil if not found or buffer is invalid.
+M.find_topic_line = function(buf)
+    if not vim.api.nvim_buf_is_valid(buf) then
+        return nil
+    end
+    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    local header_end = find_chat_header_end(lines)
+    if not header_end then return nil end
+    for i = 1, header_end do
+        if lines[i]:match("^%s*topic:%s*") then
+            return i - 1  -- 0-indexed
+        end
+    end
+    return nil
+end
+
+--------------------------------------------------------------------------------
+-- generate_topic: ask LLM to produce a short topic from conversation messages
+--------------------------------------------------------------------------------
+
+-- Fire an LLM call to generate a topic string from a conversation.
+-- @param messages  table    array of {role, content} (the conversation so far)
+-- @param provider  string   provider name (e.g. "anthropic", "openai")
+-- @param model     string   model name
+-- @param callback  function called with (topic_string) on completion
+-- @param spinner   table|nil optional {buf, find_line} — buf is the buffer to animate,
+--                  find_line() returns 0-indexed line number of the topic line (or nil to skip)
+M.generate_topic = function(messages, provider, model, callback, spinner)
+    -- Build a clean copy: strip whitespace, drop empty messages and cache_control
+    local msgs = {}
+    for _, m in ipairs(messages) do
+        local content = (m.content or ""):gsub("^%s*(.-)%s*$", "%1")
+        if content ~= "" then
+            table.insert(msgs, { role = m.role, content = content })
+        end
+    end
+    table.insert(msgs, { role = "user", content = _parley.config.chat_topic_gen_prompt })
+
+    -- Start spinner animation on the topic line if requested
+    local spinner_frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
+    local spinner_idx = 1
+    local spinner_timer = nil
+    if spinner and spinner.buf and spinner.find_line then
+        spinner_timer = vim.uv.new_timer()
+        spinner_timer:start(0, 120, vim.schedule_wrap(function()
+            if not vim.api.nvim_buf_is_valid(spinner.buf) then
+                stop_and_close_timer(spinner_timer)
+                spinner_timer = nil
+                return
+            end
+            local line_nr = spinner.find_line()
+            if line_nr then
+                local text = "topic: " .. spinner_frames[spinner_idx] .. " generating..."
+                vim.api.nvim_buf_set_lines(spinner.buf, line_nr, line_nr + 1, false, { text })
+            end
+            spinner_idx = spinner_idx % #spinner_frames + 1
+        end))
+    end
+
+    local topic_buf = vim.api.nvim_create_buf(false, true)
+    local topic_handler = _parley.dispatcher.create_handler(topic_buf, nil, 0, false, "", false)
+
+    _parley.dispatcher.query(
+        nil,
+        provider,
+        _parley.dispatcher.prepare_payload(msgs, model, provider),
+        topic_handler,
+        vim.schedule_wrap(function()
+            stop_and_close_timer(spinner_timer)
+            spinner_timer = nil
+            local topic = vim.api.nvim_buf_get_lines(topic_buf, 0, -1, false)[1] or ""
+            vim.api.nvim_buf_delete(topic_buf, { force = true })
+            topic = topic:gsub("^%s*(.-)%s*$", "%1")
+            topic = topic:gsub("%.$", "")
+            if topic ~= "" then
+                callback(topic)
+            end
+        end)
+    )
+end
+
 --------------------------------------------------------------------------------
 -- _resolve_remote_references
 --------------------------------------------------------------------------------
@@ -567,6 +746,19 @@ M.respond = function(params, callback, override_free_cursor, force)
             logger = _parley.logger,
             resolved_remote_content = resolved_remote_content,
         })
+
+        -- Inject ancestor context (tree-of-chat): walk parent chain and prepend
+        -- ancestor Q+A exchanges after the system prompt (messages[1]).
+        if parsed_chat.parent_link then
+            local ancestor_msgs = collect_ancestor_messages(file_name, parsed_chat)
+            if #ancestor_msgs > 0 then
+                _parley.logger.debug("Injecting " .. #ancestor_msgs .. " ancestor messages into context")
+                -- Insert after index 1 (system prompt), before current chat messages
+                for i = #ancestor_msgs, 1, -1 do
+                    table.insert(messages, 2, ancestor_msgs[i])
+                end
+            end
+        end
 
         -- Get agent info for display and dispatcher
         local agent_info = _parley.get_agent_info(headers, agent)
@@ -842,43 +1034,17 @@ M.respond = function(params, callback, override_free_cursor, force)
 
                 -- if topic is ?, then generate it
                 if headers.topic == "?" then
-                    -- insert last model response
-                    table.insert(messages, { role = "assistant", content = qt.response })
+                    -- include the last model response in context for topic generation
+                    local topic_msgs = vim.deepcopy(messages)
+                    table.insert(topic_msgs, { role = "assistant", content = qt.response })
 
-                    -- ask model to generate topic/title for the chat
-                    table.insert(messages, { role = "user", content = _parley.config.chat_topic_gen_prompt })
-
-                    -- prepare invisible buffer for the model to write to
-                    local topic_buf = vim.api.nvim_create_buf(false, true)
-                    local topic_handler = _parley.dispatcher.create_handler(topic_buf, nil, 0, false, "", false)
-
-                    -- call the model
-                    _parley.dispatcher.query(
-                        nil,
-                        agent_info.provider,
-                        _parley.dispatcher.prepare_payload(messages, agent_info.model, agent_info.provider),
-                        topic_handler,
-                        vim.schedule_wrap(function()
-                            -- get topic from invisible buffer
-                            local topic = vim.api.nvim_buf_get_lines(topic_buf, 0, -1, false)[1]
-                            -- close invisible buffer
-                            vim.api.nvim_buf_delete(topic_buf, { force = true })
-                            -- strip whitespace from ends of topic
-                            topic = topic:gsub("^%s*(.-)%s*$", "%1")
-                            -- strip dot from end of topic
-                            topic = topic:gsub("%.$", "")
-
-                            -- if topic is empty do not replace it
-                            if topic == "" then
-                                return
-                            end
-
-                            -- replace topic in current buffer
-                            _parley.helpers.undojoin(buf)
-                            local all_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-                            set_chat_topic_line(buf, all_lines, topic)
-                        end)
-                    )
+                    M.generate_topic(topic_msgs, agent_info.provider, agent_info.model, function(topic)
+                        _parley.helpers.undojoin(buf)
+                        local all_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+                        set_chat_topic_line(buf, all_lines, topic)
+                    end, { buf = buf, find_line = function()
+                        return M.find_topic_line(buf)
+                    end })
                 end
 
                 -- Place cursor appropriately

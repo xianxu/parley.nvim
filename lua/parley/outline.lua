@@ -66,6 +66,9 @@ local function is_outline_item(bufnr, line_number, config, code_block_memo, all_
   -- Match annotations
   elseif line:match("^@@.+@@$") then
     return true, "annotation", "→ " .. string.sub(line, 2, -2)
+  -- Match branch references
+  elseif line:match("^" .. vim.pesc(config.chat_branch_prefix or "🌿:")) then
+    return true, "branch", "🌿 " .. line
   end
 
   -- Not an outline item
@@ -127,17 +130,22 @@ local function focus_buffer_line(target_buf, target_name, preferred_windows, lnu
     end
   end
 
-  if vim.fn.filereadable(target_name) == 1 then
-    vim.cmd("split " .. vim.fn.fnameescape(target_name))
-    vim.api.nvim_win_set_cursor(0, { lnum, 0 })
+  local function safe_set_cursor(safe_lnum)
+    local line_count = vim.api.nvim_buf_line_count(vim.api.nvim_get_current_buf())
+    local clamped = math.max(1, math.min(safe_lnum, line_count))
+    vim.api.nvim_win_set_cursor(0, { clamped, 0 })
     vim.cmd("normal! zz")
+  end
+
+  if vim.fn.filereadable(target_name) == 1 then
+    vim.cmd("edit " .. vim.fn.fnameescape(target_name))
+    safe_set_cursor(lnum)
     return true
   end
 
   if vim.api.nvim_buf_is_valid(target_buf) then
-    vim.cmd("sbuffer " .. target_buf)
-    vim.api.nvim_win_set_cursor(0, { lnum, 0 })
-    vim.cmd("normal! zz")
+    vim.cmd("buffer " .. target_buf)
+    safe_set_cursor(lnum)
     return true
   end
 
@@ -160,14 +168,18 @@ local function jump_to_outline_location(selection, config)
     return false
   end
 
-  local ns_id = vim.api.nvim_create_namespace("ParleyOutline")
-  vim.api.nvim_buf_clear_namespace(target_buf, ns_id, 0, -1)
-  vim.api.nvim_buf_add_highlight(target_buf, ns_id, "DiffAdd", safe_lnum - 1, 0, -1)
-  vim.defer_fn(function()
-    if vim.api.nvim_buf_is_valid(target_buf) then
-      vim.api.nvim_buf_clear_namespace(target_buf, ns_id, 0, -1)
-    end
-  end, 1000)
+  local hl_buf = vim.api.nvim_get_current_buf()
+  local line_count = vim.api.nvim_buf_line_count(hl_buf)
+  if safe_lnum >= 1 and safe_lnum <= line_count then
+    local ns_id = vim.api.nvim_create_namespace("ParleyOutline")
+    vim.api.nvim_buf_clear_namespace(hl_buf, ns_id, 0, -1)
+    vim.api.nvim_buf_add_highlight(hl_buf, ns_id, "DiffAdd", safe_lnum - 1, 0, -1)
+    vim.defer_fn(function()
+      if vim.api.nvim_buf_is_valid(hl_buf) then
+        vim.api.nvim_buf_clear_namespace(hl_buf, ns_id, 0, -1)
+      end
+    end, 1000)
+  end
 
   return true, safe_lnum
 end
@@ -186,6 +198,160 @@ function M._build_picker_items(bufnr, config)
       table.insert(items, { display = formatted_line, value = { lnum = i } })
     end
   end
+  return items
+end
+
+--------------------------------------------------------------------------------
+-- Tree-aware outline: recursively build outline items across 🌿: linked files
+--------------------------------------------------------------------------------
+
+-- Resolve a path that may be absolute, ~-prefixed, or relative to base_dir.
+local function resolve_path(path, base_dir)
+  if path:match("^~/") or path == "~" then
+    return vim.fn.resolve(vim.fn.expand(path))
+  elseif path:sub(1, 1) == "/" then
+    return vim.fn.resolve(path)
+  else
+    return vim.fn.resolve(base_dir .. "/" .. path)
+  end
+end
+
+-- Walk parent_link chain to find the tree root file path.
+-- Returns absolute path of root.
+local function find_tree_root(file_path, config, depth)
+  depth = depth or 0
+  if depth > 20 then return file_path end
+
+  local abs_path = vim.fn.resolve(vim.fn.expand(file_path))
+  if vim.fn.filereadable(abs_path) == 0 then return abs_path end
+
+  local lines = vim.fn.readfile(abs_path)
+  local chat_parser = require("parley.chat_parser")
+  local header_end = chat_parser.find_header_end(lines)
+  if not header_end then return abs_path end
+
+  local parsed = chat_parser.parse_chat(lines, header_end, config)
+  if not parsed.parent_link then return abs_path end
+
+  local parent_dir = vim.fn.fnamemodify(abs_path, ":h")
+  local parent_abs = resolve_path(parsed.parent_link.path, parent_dir)
+  if vim.fn.filereadable(parent_abs) == 0 then return abs_path end
+
+  return find_tree_root(parent_abs, config, depth + 1)
+end
+
+-- Build outline items for a single file at a given depth.
+-- Returns array of { display, value: { lnum, file, child_path? } }
+-- child_path is set on 🌿: items — the resolved absolute path of the child file.
+local function build_file_outline_items(file_path, config, depth)
+  local abs_path = vim.fn.resolve(vim.fn.expand(file_path))
+  if vim.fn.filereadable(abs_path) == 0 then return {} end
+
+  local file_lines = vim.fn.readfile(abs_path)
+  local chat_parser = require("parley.chat_parser")
+  local header_end = chat_parser.find_header_end(file_lines)
+  if not header_end then return {} end
+
+  local parsed = chat_parser.parse_chat(file_lines, header_end, config)
+  local indent = string.rep("  ", depth)
+  local items = {}
+  local file_dir = vim.fn.fnamemodify(abs_path, ":h")
+
+  -- Map line_number -> branch for interleaving
+  local branch_at_line = {}
+  for _, branch in ipairs(parsed.branches) do
+    branch_at_line[branch.line] = branch
+  end
+
+  -- Code block memo
+  local code_memo = {}
+  local in_block = false
+  for i, line in ipairs(file_lines) do
+    if line:match("^%s*```") or line:match("^%s*~~~") then
+      in_block = not in_block
+    end
+    code_memo[i] = in_block
+  end
+
+  local user_prefix = config.chat_user_prefix
+  for i = header_end + 1, #file_lines do
+    local line = file_lines[i]
+    local branch = branch_at_line[i]
+
+    if branch then
+      local topic = branch.topic
+      if topic == "" then
+        local branch_abs = resolve_path(branch.path, file_dir)
+        local parley = require("parley")
+        topic = parley.get_chat_topic(branch_abs) or branch.path
+      end
+      local child_abs = resolve_path(branch.path, file_dir)
+      table.insert(items, {
+        display = indent .. "  🌿 " .. topic,
+        value = { lnum = branch.line, file = abs_path, child_path = child_abs },
+      })
+    elseif not code_memo[i] then
+      if line:match("^" .. vim.pesc(user_prefix)) then
+        table.insert(items, {
+          display = indent .. "  " .. line,
+          value = { lnum = i, file = abs_path },
+        })
+      elseif line:match("^# ") then
+        table.insert(items, {
+          display = indent .. "🧭 " .. string.sub(line, 3),
+          value = { lnum = i, file = abs_path },
+        })
+      elseif line:match("^## ") then
+        table.insert(items, {
+          display = indent .. "• " .. string.sub(line, 4),
+          value = { lnum = i, file = abs_path },
+        })
+      end
+    end
+  end
+
+  return items
+end
+
+-- Build tree outline with expand/collapse state.
+-- expanded_set: table of abs_path -> true for files whose children should be shown
+-- Returns flat item list with proper interleaving and indentation.
+function M._build_tree_outline_items(root_path, config, expanded_set, depth, visited)
+  depth = depth or 0
+  visited = visited or {}
+  -- nil expanded_set = expand all; do NOT default to {}
+
+  local abs_path = vim.fn.resolve(vim.fn.expand(root_path))
+  if visited[abs_path] then return {} end
+  visited[abs_path] = true
+
+  -- Get the topic for the root-level header
+  local items = {}
+  if depth == 0 then
+    local parley = require("parley")
+    local topic = parley.get_chat_topic(abs_path) or vim.fn.fnamemodify(abs_path, ":t")
+    table.insert(items, {
+      display = "📋 " .. topic,
+      value = { lnum = 1, file = abs_path },
+    })
+  end
+
+  -- Build this file's items
+  local file_items = build_file_outline_items(abs_path, config, depth)
+
+  for _, item in ipairs(file_items) do
+    table.insert(items, item)
+    -- If this is a branch item and it's expanded (nil = expand all), recurse
+    if item.value.child_path and (not expanded_set or expanded_set[item.value.child_path]) then
+      local child_items = M._build_tree_outline_items(
+        item.value.child_path, config, expanded_set, depth + 1, visited
+      )
+      for _, ci in ipairs(child_items) do
+        table.insert(items, ci)
+      end
+    end
+  end
+
   return items
 end
 
@@ -211,26 +377,65 @@ function M.question_picker(config)
     end
   end
 
-  local items = M._build_picker_items(current_bufnr, config)
+  local parley = require("parley")
+  local is_chat = not parley.not_chat(current_bufnr, buf_name)
 
-  float_picker.open({
-    title = "💬 Q&A Outline",
-    items = items,
-    anchor = "top",
-    on_select = function(item)
-      local entry = item.value
-      if not vim.api.nvim_buf_is_valid(current_bufnr) then
-        vim.notify("Buffer is no longer valid - cannot navigate", vim.log.levels.ERROR)
-        return
-      end
-      jump_to_outline_location({
-        bufnr = current_bufnr,
-        name = buf_name,
-        windows = target_windows,
-        lnum = entry.lnum,
-      }, config)
-    end,
-  })
+  if not is_chat then
+    -- Non-chat: use flat outline
+    local items = M._build_picker_items(current_bufnr, config)
+    float_picker.open({
+      title = "💬 Q&A Outline",
+      items = items,
+      anchor = "top",
+      on_select = function(item)
+        if not vim.api.nvim_buf_is_valid(current_bufnr) then return end
+        jump_to_outline_location({
+          bufnr = current_bufnr,
+          name = buf_name,
+          windows = target_windows,
+          lnum = item.value.lnum,
+        }, config)
+      end,
+    })
+    return
+  end
+
+  -- Chat file: build tree outline with expand/collapse
+  local root = find_tree_root(buf_name, config)
+  local current_abs = vim.fn.resolve(vim.fn.expand(buf_name))
+
+  -- Start fully expanded (nil = expand all); toggling a branch sets it to a table
+  local expanded_set = nil
+
+  -- Recursive picker: opens, handles expand/collapse, reopens on toggle
+  local function open_tree_picker(sel_index)
+    local items = M._build_tree_outline_items(root, config, expanded_set)
+    if #items == 0 then
+      items = M._build_picker_items(current_bufnr, config)
+    end
+
+    float_picker.open({
+      title = "🌳 Chat Tree Outline",
+      items = items,
+      anchor = "top",
+      initial_index = sel_index or 1,
+      on_select = function(item)
+        local entry = item.value
+        do
+          local target_file = entry.file or buf_name
+          local target_buf = vim.fn.bufnr(target_file)
+          jump_to_outline_location({
+            bufnr = target_buf ~= -1 and target_buf or current_bufnr,
+            name = target_file,
+            windows = target_windows,
+            lnum = entry.lnum,
+          }, config)
+        end
+      end,
+    })
+  end
+
+  open_tree_picker()
 end
 
 return M

@@ -287,6 +287,8 @@ local config = {
 	chat_assistant_prefix = { "🤖:", "[{{agent}}]" },
 	-- chat local section prefix (for content that should be ignored by parley processing)
 	chat_local_prefix = "🔒:",
+	-- chat branch prefix (for tree-of-chat links: parent back-link on first line, child branches in body)
+	chat_branch_prefix = "🌿:",
 	-- The banner shown at the top of each chat file.
 	chat_template = require("parley.defaults").short_chat_template,
 	-- if you want more real estate in your chat files and don't need the helper text
@@ -304,12 +306,13 @@ local config = {
 	chat_shortcut_respond = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g><C-g>" },
 	chat_shortcut_respond_all = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>G" },
 	chat_shortcut_delete = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>d" },
-	chat_shortcut_stop = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>s" },
+	chat_shortcut_stop = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>x" },
 	chat_shortcut_agent = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>a" },
-	chat_shortcut_system_prompt = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>p" },
+	chat_shortcut_system_prompt = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>s" },
 	chat_shortcut_follow_cursor = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>l" },
 	chat_shortcut_search = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>n" },
 	chat_shortcut_open_file = { modes = { "n", "i" }, shortcut = "<C-g>o" },
+	chat_shortcut_prune = { modes = { "n" }, shortcut = "<C-g>p" },
 	-- global shortcuts (available in any buffer)
 	global_shortcut_new = { modes = { "n", "i" }, shortcut = "<C-g>c" },
 	global_shortcut_review = { modes = { "n" }, shortcut = "<C-g>C" },
@@ -391,6 +394,7 @@ local config = {
 		thinking = nil, -- highlight for reasoning lines (default: links to Comment)
 		annotation = nil, -- highlight for annotations (default: links to DiffAdd)
 		approximate_match = nil, -- highlight for typo-tolerance edit positions in picker matches (default: links to IncSearch)
+		chat_reference = nil, -- highlight for 🌿: chat branch/parent links (default: links to Special)
 	},
 
 	-- lualine integration options
