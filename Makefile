@@ -123,7 +123,12 @@ fetch:
 # Works from main — the direct-on-main workflow counterpart to merge.
 # Usage: make push
 push:
-	@untracked=$$(git ls-files --others --exclude-standard); \
+	@branch=$$(git branch --show-current); \
+	if [ "$$branch" != "main" ]; then \
+		echo "Error: make push must be run from main (current branch: $$branch)"; \
+		exit 1; \
+	fi; \
+	untracked=$$(git ls-files --others --exclude-standard); \
 	if [ -n "$$untracked" ]; then \
 		echo "  [x] Untracked files found — add or .gitignore them first"; \
 		echo "$$untracked" | sed 's/^/       /'; \
