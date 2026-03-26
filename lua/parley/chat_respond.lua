@@ -56,6 +56,97 @@ local function find_chat_header_end(lines)
     return _parley.chat_parser.find_header_end(lines)
 end
 
+-- Pure function: given an ordered ancestor chain (oldest first), build a flat
+-- message list of Q+A pairs up to each level's branch point.
+--
+-- ancestor_chain: array of { exchanges, branch_after } where:
+--   exchanges    = parsed_chat.exchanges from that ancestor file
+--   branch_after = number of exchanges to include (exchanges[1..branch_after])
+--
+-- Returns a flat array of {role, content} tables (no system prompt).
+M.build_ancestor_messages = function(ancestor_chain)
+    local msgs = {}
+    for _, level in ipairs(ancestor_chain) do
+        for idx, exchange in ipairs(level.exchanges) do
+            if idx > level.branch_after then
+                break
+            end
+            if exchange.question then
+                table.insert(msgs, { role = "user", content = exchange.question.content })
+            end
+            if exchange.answer then
+                -- Use summary when available (mirrors memory-aware answer handling)
+                local content = exchange.summary and exchange.summary.content or exchange.answer.content
+                table.insert(msgs, { role = "assistant", content = content })
+            end
+        end
+    end
+    return msgs
+end
+
+-- Resolve a path that may be absolute, ~-prefixed, or relative to base_dir.
+local function resolve_path(path, base_dir)
+    if path:match("^~/") or path == "~" then
+        return vim.fn.resolve(vim.fn.expand(path))
+    elseif path:sub(1, 1) == "/" then
+        return vim.fn.resolve(path)
+    else
+        return vim.fn.resolve(base_dir .. "/" .. path)
+    end
+end
+
+-- Walk the ancestor chain via parent_link, building an ordered list of
+-- { exchanges, branch_after } records (oldest ancestor first).
+-- Returns an empty table when there is no parent or the parent is unreadable.
+local function collect_ancestor_chain(current_file, parsed_chat, depth)
+    depth = depth or 0
+    if depth > 20 then
+        _parley.logger.warning("collect_ancestor_chain: max depth reached, stopping")
+        return {}
+    end
+
+    if not parsed_chat.parent_link then
+        return {}
+    end
+
+    local current_dir = vim.fn.fnamemodify(current_file, ":h")
+    local abs_parent = resolve_path(parsed_chat.parent_link.path, current_dir)
+
+    if vim.fn.filereadable(abs_parent) == 0 then
+        _parley.logger.warning("collect_ancestor_chain: parent file not readable: " .. abs_parent)
+        return {}
+    end
+
+    local parent_lines = vim.fn.readfile(abs_parent)
+    local parent_header_end = find_chat_header_end(parent_lines)
+    if not parent_header_end then
+        return {}
+    end
+
+    local parent_parsed = _parley.parse_chat(parent_lines, parent_header_end)
+
+    -- Find which branch in the parent points back to current_file
+    local branch_after = 0
+    local current_abs = vim.fn.resolve(current_file)
+    local parent_dir = vim.fn.fnamemodify(abs_parent, ":h")
+    for _, branch in ipairs(parent_parsed.branches) do
+        if resolve_path(branch.path, parent_dir) == current_abs then
+            branch_after = branch.after_exchange
+            break
+        end
+    end
+
+    -- Recurse upward first so the chain is ordered oldest → newest
+    local chain = collect_ancestor_chain(abs_parent, parent_parsed, depth + 1)
+    table.insert(chain, { exchanges = parent_parsed.exchanges, branch_after = branch_after })
+    return chain
+end
+
+local function collect_ancestor_messages(current_file, parsed_chat)
+    local chain = collect_ancestor_chain(current_file, parsed_chat)
+    return M.build_ancestor_messages(chain)
+end
+
 local function set_chat_topic_line(buf, lines, topic)
     local header_end = find_chat_header_end(lines)
     if not header_end then
@@ -567,6 +658,19 @@ M.respond = function(params, callback, override_free_cursor, force)
             logger = _parley.logger,
             resolved_remote_content = resolved_remote_content,
         })
+
+        -- Inject ancestor context (tree-of-chat): walk parent chain and prepend
+        -- ancestor Q+A exchanges after the system prompt (messages[1]).
+        if parsed_chat.parent_link then
+            local ancestor_msgs = collect_ancestor_messages(file_name, parsed_chat)
+            if #ancestor_msgs > 0 then
+                _parley.logger.debug("Injecting " .. #ancestor_msgs .. " ancestor messages into context")
+                -- Insert after index 1 (system prompt), before current chat messages
+                for i = #ancestor_msgs, 1, -1 do
+                    table.insert(messages, 2, ancestor_msgs[i])
+                end
+            end
+        end
 
         -- Get agent info for display and dispatcher
         local agent_info = _parley.get_agent_info(headers, agent)

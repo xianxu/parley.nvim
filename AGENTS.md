@@ -65,7 +65,7 @@
 - **No Laziness**: Find root causes. No temporary fixes. Senior developer standards.
 - **Minimal Impact**: Changes should only touch what’s necessary. Avoid introducing bugs.
 - **Keep It DRY**: Don’t Repeat Yourself. Refactor to reuse existing code when possible.
-- **Design for Testability**: Refactor code to be easily testable. Always write regression tests for bugs.
+- **Design for Testability**: Refactor code to be easily testable. This means to write pure functions for business logic that testable in unit tests, then some integration code to connect to UI and IO. Always write regression tests for bugs.
 
 ---
 
