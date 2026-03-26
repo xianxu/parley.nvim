@@ -8,6 +8,7 @@ Parley provides custom syntax highlighting for chat buffers to distinguish betwe
 |---|---|---|
 | `ParleyQuestion` | `Keyword` | User's question area |
 | `ParleyFileReference`| `WarningMsg` | `@@` file and directory references |
+| `ParleyChatReference`| `Special` | `🌿:` chat branch/parent link lines |
 | `ParleyThinking` | `Comment` | `🧠:` thinking and `📝:` summary lines |
 | `ParleyAnnotation` | `DiffAdd` | `@...@` inline annotations |
 | `ParleyPickerApproximateMatch` | `IncSearch` | Picker positions that were accepted through typo-tolerance edit operations |

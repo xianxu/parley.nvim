@@ -287,6 +287,8 @@ local config = {
 	chat_assistant_prefix = { "🤖:", "[{{agent}}]" },
 	-- chat local section prefix (for content that should be ignored by parley processing)
 	chat_local_prefix = "🔒:",
+	-- chat branch prefix (for tree-of-chat links: parent back-link on first line, child branches in body)
+	chat_branch_prefix = "🌿:",
 	-- The banner shown at the top of each chat file.
 	chat_template = require("parley.defaults").short_chat_template,
 	-- if you want more real estate in your chat files and don't need the helper text
@@ -391,6 +393,7 @@ local config = {
 		thinking = nil, -- highlight for reasoning lines (default: links to Comment)
 		annotation = nil, -- highlight for annotations (default: links to DiffAdd)
 		approximate_match = nil, -- highlight for typo-tolerance edit positions in picker matches (default: links to IncSearch)
+		chat_reference = nil, -- highlight for 🌿: chat branch/parent links (default: links to Special)
 	},
 
 	-- lualine integration options

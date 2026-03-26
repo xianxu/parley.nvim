@@ -19,7 +19,7 @@
 - One task per subagent for focused execution
 
 ### 3. Self-Improvement Loop
-- When user needs to involve in manual debugging with you, update `tasks/lessons.md` with the pattern what went wrong in the first place.
+- You MUST update `tasks/lessons.md` with the pattern what went wrong when you make mistakes
 - Write rules for yourself that prevent the same mistake
 - You MUST Review lessons at session start for relevant project
 

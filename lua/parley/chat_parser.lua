@@ -92,6 +92,11 @@ end
 --       reasoning = { line = N, content = "text" },                     -- optional
 --     },
 --     ...
+--   },
+--   parent_link = { path = "...", topic = "...", line = N } | nil,
+--   branches = {
+--     { path = "...", topic = "...", line = N, after_exchange = N },
+--     ...
 --   }
 -- }
 
@@ -102,7 +107,9 @@ end
 M.parse_chat = function(lines, header_end, config)
 	local result = {
 		headers = {},
-		exchanges = {}
+		exchanges = {},
+		parent_link = nil,
+		branches = {}
 	}
 
 	-- Parse headers
@@ -172,6 +179,7 @@ M.parse_chat = function(lines, header_end, config)
 	local reasoning_prefix = memory_enabled and config.chat_memory.reasoning_prefix or "🧠:"
 	local user_prefix = config.chat_user_prefix
 	local local_prefix = config.chat_local_prefix
+	local branch_prefix = config.chat_branch_prefix or "🌿:"
 	logger.debug("memory config: " .. vim.inspect({memory_enabled, summary_prefix, reasoning_prefix}))
 
 	-- Determine agent prefix
@@ -186,6 +194,7 @@ M.parse_chat = function(lines, header_end, config)
 	local current_exchange = nil
 	local current_component = nil
 	local line_before_local = nil
+	local first_question_seen = false
 	-- Use table accumulation instead of string concat for content (avoids O(n²))
 	local content_parts = {}
 
@@ -219,14 +228,33 @@ M.parse_chat = function(lines, header_end, config)
 	for i = header_end + 1, #lines do
 		local line = lines[i]
 
-		-- Check for local section (ignore content in local sections)
-		if (not line_before_local) and line:sub(1, #local_prefix) == local_prefix then
-			-- detect the first local_prefix within one question or answer, this will trigger to ignore all subsequent local line_start
-			-- until next user_prefix, or agent_prefix
+		-- Check for branch reference (🌿:) — always detected, even between consecutive links.
+		-- Before the first question: first 🌿: is parent_link, subsequent ones are children.
+		-- After the first question: all 🌿: are child branches.
+		if line:sub(1, #branch_prefix) == branch_prefix then
+			local rest = line:sub(#branch_prefix + 1):gsub("^%s*(.-)%s*$", "%1")
+			local path, topic = rest:match("^%s*([^:]+)%s*:%s*(.-)%s*$")
+			if not path then
+				path = rest
+				topic = ""
+			end
+			path = path:gsub("^%s*(.-)%s*$", "%1")
+			topic = (topic or ""):gsub("^%s*(.-)%s*$", "%1")
+			local branch_info = { path = path, topic = topic, line = i, after_exchange = #result.exchanges }
+			if not first_question_seen and not result.parent_link then
+				result.parent_link = branch_info
+			else
+				table.insert(result.branches, branch_info)
+			end
+			line_before_local = i
+
+		-- Check for local section (excluded from LLM context)
+		elseif (not line_before_local) and line:sub(1, #local_prefix) == local_prefix then
 			line_before_local = i
 
 		-- Check for user message start
 		elseif line:sub(1, #user_prefix) == user_prefix then
+			first_question_seen = true
 			-- If we were building a previous exchange, finalize it
 			local current_component_start = line_before_local or i
 			finalize_component(current_component_start - 1)

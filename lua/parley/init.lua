@@ -1084,13 +1084,23 @@ local function keybinding_help_lines()
 	)
 	add(
 		resolve_shortcut(
-			{ "Parley prompt Search Chat Sections", "Parley create and insert new chat" },
+			"Parley prompt Search Chat Sections",
 			shortcut_modes(cfg.chat_shortcut_search, { "n", "i", "v", "x" }),
 			cfg.chat_shortcut_search,
 			"<C-g>n",
 			current_buf
 		),
-		"Search chat sections / insert chat reference"
+		"Search chat sections"
+	)
+	add(
+		resolve_shortcut(
+			"Parley create and insert new chat",
+			{ "n", "i" },
+			nil,
+			"<C-g>i",
+			current_buf
+		),
+		"Insert new chat reference"
 	)
 	add(
 		resolve_shortcut(
@@ -1378,6 +1388,27 @@ M.prep_chat = function(buf, file_name)
 	-- Set outline navigation keybinding
 	M.helpers.set_keymap({ buf }, "n", "<C-g>t", M.cmd.Outline, "Parley prompt Outline Navigator")
 
+	-- <C-g>i: create and insert new child chat branch reference (normal + insert mode)
+	-- Always inserts as a standalone 🌿: line after the current line.
+	local function insert_branch_ref()
+		local cursor_pos = vim.api.nvim_win_get_cursor(0)
+		local new_chat_file = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
+		local rel_path = vim.fn.fnamemodify(new_chat_file, ":~:.")
+		local branch_prefix = M.config.chat_branch_prefix or "🌿:"
+		vim.api.nvim_buf_set_lines(buf, cursor_pos[1], cursor_pos[1], false, {
+			branch_prefix .. " " .. rel_path .. ": ",
+		})
+		vim.api.nvim_win_set_cursor(0, { cursor_pos[1] + 1, 0 })
+		-- Enter insert mode at end of line so user can type the topic immediately
+		vim.schedule(function() vim.cmd("startinsert!") end)
+		M.logger.info("Created branch reference to new chat: " .. rel_path)
+	end
+	M.helpers.set_keymap({ buf }, "n", "<C-g>i", insert_branch_ref, "Parley create and insert new chat")
+	M.helpers.set_keymap({ buf }, "i", "<C-g>i", function()
+		vim.cmd("stopinsert")
+		insert_branch_ref()
+	end, "Parley create and insert new chat")
+
 	-- Set file opening keybinding
 	local of = M.config.chat_shortcut_open_file
 	if of then
@@ -1502,6 +1533,10 @@ M.highlight_markdown_chat_refs = function(buf)
 	highlighter.highlight_markdown_chat_refs(buf)
 end
 
+M.highlight_chat_branch_refs = function(buf)
+	highlighter.highlight_chat_branch_refs(buf)
+end
+
 -- Apply highlighting to chat blocks in the current buffer.
 -- Simple clear-and-apply; used by tests on scratch buffers.
 -- Production highlighting is handled by the decoration provider.
@@ -1575,9 +1610,9 @@ M.setup_markdown_keymaps = function(buf)
 		M.cmd.ChatFinder()
 	end, "Parley add chat reference")
 
-	-- Add <C-g>n keybinding to create and insert new chat
+	-- Add <C-g>i keybinding to create and insert new chat
 	-- Normal mode implementation
-	M.helpers.set_keymap({ buf }, "n", "<C-g>n", function()
+	M.helpers.set_keymap({ buf }, "n", "<C-g>i", function()
 		-- Get the current cursor position
 		local cursor_pos = vim.api.nvim_win_get_cursor(0)
 
@@ -1594,7 +1629,7 @@ M.setup_markdown_keymaps = function(buf)
 	end, "Parley create and insert new chat")
 
 	-- Insert mode implementation
-	M.helpers.set_keymap({ buf }, "i", "<C-g>n", function()
+	M.helpers.set_keymap({ buf }, "i", "<C-g>i", function()
 		-- Get the current cursor position
 		local cursor_pos = vim.api.nvim_win_get_cursor(0)
 		local current_line = vim.api.nvim_get_current_line()
@@ -2165,6 +2200,50 @@ M.cmd.OpenFileUnderCursor = function()
 	-- If not a markdown file or not a chat reference, check if it's a chat file
 	if M.not_chat(buf, file_name) then
 		M.logger.warning("OpenFileUnderCursor command is only available in chat files and markdown files")
+		return
+	end
+
+	-- Handle 🌿: branch reference lines
+	local branch_prefix = M.config.chat_branch_prefix or "🌿:"
+	if current_line:sub(1, #branch_prefix) == branch_prefix then
+		local rest = current_line:sub(#branch_prefix + 1):gsub("^%s*(.-)%s*$", "%1")
+		-- format: "filename.md: topic" — extract path before the first ":"
+		local path = rest:match("^([^:]+)") or rest
+		path = path:gsub("^%s*(.-)%s*$", "%1")
+		if path ~= "" then
+			local expanded = vim.fn.expand(path)
+			if vim.fn.filereadable(expanded) == 1 then
+				M.open_buf(expanded)
+			elseif expanded:match("%d%d%d%d%-%d%d%-%d%d%.%d%d%-%d%d%-%d%d%.%d+%.md$") then
+				-- New chat file — extract topic from line and create from template
+				local topic = rest:match("^[^:]+:%s*(.+)$") or "New chat"
+				topic = topic:gsub("^%s*(.-)%s*$", "%1")
+				if topic == "" then topic = "New chat" end
+				local agent = M.get_agent()
+				M.helpers.prepare_dir(vim.fn.fnamemodify(expanded, ":h"))
+				local template = M.get_default_template(agent, expanded)
+				template = template:gsub("{{topic}}", topic)
+				local file_lines = vim.split(template, "\n")
+
+				-- Insert parent back-link as first transcript line
+				local chat_parser = require("parley.chat_parser")
+				local header_end = chat_parser.find_header_end(file_lines)
+				if header_end then
+					local parent_path = vim.api.nvim_buf_get_name(buf)
+					local parent_rel = vim.fn.fnamemodify(parent_path, ":~:.")
+					local parent_topic = M.get_chat_topic(parent_path) or ""
+					local back_link = branch_prefix .. " " .. parent_rel .. ": " .. parent_topic
+					table.insert(file_lines, header_end + 1, back_link)
+				end
+
+				vim.fn.writefile(file_lines, expanded)
+				M.open_buf(expanded)
+			else
+				M.logger.warning("Chat file not found: " .. expanded)
+			end
+		else
+			M.logger.warning("Could not extract path from branch reference line")
+		end
 		return
 	end
 

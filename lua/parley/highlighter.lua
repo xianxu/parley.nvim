@@ -81,12 +81,14 @@ local function get_chat_highlight_prefix_patterns()
         assistant_prefix = _parley.config.chat_assistant_prefix[1]
     end
 
+    local branch_prefix = _parley.config.chat_branch_prefix or "🌿:"
     return {
         reasoning_pattern = "^" .. vim.pesc(reasoning_prefix),
         summary_pattern = "^" .. vim.pesc(summary_prefix),
         user_pattern = "^" .. vim.pesc(user_prefix),
         assistant_pattern = "^" .. vim.pesc(assistant_prefix),
         local_pattern = "^" .. vim.pesc(local_prefix),
+        branch_pattern = "^" .. vim.pesc(branch_prefix),
     }
 end
 
@@ -221,6 +223,9 @@ local function compute_chat_highlights(buf, start_line, end_line)
             table.insert(result[row], { hl_group = "ParleyQuestion", col_start = 0, col_end = -1 })
             in_block = true
         elseif line:match(patterns.assistant_pattern) then
+            in_block = false
+        elseif line:match(patterns.branch_pattern) then
+            table.insert(result[row], { hl_group = "ParleyChatReference", col_start = 0, col_end = -1 })
             in_block = false
         elseif line:match(patterns.local_pattern) then
             in_block = false
@@ -368,6 +373,15 @@ M.setup_highlights = function()
         })
     end
 
+    -- Chat branch/parent links (🌿: lines)
+    if user_highlights.chat_reference then
+        vim.api.nvim_set_hl(0, "ParleyChatReference", user_highlights.chat_reference)
+    else
+        vim.api.nvim_set_hl(0, "ParleyChatReference", {
+            link = "Special",
+        })
+    end
+
     -- Tags - Highlighted tags in @@tag@@ format
     if user_highlights.tag then
         vim.api.nvim_set_hl(0, "ParleyTag", user_highlights.tag)
@@ -447,6 +461,91 @@ M.highlight_markdown_chat_refs = function(buf)
                 local latest_lines = vim.api.nvim_buf_get_lines(buf, range.start_line - 1, range.end_line, false)
                 for offset, line in ipairs(latest_lines) do
                     local updated_line = M.render_markdown_chat_reference_line(line)
+                    if updated_line ~= line then
+                        local line_nr = range.start_line + offset - 1
+                        vim.api.nvim_buf_set_lines(buf, line_nr - 1, line_nr, false, { updated_line })
+                    end
+                end
+            end
+
+            vim.cmd("redraw")
+        end)
+    )
+end
+
+-- Render a single 🌿: branch line, filling in the topic from the referenced file.
+-- Returns the updated line, or the original if no change is needed.
+M.render_chat_branch_line = function(line)
+    local branch_prefix = _parley.config.chat_branch_prefix or "🌿:"
+    if line:sub(1, #branch_prefix) ~= branch_prefix then
+        return line
+    end
+
+    local rest = line:sub(#branch_prefix + 1):gsub("^%s*(.-)%s*$", "%1")
+    local path, current_topic = split_chat_reference_content(rest)
+    path = path and path:gsub("^%s*(.-)%s*$", "%1") or ""
+    if path == "" then
+        return line
+    end
+
+    local topic = _parley.get_chat_topic(vim.fn.expand(path))
+    if not topic or topic == "" or topic == current_topic then
+        return line
+    end
+
+    return branch_prefix .. " " .. path .. ": " .. topic
+end
+
+-- Refresh topic labels for 🌿: branch references in chat buffers.
+-- Same debounced pattern as highlight_markdown_chat_refs.
+M.highlight_chat_branch_refs = function(buf)
+    local branch_prefix = _parley.config.chat_branch_prefix or "🌿:"
+    local ranges = get_visible_line_ranges(buf)
+    local has_branch_refs = false
+
+    for _, range in ipairs(ranges) do
+        local lines = vim.api.nvim_buf_get_lines(buf, range.start_line - 1, range.end_line, false)
+        for _, line in ipairs(lines) do
+            if line:sub(1, #branch_prefix) == branch_prefix then
+                has_branch_refs = true
+                break
+            end
+        end
+        if has_branch_refs then break end
+    end
+
+    _parley._branch_topic_timers = _parley._branch_topic_timers or {}
+    local existing_timer = _parley._branch_topic_timers[buf]
+    if existing_timer then
+        stop_and_close_timer(existing_timer)
+        _parley._branch_topic_timers[buf] = nil
+    end
+
+    if not has_branch_refs then
+        return
+    end
+
+    local TOPIC_REFRESH_DEBOUNCE_MS = 500
+    local timer = vim.uv.new_timer()
+    _parley._branch_topic_timers[buf] = timer
+    timer:start(
+        TOPIC_REFRESH_DEBOUNCE_MS,
+        0,
+        vim.schedule_wrap(function()
+            stop_and_close_timer(timer)
+            if _parley._branch_topic_timers[buf] ~= timer then
+                return
+            end
+            _parley._branch_topic_timers[buf] = nil
+            if not vim.api.nvim_buf_is_valid(buf) then
+                return
+            end
+
+            local refresh_ranges = get_visible_line_ranges(buf)
+            for _, range in ipairs(refresh_ranges) do
+                local latest_lines = vim.api.nvim_buf_get_lines(buf, range.start_line - 1, range.end_line, false)
+                for offset, line in ipairs(latest_lines) do
+                    local updated_line = M.render_chat_branch_line(line)
                     if updated_line ~= line then
                         local line_nr = range.start_line + offset - 1
                         vim.api.nvim_buf_set_lines(buf, line_nr - 1, line_nr, false, { updated_line })
@@ -585,6 +684,7 @@ M.setup_buf_handler = function()
             _parley.prep_chat(buf, file_name)
             _parley.display_agent(buf, file_name)
             interview.highlight_timestamps(buf)
+            _parley.highlight_chat_branch_refs(buf)
         -- Handle non-chat markdown files
         elseif _parley.is_markdown(buf, file_name) then
             _parley._parley_bufs[buf] = "markdown"
@@ -627,6 +727,10 @@ M.setup_buf_handler = function()
         if _parley._markdown_topic_timers and _parley._markdown_topic_timers[buf] then
             stop_and_close_timer(_parley._markdown_topic_timers[buf])
             _parley._markdown_topic_timers[buf] = nil
+        end
+        if _parley._branch_topic_timers and _parley._branch_topic_timers[buf] then
+            stop_and_close_timer(_parley._branch_topic_timers[buf])
+            _parley._branch_topic_timers[buf] = nil
         end
     end, gid)
 end

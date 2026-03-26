@@ -31,3 +31,6 @@
 
 ## 2026-03-13
 - When a ChatFinder bug is reported after a seemingly successful move, instrument the full move lifecycle in the live path: selected item, destination root list, pre/post-rename file existence, buffer rename, and the refreshed finder scan/result list. Helper tests alone can miss path-specific runtime mismatches.
+
+## 2026-03-25
+- When implementing a new variant of existing behavior, read the full existing implementation — not just the parts that differ. 
