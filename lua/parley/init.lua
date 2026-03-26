@@ -1802,6 +1802,157 @@ M.move_chat = function(file_name, target_dir)
 	return target_file
 end
 
+-- Resolve a path that may be absolute, ~-prefixed, or relative to base_dir.
+local function resolve_chat_path(path, base_dir)
+	if path:match("^~/") or path == "~" then
+		return vim.fn.resolve(vim.fn.expand(path))
+	elseif path:sub(1, 1) == "/" then
+		return vim.fn.resolve(path)
+	else
+		return vim.fn.resolve(base_dir .. "/" .. path)
+	end
+end
+
+-- Walk parent_link chain to find the tree root file path.
+local function find_tree_root_file(file_path, depth)
+	depth = depth or 0
+	if depth > 20 then return file_path end
+	local abs_path = vim.fn.resolve(vim.fn.expand(file_path))
+	if vim.fn.filereadable(abs_path) == 0 then return abs_path end
+	local lines = vim.fn.readfile(abs_path)
+	local header_end = M.chat_parser.find_header_end(lines)
+	if not header_end then return abs_path end
+	local parsed = M.chat_parser.parse_chat(lines, header_end, M.config)
+	if not parsed.parent_link then return abs_path end
+	local parent_dir = vim.fn.fnamemodify(abs_path, ":h")
+	local parent_abs = resolve_chat_path(parsed.parent_link.path, parent_dir)
+	if vim.fn.filereadable(parent_abs) == 0 then return abs_path end
+	return find_tree_root_file(parent_abs, depth + 1)
+end
+
+-- Collect all file paths in a chat tree (root + all descendants via branches).
+local function collect_tree_files(file_path, visited)
+	visited = visited or {}
+	local abs_path = vim.fn.resolve(vim.fn.expand(file_path))
+	if visited[abs_path] then return {} end
+	visited[abs_path] = true
+	if vim.fn.filereadable(abs_path) == 0 then return {} end
+
+	local result = { abs_path }
+	local lines = vim.fn.readfile(abs_path)
+	local header_end = M.chat_parser.find_header_end(lines)
+	if not header_end then return result end
+	local parsed = M.chat_parser.parse_chat(lines, header_end, M.config)
+	local file_dir = vim.fn.fnamemodify(abs_path, ":h")
+
+	for _, branch in ipairs(parsed.branches) do
+		local child_abs = resolve_chat_path(branch.path, file_dir)
+		local child_files = collect_tree_files(child_abs, visited)
+		for _, f in ipairs(child_files) do
+			table.insert(result, f)
+		end
+	end
+	return result
+end
+
+-- Move an entire chat tree to a new directory, updating all 🌿: references.
+M.move_chat_tree = function(file_name, target_dir)
+	local current_root, _ = find_chat_root(file_name)
+	if not current_root then
+		return nil, "file is not in configured chat roots: " .. file_name
+	end
+
+	local target_root = registered_chat_dir(target_dir)
+	if not target_root then
+		return nil, "target is not a registered chat directory: " .. target_dir
+	end
+
+	if resolve_dir_key(current_root) == resolve_dir_key(target_root) then
+		return nil, "chat is already in that directory"
+	end
+
+	-- Find tree root and collect all files
+	local tree_root = find_tree_root_file(file_name)
+	local tree_files = collect_tree_files(tree_root)
+
+	if #tree_files == 0 then
+		return nil, "no files found in tree"
+	end
+
+	-- Check for conflicts
+	for _, src in ipairs(tree_files) do
+		local basename = vim.fn.fnamemodify(src, ":t")
+		local dst = target_root .. "/" .. basename
+		if vim.fn.filereadable(dst) == 1 then
+			return nil, "target already exists: " .. dst
+		end
+	end
+
+	-- Build old_path -> new_path mapping
+	local path_map = {}  -- old_abs -> new_abs
+	for _, src in ipairs(tree_files) do
+		local basename = vim.fn.fnamemodify(src, ":t")
+		path_map[src] = target_root .. "/" .. basename
+	end
+
+	-- Move all files
+	for _, src in ipairs(tree_files) do
+		sync_moved_chat_buffers(src, nil)
+		local ok, err = os.rename(src, path_map[src])
+		if not ok then
+			return nil, "failed to move " .. src .. ": " .. tostring(err)
+		end
+		sync_moved_chat_buffers(src, path_map[src])
+
+		if M._state.last_chat and resolve_dir_key(M._state.last_chat) == resolve_dir_key(src) then
+			M.refresh_state({ last_chat = path_map[src] })
+		end
+		require("parley.file_tracker").track_file_access(path_map[src])
+	end
+
+	-- Update 🌿: references in all moved files
+	local branch_prefix = M.config.chat_branch_prefix or "🌿:"
+	for _, new_path in pairs(path_map) do
+		if vim.fn.filereadable(new_path) == 1 then
+			local lines = vim.fn.readfile(new_path)
+			local changed = false
+			for i, line in ipairs(lines) do
+				if line:sub(1, #branch_prefix) == branch_prefix then
+					local rest = line:sub(#branch_prefix + 1)
+					local ref_path, topic = rest:match("^%s*([^:]+)%s*:%s*(.-)%s*$")
+					if ref_path then
+						ref_path = ref_path:gsub("^%s*(.-)%s*$", "%1")
+						local ref_abs = resolve_chat_path(ref_path, vim.fn.fnamemodify(new_path, ":h"))
+						-- Check if this reference pointed to a file in the old location
+						for old_abs, new_abs in pairs(path_map) do
+							if ref_abs == old_abs or resolve_chat_path(ref_path, current_root) == old_abs then
+								local new_rel = vim.fn.fnamemodify(new_abs, ":~:.")
+								lines[i] = branch_prefix .. " " .. new_rel .. ": " .. (topic or "")
+								changed = true
+								break
+							end
+						end
+					end
+				end
+			end
+			if changed then
+				vim.fn.writefile(lines, new_path)
+				-- Update buffer if open
+				local buf = vim.fn.bufnr(new_path)
+				if buf ~= -1 and vim.api.nvim_buf_is_valid(buf) then
+					vim.api.nvim_buf_call(buf, function()
+						vim.cmd("edit!")
+					end)
+				end
+			end
+		end
+	end
+
+	-- Return the new path of the originally requested file
+	local resolved_file = vim.fn.resolve(vim.fn.expand(file_name))
+	return path_map[resolved_file] or path_map[tree_root]
+end
+
 M.prompt_chat_move = function(file_name, on_complete, on_cancel)
 	local current_root, resolved_file = find_chat_root_record(file_name)
 	if not current_root then
@@ -1836,7 +1987,7 @@ M.prompt_chat_move = function(file_name, on_complete, on_cancel)
 		items = items,
 		anchor = "top",
 		on_select = function(item)
-			local new_file, err = M.move_chat(resolved_file, item.value)
+			local new_file, err = M.move_chat_tree(resolved_file, item.value)
 			if not new_file then
 				vim.notify("Failed to move chat: " .. err, vim.log.levels.WARN)
 				if on_cancel then
@@ -1845,8 +1996,8 @@ M.prompt_chat_move = function(file_name, on_complete, on_cancel)
 				return
 			end
 
-			M.logger.info("Moved chat to: " .. new_file)
-			vim.notify("Moved chat to: " .. new_file, vim.log.levels.INFO)
+			M.logger.info("Moved chat tree to: " .. new_file)
+			vim.notify("Moved chat tree to: " .. new_file, vim.log.levels.INFO)
 			if on_complete then
 				on_complete(new_file, item.value)
 			end
