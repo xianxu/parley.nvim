@@ -1412,6 +1412,8 @@ M.prep_chat = function(buf, file_name)
 		-- Enter insert mode at end of line so user can type the topic immediately
 		vim.schedule(function() vim.cmd("startinsert!") end)
 		M.logger.info("Created branch reference to new chat: " .. rel_path)
+		-- Trigger branch ref rendering to show ⚠️ for non-existent file
+		M.highlight_chat_branch_refs(buf)
 	end
 	M.helpers.set_keymap({ buf }, "n", "<C-g>i", insert_branch_ref, "Parley create and insert new chat")
 	M.helpers.set_keymap({ buf }, "i", "<C-g>i", function()

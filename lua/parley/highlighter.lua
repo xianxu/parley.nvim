@@ -488,12 +488,26 @@ M.render_chat_branch_line = function(line)
         return line
     end
 
-    local topic = _parley.get_chat_topic(vim.fn.expand(path))
-    if not topic or topic == "" or topic == current_topic then
-        return line
+    local expanded = vim.fn.expand(path)
+    local file_exists = vim.fn.filereadable(expanded) == 1
+
+    -- Strip existing warning marker before comparing
+    current_topic = current_topic and current_topic:gsub("%s*⚠️%s*$", "") or ""
+
+    local topic = file_exists and _parley.get_chat_topic(expanded) or nil
+    local warning = file_exists and "" or " ⚠️"
+
+    if topic and topic ~= "" then
+        local new_line = branch_prefix .. " " .. path .. ": " .. topic .. warning
+        if new_line == line then return line end
+        return new_line
     end
 
-    return branch_prefix .. " " .. path .. ": " .. topic
+    -- No topic change, but may need to add/update warning
+    local base = branch_prefix .. " " .. path .. ": " .. current_topic
+    local new_line = base .. warning
+    if new_line == line then return line end
+    return new_line
 end
 
 -- Refresh topic labels for 🌿: branch references in chat buffers.
