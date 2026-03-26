@@ -1039,7 +1039,7 @@ local function keybinding_help_lines()
 		"Respond all"
 	)
 	add(
-		resolve_shortcut("Parley prompt Chat Stop", shortcut_modes(cfg.chat_shortcut_stop, { "n", "i", "v", "x" }), cfg.chat_shortcut_stop, "<C-g>s", current_buf),
+		resolve_shortcut("Parley prompt Chat Stop", shortcut_modes(cfg.chat_shortcut_stop, { "n", "i", "v", "x" }), cfg.chat_shortcut_stop, "<C-g>x", current_buf),
 		"Stop active response"
 	)
 	add(
@@ -1067,7 +1067,7 @@ local function keybinding_help_lines()
 			"Parley prompt System Prompt Selector",
 			shortcut_modes(cfg.chat_shortcut_system_prompt, { "n", "i", "v", "x" }),
 			cfg.chat_shortcut_system_prompt,
-			"<C-g>p",
+			"<C-g>s",
 			current_buf
 		),
 		"Next system prompt"
@@ -2582,7 +2582,7 @@ M.get_default_template = function(agent, file_path)
 	-- Generate template using the same pattern as M.new_chat
 	-- Get shortcuts, handling potentially missing values
 	local respond_shortcut = M.config.chat_shortcut_respond and M.config.chat_shortcut_respond.shortcut or "<C-g><C-g>"
-	local stop_shortcut = M.config.chat_shortcut_stop and M.config.chat_shortcut_stop.shortcut or "<C-g>s"
+	local stop_shortcut = M.config.chat_shortcut_stop and M.config.chat_shortcut_stop.shortcut or "<C-g>x"
 	local delete_shortcut = M.config.chat_shortcut_delete and M.config.chat_shortcut_delete.shortcut or "<C-g>d"
 	local new_shortcut = M.config.global_shortcut_new and M.config.global_shortcut_new.shortcut or "<C-g>c"
 
