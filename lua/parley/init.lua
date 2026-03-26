@@ -2180,12 +2180,20 @@ M.cmd.ChatPrune = function()
 	if #topic_msgs > 0 then
 		local agent = M.get_agent()
 		local agent_info = M.get_agent_info(parsed_chat.headers, agent)
+		-- The child is now the active buffer — animate its topic line
+		local child_buf = vim.fn.bufnr(new_file)
+		local spinner_opts = nil
+		if child_buf ~= -1 then
+			spinner_opts = { buf = child_buf, find_line = function()
+				return chat_respond.find_topic_line(child_buf)
+			end }
+		end
 		chat_respond.generate_topic(topic_msgs, agent_info.provider, agent_info.model, function(topic)
 			-- Update child file's topic header
-			local child_buf = vim.fn.bufnr(new_file)
-			if child_buf ~= -1 and vim.api.nvim_buf_is_valid(child_buf) then
-				local child_lines_now = vim.api.nvim_buf_get_lines(child_buf, 0, -1, false)
-				set_chat_topic_line(child_buf, child_lines_now, topic)
+			local cbuf = vim.fn.bufnr(new_file)
+			if cbuf ~= -1 and vim.api.nvim_buf_is_valid(cbuf) then
+				local child_lines_now = vim.api.nvim_buf_get_lines(cbuf, 0, -1, false)
+				set_chat_topic_line(cbuf, child_lines_now, topic)
 			else
 				-- Child not open in a buffer — update the file directly
 				local file_lines = vim.fn.readfile(new_file)
@@ -2212,7 +2220,7 @@ M.cmd.ChatPrune = function()
 			end
 
 			M.logger.info("Prune topic generated: " .. topic)
-		end)
+		end, spinner_opts)
 	end
 end
 

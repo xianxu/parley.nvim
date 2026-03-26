@@ -468,6 +468,23 @@ M.build_messages = function(opts)
     return messages
 end
 
+-- Find the 0-indexed line number of the `topic:` header line in a buffer.
+-- Returns nil if not found or buffer is invalid.
+M.find_topic_line = function(buf)
+    if not vim.api.nvim_buf_is_valid(buf) then
+        return nil
+    end
+    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    local header_end = find_chat_header_end(lines)
+    if not header_end then return nil end
+    for i = 1, header_end do
+        if lines[i]:match("^%s*topic:%s*") then
+            return i - 1  -- 0-indexed
+        end
+    end
+    return nil
+end
+
 --------------------------------------------------------------------------------
 -- generate_topic: ask LLM to produce a short topic from conversation messages
 --------------------------------------------------------------------------------
@@ -477,7 +494,9 @@ end
 -- @param provider  string   provider name (e.g. "anthropic", "openai")
 -- @param model     string   model name
 -- @param callback  function called with (topic_string) on completion
-M.generate_topic = function(messages, provider, model, callback)
+-- @param spinner   table|nil optional {buf, find_line} — buf is the buffer to animate,
+--                  find_line() returns 0-indexed line number of the topic line (or nil to skip)
+M.generate_topic = function(messages, provider, model, callback, spinner)
     -- Build a clean copy: strip whitespace, drop empty messages and cache_control
     local msgs = {}
     for _, m in ipairs(messages) do
@@ -488,6 +507,27 @@ M.generate_topic = function(messages, provider, model, callback)
     end
     table.insert(msgs, { role = "user", content = _parley.config.chat_topic_gen_prompt })
 
+    -- Start spinner animation on the topic line if requested
+    local spinner_frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
+    local spinner_idx = 1
+    local spinner_timer = nil
+    if spinner and spinner.buf and spinner.find_line then
+        spinner_timer = vim.uv.new_timer()
+        spinner_timer:start(0, 120, vim.schedule_wrap(function()
+            if not vim.api.nvim_buf_is_valid(spinner.buf) then
+                stop_and_close_timer(spinner_timer)
+                spinner_timer = nil
+                return
+            end
+            local line_nr = spinner.find_line()
+            if line_nr then
+                local text = "topic: " .. spinner_frames[spinner_idx] .. " generating..."
+                vim.api.nvim_buf_set_lines(spinner.buf, line_nr, line_nr + 1, false, { text })
+            end
+            spinner_idx = spinner_idx % #spinner_frames + 1
+        end))
+    end
+
     local topic_buf = vim.api.nvim_create_buf(false, true)
     local topic_handler = _parley.dispatcher.create_handler(topic_buf, nil, 0, false, "", false)
 
@@ -497,6 +537,8 @@ M.generate_topic = function(messages, provider, model, callback)
         _parley.dispatcher.prepare_payload(msgs, model, provider),
         topic_handler,
         vim.schedule_wrap(function()
+            stop_and_close_timer(spinner_timer)
+            spinner_timer = nil
             local topic = vim.api.nvim_buf_get_lines(topic_buf, 0, -1, false)[1] or ""
             vim.api.nvim_buf_delete(topic_buf, { force = true })
             topic = topic:gsub("^%s*(.-)%s*$", "%1")
@@ -1000,7 +1042,9 @@ M.respond = function(params, callback, override_free_cursor, force)
                         _parley.helpers.undojoin(buf)
                         local all_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
                         set_chat_topic_line(buf, all_lines, topic)
-                    end)
+                    end, { buf = buf, find_line = function()
+                        return M.find_topic_line(buf)
+                    end })
                 end
 
                 -- Place cursor appropriately
