@@ -1113,6 +1113,16 @@ local function keybinding_help_lines()
 		"Open @@ file reference"
 	)
 	add(resolve_shortcut("Parley prompt Outline Navigator", { "n" }, nil, "<C-g>t", current_buf), "Outline picker")
+	add(
+		resolve_shortcut(
+			"Parley prune chat",
+			shortcut_modes(cfg.chat_shortcut_prune, { "n" }),
+			cfg.chat_shortcut_prune,
+			"<C-g>p",
+			current_buf
+		),
+		"Prune: move exchange + following to child"
+	)
 
 	table.insert(lines, "")
 	table.insert(lines, "Chat Finder")
@@ -1408,6 +1418,14 @@ M.prep_chat = function(buf, file_name)
 		vim.cmd("stopinsert")
 		insert_branch_ref()
 	end, "Parley create and insert new chat")
+
+	-- <C-g>p: prune exchange + following into new child chat
+	local prune_shortcut = M.config.chat_shortcut_prune
+	if prune_shortcut then
+		for _, mode in ipairs(prune_shortcut.modes) do
+			M.helpers.set_keymap({ buf }, mode, prune_shortcut.shortcut, M.cmd.ChatPrune, "Parley prune chat")
+		end
+	end
 
 	-- Set file opening keybinding
 	local of = M.config.chat_shortcut_open_file
@@ -2048,6 +2066,155 @@ M.chat_respond_all = function() return chat_respond.respond_all() end
 M.resubmit_questions_recursively = function(...) return chat_respond.resubmit_questions_recursively(...) end
 
 M.cmd.ChatRespond = function(p) chat_respond.cmd_respond(p) end
+
+-- Prune: move cursored exchange + all following into a new child chat file.
+-- Replaces pruned content in parent with a 🌿: branch reference.
+M.cmd.ChatPrune = function()
+	local buf = vim.api.nvim_get_current_buf()
+	local file_name = vim.api.nvim_buf_get_name(buf)
+	local reason = M.not_chat(buf, file_name)
+	if reason then
+		M.logger.warning("Prune is only available in chat files: " .. reason)
+		return
+	end
+
+	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+	local header_end = M.chat_parser.find_header_end(lines)
+	if not header_end then
+		M.logger.error("Prune: could not find header separator ---")
+		return
+	end
+
+	local parsed_chat = M.parse_chat(lines, header_end)
+	local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
+	local exchange_idx = M.find_exchange_at_line(parsed_chat, cursor_line)
+
+	-- If cursor isn't directly on an exchange, find the nearest one at or after cursor
+	if not exchange_idx then
+		for i, ex in ipairs(parsed_chat.exchanges) do
+			if ex.question and ex.question.line_start >= cursor_line then
+				exchange_idx = i
+				break
+			end
+		end
+	end
+
+	if not exchange_idx then
+		M.logger.warning("Prune: no exchange found at or after cursor")
+		return
+	end
+
+	if exchange_idx < 1 or exchange_idx > #parsed_chat.exchanges then
+		M.logger.warning("Prune: exchange index out of range")
+		return
+	end
+
+	-- Determine the line range to prune: from the question start of the target
+	-- exchange through the end of the file.
+	local prune_start = parsed_chat.exchanges[exchange_idx].question.line_start
+	local prune_end = #lines
+
+	-- Collect pruned lines (1-indexed inclusive)
+	local pruned_lines = {}
+	for i = prune_start, prune_end do
+		table.insert(pruned_lines, lines[i])
+	end
+
+	-- Build the new child file
+	local new_file = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
+	local rel_child = vim.fn.fnamemodify(new_file, ":~:.")
+	local branch_prefix = M.config.chat_branch_prefix or "🌿:"
+
+	-- Copy parent headers, patching topic and file fields
+	local child_lines = {}
+	local basename = vim.fn.fnamemodify(new_file, ":t")
+	for i = 1, header_end do
+		local line = lines[i]
+		if line:match("^%s*topic:%s*") then
+			line = "topic: ?"
+		elseif line:match("^%s*file:%s*") then
+			line = "file: " .. basename
+		end
+		table.insert(child_lines, line)
+	end
+
+	-- Insert parent back-link as first transcript line
+	local parent_rel = vim.fn.fnamemodify(file_name, ":~:.")
+	local parent_topic = M.get_chat_topic(file_name) or ""
+	table.insert(child_lines, branch_prefix .. " " .. parent_rel .. ": " .. parent_topic)
+	table.insert(child_lines, "")
+
+	-- Append the pruned exchanges
+	for _, l in ipairs(pruned_lines) do
+		table.insert(child_lines, l)
+	end
+
+	-- Write child file
+	M.helpers.prepare_dir(vim.fn.fnamemodify(new_file, ":h"))
+	vim.fn.writefile(child_lines, new_file)
+
+	-- Replace pruned lines in parent with a branch reference + fresh question starter
+	local branch_line = branch_prefix .. " " .. rel_child .. ": "
+	local user_prefix = M.config.chat_user_prefix
+	vim.api.nvim_buf_set_lines(buf, prune_start - 1, prune_end, false, { "", branch_line, "", user_prefix, "", "" })
+
+	-- Save parent
+	vim.cmd("write")
+
+	-- Open the child
+	M.open_buf(new_file)
+	M.logger.info("Pruned " .. #pruned_lines .. " lines into " .. rel_child)
+
+	-- Generate topic from the pruned exchanges asynchronously
+	local topic_msgs = {}
+	for idx = exchange_idx, #parsed_chat.exchanges do
+		local ex = parsed_chat.exchanges[idx]
+		if ex.question then
+			table.insert(topic_msgs, { role = "user", content = ex.question.content })
+		end
+		if ex.answer then
+			table.insert(topic_msgs, { role = "assistant", content = ex.answer.content })
+		end
+	end
+
+	if #topic_msgs > 0 then
+		local agent = M.get_agent()
+		local agent_info = M.get_agent_info(parsed_chat.headers, agent)
+		chat_respond.generate_topic(topic_msgs, agent_info.provider, agent_info.model, function(topic)
+			-- Update child file's topic header
+			local child_buf = vim.fn.bufnr(new_file)
+			if child_buf ~= -1 and vim.api.nvim_buf_is_valid(child_buf) then
+				local child_lines_now = vim.api.nvim_buf_get_lines(child_buf, 0, -1, false)
+				set_chat_topic_line(child_buf, child_lines_now, topic)
+			else
+				-- Child not open in a buffer — update the file directly
+				local file_lines = vim.fn.readfile(new_file)
+				for i, line in ipairs(file_lines) do
+					if line:match("^%s*topic:%s*") then
+						file_lines[i] = "topic: " .. topic
+						vim.fn.writefile(file_lines, new_file)
+						break
+					end
+				end
+			end
+
+			-- Update parent's 🌿: line with the generated topic
+			if vim.api.nvim_buf_is_valid(buf) then
+				local parent_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+				for i, line in ipairs(parent_lines) do
+					if line:match("^" .. vim.pesc(branch_prefix)) and line:find(rel_child, 1, true) then
+						local updated = branch_prefix .. " " .. rel_child .. ": " .. topic
+						vim.api.nvim_buf_set_lines(buf, i - 1, i, false, { updated })
+						vim.cmd("write")
+						break
+					end
+				end
+			end
+
+			M.logger.info("Prune topic generated: " .. topic)
+		end)
+	end
+end
 
 -- Command for navigating questions and headers in chat documents
 M.cmd.Outline = function()

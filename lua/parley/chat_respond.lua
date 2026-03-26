@@ -72,12 +72,18 @@ M.build_ancestor_messages = function(ancestor_chain)
                 break
             end
             if exchange.question then
-                table.insert(msgs, { role = "user", content = exchange.question.content })
+                local content = (exchange.question.content or ""):gsub("^%s*(.-)%s*$", "%1")
+                if content ~= "" then
+                    table.insert(msgs, { role = "user", content = content })
+                end
             end
             if exchange.answer then
                 -- Use summary when available (mirrors memory-aware answer handling)
-                local content = exchange.summary and exchange.summary.content or exchange.answer.content
-                table.insert(msgs, { role = "assistant", content = content })
+                local raw = exchange.summary and exchange.summary.content or exchange.answer.content
+                local content = (raw or ""):gsub("^%s*(.-)%s*$", "%1")
+                if content ~= "" then
+                    table.insert(msgs, { role = "assistant", content = content })
+                end
             end
         end
     end
@@ -460,6 +466,46 @@ M.build_messages = function(opts)
     end
 
     return messages
+end
+
+--------------------------------------------------------------------------------
+-- generate_topic: ask LLM to produce a short topic from conversation messages
+--------------------------------------------------------------------------------
+
+-- Fire an LLM call to generate a topic string from a conversation.
+-- @param messages  table    array of {role, content} (the conversation so far)
+-- @param provider  string   provider name (e.g. "anthropic", "openai")
+-- @param model     string   model name
+-- @param callback  function called with (topic_string) on completion
+M.generate_topic = function(messages, provider, model, callback)
+    -- Build a clean copy: strip whitespace, drop empty messages and cache_control
+    local msgs = {}
+    for _, m in ipairs(messages) do
+        local content = (m.content or ""):gsub("^%s*(.-)%s*$", "%1")
+        if content ~= "" then
+            table.insert(msgs, { role = m.role, content = content })
+        end
+    end
+    table.insert(msgs, { role = "user", content = _parley.config.chat_topic_gen_prompt })
+
+    local topic_buf = vim.api.nvim_create_buf(false, true)
+    local topic_handler = _parley.dispatcher.create_handler(topic_buf, nil, 0, false, "", false)
+
+    _parley.dispatcher.query(
+        nil,
+        provider,
+        _parley.dispatcher.prepare_payload(msgs, model, provider),
+        topic_handler,
+        vim.schedule_wrap(function()
+            local topic = vim.api.nvim_buf_get_lines(topic_buf, 0, -1, false)[1] or ""
+            vim.api.nvim_buf_delete(topic_buf, { force = true })
+            topic = topic:gsub("^%s*(.-)%s*$", "%1")
+            topic = topic:gsub("%.$", "")
+            if topic ~= "" then
+                callback(topic)
+            end
+        end)
+    )
 end
 
 --------------------------------------------------------------------------------
@@ -946,43 +992,15 @@ M.respond = function(params, callback, override_free_cursor, force)
 
                 -- if topic is ?, then generate it
                 if headers.topic == "?" then
-                    -- insert last model response
-                    table.insert(messages, { role = "assistant", content = qt.response })
+                    -- include the last model response in context for topic generation
+                    local topic_msgs = vim.deepcopy(messages)
+                    table.insert(topic_msgs, { role = "assistant", content = qt.response })
 
-                    -- ask model to generate topic/title for the chat
-                    table.insert(messages, { role = "user", content = _parley.config.chat_topic_gen_prompt })
-
-                    -- prepare invisible buffer for the model to write to
-                    local topic_buf = vim.api.nvim_create_buf(false, true)
-                    local topic_handler = _parley.dispatcher.create_handler(topic_buf, nil, 0, false, "", false)
-
-                    -- call the model
-                    _parley.dispatcher.query(
-                        nil,
-                        agent_info.provider,
-                        _parley.dispatcher.prepare_payload(messages, agent_info.model, agent_info.provider),
-                        topic_handler,
-                        vim.schedule_wrap(function()
-                            -- get topic from invisible buffer
-                            local topic = vim.api.nvim_buf_get_lines(topic_buf, 0, -1, false)[1]
-                            -- close invisible buffer
-                            vim.api.nvim_buf_delete(topic_buf, { force = true })
-                            -- strip whitespace from ends of topic
-                            topic = topic:gsub("^%s*(.-)%s*$", "%1")
-                            -- strip dot from end of topic
-                            topic = topic:gsub("%.$", "")
-
-                            -- if topic is empty do not replace it
-                            if topic == "" then
-                                return
-                            end
-
-                            -- replace topic in current buffer
-                            _parley.helpers.undojoin(buf)
-                            local all_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-                            set_chat_topic_line(buf, all_lines, topic)
-                        end)
-                    )
+                    M.generate_topic(topic_msgs, agent_info.provider, agent_info.model, function(topic)
+                        _parley.helpers.undojoin(buf)
+                        local all_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+                        set_chat_topic_line(buf, all_lines, topic)
+                    end)
                 end
 
                 -- Place cursor appropriately
