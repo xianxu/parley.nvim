@@ -5,6 +5,7 @@
 ### 1. Overall
 - Enter plan mode for ANY non-trivial task (3+ steps, architectural decisions, change more than 2 files, 50 lines)
 - Work for you is in `tasks/issue.md`, you MUST make plan in `tasks/todo.md`
+- IGNORE history/*`, they are for history records only
 - Wait for user	approval before implementation for ANY non-trivial task
 - If something goes sideways, STOP and re-plan immediately: don’t keep pushing
 - Use plan mode for verification steps, not just building
