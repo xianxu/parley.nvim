@@ -153,7 +153,8 @@ file: solo.md
 ]])
 			local result = exporter._collect_tree(root)
 			assert.equals(1, #result)
-			assert.equals(vim.fn.resolve(root), result[1])
+			assert.equals(vim.fn.resolve(root), result[1].abs_path)
+			assert.equals("Solo Chat", result[1].title)
 		end)
 
 		it("D2: collects root and children", function()
@@ -195,6 +196,7 @@ file: child2.md
 ]])
 			local result = exporter._collect_tree(root)
 			assert.equals(3, #result)
+			assert.equals("Root", result[1].title)
 		end)
 
 		it("D3: handles missing child files gracefully", function()
@@ -252,8 +254,8 @@ file: 2024-03-15-chat.md
 
 🤖: Hi
 ]])
-			local tree_files = { vim.fn.resolve(tmpdir .. "/2024-03-15-chat.md") }
-			local map = exporter._build_link_map(tree_files, "html")
+			local tree_infos = exporter._collect_tree(tmpdir .. "/2024-03-15-chat.md")
+			local map = exporter._build_link_map(tree_infos, "html")
 			local expected_key = vim.fn.resolve(tmpdir .. "/2024-03-15-chat.md")
 			assert.equals("2024-03-15-test_chat.html", map[expected_key])
 		end)
@@ -267,8 +269,8 @@ file: 2024-03-15-chat.md
 
 🤖: Hi
 ]])
-			local tree_files = { vim.fn.resolve(tmpdir .. "/2024-03-15-chat.md") }
-			local map = exporter._build_link_map(tree_files, "markdown")
+			local tree_infos = exporter._collect_tree(tmpdir .. "/2024-03-15-chat.md")
+			local map = exporter._build_link_map(tree_infos, "markdown")
 			local expected_key = vim.fn.resolve(tmpdir .. "/2024-03-15-chat.md")
 			assert.equals("2024-03-15-test_chat.markdown", map[expected_key])
 		end)

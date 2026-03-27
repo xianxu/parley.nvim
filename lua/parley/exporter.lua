@@ -50,15 +50,8 @@ local function get_parse_config()
 	}
 end
 
---- Read and parse a chat file from disk, returning export metadata.
---- @param file_path string absolute path to the chat file
---- @return table|nil info table with abs_path, lines, header_end, parsed, title, post_date, tags, slug
-local function read_chat_file(file_path)
-	local abs_path = vim.fn.resolve(vim.fn.expand(file_path))
-	if vim.fn.filereadable(abs_path) == 0 then
-		return nil
-	end
-	local lines = vim.fn.readfile(abs_path)
+--- Build an info table from already-loaded lines and a resolved abs_path.
+local function build_info(lines, abs_path)
 	if #lines == 0 then
 		return nil
 	end
@@ -106,54 +99,19 @@ local function read_chat_file(file_path)
 	}
 end
 
+--- Read and parse a chat file from disk, returning export metadata.
+local function read_chat_file(file_path)
+	local abs_path = vim.fn.resolve(vim.fn.expand(file_path))
+	if vim.fn.filereadable(abs_path) == 0 then
+		return nil
+	end
+	local lines = vim.fn.readfile(abs_path)
+	return build_info(lines, abs_path)
+end
+
 --- Build an info table from buffer lines (for the current buffer, which may have unsaved changes).
 local function build_info_from_lines(lines, file_path)
-	if #lines == 0 then
-		return nil
-	end
-
-	local abs_path = vim.fn.resolve(vim.fn.expand(file_path))
-	local header_end = _parley.chat_parser.find_header_end(lines)
-	if not header_end then
-		return nil
-	end
-
-	local parsed = _parley.chat_parser.parse_chat(lines, header_end, get_parse_config())
-	local headers = parsed.headers
-
-	local title = "Untitled"
-	if headers and headers.topic and headers.topic ~= "" then
-		title = headers.topic
-	end
-
-	local post_date = extract_date(headers and headers.file or "")
-		or extract_date(vim.fn.fnamemodify(abs_path, ":t"))
-		or os.date("%Y-%m-%d")
-
-	local tags = "unclassified"
-	if headers and headers.tags then
-		if type(headers.tags) == "table" and #headers.tags > 0 then
-			tags = table.concat(headers.tags, ", ")
-		elseif type(headers.tags) == "string" and headers.tags ~= "" then
-			tags = headers.tags
-		end
-	end
-
-	local slug = sanitize_title(title)
-	if slug == "" then
-		slug = vim.fn.fnamemodify(abs_path, ":t:r")
-	end
-
-	return {
-		abs_path = abs_path,
-		lines = lines,
-		header_end = header_end,
-		parsed = parsed,
-		title = title,
-		post_date = post_date,
-		tags = tags,
-		slug = slug,
-	}
+	return build_info(lines, vim.fn.resolve(vim.fn.expand(file_path)))
 end
 
 --------------------------------------------------------------------------------
@@ -183,6 +141,9 @@ local function find_tree_root(file_path, depth)
 	return find_tree_root(parent_abs, depth + 1)
 end
 
+--- Collect all files in a chat tree, returning a list of info objects.
+--- Each entry is the parsed info table (from build_info/read_chat_file).
+--- Files that exist but can't be parsed are skipped.
 local function collect_tree(file_path, visited)
 	visited = visited or {}
 	local abs_path = vim.fn.resolve(vim.fn.expand(file_path))
@@ -196,29 +157,26 @@ local function collect_tree(file_path, visited)
 
 	local info = read_chat_file(abs_path)
 	if not info then
-		return { abs_path }
+		return {}
 	end
 
-	local result = { abs_path }
+	local result = { info }
 	local file_dir = vim.fn.fnamemodify(abs_path, ":h")
 	for _, branch in ipairs(info.parsed.branches) do
 		local child_abs = resolve_chat_path(branch.path, file_dir)
-		local child_files = collect_tree(child_abs, visited)
-		for _, f in ipairs(child_files) do
-			table.insert(result, f)
+		local child_infos = collect_tree(child_abs, visited)
+		for _, child_info in ipairs(child_infos) do
+			table.insert(result, child_info)
 		end
 	end
 	return result
 end
 
---- Build a map from abs_path -> export_filename for all files in a tree.
-local function build_link_map(tree_files, extension)
+--- Build a map from abs_path -> export_filename from a list of info objects.
+local function build_link_map(tree_infos, extension)
 	local map = {}
-	for _, abs_path in ipairs(tree_files) do
-		local info = read_chat_file(abs_path)
-		if info then
-			map[abs_path] = info.post_date .. "-" .. info.slug .. "." .. extension
-		end
+	for _, info in ipairs(tree_infos) do
+		map[info.abs_path] = info.post_date .. "-" .. info.slug .. "." .. extension
 	end
 	return map
 end
@@ -247,9 +205,17 @@ end
 -- Branch line processing
 --------------------------------------------------------------------------------
 
+--- Build a branch navigation div (shared by both HTML and markdown formats).
+local function make_branch_div(class, arrow, topic, href)
+	if href then
+		return '<div class="branch-nav ' .. class .. '"><a href="' .. href .. '">' .. arrow .. " " .. topic .. "</a></div>"
+	end
+	return '<div class="branch-nav ' .. class .. '">' .. arrow .. " " .. topic .. "</div>"
+end
+
 --- Process lines, replacing 🌿: branch lines with navigation links.
 --- For HTML format, returns placeholders that must be swapped after markdown-to-HTML conversion.
---- For markdown format, returns the final Jekyll-compatible link text.
+--- For markdown format, returns the final styled HTML divs (Jekyll renders inline HTML).
 --- @param lines table array of all lines in the file
 --- @param parsed table parsed chat structure
 --- @param format string "html" or "markdown"
@@ -282,68 +248,22 @@ local function process_branch_lines(lines, parsed, format, link_map, file_dir)
 			local is_parent = not first_branch_seen and parsed.parent_link ~= nil
 			first_branch_seen = true
 
+			local class = is_parent and "parent-link" or "child-link"
+			local arrow_text = is_parent and "←" or "→"
+			local arrow_html = is_parent and "&larr;" or "&rarr;"
+
 			if format == "html" then
 				placeholder_count = placeholder_count + 1
 				local key = "XBRANCHX" .. placeholder_count .. "XBRANCHX"
-				local nav_html
-				if target_filename then
-					if is_parent then
-						nav_html = '<div class="branch-nav parent-link"><a href="'
-							.. target_filename
-							.. '">&larr; '
-							.. topic
-							.. "</a></div>"
-					else
-						nav_html = '<div class="branch-nav child-link"><a href="'
-							.. target_filename
-							.. '">&rarr; '
-							.. topic
-							.. "</a></div>"
-					end
-				else
-					if is_parent then
-						nav_html = '<div class="branch-nav parent-link">&larr; ' .. topic .. "</div>"
-					else
-						nav_html = '<div class="branch-nav child-link">&rarr; ' .. topic .. "</div>"
-					end
-				end
-				placeholders[key] = nav_html
+				placeholders[key] = make_branch_div(class, arrow_html, topic, target_filename)
 				table.insert(processed, key)
 			elseif format == "markdown" then
+				local href = nil
 				if target_filename then
 					local slug = target_filename:gsub("%.markdown$", "")
-					if is_parent then
-						table.insert(
-							processed,
-							'<div class="branch-nav parent-link"><a href="{% post_url '
-								.. slug
-								.. " %}\">← "
-								.. topic
-								.. "</a></div>"
-						)
-					else
-						table.insert(
-							processed,
-							'<div class="branch-nav child-link"><a href="{% post_url '
-								.. slug
-								.. " %}\">→ "
-								.. topic
-								.. "</a></div>"
-						)
-					end
-				else
-					if is_parent then
-						table.insert(
-							processed,
-							'<div class="branch-nav parent-link">← ' .. topic .. "</div>"
-						)
-					else
-						table.insert(
-							processed,
-							'<div class="branch-nav child-link">→ ' .. topic .. "</div>"
-						)
-					end
+					href = "{% post_url " .. slug .. " %}"
 				end
+				table.insert(processed, make_branch_div(class, arrow_text, topic, href))
 			end
 		else
 			table.insert(processed, line)
@@ -767,8 +687,8 @@ end
 -- Public API
 --------------------------------------------------------------------------------
 
--- Export current chat buffer (and its tree) as HTML
-M.export_html = function(params)
+--- Shared export orchestration for both HTML and Markdown formats.
+local function export_tree(params, format, write_fn, config_dir_key, extension)
 	local buf = vim.api.nvim_get_current_buf()
 	local file_name = vim.api.nvim_buf_get_name(buf)
 
@@ -786,7 +706,7 @@ M.export_html = function(params)
 		return
 	end
 
-	local export_dir = params and params.args and params.args ~= "" and params.args or _parley.config.export_html_dir
+	local export_dir = params and params.args and params.args ~= "" and params.args or _parley.config[config_dir_key]
 
 	-- Build info for the current buffer
 	local current_info = build_info_from_lines(lines, file_name)
@@ -796,10 +716,10 @@ M.export_html = function(params)
 		return
 	end
 
-	-- Discover tree
+	-- Discover tree (collect_tree returns info objects, avoiding redundant reads)
 	local root_path = find_tree_root(file_name)
-	local tree_files = collect_tree(root_path)
-	local link_map = build_link_map(tree_files, "html")
+	local tree_infos = collect_tree(root_path)
+	local link_map = build_link_map(tree_infos, extension)
 
 	-- Check for filename collisions
 	local collisions = check_filename_collisions(link_map)
@@ -819,35 +739,31 @@ M.export_html = function(params)
 	-- Export all files in the tree
 	local exported = {}
 	local skipped = {}
-	for _, abs_path in ipairs(tree_files) do
-		local info
-		if abs_path == current_info.abs_path then
-			info = current_info
-		else
-			info = read_chat_file(abs_path)
+	for _, info in ipairs(tree_infos) do
+		-- Use buffer lines for the current file (may have unsaved changes)
+		local export_info = info
+		if info.abs_path == current_info.abs_path then
+			export_info = current_info
 		end
 
-		if info then
-			local output_path = write_html_file(info, export_dir, link_map)
-			if output_path then
-				table.insert(exported, output_path)
-			else
-				table.insert(skipped, abs_path)
-			end
+		local output_path = write_fn(export_info, export_dir, link_map)
+		if output_path then
+			table.insert(exported, output_path)
 		else
-			table.insert(skipped, abs_path)
+			table.insert(skipped, info.abs_path)
 		end
 	end
 
 	-- Copy the current file's export path to clipboard
-	local current_export = export_dir .. "/" .. current_info.post_date .. "-" .. current_info.slug .. ".html"
+	local current_export = export_dir .. "/" .. current_info.post_date .. "-" .. current_info.slug .. "." .. extension
 	vim.fn.setreg("+", current_export)
 
+	local format_label = format == "html" and "HTML" or "Markdown"
 	if #exported == 1 then
-		_parley.logger.info("Exported chat to HTML: " .. exported[1])
+		_parley.logger.info("Exported chat to " .. format_label .. ": " .. exported[1])
 		print("✅ Exported chat to: " .. exported[1] .. " (path copied to clipboard)")
 	else
-		_parley.logger.info("Exported " .. #exported .. " chat files to HTML in " .. export_dir)
+		_parley.logger.info("Exported " .. #exported .. " chat files to " .. format_label .. " in " .. export_dir)
 		print(
 			"✅ Exported "
 				.. #exported
@@ -865,107 +781,12 @@ M.export_html = function(params)
 	end
 end
 
--- Export current chat buffer (and its tree) as Markdown for Jekyll
+M.export_html = function(params)
+	export_tree(params, "html", write_html_file, "export_html_dir", "html")
+end
+
 M.export_markdown = function(params)
-	local buf = vim.api.nvim_get_current_buf()
-	local file_name = vim.api.nvim_buf_get_name(buf)
-
-	local validation_error = _parley.not_chat(buf, file_name)
-	if validation_error then
-		_parley.logger.error("Cannot export: " .. validation_error)
-		print("Error: Cannot export - " .. validation_error)
-		return
-	end
-
-	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-	if #lines == 0 then
-		_parley.logger.error("Buffer is empty")
-		print("Error: Buffer is empty")
-		return
-	end
-
-	local export_dir = params and params.args and params.args ~= "" and params.args or _parley.config.export_markdown_dir
-
-	-- Build info for the current buffer
-	local current_info = build_info_from_lines(lines, file_name)
-	if not current_info then
-		_parley.logger.error("Cannot export: invalid chat header format")
-		print("Error: Cannot export - invalid chat header format")
-		return
-	end
-
-	-- Discover tree
-	local root_path = find_tree_root(file_name)
-	local tree_files = collect_tree(root_path)
-	local link_map = build_link_map(tree_files, "markdown")
-
-	-- Check for filename collisions
-	local collisions = check_filename_collisions(link_map)
-	if collisions then
-		_parley.logger.error("Cannot export: duplicate export filenames detected")
-		print("Error: Cannot export - multiple chat files would produce the same filename:")
-		for filename, paths in pairs(collisions) do
-			print("  " .. filename .. ":")
-			for _, path in ipairs(paths) do
-				print("    - " .. path)
-			end
-		end
-		print("Fix by giving these chats distinct topics.")
-		return
-	end
-
-	-- Export all files in the tree
-	local exported = {}
-	local skipped = {}
-	for _, abs_path in ipairs(tree_files) do
-		local info
-		if abs_path == current_info.abs_path then
-			info = current_info
-		else
-			info = read_chat_file(abs_path)
-		end
-
-		if info then
-			local output_path = write_markdown_file(info, export_dir, link_map)
-			if output_path then
-				table.insert(exported, output_path)
-			else
-				table.insert(skipped, abs_path)
-			end
-		else
-			table.insert(skipped, abs_path)
-		end
-	end
-
-	-- Copy the current file's export path to clipboard
-	local current_export = export_dir
-		.. "/"
-		.. current_info.post_date
-		.. "-"
-		.. current_info.slug
-		.. ".markdown"
-	vim.fn.setreg("+", current_export)
-
-	if #exported == 1 then
-		_parley.logger.info("Exported chat to Markdown: " .. exported[1])
-		print("✅ Exported chat to: " .. exported[1] .. " (path copied to clipboard)")
-	else
-		_parley.logger.info("Exported " .. #exported .. " chat files to Markdown in " .. export_dir)
-		print(
-			"✅ Exported "
-				.. #exported
-				.. " chat files to: "
-				.. export_dir
-				.. " (current file path copied to clipboard)"
-		)
-	end
-
-	if #skipped > 0 then
-		print("⚠️  Skipped " .. #skipped .. " files (missing or invalid)")
-		for _, path in ipairs(skipped) do
-			_parley.logger.warning("Skipped: " .. path)
-		end
-	end
+	export_tree(params, "markdown", write_markdown_file, "export_markdown_dir", "markdown")
 end
 
 -- Expose helpers for testing
