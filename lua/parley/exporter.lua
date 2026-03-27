@@ -226,11 +226,23 @@ end
 --------------------------------------------------------------------------------
 
 --- Build a branch navigation div (shared by both HTML and markdown formats).
-local function make_branch_div(class, arrow, topic, href)
+--- @param opts table|nil optional { markdown_safe = true } to add markdown="0" for Kramdown
+local function make_branch_div(class, arrow, topic, href, opts)
+	local md_attr = (opts and opts.markdown_safe) and ' markdown="0"' or ""
 	if href then
-		return '<div class="branch-nav ' .. class .. '"><a href="' .. href .. '">' .. arrow .. " " .. topic .. "</a></div>"
+		return '<div class="branch-nav '
+			.. class
+			.. '"'
+			.. md_attr
+			.. '><a href="'
+			.. href
+			.. '">'
+			.. arrow
+			.. " "
+			.. topic
+			.. "</a></div>"
 	end
-	return '<div class="branch-nav ' .. class .. '">' .. arrow .. " " .. topic .. "</div>"
+	return '<div class="branch-nav ' .. class .. '"' .. md_attr .. ">" .. arrow .. " " .. topic .. "</div>"
 end
 
 --- Process lines, replacing 🌿: branch lines with navigation links.
@@ -287,7 +299,10 @@ local function process_branch_lines(lines, parsed, format, link_map, file_dir, b
 					local slug = target_filename:gsub("%.markdown$", "")
 					href = "{% post_url " .. slug .. " %}"
 				end
-				table.insert(processed, make_branch_div(class, arrow_text, topic, href))
+				-- Blank lines + markdown="0" so Kramdown doesn't mangle block HTML
+				table.insert(processed, "")
+				table.insert(processed, make_branch_div(class, arrow_text, topic, href, { markdown_safe = true }))
+				table.insert(processed, "")
 			end
 		else
 			table.insert(processed, line)

@@ -296,9 +296,12 @@ file: 2024-01-10-parent.md
 				[vim.fn.resolve(tmpdir .. "/2024-01-10-parent.md")] = "2024-01-10-parent_topic.markdown",
 			}
 			local result = exporter._process_branch_lines(lines, parsed, "markdown", link_map, tmpdir)
-			assert.is_truthy(result[1]:find("parent%-link"))
-			assert.is_truthy(result[1]:find("post_url 2024%-01%-10%-parent_topic"))
-			assert.is_truthy(result[1]:find("← Parent Topic"))
+			-- blank line, div, blank line inserted for Kramdown compatibility
+			assert.equals("", result[1])
+			assert.is_truthy(result[2]:find("parent%-link"))
+			assert.is_truthy(result[2]:find("post_url 2024%-01%-10%-parent_topic"))
+			assert.is_truthy(result[2]:find("← Parent Topic"))
+			assert.equals("", result[3])
 		end)
 
 		it("F2: converts child branch link to Jekyll post_url with styled HTML", function()
@@ -322,9 +325,12 @@ file: 2024-01-15-child.md
 				[vim.fn.resolve(tmpdir .. "/2024-01-15-child.md")] = "2024-01-15-child_topic.markdown",
 			}
 			local result = exporter._process_branch_lines(lines, parsed, "markdown", link_map, tmpdir)
-			assert.is_truthy(result[5]:find("child%-link"))
-			assert.is_truthy(result[5]:find("post_url 2024%-01%-15%-child_topic"))
-			assert.is_truthy(result[5]:find("→ Child Topic"))
+			-- lines 1-4 are the non-branch lines, then blank, div, blank
+			assert.equals("", result[5])
+			assert.is_truthy(result[6]:find("child%-link"))
+			assert.is_truthy(result[6]:find("post_url 2024%-01%-15%-child_topic"))
+			assert.is_truthy(result[6]:find("→ Child Topic"))
+			assert.equals("", result[7])
 		end)
 
 		it("F3: renders styled div without link when target not in link map", function()
@@ -335,8 +341,10 @@ file: 2024-01-15-child.md
 			}
 			local parsed = { parent_link = { path = "missing.md", topic = "Missing Chat" }, branches = {} }
 			local result = exporter._process_branch_lines(lines, parsed, "markdown", {}, tmpdir)
-			assert.is_truthy(result[1]:find("parent%-link"))
-			assert.is_truthy(result[1]:find("← Missing Chat"))
+			assert.equals("", result[1])
+			assert.is_truthy(result[2]:find("parent%-link"))
+			assert.is_truthy(result[2]:find("← Missing Chat"))
+			assert.equals("", result[3])
 		end)
 	end)
 
