@@ -19,6 +19,8 @@ The philosophy is Keep Things Simple, and a bit of Unix:
 
 Despite of such simple interface, it's very powerful, sometimes more so than official app
 - You can use "any" LLM providers, mix in the same conversation input from many different LLMs
+- Your chat transcript can be as complex as a tree with branches, to allow you to explore into different directions, without being forced into a linear conversation
+- You can jump easily between such tree branches
 - You can access your private local file, and private Google Drive file through oauth
 - You can edit anything in the transcript, including LLM responses, which presumably would influence the agent's future responses, a soft prompt engineering. You are constructing an understanding of a topic together with the help of LLMs
 - All you chat history in one place locally, you can search and further refine with whatever tools you want
