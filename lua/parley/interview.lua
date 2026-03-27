@@ -161,28 +161,30 @@ M.stop_timer = function()
 	end
 end
 
---- Toggle interview mode on/off, handling timestamp insertion and timer lifecycle.
-M.toggle = function()
-	-- First check if cursor is on an interview timestamp line
+--- Enter interview mode, handling timestamp insertion and timer lifecycle.
+--- If cursor is on a timestamp line, resumes from that time offset.
+--- No-op if already in interview mode.
+M.enter = function()
+	if _parley._state.interview_mode then
+		vim.notify("Interview mode is already active", vim.log.levels.INFO)
+		return
+	end
+
+	-- Check if cursor is on an interview timestamp line to resume from that offset
 	local cursor_line = vim.api.nvim_get_current_line()
 	local timestamp_match = cursor_line:match("^%s*:(%d+)min")
 
 	if timestamp_match then
-		-- Parse the minute value from the line
 		local minutes = tonumber(timestamp_match)
 		if minutes then
-			-- Calculate the start time based on current time minus the elapsed minutes
 			_parley._state.interview_start_time = os.time() - (minutes * 60)
 			_parley._state.interview_mode = true
 			_logger.info(string.format("Interview mode enabled with timer set to %d minutes", minutes))
 			vim.notify(string.format("Interview timer set to %d minutes", minutes), vim.log.levels.INFO)
 
-			-- Set up insert mode keymap for timestamps
 			M.setup_keymap()
-			-- Start timer for statusline updates
 			M.start_timer()
 
-			-- Refresh lualine to update display
 			pcall(function()
 				require("lualine").refresh()
 			end)
@@ -190,45 +192,57 @@ M.toggle = function()
 		end
 	end
 
-	-- Normal toggle behavior if not on a timestamp line
-	_parley._state.interview_mode = not _parley._state.interview_mode
-	print("DEBUG: Interview mode is now: " .. tostring(_parley._state.interview_mode)) -- Debug print
+	-- Normal enter: start fresh
+	_parley._state.interview_mode = true
+	_parley._state.interview_start_time = os.time()
+	_logger.info("Interview mode enabled")
+	vim.notify("Interview mode enabled", vim.log.levels.INFO)
 
-	if _parley._state.interview_mode then
-		_parley._state.interview_start_time = os.time()
-		_logger.info("Interview mode enabled")
-		vim.notify("Interview mode enabled", vim.log.levels.INFO)
-
-		-- Insert :00min marker at current cursor position
-		local mode = vim.fn.mode()
-		if mode == "i" then
-			-- Already in insert mode, just insert the text
-			vim.api.nvim_put({ ":00min " }, "c", true, true)
-		else
-			-- Enter insert mode and insert the marker
-			vim.cmd("startinsert")
-			vim.schedule(function()
-				vim.api.nvim_put({ ":00min " }, "c", true, true)
-			end)
-		end
-
-		-- Set up insert mode keymap for timestamps
-		M.setup_keymap()
-		-- Start timer for statusline updates
-		M.start_timer()
+	-- Insert :00min marker at current cursor position
+	local mode = vim.fn.mode()
+	if mode == "i" then
+		vim.api.nvim_put({ ":00min " }, "c", true, true)
 	else
-		_parley._state.interview_start_time = nil
-		_logger.info("Interview mode disabled")
-		vim.notify("Interview mode disabled", vim.log.levels.INFO)
-		-- Remove insert mode keymap and highlighting
-		M.remove_keymap()
-		-- Stop timer
-		M.stop_timer()
+		vim.cmd("startinsert")
+		vim.schedule(function()
+			vim.api.nvim_put({ ":00min " }, "c", true, true)
+		end)
 	end
-	-- Refresh lualine to update display
+
+	M.setup_keymap()
+	M.start_timer()
+
 	pcall(function()
 		require("lualine").refresh()
 	end)
+end
+
+--- Exit interview mode. No-op if not in interview mode.
+M.exit = function()
+	if not _parley._state.interview_mode then
+		vim.notify("Interview mode is not active", vim.log.levels.INFO)
+		return
+	end
+
+	_parley._state.interview_mode = false
+	_parley._state.interview_start_time = nil
+	_logger.info("Interview mode disabled")
+	vim.notify("Interview mode disabled", vim.log.levels.INFO)
+	M.remove_keymap()
+	M.stop_timer()
+
+	pcall(function()
+		require("lualine").refresh()
+	end)
+end
+
+--- Toggle interview mode on/off (enters if off, exits if on).
+M.toggle = function()
+	if _parley._state.interview_mode then
+		M.exit()
+	else
+		M.enter()
+	end
 end
 
 return M

@@ -16,7 +16,8 @@ Parley exposes a key-bindings help command that lists active default shortcuts d
 - The help list MUST include:
   - global chat/note shortcuts,
   - chat/markdown shortcuts (including `<C-g>i` insert branch ref, `<C-g>p` prune, `<C-g>s` system prompt, `<C-g>x` stop),
-  - mode toggles (`web_search`, `raw request`, `raw response`, interview mode).
+  - mode toggles (`web_search`, `raw request`, `raw response`),
+  - interview mode (`<C-n>i` enter, `<C-n>I` exit).
 - The Chat Finder section MUST include both left and right recency-cycle shortcuts, plus delete and move.
 - The Note Finder section MUST include both left and right recency-cycle shortcuts, plus delete.
 - Displayed shortcuts MUST be resolved from active runtime keymaps when available.

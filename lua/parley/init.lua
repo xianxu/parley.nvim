@@ -550,10 +550,13 @@ M.setup = function(opts)
 		end
 	end
 
-	-- Set up global keymap for interview mode toggle
+	-- Set up global keymaps for interview mode
 	vim.keymap.set("n", "<C-n>i", function()
-		M.cmd.ToggleInterview()
-	end, { silent = true, desc = "Toggle Interview Mode" })
+		M.cmd.EnterInterview()
+	end, { silent = true, desc = "Enter Interview Mode" })
+	vim.keymap.set("n", "<C-n>I", function()
+		M.cmd.ExitInterview()
+	end, { silent = true, desc = "Exit Interview Mode" })
 
 	-- Set up global keymap for template-based note creation
 	vim.keymap.set("n", "<C-n>t", function()
@@ -630,7 +633,13 @@ M.setup = function(opts)
 		end
 	end
 
-	-- Toggle Interview Mode
+	-- Interview Mode commands
+	M.cmd.EnterInterview = function()
+		interview.enter()
+	end
+	M.cmd.ExitInterview = function()
+		interview.exit()
+	end
 	M.cmd.ToggleInterview = function()
 		interview.toggle()
 	end
@@ -1016,7 +1025,8 @@ local function keybinding_help_lines()
 		resolve_shortcut("Open oil.nvim file explorer", shortcut_modes(cfg.global_shortcut_oil, { "n" }), cfg.global_shortcut_oil, "<leader>fo", current_buf),
 		"Open oil file explorer"
 	)
-	add(resolve_shortcut("Toggle Interview Mode", { "n" }, nil, "<C-n>i", current_buf), "Toggle interview mode")
+	add(resolve_shortcut("Enter Interview Mode", { "n" }, nil, "<C-n>i", current_buf), "Enter interview mode")
+	add(resolve_shortcut("Exit Interview Mode", { "n" }, nil, "<C-n>I", current_buf), "Exit interview mode")
 	add(resolve_shortcut("Create Note from Template", { "n" }, nil, "<C-n>t", current_buf), "New note from template")
 	add(resolve_shortcut("Toggle web_search tool", { "n" }, nil, "<C-g>w", current_buf), "Toggle web_search")
 	add(resolve_shortcut("Toggle raw request mode", { "n" }, nil, "<C-g>r", current_buf), "Toggle raw request mode")
