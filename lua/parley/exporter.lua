@@ -726,9 +726,10 @@ local function write_markdown_file(info, export_dir, link_map)
 	local content = table.concat(processed_lines, "\n")
 	content = content:gsub("💬:", "## Question\n\n")
 
-	local jekyll_header = "---\nlayout: post\ntitle:  \""
-		.. info.title
-		.. "\"\ndate:   "
+	-- Use single quotes for title to avoid breaking YAML when topic contains double quotes
+	local jekyll_header = "---\nlayout: post\ntitle:  '"
+		.. info.title:gsub("'", "''")
+		.. "'\ndate:   "
 		.. info.post_date
 		.. "\ntags: "
 		.. info.tags
