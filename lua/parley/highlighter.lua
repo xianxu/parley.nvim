@@ -392,10 +392,6 @@ M.setup_highlights = function()
         })
     end
 
-    -- Concealed parts of inline branch links (prefix and path)
-    vim.api.nvim_set_hl(0, "ParleyInlineBranchConceal", { link = "Conceal" })
-
-
     -- Tags - Highlighted tags in @@tag@@ format
     if user_highlights.tag then
         vim.api.nvim_set_hl(0, "ParleyTag", user_highlights.tag)

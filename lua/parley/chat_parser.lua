@@ -95,7 +95,7 @@ end
 --   },
 --   parent_link = { path = "...", topic = "...", line = N } | nil,
 --   branches = {
---     { path = "...", topic = "...", line = N, after_exchange = N },
+--     { path = "...", topic = "...", line = N, after_exchange = N, inline = bool|nil },
 --     ...
 --   }
 -- }
@@ -130,7 +130,7 @@ end
 --- @param branch_prefix string
 --- @return string the line with inline links replaced by their display text
 M.unpack_inline_branch_links = function(line, branch_prefix)
-	local prefix_pattern = "%[" .. vim.pesc(branch_prefix) .. "(.-)%]%(.-%)";
+	local prefix_pattern = "%[" .. vim.pesc(branch_prefix) .. "(.-)%]%(.-%)"
 	return line:gsub(prefix_pattern, "%1")
 end
 
@@ -298,10 +298,6 @@ M.parse_chat = function(lines, header_end, config)
 
 			-- Detect inline branch links on the question prefix line
 			local q_inline = M.extract_inline_branch_links(question_content, branch_prefix)
-			for _, ib in ipairs(q_inline) do
-				-- Defer adding to branches until after exchange is created (below)
-			end
-			-- Unpack inline links for LLM context
 			if #q_inline > 0 then
 				question_content = M.unpack_inline_branch_links(question_content, branch_prefix)
 			end

@@ -306,25 +306,31 @@ local function process_branch_lines(lines, parsed, format, link_map, file_dir, b
 			end
 		else
 			-- Replace inline branch links [🌿:text](file) with <a> tags
-			local inline_pattern = "%[" .. vim.pesc(branch_prefix) .. "(.-)]%((.-)%)"
-			if line:find(inline_pattern) then
-				local replaced = line:gsub(inline_pattern, function(topic, path)
-					local abs_target = resolve_fn(path:gsub("^%s*(.-)%s*$", "%1"), file_dir)
+			local chat_parser = require("parley.chat_parser")
+			local inline_links = chat_parser.extract_inline_branch_links(line, branch_prefix)
+			if #inline_links > 0 then
+				-- Replace from right to left so positions stay valid
+				local replaced = line
+				for idx = #inline_links, 1, -1 do
+					local link = inline_links[idx]
+					local abs_target = resolve_fn(link.path, file_dir)
 					local target_filename = link_map and link_map[abs_target]
+					local replacement
 					if not target_filename then
-						return topic
-					end
-					if format == "html" then
+						replacement = link.topic
+					elseif format == "html" then
 						placeholder_count = placeholder_count + 1
 						local key = "XBRANCHX" .. placeholder_count .. "XBRANCHX"
-						placeholders[key] = '<a href="' .. target_filename .. '" class="branch-inline">' .. topic .. "</a>"
-						return key
+						placeholders[key] = '<a href="' .. target_filename .. '" class="branch-inline">' .. link.topic .. "</a>"
+						replacement = key
 					elseif format == "markdown" then
 						local slug = target_filename:gsub("%.markdown$", "")
-						return '<a href="{% post_url ' .. slug .. ' %}" class="branch-inline">' .. topic .. "</a>"
+						replacement = '<a href="{% post_url ' .. slug .. ' %}" class="branch-inline">' .. link.topic .. "</a>"
+					else
+						replacement = link.topic
 					end
-					return topic
-				end)
+					replaced = replaced:sub(1, link.col_start - 1) .. replacement .. replaced:sub(link.col_end + 1)
+				end
 				table.insert(processed, replaced)
 			else
 				table.insert(processed, line)

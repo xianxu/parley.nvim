@@ -1451,29 +1451,7 @@ M.prep_chat = function(buf, file_name)
 		vim.api.nvim_buf_set_lines(buf, start_line - 1, start_line, false, { new_line })
 
 		-- Create the child chat file with topic, parent back-link, and question
-		local agent = M.get_agent()
-		M.helpers.prepare_dir(vim.fn.fnamemodify(new_chat_file, ":h"))
-		local template = M.get_default_template(agent, new_chat_file)
-		template = template:gsub("topic: %?", "topic: " .. topic)
-		local file_lines = vim.split(template, "\n")
-
-		-- Insert parent back-link as first transcript line
-		local chat_parser = require("parley.chat_parser")
-		local header_end = chat_parser.find_header_end(file_lines)
-		if header_end then
-			local parent_path = vim.api.nvim_buf_get_name(buf)
-			local parent_rel = vim.fn.fnamemodify(parent_path, ":~:.")
-			local parent_topic = M.get_chat_topic(parent_path) or ""
-			local back_link = branch_prefix .. " " .. parent_rel .. ": " .. parent_topic
-			table.insert(file_lines, header_end + 1, back_link)
-			-- Insert the question
-			local user_prefix = M.config.chat_user_prefix or "💬:"
-			table.insert(file_lines, header_end + 2, "")
-			table.insert(file_lines, header_end + 3, user_prefix .. " " .. topic .. "?")
-			table.insert(file_lines, header_end + 4, "")
-		end
-
-		vim.fn.writefile(file_lines, new_chat_file)
+		M.create_child_chat(new_chat_file, topic, buf, topic .. "?")
 		M.logger.info("Created inline branch to new chat: " .. rel_path .. " (" .. topic .. ")")
 		M.highlight_chat_branch_refs(buf)
 	end
@@ -2655,26 +2633,7 @@ M.cmd.OpenFileUnderCursor = function()
 			elseif expanded:match("%d%d%d%d%-%d%d%-%d%d%.%d%d%-%d%d%-%d%d%.%d+%.md$") then
 				-- New chat file — create from template with topic and parent back-link
 				local topic = link.topic ~= "" and ('what is "' .. link.topic .. '"') or "New chat"
-				local agent = M.get_agent()
-				M.helpers.prepare_dir(vim.fn.fnamemodify(expanded, ":h"))
-				local template = M.get_default_template(agent, expanded)
-				template = template:gsub("topic: %?", "topic: " .. topic)
-				local file_lines = vim.split(template, "\n")
-
-				local header_end = chat_parser.find_header_end(file_lines)
-				if header_end then
-					local parent_path = vim.api.nvim_buf_get_name(buf)
-					local parent_rel = vim.fn.fnamemodify(parent_path, ":~:.")
-					local parent_topic = M.get_chat_topic(parent_path) or ""
-					local back_link = branch_prefix .. " " .. parent_rel .. ": " .. parent_topic
-					table.insert(file_lines, header_end + 1, back_link)
-					local user_prefix = M.config.chat_user_prefix or "💬:"
-					table.insert(file_lines, header_end + 2, "")
-					table.insert(file_lines, header_end + 3, user_prefix .. " " .. topic .. "?")
-					table.insert(file_lines, header_end + 4, "")
-				end
-
-				vim.fn.writefile(file_lines, expanded)
+				M.create_child_chat(expanded, topic, buf, topic .. "?")
 				M.open_buf(expanded)
 			else
 				M.logger.warning("Chat file not found: " .. expanded)
@@ -3034,6 +2993,39 @@ M.get_default_template = function(agent, file_path)
 	})
 
 	return template
+end
+
+--- Create a child chat file with topic, parent back-link, and optional first question.
+--- @param file_path string path for the new child chat file
+--- @param topic string topic for the child chat header
+--- @param parent_buf number buffer handle of the parent chat
+--- @param question string|nil optional first question to insert
+M.create_child_chat = function(file_path, topic, parent_buf, question)
+	local agent = M.get_agent()
+	M.helpers.prepare_dir(vim.fn.fnamemodify(file_path, ":h"))
+	local template = M.get_default_template(agent, file_path)
+	template = template:gsub("topic: %?", "topic: " .. topic)
+	local file_lines = vim.split(template, "\n")
+
+	local chat_parser = require("parley.chat_parser")
+	local header_end = chat_parser.find_header_end(file_lines)
+	if header_end then
+		local branch_prefix = M.config.chat_branch_prefix or "🌿:"
+		local parent_path = vim.api.nvim_buf_get_name(parent_buf)
+		local parent_rel = vim.fn.fnamemodify(parent_path, ":~:.")
+		local parent_topic = M.get_chat_topic(parent_path) or ""
+		local back_link = branch_prefix .. " " .. parent_rel .. ": " .. parent_topic
+		table.insert(file_lines, header_end + 1, back_link)
+
+		if question then
+			local user_prefix = M.config.chat_user_prefix or "💬:"
+			table.insert(file_lines, header_end + 2, "")
+			table.insert(file_lines, header_end + 3, user_prefix .. " " .. question)
+			table.insert(file_lines, header_end + 4, "")
+		end
+	end
+
+	vim.fn.writefile(file_lines, file_path)
 end
 
 M.get_agent_info = function(headers, agent)
