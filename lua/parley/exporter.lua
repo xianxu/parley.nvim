@@ -727,13 +727,20 @@ local function write_markdown_file(info, export_dir, link_map)
 	content = content:gsub("💬:", "## Question\n\n")
 
 	-- Use single quotes for title to avoid breaking YAML when topic contains double quotes
+	local headers = info.parsed and info.parsed.headers or {}
+	local hidden_line = ""
+	if headers.hidden and headers.hidden ~= "" then
+		hidden_line = "\nhidden: " .. headers.hidden
+	end
 	local jekyll_header = "---\nlayout: post\ntitle:  '"
 		.. info.title:gsub("'", "''")
 		.. "'\ndate:   "
 		.. info.post_date
 		.. "\ntags: "
 		.. info.tags
-		.. "\ncomments: true\n---\n\n"
+		.. "\ncomments: true"
+		.. hidden_line
+		.. "\n---\n\n"
 
 	local style_block = [[<style>
 h1 { color: #1a365d; border-bottom: 3px solid #4299e1; padding-bottom: 0.3rem; }

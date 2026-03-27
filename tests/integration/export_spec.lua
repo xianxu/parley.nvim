@@ -223,7 +223,7 @@ def hello():
                 -- Verify Jekyll front matter
                 assert.is_true(content:find("^%-%-%-\n") ~= nil, "Should start with ---")
                 assert.is_true(content:find("layout: post") ~= nil, "Should have layout")
-                assert.is_true(content:find("title:  \"Jekyll Test\"") ~= nil, "Should have title")
+                assert.is_true(content:find("title:  'Jekyll Test'") ~= nil, "Should have title")
                 assert.is_true(content:find("date:   2024%-01%-15") ~= nil, "Should have date from file header")
                 assert.is_true(content:find("tags: test, jekyll") ~= nil, "Should have tags")
                 -- Verify watermark
@@ -233,6 +233,39 @@ def hello():
             end
 
             -- Close buffer if valid
+            if vim.api.nvim_buf_is_valid(buf) then
+                vim.cmd("bdelete! " .. buf)
+            end
+        end)
+
+        it("B1b: escapes quotes in topic for valid YAML front matter", function()
+            local chat_content = [[# topic: It's a "tricky" topic
+- file: 2024-01-15-quotes.md
+- tags: test
+---
+💬: Hello
+
+🤖: Response
+]]
+            local chat_file = create_chat_file("2024-03-15-14-30-49-quotes.md", chat_content)
+
+            vim.cmd("edit " .. chat_file)
+            local buf = vim.api.nvim_get_current_buf()
+            M.cmd.ExportMarkdown()
+
+            local md_file = export_markdown_dir .. "/2024-01-15-its_a_tricky_topic.markdown"
+            local exists = vim.fn.filereadable(md_file) == 1
+            assert.is_true(exists, "Markdown file should be created at " .. md_file)
+
+            if exists then
+                local content = table.concat(vim.fn.readfile(md_file), "\n")
+                -- Single quotes in YAML are escaped by doubling them
+                assert.is_true(content:find("title:  'It''s a \"tricky\" topic'") ~= nil,
+                    "Should escape single quotes by doubling and preserve double quotes inside single-quoted YAML")
+                -- Verify it starts with valid front matter
+                assert.is_true(content:find("^%-%-%-\n") ~= nil, "Should start with ---")
+            end
+
             if vim.api.nvim_buf_is_valid(buf) then
                 vim.cmd("bdelete! " .. buf)
             end
