@@ -61,12 +61,12 @@
 7. **Document Results**: Add review section to `tasks/todo.md`
 8. **Capture Lessons**: Update `tasks/lessons.md` after corrections
 
-## Core Principles
-- **Simplicity First**: Make every change as simple as possible. Minimal impact.
-- **No Laziness**: Find root causes. No temporary fixes. Senior developer standards.
-- **Minimal Impact**: Changes should only touch what’s necessary. Avoid introducing bugs.
+## Core Design Principles
 - **Keep It DRY**: Don’t Repeat Yourself. Refactor to reuse existing code when possible.
-- **Design for Testability**: Refactor code to be easily testable. This means to write pure functions for business logic that testable in unit tests, then some integration code to connect to UI and IO. Always write regression tests for bugs.
+- **Keep It PURE**: Write majority code as pure functions, then with limited code to integrate with UI and IO. 
+- **Simplicity First**: Make every change as simple as possible. Minimal impact.
+- **Find Root Cause**: Find root causes. No temporary fixes, lazy null checks. Senior developer standards.
+- **Minimize Impact**: Changes should only touch what’s necessary. Avoid introducing bugs.
 
 ---
 

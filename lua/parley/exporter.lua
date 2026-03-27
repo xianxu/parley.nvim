@@ -50,18 +50,35 @@ local function get_parse_config()
 	}
 end
 
+--- Extract the filename (tail) from a path. Pure string operation.
+local function path_basename(path)
+	return path:match("[^/]+$") or path
+end
+
+--- Extract filename without extension from a path. Pure string operation.
+local function path_basename_no_ext(path)
+	local base = path_basename(path)
+	return base:match("^(.+)%.[^%.]+$") or base
+end
+
 --- Build an info table from already-loaded lines and a resolved abs_path.
-local function build_info(lines, abs_path)
+--- Pure function: all dependencies passed as parameters.
+--- @param lines table array of file lines
+--- @param abs_path string resolved absolute path
+--- @param chat_parser table parser module with find_header_end and parse_chat
+--- @param parse_config table config for parse_chat
+--- @param fallback_date string|nil fallback date if none found (default: os.date)
+local function build_info(lines, abs_path, chat_parser, parse_config, fallback_date)
 	if #lines == 0 then
 		return nil
 	end
 
-	local header_end = _parley.chat_parser.find_header_end(lines)
+	local header_end = chat_parser.find_header_end(lines)
 	if not header_end then
 		return nil
 	end
 
-	local parsed = _parley.chat_parser.parse_chat(lines, header_end, get_parse_config())
+	local parsed = chat_parser.parse_chat(lines, header_end, parse_config)
 	local headers = parsed.headers
 
 	local title = "Untitled"
@@ -70,7 +87,8 @@ local function build_info(lines, abs_path)
 	end
 
 	local post_date = extract_date(headers and headers.file or "")
-		or extract_date(vim.fn.fnamemodify(abs_path, ":t"))
+		or extract_date(path_basename(abs_path))
+		or fallback_date
 		or os.date("%Y-%m-%d")
 
 	local tags = "unclassified"
@@ -84,7 +102,7 @@ local function build_info(lines, abs_path)
 
 	local slug = sanitize_title(title)
 	if slug == "" then
-		slug = vim.fn.fnamemodify(abs_path, ":t:r")
+		slug = path_basename_no_ext(abs_path)
 	end
 
 	return {
@@ -100,18 +118,20 @@ local function build_info(lines, abs_path)
 end
 
 --- Read and parse a chat file from disk, returning export metadata.
+--- IO wrapper: reads file, resolves path, then delegates to pure build_info.
 local function read_chat_file(file_path)
 	local abs_path = vim.fn.resolve(vim.fn.expand(file_path))
 	if vim.fn.filereadable(abs_path) == 0 then
 		return nil
 	end
 	local lines = vim.fn.readfile(abs_path)
-	return build_info(lines, abs_path)
+	return build_info(lines, abs_path, _parley.chat_parser, get_parse_config())
 end
 
 --- Build an info table from buffer lines (for the current buffer, which may have unsaved changes).
+--- IO wrapper: resolves path, then delegates to pure build_info.
 local function build_info_from_lines(lines, file_path)
-	return build_info(lines, vim.fn.resolve(vim.fn.expand(file_path)))
+	return build_info(lines, vim.fn.resolve(vim.fn.expand(file_path)), _parley.chat_parser, get_parse_config())
 end
 
 --------------------------------------------------------------------------------
@@ -214,6 +234,7 @@ local function make_branch_div(class, arrow, topic, href)
 end
 
 --- Process lines, replacing 🌿: branch lines with navigation links.
+--- Pure function: all dependencies passed as parameters.
 --- For HTML format, returns placeholders that must be swapped after markdown-to-HTML conversion.
 --- For markdown format, returns the final styled HTML divs (Jekyll renders inline HTML).
 --- @param lines table array of all lines in the file
@@ -221,9 +242,12 @@ end
 --- @param format string "html" or "markdown"
 --- @param link_map table|nil map from abs_path -> export filename
 --- @param file_dir string directory containing this chat file
+--- @param branch_prefix string the prefix for branch lines (e.g. "🌿:")
+--- @param resolve_fn function(path, base_dir) -> abs_path resolver
 --- @return table processed_lines, table placeholders (html only; key->html)
-local function process_branch_lines(lines, parsed, format, link_map, file_dir)
-	local branch_prefix = (_parley.config and _parley.config.chat_branch_prefix) or "🌿:"
+local function process_branch_lines(lines, parsed, format, link_map, file_dir, branch_prefix, resolve_fn)
+	branch_prefix = branch_prefix or "🌿:"
+	resolve_fn = resolve_fn or resolve_chat_path
 	local processed = {}
 	local placeholders = {}
 	local placeholder_count = 0
@@ -243,7 +267,7 @@ local function process_branch_lines(lines, parsed, format, link_map, file_dir)
 				topic = path
 			end
 
-			local abs_target = resolve_chat_path(path, file_dir)
+			local abs_target = resolve_fn(path, file_dir)
 			local target_filename = link_map and link_map[abs_target]
 			local is_parent = not first_branch_seen and parsed.parent_link ~= nil
 			first_branch_seen = true
@@ -583,8 +607,9 @@ local html_css = [[
 
 local function write_html_file(info, export_dir, link_map)
 	local file_dir = vim.fn.fnamemodify(info.abs_path, ":h")
+	local branch_prefix = (_parley.config and _parley.config.chat_branch_prefix) or "🌿:"
 	local processed_lines, placeholders =
-		process_branch_lines(info.lines, info.parsed, "html", link_map, file_dir)
+		process_branch_lines(info.lines, info.parsed, "html", link_map, file_dir, branch_prefix, resolve_chat_path)
 
 	local content = table.concat(processed_lines, "\n")
 	content = content:gsub("💬:", "## Question\n\n")
@@ -639,7 +664,8 @@ local function write_markdown_file(info, export_dir, link_map)
 		table.insert(body_lines, info.lines[i])
 	end
 
-	local processed_lines = process_branch_lines(body_lines, info.parsed, "markdown", link_map, file_dir)
+	local branch_prefix = (_parley.config and _parley.config.chat_branch_prefix) or "🌿:"
+	local processed_lines = process_branch_lines(body_lines, info.parsed, "markdown", link_map, file_dir, branch_prefix, resolve_chat_path)
 	local content = table.concat(processed_lines, "\n")
 	content = content:gsub("💬:", "## Question\n\n")
 
@@ -790,13 +816,17 @@ M.export_markdown = function(params)
 end
 
 -- Expose helpers for testing
+-- Pure functions (no _parley, no vim.fn, no IO — fully unit-testable)
 M._sanitize_title = sanitize_title
 M._extract_date = extract_date
+M._build_info = build_info
+M._build_link_map = build_link_map
+M._check_filename_collisions = check_filename_collisions
+M._make_branch_div = make_branch_div
+M._process_branch_lines = process_branch_lines
+-- IO wrappers (need parley setup and filesystem)
 M._read_chat_file = read_chat_file
 M._find_tree_root = find_tree_root
 M._collect_tree = collect_tree
-M._build_link_map = build_link_map
-M._process_branch_lines = process_branch_lines
-M._check_filename_collisions = check_filename_collisions
 
 return M
