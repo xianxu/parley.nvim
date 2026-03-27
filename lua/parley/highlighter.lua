@@ -382,6 +382,19 @@ M.setup_highlights = function()
         })
     end
 
+    -- Inline branch links [🌿:text](file) — display text as underlined link
+    if user_highlights.inline_branch then
+        vim.api.nvim_set_hl(0, "ParleyInlineBranch", user_highlights.inline_branch)
+    else
+        vim.api.nvim_set_hl(0, "ParleyInlineBranch", {
+            underline = true,
+            link = "Special",
+        })
+    end
+
+    -- Concealed parts of inline branch links (prefix and path)
+    vim.api.nvim_set_hl(0, "ParleyInlineBranchConceal", { link = "Conceal" })
+
     -- Tags - Highlighted tags in @@tag@@ format
     if user_highlights.tag then
         vim.api.nvim_set_hl(0, "ParleyTag", user_highlights.tag)
@@ -510,22 +523,74 @@ M.render_chat_branch_line = function(line)
     return new_line
 end
 
+-- Apply extmark-based highlighting for inline branch links [🌿:text](file).
+-- Shows the display text with ParleyInlineBranch style and conceals the markup.
+local function highlight_inline_branch_links(buf, ranges)
+    local branch_prefix = _parley.config.chat_branch_prefix or "🌿:"
+    local chat_parser = require("parley.chat_parser")
+    local ns = vim.api.nvim_create_namespace("parley_inline_branch")
+
+    for _, range in ipairs(ranges) do
+        -- Clear existing extmarks in this range
+        vim.api.nvim_buf_clear_namespace(buf, ns, range.start_line - 1, range.end_line)
+
+        local lines = vim.api.nvim_buf_get_lines(buf, range.start_line - 1, range.end_line, false)
+        for offset, line in ipairs(lines) do
+            local links = chat_parser.extract_inline_branch_links(line, branch_prefix)
+            local line_idx = range.start_line + offset - 2 -- 0-indexed
+
+            for _, link in ipairs(links) do
+                -- Conceal the opening [🌿: part
+                local prefix_str = "[" .. branch_prefix
+                local prefix_end = link.col_start - 1 + #prefix_str
+                vim.api.nvim_buf_set_extmark(buf, ns, line_idx, link.col_start - 1, {
+                    end_col = prefix_end,
+                    conceal = "",
+                })
+
+                -- Highlight the display text
+                local topic_end = prefix_end + #link.topic
+                vim.api.nvim_buf_set_extmark(buf, ns, line_idx, prefix_end, {
+                    end_col = topic_end,
+                    hl_group = "ParleyInlineBranch",
+                })
+
+                -- Conceal the ](path) part
+                vim.api.nvim_buf_set_extmark(buf, ns, line_idx, topic_end, {
+                    end_col = link.col_end,
+                    conceal = "",
+                })
+            end
+        end
+    end
+end
+
 -- Refresh topic labels for 🌿: branch references in chat buffers.
 -- Same debounced pattern as highlight_markdown_chat_refs.
 M.highlight_chat_branch_refs = function(buf)
     local branch_prefix = _parley.config.chat_branch_prefix or "🌿:"
+    local chat_parser = require("parley.chat_parser")
     local ranges = get_visible_line_ranges(buf)
     local has_branch_refs = false
+    local has_inline_branches = false
 
     for _, range in ipairs(ranges) do
         local lines = vim.api.nvim_buf_get_lines(buf, range.start_line - 1, range.end_line, false)
         for _, line in ipairs(lines) do
             if line:sub(1, #branch_prefix) == branch_prefix then
                 has_branch_refs = true
-                break
             end
+            if #chat_parser.extract_inline_branch_links(line, branch_prefix) > 0 then
+                has_inline_branches = true
+            end
+            if has_branch_refs and has_inline_branches then break end
         end
-        if has_branch_refs then break end
+        if has_branch_refs and has_inline_branches then break end
+    end
+
+    -- Always apply inline branch highlighting if present (no debounce needed)
+    if has_inline_branches then
+        highlight_inline_branch_links(buf, ranges)
     end
 
     _parley._branch_topic_timers = _parley._branch_topic_timers or {}

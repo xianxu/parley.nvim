@@ -100,6 +100,40 @@ end
 --   }
 -- }
 
+--- Inline branch link pattern: [🌿:display text](file.md)
+--- Pure function: extracts all inline branch links from a line.
+--- @param line string
+--- @param branch_prefix string e.g. "🌿:"
+--- @return table array of { path, topic, col_start, col_end }
+M.extract_inline_branch_links = function(line, branch_prefix)
+	local results = {}
+	local prefix_pattern = "%[" .. vim.pesc(branch_prefix) .. "(.-)%]%((.-)%)"
+	local search_start = 1
+	while search_start <= #line do
+		local s, e, topic, path = line:find(prefix_pattern, search_start)
+		if not s then
+			break
+		end
+		topic = trim(topic)
+		path = trim(path)
+		if path ~= "" then
+			table.insert(results, { path = path, topic = topic, col_start = s, col_end = e })
+		end
+		search_start = e + 1
+	end
+	return results
+end
+
+--- Unpack inline branch links from a line, replacing [🌿:text](file) with just text.
+--- Pure function.
+--- @param line string
+--- @param branch_prefix string
+--- @return string the line with inline links replaced by their display text
+M.unpack_inline_branch_links = function(line, branch_prefix)
+	local prefix_pattern = "%[" .. vim.pesc(branch_prefix) .. "(.-)%]%(.-%)";
+	return line:gsub(prefix_pattern, "%1")
+end
+
 ---@param lines table        # array of strings (all lines of the chat file)
 ---@param header_end number  # index of the "---" separator line
 ---@param config table       # parley config table (or a minimal stub for tests)
@@ -262,6 +296,16 @@ M.parse_chat = function(lines, header_end, config)
 			-- Extract question content
 			local question_content = line:sub(#user_prefix + 1)
 
+			-- Detect inline branch links on the question prefix line
+			local q_inline = M.extract_inline_branch_links(question_content, branch_prefix)
+			for _, ib in ipairs(q_inline) do
+				-- Defer adding to branches until after exchange is created (below)
+			end
+			-- Unpack inline links for LLM context
+			if #q_inline > 0 then
+				question_content = M.unpack_inline_branch_links(question_content, branch_prefix)
+			end
+
 			-- Start a new exchange
 			current_exchange = {
 				question = {
@@ -276,6 +320,17 @@ M.parse_chat = function(lines, header_end, config)
 			table.insert(result.exchanges, current_exchange)
 			current_component = "question"
 			line_before_local = nil
+
+			-- Add inline branch links from the question prefix line
+			for _, ib in ipairs(q_inline) do
+				table.insert(result.branches, {
+					path = ib.path,
+					topic = ib.topic,
+					line = i,
+					after_exchange = #result.exchanges,
+					inline = true,
+				})
+			end
 
 			-- Check for inline @@ file references on the user prefix line itself
 			local inline_refs = extract_file_refs(question_content)
@@ -335,7 +390,22 @@ M.parse_chat = function(lines, header_end, config)
 		-- Handle content continuation, ignore lines if we are in local_prefix section, aka line_before_local is set
 		--   note, in this mode, both plain text and file reference pattern @@ are ignored.
 		elseif (not line_before_local) and current_exchange and current_component then
-			table.insert(content_parts, line)
+			-- Detect inline branch links [🌿:text](file) and add to branches
+			local inline_branches = M.extract_inline_branch_links(line, branch_prefix)
+			for _, ib in ipairs(inline_branches) do
+				table.insert(result.branches, {
+					path = ib.path,
+					topic = ib.topic,
+					line = i,
+					after_exchange = #result.exchanges,
+					inline = true,
+				})
+			end
+			-- Unpack inline links to plain text for LLM context
+			local content_line = #inline_branches > 0
+				and M.unpack_inline_branch_links(line, branch_prefix)
+				or line
+			table.insert(content_parts, content_line)
 
 			-- Check for file references in question content
 			if current_component == "question" then

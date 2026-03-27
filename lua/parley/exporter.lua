@@ -305,7 +305,30 @@ local function process_branch_lines(lines, parsed, format, link_map, file_dir, b
 				table.insert(processed, "")
 			end
 		else
-			table.insert(processed, line)
+			-- Replace inline branch links [🌿:text](file) with <a> tags
+			local inline_pattern = "%[" .. vim.pesc(branch_prefix) .. "(.-)]%((.-)%)"
+			if line:find(inline_pattern) then
+				local replaced = line:gsub(inline_pattern, function(topic, path)
+					local abs_target = resolve_fn(path:gsub("^%s*(.-)%s*$", "%1"), file_dir)
+					local target_filename = link_map and link_map[abs_target]
+					if not target_filename then
+						return topic
+					end
+					if format == "html" then
+						placeholder_count = placeholder_count + 1
+						local key = "XBRANCHX" .. placeholder_count .. "XBRANCHX"
+						placeholders[key] = '<a href="' .. target_filename .. '" class="branch-inline">' .. topic .. "</a>"
+						return key
+					elseif format == "markdown" then
+						local slug = target_filename:gsub("%.markdown$", "")
+						return '<a href="{% post_url ' .. slug .. ' %}" class="branch-inline">' .. topic .. "</a>"
+					end
+					return topic
+				end)
+				table.insert(processed, replaced)
+			else
+				table.insert(processed, line)
+			end
 		end
 	end
 
@@ -585,6 +608,19 @@ local html_css = [[
             color: #276749;
         }
 
+        /* Inline branch links (footnote-style) */
+        .branch-inline {
+            color: #2b6cb0;
+            text-decoration: none;
+            border-bottom: 1px dashed #90cdf4;
+            font-weight: 500;
+        }
+
+        .branch-inline:hover {
+            color: #1a365d;
+            border-bottom-style: solid;
+        }
+
         /* Responsive design */
         @media (max-width: 768px) {
             body {
@@ -703,6 +739,8 @@ h3 { color: #3182ce; border-left: 4px solid #90cdf4; padding-left: 0.8rem; }
 .branch-nav.parent-link a { color: #975a16; }
 .branch-nav.child-link { background: linear-gradient(135deg, #c6f6d5 0%, #9ae6b4 100%); border-left: 4px solid #38a169; color: #22543d; }
 .branch-nav.child-link a { color: #276749; }
+.branch-inline { color: #2b6cb0; text-decoration: none; border-bottom: 1px dashed #90cdf4; font-weight: 500; }
+.branch-inline:hover { color: #1a365d; border-bottom-style: solid; }
 </style>
 
 ]]

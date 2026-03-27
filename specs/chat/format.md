@@ -53,4 +53,12 @@ The assistant prefix line may include an agent identifier: `🤖: [AgentName]`.
 - **First transcript line** (immediately after the header `---`): back-link to parent chat.
 - **Anywhere in body**: forward link to a child chat branch.
 - `🌿:` lines are excluded from LLM context and preserved across answer regeneration (like `🔒:`).
-- `<C-g>i` in a chat buffer inserts a new `🌿:` line; `<C-g>o` on a `🌿:` line opens the referenced chat.
+- `<C-g>i` in normal/insert mode inserts a new `🌿:` line; `<C-g>o` on a `🌿:` line opens the referenced chat.
+
+## Inline Branch Links (`[🌿:text](file)`)
+- Inline branch links embed child chat references within text: `[🌿:display text](filename.md)`.
+- Coexists with full-line `🌿:` syntax. Used for footnote-style terminology lookups.
+- **Context unpacking**: `[🌿:text](file)` is replaced with just `text` when building LLM context.
+- **Creation**: visual-select text then `<C-g>i` wraps the selection as `[🌿:text](new-file.md)` and creates a child chat with `what is "text"?` as the first question.
+- **Navigation**: `<C-g>o` with cursor on an inline link opens the referenced chat.
+- See [Inline Branch Links spec](inline_branch_links.md) for full details.
