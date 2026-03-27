@@ -23,7 +23,11 @@ Parley exports chat buffers to blog-ready formats like Jekyll HTML and Markdown.
 - **Styling**: Injects a `<style>` block after front matter with header colors matching the HTML export (h1: `#1a365d`, h2: `#2b6cb0`, h3: `#3182ce`).
 - **Question headings**: `💬:` is replaced with `## Question` for blog-friendly rendering.
 
+## Tree Export
+When a chat file is part of a tree (has `🌿:` links), both export commands automatically export the entire tree. See [Tree Export](tree_export.md) for details.
+
 ## Content Cleaning
 - Excludes `🧠:` thinking lines and `📝:` summary lines from the exported file.
 - Excludes local `🔒:` sections from the output.
+- Converts `🌿:` branch links to format-appropriate navigation links (see Tree Export).
 - Formats `@@` file references for improved readability in the exported document.

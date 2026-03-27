@@ -6,6 +6,354 @@ M.setup = function(parley)
 end
 
 --------------------------------------------------------------------------------
+-- Shared helpers
+--------------------------------------------------------------------------------
+
+local function sanitize_title(title)
+	local slug = title:gsub("[^%w%s%-_]", ""):gsub("%s+", "_"):lower()
+	if #slug > 50 then
+		slug = slug:sub(1, 50)
+	end
+	return slug
+end
+
+local function extract_date(name)
+	if not name or name == "" then
+		return nil
+	end
+	local basename = name:gsub("%.md$", ""):gsub("%.markdown$", "")
+	local year, month, day = basename:match("(%d%d%d%d)-(%d%d)-(%d%d)")
+	if year and month and day then
+		return year .. "-" .. month .. "-" .. day
+	end
+	return nil
+end
+
+local function resolve_chat_path(path, base_dir)
+	if path:match("^~/") or path == "~" then
+		return vim.fn.resolve(vim.fn.expand(path))
+	elseif path:sub(1, 1) == "/" then
+		return vim.fn.resolve(path)
+	else
+		return vim.fn.resolve(base_dir .. "/" .. path)
+	end
+end
+
+local function get_parse_config()
+	local cfg = _parley.config or {}
+	return {
+		chat_user_prefix = cfg.chat_user_prefix or "💬:",
+		chat_local_prefix = cfg.chat_local_prefix or "🔒:",
+		chat_assistant_prefix = cfg.chat_assistant_prefix or { "🤖:" },
+		chat_branch_prefix = cfg.chat_branch_prefix or "🌿:",
+		chat_memory = cfg.chat_memory or { enable = true, summary_prefix = "📝:", reasoning_prefix = "🧠:" },
+	}
+end
+
+--- Read and parse a chat file from disk, returning export metadata.
+--- @param file_path string absolute path to the chat file
+--- @return table|nil info table with abs_path, lines, header_end, parsed, title, post_date, tags, slug
+local function read_chat_file(file_path)
+	local abs_path = vim.fn.resolve(vim.fn.expand(file_path))
+	if vim.fn.filereadable(abs_path) == 0 then
+		return nil
+	end
+	local lines = vim.fn.readfile(abs_path)
+	if #lines == 0 then
+		return nil
+	end
+
+	local header_end = _parley.chat_parser.find_header_end(lines)
+	if not header_end then
+		return nil
+	end
+
+	local parsed = _parley.chat_parser.parse_chat(lines, header_end, get_parse_config())
+	local headers = parsed.headers
+
+	local title = "Untitled"
+	if headers and headers.topic and headers.topic ~= "" then
+		title = headers.topic
+	end
+
+	local post_date = extract_date(headers and headers.file or "")
+		or extract_date(vim.fn.fnamemodify(abs_path, ":t"))
+		or os.date("%Y-%m-%d")
+
+	local tags = "unclassified"
+	if headers and headers.tags then
+		if type(headers.tags) == "table" and #headers.tags > 0 then
+			tags = table.concat(headers.tags, ", ")
+		elseif type(headers.tags) == "string" and headers.tags ~= "" then
+			tags = headers.tags
+		end
+	end
+
+	local slug = sanitize_title(title)
+	if slug == "" then
+		slug = vim.fn.fnamemodify(abs_path, ":t:r")
+	end
+
+	return {
+		abs_path = abs_path,
+		lines = lines,
+		header_end = header_end,
+		parsed = parsed,
+		title = title,
+		post_date = post_date,
+		tags = tags,
+		slug = slug,
+	}
+end
+
+--- Build an info table from buffer lines (for the current buffer, which may have unsaved changes).
+local function build_info_from_lines(lines, file_path)
+	if #lines == 0 then
+		return nil
+	end
+
+	local abs_path = vim.fn.resolve(vim.fn.expand(file_path))
+	local header_end = _parley.chat_parser.find_header_end(lines)
+	if not header_end then
+		return nil
+	end
+
+	local parsed = _parley.chat_parser.parse_chat(lines, header_end, get_parse_config())
+	local headers = parsed.headers
+
+	local title = "Untitled"
+	if headers and headers.topic and headers.topic ~= "" then
+		title = headers.topic
+	end
+
+	local post_date = extract_date(headers and headers.file or "")
+		or extract_date(vim.fn.fnamemodify(abs_path, ":t"))
+		or os.date("%Y-%m-%d")
+
+	local tags = "unclassified"
+	if headers and headers.tags then
+		if type(headers.tags) == "table" and #headers.tags > 0 then
+			tags = table.concat(headers.tags, ", ")
+		elseif type(headers.tags) == "string" and headers.tags ~= "" then
+			tags = headers.tags
+		end
+	end
+
+	local slug = sanitize_title(title)
+	if slug == "" then
+		slug = vim.fn.fnamemodify(abs_path, ":t:r")
+	end
+
+	return {
+		abs_path = abs_path,
+		lines = lines,
+		header_end = header_end,
+		parsed = parsed,
+		title = title,
+		post_date = post_date,
+		tags = tags,
+		slug = slug,
+	}
+end
+
+--------------------------------------------------------------------------------
+-- Tree discovery
+--------------------------------------------------------------------------------
+
+local function find_tree_root(file_path, depth)
+	depth = depth or 0
+	if depth > 20 then
+		return file_path
+	end
+	local abs_path = vim.fn.resolve(vim.fn.expand(file_path))
+	if vim.fn.filereadable(abs_path) == 0 then
+		return abs_path
+	end
+
+	local info = read_chat_file(abs_path)
+	if not info or not info.parsed.parent_link then
+		return abs_path
+	end
+
+	local parent_dir = vim.fn.fnamemodify(abs_path, ":h")
+	local parent_abs = resolve_chat_path(info.parsed.parent_link.path, parent_dir)
+	if vim.fn.filereadable(parent_abs) == 0 then
+		return abs_path
+	end
+	return find_tree_root(parent_abs, depth + 1)
+end
+
+local function collect_tree(file_path, visited)
+	visited = visited or {}
+	local abs_path = vim.fn.resolve(vim.fn.expand(file_path))
+	if visited[abs_path] then
+		return {}
+	end
+	visited[abs_path] = true
+	if vim.fn.filereadable(abs_path) == 0 then
+		return {}
+	end
+
+	local info = read_chat_file(abs_path)
+	if not info then
+		return { abs_path }
+	end
+
+	local result = { abs_path }
+	local file_dir = vim.fn.fnamemodify(abs_path, ":h")
+	for _, branch in ipairs(info.parsed.branches) do
+		local child_abs = resolve_chat_path(branch.path, file_dir)
+		local child_files = collect_tree(child_abs, visited)
+		for _, f in ipairs(child_files) do
+			table.insert(result, f)
+		end
+	end
+	return result
+end
+
+--- Build a map from abs_path -> export_filename for all files in a tree.
+local function build_link_map(tree_files, extension)
+	local map = {}
+	for _, abs_path in ipairs(tree_files) do
+		local info = read_chat_file(abs_path)
+		if info then
+			map[abs_path] = info.post_date .. "-" .. info.slug .. "." .. extension
+		end
+	end
+	return map
+end
+
+--- Check for duplicate export filenames in the link map.
+--- Returns a table of { filename = { path1, path2, ... } } for collisions, or nil if none.
+local function check_filename_collisions(link_map)
+	local by_filename = {}
+	for abs_path, filename in pairs(link_map) do
+		by_filename[filename] = by_filename[filename] or {}
+		table.insert(by_filename[filename], abs_path)
+	end
+	local collisions = {}
+	for filename, paths in pairs(by_filename) do
+		if #paths > 1 then
+			collisions[filename] = paths
+		end
+	end
+	if next(collisions) then
+		return collisions
+	end
+	return nil
+end
+
+--------------------------------------------------------------------------------
+-- Branch line processing
+--------------------------------------------------------------------------------
+
+--- Process lines, replacing 🌿: branch lines with navigation links.
+--- For HTML format, returns placeholders that must be swapped after markdown-to-HTML conversion.
+--- For markdown format, returns the final Jekyll-compatible link text.
+--- @param lines table array of all lines in the file
+--- @param parsed table parsed chat structure
+--- @param format string "html" or "markdown"
+--- @param link_map table|nil map from abs_path -> export filename
+--- @param file_dir string directory containing this chat file
+--- @return table processed_lines, table placeholders (html only; key->html)
+local function process_branch_lines(lines, parsed, format, link_map, file_dir)
+	local branch_prefix = (_parley.config and _parley.config.chat_branch_prefix) or "🌿:"
+	local processed = {}
+	local placeholders = {}
+	local placeholder_count = 0
+	local first_branch_seen = false
+
+	for _, line in ipairs(lines) do
+		if line:sub(1, #branch_prefix) == branch_prefix then
+			local rest = line:sub(#branch_prefix + 1):gsub("^%s*(.-)%s*$", "%1")
+			local path, topic = rest:match("^%s*([^:]+)%s*:%s*(.-)%s*$")
+			if not path then
+				path = rest
+				topic = ""
+			end
+			path = path:gsub("^%s*(.-)%s*$", "%1")
+			topic = (topic or ""):gsub("^%s*(.-)%s*$", "%1")
+			if topic == "" then
+				topic = path
+			end
+
+			local abs_target = resolve_chat_path(path, file_dir)
+			local target_filename = link_map and link_map[abs_target]
+			local is_parent = not first_branch_seen and parsed.parent_link ~= nil
+			first_branch_seen = true
+
+			if format == "html" then
+				placeholder_count = placeholder_count + 1
+				local key = "XBRANCHX" .. placeholder_count .. "XBRANCHX"
+				local nav_html
+				if target_filename then
+					if is_parent then
+						nav_html = '<div class="branch-nav parent-link"><a href="'
+							.. target_filename
+							.. '">&larr; '
+							.. topic
+							.. "</a></div>"
+					else
+						nav_html = '<div class="branch-nav child-link"><a href="'
+							.. target_filename
+							.. '">&rarr; '
+							.. topic
+							.. "</a></div>"
+					end
+				else
+					if is_parent then
+						nav_html = '<div class="branch-nav parent-link">&larr; ' .. topic .. "</div>"
+					else
+						nav_html = '<div class="branch-nav child-link">&rarr; ' .. topic .. "</div>"
+					end
+				end
+				placeholders[key] = nav_html
+				table.insert(processed, key)
+			elseif format == "markdown" then
+				if target_filename then
+					local slug = target_filename:gsub("%.markdown$", "")
+					if is_parent then
+						table.insert(
+							processed,
+							'<div class="branch-nav parent-link"><a href="{% post_url '
+								.. slug
+								.. " %}\">← "
+								.. topic
+								.. "</a></div>"
+						)
+					else
+						table.insert(
+							processed,
+							'<div class="branch-nav child-link"><a href="{% post_url '
+								.. slug
+								.. " %}\">→ "
+								.. topic
+								.. "</a></div>"
+						)
+					end
+				else
+					if is_parent then
+						table.insert(
+							processed,
+							'<div class="branch-nav parent-link">← ' .. topic .. "</div>"
+						)
+					else
+						table.insert(
+							processed,
+							'<div class="branch-nav child-link">→ ' .. topic .. "</div>"
+						)
+					end
+				end
+			end
+		else
+			table.insert(processed, line)
+		end
+	end
+
+	return processed, placeholders
+end
+
+--------------------------------------------------------------------------------
 -- Markdown / HTML export helpers
 --------------------------------------------------------------------------------
 
@@ -24,7 +372,11 @@ M.simple_markdown_to_html = function(markdown)
 		if lang and lang ~= "" then
 			class_attr = ' class="language-' .. lang .. '"'
 		end
-		return '\n<div class="code-block"><pre><code' .. class_attr .. ">" .. code .. "</code></pre></div>\n"
+		return '\n<div class="code-block"><pre><code'
+			.. class_attr
+			.. ">"
+			.. code
+			.. "</code></pre></div>\n"
 	end)
 
 	-- Convert inline code
@@ -69,91 +421,11 @@ M.simple_markdown_to_html = function(markdown)
 	return html
 end
 
--- Export current chat buffer as HTML
-M.export_html = function(params)
-	local buf = vim.api.nvim_get_current_buf()
-	local file_name = vim.api.nvim_buf_get_name(buf)
+--------------------------------------------------------------------------------
+-- HTML CSS template (branch-nav styles added)
+--------------------------------------------------------------------------------
 
-	-- Check if this is a valid chat file
-	local validation_error = _parley.not_chat(buf, file_name)
-	if validation_error then
-		_parley.logger.error("Cannot export: " .. validation_error)
-		print("Error: Cannot export - " .. validation_error)
-		return
-	end
-
-	-- Get all buffer lines
-	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-	if #lines == 0 then
-		_parley.logger.error("Buffer is empty")
-		print("Error: Buffer is empty")
-		return
-	end
-
-	-- Parse headers to extract topic/title
-	local cfg = _parley.config or {}
-	local chat_parser = _parley.chat_parser
-	local header_end = chat_parser.find_header_end(lines)
-	if not header_end then
-		_parley.logger.error("Cannot export: invalid chat header format")
-		print("Error: Cannot export - invalid chat header format")
-		return
-	end
-	local parse_config = {
-		chat_user_prefix = cfg.chat_user_prefix or "💬:",
-		chat_local_prefix = cfg.chat_local_prefix or "🔒:",
-		chat_assistant_prefix = cfg.chat_assistant_prefix or { "🤖:" },
-		chat_memory = cfg.chat_memory or { enable = true, summary_prefix = "📝:", reasoning_prefix = "🧠:" },
-	}
-	local parsed = chat_parser.parse_chat(lines, header_end, parse_config)
-	local headers = parsed.headers
-
-	-- Extract title from parsed headers
-	local title = "Untitled"
-	if headers and headers.topic and headers.topic ~= "" then
-		title = headers.topic
-	end
-
-	-- Convert content to markdown format suitable for processing
-	local content = table.concat(lines, "\n")
-
-	-- Replace 💬: with ## Question (similar to your sed command)
-	content = content:gsub("💬:", "## Question\n\n")
-
-	-- Clean title for filename
-	local html_filename = title:gsub("[^%w%s%-_]", ""):gsub("%s+", "_"):lower()
-	if #html_filename > 50 then
-		html_filename = html_filename:sub(1, 50)
-	end
-	if html_filename == "" then
-		html_filename = vim.fn.fnamemodify(file_name, ":t:r")
-	end
-
-	-- Extract date prefix from buffer filename (Jekyll convention: YYYY-MM-DD-title.html)
-	local post_date = os.date("%Y-%m-%d")
-	local basename = vim.fn.fnamemodify(file_name, ":t:r")
-	local year, month, day = basename:match("^(%d%d%d%d)-(%d%d)-(%d%d)")
-	if year and month and day then
-		post_date = year .. "-" .. month .. "-" .. day
-	end
-
-	local output_file = post_date .. "-" .. html_filename .. ".html"
-
-	-- Export directory (configurable, with CLI override)
-	local export_dir = params and params.args and params.args ~= "" and params.args or _parley.config.export_html_dir
-	local full_output_path = export_dir .. "/" .. output_file
-
-	-- Create HTML content with enhanced glow-like styling
-	local html_template = [[
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>]] .. title .. [[</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-    <script>hljs.highlightAll();</script>
+local html_css = [[
     <style>
         /* Base styling inspired by glow */
         body {
@@ -317,6 +589,43 @@ M.export_html = function(params)
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
+        /* Branch navigation links */
+        .branch-nav {
+            margin: 1rem 0;
+            padding: 0.6rem 1rem;
+            border-radius: 8px;
+            font-size: 0.95em;
+        }
+
+        .branch-nav a {
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .branch-nav a:hover {
+            text-decoration: underline;
+        }
+
+        .branch-nav.parent-link {
+            background: linear-gradient(135deg, #fefcbf 0%, #faf089 100%);
+            border-left: 4px solid #d69e2e;
+            color: #744210;
+        }
+
+        .branch-nav.parent-link a {
+            color: #975a16;
+        }
+
+        .branch-nav.child-link {
+            background: linear-gradient(135deg, #c6f6d5 0%, #9ae6b4 100%);
+            border-left: 4px solid #38a169;
+            color: #22543d;
+        }
+
+        .branch-nav.child-link a {
+            color: #276749;
+        }
+
         /* Responsive design */
         @media (max-width: 768px) {
             body {
@@ -346,35 +655,123 @@ M.export_html = function(params)
         .hljs-function { color: #6f42c1; }
         .hljs-number { color: #005cc5; }
         .hljs-variable { color: #e36209; }
-    </style>
+    </style>]]
+
+--------------------------------------------------------------------------------
+-- Single-file export core logic
+--------------------------------------------------------------------------------
+
+local function write_html_file(info, export_dir, link_map)
+	local file_dir = vim.fn.fnamemodify(info.abs_path, ":h")
+	local processed_lines, placeholders =
+		process_branch_lines(info.lines, info.parsed, "html", link_map, file_dir)
+
+	local content = table.concat(processed_lines, "\n")
+	content = content:gsub("💬:", "## Question\n\n")
+
+	local output_file = info.post_date .. "-" .. info.slug .. ".html"
+	local full_output_path = export_dir .. "/" .. output_file
+
+	local body_html = M.simple_markdown_to_html(content)
+
+	-- Replace branch placeholders (they may be wrapped in <p> tags)
+	for key, replacement in pairs(placeholders) do
+		body_html = body_html:gsub("<p[^>]*>%s*" .. key .. "%s*</p>", replacement)
+		body_html = body_html:gsub(key, replacement)
+	end
+
+	local html_template = [[
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>]] .. info.title .. [[</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+]] .. html_css .. [[
+
 </head>
 <body>
-]] .. M.simple_markdown_to_html(content) .. [[
+]] .. body_html .. [[
+
 </body>
 </html>]]
 
-	-- Write HTML file
 	local file_handle = io.open(full_output_path, "w")
 	if not file_handle then
 		_parley.logger.error("Failed to create output file: " .. full_output_path)
-		print("Error: Failed to create output file: " .. full_output_path)
-		return
+		return nil
 	end
 
 	file_handle:write(html_template)
 	file_handle:close()
-
-	vim.fn.setreg("+", full_output_path)
-	_parley.logger.info("Exported chat to HTML: " .. full_output_path)
-	print("✅ Exported chat to: " .. full_output_path .. " (path copied to clipboard)")
+	return full_output_path
 end
 
--- Export current chat buffer as Markdown for Jekyll
-M.export_markdown = function(params)
+local function write_markdown_file(info, export_dir, link_map)
+	local file_dir = vim.fn.fnamemodify(info.abs_path, ":h")
+
+	-- Process body lines only (after header)
+	local body_lines = {}
+	for i = info.header_end + 1, #info.lines do
+		table.insert(body_lines, info.lines[i])
+	end
+
+	local processed_lines = process_branch_lines(body_lines, info.parsed, "markdown", link_map, file_dir)
+	local content = table.concat(processed_lines, "\n")
+	content = content:gsub("💬:", "## Question\n\n")
+
+	local jekyll_header = "---\nlayout: post\ntitle:  \""
+		.. info.title
+		.. "\"\ndate:   "
+		.. info.post_date
+		.. "\ntags: "
+		.. info.tags
+		.. "\ncomments: true\n---\n\n"
+
+	local style_block = [[<style>
+h1 { color: #1a365d; border-bottom: 3px solid #4299e1; padding-bottom: 0.3rem; }
+h2 { color: #2b6cb0; border-bottom: 2px solid #bee3f8; padding-bottom: 0.3rem; }
+h3 { color: #3182ce; border-left: 4px solid #90cdf4; padding-left: 0.8rem; }
+.branch-nav { margin: 1rem 0; padding: 0.6rem 1rem; border-radius: 8px; font-size: 0.95em; }
+.branch-nav a { text-decoration: none; font-weight: 500; }
+.branch-nav a:hover { text-decoration: underline; }
+.branch-nav.parent-link { background: linear-gradient(135deg, #fefcbf 0%, #faf089 100%); border-left: 4px solid #d69e2e; color: #744210; }
+.branch-nav.parent-link a { color: #975a16; }
+.branch-nav.child-link { background: linear-gradient(135deg, #c6f6d5 0%, #9ae6b4 100%); border-left: 4px solid #38a169; color: #22543d; }
+.branch-nav.child-link a { color: #276749; }
+</style>
+
+]]
+
+	local watermark = "This transcript is generated by [parley.nvim](https://github.com/xianxu/parley.nvim).\n\n"
+	content = jekyll_header .. style_block .. watermark .. content
+
+	local output_file = info.post_date .. "-" .. info.slug .. ".markdown"
+	local full_output_path = export_dir .. "/" .. output_file
+
+	local file_handle = io.open(full_output_path, "w")
+	if not file_handle then
+		_parley.logger.error("Failed to create output file: " .. full_output_path)
+		return nil
+	end
+
+	file_handle:write(content)
+	file_handle:close()
+	return full_output_path
+end
+
+--------------------------------------------------------------------------------
+-- Public API
+--------------------------------------------------------------------------------
+
+-- Export current chat buffer (and its tree) as HTML
+M.export_html = function(params)
 	local buf = vim.api.nvim_get_current_buf()
 	local file_name = vim.api.nvim_buf_get_name(buf)
 
-	-- Check if this is a valid chat file
 	local validation_error = _parley.not_chat(buf, file_name)
 	if validation_error then
 		_parley.logger.error("Cannot export: " .. validation_error)
@@ -382,7 +779,6 @@ M.export_markdown = function(params)
 		return
 	end
 
-	-- Get all buffer lines
 	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 	if #lines == 0 then
 		_parley.logger.error("Buffer is empty")
@@ -390,135 +786,196 @@ M.export_markdown = function(params)
 		return
 	end
 
-	local cfg = _parley.config or {}
-	local chat_parser = _parley.chat_parser
-	local header_end = chat_parser.find_header_end(lines)
-	if not header_end then
+	local export_dir = params and params.args and params.args ~= "" and params.args or _parley.config.export_html_dir
+
+	-- Build info for the current buffer
+	local current_info = build_info_from_lines(lines, file_name)
+	if not current_info then
 		_parley.logger.error("Cannot export: invalid chat header format")
 		print("Error: Cannot export - invalid chat header format")
 		return
 	end
-	local parse_config = {
-		chat_user_prefix = cfg.chat_user_prefix or "💬:",
-		chat_local_prefix = cfg.chat_local_prefix or "🔒:",
-		chat_assistant_prefix = cfg.chat_assistant_prefix or { "🤖:" },
-		chat_memory = cfg.chat_memory or {
-			enable = true,
-			summary_prefix = "📝:",
-			reasoning_prefix = "🧠:",
-		},
-	}
-	local parsed = chat_parser.parse_chat(lines, header_end, parse_config)
-	local headers = parsed.headers
 
-	-- Extract Jekyll front matter data from Parley header
-	local title = "Untitled"
-	local post_date = os.date("%Y-%m-%d")
-	local tags = "unclassified"
-	local markdown_filename
+	-- Discover tree
+	local root_path = find_tree_root(file_name)
+	local tree_files = collect_tree(root_path)
+	local link_map = build_link_map(tree_files, "html")
 
-	-- Extract title from parsed headers
-	if headers and headers.topic and headers.topic ~= "" then
-		title = headers.topic
-	end
-
-	-- Extract date from transcript header filename first, then fallback to current file
-	local transcript_filename = headers and headers.file or nil
-
-	-- Try to extract date from transcript header filename first
-	if transcript_filename then
-		local basename = transcript_filename:gsub("%.md$", ""):gsub("%.markdown$", "")
-		local year, month, day = basename:match("^(%d%d%d%d)-(%d%d)-(%d%d)")
-		if year and month and day then
-			post_date = year .. "-" .. month .. "-" .. day
-		end
-	end
-
-	-- Fallback: extract date from current filename if not found in header
-	if post_date == os.date("%Y-%m-%d") then
-		local current_basename = vim.fn.fnamemodify(file_name, ":t:r")
-		local year, month, day = current_basename:match("^(%d%d%d%d)-(%d%d)-(%d%d)")
-		if year and month and day then
-			post_date = year .. "-" .. month .. "-" .. day
-		end
-	end
-
-	-- Extract tags from parsed headers
-	if headers and headers.tags then
-		if type(headers.tags) == "table" then
-			if #headers.tags > 0 then
-				tags = table.concat(headers.tags, ", ")
+	-- Check for filename collisions
+	local collisions = check_filename_collisions(link_map)
+	if collisions then
+		_parley.logger.error("Cannot export: duplicate export filenames detected")
+		print("Error: Cannot export - multiple chat files would produce the same filename:")
+		for filename, paths in pairs(collisions) do
+			print("  " .. filename .. ":")
+			for _, path in ipairs(paths) do
+				print("    - " .. path)
 			end
-		elseif type(headers.tags) == "string" and headers.tags ~= "" then
-			tags = headers.tags
 		end
-	end
-
-	-- Clean title for filename (remove invalid characters and normalize)
-	markdown_filename = title:gsub("[^%w%s%-_]", ""):gsub("%s+", "_"):lower()
-	if #markdown_filename > 50 then
-		markdown_filename = markdown_filename:sub(1, 50)
-	end
-
-	-- Create Jekyll front matter
-	local jekyll_header = [[---
-layout: post
-title:  "]] .. title .. [["
-date:   ]] .. post_date .. [[
-
-tags: ]] .. tags .. [[
-
-comments: true
----
-
-]]
-
-	-- Process content: replace 💬: with ## and remove Parley header
-	local body_lines = {}
-	for i = header_end + 1, #lines do
-		table.insert(body_lines, lines[i])
-	end
-	local content = table.concat(body_lines, "\n")
-
-	-- Replace 💬: with ## Question heading (styled like HTML export)
-	content = content:gsub("💬:", "## Question\n\n")
-
-	-- CSS style block matching HTML export color scheme
-	local style_block = [[<style>
-h1 { color: #1a365d; border-bottom: 3px solid #4299e1; padding-bottom: 0.3rem; }
-h2 { color: #2b6cb0; border-bottom: 2px solid #bee3f8; padding-bottom: 0.3rem; }
-h3 { color: #3182ce; border-left: 4px solid #90cdf4; padding-left: 0.8rem; }
-</style>
-
-]]
-
-	-- Add watermark after Jekyll header
-	local watermark = "This transcript is generated by [parley.nvim](https://github.com/xianxu/parley.nvim).\n\n"
-
-	-- Combine Jekyll header with style block, watermark and processed content
-	content = jekyll_header .. style_block .. watermark .. content
-
-	-- Use extracted date for Jekyll filename prefix
-	local output_file = post_date .. "-" .. markdown_filename .. ".markdown"
-
-	-- Export directory (configurable, with CLI override)
-	local export_dir = params and params.args and params.args ~= "" and params.args or _parley.config.export_markdown_dir
-	local full_output_path = export_dir .. "/" .. output_file
-
-	-- Write Markdown file
-	local file_handle = io.open(full_output_path, "w")
-	if not file_handle then
-		_parley.logger.error("Failed to create output file: " .. full_output_path)
-		print("Error: Failed to create output file: " .. full_output_path)
+		print("Fix by giving these chats distinct topics.")
 		return
 	end
 
-	file_handle:write(content)
-	file_handle:close()
+	-- Export all files in the tree
+	local exported = {}
+	local skipped = {}
+	for _, abs_path in ipairs(tree_files) do
+		local info
+		if abs_path == current_info.abs_path then
+			info = current_info
+		else
+			info = read_chat_file(abs_path)
+		end
 
-	vim.fn.setreg("+", full_output_path)
-	_parley.logger.info("Exported chat to Markdown: " .. full_output_path)
-	print("✅ Exported chat to: " .. full_output_path .. " (path copied to clipboard)")
+		if info then
+			local output_path = write_html_file(info, export_dir, link_map)
+			if output_path then
+				table.insert(exported, output_path)
+			else
+				table.insert(skipped, abs_path)
+			end
+		else
+			table.insert(skipped, abs_path)
+		end
+	end
+
+	-- Copy the current file's export path to clipboard
+	local current_export = export_dir .. "/" .. current_info.post_date .. "-" .. current_info.slug .. ".html"
+	vim.fn.setreg("+", current_export)
+
+	if #exported == 1 then
+		_parley.logger.info("Exported chat to HTML: " .. exported[1])
+		print("✅ Exported chat to: " .. exported[1] .. " (path copied to clipboard)")
+	else
+		_parley.logger.info("Exported " .. #exported .. " chat files to HTML in " .. export_dir)
+		print(
+			"✅ Exported "
+				.. #exported
+				.. " chat files to: "
+				.. export_dir
+				.. " (current file path copied to clipboard)"
+		)
+	end
+
+	if #skipped > 0 then
+		print("⚠️  Skipped " .. #skipped .. " files (missing or invalid)")
+		for _, path in ipairs(skipped) do
+			_parley.logger.warning("Skipped: " .. path)
+		end
+	end
 end
+
+-- Export current chat buffer (and its tree) as Markdown for Jekyll
+M.export_markdown = function(params)
+	local buf = vim.api.nvim_get_current_buf()
+	local file_name = vim.api.nvim_buf_get_name(buf)
+
+	local validation_error = _parley.not_chat(buf, file_name)
+	if validation_error then
+		_parley.logger.error("Cannot export: " .. validation_error)
+		print("Error: Cannot export - " .. validation_error)
+		return
+	end
+
+	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+	if #lines == 0 then
+		_parley.logger.error("Buffer is empty")
+		print("Error: Buffer is empty")
+		return
+	end
+
+	local export_dir = params and params.args and params.args ~= "" and params.args or _parley.config.export_markdown_dir
+
+	-- Build info for the current buffer
+	local current_info = build_info_from_lines(lines, file_name)
+	if not current_info then
+		_parley.logger.error("Cannot export: invalid chat header format")
+		print("Error: Cannot export - invalid chat header format")
+		return
+	end
+
+	-- Discover tree
+	local root_path = find_tree_root(file_name)
+	local tree_files = collect_tree(root_path)
+	local link_map = build_link_map(tree_files, "markdown")
+
+	-- Check for filename collisions
+	local collisions = check_filename_collisions(link_map)
+	if collisions then
+		_parley.logger.error("Cannot export: duplicate export filenames detected")
+		print("Error: Cannot export - multiple chat files would produce the same filename:")
+		for filename, paths in pairs(collisions) do
+			print("  " .. filename .. ":")
+			for _, path in ipairs(paths) do
+				print("    - " .. path)
+			end
+		end
+		print("Fix by giving these chats distinct topics.")
+		return
+	end
+
+	-- Export all files in the tree
+	local exported = {}
+	local skipped = {}
+	for _, abs_path in ipairs(tree_files) do
+		local info
+		if abs_path == current_info.abs_path then
+			info = current_info
+		else
+			info = read_chat_file(abs_path)
+		end
+
+		if info then
+			local output_path = write_markdown_file(info, export_dir, link_map)
+			if output_path then
+				table.insert(exported, output_path)
+			else
+				table.insert(skipped, abs_path)
+			end
+		else
+			table.insert(skipped, abs_path)
+		end
+	end
+
+	-- Copy the current file's export path to clipboard
+	local current_export = export_dir
+		.. "/"
+		.. current_info.post_date
+		.. "-"
+		.. current_info.slug
+		.. ".markdown"
+	vim.fn.setreg("+", current_export)
+
+	if #exported == 1 then
+		_parley.logger.info("Exported chat to Markdown: " .. exported[1])
+		print("✅ Exported chat to: " .. exported[1] .. " (path copied to clipboard)")
+	else
+		_parley.logger.info("Exported " .. #exported .. " chat files to Markdown in " .. export_dir)
+		print(
+			"✅ Exported "
+				.. #exported
+				.. " chat files to: "
+				.. export_dir
+				.. " (current file path copied to clipboard)"
+		)
+	end
+
+	if #skipped > 0 then
+		print("⚠️  Skipped " .. #skipped .. " files (missing or invalid)")
+		for _, path in ipairs(skipped) do
+			_parley.logger.warning("Skipped: " .. path)
+		end
+	end
+end
+
+-- Expose helpers for testing
+M._sanitize_title = sanitize_title
+M._extract_date = extract_date
+M._read_chat_file = read_chat_file
+M._find_tree_root = find_tree_root
+M._collect_tree = collect_tree
+M._build_link_map = build_link_map
+M._process_branch_lines = process_branch_lines
+M._check_filename_collisions = check_filename_collisions
 
 return M
