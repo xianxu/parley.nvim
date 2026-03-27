@@ -158,11 +158,14 @@ push:
 			echo "==> Archiving tasks to history/issue-$$slug.md ..."; \
 			cp tasks/issue.md "history/issue-$$slug.md"; \
 			cp tasks/todo.md "history/issue-$$slug-record.md"; \
-			echo "==> Clearing tasks/issue.md..."; \
-			: > tasks/issue.md; \
+			echo "==> Committing archived history..."; \
+			git add history/ && \
+			git commit -m "archive issue tasks to history" && \
+			git push; \
 		fi; \
 	fi; \
-	echo "==> Clearing tasks/todo.md..."; \
+	echo "==> Clearing tasks/issue.md and tasks/todo.md..."; \
+	: > tasks/issue.md; \
 	: > tasks/todo.md; \
 	echo "Done."
 
@@ -281,9 +284,13 @@ merge:
 			mkdir -p "$$main_path/history"; \
 			cp tasks/issue.md "$$main_path/history/issue-$$slug.md"; \
 			cp tasks/todo.md "$$main_path/history/issue-$$slug-record.md"; \
+			echo "==> Committing archived history in main..."; \
+			git -C "$$main_path" add history/ && \
+			git -C "$$main_path" commit -m "archive issue tasks to history" && \
+			git -C "$$main_path" push; \
 		fi; \
 	fi; \
-	echo "==> Cleaning up tasks/todo.md..."; \
+	echo "==> Clearing tasks/todo.md..."; \
 	rm -f "$$main_path/tasks/todo.md" && touch "$$main_path/tasks/todo.md"; \
 	echo "==> Removing worktree at $$wt_path..."; \
 	git -C "$$main_path" worktree remove "$$wt_path" 2>/dev/null || true; \
