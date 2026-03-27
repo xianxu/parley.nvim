@@ -395,6 +395,11 @@ M.setup_highlights = function()
     -- Concealed parts of inline branch links (prefix and path)
     vim.api.nvim_set_hl(0, "ParleyInlineBranchConceal", { link = "Conceal" })
 
+    -- Disable markdown strikethrough globally — tilde (~) in file paths like
+    -- ~/workspace/file.md triggers false strikethrough in chat buffers.
+    vim.api.nvim_set_hl(0, "@markup.strikethrough", {})
+    vim.api.nvim_set_hl(0, "@markup.strikethrough.markdown_inline", {})
+
     -- Tags - Highlighted tags in @@tag@@ format
     if user_highlights.tag then
         vim.api.nvim_set_hl(0, "ParleyTag", user_highlights.tag)
@@ -422,6 +427,16 @@ M.setup_highlights = function()
     })
 
     return ns
+end
+
+--- Disable markdown strikethrough rendering in a buffer.
+--- Tilde (~) in file paths like ~/workspace/file.md triggers false strikethrough.
+--- Treesitter highlight is cleared globally in setup_highlights().
+--- This handles the vim syntax fallback for when treesitter is not active.
+M.disable_strikethrough = function(buf)
+	pcall(vim.api.nvim_buf_call, buf, function()
+		vim.cmd("silent! syntax clear markdownStrike")
+	end)
 end
 
 -- Refresh topic labels for chat references in non-chat markdown files.
@@ -764,6 +779,9 @@ M.setup_buf_handler = function()
             _parley.display_agent(buf, file_name)
             interview.highlight_timestamps(buf)
             _parley.highlight_chat_branch_refs(buf)
+            -- Disable markdown strikethrough in chat buffers — tilde (~) in file
+            -- paths like ~/workspace/file.md triggers false strikethrough rendering.
+            M.disable_strikethrough(buf)
         -- Handle non-chat markdown files
         elseif _parley.is_markdown(buf, file_name) then
             _parley._parley_bufs[buf] = "markdown"
