@@ -43,6 +43,16 @@ end
 local HIGHLIGHT_VIEWPORT_MARGIN = 20
 local HIGHLIGHT_CONTEXT_LINES = 200
 
+local function resolve_path(path, base_dir)
+    if path:match("^~/") or path == "~" then
+        return vim.fn.resolve(vim.fn.expand(path))
+    elseif path:sub(1, 1) == "/" then
+        return vim.fn.resolve(path)
+    else
+        return vim.fn.resolve(base_dir .. "/" .. path)
+    end
+end
+
 local function split_chat_reference_content(content)
     local path, topic = content:match("^%s*([^:]+)%s*:%s*(.-)%s*$")
     if path then
@@ -52,13 +62,13 @@ local function split_chat_reference_content(content)
     return content:gsub("^%s*(.-)%s*$", "%1"), nil
 end
 
-local function render_chat_reference_label(path, current_topic)
+local function render_chat_reference_label(path, current_topic, base_dir)
     local trimmed_path = path and path:gsub("^%s*(.-)%s*$", "%1") or ""
     if trimmed_path == "" then
         return nil
     end
 
-    local expanded_path = vim.fn.expand(trimmed_path)
+    local expanded_path = base_dir and resolve_path(trimmed_path, base_dir) or vim.fn.expand(trimmed_path)
     local topic = _parley.get_chat_topic(expanded_path)
     if not topic or topic == "" or topic == current_topic then
         return nil
@@ -478,11 +488,12 @@ M.highlight_markdown_chat_refs = function(buf)
                 return
             end
 
+            local base_dir = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ":h")
             local refresh_ranges = get_visible_line_ranges(buf)
             for _, range in ipairs(refresh_ranges) do
                 local latest_lines = vim.api.nvim_buf_get_lines(buf, range.start_line - 1, range.end_line, false)
                 for offset, line in ipairs(latest_lines) do
-                    local updated_line = M.render_markdown_chat_reference_line(line)
+                    local updated_line = M.render_markdown_chat_reference_line(line, base_dir)
                     if updated_line ~= line then
                         local line_nr = range.start_line + offset - 1
                         vim.api.nvim_buf_set_lines(buf, line_nr - 1, line_nr, false, { updated_line })
@@ -497,7 +508,7 @@ end
 
 -- Render a single 🌿: branch line, filling in the topic from the referenced file.
 -- Returns the updated line, or the original if no change is needed.
-M.render_chat_branch_line = function(line)
+M.render_chat_branch_line = function(line, base_dir)
     local branch_prefix = _parley.config.chat_branch_prefix or "🌿:"
     if line:sub(1, #branch_prefix) ~= branch_prefix then
         return line
@@ -510,7 +521,7 @@ M.render_chat_branch_line = function(line)
         return line
     end
 
-    local expanded = vim.fn.expand(path)
+    local expanded = base_dir and resolve_path(path, base_dir) or vim.fn.expand(path)
     local file_exists = vim.fn.filereadable(expanded) == 1
 
     -- Strip existing warning marker before comparing
@@ -630,11 +641,12 @@ M.highlight_chat_branch_refs = function(buf)
                 return
             end
 
+            local base_dir = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ":h")
             local refresh_ranges = get_visible_line_ranges(buf)
             for _, range in ipairs(refresh_ranges) do
                 local latest_lines = vim.api.nvim_buf_get_lines(buf, range.start_line - 1, range.end_line, false)
                 for offset, line in ipairs(latest_lines) do
-                    local updated_line = M.render_chat_branch_line(line)
+                    local updated_line = M.render_chat_branch_line(line, base_dir)
                     if updated_line ~= line then
                         local line_nr = range.start_line + offset - 1
                         vim.api.nvim_buf_set_lines(buf, line_nr - 1, line_nr, false, { updated_line })
@@ -647,12 +659,12 @@ M.highlight_chat_branch_refs = function(buf)
     )
 end
 
-M.render_markdown_chat_reference_line = function(line)
+M.render_markdown_chat_reference_line = function(line, base_dir)
     local rendered_line = line
 
     rendered_line = rendered_line:gsub("@@(.-)@@", function(content)
         local path, current_topic = split_chat_reference_content(content)
-        local rendered = render_chat_reference_label(path, current_topic)
+        local rendered = render_chat_reference_label(path, current_topic, base_dir)
         if rendered then
             return rendered .. "@@"
         end
@@ -664,7 +676,7 @@ M.render_markdown_chat_reference_line = function(line)
         local content = rendered_line:match("^@@%s*(.-)%s*$")
         if content then
             local path, current_topic = split_chat_reference_content(content)
-            local rendered = render_chat_reference_label(path, current_topic)
+            local rendered = render_chat_reference_label(path, current_topic, base_dir)
             if rendered then
                 return rendered
             end

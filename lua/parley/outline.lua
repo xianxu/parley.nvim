@@ -187,9 +187,20 @@ function M._build_picker_items(bufnr, config)
   local code_block_memo = build_code_block_memo(bufnr)
   local items = {}
   for i = 1, #all_lines do
-    local is_item, _, formatted_line = is_outline_item(bufnr, i, config, code_block_memo, all_lines)
+    local is_item, item_type, formatted_line = is_outline_item(bufnr, i, config, code_block_memo, all_lines)
     if is_item then
-      table.insert(items, { display = formatted_line, value = { lnum = i } })
+      table.insert(items, { display = formatted_line, value = { lnum = i }, type = item_type })
+    end
+  end
+  -- Drop trailing empty question (the placeholder prompt for the user to continue)
+  if #items > 0 then
+    local last = items[#items]
+    if last.type == "question" then
+      local line = all_lines[last.value.lnum] or ""
+      local after_prefix = line:sub(#config.chat_user_prefix + 1)
+      if after_prefix:match("^%s*$") then
+        table.remove(items)
+      end
     end
   end
   return items
@@ -290,7 +301,20 @@ local function build_file_outline_items(file_path, config, depth)
         table.insert(items, {
           display = indent .. "  " .. line,
           value = { lnum = i, file = abs_path },
+          type = "question",
         })
+      end
+    end
+  end
+
+  -- Drop trailing empty question (the placeholder prompt for the user to continue)
+  if #items > 0 then
+    local last = items[#items]
+    if last.type == "question" then
+      local line = file_lines[last.value.lnum] or ""
+      local after_prefix = line:sub(#user_prefix + 1)
+      if after_prefix:match("^%s*$") then
+        table.remove(items)
       end
     end
   end
