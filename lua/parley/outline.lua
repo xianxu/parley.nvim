@@ -57,12 +57,6 @@ local function is_outline_item(bufnr, line_number, config, code_block_memo, all_
   -- Match questions (using configured user prefix)
   if line:match("^" .. vim.pesc(user_prefix)) then
     return true, "question", "  " .. line
-  -- Match top-level headers
-  elseif line:match("^# ") then
-    return true, "header1", "🧭 " .. string.sub(line, 3)
-  -- Match second-level headers
-  elseif line:match("^## ") then
-    return true, "header2", "• " .. string.sub(line, 4)
   -- Match annotations
   elseif line:match("^@@.+@@$") then
     return true, "annotation", "→ " .. string.sub(line, 2, -2)
@@ -286,24 +280,15 @@ local function build_file_outline_items(file_path, config, depth)
         topic = parley.get_chat_topic(branch_abs) or branch.path
       end
       local child_abs = resolve_path(branch.path, file_dir)
+      local branch_indent = branch.inline and (indent .. "    ") or (indent .. "  ")
       table.insert(items, {
-        display = indent .. "  🌿 " .. topic,
-        value = { lnum = branch.line, file = abs_path, child_path = child_abs },
+        display = branch_indent .. "🌿 " .. topic,
+        value = { lnum = branch.line, file = abs_path, child_path = child_abs, inline = branch.inline },
       })
     elseif not code_memo[i] then
       if line:match("^" .. vim.pesc(user_prefix)) then
         table.insert(items, {
           display = indent .. "  " .. line,
-          value = { lnum = i, file = abs_path },
-        })
-      elseif line:match("^# ") then
-        table.insert(items, {
-          display = indent .. "🧭 " .. string.sub(line, 3),
-          value = { lnum = i, file = abs_path },
-        })
-      elseif line:match("^## ") then
-        table.insert(items, {
-          display = indent .. "• " .. string.sub(line, 4),
           value = { lnum = i, file = abs_path },
         })
       end
@@ -343,8 +328,9 @@ function M._build_tree_outline_items(root_path, config, expanded_set, depth, vis
     table.insert(items, item)
     -- If this is a branch item and it's expanded (nil = expand all), recurse
     if item.value.child_path and (not expanded_set or expanded_set[item.value.child_path]) then
+      local child_depth = item.value.inline and (depth + 2) or (depth + 1)
       local child_items = M._build_tree_outline_items(
-        item.value.child_path, config, expanded_set, depth + 1, visited
+        item.value.child_path, config, expanded_set, child_depth, visited
       )
       for _, ci in ipairs(child_items) do
         table.insert(items, ci)

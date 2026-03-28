@@ -41,11 +41,11 @@ describe("Outline navigation", function()
         local bufnr = vim.api.nvim_create_buf(false, true)
         vim.api.nvim_set_current_buf(bufnr)
         vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
-            "# Heading",
+            "Some text",
             "",
             "💬: First question",
             "Plain text",
-            "## Section",
+            "More text",
         })
 
         local ok, jumped_lnum = outline._jump_to_outline_location({

@@ -130,15 +130,15 @@ describe("outline picker item building", function()
 
     it("returns items in document order (ascending line numbers)", function()
         local bufnr = make_buf({
-            "# First heading",
-            "",
             "💬: First question",
-            "## Second heading",
+            "",
             "💬: Second question",
+            "",
+            "💬: Third question",
         })
 
         local items = outline._build_picker_items(bufnr, config)
-        assert.equals(4, #items)
+        assert.equals(3, #items)
         -- Each successive item must have a higher line number
         for i = 2, #items do
             assert.is_true(
@@ -148,18 +148,10 @@ describe("outline picker item building", function()
         end
     end)
 
-    it("formats h1 headers with the 🧭 prefix", function()
-        local bufnr = make_buf({ "# Top heading" })
+    it("excludes markdown headers from outline", function()
+        local bufnr = make_buf({ "# Top heading", "## Sub heading" })
         local items = outline._build_picker_items(bufnr, config)
-        assert.equals(1, #items)
-        assert.truthy(items[1].display:find("🧭", 1, true))
-    end)
-
-    it("formats h2 headers with the bullet prefix", function()
-        local bufnr = make_buf({ "## Sub heading" })
-        local items = outline._build_picker_items(bufnr, config)
-        assert.equals(1, #items)
-        assert.truthy(items[1].display:find("•", 1, true))
+        assert.equals(0, #items)
     end)
 
     it("includes user-prefix lines", function()
@@ -172,14 +164,13 @@ describe("outline picker item building", function()
     it("skips lines inside code blocks", function()
         local bufnr = make_buf({
             "```",
-            "# Not a heading",
             "💬: Not a question",
             "```",
-            "# Real heading",
+            "💬: Real question",
         })
         local items = outline._build_picker_items(bufnr, config)
         assert.equals(1, #items)
-        assert.truthy(items[1].display:find("Real heading", 1, true))
+        assert.truthy(items[1].display:find("Real question", 1, true))
     end)
 
     it("returns an empty list for a buffer with no outline items", function()
@@ -191,9 +182,9 @@ describe("outline picker item building", function()
     it("stores the correct line number in item.value.lnum", function()
         local bufnr = make_buf({
             "plain",
-            "# Heading",   -- line 2
+            "💬: First question",  -- line 2
             "plain",
-            "💬: Question", -- line 4
+            "💬: Second question", -- line 4
         })
         local items = outline._build_picker_items(bufnr, config)
         assert.equals(2, items[1].value.lnum)

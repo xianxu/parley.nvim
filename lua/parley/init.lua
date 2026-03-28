@@ -2612,7 +2612,8 @@ M.cmd.OpenFileUnderCursor = function()
 		local path = rest:match("^([^:]+)") or rest
 		path = path:gsub("^%s*(.-)%s*$", "%1")
 		if path ~= "" then
-			local expanded = vim.fn.expand(path)
+			local current_dir = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ":p:h")
+			local expanded = resolve_chat_path(path, current_dir)
 			if vim.fn.filereadable(expanded) == 1 then
 				M.open_buf(expanded)
 			elseif expanded:match("%d%d%d%d%-%d%d%-%d%d%.%d%d%-%d%d%-%d%d%.%d+%.md$") then
@@ -2654,13 +2655,8 @@ M.cmd.OpenFileUnderCursor = function()
 	for _, link in ipairs(inline_links) do
 		-- cursor_col is 0-indexed, col_start/col_end are 1-indexed
 		if cursor_col + 1 >= link.col_start and cursor_col + 1 <= link.col_end then
-			-- Resolve path relative to current file's directory (supports both
-			-- bare filenames like "2026-03-28.md" and ~/absolute paths)
-			local expanded = vim.fn.expand(link.path)
-			if not expanded:match("^[/~]") then
-				local current_dir = vim.fn.expand("%:p:h")
-				expanded = current_dir .. "/" .. expanded
-			end
+			local current_dir = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ":p:h")
+			local expanded = resolve_chat_path(link.path, current_dir)
 			if vim.fn.filereadable(expanded) == 1 then
 				M.open_buf(expanded)
 			elseif expanded:match("%d%d%d%d%-%d%d%-%d%d%.%d%d%-%d%d%-%d%d%.%d+%.md$") then
