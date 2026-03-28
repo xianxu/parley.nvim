@@ -313,6 +313,8 @@ local config = {
 	chat_shortcut_search = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>n" },
 	chat_shortcut_open_file = { modes = { "n", "i" }, shortcut = "<C-g>o" },
 	chat_shortcut_prune = { modes = { "n" }, shortcut = "<C-g>p" },
+	chat_shortcut_export_markdown = { modes = { "n" }, shortcut = "<C-g>em" },
+	chat_shortcut_export_html = { modes = { "n" }, shortcut = "<C-g>eh" },
 	-- global shortcuts (available in any buffer)
 	global_shortcut_new = { modes = { "n", "i" }, shortcut = "<C-g>c" },
 	global_shortcut_review = { modes = { "n" }, shortcut = "<C-g>C" },

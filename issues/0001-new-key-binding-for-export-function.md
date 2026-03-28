@@ -1,7 +1,7 @@
 ---
 id: 0001
-status: open
-deps: [0003]
+status: done
+deps: []
 created: 2026-03-28
 updated: 2026-03-28
 ---
@@ -17,7 +17,10 @@ updated: 2026-03-28
 
 ## Plan
 
-- [ ] make some pizza → issue 0003
+- [x] Add config entries `chat_shortcut_export_markdown` and `chat_shortcut_export_html`
+- [x] Add keybindings in chat buffer setup (init.lua)
+- [x] Add keybindings to help display
+- [x] Verify with lint
 
 ## Log
 

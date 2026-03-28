@@ -1179,6 +1179,26 @@ local function keybinding_help_lines()
 		),
 		"Prune: move exchange + following to child"
 	)
+	add(
+		resolve_shortcut(
+			"Parley export markdown",
+			shortcut_modes(cfg.chat_shortcut_export_markdown, { "n" }),
+			cfg.chat_shortcut_export_markdown,
+			"<C-g>em",
+			current_buf
+		),
+		"Export markdown (Jekyll)"
+	)
+	add(
+		resolve_shortcut(
+			"Parley export HTML",
+			shortcut_modes(cfg.chat_shortcut_export_html, { "n" }),
+			cfg.chat_shortcut_export_html,
+			"<C-g>eh",
+			current_buf
+		),
+		"Export HTML"
+	)
 
 	table.insert(lines, "")
 	table.insert(lines, "Chat Finder")
@@ -1528,6 +1548,20 @@ M.prep_chat = function(buf, file_name)
 	if prune_shortcut then
 		for _, mode in ipairs(prune_shortcut.modes) do
 			M.helpers.set_keymap({ buf }, mode, prune_shortcut.shortcut, M.cmd.ChatPrune, "Parley prune chat")
+		end
+	end
+
+	-- <C-g>em: export markdown, <C-g>eh: export HTML
+	local export_md = M.config.chat_shortcut_export_markdown
+	if export_md then
+		for _, mode in ipairs(export_md.modes) do
+			M.helpers.set_keymap({ buf }, mode, export_md.shortcut, M.cmd.ExportMarkdown, "Parley export markdown")
+		end
+	end
+	local export_html = M.config.chat_shortcut_export_html
+	if export_html then
+		for _, mode in ipairs(export_html.modes) do
+			M.helpers.set_keymap({ buf }, mode, export_html.shortcut, M.cmd.ExportHTML, "Parley export HTML")
 		end
 	end
 
