@@ -287,7 +287,7 @@ M.open = function(_options)
 
 	local chat_roots = _parley.get_chat_roots()
 	local delete_shortcut = _parley.config.chat_finder_mappings.delete or _parley.config.chat_shortcut_delete
-	local move_shortcut = _parley.config.chat_finder_mappings.move or { shortcut = "<C-r>" }
+	local move_shortcut = _parley.config.chat_finder_mappings.move or { shortcut = "<C-x>" }
 	local next_recency_shortcut = _parley.config.chat_finder_mappings.next_recency or { shortcut = "<C-a>" }
 	local previous_recency_shortcut = _parley.config.chat_finder_mappings.previous_recency or { shortcut = "<C-s>" }
 	local keybindings_shortcut = _parley.config.global_shortcut_keybindings or { shortcut = "<C-g>?" }

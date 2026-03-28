@@ -41,6 +41,7 @@ end
 -- Create a floating picker to select an LLM agent
 function M.agent_picker(plugin)
     local items = M._build_items(plugin)
+    local keybindings_key = (plugin.config.global_shortcut_keybindings or { shortcut = "<C-g>?" }).shortcut
     float_picker.open({
         title = "🤖 Parley Agents",
         items = items,
@@ -50,6 +51,16 @@ function M.agent_picker(plugin)
             plugin.logger.info("Agent set to: " .. item.name)
             vim.cmd("doautocmd User ParleyAgentChanged")
         end,
+        mappings = {
+            {
+                key = keybindings_key,
+                fn = function(_, _)
+                    vim.schedule(function()
+                        plugin.cmd.KeyBindings()
+                    end)
+                end,
+            },
+        },
     })
 end
 

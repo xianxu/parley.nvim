@@ -17,6 +17,7 @@ This index provides a central directory for all specifications of the `parley.nv
 - [Anthropic Provider](providers/anthropic.md): Implementation for Claude models.
 - [Google AI Provider](providers/googleai.md): Implementation for Gemini models.
 - [Agents](providers/agents.md): Agent configuration and selection mechanisms.
+- [System Prompts](providers/system_prompts.md): Editable system prompts with built-in/custom/modified sources.
 
 ## 3. Context & References
 - [File References (@@)](context/file_references.md): Syntax for local file and directory inclusion.

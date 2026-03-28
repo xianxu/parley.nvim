@@ -182,6 +182,14 @@ function M.chat_dir_picker(plugin, initial_dir)
                     end)
                 end,
             },
+            {
+                key = (plugin.config.global_shortcut_keybindings or { shortcut = "<C-g>?" }).shortcut,
+                fn = function(_, _)
+                    vim.schedule(function()
+                        plugin.cmd.KeyBindings()
+                    end)
+                end,
+            },
         },
     })
 end

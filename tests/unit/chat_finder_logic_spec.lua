@@ -75,7 +75,7 @@ describe("ChatFinder logic", function()
         }
         M.config.chat_finder_mappings = {
             delete = { shortcut = "<C-d>" },
-            move = { shortcut = "<C-r>" },
+            move = { shortcut = "<C-x>" },
             next_recency = { shortcut = "<C-a>" },
             previous_recency = { shortcut = "<C-s>" },
         }
@@ -503,7 +503,7 @@ describe("ChatFinder logic", function()
 
             assert.is_truthy(captured)
             assert.equals("Chat Files (Recent: 12 months  <C-a>/<C-s>: cycle)", captured.title)
-            assert.equals("<C-r>", captured.mappings[2].key)
+            assert.equals("<C-x>", captured.mappings[2].key)
             assert.equals("<C-a>", captured.mappings[3].key)
             assert.equals("<C-s>", captured.mappings[4].key)
         end)

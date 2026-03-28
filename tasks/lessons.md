@@ -41,3 +41,6 @@
 - When a function uses `default = x or {}` for an optional parameter, passing `nil` to mean "special behavior" won't work — the default replaces `nil` before the check. Use an explicit sentinel or skip the defaulting.
 - For cross-file navigation in pickers, use `edit` (same window) not `split`, and clamp cursor positions to `max(1, min(lnum, line_count))` after opening. The target buffer may have fewer lines than expected.
 - When applying highlights after cross-file navigation, use `nvim_get_current_buf()` (the actual buffer after `edit`) not the original `target_buf` variable which may reference the pre-navigation buffer.
+
+## 2026-03-28
+- The float picker uses an insert-mode prompt buffer for typeahead fuzzy search. Regular letter keys (j/k/e/a/dd) are consumed as search text — only control-key combos (`<C-d>`, `<C-a>`, etc.) or `<Up>`/`<Down>` work as picker actions. Before proposing picker keybindings, always check the picker's interaction model (insert-mode typeahead vs normal-mode navigation).

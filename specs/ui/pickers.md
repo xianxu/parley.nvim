@@ -41,6 +41,9 @@ Typing in the prompt filters and re-ranks the results live on every keystroke:
 - Insert-mode prompt mouse mappings intercept result clicks via `getmousepos()`, update the selection, and restore prompt focus without leaving the picker active state.
 
 ## Keyboard (from prompt)
+
+The prompt is an insert-mode buffer for typeahead fuzzy search. All regular letter keys are consumed as search text. Only control-key combos and special keys can serve as picker actions.
+
 | Key | Action |
 |-----|--------|
 | `<CR>` | Confirm selected item; picker-local extra mappings MUST NOT override this through equivalent keycodes such as `<C-m>` |
@@ -48,6 +51,22 @@ Typing in the prompt filters and re-ranks the results live on every keystroke:
 | `<C-j>` / `<Down>` | Move selection visually downward toward the prompt; scroll only after reaching the bottom visible edge |
 | `<C-k>` / `<Up>` | Move selection visually upward away from the prompt; scroll only after reaching the top visible edge |
 | Extra mappings such as `<C-d>` / `<C-a>` | Routed through picker-local key handling so control keys work inside the prompt buffer without being treated as text edits |
+
+## Standardized Picker Action Keys
+
+All float pickers share a common vocabulary of control-key actions. Not every action applies to every picker.
+
+| Action | Key | Description |
+|--------|-----|-------------|
+| **Select** | `<CR>` | Confirm selection |
+| **Delete** | `<C-d>` | Delete / remove item |
+| **New** | `<C-n>` | Create new item |
+| **Rename** | `<C-r>` | Rename item key/label |
+| **Edit** | `<C-e>` | Edit item value/content |
+| **Move** | `<C-x>` | Move item to another group |
+| **Recency left** | `<C-a>` | Cycle to smaller time window |
+| **Recency right** | `<C-s>` | Cycle to larger time window |
+| **Help** | `<C-g>?` | Open keybindings help (available in ALL pickers) |
 
 ## Sizing
 - `desired_w` = max of title width + 4 and longest item width + 2, or `opts.width` if provided.
@@ -82,7 +101,7 @@ The picker closes if focus moves to any window that is neither the results nor t
     - Delete key (`<C-d>` by default): Delete the selected chat file.
       The confirmation prompt is opened from the source window after the picker closes. If it is cancelled with `Esc` or answered negatively, ChatFinder reopens instead of being dismissed.
       After a confirmed delete, ChatFinder preserves the same visual row in the bottom-anchored list: it prefers the older surviving neighbor that slides into the deleted row, and falls back to the newer neighbor only when deleting the oldest visible entry.
-    - Move key (`<C-r>` by default): Move the selected chat file to another registered chat root.
+    - Move key (`<C-x>` by default): Move the selected chat file to another registered chat root.
       The move picker opens after ChatFinder closes. Destination rows show primary/extra status, label, and directory path. If it is cancelled, ChatFinder reopens on the original chat.
     - `<C-g>?`: Open Parley key-bindings help.
 - Files are sorted by modification date, newest first.

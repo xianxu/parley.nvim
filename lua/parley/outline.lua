@@ -383,6 +383,7 @@ function M.question_picker(config)
   if not is_chat then
     -- Non-chat: use flat outline
     local items = M._build_picker_items(current_bufnr, config)
+    local keybindings_key = (parley.config.global_shortcut_keybindings or { shortcut = "<C-g>?" }).shortcut
     float_picker.open({
       title = "💬 Q&A Outline",
       items = items,
@@ -396,6 +397,16 @@ function M.question_picker(config)
           lnum = item.value.lnum,
         }, config)
       end,
+      mappings = {
+        {
+          key = keybindings_key,
+          fn = function(_, _)
+            vim.schedule(function()
+              parley.cmd.KeyBindings()
+            end)
+          end,
+        },
+      },
     })
     return
   end
@@ -414,6 +425,7 @@ function M.question_picker(config)
       items = M._build_picker_items(current_bufnr, config)
     end
 
+    local keybindings_key = (parley.config.global_shortcut_keybindings or { shortcut = "<C-g>?" }).shortcut
     float_picker.open({
       title = "🌳 Chat Tree Outline",
       items = items,
@@ -432,6 +444,16 @@ function M.question_picker(config)
           }, config)
         end
       end,
+      mappings = {
+        {
+          key = keybindings_key,
+          fn = function(_, _)
+            vim.schedule(function()
+              parley.cmd.KeyBindings()
+            end)
+          end,
+        },
+      },
     })
   end
 

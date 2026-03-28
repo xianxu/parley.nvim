@@ -35,6 +35,9 @@ chat_parser = require("parley.chat_parser"), -- chat file parser
 	float_picker = require("parley.float_picker"), -- shared floating window picker
 }
 
+-- Custom system prompts persistence (loaded here; wired up via custom_prompts.setup() inside M.setup())
+local custom_prompts = require("parley.custom_prompts")
+
 -- Interview mode module (loaded here; wired up via interview.setup() inside M.setup())
 local interview = require("parley.interview")
 
@@ -262,6 +265,7 @@ M.setup = function(opts)
 	M.logger.setup(opts.log_file or M.config.log_file, opts.log_sensitive)
 
 	M.vault.setup({ state_dir = state_dir, curl_params = curl_params })
+	custom_prompts.setup(M.helpers, state_dir)
 
 	-- Process API keys from api_keys table and load them into vault
 	local api_keys = opts.api_keys or M.config.api_keys or {}
@@ -378,6 +382,17 @@ M.setup = function(opts)
 					.. "', disable = true },"
 			)
 			M.system_prompts[name] = nil
+		end
+	end
+
+	-- snapshot builtin prompts (after config merge and disabled removal)
+	M._builtin_system_prompts = vim.deepcopy(M.system_prompts)
+
+	-- merge custom (user-edited) prompts over builtins
+	local user_prompts = custom_prompts.load()
+	for name, prompt in pairs(user_prompts) do
+		if type(prompt) == "table" and prompt.system_prompt then
+			M.system_prompts[name] = prompt
 		end
 	end
 
@@ -1140,7 +1155,7 @@ local function keybinding_help_lines()
 	add(shortcut_value(finder_mappings.next_recency, "<C-a>"), "Cycle chat recency window left")
 	add(shortcut_value(finder_mappings.previous_recency, "<C-s>"), "Cycle chat recency window right")
 	add(shortcut_value(finder_mappings.delete, "<C-d>"), "Delete selected chat")
-	add(shortcut_value(finder_mappings.move, "<C-r>"), "Move selected chat")
+	add(shortcut_value(finder_mappings.move, "<C-x>"), "Move selected chat")
 	table.insert(lines, string.format("  %-12s %s", "", "(Recent window default: last " .. tostring((cfg.chat_finder_recency or {}).months or 6) .. " months)"))
 
 	table.insert(lines, "")
