@@ -87,7 +87,8 @@ function M.edit_prompt(plugin, prompt_name, on_done)
     vim.api.nvim_buf_set_name(buf, buf_name)
     vim.bo[buf].buftype = "acwrite"
     vim.bo[buf].filetype = "markdown"
-    vim.bo[buf].buflisted = true
+    vim.bo[buf].buflisted = false
+    vim.bo[buf].bufhidden = "wipe"
     vim.bo[buf].modified = false
 
     -- Set initial content

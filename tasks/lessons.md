@@ -44,3 +44,4 @@
 
 ## 2026-03-28
 - The float picker uses an insert-mode prompt buffer for typeahead fuzzy search. Regular letter keys (j/k/e/a/dd) are consumed as search text — only control-key combos (`<C-d>`, `<C-a>`, etc.) or `<Up>`/`<Down>` work as picker actions. Before proposing picker keybindings, always check the picker's interaction model (insert-mode typeahead vs normal-mode navigation).
+- Never hide errors by adding nil guards that silently skip logic. If a dependency isn't initialized (e.g. `_state_dir` is nil), that's a real bug — fix the caller (e.g. set up the dependency in the test) instead of making the code silently tolerate broken state. Null-check-and-skip masks problems and makes tests pass for the wrong reasons.

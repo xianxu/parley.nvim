@@ -1,6 +1,8 @@
 local agent_picker         = require("parley.agent_picker")
 local system_prompt_picker = require("parley.system_prompt_picker")
 local outline              = require("parley.outline")
+local custom_prompts       = require("parley.custom_prompts")
+local helper               = require("parley.helper")
 
 -- ---------------------------------------------------------------------------
 -- Shared fake plugin state for agent / system-prompt picker tests
@@ -18,16 +20,23 @@ local function make_plugin(current_agent)
 end
 
 local function make_prompt_plugin(current_prompt)
+    local prompts = {
+        concise = { system_prompt = "Be brief." },
+        expert  = { system_prompt = "You are an expert." },
+        verbose = { system_prompt = "Explain everything in great detail." },
+    }
     return {
         _system_prompts = { "verbose", "concise", "expert" },
-        system_prompts = {
-            concise = { system_prompt = "Be brief." },
-            expert  = { system_prompt = "You are an expert." },
-            verbose = { system_prompt = "Explain everything in great detail." },
-        },
+        system_prompts = prompts,
+        _builtin_system_prompts = vim.deepcopy(prompts),
         _state = { system_prompt = current_prompt },
     }
 end
+
+-- Set up custom_prompts with a temp dir so source() works
+local _tmpdir = "/tmp/parley-test-picker-items-" .. string.format("%x", math.random(0, 0xFFFFFF))
+vim.fn.mkdir(_tmpdir, "p")
+custom_prompts.setup(helper, _tmpdir)
 
 -- ---------------------------------------------------------------------------
 -- agent_picker._build_items

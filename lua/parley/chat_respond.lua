@@ -716,7 +716,9 @@ M.respond = function(params, callback, override_free_cursor, force)
 
             -- Always schedule the highlight to clear after a brief delay
             vim.defer_fn(function()
-                vim.api.nvim_buf_clear_namespace(buf, ns_id, 0, -1)
+                if vim.api.nvim_buf_is_valid(buf) then
+                    vim.api.nvim_buf_clear_namespace(buf, ns_id, 0, -1)
+                end
             end, 1000)
         end
     end
