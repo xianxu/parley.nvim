@@ -533,7 +533,7 @@ M.render_chat_branch_line = function(line)
 end
 
 -- Apply extmark-based highlighting for inline branch links [🌿:text](file).
--- Shows the display text with ParleyInlineBranch style and conceals the markup.
+-- Conceals [ and ](path), showing 🌿:text with ParleyInlineBranch style.
 local function highlight_inline_branch_links(buf, ranges)
     local branch_prefix = _parley.config.chat_branch_prefix or "🌿:"
     local chat_parser = require("parley.chat_parser")
@@ -549,23 +549,24 @@ local function highlight_inline_branch_links(buf, ranges)
             local line_idx = range.start_line + offset - 2 -- 0-indexed
 
             for _, link in ipairs(links) do
-                -- Conceal the opening [🌿: part
-                local prefix_str = "[" .. branch_prefix
-                local prefix_end = link.col_start - 1 + #prefix_str
-                vim.api.nvim_buf_set_extmark(buf, ns, line_idx, link.col_start - 1, {
-                    end_col = prefix_end,
+                local col_start_0 = link.col_start - 1
+
+                -- Conceal the opening [ bracket
+                vim.api.nvim_buf_set_extmark(buf, ns, line_idx, col_start_0, {
+                    end_col = col_start_0 + #"[",
                     conceal = "",
                 })
 
-                -- Highlight the display text
-                local topic_end = prefix_end + #link.topic
-                vim.api.nvim_buf_set_extmark(buf, ns, line_idx, prefix_end, {
-                    end_col = topic_end,
+                -- Highlight 🌿:topic
+                local text_start = col_start_0 + #"["
+                local text_end = col_start_0 + #("[" .. branch_prefix) + #link.topic
+                vim.api.nvim_buf_set_extmark(buf, ns, line_idx, text_start, {
+                    end_col = text_end,
                     hl_group = "ParleyInlineBranch",
                 })
 
                 -- Conceal the ](path) part
-                vim.api.nvim_buf_set_extmark(buf, ns, line_idx, topic_end, {
+                vim.api.nvim_buf_set_extmark(buf, ns, line_idx, text_end, {
                     end_col = link.col_end,
                     conceal = "",
                 })

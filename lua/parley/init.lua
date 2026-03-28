@@ -1429,7 +1429,7 @@ M.prep_chat = function(buf, file_name)
 	local function insert_branch_ref()
 		local cursor_pos = vim.api.nvim_win_get_cursor(0)
 		local new_chat_file = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
-		local rel_path = vim.fn.fnamemodify(new_chat_file, ":~:.")
+		local rel_path = vim.fn.fnamemodify(new_chat_file, ":t")
 		local branch_prefix = M.config.chat_branch_prefix or "🌿:"
 		vim.api.nvim_buf_set_lines(buf, cursor_pos[1], cursor_pos[1], false, {
 			branch_prefix .. " " .. rel_path .. ": ",
@@ -1464,7 +1464,7 @@ M.prep_chat = function(buf, file_name)
 
 		-- Create the child chat file
 		local new_chat_file = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
-		local rel_path = vim.fn.fnamemodify(new_chat_file, ":~:.")
+		local rel_path = vim.fn.fnamemodify(new_chat_file, ":t")
 		local branch_prefix = M.config.chat_branch_prefix or "🌿:"
 		local topic = 'what is "' .. selected_text .. '"'
 
@@ -1508,10 +1508,12 @@ M.prep_chat = function(buf, file_name)
 		end
 	end
 
+	-- conceallevel=2 for inline branch link concealing and model header params
+	vim.opt_local.conceallevel = 2
+	vim.opt_local.concealcursor = ""
+
 	-- conceal parameters in model header so it's not distracting
 	if M.config.chat_conceal_model_params then
-		vim.opt_local.conceallevel = 2
-		vim.opt_local.concealcursor = ""
 		vim.fn.matchadd("Conceal", [[^- model: .*model.:.[^"]*\zs".*\ze]], 10, -1, { conceal = "…" })
 		vim.fn.matchadd("Conceal", [[^- model: \zs.*model.:.\ze.*]], 10, -1, { conceal = "…" })
 		vim.fn.matchadd("Conceal", [[^- system_prompt: .\{64,64\}\zs.*\ze]], 10, -1, { conceal = "…" })
@@ -2652,7 +2654,13 @@ M.cmd.OpenFileUnderCursor = function()
 	for _, link in ipairs(inline_links) do
 		-- cursor_col is 0-indexed, col_start/col_end are 1-indexed
 		if cursor_col + 1 >= link.col_start and cursor_col + 1 <= link.col_end then
+			-- Resolve path relative to current file's directory (supports both
+			-- bare filenames like "2026-03-28.md" and ~/absolute paths)
 			local expanded = vim.fn.expand(link.path)
+			if not expanded:match("^[/~]") then
+				local current_dir = vim.fn.expand("%:p:h")
+				expanded = current_dir .. "/" .. expanded
+			end
 			if vim.fn.filereadable(expanded) == 1 then
 				M.open_buf(expanded)
 			elseif expanded:match("%d%d%d%d%-%d%d%-%d%d%.%d%d%-%d%d%-%d%d%.%d+%.md$") then
