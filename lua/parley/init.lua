@@ -1711,7 +1711,7 @@ M.setup_markdown_keymaps = function(buf)
 
 		-- Create a new chat file path (timestamp format only)
 		local new_chat_file = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
-		local rel_path = vim.fn.fnamemodify(new_chat_file, ":~:.")
+		local rel_path = vim.fn.fnamemodify(new_chat_file, ":t")
 
 		-- Insert the chat reference at the cursor position
 		vim.api.nvim_buf_set_lines(buf, cursor_pos[1] - 1, cursor_pos[1] - 1, false, {
@@ -1729,7 +1729,7 @@ M.setup_markdown_keymaps = function(buf)
 
 		-- Create a new chat file path (timestamp format only)
 		local new_chat_file = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
-		local rel_path = vim.fn.fnamemodify(new_chat_file, ":~:.")
+		local rel_path = vim.fn.fnamemodify(new_chat_file, ":t")
 
 		-- Insert the chat reference at the current cursor position
 		local col = cursor_pos[2]
@@ -1999,7 +1999,7 @@ M.move_chat_tree = function(file_name, target_dir)
 						-- Check if this reference pointed to a file in the old location
 						for old_abs, new_abs in pairs(path_map) do
 							if ref_abs == old_abs or resolve_chat_path(ref_path, current_root) == old_abs then
-								local new_rel = vim.fn.fnamemodify(new_abs, ":~:.")
+								local new_rel = vim.fn.fnamemodify(new_abs, ":t")
 								lines[i] = branch_prefix .. " " .. new_rel .. ": " .. (topic or "")
 								changed = true
 								break
@@ -2348,12 +2348,12 @@ M.cmd.ChatPrune = function()
 
 	-- Build the new child file
 	local new_file = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
-	local rel_child = vim.fn.fnamemodify(new_file, ":~:.")
+	local rel_child = vim.fn.fnamemodify(new_file, ":t")
 	local branch_prefix = M.config.chat_branch_prefix or "🌿:"
 
 	-- Copy parent headers, patching topic and file fields
 	local child_lines = {}
-	local basename = vim.fn.fnamemodify(new_file, ":t")
+	local basename = rel_child
 	for i = 1, header_end do
 		local line = lines[i]
 		if line:match("^%s*topic:%s*") then
@@ -2365,7 +2365,7 @@ M.cmd.ChatPrune = function()
 	end
 
 	-- Insert parent back-link as first transcript line
-	local parent_rel = vim.fn.fnamemodify(file_name, ":~:.")
+	local parent_rel = vim.fn.fnamemodify(file_name, ":t")
 	local parent_topic = M.get_chat_topic(file_name) or ""
 	table.insert(child_lines, branch_prefix .. " " .. parent_rel .. ": " .. parent_topic)
 	table.insert(child_lines, "")
@@ -2632,7 +2632,7 @@ M.cmd.OpenFileUnderCursor = function()
 				local header_end = chat_parser.find_header_end(file_lines)
 				if header_end then
 					local parent_path = vim.api.nvim_buf_get_name(buf)
-					local parent_rel = vim.fn.fnamemodify(parent_path, ":~:.")
+					local parent_rel = vim.fn.fnamemodify(parent_path, ":t")
 					local parent_topic = M.get_chat_topic(parent_path) or ""
 					local back_link = branch_prefix .. " " .. parent_rel .. ": " .. parent_topic
 					table.insert(file_lines, header_end + 1, back_link)
@@ -3041,7 +3041,7 @@ M.create_child_chat = function(file_path, topic, parent_buf, question)
 	if header_end then
 		local branch_prefix = M.config.chat_branch_prefix or "🌿:"
 		local parent_path = vim.api.nvim_buf_get_name(parent_buf)
-		local parent_rel = vim.fn.fnamemodify(parent_path, ":~:.")
+		local parent_rel = vim.fn.fnamemodify(parent_path, ":t")
 		local parent_topic = M.get_chat_topic(parent_path) or ""
 		local back_link = branch_prefix .. " " .. parent_rel .. ": " .. parent_topic
 		table.insert(file_lines, header_end + 1, back_link)

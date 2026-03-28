@@ -491,8 +491,8 @@ M.open = function(_options)
 						-- Extract topic from the display
 						local topic = display:match(" %- (.+) %[") or "Chat"
 
-						-- Get relative path for better readability
-						local rel_path = vim.fn.fnamemodify(file_path, ":~:.")
+						-- Use bare filename — chat files are in the same directory
+						local rel_path = vim.fn.fnamemodify(file_path, ":t")
 
 						-- Handle normal mode insertion
 						if _parley._chat_finder.insert_normal_mode then
