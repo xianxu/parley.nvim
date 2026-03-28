@@ -2239,7 +2239,7 @@ M._note_finder = {
 M._issue_finder = {
 	opened = false,
 	source_win = nil,
-	show_done = false,
+	view_mode = 0, -- 0=open+blocked, 1=all, 2=all+history
 	initial_index = nil,
 	initial_value = nil,
 }

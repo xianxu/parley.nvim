@@ -73,6 +73,7 @@ M.parse_frontmatter = function(lines)
         deps = {},
         created = "",
         updated = "",
+        github_issue = nil,
         header_end = header_end,
     }
 
@@ -92,6 +93,8 @@ M.parse_frontmatter = function(lines)
                     result.created = val
                 elseif key == "updated" then
                     result.updated = val
+                elseif key == "github_issue" then
+                    result.github_issue = val
                 end
             end
         end
@@ -168,7 +171,7 @@ M.next_runnable = function(issues, current_id)
     end
 
     -- Find the issue after current_id, cycling back to start
-    for i, issue in ipairs(runnable) do
+    for _, issue in ipairs(runnable) do
         if issue.id > current_id then
             return issue
         end
@@ -229,10 +232,19 @@ M.get_issues_dir = function()
     return git_root .. "/" .. issues_dir
 end
 
--- Find the next issue ID by scanning existing files
-M.next_issue_id = function(issues_dir)
+-- Resolve the history directory (sibling to issues_dir at git root)
+M.get_history_dir = function()
+    local git_root = _parley.helpers.find_git_root(vim.fn.getcwd())
+    if git_root == "" then
+        git_root = vim.fn.getcwd()
+    end
+    return git_root .. "/history"
+end
+
+-- Scan a directory for max issue ID (4-digit prefix pattern)
+local function scan_max_id(dir)
     local max_id = 0
-    local handle = vim.loop.fs_scandir(issues_dir)
+    local handle = vim.loop.fs_scandir(dir)
     if handle then
         local name, kind
         repeat
@@ -248,19 +260,28 @@ M.next_issue_id = function(issues_dir)
             end
         until not name
     end
+    return max_id
+end
+
+-- Find the next issue ID by scanning both issues/ and history/ directories
+M.next_issue_id = function(issues_dir)
+    local max_id = scan_max_id(issues_dir)
+    -- Also check history/ to avoid ID collisions with archived issues
+    local history_dir = M.get_history_dir()
+    if history_dir then
+        local history_max = scan_max_id(history_dir)
+        if history_max > max_id then
+            max_id = history_max
+        end
+    end
     return string.format("%04d", max_id + 1)
 end
 
--- Scan all issue files and return parsed list
-M.scan_issues = function(issues_dir)
-    if not issues_dir then
-        return {}
-    end
-
-    local issues = {}
-    local handle = vim.loop.fs_scandir(issues_dir)
+-- Scan a single directory for issue files, appending to the issues table
+local function scan_dir_issues(dir, issues, is_archived)
+    local handle = vim.loop.fs_scandir(dir)
     if not handle then
-        return {}
+        return
     end
 
     local name, kind
@@ -269,7 +290,7 @@ M.scan_issues = function(issues_dir)
         if name and (kind == "file") and name:match("%.md$") then
             local id_str = name:match("^(%d%d%d%d)%-")
             if id_str then
-                local path = issues_dir .. "/" .. name
+                local path = dir .. "/" .. name
                 local lines = vim.fn.readfile(path)
                 local fm = M.parse_frontmatter(lines)
                 local slug = name:match("^%d%d%d%d%-(.+)%.md$") or ""
@@ -282,11 +303,32 @@ M.scan_issues = function(issues_dir)
                     deps = fm and fm.deps or {},
                     created = fm and fm.created or "",
                     updated = fm and fm.updated or "",
+                    github_issue = fm and fm.github_issue or nil,
                     path = path,
+                    archived = is_archived or false,
                 })
             end
         end
     until not name
+end
+
+-- Scan all issue files and return parsed list
+-- opts.include_history: if true, also scan history/ for archived issues
+M.scan_issues = function(issues_dir, opts)
+    if not issues_dir then
+        return {}
+    end
+
+    opts = opts or {}
+    local issues = {}
+    scan_dir_issues(issues_dir, issues, false)
+
+    if opts.include_history then
+        local history_dir = M.get_history_dir()
+        if history_dir then
+            scan_dir_issues(history_dir, issues, true)
+        end
+    end
 
     -- Sort by ID ascending
     table.sort(issues, function(a, b) return a.id < b.id end)

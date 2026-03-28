@@ -2,38 +2,31 @@
 
 help:
 	@printf '%s\n' \
-	"AI Workflow" \
+	"AI Workflow (issue-based)" \
 	"" \
 	"Work on main:" \
 	"  make fetch 42" \
-	"    Fetch GitHub issue 42 and append it to tasks/issue.md." \
-	"  make fetch 60" \
-	"    Fetch another issue and append it to tasks/issue.md." \
+	"    Fetch GitHub issue 42, create issues/NNNN-slug.md with github_issue frontmatter." \
 	"  make push" \
-	"    Auto-commit tracked changes if needed, git push, then close all issues" \
-	"    mentioned in tasks/issue.md and clear tasks/issue.md and tasks/todo.md." \
+	"    Auto-commit, git push, close GitHub issues for done issues, move done to history/." \
 	"" \
 	"Work on a larger issue:" \
 	"  make issue 42" \
-	"    Fetch GitHub issue 42 into tasks/issue.md, create a sibling worktree" \
-	"    named {current-dir}-42, and use that worktree for isolated changes." \
+	"    Fetch GitHub issue 42 into issues/, create a sibling worktree." \
 	"  make pull-request" \
-	"    Push the current worktree branch and open a PR that fixes all issues" \
-	"    mentioned in tasks/issue.md." \
+	"    Push branch, open PR referencing GitHub issues from touched issue files." \
 	"  make merge" \
-	"    Merge the PR, sync main, and clean up the worktree/branch." \
+	"    Merge PR, move done issues to history/, clean up worktree." \
 	"" \
 	"Alternate setup:" \
 	"  make worktree a-banana-tree" \
 	"    Create a sibling worktree/branch with that name." \
-	"  make fetch 42" \
-	"    Fetch issue 42 into tasks/issue.md in the current directory." \
 	"" \
 	"Typical agent flow:" \
 	"  1. Prepare work with one of the commands above." \
 	"  2. Open the repo or worktree." \
 	"  3. Tell the coding agent: go" \
-	"     The agent will read tasks/issue.md and continue from there."
+	"     The agent reads issues/ and uses <C-q>x to find the next runnable issue."
 
 # Worktree management targets
 # Capture extra argument after worktree (e.g. make worktree feature-x)
@@ -71,7 +64,7 @@ worktree:
 	git worktree add -b "$$name" "../$$name" HEAD
 	@echo "Worktree created at ../$(WT_NAME) on branch $(WT_NAME)"
 
-# Create a new git worktree for a GitHub issue, fetch the issue into tasks/issue.md.
+# Create a new git worktree for a GitHub issue, create issue file in issues/.
 # Usage: make issue <number>
 issue:
 	@if [ -z "$(ISSUE_NUM)" ]; then \
@@ -95,15 +88,46 @@ issue:
 		git worktree add -b "$$branch" "$$wt_path" HEAD || exit 1; \
 	fi; \
 	repo=$$(git remote get-url origin | sed 's|.*github.com[:/]\(.*\)\.git|\1|;s|.*github.com[:/]\(.*\)$$|\1|'); \
-	mkdir -p "$$wt_path/tasks" && \
-	gh issue view "$(ISSUE_NUM)" --repo "$$repo" --json number,title,body,labels,assignees,state \
-		| jq -r '"# Issue #\(.number): \(.title)\n\n**State:** \(.state)\n**Labels:** \([.labels[].name] | join(", "))\n**Assignees:** \([.assignees[].login] | join(", "))\n\n## Description\n\n\(.body)"' \
-		> "$$wt_path/tasks/issue.md" || { git worktree remove "$$wt_path" 2>/dev/null; exit 1; }; \
+	gh_json=$$(gh issue view "$(ISSUE_NUM)" --repo "$$repo" --json number,title,body) || { git worktree remove "$$wt_path" 2>/dev/null; exit 1; }; \
+	gh_title=$$(echo "$$gh_json" | jq -r '.title'); \
+	gh_body=$$(echo "$$gh_json" | jq -r '.body // ""'); \
+	slug=$$(echo "$$gh_title" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$$//'); \
+	mkdir -p "$$wt_path/issues"; \
+	max_id=$$(ls "$$wt_path/issues/" "$$wt_path/history/" 2>/dev/null | grep -oE '^[0-9]{4}-' | sed 's/-//' | sort -n | tail -1); \
+	next_id=$$(printf '%04d' $$(( $${max_id:-0} + 1 )) ); \
+	issue_file="$$wt_path/issues/$${next_id}-$${slug}.md"; \
+	today=$$(date +%Y-%m-%d); \
+	printf '%s\n' \
+		"---" \
+		"status: open" \
+		"deps: []" \
+		"github_issue: $(ISSUE_NUM)" \
+		"created: $$today" \
+		"updated: $$today" \
+		"---" \
+		"" \
+		"# $$gh_title" \
+		"" \
+		"$$gh_body" \
+		"" \
+		"## Done when" \
+		"" \
+		"-" \
+		"" \
+		"## Plan" \
+		"" \
+		"- [ ]" \
+		"" \
+		"## Log" \
+		"" \
+		"### $$today" \
+		"" \
+		> "$$issue_file"; \
 	echo "Worktree created at $$wt_path on branch $$branch"; \
-	echo "Issue #$(ISSUE_NUM) saved to $$wt_path/tasks/issue.md"; \
+	echo "Issue file: $$issue_file"; \
 	echo "Run: cd $$wt_path"
 
-# Fetch a GitHub issue and append it to tasks/issue.md in the current directory.
+# Fetch a GitHub issue and create a local issue file in issues/.
 # Usage: make fetch <number>
 fetch:
 	@if [ -z "$(FETCH_NUM)" ]; then \
@@ -112,14 +136,44 @@ fetch:
 	fi
 	@set -o pipefail; \
 	repo=$$(git remote get-url origin | sed 's|.*github.com[:/]\(.*\)\.git|\1|;s|.*github.com[:/]\(.*\)$$|\1|'); \
-	mkdir -p tasks && \
-	content=$$(gh issue view "$(FETCH_NUM)" --repo "$$repo" --json number,title,body,labels,assignees,state \
-		| jq -r '"# Issue #\(.number): \(.title)\n\n**State:** \(.state)\n**Labels:** \([.labels[].name] | join(", "))\n**Assignees:** \([.assignees[].login] | join(", "))\n\n## Description\n\n\(.body)"') || exit 1; \
-	echo "" >> tasks/issue.md && \
-	echo "$$content" >> tasks/issue.md && \
-	echo "Issue #$(FETCH_NUM) appended to tasks/issue.md"
+	gh_json=$$(gh issue view "$(FETCH_NUM)" --repo "$$repo" --json number,title,body) || exit 1; \
+	gh_title=$$(echo "$$gh_json" | jq -r '.title'); \
+	gh_body=$$(echo "$$gh_json" | jq -r '.body // ""'); \
+	slug=$$(echo "$$gh_title" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$$//'); \
+	mkdir -p issues; \
+	max_id=$$(ls issues/ history/ 2>/dev/null | grep -oE '^[0-9]{4}-' | sed 's/-//' | sort -n | tail -1); \
+	next_id=$$(printf '%04d' $$(( $${max_id:-0} + 1 )) ); \
+	issue_file="issues/$${next_id}-$${slug}.md"; \
+	today=$$(date +%Y-%m-%d); \
+	printf '%s\n' \
+		"---" \
+		"status: open" \
+		"deps: []" \
+		"github_issue: $(FETCH_NUM)" \
+		"created: $$today" \
+		"updated: $$today" \
+		"---" \
+		"" \
+		"# $$gh_title" \
+		"" \
+		"$$gh_body" \
+		"" \
+		"## Done when" \
+		"" \
+		"-" \
+		"" \
+		"## Plan" \
+		"" \
+		"- [ ]" \
+		"" \
+		"## Log" \
+		"" \
+		"### $$today" \
+		"" \
+		> "$$issue_file"; \
+	echo "Created $$issue_file (GitHub #$(FETCH_NUM))"
 
-# Push to remote and close any issues listed in tasks/issue.md.
+# Push to remote, close GitHub issues for done issues, move done issues to history/.
 # Works from main — the direct-on-main workflow counterpart to merge.
 # Usage: make push
 push:
@@ -141,36 +195,34 @@ push:
 	fi; \
 	git push || exit 1; \
 	repo=$$(git remote get-url origin | sed 's|.*github.com[:/]\(.*\)\.git|\1|;s|.*github.com[:/]\(.*\)$$|\1|'); \
-	if [ -f tasks/issue.md ]; then \
-		nums=$$(grep -oE '^# Issue #[0-9]+' tasks/issue.md | grep -oE '[0-9]+'); \
-		if [ -n "$$nums" ]; then \
-			failed=0; \
-			for num in $$nums; do \
-				echo "==> Closing issue #$$num..."; \
-				gh issue close "$$num" --repo "$$repo" --comment "Fixed on main." || failed=1; \
-			done; \
-			if [ "$$failed" -ne 0 ]; then \
-				echo "  [x] Some issues failed to close — keeping tasks/issue.md"; \
-				exit 1; \
+	moved=0; \
+	if [ -d issues ]; then \
+		for f in issues/[0-9][0-9][0-9][0-9]-*.md; do \
+			[ -f "$$f" ] || continue; \
+			status=$$(grep -m1 '^status:' "$$f" | sed 's/^status:[[:space:]]*//'); \
+			if [ "$$status" = "done" ]; then \
+				gh_num=$$(grep -m1 '^github_issue:' "$$f" | sed 's/^github_issue:[[:space:]]*//'); \
+				if [ -n "$$gh_num" ] && [ "$$gh_num" != "" ]; then \
+					echo "==> Closing GitHub issue #$$gh_num..."; \
+					gh issue close "$$gh_num" --repo "$$repo" --comment "Fixed on main." || true; \
+				fi; \
+				mkdir -p history; \
+				echo "==> Archiving $$f to history/..."; \
+				mv "$$f" "history/$$(basename $$f)"; \
+				moved=1; \
 			fi; \
-			slug=$$(echo "$$nums" | paste -sd ',' -); \
-			mkdir -p history; \
-			echo "==> Archiving tasks to history/issue-$$slug.md ..."; \
-			cp tasks/issue.md "history/issue-$$slug.md"; \
-			cp tasks/todo.md "history/issue-$$slug-record.md"; \
-			echo "==> Committing archived history..."; \
-			git add history/ && \
-			git commit -m "archive issue tasks to history" && \
-			git push; \
-		fi; \
+		done; \
 	fi; \
-	echo "==> Clearing tasks/issue.md and tasks/todo.md..."; \
-	: > tasks/issue.md; \
-	: > tasks/todo.md; \
+	if [ "$$moved" -eq 1 ]; then \
+		echo "==> Committing archived history..."; \
+		git add issues/ history/ && \
+		git commit -m "archive done issues to history" && \
+		git push; \
+	fi; \
 	echo "Done."
 
 # Create a GitHub pull request from the current worktree branch to main.
-# Reads tasks/issue.md for "# Issue #NN" lines and adds "Fixes #NN, ..." to the PR body.
+# Scans issues/ files touched since branch point for github_issue frontmatter.
 # Must be run from inside a worktree (not from main).
 pull-request:
 	@branch=$$(git branch --show-current); \
@@ -180,17 +232,24 @@ pull-request:
 	fi; \
 	git push -u origin "$$branch" || exit 1; \
 	repo=$$(git remote get-url origin | sed 's|.*github.com[:/]\(.*\)\.git|\1|;s|.*github.com[:/]\(.*\)$$|\1|'); \
-	fixes=""; \
-	if [ -f tasks/issue.md ]; then \
-		nums=$$(grep -oE '^# Issue #[0-9]+' tasks/issue.md | grep -oE '[0-9]+'); \
-		if [ -n "$$nums" ]; then \
-			fixes=$$(echo "$$nums" | sed 's/^/#/' | paste -sd ', ' -); \
-			fixes="Fixes $$fixes"; \
+	base=$$(git merge-base main HEAD 2>/dev/null || echo main); \
+	touched_issues=$$(git diff --name-only "$$base"..HEAD -- 'issues/*.md' 2>/dev/null); \
+	gh_nums=""; \
+	for f in $$touched_issues; do \
+		[ -f "$$f" ] || continue; \
+		num=$$(grep -m1 '^github_issue:' "$$f" | sed 's/^github_issue:[[:space:]]*//'); \
+		if [ -n "$$num" ] && [ "$$num" != "" ]; then \
+			gh_nums="$$gh_nums $$num"; \
 		fi; \
+	done; \
+	fixes=""; \
+	if [ -n "$$gh_nums" ]; then \
+		fixes=$$(echo $$gh_nums | tr ' ' '\n' | sort -u | sed 's/^/#/' | paste -sd ', ' -); \
+		fixes="Fixes $$fixes"; \
 	fi; \
+	commits=$$(git log main..HEAD --pretty=format:'- %s' 2>/dev/null); \
 	if [ -n "$$fixes" ]; then \
 		echo "Including in PR body: $$fixes"; \
-		commits=$$(git log main..HEAD --pretty=format:'- %s' 2>/dev/null); \
 		body="$$commits"; \
 		if [ -n "$$body" ]; then \
 			body="$$body"$$'\n\n'"$$fixes"; \
@@ -202,8 +261,9 @@ pull-request:
 		gh pr create --repo "$$repo" --base main --head "$$branch" --fill; \
 	fi
 
-# Merge the current worktree branch into main (if a PR exists), close any linked issue,
-# then clean up the worktree. Must be run from inside a worktree (not from main).
+# Merge the current worktree branch into main (if a PR exists),
+# move done issues to history/, clean up the worktree.
+# Must be run from inside a worktree (not from main).
 merge:
 	@branch=$$(git branch --show-current); \
 	if [ -z "$$branch" ] || [ "$$branch" = "main" ]; then \
@@ -276,22 +336,26 @@ merge:
 			fi; \
 		fi; \
 	fi; \
-	echo "==> Archiving tasks to history/..."; \
-	if [ -f tasks/issue.md ]; then \
-		nums=$$(grep -oE '^# Issue #[0-9]+' tasks/issue.md | grep -oE '[0-9]+'); \
-		if [ -n "$$nums" ]; then \
-			slug=$$(echo "$$nums" | paste -sd ',' -); \
-			mkdir -p "$$main_path/history"; \
-			cp tasks/issue.md "$$main_path/history/issue-$$slug.md"; \
-			cp tasks/todo.md "$$main_path/history/issue-$$slug-record.md"; \
-			echo "==> Committing archived history in main..."; \
-			git -C "$$main_path" add history/ && \
-			git -C "$$main_path" commit -m "archive issue tasks to history" && \
-			git -C "$$main_path" push; \
-		fi; \
+	echo "==> Archiving done issues to history/..."; \
+	moved=0; \
+	if [ -d "$$main_path/issues" ]; then \
+		for f in "$$main_path"/issues/[0-9][0-9][0-9][0-9]-*.md; do \
+			[ -f "$$f" ] || continue; \
+			status=$$(grep -m1 '^status:' "$$f" | sed 's/^status:[[:space:]]*//'); \
+			if [ "$$status" = "done" ]; then \
+				mkdir -p "$$main_path/history"; \
+				echo "  Moving $$(basename $$f) to history/"; \
+				mv "$$f" "$$main_path/history/$$(basename $$f)"; \
+				moved=1; \
+			fi; \
+		done; \
 	fi; \
-	echo "==> Clearing tasks/todo.md..."; \
-	rm -f "$$main_path/tasks/todo.md" && touch "$$main_path/tasks/todo.md"; \
+	if [ "$$moved" -eq 1 ]; then \
+		echo "==> Committing archived history in main..."; \
+		git -C "$$main_path" add issues/ history/ && \
+		git -C "$$main_path" commit -m "archive done issues to history" && \
+		git -C "$$main_path" push; \
+	fi; \
 	echo "==> Removing worktree at $$wt_path..."; \
 	git -C "$$main_path" worktree remove "$$wt_path" 2>/dev/null || true; \
 	git -C "$$main_path" branch -D "$$branch" 2>/dev/null || true; \

@@ -104,13 +104,21 @@ M.open = function(_options)
         return
     end
 
-    local all_issues = issues_mod.scan_issues(issues_dir)
-    local show_done = _parley._issue_finder.show_done or false
+    -- View mode: 0=open+blocked, 1=all (incl done), 2=all+history
+    local view_mode = _parley._issue_finder.view_mode or 0
+    local include_history = view_mode == 2
+    local all_issues = issues_mod.scan_issues(issues_dir, { include_history = include_history })
 
-    -- Filter and sort
+    -- Filter based on view mode
     local filtered = {}
     for _, issue in ipairs(all_issues) do
-        if show_done or issue.status ~= "done" then
+        if view_mode == 0 then
+            -- Only open + blocked (from issues/ dir only)
+            if issue.status ~= "done" and not issue.archived then
+                table.insert(filtered, issue)
+            end
+        else
+            -- view_mode 1 or 2: show all
             table.insert(filtered, issue)
         end
     end
@@ -119,7 +127,12 @@ M.open = function(_options)
     -- Build picker items
     local items = {}
     for _, issue in ipairs(sorted) do
-        local display = string.format("[%s] %s %s", issue.status, issue.id, issue.title ~= "" and issue.title or issue.slug)
+        local prefix = issue.archived and "[archived]" or string.format("[%s]", issue.status)
+        local label = issue.title ~= "" and issue.title or issue.slug
+        local display = string.format("%s %s %s", prefix, issue.id, label)
+        if issue.github_issue then
+            display = display .. " (#" .. issue.github_issue .. ")"
+        end
         if issue.created ~= "" then
             display = display .. " [" .. issue.created .. "]"
         end
@@ -139,10 +152,10 @@ M.open = function(_options)
 
     local chat_finder_mod = require("parley.chat_finder")
 
-    local done_label = show_done and "all" or "open+blocked"
+    local view_labels = { [0] = "open+blocked", [1] = "all", [2] = "all+history" }
     local prompt_title = string.format(
-        "Issues (%s  %s: toggle done)",
-        done_label,
+        "Issues (%s  %s: cycle view)",
+        view_labels[view_mode] or "open+blocked",
         toggle_done_shortcut.shortcut
     )
 
@@ -221,7 +234,7 @@ M.open = function(_options)
             {
                 key = toggle_done_shortcut.shortcut,
                 fn = function(_, close_fn)
-                    _parley._issue_finder.show_done = not show_done
+                    _parley._issue_finder.view_mode = (view_mode + 1) % 3
                     close_fn()
                     vim.defer_fn(function()
                         _parley._issue_finder.opened = false

@@ -129,6 +129,18 @@ describe("parse_frontmatter", function()
         local fm = issues.parse_frontmatter(lines)
         assert.same({}, fm.deps)
     end)
+
+    it("parses github_issue field", function()
+        local lines = { "---", "status: open", "github_issue: 42", "deps: []", "---" }
+        local fm = issues.parse_frontmatter(lines)
+        assert.equals("42", fm.github_issue)
+    end)
+
+    it("github_issue is nil when absent", function()
+        local lines = { "---", "status: open", "deps: []", "---" }
+        local fm = issues.parse_frontmatter(lines)
+        assert.is_nil(fm.github_issue)
+    end)
 end)
 
 --------------------------------------------------------------------------------

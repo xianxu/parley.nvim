@@ -5,3 +5,4 @@ tasks/*
 .nvimlog
 .test-xdg/
 .test-tmp/
+.test-home/
