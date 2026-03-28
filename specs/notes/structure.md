@@ -1,26 +1,18 @@
-# Spec: Notes Structure
+# Notes Structure
 
-## Overview
-Parley organizes notes within `notes_dir` by date (Year/Month/Week).
+## Layout
+- Dated notes: `notes_dir/YYYY/MM/weekNN/DD-subject.md`
+- Special folder notes: `notes_dir/<folder>/slug.md`
 
-## Directory Layout
-- `notes_dir/YYYY/MM/weekNN/DD-subject.md`.
-- Example: `notes/2026/03/week10/07-design-plans.md`.
-
-## Note Creation
-### Command: `:ParleyNoteNew` (`<C-n>c`)
-- Prompts for a subject.
-- Automatically creates the sub-directory structure.
-- Opens the new note in a Neovim buffer.
-
-### Subject-Based Organization
-- Plain subjects are always treated as normal note titles, even if the first word matches a first-level folder name under `notes_dir`.
-- Example: `K task-description` MUST create a dated note such as `notes/YYYY/MM/WNN/DD-K-task-description.md`.
-- Only the explicit braced top-level folder syntax from Note Finder labels may bypass the dated Year/Month/Week layout. A subject like `{K} some document title` MUST create `notes_dir/K/some-document-title.md`.
-- For template-based note creation, the same placement rule applies, but the filename slug MUST append the normalized template suffix after dropping template slug segments that occur in more than `3` template filenames.
-- Bare `{}` MUST be rejected during note creation; it is reserved for Note Finder's dated-tree filter semantics and must not create a note.
-- Only one leading braced top-level folder segment is supported during note creation. Inputs such as `{K} {another} love` MUST be rejected.
+## Note Creation (`:ParleyNoteNew`, `<C-n>c`)
+- Prompts for subject, auto-creates directory structure, opens buffer
+- Plain subjects always go to dated tree (even if first word matches a folder name)
+  - `K task-description` -> `notes/YYYY/MM/WNN/DD-K-task-description.md`
+- Braced prefix `{K} title` -> `notes_dir/K/some-title.md` (bypasses dated tree)
+- Bare `{}` rejected (reserved for finder filter)
+- Multiple braced segments rejected (e.g. `{K} {another} love`)
+- Template-based creation: same rules; filename slug appends template suffix with common segments (count > 3) stripped
 
 ## Navigation
-- `:ParleyNoteFinder` (`<C-n>f`): Opens a recursive note picker rooted at `notes_dir`.
-- `:ParleyYearRoot` (`<C-n>r`): Changes the Neovim working directory to the current year's notes folder.
+- `:ParleyNoteFinder` (`<C-n>f`): note picker
+- `:ParleyYearRoot` (`<C-n>r`): cd to current year's notes folder

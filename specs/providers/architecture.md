@@ -1,28 +1,8 @@
-# Spec: Provider Architecture
+# Provider Architecture
 
-## Overview
-Parley's provider architecture manages communication with LLM backends using a unified interface.
-
-## Transport Layer
-Requests are sent via a `curl` subprocess.
-- `--no-buffer` and `-s` (silent) flags.
-- `Content-Type: application/json`.
-- Payload is passed through a temporary file via `-d @<file>`.
-- Any `curl_params` from global config are appended.
-
-## Payload Construction
-The dispatcher module builds API payloads for different providers.
-- **Messages**: Conversation history as `{role, content}`.
-- **Parameters**: `model`, `temperature`, `top_p`, `max_tokens` (or `max_completion_tokens`).
-- **Streaming**: All requests MUST enable streaming.
-- OpenAI-compatible adapters (OpenAI/Copilot/Azure/Ollama/CLIProxyAPI) share common payload and SSE parsing behavior with provider-specific header and endpoint handling.
-- CLIProxyAPI can dynamically select OpenAI-compatible or Anthropic-compatible payload/endpoint behavior based on configured strategy and model family.
-
-## Query Cache Management
-- Queries are saved in `query_dir`.
-- Cleanup occurs periodically (e.g., pruning when > 200 files).
-- Temporary files MUST be deleted after successful request completion.
-
-## Error Handling
-- Response streams are parsed line by line.
-- Empty responses or HTTP errors trigger a logger error and user notification.
+- Transport: `curl` subprocess with `--no-buffer -s`, payload via temp file (`-d @<file>`), global `curl_params` appended
+- Payload: `{role, content}` messages, `model`, `temperature`, `top_p`, `max_tokens`/`max_completion_tokens`; streaming always enabled
+- OpenAI-compatible adapters (OpenAI/Copilot/Azure/Ollama/CLIProxyAPI) share payload format and SSE parsing; differ in headers/endpoints
+- CLIProxyAPI dynamically selects OpenAI-compatible or Anthropic-compatible behavior based on strategy and model family
+- Query cache in `query_dir`; prune at >200 files; delete temp files after request completion
+- Errors: line-by-line stream parsing; empty/HTTP errors trigger logger error + user notification

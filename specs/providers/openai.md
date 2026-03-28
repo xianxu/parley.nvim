@@ -1,29 +1,8 @@
-# Spec: OpenAI Provider
+# OpenAI Provider
 
-## Overview
-OpenAI's provider is the default for most agents.
-
-## Endpoint
-- Default: `https://api.openai.com/v1/chat/completions`.
-- Customizable for Azure, LM Studio, or local endpoints.
-
-## Payload Structure
-- `model`: Model name string.
-- `stream`: `true`.
-- `messages`: List of `{role, content}` objects.
-- `temperature`: Clamped to `[0, 2]`.
-- `top_p`: Clamped to `[0, 1]`.
-- `max_tokens`: Configurable; defaults to `4096`.
-
-### Reasoning Models (o1, o3, gpt-5)
-- MUST use `max_completion_tokens`.
-- System messages MUST be omitted for some models (e.g., `o1`).
-- `reasoning_effort` MUST be included (e.g., `"low"`, `"medium"`, `"high"`).
-
-## Headers
-- `Authorization: Bearer <secret>`.
-- `api-key: <secret>` (for Azure compatibility).
-
-## Content Extraction
-- Extracts from `choices[0].delta.content` in each SSE `data:` line.
-- Usage metrics: `prompt_tokens`, `completion_tokens`.
+- Endpoint: `https://api.openai.com/v1/chat/completions` (customizable for Azure/local)
+- Headers: `Authorization: Bearer <secret>`, `api-key: <secret>` (Azure)
+- Payload: `model`, `stream: true`, `messages`, `temperature` [0,2], `top_p` [0,1], `max_tokens` (default 4096)
+- Reasoning models (o1, o3, gpt-5): use `max_completion_tokens` instead, omit system messages for some, include `reasoning_effort`
+- Content extraction: `choices[0].delta.content` from SSE `data:` lines
+- Usage: `prompt_tokens`, `completion_tokens`

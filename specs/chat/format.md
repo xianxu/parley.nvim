@@ -1,64 +1,28 @@
-# Spec: Chat Format
+# Chat Format
 
-## Overview
-The chat transcript is a Markdown-compatible file with specific conventions for marking turns, metadata, and special content.
+## Header
+- Front matter (`---` / `---`), legacy format also supported
+- Required: `topic`, `file`
+- Optional overrides: `model`, `provider`, `system_prompt`, `system_prompt+`, `tags`, `max_full_exchanges`, `raw_mode.show_raw_response`, `raw_mode.parse_raw_request`
+- `role`/`role+` are aliases for `system_prompt`/`system_prompt+`
+- `key+` = append to base key; `key` = replace; both present => replace then append
 
-## File Header Section
-Every chat file MUST contain a header section before the transcript body.
-Preferred format is Markdown front matter (`---` opening + `---` closing). Legacy header style remains supported for existing files.
+## Prefixes
+- `💬:` user turn
+- `🤖:` assistant turn (may include `[AgentName]`)
+- `🔒:` local section — excluded from LLM context, ends at next `💬:`/`🤖:`
+- `🌿:` branch link — excluded from LLM context, format: `🌿: file.md: topic`
+- `🧠:` thinking line (within assistant answer)
+- `📝:` summary line (within assistant answer, used by memory)
 
-### Required Fields
-- `topic: <topic>`
-- `file: <filename>`
+## Branch Links
+- First `🌿:` after header = parent back-link
+- Later `🌿:` lines = child branch forward-links
+- `<C-g>i` (normal) inserts `🌿:` line; `<C-g>o` opens referenced chat
 
-### Optional Configuration Overrides
-The header MAY contain YAML-like keys to override global configurations for the specific chat:
-- `model: <string|json>`: Model parameters.
-- `provider: <provider_name>`: LLM provider.
-- `system_prompt: <system_prompt>`: System prompt (newlines escaped as `\n`).
-- `system_prompt+: <system_prompt_suffix>`: Append text to the resolved system prompt (`system_prompt+` MAY be repeated; entries apply in order).
-- `role` / `role+`: Backward-compatible aliases for `system_prompt` / `system_prompt+`.
-- `tags: <space_or_comma_separated_tags>`: Tags for organization.
-- `max_full_exchanges: <number>`: Memory threshold override.
-- `raw_mode.show_raw_response: <boolean>`: Display raw JSON response.
-- `raw_mode.parse_raw_request: <boolean>`: Parse user JSON as request.
-
-### Append Syntax (`key+`)
-- Header keys ending with `+` MUST be treated as append directives for the base key.
-- Repeated `key+` entries MUST be preserved and applied in file order.
-- `key` remains replace semantics; if both `key` and `key+` are present, Parley MUST apply replacement first, then append values.
-
-## Conversation Prefixes
-The plugin uses specific markers to distinguish between roles and special content.
-
-| Prefix | Default | Role/Purpose |
-|---|---|---|
-| `chat_user_prefix` | `💬:` | User's question |
-| `chat_assistant_prefix`| `🤖:` | Assistant's answer |
-| `chat_local_prefix` | `🔒:` | Local section (ignored by LLM) |
-| `chat_branch_prefix` | `🌿:` | Chat tree link (parent or child; ignored by LLM) |
-| `thinking_prefix` | `🧠:` | Assistant's internal reasoning |
-| `summary_prefix` | `📝:` | Summary of the exchange (for memory) |
-
-### Assistant Prefix with Agent
-The assistant prefix line may include an agent identifier: `🤖: [AgentName]`.
-
-## Local Sections
-- Lines starting with `🔒:` begin a local section.
-- Content in these sections is excluded from the context sent to the LLM.
-- A local section ends when the next user or assistant prefix is encountered. This algorithm is greedy.
-
-## Chat Branch Links (`🌿:`)
-- Lines starting with `🌿:` are chat tree links with the format: `🌿: filename.md: topic`.
-- **First transcript line** (immediately after the header `---`): back-link to parent chat.
-- **Anywhere in body**: forward link to a child chat branch.
-- `🌿:` lines are excluded from LLM context and preserved across answer regeneration (like `🔒:`).
-- `<C-g>i` in normal/insert mode inserts a new `🌿:` line; `<C-g>o` on a `🌿:` line opens the referenced chat.
-
-## Inline Branch Links (`[🌿:text](file)`)
-- Inline branch links embed child chat references within text: `[🌿:display text](filename.md)`.
-- Coexists with full-line `🌿:` syntax. Used for footnote-style terminology lookups.
-- **Context unpacking**: `[🌿:text](file)` is replaced with just `text` when building LLM context.
-- **Creation**: visual-select text then `<C-g>i` wraps the selection as `[🌿:text](new-file.md)` and creates a child chat with `what is "text"?` as the first question.
-- **Navigation**: `<C-g>o` with cursor on an inline link opens the referenced chat.
-- See [Inline Branch Links spec](inline_branch_links.md) for full details.
+## Inline Branch Links
+- Syntax: `[🌿:display text](file.md)` — appears inline within text
+- LLM context: replaced with just `display text`
+- Line containing inline link is NOT excluded (unlike full-line `🌿:`)
+- `<C-g>i` (visual) wraps selection; `<C-g>o` navigates
+- See `inline_branch_links.md` for details

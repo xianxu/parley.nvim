@@ -1,140 +1,68 @@
 # Spec: UI Pickers
 
-## Overview
-Parley uses a single custom floating-window picker (`float_picker`) for all selection UIs.
-No external picker dependency is required.
-Pickers may seed the prompt via `initial_query`; that text is rendered immediately and used for the first filter pass before the user types.
-
-## Layout
-Each picker opens two stacked floating windows:
-- **Results window** (top): read-only list of items, `cursorline` shows the current selection, linked through `PmenuSel` for stronger theme-driven contrast.
-- **Prompt window** (bottom, 1 line): focused on open, implemented with a prompt buffer. The user types a fuzzy query here.
-
-Both windows share the same width and are centered as a unit. Actual dimensions are clamped to the screen with `MARGIN_H = 4` cols and `MARGIN_V = 3` rows on each side. The prompt window adds a fixed overhead of 5 rows (two sets of borders + 1 content row) to the total vertical height.
-
-Item display order is controlled by the `anchor` option passed to `float_picker.open()`:
-- `"bottom"` (default): the logical first item (index 1) is shown on the bottom row nearest the prompt; later items extend upward; unused rows pad above. Used by Chat Finder so newest files stay closest to the prompt.
-- `"top"`: the logical first item is shown on the top row; later items extend downward; unused rows pad below. Used by all other pickers (agent, system prompt, outline, etc.) for natural document order.
-
-Keyboard navigation preserves the current view until selection crosses a visible edge, then scrolls just enough to keep the selected row visible.
-
-`VimResized` repositions both windows (cleaned up on close).
+## Architecture
+- Single custom `float_picker` for all selection UIs — no external dependencies
+- Two stacked floats: results (top, read-only) + prompt (bottom, 1-line insert-mode)
+- Centered, clamped to screen (`MARGIN_H=4`, `MARGIN_V=3`)
+- `anchor` option: `"bottom"` (default, Chat Finder) = item 1 nearest prompt; `"top"` = item 1 at top row
+- `VimResized` repositions; `WinLeave` (to unrelated window) closes
+- `initial_query` seeds prompt text for first filter pass
 
 ## Fuzzy Search
-Typing in the prompt filters and re-ranks the results live on every keystroke:
-- Query is split on whitespace into **words**.
-- Surrounding square brackets on query tokens are ignored for matching, so tag-style terms like `[tech]` match the same entries as `tech`.
-- **All words must match** for an item to be included (AND logic).
-- **Word order does not matter** — `"gpt open"` matches `"openai gpt-4"`.
-- Matching is **word-aware**: candidate text is tokenized on non-word separators, and token-prefix matches score highest.
-- Small typos are tolerated on token prefixes with bounded edit distance, so near-prefixes like `"anthrpic"` still match `"anthropic"`, but approximate prefix matching still requires the first query character to match the candidate token.
-- A lower-ranked whole-string subsequence fallback keeps the picker feeling `fzf`-like for short plain fragments, but full-word plain queries must match within a single token rather than spanning word boundaries.
-- Items are scored and sorted by match quality (prefix, early boundary, and consecutive compact matches score higher).
-- Exact matched characters are highlighted with `Search`.
-- Candidate positions consumed by typo-tolerance edits are highlighted with `ParleyPickerApproximateMatch`, so approximate hits show where the edits were applied.
-- Empty query shows all items in their original order with no highlights.
-- Prompt text changes are driven by prompt-buffer `TextChangedI` / `TextChanged` updates, while control-key actions are handled separately so non-text inputs do not reset selection.
+- Query split on whitespace; ALL words must match (AND); order irrelevant
+- Bracket stripping: `[tech]` matches same as `tech`
+- Token-prefix matching scored highest; bounded edit-distance typo tolerance (first char must match)
+- Subsequence fallback for fzf-like feel; full-word queries must match within single token
+- Matched chars highlighted with `Search`; typo-tolerance edits with `ParleyPickerApproximateMatch`
+- Empty query = all items, original order, no highlights
+- `TextChangedI`/`TextChanged` drives filtering; control keys handled separately
 
-## Mouse Interaction
-- **Single click** in results: moves selection to clicked row without changing the current list view; focus stays in the prompt (insert mode).
-- **Double-click** in results: confirms the selection and closes the picker.
-- Insert-mode prompt mouse mappings intercept result clicks via `getmousepos()`, update the selection, and restore prompt focus without leaving the picker active state.
+## Mouse
+- Single click: move selection, keep prompt focus
+- Double click: confirm and close
 
-## Keyboard (from prompt)
+## Keyboard (prompt insert mode)
+- `<CR>`: confirm (MUST NOT be overridden by `<C-m>` equivalents)
+- `<Esc>`/`<C-c>`: cancel
+- `<C-j>`/`<Down>`: select visually downward; `<C-k>`/`<Up>`: select visually upward
+- Scroll only when selection crosses visible edge
 
-The prompt is an insert-mode buffer for typeahead fuzzy search. All regular letter keys are consumed as search text. Only control-key combos and special keys can serve as picker actions.
+## Standard Action Keys (not all apply to every picker)
+- `<CR>` select, `<C-d>` delete, `<C-n>` new, `<C-r>` rename, `<C-e>` edit
+- `<C-x>` move, `<C-a>` recency left, `<C-s>` recency right, `<C-g>?` help
 
-| Key | Action |
-|-----|--------|
-| `<CR>` | Confirm selected item; picker-local extra mappings MUST NOT override this through equivalent keycodes such as `<C-m>` |
-| `<Esc>` / `<C-c>` | Cancel and close |
-| `<C-j>` / `<Down>` | Move selection visually downward toward the prompt; scroll only after reaching the bottom visible edge |
-| `<C-k>` / `<Up>` | Move selection visually upward away from the prompt; scroll only after reaching the top visible edge |
-| Extra mappings such as `<C-d>` / `<C-a>` | Routed through picker-local key handling so control keys work inside the prompt buffer without being treated as text edits |
+## Agent Picker (`:ParleyAgent`)
+- Shows agent name, provider, model; current marked `✓` sorted to top
 
-## Standardized Picker Action Keys
+## System Prompt Picker (`:ParleySystemPrompt`)
+- Current marked `✓` sorted to top; descriptions truncated to 80 chars
 
-All float pickers share a common vocabulary of control-key actions. Not every action applies to every picker.
+## Chat Finder (`:ParleyChatFinder` / `<C-g>f`)
+- Bottom-anchored, sorted by mtime (newest first)
+- Recency filter: configurable `chat_finder_recency.months` + `presets` cycle + `All`
+- Search ranked against filename+tags+topic (not display row)
+- Extra-root chats show `{label}` marker; search text includes label
+- Bare `{}` matches only primary-root chats
+- Sticky filter fragments (`[tag]`, `{root}`, bare `{}`) preserved across reopen flows
+- Bracketed filters match tags only; braced filters match root-labels only — no fallback
+- `<C-d>`: delete with confirmation (reopen on cancel; preserve visual row position)
+- `<C-x>`: move to another chat root (reopen on cancel)
+- `<C-a>`/`<C-s>`: recency cycle
 
-| Action | Key | Description |
-|--------|-----|-------------|
-| **Select** | `<CR>` | Confirm selection |
-| **Delete** | `<C-d>` | Delete / remove item |
-| **New** | `<C-n>` | Create new item |
-| **Rename** | `<C-r>` | Rename item key/label |
-| **Edit** | `<C-e>` | Edit item value/content |
-| **Move** | `<C-x>` | Move item to another group |
-| **Recency left** | `<C-a>` | Cycle to smaller time window |
-| **Recency right** | `<C-s>` | Cycle to larger time window |
-| **Help** | `<C-g>?` | Open keybindings help (available in ALL pickers) |
+## Note Finder (`:ParleyNoteFinder` / `<C-n>f`)
+- Same mechanics as Chat Finder (bottom-anchored, sticky fragments, recency cycle)
+- Recursive scan excluding `notes_dir/templates/`
+- Recency uses directory-derived dates, not just mtime
+- First-level non-date/non-template folders bypass recency, show `{base_folder}` prefix
+- Bare `{}` matches only dated Year/Month/Week notes
+- Braced filters match special folder labels only
+- `<C-d>`: delete with confirmation + reopen
 
-## Sizing
-- `desired_w` = max of title width + 4 and longest item width + 2, or `opts.width` if provided.
-- `desired_h` = number of items, or `opts.height` if provided (controls results window only).
-- Both are clamped to screen bounds.
+## Chat Roots Picker (`:ParleyChatDirs` / `<C-g>h`)
+- Shows configured roots in order (primary first, then extras with labels)
+- `<C-n>`: add new root, `<C-r>`: rename label, `<C-d>`: remove (primary not removable)
+- Confirmation prompt opens while picker stays visible
 
-## WinLeave Behaviour
-The picker closes if focus moves to any window that is neither the results nor the prompt window.
-
-## Agent Picker
-- `:ParleyAgent`: Opens a picker with agent names, providers, and models.
-- The current agent is marked with `✓` and sorted to the top; others are alphabetical.
-
-## System Prompt Picker
-- `:ParleySystemPrompt`: Opens a picker with named system prompts.
-- The current prompt is marked with `✓` and sorted to the top; others are alphabetical.
-- Descriptions are truncated to 80 characters in the display.
-
-## Chat Finder
-- `:ParleyChatFinder` (`<C-g>f`): Browse and open chat files.
-- **Recency Filter**: By default shows files from the configured `chat_finder_recency.months`, and can cycle through additional `chat_finder_recency.presets` before reaching `All`.
-- Finder search is ranked against a dedicated search string built from the chat filename, tags, and topic instead of the fully formatted display row.
-- Chats from extra chat roots show a compact `{label}` marker between the filename and the tag/title portion so users can distinguish them from primary-root chats at a glance.
-- Finder search text MUST include the extra-root label so users can filter by root name.
-- Bare `{}` in Chat Finder MUST match only chats from the primary chat root.
-- When the prompt contains sticky filter fragments such as `[workspace] [client-a]` or `{family}`, Chat Finder preserves those fragments between invocations and internal reopen flows (delete/move/recency cycling). Reopened prompts seed the preserved fragments with a trailing space so users can immediately continue with free-text filtering. Non-fragment free-text terms are not preserved.
-- Bare `{}` MUST be preserved by the same sticky-filter mechanism.
-- Bracketed filters MUST match only tag entities, and braced filters MUST match only root-label entities; they MUST NOT fall back to plain word matching elsewhere in the row text.
-- **Extra mappings** (insert mode in prompt):
-    - Next recency key (`<C-a>` by default): Move left through configured recency windows toward smaller cutoffs.
-    - Previous recency key (`<C-s>` by default): Move right through configured recency windows toward larger cutoffs and `All`.
-    - Delete key (`<C-d>` by default): Delete the selected chat file.
-      The confirmation prompt is opened from the source window after the picker closes. If it is cancelled with `Esc` or answered negatively, ChatFinder reopens instead of being dismissed.
-      After a confirmed delete, ChatFinder preserves the same visual row in the bottom-anchored list: it prefers the older surviving neighbor that slides into the deleted row, and falls back to the newer neighbor only when deleting the oldest visible entry.
-    - Move key (`<C-x>` by default): Move the selected chat file to another registered chat root.
-      The move picker opens after ChatFinder closes. Destination rows show primary/extra status, label, and directory path. If it is cancelled, ChatFinder reopens on the original chat.
-    - `<C-g>?`: Open Parley key-bindings help.
-- Files are sorted by modification date, newest first.
-
-## Note Finder
-- `:ParleyNoteFinder` (`<C-n>f`): Browse and open note files under `notes_dir`.
-- Note Finder uses the same floating-picker mechanics as Chat Finder, including bottom anchoring and picker-local control-key mappings.
-- The scan MUST be recursive and MUST exclude files under `notes_dir/templates/`.
-- **Recency Filter**: By default shows files from `note_finder_recency.months`, and can cycle through additional `note_finder_recency.presets` before reaching `All`.
-- For notes in dated directory trees, recency filtering MUST use directory-derived date ranges as a coarse inclusion heuristic rather than relying only on filesystem mtime.
-- Notes under first-level non-date, non-template folders MUST bypass the recency filter and stay visible in all note-finder windows.
-- Those special-folder notes MUST display a compact `{base_folder}` prefix ahead of the filename, and Note Finder search text MUST include the same braced folder label.
-- Bare `{}` in Note Finder MUST match only notes from the dated Year/Month/Week tree.
-- When the prompt contains sticky folder fragments such as `{K}`, Note Finder preserves those fragments between invocations and internal reopen flows. Non-fragment free-text terms are not preserved.
-- Bare `{}` MUST be preserved by the same sticky-filter mechanism.
-- Braced Note Finder filters MUST match only these special first-level folder labels.
-- **Extra mappings**:
-  - Next recency key (`<C-a>` by default): Move left through configured recency windows toward smaller cutoffs.
-  - Previous recency key (`<C-s>` by default): Move right through configured recency windows toward larger cutoffs and `All`.
-  - Delete key (`<C-d>` by default): Delete the selected note after confirmation, then reopen Note Finder on the surviving item that stays in the same visual row when possible.
-  - `<C-g>?`: Open Parley key-bindings help.
-
-## Chat Roots Picker
-- `:ParleyChatDirs` (`<C-g>h`): Opens a picker showing the configured chat roots in order.
-- The first item is the primary writable root used for new chats; later items are additional discovery roots.
-- Every row shows the root role plus a user-facing label.
-- Extra mappings:
-  - `<C-n>`: Prompt for a new root, then prompt for a label (defaulting to the directory basename), and add it as an extra root.
-  - `<C-r>`: Rename the selected extra-root label.
-  - `<C-d>`: Remove the selected root after confirmation. The confirmation prompt opens while the picker stays visible; cancelling returns focus to the same picker instance.
-- The primary root MUST NOT be removable from the picker.
-
-## Navigation / Outline Picker
-- `:ParleySearchChat` (`<C-g>n`) and `:ParleyOutline` (`<C-g>t`): Navigate headings and conversation turns.
-- Items are listed in document order (top to bottom).
-- Selecting an item jumps the cursor to that line with a brief highlight flash.
+## Outline Picker (`:ParleySearchChat` `<C-g>n` / `:ParleyOutline` `<C-g>t`)
+- Document-order headings and conversation turns
+- Selecting jumps cursor with brief highlight flash

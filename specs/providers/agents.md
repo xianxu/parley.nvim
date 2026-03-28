@@ -1,31 +1,9 @@
-# Spec: Agents
+# Agents
 
-## Overview
-An agent combines a provider, a model, and a system prompt.
-
-## Configuration
-- `name`: Unique identifier for the agent.
-- `provider`: Reference to the provider key (e.g., `openai`, `anthropic`).
-- `model`: JSON object or string with model parameters.
-- `system_prompt`: Initial prompt defining assistant behavior.
-- `disable`: Set to `true` to exclude the agent from the active set.
-
-## Default Agents
-| Agent | Provider | Model |
-|---|---|---|
-| GPT5.4 | openai | gpt-5.4 |
-| Claude-Sonnet | anthropic | claude-sonnet-4-6 |
-| Gemini2.5-Pro | googleai | gemini-2.5-pro |
-| Proxy-GPT5.4 | cliproxyapi | gpt-5.4 |
-| Claude-Code | cliproxyapi | code_execution_20260120 |
-
-Default config includes `Proxy-*` variants for major model families through `cliproxyapi`.
-
-## Agent Selection
-- `:ParleyAgent [name]`: Selects an agent via Parley's floating picker or by explicit name argument.
-- `:ParleyNextAgent` (`<C-g>a`): Cycles to the next available agent.
-- Persisted selection to `state_dir/last_agent`.
-
-## Virtual Text Integration
-- In chat buffers, the current agent MUST be displayed as virtual text on the first line: `[AgentName]`.
-- Anthropic agents with web search MUST append `[w]`.
+- An agent = provider + model + system prompt
+- Config fields: `name`, `provider`, `model` (string or object), `system_prompt`, `disable` (bool)
+- Default agents: GPT5.4 (openai), Claude-Sonnet (anthropic), Gemini2.5-Pro (googleai), Proxy-GPT5.4 (cliproxyapi), Claude-Code (cliproxyapi/code_execution_20260120)
+- `Proxy-*` variants included for all major model families via cliproxyapi
+- Selection: `:ParleyAgent [name]` (picker or explicit), `:ParleyNextAgent` (`<C-g>a`) cycles
+- Persisted to `state_dir/last_agent`
+- Virtual text on first chat line: `[AgentName]`; Anthropic w/ web search appends `[w]`

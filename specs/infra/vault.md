@@ -1,24 +1,8 @@
-# Spec: Vault (Secret Management)
+# Vault (Secret Management)
 
-## Overview
-Parley's vault module securely manages API keys and OAuth tokens.
-
-## Secret Storage
-Secrets are stored internally and NOT exposed in the plugin's public configuration table.
-
-### Key Retrieval Methods
-- **Hardcoded String**: Used directly.
-- **Environment Variable**: `os.getenv("VARIABLE")`.
-- **Command (Table)**: Asynchronous execution of a shell command (e.g., `security`, `cat`, `bw`).
-
-## OAuth Management
-- Tokens for Google Drive are stored in a platform-specific secure location.
-- Revocation and deletion through `:ParleyGdriveLogout`.
-
-## Sensitive Data Handling
-- Secrets MUST NOT be written to log files unless `log_sensitive` is `true`.
-- Secrets MUST be passed securely to the `curl` subprocess.
-
-## Copilot Token Cache
-- GitHub Copilot tokens are cached with their expiry time.
-- Automatic renewal before expiration.
+- Secrets stored internally, never exposed in public config table
+- Retrieval methods: hardcoded string, env var (`os.getenv`), async shell command (table form)
+- Secrets must not appear in logs unless `log_sensitive = true`
+- Secrets passed securely to `curl` subprocess
+- OAuth tokens (Google Drive) stored in platform-specific secure location; revoke via `:ParleyGdriveLogout`
+- GitHub Copilot tokens cached with expiry, auto-renewed

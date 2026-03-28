@@ -1,34 +1,22 @@
-# Spec: Export Formats
+# Export Formats
 
-## Overview
-Parley exports chat buffers to blog-ready formats like Jekyll HTML and Markdown.
+## HTML (`:ParleyExportHTML [dir]`)
+- Self-contained HTML with inline CSS
+- Title from `# topic:` line; output to `export_html_dir` or arg
+- File path copied to `+` register
 
-## Export to Jekyll HTML
-### Command: `:ParleyExportHTML [dir]`
-- Generates a self-contained HTML file.
-- **Title**: Extracted from the `# topic:` line.
-- **Styling**: Inline CSS for syntax highlighting and layout.
-- **Output**: Written to `export_html_dir` or the provided argument.
-- **Clipboard**: Full path of the generated file is copied to the system clipboard (`+` register).
-
-## Export to Markdown (Jekyll)
-### Command: `:ParleyExportMarkdown [dir]`
-- Generates a Jekyll-compatible `.md` file with YAML front matter.
-- **Front Matter Fields**: `title`, `date`, `tags`, `layout`, `comments`, and `hidden` (when present in the chat header).
-- **Title Quoting**: Titles are single-quoted in YAML; embedded single quotes are escaped by doubling (`''`).
-- **Title**: Extracted from the `# topic:` line.
-- **Date**: Extracted from the timestamp prefix in the `- file:` header.
-- **Tags**: Extracted from the `- tags:` header (defaults to `"unclassified"`).
-- **Output**: Written to `export_markdown_dir` or the provided argument.
-- **Clipboard**: Full path of the generated file is copied to the system clipboard (`+` register).
-- **Styling**: Injects a `<style>` block after front matter with header colors matching the HTML export (h1: `#1a365d`, h2: `#2b6cb0`, h3: `#3182ce`).
-- **Question headings**: `💬:` is replaced with `## Question` for blog-friendly rendering.
+## Markdown/Jekyll (`:ParleyExportMarkdown [dir]`)
+- Jekyll `.md` with YAML front matter (`title`, `date`, `tags`, `layout`, `comments`, `hidden`)
+- Title from `# topic:`, date from `- file:` timestamp, tags from `- tags:` (default `"unclassified"`)
+- Titles single-quoted in YAML; embedded `'` escaped as `''`
+- Injects `<style>` block (h1: `#1a365d`, h2: `#2b6cb0`, h3: `#3182ce`)
+- `💬:` replaced with `## Question`
+- Output to `export_markdown_dir` or arg; path copied to `+` register
 
 ## Tree Export
-When a chat file is part of a tree (has `🌿:` links), both export commands automatically export the entire tree. See [Tree Export](tree_export.md) for details.
+- If chat has `🌿:` links, both commands auto-export entire tree (see `tree_export.md`)
 
-## Content Cleaning
-- Excludes `🧠:` thinking lines and `📝:` summary lines from the exported file.
-- Excludes local `🔒:` sections from the output.
-- Converts `🌿:` branch links to format-appropriate navigation links (see Tree Export).
-- Formats `@@` file references for improved readability in the exported document.
+## Content Cleaning (both formats)
+- Exclude: `🧠:` thinking, `📝:` summary, `🔒:` local sections
+- Convert `🌿:` to navigation links
+- Format `@@` file references for readability
