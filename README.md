@@ -6,9 +6,13 @@
 
 <!-- panvimdoc-ignore-end -->
 
-Parley is a Neovim chat notebook for LLM conversations. There are just many different ways we can leverage it. With Parley, you have all the power of Neovim at your fingertips in your LLM chat, thus making comprehensive research easier. All your chat history also lives in plain markdown files, you can easily search through using local tools. You can even direct your coding agent to act according to the "brainstorming" chat thread you had with other agents, for example. The possibilities seem endless.
+Parley is a Neovim chat notebook for LLM conversations. It's created to help user research on a topic with the help with many different agents. 
 
-The philosophy is Keep Things Simple, and a bit of Unix:
+There are just many different ways user can leverage it. With Parley, you have all the power of Neovim at your fingertips in your LLM chat, thus making comprehensive research easier. All your chat history also lives in plain markdown files, you can easily search through using local tools. You can even direct your coding agent to act according to the "brainstorming" chat thread you had with other agents, for example. The possibilities seem endless.
+
+Compared to stock chatbot, Parley supports a "tree of chats", essentially allowing user to branch of some side topic, in a linked but different file. This way, information is always organized, matching how human research and learn a topic.
+
+The philosophy behind Parley is Keep Things Simple, and Local, and a bit of Unix:
 - Keep chats as plain Markdown files you can edit any place
 - The chat transcript file has the full state of LLM chat
 - Highly configurable but also have good default out-of-box
@@ -116,6 +120,7 @@ Most-used defaults:
 - `<C-g>a` change agent
 - `<C-g>p` next system prompt
 - `<C-g>l` toggle follow cursor
+- `<C-g>i` to insert a fork in the chat tree, can be inline or standalone
 
 **Corresponding commands**
 - `:ParleyChatNew` create a new chat
