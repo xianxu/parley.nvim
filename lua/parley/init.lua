@@ -54,6 +54,14 @@ local find_chat_root_record = function(f) return chat_dirs.find_chat_root_record
 local registered_chat_dir = function(d) return chat_dirs.registered_chat_dir(d) end
 local chat_root_display = function(r, i) return chat_dirs.chat_root_display(r, i) end
 
+-- Issues module (loaded here; wired up immediately since it only needs M reference)
+local issues_mod = require("parley.issues")
+issues_mod.setup(M)
+
+-- Issue finder module
+local issue_finder_mod = require("parley.issue_finder")
+issue_finder_mod.setup(M)
+
 -- Exporter module (loaded here; wired up at module-load time with M reference)
 local exporter = require("parley.exporter")
 exporter.setup(M)
@@ -564,6 +572,29 @@ M.setup = function(opts)
 			end
 		end
 	end
+
+	-- Issue management shortcuts
+	local function register_issue_shortcut(config_key, desc, callback)
+		local shortcut = M.config[config_key]
+		if shortcut then
+			for _, mode in ipairs(shortcut.modes) do
+				if mode == "n" then
+					vim.keymap.set(mode, shortcut.shortcut, callback, { silent = true, desc = desc })
+				elseif mode == "i" then
+					vim.keymap.set(mode, shortcut.shortcut, function()
+						vim.cmd("stopinsert")
+						callback()
+					end, { silent = true, desc = desc })
+				end
+			end
+		end
+	end
+
+	register_issue_shortcut("global_shortcut_issue_new", "Create New Issue", function() M.cmd.IssueNew() end)
+	register_issue_shortcut("global_shortcut_issue_finder", "Open Issue Finder", function() M.cmd.IssueFinder({}) end)
+	register_issue_shortcut("global_shortcut_issue_next", "Open Next Runnable Issue", function() M.cmd.IssueNext() end)
+	register_issue_shortcut("global_shortcut_issue_status", "Cycle Issue Status", function() M.cmd.IssueStatus() end)
+	register_issue_shortcut("global_shortcut_issue_decompose", "Decompose Issue", function() M.cmd.IssueDecompose() end)
 
 	-- Set up global keymaps for interview mode
 	vim.keymap.set("n", "<C-n>i", function()
@@ -2205,6 +2236,14 @@ M._note_finder = {
 	sticky_query = nil,
 }
 
+M._issue_finder = {
+	opened = false,
+	source_win = nil,
+	show_done = false,
+	initial_index = nil,
+	initial_value = nil,
+}
+
 -- Create a new note with given subject
 M.new_note = function(subject)
 	return notes.new_note(subject)
@@ -2882,6 +2921,13 @@ M.cmd.ChatFinder = function(opts) chat_finder_mod.open(opts) end
 
 M.cmd.NoteFinder = function(opts) note_finder_mod.open(opts) end
 
+
+-- Issue management commands
+M.cmd.IssueNew = function() issues_mod.cmd_issue_new() end
+M.cmd.IssueFinder = function(opts) issue_finder_mod.open(opts) end
+M.cmd.IssueNext = function() issues_mod.cmd_issue_next() end
+M.cmd.IssueStatus = function() issues_mod.cmd_issue_status() end
+M.cmd.IssueDecompose = function() issues_mod.cmd_issue_decompose() end
 
 M.cmd.ChatDirs = function(p) chat_dirs.cmd_chat_dirs(p) end
 M.cmd.ChatMove = function(p) chat_dirs.cmd_chat_move(p) end

@@ -354,6 +354,19 @@ local config = {
 		months = 3,
 		presets = { 3, 6, 12 },
 	},
+	-- issue management (repo-local, relative to git root)
+	issues_dir = "issues",
+	-- global shortcuts for issue management
+	global_shortcut_issue_new = { modes = { "n", "i" }, shortcut = "<C-q>c" },
+	global_shortcut_issue_finder = { modes = { "n", "i" }, shortcut = "<C-q>f" },
+	global_shortcut_issue_next = { modes = { "n", "i" }, shortcut = "<C-q>x" },
+	global_shortcut_issue_status = { modes = { "n" }, shortcut = "<C-q>s" },
+	global_shortcut_issue_decompose = { modes = { "n" }, shortcut = "<C-q>i" },
+	issue_finder_mappings = {
+		delete = { modes = { "n", "i", "v", "x" }, shortcut = "<C-d>" },
+		cycle_status = { modes = { "n", "i", "v", "x" }, shortcut = "<C-s>" },
+		toggle_done = { modes = { "n", "i", "v", "x" }, shortcut = "<C-a>" },
+	},
 
 	-- if true, finished ChatResponder won't move the cursor to the end of the buffer
 	chat_free_cursor = true,

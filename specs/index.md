@@ -29,26 +29,29 @@ This index provides a central directory for all specifications of the `parley.nv
 - [Notes Structure](notes/structure.md): Year/Month/Week organization logic.
 - [Note Templates](notes/templates.md): Template system for new notes.
 
-## 5. UI & UX Components
+## 5. Issue Management
+- [Issue Management](issues/issue-management.md): Repo-local issue tracking with single-file-per-issue format, scheduler, and decomposition.
+
+## 6. UI & UX Components
 - [UI Pickers](ui/pickers.md): Custom floating-window pickers for agents, prompts, finder, and outline navigation.
 - [Key Bindings Help](ui/keybindings.md): Shortcut reference command and default mapping.
 - [Outline Navigation](ui/outline.md): Buffer navigation and outline logic.
 - [Lualine Integration](ui/lualine.md): Statusline component and indicators.
 - [Syntax Highlighting](ui/highlights.md): Highlighting groups and rules.
 
-## 6. Infrastructure & Security
+## 7. Infrastructure & Security
 - [Configuration System](infra/config.md): Settings and merging logic.
 - [Vault (Secret Management)](infra/vault.md): Secret retrieval and storage.
 - [Logging System](infra/logging.md): Logging and inspection tools.
 - [Linting](infra/linting.md): Lua static analysis baseline and `make lint` behavior.
 
-## 7. Special Modes
+## 8. Special Modes
 - [Interview Mode](modes/interview.md): Mechanics and automatic timestamps.
 - [Raw Mode](modes/raw_mode.md): API debugging via raw requests/responses.
 
-## 8. Export
+## 9. Export
 - [Export Formats](export/formats.md): Jekyll HTML and Markdown export logic.
 - [Tree Export](export/tree_export.md): Exporting chat trees as multiple linked files with navigation.
 
-## 9. Spec Traceability
+## 10. Spec Traceability
 - [Traceability Map](traceability.yaml): Mapping from each feature spec to implementation files and related tests. 
