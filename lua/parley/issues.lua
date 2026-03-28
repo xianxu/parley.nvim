@@ -69,6 +69,7 @@ M.parse_frontmatter = function(lines)
     end
 
     local result = {
+        id = nil,
         status = "open",
         deps = {},
         created = "",
@@ -85,7 +86,9 @@ M.parse_frontmatter = function(lines)
             if key then
                 key = key:lower()
                 val = trim(val)
-                if key == "status" then
+                if key == "id" then
+                    result.id = val:match('^"(.*)"$') or val
+                elseif key == "status" then
                     result.status = val
                 elseif key == "deps" then
                     result.deps = M.parse_deps_value(val)
@@ -337,6 +340,7 @@ end
 
 -- Issue template
 local ISSUE_TEMPLATE = [[---
+id: {{id}}
 status: open
 deps: []
 created: {{date}}
@@ -373,7 +377,7 @@ M.create_issue = function(title)
     local filepath = issues_dir .. "/" .. filename
 
     local date = os.date("%Y-%m-%d")
-    local content = ISSUE_TEMPLATE:gsub("{{title}}", title):gsub("{{date}}", date)
+    local content = ISSUE_TEMPLATE:gsub("{{id}}", id):gsub("{{title}}", title):gsub("{{date}}", date)
     local lines = vim.split(content, "\n", { plain = true })
 
     vim.fn.writefile(lines, filepath)

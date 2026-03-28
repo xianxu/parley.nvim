@@ -99,6 +99,7 @@ issue:
 	today=$$(date +%Y-%m-%d); \
 	printf '%s\n' \
 		"---" \
+		"id: $$next_id" \
 		"status: open" \
 		"deps: []" \
 		"github_issue: $(ISSUE_NUM)" \
@@ -147,6 +148,7 @@ fetch:
 	today=$$(date +%Y-%m-%d); \
 	printf '%s\n' \
 		"---" \
+		"id: $$next_id" \
 		"status: open" \
 		"deps: []" \
 		"github_issue: $(FETCH_NUM)" \

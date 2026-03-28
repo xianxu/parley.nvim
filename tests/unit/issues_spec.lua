@@ -101,6 +101,7 @@ describe("parse_frontmatter", function()
     it("parses full frontmatter", function()
         local lines = {
             "---",
+            "id: 0002",
             "status: blocked",
             "deps: [0001, 0003]",
             "created: 2026-03-28",
@@ -111,11 +112,24 @@ describe("parse_frontmatter", function()
         }
         local fm = issues.parse_frontmatter(lines)
         assert.is_not_nil(fm)
+        assert.equals("0002", fm.id)
         assert.equals("blocked", fm.status)
         assert.same({ "0001", "0003" }, fm.deps)
         assert.equals("2026-03-28", fm.created)
         assert.equals("2026-03-29", fm.updated)
-        assert.equals(6, fm.header_end)
+        assert.equals(7, fm.header_end)
+    end)
+
+    it("parses id without quotes", function()
+        local lines = { "---", "id: 0005", "status: open", "---" }
+        local fm = issues.parse_frontmatter(lines)
+        assert.equals("0005", fm.id)
+    end)
+
+    it("id is nil when absent", function()
+        local lines = { "---", "status: open", "deps: []", "---" }
+        local fm = issues.parse_frontmatter(lines)
+        assert.is_nil(fm.id)
     end)
 
     it("defaults status to open when missing", function()

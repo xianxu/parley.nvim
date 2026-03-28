@@ -357,11 +357,11 @@ local config = {
 	-- issue management (repo-local, relative to git root)
 	issues_dir = "issues",
 	-- global shortcuts for issue management
-	global_shortcut_issue_new = { modes = { "n", "i" }, shortcut = "<C-q>c" },
-	global_shortcut_issue_finder = { modes = { "n", "i" }, shortcut = "<C-q>f" },
-	global_shortcut_issue_next = { modes = { "n", "i" }, shortcut = "<C-q>x" },
-	global_shortcut_issue_status = { modes = { "n" }, shortcut = "<C-q>s" },
-	global_shortcut_issue_decompose = { modes = { "n" }, shortcut = "<C-q>i" },
+	global_shortcut_issue_new = { modes = { "n", "i" }, shortcut = "<C-y>c" },
+	global_shortcut_issue_finder = { modes = { "n", "i" }, shortcut = "<C-y>f" },
+	global_shortcut_issue_next = { modes = { "n", "i" }, shortcut = "<C-y>x" },
+	global_shortcut_issue_status = { modes = { "n" }, shortcut = "<C-y>s" },
+	global_shortcut_issue_decompose = { modes = { "n" }, shortcut = "<C-y>i" },
 	issue_finder_mappings = {
 		delete = { modes = { "n", "i", "v", "x" }, shortcut = "<C-d>" },
 		cycle_status = { modes = { "n", "i", "v", "x" }, shortcut = "<C-s>" },

@@ -51,15 +51,15 @@ require("parley").setup({
 
 | Command | Default Binding | Description |
 |---|---|---|
-| `:ParleyIssueNew` | `<C-q>c` | Prompt for title, create issue with auto-incremented ID |
-| `:ParleyIssueFinder` | `<C-q>f` | Float picker over issues with status badges |
-| `:ParleyIssueNext` | `<C-q>x` | Open next runnable issue (cycles through list) |
-| `:ParleyIssueStatus` | `<C-q>s` | Cycle frontmatter status: open → blocked → done → open |
-| `:ParleyIssueDecompose` | `<C-q>i` | Create child issue from plan line at cursor, add to parent deps |
+| `:ParleyIssueNew` | `<C-y>c` | Prompt for title, create issue with auto-incremented ID |
+| `:ParleyIssueFinder` | `<C-y>f` | Float picker over issues with status badges |
+| `:ParleyIssueNext` | `<C-y>x` | Open next runnable issue (cycles through list) |
+| `:ParleyIssueStatus` | `<C-y>s` | Cycle frontmatter status: open → blocked → done → open |
+| `:ParleyIssueDecompose` | `<C-y>i` | Create child issue from plan line at cursor, add to parent deps |
 
 ## Finder
 
-The issue finder (`<C-q>f`) uses the float picker with:
+The issue finder (`<C-y>f`) uses the float picker with:
 - Display: `[status] NNNN title (#GH) [date]`
 - Sort: open first, then blocked, then done (by ID within each group)
 - Three view modes cycled via `<C-a>`: open+blocked → all → all+history

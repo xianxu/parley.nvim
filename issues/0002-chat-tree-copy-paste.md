@@ -1,4 +1,5 @@
 ---
+id: 0002
 status: open
 deps: []
 created: 2026-03-28
