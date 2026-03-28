@@ -751,9 +751,11 @@ M.respond = function(params, callback, override_free_cursor, force)
 
         -- Inject ancestor context (tree-of-chat): walk parent chain and prepend
         -- ancestor Q+A exchanges after the system prompt (messages[1]).
+        local ancestor_msg_count = 0
         if parsed_chat.parent_link then
             local ancestor_msgs = collect_ancestor_messages(file_name, parsed_chat)
             if #ancestor_msgs > 0 then
+                ancestor_msg_count = #ancestor_msgs
                 _parley.logger.debug("Injecting " .. #ancestor_msgs .. " ancestor messages into context")
                 -- Insert after index 1 (system prompt), before current chat messages
                 for i = #ancestor_msgs, 1, -1 do
@@ -1036,8 +1038,15 @@ M.respond = function(params, callback, override_free_cursor, force)
 
                 -- if topic is ?, then generate it
                 if headers.topic == "?" then
-                    -- include the last model response in context for topic generation
-                    local topic_msgs = vim.deepcopy(messages)
+                    -- For topic generation, use only current file's messages (skip ancestors)
+                    -- messages layout: [system_prompt, ...ancestors, ...current_file_msgs]
+                    local topic_msgs = {}
+                    for i, m in ipairs(messages) do
+                        -- skip ancestor messages (indices 2 through ancestor_msg_count + 1)
+                        if i == 1 or i > ancestor_msg_count + 1 then
+                            table.insert(topic_msgs, vim.deepcopy(m))
+                        end
+                    end
                     table.insert(topic_msgs, { role = "assistant", content = qt.response })
 
                     M.generate_topic(topic_msgs, agent_info.provider, agent_info.model, function(topic)
