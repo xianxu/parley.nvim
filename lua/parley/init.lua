@@ -753,8 +753,8 @@ M.setup = function(opts)
 		vim.notify(msg, vim.log.levels.INFO)
 	end
 
-	M.cmd.KeyBindings = function()
-		show_keybindings()
+	M.cmd.KeyBindings = function(context)
+		show_keybindings(context)
 	end
 	-- Logout from Google Drive OAuth (remove stored tokens)
 	M.cmd.GdriveLogout = function()
@@ -994,18 +994,107 @@ local function resolve_shortcut(descs, modes, shortcut_config, fallback, bufnr)
 	return shortcut_value(shortcut_config, fallback)
 end
 
-local function keybinding_help_lines()
+-- Detect the buffer context for scoped keybinding help.
+-- Returns one of: "chat", "note", "issue", "markdown", "other"
+local function detect_buffer_context(buf)
+	local file_name = vim.api.nvim_buf_get_name(buf)
+	if not M.not_chat(buf, file_name) then
+		return "chat"
+	end
+	if M.is_markdown(buf, file_name) then
+		-- Normalize: resolve symlinks and ensure trailing /
+		local resolved = vim.fn.resolve(vim.fn.fnamemodify(file_name, ":p"))
+		-- Check note
+		local notes_dir = M.config.notes_dir
+		if notes_dir and notes_dir ~= "" then
+			local norm_notes = vim.fn.resolve(vim.fn.fnamemodify(vim.fn.expand(notes_dir), ":p"))
+			if not norm_notes:match("/$") then norm_notes = norm_notes .. "/" end
+			if resolved:sub(1, #norm_notes) == norm_notes then
+				return "note"
+			end
+		end
+		-- Check issue
+		local issues = require("parley.issues")
+		local issues_dir = issues.get_issues_dir()
+		if issues_dir then
+			local norm_issues = vim.fn.resolve(vim.fn.fnamemodify(issues_dir, ":p"))
+			if not norm_issues:match("/$") then norm_issues = norm_issues .. "/" end
+			if resolved:sub(1, #norm_issues) == norm_issues then
+				return "issue"
+			end
+		end
+		return "markdown"
+	end
+	return "other"
+end
+
+M._detect_buffer_context = detect_buffer_context
+
+local function keybinding_help_lines(context)
 	local cfg = M.config or {}
 	local current_buf = vim.api.nvim_get_current_buf()
+
+	-- Auto-detect context if not provided (finders pass explicit context)
+	context = context or detect_buffer_context(current_buf)
+
+	-- Title with context suffix
+	local title_suffix = {
+		chat = " (Chat)",
+		note = " (Note)",
+		issue = " (Issue)",
+		markdown = " (Markdown)",
+		chat_finder = " (Chat Finder)",
+		note_finder = " (Note Finder)",
+		issue_finder = " (Issue Finder)",
+	}
 	local lines = {
-		"Parley Key Bindings",
+		"Parley Key Bindings" .. (title_suffix[context] or ""),
 		"",
-		"Global",
 	}
 
 	local function add(shortcut, description)
 		table.insert(lines, string.format("  %-12s %s", shortcut, description))
 	end
+
+	-- Finder contexts: show only finder-specific keys
+	if context == "chat_finder" then
+		table.insert(lines, "Chat Finder")
+		local finder_mappings = cfg.chat_finder_mappings or {}
+		add(shortcut_value(finder_mappings.next_recency, "<C-a>"), "Cycle recency window left")
+		add(shortcut_value(finder_mappings.previous_recency, "<C-s>"), "Cycle recency window right")
+		add(shortcut_value(finder_mappings.delete, "<C-d>"), "Delete selected chat")
+		add(shortcut_value(finder_mappings.move, "<C-x>"), "Move selected chat")
+		table.insert(lines, string.format("  %-12s %s", "", "(Recent window default: last " .. tostring((cfg.chat_finder_recency or {}).months or 6) .. " months)"))
+		table.insert(lines, "")
+		table.insert(lines, "Close: q or <Esc>")
+		return lines
+	end
+
+	if context == "note_finder" then
+		table.insert(lines, "Note Finder")
+		local note_finder_mappings = cfg.note_finder_mappings or {}
+		add(shortcut_value(note_finder_mappings.next_recency, "<C-a>"), "Cycle recency window left")
+		add(shortcut_value(note_finder_mappings.previous_recency, "<C-s>"), "Cycle recency window right")
+		add(shortcut_value(note_finder_mappings.delete, "<C-d>"), "Delete selected note")
+		table.insert(lines, string.format("  %-12s %s", "", "(Recent window default: last " .. tostring((cfg.note_finder_recency or {}).months or 6) .. " months)"))
+		table.insert(lines, "")
+		table.insert(lines, "Close: q or <Esc>")
+		return lines
+	end
+
+	if context == "issue_finder" then
+		table.insert(lines, "Issue Finder")
+		local issue_finder_mappings = cfg.issue_finder_mappings or {}
+		add(shortcut_value(issue_finder_mappings.cycle_status, "<C-s>"), "Cycle issue status")
+		add(shortcut_value(issue_finder_mappings.toggle_done, "<C-a>"), "Toggle show done/history")
+		add(shortcut_value(issue_finder_mappings.delete, "<C-d>"), "Delete selected issue")
+		table.insert(lines, "")
+		table.insert(lines, "Close: q or <Esc>")
+		return lines
+	end
+
+	-- Non-finder contexts: Global section
+	table.insert(lines, "Global")
 
 	add(
 		resolve_shortcut(
@@ -1020,16 +1109,6 @@ local function keybinding_help_lines()
 	add(
 		resolve_shortcut("Create New Chat", shortcut_modes(cfg.global_shortcut_new, { "n", "i" }), cfg.global_shortcut_new, "<C-g>c", current_buf),
 		"New chat"
-	)
-	add(
-		resolve_shortcut(
-			"Review current file in new Chat",
-			shortcut_modes(cfg.global_shortcut_review, { "n" }),
-			cfg.global_shortcut_review,
-			"<C-g>C",
-			current_buf
-		),
-		"Review current file in chat"
 	)
 	add(
 		resolve_shortcut("Open Chat Finder", shortcut_modes(cfg.global_shortcut_finder, { "n", "i" }), cfg.global_shortcut_finder, "<C-g>f", current_buf),
@@ -1073,183 +1152,241 @@ local function keybinding_help_lines()
 		resolve_shortcut("Open oil.nvim file explorer", shortcut_modes(cfg.global_shortcut_oil, { "n" }), cfg.global_shortcut_oil, "<leader>fo", current_buf),
 		"Open oil file explorer"
 	)
-	add(resolve_shortcut("Enter Interview Mode", { "n" }, nil, "<C-n>i", current_buf), "Enter interview mode")
-	add(resolve_shortcut("Exit Interview Mode", { "n" }, nil, "<C-n>I", current_buf), "Exit interview mode")
-	add(resolve_shortcut("Create Note from Template", { "n" }, nil, "<C-n>t", current_buf), "New note from template")
-	add(resolve_shortcut("Toggle web_search tool", { "n" }, nil, "<C-g>w", current_buf), "Toggle web_search")
-	add(resolve_shortcut("Toggle raw request mode", { "n" }, nil, "<C-g>r", current_buf), "Toggle raw request mode")
-	add(resolve_shortcut("Toggle raw response mode", { "n" }, nil, "<C-g>R", current_buf), "Toggle raw response mode")
 
-	table.insert(lines, "")
-	table.insert(lines, "Chat / Markdown")
-	add(
-		resolve_shortcut("Parley prompt Chat Respond", shortcut_modes(cfg.chat_shortcut_respond, { "n", "i", "v", "x" }), cfg.chat_shortcut_respond, "<C-g><C-g>", current_buf),
-		"Respond"
-	)
-	add(
-		resolve_shortcut(
-			"Parley prompt Chat Respond All",
-			shortcut_modes(cfg.chat_shortcut_respond_all, { "n", "i", "v", "x" }),
-			cfg.chat_shortcut_respond_all,
-			"<C-g>G",
-			current_buf
-		),
-		"Respond all"
-	)
-	add(
-		resolve_shortcut("Parley prompt Chat Stop", shortcut_modes(cfg.chat_shortcut_stop, { "n", "i", "v", "x" }), cfg.chat_shortcut_stop, "<C-g>x", current_buf),
-		"Stop active response"
-	)
-	add(
-		resolve_shortcut(
-			"Parley prompt Chat Delete",
-			shortcut_modes(cfg.chat_shortcut_delete, { "n", "i", "v", "x" }),
-			cfg.chat_shortcut_delete,
-			"<C-g>d",
-			current_buf
-		),
-		"Delete chat / file"
-	)
-	add(
-		resolve_shortcut(
-			{ "Parley prompt Next Agent", "Parley add chat reference" },
-			shortcut_modes(cfg.chat_shortcut_agent, { "n", "i", "v", "x" }),
-			cfg.chat_shortcut_agent,
-			"<C-g>a",
-			current_buf
-		),
-		"Next agent / add chat reference"
-	)
-	add(
-		resolve_shortcut(
-			"Parley prompt System Prompt Selector",
-			shortcut_modes(cfg.chat_shortcut_system_prompt, { "n", "i", "v", "x" }),
-			cfg.chat_shortcut_system_prompt,
-			"<C-g>s",
-			current_buf
-		),
-		"Next system prompt"
-	)
-	add(
-		resolve_shortcut(
-			"Parley prompt Toggle Follow Cursor",
-			shortcut_modes(cfg.chat_shortcut_follow_cursor, { "n", "i", "v", "x" }),
-			cfg.chat_shortcut_follow_cursor,
-			"<C-g>l",
-			current_buf
-		),
-		"Toggle follow cursor"
-	)
-	add(
-		resolve_shortcut(
-			"Parley prompt Search Chat Sections",
-			shortcut_modes(cfg.chat_shortcut_search, { "n", "i", "v", "x" }),
-			cfg.chat_shortcut_search,
-			"<C-g>n",
-			current_buf
-		),
-		"Search chat sections"
-	)
-	add(
-		resolve_shortcut(
-			"Parley create and insert new chat",
-			{ "n", "i" },
-			nil,
-			"<C-g>i",
-			current_buf
-		),
-		"Insert new chat reference"
-	)
-	add(
-		resolve_shortcut(
-			"Parley open file under cursor",
-			shortcut_modes(cfg.chat_shortcut_open_file, { "n", "i" }),
-			cfg.chat_shortcut_open_file,
-			"<C-g>o",
-			current_buf
-		),
-		"Open @@ file reference"
-	)
-	add(resolve_shortcut("Parley prompt Outline Navigator", { "n" }, nil, "<C-g>t", current_buf), "Outline picker")
-	add(
-		resolve_shortcut(
-			"Parley prune chat",
-			shortcut_modes(cfg.chat_shortcut_prune, { "n" }),
-			cfg.chat_shortcut_prune,
-			"<C-g>p",
-			current_buf
-		),
-		"Prune: move exchange + following to child"
-	)
-	add(
-		resolve_shortcut(
-			"Parley export markdown",
-			shortcut_modes(cfg.chat_shortcut_export_markdown, { "n" }),
-			cfg.chat_shortcut_export_markdown,
-			"<C-g>em",
-			current_buf
-		),
-		"Export markdown (Jekyll)"
-	)
-	add(
-		resolve_shortcut(
-			"Parley export HTML",
-			shortcut_modes(cfg.chat_shortcut_export_html, { "n" }),
-			cfg.chat_shortcut_export_html,
-			"<C-g>eh",
-			current_buf
-		),
-		"Export HTML"
-	)
-	add(
-		resolve_shortcut(
-			"Parley cut exchange",
-			shortcut_modes(cfg.chat_shortcut_exchange_cut, { "n", "v" }),
-			cfg.chat_shortcut_exchange_cut,
-			"<C-g>X",
-			current_buf
-		),
-		"Cut exchange(s)"
-	)
-	add(
-		resolve_shortcut(
-			"Parley paste exchange",
-			shortcut_modes(cfg.chat_shortcut_exchange_paste, { "n" }),
-			cfg.chat_shortcut_exchange_paste,
-			"<C-g>V",
-			current_buf
-		),
-		"Paste exchange(s)"
-	)
+	-- Context-specific global keys
+	-- Chat-specific keys collected into a list, rendered as one section below
+	local chat_extra_lines = {}
+	if context == "chat" then
+		local function add_chat(shortcut, description)
+			table.insert(chat_extra_lines, string.format("  %-12s %s", shortcut, description))
+		end
+		add_chat(
+			resolve_shortcut(
+				"Review current file in new Chat",
+				shortcut_modes(cfg.global_shortcut_review, { "n" }),
+				cfg.global_shortcut_review,
+				"<C-g>C",
+				current_buf
+			),
+			"Review current file in chat"
+		)
+		add_chat(resolve_shortcut("Toggle web_search tool", { "n" }, nil, "<C-g>w", current_buf), "Toggle web_search")
+		add_chat(resolve_shortcut("Toggle raw request mode", { "n" }, nil, "<C-g>r", current_buf), "Toggle raw request mode")
+		add_chat(resolve_shortcut("Toggle raw response mode", { "n" }, nil, "<C-g>R", current_buf), "Toggle raw response mode")
+	end
 
-	table.insert(lines, "")
-	table.insert(lines, "Chat Finder")
-	local finder_mappings = cfg.chat_finder_mappings or {}
-	add(shortcut_value(finder_mappings.next_recency, "<C-a>"), "Cycle chat recency window left")
-	add(shortcut_value(finder_mappings.previous_recency, "<C-s>"), "Cycle chat recency window right")
-	add(shortcut_value(finder_mappings.delete, "<C-d>"), "Delete selected chat")
-	add(shortcut_value(finder_mappings.move, "<C-x>"), "Move selected chat")
-	table.insert(lines, string.format("  %-12s %s", "", "(Recent window default: last " .. tostring((cfg.chat_finder_recency or {}).months or 6) .. " months)"))
+	if context == "note" then
+		table.insert(lines, "")
+		table.insert(lines, "Note")
+		add(resolve_shortcut("Enter Interview Mode", { "n" }, nil, "<C-n>i", current_buf), "Enter interview mode")
+		add(resolve_shortcut("Exit Interview Mode", { "n" }, nil, "<C-n>I", current_buf), "Exit interview mode")
+		add(resolve_shortcut("Create Note from Template", { "n" }, nil, "<C-n>t", current_buf), "New note from template")
+	end
 
-	table.insert(lines, "")
-	table.insert(lines, "Note Finder")
-	local note_finder_mappings = cfg.note_finder_mappings or {}
-	add(shortcut_value(note_finder_mappings.next_recency, "<C-a>"), "Cycle note recency window left")
-	add(shortcut_value(note_finder_mappings.previous_recency, "<C-s>"), "Cycle note recency window right")
-	add(shortcut_value(note_finder_mappings.delete, "<C-d>"), "Delete selected note")
-	table.insert(lines, string.format("  %-12s %s", "", "(Recent window default: last " .. tostring((cfg.note_finder_recency or {}).months or 6) .. " months)"))
+	if context == "issue" then
+		table.insert(lines, "")
+		table.insert(lines, "Issue")
+		add(
+			resolve_shortcut("Create New Issue", shortcut_modes(cfg.global_shortcut_issue_new, { "n", "i" }), cfg.global_shortcut_issue_new, "<C-y>c", current_buf),
+			"New issue"
+		)
+		add(
+			resolve_shortcut("Open Issue Finder", shortcut_modes(cfg.global_shortcut_issue_finder, { "n", "i" }), cfg.global_shortcut_issue_finder, "<C-y>f", current_buf),
+			"Open issue finder"
+		)
+		add(
+			resolve_shortcut("Pick Next Issue", shortcut_modes(cfg.global_shortcut_issue_next, { "n", "i" }), cfg.global_shortcut_issue_next, "<C-y>x", current_buf),
+			"Next issue"
+		)
+		add(
+			resolve_shortcut("Cycle Issue Status", shortcut_modes(cfg.global_shortcut_issue_status, { "n" }), cfg.global_shortcut_issue_status, "<C-y>s", current_buf),
+			"Cycle issue status"
+		)
+		add(
+			resolve_shortcut("Decompose Issue", shortcut_modes(cfg.global_shortcut_issue_decompose, { "n" }), cfg.global_shortcut_issue_decompose, "<C-y>i", current_buf),
+			"Decompose issue"
+		)
+	end
+
+	-- Chat buffer keys
+	if context == "chat" then
+		table.insert(lines, "")
+		table.insert(lines, "Chat")
+		for _, l in ipairs(chat_extra_lines) do
+			table.insert(lines, l)
+		end
+		add(
+			resolve_shortcut("Parley prompt Chat Respond", shortcut_modes(cfg.chat_shortcut_respond, { "n", "i", "v", "x" }), cfg.chat_shortcut_respond, "<C-g><C-g>", current_buf),
+			"Respond"
+		)
+		add(
+			resolve_shortcut(
+				"Parley prompt Chat Respond All",
+				shortcut_modes(cfg.chat_shortcut_respond_all, { "n", "i", "v", "x" }),
+				cfg.chat_shortcut_respond_all,
+				"<C-g>G",
+				current_buf
+			),
+			"Respond all"
+		)
+		add(
+			resolve_shortcut("Parley prompt Chat Stop", shortcut_modes(cfg.chat_shortcut_stop, { "n", "i", "v", "x" }), cfg.chat_shortcut_stop, "<C-g>x", current_buf),
+			"Stop active response"
+		)
+		add(
+			resolve_shortcut(
+				"Parley prompt Chat Delete",
+				shortcut_modes(cfg.chat_shortcut_delete, { "n", "i", "v", "x" }),
+				cfg.chat_shortcut_delete,
+				"<C-g>d",
+				current_buf
+			),
+			"Delete chat"
+		)
+		add(
+			resolve_shortcut(
+				"Parley prompt Next Agent",
+				shortcut_modes(cfg.chat_shortcut_agent, { "n", "i", "v", "x" }),
+				cfg.chat_shortcut_agent,
+				"<C-g>a",
+				current_buf
+			),
+			"Next agent"
+		)
+		add(
+			resolve_shortcut(
+				"Parley prompt System Prompt Selector",
+				shortcut_modes(cfg.chat_shortcut_system_prompt, { "n", "i", "v", "x" }),
+				cfg.chat_shortcut_system_prompt,
+				"<C-g>s",
+				current_buf
+			),
+			"Next system prompt"
+		)
+		add(
+			resolve_shortcut(
+				"Parley prompt Toggle Follow Cursor",
+				shortcut_modes(cfg.chat_shortcut_follow_cursor, { "n", "i", "v", "x" }),
+				cfg.chat_shortcut_follow_cursor,
+				"<C-g>l",
+				current_buf
+			),
+			"Toggle follow cursor"
+		)
+		add(
+			resolve_shortcut(
+				"Parley prompt Search Chat Sections",
+				shortcut_modes(cfg.chat_shortcut_search, { "n", "i", "v", "x" }),
+				cfg.chat_shortcut_search,
+				"<C-g>n",
+				current_buf
+			),
+			"Search chat sections"
+		)
+		add(
+			resolve_shortcut(
+				"Parley create and insert new chat",
+				{ "n", "i" },
+				nil,
+				"<C-g>i",
+				current_buf
+			),
+			"Insert branch reference"
+		)
+		add(
+			resolve_shortcut(
+				"Parley open file under cursor",
+				shortcut_modes(cfg.chat_shortcut_open_file, { "n", "i" }),
+				cfg.chat_shortcut_open_file,
+				"<C-g>o",
+				current_buf
+			),
+			"Open @@ file reference"
+		)
+		add(resolve_shortcut("Parley prompt Outline Navigator", { "n" }, nil, "<C-g>t", current_buf), "Outline picker")
+		add(
+			resolve_shortcut(
+				"Parley prune chat",
+				shortcut_modes(cfg.chat_shortcut_prune, { "n" }),
+				cfg.chat_shortcut_prune,
+				"<C-g>p",
+				current_buf
+			),
+			"Prune: move exchange + following to child"
+		)
+		add(
+			resolve_shortcut(
+				"Parley export markdown",
+				shortcut_modes(cfg.chat_shortcut_export_markdown, { "n" }),
+				cfg.chat_shortcut_export_markdown,
+				"<C-g>em",
+				current_buf
+			),
+			"Export markdown (Jekyll)"
+		)
+		add(
+			resolve_shortcut(
+				"Parley export HTML",
+				shortcut_modes(cfg.chat_shortcut_export_html, { "n" }),
+				cfg.chat_shortcut_export_html,
+				"<C-g>eh",
+				current_buf
+			),
+			"Export HTML"
+		)
+		add(
+			resolve_shortcut(
+				"Parley cut exchange",
+				shortcut_modes(cfg.chat_shortcut_exchange_cut, { "n", "v" }),
+				cfg.chat_shortcut_exchange_cut,
+				"<C-g>X",
+				current_buf
+			),
+			"Cut exchange(s)"
+		)
+		add(
+			resolve_shortcut(
+				"Parley paste exchange",
+				shortcut_modes(cfg.chat_shortcut_exchange_paste, { "n" }),
+				cfg.chat_shortcut_exchange_paste,
+				"<C-g>V",
+				current_buf
+			),
+			"Paste exchange(s)"
+		)
+	end
+
+	-- Markdown buffer keys (shown for markdown, note, and issue contexts)
+	if context == "markdown" or context == "note" or context == "issue" then
+		table.insert(lines, "")
+		table.insert(lines, "Markdown Buffer")
+		add(
+			resolve_shortcut(
+				"Parley open chat reference under cursor",
+				shortcut_modes(cfg.chat_shortcut_open_file, { "n", "i" }),
+				cfg.chat_shortcut_open_file,
+				"<C-g>o",
+				current_buf
+			),
+			"Open file reference"
+		)
+		add(resolve_shortcut("Parley find chat", { "n" }, nil, "<C-g>f", current_buf), "Find chat references")
+		add(resolve_shortcut("Parley add chat reference", { "n", "i" }, nil, "<C-g>a", current_buf), "Add chat reference")
+		add(resolve_shortcut("Parley create and insert new chat", { "n", "i" }, nil, "<C-g>i", current_buf), "Insert new chat reference")
+		add(resolve_shortcut("Parley delete current file and buffer", { "n" }, nil, "<C-g>d", current_buf), "Delete file")
+	end
 
 	table.insert(lines, "")
 	table.insert(lines, "Close: q or <Esc>")
 	return lines
 end
 
-M._keybinding_help_lines = function()
-	return keybinding_help_lines()
+M._keybinding_help_lines = function(context)
+	return keybinding_help_lines(context)
 end
 
-show_keybindings = function()
-	local lines = keybinding_help_lines()
+show_keybindings = function(context)
+	local lines = keybinding_help_lines(context)
 	local width = 0
 	for _, line in ipairs(lines) do
 		width = math.max(width, vim.fn.strdisplaywidth(line))

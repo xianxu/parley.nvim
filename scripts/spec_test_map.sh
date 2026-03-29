@@ -96,11 +96,17 @@ list_changed_specs() {
     current_branch="$(git branch --show-current)"
 
     {
+        # Committed changes vs base
         if [ "$current_branch" = "main" ]; then
             git diff --name-only --diff-filter=ACMR "$base_ref..HEAD" -- specs
         else
             git diff --name-only --diff-filter=ACMR "$(git merge-base HEAD "$base_ref")" -- specs
         fi
+        # Staged (index) changes
+        git diff --cached --name-only -- specs
+        # Unstaged working tree changes
+        git diff --name-only -- specs
+        # Untracked files
         git ls-files --others --exclude-standard -- specs
     } | awk '/^specs\/.+\/.+\.md$/ { print }' | sort -u
 }

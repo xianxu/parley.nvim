@@ -409,7 +409,7 @@ M.open = function(_options)
 				key = keybindings_shortcut.shortcut,
 				fn = function(_, _)
 					vim.schedule(function()
-						_parley.cmd.KeyBindings()
+						_parley.cmd.KeyBindings("note_finder")
 					end)
 				end,
 			},

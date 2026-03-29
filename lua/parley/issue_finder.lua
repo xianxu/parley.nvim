@@ -243,6 +243,15 @@ M.open = function(_options)
                     end, 100)
                 end,
             },
+            -- Show key bindings help
+            {
+                key = (_parley.config.global_shortcut_keybindings or { shortcut = "<C-g>?" }).shortcut,
+                fn = function(_, _)
+                    vim.schedule(function()
+                        _parley.cmd.KeyBindings("issue_finder")
+                    end)
+                end,
+            },
         },
     })
 
