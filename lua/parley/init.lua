@@ -66,6 +66,8 @@ issue_finder_mod.setup(M)
 local exporter = require("parley.exporter")
 exporter.setup(M)
 
+local exchange_clipboard = require("parley.exchange_clipboard")
+
 -- Chat finder module (loaded here; wired up immediately since it only needs M reference)
 local chat_finder_mod = require("parley.chat_finder")
 chat_finder_mod.setup(M)
@@ -1199,6 +1201,26 @@ local function keybinding_help_lines()
 		),
 		"Export HTML"
 	)
+	add(
+		resolve_shortcut(
+			"Parley cut exchange",
+			shortcut_modes(cfg.chat_shortcut_exchange_cut, { "n", "v" }),
+			cfg.chat_shortcut_exchange_cut,
+			"<C-g>X",
+			current_buf
+		),
+		"Cut exchange(s)"
+	)
+	add(
+		resolve_shortcut(
+			"Parley paste exchange",
+			shortcut_modes(cfg.chat_shortcut_exchange_paste, { "n" }),
+			cfg.chat_shortcut_exchange_paste,
+			"<C-g>V",
+			current_buf
+		),
+		"Paste exchange(s)"
+	)
 
 	table.insert(lines, "")
 	table.insert(lines, "Chat Finder")
@@ -1562,6 +1584,29 @@ M.prep_chat = function(buf, file_name)
 	if export_html then
 		for _, mode in ipairs(export_html.modes) do
 			M.helpers.set_keymap({ buf }, mode, export_html.shortcut, M.cmd.ExportHTML, "Parley export HTML")
+		end
+	end
+
+	-- <C-g>X: cut exchange, <C-g>V: paste exchange
+	local cut_shortcut = M.config.chat_shortcut_exchange_cut
+	if cut_shortcut then
+		for _, mode in ipairs(cut_shortcut.modes) do
+			if mode == "v" or mode == "x" then
+				M.helpers.set_keymap({ buf }, mode, cut_shortcut.shortcut, function()
+					vim.cmd("normal! " .. vim.api.nvim_replace_termcodes("<Esc>", true, false, true))
+					M.cmd.ExchangeCut({ visual = true })
+				end, "Parley cut exchange(s)")
+			else
+				M.helpers.set_keymap({ buf }, mode, cut_shortcut.shortcut, function()
+					M.cmd.ExchangeCut()
+				end, "Parley cut exchange")
+			end
+		end
+	end
+	local paste_shortcut = M.config.chat_shortcut_exchange_paste
+	if paste_shortcut then
+		for _, mode in ipairs(paste_shortcut.modes) do
+			M.helpers.set_keymap({ buf }, mode, paste_shortcut.shortcut, M.cmd.ExchangePaste, "Parley paste exchange")
 		end
 	end
 
@@ -2521,6 +2566,111 @@ M.cmd.ChatPrune = function()
 			M.logger.info("Prune topic generated: " .. topic)
 		end, spinner_opts)
 	end
+end
+
+-- Internal clipboard for exchange cut/paste (buffer-local lines)
+local _exchange_clipboard = nil
+
+--- Cut exchange(s) at cursor (normal) or overlapping visual selection (visual).
+--- @param opts table|nil  { visual = bool }
+M.cmd.ExchangeCut = function(opts)
+	local buf = vim.api.nvim_get_current_buf()
+	local file_name = vim.api.nvim_buf_get_name(buf)
+	local reason = M.not_chat(buf, file_name)
+	if reason then
+		M.logger.warning("ExchangeCut is only available in chat files: " .. reason)
+		return
+	end
+
+	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+	local header_end = M.chat_parser.find_header_end(lines)
+	if not header_end then
+		M.logger.error("ExchangeCut: could not find header separator ---")
+		return
+	end
+
+	local parsed_chat = M.parse_chat(lines, header_end)
+	local total_lines = #lines
+	local exchange_indices
+
+	if opts and opts.visual then
+		local sel_start = vim.fn.line("'<")
+		local sel_end = vim.fn.line("'>")
+		exchange_indices = exchange_clipboard.get_exchanges_for_range(parsed_chat, sel_start, sel_end, total_lines)
+	else
+		local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
+		local idx = M.find_exchange_at_line(parsed_chat, cursor_line)
+		if not idx then
+			-- Try nearest exchange at or after cursor
+			for i, ex in ipairs(parsed_chat.exchanges) do
+				if ex.question and ex.question.line_start >= cursor_line then
+					idx = i
+					break
+				end
+			end
+		end
+		if idx then
+			exchange_indices = { idx }
+		else
+			exchange_indices = {}
+		end
+	end
+
+	if #exchange_indices == 0 then
+		M.logger.warning("ExchangeCut: no exchange found at cursor")
+		return
+	end
+
+	local extracted, start_line, end_line = exchange_clipboard.extract_exchange_lines(lines, parsed_chat, exchange_indices, total_lines)
+	if #extracted == 0 then
+		M.logger.warning("ExchangeCut: nothing to cut")
+		return
+	end
+
+	_exchange_clipboard = extracted
+	vim.fn.setreg("+", table.concat(extracted, "\n") .. "\n")
+	vim.api.nvim_buf_set_lines(buf, start_line - 1, end_line, false, {})
+
+	-- Clean up consecutive blank lines at the cut seam
+	local new_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+	local cut_point = math.min(start_line, #new_lines + 1)
+	local seam_start, seam_end, replacement = exchange_clipboard.compute_cut_cleanup(new_lines, cut_point, #new_lines)
+	if seam_start then
+		vim.api.nvim_buf_set_lines(buf, seam_start - 1, seam_end, false, replacement)
+	end
+
+	M.logger.info("Cut " .. #exchange_indices .. " exchange(s) (" .. #extracted .. " lines)")
+end
+
+--- Paste previously cut exchanges after the exchange at cursor.
+M.cmd.ExchangePaste = function()
+	if not _exchange_clipboard or #_exchange_clipboard == 0 then
+		M.logger.warning("ExchangePaste: clipboard is empty — cut an exchange first")
+		return
+	end
+
+	local buf = vim.api.nvim_get_current_buf()
+	local file_name = vim.api.nvim_buf_get_name(buf)
+	local reason = M.not_chat(buf, file_name)
+	if reason then
+		M.logger.warning("ExchangePaste is only available in chat files: " .. reason)
+		return
+	end
+
+	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+	local header_end = M.chat_parser.find_header_end(lines)
+	if not header_end then
+		M.logger.error("ExchangePaste: could not find header separator ---")
+		return
+	end
+
+	local parsed_chat = M.parse_chat(lines, header_end)
+	local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
+	local paste_after = exchange_clipboard.get_paste_line(parsed_chat, cursor_line, header_end, #lines)
+
+	local to_insert = exchange_clipboard.build_paste_lines(lines, paste_after, _exchange_clipboard, #lines)
+	vim.api.nvim_buf_set_lines(buf, paste_after, paste_after, false, to_insert)
+	M.logger.info("Pasted " .. #_exchange_clipboard .. " lines after line " .. paste_after)
 end
 
 -- Command for navigating questions and headers in chat documents
