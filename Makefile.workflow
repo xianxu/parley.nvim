@@ -12,12 +12,12 @@ help-workflow:
 	"    make push           Auto-commit, push, close done issues, archive to history/" \
 	"" \
 	"  Work on a larger issue:" \
-	"    make issue 42       Fetch issue into issues/, create sibling worktree" \
+	"    make issue 42       Fetch issue into issues/, create worktree in ../worktree/" \
 	"    make pull-request   Push branch, open PR referencing GitHub issues" \
 	"    make merge          Merge PR, archive done issues, clean up worktree" \
 	"" \
 	"  Other:" \
-	"    make worktree NAME  Create a sibling worktree/branch" \
+	"    make worktree NAME  Create a worktree in ../worktree/<name>" \
 	""
 
 # Worktree management targets
@@ -52,9 +52,10 @@ worktree:
 		echo "Usage: make worktree <name>"; \
 		exit 1; \
 	fi
+	@mkdir -p ../worktree
 	@name="$(WT_NAME)"; \
-	git worktree add -b "$$name" "../$$name" HEAD
-	@echo "Worktree created at ../$(WT_NAME) on branch $(WT_NAME)"
+	git worktree add -b "$$name" "../worktree/$$name" HEAD
+	@echo "Worktree created at ../worktree/$(WT_NAME) on branch $(WT_NAME)"
 
 # Create a new git worktree for a GitHub issue, create issue file in issues/.
 # Usage: make issue <number>
@@ -63,10 +64,10 @@ issue:
 		echo "Usage: make issue <number>"; \
 		exit 1; \
 	fi
+	@mkdir -p ../worktree
 	@set -o pipefail; \
-	repo_name=$$(basename "$$(git rev-parse --show-toplevel)"); \
-	branch="$$repo_name-$(ISSUE_NUM)"; \
-	wt_path="../$$branch"; \
+	branch="$(REPO_NAME)-$(ISSUE_NUM)"; \
+	wt_path="../worktree/$$branch"; \
 	if git show-ref --verify --quiet "refs/heads/$$branch"; then \
 		if [ -d "$$wt_path" ]; then \
 			echo "Worktree already exists at $$wt_path, refreshing issue file..."; \

@@ -13,8 +13,8 @@ help-sandbox:
 	"  make sandbox-nuke     Destroy sandbox and all state" \
 	""
 
-SANDBOX_NAME = $(shell basename $(CURDIR))-sandbox
-SANDBOX_IMAGE = $(shell basename $(CURDIR))-sandbox
+SANDBOX_NAME = $(REPO_NAME)-sandbox
+SANDBOX_IMAGE = $(REPO_NAME)-sandbox
 
 # Build the sandbox image and reset state (only needed when .openshell/ changes)
 sandbox-build:
@@ -43,9 +43,12 @@ sandbox:
 		docker exec -it $(SANDBOX_NAME) zsh; \
 	else \
 		echo "Starting sandbox..."; \
+		mkdir -p "$$(pwd)/../worktree"; \
 		docker run -d \
 			--name $(SANDBOX_NAME) \
-			-v "$$(pwd):/sandbox" \
+			-v "$$(pwd):/$(REPO_NAME)" \
+			-v "$$(pwd)/../worktree:/worktree" \
+			-w "/$(REPO_NAME)" \
 			-v "$$SSH_AUTH_SOCK:/ssh-agent" \
 			-e SSH_AUTH_SOCK=/ssh-agent \
 			-v $(SANDBOX_NAME)-home:/home/sandbox \

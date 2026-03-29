@@ -2,7 +2,8 @@ version: "1.0"
 
 filesystem:
   writable:
-    - /sandbox
+    - /parley.nvim    # repo mount (named after repo, not hardcoded /sandbox)
+    - /worktree       # worktree mount for branch-based workflow
     - /tmp
     - /home/sandbox
   readable:

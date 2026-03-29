@@ -22,14 +22,22 @@ bootstrap.sh            # One-command sandbox creation
 
 ## Usage
 ```bash
-./bootstrap.sh              # creates sandbox named after current directory
-./bootstrap.sh my-sandbox   # custom name
-openshell sandbox connect <name>
+make sandbox-build          # build/rebuild image (destroys state)
+make sandbox                # start, restart, or attach
+make sandbox-shell          # open another shell
+make sandbox-stop           # stop (state preserved)
+make sandbox-nuke           # destroy all state
 ```
 
+## Mount Layout
+- Repo mounted at `/{repo-name}` (e.g., `/parley.nvim`), set as working directory
+- `../worktree` mounted at `/worktree` — enables `make issue`/`make worktree` inside container
+- `../worktree` from `/{repo-name}` resolves to `/worktree`, so relative paths are portable
+
 ## Policy
-- Filesystem: writable `/sandbox`, `/tmp`, `/home/sandbox`
+- Filesystem: writable `/{repo-name}`, `/worktree`, `/tmp`, `/home/sandbox`
 - Network: allows GitHub, npm, PyPI, Go proxy, Anthropic API, OpenAI API; denies all else
 
 ## History
+- 2026-03-29: Mount as /{repo-name}, add /worktree mount, portable worktree paths (issue 000014)
 - 2026-03-28: Initial creation (issue 000010)

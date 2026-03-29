@@ -5,7 +5,7 @@ FROM ubuntu:24.04
 ARG DEBIAN_FRONTEND=noninteractive
 
 # Create sandbox user (OpenShell base image provides this; ubuntu:24.04 does not)
-RUN useradd -m -s /usr/bin/zsh sandbox && mkdir -p /sandbox && chown sandbox:sandbox /sandbox
+RUN useradd -m -s /usr/bin/zsh sandbox
 
 # System packages
 RUN apt-get update && apt-get install -y \
@@ -97,4 +97,4 @@ COPY --chown=sandbox:sandbox dotfiles/nvim/ /home/sandbox/.config/nvim/
 # Neovim plugins (restore exact versions from lazy-lock.json, don't update)
 RUN nvim --headless "+Lazy! restore" +qa 2>/dev/null || true
 
-WORKDIR /sandbox
+# WORKDIR is set at runtime via docker run -w (mount point varies per repo)
