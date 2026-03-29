@@ -27,6 +27,8 @@ The ideal is describe in `../design/2026-03-29.08-52-09.171.md`, basically we wo
 
 6/ is shell script still a good way to run those multi-process scatter/gather pattern?
 
+7/ such parallel invocation pattern is also beneficial to `make push`, `make merge`. but if we are to do it, there might be multiple progress bars, one for the parallelism.
+
 ## Done when
 
 -
