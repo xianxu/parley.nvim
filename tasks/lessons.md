@@ -53,3 +53,6 @@
 - `claude -p` in background/piped processes needs `< /dev/null` to avoid stdin timeout warnings
 - `claude -p` without `--permission-mode bypassPermissions` may silently fail when tools need approval but no TTY is available
 - Parallel agents sharing a git working directory: don't use `git status` diff to detect changes from one agent — other concurrent agents may have modified files too
+- `timeout` is GNU coreutils — not on macOS. Use `perl -e 'alarm shift; exec @ARGV'` as portable fallback
+- `wait -n` requires bash 4.3+ — macOS ships bash 3.2. Use `kill -0` polling instead
+- When a subprocess fails silently and its empty stdout is treated as "success", the feature appears to work but does nothing — always check exit codes or validate output isn't vacuous

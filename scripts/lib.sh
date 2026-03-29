@@ -18,7 +18,7 @@ is_clean_check_output() {
     [[ -z "$output" ]] && return 0
     # Known clean patterns from agent prompts
     echo "$output" | grep -qiE \
-        'no (DRY|PURE) violations found|all tests pass|no changes needed|in sync|no issue files changed|REMINDER:' \
+        'no (DRY|PURE) violations found|all tests pass|no changes needed|in sync|no issue files changed' \
         && return 0
     return 1
 }

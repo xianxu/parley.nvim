@@ -89,10 +89,19 @@ run_check_captured() {
     if [[ "$name" == "specs" ]]; then
         tools="Edit,Read,Write,Grep,Glob,Bash"
     fi
-    timeout "${CHECK_TIMEOUT:-300}" env \
-        ALLOWED_TOOLS="$tools" CHECK_NO_COMMIT=1 \
-        "$SCRIPT_DIR/pre-merge-checks.sh" "$name" \
-        < /dev/null >"$outdir/$name.out" 2>"$outdir/$name.err" || rc=$?
+    local timeout_secs="${CHECK_TIMEOUT:-300}"
+    if command -v timeout &>/dev/null; then
+        timeout "$timeout_secs" env \
+            ALLOWED_TOOLS="$tools" CHECK_NO_COMMIT=1 \
+            "$SCRIPT_DIR/pre-merge-checks.sh" "$name" \
+            < /dev/null >"$outdir/$name.out" 2>"$outdir/$name.err" || rc=$?
+    else
+        # macOS: no GNU timeout — use perl alarm as fallback
+        perl -e 'alarm shift; exec @ARGV' "$timeout_secs" env \
+            ALLOWED_TOOLS="$tools" CHECK_NO_COMMIT=1 \
+            "$SCRIPT_DIR/pre-merge-checks.sh" "$name" \
+            < /dev/null >"$outdir/$name.out" 2>"$outdir/$name.err" || rc=$?
+    fi
     printf '%d' "$rc" > "$outdir/$name.rc"
 }
 
@@ -119,13 +128,13 @@ run_all_parallel() {
     for check in "${ALL_CHECKS[@]}"; do
         # Wait for a slot if at the concurrency limit
         while [[ ${#pids[@]} -ge $max_jobs ]]; do
-            wait -n -p _done_pid "${pids[@]}" 2>/dev/null || true
             # Rebuild pids array, removing finished processes
             local alive=()
             for p in "${pids[@]}"; do
                 kill -0 "$p" 2>/dev/null && alive+=("$p")
             done
             pids=("${alive[@]}")
+            [[ ${#pids[@]} -ge $max_jobs ]] && sleep 0.5
         done
         progress "running $check..."
         run_check_captured "$check" "$outdir" &
