@@ -6,7 +6,7 @@
 
 <!-- panvimdoc-ignore-end -->
 
-Parley is a Neovim chat notebook for LLM conversations. It's created to help user research on a topic with the help with many different agents. 
+Parley is a Neovim chat notebook for LLM conversations. It's created to help user research on a topic with the help with many different agents. A side goal of Parley is really a test bed for me to play with agentic coding workflow. I have no idea of nvim or lua when I started this, everything's coded using different generation of agentic coding!
 
 There are just many different ways user can leverage it. With Parley, you have all the power of Neovim at your fingertips in your LLM chat, thus making comprehensive research easier. All your chat history also lives in plain markdown files, you can easily search through using local tools. You can even direct your coding agent to act according to the "brainstorming" chat thread you had with other agents, for example. The possibilities seem endless.
 
