@@ -19,8 +19,8 @@ updated: 2026-03-29
 - [x] Fix: keep existing agent-forwarding approach (`-v $SSH_AUTH_SOCK:/ssh-agent`), configure host properly
 - [x] User: add `export SSH_AUTH_SOCK=$(launchctl asuser $(id -u) launchctl getenv SSH_AUTH_SOCK)` to `~/.zshrc`
 - [x] User: run `ssh-add --apple-use-keychain ~/.ssh/id_ed25519` to load key
-- [ ] Verify: `ssh -T git@github.com` works inside sandbox
-- [ ] Verify: `make push` succeeds inside sandbox
+- [x] Verify: `ssh -T git@github.com` works inside sandbox
+- [x] Verify: `make push` succeeds inside sandbox
 
 ## Log
 
