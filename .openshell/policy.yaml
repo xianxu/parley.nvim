@@ -1,0 +1,85 @@
+version: "1.0"
+
+filesystem:
+  writable:
+    - /sandbox
+    - /tmp
+    - /home/sandbox
+  readable:
+    - /usr
+    - /etc
+    - /opt
+
+network:
+  egress:
+    allow:
+      # Git & GitHub
+      - "github.com:443"
+      - "*.github.com:443"
+      - "*.githubusercontent.com:443"
+      - "ssh.github.com:22"
+      - "ssh.github.com:443"
+
+      # Node.js / npm
+      - "registry.npmjs.org:443"
+      - "*.npmjs.org:443"
+      - "*.npmjs.com:443"
+
+      # Rust / Cargo
+      - "crates.io:443"
+      - "*.crates.io:443"
+      - "static.rust-lang.org:443"
+
+      # Ruby / RubyGems
+      - "rubygems.org:443"
+      - "*.rubygems.org:443"
+
+      # Python / PyPI
+      - "pypi.org:443"
+      - "files.pythonhosted.org:443"
+
+      # Go
+      - "proxy.golang.org:443"
+      - "sum.golang.org:443"
+      - "storage.googleapis.com:443"
+
+      # Lua
+      - "luarocks.org:443"
+      - "*.luarocks.org:443"
+
+      # AI APIs (Claude, OpenAI/Codex, Gemini, Amazon Q)
+      - "api.anthropic.com:443"
+      - "statsig.anthropic.com:443"
+      - "sentry.io:443"
+      - "api.openai.com:443"
+      - "generativelanguage.googleapis.com:443"
+      - "*.amazonaws.com:443"
+
+      # Elixir / Hex / Erlang
+      - "hex.pm:443"
+      - "*.hex.pm:443"
+      - "builds.hex.pm:443"
+      - "repo.hex.pm:443"
+
+      # Ubuntu apt (system updates inside sandbox)
+      - "archive.ubuntu.com:443"
+      - "ports.ubuntu.com:443"
+      - "security.ubuntu.com:443"
+
+      # Neovim Mason (LSP/linter/formatter installer)
+      - "objects.githubusercontent.com:443"
+      - "github-releases.githubusercontent.com:443"
+
+      # nvm / rustup / oh-my-zsh installers
+      - "raw.githubusercontent.com:443"
+      - "sh.rustup.rs:443"
+      - "static.crates.io:443"
+
+      # GitHub CLI apt repo
+      - "cli.github.com:443"
+
+      # zoxide, fzf (installed from GitHub)
+      - "github.com:22"
+
+    deny:
+      - "*"

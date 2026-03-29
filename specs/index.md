@@ -44,6 +44,7 @@ This index provides a central directory for all specifications of the `parley.nv
 - [Vault (Secret Management)](infra/vault.md): Secret retrieval and storage.
 - [Logging System](infra/logging.md): Logging and inspection tools.
 - [Linting](infra/linting.md): Lua static analysis baseline and `make lint` behavior.
+- [OpenShell Sandbox](infra/openshell.md): Hermetic dev environment via NVIDIA OpenShell.
 
 ## 8. Special Modes
 - [Interview Mode](modes/interview.md): Mechanics and automatic timestamps.

@@ -1,0 +1,69 @@
+# ── Node.js (nvm) ────────────────────────────────────────────────────────────
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+
+# ── PATH ─────────────────────────────────────────────────────────────────────
+export PATH="/opt/fzf/bin:$HOME/.cargo/bin:$HOME/.local/bin:$HOME/bin:/usr/local/bin:/usr/local/sbin:$PATH"
+
+# ── Oh-My-Zsh ────────────────────────────────────────────────────────────────
+export ZSH="$HOME/.oh-my-zsh"
+ZSH_THEME="af-magic"
+
+zstyle ':omz:update' mode auto
+zstyle ':omz:update' frequency 13
+
+plugins=(
+    gitfast
+    fzf-tab
+    zsh-autosuggestions
+    fast-syntax-highlighting
+)
+
+source $ZSH/oh-my-zsh.sh
+
+# Guard git_prompt_info against deleted working directories
+functions[_orig_git_prompt_info]=$functions[git_prompt_info]
+function git_prompt_info() { [[ -d $PWD ]] && _orig_git_prompt_info }
+
+# ── zoxide ───────────────────────────────────────────────────────────────────
+eval "$(zoxide init zsh)"
+
+# ── User configuration ───────────────────────────────────────────────────────
+export LANG=en_US.UTF-8
+export EDITOR="nvim"
+export VISUAL="nvim"
+
+# ── Aliases ──────────────────────────────────────────────────────────────────
+alias v=nvim
+alias s="git status"
+alias ss="git diff --stat"
+alias a="git add"
+alias d="git diff"
+alias p="git commit -a; git push"
+alias todo="nvim tasks/todo.md"
+alias issue="nvim tasks/issue.md"
+alias lesson="nvim tasks/lessons.md"
+
+# ── Vi mode ──────────────────────────────────────────────────────────────────
+function zle-keymap-select {
+    case $KEYMAP in
+        vicmd) echo -ne '\e[1 q' ;;
+        viins) echo -ne '\e[5 q' ;;
+    esac
+}
+
+function zle-line-init {
+    echo -ne '\e[5 q'
+}
+zle -N zle-keymap-select
+zle -N zle-line-init
+
+bindkey -v
+bindkey '^R' history-incremental-search-backward
+bindkey '^S' history-incremental-search-forward
+
+# ── fzf ──────────────────────────────────────────────────────────────────────
+[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+[ -f /opt/fzf/shell/key-bindings.zsh ] && source /opt/fzf/shell/key-bindings.zsh
+[ -f /opt/fzf/shell/completion.zsh ] && source /opt/fzf/shell/completion.zsh
