@@ -159,6 +159,7 @@ You are a project management reviewer. Check all issue files in issues/*.md for 
 
 Fix any issues you find — check off completed items, update status, add missing log entries
 based on git history. If everything is in order, say so.
+Only modify files in the diff. Do not touch unrelated code.
 PROMPT
             ;;
         test)
@@ -180,13 +181,12 @@ PROMPT
         specs)
             cat <<PROMPT
 You are a documentation reviewer. Compare the code changes in the diff below against:
-1. The spec files in specs/ — are they up to date with the implementation?
-2. README.md — does it accurately reflect current features and usage?
+1. The spec files in specs/
+2. README.md
 
-Look for: new features not documented in specs, changed behavior not reflected,
-stale documentation that contradicts current code, missing spec entries.
+Those files do not meant to be comprehensive. Synthesize what we just built into reusable spec document. DO NOT over specify — `specs/` is a practical way pointer for future developers and agents to know the sketch of functionalities, history and intention behind them. Details should live in the code
 
-Update any stale documentation. If everything is in sync, say so and make no changes.
+Update any stale documentation. Incorrect information is bad. If everything is in sync, say so and make no changes.
 
 Only update documentation that is actually out of sync. Do not rewrite documentation that is fine.
 
@@ -202,8 +202,7 @@ You are reviewing the recent work session for lessons learned. Check:
 2. Are there patterns that should be captured to prevent future mistakes?
 3. Is there anything in the git log (recent commits) that suggests a lesson?
 
-Review tasks/lessons.md to avoid duplicating existing lessons.
-Only add genuinely important, non-obvious lessons. Do not add trivial observations.
+Only add genuinely important, non-obvious lessons. Do not add trivial observations. Keep wording very concise, just enough to remind you of issues, not full details.
 
 If there are no meaningful lessons to capture, say so and make no changes.
 PROMPT
