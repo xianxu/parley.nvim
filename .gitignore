@@ -6,3 +6,4 @@ tasks/*
 .test-xdg/
 .test-tmp/
 .test-home/
+.claude/constitution-check-state

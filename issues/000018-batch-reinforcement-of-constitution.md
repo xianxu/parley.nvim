@@ -31,13 +31,25 @@ The ideal is describe in `../design/2026-03-29.08-52-09.171.md`, basically we wo
 
 ## Done when
 
--
+- Constitution checks run in parallel groups, with no-commit mode, triggered by PostToolUse:Write hook when diff exceeds threshold
 
 ## Plan
 
-- [ ]
+- [x] Add `CHECK_NO_COMMIT=1` mode to `pre-merge-checks.sh` run_check()
+- [x] Create `scripts/parallel-checks.sh` with parallel group runner
+- [x] Add threshold gate (`--hook-gate`) with 500 lines/10 files + 20% growth gate
+- [x] Wire up PostToolUse:Write hook in `.claude/settings.json`
+- [x] Update `make pre-merge` to use parallel runner
+- [x] Add state file to `.gitignore`
+- [x] Manual verification: run `scripts/parallel-checks.sh --no-commit`
+- [x] Manual verification: run `make pre-merge` with `none` to skip
 
 ## Log
 
 ### 2026-03-29
 
+- Added `CHECK_NO_COMMIT` env var to `pre-merge-checks.sh` — reports violations and discards changes without user prompt
+- Created `scripts/parallel-checks.sh` — runs 5 groups (dry+pure parallel, then test, specs, plan, lessons sequentially)
+- Threshold gate: state file `.claude/constitution-check-state` tracks last checked diff size, 20% growth gate prevents re-firing
+- Hook wired in `.claude/settings.json` as `PostToolUse:Write` matcher
+- `make pre-merge` now delegates to parallel runner; `make check-*` still uses single-check interactive mode

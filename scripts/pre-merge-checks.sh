@@ -245,6 +245,16 @@ run_check() {
     after=$(git status --porcelain)
 
     if [[ "$before" != "$after" ]]; then
+        if [[ "${CHECK_NO_COMMIT:-}" == "1" ]]; then
+            # No-commit mode: report findings and discard changes
+            printf "VIOLATION [%s]: %s\n" "$name" "$label"
+            git diff 2>/dev/null || true
+            git checkout -- . 2>/dev/null || true
+            git clean -fd 2>/dev/null || true
+            printf "${GREEN}  ✓ %s complete${RESET}\n" "$label" >&2
+            return 2
+        fi
+
         printf "\n${YELLOW}  ⚠ Files changed:${RESET}\n"
         git diff --stat | sed 's/^/    /'
         # Also show new untracked files

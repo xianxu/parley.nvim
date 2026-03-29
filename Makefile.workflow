@@ -34,7 +34,7 @@ help-workflow:
 check: pre-merge
 
 pre-merge:
-	@scripts/pre-merge-checks.sh
+	@scripts/parallel-checks.sh
 
 check-%:
 	@scripts/pre-merge-checks.sh $*
