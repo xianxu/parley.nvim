@@ -105,13 +105,9 @@ assemble_context() {
         local rc
         rc=$(cat "$rc_file")
         local out="$outdir/$name.out"
-        if [[ "$rc" != "0" ]] || [[ -s "$out" ]]; then
-            printf '=== Constitution Check: %s ===\n' "$name"
-            local content
-            content=$(cat "$out")
-            print_check_output "$content"
-            printf '\n'
-        fi
+        local content=""
+        [[ -s "$out" ]] && content=$(cat "$out")
+        print_check_output "$name" "$content"
     done
 }
 
@@ -138,15 +134,7 @@ run_all_parallel() {
     for pid in "${pids[@]}"; do
         wait "$pid" || true
     done
-    for check in "${ALL_CHECKS[@]}"; do
-        local rc
-        rc=$(cat "$outdir/$check.rc" 2>/dev/null || echo 0)
-        if [[ "$rc" != "0" ]] || [[ -s "$outdir/$check.out" ]]; then
-            progress_done "$check — findings reported"
-        else
-            progress_done "$check — clean"
-        fi
-    done
+    if "$IS_TTY"; then printf "\r\033[K" >&2; fi
 }
 
 # ── Main ─────────────────────────────────────────────────────────────────────

@@ -233,14 +233,12 @@ run_check() {
         plan)
             changed_issues=$(git_changed_issues)
             if [[ -z "$changed_issues" ]]; then
-                printf "No issue files changed — skipping plan check.\n"
-                printf "${GREEN}  ✓ %s complete${RESET}\n" "$label"
+                emit_check_message "$label" "No issue files changed — skipping plan check."
                 return 0
             fi
             ;;
         lessons)
-            printf "REMINDER: Review tasks/lessons.md — capture any non-obvious patterns from this session.\n"
-            printf "${GREEN}  ✓ %s complete${RESET}\n" "$label"
+            emit_check_message "$label" "REMINDER: Review tasks/lessons.md — capture any non-obvious patterns from this session."
             return 0
             ;;
     esac
@@ -258,11 +256,10 @@ run_check() {
     printf "${BOLD}  Invoking agent...${RESET}\n" >&2
     local agent_output
     agent_output=$(run_agent_with_progress "$prompt")
-    print_check_output "$agent_output"
+    emit_check_message "$label" "$agent_output"
 
-    # In no-commit mode, agent stdout is the only output — skip change detection
+    # In no-commit mode (parallel/audit), skip change detection — caller handles formatting
     if [[ "${CHECK_NO_COMMIT:-}" == "1" ]]; then
-        printf "${GREEN}  ✓ %s complete${RESET}\n" "$label" >&2
         return 0
     fi
 
@@ -290,8 +287,6 @@ run_check() {
     else
         printf "  ${GREEN}✓ No changes needed.${RESET}\n" >&2
     fi
-
-    printf "${GREEN}  ✓ %s complete${RESET}\n" "$label" >&2
 }
 
 # ── Main ──────────────────────────────────────────────────────────────────────

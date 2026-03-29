@@ -23,12 +23,26 @@ is_clean_check_output() {
     return 1
 }
 
-# Print text, wrapping in red if it contains violations.
-print_check_output() {
-    local output="$1"
-    if is_clean_check_output "$output"; then
-        printf '%s\n' "$output"
+# Emit a check message — formats with ✓/✗ in interactive mode, raw text in audit mode.
+# Usage: emit_check_message <label> <output>
+emit_check_message() {
+    local label="$1" msg="$2"
+    if [[ "${CHECK_NO_COMMIT:-}" == "1" ]]; then
+        printf '%s\n' "$msg"
     else
+        print_check_output "$label" "$msg"
+    fi
+}
+
+# Print check result with consistent pass/fail formatting.
+# Usage: print_check_output <label> <output>
+print_check_output() {
+    local label="$1"
+    local output="$2"
+    if is_clean_check_output "$output"; then
+        printf "  ${GREEN}✓ %s${RESET}\n" "$label"
+    else
+        printf "  ${RED}✗ %s${RESET}\n" "$label"
         printf "${RED}%s${RESET}\n" "$output"
     fi
 }
