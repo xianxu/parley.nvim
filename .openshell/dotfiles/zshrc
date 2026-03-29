@@ -67,3 +67,8 @@ bindkey '^S' history-incremental-search-forward
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 [ -f /opt/fzf/shell/key-bindings.zsh ] && source /opt/fzf/shell/key-bindings.zsh
 [ -f /opt/fzf/shell/completion.zsh ] && source /opt/fzf/shell/completion.zsh
+
+# ── AI agent sandbox permissions ─────────────────────────────────────────────
+# Sandbox is the security boundary — agents get full auto-approve
+alias codex="codex --full-auto"
+export GEMINI_CLI_AUTO_APPROVE=true

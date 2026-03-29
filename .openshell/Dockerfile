@@ -94,6 +94,9 @@ RUN curl --proto '=https' --tlsv1.2 -sSf \
 COPY --chown=sandbox:sandbox dotfiles/zshrc /home/sandbox/.zshrc
 COPY --chown=sandbox:sandbox dotfiles/nvim/ /home/sandbox/.config/nvim/
 
+# AI agent configs — sandbox is the security boundary, so agents get full auto-approve
+COPY --chown=sandbox:sandbox dotfiles/claude/ /home/sandbox/.claude/
+
 # Neovim plugins (restore exact versions from lazy-lock.json, don't update)
 RUN nvim --headless "+Lazy! restore" +qa 2>/dev/null || true
 
