@@ -30,7 +30,7 @@ PRE_MERGE_CHECKS=none make push         # push skipping all checks
 ```
 
 ### Parallel Execution
-`make pre-merge` uses `scripts/parallel-checks.sh`. In audit mode (`--audit`), all six checks run fully in parallel as read-only agents (except `specs` which gets write tools). In interactive mode (no flags), it delegates to `pre-merge-checks.sh` for sequential accept/discard flow.
+`make pre-merge` uses `scripts/parallel-checks.sh`. In audit mode (`--audit`), checks run in parallel with a concurrency limit (default 3, configurable via `MAX_PARALLEL_CHECKS`) as read-only agents (except `specs` which gets write tools). In interactive mode (no flags), it delegates to `pre-merge-checks.sh` for sequential accept/discard flow.
 
 ### No-Commit Mode
 `CHECK_NO_COMMIT=1` runs checks in audit-only mode: violations are reported to stdout, agent changes are discarded. Used by hooks and `--no-commit` flag.
@@ -45,6 +45,7 @@ After each agent check (interactive mode), repo state is diffed. If files change
 A `PostToolUse:Write` hook in `.claude/settings.json` triggers batch constitution checks automatically during coding sessions when the diff crosses a threshold (400 lines or 10 files changed). Uses a 50% growth gate to avoid re-firing on every write. Findings are injected into the agent's context via stdout (silent-unless-violated).
 
 ## History
+- 2026-03-29: Concurrency-limited parallel checks (issue 000021)
 - 2026-03-29: Parallel checks with hook-gated constitution enforcement (issue 000018)
 - 2026-03-29: Progress display for headless agent calls (issue 000017)
 - 2026-03-29: Pre-merge checks (issue 000015)

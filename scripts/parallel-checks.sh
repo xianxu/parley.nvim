@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Parallel constitution check runner.
-# In audit mode, all checks run fully in parallel (read-only agents).
+# In audit mode, checks run in parallel with a concurrency limit (read-only agents).
+# Set MAX_PARALLEL_CHECKS to control concurrency (default: 3).
 # specs is the only check that may write files (documentation updates).
 #
 # Usage:
@@ -112,11 +113,22 @@ assemble_context() {
     done
 }
 
-# ── Run all checks in parallel ───────────────────────────────────────────────
+# ── Run all checks in parallel (with concurrency limit) ─────────────────────
 run_all_parallel() {
     local outdir="$1"
+    local max_jobs="${MAX_PARALLEL_CHECKS:-3}"
     local pids=()
     for check in "${ALL_CHECKS[@]}"; do
+        # Wait for a slot if at the concurrency limit
+        while [[ ${#pids[@]} -ge $max_jobs ]]; do
+            wait -n -p _done_pid "${pids[@]}" 2>/dev/null || true
+            # Rebuild pids array, removing finished processes
+            local alive=()
+            for p in "${pids[@]}"; do
+                kill -0 "$p" 2>/dev/null && alive+=("$p")
+            done
+            pids=("${alive[@]}")
+        done
         progress "running $check..."
         run_check_captured "$check" "$outdir" &
         pids+=($!)
