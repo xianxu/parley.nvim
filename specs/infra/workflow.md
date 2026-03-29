@@ -13,30 +13,24 @@ Agent-driven verification steps run before `push` and `merge`. Each check invoke
 ### Checks
 | Target          | What it does                                             |
 |-----------------|----------------------------------------------------------|
-| `check-dry`     | Review diff for DRY violations, refactor if found        |
-| `check-pure`    | Review for pure/impure separation                        |
+| `check-dry`     | Report DRY violations in diff (read-only)                |
+| `check-pure`    | Report pure/impure separation issues (read-only)         |
 | `check-plan`    | Verify issue plans complete, steps checked, logs written  |
 | `check-test`    | Run `make test`, feed output to agent for analysis       |
-| `check-specs`   | Compare code changes to specs/ and README.md             |
-| `check-lessons` | Review session for patterns worth capturing              |
+| `check-specs`   | Compare code changes to specs/ and README.md, update     |
+| `check-lessons` | Reminder to review tasks/lessons.md (no agent)           |
 
 ### Usage
 ```bash
 make pre-merge                          # parallel runner (interactive accept/discard)
+make c                                  # audit mode (all parallel, report-only)
 make check-dry                          # single check (interactive)
 PRE_MERGE_CHECKS=yynnyn make pre-merge  # preset (y=run, n=skip)
 PRE_MERGE_CHECKS=none make push         # push skipping all checks
 ```
 
 ### Parallel Execution
-`make pre-merge` uses `scripts/parallel-checks.sh` which runs checks in groups:
-1. `dry` + `pure` (parallel)
-2. `test`
-3. `specs`
-4. `plan`
-5. `lessons`
-
-Groups run in parallel; checks within a group run sequentially (to avoid conflicts on shared files).
+`make pre-merge` uses `scripts/parallel-checks.sh`. In audit mode (`--audit`), all six checks run fully in parallel as read-only agents (except `specs` which gets write tools). In interactive mode (no flags), it delegates to `pre-merge-checks.sh` for sequential accept/discard flow.
 
 ### No-Commit Mode
 `CHECK_NO_COMMIT=1` runs checks in audit-only mode: violations are reported to stdout, agent changes are discarded. Used by hooks and `--no-commit` flag.

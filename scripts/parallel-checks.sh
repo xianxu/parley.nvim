@@ -11,13 +11,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# ── Colors ────────────────────────────────────────────────────────────────────
-BOLD='\033[1m'
-CYAN='\033[1;36m'
-GREEN='\033[1;32m'
-YELLOW='\033[1;33m'
-RED='\033[1;31m'
-RESET='\033[0m'
+# ── Shared helpers ────────────────────────────────────────────────────────────
+# shellcheck source=lib.sh
+source "$SCRIPT_DIR/lib.sh"
 
 ALL_CHECKS=(dry pure test specs plan lessons)
 
@@ -51,14 +47,7 @@ progress_done() {
 # ── Threshold gate ───────────────────────────────────────────────────────────
 measure_diff() {
     local base
-    local branch
-    branch=$(git branch --show-current 2>/dev/null)
-    if [[ "$branch" == "main" ]]; then
-        base=$(git rev-parse origin/main 2>/dev/null || echo "HEAD~10")
-    else
-        base=$(git merge-base main HEAD 2>/dev/null || echo "HEAD~10")
-    fi
-
+    base=$(git_diff_base)
     DIFF_LINES=$(git diff "$base" --numstat -- ':!issues/' ':!history/' 2>/dev/null \
         | awk '{s+=$1+$2} END {print s+0}')
     DIFF_FILES=$(git diff "$base" --name-only -- ':!issues/' ':!history/' 2>/dev/null | wc -l | tr -d ' ')

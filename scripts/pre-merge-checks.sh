@@ -6,13 +6,9 @@
 #   PRE_MERGE_CHECKS=yynnyn scripts/pre-merge-checks.sh  # preset selection
 set -euo pipefail
 
-# ── Colors ────────────────────────────────────────────────────────────────────
-BOLD='\033[1m'
-CYAN='\033[1;36m'
-GREEN='\033[1;32m'
-YELLOW='\033[1;33m'
-RED='\033[1;31m'
-RESET='\033[0m'
+# ── Shared helpers ────────────────────────────────────────────────────────────
+# shellcheck source=lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 # ── Agent command (configurable via env) ──────────────────────────────────────
 AGENT_CMD="${AGENT_CMD:-claude}"
@@ -85,17 +81,9 @@ else
 fi
 
 # ── Diff context: changes since branch diverged from main ─────────────────────
-# On main: diff against origin/main (unpushed local changes).
-# On feature branch: diff against merge-base with main (branch changes).
 git_diff_context() {
     local base
-    local branch
-    branch=$(git branch --show-current 2>/dev/null)
-    if [[ "$branch" == "main" ]]; then
-        base=$(git rev-parse origin/main 2>/dev/null || echo "HEAD~10")
-    else
-        base=$(git merge-base main HEAD 2>/dev/null || echo "HEAD~10")
-    fi
+    base=$(git_diff_base)
     git diff "$base"..HEAD -- ':!issues/' ':!history/' 2>/dev/null || true
 }
 
@@ -248,21 +236,17 @@ run_check() {
     printf "${BOLD}  Invoking agent...${RESET}\n" >&2
     run_agent_with_progress "$prompt"
 
+    # In no-commit mode, agent stdout is the only output — skip change detection
+    if [[ "${CHECK_NO_COMMIT:-}" == "1" ]]; then
+        printf "${GREEN}  ✓ %s complete${RESET}\n" "$label" >&2
+        return 0
+    fi
+
     # Detect changes
     local after
     after=$(git status --porcelain)
 
     if [[ "$before" != "$after" ]]; then
-        if [[ "${CHECK_NO_COMMIT:-}" == "1" ]]; then
-            # No-commit mode: report findings and discard changes
-            printf "VIOLATION [%s]: %s\n" "$name" "$label"
-            git diff 2>/dev/null || true
-            git checkout -- . 2>/dev/null || true
-            git clean -fd 2>/dev/null || true
-            printf "${GREEN}  ✓ %s complete${RESET}\n" "$label" >&2
-            return 2
-        fi
-
         printf "\n${YELLOW}  ⚠ Files changed:${RESET}\n" >&2
         git diff --stat | sed 's/^/    /' >&2
         # Also show new untracked files
