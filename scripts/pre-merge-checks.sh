@@ -296,12 +296,17 @@ main() {
     local default
     default=$(printf 'y%.0s' $(seq 1 "$num_checks"))
     local selection="${PRE_MERGE_CHECKS:-}"
+    if [[ "$selection" == "none" ]]; then
+        selection=$(printf 'n%.0s' $(seq 1 "$num_checks"))
+    fi
 
     if [[ -z "$selection" ]]; then
-        printf "\n${BOLD}Select checks [%s] (y=run, n=skip, Enter=all): ${RESET}" "$default"
+        printf "\n${BOLD}Select checks [%s] (y=run, n=skip, Enter=all, 'none' to skip all): ${RESET}" "$default"
         read -r selection </dev/tty
         if [[ -z "$selection" ]]; then
             selection="$default"
+        elif [[ "$selection" == "none" ]]; then
+            selection=$(printf 'n%.0s' $(seq 1 "$num_checks"))
         fi
     fi
 
