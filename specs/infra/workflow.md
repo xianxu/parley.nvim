@@ -5,6 +5,8 @@ Work is tracked via single-file-per-issue markdown in `issues/`. Two modes:
 - **On main**: `make fetch` → work → `make push` (auto-commit, close GH issues, archive)
 - **On branch**: `make issue` → work in worktree → `make pull-request` → `make merge`
 
+Completed issues are moved to `history/` upon archival. These are considered low-signal history and should generally be avoided by agent workflows to preserve context efficiency.
+
 Worktrees created under `../worktree/` for portability between local and openshell environments.
 
 ## Pre-Merge Checks

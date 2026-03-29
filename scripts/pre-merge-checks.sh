@@ -14,69 +14,130 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 AGENT_CMD="${AGENT_CMD:-claude}"
 ALLOWED_TOOLS="${ALLOWED_TOOLS:-Edit,Read,Write,Grep,Glob,Bash}"
 
+# Sandbox detection: inside Docker container = full auto-approve
+is_sandbox() { [[ -f /.dockerenv ]]; }
+
+# ── Agent adapters ───────────────────────────────────────────────────────────
+# Each adapter builds the correct command line for its agent.
+# Returns the command via stdout (eval-safe).
+
+agent_run_claude() {
+    local prompt="$1" stream="$2"
+    local cmd="claude -p"
+    cmd+=" --allowedTools $(printf '%q' "$ALLOWED_TOOLS")"
+    cmd+=" --permission-mode bypassPermissions"
+    if [[ "$stream" == "1" ]]; then
+        cmd+=" --output-format stream-json"
+    fi
+    cmd+=" $(printf '%q' "$prompt")"
+    echo "$cmd"
+}
+
+agent_run_codex() {
+    local prompt="$1" stream="$2"
+    local cmd="codex exec"
+    if is_sandbox; then
+        cmd+=" --full-auto"
+    fi
+    cmd+=" $(printf '%q' "$prompt")"
+    echo "$cmd"
+}
+
+agent_run_gemini() {
+    local prompt="$1" stream="$2"
+    local cmd="gemini"
+    if is_sandbox; then
+        cmd+=" --yolo"
+    fi
+    cmd+=" -p $(printf '%q' "$prompt")"
+    echo "$cmd"
+}
+
+# Resolve the adapter function name for the current AGENT_CMD
+agent_adapter() {
+    case "$AGENT_CMD" in
+        claude) echo "agent_run_claude" ;;
+        codex)  echo "agent_run_codex" ;;
+        gemini) echo "agent_run_gemini" ;;
+        *)
+            printf "${RED}Unknown AGENT_CMD: %s (supported: claude, codex, gemini)${RESET}\n" "$AGENT_CMD" >&2
+            return 1
+            ;;
+    esac
+}
+
 # ── Run agent with streaming progress ────────────────────────────────────────
-# Invokes claude -p with stream-json output and displays a single updating
-# progress line showing the current tool being called.  Falls back to plain
-# pipe when jq is not available.
+# For claude: parses stream-json output and displays tool-call progress.
+# For other agents: pipes output directly (no structured streaming).
 if command -v jq &>/dev/null; then
     run_agent_with_progress() {
         local prompt="$1"
+        local adapter
+        adapter=$(agent_adapter) || return 1
         local is_tty=false
         if [[ -t 2 ]]; then is_tty=true; fi
 
-        $AGENT_CMD -p "$prompt" \
-            --allowedTools "$ALLOWED_TOOLS" \
-            --permission-mode bypassPermissions \
-            --output-format stream-json 2>/dev/null \
-        | while IFS= read -r line; do
-            local evt_type
-            evt_type=$(printf '%s' "$line" | jq -r '.type // empty' 2>/dev/null) || continue
+        # Only claude supports stream-json progress
+        if [[ "$AGENT_CMD" == "claude" ]]; then
+            local cmd
+            cmd=$($adapter "$prompt" 1)
+            eval "$cmd" 2>/dev/null \
+            | while IFS= read -r line; do
+                local evt_type
+                evt_type=$(printf '%s' "$line" | jq -r '.type // empty' 2>/dev/null) || continue
 
-            case "$evt_type" in
-                assistant)
-                    local tool_name
-                    tool_name=$(printf '%s' "$line" | jq -r '
-                        [.message.content[] | select(.type == "tool_use") | .name]
-                        | last // empty
-                    ' 2>/dev/null) || true
-                    if [[ -n "${tool_name:-}" ]]; then
-                        local hint
-                        hint=$(printf '%s' "$line" | jq -r '
-                            [.message.content[] | select(.type == "tool_use")]
-                            | last
-                            | .input
-                            | (.file_path // .command // .pattern // .path // empty)
-                        ' 2>/dev/null | head -1 | cut -c1-60) || true
-                        if "$is_tty"; then
-                            if [[ -n "${hint:-}" ]]; then
-                                printf "\r\033[K  ${YELLOW}⟳ %s${RESET} %s" "$tool_name" "$hint" >&2
+                case "$evt_type" in
+                    assistant)
+                        local tool_name
+                        tool_name=$(printf '%s' "$line" | jq -r '
+                            [.message.content[] | select(.type == "tool_use") | .name]
+                            | last // empty
+                        ' 2>/dev/null) || true
+                        if [[ -n "${tool_name:-}" ]]; then
+                            local hint
+                            hint=$(printf '%s' "$line" | jq -r '
+                                [.message.content[] | select(.type == "tool_use")]
+                                | last
+                                | .input
+                                | (.file_path // .command // .pattern // .path // empty)
+                            ' 2>/dev/null | head -1 | cut -c1-60) || true
+                            if "$is_tty"; then
+                                if [[ -n "${hint:-}" ]]; then
+                                    printf "\r\033[K  ${YELLOW}⟳ %s${RESET} %s" "$tool_name" "$hint" >&2
+                                else
+                                    printf "\r\033[K  ${YELLOW}⟳ %s${RESET}" "$tool_name" >&2
+                                fi
                             else
-                                printf "\r\033[K  ${YELLOW}⟳ %s${RESET}" "$tool_name" >&2
-                            fi
-                        else
-                            if [[ -n "${hint:-}" ]]; then
-                                printf "  > %s %s\n" "$tool_name" "$hint" >&2
-                            else
-                                printf "  > %s\n" "$tool_name" >&2
+                                if [[ -n "${hint:-}" ]]; then
+                                    printf "  > %s %s\n" "$tool_name" "$hint" >&2
+                                else
+                                    printf "  > %s\n" "$tool_name" >&2
+                                fi
                             fi
                         fi
-                    fi
-                    ;;
-                result)
-                    if "$is_tty"; then
-                        printf "\r\033[K" >&2
-                    fi
-                    printf '%s' "$line" | jq -r '.result // empty' 2>/dev/null | sed 's/^/  /' || true
-                    ;;
-            esac
-        done || true
+                        ;;
+                    result)
+                        if "$is_tty"; then
+                            printf "\r\033[K" >&2
+                        fi
+                        printf '%s' "$line" | jq -r '.result // empty' 2>/dev/null | sed 's/^/  /' || true
+                        ;;
+                esac
+            done || true
+        else
+            local cmd
+            cmd=$($adapter "$prompt" 0)
+            eval "$cmd" 2>&1 | sed 's/^/  /'
+        fi
     }
 else
     run_agent_with_progress() {
         local prompt="$1"
-        $AGENT_CMD -p "$prompt" \
-            --allowedTools "$ALLOWED_TOOLS" \
-            --permission-mode bypassPermissions 2>&1 | sed 's/^/  /'
+        local adapter
+        adapter=$(agent_adapter) || return 1
+        local cmd
+        cmd=$($adapter "$prompt" 0)
+        eval "$cmd" 2>&1 | sed 's/^/  /'
     }
 fi
 

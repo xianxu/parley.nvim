@@ -12,10 +12,10 @@ RESET='\033[0m'
 # ── Output helpers ──────────────────────────────────────────────────────────
 # Detect whether check output indicates a clean result (no violations).
 # Returns 0 if clean, 1 if violations found.
+# Empty output is NOT clean — it likely means the agent failed silently.
 is_clean_check_output() {
     local output="$1"
-    # Empty output counts as clean
-    [[ -z "$output" ]] && return 0
+    [[ -z "$output" ]] && return 1
     # Known clean patterns from agent prompts
     echo "$output" | grep -qiE \
         'no (DRY|PURE) violations found|all tests pass|no changes needed|in sync|no issue files changed' \

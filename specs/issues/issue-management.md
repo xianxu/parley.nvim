@@ -78,6 +78,8 @@ When the cursor is on a plan checklist line (`- [ ] Some task`), `IssueDecompose
 
 Done issues are moved from `issues/` to `history/` by `make push` (main branch) or `make merge` (worktree branch). The issue finder's "all+history" view mode can browse archived issues. GitHub issues with `github_issue:` frontmatter are auto-closed on push/merge.
 
+Archived issues remain available for lookup, ID allocation, and finder browsing, but routine planning and implementation should center on the live `issues/` set. Treat `history/` as low-signal reference material rather than primary working context. Agent workflows should avoid reading history files unless specifically directed to save context and time.
+
 ## Makefile Integration
 
 - `make fetch N` — creates `issues/NNNN-slug.md` from GitHub issue #N with `github_issue: N` frontmatter

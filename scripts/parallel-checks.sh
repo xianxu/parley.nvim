@@ -83,6 +83,7 @@ update_state() {
 # ── Run a single check, capturing output ─────────────────────────────────────
 # Read-only tools for most checks; write tools only for specs.
 run_check_captured() {
+    trap - EXIT  # Don't inherit parent's cleanup trap in background subshells
     local name="$1" outdir="$2"
     local rc=0
     local tools="Read,Grep,Glob,Bash"
@@ -193,10 +194,15 @@ main() {
 
     if [[ "$HAS_FAILURES" -eq 1 ]]; then
         printf "\n${YELLOW}${BOLD}Some checks reported issues.${RESET}\n" >&2
-        printf "${BOLD}Stop to address them? [Y/n]: ${RESET}" >&2
-        read -r answer </dev/tty
-        if [[ "$answer" == "n" || "$answer" == "N" ]]; then
-            printf "  Continuing...\n" >&2
+        if [[ -e /dev/tty ]]; then
+            printf "${BOLD}Stop to address them? [Y/n]: ${RESET}" >&2
+            read -r answer </dev/tty
+            if [[ "$answer" == "n" || "$answer" == "N" ]]; then
+                printf "  Continuing...\n" >&2
+            else
+                printf "  Stopping. Address the issues above, then re-run.\n" >&2
+                return 1
+            fi
         else
             printf "  Stopping. Address the issues above, then re-run.\n" >&2
             return 1
