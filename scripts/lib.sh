@@ -23,6 +23,13 @@ is_clean_check_output() {
     return 1
 }
 
+# Informational output — shown but not treated as a failure.
+is_info_check_output() {
+    local output="$1"
+    echo "$output" | grep -qiE 'REMINDER:' && return 0
+    return 1
+}
+
 # Emit a check message — formats with ✓/✗ in interactive mode, raw text in audit mode.
 # Usage: emit_check_message <label> <output>
 emit_check_message() {
@@ -41,6 +48,9 @@ print_check_output() {
     local output="$2"
     if is_clean_check_output "$output"; then
         printf "  ${GREEN}✓ %s${RESET}\n" "$label"
+    elif is_info_check_output "$output"; then
+        printf "  ${YELLOW}ℹ %s${RESET}\n" "$label"
+        printf "  %s\n" "$output"
     else
         printf "  ${RED}✗ %s${RESET}\n" "$label"
         printf "${RED}%s${RESET}\n" "$output"

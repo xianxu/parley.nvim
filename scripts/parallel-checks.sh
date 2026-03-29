@@ -106,8 +106,10 @@ run_check_captured() {
 }
 
 # ── Assemble context from check outputs ──────────────────────────────────────
+# Prints results and sets HAS_FAILURES=1 if any check has violations.
 assemble_context() {
     local outdir="$1"
+    HAS_FAILURES=0
     for name in "${ALL_CHECKS[@]}"; do
         local rc_file="$outdir/$name.rc"
         [[ -f "$rc_file" ]] || continue
@@ -116,6 +118,9 @@ assemble_context() {
         local out="$outdir/$name.out"
         local content=""
         [[ -s "$out" ]] && content=$(cat "$out")
+        if ! is_clean_check_output "$content" && ! is_info_check_output "$content"; then
+            HAS_FAILURES=1
+        fi
         print_check_output "$name" "$content"
     done
 }
@@ -186,7 +191,19 @@ main() {
         update_state
     fi
 
-    printf "\n${GREEN}${BOLD}All constitution checks complete.${RESET}\n" >&2
+    if [[ "$HAS_FAILURES" -eq 1 ]]; then
+        printf "\n${YELLOW}${BOLD}Some checks reported issues.${RESET}\n" >&2
+        printf "${BOLD}Stop to address them? [Y/n]: ${RESET}" >&2
+        read -r answer </dev/tty
+        if [[ "$answer" == "n" || "$answer" == "N" ]]; then
+            printf "  Continuing...\n" >&2
+        else
+            printf "  Stopping. Address the issues above, then re-run.\n" >&2
+            return 1
+        fi
+    else
+        printf "\n${GREEN}${BOLD}All constitution checks passed.${RESET}\n" >&2
+    fi
 }
 
 main "$@"
