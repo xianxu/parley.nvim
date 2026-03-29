@@ -81,11 +81,15 @@ else
 fi
 
 # ── Diff context: changes since branch diverged from main ─────────────────────
-git_diff_context() {
+_git_diff_base() {
     local base
     base=$(git_diff_base)
-    git diff "$base"..HEAD -- ':!issues/' ':!history/' 2>/dev/null || true
+    git diff "$base"..HEAD "$@" 2>/dev/null || true
 }
+
+git_diff_context()        { _git_diff_base -- ':!issues/' ':!history/'; }
+git_diff_context_issues() { _git_diff_base -- 'issues/*.md'; }
+git_changed_issues()      { _git_diff_base --name-only -- 'issues/*.md'; }
 
 # ── Check table ───────────────────────────────────────────────────────────────
 # Each check: name|label|pre-command (empty if none)
@@ -106,6 +110,7 @@ build_prompt() {
     local name="$1"
     local pre_output="$2"
     local diff_ctx="$3"
+    local changed_issues="${4:-}"
 
     case "$name" in
         dry)
@@ -144,15 +149,19 @@ PROMPT
         plan)
             cat <<PROMPT
 You are a project management reviewer (TPM). You don't know technical details.
-Check all open issue files in issues/*.md for completeness:
+Only review the issue files that changed in this diff — do NOT review other issues.
 
-1. Does each open issue have a filled-in Plan section with checklist items?
+For each changed issue file, check:
+1. Does it have a filled-in Plan section with checklist items?
 2. Are plan checklist items that appear done (based on the diff and git log) still unchecked?
 3. Does the Log section have entries documenting what was done?
 4. Is the status frontmatter correct (should it be "done")?
 
 Report any issues you find. Do NOT modify any files.
 If a checklist item looks completed based on the diff, say so and recommend checking it off.
+
+Changed issue files:
+$changed_issues
 
 Diff:
 $diff_ctx
@@ -219,7 +228,16 @@ run_check() {
     fi
 
     # Handle checks that don't need an agent
+    local changed_issues=""
     case "$name" in
+        plan)
+            changed_issues=$(git_changed_issues)
+            if [[ -z "$changed_issues" ]]; then
+                printf "No issue files changed — skipping plan check.\n"
+                printf "${GREEN}  ✓ %s complete${RESET}\n" "$label"
+                return 0
+            fi
+            ;;
         lessons)
             printf "REMINDER: Review tasks/lessons.md — capture any non-obvious patterns from this session.\n"
             printf "${GREEN}  ✓ %s complete${RESET}\n" "$label"
@@ -229,9 +247,13 @@ run_check() {
 
     # Build prompt and invoke agent
     local diff_ctx
-    diff_ctx=$(git_diff_context)
+    if [[ "$name" == "plan" ]]; then
+        diff_ctx=$(git_diff_context_issues)
+    else
+        diff_ctx=$(git_diff_context)
+    fi
     local prompt
-    prompt=$(build_prompt "$name" "$pre_output" "$diff_ctx")
+    prompt=$(build_prompt "$name" "$pre_output" "$diff_ctx" "$changed_issues")
 
     printf "${BOLD}  Invoking agent...${RESET}\n" >&2
     run_agent_with_progress "$prompt"
