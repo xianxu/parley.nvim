@@ -25,7 +25,7 @@ if command -v jq &>/dev/null; then
     run_agent_with_progress() {
         local prompt="$1"
         local is_tty=false
-        [[ -t 2 ]] && is_tty=true
+        if [[ -t 2 ]]; then is_tty=true; fi
 
         $AGENT_CMD -p "$prompt" \
             --allowedTools Edit,Read,Write,Grep,Glob,Bash \
@@ -40,23 +40,23 @@ if command -v jq &>/dev/null; then
                     tool_name=$(printf '%s' "$line" | jq -r '
                         [.message.content[] | select(.type == "tool_use") | .name]
                         | last // empty
-                    ' 2>/dev/null)
-                    if [[ -n "$tool_name" ]]; then
+                    ' 2>/dev/null) || true
+                    if [[ -n "${tool_name:-}" ]]; then
                         local hint
                         hint=$(printf '%s' "$line" | jq -r '
                             [.message.content[] | select(.type == "tool_use")]
                             | last
                             | .input
                             | (.file_path // .command // .pattern // .path // empty)
-                        ' 2>/dev/null | head -1 | cut -c1-60)
+                        ' 2>/dev/null | head -1 | cut -c1-60) || true
                         if "$is_tty"; then
-                            if [[ -n "$hint" ]]; then
+                            if [[ -n "${hint:-}" ]]; then
                                 printf "\r\033[K  ${YELLOW}⟳ %s${RESET} %s" "$tool_name" "$hint" >&2
                             else
                                 printf "\r\033[K  ${YELLOW}⟳ %s${RESET}" "$tool_name" >&2
                             fi
                         else
-                            if [[ -n "$hint" ]]; then
+                            if [[ -n "${hint:-}" ]]; then
                                 printf "  > %s %s\n" "$tool_name" "$hint" >&2
                             else
                                 printf "  > %s\n" "$tool_name" >&2
@@ -68,10 +68,10 @@ if command -v jq &>/dev/null; then
                     if "$is_tty"; then
                         printf "\r\033[K" >&2
                     fi
-                    printf '%s' "$line" | jq -r '.result // empty' 2>/dev/null | sed 's/^/  /'
+                    printf '%s' "$line" | jq -r '.result // empty' 2>/dev/null | sed 's/^/  /' || true
                     ;;
             esac
-        done
+        done || true
     }
 else
     run_agent_with_progress() {

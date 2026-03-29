@@ -25,7 +25,7 @@ The ideal is describe in `../design/2026-03-29.08-52-09.171.md`, basically we wo
 
 5/ when those all finish, assemble context for the agent. 
 
-6/ is shell script still a good way to run those multi-process scatter/gather pattern?
+6/ is shell script still a good way to run those multi-process scatter/gather pattern? maybe should use typescript, given all the nice cli are build in it it seems? 
 
 7/ such parallel invocation pattern is also beneficial to `make push`, `make merge`. but if we are to do it, there might be multiple progress bars, one for the parallelism.
 
