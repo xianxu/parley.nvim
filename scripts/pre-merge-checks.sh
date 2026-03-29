@@ -16,6 +16,7 @@ RESET='\033[0m'
 
 # ── Agent command (configurable via env) ──────────────────────────────────────
 AGENT_CMD="${AGENT_CMD:-claude}"
+ALLOWED_TOOLS="${ALLOWED_TOOLS:-Edit,Read,Write,Grep,Glob,Bash}"
 
 # ── Run agent with streaming progress ────────────────────────────────────────
 # Invokes claude -p with stream-json output and displays a single updating
@@ -28,7 +29,8 @@ if command -v jq &>/dev/null; then
         if [[ -t 2 ]]; then is_tty=true; fi
 
         $AGENT_CMD -p "$prompt" \
-            --allowedTools Edit,Read,Write,Grep,Glob,Bash \
+            --allowedTools "$ALLOWED_TOOLS" \
+            --permission-mode bypassPermissions \
             --output-format stream-json 2>/dev/null \
         | while IFS= read -r line; do
             local evt_type
@@ -77,7 +79,8 @@ else
     run_agent_with_progress() {
         local prompt="$1"
         $AGENT_CMD -p "$prompt" \
-            --allowedTools Edit,Read,Write,Grep,Glob,Bash 2>&1 | sed 's/^/  /'
+            --allowedTools "$ALLOWED_TOOLS" \
+            --permission-mode bypassPermissions 2>&1 | sed 's/^/  /'
     }
 fi
 
@@ -123,9 +126,10 @@ You are a code reviewer. Review the following diff for DRY (Don't Repeat Yoursel
 Look for: duplicated logic, copy-pasted code blocks, functions that could be consolidated,
 repeated patterns that should be extracted into shared helpers.
 
-If you find violations, refactor the code to fix them. If the code is already DRY, say so and make no changes.
+Report any violations you find with file paths and line numbers. Suggest how to fix them.
+Do NOT modify any files. Only report.
 
-Only modify files that have actual DRY violations. Do not refactor code that is not in the diff.
+If the code is already DRY, say "No DRY violations found."
 
 Diff:
 $diff_ctx
@@ -140,9 +144,10 @@ then use minimal "glue" code to integrate with UI and IO.
 Look for: business logic mixed with IO, functions that could be pure but aren't,
 side effects that could be moved to the boundary.
 
-If you find violations, refactor to separate pure logic from impure integration. If already clean, say so.
+Report any violations with file paths and line numbers. Suggest how to refactor.
+Do NOT modify any files. Only report.
 
-Only modify files in the diff. Do not touch unrelated code.
+If the code is clean, say "No PURE violations found."
 
 Diff:
 $diff_ctx
@@ -150,16 +155,19 @@ PROMPT
             ;;
         plan)
             cat <<PROMPT
-You are a project management reviewer. Check all issue files in issues/*.md for completeness:
+You are a project management reviewer (TPM). You don't know technical details.
+Check all open issue files in issues/*.md for completeness:
 
 1. Does each open issue have a filled-in Plan section with checklist items?
-2. Are all plan checklist items marked complete (checked off)?
+2. Are plan checklist items that appear done (based on the diff and git log) still unchecked?
 3. Does the Log section have entries documenting what was done?
-4. Is the status frontmatter set correctly (done if all work is complete)?
+4. Is the status frontmatter correct (should it be "done")?
 
-Fix any issues you find — check off completed items, update status, add missing log entries
-based on git history. If everything is in order, say so.
-Only modify files in the diff. Do not touch unrelated code.
+Report any issues you find. Do NOT modify any files.
+If a checklist item looks completed based on the diff, say so and recommend checking it off.
+
+Diff:
+$diff_ctx
 PROMPT
             ;;
         test)
@@ -167,12 +175,12 @@ PROMPT
 You are a test results analyst. The following is the output from running the test suite.
 Analyze the results:
 
-1. Are there any test failures? If so, identify the root cause and fix the code.
+1. Are there any test failures? If so, identify the root cause.
 2. Are there any errors or warnings that indicate problems?
 3. Are there flaky or suspicious test results?
 
-If all tests pass cleanly, say "All tests pass" and make no changes.
-If there are failures, fix them.
+Report your findings. Do NOT modify any files.
+If all tests pass cleanly, say "All tests pass."
 
 Test output:
 $pre_output
@@ -184,7 +192,7 @@ You are a documentation reviewer. Compare the code changes in the diff below aga
 1. The spec files in specs/
 2. README.md
 
-Those files do not meant to be comprehensive. Synthesize what we just built into reusable spec document. DO NOT over specify — `specs/` is a practical way pointer for future developers and agents to know the sketch of functionalities, history and intention behind them. Details should live in the code
+Those files do not meant to be comprehensive. Synthesize what we just built into reusable spec document. DO NOT over specify — specs/ is a practical pointer for future developers and agents to know the sketch of functionalities, history and intention behind them. Details should live in the code.
 
 Update any stale documentation. Incorrect information is bad. If everything is in sync, say so and make no changes.
 
@@ -195,17 +203,8 @@ $diff_ctx
 PROMPT
             ;;
         lessons)
-            cat <<PROMPT
-You are reviewing the recent work session for lessons learned. Check:
-
-1. Were there any mistakes, false starts, or corrections during this session?
-2. Are there patterns that should be captured to prevent future mistakes?
-3. Is there anything in the git log (recent commits) that suggests a lesson?
-
-Only add genuinely important, non-obvious lessons. Do not add trivial observations. Keep wording very concise, just enough to remind you of issues, not full details.
-
-If there are no meaningful lessons to capture, say so and make no changes.
-PROMPT
+            # No agent — handled directly in run_check
+            return 0
             ;;
     esac
 }
@@ -217,7 +216,7 @@ run_check() {
     local label="${CHECK_LABELS[$idx]}"
     local pre_cmd="${CHECK_PRE_CMDS[$idx]}"
 
-    printf "\n${CYAN}━━━ %s: %s ━━━${RESET}\n" "$name" "$label"
+    printf "\n${CYAN}━━━ %s: %s ━━━${RESET}\n" "$name" "$label" >&2
 
     # Snapshot repo state
     local before
@@ -226,10 +225,19 @@ run_check() {
     # Run pre-command if any
     local pre_output=""
     if [[ -n "$pre_cmd" ]]; then
-        printf "${BOLD}  Running: %s${RESET}\n" "$pre_cmd"
+        printf "${BOLD}  Running: %s${RESET}\n" "$pre_cmd" >&2
         pre_output=$(eval "$pre_cmd" 2>&1) || true
-        printf "%s\n" "$pre_output" | tail -20 | sed 's/^/  /'
+        printf "%s\n" "$pre_output" | tail -20 | sed 's/^/  /' >&2
     fi
+
+    # Handle checks that don't need an agent
+    case "$name" in
+        lessons)
+            printf "REMINDER: Review tasks/lessons.md — capture any non-obvious patterns from this session.\n"
+            printf "${GREEN}  ✓ %s complete${RESET}\n" "$label"
+            return 0
+            ;;
+    esac
 
     # Build prompt and invoke agent
     local diff_ctx
@@ -237,7 +245,7 @@ run_check() {
     local prompt
     prompt=$(build_prompt "$name" "$pre_output" "$diff_ctx")
 
-    printf "${BOLD}  Invoking agent...${RESET}\n"
+    printf "${BOLD}  Invoking agent...${RESET}\n" >&2
     run_agent_with_progress "$prompt"
 
     # Detect changes
@@ -255,27 +263,27 @@ run_check() {
             return 2
         fi
 
-        printf "\n${YELLOW}  ⚠ Files changed:${RESET}\n"
-        git diff --stat | sed 's/^/    /'
+        printf "\n${YELLOW}  ⚠ Files changed:${RESET}\n" >&2
+        git diff --stat | sed 's/^/    /' >&2
         # Also show new untracked files
-        git ls-files --others --exclude-standard | sed 's/^/    + /'
+        git ls-files --others --exclude-standard | sed 's/^/    + /' >&2
 
-        printf "${BOLD}  Accept changes? [Y/n]: ${RESET}"
+        printf "${BOLD}  Accept changes? [Y/n]: ${RESET}" >&2
         read -r answer </dev/tty
         if [[ "$answer" == "n" || "$answer" == "N" ]]; then
-            printf "  ${RED}Discarding changes...${RESET}\n"
+            printf "  ${RED}Discarding changes...${RESET}\n" >&2
             git checkout -- . 2>/dev/null || true
             git clean -fd 2>/dev/null || true
         else
-            printf "  ${GREEN}Changes accepted, committing...${RESET}\n"
+            printf "  ${GREEN}Changes accepted, committing...${RESET}\n" >&2
             git add -A
             git commit -m "pre-merge check: $name"
         fi
     else
-        printf "  ${GREEN}✓ No changes needed.${RESET}\n"
+        printf "  ${GREEN}✓ No changes needed.${RESET}\n" >&2
     fi
 
-    printf "${GREEN}  ✓ %s complete${RESET}\n" "$label"
+    printf "${GREEN}  ✓ %s complete${RESET}\n" "$label" >&2
 }
 
 # ── Main ──────────────────────────────────────────────────────────────────────

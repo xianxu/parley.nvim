@@ -33,6 +33,9 @@ help-workflow:
 # ── Pre-merge checks ─────────────────────────────────────────────────────────
 check: pre-merge
 
+c:
+	@scripts/parallel-checks.sh --audit
+
 pre-merge:
 	@scripts/parallel-checks.sh
 
