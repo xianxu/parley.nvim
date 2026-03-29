@@ -6,7 +6,7 @@
 - Enter plan mode for ANY non-trivial task (3+ steps, architectural decisions, change more than 2 files, 50 lines)
 - Work is tracked in `issues/` folder as single-file-per-issue markdown
 - Plan within the issue file's `## Plan` section (checklist), log discoveries, tools you used or installed in `## Log`
-- IGNORE `history/*` — they are archived completed issues
+- AVOID READING `history/*`, they are history, low signal
 - Wait for user approval before implementation for ANY non-trivial task
 - If something goes sideways, STOP and re-plan immediately: don't keep pushing
 - Use plan mode for verification steps, not just building
