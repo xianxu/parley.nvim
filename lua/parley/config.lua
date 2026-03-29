@@ -318,6 +318,9 @@ local config = {
 	chat_shortcut_export_html = { modes = { "n" }, shortcut = "<C-g>eh" },
 	chat_shortcut_exchange_cut = { modes = { "n", "v" }, shortcut = "<C-g>X" },
 	chat_shortcut_exchange_paste = { modes = { "n" }, shortcut = "<C-g>V" },
+	chat_shortcut_copy_fence = { modes = { "n" }, shortcut = "<leader>cf" },
+	chat_shortcut_copy_location = { modes = { "n", "v" }, shortcut = "<leader>cl" },
+	chat_shortcut_copy_location_content = { modes = { "n", "v" }, shortcut = "<leader>cL" },
 	-- global shortcuts (available in any buffer)
 	global_shortcut_new = { modes = { "n", "i" }, shortcut = "<C-g>c" },
 	global_shortcut_review = { modes = { "n" }, shortcut = "<C-g>C" },

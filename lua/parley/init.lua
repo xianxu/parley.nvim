@@ -1355,6 +1355,36 @@ local function keybinding_help_lines(context)
 			),
 			"Paste exchange(s)"
 		)
+		add(
+			resolve_shortcut(
+				"Parley copy code fence",
+				shortcut_modes(cfg.chat_shortcut_copy_fence, { "n" }),
+				cfg.chat_shortcut_copy_fence,
+				"<leader>cf",
+				current_buf
+			),
+			"Copy code fence to clipboard"
+		)
+		add(
+			resolve_shortcut(
+				"Parley copy location",
+				shortcut_modes(cfg.chat_shortcut_copy_location, { "n", "v" }),
+				cfg.chat_shortcut_copy_location,
+				"<leader>cl",
+				current_buf
+			),
+			"Copy file:line to clipboard"
+		)
+		add(
+			resolve_shortcut(
+				"Parley copy location + content",
+				shortcut_modes(cfg.chat_shortcut_copy_location_content, { "n", "v" }),
+				cfg.chat_shortcut_copy_location_content,
+				"<leader>cL",
+				current_buf
+			),
+			"Copy file:line + content to clipboard"
+		)
 	end
 
 	-- Markdown buffer keys (shown for markdown, note, and issue contexts)
@@ -1755,6 +1785,30 @@ M.prep_chat = function(buf, file_name)
 		end
 	end
 
+	-- <leader>cf: copy code fence content to clipboard
+	local copy_fence = M.config.chat_shortcut_copy_fence
+	if copy_fence then
+		for _, mode in ipairs(copy_fence.modes) do
+			M.helpers.set_keymap({ buf }, mode, copy_fence.shortcut, M.cmd.CopyCodeFence, "Parley copy code fence")
+		end
+	end
+
+	-- <leader>cl: copy filename:line or filename:range to clipboard
+	local copy_loc = M.config.chat_shortcut_copy_location
+	if copy_loc then
+		for _, mode in ipairs(copy_loc.modes) do
+			M.helpers.set_keymap({ buf }, mode, copy_loc.shortcut, M.cmd.CopyLocation, "Parley copy location")
+		end
+	end
+
+	-- <leader>cL: copy filename:line + content to clipboard
+	local copy_loc_content = M.config.chat_shortcut_copy_location_content
+	if copy_loc_content then
+		for _, mode in ipairs(copy_loc_content.modes) do
+			M.helpers.set_keymap({ buf }, mode, copy_loc_content.shortcut, M.cmd.CopyLocationContent, "Parley copy location + content")
+		end
+	end
+
 	-- Set file opening keybinding
 	local of = M.config.chat_shortcut_open_file
 	if of then
@@ -1904,6 +1958,30 @@ M.setup_markdown_keymaps = function(buf)
 				M.cmd.OpenFileUnderCursor,
 				"Parley open chat reference under cursor"
 			)
+		end
+	end
+
+	-- <leader>cf: copy code fence content to clipboard
+	local copy_fence = M.config.chat_shortcut_copy_fence
+	if copy_fence then
+		for _, mode in ipairs(copy_fence.modes) do
+			M.helpers.set_keymap({ buf }, mode, copy_fence.shortcut, M.cmd.CopyCodeFence, "Parley copy code fence")
+		end
+	end
+
+	-- <leader>cl: copy filename:line or filename:range to clipboard
+	local copy_loc = M.config.chat_shortcut_copy_location
+	if copy_loc then
+		for _, mode in ipairs(copy_loc.modes) do
+			M.helpers.set_keymap({ buf }, mode, copy_loc.shortcut, M.cmd.CopyLocation, "Parley copy location")
+		end
+	end
+
+	-- <leader>cL: copy filename:line + content to clipboard
+	local copy_loc_content = M.config.chat_shortcut_copy_location_content
+	if copy_loc_content then
+		for _, mode in ipairs(copy_loc_content.modes) do
+			M.helpers.set_keymap({ buf }, mode, copy_loc_content.shortcut, M.cmd.CopyLocationContent, "Parley copy location + content")
 		end
 	end
 
@@ -2964,6 +3042,96 @@ M.open_chat_reference = function(current_line, cursor_col, _in_insert_mode, full
 			M.logger.warning("Chat file not found: " .. expanded_path)
 			return false
 		end
+	end
+end
+
+-- Copy the content of the code fence surrounding the cursor to the system clipboard.
+M.cmd.CopyCodeFence = function()
+	local buf = vim.api.nvim_get_current_buf()
+	local cursor_row = vim.api.nvim_win_get_cursor(0)[1] -- 1-indexed
+	local line_count = vim.api.nvim_buf_line_count(buf)
+
+	-- Scan up for opening ```
+	local fence_start = nil
+	for i = cursor_row, 1, -1 do
+		local line = vim.api.nvim_buf_get_lines(buf, i - 1, i, false)[1]
+		if line:match("^%s*```") then
+			fence_start = i
+			break
+		end
+	end
+
+	if not fence_start then
+		vim.notify("Not inside a code fence", vim.log.levels.WARN)
+		return
+	end
+
+	-- The opening ``` must be above or at cursor; if cursor is ON the opening line,
+	-- content starts on the next line. Scan down for closing ```.
+	local fence_end = nil
+	for i = fence_start + 1, line_count do
+		local line = vim.api.nvim_buf_get_lines(buf, i - 1, i, false)[1]
+		if line:match("^%s*```") then
+			fence_end = i
+			break
+		end
+	end
+
+	if not fence_end then
+		vim.notify("No closing ``` found for code fence", vim.log.levels.WARN)
+		return
+	end
+
+	-- Cursor must be between the fences (inclusive of delimiter lines)
+	if cursor_row < fence_start or cursor_row > fence_end then
+		vim.notify("Not inside a code fence", vim.log.levels.WARN)
+		return
+	end
+
+	-- Extract content between the delimiters (exclusive)
+	local content_lines = vim.api.nvim_buf_get_lines(buf, fence_start, fence_end - 1, false)
+	local text = table.concat(content_lines, "\n")
+	vim.fn.setreg("+", text)
+	vim.notify(#content_lines .. " line(s) copied from code fence", vim.log.levels.INFO)
+end
+
+-- Copy filename:line (normal) or filename:range (visual) to system clipboard.
+M.cmd.CopyLocation = function()
+	local mode = vim.fn.mode()
+	if mode == "v" or mode == "V" or mode == "\22" then
+		local filename = vim.fn.expand("%")
+		local start_line = vim.fn.line("v")
+		local end_line = vim.fn.line(".")
+		if start_line > end_line then
+			start_line, end_line = end_line, start_line
+		end
+		vim.fn.setreg("+", string.format("%s:%d-%d", filename, start_line, end_line))
+		vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "n", false)
+	else
+		vim.fn.setreg("+", vim.fn.expand("%") .. ":" .. vim.fn.line("."))
+	end
+end
+
+-- Copy filename:line + content (normal) or filename:range + content (visual) to system clipboard.
+M.cmd.CopyLocationContent = function()
+	local mode = vim.fn.mode()
+	if mode == "v" or mode == "V" or mode == "\22" then
+		local filename = vim.fn.expand("%")
+		local start_line = vim.fn.line("v")
+		local end_line = vim.fn.line(".")
+		if start_line > end_line then
+			start_line, end_line = end_line, start_line
+		end
+		local lines = vim.api.nvim_buf_get_lines(0, start_line - 1, end_line, false)
+		local output = string.format("%s:%d-%d\n%s", filename, start_line, end_line, table.concat(lines, "\n"))
+		vim.fn.setreg("+", output)
+		vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "n", false)
+	else
+		local filename = vim.fn.expand("%")
+		local line_num = vim.fn.line(".")
+		local line_content = vim.fn.getline(".")
+		vim.fn.setreg("+", string.format("%s:%d\n%s", filename, line_num, line_content))
+		vim.notify("Copied: " .. filename .. ":" .. line_num, vim.log.levels.INFO)
 	end
 end
 
