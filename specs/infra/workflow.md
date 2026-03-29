@@ -35,6 +35,9 @@ PRE_MERGE_CHECKS=none make push         # push skipping all checks
 ### No-Commit Mode
 `CHECK_NO_COMMIT=1` runs checks in audit-only mode: violations are reported to stdout, agent changes are discarded. Used by hooks and `--no-commit` flag.
 
+### Output Coloring
+Check output containing violations is printed in red; clean output (matching known-good patterns like "No DRY violations found", "All tests pass", etc.) is printed normally. Helpers `is_clean_check_output` and `print_check_output` live in `scripts/lib.sh`.
+
 ### Change Detection
 After each agent check (interactive mode), repo state is diffed. If files changed:
 - User sees `git diff --stat`
@@ -45,6 +48,7 @@ After each agent check (interactive mode), repo state is diffed. If files change
 A `PostToolUse:Write` hook in `.claude/settings.json` triggers batch constitution checks automatically during coding sessions when the diff crosses a threshold (400 lines or 10 files changed). Uses a 50% growth gate to avoid re-firing on every write. Findings are injected into the agent's context via stdout (silent-unless-violated).
 
 ## History
+- 2026-03-29: Red-colored output for check violations (issue 000026)
 - 2026-03-29: Concurrency-limited parallel checks (issue 000021)
 - 2026-03-29: Parallel checks with hook-gated constitution enforcement (issue 000018)
 - 2026-03-29: Progress display for headless agent calls (issue 000017)

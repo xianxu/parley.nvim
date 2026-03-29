@@ -107,7 +107,9 @@ assemble_context() {
         local out="$outdir/$name.out"
         if [[ "$rc" != "0" ]] || [[ -s "$out" ]]; then
             printf '=== Constitution Check: %s ===\n' "$name"
-            cat "$out"
+            local content
+            content=$(cat "$out")
+            print_check_output "$content"
             printf '\n'
         fi
     done

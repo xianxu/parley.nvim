@@ -256,7 +256,9 @@ run_check() {
     prompt=$(build_prompt "$name" "$pre_output" "$diff_ctx" "$changed_issues")
 
     printf "${BOLD}  Invoking agent...${RESET}\n" >&2
-    run_agent_with_progress "$prompt"
+    local agent_output
+    agent_output=$(run_agent_with_progress "$prompt")
+    print_check_output "$agent_output"
 
     # In no-commit mode, agent stdout is the only output — skip change detection
     if [[ "${CHECK_NO_COMMIT:-}" == "1" ]]; then
