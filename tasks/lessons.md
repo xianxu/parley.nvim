@@ -45,3 +45,6 @@
 - Don't nil-guard broken state — fix the caller instead
 - Chat file paths must be relative to containing file, not cwd — use `:t` not `:~:.`
 - New keybindings must use config-driven mechanism (`chat_shortcut_*` in config.lua + `M.cmd.*`) — don't copy hardcoded patterns
+
+## 2026-03-29
+- Picker tests: don't assert mappings by numeric index (`mappings[2]`) — indices shift when new mappings are added. Look up by key name instead

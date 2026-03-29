@@ -186,8 +186,9 @@ run_check() {
             git checkout -- . 2>/dev/null || true
             git clean -fd 2>/dev/null || true
         else
-            printf "  ${GREEN}Changes accepted.${RESET}\n"
+            printf "  ${GREEN}Changes accepted, committing...${RESET}\n"
             git add -A
+            git commit -m "pre-merge check: $name"
         fi
     else
         printf "  ${GREEN}✓ No changes needed.${RESET}\n"
