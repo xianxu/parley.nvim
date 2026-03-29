@@ -505,6 +505,23 @@ M.setup = function(opts)
 		end
 	end
 
+	-- Global copy shortcuts (work in any buffer)
+	if M.config.global_shortcut_copy_location then
+		for _, mode in ipairs(M.config.global_shortcut_copy_location.modes) do
+			vim.keymap.set(mode, M.config.global_shortcut_copy_location.shortcut, M.cmd.CopyLocation, { silent = true, desc = "Copy file:line to clipboard" })
+		end
+	end
+	if M.config.global_shortcut_copy_location_content then
+		for _, mode in ipairs(M.config.global_shortcut_copy_location_content.modes) do
+			vim.keymap.set(mode, M.config.global_shortcut_copy_location_content.shortcut, M.cmd.CopyLocationContent, { silent = true, desc = "Copy file:line + content to clipboard" })
+		end
+	end
+	if M.config.global_shortcut_copy_context then
+		for _, mode in ipairs(M.config.global_shortcut_copy_context.modes) do
+			vim.keymap.set(mode, M.config.global_shortcut_copy_context.shortcut, M.cmd.CopyContext, { silent = true, desc = "Copy location + context to clipboard" })
+		end
+	end
+
 	-- Set up global shortcuts for note-taking
 	if M.config.global_shortcut_note_new then
 		for _, mode in ipairs(M.config.global_shortcut_note_new.modes) do
@@ -1365,26 +1382,6 @@ local function keybinding_help_lines(context)
 			),
 			"Copy code fence to clipboard"
 		)
-		add(
-			resolve_shortcut(
-				"Parley copy location",
-				shortcut_modes(cfg.chat_shortcut_copy_location, { "n", "v" }),
-				cfg.chat_shortcut_copy_location,
-				"<leader>cl",
-				current_buf
-			),
-			"Copy file:line to clipboard"
-		)
-		add(
-			resolve_shortcut(
-				"Parley copy location + content",
-				shortcut_modes(cfg.chat_shortcut_copy_location_content, { "n", "v" }),
-				cfg.chat_shortcut_copy_location_content,
-				"<leader>cL",
-				current_buf
-			),
-			"Copy file:line + content to clipboard"
-		)
 	end
 
 	-- Markdown buffer keys (shown for markdown, note, and issue contexts)
@@ -1793,22 +1790,6 @@ M.prep_chat = function(buf, file_name)
 		end
 	end
 
-	-- <leader>cl: copy filename:line or filename:range to clipboard
-	local copy_loc = M.config.chat_shortcut_copy_location
-	if copy_loc then
-		for _, mode in ipairs(copy_loc.modes) do
-			M.helpers.set_keymap({ buf }, mode, copy_loc.shortcut, M.cmd.CopyLocation, "Parley copy location")
-		end
-	end
-
-	-- <leader>cL: copy filename:line + content to clipboard
-	local copy_loc_content = M.config.chat_shortcut_copy_location_content
-	if copy_loc_content then
-		for _, mode in ipairs(copy_loc_content.modes) do
-			M.helpers.set_keymap({ buf }, mode, copy_loc_content.shortcut, M.cmd.CopyLocationContent, "Parley copy location + content")
-		end
-	end
-
 	-- Set file opening keybinding
 	local of = M.config.chat_shortcut_open_file
 	if of then
@@ -1966,22 +1947,6 @@ M.setup_markdown_keymaps = function(buf)
 	if copy_fence then
 		for _, mode in ipairs(copy_fence.modes) do
 			M.helpers.set_keymap({ buf }, mode, copy_fence.shortcut, M.cmd.CopyCodeFence, "Parley copy code fence")
-		end
-	end
-
-	-- <leader>cl: copy filename:line or filename:range to clipboard
-	local copy_loc = M.config.chat_shortcut_copy_location
-	if copy_loc then
-		for _, mode in ipairs(copy_loc.modes) do
-			M.helpers.set_keymap({ buf }, mode, copy_loc.shortcut, M.cmd.CopyLocation, "Parley copy location")
-		end
-	end
-
-	-- <leader>cL: copy filename:line + content to clipboard
-	local copy_loc_content = M.config.chat_shortcut_copy_location_content
-	if copy_loc_content then
-		for _, mode in ipairs(copy_loc_content.modes) do
-			M.helpers.set_keymap({ buf }, mode, copy_loc_content.shortcut, M.cmd.CopyLocationContent, "Parley copy location + content")
 		end
 	end
 
@@ -3133,6 +3098,61 @@ M.cmd.CopyLocationContent = function()
 		vim.fn.setreg("+", string.format("%s:%d\n%s", filename, line_num, line_content))
 		vim.notify("Copied: " .. filename .. ":" .. line_num, vim.log.levels.INFO)
 	end
+end
+
+-- Copy location + selected text query + surrounding context to clipboard.
+-- Normal mode: copies file:line:col with +/-2 lines of context.
+-- Visual mode: copies file:line:col, "tell me more about `selection`", and +/-2 lines around the selection.
+M.cmd.CopyContext = function()
+	local buf = vim.api.nvim_get_current_buf()
+	local filename = vim.fn.expand("%")
+	local line_count = vim.api.nvim_buf_line_count(buf)
+	local mode = vim.fn.mode()
+
+	local cursor = vim.api.nvim_win_get_cursor(0)
+	local row, col = cursor[1], cursor[2]
+
+	local function context_lines(from, to)
+		local start = math.max(1, from - 2)
+		local finish = math.min(line_count, to + 2)
+		return vim.api.nvim_buf_get_lines(buf, start - 1, finish, false), start
+	end
+
+	if mode == "v" or mode == "V" or mode == "\22" then
+		local start_line = vim.fn.line("v")
+		local end_line = vim.fn.line(".")
+		if start_line > end_line then
+			start_line, end_line = end_line, start_line
+		end
+		local sel_lines = vim.api.nvim_buf_get_lines(buf, start_line - 1, end_line, false)
+		local selection = table.concat(sel_lines, "\n")
+		local ctx, ctx_start = context_lines(start_line, end_line)
+
+		local parts = {
+			string.format("%s:%d:%d", filename, row, col + 1),
+			"",
+			string.format("tell me more about `%s`", selection),
+			"",
+		}
+		for i, line in ipairs(ctx) do
+			table.insert(parts, string.format("%d: %s", ctx_start + i - 1, line))
+		end
+
+		vim.fn.setreg("+", table.concat(parts, "\n"))
+		vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "n", false)
+	else
+		local ctx, ctx_start = context_lines(row, row)
+		local parts = {
+			string.format("%s:%d:%d", filename, row, col + 1),
+			"",
+		}
+		for i, line in ipairs(ctx) do
+			table.insert(parts, string.format("%d: %s", ctx_start + i - 1, line))
+		end
+
+		vim.fn.setreg("+", table.concat(parts, "\n"))
+	end
+	vim.notify("Context copied to clipboard", vim.log.levels.INFO)
 end
 
 -- Command to extract and open a file referenced with @@ syntax
