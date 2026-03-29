@@ -1,7 +1,7 @@
 # AI issue-based workflow — include from your project Makefile:
 #   include Makefile.workflow
 
-.PHONY: help-workflow worktree issue fetch push pull-request merge
+.PHONY: help-workflow worktree issue fetch push pull-request merge check pre-merge
 
 help-workflow:
 	@printf '%s\n' \
@@ -16,9 +16,28 @@ help-workflow:
 	"    make pull-request   Push branch, open PR referencing GitHub issues" \
 	"    make merge          Merge PR, archive done issues, clean up worktree" \
 	"" \
+	"  Pre-merge checks (agent-driven, run first in push/merge):" \
+	"    make check          Run all checks with interactive selection" \
+	"    make check-dry      Check DRY principle" \
+	"    make check-pure     Check PURE principle" \
+	"    make check-plan     Check issue plan completeness" \
+	"    make check-test     Run tests, inspect results" \
+	"    make check-specs    Check specs/README sync" \
+	"    make check-lessons  Check for lessons to capture" \
+	"    PRE_MERGE_CHECKS=yynnyn make pre-merge   Preset selection" \
+	"" \
 	"  Other:" \
 	"    make worktree NAME  Create a worktree in ../worktree/<name>" \
 	""
+
+# ── Pre-merge checks ─────────────────────────────────────────────────────────
+check: pre-merge
+
+pre-merge:
+	@scripts/pre-merge-checks.sh
+
+check-%:
+	@scripts/pre-merge-checks.sh $*
 
 # Worktree management targets
 # Capture extra argument after worktree (e.g. make worktree feature-x)
@@ -176,8 +195,9 @@ push:
 	if [ "$$branch" != "main" ]; then \
 		echo "Error: make push must be run from main (current branch: $$branch)"; \
 		exit 1; \
-	fi; \
-	untracked=$$(git ls-files --others --exclude-standard); \
+	fi
+	@$(MAKE) pre-merge
+	@untracked=$$(git ls-files --others --exclude-standard); \
 	if [ -n "$$untracked" ]; then \
 		echo "  [x] Untracked files found — add or .gitignore them first"; \
 		echo "$$untracked" | sed 's/^/       /'; \
@@ -282,7 +302,9 @@ merge:
 	if [ -z "$$branch" ] || [ "$$branch" = "main" ]; then \
 		echo "Error: run this from a worktree branch, not main"; \
 		exit 1; \
-	fi; \
+	fi
+	@$(MAKE) pre-merge
+	@branch=$$(git branch --show-current); \
 	echo "==> Branch: $$branch"; \
 	uncommitted=$$(git status --porcelain); \
 	if [ -n "$$uncommitted" ]; then \

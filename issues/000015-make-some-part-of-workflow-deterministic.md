@@ -1,6 +1,6 @@
 ---
 id: 000015
-status: open
+status: done
 deps: []
 created: 2026-03-29
 updated: 2026-03-29
@@ -31,13 +31,27 @@ Let's call those pre-merge checks, and instead of asking user's initial confirma
 
 ## Done when
 
--
+- `make pre-merge` runs selection UX and orchestrates agent-driven checks
+- Individual `make check-*` targets work standalone
+- `push` and `merge` call `pre-merge` before proceeding
+- Change detection with accept/discard flow works
+- Colored output throughout
 
 ## Plan
 
-- [ ]
+- [x] Create `scripts/pre-merge-checks.sh` with check table, orchestration, change detection
+- [x] Add Make targets: `pre-merge`, `check-dry`, `check-pure`, `check-plan`, `check-test`, `check-specs`, `check-lessons`
+- [x] Integrate `pre-merge` into `push` and `merge` targets
+- [x] Update help text
+- [x] Verify `make help` and `make pre-merge`
 
 ## Log
 
 ### 2026-03-29
 
+- Created `scripts/pre-merge-checks.sh` with 6 agent-driven checks (dry, pure, plan, test, specs, lessons), interactive selection UX, change detection with accept/discard flow, colored output
+- Added Make targets in `Makefile.workflow`: `pre-merge`, `check`, and `check-*` for each individual check
+- Integrated `pre-merge` into `push` and `merge` targets so checks run automatically before those operations
+- Updated `help-workflow` with pre-merge check documentation
+- Added `specs/infra/workflow.md` documenting the pre-merge checks system
+- Updated `specs/index.md` to link the workflow spec
