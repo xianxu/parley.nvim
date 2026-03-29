@@ -93,8 +93,8 @@ issue:
 	gh_body=$$(echo "$$gh_json" | jq -r '.body // ""'); \
 	slug=$$(echo "$$gh_title" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$$//'); \
 	mkdir -p "$$wt_path/issues"; \
-	max_id=$$(ls "$$wt_path/issues/" "$$wt_path/history/" 2>/dev/null | grep -oE '^[0-9]{4}-' | sed 's/-//' | sort -n | tail -1); \
-	next_id=$$(printf '%04d' $$(( $${max_id:-0} + 1 )) ); \
+	max_id=$$(ls "$$wt_path/issues/" "$$wt_path/history/" 2>/dev/null | grep -oE '^[0-9]{6}-' | sed 's/-//' | sort -n | tail -1); \
+	next_id=$$(printf '%06d' $$(( $${max_id:-0} + 1 )) ); \
 	issue_file="$$wt_path/issues/$${next_id}-$${slug}.md"; \
 	today=$$(date +%Y-%m-%d); \
 	printf '%s\n' \
@@ -142,8 +142,8 @@ fetch:
 	gh_body=$$(echo "$$gh_json" | jq -r '.body // ""'); \
 	slug=$$(echo "$$gh_title" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$$//'); \
 	mkdir -p issues; \
-	max_id=$$(ls issues/ history/ 2>/dev/null | grep -oE '^[0-9]{4}-' | sed 's/-//' | sort -n | tail -1); \
-	next_id=$$(printf '%04d' $$(( $${max_id:-0} + 1 )) ); \
+	max_id=$$(ls issues/ history/ 2>/dev/null | grep -oE '^[0-9]{6}-' | sed 's/-//' | sort -n | tail -1); \
+	next_id=$$(printf '%06d' $$(( $${max_id:-0} + 1 )) ); \
 	issue_file="issues/$${next_id}-$${slug}.md"; \
 	today=$$(date +%Y-%m-%d); \
 	printf '%s\n' \
@@ -194,7 +194,7 @@ push:
 	if [ -n "$$dirty" ]; then \
 		echo "==> Auto-committing tracked changes..."; \
 		commit_msg=""; \
-		for f in issues/[0-9][0-9][0-9][0-9]-*.md; do \
+		for f in issues/[0-9][0-9][0-9][0-9][0-9][0-9]-*.md; do \
 			[ -f "$$f" ] || continue; \
 			if ! git diff --quiet -- "$$f" 2>/dev/null || ! git diff --cached --quiet -- "$$f" 2>/dev/null; then \
 				topic=$$(grep -m1 '^# ' "$$f" | sed 's/^# *//'); \
@@ -217,7 +217,7 @@ push:
 	repo=$$(git remote get-url origin | sed 's|.*github.com[:/]\(.*\)\.git|\1|;s|.*github.com[:/]\(.*\)$$|\1|'); \
 	moved=0; \
 	if [ -d issues ]; then \
-		for f in issues/[0-9][0-9][0-9][0-9]-*.md; do \
+		for f in issues/[0-9][0-9][0-9][0-9][0-9][0-9]-*.md; do \
 			[ -f "$$f" ] || continue; \
 			status=$$(grep -m1 '^status:' "$$f" | sed 's/^status:[[:space:]]*//'); \
 			if [ "$$status" = "done" ]; then \
@@ -360,7 +360,7 @@ merge:
 	echo "==> Archiving done issues to history/..."; \
 	moved=0; \
 	if [ -d "$$main_path/issues" ]; then \
-		for f in "$$main_path"/issues/[0-9][0-9][0-9][0-9]-*.md; do \
+		for f in "$$main_path"/issues/[0-9][0-9][0-9][0-9][0-9][0-9]-*.md; do \
 			[ -f "$$f" ] || continue; \
 			status=$$(grep -m1 '^status:' "$$f" | sed 's/^status:[[:space:]]*//'); \
 			if [ "$$status" = "done" ]; then \
