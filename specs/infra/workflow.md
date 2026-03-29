@@ -10,7 +10,7 @@ Completed issues are moved to `history/` upon archival. These are considered low
 Worktrees created under `../worktree/` for portability between local and openshell environments.
 
 ## Pre-Merge Checks
-Agent-driven verification steps run before `push` and `merge`. Each check invokes a coding agent (`claude -p` by default, configurable via `AGENT_CMD`) with a focused prompt, then detects repo changes for user accept/discard.
+Agent-driven verification steps run before `push` and `merge`. Each check invokes a coding agent (configurable via `AGENT_CMD`; supports `claude`, `codex`, `gemini`) with a focused prompt, then detects repo changes for user accept/discard. If any check reports violations, the runner stops and prompts the user before proceeding (interactive) or exits non-zero (non-interactive).
 
 ### Checks
 | Target          | What it does                                             |
@@ -38,7 +38,7 @@ PRE_MERGE_CHECKS=none make push         # push skipping all checks
 `CHECK_NO_COMMIT=1` runs checks in audit-only mode: violations are reported to stdout, agent changes are discarded. Used by hooks and `--no-commit` flag.
 
 ### Output Formatting
-Each check prints a consistent pass/fail line: green `✓ <label>` for clean results, red `✗ <label>` followed by violation details for failures. Detection uses known-good patterns (e.g. "No DRY violations found", "All tests pass") in `is_clean_check_output`. Helpers live in `scripts/lib.sh`.
+Each check prints a consistent three-tier result: green `✓` for clean, yellow `ℹ` for informational (e.g. reminders), red `✗` for violations. Detection uses known-good patterns in `is_clean_check_output` and `is_info_check_output`. Empty output is treated as a failure (silent agent crash). Helpers live in `scripts/lib.sh`.
 
 ### Change Detection
 After each agent check (interactive mode), repo state is diffed. If files changed:
@@ -50,6 +50,7 @@ After each agent check (interactive mode), repo state is diffed. If files change
 A `PostToolUse:Write` hook in `.claude/settings.json` triggers batch constitution checks automatically during coding sessions when the diff crosses a threshold (400 lines or 10 files changed). Uses a 50% growth gate to avoid re-firing on every write. Findings are injected into the agent's context via stdout (silent-unless-violated).
 
 ## History
+- 2026-03-29: Multi-agent support (codex, gemini), failure-stops-merge, info output tier (issue 000029)
 - 2026-03-29: Consistent pass/fail formatting for check output (issue 000026)
 - 2026-03-29: Concurrency-limited parallel checks (issue 000021)
 - 2026-03-29: Parallel checks with hook-gated constitution enforcement (issue 000018)
