@@ -54,6 +54,14 @@ sandbox:
 			-v $(SANDBOX_NAME)-home:/home/sandbox \
 			$(SANDBOX_IMAGE) sleep infinity; \
 		docker exec -u root $(SANDBOX_NAME) chmod 777 /ssh-agent 2>/dev/null || true; \
+		git_name=$$(git config user.name); \
+		git_email=$$(git config user.email); \
+		if [ -n "$$git_name" ]; then \
+			docker exec $(SANDBOX_NAME) git config --global user.name "$$git_name"; \
+		fi; \
+		if [ -n "$$git_email" ]; then \
+			docker exec $(SANDBOX_NAME) git config --global user.email "$$git_email"; \
+		fi; \
 		docker exec -it $(SANDBOX_NAME) zsh; \
 	fi
 
