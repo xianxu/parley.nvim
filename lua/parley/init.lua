@@ -1482,10 +1482,11 @@ M.prep_chat = function(buf, file_name)
 
 	local search_shortcut = M.config.chat_shortcut_search
 	if search_shortcut then
-		-- Create a function for searching chat sections (questions only)
+		-- Create a function for searching chat sections (questions and branch points)
 		local function search_chat_sections()
 			local user_prefix = M.config.chat_user_prefix
-			vim.cmd("/^" .. vim.pesc(user_prefix))
+			local branch_prefix = M.config.chat_branch_prefix
+			vim.cmd("/^" .. vim.pesc(user_prefix) .. "\\|^" .. vim.pesc(branch_prefix))
 		end
 
 		for _, mode in ipairs(search_shortcut.modes) do
