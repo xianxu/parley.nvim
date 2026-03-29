@@ -12,13 +12,21 @@ updated: 2026-03-29
 
 ## Done when
 
--
+- Progress is visible in real-time during `make pre-merge` agent checks
 
 ## Plan
 
-- [ ]
+- [x] Add `run_agent_with_progress()` function using `--output-format stream-json` + `jq` parser
+- [x] Replace plain pipe on agent invocation line with new function
+- [x] Add `jq` fallback for environments without it
+- [ ] Manual verification: run `scripts/pre-merge-checks.sh dry` and confirm progress displays
 
 ## Log
 
 ### 2026-03-29
 
+- Added `run_agent_with_progress()` to `scripts/pre-merge-checks.sh`
+- Uses `--output-format stream-json` to get real-time events from `claude -p`
+- Parses `assistant` events for `tool_use` to show `⟳ ToolName hint` on a single updating line
+- Extracts `result` event for final text display
+- Falls back to original `sed` pipe when `jq` is unavailable

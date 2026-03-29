@@ -17,6 +17,70 @@ RESET='\033[0m'
 # ── Agent command (configurable via env) ──────────────────────────────────────
 AGENT_CMD="${AGENT_CMD:-claude}"
 
+# ── Run agent with streaming progress ────────────────────────────────────────
+# Invokes claude -p with stream-json output and displays a single updating
+# progress line showing the current tool being called.  Falls back to plain
+# pipe when jq is not available.
+if command -v jq &>/dev/null; then
+    run_agent_with_progress() {
+        local prompt="$1"
+        local is_tty=false
+        [[ -t 2 ]] && is_tty=true
+
+        $AGENT_CMD -p "$prompt" \
+            --allowedTools Edit,Read,Write,Grep,Glob,Bash \
+            --output-format stream-json 2>/dev/null \
+        | while IFS= read -r line; do
+            local evt_type
+            evt_type=$(printf '%s' "$line" | jq -r '.type // empty' 2>/dev/null) || continue
+
+            case "$evt_type" in
+                assistant)
+                    local tool_name
+                    tool_name=$(printf '%s' "$line" | jq -r '
+                        [.message.content[] | select(.type == "tool_use") | .name]
+                        | last // empty
+                    ' 2>/dev/null)
+                    if [[ -n "$tool_name" ]]; then
+                        local hint
+                        hint=$(printf '%s' "$line" | jq -r '
+                            [.message.content[] | select(.type == "tool_use")]
+                            | last
+                            | .input
+                            | (.file_path // .command // .pattern // .path // empty)
+                        ' 2>/dev/null | head -1 | cut -c1-60)
+                        if "$is_tty"; then
+                            if [[ -n "$hint" ]]; then
+                                printf "\r\033[K  ${YELLOW}⟳ %s${RESET} %s" "$tool_name" "$hint" >&2
+                            else
+                                printf "\r\033[K  ${YELLOW}⟳ %s${RESET}" "$tool_name" >&2
+                            fi
+                        else
+                            if [[ -n "$hint" ]]; then
+                                printf "  > %s %s\n" "$tool_name" "$hint" >&2
+                            else
+                                printf "  > %s\n" "$tool_name" >&2
+                            fi
+                        fi
+                    fi
+                    ;;
+                result)
+                    if "$is_tty"; then
+                        printf "\r\033[K" >&2
+                    fi
+                    printf '%s' "$line" | jq -r '.result // empty' 2>/dev/null | sed 's/^/  /'
+                    ;;
+            esac
+        done
+    }
+else
+    run_agent_with_progress() {
+        local prompt="$1"
+        $AGENT_CMD -p "$prompt" \
+            --allowedTools Edit,Read,Write,Grep,Glob,Bash 2>&1 | sed 's/^/  /'
+    }
+fi
+
 # ── Diff context: changes since branch diverged from main ─────────────────────
 git_diff_context() {
     local base
@@ -167,7 +231,7 @@ run_check() {
     prompt=$(build_prompt "$name" "$pre_output" "$diff_ctx")
 
     printf "${BOLD}  Invoking agent...${RESET}\n"
-    $AGENT_CMD -p "$prompt" --allowedTools Edit,Read,Write,Grep,Glob,Bash 2>&1 | sed 's/^/  /'
+    run_agent_with_progress "$prompt"
 
     # Detect changes
     local after
