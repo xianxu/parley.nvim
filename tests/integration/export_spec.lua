@@ -225,7 +225,7 @@ def hello():
                 assert.is_true(content:find("layout: post") ~= nil, "Should have layout")
                 assert.is_true(content:find("title:  'Jekyll Test'") ~= nil, "Should have title")
                 assert.is_true(content:find("date:   2024%-01%-15") ~= nil, "Should have date from file header")
-                assert.is_true(content:find("tags: test, jekyll") ~= nil, "Should have tags")
+                assert.is_true(content:find("tags: %[test, jekyll%]") ~= nil, "Should have tags as YAML array")
                 -- Verify watermark
                 assert.is_true(content:find("parley%.nvim") ~= nil, "Should have parley.nvim watermark")
                 -- Verify header removal
@@ -350,8 +350,8 @@ def hello():
             if #md_files > 0 then
                 local content = table.concat(vim.fn.readfile(md_files[1]), "\n")
                 -- Should have default tags
-                assert.is_true(content:find("tags: unclassified") ~= nil,
-                    "Should use default 'unclassified' tag")
+                assert.is_true(content:find("tags: %[unclassified%]") ~= nil,
+                    "Should use default '[unclassified]' tag")
             end
 
             -- Close buffer if valid

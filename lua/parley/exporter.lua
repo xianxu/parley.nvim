@@ -91,12 +91,12 @@ local function build_info(lines, abs_path, chat_parser, parse_config, fallback_d
 		or fallback_date
 		or os.date("%Y-%m-%d")
 
-	local tags = "unclassified"
+	local tags = "[unclassified]"
 	if headers and headers.tags then
 		if type(headers.tags) == "table" and #headers.tags > 0 then
-			tags = table.concat(headers.tags, ", ")
+			tags = "[" .. table.concat(headers.tags, ", ") .. "]"
 		elseif type(headers.tags) == "string" and headers.tags ~= "" then
-			tags = headers.tags
+			tags = "[" .. headers.tags .. "]"
 		end
 	end
 
