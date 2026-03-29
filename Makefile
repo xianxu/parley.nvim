@@ -193,7 +193,24 @@ push:
 	dirty=$$(git status --porcelain); \
 	if [ -n "$$dirty" ]; then \
 		echo "==> Auto-committing tracked changes..."; \
-		git commit -a -m "auto-commit before push" || exit 1; \
+		commit_msg=""; \
+		for f in issues/[0-9][0-9][0-9][0-9]-*.md; do \
+			[ -f "$$f" ] || continue; \
+			if ! git diff --quiet -- "$$f" 2>/dev/null || ! git diff --cached --quiet -- "$$f" 2>/dev/null; then \
+				topic=$$(grep -m1 '^# ' "$$f" | sed 's/^# *//'); \
+				if [ -n "$$topic" ]; then \
+					if [ -n "$$commit_msg" ]; then \
+						commit_msg="$$commit_msg"$$'\n'"$$topic"; \
+					else \
+						commit_msg="$$topic"; \
+					fi; \
+				fi; \
+			fi; \
+		done; \
+		if [ -z "$$commit_msg" ]; then \
+			commit_msg="auto-commit before push"; \
+		fi; \
+		git commit -a -m "$$commit_msg" || exit 1; \
 	fi; \
 	$(call check_undone_issues,origin/main,issues) \
 	git push || exit 1; \
