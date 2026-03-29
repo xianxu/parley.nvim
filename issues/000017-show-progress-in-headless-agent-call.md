@@ -30,3 +30,4 @@ updated: 2026-03-29
 - Parses `assistant` events for `tool_use` to show `⟳ ToolName hint` on a single updating line
 - Extracts `result` event for final text display
 - Falls back to original `sed` pipe when `jq` is unavailable
+- Fixed `git_diff_context()`: on main, diffs against `origin/main` (was diffing against self → empty diff, silently skipping dry/pure/specs checks)

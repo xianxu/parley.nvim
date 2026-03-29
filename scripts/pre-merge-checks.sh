@@ -82,9 +82,17 @@ else
 fi
 
 # ── Diff context: changes since branch diverged from main ─────────────────────
+# On main: diff against origin/main (unpushed local changes).
+# On feature branch: diff against merge-base with main (branch changes).
 git_diff_context() {
     local base
-    base=$(git merge-base main HEAD 2>/dev/null || echo "HEAD~10")
+    local branch
+    branch=$(git branch --show-current 2>/dev/null)
+    if [[ "$branch" == "main" ]]; then
+        base=$(git rev-parse origin/main 2>/dev/null || echo "HEAD~10")
+    else
+        base=$(git merge-base main HEAD 2>/dev/null || echo "HEAD~10")
+    fi
     git diff "$base"..HEAD -- ':!issues/' ':!history/' 2>/dev/null || true
 }
 
