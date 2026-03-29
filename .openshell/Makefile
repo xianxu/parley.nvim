@@ -53,6 +53,7 @@ sandbox:
 			-e SSH_AUTH_SOCK=/ssh-agent \
 			-v $(SANDBOX_NAME)-home:/home/sandbox \
 			$(SANDBOX_IMAGE) sleep infinity; \
+		docker exec -u root $(SANDBOX_NAME) chmod 777 /ssh-agent 2>/dev/null || true; \
 		docker exec -it $(SANDBOX_NAME) zsh; \
 	fi
 
