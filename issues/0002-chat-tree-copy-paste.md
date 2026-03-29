@@ -1,6 +1,6 @@
 ---
 id: 0002
-status: open
+status: blocked
 deps: []
 created: 2026-03-28
 updated: 2026-03-28

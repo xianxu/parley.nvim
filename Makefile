@@ -195,6 +195,7 @@ push:
 		echo "==> Auto-committing tracked changes..."; \
 		git commit -a -m "auto-commit before push" || exit 1; \
 	fi; \
+	$(call check_undone_issues,origin/main,issues) \
 	git push || exit 1; \
 	repo=$$(git remote get-url origin | sed 's|.*github.com[:/]\(.*\)\.git|\1|;s|.*github.com[:/]\(.*\)$$|\1|'); \
 	moved=0; \
@@ -308,6 +309,7 @@ merge:
 	else \
 		echo "  [ok] No unmerged local commits (branch is clean)"; \
 	fi; \
+	$(call check_undone_issues,main,issues) \
 	printf "Final confirmation: proceed with irreversible merge/cleanup actions? [y/N] "; \
 	read final_answer; \
 	if [ "$$final_answer" != "y" ] && [ "$$final_answer" != "Y" ]; then \
@@ -362,6 +364,32 @@ merge:
 	git -C "$$main_path" worktree remove "$$wt_path" 2>/dev/null || true; \
 	git -C "$$main_path" branch -D "$$branch" 2>/dev/null || true; \
 	echo "Done. Run: cd $$main_path"
+
+# Warn if any touched issue files are not marked status: done.
+# Usage: $(call check_undone_issues,<base-ref>,<issues-dir>)
+#   base-ref:   git ref to diff against (e.g. origin/main, main)
+#   issues-dir: path to issues directory (e.g. issues, $$main_path/issues)
+define check_undone_issues
+	not_done=""; \
+	touched=$$(git diff --name-only $(1)..HEAD -- 'issues/*.md' 2>/dev/null); \
+	for f in $$touched; do \
+		target="$(2)/$$(basename $$f)"; \
+		[ -f "$$target" ] || continue; \
+		status=$$(grep -m1 '^status:' "$$target" | sed 's/^status:[[:space:]]*//'); \
+		if [ "$$status" != "done" ]; then \
+			not_done="$$not_done\n  $$f (status: $${status:-unset})"; \
+		fi; \
+	done; \
+	if [ -n "$$not_done" ]; then \
+		printf "⚠️  Touched issue files that are NOT done:$$not_done\n"; \
+		printf "Continue anyway? [y/N] "; \
+		read undone_answer; \
+		if [ "$$undone_answer" != "y" ] && [ "$$undone_answer" != "Y" ]; then \
+			echo "Aborted."; \
+			exit 1; \
+		fi; \
+	fi;
+endef
 
 PLENARY = ~/.local/share/nvim/lazy/plenary.nvim
 REAL_HOME = $(HOME)
