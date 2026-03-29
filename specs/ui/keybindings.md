@@ -50,7 +50,7 @@ Help content is scoped to the current buffer context:
 - Open file reference, find chat, add chat reference, insert new chat, delete file
 
 ### Finder contexts
-- Chat Finder: recency cycle left/right, delete, move
+- Chat Finder: recency cycle left/right, delete, delete tree, move
 - Note Finder: recency cycle left/right, delete
 - Issue Finder: cycle status, toggle done/history, delete
 

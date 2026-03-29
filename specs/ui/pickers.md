@@ -46,6 +46,7 @@
 - Sticky filter fragments (`[tag]`, `{root}`, bare `{}`) preserved across reopen flows
 - Bracketed filters match tags only; braced filters match root-labels only — no fallback
 - `<C-d>`: delete with confirmation (reopen on cancel; preserve visual row position)
+- `<C-D>`: delete entire chat tree (root + all branches) with confirmation
 - `<C-x>`: move to another chat root (reopen on cancel)
 - `<C-a>`/`<C-s>`: recency cycle
 

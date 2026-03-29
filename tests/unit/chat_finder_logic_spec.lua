@@ -503,9 +503,9 @@ describe("ChatFinder logic", function()
 
             assert.is_truthy(captured)
             assert.equals("Chat Files (Recent: 12 months  <C-a>/<C-s>: cycle)", captured.title)
-            assert.equals("<C-x>", captured.mappings[2].key)
-            assert.equals("<C-a>", captured.mappings[3].key)
-            assert.equals("<C-s>", captured.mappings[4].key)
+            assert.equals("<C-x>", captured.mappings[3].key)
+            assert.equals("<C-a>", captured.mappings[4].key)
+            assert.equals("<C-s>", captured.mappings[5].key)
         end)
 
         it("prefers restoring selection by item value when reopening after delete", function()
@@ -594,7 +594,7 @@ describe("ChatFinder logic", function()
             assert.equals("Chat Files (Recent: 12 months  <C-a>/<C-s>: cycle)", picker_calls[1].title)
             assert.equals(old_path, picker_calls[1].items[1].value)
 
-            picker_calls[1].mappings[2].fn(picker_calls[1].items[1], function() end)
+            picker_calls[1].mappings[3].fn(picker_calls[1].items[1], function() end)
 
             assert.equals(0, vim.fn.filereadable(old_path))
             assert.equals(1, vim.fn.filereadable(new_path))
@@ -636,7 +636,7 @@ describe("ChatFinder logic", function()
             file:close()
 
             M.cmd.ChatFinder()
-            picker_calls[1].mappings[2].fn(picker_calls[1].items[1], function() end)
+            picker_calls[1].mappings[3].fn(picker_calls[1].items[1], function() end)
 
             assert.equals(0, vim.fn.filereadable(old_path))
             assert.equals(1, vim.fn.filereadable(new_path))
@@ -678,7 +678,7 @@ describe("ChatFinder logic", function()
             file:close()
 
             M.cmd.ChatFinder()
-            picker_calls[1].mappings[2].fn(picker_calls[1].items[1], function() end)
+            picker_calls[1].mappings[3].fn(picker_calls[1].items[1], function() end)
 
             assert.equals(0, vim.fn.filereadable(old_path))
             assert.equals(1, vim.fn.filereadable(new_path))
