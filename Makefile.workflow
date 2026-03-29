@@ -196,7 +196,6 @@ push:
 		echo "Error: make push must be run from main (current branch: $$branch)"; \
 		exit 1; \
 	fi
-	@$(MAKE) pre-merge
 	@untracked=$$(git ls-files --others --exclude-standard); \
 	if [ -n "$$untracked" ]; then \
 		echo "  [x] Untracked files found — add or .gitignore them first"; \
@@ -224,8 +223,9 @@ push:
 			commit_msg="auto-commit before push"; \
 		fi; \
 		git commit -a -m "$$commit_msg" || exit 1; \
-	fi; \
-	$(call check_undone_issues,origin/main,issues) \
+	fi
+	@$(MAKE) pre-merge
+	@$(call check_undone_issues,origin/main,issues) \
 	git push || exit 1; \
 	repo=$$(git remote get-url origin | sed 's|.*github.com[:/]\(.*\)\.git|\1|;s|.*github.com[:/]\(.*\)$$|\1|'); \
 	moved=0; \
@@ -302,9 +302,7 @@ merge:
 	if [ -z "$$branch" ] || [ "$$branch" = "main" ]; then \
 		echo "Error: run this from a worktree branch, not main"; \
 		exit 1; \
-	fi
-	@$(MAKE) pre-merge
-	@branch=$$(git branch --show-current); \
+	fi; \
 	echo "==> Branch: $$branch"; \
 	uncommitted=$$(git status --porcelain); \
 	if [ -n "$$uncommitted" ]; then \
@@ -326,7 +324,8 @@ merge:
 		echo "Push your branch before merging."; \
 		exit 1; \
 	fi; \
-	echo "  [ok] No unpushed local commits (HEAD synced with $$upstream)"; \
+	echo "  [ok] No unpushed local commits (HEAD synced with $$upstream)"
+	@$(MAKE) pre-merge \
 	wt_path=$$(git rev-parse --show-toplevel); \
 	main_path=$$(git worktree list | grep '\[main\]' | awk '{print $$1}'); \
 	if [ -z "$$main_path" ]; then \
