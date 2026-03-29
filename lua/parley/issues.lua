@@ -253,7 +253,7 @@ local function scan_max_id(dir)
         repeat
             name, kind = vim.loop.fs_scandir_next(handle)
             if name and (kind == "file") and name:match("%.md$") then
-                local id_str = name:match("^(%d%d%d%d)%-")
+                local id_str = name:match("^(%d+)%-")
                 if id_str then
                     local id = tonumber(id_str)
                     if id and id > max_id then
@@ -277,7 +277,7 @@ M.next_issue_id = function(issues_dir)
             max_id = history_max
         end
     end
-    return string.format("%04d", max_id + 1)
+    return string.format("%06d", max_id + 1)
 end
 
 -- Scan a single directory for issue files, appending to the issues table
@@ -291,12 +291,12 @@ local function scan_dir_issues(dir, issues, is_archived)
     repeat
         name, kind = vim.loop.fs_scandir_next(handle)
         if name and (kind == "file") and name:match("%.md$") then
-            local id_str = name:match("^(%d%d%d%d)%-")
+            local id_str = name:match("^(%d+)%-")
             if id_str then
                 local path = dir .. "/" .. name
                 local lines = vim.fn.readfile(path)
                 local fm = M.parse_frontmatter(lines)
-                local slug = name:match("^%d%d%d%d%-(.+)%.md$") or ""
+                local slug = name:match("^%d+%-(.+)%.md$") or ""
                 local title = M.extract_title(lines, fm and fm.header_end or 0)
                 table.insert(issues, {
                     id = id_str,
@@ -481,7 +481,7 @@ M.cmd_issue_next = function()
     local current_id = nil
     local current_file = vim.fn.expand("%:t")
     if current_file then
-        current_id = current_file:match("^(%d%d%d%d)%-")
+        current_id = current_file:match("^(%d+)%-")
     end
 
     local issues = M.scan_issues(issues_dir)

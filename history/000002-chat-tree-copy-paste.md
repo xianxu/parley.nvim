@@ -1,5 +1,5 @@
 ---
-id: 0002
+id: 000002
 status: done
 deps: []
 created: 2026-03-28
