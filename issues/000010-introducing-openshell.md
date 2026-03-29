@@ -1,6 +1,6 @@
 ---
 id: 000010
-status: open
+status: done
 deps: []
 created: 2026-03-28
 updated: 2026-03-28
@@ -30,7 +30,7 @@ see discussion in ../design/2026-03-28.18-37-34.270.md, and design bootstrap wit
 - [x] Copy nvim config into `.openshell/dotfiles/nvim/`
 - [x] Create `bootstrap.sh` at repo root
 - [x] Verify Dockerfile builds
-- [ ] User verifies end-to-end
+- [x] User verifies end-to-end
 
 ## Verification Steps (for you to run)
 
