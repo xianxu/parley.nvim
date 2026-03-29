@@ -306,6 +306,7 @@ local config = {
 	chat_shortcut_respond = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g><C-g>" },
 	chat_shortcut_respond_all = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>G" },
 	chat_shortcut_delete = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>d" },
+	chat_shortcut_delete_tree = { modes = { "n" }, shortcut = "<C-g>D" },
 	chat_shortcut_stop = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>x" },
 	chat_shortcut_agent = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>a" },
 	chat_shortcut_system_prompt = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>s" },
@@ -335,6 +336,7 @@ local config = {
 	chat_finder_pattern = "",
 	chat_finder_mappings = {
 		delete = { modes = { "n", "i", "v", "x" }, shortcut = "<C-d>" },
+		delete_tree = { modes = { "n", "i", "v", "x" }, shortcut = "<C-D>" },
 		move = { modes = { "n", "i", "v", "x" }, shortcut = "<C-x>" },
 		next_recency = { modes = { "n", "i", "v", "x" }, shortcut = "<C-a>" },
 		previous_recency = { modes = { "n", "i", "v", "x" }, shortcut = "<C-s>" },

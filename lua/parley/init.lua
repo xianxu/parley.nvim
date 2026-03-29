@@ -1063,6 +1063,7 @@ local function keybinding_help_lines(context)
 		add(shortcut_value(finder_mappings.next_recency, "<C-a>"), "Cycle recency window left")
 		add(shortcut_value(finder_mappings.previous_recency, "<C-s>"), "Cycle recency window right")
 		add(shortcut_value(finder_mappings.delete, "<C-d>"), "Delete selected chat")
+		add(shortcut_value(finder_mappings.delete_tree, "<C-D>"), "Delete chat tree")
 		add(shortcut_value(finder_mappings.move, "<C-x>"), "Move selected chat")
 		table.insert(lines, string.format("  %-12s %s", "", "(Recent window default: last " .. tostring((cfg.chat_finder_recency or {}).months or 6) .. " months)"))
 		table.insert(lines, "")
@@ -1374,6 +1375,7 @@ local function keybinding_help_lines(context)
 		add(resolve_shortcut("Parley add chat reference", { "n", "i" }, nil, "<C-g>a", current_buf), "Add chat reference")
 		add(resolve_shortcut("Parley create and insert new chat", { "n", "i" }, nil, "<C-g>i", current_buf), "Insert new chat reference")
 		add(resolve_shortcut("Parley delete current file and buffer", { "n" }, nil, "<C-g>d", current_buf), "Delete file")
+		add(resolve_shortcut("Parley prompt Chat Delete Tree", { "n" }, cfg.chat_shortcut_delete_tree, "<C-g>D", current_buf), "Delete chat tree")
 	end
 
 	table.insert(lines, "")
@@ -1600,6 +1602,11 @@ M.prep_chat = function(buf, file_name)
 
 	local ds = M.config.chat_shortcut_delete
 	M.helpers.set_keymap({ buf }, ds.modes, ds.shortcut, M.cmd.ChatDelete, "Parley prompt Chat Delete")
+
+	local dts = M.config.chat_shortcut_delete_tree
+	if dts then
+		M.helpers.set_keymap({ buf }, dts.modes, dts.shortcut, M.cmd.ChatDeleteTree, "Parley prompt Chat Delete Tree")
+	end
 
 	local ss = M.config.chat_shortcut_stop
 	M.helpers.set_keymap({ buf }, ss.modes, ss.shortcut, M.cmd.Stop, "Parley prompt Chat Stop")
@@ -2006,6 +2013,7 @@ M.setup_markdown_keymaps = function(buf)
 			end
 		end
 	end, "Parley delete current file and buffer")
+
 end
 
 M.setup_buf_handler = function()
@@ -2174,6 +2182,27 @@ local function collect_tree_files(file_path, visited)
 		end
 	end
 	return result
+end
+
+-- Delete an entire chat tree (root + all descendants) after confirmation.
+M.delete_chat_tree = function(buf)
+	local file = vim.api.nvim_buf_get_name(buf)
+	if file == "" then return end
+	local root = find_tree_root_file(file)
+	local tree_files = collect_tree_files(root)
+	if #tree_files == 0 then return end
+
+	local root_rel = vim.fn.fnamemodify(root, ":~:.")
+	local msg = "Delete " .. #tree_files .. " chat file(s) in tree rooted at " .. root_rel .. "?\n\n"
+	for _, f in ipairs(tree_files) do
+		msg = msg .. "  " .. vim.fn.fnamemodify(f, ":~:.") .. "\n"
+	end
+	local choice = vim.fn.confirm(msg, "&Yes\n&No", 2)
+	if choice == 1 then
+		for _, f in ipairs(tree_files) do
+			M.helpers.delete_file(f)
+		end
+	end
 end
 
 -- Move an entire chat tree to a new directory, updating all 🌿: references.
@@ -2494,6 +2523,11 @@ M.cmd.ChatDelete = function()
 			M.helpers.delete_file(file_name)
 		end
 	end)
+end
+
+M.cmd.ChatDeleteTree = function()
+	local buf = vim.api.nvim_get_current_buf()
+	M.delete_chat_tree(buf)
 end
 
 -- Structure to represent a parsed chat:
@@ -3224,6 +3258,20 @@ end
 
 M._prompt_chat_finder_delete_confirmation = function(...)
 	chat_finder_mod.prompt_delete_confirmation(...)
+end
+
+M._handle_chat_finder_delete_tree_response = function(...)
+	chat_finder_mod.handle_delete_tree_response(...)
+end
+
+M._prompt_chat_finder_delete_tree_confirmation = function(...)
+	chat_finder_mod.prompt_delete_tree_confirmation(...)
+end
+
+-- Get all files in a chat tree (root + descendants) for a given file path.
+M.get_chat_tree_files = function(file_path)
+	local root = find_tree_root_file(file_path)
+	return collect_tree_files(root)
 end
 
 M._reopen_note_finder = function(source_win, selection_index, selection_value)

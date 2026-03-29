@@ -271,6 +271,76 @@ M.prompt_delete_confirmation = function(item_value, selected_index, items_count,
 	end)
 end
 
+M.handle_delete_tree_response = function(input, item_value, tree_files, selected_index, items_count, source_win, close_fn, context)
+	if input and input:lower() == "y" then
+		for _, f in ipairs(tree_files) do
+			_parley.helpers.delete_file(f)
+		end
+		if close_fn then
+			close_fn()
+		end
+		local next_index = math.min(selected_index, math.max(1, items_count - 1))
+		local next_value = nil
+		local items = context and context.chat_finder_items or nil
+		if type(items) == "table" then
+			local next_item = items[selected_index + 1] or items[selected_index - 1]
+			next_value = next_item and next_item.value or nil
+		end
+		_parley._reopen_chat_finder(source_win, next_index, next_value)
+		return
+	end
+
+	if context then
+		context.resume_after_external_ui()
+		vim.schedule(function()
+			if context.focus_prompt then
+				context.focus_prompt()
+			end
+		end)
+		vim.defer_fn(function()
+			if context.focus_prompt then
+				context.focus_prompt()
+			end
+		end, 10)
+		return
+	end
+
+	_parley._reopen_chat_finder(source_win, selected_index, item_value)
+end
+
+M.prompt_delete_tree_confirmation = function(item_value, selected_index, items_count, source_win, close_fn, context)
+	if source_win and vim.api.nvim_win_is_valid(source_win) then
+		vim.api.nvim_set_current_win(source_win)
+	end
+
+	local tree_files = _parley.get_chat_tree_files(item_value)
+	if #tree_files == 0 then
+		if context then
+			context.resume_after_external_ui()
+		end
+		return
+	end
+
+	local rel_files = {}
+	for _, f in ipairs(tree_files) do
+		table.insert(rel_files, vim.fn.fnamemodify(f, ":~:."))
+	end
+	local prompt = "Delete " .. #tree_files .. " file(s) in tree? [" .. table.concat(rel_files, ", ") .. "] [y/N] "
+
+	vim.ui.input({ prompt = prompt }, function(input)
+		_parley._handle_chat_finder_delete_tree_response(
+			input,
+			item_value,
+			tree_files,
+			selected_index,
+			items_count,
+			source_win,
+			close_fn,
+			context
+		)
+	end)
+end
+
 --------------------------------------------------------------------------------
 -- Main ChatFinder open function (was M.cmd.ChatFinder body)
 --------------------------------------------------------------------------------
@@ -287,6 +357,7 @@ M.open = function(_options)
 
 	local chat_roots = _parley.get_chat_roots()
 	local delete_shortcut = _parley.config.chat_finder_mappings.delete or _parley.config.chat_shortcut_delete
+	local delete_tree_shortcut = _parley.config.chat_finder_mappings.delete_tree or { shortcut = "<C-D>" }
 	local move_shortcut = _parley.config.chat_finder_mappings.move or { shortcut = "<C-x>" }
 	local next_recency_shortcut = _parley.config.chat_finder_mappings.next_recency or { shortcut = "<C-a>" }
 	local previous_recency_shortcut = _parley.config.chat_finder_mappings.previous_recency or { shortcut = "<C-s>" }
@@ -588,6 +659,36 @@ M.open = function(_options)
 						context.suspend_for_external_ui()
 						vim.defer_fn(function()
 							M.prompt_delete_confirmation(
+								item.value,
+								selected_index,
+								#items,
+								source_win,
+								close_fn,
+								context
+							)
+						end, 20)
+					end,
+				},
+				-- Delete entire chat tree for the selected file
+				{
+					key = delete_tree_shortcut.shortcut,
+					fn = function(item, close_fn, context)
+						if not item then
+							return
+						end
+						local selected_index = 1
+						for idx, picker_item in ipairs(items) do
+							if picker_item.value == item.value then
+								selected_index = idx
+								break
+							end
+						end
+
+						context.skip_focus_restore = true
+						context.chat_finder_items = items
+						context.suspend_for_external_ui()
+						vim.defer_fn(function()
+							M.prompt_delete_tree_confirmation(
 								item.value,
 								selected_index,
 								#items,
