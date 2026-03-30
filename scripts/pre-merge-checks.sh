@@ -27,7 +27,7 @@ agent_run_claude() {
     cmd+=" --allowedTools $(printf '%q' "$ALLOWED_TOOLS")"
     cmd+=" --permission-mode bypassPermissions"
     if [[ "$stream" == "1" ]]; then
-        cmd+=" --output-format stream-json"
+        cmd+=" --verbose --output-format stream-json"
     fi
     cmd+=" $(printf '%q' "$prompt")"
     echo "$cmd"

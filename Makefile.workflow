@@ -1,7 +1,7 @@
 # AI issue-based workflow — include from your project Makefile:
 #   include Makefile.workflow
 
-.PHONY: help-workflow worktree issue fetch push pull-request merge check pre-merge
+.PHONY: help-workflow worktree issue fetch push pull-request merge check pre-merge test-agents
 
 help-workflow:
 	@printf '%s\n' \
@@ -41,6 +41,9 @@ pre-merge:
 
 check-%:
 	@scripts/pre-merge-checks.sh $*
+
+test-agents:
+	@tests/test_agents.sh
 
 # Worktree management targets
 # Capture extra argument after worktree (e.g. make worktree feature-x)
