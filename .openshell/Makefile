@@ -1,80 +1,68 @@
 # Sandbox management — include from your project Makefile:
 #   include .openshell/Makefile
 
-.PHONY: help-sandbox sandbox sandbox-build sandbox-stop sandbox-shell sandbox-nuke
+.PHONY: help-sandbox bootstrap sandbox sandbox-build sandbox-stop sandbox-shell sandbox-nuke
+
+# K8s names must be DNS-1035: lowercase alphanumeric + hyphens only
+SANDBOX_NAME = $(shell echo "$(REPO_NAME)-sandbox" | tr '.' '-' | tr '[:upper:]' '[:lower:]')
 
 help-sandbox:
 	@printf '%s\n' \
-	"Sandbox:" \
-	"  make sandbox-build    Build/rebuild the sandbox image" \
-	"  make sandbox          Start, restart, or attach to sandbox" \
-	"  make sandbox-shell    Open another shell into running sandbox" \
-	"  make sandbox-stop     Stop sandbox (state preserved)" \
-	"  make sandbox-nuke     Destroy sandbox and all state" \
+	"Sandbox (OpenShell + mutagen):" \
+	"  make bootstrap        Install dependencies (openshell, gh, mutagen) and auth" \
+	"  make sandbox-build    Create sandbox, run setup, start sync (one-time)" \
+	"  make sandbox          Connect to sandbox (builds if needed)" \
+	"  make sandbox-shell    Alias for sandbox" \
+	"  make sandbox-stop     Stop sync, delete sandbox, clean up" \
+	"  make sandbox-nuke     Same as sandbox-stop (no persistent state)" \
 	""
 
-SANDBOX_NAME = $(REPO_NAME)-sandbox
-SANDBOX_IMAGE = $(REPO_NAME)-sandbox
-
-# Build the sandbox image and reset state (only needed when .openshell/ changes)
-sandbox-build:
-	@printf '\033[1;31mWarning: This will rebuild the image and destroy all sandbox state\033[0m\n'
-	@printf '\033[1;31m(auth tokens, shell history, Mason LSPs, etc.)\033[0m\n'
-	@printf 'Continue? [y/N] '; \
-	read answer; \
-	if [ "$$answer" != "y" ] && [ "$$answer" != "Y" ]; then \
-		echo "Aborted."; \
-		exit 1; \
-	fi
-	docker rm -f $(SANDBOX_NAME) 2>/dev/null || true
-	docker volume rm $(SANDBOX_NAME)-home 2>/dev/null || true
-	docker build -t $(SANDBOX_IMAGE) -f .openshell/Dockerfile .openshell/
-	@echo "Done. Run 'make sandbox' to start fresh."
-
-# Start sandbox in background with repo mounted, or attach if already running.
-# Named volumes persist auth tokens, shell history, Mason LSPs, etc. across restarts.
-sandbox:
-	@if docker ps --format '{{.Names}}' | grep -q '^$(SANDBOX_NAME)$$'; then \
-		echo "Attaching to running sandbox..."; \
-		docker exec -it $(SANDBOX_NAME) zsh; \
-	elif docker ps -a --format '{{.Names}}' | grep -q '^$(SANDBOX_NAME)$$'; then \
-		echo "Restarting stopped sandbox..."; \
-		docker start $(SANDBOX_NAME); \
-		docker exec -it $(SANDBOX_NAME) zsh; \
+# Install sandbox dependencies and configure auth.
+bootstrap:
+	@echo "==> Checking homebrew dependencies..."
+	@for pkg in gh mutagen-io/mutagen/mutagen; do \
+		name=$$(echo "$$pkg" | sed 's|.*/||'); \
+		if brew list "$$pkg" >/dev/null 2>&1; then \
+			echo "  [ok] $$name already installed"; \
+		else \
+			echo "  [..] Installing $$name..."; \
+			brew install "$$pkg"; \
+		fi; \
+	done
+	@echo ""
+	@echo "==> Checking openshell CLI..."
+	@if command -v openshell >/dev/null 2>&1; then \
+		echo "  [ok] openshell already installed: $$(openshell --version 2>/dev/null || echo 'unknown version')"; \
 	else \
-		echo "Starting sandbox..."; \
-		mkdir -p "$$(pwd)/../worktree"; \
-		docker run -d \
-			--name $(SANDBOX_NAME) \
-			-v "$$(pwd):/$(REPO_NAME)" \
-			-v "$$(pwd)/../worktree:/worktree" \
-			-w "/$(REPO_NAME)" \
-			-v "$$SSH_AUTH_SOCK:/ssh-agent" \
-			-e SSH_AUTH_SOCK=/ssh-agent \
-			-v $(SANDBOX_NAME)-home:/home/sandbox \
-			$(SANDBOX_IMAGE) sleep infinity; \
-		docker exec -u root $(SANDBOX_NAME) chmod 777 /ssh-agent 2>/dev/null || true; \
-		git_name=$$(git config user.name); \
-		git_email=$$(git config user.email); \
-		if [ -n "$$git_name" ]; then \
-			docker exec $(SANDBOX_NAME) git config --global user.name "$$git_name"; \
-		fi; \
-		if [ -n "$$git_email" ]; then \
-			docker exec $(SANDBOX_NAME) git config --global user.email "$$git_email"; \
-		fi; \
-		docker exec -it $(SANDBOX_NAME) zsh; \
+		echo "  [..] Installing openshell..."; \
+		curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | sh; \
+		echo "  Ensure ~/.local/bin is in your PATH:"; \
+		echo '    export PATH="$$HOME/.local/bin:$$PATH"'; \
+	fi
+	@echo ""
+	@echo "==> Checking GitHub CLI auth..."
+	@if gh auth status >/dev/null 2>&1; then \
+		echo "  [ok] gh is authenticated"; \
+	else \
+		echo "  [..] gh is not authenticated. Starting login..."; \
+		echo "  (Select HTTPS as preferred protocol for git operations)"; \
+		gh auth login; \
 	fi
 
-# Open another shell into a running sandbox
-sandbox-shell:
-	docker exec -it $(SANDBOX_NAME) zsh
+# Create sandbox, run setup, start sync. Idempotent.
+sandbox-build:
+	@.openshell/sandbox.sh build $(SANDBOX_NAME)
 
-# Stop the sandbox (state preserved, `make sandbox` will restart it)
+# Connect to sandbox (builds first if needed)
+sandbox: sandbox-build
+	@.openshell/sandbox.sh connect $(SANDBOX_NAME)
+
+# Alias
+sandbox-shell: sandbox
+
+# Stop sandbox: terminate sync, delete sandbox, clean up
 sandbox-stop:
-	docker stop $(SANDBOX_NAME) 2>/dev/null || true
+	@.openshell/sandbox.sh stop $(SANDBOX_NAME)
 
-# Destroy sandbox and all persisted state (clean slate)
-sandbox-nuke:
-	docker rm -f $(SANDBOX_NAME) 2>/dev/null || true
-	docker volume rm $(SANDBOX_NAME)-home 2>/dev/null || true
-	@echo "Sandbox destroyed. Run 'make sandbox' to start fresh."
+# Same as stop — no persistent state with OpenShell
+sandbox-nuke: sandbox-stop

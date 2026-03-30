@@ -1,0 +1,164 @@
+#!/bin/bash
+# Sandbox lifecycle management for OpenShell + mutagen.
+# Called by Makefile targets: sandbox, sandbox-build, sandbox-stop
+set -euo pipefail
+
+ACTION="${1:-}"
+SANDBOX_NAME="${2:-}"
+SANDBOX_SSH_HOST="openshell-${SANDBOX_NAME}"
+PLENARY_HOST="${HOME}/.local/share/nvim/lazy/plenary.nvim"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# macOS Docker Desktop uses a non-default socket
+if [ "$(uname -s)" = "Darwin" ]; then
+    export DOCKER_HOST="${DOCKER_HOST:-unix://${HOME}/.docker/run/docker.sock}"
+fi
+
+get_phase() {
+    openshell sandbox list 2>/dev/null \
+        | sed 's/\x1b\[[0-9;]*m//g' \
+        | grep "$SANDBOX_NAME" \
+        | awk '{print $NF}' || true
+}
+
+ensure_ssh_config() {
+    mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
+    touch "$HOME/.ssh/config" && chmod 600 "$HOME/.ssh/config"
+    if ! grep -q "# BEGIN openshell-${SANDBOX_NAME}" "$HOME/.ssh/config" 2>/dev/null; then
+        sed "/^# BEGIN openshell-${SANDBOX_NAME}/,/^# END openshell-${SANDBOX_NAME}/d" \
+            "$HOME/.ssh/config" > "$HOME/.ssh/config.tmp" || true
+        {
+            echo "# BEGIN openshell-${SANDBOX_NAME}"
+            openshell sandbox ssh-config "$SANDBOX_NAME"
+            echo "# END openshell-${SANDBOX_NAME}"
+            echo ""
+            cat "$HOME/.ssh/config.tmp"
+        } > "$HOME/.ssh/config"
+        rm -f "$HOME/.ssh/config.tmp"
+    fi
+}
+
+ensure_setup() {
+    if ! ssh "$SANDBOX_SSH_HOST" "test -x \$HOME/.local/bin/nvim" 2>/dev/null; then
+        echo "==> Running setup (neovim, git config)..."
+        cat "$SCRIPT_DIR/overlay/setup.sh" \
+            | ssh "$SANDBOX_SSH_HOST" "cat > /tmp/setup.sh && bash /tmp/setup.sh"
+    fi
+
+    local git_name git_email
+    git_name=$(git config user.name 2>/dev/null || true)
+    git_email=$(git config user.email 2>/dev/null || true)
+    if [ -n "$git_name" ]; then
+        ssh "$SANDBOX_SSH_HOST" "git config --global user.name '$git_name'" 2>/dev/null || true
+    fi
+    if [ -n "$git_email" ]; then
+        ssh "$SANDBOX_SSH_HOST" "git config --global user.email '$git_email'" 2>/dev/null || true
+    fi
+}
+
+ensure_mutagen_sync() {
+    if ! mutagen sync list "${SANDBOX_NAME}-repo" >/dev/null 2>&1; then
+        echo "  Starting repo sync..."
+        mutagen sync create \
+            --name "${SANDBOX_NAME}-repo" \
+            --mode two-way-resolved \
+            --ignore-vcs \
+            --ignore node_modules \
+            --ignore .test-home --ignore .test-xdg --ignore .test-tmp \
+            "$REPO_DIR" "${SANDBOX_SSH_HOST}:/sandbox/repo" || true
+        mutagen sync flush "${SANDBOX_NAME}-repo" 2>/dev/null || true
+    fi
+
+    if ! mutagen sync list "${SANDBOX_NAME}-worktree" >/dev/null 2>&1; then
+        echo "  Starting worktree sync..."
+        mkdir -p "$REPO_DIR/../worktree"
+        mutagen sync create \
+            --name "${SANDBOX_NAME}-worktree" \
+            --mode two-way-resolved \
+            --ignore-vcs \
+            "$REPO_DIR/../worktree" "${SANDBOX_SSH_HOST}:/sandbox/worktree" || true
+    fi
+
+    if [ -d "$PLENARY_HOST" ] && ! mutagen sync list "${SANDBOX_NAME}-plenary" >/dev/null 2>&1; then
+        echo "  Starting plenary sync..."
+        mutagen sync create \
+            --name "${SANDBOX_NAME}-plenary" \
+            --mode one-way-replica \
+            --ignore-vcs \
+            "$PLENARY_HOST" \
+            "${SANDBOX_SSH_HOST}:/sandbox/.local/share/nvim/lazy/plenary.nvim" || true
+        mutagen sync flush "${SANDBOX_NAME}-plenary" 2>/dev/null || true
+    fi
+}
+
+cleanup() {
+    mutagen sync terminate "${SANDBOX_NAME}-repo" 2>/dev/null || true
+    mutagen sync terminate "${SANDBOX_NAME}-worktree" 2>/dev/null || true
+    mutagen sync terminate "${SANDBOX_NAME}-plenary" 2>/dev/null || true
+    openshell sandbox delete "$SANDBOX_NAME" 2>/dev/null || true
+    if [ -f "$HOME/.ssh/config" ]; then
+        sed "/^# BEGIN openshell-${SANDBOX_NAME}/,/^# END openshell-${SANDBOX_NAME}/d" \
+            "$HOME/.ssh/config" > "$HOME/.ssh/config.tmp" \
+        && mv "$HOME/.ssh/config.tmp" "$HOME/.ssh/config"
+    fi
+}
+
+# Ensure sandbox exists and is fully set up. Idempotent.
+cmd_build() {
+    local phase
+    phase=$(get_phase)
+
+    # Clean up broken state
+    if [ -n "$phase" ] && [ "$phase" != "Running" ] && [ "$phase" != "Ready" ]; then
+        echo "==> Sandbox in bad state ($phase), cleaning up..."
+        cleanup
+        phase=""
+    fi
+
+    # Create if needed
+    if [ -z "$phase" ]; then
+        echo "==> Creating sandbox..."
+        openshell sandbox create \
+            --name "$SANDBOX_NAME" \
+            --from base \
+            --policy .openshell/policy.yaml \
+            --auto-providers \
+            -- true || true
+    fi
+
+    echo "==> Ensuring SSH config..."
+    ensure_ssh_config
+
+    ensure_setup
+
+    echo "==> Ensuring file sync..."
+    ensure_mutagen_sync
+
+    echo "==> Sandbox ready."
+}
+
+# Connect to sandbox. Builds first if needed.
+cmd_connect() {
+    local phase
+    phase=$(get_phase)
+
+    if [ "$phase" != "Running" ] && [ "$phase" != "Ready" ]; then
+        cmd_build
+    fi
+
+    openshell sandbox connect "$SANDBOX_NAME" || true
+}
+
+cmd_stop() {
+    echo "==> Stopping sandbox..."
+    cleanup
+    echo "Sandbox stopped."
+}
+
+case "$ACTION" in
+    build)   cmd_build ;;
+    connect) cmd_connect ;;
+    stop)    cmd_stop ;;
+    *)       echo "Usage: $0 {build|connect|stop} <sandbox-name>"; exit 1 ;;
+esac

@@ -1,86 +1,195 @@
-version: "1.0"
+version: 1
 
-filesystem:
-  writable:
-    - /parley.nvim    # repo mount (named after repo, not hardcoded /sandbox)
-    - /worktree       # worktree mount for branch-based workflow
+# ── Static (locked at sandbox creation) ──────────────────────────────────────
+
+filesystem_policy:
+  include_workdir: true          # auto-add /sandbox to read_write
+  read_write:
+    - /home/sandbox              # user home — repo and worktree live under here
     - /tmp
-    - /home/sandbox
-  readable:
+  read_only:
     - /usr
     - /etc
     - /opt
+    - /proc
+    - /dev/urandom
 
-network:
-  egress:
-    allow:
-      # Git & GitHub
-      - "github.com:443"
-      - "*.github.com:443"
-      - "*.githubusercontent.com:443"
-      - "ssh.github.com:22"
-      - "ssh.github.com:443"
+landlock:
+  compatibility: best_effort
 
-      # Node.js / npm
-      - "registry.npmjs.org:443"
-      - "*.npmjs.org:443"
-      - "*.npmjs.com:443"
+process:
+  run_as_user: sandbox
+  run_as_group: sandbox
 
-      # Rust / Cargo
-      - "crates.io:443"
-      - "*.crates.io:443"
-      - "static.rust-lang.org:443"
+# ── Dynamic (hot-reloadable) ─────────────────────────────────────────────────
+# Deny-by-default: anything not listed below is blocked.
+# Every entry needs `binaries` — without it, OPA denies all connections.
+# We use path: "/**" (allow any binary) since the security boundary is at
+# the network level (which hosts are reachable), not per-binary.
 
-      # Ruby / RubyGems
-      - "rubygems.org:443"
-      - "*.rubygems.org:443"
+network_policies:
 
-      # Python / PyPI
-      - "pypi.org:443"
-      - "files.pythonhosted.org:443"
+  # ── Git & GitHub ───────────────────────────────────────────────────────────
+  github:
+    name: GitHub
+    endpoints:
+      - host: github.com
+        port: 443
+      - host: "*.github.com"
+        port: 443
+      - host: "*.githubusercontent.com"
+        port: 443
+      # GitHub release assets redirect to Azure Blob Storage
+      - host: "*.blob.core.windows.net"
+        port: 443
+      - host: ssh.github.com
+        port: 22
+      - host: ssh.github.com
+        port: 443
+    binaries:
+      - path: "/**"
 
-      # Go
-      - "proxy.golang.org:443"
-      - "sum.golang.org:443"
-      - "storage.googleapis.com:443"
+  # ── Node.js / npm ─────────────────────────────────────────────────────────
+  npm:
+    name: npm registry
+    endpoints:
+      - host: registry.npmjs.org
+        port: 443
+      - host: "*.npmjs.org"
+        port: 443
+      - host: "*.npmjs.com"
+        port: 443
+    binaries:
+      - path: "/**"
 
-      # Lua
-      - "luarocks.org:443"
-      - "*.luarocks.org:443"
+  # ── Rust / Cargo ───────────────────────────────────────────────────────────
+  cargo:
+    name: Cargo registry
+    endpoints:
+      - host: crates.io
+        port: 443
+      - host: "*.crates.io"
+        port: 443
+      - host: static.rust-lang.org
+        port: 443
+      - host: static.crates.io
+        port: 443
+      - host: sh.rustup.rs
+        port: 443
+    binaries:
+      - path: "/**"
 
-      # AI APIs (Claude, OpenAI/Codex, Gemini, Amazon Q)
-      - "api.anthropic.com:443"
-      - "statsig.anthropic.com:443"
-      - "sentry.io:443"
-      - "api.openai.com:443"
-      - "generativelanguage.googleapis.com:443"
-      - "*.amazonaws.com:443"
+  # ── Ruby / RubyGems ───────────────────────────────────────────────────────
+  rubygems:
+    name: RubyGems
+    endpoints:
+      - host: rubygems.org
+        port: 443
+      - host: "*.rubygems.org"
+        port: 443
+    binaries:
+      - path: "/**"
 
-      # Elixir / Hex / Erlang
-      - "hex.pm:443"
-      - "*.hex.pm:443"
-      - "builds.hex.pm:443"
-      - "repo.hex.pm:443"
+  # ── Python / PyPI ──────────────────────────────────────────────────────────
+  pypi:
+    name: PyPI
+    endpoints:
+      - host: pypi.org
+        port: 443
+      - host: files.pythonhosted.org
+        port: 443
+    binaries:
+      - path: "/**"
 
-      # Ubuntu apt (system updates inside sandbox)
-      - "archive.ubuntu.com:443"
-      - "ports.ubuntu.com:443"
-      - "security.ubuntu.com:443"
+  # ── Go ─────────────────────────────────────────────────────────────────────
+  golang:
+    name: Go modules
+    endpoints:
+      - host: proxy.golang.org
+        port: 443
+      - host: sum.golang.org
+        port: 443
+      - host: storage.googleapis.com
+        port: 443
+    binaries:
+      - path: "/**"
 
-      # Neovim Mason (LSP/linter/formatter installer)
-      - "objects.githubusercontent.com:443"
-      - "github-releases.githubusercontent.com:443"
+  # ── Lua ────────────────────────────────────────────────────────────────────
+  luarocks:
+    name: LuaRocks
+    endpoints:
+      - host: luarocks.org
+        port: 443
+      - host: "*.luarocks.org"
+        port: 443
+    binaries:
+      - path: "/**"
 
-      # nvm / rustup / oh-my-zsh installers
-      - "raw.githubusercontent.com:443"
-      - "sh.rustup.rs:443"
-      - "static.crates.io:443"
+  # ── Elixir / Hex ──────────────────────────────────────────────────────────
+  hex:
+    name: Hex packages
+    endpoints:
+      - host: hex.pm
+        port: 443
+      - host: "*.hex.pm"
+        port: 443
+    binaries:
+      - path: "/**"
 
-      # GitHub CLI apt repo
-      - "cli.github.com:443"
+  # ── AI APIs ────────────────────────────────────────────────────────────────
+  ai_anthropic:
+    name: Anthropic (Claude)
+    endpoints:
+      - host: api.anthropic.com
+        port: 443
+      - host: statsig.anthropic.com
+        port: 443
+      - host: sentry.io
+        port: 443
+    binaries:
+      - path: "/**"
 
-      # zoxide, fzf (installed from GitHub)
-      - "github.com:22"
+  ai_openai:
+    name: OpenAI (Codex)
+    endpoints:
+      - host: api.openai.com
+        port: 443
+    binaries:
+      - path: "/**"
 
-    deny:
-      - "*"
+  ai_google:
+    name: Google (Gemini)
+    endpoints:
+      - host: generativelanguage.googleapis.com
+        port: 443
+    binaries:
+      - path: "/**"
+
+  ai_amazon:
+    name: Amazon Q
+    endpoints:
+      - host: "*.amazonaws.com"
+        port: 443
+    binaries:
+      - path: "/**"
+
+  # ── System / package managers ──────────────────────────────────────────────
+  ubuntu_apt:
+    name: Ubuntu apt
+    endpoints:
+      - host: archive.ubuntu.com
+        port: 443
+      - host: ports.ubuntu.com
+        port: 443
+      - host: security.ubuntu.com
+        port: 443
+    binaries:
+      - path: "/**"
+
+  github_cli:
+    name: GitHub CLI apt repo
+    endpoints:
+      - host: cli.github.com
+        port: 443
+    binaries:
+      - path: "/**"

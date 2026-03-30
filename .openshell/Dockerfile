@@ -5,10 +5,13 @@ FROM ubuntu:24.04
 ARG DEBIAN_FRONTEND=noninteractive
 
 # Create sandbox user (OpenShell base image provides this; ubuntu:24.04 does not)
-RUN useradd -m -s /usr/bin/zsh sandbox
+# Shell set to /bin/bash initially; changed to zsh after package install below.
+RUN useradd -m -s /bin/bash sandbox
 
 # System packages
 RUN apt-get update && apt-get install -y \
+    iproute2 \
+    iptables \
     tmux \
     git \
     curl \
@@ -97,4 +100,12 @@ COPY --chown=sandbox:sandbox dotfiles/nvim/ /home/sandbox/.config/nvim/
 # Neovim plugins (restore exact versions from lazy-lock.json, don't update)
 RUN nvim --headless "+Lazy! restore" +qa 2>/dev/null || true
 
-# WORKDIR is set at runtime via docker run -w (mount point varies per repo)
+# Git: rewrite SSH URLs to HTTPS (credentials injected by OpenShell provider)
+RUN git config --global url."https://github.com/".insteadOf "git@github.com:" \
+    && git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+
+# Mutagen sync targets (host repo and worktree are synced here)
+# Both live under /home/sandbox so filesystem_policy covers them.
+RUN mkdir -p /home/sandbox/repo /home/sandbox/worktree
+
+WORKDIR /home/sandbox/repo
