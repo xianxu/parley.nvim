@@ -37,6 +37,9 @@ PRE_MERGE_CHECKS=none make push         # push skipping all checks
 ### No-Commit Mode
 `CHECK_NO_COMMIT=1` runs checks in audit-only mode: violations are reported to stdout, agent changes are discarded. Used by hooks and `--no-commit` flag.
 
+### Agent CLI Tests
+`make test-agents` (or `tests/test_agents.sh`) validates assumptions about agent CLI tools — flag combos, stream-json event schema, jq extraction patterns, and output classification helpers. Requires `claude` CLI; `codex`/`gemini` tests skipped if not installed.
+
 ### Output Formatting
 Each check prints a consistent three-tier result: green `✓` for clean, yellow `ℹ` for informational (e.g. reminders), red `✗` for violations. Detection uses known-good patterns in `is_clean_check_output` and `is_info_check_output`. Empty output is treated as a failure (silent agent crash). Helpers live in `scripts/lib.sh`.
 

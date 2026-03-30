@@ -41,6 +41,7 @@ Host (macOS)                          Sandbox (OpenShell / K3s pod)
 
 3. **Mutagen for file sync** (not docker bind mounts, not `--upload`):
    - **Repo**: two-way-resolved to `/sandbox/repo`
+   - **Git history**: one-way-replica of `.git/` to sandbox (enables `git diff/log/branch` inside sandbox without full clone; ignores `index.lock` to avoid conflicts)
    - **Worktree**: two-way-resolved to `/sandbox/worktree`
    - **Plenary.nvim**: one-way from host (avoids slow git clone through OpenShell proxy)
    - Near-instant on macOS (FSEvents), ~10s for sandbox-originated changes
@@ -67,9 +68,10 @@ make sandbox-nuke       # Same as stop (no persistent state)
 
 ## File Sync Layout
 - Host repo → `/sandbox/repo` (two-way via mutagen)
+- Host `.git/` → `/sandbox/repo/.git` (one-way-replica via mutagen, ignores `index.lock`)
 - Host `../worktree` → `/sandbox/worktree` (two-way via mutagen)
 - Host `~/.local/share/nvim/lazy/plenary.nvim` → sandbox (one-way via mutagen)
-- SSH config managed via `BEGIN/END` markers in `~/.ssh/config`
+- SSH config managed via `BEGIN/END` markers in `~/.ssh/config` (includes `ServerAliveInterval 15` keepalive)
 
 ## Agent Permissions
 Sandbox is the security boundary — agents inside get full auto-approve:
