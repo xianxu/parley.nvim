@@ -82,6 +82,18 @@ ensure_mutagen_sync() {
             "$REPO_DIR/../worktree" "${SANDBOX_SSH_HOST}:/sandbox/worktree" || true
     fi
 
+    # Sync .git/ one-way so sandbox has git history for diff/log/branch commands.
+    # One-way-replica avoids conflicts on index, lock files, etc.
+    if ! mutagen sync list "${SANDBOX_NAME}-git" >/dev/null 2>&1; then
+        echo "  Starting git sync..."
+        mutagen sync create \
+            --name "${SANDBOX_NAME}-git" \
+            --mode one-way-replica \
+            --ignore "index.lock" \
+            "$REPO_DIR/.git" "${SANDBOX_SSH_HOST}:/sandbox/repo/.git" || true
+        mutagen sync flush "${SANDBOX_NAME}-git" 2>/dev/null || true
+    fi
+
     if [ -d "$PLENARY_HOST" ] && ! mutagen sync list "${SANDBOX_NAME}-plenary" >/dev/null 2>&1; then
         echo "  Starting plenary sync..."
         mutagen sync create \
@@ -96,6 +108,7 @@ ensure_mutagen_sync() {
 
 cleanup() {
     mutagen sync terminate "${SANDBOX_NAME}-repo" 2>/dev/null || true
+    mutagen sync terminate "${SANDBOX_NAME}-git" 2>/dev/null || true
     mutagen sync terminate "${SANDBOX_NAME}-worktree" 2>/dev/null || true
     mutagen sync terminate "${SANDBOX_NAME}-plenary" 2>/dev/null || true
     openshell sandbox delete "$SANDBOX_NAME" 2>/dev/null || true
