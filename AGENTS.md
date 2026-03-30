@@ -4,7 +4,7 @@
 
 ### 1. Overall
 - Enter plan mode for ANY non-trivial task (3+ steps, architectural decisions, change more than 2 files, 50 lines)
-- Work is tracked in `issues/` folder as single-file-per-issue markdown
+- Work is tracked in `issues/` folder as single-file-per-issue markdown file. Issue status are: open, working, blocked, done, wontfix. You should maintain them
 - Plan within the issue file's `## Plan` section (checklist), log discoveries, tools you used or installed in `## Log`
 - AVOID READING `history/*`, they are history, low signal
 - Wait for user approval before implementation for ANY non-trivial task
