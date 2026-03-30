@@ -141,3 +141,8 @@ Docs: https://docs.nvidia.com/openshell/latest/index.html
 - Docker Desktop macOS needs `DOCKER_HOST=unix://$HOME/.docker/run/docker.sock`
 - `--no-tty` on `sandbox create` still seems to open a shell — need to exit one level before setup runs. End result works but UX needs polish.
 - **End-to-end working**: `make sandbox` → creates sandbox, runs setup via SSH, syncs repo + plenary via mutagen, `make test` passes inside sandbox
+- Policy needs `*.claude.com`, `*.claude.ai`, `*.chatgpt.com` for agent CLIs (not just API endpoints)
+- DO NOT sync `~/.claude` or `~/.codex` from host — overwrites sandbox auth state set by OpenShell's `--auto-providers`. Let agents authenticate via provider injection or manual login inside sandbox.
+- Codex OAuth device flow broken through MITM proxy (chatgpt.com returns 403 on GET after CONNECT succeeds). API key auth works. Filed as OpenShell limitation.
+- Refactored sandbox.sh: `build` (idempotent setup), `connect` (builds if needed + connects), `stop` (cleanup)
+- `make sandbox-build` = one-time setup, `make sandbox` = connect (runs build first)

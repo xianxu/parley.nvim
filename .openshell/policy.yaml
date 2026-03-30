@@ -142,9 +142,19 @@ network_policies:
     endpoints:
       - host: api.anthropic.com
         port: 443
-      - host: statsig.anthropic.com
+      - host: "*.anthropic.com"
+        port: 443
+      - host: platform.claude.com
+        port: 443
+      - host: "*.claude.com"
+        port: 443
+      - host: claude.ai
+        port: 443
+      - host: "*.claude.ai"
         port: 443
       - host: sentry.io
+        port: 443
+      - host: "*.sentry.io"
         port: 443
     binaries:
       - path: "/**"
@@ -153,6 +163,12 @@ network_policies:
     name: OpenAI (Codex)
     endpoints:
       - host: api.openai.com
+        port: 443
+      - host: "*.openai.com"
+        port: 443
+      - host: chatgpt.com
+        port: 443
+      - host: "*.chatgpt.com"
         port: 443
     binaries:
       - path: "/**"
