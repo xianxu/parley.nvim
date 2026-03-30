@@ -25,18 +25,20 @@ get_phase() {
 ensure_ssh_config() {
     mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
     touch "$HOME/.ssh/config" && chmod 600 "$HOME/.ssh/config"
-    if ! grep -q "# BEGIN openshell-${SANDBOX_NAME}" "$HOME/.ssh/config" 2>/dev/null; then
-        sed "/^# BEGIN openshell-${SANDBOX_NAME}/,/^# END openshell-${SANDBOX_NAME}/d" \
-            "$HOME/.ssh/config" > "$HOME/.ssh/config.tmp" || true
-        {
-            echo "# BEGIN openshell-${SANDBOX_NAME}"
-            openshell sandbox ssh-config "$SANDBOX_NAME"
-            echo "# END openshell-${SANDBOX_NAME}"
-            echo ""
-            cat "$HOME/.ssh/config.tmp"
-        } > "$HOME/.ssh/config"
-        rm -f "$HOME/.ssh/config.tmp"
-    fi
+    # Always regenerate to pick up keepalive settings
+    sed "/^# BEGIN openshell-${SANDBOX_NAME}/,/^# END openshell-${SANDBOX_NAME}/d" \
+        "$HOME/.ssh/config" > "$HOME/.ssh/config.tmp" || true
+    {
+        echo "# BEGIN openshell-${SANDBOX_NAME}"
+        openshell sandbox ssh-config "$SANDBOX_NAME"
+        # Keep connection alive through the proxy (every 15s, tolerate 3 misses)
+        echo "    ServerAliveInterval 15"
+        echo "    ServerAliveCountMax 3"
+        echo "# END openshell-${SANDBOX_NAME}"
+        echo ""
+        cat "$HOME/.ssh/config.tmp"
+    } > "$HOME/.ssh/config"
+    rm -f "$HOME/.ssh/config.tmp"
 }
 
 ensure_setup() {
