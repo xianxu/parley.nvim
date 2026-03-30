@@ -57,7 +57,10 @@ print_check_output() {
     fi
 }
 
-# ── Git diff base ────────────────────────────────────────────────────────────
+# ── Git helpers ───────────────────────────────────────────────────────────────
+# Check if we're inside a git repository.
+is_git_repo() { git rev-parse --git-dir &>/dev/null; }
+
 # On main: diff against origin/main (unpushed local changes).
 # On feature branch: diff against merge-base with main (branch changes).
 git_diff_base() {

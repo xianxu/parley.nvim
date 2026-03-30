@@ -183,16 +183,24 @@ end)
 --------------------------------------------------------------------------------
 
 describe("cycle_status_value", function()
-    it("cycles open to blocked", function()
-        assert.equals("blocked", issues.cycle_status_value("open"))
+    it("cycles open to working", function()
+        assert.equals("working", issues.cycle_status_value("open"))
+    end)
+
+    it("cycles working to blocked", function()
+        assert.equals("blocked", issues.cycle_status_value("working"))
     end)
 
     it("cycles blocked to done", function()
         assert.equals("done", issues.cycle_status_value("blocked"))
     end)
 
-    it("cycles done to open", function()
-        assert.equals("open", issues.cycle_status_value("done"))
+    it("cycles done to wontfix", function()
+        assert.equals("wontfix", issues.cycle_status_value("done"))
+    end)
+
+    it("cycles wontfix to open", function()
+        assert.equals("open", issues.cycle_status_value("wontfix"))
     end)
 
     it("defaults unknown to open", function()
@@ -227,6 +235,22 @@ describe("next_runnable", function()
     it("skips blocked issues", function()
         local result = issues.next_runnable({
             { id = "0001", status = "blocked", deps = {} },
+            { id = "0002", status = "open", deps = {} },
+        })
+        assert.equals("0002", result.id)
+    end)
+
+    it("skips working issues", function()
+        local result = issues.next_runnable({
+            { id = "0001", status = "working", deps = {} },
+            { id = "0002", status = "open", deps = {} },
+        })
+        assert.equals("0002", result.id)
+    end)
+
+    it("skips wontfix issues", function()
+        local result = issues.next_runnable({
+            { id = "0001", status = "wontfix", deps = {} },
             { id = "0002", status = "open", deps = {} },
         })
         assert.equals("0002", result.id)
@@ -331,6 +355,21 @@ describe("topo_sort", function()
         assert.equals("0003", sorted[1].id) -- open
         assert.equals("0002", sorted[2].id) -- blocked
         assert.equals("0001", sorted[3].id) -- done
+    end)
+
+    it("sorts all five statuses in priority order", function()
+        local sorted = issues.topo_sort({
+            { id = "0001", status = "wontfix", deps = {} },
+            { id = "0002", status = "done", deps = {} },
+            { id = "0003", status = "blocked", deps = {} },
+            { id = "0004", status = "working", deps = {} },
+            { id = "0005", status = "open", deps = {} },
+        })
+        assert.equals("0005", sorted[1].id) -- open
+        assert.equals("0004", sorted[2].id) -- working
+        assert.equals("0003", sorted[3].id) -- blocked
+        assert.equals("0002", sorted[4].id) -- done
+        assert.equals("0001", sorted[5].id) -- wontfix
     end)
 
     it("sorts by ID within same status", function()

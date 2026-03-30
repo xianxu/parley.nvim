@@ -104,7 +104,7 @@ M.open = function(_options)
         return
     end
 
-    -- View mode: 0=open+blocked, 1=all (incl done), 2=all+history
+    -- View mode: 0=active (open+working+blocked), 1=all (incl done+wontfix), 2=all+history
     local view_mode = _parley._issue_finder.view_mode or 0
     local include_history = view_mode == 2
     local all_issues = issues_mod.scan_issues(issues_dir, { include_history = include_history })
@@ -113,8 +113,8 @@ M.open = function(_options)
     local filtered = {}
     for _, issue in ipairs(all_issues) do
         if view_mode == 0 then
-            -- Only open + blocked (from issues/ dir only)
-            if issue.status ~= "done" and not issue.archived then
+            -- Active issues only: open, working, blocked (exclude done, wontfix, archived)
+            if issue.status ~= "done" and issue.status ~= "wontfix" and not issue.archived then
                 table.insert(filtered, issue)
             end
         else
@@ -152,7 +152,7 @@ M.open = function(_options)
 
     local chat_finder_mod = require("parley.chat_finder")
 
-    local view_labels = { [0] = "open+blocked", [1] = "all", [2] = "all+history" }
+    local view_labels = { [0] = "active", [1] = "all", [2] = "all+history" }
     local prompt_title = string.format(
         "Issues (%s  %s: cycle view)",
         view_labels[view_mode] or "open+blocked",

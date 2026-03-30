@@ -25,7 +25,7 @@ updated: 2026-03-28
 ---
 ```
 
-- `status`: `open` | `blocked` | `done`
+- `status`: `open` | `working` | `blocked` | `done` | `wontfix`
 - `deps`: list of issue IDs (4-digit, zero-padded) that must be `done` before this issue is runnable
 - `github_issue`: optional GitHub issue number (set by `make fetch` / `make issue`)
 - `created` / `updated`: `YYYY-MM-DD` dates
@@ -54,15 +54,15 @@ require("parley").setup({
 | `:ParleyIssueNew` | `<C-y>c` | Prompt for title, create issue with auto-incremented ID |
 | `:ParleyIssueFinder` | `<C-y>f` | Float picker over issues with status badges |
 | `:ParleyIssueNext` | `<C-y>x` | Open next runnable issue (cycles through list) |
-| `:ParleyIssueStatus` | `<C-y>s` | Cycle frontmatter status: open → blocked → done → open |
+| `:ParleyIssueStatus` | `<C-y>s` | Cycle frontmatter status: open → working → blocked → done → wontfix → open |
 | `:ParleyIssueDecompose` | `<C-y>i` | Create child issue from plan line at cursor, add to parent deps |
 
 ## Finder
 
 The issue finder (`<C-y>f`) uses the float picker with:
 - Display: `[status] NNNN title (#GH) [date]`
-- Sort: open first, then blocked, then done (by ID within each group)
-- Three view modes cycled via `<C-a>`: open+blocked → all → all+history
+- Sort: open, working, blocked, done, wontfix (by ID within each group)
+- Three view modes cycled via `<C-a>`: active (open+working+blocked) → all → all+history
 - `<C-s>`: cycle status of selected issue
 - `<C-d>`: delete selected issue
 

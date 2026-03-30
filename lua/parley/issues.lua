@@ -118,15 +118,16 @@ M.extract_title = function(lines, header_end)
     return ""
 end
 
--- Cycle status: open → blocked → done → open
+-- Cycle status: open → working → blocked → done → wontfix → open
 M.cycle_status_value = function(current)
-    if current == "open" then
-        return "blocked"
-    elseif current == "blocked" then
-        return "done"
-    else
-        return "open"
-    end
+    local next_status = {
+        open = "working",
+        working = "blocked",
+        blocked = "done",
+        done = "wontfix",
+        wontfix = "open",
+    }
+    return next_status[current] or "open"
 end
 
 -- Find the next runnable issue: oldest open issue whose deps are all done.
@@ -183,13 +184,13 @@ M.next_runnable = function(issues, current_id)
     return runnable[1]
 end
 
--- Sort issues for display: open first (by ID), then blocked (by ID), then done (by ID)
+-- Sort issues for display: open, working, blocked, done, wontfix (by ID within each group)
 M.topo_sort = function(issues)
     local sorted = {}
     for _, issue in ipairs(issues) do
         table.insert(sorted, issue)
     end
-    local status_priority = { open = 1, blocked = 2, done = 3 }
+    local status_priority = { open = 1, working = 2, blocked = 3, done = 4, wontfix = 5 }
     table.sort(sorted, function(a, b)
         local pa = status_priority[a.status] or 4
         local pb = status_priority[b.status] or 4

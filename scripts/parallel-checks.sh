@@ -177,6 +177,12 @@ main() {
         exec "$SCRIPT_DIR/pre-merge-checks.sh"
     fi
 
+    # Bail early if not in a git repo — nothing to diff
+    if ! is_git_repo; then
+        printf "\n${YELLOW}Not a git repository — skipping constitution checks.${RESET}\n" >&2
+        return 0
+    fi
+
     # Audit mode: all checks in parallel, read-only
     OUTDIR=$(mktemp -d)
     trap 'rm -rf "$OUTDIR" "$LOCK_DIR" 2>/dev/null' EXIT

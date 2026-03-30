@@ -352,6 +352,11 @@ run_check() {
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 main() {
+    if ! is_git_repo; then
+        printf "\n${YELLOW}Not a git repository — skipping pre-merge checks.${RESET}\n" >&2
+        return 0
+    fi
+
     local num_checks=${#CHECK_NAMES[@]}
 
     # Single-check mode: scripts/pre-merge-checks.sh <name>
