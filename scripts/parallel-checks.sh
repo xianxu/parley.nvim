@@ -205,7 +205,7 @@ main() {
         printf "\n${YELLOW}${BOLD}Some checks reported issues.${RESET}\n" >&2
         # In hook mode: exit 2 = Claude sees stderr as feedback
         if [[ "$hook_gate" -eq 1 ]]; then
-            printf "\nYou MUST address these issues before continuing with any other work. Fix them now.\n" >&2
+            printf "\nYou SHOULD consider those suggestions and fix those issues. \n" >&2
             return 2
         elif [[ -e /dev/tty ]]; then
             printf "${BOLD}Stop to address them? [Y/n]: ${RESET}" >&2
