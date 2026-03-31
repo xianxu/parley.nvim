@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Shared helpers for pre-merge and parallel check scripts.
+# test
 
 # ── Colors ────────────────────────────────────────────────────────────────────
 BOLD='\033[1m'

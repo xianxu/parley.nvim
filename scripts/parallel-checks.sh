@@ -7,7 +7,7 @@
 # Usage:
 #   scripts/parallel-checks.sh                  # interactive (delegates to pre-merge-checks.sh)
 #   scripts/parallel-checks.sh --audit          # all parallel, read-only, report context
-#   scripts/parallel-checks.sh --hook-gate      # threshold check + audit mode
+#   scripts/parallel-checks.sh --hook-gate      # threshold check + nag/force mode
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -22,6 +22,7 @@ ALL_CHECKS=(dry pure test specs plan lessons)
 THRESHOLD_LINES=400
 THRESHOLD_FILES=10
 GROWTH_GATE_PCT=50
+FORCE_MULTIPLIER=3   # When diff >= 3x nag threshold, force-run (can't be postponed)
 STATE_FILE=".claude/constitution-check-state"
 LOCK_DIR="/tmp/parallel-checks-$(pwd | (md5sum 2>/dev/null || shasum) | cut -c1-8).lock"
 
@@ -54,30 +55,67 @@ measure_diff() {
     DIFF_FILES=$(git diff "$base" --name-only -- ':!issues/' ':!history/' 2>/dev/null | wc -l | tr -d ' ')
 }
 
-should_run_checks() {
-    measure_diff
-
-    # Absolute threshold
-    if [[ "$DIFF_FILES" -lt "$THRESHOLD_FILES" && "$DIFF_LINES" -lt "$THRESHOLD_LINES" ]]; then
-        return 1
-    fi
-
-    # Growth gate: only re-fire if diff grew since last check
+# Read last check state into LAST_LINES and LAST_FILES.
+# Resets to 0/0 if the merge base SHA has changed (new commits landed on main).
+read_state() {
+    LAST_LINES=0
+    LAST_FILES=0
     if [[ -f "$STATE_FILE" ]]; then
-        local last_lines
-        last_lines=$(cat "$STATE_FILE" 2>/dev/null || echo 0)
-        local gate=$(( last_lines + last_lines * GROWTH_GATE_PCT / 100 ))
-        if [[ "$DIFF_LINES" -le "$gate" ]]; then
-            return 1
+        local stored_sha
+        stored_sha=$(sed -n '1p' "$STATE_FILE" | tr -d ' \n')
+        local current_sha
+        current_sha=$(git_diff_base)
+        if [[ "$stored_sha" == "$current_sha" ]]; then
+            LAST_LINES=$(sed -n '2p' "$STATE_FILE" | tr -d ' \n')
+            LAST_FILES=$(sed -n '3p' "$STATE_FILE" | tr -d ' \n')
+            LAST_LINES=${LAST_LINES:-0}
+            LAST_FILES=${LAST_FILES:-0}
         fi
+        # If SHA differs, keep defaults (0/0) — merge base advanced, fresh start
+    fi
+}
+
+# Compute thresholds and set HOOK_ACTION (none/nag/force)
+check_action() {
+    measure_diff
+    read_state
+
+    # Compute nag thresholds from last check state (or absolute defaults)
+    local nag_lines nag_files growth
+    if [[ "$LAST_LINES" -gt 0 ]]; then
+        growth=$(( LAST_LINES * GROWTH_GATE_PCT / 100 ))
+        [[ "$growth" -lt 1 ]] && growth=1
+        nag_lines=$(( LAST_LINES + growth ))
+    else
+        nag_lines=$THRESHOLD_LINES
+    fi
+    if [[ "$LAST_FILES" -gt 0 ]]; then
+        growth=$(( LAST_FILES * GROWTH_GATE_PCT / 100 ))
+        [[ "$growth" -lt 1 ]] && growth=1
+        nag_files=$(( LAST_FILES + growth ))
+    else
+        nag_files=$THRESHOLD_FILES
     fi
 
-    return 0
+    # Force threshold: FORCE_MULTIPLIER × nag threshold
+    local force_lines=$(( nag_lines * FORCE_MULTIPLIER ))
+    local force_files=$(( nag_files * FORCE_MULTIPLIER ))
+
+    # Determine action
+    if [[ "$DIFF_LINES" -lt "$nag_lines" && "$DIFF_FILES" -lt "$nag_files" ]]; then
+        HOOK_ACTION=none
+    elif [[ "$DIFF_LINES" -ge "$force_lines" || "$DIFF_FILES" -ge "$force_files" ]]; then
+        HOOK_ACTION=force
+    else
+        HOOK_ACTION=nag
+    fi
 }
 
 update_state() {
     measure_diff
-    printf '%d' "$DIFF_LINES" > "$STATE_FILE"
+    local current_sha
+    current_sha=$(git_diff_base)
+    printf '%s\n%d\n%d\n' "$current_sha" "$DIFF_LINES" "$DIFF_FILES" > "$STATE_FILE"
 }
 
 # ── Run a single check, capturing output ─────────────────────────────────────
@@ -160,12 +198,12 @@ main() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --audit) audit=1; shift ;;
-            --hook-gate) hook_gate=1; audit=1; shift ;;
+            --hook-gate) hook_gate=1; shift ;;
             *) printf "${RED}Unknown option: %s${RESET}\n" "$1" >&2; return 1 ;;
         esac
     done
 
-    # Hook gate mode: drain stdin (Claude sends JSON), check lock
+    # Hook gate mode: drain stdin (Claude sends JSON), check lock, then decide action
     if [[ "$hook_gate" -eq 1 ]]; then
         cat >/dev/null 2>&1 || true  # consume stdin from Claude hook
         if ! mkdir "$LOCK_DIR" 2>/dev/null; then
@@ -173,6 +211,46 @@ main() {
         fi
         trap 'rm -rf "$LOCK_DIR" 2>/dev/null' EXIT
         export CHECK_MODE=hook
+
+        # Bail early if not in a git repo
+        if ! is_git_repo; then
+            return 0
+        fi
+
+        check_action
+
+        case "$HOOK_ACTION" in
+            none)
+                return 0
+                ;;
+            nag)
+                printf '{"systemMessage": "Constitution reminder: You have made substantial changes (%s files, ~%s lines). Consider running scripts/parallel-checks.sh --audit when you reach a good stopping point."}\n' \
+                    "$DIFF_FILES" "$DIFF_LINES"
+                return 0
+                ;;
+            force)
+                # Force: run all checks and require the agent to address violations
+                OUTDIR=$(mktemp -d)
+                trap 'rm -rf "$OUTDIR" "$LOCK_DIR" 2>/dev/null' EXIT
+
+                printf "Constitution check (forced): Change is very large (%s files, ~%s lines). Running checks now.\n" \
+                    "$DIFF_FILES" "$DIFF_LINES" >&2
+
+                run_all_parallel "$OUTDIR"
+                assemble_context "$OUTDIR"
+                update_state
+
+                if [[ "$HAS_FAILURES" -eq 1 ]]; then
+                    local check_output msg
+                    check_output=$(cat "$OUTDIR"/*.out 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' || true)
+                    msg="Constitution check (forced): Very large change ($DIFF_FILES files, ~$DIFF_LINES lines). Violations found — STOP what you are doing and address these NOW before any further edits."$'\n\n'"$check_output"$'\n\nYou MUST fix the above violations immediately. Do not proceed with any other task until these are resolved.'
+                    jq -n --arg m "$msg" '{"systemMessage": $m}'
+                else
+                    jq -n --arg m "Constitution check (forced): Very large change ($DIFF_FILES files, ~$DIFF_LINES lines). All checks passed." '{"systemMessage": $m}'
+                fi
+                return 0
+                ;;
+        esac
     fi
 
     # Interactive mode: delegate to existing script
@@ -180,15 +258,15 @@ main() {
         exec "$SCRIPT_DIR/pre-merge-checks.sh"
     fi
 
+    # Audit mode (voluntary run): checks in parallel, then update state
     # Bail early if not in a git repo — nothing to diff
     if ! is_git_repo; then
         printf "\n${YELLOW}Not a git repository — skipping constitution checks.${RESET}\n" >&2
         return 0
     fi
 
-    # Audit mode: all checks in parallel, read-only
     OUTDIR=$(mktemp -d)
-    trap 'rm -rf "$OUTDIR" "$LOCK_DIR" 2>/dev/null' EXIT
+    trap 'rm -rf "$OUTDIR" 2>/dev/null' EXIT
 
     printf "\n${CYAN}${BOLD}Constitution checks${RESET}" >&2
     measure_diff
@@ -197,17 +275,12 @@ main() {
     run_all_parallel "$OUTDIR"
     assemble_context "$OUTDIR"
 
-    if [[ "$hook_gate" -eq 1 ]]; then
-        update_state
-    fi
+    # Always update state after a voluntary audit — resets nag threshold
+    update_state
 
     if [[ "$HAS_FAILURES" -eq 1 ]]; then
         printf "\n${YELLOW}${BOLD}Some checks reported issues.${RESET}\n" >&2
-        # In hook mode: exit 2 = Claude sees stderr as feedback
-        if [[ "$hook_gate" -eq 1 ]]; then
-            printf "\nYou SHOULD consider those suggestions and fix those issues. \n" >&2
-            return 2
-        elif [[ -e /dev/tty ]]; then
+        if [[ -e /dev/tty ]]; then
             printf "${BOLD}Stop to address them? [Y/n]: ${RESET}" >&2
             read -r answer </dev/tty 2>/dev/null || answer="Y"
             if [[ "$answer" == "n" || "$answer" == "N" ]]; then

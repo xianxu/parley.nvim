@@ -46,6 +46,9 @@ check-%:
 test-agents:
 	@tests/test_agents.sh
 
+test-checks:
+	@tests/test_parallel_checks.sh
+
 # Worktree management targets
 # Capture extra argument after worktree (e.g. make worktree feature-x)
 ifeq (worktree,$(firstword $(MAKECMDGOALS)))

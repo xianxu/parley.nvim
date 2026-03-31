@@ -40,6 +40,8 @@ PRE_MERGE_CHECKS=none make push         # push skipping all checks
 ### Agent CLI Tests
 `make test-agents` (or `tests/test_agents.sh`) validates assumptions about agent CLI tools — flag combos, stream-json event schema, jq extraction patterns, and output classification helpers. Requires `claude` CLI; `codex`/`gemini` tests skipped if not installed.
 
+`make test-checks` (or `tests/test_parallel_checks.sh`) validates the parallel-checks hook gate logic — threshold calculation, state read/write, and nag/force/none action selection.
+
 ### Output Formatting
 Each check prints a consistent three-tier result: green `✓` for clean, yellow `ℹ` for informational (e.g. reminders), red `✗` for violations. Detection uses known-good patterns in `is_clean_check_output` and `is_info_check_output`. Empty output is treated as a failure (silent agent crash). Helpers live in `scripts/lib.sh`.
 
@@ -50,7 +52,14 @@ After each agent check (interactive mode), repo state is diffed. If files change
 - Discard → `git checkout/clean`
 
 ## Constitution Hook
-`PostToolUse` hooks on both `Write` and `Edit` in `.claude/settings.json` trigger constitution checks automatically during coding sessions. A filesystem lock prevents concurrent runs. Findings are injected into the agent's context via stderr.
+`PostToolUse` hooks on both `Write` and `Edit` in `.claude/settings.json` trigger constitution checks automatically during coding sessions. A filesystem lock prevents concurrent runs.
+
+Hook gate uses a three-tier response based on diff size relative to the last-check state:
+- **none**: diff is below the nag threshold — silent, no action.
+- **nag**: diff grew by ≥50% since last check — injects a reminder `systemMessage` asking the agent to run `--audit` at a good stopping point. No checks are actually run.
+- **force**: diff is ≥3× the nag threshold — runs all checks in parallel immediately, injects findings as a `systemMessage` requiring the agent to address violations before proceeding.
+
+State is stored in `.claude/constitution-check-state` as SHA + lines + files. The SHA is the current merge base; if it advances (new commits land on main), the state resets to absolute thresholds (400 lines / 10 files) for the next cycle.
 
 In hook mode (`CHECK_MODE=hook`), the test check runs the lighter `make test-changed` + `make lint` instead of the full suite to keep the feedback loop fast.
 
@@ -63,6 +72,7 @@ rm COMPARE-SHA                  # revert to default
 ```
 
 ## History
+- 2026-03-30: Hook gate refactored to three-tier nag/force/none system; state file tracks SHA+lines+files; `make test-checks` added
 - 2026-03-29: Multi-agent support (codex, gemini), failure-stops-merge, info output tier (issue 000029)
 - 2026-03-29: Consistent pass/fail formatting for check output (issue 000026)
 - 2026-03-29: Concurrency-limited parallel checks (issue 000021)
