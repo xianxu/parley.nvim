@@ -4,6 +4,10 @@ FROM ubuntu:24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 
+# Terminal color support (256-color + truecolor for rich CLI output)
+ENV TERM=xterm-256color
+ENV COLORTERM=truecolor
+
 # Create sandbox user (OpenShell base image provides this; ubuntu:24.04 does not)
 # Shell set to /bin/bash initially; changed to zsh after package install below.
 RUN useradd -m -s /bin/bash sandbox

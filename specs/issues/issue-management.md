@@ -83,7 +83,7 @@ Archived issues remain available for lookup, ID allocation, and finder browsing,
 ## Makefile Integration
 
 - `make fetch N` — creates `issues/NNNN-slug.md` from GitHub issue #N with `github_issue: N` frontmatter
-- `make issue N` — same as fetch + creates a sibling worktree
+- `make issue N` — same as fetch + creates a worktree under `../worktree/`
 - `make push` — pushes, closes GitHub issues for done issues, moves done to `history/`
 - `make pull-request` — diffs `issues/` between branch point and HEAD, gathers `github_issue:` IDs for PR body
 - `make merge` — merges PR, moves done issues to `history/`, cleans up worktree

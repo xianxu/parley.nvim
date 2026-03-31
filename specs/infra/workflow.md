@@ -24,7 +24,7 @@ Agent-driven verification steps run before `push` and `merge`. Each check invoke
 
 ### Usage
 ```bash
-make pre-merge                          # parallel runner (interactive accept/discard)
+make pre-merge                          # interactive sequential (accept/discard per check)
 make c                                  # audit mode (all parallel, report-only)
 make check-dry                          # single check (interactive)
 PRE_MERGE_CHECKS=yynnyn make pre-merge  # preset (y=run, n=skip)

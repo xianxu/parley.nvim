@@ -23,7 +23,7 @@ THRESHOLD_LINES=400
 THRESHOLD_FILES=10
 GROWTH_GATE_PCT=50
 STATE_FILE=".claude/constitution-check-state"
-LOCK_DIR="/tmp/parallel-checks-$(pwd | md5sum 2>/dev/null || shasum | cut -c1-8).lock"
+LOCK_DIR="/tmp/parallel-checks-$(pwd | (md5sum 2>/dev/null || shasum) | cut -c1-8).lock"
 
 # ── TTY detection ────────────────────────────────────────────────────────────
 IS_TTY=false
@@ -165,11 +165,13 @@ main() {
         esac
     done
 
-    # Hook gate mode: check threshold first, use lighter tests
+    # Hook gate mode: drain stdin (Claude sends JSON), check lock
     if [[ "$hook_gate" -eq 1 ]]; then
+        cat >/dev/null 2>&1 || true  # consume stdin from Claude hook
         if ! mkdir "$LOCK_DIR" 2>/dev/null; then
-            exit 0  # another run in progress, skip silently
+            return 0  # another run in progress, skip silently
         fi
+        trap 'rm -rf "$LOCK_DIR" 2>/dev/null' EXIT
         export CHECK_MODE=hook
     fi
 
@@ -201,9 +203,13 @@ main() {
 
     if [[ "$HAS_FAILURES" -eq 1 ]]; then
         printf "\n${YELLOW}${BOLD}Some checks reported issues.${RESET}\n" >&2
-        if [[ -e /dev/tty ]]; then
+        # In hook mode: exit 2 = Claude sees stderr as feedback
+        if [[ "$hook_gate" -eq 1 ]]; then
+            printf "  Address the issues above, then continue.\n" >&2
+            return 2
+        elif [[ -e /dev/tty ]]; then
             printf "${BOLD}Stop to address them? [Y/n]: ${RESET}" >&2
-            read -r answer </dev/tty
+            read -r answer </dev/tty 2>/dev/null || answer="Y"
             if [[ "$answer" == "n" || "$answer" == "N" ]]; then
                 printf "  Continuing...\n" >&2
             else

@@ -12,6 +12,15 @@
             "command": "scripts/parallel-checks.sh --hook-gate"
           }
         ]
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "scripts/parallel-checks.sh --hook-gate"
+          }
+        ]
       }
     ]
   }

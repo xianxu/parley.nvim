@@ -57,6 +57,14 @@ ensure_setup() {
     if [ -n "$git_email" ]; then
         ssh "$SANDBOX_SSH_HOST" "git config --global user.email '$git_email'" 2>/dev/null || true
     fi
+
+    # Forward GitHub CLI auth from host to sandbox (auto-shared from host)
+    local gh_token
+    gh_token=$(gh auth token 2>/dev/null || true)
+    if [ -n "$gh_token" ]; then
+        echo "  Forwarding gh auth to sandbox..."
+        echo "$gh_token" | ssh "$SANDBOX_SSH_HOST" "gh auth login --with-token" 2>/dev/null || true
+    fi
 }
 
 ensure_mutagen_sync() {

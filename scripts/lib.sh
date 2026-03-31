@@ -47,13 +47,13 @@ print_check_output() {
     local label="$1"
     local output="$2"
     if is_clean_check_output "$output"; then
-        printf "  ${GREEN}✓ %s${RESET}\n" "$label"
+        printf "  ${GREEN}✓ %s${RESET}\n" "$label" >&2
     elif is_info_check_output "$output"; then
-        printf "  ${YELLOW}ℹ %s${RESET}\n" "$label"
-        printf "  %s\n" "$output"
+        printf "  ${YELLOW}ℹ %s${RESET}\n" "$label" >&2
+        printf "  %s\n" "$output" >&2
     else
-        printf "  ${RED}✗ %s${RESET}\n" "$label"
-        printf "${RED}%s${RESET}\n" "$output"
+        printf "  ${RED}✗ %s${RESET}\n" "$label" >&2
+        printf "${RED}%s${RESET}\n" "$output" >&2
     fi
 }
 
