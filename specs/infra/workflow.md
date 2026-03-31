@@ -50,7 +50,7 @@ After each agent check (interactive mode), repo state is diffed. If files change
 - Discard → `git checkout/clean`
 
 ## Constitution Hook
-A `PostToolUse:Write` hook in `.claude/settings.json` triggers batch constitution checks automatically during coding sessions when the diff crosses a threshold (400 lines or 10 files changed). Uses a 50% growth gate to avoid re-firing on every write. Findings are injected into the agent's context via stdout (silent-unless-violated).
+`PostToolUse` hooks on both `Write` and `Edit` in `.claude/settings.json` trigger constitution checks automatically during coding sessions. A filesystem lock prevents concurrent runs. Findings are injected into the agent's context via stderr.
 
 In hook mode (`CHECK_MODE=hook`), the test check runs the lighter `make test-changed` + `make lint` instead of the full suite to keep the feedback loop fast.
 
