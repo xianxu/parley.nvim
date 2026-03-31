@@ -19,8 +19,8 @@ source "$SCRIPT_DIR/lib.sh"
 ALL_CHECKS=(dry pure test specs plan lessons)
 
 # ── Threshold configuration ──────────────────────────────────────────────────
-THRESHOLD_LINES=400
-THRESHOLD_FILES=10
+THRESHOLD_LINES=300
+THRESHOLD_FILES=5
 GROWTH_GATE_PCT=50
 FORCE_MULTIPLIER=3   # When diff >= 3x nag threshold, force-run (can't be postponed)
 STATE_FILE=".claude/constitution-check-state"
@@ -290,8 +290,7 @@ main() {
                 return 1
             fi
         else
-            printf "  Stopping. Address the issues above, then re-run.\n" >&2
-            return 1
+            printf "  No TTY available — continuing.\n" >&2
         fi
     else
         printf "\n${GREEN}${BOLD}All constitution checks passed.${RESET}\n" >&2

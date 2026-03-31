@@ -2,11 +2,12 @@
 
 ## Architecture
 - Single custom `float_picker` for all selection UIs — no external dependencies
-- Two stacked floats: results (top, read-only) + prompt (bottom, 1-line insert-mode)
+- Two or three stacked floats: results (top, read-only) + optional tag bar (middle) + prompt (bottom, 1-line insert-mode)
 - Centered, clamped to screen (`MARGIN_H=4`, `MARGIN_V=3`)
 - `anchor` option: `"bottom"` (default, Chat Finder) = item 1 nearest prompt; `"top"` = item 1 at top row
-- `VimResized` repositions; `WinLeave` (to unrelated window) closes
+- `VimResized` repositions all windows (including tag bar); `WinLeave` (to unrelated window) closes
 - `initial_query` seeds prompt text for first filter pass
+- `M.open()` returns `{ update = fn(items, tag_bar_tags) }` for in-place refresh without close/reopen
 
 ## Fuzzy Search
 - Query split on whitespace; ALL words must match (AND); order irrelevant
@@ -17,9 +18,18 @@
 - Empty query = all items, original order, no highlights
 - `TextChangedI`/`TextChanged` drives filtering; control keys handled separately
 
+## Tag Bar (optional)
+- Enabled when `opts.tag_bar = { tags = [{label, enabled}], on_toggle, on_all, on_none }` is passed
+- Non-focusable float between results and prompt; shows `ALL` / `NONE` action buttons then `[tag]` toggles
+- Enabled tags: bold (`ParleyTagOn`); disabled: dimmed (`ParleyTagOff`); active action button: reversed (`ParleyTagAction`)
+- `""` label represents untagged files (shown as `[]`)
+- Click detection uses screen coordinates (tag bar is non-focusable, so `getmousepos().winid` is unreliable)
+- Tag state is maintained by the caller; picker calls `on_toggle(label)`, `on_all()`, or `on_none()`
+
 ## Mouse
 - Single click: move selection, keep prompt focus
 - Double click: confirm and close
+- Click on tag bar: toggles tag or triggers ALL/NONE; triple-click on tag bar is suppressed
 
 ## Keyboard (prompt insert mode)
 - `<CR>`: confirm (MUST NOT be overridden by `<C-m>` equivalents)
@@ -45,6 +55,9 @@
 - Bare `{}` matches only primary-root chats
 - Sticky filter fragments (`[tag]`, `{root}`, bare `{}`) preserved across reopen flows
 - Bracketed filters match tags only; braced filters match root-labels only — no fallback
+- Untagged files get `[]` in search ordinal so typing `[]` matches them
+- **Tag bar**: shown when any chat has tags; OR logic — file visible if any of its enabled tags matches; untagged files controlled by the `""` toggle
+- Tag state persisted in `_parley._chat_finder.tag_state` across reopens; new tags default to enabled
 - `<C-d>`: delete with confirmation (reopen on cancel; preserve visual row position)
 - `<C-D>`: delete entire chat tree (root + all branches) with confirmation
 - `<C-x>`: move to another chat root (reopen on cancel)

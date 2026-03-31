@@ -41,6 +41,9 @@ local APPROXIMATE_MATCH_HL = "ParleyPickerApproximateMatch"
 --   results top-border(1) + results bottom-border(1) +
 --   prompt  top-border(1) + prompt  content(1) + prompt bottom-border(1) = 5
 local PROMPT_OVERHEAD = 5
+-- Rows consumed by the optional tag bar window:
+--   top-border(1) + content(1) + bottom-border(1) = 3
+local TAG_BAR_OVERHEAD = 3
 
 -- Highlight namespace for fuzzy match characters in results.
 local MATCH_NS = vim.api.nvim_create_namespace("float_picker_match")
@@ -480,20 +483,24 @@ end
 -- Layout helpers
 -- ---------------------------------------------------------------------------
 
--- Compute actual dimensions and positions for results and prompt windows.
-local function compute_layout(desired_w, desired_h, ui)
+-- Compute actual dimensions and positions for results, optional tag bar, and prompt windows.
+-- Returns: win_w, win_h, row, col, tag_bar_row, prompt_row
+-- When has_tag_bar is false/nil, tag_bar_row is nil and prompt_row follows results directly.
+local function compute_layout(desired_w, desired_h, ui, has_tag_bar)
     local screen_w = ui.width
     local screen_h = ui.height
-    local win_w   = math.max(MIN_W, math.min(desired_w, screen_w - MARGIN_H * 2))
-    local max_h   = math.max(MIN_H, screen_h - MARGIN_V * 2 - PROMPT_OVERHEAD)
-    local win_h   = math.max(MIN_H, math.min(desired_h, max_h))
-    -- Centre based on total visual height (results borders + prompt borders + content)
-    local total_h = win_h + PROMPT_OVERHEAD
-    local row     = math.floor((screen_h - total_h) / 2)
-    local col     = math.floor((screen_w - win_w)   / 2)
-    -- Prompt sits immediately below results (results takes row..row+win_h+1 visually)
-    local prompt_row = row + win_h + 2
-    return win_w, win_h, row, col, prompt_row
+    local win_w    = math.max(MIN_W, math.min(desired_w, screen_w - MARGIN_H * 2))
+    local extra    = has_tag_bar and TAG_BAR_OVERHEAD or 0
+    local max_h    = math.max(MIN_H, screen_h - MARGIN_V * 2 - PROMPT_OVERHEAD - extra)
+    local win_h    = math.max(MIN_H, math.min(desired_h, max_h))
+    -- Centre based on total visual height
+    local total_h  = win_h + PROMPT_OVERHEAD + extra
+    local row      = math.floor((screen_h - total_h) / 2)
+    local col      = math.floor((screen_w - win_w)   / 2)
+    -- Tag bar (when present) sits between results and prompt
+    local tag_bar_row = has_tag_bar and (row + win_h + 2) or nil
+    local prompt_row  = has_tag_bar and (tag_bar_row + TAG_BAR_OVERHEAD) or (row + win_h + 2)
+    return win_w, win_h, row, col, tag_bar_row, prompt_row
 end
 
 -- Truncate a display string to fit within max_w display columns, appending "…".
@@ -554,8 +561,11 @@ function M.open(opts)
     end)()
     local desired_h = opts.height or #items
 
+    local tag_bar_opts = opts.tag_bar  -- optional: { tags = [{label, enabled}], on_toggle = fn(label) }
+    local has_tag_bar = tag_bar_opts ~= nil and type(tag_bar_opts.tags) == "table" and #tag_bar_opts.tags > 0
+
     local ui = vim.api.nvim_list_uis()[1] or { width = 80, height = 24 }
-    local win_w, win_h, row, col, prompt_row = compute_layout(desired_w, desired_h, ui)
+    local win_w, win_h, row, col, tag_bar_row, prompt_row = compute_layout(desired_w, desired_h, ui, has_tag_bar)
 
     local results_buf = vim.api.nvim_create_buf(false, true)
     vim.bo[results_buf].bufhidden = "wipe"
@@ -628,6 +638,104 @@ function M.open(opts)
     vim.wo[prompt_win].number = false
     vim.wo[prompt_win].relativenumber = false
     vim.wo[prompt_win].signcolumn = "no"
+
+    -- Tag bar window (optional, between results and prompt)
+    local tag_bar_buf = nil
+    local tag_bar_win = nil
+    local tag_col_ranges = {}  -- { {start_col, end_col, label}, ... } for click detection
+    local TAG_BAR_NS = vim.api.nvim_create_namespace("float_picker_tag_bar")
+
+    if has_tag_bar then
+        tag_bar_buf = vim.api.nvim_create_buf(false, true)
+        vim.bo[tag_bar_buf].bufhidden = "wipe"
+        vim.bo[tag_bar_buf].buftype = "nofile"
+        local tag_bar_cfg = {
+            relative = "editor",
+            row = tag_bar_row,
+            col = col,
+            width = win_w,
+            height = 1,
+            style = "minimal",
+            border = "rounded",
+            focusable = false,
+        }
+        tag_bar_win = vim.api.nvim_open_win(tag_bar_buf, false, tag_bar_cfg)
+        vim.wo[tag_bar_win].wrap = false
+        vim.wo[tag_bar_win].number = false
+        vim.wo[tag_bar_win].relativenumber = false
+        vim.wo[tag_bar_win].signcolumn = "no"
+
+        -- Define highlight groups (default=true makes each call idempotent)
+        vim.api.nvim_set_hl(0, "ParleyTagOn",     { bold = true,    default = true })
+        vim.api.nvim_set_hl(0, "ParleyTagOff",    { link = "Comment", default = true })
+        vim.api.nvim_set_hl(0, "ParleyTagAction", { reverse = true, default = true })
+    end
+
+    -- Sentinel labels for the fixed ALL/NONE action buttons (can't appear in real tag names)
+    local TAG_ACTION_ALL  = "\0all"
+    local TAG_ACTION_NONE = "\0none"
+
+    local function render_tag_bar()
+        if not has_tag_bar or not tag_bar_buf or not vim.api.nvim_buf_is_valid(tag_bar_buf) then
+            return
+        end
+        local parts = {}
+        local ranges = {}
+        local col_pos = 2  -- 1-indexed, starts after leading space
+        local line = " "
+
+        -- Determine ALL/NONE active state from current tag enabled flags
+        local all_on, all_off = true, true
+        for _, tag in ipairs(tag_bar_opts.tags) do
+            if not tag.enabled then all_on = false end
+            if tag.enabled then all_off = false end
+        end
+        -- all_active: ALL is the current state; none_active: NONE is the current state; mixed: neither
+        local all_active  = all_on
+        local none_active = all_off
+
+        local function add_button(btn, label, part_extra)
+            local start_col = col_pos
+            local end_col = col_pos + #btn - 1
+            local part = { text = btn, label = label, start_col = start_col, end_col = end_col }
+            for k, v in pairs(part_extra) do part[k] = v end
+            table.insert(parts, part)
+            table.insert(ranges, { start_col, end_col, label })
+            col_pos = end_col + 2
+            line = line .. btn .. " "
+        end
+
+        -- Fixed action buttons first
+        add_button("ALL",  TAG_ACTION_ALL,  { is_action = true, active = all_active })
+        add_button("NONE", TAG_ACTION_NONE, { is_action = true, active = none_active })
+
+        -- Separator
+        line = line .. " "
+        col_pos = col_pos + 1
+
+        -- Tag toggle buttons
+        for _, tag in ipairs(tag_bar_opts.tags) do
+            local btn = "[" .. (tag.label == "" and "" or tag.label) .. "]"
+            add_button(btn, tag.label, { enabled = tag.enabled })
+        end
+
+        tag_col_ranges = ranges
+        vim.bo[tag_bar_buf].modifiable = true
+        vim.api.nvim_buf_set_lines(tag_bar_buf, 0, -1, false, { line })
+        vim.bo[tag_bar_buf].modifiable = false
+        -- Apply highlights
+        vim.api.nvim_buf_clear_namespace(tag_bar_buf, TAG_BAR_NS, 0, -1)
+        for _, part in ipairs(parts) do
+            local hl
+            if part.is_action then
+                hl = part.active and "ParleyTagAction" or "ParleyTagOff"
+            else
+                hl = part.enabled and "ParleyTagOn" or "ParleyTagOff"
+            end
+            vim.api.nvim_buf_add_highlight(tag_bar_buf, TAG_BAR_NS, hl,
+                0, part.start_col - 1, part.end_col)
+        end
+    end
 
     local function prompt_line()
         if not vim.api.nvim_buf_is_valid(prompt_buf) then
@@ -759,6 +867,9 @@ function M.open(opts)
         end
         if vim.api.nvim_win_is_valid(prompt_win) then
             vim.api.nvim_win_close(prompt_win, true)
+        end
+        if tag_bar_win and vim.api.nvim_win_is_valid(tag_bar_win) then
+            vim.api.nvim_win_close(tag_bar_win, true)
         end
         if vim.api.nvim_win_is_valid(results_win) then
             vim.api.nvim_win_close(results_win, true)
@@ -1004,6 +1115,7 @@ function M.open(opts)
     end
 
     render_prompt()
+    render_tag_bar()
     apply_filter(true)
     on_query_change(query_text)
 
@@ -1033,8 +1145,55 @@ function M.open(opts)
         })
     end
 
+
+    -- Returns the 1-indexed buffer column if pos (from getmousepos()) is in the
+    -- tag bar content area, or nil otherwise.  We use screen coordinates because
+    -- getmousepos() returns the underlying (focusable) window's winid when the
+    -- mouse is over a non-focusable float, so winid comparison is unreliable.
+    local function tag_bar_content_col(pos)
+        if not has_tag_bar or not tag_bar_win or not vim.api.nvim_win_is_valid(tag_bar_win) then
+            return nil
+        end
+        local tb_pos = vim.api.nvim_win_get_position(tag_bar_win)  -- {row, col}, 0-indexed
+        local tb_cfg = vim.api.nvim_win_get_config(tag_bar_win)
+        -- With rounded border: content row is tb_pos[1]+1 (0-idx) = tb_pos[1]+2 (1-idx screenrow)
+        local content_screenrow = tb_pos[1] + 2
+        -- Content cols: tb_pos[2]+1 (0-idx left border) + 1 (1-idx) = tb_pos[2]+2 to tb_pos[2]+width-1
+        local content_screencol_start = tb_pos[2] + 2
+        local content_screencol_end   = tb_pos[2] + tb_cfg.width - 1
+        if pos.screenrow ~= content_screenrow then return nil end
+        if pos.screencol < content_screencol_start or pos.screencol > content_screencol_end then return nil end
+        -- Convert screencol to 1-indexed buffer column within content
+        return pos.screencol - (tb_pos[2] + 1)
+    end
+
+    local function try_tag_bar_click(pos)
+        local click_col = tag_bar_content_col(pos)
+        if not click_col then return false end
+        for _, range in ipairs(tag_col_ranges) do
+            if click_col >= range[1] and click_col <= range[2] then
+                local label = range[3]
+                -- Defer so pending multi-click events are absorbed before any close.
+                vim.defer_fn(function()
+                    if closed then return end
+                    if label == TAG_ACTION_ALL and tag_bar_opts.on_all then
+                        tag_bar_opts.on_all()
+                    elseif label == TAG_ACTION_NONE and tag_bar_opts.on_none then
+                        tag_bar_opts.on_none()
+                    elseif tag_bar_opts.on_toggle then
+                        tag_bar_opts.on_toggle(label)
+                    end
+                end, 50)
+                return true
+            end
+        end
+        focus_prompt()  -- clicked on whitespace in tag bar
+        return true
+    end
+
     local function prompt_click()
         local pos = vim.fn.getmousepos()
+        if try_tag_bar_click(pos) then return end
         if pos.winid == results_win and is_content_row(pos.line) then
             set_selection(index_for_visual_row(pos.line), { preserve_view = true })
             focus_prompt()
@@ -1050,6 +1209,8 @@ function M.open(opts)
     end
 
     nmap_r("<LeftMouse>", function()
+        local pos = vim.fn.getmousepos()
+        if try_tag_bar_click(pos) then return end
         if vim.api.nvim_win_is_valid(results_win) then
             set_selection(index_for_visual_row(vim.api.nvim_win_get_cursor(results_win)[1]), { preserve_view = true })
         end
@@ -1060,22 +1221,40 @@ function M.open(opts)
     nmap_r("<LeftDrag>", function() end)
     nmap_r("<LeftRelease>", function() end)
     nmap_r("<2-LeftMouse>", function()
+        local pos = vim.fn.getmousepos()
+        if tag_bar_content_col(pos) then return end
         if vim.api.nvim_win_is_valid(results_win) then
             sel_idx = index_for_visual_row(vim.api.nvim_win_get_cursor(results_win)[1])
         end
         confirm()
     end)
+    nmap_r("<3-LeftMouse>", function()
+        local pos = vim.fn.getmousepos()
+        if tag_bar_content_col(pos) then return end
+    end)
     nmap_r("<CR>", confirm)
     nmap_r("<Esc>", cancel)
     nmap_r("q", cancel)
 
+    local function prompt_tripleclick()
+        -- Suppress triple-click on tag bar; for results, just treat as single click.
+        local pos = vim.fn.getmousepos()
+        if tag_bar_content_col(pos) then return end
+        if pos.winid == results_win and is_content_row(pos.line) then
+            set_selection(index_for_visual_row(pos.line), { preserve_view = true })
+            focus_prompt()
+        end
+    end
+
     nmap_p("<LeftMouse>", prompt_click)
     nmap_p("<2-LeftMouse>", prompt_dblclick)
+    nmap_p("<3-LeftMouse>", prompt_tripleclick)
     nmap_p("<CR>", confirm)
     nmap_p("<Esc>", cancel)
     nmap_p("q", cancel)
     imap_p("<LeftMouse>", prompt_click)
     imap_p("<2-LeftMouse>", prompt_dblclick)
+    imap_p("<3-LeftMouse>", prompt_tripleclick)
     imap_p("<Up>", function()
         move_selection(-1)
         focus_prompt()
@@ -1149,6 +1328,7 @@ function M.open(opts)
         local cur_win = vim.api.nvim_get_current_win()
         local mouse = vim.fn.getmousepos()
         local translated = key_name(key)
+
         if cur_win == prompt_win and mouse.winid == results_win then
             if translated == "<LeftMouse>" and is_content_row(mouse.line) then
                 vim.schedule(function()
@@ -1206,7 +1386,7 @@ function M.open(opts)
                 return
             end
             local new_ui = vim.api.nvim_list_uis()[1] or { width = 80, height = 24 }
-            local nw, nh, nr, nc, npr = compute_layout(desired_w, desired_h, new_ui)
+            local nw, nh, nr, nc, ntbr, npr = compute_layout(desired_w, desired_h, new_ui, has_tag_bar)
             vim.api.nvim_win_set_config(results_win, {
                 relative = "editor",
                 row = nr,
@@ -1214,6 +1394,15 @@ function M.open(opts)
                 width = nw,
                 height = nh,
             })
+            if has_tag_bar and tag_bar_win and vim.api.nvim_win_is_valid(tag_bar_win) then
+                vim.api.nvim_win_set_config(tag_bar_win, {
+                    relative = "editor",
+                    row = ntbr,
+                    col = nc,
+                    width = nw,
+                    height = 1,
+                })
+            end
             if vim.api.nvim_win_is_valid(prompt_win) then
                 vim.api.nvim_win_set_config(prompt_win, {
                     relative = "editor",
@@ -1239,6 +1428,9 @@ function M.open(opts)
             if cur == results_win or cur == prompt_win then
                 return
             end
+            if has_tag_bar and tag_bar_win and cur == tag_bar_win then
+                return
+            end
             cancel()
         end)
     end
@@ -1252,7 +1444,20 @@ function M.open(opts)
         callback = on_win_leave,
     })
 
+    -- Update items and/or tag bar in-place (avoids close/reopen flash).
+    -- new_tag_bar_tags: optional list of {label, enabled} to refresh the tag bar display.
+    local function update(new_items, new_tag_bar_tags)
+        if closed then return end
+        items = new_items
+        if new_tag_bar_tags and has_tag_bar then
+            tag_bar_opts.tags = new_tag_bar_tags
+            render_tag_bar()
+        end
+        apply_filter(false)
+    end
+
     focus_prompt()
+    return { update = update }
 end
 
 return M

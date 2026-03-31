@@ -3428,6 +3428,7 @@ M._chat_finder = {
 	insert_line = nil, -- The line to insert at
 	insert_col = nil, -- The column to insert at (for insert mode)
 	insert_normal_mode = nil, -- Whether we're inserting in normal mode or insert mode
+	tag_state = nil, -- Map of tag_label -> bool (true=enabled). nil means all enabled (initial state).
 }
 
 -- Passthroughs: recency helpers (called by tests and internally)

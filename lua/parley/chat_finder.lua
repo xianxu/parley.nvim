@@ -482,8 +482,8 @@ M.open = function(_options)
 				tags_display = table.concat(tag_parts, " ") .. " "
 			end
 
-			-- Format tags for search ordinal
-			local tags_searchable = #tags > 0 and (" [" .. table.concat(tags, "] [") .. "]") or ""
+			-- Format tags for search ordinal; untagged files get [] so typing [] matches them
+			local tags_searchable = #tags > 0 and (" [" .. table.concat(tags, "] [") .. "]") or " []"
 
 			local display_filename = vim.fn.fnamemodify(file, ":t")
 			local root_prefix = is_primary_root and "" or string.format("{%s} ", root.label)
@@ -493,6 +493,7 @@ M.open = function(_options)
 				display = display_filename .. " - " .. root_prefix .. tags_display .. topic .. " [" .. date_str .. "]",
 				ordinal = display_filename .. root_searchable .. " " .. tags_searchable .. " " .. topic,
 				timestamp = file_time,
+				tags = tags,
 			})
 
 			::continue::
@@ -503,6 +504,97 @@ M.open = function(_options)
 			return a.timestamp > b.timestamp
 		end)
 
+		-- Collect all unique tags from current entries (for tag bar)
+		local all_tags_set = {}
+		local has_untagged = false
+		for _, entry in ipairs(entries) do
+			if #entry.tags == 0 then
+				has_untagged = true
+			else
+				for _, tag in ipairs(entry.tags) do
+					all_tags_set[tag] = true
+				end
+			end
+		end
+		local all_tags = {}
+		for tag in pairs(all_tags_set) do
+			table.insert(all_tags, tag)
+		end
+		table.sort(all_tags)
+		if has_untagged then
+			table.insert(all_tags, "")  -- "" represents "no tag" files
+		end
+
+		-- Initialize or merge tag state
+		if _parley._chat_finder.tag_state == nil then
+			local state = {}
+			for _, tag in ipairs(all_tags) do
+				state[tag] = true
+			end
+			_parley._chat_finder.tag_state = state
+		else
+			-- New tags (not seen before) default to enabled
+			for _, tag in ipairs(all_tags) do
+				if _parley._chat_finder.tag_state[tag] == nil then
+					_parley._chat_finder.tag_state[tag] = true
+				end
+			end
+		end
+
+		-- Build picker items and tag bar tags from entries + current tag_state.
+		-- Returns items list and tag_bar_tags list (or nil if no tags).
+		local function build_picker_data()
+			local any_tag_disabled = false
+			for _, enabled in pairs(_parley._chat_finder.tag_state) do
+				if not enabled then any_tag_disabled = true; break end
+			end
+
+			-- OR logic: include file if any of its tags is enabled.
+			-- Untagged files are included if the "" (no-tag) entry is enabled.
+			local tag_filtered_entries = entries
+			if any_tag_disabled then
+				local tag_state = _parley._chat_finder.tag_state
+				tag_filtered_entries = {}
+				for _, entry in ipairs(entries) do
+					local matches = false
+					if #entry.tags == 0 then
+						if tag_state[""] then matches = true end
+					else
+						for _, tag in ipairs(entry.tags) do
+							if tag_state[tag] then matches = true; break end
+						end
+					end
+					if matches then
+						table.insert(tag_filtered_entries, entry)
+					end
+				end
+			end
+
+			local new_items = {}
+			for _, entry in ipairs(tag_filtered_entries) do
+				table.insert(new_items, {
+					display = entry.display,
+					search_text = entry.ordinal,
+					value = entry.value,
+				})
+			end
+
+			local new_tag_bar_tags = nil
+			if #all_tags > 0 then
+				new_tag_bar_tags = {}
+				for _, tag in ipairs(all_tags) do
+					table.insert(new_tag_bar_tags, {
+						label = tag,
+						enabled = _parley._chat_finder.tag_state[tag] ~= false,
+					})
+				end
+			end
+
+			return new_items, new_tag_bar_tags
+		end
+
+		local items, tag_bar_tags = build_picker_data()
+
 		-- Determine prompt title based on filtering state
 		local prompt_title = string.format(
 			"Chat Files (%s  %s/%s: cycle)",
@@ -512,16 +604,6 @@ M.open = function(_options)
 		)
 
 		_parley.logger.debug("ChatFinder using active_window: " .. (_parley._chat_finder.active_window or "nil"))
-
-		-- Build float-picker items from sorted entries
-		local items = {}
-		for _, entry in ipairs(entries) do
-			table.insert(items, {
-				display = entry.display,
-				search_text = entry.ordinal,
-				value = entry.value,
-			})
-		end
 
 		local source_win = _parley._chat_finder.source_win
 		if not (source_win and vim.api.nvim_win_is_valid(source_win)) then
@@ -538,11 +620,39 @@ M.open = function(_options)
 			items[1] and items[1].value or "nil"
 		))
 
-		_parley.float_picker.open({
+		-- picker_ref lets on_toggle call picker.update() before the picker is created
+		local picker_ref = {}
+
+		-- Build tag bar options (only shown when there are tags to display)
+		local tag_bar = nil
+		if tag_bar_tags then
+			local function refresh_picker()
+				local new_items, new_tb_tags = build_picker_data()
+				if picker_ref.update then picker_ref.update(new_items, new_tb_tags) end
+			end
+			local function set_all_tags(value)
+				for tag in pairs(_parley._chat_finder.tag_state) do
+					_parley._chat_finder.tag_state[tag] = value
+				end
+				refresh_picker()
+			end
+			tag_bar = {
+				tags = tag_bar_tags,
+				on_toggle = function(tag_label)
+					_parley._chat_finder.tag_state[tag_label] = not _parley._chat_finder.tag_state[tag_label]
+					refresh_picker()
+				end,
+				on_all  = function() set_all_tags(true)  end,
+				on_none = function() set_all_tags(false) end,
+			}
+		end
+
+		local picker = _parley.float_picker.open({
 			title = prompt_title,
 			items = items,
 			initial_index = M.resolve_finder_initial_index(_parley._chat_finder, items, "ChatFinder"),
 			initial_query = format_finder_initial_query(_parley._chat_finder.sticky_query),
+			tag_bar = tag_bar,
 			on_query_change = function(query)
 				_parley._chat_finder.sticky_query = extract_chat_finder_sticky_query(query)
 			end,
@@ -770,6 +880,7 @@ M.open = function(_options)
 				},
 			},
 		})
+		if picker then picker_ref.update = picker.update end
 	end
 
 	_parley._chat_finder.initial_index = nil
