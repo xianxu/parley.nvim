@@ -9,6 +9,18 @@ resolve_base_ref() {
         return
     fi
 
+    # Check for COMPARE-SHA file in repo root
+    local root
+    root=$(git rev-parse --show-toplevel 2>/dev/null)
+    if [ -n "$root" ] && [ -f "$root/COMPARE-SHA" ]; then
+        local sha
+        sha=$(head -1 "$root/COMPARE-SHA" | tr -d '[:space:]')
+        if [ -n "$sha" ] && git rev-parse --verify "$sha" >/dev/null 2>&1; then
+            printf '%s\n' "$sha"
+            return
+        fi
+    fi
+
     if git rev-parse --verify remote/main >/dev/null 2>&1; then
         printf '%s\n' "remote/main"
         return
@@ -95,9 +107,18 @@ list_changed_specs() {
     base_ref="$(resolve_base_ref)"
     current_branch="$(git branch --show-current)"
 
+    # Use direct diff when COMPARE-SHA override is active or on main;
+    # otherwise compute merge-base for feature branches.
+    local root
+    root=$(git rev-parse --show-toplevel 2>/dev/null)
+    local has_compare_sha=false
+    if [ -n "${BASE_REF:-}" ] || { [ -n "$root" ] && [ -f "$root/COMPARE-SHA" ]; }; then
+        has_compare_sha=true
+    fi
+
     {
         # Committed changes vs base
-        if [ "$current_branch" = "main" ]; then
+        if [ "$current_branch" = "main" ] || [ "$has_compare_sha" = "true" ]; then
             git diff --name-only --diff-filter=ACMR "$base_ref..HEAD" -- specs
         else
             git diff --name-only --diff-filter=ACMR "$(git merge-base HEAD "$base_ref")" -- specs
@@ -126,6 +147,29 @@ case "$cmd" in
         done | awk 'NF' | sort -u
         ;;
 
+    has-mapping)
+        # Exit 0 if the spec key exists in traceability.yaml, 1 otherwise.
+        if [ "$#" -eq 0 ]; then
+            echo "has-mapping requires a spec key/path" >&2
+            exit 1
+        fi
+        spec="$1"
+        key="$spec"
+        key="${key#specs/}"
+        key="${key%.md}"
+        awk -v key="$key" '
+            /^specs:[[:space:]]*$/ { in_specs = 1; next }
+            !in_specs { next }
+            /^  [^[:space:]][^:]*:[[:space:]]*$/ {
+                current = $0
+                sub(/^  /, "", current)
+                sub(/:[[:space:]]*$/, "", current)
+                if (current == key) { found = 1; exit }
+            }
+            END { exit !found }
+        ' "$MAP_FILE"
+        ;;
+
     list-changed-specs)
         list_changed_specs
         ;;
@@ -146,6 +190,7 @@ case "$cmd" in
         cat >&2 <<USAGE
 Usage:
   scripts/spec_test_map.sh list-tests <spec-key-or-path> [more...]
+  scripts/spec_test_map.sh has-mapping <spec-key-or-path>
   scripts/spec_test_map.sh list-changed-specs
   scripts/spec_test_map.sh list-tests-from-changed-specs
 Env:

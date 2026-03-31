@@ -164,7 +164,12 @@ CHECK_LABELS=(
     "Check specs/README sync"
     "Check for lessons to capture"
 )
-CHECK_PRE_CMDS=("" "" "" "make test 2>&1" "" "")
+# Hook mode runs lighter tests; pre-merge runs everything.
+if [[ "${CHECK_MODE:-}" == "hook" ]]; then
+    CHECK_PRE_CMDS=("" "" "" "{ make test-changed 2>&1; make lint 2>&1; }" "" "")
+else
+    CHECK_PRE_CMDS=("" "" "" "{ make test 2>&1; make test-agents 2>&1; make lint 2>&1; }" "" "")
+fi
 
 # ── Prompts ───────────────────────────────────────────────────────────────────
 build_prompt() {

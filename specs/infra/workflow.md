@@ -18,7 +18,7 @@ Agent-driven verification steps run before `push` and `merge`. Each check invoke
 | `check-dry`     | Report DRY violations in diff (read-only)                |
 | `check-pure`    | Report pure/impure separation issues (read-only)         |
 | `check-plan`    | Verify issue plans complete, steps checked, logs written  |
-| `check-test`    | Run `make test`, feed output to agent for analysis       |
+| `check-test`    | Run `test` + `test-agents` + `lint`, feed to agent       |
 | `check-specs`   | Compare code changes to specs/ and README.md, update     |
 | `check-lessons` | Reminder to review tasks/lessons.md (no agent)           |
 
@@ -51,6 +51,16 @@ After each agent check (interactive mode), repo state is diffed. If files change
 
 ## Constitution Hook
 A `PostToolUse:Write` hook in `.claude/settings.json` triggers batch constitution checks automatically during coding sessions when the diff crosses a threshold (400 lines or 10 files changed). Uses a 50% growth gate to avoid re-firing on every write. Findings are injected into the agent's context via stdout (silent-unless-violated).
+
+In hook mode (`CHECK_MODE=hook`), the test check runs the lighter `make test-changed` + `make lint` instead of the full suite to keep the feedback loop fast.
+
+## COMPARE-SHA
+A `COMPARE-SHA` file in the repo root overrides the git diff base ref used by all check scripts and `test-changed`. This is useful for testing hook/check behavior with a wider diff than the default (origin/main or merge-base). The file is gitignored.
+
+```bash
+echo "abc1234" > COMPARE-SHA   # override diff base
+rm COMPARE-SHA                  # revert to default
+```
 
 ## History
 - 2026-03-29: Multi-agent support (codex, gemini), failure-stops-merge, info output tier (issue 000029)

@@ -21,13 +21,14 @@ help-workflow:
 	"    make check-dry      Check DRY principle" \
 	"    make check-pure     Check PURE principle" \
 	"    make check-plan     Check issue plan completeness" \
-	"    make check-test     Run tests, inspect results" \
+	"    make check-test     Run tests + test-agents + lint, inspect results" \
 	"    make check-specs    Check specs/README sync" \
 	"    make check-lessons  Check for lessons to capture" \
 	"    PRE_MERGE_CHECKS=yynnyn make pre-merge   Preset selection" \
 	"" \
 	"  Other:" \
 	"    make worktree NAME  Create a worktree in ../worktree/<name>" \
+	"    make test-agents    Run agent workflow tests" \
 	""
 
 # ── Pre-merge checks ─────────────────────────────────────────────────────────

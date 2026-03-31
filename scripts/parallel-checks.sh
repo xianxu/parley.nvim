@@ -165,11 +165,12 @@ main() {
         esac
     done
 
-    # Hook gate mode: check threshold first
+    # Hook gate mode: check threshold first, use lighter tests
     if [[ "$hook_gate" -eq 1 ]]; then
         if ! mkdir "$LOCK_DIR" 2>/dev/null; then
             exit 0  # another run in progress, skip silently
         fi
+        export CHECK_MODE=hook
     fi
 
     # Interactive mode: delegate to existing script

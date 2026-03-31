@@ -61,9 +61,19 @@ print_check_output() {
 # Check if we're inside a git repository.
 is_git_repo() { git rev-parse --git-dir &>/dev/null; }
 
-# On main: diff against origin/main (unpushed local changes).
-# On feature branch: diff against merge-base with main (branch changes).
+# Resolve the git ref to diff against.
+# Priority: COMPARE-SHA file > on main: origin/main > on branch: merge-base with main.
 git_diff_base() {
+    local root
+    root=$(git rev-parse --show-toplevel 2>/dev/null)
+    if [[ -n "$root" && -f "$root/COMPARE-SHA" ]]; then
+        local sha
+        sha=$(head -1 "$root/COMPARE-SHA" | tr -d '[:space:]')
+        if [[ -n "$sha" ]] && git rev-parse --verify "$sha" &>/dev/null; then
+            echo "$sha"
+            return
+        fi
+    fi
     local branch
     branch=$(git branch --show-current 2>/dev/null)
     if [[ "$branch" == "main" ]]; then

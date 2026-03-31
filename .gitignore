@@ -7,3 +7,4 @@ tasks/*
 .test-tmp/
 .test-home/
 .claude/constitution-check-state
+COMPARE-SHA

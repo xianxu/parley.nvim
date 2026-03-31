@@ -46,6 +46,17 @@ specs:
       - tests/unit/parse_chat_spec.lua
       - tests/unit/chat_finder_logic_spec.lua
 
+  chat/inline_branch_links:
+    code:
+      - lua/parley/chat_parser.lua
+      - lua/parley/init.lua
+      - lua/parley/exporter.lua
+      - lua/parley/highlighter.lua
+    tests:
+      - tests/unit/inline_branch_spec.lua
+      - tests/unit/parse_chat_spec.lua
+      - tests/integration/tree_export_spec.lua
+
   context/file_references:
     code:
       - lua/parley/init.lua
@@ -89,6 +100,14 @@ specs:
       - lua/parley/render.lua
     tests:
       - tests/integration/export_spec.lua
+
+  export/tree_export:
+    code:
+      - lua/parley/exporter.lua
+      - lua/parley/chat_parser.lua
+    tests:
+      - tests/unit/exporter_tree_spec.lua
+      - tests/integration/tree_export_spec.lua
 
   infra/config:
     code:
@@ -219,6 +238,39 @@ specs:
       - tests/unit/dispatcher_query_spec.lua
       - tests/unit/sse_parsing_spec.lua
       - tests/unit/build_messages_spec.lua
+
+  providers/system_prompts:
+    code:
+      - lua/parley/custom_prompts.lua
+      - lua/parley/system_prompt_picker.lua
+      - lua/parley/init.lua
+    tests:
+      - tests/unit/custom_prompts_spec.lua
+      - tests/unit/picker_items_spec.lua
+
+  infra/openshell:
+    code:
+      - .openshell/sandbox.sh
+      - .openshell/Makefile
+      - .openshell/policy.yaml
+      - .openshell/overlay/setup.sh
+    tests: []
+
+  infra/workflow:
+    code:
+      - Makefile.workflow
+      - scripts/pre-merge-checks.sh
+      - scripts/parallel-checks.sh
+      - scripts/lib.sh
+    tests:
+      - tests/test_agents.sh
+
+  issues/issue-management:
+    code:
+      - lua/parley/issues.lua
+      - lua/parley/issue_finder.lua
+    tests:
+      - tests/unit/issues_spec.lua
 
   ui/highlights:
     code:

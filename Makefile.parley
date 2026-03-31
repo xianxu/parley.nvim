@@ -71,9 +71,8 @@ test-changed:
 	printf '%s\n' "$$changed_specs"; \
 	missing=0; \
 	for spec_path in $$changed_specs; do \
-		spec_tests="$$(scripts/spec_test_map.sh list-tests "$$spec_path")"; \
-		if [ -z "$$spec_tests" ]; then \
-			echo "No tests mapped for $$spec_path"; \
+		if ! scripts/spec_test_map.sh has-mapping "$$spec_path"; then \
+			echo "No traceability entry for $$spec_path"; \
 			missing=1; \
 		fi; \
 	done; \
@@ -83,15 +82,42 @@ test-changed:
 	fi; \
 	all_tests="$$(scripts/spec_test_map.sh list-tests-from-changed-specs)"; \
 	if [ -z "$$all_tests" ]; then \
-		echo "No mapped tests found for changed specs."; \
+		echo "No mapped tests for changed specs (all may have tests: [])."; \
+		exit 0; \
+	fi; \
+	lua_tests=""; sh_tests=""; unknown=""; \
+	for f in $$all_tests; do \
+		case "$$f" in \
+			*.lua) lua_tests="$$lua_tests $$f" ;; \
+			*.sh)  sh_tests="$$sh_tests $$f" ;; \
+			*)     unknown="$$unknown $$f" ;; \
+		esac; \
+	done; \
+	if [ -n "$$unknown" ]; then \
+		echo "Unknown test types:$$unknown"; \
 		exit 1; \
 	fi; \
-	for test_file in $$all_tests; do \
-		echo "Running $$test_file"; \
-		$(TEST_ENV) nvim -n --headless --noplugin -u tests/minimal_init.vim \
-		  -c "PlenaryBustedFile $$test_file" \
-		  -c "qa!" || exit $$?; \
-	done
+	sh_pids=""; sh_fail=0; \
+	for test_file in $$sh_tests; do \
+		echo "Running $$test_file (background)"; \
+		bash "$$test_file" & \
+		sh_pids="$$sh_pids $$!"; \
+	done; \
+	if [ -n "$$lua_tests" ]; then \
+		for test_file in $$lua_tests; do \
+			echo "Running $$test_file"; \
+			$(TEST_ENV) nvim -n --headless --noplugin -u tests/minimal_init.vim \
+			  -c "PlenaryBustedFile $$test_file" \
+			  -c "qa!" || exit $$?; \
+		done; \
+	fi; \
+	for pid in $$sh_pids; do \
+		wait "$$pid" || sh_fail=1; \
+	done; \
+	if [ "$$sh_fail" -ne 0 ]; then \
+		echo "One or more shell tests failed"; \
+		exit 1; \
+	fi
 
 # Run static analysis for Lua code and tests.
 lint:
