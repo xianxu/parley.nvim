@@ -174,6 +174,17 @@ case "$cmd" in
         list_changed_specs
         ;;
 
+    base-info)
+        base_ref="$(resolve_base_ref)"
+        base_sha="$(git rev-parse --short "$base_ref")"
+        current_sha="$(git rev-parse --short HEAD)"
+        lines_changed="$(git diff --stat "$base_ref..HEAD" | tail -1)"
+        printf 'Base: %s → HEAD (%s)\n' "$base_sha" "$current_sha"
+        if [ -n "$lines_changed" ]; then
+            printf 'Diff: %s\n' "$lines_changed"
+        fi
+        ;;
+
     list-tests-from-changed-specs)
         changed_specs="$(list_changed_specs)"
         if [ -z "$changed_specs" ]; then
@@ -193,6 +204,7 @@ Usage:
   scripts/spec_test_map.sh has-mapping <spec-key-or-path>
   scripts/spec_test_map.sh list-changed-specs
   scripts/spec_test_map.sh list-tests-from-changed-specs
+  scripts/spec_test_map.sh base-info
 Env:
   BASE_REF=<git ref>    Override base branch ref (default: remote/main, fallback origin/main, then main)
 USAGE

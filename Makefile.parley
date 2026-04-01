@@ -62,6 +62,7 @@ test-spec:
 # (default base ref: remote/main, fallback origin/main, then main).
 test-changed:
 	@$(PREP_TEST_ENV); \
+	scripts/spec_test_map.sh base-info; \
 	changed_specs="$$(scripts/spec_test_map.sh list-changed-specs)"; \
 	if [ -z "$$changed_specs" ]; then \
 		echo "No changed spec files under specs/*/*.md"; \

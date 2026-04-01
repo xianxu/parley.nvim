@@ -11,6 +11,11 @@ curl -fsSL https://github.com/neovim/neovim/releases/download/v0.11.6/nvim-linux
     | tar xz -C "$HOME/.local"
 ln -sf "$HOME/.local/nvim-linux-arm64/bin/nvim" "$HOME/.local/bin/nvim"
 
+echo "==> Installing Zellij..."
+curl -fsSL https://github.com/zellij-org/zellij/releases/latest/download/zellij-aarch64-unknown-linux-musl.tar.gz \
+    | tar xz -C "$HOME/.local/bin"
+chmod +x "$HOME/.local/bin/zellij"
+
 echo "==> Configuring shell..."
 cat >> "$HOME/.bashrc" << 'BASHEOF'
 
