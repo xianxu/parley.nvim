@@ -485,7 +485,7 @@ M.cmd_issue_new = function()
         end
         local filepath = M.create_issue(title)
         if filepath then
-            _parley.logger.info("Created issue: " .. filepath)
+            _parley.logger.info("Created issue: " .. vim.fn.fnamemodify(filepath, ":t"))
         end
     end)
 end
