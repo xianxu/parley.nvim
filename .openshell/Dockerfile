@@ -1,5 +1,5 @@
 # When OpenShell's base image becomes publicly available, switch to:
-#   FROM ghcr.io/nvidia/openshell-community/base:latest
+#   FROM ghcr.io/nvidia/openshell-community/sandboxes/base:latest
 FROM ubuntu:24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
