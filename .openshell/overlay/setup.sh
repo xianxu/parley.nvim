@@ -30,7 +30,6 @@ cat >> "$HOME/.bashrc" << 'BASHEOF'
 
 # Added by openshell overlay setup
 export PATH="$HOME/.local/bin:$PATH"
-export LANG=en_US.UTF-8
 export EDITOR="nvim"
 export VISUAL="nvim"
 
@@ -39,7 +38,7 @@ set -o vi
 bind '"\C-r": reverse-search-history'
 bind '"\C-s": forward-search-history'
 
-# Git aliases
+# Aliases
 alias v=nvim
 alias s="git status"
 alias ss="git diff --stat"
