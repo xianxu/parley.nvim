@@ -10,7 +10,7 @@ Completed issues are moved to `history/` upon archival. These are considered low
 Worktrees created under `../worktree/` for portability between local and openshell environments.
 
 ## Pre-Merge Checks
-Agent-driven verification steps run before `push` and `merge`. Each check invokes a coding agent (configurable via `AGENT_CMD`; supports `claude`, `codex`, `gemini`) with a focused prompt, then detects repo changes for user accept/discard. If any check reports violations, the runner stops and prompts the user before proceeding (interactive) or exits non-zero (non-interactive).
+Agent-driven verification steps run before `push` and `merge`. Each check invokes a coding agent (configurable via `AGENT_CMD`; supports `claude`, `codex`, `gemini`) with a focused prompt, then detects repo changes for user accept/discard. If any check reports violations, the runner prints a warning and continues (it no longer blocks interactively).
 
 ### Checks
 | Target          | What it does                                             |

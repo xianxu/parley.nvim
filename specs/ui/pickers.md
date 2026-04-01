@@ -48,7 +48,10 @@
 - Current marked `✓` sorted to top; descriptions truncated to 80 chars
 
 ## Chat Finder (`:ParleyChatFinder` / `<C-g>f`)
-- Bottom-anchored, sorted by mtime (newest first)
+- Bottom-anchored, sorted by timestamp (newest first; inferred from filename, fallback to mtime)
+- **Mtime cache**: file metadata (topic, tags) cached by resolved path + mtime; unchanged files are never re-read
+- **Prewarm**: `chat_finder.prewarm()` runs at setup to populate the cache before the first open; if a prewarm is in flight when the user opens the finder, it waits instead of scanning twice
+- Cache invalidated per-path on delete; stale entries pruned on each scan
 - Recency filter: configurable `chat_finder_recency.months` + `presets` cycle + `All`
 - Search ranked against filename+tags+topic (not display row)
 - Extra-root chats show `{label}` marker; search text includes label

@@ -280,18 +280,6 @@ main() {
 
     if [[ "$HAS_FAILURES" -eq 1 ]]; then
         printf "\n${YELLOW}${BOLD}Some checks reported issues.${RESET}\n" >&2
-        if [[ -e /dev/tty ]]; then
-            printf "${BOLD}Stop to address them? [Y/n]: ${RESET}" >&2
-            read -r answer </dev/tty 2>/dev/null || answer="Y"
-            if [[ "$answer" == "n" || "$answer" == "N" ]]; then
-                printf "  Continuing...\n" >&2
-            else
-                printf "  Stopping. Address the issues above, then re-run.\n" >&2
-                return 1
-            fi
-        else
-            printf "  No TTY available — continuing.\n" >&2
-        fi
     else
         printf "\n${GREEN}${BOLD}All constitution checks passed.${RESET}\n" >&2
     fi

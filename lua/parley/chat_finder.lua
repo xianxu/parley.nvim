@@ -4,8 +4,33 @@
 local M = {}
 local _parley
 
+-- Mtime-based metadata cache: avoids re-reading unchanged files on repeated opens.
+-- Key: resolved file path, Value: { mtime = number, topic = string, tags = {} }
+local _file_cache = {}
+
+-- Prewarm state: when a prewarm is in flight, ChatFinder waits for it
+-- instead of triggering a second filesystem traversal.
+local _prewarm_pending = false
+local _prewarm_callbacks = {}
+
 M.setup = function(parley)
 	_parley = parley
+end
+
+M.clear_cache = function()
+	_file_cache = {}
+end
+
+M.get_cache = function()
+	return _file_cache
+end
+
+M.is_prewarming = function()
+	return _prewarm_pending
+end
+
+M.invalidate_path = function(path)
+	_file_cache[vim.fn.resolve(path)] = nil
 end
 
 --------------------------------------------------------------------------------
@@ -202,6 +227,7 @@ M.handle_delete_response = function(input, item_value, selected_index, items_cou
 	))
 	if input and input:lower() == "y" then
 		_parley.helpers.delete_file(item_value)
+		M.invalidate_path(item_value)
 		if close_fn then
 			close_fn()
 		end
@@ -275,6 +301,7 @@ M.handle_delete_tree_response = function(input, item_value, tree_files, selected
 	if input and input:lower() == "y" then
 		for _, f in ipairs(tree_files) do
 			_parley.helpers.delete_file(f)
+			M.invalidate_path(f)
 		end
 		if close_fn then
 			close_fn()
@@ -342,6 +369,171 @@ M.prompt_delete_tree_confirmation = function(item_value, selected_index, items_c
 end
 
 --------------------------------------------------------------------------------
+-- File scanning with mtime cache
+--------------------------------------------------------------------------------
+
+--- Read and parse a single file's header, returning topic and tags.
+--- Uses _file_cache to skip re-reading unchanged files.
+--- @param resolved string already-resolved path (cache key)
+local function read_file_metadata(file, resolved, stat_mtime)
+	local cached = _file_cache[resolved]
+	if cached and cached.mtime == stat_mtime then
+		return cached.topic, cached.tags
+	end
+
+	local topic = ""
+	local tags = {}
+	local lines = vim.fn.readfile(file, "", 10)
+
+	local header_end = _parley.chat_parser.find_header_end(lines)
+	if header_end then
+		local parsed_chat = _parley.parse_chat(lines, header_end)
+		if parsed_chat.headers.topic then
+			topic = parsed_chat.headers.topic
+		end
+		if parsed_chat.headers.tags and type(parsed_chat.headers.tags) == "table" then
+			tags = parsed_chat.headers.tags
+		end
+	else
+		for _, line in ipairs(lines) do
+			local t = line:match("^# topic: (.+)")
+			if t then
+				topic = t
+				break
+			end
+		end
+	end
+
+	_file_cache[resolved] = { mtime = stat_mtime, topic = topic, tags = tags }
+	return topic, tags
+end
+
+--- Scan chat roots and return sorted entries using the cache.
+--- Shared by M.open() and M.prewarm().
+local function scan_chat_files(chat_roots, cutoff_time, is_filtering)
+	local files = {}
+	local seen_files = {}
+	local resolved_primary_dir = vim.fn.resolve(vim.fn.fnamemodify(vim.fn.expand(_parley.config.chat_dir), ":p"))
+	for _, root in ipairs(chat_roots) do
+		local dir = root.dir
+		local resolved_root_dir = vim.fn.resolve(vim.fn.fnamemodify(vim.fn.expand(dir), ":p"))
+		local is_primary_root = root.is_primary or resolved_root_dir == resolved_primary_dir
+		local pattern = vim.fn.fnameescape(dir) .. "/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*.md"
+		for _, file in ipairs(vim.fn.glob(pattern, false, true)) do
+			local resolved = vim.fn.resolve(file)
+			if not seen_files[resolved] then
+				seen_files[resolved] = true
+				table.insert(files, { path = file, resolved = resolved, root = root, is_primary_root = is_primary_root })
+			end
+		end
+	end
+
+	-- Prune stale cache entries
+	for cached_path in pairs(_file_cache) do
+		if not seen_files[cached_path] then
+			_file_cache[cached_path] = nil
+		end
+	end
+
+	local entries = {}
+
+	for _, item in ipairs(files) do
+		local file = item.path
+		local resolved = item.resolved
+		local root = item.root
+		local is_primary_root = item.is_primary_root
+
+		-- Extract timestamp from filename first (no I/O needed)
+		local file_time
+		local filename = vim.fn.fnamemodify(file, ":t:r")
+		local year, month, day, hour, min, sec = filename:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)%-(%d%d)%-(%d%d)%-(%d%d)")
+
+		if year and month and day and hour and min and sec then
+			file_time = os.time({
+				year = tonumber(year), month = tonumber(month), day = tonumber(day),
+				hour = tonumber(hour), min = tonumber(min), sec = tonumber(sec),
+			})
+			-- Skip old files before stat — no I/O for filtered-out files with parseable filenames
+			if is_filtering and cutoff_time and file_time < cutoff_time then
+				goto continue
+			end
+		end
+
+		local stat = vim.loop.fs_stat(file)
+		if not stat then
+			goto continue
+		end
+
+		if not file_time then
+			file_time = stat.mtime.sec or (stat.birthtime and stat.birthtime.sec) or stat.mtime.sec
+			if is_filtering and cutoff_time and file_time < cutoff_time then
+				goto continue
+			end
+		end
+
+		local topic, tags = read_file_metadata(file, resolved, stat.mtime.sec)
+
+		local date_str = os.date("%Y-%m-%d", file_time)
+		local tags_display = ""
+		if #tags > 0 then
+			local tag_parts = {}
+			for _, tag in ipairs(tags) do
+				table.insert(tag_parts, "[" .. tag .. "]")
+			end
+			tags_display = table.concat(tag_parts, " ") .. " "
+		end
+		local tags_searchable = #tags > 0 and (" [" .. table.concat(tags, "] [") .. "]") or " []"
+		local display_filename = vim.fn.fnamemodify(file, ":t")
+		local root_prefix = is_primary_root and "" or string.format("{%s} ", root.label)
+		local root_searchable = is_primary_root and " {}" or (" {" .. root.label .. "}")
+
+		table.insert(entries, {
+			value = file,
+			display = display_filename .. " - " .. root_prefix .. tags_display .. topic .. " [" .. date_str .. "]",
+			ordinal = display_filename .. root_searchable .. " " .. tags_searchable .. " " .. topic,
+			timestamp = file_time,
+			tags = tags,
+		})
+
+		::continue::
+	end
+
+	table.sort(entries, function(a, b)
+		return a.timestamp > b.timestamp
+	end)
+
+	return entries
+end
+
+--- Prewarm the file metadata cache in the background.
+M.prewarm = function()
+	if _prewarm_pending or not _parley then
+		return
+	end
+	_prewarm_pending = true
+	vim.defer_fn(function()
+		local ok, err = pcall(function()
+			local chat_roots = _parley.get_chat_roots()
+			if chat_roots and #chat_roots > 0 then
+				scan_chat_files(chat_roots, nil, false)
+			end
+		end)
+		if not ok and _parley then
+			_parley.logger.debug("ChatFinder prewarm error: " .. tostring(err))
+		end
+		_prewarm_pending = false
+		local callbacks = _prewarm_callbacks
+		_prewarm_callbacks = {}
+		for _, cb in ipairs(callbacks) do
+			cb()
+		end
+	end, 0)
+end
+
+-- Exposed for benchmarking (perf_chat_finder.lua)
+M._scan_chat_files = scan_chat_files
+
+--------------------------------------------------------------------------------
 -- Main ChatFinder open function (was M.cmd.ChatFinder body)
 --------------------------------------------------------------------------------
 
@@ -363,27 +555,18 @@ M.open = function(_options)
 	local previous_recency_shortcut = _parley.config.chat_finder_mappings.previous_recency or { shortcut = "<C-s>" }
 	local keybindings_shortcut = _parley.config.global_shortcut_keybindings or { shortcut = "<C-g>?" }
 
+	-- If a prewarm is in flight, wait for it instead of scanning again
+	if _prewarm_pending then
+		_parley.logger.debug("ChatFinder: waiting for prewarm to finish")
+		_parley._chat_finder.opened = false
+		table.insert(_prewarm_callbacks, function()
+			M.open(_options)
+		end)
+		return
+	end
+
 	-- Launch float picker for chat finder
 	do
-		-- Get all timestamp format files
-		local files = {}
-		local seen_files = {}
-		for _, root in ipairs(chat_roots) do
-			local dir = root.dir
-			local pattern = vim.fn.fnameescape(dir) .. "/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*.md"
-			for _, file in ipairs(vim.fn.glob(pattern, false, true)) do
-				local resolved = vim.fn.resolve(file)
-				if not seen_files[resolved] then
-					seen_files[resolved] = true
-					table.insert(files, {
-						path = file,
-						root = root,
-					})
-				end
-			end
-		end
-		local entries = {}
-
 		-- Get recency configuration
 		local recency_config = _parley.config.chat_finder_recency
 			or {
@@ -404,105 +587,7 @@ M.open = function(_options)
 
 		local is_filtering = not resolved_recency.current.is_all
 
-		for _, item in ipairs(files) do
-			local file = item.path
-			local root = item.root
-			local resolved_root_dir = vim.fn.resolve(vim.fn.fnamemodify(vim.fn.expand(root.dir), ":p"))
-			local resolved_primary_dir = vim.fn.resolve(vim.fn.fnamemodify(vim.fn.expand(_parley.config.chat_dir), ":p"))
-			local is_primary_root = root.is_primary or resolved_root_dir == resolved_primary_dir
-			-- Get file info
-			local stat = vim.loop.fs_stat(file)
-			if not stat then
-				goto continue
-			end
-
-			-- Try to infer timestamp from chat filename first
-			-- Chat files typically have format: YYYY-MM-DD-HH-MM-SS-topic.md
-			local file_time
-			local filename = vim.fn.fnamemodify(file, ":t:r")
-			local year, month, day, hour, min, sec = filename:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)%-(%d%d)%-(%d%d)%-(%d%d)")
-
-			if year and month and day and hour and min and sec then
-				-- Create date table and convert to timestamp
-				local date_table = {
-					year = tonumber(year),
-					month = tonumber(month),
-					day = tonumber(day),
-					hour = tonumber(hour),
-					min = tonumber(min),
-					sec = tonumber(sec),
-				}
-				file_time = os.time(date_table)
-			else
-				-- Fallback to file system times if we couldn't infer from filename
-				file_time = stat.mtime.sec or (stat.birthtime and stat.birthtime.sec) or stat.mtime.sec
-			end
-
-			-- Skip files older than cutoff if filtering is active
-			if is_filtering and file_time < cutoff_time then
-				goto continue
-			end
-
-			-- Get topic and tags from the file
-			local lines = vim.fn.readfile(file, "", 10) -- Read first 10 lines to get headers
-			local topic = ""
-			local tags = {}
-
-			-- Parse the file headers to get topic and tags
-			local header_end = _parley.chat_parser.find_header_end(lines)
-			if header_end then
-				local parsed_chat = _parley.parse_chat(lines, header_end)
-				if parsed_chat.headers.topic then
-					topic = parsed_chat.headers.topic
-				end
-				if parsed_chat.headers.tags and type(parsed_chat.headers.tags) == "table" then
-					tags = parsed_chat.headers.tags
-				end
-			else
-				-- Fallback: look for topic in old format
-				for _, line in ipairs(lines) do
-					local t = line:match("^# topic: (.+)")
-					if t then
-						topic = t
-						break
-					end
-				end
-			end
-
-			-- Format date string
-			local date_str = os.date("%Y-%m-%d", file_time)
-
-			-- Format tags for display
-			local tags_display = ""
-			if #tags > 0 then
-				local tag_parts = {}
-				for _, tag in ipairs(tags) do
-					table.insert(tag_parts, "[" .. tag .. "]")
-				end
-				tags_display = table.concat(tag_parts, " ") .. " "
-			end
-
-			-- Format tags for search ordinal; untagged files get [] so typing [] matches them
-			local tags_searchable = #tags > 0 and (" [" .. table.concat(tags, "] [") .. "]") or " []"
-
-			local display_filename = vim.fn.fnamemodify(file, ":t")
-			local root_prefix = is_primary_root and "" or string.format("{%s} ", root.label)
-			local root_searchable = is_primary_root and " {}" or (" {" .. root.label .. "}")
-			table.insert(entries, {
-				value = file,
-				display = display_filename .. " - " .. root_prefix .. tags_display .. topic .. " [" .. date_str .. "]",
-				ordinal = display_filename .. root_searchable .. " " .. tags_searchable .. " " .. topic,
-				timestamp = file_time,
-				tags = tags,
-			})
-
-			::continue::
-		end
-
-		-- Sort entries by timestamp (newest first)
-		table.sort(entries, function(a, b)
-			return a.timestamp > b.timestamp
-		end)
+		local entries = scan_chat_files(chat_roots, cutoff_time, is_filtering)
 
 		-- Collect all unique tags from current entries (for tag bar)
 		local all_tags_set = {}

@@ -1,9 +1,9 @@
 ---
 id: 000042
-status: open
+status: working
 deps: []
 created: 2026-03-31
-updated: 2026-03-31
+updated: 2026-04-01
 ---
 
 # inspect chat finder performance
@@ -25,7 +25,13 @@ any other ideas?
 ## Plan
 
 - [x] Analyze current chat finder implementation and cost model
-- [ ] Propose optimizations
+- [x] Propose optimizations
+- [x] Implement mtime-based metadata cache
+- [x] Skip stat for old files with parseable filenames
+- [x] Add prewarm on setup with wait-for-prewarm in open()
+- [x] Cache eviction on delete/move via `M.invalidate_path`
+- [x] Hoist per-root resolves out of per-file loop
+- [x] All tests pass, perf benchmark confirms improvement
 
 ## Log
 
@@ -56,5 +62,50 @@ For N files discovered by glob:
 #### What's NOT Optimized
 - **No caching between invocations** — full rescan every time ChatFinder opens
 - **No mtime-based cache invalidation** — could skip unchanged files
-- **stat() called even for files that will be filtered by recency** — stat happens before cutoff check (line 414 vs 442)
+
+### 2026-04-01
+
+#### Implemented Optimizations
+
+1. **Mtime-based metadata cache** (`_file_cache` in `chat_finder.lua`)
+   - Cache keyed by resolved path, stores `{ mtime, topic, tags }`
+   - On open: compare `stat.mtime.sec` with cached mtime → skip `readfile` + `parse_chat` if unchanged
+   - Stale entries pruned when files disappear from glob
+   - Cache evicted on delete/move via `M.invalidate_path(path)`
+
+2. **Recency filter before stat** (for files with parseable filenames)
+   - Timestamp extracted from filename (pure string op) → recency check → skip stat entirely for old files
+   - Only falls back to stat when filename isn't in `YYYY-MM-DD-HH-MM-SS` format
+
+3. **Prewarm on startup** (`M.prewarm()` called from `setup()`)
+   - Deferred via `vim.defer_fn(fn, 0)` — runs after Neovim finishes init
+   - Populates `_file_cache` for all files (no recency filter)
+   - If ChatFinder opens during prewarm, it waits for completion via callback queue
+
+4. **Hoisted per-root resolves** out of per-file loop
+   - `resolved_primary_dir` computed once, `resolved_root_dir` once per root (was N times per file)
+
+5. **Extracted scan loop** (`scan_chat_files()`) shared by `M.open()` and `M.prewarm()`
+
+**Skipped**: Parallel async reads with libuv — cache eliminates most reads; complexity not justified.
+
+#### Benchmark (user's machine, 10K files)
+
+| Scenario | Old | New | Change |
+|---|---|---|---|
+| Cold scan | 679ms | 929ms* | +37% |
+| Warm scan (cached) | 670ms | 367ms | **-45%** |
+| 6mo recency cold | 302ms | 422ms* | +40% |
+| 6mo recency warm | 290ms | 291ms | same |
+
+*Cold regression was from double `vim.fn.resolve()` — fixed by passing resolved path through. Re-benchmark on sandbox showed cold scan on par with baseline after fix.
+
+#### Benchmark (sandbox, after resolve fix, 10K files)
+
+| Scenario | Old | New | Change |
+|---|---|---|---|
+| Cold scan | 272ms | 282ms | ~same |
+| Warm scan (cached) | 255ms | 155ms | **-39%** |
+| 6mo recency cold | 154ms | 128ms | **-17%** |
+| 6mo recency warm | 145ms | 100ms | **-31%** |
 
