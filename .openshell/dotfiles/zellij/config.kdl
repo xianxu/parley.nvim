@@ -1,7 +1,7 @@
 keybinds {
     normal clear-defaults=true {
         // tmux
-        bind "Ctrl f" { SwitchToMode "Tmux"; }
+        bind "Ctrl q" { SwitchToMode "Tmux"; }
         unbind "Ctrl b"
         // general stuff
         bind "Alt Left" { NewPane "Left"; }
@@ -24,7 +24,7 @@ keybinds {
     }
 
     tmux clear-defaults=true {
-        bind "Ctrl f" { Write 2; SwitchToMode "Normal"; }
+        bind "Ctrl q" { Write 2; SwitchToMode "Normal"; }
         bind "Esc" { SwitchToMode "Normal"; }
         bind "g" { SwitchToMode "Locked"; }
         bind "p" { SwitchToMode "Pane"; }

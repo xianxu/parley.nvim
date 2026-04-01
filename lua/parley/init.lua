@@ -1308,7 +1308,7 @@ local function keybinding_help_lines(context)
 		add(
 			resolve_shortcut(
 				"Parley create and insert new chat",
-				{ "n", "i" },
+				{ "n", "i", "v" },
 				nil,
 				"<C-g>i",
 				current_buf
@@ -1404,7 +1404,7 @@ local function keybinding_help_lines(context)
 		)
 		add(resolve_shortcut("Parley find chat", { "n" }, nil, "<C-g>f", current_buf), "Find chat references")
 		add(resolve_shortcut("Parley add chat reference", { "n", "i" }, nil, "<C-g>a", current_buf), "Add chat reference")
-		add(resolve_shortcut("Parley create and insert new chat", { "n", "i" }, nil, "<C-g>i", current_buf), "Insert new chat reference")
+		add(resolve_shortcut("Parley create and insert new chat", { "n", "i", "v" }, nil, "<C-g>i", current_buf), "Insert new chat reference")
 		add(resolve_shortcut("Parley delete current file and buffer", { "n" }, nil, "<C-g>d", current_buf), "Delete file")
 		add(resolve_shortcut("Parley prompt Chat Delete Tree", { "n" }, cfg.chat_shortcut_delete_tree, "<C-g>D", current_buf), "Delete chat tree")
 	end
@@ -2048,6 +2048,43 @@ M.setup_markdown_keymaps = function(buf)
 
 		M.logger.info("Created reference to new chat: " .. rel_path)
 	end, "Parley create and insert new chat")
+
+	-- Visual mode: wrap selected text as @@filename@@ link and create child chat
+	M.helpers.set_keymap({ buf }, "v", "<C-g>i", function()
+		-- Exit visual mode first so '< and '> marks are set
+		vim.cmd("normal! " .. vim.api.nvim_replace_termcodes("<Esc>", true, false, true))
+
+		-- Get visual selection range
+		local start_pos = vim.fn.getpos("'<")
+		local end_pos = vim.fn.getpos("'>")
+		local start_line, start_col = start_pos[2], start_pos[3]
+		local end_line, end_col = end_pos[2], end_pos[3]
+
+		-- Only support single-line selections
+		if start_line ~= end_line then
+			M.logger.warning("Inline chat references only support single-line selections")
+			return
+		end
+
+		local line = vim.api.nvim_buf_get_lines(buf, start_line - 1, start_line, false)[1]
+		local selected_text = line:sub(start_col, end_col)
+		if selected_text == "" then
+			M.logger.warning("No text selected")
+			return
+		end
+
+		-- Create a new chat file
+		local new_chat_file = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
+		local rel_path = vim.fn.fnamemodify(new_chat_file, ":t")
+
+		-- Replace selected text with @@filename@@ reference
+		local before = line:sub(1, start_col - 1)
+		local after = line:sub(end_col + 1)
+		local new_line = before .. "@@" .. rel_path .. "@@" .. after
+		vim.api.nvim_buf_set_lines(buf, start_line - 1, start_line, false, { new_line })
+
+		M.logger.info("Created reference to new chat: " .. rel_path)
+	end, "Parley create and insert new chat from selection")
 
 	-- Add <C-g>d keybinding to delete current file and buffer
 	M.helpers.set_keymap({ buf }, "n", "<C-g>d", function()
