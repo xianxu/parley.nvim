@@ -58,6 +58,11 @@ ensure_setup() {
         ssh "$SANDBOX_SSH_HOST" "git config --global user.email '$git_email'" 2>/dev/null || true
     fi
 
+    # Copy dotfiles to sandbox
+    echo "  Copying dotfiles..."
+    ssh "$SANDBOX_SSH_HOST" "mkdir -p ~/.config/zellij"
+    scp -q "$SCRIPT_DIR/dotfiles/zellij/config.kdl" "$SANDBOX_SSH_HOST:~/.config/zellij/config.kdl"
+
     # Forward GitHub CLI auth from host to sandbox (write config directly — fast)
     local gh_token
     gh_token=$(gh auth token 2>/dev/null || true)
