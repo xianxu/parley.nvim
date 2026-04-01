@@ -31,6 +31,7 @@ end
 M.handle_delete_response = function(input, item_value, selected_index, items_count, source_win, close_fn, context)
     if input and input:lower() == "y" then
         _parley.helpers.delete_file(item_value)
+        issues_mod.invalidate_path(item_value)
         if close_fn then
             close_fn()
         end
@@ -225,6 +226,7 @@ M.open = function(_options)
                             end
                         end
                         vim.fn.writefile(lines, item.value)
+                        issues_mod.invalidate_path(item.value)
                     end
                     -- Reopen to refresh
                     close_fn()

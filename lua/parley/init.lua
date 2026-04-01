@@ -845,8 +845,9 @@ M.setup = function(opts)
 		link = "IncSearch",
 	})
 
-	-- Prewarm chat finder cache in the background (deferred, non-blocking)
+	-- Prewarm finder caches in the background (deferred, non-blocking)
 	chat_finder_mod.prewarm()
+	note_finder_mod.prewarm()
 
 	M.logger.debug("setup finished")
 end

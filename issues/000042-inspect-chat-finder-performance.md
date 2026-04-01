@@ -32,6 +32,8 @@ any other ideas?
 - [x] Cache eviction on delete/move via `M.invalidate_path`
 - [x] Hoist per-root resolves out of per-file loop
 - [x] All tests pass, perf benchmark confirms improvement
+- [x] Apply same optimizations to note_finder (DRY: same cache/prewarm/wait pattern)
+- [x] Apply mtime cache to issue_finder via `issues.lua:scan_dir_issues`
 
 ## Log
 
@@ -89,7 +91,19 @@ For N files discovered by glob:
 
 **Skipped**: Parallel async reads with libuv — cache eliminates most reads; complexity not justified.
 
-#### Benchmark (user's machine, 10K files)
+#### Applied to all three finders
+
+Same mtime-based cache pattern applied across all finder UIs:
+
+| Finder | Cache location | What's cached | Prewarm | Key difference |
+|---|---|---|---|---|
+| **ChatFinder** | `chat_finder.lua:_file_cache` | `{ mtime, topic, tags }` | Yes | Skips `readfile` + `parse_chat`; filename-based recency skip before stat |
+| **NoteFinder** | `note_finder.lua:_file_cache` | `{ mtime, classification, inferred_time }` | Yes | Skips classify + infer; hoisted root resolve out of per-file loop |
+| **IssueFinder** | `issues.lua:_file_cache` | `{ mtime, issue_data }` | No (few files) | Skips full-file `readfile` + `parse_frontmatter`; evicts on status cycle |
+
+All finders expose `clear_cache()`, `get_cache()`, `invalidate_path(path)`. Chat and note finders also have `prewarm()` + wait-for-prewarm in `open()`.
+
+#### Benchmark (user's machine, 10K chat files)
 
 | Scenario | Old | New | Change |
 |---|---|---|---|

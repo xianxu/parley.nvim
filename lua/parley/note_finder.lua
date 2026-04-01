@@ -5,10 +5,33 @@ local M = {}
 local _parley
 local _chat_finder_mod  -- set after both modules are loaded
 
+-- Mtime-based cache: avoids re-classifying and re-stating unchanged files.
+-- Key: resolved file path, Value: { mtime, classification, inferred_time }
+local _file_cache = {}
+
+-- Prewarm state (same pattern as chat_finder)
+local _prewarm_pending = false
+local _prewarm_callbacks = {}
+
 M.setup = function(parley)
 	_parley = parley
-	-- Lazily resolve chat_finder module to avoid circular require issues
 	_chat_finder_mod = require("parley.chat_finder")
+end
+
+M.clear_cache = function()
+	_file_cache = {}
+end
+
+M.get_cache = function()
+	return _file_cache
+end
+
+M.is_prewarming = function()
+	return _prewarm_pending
+end
+
+M.invalidate_path = function(path)
+	_file_cache[vim.fn.resolve(path)] = nil
 end
 
 --------------------------------------------------------------------------------
@@ -47,15 +70,18 @@ local function format_finder_initial_query(sticky_query)
 	return sticky_query .. " "
 end
 
-local function infer_note_directory_cutoff_time(file_path, notes_root)
-	local expanded_root = vim.fn.resolve(vim.fn.fnamemodify(vim.fn.expand(notes_root), ":p")):gsub("/+$", "")
-	local absolute_path = vim.fn.resolve(vim.fn.fnamemodify(file_path, ":p")):gsub("/+$", "")
-	local relative = absolute_path
-	local prefix = expanded_root .. "/"
-	if absolute_path:sub(1, #prefix) == prefix then
-		relative = absolute_path:sub(#prefix + 1)
+--- Compute relative path from resolved root to resolved file.
+local function relative_to_root(resolved_file, expanded_root_prefix)
+	if resolved_file:sub(1, #expanded_root_prefix) == expanded_root_prefix then
+		return resolved_file:sub(#expanded_root_prefix + 1)
 	end
+	return resolved_file
+end
 
+--- Infer a cutoff timestamp from directory structure (year/month/day).
+--- @param relative string path relative to notes root
+--- @param file_path string original file path (for filename extraction)
+local function infer_note_directory_cutoff_time(relative, file_path)
 	local parts = vim.split(relative, "/", { plain = true, trimempty = true })
 	local year = tonumber(parts[1] and parts[1]:match("^(%d%d%d%d)$"))
 	local month = tonumber(parts[2] and parts[2]:match("^(%d%d)$"))
@@ -97,15 +123,9 @@ local function infer_note_directory_cutoff_time(file_path, notes_root)
 	return nil
 end
 
-local function classify_note_finder_path(file_path, notes_root)
-	local expanded_root = vim.fn.resolve(vim.fn.fnamemodify(vim.fn.expand(notes_root), ":p")):gsub("/+$", "")
-	local absolute_path = vim.fn.resolve(vim.fn.fnamemodify(file_path, ":p")):gsub("/+$", "")
-	local relative = absolute_path
-	local prefix = expanded_root .. "/"
-	if absolute_path:sub(1, #prefix) == prefix then
-		relative = absolute_path:sub(#prefix + 1)
-	end
-
+--- Classify a note file path (template, base_folder, relative_path).
+--- @param relative string path relative to notes root
+local function classify_note_finder_path(relative)
 	local parts = vim.split(relative, "/", { plain = true, trimempty = true })
 	local first_part = parts[1]
 	if not first_part or first_part == "templates" then
@@ -164,6 +184,7 @@ M.handle_delete_response = function(input, item_value, selected_index, items_cou
 	))
 	if input and input:lower() == "y" then
 		_parley.helpers.delete_file(item_value)
+		M.invalidate_path(item_value)
 		if close_fn then
 			close_fn()
 		end
@@ -222,6 +243,129 @@ M.prompt_delete_confirmation = function(item_value, selected_index, items_count,
 end
 
 --------------------------------------------------------------------------------
+-- File scanning with mtime cache
+--------------------------------------------------------------------------------
+
+--- Scan notes directory and return sorted entries using the cache.
+--- Shared by M.open() and M.prewarm().
+local function scan_note_files(notes_root, cutoff_time)
+	local files = _parley.helpers.find_files(notes_root, "*.md", true)
+	local expanded_root_prefix = vim.fn.resolve(vim.fn.fnamemodify(vim.fn.expand(notes_root), ":p")):gsub("/+$", "") .. "/"
+
+	-- Track seen files for cache pruning
+	local seen_files = {}
+
+	local entries = {}
+	for _, file in ipairs(files) do
+		local resolved = vim.fn.resolve(file)
+		seen_files[resolved] = true
+
+		-- Check cache: skip classify + infer if file unchanged
+		local stat = vim.loop.fs_stat(file)
+		if not stat then
+			goto continue
+		end
+
+		local cached = _file_cache[resolved]
+		local classification, inferred_time
+		if cached and cached.mtime == stat.mtime.sec then
+			classification = cached.classification
+			inferred_time = cached.inferred_time
+		else
+			local relative = relative_to_root(resolved, expanded_root_prefix)
+			classification = classify_note_finder_path(relative)
+			inferred_time = infer_note_directory_cutoff_time(relative, file)
+			_file_cache[resolved] = {
+				mtime = stat.mtime.sec,
+				classification = classification,
+				inferred_time = inferred_time,
+			}
+		end
+
+		if classification.is_template then
+			goto continue
+		end
+
+		local modified_time = stat.mtime.sec
+		local sort_time = inferred_time or modified_time
+		local range_time = inferred_time or modified_time
+		local is_special_folder = classification.base_folder ~= nil
+
+		if not is_special_folder and cutoff_time and range_time < cutoff_time then
+			goto continue
+		end
+
+		local display, search_text
+		if is_special_folder then
+			local file_name = vim.fn.fnamemodify(file, ":t")
+			display = string.format("{%s} %s [%s]", classification.base_folder, file_name, os.date("%Y-%m-%d", sort_time))
+			search_text = string.format("{%s} %s %s", classification.base_folder, file_name, classification.relative_path:gsub("%-", " "))
+		else
+			display = classification.relative_path .. " [" .. os.date("%Y-%m-%d", sort_time) .. "]"
+			search_text = "{} " .. classification.relative_path:gsub("%-", " ")
+		end
+
+		table.insert(entries, {
+			value = file,
+			display = display,
+			ordinal = search_text,
+			timestamp = sort_time,
+			modified_time = modified_time,
+			base_folder = classification.base_folder,
+		})
+
+		::continue::
+	end
+
+	-- Prune stale cache entries
+	for cached_path in pairs(_file_cache) do
+		if not seen_files[cached_path] then
+			_file_cache[cached_path] = nil
+		end
+	end
+
+	table.sort(entries, function(a, b)
+		if a.timestamp == b.timestamp then
+			if a.modified_time ~= b.modified_time then
+				return a.modified_time > b.modified_time
+			end
+			return a.value < b.value
+		end
+		return a.timestamp > b.timestamp
+	end)
+
+	return entries
+end
+
+--- Prewarm the note file metadata cache in the background.
+M.prewarm = function()
+	if _prewarm_pending or not _parley then
+		return
+	end
+	_prewarm_pending = true
+	vim.defer_fn(function()
+		local ok, err = pcall(function()
+			local notes_root = vim.fn.expand(_parley.config.notes_dir)
+			if notes_root and notes_root ~= "" then
+				scan_note_files(notes_root, nil)
+			end
+		end)
+		if not ok and _parley then
+			_parley.logger.debug("NoteFinder prewarm error: " .. tostring(err))
+		end
+		_prewarm_pending = false
+		local callbacks = _prewarm_callbacks
+		_prewarm_callbacks = {}
+		for _, cb in ipairs(callbacks) do
+			cb()
+		end
+	end, 0)
+end
+
+-- Exposed for benchmarking
+M._scan_note_files = scan_note_files
+
+--------------------------------------------------------------------------------
 -- Main NoteFinder open function (was M.cmd.NoteFinder body)
 --------------------------------------------------------------------------------
 
@@ -238,8 +382,17 @@ M.open = function(_options)
 	local previous_recency_shortcut = note_finder_mappings.previous_recency or { shortcut = "<C-s>" }
 	local keybindings_shortcut = _parley.config.global_shortcut_keybindings or { shortcut = "<C-g>?" }
 	local notes_root = vim.fn.expand(_parley.config.notes_dir)
-	local files = _parley.helpers.find_files(notes_root, "*.md", true)
-	local entries = {}
+
+	-- If a prewarm is in flight, wait for it instead of scanning again
+	if _prewarm_pending then
+		_parley.logger.debug("NoteFinder: waiting for prewarm to finish")
+		_parley._note_finder.opened = false
+		table.insert(_prewarm_callbacks, function()
+			M.open(_options)
+		end)
+		return
+	end
+
 	local recency_config = _parley.config.note_finder_recency or {
 		filter_by_default = true,
 		months = 3,
@@ -253,49 +406,7 @@ M.open = function(_options)
 		cutoff_time = os.time() - (resolved_recency.current.months * 30 * 24 * 60 * 60)
 	end
 
-	for _, file in ipairs(files) do
-		local classification = classify_note_finder_path(file, notes_root)
-		if not classification.is_template then
-			local stat = vim.loop.fs_stat(file)
-			if stat then
-				local inferred_time = infer_note_directory_cutoff_time(file, notes_root)
-				local modified_time = stat.mtime.sec
-				local sort_time = inferred_time or modified_time
-				local range_time = inferred_time or modified_time
-				local is_special_folder = classification.base_folder ~= nil
-				if is_special_folder or not cutoff_time or range_time >= cutoff_time then
-					local display
-					local search_text
-					if is_special_folder then
-						local file_name = vim.fn.fnamemodify(file, ":t")
-						display = string.format("{%s} %s [%s]", classification.base_folder, file_name, os.date("%Y-%m-%d", sort_time))
-						search_text = string.format("{%s} %s %s", classification.base_folder, file_name, classification.relative_path:gsub("%-", " "))
-					else
-						display = classification.relative_path .. " [" .. os.date("%Y-%m-%d", sort_time) .. "]"
-						search_text = "{} " .. classification.relative_path:gsub("%-", " ")
-					end
-					table.insert(entries, {
-						value = file,
-						display = display,
-						ordinal = search_text,
-						timestamp = sort_time,
-						modified_time = modified_time,
-						base_folder = classification.base_folder,
-					})
-				end
-			end
-		end
-	end
-
-	table.sort(entries, function(a, b)
-		if a.timestamp == b.timestamp then
-			if a.modified_time ~= b.modified_time then
-				return a.modified_time > b.modified_time
-			end
-			return a.value < b.value
-		end
-		return a.timestamp > b.timestamp
-	end)
+	local entries = scan_note_files(notes_root, cutoff_time)
 
 	local items = {}
 	for _, entry in ipairs(entries) do

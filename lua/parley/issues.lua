@@ -15,8 +15,24 @@ local M = {}
 
 local _parley = nil
 
+-- Mtime-based cache: avoids re-reading unchanged issue files.
+-- Key: file path, Value: { mtime, issue_data }
+local _file_cache = {}
+
 M.setup = function(parley)
     _parley = parley
+end
+
+M.clear_cache = function()
+    _file_cache = {}
+end
+
+M.get_cache = function()
+    return _file_cache
+end
+
+M.invalidate_path = function(path)
+    _file_cache[path] = nil
 end
 
 --------------------------------------------------------------------------------
@@ -281,7 +297,8 @@ M.next_issue_id = function(issues_dir)
     return string.format("%06d", max_id + 1)
 end
 
--- Scan a single directory for issue files, appending to the issues table
+-- Scan a single directory for issue files, appending to the issues table.
+-- Uses _file_cache to skip re-reading unchanged files.
 local function scan_dir_issues(dir, issues, is_archived)
     local handle = vim.loop.fs_scandir(dir)
     if not handle then
@@ -295,24 +312,41 @@ local function scan_dir_issues(dir, issues, is_archived)
             local id_str = name:match("^(%d+)%-")
             if id_str then
                 local path = dir .. "/" .. name
-                local lines = vim.fn.readfile(path)
-                local fm = M.parse_frontmatter(lines)
-                local slug = name:match("^%d+%-(.+)%.md$") or ""
-                local title = M.extract_title(lines, fm and fm.header_end or 0)
-                table.insert(issues, {
-                    id = id_str,
-                    slug = slug,
-                    title = title,
-                    status = fm and fm.status or "open",
-                    deps = fm and fm.deps or {},
-                    created = fm and fm.created or "",
-                    updated = fm and fm.updated or "",
-                    github_issue = fm and fm.github_issue or nil,
-                    path = path,
-                    archived = is_archived or false,
-                })
+                local stat = vim.loop.fs_stat(path)
+                if not stat then
+                    goto continue
+                end
+
+                local cached = _file_cache[path]
+                if cached and cached.mtime == stat.mtime.sec then
+                    -- Use cached data, just update archived flag
+                    local issue = vim.deepcopy(cached.issue_data)
+                    issue.archived = is_archived or false
+                    table.insert(issues, issue)
+                else
+                    local lines = vim.fn.readfile(path)
+                    local fm = M.parse_frontmatter(lines)
+                    local slug = name:match("^%d+%-(.+)%.md$") or ""
+                    local title = M.extract_title(lines, fm and fm.header_end or 0)
+                    local issue_data = {
+                        id = id_str,
+                        slug = slug,
+                        title = title,
+                        status = fm and fm.status or "open",
+                        deps = fm and fm.deps or {},
+                        created = fm and fm.created or "",
+                        updated = fm and fm.updated or "",
+                        github_issue = fm and fm.github_issue or nil,
+                        path = path,
+                    }
+                    _file_cache[path] = { mtime = stat.mtime.sec, issue_data = issue_data }
+                    local issue = vim.deepcopy(issue_data)
+                    issue.archived = is_archived or false
+                    table.insert(issues, issue)
+                end
             end
         end
+        ::continue::
     until not name
 end
 
