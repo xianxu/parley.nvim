@@ -537,7 +537,7 @@ M._scan_chat_files = scan_chat_files
 -- Main ChatFinder open function (was M.cmd.ChatFinder body)
 --------------------------------------------------------------------------------
 
-M.open = function(_options)
+M.open = function(options) -- luacheck: ignore options
 	if _parley._chat_finder.opened then
 		_parley.logger.warning("Chat finder is already open")
 		return

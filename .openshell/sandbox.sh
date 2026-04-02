@@ -59,7 +59,7 @@ ensure_setup() {
         echo "==> Running post-install on sandbox..."
         scp -q "$SCRIPT_DIR/overlay/post-install.sh" "$SANDBOX_SSH_HOST:/tmp/post-install.sh"
         scp -q "$SCRIPT_DIR/overlay/setup.sh" "$SANDBOX_SSH_HOST:/tmp/setup.sh"
-        ssh "$SANDBOX_SSH_HOST" "bash /tmp/setup.sh && bash /tmp/post-install.sh"
+        ssh "$SANDBOX_SSH_HOST" "bash /tmp/post-install.sh && bash /tmp/setup.sh"
     fi
 
     local git_name git_email
@@ -138,6 +138,21 @@ ensure_mutagen_sync() {
     fi
 }
 
+# Light cleanup: terminate syncs and wipe sandbox working dirs, but keep the
+# sandbox container and installed tools. Fast way to get a fresh repo state.
+soft_cleanup() {
+    echo "==> Soft cleanup (keeping sandbox + tools)..."
+    mutagen sync terminate "${SANDBOX_NAME}-repo" 2>/dev/null || true
+    mutagen sync terminate "${SANDBOX_NAME}-git" 2>/dev/null || true
+    mutagen sync terminate "${SANDBOX_NAME}-worktree" 2>/dev/null || true
+    mutagen sync terminate "${SANDBOX_NAME}-plenary" 2>/dev/null || true
+    ssh "$SANDBOX_SSH_HOST" "rm -rf /sandbox/repo /sandbox/worktree && mkdir -p /sandbox/repo /sandbox/worktree" 2>/dev/null || true
+    echo "==> Re-syncing files..."
+    ensure_mutagen_sync
+    echo "==> Clean done."
+}
+
+# Full cleanup: destroy everything including the sandbox container.
 cleanup() {
     mutagen sync terminate "${SANDBOX_NAME}-bootstrap" 2>/dev/null || true
     mutagen sync terminate "${SANDBOX_NAME}-repo" 2>/dev/null || true
@@ -152,9 +167,13 @@ cleanup() {
     fi
 }
 
+timer_start() { date +%s; }
+timer_show() { echo "    (${1}: $(( $(date +%s) - $2 ))s)"; }
+
 # Ensure sandbox exists and is fully set up. Idempotent.
 cmd_build() {
-    local phase
+    local phase t0 t_total
+    t_total=$(timer_start)
     phase=$(get_phase)
 
     # Clean up broken state
@@ -167,6 +186,7 @@ cmd_build() {
     # Create sandbox and download deps in parallel
     if [ -z "$phase" ]; then
         echo "==> Creating sandbox + downloading deps (parallel)..."
+        t0=$(timer_start)
         openshell sandbox create \
             --name "$SANDBOX_NAME" \
             --from base \
@@ -178,23 +198,34 @@ cmd_build() {
         local bootstrap_pid=$!
         wait "$sandbox_pid" || true
         wait "$bootstrap_pid"
+        timer_show "create+bootstrap" "$t0"
     else
         echo "==> Bootstrapping dependencies on host..."
+        t0=$(timer_start)
         bash "$SCRIPT_DIR/overlay/bootstrap.sh"
+        timer_show "bootstrap" "$t0"
     fi
 
     echo "==> Ensuring SSH config..."
+    t0=$(timer_start)
     ensure_ssh_config
+    timer_show "ssh config" "$t0"
 
     echo "==> Ensuring bootstrap sync..."
+    t0=$(timer_start)
     ensure_bootstrap_sync
+    timer_show "bootstrap sync" "$t0"
 
+    t0=$(timer_start)
     ensure_setup
+    timer_show "setup+post-install" "$t0"
 
     echo "==> Ensuring file sync..."
+    t0=$(timer_start)
     ensure_mutagen_sync
+    timer_show "file sync" "$t0"
 
-    echo "==> Sandbox ready."
+    echo "==> Sandbox ready. (total: $(( $(date +%s) - t_total ))s)"
 }
 
 # Connect to sandbox. Builds first if needed.
@@ -209,6 +240,10 @@ cmd_connect() {
     openshell sandbox connect "$SANDBOX_NAME" || true
 }
 
+cmd_clean() {
+    soft_cleanup
+}
+
 cmd_stop() {
     echo "==> Stopping sandbox..."
     cleanup
@@ -218,6 +253,7 @@ cmd_stop() {
 case "$ACTION" in
     build)   cmd_build ;;
     connect) cmd_connect ;;
+    clean)   cmd_clean ;;
     stop)    cmd_stop ;;
-    *)       echo "Usage: $0 {build|connect|stop} <sandbox-name>"; exit 1 ;;
+    *)       echo "Usage: $0 {build|connect|stop|clean} <sandbox-name>"; exit 1 ;;
 esac

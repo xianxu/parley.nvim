@@ -423,8 +423,6 @@ function M.question_picker(config)
 
   -- Chat file: build tree outline with expand/collapse
   local root = find_tree_root(buf_name, config)
-  local current_abs = vim.fn.resolve(vim.fn.expand(buf_name))
-
   -- Start fully expanded (nil = expand all); toggling a branch sets it to a table
   local expanded_set = nil
 

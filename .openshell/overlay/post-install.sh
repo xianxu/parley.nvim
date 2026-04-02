@@ -28,8 +28,12 @@ fi
 if [ ! -d "$HOME/.oh-my-bash" ]; then
     echo "==> Installing Oh My Bash..."
     cp -r "$BOOTSTRAP/oh-my-bash" "$HOME/.oh-my-bash"
-    # Source the install script in unattended mode to set up .bashrc integration
-    OSH="$HOME/.oh-my-bash" RUNZSH=no CHSH=no bash "$HOME/.oh-my-bash/tools/install.sh" --unattended 2>/dev/null || true
+    # Install bashrc from template (the install.sh script bails if $OSH dir exists)
+    if [ -f "$HOME/.bashrc" ]; then
+        cp "$HOME/.bashrc" "$HOME/.bashrc.pre-omb"
+    fi
+    sed "s|^export OSH=.*|export OSH=$HOME/.oh-my-bash|" \
+        "$HOME/.oh-my-bash/templates/bashrc.osh-template" > "$HOME/.bashrc"
 else
     echo "  [ok] Oh My Bash"
 fi

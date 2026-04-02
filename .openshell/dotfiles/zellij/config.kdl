@@ -35,4 +35,8 @@ keybinds {
         bind "o" { SwitchToMode "Session"; }
         bind "q" { Quit; }
     }
+
+	shared_except "locked" {
+        bind "Alt /" { SwitchToMode "Scroll"; }
+    }
 }

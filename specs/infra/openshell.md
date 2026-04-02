@@ -25,21 +25,31 @@ Host (macOS)                          Sandbox (OpenShell / K3s pod)
 ## Structure
 ```
 .openshell/
-├── Makefile            # Make targets (bootstrap, sandbox, sandbox-build, etc.)
-├── sandbox.sh          # Lifecycle script (build, connect, stop)
+├── Makefile            # Make targets (bootstrap, sandbox-build, sandbox-clean, etc.)
+├── sandbox.sh          # Lifecycle script (build, connect, clean, stop)
 ├── policy.yaml         # OpenShell network/filesystem policy
+├── .bootstrap/         # Host-side dep cache (gitignored, persists across rebuilds)
 ├── overlay/
-│   └── setup.sh        # One-shot user-local setup (neovim, git config, aliases)
-└── dotfiles/           # Legacy — kept for reference, not used in sandbox
+│   ├── bootstrap.sh    # Host-side: parallel download of all deps into .bootstrap/
+│   ├── setup.sh        # Sandbox-side: git config, shell config, workspace dirs
+│   ├── post-install.sh # Sandbox-side: install tools from bootstrap cache
+│   └── deps/           # Legacy individual dep scripts (no longer sourced)
+└── dotfiles/
+    └── zellij/         # Zellij terminal multiplexer config
 ```
 
 ## Key Design Decisions
 
 1. **Community `base` image** — no custom Dockerfile. Base includes Python, Node 22, gh, git, claude, codex, copilot. Sandbox is agent runtime only.
 
-2. **Minimal overlay** — `setup.sh` installs only neovim binary to `~/.local/bin` + git config + bash aliases. No IDE plugins, no zsh, no dotfiles. Agents run headless; humans use host.
+2. **Host-side bootstrap + sandbox post-install** (split download from install for speed):
+   - `bootstrap.sh` runs on the **host** — downloads neovim, zellij, oh-my-bash, lua source, luacheck+deps in parallel to `.bootstrap/` cache. Skips if `.bootstrap/.done` exists.
+   - `post-install.sh` runs on the **sandbox** — copies pre-built binaries, compiles Lua/luafilesystem from source, installs luacheck via wrapper script.
+   - `setup.sh` runs on the **sandbox** — git config, shell config, workspace dirs only.
+   - **Why split?** Host downloads are fast (no proxy overhead, parallel). Sandbox only does the cheap parts (copy, compile). Bootstrap cache persists across sandbox rebuilds.
 
 3. **Mutagen for file sync** (not docker bind mounts, not `--upload`):
+   - **Bootstrap**: one-way-replica of `.bootstrap/` to `/tmp/bootstrap/` (deps cache)
    - **Repo**: two-way-resolved to `/sandbox/repo`
    - **Git history**: one-way-replica of `.git/` to sandbox (enables `git diff/log/branch` inside sandbox without full clone; ignores `index.lock` to avoid conflicts)
    - **Worktree**: two-way-resolved to `/sandbox/worktree`
@@ -62,6 +72,7 @@ make bootstrap          # Install openshell, gh, mutagen + gh auth (one-time)
 make sandbox-build      # Create sandbox, run setup, start sync (idempotent)
 make sandbox            # Connect to sandbox (builds if needed)
 make sandbox-shell      # Alias for sandbox
+make sandbox-clean      # Reset repo sync, keep sandbox + installed tools (fast)
 make sandbox-stop       # Stop sync, delete sandbox, clean up SSH config
 make sandbox-nuke       # Same as stop (no persistent state)
 ```
@@ -85,6 +96,20 @@ Sandbox is the security boundary — agents inside get full auto-approve:
 - L4 passthrough (no HTTP inspection) for most endpoints
 - All entries require `binaries: [{path: "/**"}]`
 
+## Performance Optimizations
+
+1. **Parallel sandbox create + host download** — `openshell sandbox create` (~34s) runs in background while `bootstrap.sh` downloads deps on host. Both must finish before post-install.
+
+2. **Host-side download, sandbox-side install** — All `curl`/`git clone` happens on the host (no proxy overhead, parallel downloads). Only compilation (Lua, luafilesystem) and file copies run on the sandbox.
+
+3. **Bootstrap cache** — `.bootstrap/` persists across `sandbox-stop`/`sandbox-build` cycles. Only cleared manually (`rm -rf .openshell/.bootstrap`). The `.done` marker skips re-downloading.
+
+4. **`sandbox-clean` for fast reset** — Terminates mutagen syncs and wipes `/sandbox/repo` + `/sandbox/worktree`, then re-syncs. Skips the 34s sandbox creation and all tool installs.
+
+5. **Luacheck without LuaRocks** — LuaRocks requires `unzip` (not in base image, no root). Instead: clone luacheck + argparse source, build luafilesystem C module with one `gcc` call, wrapper script sets `LUA_PATH`/`LUA_CPATH`.
+
+6. **Lua without readline** — Build with `make linux` instead of `make linux-readline` to avoid `libreadline-dev` dependency (not in base image). Interactive shell features not needed for linting.
+
 ## Known Limitations
 - `openshell sandbox create --no-tty` still opens an interactive shell (~30s supervisor startup)
 - Git clone inside sandbox is slow (all traffic goes through L7 proxy) — prefer syncing deps from host
@@ -92,6 +117,9 @@ Sandbox is the security boundary — agents inside get full auto-approve:
 - No persistent state across sandbox recreations — all setup re-runs on fresh create
 
 ## History
+- 2026-04-01: Split deps into host-side bootstrap + sandbox post-install for speed
+  - Parallel sandbox create + dep download, bootstrap cache, luacheck without LuaRocks
+  - Added `make sandbox-clean` for fast repo reset without recreating sandbox
 - 2026-03-30: Migrated to real OpenShell runtime with policy enforcement (issue 000031)
   - Community base image, mutagen sync, GitHub token auth, minimal agent-runtime setup
   - Dropped custom Dockerfile, SSH agent forwarding, docker bind mounts

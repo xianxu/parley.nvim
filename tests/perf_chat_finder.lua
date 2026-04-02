@@ -76,7 +76,7 @@ local function touch_random_files(dir, count, pct)
 	local pattern = vim.fn.fnameescape(dir) .. "/[0-9]*.md"
 	local files = vim.fn.glob(pattern, false, true)
 	local n = math.max(1, math.floor(#files * pct / 100))
-	for i = 1, n do
+	for _ = 1, n do
 		local idx = math.random(#files)
 		local filepath = files[idx]
 		-- Append a line to change mtime
@@ -90,7 +90,7 @@ end
 local function benchmark(label, fn, iterations)
 	iterations = iterations or 3
 	local times = {}
-	for i = 1, iterations do
+	for _ = 1, iterations do
 		local start = vim.loop.hrtime()
 		fn()
 		local elapsed_ms = (vim.loop.hrtime() - start) / 1e6

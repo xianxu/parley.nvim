@@ -369,7 +369,7 @@ M._scan_note_files = scan_note_files
 -- Main NoteFinder open function (was M.cmd.NoteFinder body)
 --------------------------------------------------------------------------------
 
-M.open = function(_options)
+M.open = function(options) -- luacheck: ignore options
 	if _parley._note_finder.opened then
 		_parley.logger.warning("Note finder is already open")
 		return

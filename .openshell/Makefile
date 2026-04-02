@@ -1,7 +1,7 @@
 # Sandbox management — include from your project Makefile:
 #   include .openshell/Makefile
 
-.PHONY: help-sandbox bootstrap sandbox sandbox-build sandbox-stop sandbox-shell sandbox-nuke
+.PHONY: help-sandbox bootstrap sandbox sandbox-build sandbox-clean sandbox-stop sandbox-shell sandbox-nuke
 
 # K8s names must be DNS-1035: lowercase alphanumeric + hyphens only
 SANDBOX_NAME = $(shell echo "$(REPO_NAME)-sandbox" | tr '.' '-' | tr '[:upper:]' '[:lower:]')
@@ -13,6 +13,7 @@ help-sandbox:
 	"  make sandbox-build    Create sandbox, run setup, start sync (one-time)" \
 	"  make sandbox          Connect to sandbox (builds if needed)" \
 	"  make sandbox-shell    Alias for sandbox" \
+	"  make sandbox-clean    Reset repo sync (keeps sandbox + tools)" \
 	"  make sandbox-stop     Stop sync, delete sandbox, clean up" \
 	"  make sandbox-nuke     Same as sandbox-stop (no persistent state)" \
 	""
@@ -59,6 +60,10 @@ sandbox: sandbox-build
 
 # Alias
 sandbox-shell: sandbox
+
+# Light reset: re-sync repo files, keep sandbox and tools
+sandbox-clean:
+	@.openshell/sandbox.sh clean $(SANDBOX_NAME)
 
 # Stop sandbox: terminate sync, delete sandbox, clean up
 sandbox-stop:
