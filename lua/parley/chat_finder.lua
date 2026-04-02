@@ -760,17 +760,19 @@ M.open = function(_options)
 						-- Use bare filename — chat files are in the same directory
 						local rel_path = vim.fn.fnamemodify(file_path, ":t")
 
-						-- Handle normal mode insertion
+						local branch_prefix = _parley.config.chat_branch_prefix or "🌿:"
+
+						-- Handle normal mode insertion (full-line branch ref)
 						if _parley._chat_finder.insert_normal_mode then
 							vim.api.nvim_buf_set_lines(
 								_parley._chat_finder.insert_buf,
 								_parley._chat_finder.insert_line - 1,
 								_parley._chat_finder.insert_line - 1,
 								false,
-								{ "@@" .. rel_path .. ": " .. topic }
+								{ branch_prefix .. " " .. rel_path .. ": " .. topic }
 							)
 						else
-							-- Handle insert mode insertion by modifying the current line
+							-- Handle insert mode insertion (inline branch link)
 							local current_line = vim.api.nvim_buf_get_lines(
 								_parley._chat_finder.insert_buf,
 								_parley._chat_finder.insert_line - 1,
@@ -779,7 +781,8 @@ M.open = function(_options)
 							)[1]
 
 							local col = _parley._chat_finder.insert_col
-							local new_line = current_line:sub(1, col) .. "@@" .. rel_path .. ": " .. topic .. current_line:sub(col + 1)
+							local inline_link = "[" .. branch_prefix .. topic .. "](" .. rel_path .. ")"
+							local new_line = current_line:sub(1, col) .. inline_link .. current_line:sub(col + 1)
 
 							vim.api.nvim_buf_set_lines(
 								_parley._chat_finder.insert_buf,
@@ -792,7 +795,7 @@ M.open = function(_options)
 							-- Move cursor to the end of the inserted reference
 							vim.api.nvim_win_set_cursor(0, {
 								_parley._chat_finder.insert_line,
-								col + #("@@" .. rel_path .. ": " .. topic),
+								col + #inline_link,
 							})
 
 							-- Return to insert mode

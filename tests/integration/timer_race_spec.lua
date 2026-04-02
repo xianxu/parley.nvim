@@ -98,15 +98,15 @@ describe("timer replacement race safety", function()
 
 		local missing_chat_path = tmp_dir .. "/missing-chat-" .. tostring(math.random(100000)) .. ".md"
 		local file = write_markdown_file("notes-topic-race.md", {
-			"@@"
-				.. missing_chat_path,
+			"🌿: "
+				.. missing_chat_path .. ": ",
 			"plain line",
 		})
 		vim.cmd("edit " .. vim.fn.fnameescape(file))
 		local buf = vim.api.nvim_get_current_buf()
 
-		parley.highlight_markdown_chat_refs(buf)
-		parley.highlight_markdown_chat_refs(buf)
+		parley.highlight_chat_branch_refs(buf)
+		parley.highlight_chat_branch_refs(buf)
 
 		assert.are.same(2, #timers)
 		assert.is_true(timers[1].closed, "first timer should be closed when replaced")

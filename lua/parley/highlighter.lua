@@ -62,20 +62,6 @@ local function split_chat_reference_content(content)
     return content:gsub("^%s*(.-)%s*$", "%1"), nil
 end
 
-local function render_chat_reference_label(path, current_topic, base_dir)
-    local trimmed_path = path and path:gsub("^%s*(.-)%s*$", "%1") or ""
-    if trimmed_path == "" then
-        return nil
-    end
-
-    local expanded_path = base_dir and resolve_path(trimmed_path, base_dir) or vim.fn.expand(trimmed_path)
-    local topic = _parley.get_chat_topic(expanded_path)
-    if not topic or topic == "" or topic == current_topic then
-        return nil
-    end
-
-    return "@@" .. trimmed_path .. ": " .. topic
-end
 
 local function get_chat_highlight_prefix_patterns()
     local user_prefix = _parley.config.chat_user_prefix
@@ -264,12 +250,13 @@ end
 -- Returns a table keyed by 0-indexed row: { [row] = { {hl_group, col_start, col_end}, ... } }
 local function compute_markdown_highlights(buf, start_line, end_line)
     local result = {}
+    local branch_prefix = _parley.config.chat_branch_prefix or "🌿:"
     local lines = vim.api.nvim_buf_get_lines(buf, start_line - 1, end_line, false)
     for offset, line in ipairs(lines) do
         local row = start_line + offset - 2
-        if line:match("^@@%s*[^+]") or line:match("^@@/") then
+        if line:sub(1, #branch_prefix) == branch_prefix then
             result[row] = result[row] or {}
-            table.insert(result[row], { hl_group = "ParleyFileReference", col_start = 0, col_end = -1 })
+            table.insert(result[row], { hl_group = "ParleyChatReference", col_start = 0, col_end = -1 })
         end
     end
     return result
@@ -443,68 +430,6 @@ M.disable_strikethrough = function(buf)
 	end)
 end
 
--- Refresh topic labels for chat references in non-chat markdown files.
--- Highlighting is handled by the decoration provider; this only does topic updates.
-M.highlight_markdown_chat_refs = function(buf)
-    local ranges = get_visible_line_ranges(buf)
-    local has_chat_refs = false
-
-    for _, range in ipairs(ranges) do
-        local lines = vim.api.nvim_buf_get_lines(buf, range.start_line - 1, range.end_line, false)
-        for _, line in ipairs(lines) do
-            if line:match("^@@%s*[^+]") or line:match("^@@/") then
-                has_chat_refs = true
-                break
-            end
-        end
-        if has_chat_refs then break end
-    end
-
-    -- Defer topic updates so editing stays fast in large markdown files.
-    _parley._markdown_topic_timers = _parley._markdown_topic_timers or {}
-    local existing_timer = _parley._markdown_topic_timers[buf]
-    if existing_timer then
-        stop_and_close_timer(existing_timer)
-        _parley._markdown_topic_timers[buf] = nil
-    end
-
-    if not has_chat_refs then
-        return
-    end
-
-    local TOPIC_REFRESH_DEBOUNCE_MS = 500
-    local timer = vim.uv.new_timer()
-    _parley._markdown_topic_timers[buf] = timer
-    timer:start(
-        TOPIC_REFRESH_DEBOUNCE_MS,
-        0,
-        vim.schedule_wrap(function()
-            stop_and_close_timer(timer)
-            if _parley._markdown_topic_timers[buf] ~= timer then
-                return
-            end
-            _parley._markdown_topic_timers[buf] = nil
-            if not vim.api.nvim_buf_is_valid(buf) then
-                return
-            end
-
-            local base_dir = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ":h")
-            local refresh_ranges = get_visible_line_ranges(buf)
-            for _, range in ipairs(refresh_ranges) do
-                local latest_lines = vim.api.nvim_buf_get_lines(buf, range.start_line - 1, range.end_line, false)
-                for offset, line in ipairs(latest_lines) do
-                    local updated_line = M.render_markdown_chat_reference_line(line, base_dir)
-                    if updated_line ~= line then
-                        local line_nr = range.start_line + offset - 1
-                        vim.api.nvim_buf_set_lines(buf, line_nr - 1, line_nr, false, { updated_line })
-                    end
-                end
-            end
-
-            vim.cmd("redraw")
-        end)
-    )
-end
 
 -- Render a single 🌿: branch line, filling in the topic from the referenced file.
 -- Returns the updated line, or the original if no change is needed.
@@ -587,7 +512,7 @@ local function highlight_inline_branch_links(buf, ranges)
 end
 
 -- Refresh topic labels for 🌿: branch references in chat buffers.
--- Same debounced pattern as highlight_markdown_chat_refs.
+-- Debounced topic refresh for 🌿: branch references and inline [🌿:text](file) links.
 M.highlight_chat_branch_refs = function(buf)
     local branch_prefix = _parley.config.chat_branch_prefix or "🌿:"
     local chat_parser = require("parley.chat_parser")
@@ -659,32 +584,6 @@ M.highlight_chat_branch_refs = function(buf)
     )
 end
 
-M.render_markdown_chat_reference_line = function(line, base_dir)
-    local rendered_line = line
-
-    rendered_line = rendered_line:gsub("@@(.-)@@", function(content)
-        local path, current_topic = split_chat_reference_content(content)
-        local rendered = render_chat_reference_label(path, current_topic, base_dir)
-        if rendered then
-            return rendered .. "@@"
-        end
-
-        return "@@" .. content .. "@@"
-    end)
-
-    if rendered_line:match("^@@") and not rendered_line:find("@@.-@@") then
-        local content = rendered_line:match("^@@%s*(.-)%s*$")
-        if content then
-            local path, current_topic = split_chat_reference_content(content)
-            local rendered = render_chat_reference_label(path, current_topic, base_dir)
-            if rendered then
-                return rendered
-            end
-        end
-    end
-
-    return rendered_line
-end
 
 -- Apply highlighting to chat blocks in the current buffer.
 -- Simple clear-and-apply; used by tests on scratch buffers.
@@ -794,7 +693,7 @@ M.setup_buf_handler = function()
             _parley._parley_bufs[buf] = "markdown"
             _parley.prep_md(buf)
             _parley.setup_markdown_keymaps(buf)
-            _parley.highlight_markdown_chat_refs(buf)
+            _parley.highlight_chat_branch_refs(buf)
             interview.highlight_timestamps(buf)
         end
     end, gid)
@@ -828,10 +727,6 @@ M.setup_buf_handler = function()
             end
         end
         interview.clear_match_cache(buf)
-        if _parley._markdown_topic_timers and _parley._markdown_topic_timers[buf] then
-            stop_and_close_timer(_parley._markdown_topic_timers[buf])
-            _parley._markdown_topic_timers[buf] = nil
-        end
         if _parley._branch_topic_timers and _parley._branch_topic_timers[buf] then
             stop_and_close_timer(_parley._branch_topic_timers[buf])
             _parley._branch_topic_timers[buf] = nil

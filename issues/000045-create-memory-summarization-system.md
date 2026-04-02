@@ -24,7 +24,7 @@ We are into how do we organize system_prompt territory. The current structure is
 2. "user preference": e.g. what user may initially put in. 
 3. "discovered user preference": based on above memory mechanism.
 
-I guess another interesting aspect is that once we have tool use, then user can ask about past chat "what did I tell you about XXX", and we can use `ack XXX` to find the context in chats, or notes, then ask agent to summarize. 
+I guess another interesting aspect is that once we have tool use, then user can ask about past chat "what did I tell you about XXX", and we can use `ack XXX` to find the context in chats, or notes, then ask agent to summarize. Well, I'm not sure turning everything into Claude code/co-work is necessarily a good idea. 
 
 ## Done when
 

@@ -8,8 +8,8 @@
 ## Behavior
 - Inline anywhere in text: `review @@./file.lua@@ and improve it`
 - Content loaded with filename header and line numbers
-- Chat transcript refs render with topic: `@@2026-03-24.12-34-56.123.md: Topic@@`
 - Non-chat refs keep original text
+- Chat-to-chat references now use `🌿:` branch links (see `chat/inline_branch_links.md`)
 
 ## Keybindings
 - `<C-g>o`: Open file/directory under cursor

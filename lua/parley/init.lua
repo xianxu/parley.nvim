@@ -1726,7 +1726,7 @@ M.prep_chat = function(buf, file_name)
 
 		-- Create the child chat file with topic, parent back-link, and question
 		M.create_child_chat(new_chat_file, topic, buf, topic .. "?")
-		M.logger.info("Created inline branch to new chat: " .. rel_path .. " (" .. topic .. ")")
+		M.logger.debug("Created inline branch to new chat: " .. rel_path .. " (" .. topic .. ")")
 		M.highlight_chat_branch_refs(buf)
 	end
 
@@ -1916,10 +1916,6 @@ end
 M._parley_bufs = {}
 
 -- Refresh topic labels for chat references in non-chat markdown files.
-M.highlight_markdown_chat_refs = function(buf)
-	highlighter.highlight_markdown_chat_refs(buf)
-end
-
 M.highlight_chat_branch_refs = function(buf)
 	highlighter.highlight_chat_branch_refs(buf)
 end
@@ -2005,51 +2001,29 @@ M.setup_markdown_keymaps = function(buf)
 		M.cmd.ChatFinder()
 	end, "Parley add chat reference")
 
-	-- Add <C-g>i keybinding to create and insert new chat
-	-- Normal mode implementation
-	M.helpers.set_keymap({ buf }, "n", "<C-g>i", function()
-		-- Get the current cursor position
+	-- Add <C-g>i keybinding to create and insert new chat (branch link format)
+	-- Normal mode: full-line 🌿: branch ref, enter insert mode for topic
+	local function md_insert_branch_ref()
 		local cursor_pos = vim.api.nvim_win_get_cursor(0)
-
-		-- Create a new chat file path (timestamp format only)
 		local new_chat_file = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
-		local rel_path = vim.fn.fnamemodify(new_chat_file, ":t")
-
-		-- Insert the chat reference at the cursor position
-		vim.api.nvim_buf_set_lines(buf, cursor_pos[1] - 1, cursor_pos[1] - 1, false, {
-			"@@" .. rel_path .. "@@",
+		local chat_path = vim.fn.fnamemodify(new_chat_file, ":p")
+		local branch_prefix = M.config.chat_branch_prefix or "🌿:"
+		vim.api.nvim_buf_set_lines(buf, cursor_pos[1], cursor_pos[1], false, {
+			branch_prefix .. " " .. chat_path .. ": ",
 		})
+		vim.api.nvim_win_set_cursor(0, { cursor_pos[1] + 1, 0 })
+		vim.schedule(function() vim.cmd("startinsert!") end)
+		M.logger.info("Created branch reference to new chat: " .. chat_path)
+		M.highlight_chat_branch_refs(buf)
+	end
 
-		M.logger.info("Created reference to new chat: " .. rel_path)
-	end, "Parley create and insert new chat")
-
-	-- Insert mode implementation
+	M.helpers.set_keymap({ buf }, "n", "<C-g>i", md_insert_branch_ref, "Parley create and insert new chat")
 	M.helpers.set_keymap({ buf }, "i", "<C-g>i", function()
-		-- Get the current cursor position
-		local cursor_pos = vim.api.nvim_win_get_cursor(0)
-		local current_line = vim.api.nvim_get_current_line()
-
-		-- Create a new chat file path (timestamp format only)
-		local new_chat_file = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
-		local rel_path = vim.fn.fnamemodify(new_chat_file, ":t")
-
-		-- Insert the chat reference at the current cursor position
-		local col = cursor_pos[2]
-		local new_line = current_line:sub(1, col) .. "@@" .. rel_path .. "@@" .. current_line:sub(col + 1)
-		vim.api.nvim_set_current_line(new_line)
-
-		-- Return to insert mode at the end of the inserted reference
-		vim.api.nvim_win_set_cursor(0, { cursor_pos[1], col + #("@@" .. rel_path .. "@@") })
-
-		-- Make sure we stay in insert mode
-		vim.schedule(function()
-			vim.cmd("startinsert")
-		end)
-
-		M.logger.info("Created reference to new chat: " .. rel_path)
+		vim.cmd("stopinsert")
+		md_insert_branch_ref()
 	end, "Parley create and insert new chat")
 
-	-- Visual mode: wrap selected text as @@filename@@ link and create child chat
+	-- Visual mode: wrap selected text as inline [🌿:text](file) link and create child chat
 	M.helpers.set_keymap({ buf }, "v", "<C-g>i", function()
 		-- Exit visual mode first so '< and '> marks are set
 		vim.cmd("normal! " .. vim.api.nvim_replace_termcodes("<Esc>", true, false, true))
@@ -2062,7 +2036,7 @@ M.setup_markdown_keymaps = function(buf)
 
 		-- Only support single-line selections
 		if start_line ~= end_line then
-			M.logger.warning("Inline chat references only support single-line selections")
+			M.logger.warning("Inline branch links only support single-line selections")
 			return
 		end
 
@@ -2073,18 +2047,24 @@ M.setup_markdown_keymaps = function(buf)
 			return
 		end
 
-		-- Create a new chat file
+		-- Create the child chat file
 		local new_chat_file = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
-		local rel_path = vim.fn.fnamemodify(new_chat_file, ":t")
+		local chat_path = vim.fn.fnamemodify(new_chat_file, ":p")
+		local branch_prefix = M.config.chat_branch_prefix or "🌿:"
+		local topic = 'what is "' .. selected_text .. '"'
 
-		-- Replace selected text with @@filename@@ reference
+		-- Replace selected text with inline branch link (absolute path for non-chat files)
 		local before = line:sub(1, start_col - 1)
 		local after = line:sub(end_col + 1)
-		local new_line = before .. "@@" .. rel_path .. "@@" .. after
+		local inline_link = "[" .. branch_prefix .. selected_text .. "](" .. chat_path .. ")"
+		local new_line = before .. inline_link .. after
 		vim.api.nvim_buf_set_lines(buf, start_line - 1, start_line, false, { new_line })
 
-		M.logger.info("Created reference to new chat: " .. rel_path)
-	end, "Parley create and insert new chat from selection")
+		-- Create the child chat file with topic, parent back-link, and question
+		M.create_child_chat(new_chat_file, topic, buf, topic .. "?")
+		M.logger.debug("Created inline branch to new chat: " .. chat_path .. " (" .. topic .. ")")
+		M.highlight_chat_branch_refs(buf)
+	end, "Parley create inline branch from selection")
 
 	-- Add <C-g>d keybinding to delete current file and buffer
 	M.helpers.set_keymap({ buf }, "n", "<C-g>d", function()
@@ -2224,6 +2204,32 @@ local function resolve_chat_path(path, base_dir)
 	else
 		return vim.fn.resolve(base_dir .. "/" .. path)
 	end
+end
+
+-- Try to open an inline branch link [🌿:text](file) under the cursor.
+-- Returns true if a link was found (and handled), false otherwise.
+local function try_open_inline_branch_link(current_line, cursor_col, parent_buf)
+	local branch_prefix = M.config.chat_branch_prefix or "🌿:"
+	local chat_parser = require("parley.chat_parser")
+	local inline_links = chat_parser.extract_inline_branch_links(current_line, branch_prefix)
+	for _, link in ipairs(inline_links) do
+		-- cursor_col is 0-indexed, col_start/col_end are 1-indexed
+		if cursor_col + 1 >= link.col_start and cursor_col + 1 <= link.col_end then
+			local current_dir = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(parent_buf), ":p:h")
+			local expanded = resolve_chat_path(link.path, current_dir)
+			if vim.fn.filereadable(expanded) == 1 then
+				M.open_buf(expanded)
+			elseif expanded:match("%d%d%d%d%-%d%d%-%d%d%.%d%d%-%d%d%-%d%d%.%d+%.md$") then
+				local topic = link.topic ~= "" and ('what is "' .. link.topic .. '"') or "New chat"
+				M.create_child_chat(expanded, topic, parent_buf, topic .. "?")
+				M.open_buf(expanded)
+			else
+				M.logger.warning("Chat file not found: " .. expanded)
+			end
+			return true
+		end
+	end
+	return false
 end
 
 -- Walk parent_link chain to find the tree root file path.
@@ -2976,6 +2982,11 @@ end
 
 -- Function to open a chat reference from a markdown file
 M.open_chat_reference = function(current_line, cursor_col, _in_insert_mode, full_line)
+	-- Check for inline branch links [🌿:text](file) first
+	if try_open_inline_branch_link(current_line, cursor_col, vim.api.nvim_get_current_buf()) then
+		return true
+	end
+
 	-- Extract the chat path
 	local chat_path
 
@@ -3274,25 +3285,8 @@ M.cmd.OpenFileUnderCursor = function()
 	end
 
 	-- Handle inline branch links [🌿:text](file) — check if cursor is within one
-	local chat_parser = require("parley.chat_parser")
-	local inline_links = chat_parser.extract_inline_branch_links(current_line, branch_prefix)
-	for _, link in ipairs(inline_links) do
-		-- cursor_col is 0-indexed, col_start/col_end are 1-indexed
-		if cursor_col + 1 >= link.col_start and cursor_col + 1 <= link.col_end then
-			local current_dir = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ":p:h")
-			local expanded = resolve_chat_path(link.path, current_dir)
-			if vim.fn.filereadable(expanded) == 1 then
-				M.open_buf(expanded)
-			elseif expanded:match("%d%d%d%d%-%d%d%-%d%d%.%d%d%-%d%d%-%d%d%.%d+%.md$") then
-				-- New chat file — create from template with topic and parent back-link
-				local topic = link.topic ~= "" and ('what is "' .. link.topic .. '"') or "New chat"
-				M.create_child_chat(expanded, topic, buf, topic .. "?")
-				M.open_buf(expanded)
-			else
-				M.logger.warning("Chat file not found: " .. expanded)
-			end
-			return
-		end
+	if try_open_inline_branch_link(current_line, cursor_col, buf) then
+		return
 	end
 
 	-- Process standard @@ file references in chat files

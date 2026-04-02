@@ -3,11 +3,11 @@
 ## Syntax
 - `[🌿:display text](file.md)` — inline within any line (vs full-line `🌿:` on its own line)
 
-## Creation (`<C-g>i` in visual mode)
-- Wraps selection as `[🌿:selected text](new-file.md)`
-- Creates child chat with topic `what is "selected text"` and first question `💬: what is "selected text"?`
+## Creation (`<C-g>i`)
+- **Visual mode** (chat + markdown): wraps selection as `[🌿:selected text](new-file.md)`, creates child chat with topic `what is "selected text"`
+- **Normal mode** (chat + markdown): inserts full-line `🌿: <path>: ` and enters insert mode for topic
+- **Insert mode** (markdown): exits insert, then behaves as normal mode
 - Child gets `🌿:` parent back-link; no auto topic inference (topic is not `?`)
-- Normal mode `<C-g>i` retains existing full-line `🌿:` behavior
 
 ## Parser
 - Detected by `parse_chat`, added to `parsed.branches` with `{ path, topic, line, after_exchange }`
