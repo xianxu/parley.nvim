@@ -8,3 +8,4 @@ tasks/*
 .test-home/
 .claude/constitution-check-state
 COMPARE-SHA
+.openshell/.bootstrap/

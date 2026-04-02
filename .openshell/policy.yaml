@@ -120,6 +120,8 @@ network_policies:
     endpoints:
       - host: www.lua.org
         port: 443
+    binaries:
+      - path: "/**"
   luarocks:
     name: LuaRocks
     endpoints:

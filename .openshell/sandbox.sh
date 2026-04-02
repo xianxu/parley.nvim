@@ -41,11 +41,25 @@ ensure_ssh_config() {
     rm -f "$HOME/.ssh/config.tmp"
 }
 
+ensure_bootstrap_sync() {
+    local bootstrap_dir="$SCRIPT_DIR/overlay/../../.openshell/.bootstrap"
+    if ! mutagen sync list "${SANDBOX_NAME}-bootstrap" >/dev/null 2>&1; then
+        echo "  Starting bootstrap sync..."
+        mutagen sync create \
+            --name "${SANDBOX_NAME}-bootstrap" \
+            --mode one-way-replica \
+            --ignore-vcs \
+            "$bootstrap_dir" "${SANDBOX_SSH_HOST}:/tmp/bootstrap" || true
+        mutagen sync flush "${SANDBOX_NAME}-bootstrap" 2>/dev/null || true
+    fi
+}
+
 ensure_setup() {
     if ! ssh "$SANDBOX_SSH_HOST" "test -x \$HOME/.local/bin/nvim" 2>/dev/null; then
-        echo "==> Running setup (neovim, git config)..."
-        cat "$SCRIPT_DIR/overlay/setup.sh" \
-            | ssh "$SANDBOX_SSH_HOST" "cat > /tmp/setup.sh && bash /tmp/setup.sh"
+        echo "==> Running post-install on sandbox..."
+        scp -q "$SCRIPT_DIR/overlay/post-install.sh" "$SANDBOX_SSH_HOST:/tmp/post-install.sh"
+        scp -q "$SCRIPT_DIR/overlay/setup.sh" "$SANDBOX_SSH_HOST:/tmp/setup.sh"
+        ssh "$SANDBOX_SSH_HOST" "bash /tmp/setup.sh && bash /tmp/post-install.sh"
     fi
 
     local git_name git_email
@@ -125,6 +139,7 @@ ensure_mutagen_sync() {
 }
 
 cleanup() {
+    mutagen sync terminate "${SANDBOX_NAME}-bootstrap" 2>/dev/null || true
     mutagen sync terminate "${SANDBOX_NAME}-repo" 2>/dev/null || true
     mutagen sync terminate "${SANDBOX_NAME}-git" 2>/dev/null || true
     mutagen sync terminate "${SANDBOX_NAME}-worktree" 2>/dev/null || true
@@ -149,19 +164,30 @@ cmd_build() {
         phase=""
     fi
 
-    # Create if needed
+    # Create sandbox and download deps in parallel
     if [ -z "$phase" ]; then
-        echo "==> Creating sandbox..."
+        echo "==> Creating sandbox + downloading deps (parallel)..."
         openshell sandbox create \
             --name "$SANDBOX_NAME" \
             --from base \
             --policy .openshell/policy.yaml \
             --auto-providers \
-            -- true || true
+            -- true &
+        local sandbox_pid=$!
+        bash "$SCRIPT_DIR/overlay/bootstrap.sh" &
+        local bootstrap_pid=$!
+        wait "$sandbox_pid" || true
+        wait "$bootstrap_pid"
+    else
+        echo "==> Bootstrapping dependencies on host..."
+        bash "$SCRIPT_DIR/overlay/bootstrap.sh"
     fi
 
     echo "==> Ensuring SSH config..."
     ensure_ssh_config
+
+    echo "==> Ensuring bootstrap sync..."
+    ensure_bootstrap_sync
 
     ensure_setup
 

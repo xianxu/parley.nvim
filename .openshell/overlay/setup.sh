@@ -1,12 +1,7 @@
 #!/bin/bash
-# One-shot setup for OpenShell sandbox — agent runtime, not dev environment.
-# Installs minimal tooling needed to run tests and agent workflows.
-# Everything installs to $HOME — no root needed.
-#
-# Dependencies live in deps/*.sh — comment out lines below to disable.
+# One-shot setup for OpenShell sandbox — git config, shell config, workspace dirs.
+# Dependency installation is handled by post-install.sh (from bootstrap cache).
 set -euo pipefail
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 mkdir -p "$HOME/.local/bin"
 
@@ -16,12 +11,6 @@ git config --global url."https://github.com/".insteadOf "git@github.com:"
 git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
 # OpenShell proxy terminates TLS — sandbox doesn't have its CA cert
 git config --global http.sslVerify false
-
-# ── Dependencies (comment out to disable) ────────────────────────────────────
-source "$SCRIPT_DIR/deps/neovim.sh"
-source "$SCRIPT_DIR/deps/zellij.sh"
-source "$SCRIPT_DIR/deps/oh-my-bash.sh"
-source "$SCRIPT_DIR/deps/lua.sh"
 
 # ── Shell config ─────────────────────────────────────────────────────────────
 echo "==> Configuring shell..."

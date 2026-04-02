@@ -3,7 +3,7 @@
 echo "==> Installing Lua 5.4 + LuaRocks..."
 LUA_VERSION=5.4.7
 curl -fsSL "https://www.lua.org/ftp/lua-${LUA_VERSION}.tar.gz" | tar xz -C /tmp
-make -C "/tmp/lua-${LUA_VERSION}" linux-readline INSTALL_TOP="$HOME/.local" -j"$(nproc)" && \
+make -C "/tmp/lua-${LUA_VERSION}" linux INSTALL_TOP="$HOME/.local" -j"$(nproc)" && \
     make -C "/tmp/lua-${LUA_VERSION}" install INSTALL_TOP="$HOME/.local"
 rm -rf "/tmp/lua-${LUA_VERSION}"
 
