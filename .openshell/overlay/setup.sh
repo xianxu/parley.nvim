@@ -2,34 +2,33 @@
 # One-shot setup for OpenShell sandbox — agent runtime, not dev environment.
 # Installs minimal tooling needed to run tests and agent workflows.
 # Everything installs to $HOME — no root needed.
+#
+# Dependencies live in deps/*.sh — comment out lines below to disable.
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 mkdir -p "$HOME/.local/bin"
 
+# ── Git config ───────────────────────────────────────────────────────────────
 echo "==> Configuring git..."
 git config --global url."https://github.com/".insteadOf "git@github.com:"
 git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
 # OpenShell proxy terminates TLS — sandbox doesn't have its CA cert
 git config --global http.sslVerify false
 
-echo "==> Installing Neovim 0.11..."
-curl -fsSL https://github.com/neovim/neovim/releases/download/v0.11.6/nvim-linux-arm64.tar.gz \
-    | tar xz -C "$HOME/.local"
-ln -sf "$HOME/.local/nvim-linux-arm64/bin/nvim" "$HOME/.local/bin/nvim"
+# ── Dependencies (comment out to disable) ────────────────────────────────────
+source "$SCRIPT_DIR/deps/neovim.sh"
+source "$SCRIPT_DIR/deps/zellij.sh"
+source "$SCRIPT_DIR/deps/oh-my-bash.sh"
+source "$SCRIPT_DIR/deps/lua.sh"
 
-echo "==> Installing Zellij..."
-curl -fsSL https://github.com/zellij-org/zellij/releases/latest/download/zellij-aarch64-unknown-linux-musl.tar.gz \
-    | tar xz -C "$HOME/.local/bin"
-chmod +x "$HOME/.local/bin/zellij"
-
-echo "==> Installing Oh My Bash..."
-OSH="$HOME/.oh-my-bash" bash -c "$(curl -fsSL https://raw.githubusercontent.com/ohmybash/oh-my-bash/master/tools/install.sh)" --unattended
-
+# ── Shell config ─────────────────────────────────────────────────────────────
 echo "==> Configuring shell..."
 cat >> "$HOME/.bashrc" << 'BASHEOF'
 
 # Added by openshell overlay setup
-export PATH="$HOME/.local/bin:$PATH"
+export PATH="$HOME/.luarocks/bin:$HOME/.local/bin:$PATH"
 export EDITOR="nvim"
 export VISUAL="nvim"
 
@@ -55,6 +54,7 @@ alias codex="codex --full-auto"
 export GEMINI_CLI_AUTO_APPROVE=true
 BASHEOF
 
+# ── Workspace dirs ───────────────────────────────────────────────────────────
 echo "==> Creating workspace dirs..."
 mkdir -p "$HOME/repo" "$HOME/worktree"
 mkdir -p "$HOME/.local/share/nvim/lazy"

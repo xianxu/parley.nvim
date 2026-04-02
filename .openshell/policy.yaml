@@ -115,6 +115,11 @@ network_policies:
       - path: "/**"
 
   # ── Lua ────────────────────────────────────────────────────────────────────
+  lua:
+    name: Lua
+    endpoints:
+      - host: www.lua.org
+        port: 443
   luarocks:
     name: LuaRocks
     endpoints:

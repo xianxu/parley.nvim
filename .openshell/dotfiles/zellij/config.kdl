@@ -4,10 +4,10 @@ keybinds {
         bind "Ctrl q" { SwitchToMode "Tmux"; }
         unbind "Ctrl b"
         // general stuff
-        bind "Alt Left" { NewPane "Left"; }
-        bind "Alt Right" { NewPane "Right"; }
+        bind "Alt Left" { GoToPreviousTab; }
+        bind "Alt Right" { GoToNextTab; }
         bind "Alt Up" { NewPane "Up"; }
-        bind "Alt Down" { NewPane "Up"; }
+        bind "Alt Down" { NewPane "Down"; }
         bind "Alt x" { CloseFocus; SwitchToMode "Normal"; }
         bind "Alt w" { ToggleFloatingPanes;}
         bind "Alt t" { NewTab;}
