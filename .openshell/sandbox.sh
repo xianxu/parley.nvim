@@ -9,6 +9,60 @@ SANDBOX_SSH_HOST="openshell-${SANDBOX_NAME}"
 PLENARY_HOST="${HOME}/.local/share/nvim/lazy/plenary.nvim"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+BASE_IMAGE="ghcr.io/nvidia/openshell-community/sandboxes/base"
+DIGEST_FILE="$SCRIPT_DIR/.base-image-digest"
+
+# Fetch the latest digest of the base image from GHCR.
+# Returns empty string on any failure (network, auth, etc).
+fetch_remote_digest() {
+    local token digest
+    token=$(curl -sf --max-time 5 \
+        "https://ghcr.io/token?service=ghcr.io&scope=repository:nvidia/openshell-community/sandboxes/base:pull" \
+        | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null) || true
+    if [ -z "$token" ]; then return; fi
+    digest=$(curl -sf --max-time 5 \
+        -H "Authorization: Bearer $token" \
+        -H "Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.v2+json" \
+        -o /dev/null -w '' \
+        --dump-header /dev/stdout \
+        "https://ghcr.io/v2/nvidia/openshell-community/sandboxes/base/manifests/latest" \
+        | grep -i 'docker-content-digest' | awk '{print $2}' | tr -d '\r') || true
+    echo "$digest"
+}
+
+save_digest() {
+    local digest
+    digest=$(fetch_remote_digest)
+    if [ -n "$digest" ]; then
+        echo "$digest" > "$DIGEST_FILE"
+    fi
+}
+
+# Check if the base image has been updated since the sandbox was created.
+# Prints a warning and prompts user if an update is available.
+# Returns 0 to continue, 1 if user wants to rebuild.
+check_base_image_update() {
+    if [ ! -f "$DIGEST_FILE" ]; then return 0; fi
+    local saved_digest remote_digest
+    saved_digest=$(cat "$DIGEST_FILE")
+    remote_digest=$(fetch_remote_digest)
+    if [ -z "$remote_digest" ]; then return 0; fi  # can't check, continue
+    if [ "$saved_digest" = "$remote_digest" ]; then return 0; fi
+    echo ""
+    echo "  ** Base image update available **"
+    echo "  Current: ${saved_digest:0:19}..."
+    echo "  Latest:  ${remote_digest:0:19}..."
+    echo ""
+    printf "  Recreate sandbox with new base image? [y/N] "
+    read -r answer </dev/tty
+    if [[ "$answer" =~ ^[Yy] ]]; then
+        echo "==> Rebuilding sandbox with updated base image..."
+        cleanup
+        return 1
+    fi
+    echo "  Continuing with current sandbox."
+    return 0
+}
 
 get_phase() {
     openshell sandbox list 2>/dev/null \
@@ -187,6 +241,13 @@ cmd_build() {
         phase=""
     fi
 
+    # Check for base image updates on existing sandbox
+    if [ -n "$phase" ]; then
+        if ! check_base_image_update; then
+            phase=""  # user chose to rebuild
+        fi
+    fi
+
     # Create sandbox and download deps in parallel
     if [ -z "$phase" ]; then
         echo "==> Creating sandbox + downloading deps (parallel)..."
@@ -202,6 +263,7 @@ cmd_build() {
         local bootstrap_pid=$!
         wait "$sandbox_pid" || true
         wait "$bootstrap_pid"
+        save_digest  # record the base image digest for future update checks
         timer_show "create+bootstrap" "$t0"
     else
         echo "==> Bootstrapping dependencies on host..."

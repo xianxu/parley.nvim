@@ -1,23 +1,9 @@
 # Note Finder
 
-- **Command**: `:ParleyNoteFinder` (`<C-n>f`) -- floating picker for notes
-- Searches `notes_dir` recursively for `.md` files; excludes `notes_dir/templates/`
-- Paths shown relative to `notes_dir`, sorted newest-first
-- Date inferred from directory path (`YYYY/MM/weekNN/DD-subject.md`) drives sort order over mtime
+`:ParleyNoteFinder` (`<C-n>f`) — floating picker for notes under `notes_dir` (excludes `templates/`).
 
 ## Special Folders
-- First-level folders under `notes_dir` that aren't `templates` or dated paths = special named folders
-- Special folder notes show braced prefix: `{K} evergreen-note.md`
-- Special folder notes always visible regardless of recency window
-- Search includes braced label; `{K}` filters to that folder, bare `{}` filters to dated tree only
-- Braced filters match only folder labels, not arbitrary row text
-- Braced filters persist between picker invocations (seeded with trailing space on reopen)
+First-level non-date/non-template folders are "special" — always visible regardless of recency, shown with `{folder}` prefix. Braced filters (`{K}`) match folder labels; bare `{}` matches dated tree only. Braced filters persist between picker invocations.
 
 ## Recency
-- Same month-based cycle model as Chat Finder: `note_finder_recency.months` default, `note_finder_recency.presets`, then `All`
-- Directory-based date ranges decide folder overlap with recency cutoff (may include slightly older files)
-
-## Picker Actions
-- `<C-d>`: delete note (with confirmation)
-- `<C-a>`/`<C-s>`: cycle recency window left/right
-- Select: opens note in source window
+Same month-based cycle as Chat Finder. Directory-derived dates drive sort order over mtime.

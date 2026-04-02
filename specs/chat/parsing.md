@@ -1,27 +1,17 @@
 # Chat Parsing
 
 ## Buffer Sections
-- **Header**: front matter (`---`/`---`) or legacy (lines before first `---`)
-- **Transcript**: everything after header closing separator
+- **Header**: front matter (`---`/`---`) or legacy format
+- **Transcript**: everything after header
 
 ## Turn Detection
-- `💬:` starts user turn, ends at next `🤖:` or EOF
-- `🤖:` starts assistant turn, ends at next `💬:` or EOF
-
-## Special Lines (within assistant answer)
-- `🧠:` thinking (single line)
-- `📝:` summary (single line, used by memory)
+`💬:` starts user turn, `🤖:` starts assistant turn. Special lines within assistant: `🧠:` (thinking), `📝:` (summary).
 
 ## Excluded from LLM Context
-- `🔒:` local sections
-- `🌿:` branch links (full-line)
+`🔒:` local sections, `🌿:` branch links (full-line).
 
 ## Branch Link Parsing
-- First `🌿:` before first `💬:` => `parent_link = { path, topic, line }`
-- Subsequent `🌿:` => `branches[] = { path, topic, line, after_exchange }`
-- `after_exchange`: number of preceding exchanges (for context assembly)
+First `🌿:` before first `💬:` = parent link. Subsequent = child branches with `after_exchange` count for context assembly.
 
 ## Validation
-- Path must be inside a configured chat root
-- Filename must match `YYYY-MM-DD` pattern
-- Header must contain `topic` and `file`
+Path must be inside a configured chat root; filename must match `YYYY-MM-DD` pattern; header must contain `topic` and `file`.
