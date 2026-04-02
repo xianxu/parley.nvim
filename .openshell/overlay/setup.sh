@@ -1,6 +1,7 @@
 #!/bin/bash
 # One-shot setup for OpenShell sandbox — git config, shell config, workspace dirs.
 # Dependency installation is handled by post-install.sh (from bootstrap cache).
+# Idempotent: safe to re-run (e.g. via `make sandbox-clean`).
 set -euo pipefail
 
 mkdir -p "$HOME/.local/bin"
@@ -14,9 +15,10 @@ git config --global http.sslVerify false
 
 # ── Shell config ─────────────────────────────────────────────────────────────
 echo "==> Configuring shell..."
+# Remove old block if present (idempotent)
+sed -i '/^# BEGIN openshell-overlay/,/^# END openshell-overlay/d' "$HOME/.bashrc"
 cat >> "$HOME/.bashrc" << 'BASHEOF'
-
-# Added by openshell overlay setup
+# BEGIN openshell-overlay
 export PATH="$HOME/.luarocks/bin:$HOME/.local/bin:$PATH"
 export EDITOR="nvim"
 export VISUAL="nvim"
@@ -36,11 +38,15 @@ alias p="git commit -a; git push"
 alias todo="nvim tasks/todo.md"
 alias issue="nvim tasks/issue.md"
 alias lesson="nvim tasks/lessons.md"
+alias zl="zellij list-sessions"
+alias ze="zellij"
+alias za="zellij a"
 
 # AI agent sandbox permissions — agents get full auto-approve
 alias claude="claude --permission-mode bypassPermissions"
 alias codex="codex --full-auto"
 export GEMINI_CLI_AUTO_APPROVE=true
+# END openshell-overlay
 BASHEOF
 
 # ── Workspace dirs ───────────────────────────────────────────────────────────

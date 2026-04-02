@@ -58,9 +58,16 @@ ensure_setup() {
     if ! ssh "$SANDBOX_SSH_HOST" "test -x \$HOME/.local/bin/nvim" 2>/dev/null; then
         echo "==> Running post-install on sandbox..."
         scp -q "$SCRIPT_DIR/overlay/post-install.sh" "$SANDBOX_SSH_HOST:/tmp/post-install.sh"
-        scp -q "$SCRIPT_DIR/overlay/setup.sh" "$SANDBOX_SSH_HOST:/tmp/setup.sh"
-        ssh "$SANDBOX_SSH_HOST" "bash /tmp/post-install.sh && bash /tmp/setup.sh"
+        ssh "$SANDBOX_SSH_HOST" "bash /tmp/post-install.sh"
     fi
+    apply_config
+}
+
+# Apply setup.sh, dotfiles, and credentials to sandbox. Idempotent — safe to re-run.
+apply_config() {
+    echo "==> Applying config to sandbox..."
+    scp -q "$SCRIPT_DIR/overlay/setup.sh" "$SANDBOX_SSH_HOST:/tmp/setup.sh"
+    ssh "$SANDBOX_SSH_HOST" "bash /tmp/setup.sh"
 
     local git_name git_email
     git_name=$(git config user.name 2>/dev/null || true)
@@ -149,6 +156,8 @@ soft_cleanup() {
     ssh "$SANDBOX_SSH_HOST" "rm -rf /sandbox/repo /sandbox/worktree && mkdir -p /sandbox/repo /sandbox/worktree" 2>/dev/null || true
     echo "==> Re-syncing files..."
     ensure_mutagen_sync
+    echo "==> Re-applying config..."
+    apply_config
     echo "==> Clean done."
 }
 

@@ -45,7 +45,7 @@ Host (macOS)                          Sandbox (OpenShell / K3s pod)
 2. **Host-side bootstrap + sandbox post-install** (split download from install for speed):
    - `bootstrap.sh` runs on the **host** — downloads neovim, zellij, oh-my-bash, lua source, luacheck+deps in parallel to `.bootstrap/` cache. Skips if `.bootstrap/.done` exists.
    - `post-install.sh` runs on the **sandbox** — copies pre-built binaries, compiles Lua/luafilesystem from source, installs luacheck via wrapper script.
-   - `setup.sh` runs on the **sandbox** — git config, shell config, workspace dirs only.
+   - `setup.sh` runs on the **sandbox** — git config, shell config, workspace dirs only. Idempotent via `BEGIN/END` markers so it can be re-run by `sandbox-clean`.
    - **Why split?** Host downloads are fast (no proxy overhead, parallel). Sandbox only does the cheap parts (copy, compile). Bootstrap cache persists across sandbox rebuilds.
 
 3. **Mutagen for file sync** (not docker bind mounts, not `--upload`):
@@ -72,7 +72,7 @@ make bootstrap          # Install openshell, gh, mutagen + gh auth (one-time)
 make sandbox-build      # Create sandbox, run setup, start sync (idempotent)
 make sandbox            # Connect to sandbox (builds if needed)
 make sandbox-shell      # Alias for sandbox
-make sandbox-clean      # Reset repo sync, keep sandbox + installed tools (fast)
+make sandbox-clean      # Reset repo sync + re-apply config, keep sandbox + tools
 make sandbox-stop       # Stop sync, delete sandbox, clean up SSH config
 make sandbox-nuke       # Same as stop (no persistent state)
 ```
@@ -104,7 +104,7 @@ Sandbox is the security boundary — agents inside get full auto-approve:
 
 3. **Bootstrap cache** — `.bootstrap/` persists across `sandbox-stop`/`sandbox-build` cycles. Only cleared manually (`rm -rf .openshell/.bootstrap`). The `.done` marker skips re-downloading.
 
-4. **`sandbox-clean` for fast reset** — Terminates mutagen syncs and wipes `/sandbox/repo` + `/sandbox/worktree`, then re-syncs. Skips the 34s sandbox creation and all tool installs.
+4. **`sandbox-clean` for iterating on trampoline setup** — Terminates mutagen syncs, wipes `/sandbox/repo` + `/sandbox/worktree`, re-syncs files, then re-runs `setup.sh` + dotfile copies + credential forwarding. This is the fast path for evolving the sandbox configuration (shell aliases, env vars, dotfiles) without recreating the sandbox — edit files on the host, `make sandbox-clean`, `make sandbox` to test. `setup.sh` is idempotent (uses `BEGIN/END openshell-overlay` markers in `.bashrc`).
 
 5. **Luacheck without LuaRocks** — LuaRocks requires `unzip` (not in base image, no root). Instead: clone luacheck + argparse source, build luafilesystem C module with one `gcc` call, wrapper script sets `LUA_PATH`/`LUA_CPATH`.
 
@@ -117,6 +117,9 @@ Sandbox is the security boundary — agents inside get full auto-approve:
 - No persistent state across sandbox recreations — all setup re-runs on fresh create
 
 ## History
+- 2026-04-01: `sandbox-clean` now re-applies config (setup.sh + dotfiles + creds) after re-sync
+  - `setup.sh` made idempotent with `BEGIN/END openshell-overlay` markers
+  - Enables iterating on trampoline setup without full sandbox rebuild
 - 2026-04-01: Split deps into host-side bootstrap + sandbox post-install for speed
   - Parallel sandbox create + dep download, bootstrap cache, luacheck without LuaRocks
   - Added `make sandbox-clean` for fast repo reset without recreating sandbox
