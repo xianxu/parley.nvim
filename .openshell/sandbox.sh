@@ -10,11 +10,6 @@ PLENARY_HOST="${HOME}/.local/share/nvim/lazy/plenary.nvim"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# macOS Docker Desktop uses a non-default socket
-if [ "$(uname -s)" = "Darwin" ]; then
-    export DOCKER_HOST="${DOCKER_HOST:-unix://${HOME}/.docker/run/docker.sock}"
-fi
-
 get_phase() {
     openshell sandbox list 2>/dev/null \
         | sed 's/\x1b\[[0-9;]*m//g' \
