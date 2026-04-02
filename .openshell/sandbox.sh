@@ -42,12 +42,19 @@ save_digest() {
 # Prints a warning and prompts user if an update is available.
 # Returns 0 to continue, 1 if user wants to rebuild.
 check_base_image_update() {
-    if [ ! -f "$DIGEST_FILE" ]; then return 0; fi
     local saved_digest remote_digest
-    saved_digest=$(cat "$DIGEST_FILE")
     remote_digest=$(fetch_remote_digest)
-    if [ -z "$remote_digest" ]; then return 0; fi  # can't check, continue
-    if [ "$saved_digest" = "$remote_digest" ]; then return 0; fi
+    if [ -z "$remote_digest" ]; then return 0; fi  # can't reach registry, continue
+    if [ ! -f "$DIGEST_FILE" ]; then
+        echo "  Seeding base image digest for future update checks."
+        echo "$remote_digest" > "$DIGEST_FILE"
+        return 0
+    fi
+    saved_digest=$(cat "$DIGEST_FILE")
+    if [ "$saved_digest" = "$remote_digest" ]; then
+        echo "  Base image is up to date."
+        return 0
+    fi
     echo ""
     echo "  ** Base image update available **"
     echo "  Current: ${saved_digest:0:19}..."
