@@ -101,3 +101,12 @@ wait
 
 touch "$BOOTSTRAP_DIR/.done"
 echo "==> Downloads complete."
+
+# ── Credentials (always refresh, not gated by .done) ────────────────────────
+echo "==> Gathering credentials..."
+CREDS_DIR="$BOOTSTRAP_DIR/credentials"
+mkdir -p "$CREDS_DIR"
+if [ -f "$HOME/.codex/auth.json" ]; then
+    cp "$HOME/.codex/auth.json" "$CREDS_DIR/codex-auth.json"
+    echo "  [ok] codex auth"
+fi

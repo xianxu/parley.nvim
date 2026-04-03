@@ -54,4 +54,15 @@ echo "==> Creating workspace dirs..."
 mkdir -p "$HOME/repo" "$HOME/worktree"
 mkdir -p "$HOME/.local/share/nvim/lazy"
 
+# ── Credentials (from bootstrap cache) ──────────────────────────────────────
+CREDS="/tmp/bootstrap/credentials"
+if [ -d "$CREDS" ]; then
+    echo "==> Distributing credentials..."
+    if [ -f "$CREDS/codex-auth.json" ]; then
+        mkdir -p "$HOME/.codex"
+        cp "$CREDS/codex-auth.json" "$HOME/.codex/auth.json"
+        echo "  [ok] codex auth"
+    fi
+fi
+
 echo "==> Done."
