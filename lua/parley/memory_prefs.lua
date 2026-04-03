@@ -25,6 +25,62 @@ local function prefs_path(tag)
 end
 
 --------------------------------------------------------------------------------
+-- Pure functions
+--------------------------------------------------------------------------------
+
+--- Build the grep command string for scanning chat roots.
+--- Pure function: no I/O.
+---@param dirs string[] shell-escaped directory paths
+---@return string grep command
+M.build_grep_cmd = function(dirs)
+	return 'grep -rn -E "^tags:|^📝:" ' .. table.concat(dirs, " ") .. " 2>/dev/null"
+end
+
+--- Parse a tag preference file's content lines into structured data.
+--- Pure function: no I/O.
+---@param lines string[] file lines
+---@return table|nil { last_generated = string|nil, text = string }
+M.parse_tag_content = function(lines)
+	if #lines == 0 then
+		return nil
+	end
+	local ts = lines[1]:match("<!%-%- last_generated: (.+) %-%->")
+	local start = ts and 3 or 1
+	local content_lines = {}
+	for i = start, #lines do
+		table.insert(content_lines, lines[i])
+	end
+	local text = vim.trim(table.concat(content_lines, "\n"))
+	if text == "" then
+		return nil
+	end
+	return { last_generated = ts, text = text }
+end
+
+--- Check if the oldest generated timestamp is stale.
+--- Pure function: no I/O.
+---@param oldest_ts string|nil ISO timestamp
+---@param max_age_days number
+---@param now_utc table os.date("!*t") result
+---@return boolean true if generation is needed
+M.is_stale = function(oldest_ts, max_age_days, now_utc)
+	if not oldest_ts then
+		return true
+	end
+	local y, mo, d, h, mi, s = oldest_ts:match("(%d+)-(%d+)-(%d+)T(%d+):(%d+):(%d+)")
+	if not y then
+		return true
+	end
+	local generated_time = os.time({
+		year = tonumber(y), month = tonumber(mo), day = tonumber(d),
+		hour = tonumber(h), min = tonumber(mi), sec = tonumber(s),
+	})
+	local now_time = os.time(now_utc)
+	local age_seconds = os.difftime(now_time, generated_time)
+	return age_seconds >= max_age_days * 86400
+end
+
+--------------------------------------------------------------------------------
 -- Phase 1+2: Extract and group summaries via grep
 --------------------------------------------------------------------------------
 
@@ -115,7 +171,7 @@ M.extract_summaries = function()
 		return {}
 	end
 
-	local cmd = 'grep -rn -E "^tags:|^📝:" ' .. table.concat(dirs, " ") .. " 2>/dev/null"
+	local cmd = M.build_grep_cmd(dirs)
 	_parley.logger.debug("memory_prefs: grep cmd: " .. cmd)
 	local lines = vim.fn.systemlist(cmd)
 	_parley.logger.debug("memory_prefs: grep returned " .. #lines .. " lines")
@@ -238,22 +294,7 @@ local function load_tag_file(tag)
 		return nil
 	end
 	local lines = vim.fn.readfile(path)
-	if #lines == 0 then
-		return nil
-	end
-
-	local ts = lines[1]:match("<!%-%- last_generated: (.+) %-%->")
-	-- Content starts after the timestamp line and blank line
-	local start = ts and 3 or 1
-	local content_lines = {}
-	for i = start, #lines do
-		table.insert(content_lines, lines[i])
-	end
-	local text = vim.trim(table.concat(content_lines, "\n"))
-	if text == "" then
-		return nil
-	end
-	return { last_generated = ts, text = text }
+	return M.parse_tag_content(lines)
 end
 
 --- Load all preference files. Returns cached version if available.
@@ -400,20 +441,9 @@ M.maybe_generate = function()
 	end
 
 	local data = M.load()
-	if data and data.oldest_generated then
-		-- Parse ISO timestamp
-		local y, mo, d, h, mi, s = data.oldest_generated:match("(%d+)-(%d+)-(%d+)T(%d+):(%d+):(%d+)")
-		if y then
-			local generated_time = os.time({
-				year = tonumber(y), month = tonumber(mo), day = tonumber(d),
-				hour = tonumber(h), min = tonumber(mi), sec = tonumber(s),
-			})
-			local age_seconds = os.difftime(os.time(os.date("!*t")), generated_time)
-			local max_age = (config.max_age_days or 1) * 86400
-			if age_seconds < max_age then
-				return
-			end
-		end
+	local oldest_ts = data and data.oldest_generated or nil
+	if not M.is_stale(oldest_ts, config.max_age_days or 1, os.date("!*t")) then
+		return
 	end
 
 	-- File missing, empty, or stale — generate

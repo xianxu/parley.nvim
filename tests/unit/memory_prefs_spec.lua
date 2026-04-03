@@ -85,4 +85,69 @@ describe("memory_prefs", function()
 			assert.equals(2, #buckets.dev)
 		end)
 	end)
+
+	describe("build_grep_cmd", function()
+		it("builds grep command from directory list", function()
+			local cmd = memory_prefs.build_grep_cmd({ "'/path/to/chats'", "'/other/dir'" })
+			assert.truthy(cmd:find("grep %-rn %-E"))
+			assert.truthy(cmd:find("'/path/to/chats'"))
+			assert.truthy(cmd:find("'/other/dir'"))
+			assert.truthy(cmd:find("2>/dev/null"))
+		end)
+	end)
+
+	describe("parse_tag_content", function()
+		it("parses file with timestamp and content", function()
+			local result = memory_prefs.parse_tag_content({
+				"<!-- last_generated: 2026-04-03T04:34:29 -->",
+				"",
+				"User prefers concise code.",
+				"Expert in Lua.",
+			})
+			assert.equals("2026-04-03T04:34:29", result.last_generated)
+			assert.equals("User prefers concise code.\nExpert in Lua.", result.text)
+		end)
+
+		it("parses file without timestamp", function()
+			local result = memory_prefs.parse_tag_content({
+				"User prefers concise code.",
+			})
+			assert.is_nil(result.last_generated)
+			assert.equals("User prefers concise code.", result.text)
+		end)
+
+		it("returns nil for empty lines", function()
+			assert.is_nil(memory_prefs.parse_tag_content({}))
+		end)
+
+		it("returns nil for blank content", function()
+			assert.is_nil(memory_prefs.parse_tag_content({
+				"<!-- last_generated: 2026-04-03T04:34:29 -->",
+				"",
+			}))
+		end)
+	end)
+
+	describe("is_stale", function()
+		it("returns true when timestamp is nil", function()
+			assert.is_true(memory_prefs.is_stale(nil, 1, os.date("!*t")))
+		end)
+
+		it("returns true when timestamp is malformed", function()
+			assert.is_true(memory_prefs.is_stale("not-a-date", 1, os.date("!*t")))
+		end)
+
+		it("returns false when within max age", function()
+			-- Use a timestamp 1 hour ago
+			local now = os.date("!*t")
+			local recent = os.date("!%Y-%m-%dT%H:%M:%S", os.time(now) - 3600)
+			assert.is_false(memory_prefs.is_stale(recent, 1, now))
+		end)
+
+		it("returns true when older than max age", function()
+			local now = os.date("!*t")
+			local old = os.date("!%Y-%m-%dT%H:%M:%S", os.time(now) - 2 * 86400)
+			assert.is_true(memory_prefs.is_stale(old, 1, now))
+		end)
+	end)
 end)

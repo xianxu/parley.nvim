@@ -64,3 +64,12 @@ In parley, for now 1 and 2 are modeled as system_prompt. and 3 is what we descri
 
 ## Log
 
+### 2026-04-03
+- Created `lua/parley/memory_prefs.lua` — extracts 📝 summaries via grep, groups by tag, sends to LLM for preference generation, injects into system prompt
+- Per-tag markdown files (`memory_prefs_{tag}.md`) stored in chat_dir (syncs via iCloud)
+- Auto-generates on startup if files missing or stale (>1 day), in-memory lock prevents concurrent runs
+- Refactored pure functions: `parse_grep_output`, `build_grep_cmd`, `parse_tag_content`, `is_stale`
+- 15 unit tests covering all pure functions
+- Also refactored `.openshell/sandbox.sh` mutagen sync setup (extracted `ensure_sync` helper, `SYNC_NAMES` list, `terminate_all_syncs`)
+- Added nvim state dir sync to sandbox for log access
+
