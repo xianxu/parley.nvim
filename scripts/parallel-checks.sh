@@ -224,8 +224,8 @@ main() {
                 return 0
                 ;;
             nag)
-                printf '{"systemMessage": "Constitution reminder: You have made substantial changes (%s files, ~%s lines). Consider running scripts/parallel-checks.sh --audit when you reach a good stopping point."}\n' \
-                    "$DIFF_FILES" "$DIFF_LINES"
+                jq -n --arg f "$DIFF_FILES" --arg l "$DIFF_LINES" \
+                    '{"additionalContext": "Constitution reminder: You have made substantial changes (\($f) files, ~\($l) lines). Consider running scripts/parallel-checks.sh --audit when you reach a good stopping point."}'
                 return 0
                 ;;
             force)
@@ -244,9 +244,9 @@ main() {
                     local check_output msg
                     check_output=$(cat "$OUTDIR"/*.out 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' || true)
                     msg="Constitution check (forced): Very large change ($DIFF_FILES files, ~$DIFF_LINES lines). Violations found — STOP what you are doing and address these NOW before any further edits."$'\n\n'"$check_output"$'\n\nYou MUST fix the above violations immediately. Do not proceed with any other task until these are resolved.'
-                    jq -n --arg m "$msg" '{"systemMessage": $m}'
+                    jq -n --arg m "$msg" '{"additionalContext": $m}'
                 else
-                    jq -n --arg m "Constitution check (forced): Very large change ($DIFF_FILES files, ~$DIFF_LINES lines). All checks passed." '{"systemMessage": $m}'
+                    jq -n --arg m "Constitution check (forced): Very large change ($DIFF_FILES files, ~$DIFF_LINES lines). All checks passed." '{"additionalContext": $m}'
                 fi
                 return 0
                 ;;
