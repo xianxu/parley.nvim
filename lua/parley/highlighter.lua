@@ -44,13 +44,7 @@ local HIGHLIGHT_VIEWPORT_MARGIN = 20
 local HIGHLIGHT_CONTEXT_LINES = 200
 
 local function resolve_path(path, base_dir)
-    if path:match("^~/") or path == "~" then
-        return vim.fn.resolve(vim.fn.expand(path))
-    elseif path:sub(1, 1) == "/" then
-        return vim.fn.resolve(path)
-    else
-        return vim.fn.resolve(base_dir .. "/" .. path)
-    end
+    return _parley.resolve_chat_path(path, base_dir)
 end
 
 local function split_chat_reference_content(content)

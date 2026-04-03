@@ -89,7 +89,7 @@ ensure_ssh_config() {
         openshell sandbox ssh-config "$SANDBOX_NAME"
         # Keep connection alive through the proxy (every 15s, tolerate 3 misses)
         echo "    ServerAliveInterval 15"
-        echo "    ServerAliveCountMax 3"
+        echo "    ServerAliveCountMax 480"
         echo "# END openshell-${SANDBOX_NAME}"
         echo ""
         cat "$HOME/.ssh/config.tmp"
@@ -311,6 +311,7 @@ cmd_connect() {
     fi
 
     openshell sandbox connect "$SANDBOX_NAME" || true
+    stty sane 2>/dev/null  # restore terminal after abnormal disconnect (e.g. sleep/wake)
 }
 
 cmd_clean() {

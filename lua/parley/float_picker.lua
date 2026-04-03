@@ -938,7 +938,10 @@ function M.open(opts)
             return
         end
         local current_row = visual_row_for_index(sel_idx)
-        local next_row = math.max(first_content_row(), math.min(current_row + delta_rows, last_content_row()))
+        local first = first_content_row()
+        local last = last_content_row()
+        local range = last - first + 1
+        local next_row = first + (current_row - first + delta_rows) % range
         set_selection(index_for_visual_row(next_row), { ensure_visible = true })
     end
 
