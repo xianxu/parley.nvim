@@ -397,6 +397,18 @@ local config = {
 		omit_user_text = "Summarize our chat",
 	},
 
+	-- memory preferences: per-tag user preference profiles from chat history
+	memory_prefs = {
+		-- enable auto-generation and system prompt injection
+		enable = true,
+		-- max recent files per tag to include summaries from
+		max_files = 100,
+		-- max age in days before re-generating
+		max_age_days = 1,
+		-- prompt sent to LLM to generate preference profile
+		prompt = "Based on the following chat history summaries, generate a concise user preference profile that captures the user's interests, expertise level, and communication preferences. Output only the profile text.",
+	},
+
 	-- styling for chatfinder
 	---@type "single" | "double" | "rounded" | "solid" | "shadow" | "none"
 	style_chat_finder_border = "single",

@@ -99,15 +99,7 @@ ensure_ssh_config() {
 
 ensure_bootstrap_sync() {
     local bootstrap_dir="$SCRIPT_DIR/overlay/../../.openshell/.bootstrap"
-    if ! mutagen sync list "${SANDBOX_NAME}-bootstrap" >/dev/null 2>&1; then
-        echo "  Starting bootstrap sync..."
-        mutagen sync create \
-            --name "${SANDBOX_NAME}-bootstrap" \
-            --mode one-way-replica \
-            --ignore-vcs \
-            "$bootstrap_dir" "${SANDBOX_SSH_HOST}:/tmp/bootstrap" || true
-        mutagen sync flush "${SANDBOX_NAME}-bootstrap" 2>/dev/null || true
-    fi
+    ensure_sync bootstrap "$bootstrap_dir" /tmp/bootstrap one-way-replica --ignore-vcs
 }
 
 ensure_setup() {
@@ -154,61 +146,65 @@ EOF
     fi
 }
 
+# Create a mutagen sync if it doesn't already exist.
+# Usage: ensure_sync <label> <local_path> <remote_path> <mode> [extra_args...]
+# Flushes after creation for one-way-replica and two-way-resolved modes.
+ensure_sync() {
+    local label="$1" local_path="$2" remote_path="$3" mode="$4"
+    shift 4
+    local sync_name="${SANDBOX_NAME}-${label}"
+
+    if mutagen sync list "$sync_name" >/dev/null 2>&1; then
+        return
+    fi
+    echo "  Starting ${label} sync..."
+    mutagen sync create \
+        --name "$sync_name" \
+        --mode "$mode" \
+        "$@" \
+        "$local_path" "${SANDBOX_SSH_HOST}:${remote_path}" || true
+    mutagen sync flush "$sync_name" 2>/dev/null || true
+}
+
 ensure_mutagen_sync() {
-    if ! mutagen sync list "${SANDBOX_NAME}-repo" >/dev/null 2>&1; then
-        echo "  Starting repo sync..."
-        mutagen sync create \
-            --name "${SANDBOX_NAME}-repo" \
-            --mode two-way-resolved \
-            --ignore-vcs \
-            --ignore node_modules \
-            --ignore .test-home --ignore .test-xdg --ignore .test-tmp \
-            "$REPO_DIR" "${SANDBOX_SSH_HOST}:/sandbox/repo" || true
-        mutagen sync flush "${SANDBOX_NAME}-repo" 2>/dev/null || true
+    ensure_sync repo "$REPO_DIR" /sandbox/repo two-way-resolved \
+        --ignore-vcs \
+        --ignore node_modules \
+        --ignore .test-home --ignore .test-xdg --ignore .test-tmp
+
+    mkdir -p "$REPO_DIR/../worktree"
+    ensure_sync worktree "$REPO_DIR/../worktree" /sandbox/worktree two-way-resolved \
+        --ignore-vcs
+
+    ensure_sync git "$REPO_DIR/.git" /sandbox/repo/.git one-way-replica \
+        --ignore "index.lock"
+
+    local nvim_state="${HOME}/.local/state/nvim"
+    if [ -d "$nvim_state" ]; then
+        ensure_sync nvim-state "$nvim_state" /sandbox/.local/state/nvim one-way-replica \
+            --ignore-vcs
     fi
 
-    if ! mutagen sync list "${SANDBOX_NAME}-worktree" >/dev/null 2>&1; then
-        echo "  Starting worktree sync..."
-        mkdir -p "$REPO_DIR/../worktree"
-        mutagen sync create \
-            --name "${SANDBOX_NAME}-worktree" \
-            --mode two-way-resolved \
-            --ignore-vcs \
-            "$REPO_DIR/../worktree" "${SANDBOX_SSH_HOST}:/sandbox/worktree" || true
+    if [ -d "$PLENARY_HOST" ]; then
+        ensure_sync plenary "$PLENARY_HOST" /sandbox/.local/share/nvim/lazy/plenary.nvim one-way-replica \
+            --ignore-vcs
     fi
+}
 
-    # Sync .git/ one-way so sandbox has git history for diff/log/branch commands.
-    # One-way-replica avoids conflicts on index, lock files, etc.
-    if ! mutagen sync list "${SANDBOX_NAME}-git" >/dev/null 2>&1; then
-        echo "  Starting git sync..."
-        mutagen sync create \
-            --name "${SANDBOX_NAME}-git" \
-            --mode one-way-replica \
-            --ignore "index.lock" \
-            "$REPO_DIR/.git" "${SANDBOX_SSH_HOST}:/sandbox/repo/.git" || true
-        mutagen sync flush "${SANDBOX_NAME}-git" 2>/dev/null || true
-    fi
+# All mutagen sync names (add new syncs here)
+SYNC_NAMES="repo git worktree plenary nvim-state"
 
-    if [ -d "$PLENARY_HOST" ] && ! mutagen sync list "${SANDBOX_NAME}-plenary" >/dev/null 2>&1; then
-        echo "  Starting plenary sync..."
-        mutagen sync create \
-            --name "${SANDBOX_NAME}-plenary" \
-            --mode one-way-replica \
-            --ignore-vcs \
-            "$PLENARY_HOST" \
-            "${SANDBOX_SSH_HOST}:/sandbox/.local/share/nvim/lazy/plenary.nvim" || true
-        mutagen sync flush "${SANDBOX_NAME}-plenary" 2>/dev/null || true
-    fi
+terminate_all_syncs() {
+    for name in $SYNC_NAMES; do
+        mutagen sync terminate "${SANDBOX_NAME}-${name}" 2>/dev/null || true
+    done
 }
 
 # Light cleanup: terminate syncs and wipe sandbox working dirs, but keep the
 # sandbox container and installed tools. Fast way to get a fresh repo state.
 soft_cleanup() {
     echo "==> Soft cleanup (keeping sandbox + tools)..."
-    mutagen sync terminate "${SANDBOX_NAME}-repo" 2>/dev/null || true
-    mutagen sync terminate "${SANDBOX_NAME}-git" 2>/dev/null || true
-    mutagen sync terminate "${SANDBOX_NAME}-worktree" 2>/dev/null || true
-    mutagen sync terminate "${SANDBOX_NAME}-plenary" 2>/dev/null || true
+    terminate_all_syncs
     ssh "$SANDBOX_SSH_HOST" "rm -rf /sandbox/repo /sandbox/worktree && mkdir -p /sandbox/repo /sandbox/worktree" 2>/dev/null || true
     echo "==> Re-syncing files..."
     ensure_mutagen_sync
@@ -220,10 +216,7 @@ soft_cleanup() {
 # Full cleanup: destroy everything including the sandbox container.
 cleanup() {
     mutagen sync terminate "${SANDBOX_NAME}-bootstrap" 2>/dev/null || true
-    mutagen sync terminate "${SANDBOX_NAME}-repo" 2>/dev/null || true
-    mutagen sync terminate "${SANDBOX_NAME}-git" 2>/dev/null || true
-    mutagen sync terminate "${SANDBOX_NAME}-worktree" 2>/dev/null || true
-    mutagen sync terminate "${SANDBOX_NAME}-plenary" 2>/dev/null || true
+    terminate_all_syncs
     openshell sandbox delete "$SANDBOX_NAME" 2>/dev/null || true
     if [ -f "$HOME/.ssh/config" ]; then
         sed "/^# BEGIN openshell-${SANDBOX_NAME}/,/^# END openshell-${SANDBOX_NAME}/d" \

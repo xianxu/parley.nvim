@@ -54,6 +54,10 @@ local find_chat_root_record = function(f) return chat_dirs.find_chat_root_record
 local registered_chat_dir = function(d) return chat_dirs.registered_chat_dir(d) end
 local chat_root_display = function(r, i) return chat_dirs.chat_root_display(r, i) end
 
+-- Memory preferences module (loaded here; wired up immediately since it only needs M reference)
+local memory_prefs = require("parley.memory_prefs")
+memory_prefs.setup(M)
+
 -- Issues module (loaded here; wired up immediately since it only needs M reference)
 local issues_mod = require("parley.issues")
 issues_mod.setup(M)
@@ -848,6 +852,9 @@ M.setup = function(opts)
 	-- Prewarm finder caches in the background (deferred, non-blocking)
 	chat_finder_mod.prewarm()
 	note_finder_mod.prewarm()
+
+	-- Auto-generate memory preferences if enabled and stale
+	memory_prefs.maybe_generate()
 
 	M.logger.debug("setup finished")
 end
@@ -3608,6 +3615,9 @@ M.cmd.IssueNext = function() issues_mod.cmd_issue_next() end
 M.cmd.IssueStatus = function() issues_mod.cmd_issue_status() end
 M.cmd.IssueDecompose = function() issues_mod.cmd_issue_decompose() end
 
+-- Memory preferences command
+M.cmd.MemoryPrefs = function() memory_prefs.generate() end
+
 M.cmd.ChatDirs = function(p) chat_dirs.cmd_chat_dirs(p) end
 M.cmd.ChatMove = function(p) chat_dirs.cmd_chat_move(p) end
 M.cmd.ChatDirAdd = function(p) chat_dirs.cmd_chat_dir_add(p) end
@@ -3870,6 +3880,12 @@ M.get_agent_info = function(headers, agent)
 			if parsed_append then
 				info.system_prompt = append_prompt_line(info.system_prompt, parsed_append)
 			end
+		end
+
+		-- Append memory-based user preferences (based on chat tags)
+		local mem_pref = memory_prefs.get_preference(headers.tags)
+		if mem_pref then
+			info.system_prompt = append_prompt_line(info.system_prompt, mem_pref)
 		end
 
 		-- Update display name if model or role is overridden
