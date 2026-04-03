@@ -22,4 +22,4 @@ Agent-driven verification before `push` and `merge`. Each check invokes a coding
 Supports interactive (sequential accept/discard) and audit mode (parallel, report-only). Configurable agent (`AGENT_CMD`: claude/codex/gemini).
 
 ## Constitution Hook
-`PostToolUse` hooks on `Write`/`Edit` trigger constitution checks during coding sessions. Three-tier gate based on diff size: **none** (below threshold), **nag** (reminder to run audit), **force** (runs checks immediately). State resets when merge base advances.
+`PostToolUse` hooks on `Write`/`Edit` trigger constitution checks during coding sessions. Three-tier gate based on diff size: **none** (below threshold), **nag** (reminder to run audit), **force** (runs checks immediately). State resets when merge base advances. Hook output uses `additionalContext` JSON field so Claude sees and acts on the messages (not `systemMessage`, which is user-visible only).
