@@ -33,6 +33,10 @@ Host (macOS)                          Sandbox (OpenShell / K3s pod)
 
 On every `make sandbox`, compares the GHCR registry digest of `base:latest` against a locally saved digest (`.openshell/.base-image-digest`). Prompts user to rebuild if a newer image is available. Fails open — never blocks on network errors.
 
+## Connection Resilience
+- SSH keepalive: `ServerAliveInterval 15`, `ServerAliveCountMax 480` — tolerates up to 2 hours of missed heartbeats (e.g. laptop sleep/wake).
+- `stty sane` run after disconnect to restore terminal state after abnormal disconnects.
+
 ## Gotchas
 
 - **Policy `binaries` field** — every `network_policies` entry must have `binaries` or OPA silently denies all traffic.

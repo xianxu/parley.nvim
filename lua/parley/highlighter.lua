@@ -47,15 +47,6 @@ local function resolve_path(path, base_dir)
     return _parley.resolve_chat_path(path, base_dir)
 end
 
-local function split_chat_reference_content(content)
-    local path, topic = content:match("^%s*([^:]+)%s*:%s*(.-)%s*$")
-    if path then
-        return path, topic
-    end
-
-    return content:gsub("^%s*(.-)%s*$", "%1"), nil
-end
-
 
 local function get_chat_highlight_prefix_patterns()
     local user_prefix = _parley.config.chat_user_prefix
@@ -428,36 +419,20 @@ end
 -- Render a single 🌿: branch line, filling in the topic from the referenced file.
 -- Returns the updated line, or the original if no change is needed.
 M.render_chat_branch_line = function(line, base_dir)
-    local branch_prefix = _parley.config.chat_branch_prefix or "🌿:"
-    if line:sub(1, #branch_prefix) ~= branch_prefix then
+    local parsed = _parley._parse_branch_ref(line)
+    if not parsed then
         return line
     end
 
-    local rest = line:sub(#branch_prefix + 1):gsub("^%s*(.-)%s*$", "%1")
-    local path, current_topic = split_chat_reference_content(rest)
-    path = path and path:gsub("^%s*(.-)%s*$", "%1") or ""
-    if path == "" then
-        return line
-    end
-
-    local expanded = base_dir and resolve_path(path, base_dir) or vim.fn.expand(path)
+    local expanded = resolve_path(parsed.path, base_dir)
     local file_exists = vim.fn.filereadable(expanded) == 1
-
-    -- Strip existing warning marker before comparing
-    current_topic = current_topic and current_topic:gsub("%s*⚠️%s*$", "") or ""
 
     local topic = file_exists and _parley.get_chat_topic(expanded) or nil
     local warning = file_exists and "" or " ⚠️"
+    local display_topic = (topic and topic ~= "") and topic or parsed.topic
 
-    if topic and topic ~= "" then
-        local new_line = branch_prefix .. " " .. path .. ": " .. topic .. warning
-        if new_line == line then return line end
-        return new_line
-    end
-
-    -- No topic change, but may need to add/update warning
-    local base = branch_prefix .. " " .. path .. ": " .. current_topic
-    local new_line = base .. warning
+    local branch_prefix = _parley.config.chat_branch_prefix or "🌿:"
+    local new_line = branch_prefix .. " " .. parsed.path .. ": " .. display_topic .. warning
     if new_line == line then return line end
     return new_line
 end

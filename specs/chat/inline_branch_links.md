@@ -5,7 +5,7 @@
 
 ## Creation (`<C-g>i`)
 - **Visual mode** (chat + markdown): wraps selection as `[🌿:selected text](new-file.md)`, creates child chat with topic `what is "selected text"`
-- **Normal mode** (chat + markdown): inserts full-line `🌿: <path>: ` and enters insert mode for topic
+- **Normal mode** (chat + markdown): inserts full-line `🌿: <filename>: ` (tail-only relative name) and enters insert mode for topic
 - **Insert mode** (markdown): exits insert, then behaves as normal mode
 - Child gets `🌿:` parent back-link; no auto topic inference (topic is not `?`)
 
@@ -17,6 +17,8 @@
 
 ## Navigation
 - `<C-g>o` on inline link opens referenced file
+- `<C-g>o` on full-line `🌿:` references works from both chat and markdown buffers (shared `open_branch_ref`)
+- Bare filenames resolved by searching base_dir first, then all configured chat roots
 
 ## Export
 - HTML: `<a href="child.html" class="branch-inline">display text</a>`

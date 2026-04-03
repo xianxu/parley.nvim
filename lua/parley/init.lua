@@ -1927,6 +1927,16 @@ M.highlight_question_block = function(buf)
 	highlighter.highlight_question_block(buf)
 end
 
+-- Return the branch prefix string from config.
+local function get_branch_prefix()
+	return M.config.chat_branch_prefix or "🌿:"
+end
+
+-- Format a 🌿: branch reference line.
+local function format_branch_ref(rel_path, topic)
+	return get_branch_prefix() .. " " .. rel_path .. ": " .. (topic or "")
+end
+
 M.setup_markdown_keymaps = function(buf)
 	-- Add <C-g>o keybinding to open chat file references
 	local of = M.config.chat_shortcut_open_file
@@ -2007,9 +2017,8 @@ M.setup_markdown_keymaps = function(buf)
 		local cursor_pos = vim.api.nvim_win_get_cursor(0)
 		local new_chat_file = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
 		local rel_path = vim.fn.fnamemodify(new_chat_file, ":t")
-		local branch_prefix = M.config.chat_branch_prefix or "🌿:"
 		vim.api.nvim_buf_set_lines(buf, cursor_pos[1], cursor_pos[1], false, {
-			branch_prefix .. " " .. rel_path .. ": ",
+			format_branch_ref(rel_path, ""),
 		})
 		vim.api.nvim_win_set_cursor(0, { cursor_pos[1] + 1, 0 })
 		vim.schedule(function() vim.cmd("startinsert!") end)
@@ -2195,33 +2204,56 @@ M.move_chat = function(file_name, target_dir)
 	return target_file
 end
 
--- Resolve a path that may be absolute, ~-prefixed, or relative to base_dir.
+
+-- Pure: return ordered list of candidate paths for a chat reference.
+-- For absolute/~ paths, returns a single candidate.
+-- For relative paths, tries base_dir first, then all chat roots.
+M._resolve_chat_path_candidates = function(path, base_dir, dirs)
+	if path:match("^~/") or path == "~" then
+		return { vim.fn.resolve(vim.fn.expand(path)) }
+	elseif path:sub(1, 1) == "/" then
+		return { vim.fn.resolve(path) }
+	end
+	local candidates = { vim.fn.resolve(base_dir .. "/" .. path) }
+	for _, dir in ipairs(dirs or {}) do
+		local c = vim.fn.resolve(dir .. "/" .. path)
+		if c ~= candidates[1] then
+			table.insert(candidates, c)
+		end
+	end
+	return candidates
+end
+
 -- Resolve a chat path: absolute/~ paths directly, relative paths by searching
 -- base_dir first, then all registered chat roots. Used by init.lua and highlighter.
 local function resolve_chat_path(path, base_dir)
-	if path:match("^~/") or path == "~" then
-		return vim.fn.resolve(vim.fn.expand(path))
-	elseif path:sub(1, 1) == "/" then
-		return vim.fn.resolve(path)
-	else
-		-- Try base_dir first (works for chat-to-chat references in same directory)
-		local local_path = vim.fn.resolve(base_dir .. "/" .. path)
-		if vim.fn.filereadable(local_path) == 1 then
-			return local_path
+	local candidates = M._resolve_chat_path_candidates(path, base_dir, M.get_chat_dirs())
+	for _, candidate in ipairs(candidates) do
+		if vim.fn.filereadable(candidate) == 1 then
+			return candidate
 		end
-		-- Fall back to searching chat roots (default chat_dir first, then extras)
-		local dirs = M.get_chat_dirs()
-		for _, dir in ipairs(dirs) do
-			local candidate = vim.fn.resolve(dir .. "/" .. path)
-			if vim.fn.filereadable(candidate) == 1 then
-				return candidate
-			end
-		end
-		-- Nothing found — return base_dir resolution for downstream handling
-		return local_path
 	end
+	return candidates[1]
 end
 M.resolve_chat_path = resolve_chat_path
+
+-- Pure: parse a 🌿: branch reference line into {path, topic} or nil.
+M._parse_branch_ref = function(line)
+	local prefix = get_branch_prefix()
+	if line:sub(1, #prefix) ~= prefix then
+		return nil
+	end
+	local rest = line:sub(#prefix + 1):gsub("^%s*(.-)%s*$", "%1")
+	local path = rest:match("^([^:]+)") or rest
+	path = path:gsub("^%s*(.-)%s*$", "%1")
+	if path == "" then
+		return nil
+	end
+	local topic = rest:match("^[^:]+:%s*(.+)$") or ""
+	topic = topic:gsub("^%s*(.-)%s*$", "%1")
+	topic = topic:gsub("%s*⚠️%s*$", "")
+	return { path = path, topic = topic }
+end
 
 -- Try to open an inline branch link [🌿:text](file) under the cursor.
 -- Returns true if a link was found (and handled), false otherwise.
@@ -2560,17 +2592,13 @@ M.cmd.ChatReview = function(_params)
 	-- insert reference as last line in source file's front matter
 	local chat_filename = vim.api.nvim_buf_get_name(buf)
 	local rel_path = vim.fn.fnamemodify(chat_filename, ":t")
-	local branch_prefix = M.config.chat_branch_prefix or "🌿:"
+	local chat_parser = require("parley.chat_parser")
 	local lines = vim.api.nvim_buf_get_lines(source_buf, 0, -1, false)
-	if lines[1] == "---" then
-		for i = 2, #lines do
-			if lines[i] == "---" then
-				vim.api.nvim_buf_set_lines(source_buf, i - 1, i - 1, false, {
-					branch_prefix .. " " .. rel_path .. ": proof read",
-				})
-				break
-			end
-		end
+	local header_end = chat_parser.find_header_end(lines)
+	if header_end then
+		vim.api.nvim_buf_set_lines(source_buf, header_end - 1, header_end - 1, false, {
+			format_branch_ref(rel_path, "proof read"),
+		})
 	end
 
 	return buf
@@ -3021,21 +3049,13 @@ end
 -- Open or create a chat file from a 🌿: branch reference line.
 -- Shared by both chat-buffer and markdown-buffer <C-g>o handlers.
 local function open_branch_ref(current_line, buf)
-	local branch_prefix = M.config.chat_branch_prefix or "🌿:"
-	if current_line:sub(1, #branch_prefix) ~= branch_prefix then
+	local parsed = M._parse_branch_ref(current_line)
+	if parsed == nil then
 		return false
 	end
 
-	local rest = current_line:sub(#branch_prefix + 1):gsub("^%s*(.-)%s*$", "%1")
-	local path = rest:match("^([^:]+)") or rest
-	path = path:gsub("^%s*(.-)%s*$", "%1")
-	if path == "" then
-		M.logger.warning("Could not extract path from branch reference line")
-		return true -- consumed the line, just couldn't parse it
-	end
-
 	local current_dir = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ":p:h")
-	local expanded = resolve_chat_path(path, current_dir)
+	local expanded = resolve_chat_path(parsed.path, current_dir)
 
 	if vim.fn.filereadable(expanded) == 1 then
 		M.open_buf(expanded)
@@ -3044,10 +3064,7 @@ local function open_branch_ref(current_line, buf)
 
 	-- Chat file doesn't exist yet — create it if it looks like a chat timestamp
 	if expanded:match("%d%d%d%d%-%d%d%-%d%d%.%d%d%-%d%d%-%d%d%.%d+%.md$") then
-		local topic = rest:match("^[^:]+:%s*(.+)$") or "New chat"
-		topic = topic:gsub("^%s*(.-)%s*$", "%1")
-		topic = topic:gsub("%s*⚠️%s*$", "")
-		if topic == "" then topic = "New chat" end
+		local topic = parsed.topic ~= "" and parsed.topic or "New chat"
 
 		-- Place new file in default chat_dir (not relative to source file)
 		local chat_file = M.config.chat_dir .. "/" .. vim.fn.fnamemodify(expanded, ":t")
@@ -3066,8 +3083,7 @@ local function open_branch_ref(current_line, buf)
 			if header_end then
 				local parent_rel = vim.fn.fnamemodify(parent_path, ":t")
 				local parent_topic = M.get_chat_topic(parent_path) or ""
-				local back_link = branch_prefix .. " " .. parent_rel .. ": " .. parent_topic
-				table.insert(file_lines, header_end + 1, back_link)
+				table.insert(file_lines, header_end + 1, format_branch_ref(parent_rel, parent_topic))
 			end
 		end
 

@@ -21,5 +21,8 @@ Resubmits all questions from start to cursor, replacing existing answers. Stop w
 ## Context Assembly (Tree of Chat)
 Child chats inject ancestor context by walking parent chain to root. Summaries replace full answers when available.
 
+## Review (`:ParleyChatReview`)
+Creates a new chat pre-filled with a proof-read prompt for the current file. Inserts a `🌿:` back-link into the source file's front matter pointing to the review chat.
+
 ## Deletion (`:ParleyChatDelete` / `<C-g>d`)
 Deletes current file only (not children). Purges associated memory and cached metrics.

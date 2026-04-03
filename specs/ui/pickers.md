@@ -2,6 +2,9 @@
 
 Custom `float_picker` for all selection UIs — no external dependencies. Two or three stacked floats: results + optional tag bar + prompt.
 
+## Navigation
+Up/down arrow keys wrap around at list boundaries (top wraps to bottom, bottom wraps to top).
+
 ## Fuzzy Search
 AND-matching across whitespace-split tokens. Token-prefix scoring, bounded edit-distance typo tolerance, subsequence fallback.
 

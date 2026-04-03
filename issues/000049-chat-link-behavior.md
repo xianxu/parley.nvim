@@ -4,7 +4,6 @@ status: done
 deps: []
 created: 2026-04-02
 updated: 2026-04-03
-🌿: 2026-04-02.18-33-12.514.md: Proofreading issue file
 ---
 
 # chat link behavior
@@ -13,8 +12,6 @@ I want to further tune chat link behavior. at some point, I changed it such that
 
 When opening it though, we should look through all current registered chat roots, starting with the default root. chat files are largely unique, and the semantic we provided would move them around, not easily cloning them. so this should work reasonably well.
 
-
-🌿: 2026-04-02.18-53-54.370.md: ?
 
 ## Resolution
 
