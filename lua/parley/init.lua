@@ -3135,9 +3135,12 @@ M.open_chat_reference = function(current_line, cursor_col, _in_insert_mode, full
 		return
 	end
 
-	-- Resolve the path (searches chat roots for bare filenames)
-	local current_dir = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ":p:h")
-	local expanded_path = resolve_chat_path(vim.fn.expand(chat_path), current_dir)
+	-- Expand ~ and resolve relative paths (searches chat roots for bare filenames)
+	local expanded_path = vim.fn.expand(chat_path)
+	if expanded_path:sub(1, 1) ~= "/" then
+		local current_dir = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ":p:h")
+		expanded_path = resolve_chat_path(expanded_path, current_dir)
+	end
 
 	-- Check if the file exists
 	if vim.fn.filereadable(expanded_path) == 1 then
