@@ -19,7 +19,7 @@ Agent-driven verification before `push` and `merge`. Each check invokes a coding
 | `check-specs` | Specs match code |
 | `check-lessons` | Lessons review reminder |
 
-Supports interactive (sequential accept/discard) and audit mode (parallel, report-only). Configurable agent (`AGENT_CMD`: claude/codex/gemini).
+Supports interactive (sequential accept/discard) and audit mode (parallel, report-only). Defaults to `codex`; override with `AGENT_CMD` (`claude`, `codex`, or `gemini`).
 
 ## Constitution Hook
-`PostToolUse` hooks on `Write`/`Edit` trigger constitution checks during coding sessions. Three-tier gate based on diff size: **none** (below threshold), **nag** (reminder to run audit), **force** (runs checks immediately). State resets when merge base advances. Hook output uses `additionalContext` JSON field so Claude sees and acts on the messages (not `systemMessage`, which is user-visible only).
+`PostToolUse` hooks on `Write`/`Edit` trigger constitution checks during coding sessions. Three-tier gate based on diff size: **none** (below threshold), **nag** (reminder to run audit), **force** (runs checks immediately). Gate state is stored in repo-root `.constitution-check-state` and resets when merge base advances. Hook output uses the `additionalContext` JSON field so the active coding agent receives the reminder or forced-check result without surfacing it as a user-visible system message.

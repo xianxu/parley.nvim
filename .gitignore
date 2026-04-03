@@ -6,7 +6,7 @@ tasks/*
 .test-xdg/
 .test-tmp/
 .test-home/
-.claude/constitution-check-state
+.constitution-check-state
 COMPARE-SHA
 .openshell/.bootstrap/
 .openshell/.base-image-digest

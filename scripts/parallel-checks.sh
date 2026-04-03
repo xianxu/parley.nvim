@@ -23,7 +23,7 @@ THRESHOLD_LINES=300
 THRESHOLD_FILES=5
 GROWTH_GATE_PCT=50
 FORCE_MULTIPLIER=3   # When diff >= 3x nag threshold, force-run (can't be postponed)
-STATE_FILE=".claude/constitution-check-state"
+STATE_FILE=".constitution-check-state"
 LOCK_DIR="/tmp/parallel-checks-$(pwd | (md5sum 2>/dev/null || shasum) | cut -c1-8).lock"
 
 # ── TTY detection ────────────────────────────────────────────────────────────
