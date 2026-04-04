@@ -369,11 +369,12 @@ local config = {
 	-- vision tracker (repo-local, relative to git root)
 	vision_dir = "vision",
 	-- global shortcuts for vision tracker
-	global_shortcut_vision_validate = { modes = { "n" }, shortcut = "<C-j>V" },
+	global_shortcut_vision_validate = { modes = { "n" }, shortcut = "<C-j>v" },
 	global_shortcut_vision_export_csv = { modes = { "n" }, shortcut = "<C-j>ec" },
 	global_shortcut_vision_export_dot = { modes = { "n" }, shortcut = "<C-j>ed" },
 	global_shortcut_vision_finder = { modes = { "n", "i" }, shortcut = "<C-j>f" },
 	global_shortcut_vision_new = { modes = { "n" }, shortcut = "<C-j>n" },
+	global_shortcut_vision_goto = { modes = { "n" }, shortcut = "<C-j>o" },
 	-- global shortcuts for issue management
 	global_shortcut_issue_new = { modes = { "n", "i" }, shortcut = "<C-y>c" },
 	global_shortcut_issue_finder = { modes = { "n", "i" }, shortcut = "<C-y>f" },

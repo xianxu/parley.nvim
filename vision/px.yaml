@@ -1,17 +1,31 @@
-- name: Mobile App v2
+- project: Mobile App v2
   type: business
   size: M
-  quarter: Q1-next
-  depends_on: [sync.data]
+  need_by: 25Q1
+  depends_on:
+    - sync.data
 
-- name: Self-Serve Onboarding
+- project: Self-Serve Onboarding
   type: business
   size: L
-  quarter: Q4
-  depends_on: [sync.data, sync.auth]
+  need_by: 25Q4
+  depends_on:
+    - sync.data
+    - sync.auth
+    - px.some-secrete-project-1
 
-- name: some secrete project
+- project: some secrete project
   type: tech
   size: M
-  quarter: 
-  depends_on: [mobile]
+  need_by:
+  depends_on:
+    - mobile
+    - self-serve
+
+- project: some secrete project 1
+  type: tech
+  size: M
+  need_by: 25Q4
+  depends_on:
+    - mobile
+    - sync.data

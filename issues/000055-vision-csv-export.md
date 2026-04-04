@@ -34,3 +34,4 @@ Parent: #52
 
 ### 2026-04-04
 
+- Changed default export behavior: when no path argument is given, CSV exports to `roadmap.csv` at the repo root instead of printing to messages. DOT export similarly defaults to `roadmap.dot`. Explicit path argument still supported.

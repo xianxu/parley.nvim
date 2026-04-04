@@ -632,6 +632,7 @@ M.setup = function(opts)
 	register_issue_shortcut("global_shortcut_vision_export_csv", "Vision Export CSV", function() M.cmd.VisionExportCsv({}) end)
 	register_issue_shortcut("global_shortcut_vision_export_dot", "Vision Export DOT", function() M.cmd.VisionExportDot({}) end)
 	register_issue_shortcut("global_shortcut_vision_new", "Vision New Project", function() M.cmd.VisionNew() end)
+	register_issue_shortcut("global_shortcut_vision_goto", "Vision Goto Ref", function() M.cmd.VisionGoto() end)
 	register_issue_shortcut("global_shortcut_vision_finder", "Vision Finder", function() M.cmd.VisionShow() end)
 
 	-- Set up omnifunc for vision YAML files
@@ -3657,6 +3658,7 @@ M.cmd.VisionValidate = function() vision_mod.cmd_validate() end
 M.cmd.VisionExportCsv = function(params) vision_mod.cmd_export_csv(params) end
 M.cmd.VisionExportDot = function(params) vision_mod.cmd_export_dot(params) end
 M.cmd.VisionNew = function() vision_mod.cmd_new() end
+M.cmd.VisionGoto = function() vision_mod.cmd_goto_ref() end
 M.cmd.VisionShow = function() vision_finder_mod.open() end
 
 -- Memory preferences command

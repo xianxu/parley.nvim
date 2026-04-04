@@ -53,7 +53,7 @@ end
 -- Comments (lines starting with #) and blank lines are ignored.
 --
 -- Expected format:
---   - name: Some Initiative
+--   - project: Some Initiative
 --     type: tech
 --     size: XL
 --     depends_on: [auth, data]
@@ -61,6 +61,29 @@ end
 M.parse_vision_yaml = function(text)
     local items = {}
     local current = nil
+    local list_key = nil  -- key currently collecting multiline list items
+
+    local function set_key(key, val, ln)
+        val = trim(val)
+        local list = parse_inline_list(val)
+        if list then
+            current[key] = list
+            -- All inline list items share the same line
+            current["_" .. key .. "_lines"] = {}
+            for i = 1, #list do
+                current["_" .. key .. "_lines"][i] = ln
+            end
+            list_key = nil
+        elseif val == "" then
+            -- Key with no value — expect multiline list items below
+            current[key] = {}
+            current["_" .. key .. "_lines"] = {}
+            list_key = key
+        else
+            current[key] = val
+            list_key = nil
+        end
+    end
 
     for line_num, line in ipairs(type(text) == "string" and vim.split(text, "\n") or text) do
         -- Skip comments and blank lines
@@ -73,27 +96,24 @@ M.parse_vision_yaml = function(text)
                 table.insert(items, current)
             end
             current = { _line = line_num }
+            list_key = nil
             local key, val = line:match("^%-%s+([%w_]+):%s*(.*)$")
             if key then
-                val = trim(val)
-                local list = parse_inline_list(val)
-                if list then
-                    current[key] = list
-                else
-                    current[key] = val
-                end
+                set_key(key, val, line_num)
+            end
+        elseif current and list_key and stripped:match("^%- ") then
+            -- Multiline list item: "    - value"
+            local val = stripped:match("^%-%s+(.+)$")
+            if val then
+                table.insert(current[list_key], trim(val))
+                local lines_key = "_" .. list_key .. "_lines"
+                current[lines_key][#current[list_key]] = line_num
             end
         elseif current and line:match("^%s+[%w_]+:") then
             -- Continuation key within current item: "  key: value"
             local key, val = line:match("^%s+([%w_]+):%s*(.*)$")
             if key then
-                val = trim(val)
-                local list = parse_inline_list(val)
-                if list then
-                    current[key] = list
-                else
-                    current[key] = val
-                end
+                set_key(key, val, line_num)
             end
         end
     end
@@ -109,19 +129,20 @@ end
 -- ID Resolution
 --------------------------------------------------------------------------------
 
--- Convert a human name to a snake_case ID.
--- "Data Platform" → "data_platform", "Auth Service Rewrite" → "auth_service_rewrite"
+-- Convert a human name to a hyphenated ID.
+-- "Data Platform" → "data-platform", "Auth Service Rewrite" → "auth-service-rewrite"
+-- "Self-Serve Onboarding" → "self-serve-onboarding"
 M.name_to_id = function(name)
     if not name or name == "" then return "" end
     local id = name:lower()
-    id = id:gsub("[^%w%s]", "")  -- strip non-alphanumeric (except spaces)
-    id = id:gsub("%s+", "_")     -- spaces to underscores
-    id = id:gsub("_+", "_")      -- collapse multiple underscores
-    id = id:gsub("^_+", ""):gsub("_+$", "")  -- trim leading/trailing
+    id = id:gsub("[^%w%s%-]", "")  -- strip non-alphanumeric (except spaces and hyphens)
+    id = id:gsub("[%s_]+", "-")    -- spaces/underscores to hyphens
+    id = id:gsub("%-+", "-")      -- collapse multiple hyphens
+    id = id:gsub("^%-+", ""):gsub("%-+$", "")  -- trim leading/trailing
     return id
 end
 
--- Build a fully qualified ID: namespace.snake_case_name
+-- Build a fully qualified ID: namespace.hyphenated-name
 M.full_id = function(namespace, name)
     return namespace .. "." .. M.name_to_id(name)
 end
@@ -143,18 +164,27 @@ M.resolve_ref = function(ref, current_ns, all_ids)
         return nil, "empty reference"
     end
 
+    -- Normalize ref through name_to_id so hyphens/special chars match
+    local norm_ref
+    if ref:find("%.") then
+        local ns, name = ref:match("^([^%.]+)%.(.+)$")
+        norm_ref = ns .. "." .. M.name_to_id(name)
+    else
+        norm_ref = M.name_to_id(ref)
+    end
+
     local matches = {}
 
     if ref:find("%.") then
         -- Namespaced ref: match as prefix against full IDs
         for _, fid in ipairs(all_ids) do
-            if fid:sub(1, #ref) == ref then
+            if fid:sub(1, #norm_ref) == norm_ref then
                 table.insert(matches, fid)
             end
         end
     else
         -- Bare ref: try local namespace first
-        local local_prefix = current_ns .. "." .. ref
+        local local_prefix = current_ns .. "." .. norm_ref
         for _, fid in ipairs(all_ids) do
             if fid:sub(1, #local_prefix) == local_prefix then
                 table.insert(matches, fid)
@@ -165,7 +195,7 @@ M.resolve_ref = function(ref, current_ns, all_ids)
         if #matches == 0 then
             for _, fid in ipairs(all_ids) do
                 local name_part = fid:match("^[^%.]+%.(.+)$")
-                if name_part and name_part:sub(1, #ref) == ref then
+                if name_part and name_part:sub(1, #norm_ref) == norm_ref then
                     table.insert(matches, fid)
                 end
             end
@@ -177,6 +207,11 @@ M.resolve_ref = function(ref, current_ns, all_ids)
     elseif #matches == 1 then
         return matches[1], nil
     else
+        -- Prefer exact match over prefix matches
+        local exact = ref:find("%.") and norm_ref or (current_ns .. "." .. norm_ref)
+        for _, fid in ipairs(matches) do
+            if fid == exact then return fid, nil end
+        end
         return nil, string.format('"%s" is ambiguous — matches: %s',
             ref, table.concat(matches, ", "))
     end
@@ -187,24 +222,32 @@ end
 --------------------------------------------------------------------------------
 
 -- Validate a loaded vision graph. Returns a list of error strings (empty = valid).
--- initiatives: list of {name, namespace, depends_on, ...} tables
+-- initiatives: list of {project, namespace, depends_on, ...} tables
 M.validate_graph = function(initiatives)
     local errors = {}
+
+    local function add_error(text, item)
+        table.insert(errors, {
+            text = text,
+            filename = item and item._file or nil,
+            lnum = item and item._line or nil,
+        })
+    end
 
     -- Build full ID list
     local all_ids = {}
     local id_set = {}
     for _, item in ipairs(initiatives) do
-        if not item.name or item.name == "" then
-            table.insert(errors, string.format(
-                "initiative at line %d in %s has no name",
-                item._line or 0, item._namespace or "?"))
+        if not item.project or item.project == "" then
+            add_error(string.format(
+                "item at line %d in %s is not a project",
+                item._line or 0, item._namespace or "?"), item)
         else
-            local fid = M.full_id(item._namespace or "", item.name)
+            local fid = M.full_id(item._namespace or "", item.project)
             if id_set[fid] then
-                table.insert(errors, string.format(
+                add_error(string.format(
                     'duplicate ID "%s" (from "%s" in %s)',
-                    fid, item.name, item._namespace or "?"))
+                    fid, item.project, item._namespace or "?"), item)
             else
                 table.insert(all_ids, fid)
                 id_set[fid] = true
@@ -214,22 +257,37 @@ M.validate_graph = function(initiatives)
 
     -- Resolve all depends_on refs and build adjacency
     local adj = {}  -- full_id → list of full_ids it depends on
+    local dep_lines = {}  -- "source_fid\0target_fid" → line number of the dep
     for _, item in ipairs(initiatives) do
-        if item.name and item.name ~= "" then
-            local fid = M.full_id(item._namespace or "", item.name)
+        if item.project and item.project ~= "" then
+            local fid = M.full_id(item._namespace or "", item.project)
             adj[fid] = {}
             local deps = item.depends_on or {}
             if type(deps) == "string" then deps = { deps } end
-            for _, ref in ipairs(deps) do
+            local lines = item._depends_on_lines or {}
+            for idx, ref in ipairs(deps) do
                 local resolved, err = M.resolve_ref(ref, item._namespace or "", all_ids)
                 if err then
-                    table.insert(errors, string.format(
+                    local err_item = { _file = item._file, _line = lines[idx] or item._line }
+                    add_error(string.format(
                         '%s.%s depends_on: %s',
-                        item._namespace or "?", M.name_to_id(item.name), err))
+                        item._namespace or "?", M.name_to_id(item.project), err), err_item)
                 else
                     table.insert(adj[fid], resolved)
+                    if lines[idx] then
+                        dep_lines[fid .. "\0" .. resolved] = lines[idx]
+                    end
                 end
             end
+        end
+    end
+
+    -- Build lookup: full_id → initiative item (for error locations)
+    local by_id = {}
+    for _, item in ipairs(initiatives) do
+        if item.project and item.project ~= "" then
+            local fid = M.full_id(item._namespace or "", item.project)
+            if not by_id[fid] then by_id[fid] = item end
         end
     end
 
@@ -258,8 +316,16 @@ M.validate_graph = function(initiatives)
                     table.insert(cycle, path[i])
                 end
                 table.insert(cycle, dep)
-                table.insert(errors, string.format(
-                    "circular dependency: %s", table.concat(cycle, " → ")))
+                local msg = string.format(
+                    "circular dependency: %s", table.concat(cycle, " → "))
+                for i = cycle_start, #path do
+                    local src = path[i]
+                    local tgt = path[i + 1] or dep
+                    local item = by_id[src]
+                    local ln = dep_lines[src .. "\0" .. tgt]
+                    local err_item = { _file = item and item._file, _line = ln or (item and item._line) }
+                    add_error(msg, err_item)
+                end
                 return
             elseif color[dep] == WHITE then
                 dfs(dep, path)
@@ -272,6 +338,29 @@ M.validate_graph = function(initiatives)
     for _, fid in ipairs(all_ids) do
         if color[fid] == WHITE then
             dfs(fid, {})
+        end
+    end
+
+    -- need_by ordering: if A depends on B, A's need_by must not be earlier than B's
+    for _, fid in ipairs(all_ids) do
+        local item = by_id[fid]
+        local a_need = item and type(item.need_by) == "string" and item.need_by or ""
+        if a_need ~= "" then
+            for _, dep_fid in ipairs(adj[fid] or {}) do
+                local dep_item = by_id[dep_fid]
+                local b_need = dep_item and type(dep_item.need_by) == "string" and dep_item.need_by or ""
+                local ln = dep_lines[fid .. "\0" .. dep_fid]
+                local err_item = { _file = item._file, _line = ln or item._line }
+                if b_need == "" then
+                    add_error(string.format(
+                        '%s needs by %s but depends on %s which has no need_by',
+                        fid, a_need, dep_fid), err_item)
+                elseif a_need < b_need then
+                    add_error(string.format(
+                        '%s needs by %s but depends on %s which needs by %s',
+                        fid, a_need, dep_fid, b_need), err_item)
+                end
+            end
         end
     end
 
@@ -321,7 +410,7 @@ end
 -- Export initiatives to CSV format. Returns the CSV string.
 M.export_csv = function(initiatives)
     local lines = {}
-    table.insert(lines, "namespace,name,type,size,quarter,depends_on")
+    table.insert(lines, "namespace,project,type,size,need_by,depends_on")
 
     for _, item in ipairs(initiatives) do
         local deps = item.depends_on or {}
@@ -330,10 +419,10 @@ M.export_csv = function(initiatives)
 
         table.insert(lines, string.format("%s,%s,%s,%s,%s,%s",
             csv_escape(item._namespace or ""),
-            csv_escape(item.name or ""),
+            csv_escape(item.project or ""),
             csv_escape(item.type or ""),
             csv_escape(item.size or ""),
-            csv_escape(item.quarter or ""),
+            csv_escape(item.need_by or ""),
             csv_escape(deps_str)))
     end
 
@@ -409,8 +498,8 @@ M.export_dot = function(initiatives, opts)
     -- Build lookup: full_id → initiative
     local by_id = {}
     for _, item in ipairs(initiatives) do
-        if item.name and item.name ~= "" then
-            local fid = M.full_id(item._namespace or "", item.name)
+        if item.project and item.project ~= "" then
+            local fid = M.full_id(item._namespace or "", item.project)
             by_id[fid] = item
         end
     end
@@ -440,9 +529,9 @@ M.export_dot = function(initiatives, opts)
                 local w = SIZE_MAP[item.size] or 1.5
                 local color = COLOR_MAP[item.type] or "#eeeeee"
                 local label = string.format("%s\\n[%s] %s",
-                    item.name or fid,
+                    item.project or fid,
                     item.size or "?",
-                    item.quarter or "")
+                    item.need_by or "")
                 local fontsize = tostring(10 + math.floor(w * 3))
 
                 table.insert(lines, string.format(
@@ -494,6 +583,18 @@ M.get_vision_dir = function()
     return git_root .. "/" .. vision_dir
 end
 
+-- Save any modified buffers whose files are in the given directory.
+local function save_vision_buffers(dir)
+    for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+        if vim.api.nvim_buf_is_loaded(buf) and vim.bo[buf].modified then
+            local name = vim.api.nvim_buf_get_name(buf)
+            if name:sub(1, #dir) == dir and name:match("%.yaml$") then
+                vim.api.nvim_buf_call(buf, function() vim.cmd("write") end)
+            end
+        end
+    end
+end
+
 -- Load all initiatives from vision_dir, or nil + warning if not configured
 local function load_all()
     local dir = M.get_vision_dir()
@@ -501,6 +602,7 @@ local function load_all()
         _parley.logger.warning("vision_dir is not configured")
         return nil
     end
+    save_vision_buffers(dir)
     return M.load_vision_dir(dir), dir
 end
 
@@ -511,12 +613,18 @@ M.cmd_validate = function()
 
     local errors = M.validate_graph(items)
     if #errors == 0 then
+        vim.fn.setqflist({}, "r")
+        vim.cmd("cclose")
         vim.notify("Vision: all OK (" .. #items .. " initiatives)", vim.log.levels.INFO)
     else
         -- Show errors in quickfix
         local qf = {}
         for _, e in ipairs(errors) do
-            table.insert(qf, { text = e })
+            table.insert(qf, {
+                text = e.text,
+                filename = e.filename,
+                lnum = e.lnum or 0,
+            })
         end
         vim.fn.setqflist(qf, "r")
         vim.cmd("copen")
@@ -531,18 +639,18 @@ M.cmd_export_csv = function(params)
 
     local csv = M.export_csv(items)
     local output = params and params.args and params.args ~= "" and params.args or nil
-    if output then
-        local f = io.open(output, "w")
-        if f then
-            f:write(csv)
-            f:close()
-            vim.notify("Vision: CSV exported to " .. output, vim.log.levels.INFO)
-        else
-            vim.notify("Vision: failed to write " .. output, vim.log.levels.ERROR)
-        end
+    if not output then
+        local git_root = _parley.helpers.find_git_root(vim.fn.getcwd())
+        if git_root == "" then git_root = vim.fn.getcwd() end
+        output = git_root .. "/roadmap.csv"
+    end
+    local f = io.open(output, "w")
+    if f then
+        f:write(csv)
+        f:close()
+        vim.notify("Vision: CSV exported to " .. output, vim.log.levels.INFO)
     else
-        -- Print to messages
-        print(csv)
+        vim.notify("Vision: failed to write " .. output, vim.log.levels.ERROR)
     end
 end
 
@@ -559,22 +667,23 @@ M.cmd_export_dot = function(params)
     local dot, errors = M.export_dot(items, { root = root })
     if errors then
         for _, e in ipairs(errors) do
-            vim.notify("Vision: " .. e, vim.log.levels.ERROR)
+            vim.notify("Vision: " .. e.text, vim.log.levels.ERROR)
         end
         return
     end
 
-    if output then
-        local f = io.open(output, "w")
-        if f then
-            f:write(dot)
-            f:close()
-            vim.notify("Vision: DOT exported to " .. output, vim.log.levels.INFO)
-        else
-            vim.notify("Vision: failed to write " .. output, vim.log.levels.ERROR)
-        end
+    if not output then
+        local git_root = _parley.helpers.find_git_root(vim.fn.getcwd())
+        if git_root == "" then git_root = vim.fn.getcwd() end
+        output = git_root .. "/roadmap.dot"
+    end
+    local f = io.open(output, "w")
+    if f then
+        f:write(dot)
+        f:close()
+        vim.notify("Vision: DOT exported to " .. output, vim.log.levels.INFO)
     else
-        print(dot)
+        vim.notify("Vision: failed to write " .. output, vim.log.levels.ERROR)
     end
 end
 
@@ -588,10 +697,10 @@ M.cmd_new = function()
 
     local template = {
         "",
-        "- name: New Project",
+        "- project: New Project",
         "  type: tech",
         "  size: M",
-        "  quarter: ",
+        "  need_by: ",
         "  depends_on: []",
     }
 
@@ -613,6 +722,79 @@ M.cmd_new = function()
     vim.cmd("startinsert!")
 end
 
+-- :ParleyVisionGoto — jump to the initiative under cursor in depends_on
+M.cmd_goto_ref = function()
+    local items = load_all()
+    if not items then return end
+
+    -- Get current line and extract the ref under cursor
+    local line = vim.api.nvim_get_current_line()
+    local col = vim.api.nvim_win_get_cursor(0)[2] + 1  -- 1-indexed
+
+    -- Extract ref: find the word (allowing dots and hyphens) around cursor
+    local ref
+    -- Try multiline list item: "    - some-ref"
+    ref = line:match("^%s+%-%s+(.+)$")
+    if ref then
+        ref = trim(ref)
+    else
+        -- Try inline list: find the item at cursor position within [...]
+        local bracket_content = line:match("%[(.*)%]")
+        if bracket_content then
+            local bracket_start = line:find("%[")
+            local pos = col - bracket_start  -- position within bracket content
+            -- Split by comma and find which item the cursor is in
+            local offset = 1
+            for item in bracket_content:gmatch("[^,]+") do
+                local item_end = offset + #item - 1
+                if pos >= offset and pos <= item_end then
+                    ref = trim(item)
+                    break
+                end
+                offset = item_end + 2  -- skip comma
+            end
+        end
+    end
+
+    if not ref or ref == "" then
+        vim.notify("Vision: no reference under cursor", vim.log.levels.WARN)
+        return
+    end
+
+    -- Determine current namespace from filename
+    local filepath = vim.api.nvim_buf_get_name(0)
+    local current_ns = vim.fn.fnamemodify(filepath, ":t:r")
+
+    -- Build all IDs
+    local all_ids = {}
+    for _, item in ipairs(items) do
+        if item.project and item.project ~= "" then
+            table.insert(all_ids, M.full_id(item._namespace or "", item.project))
+        end
+    end
+
+    -- Resolve
+    local resolved, err = M.resolve_ref(ref, current_ns, all_ids)
+    if err then
+        vim.notify("Vision: " .. err, vim.log.levels.WARN)
+        return
+    end
+
+    -- Find the target item
+    for _, item in ipairs(items) do
+        if item.project and item.project ~= "" then
+            local fid = M.full_id(item._namespace or "", item.project)
+            if fid == resolved then
+                _parley.open_buf(item._file, true)
+                if item._line then
+                    vim.api.nvim_win_set_cursor(0, { item._line, 0 })
+                end
+                return
+            end
+        end
+    end
+end
+
 --------------------------------------------------------------------------------
 -- Omnifunc completion for depends_on fields
 --------------------------------------------------------------------------------
@@ -624,8 +806,8 @@ M.get_all_ids = function()
 
     local ids = {}
     for _, item in ipairs(items) do
-        if item.name and item.name ~= "" then
-            table.insert(ids, M.full_id(item._namespace or "", item.name))
+        if item.project and item.project ~= "" then
+            table.insert(ids, M.full_id(item._namespace or "", item.project))
         end
     end
     return ids
