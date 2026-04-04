@@ -104,7 +104,7 @@ ensure_bootstrap_sync() {
 
 ensure_setup() {
     # Re-run post-install if any expected tool is missing
-    if ! ssh "$SANDBOX_SSH_HOST" "test -x \$HOME/.local/bin/nvim && test -x \$HOME/.local/bin/tmux && test -x \$HOME/.local/bin/zellij" 2>/dev/null; then
+    if ! ssh "$SANDBOX_SSH_HOST" "test -x \$HOME/.local/bin/nvim && test -x \$HOME/.local/bin/zellij" 2>/dev/null; then
         echo "==> Running post-install on sandbox..."
         mutagen sync flush "${SANDBOX_NAME}-bootstrap" 2>/dev/null || true
         scp -q "$SCRIPT_DIR/overlay/post-install.sh" "$SANDBOX_SSH_HOST:/tmp/post-install.sh"

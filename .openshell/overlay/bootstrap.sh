@@ -39,18 +39,6 @@ download_zellij() {
     fi
 }
 
-# ── tmux ──────────────────────────────────────────────────────────────────────
-download_tmux() {
-    if [ ! -f "$BOOTSTRAP_DIR/tmux" ]; then
-        echo "  [dl] tmux 3.6a..."
-        curl -fsSL https://github.com/mjakob-gh/build-static-tmux/releases/download/v3.6a/tmux.linux-arm64.stripped.gz \
-            | gunzip > "$BOOTSTRAP_DIR/tmux"
-        chmod +x "$BOOTSTRAP_DIR/tmux"
-    else
-        echo "  [ok] tmux"
-    fi
-}
-
 # ── Oh My Bash ────────────────────────────────────────────────────────────────
 download_ohmybash() {
     if [ ! -d "$BOOTSTRAP_DIR/oh-my-bash" ]; then
@@ -105,7 +93,6 @@ download_luafilesystem() {
 pids=()
 download_neovim & pids+=($!)
 download_zellij & pids+=($!)
-download_tmux & pids+=($!)
 download_ohmybash & pids+=($!)
 download_lua & pids+=($!)
 download_luacheck & pids+=($!)

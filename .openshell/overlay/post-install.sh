@@ -24,15 +24,6 @@ else
     echo "  [ok] Zellij"
 fi
 
-# ── tmux ──────────────────────────────────────────────────────────────────────
-if [ ! -x "$HOME/.local/bin/tmux" ]; then
-    echo "==> Installing tmux..."
-    cp "$BOOTSTRAP/tmux" "$HOME/.local/bin/tmux"
-    chmod +x "$HOME/.local/bin/tmux"
-else
-    echo "  [ok] tmux"
-fi
-
 # ── Oh My Bash ────────────────────────────────────────────────────────────────
 if [ ! -d "$HOME/.oh-my-bash" ]; then
     echo "==> Installing Oh My Bash..."
