@@ -41,6 +41,9 @@ alias lesson="nvim tasks/lessons.md"
 alias zl="zellij list-sessions"
 alias ze="zellij"
 alias za="zellij a"
+alias tl="tmux list-sessions"
+alias ta="tmux attach -t"
+alias tn="tmux new -s"
 
 # AI agent sandbox permissions — agents get full auto-approve
 alias claude="claude --permission-mode bypassPermissions"

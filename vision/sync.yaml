@@ -11,12 +11,6 @@
   depends_on:
     - auth
 
-- resource: Xian
-  capacity: 
-
-
-    
-
 - project: New Project
   type: tech
   size: M

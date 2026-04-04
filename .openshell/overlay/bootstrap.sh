@@ -39,6 +39,18 @@ download_zellij() {
     fi
 }
 
+# ── tmux ──────────────────────────────────────────────────────────────────────
+download_tmux() {
+    if [ ! -f "$BOOTSTRAP_DIR/tmux" ]; then
+        echo "  [dl] tmux 3.6a..."
+        curl -fsSL https://github.com/mjakob-gh/build-static-tmux/releases/download/v3.6a/tmux.linux-arm64.stripped.gz \
+            | gunzip > "$BOOTSTRAP_DIR/tmux"
+        chmod +x "$BOOTSTRAP_DIR/tmux"
+    else
+        echo "  [ok] tmux"
+    fi
+}
+
 # ── Oh My Bash ────────────────────────────────────────────────────────────────
 download_ohmybash() {
     if [ ! -d "$BOOTSTRAP_DIR/oh-my-bash" ]; then
@@ -89,15 +101,25 @@ download_luafilesystem() {
     fi
 }
 
-# Download all in parallel
-download_neovim &
-download_zellij &
-download_ohmybash &
-download_lua &
-download_luacheck &
-download_argparse &
-download_luafilesystem &
-wait
+# Download all in parallel, collecting PIDs to check exit codes
+pids=()
+download_neovim & pids+=($!)
+download_zellij & pids+=($!)
+download_tmux & pids+=($!)
+download_ohmybash & pids+=($!)
+download_lua & pids+=($!)
+download_luacheck & pids+=($!)
+download_argparse & pids+=($!)
+download_luafilesystem & pids+=($!)
+
+failed=0
+for pid in "${pids[@]}"; do
+    wait "$pid" || failed=1
+done
+if [ "$failed" -ne 0 ]; then
+    echo "ERROR: Some downloads failed. Not marking bootstrap as done."
+    exit 1
+fi
 
 touch "$BOOTSTRAP_DIR/.done"
 echo "==> Downloads complete."
