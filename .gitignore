@@ -9,4 +9,3 @@ tasks/*
 .constitution-check-state
 COMPARE-SHA
 .openshell/.bootstrap/
-.openshell/.base-image-digest
