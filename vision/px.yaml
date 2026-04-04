@@ -1,0 +1,17 @@
+- name: Mobile App v2
+  type: business
+  size: M
+  quarter: Q1-next
+  depends_on: [sync.data]
+
+- name: Self-Serve Onboarding
+  type: business
+  size: L
+  quarter: Q4
+  depends_on: [sync.data, sync.auth]
+
+- name: some secrete project
+  type: tech
+  size: M
+  quarter: 
+  depends_on: [mobile]

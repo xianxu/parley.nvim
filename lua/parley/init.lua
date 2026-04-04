@@ -66,6 +66,14 @@ issues_mod.setup(M)
 local issue_finder_mod = require("parley.issue_finder")
 issue_finder_mod.setup(M)
 
+-- Vision tracker module
+local vision_mod = require("parley.vision")
+vision_mod.setup(M)
+
+-- Vision finder module
+local vision_finder_mod = require("parley.vision_finder")
+vision_finder_mod.setup(M)
+
 -- Exporter module (loaded here; wired up at module-load time with M reference)
 local exporter = require("parley.exporter")
 exporter.setup(M)
@@ -618,6 +626,29 @@ M.setup = function(opts)
 	register_issue_shortcut("global_shortcut_issue_next", "Open Next Runnable Issue", function() M.cmd.IssueNext() end)
 	register_issue_shortcut("global_shortcut_issue_status", "Cycle Issue Status", function() M.cmd.IssueStatus() end)
 	register_issue_shortcut("global_shortcut_issue_decompose", "Decompose Issue", function() M.cmd.IssueDecompose() end)
+
+	-- Set up global keymaps for vision tracker
+	register_issue_shortcut("global_shortcut_vision_validate", "Vision Validate", function() M.cmd.VisionValidate() end)
+	register_issue_shortcut("global_shortcut_vision_export_csv", "Vision Export CSV", function() M.cmd.VisionExportCsv({}) end)
+	register_issue_shortcut("global_shortcut_vision_export_dot", "Vision Export DOT", function() M.cmd.VisionExportDot({}) end)
+	register_issue_shortcut("global_shortcut_vision_new", "Vision New Project", function() M.cmd.VisionNew() end)
+	register_issue_shortcut("global_shortcut_vision_finder", "Vision Finder", function() M.cmd.VisionShow() end)
+
+	-- Set up omnifunc for vision YAML files
+	vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, {
+		pattern = "*.yaml",
+		callback = function(ev)
+			local vision_dir = M.config.vision_dir
+			if not vision_dir or vision_dir == "" then return end
+			local git_root = M.helpers.find_git_root(vim.fn.getcwd())
+			if git_root == "" then git_root = vim.fn.getcwd() end
+			local abs_vision = vim.fn.resolve(git_root .. "/" .. vision_dir)
+			local file_dir = vim.fn.resolve(vim.fn.fnamemodify(ev.file, ":p:h"))
+			if file_dir:sub(1, #abs_vision) == abs_vision then
+				vim.bo[ev.buf].omnifunc = "v:lua.require'parley.vision'.omnifunc"
+			end
+		end,
+	})
 
 	-- Set up global keymaps for interview mode
 	vim.keymap.set("n", "<C-n>i", function()
@@ -2653,6 +2684,12 @@ M._issue_finder = {
 	initial_value = nil,
 }
 
+M._vision_finder = {
+	opened = false,
+	initial_index = nil,
+	initial_value = nil,
+}
+
 -- Create a new note with given subject
 M.new_note = function(subject)
 	return notes.new_note(subject)
@@ -3614,6 +3651,13 @@ M.cmd.IssueFinder = function(opts) issue_finder_mod.open(opts) end
 M.cmd.IssueNext = function() issues_mod.cmd_issue_next() end
 M.cmd.IssueStatus = function() issues_mod.cmd_issue_status() end
 M.cmd.IssueDecompose = function() issues_mod.cmd_issue_decompose() end
+
+-- Vision tracker commands
+M.cmd.VisionValidate = function() vision_mod.cmd_validate() end
+M.cmd.VisionExportCsv = function(params) vision_mod.cmd_export_csv(params) end
+M.cmd.VisionExportDot = function(params) vision_mod.cmd_export_dot(params) end
+M.cmd.VisionNew = function() vision_mod.cmd_new() end
+M.cmd.VisionShow = function() vision_finder_mod.open() end
 
 -- Memory preferences command
 M.cmd.MemoryPrefs = function() memory_prefs.generate() end

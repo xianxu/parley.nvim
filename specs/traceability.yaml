@@ -265,6 +265,20 @@ specs:
     tests:
       - tests/test_agents.sh
 
+  vision/format:
+    code:
+      - lua/parley/vision.lua
+    tests:
+      - tests/unit/vision_spec.lua
+
+  vision/exports:
+    code:
+      - lua/parley/vision.lua
+      - lua/parley/init.lua
+      - lua/parley/config.lua
+    tests:
+      - tests/unit/vision_spec.lua
+
   issues/issue-management:
     code:
       - lua/parley/issues.lua

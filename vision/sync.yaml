@@ -1,0 +1,11 @@
+- name: Auth Service Rewrite
+  type: tech
+  size: S
+  quarter: Q3
+  depends_on: []
+
+- name: Data Platform
+  type: tech
+  size: XL
+  quarter: Q3-Q4
+  depends_on: [auth]

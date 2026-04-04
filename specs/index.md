@@ -56,5 +56,9 @@ This index provides a central directory for all specifications of the `parley.nv
 - [Export Formats](export/formats.md): Jekyll HTML and Markdown export logic.
 - [Tree Export](export/tree_export.md): Exporting chat trees as multiple linked files with navigation.
 
-## 10. Spec Traceability
+## 10. Vision Tracker
+- [Vision Format](vision/format.md): YAML schema, multi-file namespacing, and ID resolution rules.
+- [Vision Exports](vision/exports.md): CSV, DOT graph export, and validation.
+
+## 11. Spec Traceability
 - [Traceability Map](traceability.yaml): Mapping from each feature spec to implementation files and related tests. 
