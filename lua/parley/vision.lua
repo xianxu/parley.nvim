@@ -25,6 +25,12 @@ local function trim(s)
     return s:match("^%s*(.-)%s*$")
 end
 
+-- Safely get a string value from a field that may be a table (from parser) or nil.
+local function str(val)
+    if type(val) == "string" then return val end
+    return ""
+end
+
 -- Parse an inline YAML list: "[a, b, c]" → {"a", "b", "c"}, "[]" → {}
 local function parse_inline_list(value)
     local inner = value:match("^%[(.*)%]$")
@@ -511,9 +517,9 @@ M.export_csv = function(initiatives)
         table.insert(lines, string.format("%s,%s,%s,%s,%s,%s",
             csv_escape(item._namespace or ""),
             csv_escape(item.project or ""),
-            csv_escape(item.type or ""),
-            csv_escape(item.size or ""),
-            csv_escape(item.need_by or ""),
+            csv_escape(str(item.type)),
+            csv_escape(str(item.size)),
+            csv_escape(str(item.need_by)),
             csv_escape(deps_str)))
     end
 
@@ -524,8 +530,33 @@ end
 -- DOT Graph Export
 --------------------------------------------------------------------------------
 
-local SIZE_MAP = { S = 1.0, M = 1.5, L = 2.2, XL = 3.0 }
+local BASE_SIZE_MAP = { S = 1.0, M = 1.5, L = 2.2, XL = 3.0 }
 local COLOR_MAP = { tech = "#a0d8ef", business = "#ffe0b2" }
+local CHARS_PER_INCH = 7  -- approx characters per inch for wrapping decisions
+local SCALE_CHARS_PER_INCH = 4  -- conservative estimate for Graphviz box sizing
+
+-- Wrap text at word boundaries to fit within max_chars per line.
+-- Returns list of lines and the length of the longest line.
+local function wrap_text(text, max_chars)
+    local lines = {}
+    local current = ""
+    for word in text:gmatch("%S+") do
+        if current == "" then
+            current = word
+        elseif #current + 1 + #word <= max_chars then
+            current = current .. " " .. word
+        else
+            table.insert(lines, current)
+            current = word
+        end
+    end
+    if current ~= "" then table.insert(lines, current) end
+    local longest = 0
+    for _, l in ipairs(lines) do
+        if #l > longest then longest = #l end
+    end
+    return lines, longest
+end
 
 -- Collect reachable nodes from a root in the adjacency graph.
 -- direction: "down" (descendants), "up" (ancestors), "both"
@@ -605,31 +636,93 @@ M.export_dot = function(initiatives, opts)
         include = collect_subgraph(resolved_root, adj, all_ids, opts.direction or "both")
     end
 
-    -- Build DOT
-    local lines = {}
-    table.insert(lines, 'digraph vision {')
-    table.insert(lines, '    rankdir=TB;')
-    table.insert(lines, '    node [shape=box, style="filled,rounded"];')
-    table.insert(lines, '')
-
-    -- Nodes
+    -- Pass 1: compute global scale factor so all text fits in its size box
+    -- Wrap at CHARS_PER_INCH (generous), scale at SCALE_CHARS_PER_INCH (conservative)
+    local scale = 1.0
     for _, fid in ipairs(all_ids) do
         if not include or include[fid] then
             local item = by_id[fid]
             if item then
-                local w = SIZE_MAP[item.size] or 1.5
-                local color = COLOR_MAP[item.type] or "#eeeeee"
-                local label = string.format("%s\\n[%s] %s",
-                    item.project or fid,
-                    item.size or "?",
-                    item.need_by or "")
-                local fontsize = tostring(10 + math.floor(w * 3))
-
-                table.insert(lines, string.format(
-                    '    "%s" [label="%s", width=%.1f, fillcolor="%s", fontsize=%s];',
-                    fid, label, w, color, fontsize))
+                local base_w = BASE_SIZE_MAP[item.size] or 1.5
+                local wrap_chars = math.floor(base_w * CHARS_PER_INCH)
+                local fit_chars = math.floor(base_w * SCALE_CHARS_PER_INCH)
+                local ns_prefix = (item._namespace or ""):upper()
+                local name = ns_prefix .. ": " .. (item.project or fid)
+                local _, longest_name = wrap_text(name, wrap_chars)
+                -- Also consider the metadata line: "[S] 25Q3"
+                local meta_len = 2 + #(item.size or "?") + 2 + #str(item.need_by)
+                local longest = math.max(longest_name, meta_len)
+                if longest > fit_chars then
+                    local needed = longest / SCALE_CHARS_PER_INCH
+                    local item_scale = needed / base_w
+                    if item_scale > scale then scale = item_scale end
+                end
             end
         end
+    end
+
+    -- Build DOT
+    local lines = {}
+    table.insert(lines, 'digraph vision {')
+    table.insert(lines, '    rankdir=TB;')
+    table.insert(lines, '    node [shape=box, style="filled,rounded", fixedsize=true];')
+    table.insert(lines, '')
+
+    -- Pass 2: precompute node data and heights
+    local size_order = { S = 1, M = 2, L = 3, XL = 4 }
+    local nodes = {}
+    for _, fid in ipairs(all_ids) do
+        if not include or include[fid] then
+            local item = by_id[fid]
+            if item then
+                local base_w = BASE_SIZE_MAP[item.size] or 1.5
+                local w = base_w * scale
+                local color = COLOR_MAP[item.type] or "#eeeeee"
+                local max_chars = math.floor(w * CHARS_PER_INCH)
+                local ns_prefix = (item._namespace or ""):upper()
+                local name = ns_prefix .. ": " .. (item.project or fid)
+                local wrapped, _ = wrap_text(name, max_chars)
+                local wrapped_name = table.concat(wrapped, "\\n")
+
+                local label = string.format("%s\\n[%s] %s",
+                    wrapped_name,
+                    item.size or "?",
+                    str(item.need_by))
+
+                local fontsize = 10 + math.floor(w * 3)
+                local num_lines = #wrapped + 1
+                local h = num_lines * fontsize / 72 + 0.3
+
+                table.insert(nodes, {
+                    fid = fid, label = label, w = w, h = h,
+                    color = color, fontsize = fontsize,
+                    size_rank = size_order[item.size] or 2,
+                })
+            end
+        end
+    end
+
+    -- Enforce: larger size rank must have height >= max height of any smaller rank
+    local max_h_by_rank = {}
+    for _, n in ipairs(nodes) do
+        max_h_by_rank[n.size_rank] = math.max(max_h_by_rank[n.size_rank] or 0, n.h)
+    end
+    local floor_h = 0
+    for rank = 1, 4 do
+        if max_h_by_rank[rank] then
+            floor_h = math.max(floor_h, max_h_by_rank[rank])
+        end
+        max_h_by_rank[rank] = floor_h
+    end
+    for _, n in ipairs(nodes) do
+        n.h = math.max(n.h, max_h_by_rank[n.size_rank] or 0)
+    end
+
+    -- Emit nodes
+    for _, n in ipairs(nodes) do
+        table.insert(lines, string.format(
+            '    "%s" [label="%s", width=%.1f, height=%.1f, fillcolor="%s", fontsize=%d];',
+            n.fid, n.label, n.w, n.h, n.color, n.fontsize))
     end
 
     table.insert(lines, '')
@@ -887,81 +980,158 @@ M.cmd_goto_ref = function()
 end
 
 --------------------------------------------------------------------------------
--- Typeahead completion for depends_on fields
+-- Typeahead completion for vision YAML fields
 --------------------------------------------------------------------------------
 
--- Check if cursor is on a depends_on list line (multiline item).
--- Returns the partial text after "- " if so, or nil.
-local function get_depends_on_partial(buf)
+-- Determine completion context at cursor.
+-- Returns { key = "field_name", partial = "typed text", col = start_col } or nil.
+-- key_path is a list from innermost to outermost, e.g. {"depends_on"} for list items.
+-- For inline fields like "  type: te", key is "type" and partial is "te".
+local function get_completion_context(buf)
     local cursor = vim.api.nvim_win_get_cursor(0)
     local row = cursor[1]
     local line = vim.api.nvim_get_current_line()
 
-    -- Must be an indented list item line: "    - partial"
-    local partial = line:match("^%s+%-%s(.*)$")
-    if not partial then return nil end
-
-    -- Walk up to find the parent key — must be depends_on
-    for r = row - 1, math.max(1, row - 10), -1 do
-        local prev = vim.api.nvim_buf_get_lines(buf, r - 1, r, false)[1]
-        if not prev then break end
-        local key = prev:match("^%s+([%w_]+):%s*$")
-        if key then
-            return key == "depends_on" and partial or nil
+    -- Case 1: indented list item "    - partial" — walk up to find parent key
+    local list_partial = line:match("^%s+%-%s(.*)$")
+    if list_partial then
+        for r = row - 1, math.max(1, row - 10), -1 do
+            local prev = vim.api.nvim_buf_get_lines(buf, r - 1, r, false)[1]
+            if not prev then break end
+            local key = prev:match("^%s+([%w_]+):%s*$")
+            if key then
+                local dash_pos = line:find("%-")
+                local col = dash_pos + 1
+                while line:sub(col + 1, col + 1) == " " do col = col + 1 end
+                return { key = key, partial = list_partial, col = col + 1 }
+            end
+            local stripped = trim(prev)
+            if stripped ~= "" and not stripped:match("^#") and not prev:match("^%s+%- ") then
+                break
+            end
         end
-        -- If we hit a non-list, non-blank, non-comment line that's not indented list item, stop
-        local stripped = trim(prev)
-        if stripped ~= "" and not stripped:match("^#") and not prev:match("^%s+%- ") then
-            break
-        end
+        return nil
     end
+
+    -- Case 2: inline field "  key: partial" (continuation key within an item)
+    -- Skip depends_on — it uses list items (case 1), not inline values
+    local key, val = line:match("^%s+([%w_]+):%s*(.*)$")
+    if key and key ~= "depends_on" then
+        local col = line:find(":%s*") + 1
+        while line:sub(col + 1, col + 1) == " " do col = col + 1 end
+        return { key = key, partial = val or "", col = col + 1 }
+    end
+
     return nil
 end
 
--- Build completion candidates for depends_on typeahead.
--- current_ns: namespace of current file
--- Returns list of {word, menu} tables for vim.fn.complete
-M.build_completion_candidates = function(current_ns)
+-- Completable fields and their candidate sources.
+-- Each returns a list of {word, menu} tables.
+local completion_sources = {}
+
+-- type: tech, business, or values seen in existing data
+completion_sources.type = function()
+    local items = load_all()
+    if not items then return {} end
+    local seen = {}
+    local candidates = {}
+    -- Always include built-in types
+    for _, t in ipairs({ "tech", "business" }) do
+        seen[t] = true
+        table.insert(candidates, { word = t })
+    end
+    -- Add any custom types from data
+    for _, item in ipairs(items) do
+        local t = str(item.type)
+        if t ~= "" and not seen[t] then
+            seen[t] = true
+            table.insert(candidates, { word = t })
+        end
+    end
+    return candidates
+end
+
+-- size: T-shirt sizes
+completion_sources.size = function()
+    return {
+        { word = "S" },
+        { word = "M" },
+        { word = "L" },
+        { word = "XL" },
+    }
+end
+
+-- need_by: values seen in existing data
+completion_sources.need_by = function()
+    local items = load_all()
+    if not items then return {} end
+    local seen = {}
+    local candidates = {}
+    for _, item in ipairs(items) do
+        local nb = item.need_by
+        if type(nb) == "string" and nb ~= "" and not seen[nb] then
+            seen[nb] = true
+            table.insert(candidates, { word = nb })
+        end
+    end
+    table.sort(candidates, function(a, b) return a.word < b.word end)
+    return candidates
+end
+
+-- depends_on: project refs with namespace awareness
+-- partial is passed so we can switch modes: bare locals vs prefixed locals
+completion_sources.depends_on = function(current_ns, partial)
     local items = load_all()
     if not items then return {} end
 
+    -- Check if user has typed the local namespace prefix
+    local local_prefixed = partial and partial:match("^" .. current_ns .. ":%s*")
+
+    -- Detect if user has typed a namespace prefix
+    local typed_ns = partial and partial:match("^(%w+):%s*")
+
     local candidates = {}
+    local namespaces = {}  -- track all namespaces seen
     for _, item in ipairs(items) do
         if item.project and item.project ~= "" then
             local ns = item._namespace or ""
             local name_id = M.name_to_id(item.project)
-            if ns == current_ns then
-                -- Local: show bare name
-                table.insert(candidates, {
-                    word = name_id,
-                    menu = item.project,
-                })
-            else
-                -- Cross-namespace: show ns: name
+            namespaces[ns] = true
+            if typed_ns == ns then
+                -- User typed this namespace prefix — show prefixed names
                 table.insert(candidates, {
                     word = ns .. ": " .. name_id,
-                    menu = ns .. ": " .. item.project,
+                    menu = item.project,
                 })
+            elseif not typed_ns then
+                if ns == current_ns then
+                    -- Default: show bare local names
+                    table.insert(candidates, { word = name_id, menu = item.project })
+                end
+                -- Remote names only shown after typing their prefix
             end
+        end
+    end
+    -- When no prefix typed, show namespace prefixes as candidates
+    if not typed_ns then
+        for ns, _ in pairs(namespaces) do
+            local label = ns == current_ns and "local namespace" or ns .. ".yaml"
+            table.insert(candidates, { word = ns .. ": ", menu = label })
         end
     end
     return candidates
 end
 
 -- Match a partial input against a candidate word.
--- Supports multi-prefix with "..." and regular prefix matching.
--- For "ns: partial", matches only against that namespace's portion.
+-- Supports multi-prefix with "..." and namespace-scoped matching for depends_on.
 local function match_candidate(partial, word)
     if partial == "" then return true end
 
-    -- Handle "ns: partial" — match against the word which is already "ns: name"
-    -- and bare names which won't have ":"
+    -- Handle "ns: partial" — for depends_on cross-namespace refs
     local partial_ns, partial_rest = partial:match("^([^:]+):%s*(.*)$")
     if partial_ns then
-        -- Must be a cross-namespace candidate starting with this ns
         local word_ns = word:match("^([^:]+):")
         if not word_ns or word_ns ~= partial_ns then return false end
-        -- Match rest against name portion
         local word_name = word:match("^[^:]+:%s*(.+)$")
         if not word_name then return partial_rest == "" end
         partial = partial_rest
@@ -991,42 +1161,42 @@ local function match_candidate(partial, word)
     end
 
     -- Regular prefix match
-    local norm = M.name_to_id(partial)
-    if norm == "" then return true end
-    return word:sub(1, #norm) == norm
+    local norm_partial = partial:lower()
+    return word:lower():sub(1, #norm_partial) == norm_partial
 end
 
 -- TextChangedI handler for typeahead completion
 M.on_text_changed_i = function(buf)
-    local partial = get_depends_on_partial(buf)
-    if not partial then return end
+    local ctx = get_completion_context(buf)
+    if not ctx then return end
 
-    -- Determine current namespace
-    local filepath = vim.api.nvim_buf_get_name(buf)
-    local current_ns = vim.fn.fnamemodify(filepath, ":t:r")
+    local source = completion_sources[ctx.key]
+    if not source then return end
 
-    local all_candidates = M.build_completion_candidates(current_ns)
+    -- depends_on needs current namespace
+    local candidates
+    if ctx.key == "depends_on" then
+        local filepath = vim.api.nvim_buf_get_name(buf)
+        local current_ns = vim.fn.fnamemodify(filepath, ":t:r")
+        candidates = source(current_ns, ctx.partial)
+    else
+        candidates = source()
+    end
 
     -- Filter candidates
     local filtered = {}
-    for _, c in ipairs(all_candidates) do
-        if match_candidate(partial, c.word) then
+    for _, c in ipairs(candidates) do
+        if match_candidate(ctx.partial, c.word) then
             table.insert(filtered, c)
         end
     end
 
     if #filtered == 0 then return end
 
-    -- Find the column where the partial starts (after "- ")
-    local line = vim.api.nvim_get_current_line()
-    local dash_pos = line:find("%-")
-    local col = dash_pos + 1  -- after "-"
-    while line:sub(col + 1, col + 1) == " " do col = col + 1 end
-
     -- Set completeopt for non-blocking typeahead
     local saved_completeopt = vim.o.completeopt
     vim.o.completeopt = "menuone,noinsert,noselect"
-    vim.fn.complete(col + 1, filtered)
+    vim.fn.complete(ctx.col, filtered)
     vim.o.completeopt = saved_completeopt
 end
 

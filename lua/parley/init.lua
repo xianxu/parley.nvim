@@ -646,6 +646,11 @@ M.setup = function(opts)
 			local abs_vision = vim.fn.resolve(git_root .. "/" .. vision_dir)
 			local file_dir = vim.fn.resolve(vim.fn.fnamemodify(ev.file, ":p:h"))
 			if file_dir:sub(1, #abs_vision) == abs_vision then
+				-- Disable nvim-cmp for vision YAML buffers
+				local cmp_ok, cmp = pcall(require, "cmp")
+				if cmp_ok and cmp then
+					cmp.setup.buffer({ enabled = false })
+				end
 				vim.api.nvim_create_autocmd("TextChangedI", {
 					buffer = ev.buf,
 					callback = function()

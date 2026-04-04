@@ -31,7 +31,7 @@ M.open = function()
     for _, item in ipairs(initiatives) do
         local size_str = item.size and ("[" .. item.size .. "]") or ""
         local type_str = item.type or ""
-        local need_by_str = item.need_by or ""
+        local need_by_str = type(item.need_by) == "string" and item.need_by or ""
         local ns = item._namespace or ""
         local display = string.format("%s  %s  %s  %s  %s",
             ns, item.project or "?", size_str, type_str, need_by_str)
@@ -43,7 +43,7 @@ M.open = function()
             display = display,
             search_text = string.format("%s %s %s %s %s %s",
                 ns, item.project or "", item.type or "", item.size or "",
-                item.need_by or "", deps),
+                type(item.need_by) == "string" and item.need_by or "", deps),
             value = item._file,
             line = item._line,
         })
