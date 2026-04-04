@@ -12,17 +12,17 @@
   depends_on:
     - sync: data
     - sync: auth
-    - px:some secrete ... 1
+    - px: some secrete ... 1
 
-- project: some secrete project
-  type: tech
+- project: Some Secrete Project
+  type: tench
   size: M
   need_by:
   depends_on:
     - mobile
     - self-serve
 
-- project: some secrete project 1
+- project: Some Secrete Project 1
   type: tech
   size: M
   need_by: 25Q4

@@ -887,58 +887,147 @@ M.cmd_goto_ref = function()
 end
 
 --------------------------------------------------------------------------------
--- Omnifunc completion for depends_on fields
+-- Typeahead completion for depends_on fields
 --------------------------------------------------------------------------------
 
--- Build a list of all initiative IDs from vision_dir
-M.get_all_ids = function()
+-- Check if cursor is on a depends_on list line (multiline item).
+-- Returns the partial text after "- " if so, or nil.
+local function get_depends_on_partial(buf)
+    local cursor = vim.api.nvim_win_get_cursor(0)
+    local row = cursor[1]
+    local line = vim.api.nvim_get_current_line()
+
+    -- Must be an indented list item line: "    - partial"
+    local partial = line:match("^%s+%-%s(.*)$")
+    if not partial then return nil end
+
+    -- Walk up to find the parent key — must be depends_on
+    for r = row - 1, math.max(1, row - 10), -1 do
+        local prev = vim.api.nvim_buf_get_lines(buf, r - 1, r, false)[1]
+        if not prev then break end
+        local key = prev:match("^%s+([%w_]+):%s*$")
+        if key then
+            return key == "depends_on" and partial or nil
+        end
+        -- If we hit a non-list, non-blank, non-comment line that's not indented list item, stop
+        local stripped = trim(prev)
+        if stripped ~= "" and not stripped:match("^#") and not prev:match("^%s+%- ") then
+            break
+        end
+    end
+    return nil
+end
+
+-- Build completion candidates for depends_on typeahead.
+-- current_ns: namespace of current file
+-- Returns list of {word, menu} tables for vim.fn.complete
+M.build_completion_candidates = function(current_ns)
     local items = load_all()
     if not items then return {} end
 
-    local ids = {}
+    local candidates = {}
     for _, item in ipairs(items) do
         if item.project and item.project ~= "" then
-            table.insert(ids, M.full_id(item._namespace or "", item.project))
+            local ns = item._namespace or ""
+            local name_id = M.name_to_id(item.project)
+            if ns == current_ns then
+                -- Local: show bare name
+                table.insert(candidates, {
+                    word = name_id,
+                    menu = item.project,
+                })
+            else
+                -- Cross-namespace: show ns: name
+                table.insert(candidates, {
+                    word = ns .. ": " .. name_id,
+                    menu = ns .. ": " .. item.project,
+                })
+            end
         end
     end
-    return ids
+    return candidates
 end
 
--- Omnifunc for YAML files in vision_dir.
--- Completes initiative IDs when cursor is inside a depends_on value.
-M.omnifunc = function(findstart, base)
-    if findstart == 1 then
-        -- Find the start of the word to complete
-        local line = vim.api.nvim_get_current_line()
-        local col = vim.api.nvim_win_get_cursor(0)[2]
+-- Match a partial input against a candidate word.
+-- Supports multi-prefix with "..." and regular prefix matching.
+-- For "ns: partial", matches only against that namespace's portion.
+local function match_candidate(partial, word)
+    if partial == "" then return true end
 
-        -- Only complete inside depends_on lines
-        if not line:match("depends_on") then
-            return -3  -- cancel completion
-        end
-
-        -- Find start of current word (scanning backwards from cursor)
-        local start = col
-        while start > 0 and line:sub(start, start):match("[%w_%.]") do
-            start = start - 1
-        end
-        return start
-    else
-        -- Return matching IDs
-        local all_ids = M.get_all_ids()
-        local matches = {}
-        for _, fid in ipairs(all_ids) do
-            if fid:sub(1, #base) == base then
-                table.insert(matches, fid)
-            end
-            -- Also match against name part only
-            local name_part = fid:match("^[^%.]+%.(.+)$")
-            if name_part and name_part:sub(1, #base) == base and fid:sub(1, #base) ~= base then
-                table.insert(matches, fid)
-            end
-        end
-        return matches
+    -- Handle "ns: partial" — match against the word which is already "ns: name"
+    -- and bare names which won't have ":"
+    local partial_ns, partial_rest = partial:match("^([^:]+):%s*(.*)$")
+    if partial_ns then
+        -- Must be a cross-namespace candidate starting with this ns
+        local word_ns = word:match("^([^:]+):")
+        if not word_ns or word_ns ~= partial_ns then return false end
+        -- Match rest against name portion
+        local word_name = word:match("^[^:]+:%s*(.+)$")
+        if not word_name then return partial_rest == "" end
+        partial = partial_rest
+        word = word_name
     end
+
+    -- Multi-prefix: "mob ... v2"
+    if partial:find("%.%.%.") then
+        local segments = {}
+        local rest = partial
+        while true do
+            local s, e = rest:find("%.%.%.")
+            if not s then
+                table.insert(segments, rest)
+                break
+            end
+            table.insert(segments, rest:sub(1, s - 1))
+            rest = rest:sub(e + 1)
+        end
+        local norm_segments = {}
+        for _, seg in ipairs(segments) do
+            local normed = M.name_to_id(trim(seg))
+            if normed ~= "" then table.insert(norm_segments, normed) end
+        end
+        if #norm_segments == 0 then return true end
+        return multi_prefix_match(norm_segments, word)
+    end
+
+    -- Regular prefix match
+    local norm = M.name_to_id(partial)
+    if norm == "" then return true end
+    return word:sub(1, #norm) == norm
+end
+
+-- TextChangedI handler for typeahead completion
+M.on_text_changed_i = function(buf)
+    local partial = get_depends_on_partial(buf)
+    if not partial then return end
+
+    -- Determine current namespace
+    local filepath = vim.api.nvim_buf_get_name(buf)
+    local current_ns = vim.fn.fnamemodify(filepath, ":t:r")
+
+    local all_candidates = M.build_completion_candidates(current_ns)
+
+    -- Filter candidates
+    local filtered = {}
+    for _, c in ipairs(all_candidates) do
+        if match_candidate(partial, c.word) then
+            table.insert(filtered, c)
+        end
+    end
+
+    if #filtered == 0 then return end
+
+    -- Find the column where the partial starts (after "- ")
+    local line = vim.api.nvim_get_current_line()
+    local dash_pos = line:find("%-")
+    local col = dash_pos + 1  -- after "-"
+    while line:sub(col + 1, col + 1) == " " do col = col + 1 end
+
+    -- Set completeopt for non-blocking typeahead
+    local saved_completeopt = vim.o.completeopt
+    vim.o.completeopt = "menuone,noinsert,noselect"
+    vim.fn.complete(col + 1, filtered)
+    vim.o.completeopt = saved_completeopt
 end
 
 return M

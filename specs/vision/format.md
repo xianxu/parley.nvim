@@ -48,3 +48,13 @@ Additional fields are preserved but not semantically interpreted.
   - Exact match preferred over prefix when names overlap: `auth` resolves to `sync:auth` not `sync:auth-v2`
   - Multi-prefix with `...`: `scope ... onprem` matches `scope-deletion-in-onprem-within-a-quarter`
   - Ambiguous or zero matches produce errors
+
+## Typeahead Completion
+
+When editing `depends_on` list lines in vision YAML files, typeahead completion auto-triggers as you type:
+
+- Local projects shown as bare names (e.g., `auth-service-rewrite`)
+- Cross-namespace projects shown as `ns: name` (e.g., `sync: data-platform`)
+- Supports multi-prefix filtering with `...` (e.g., `some ... 1`)
+- Typing `sync:` narrows to only projects from `sync.yaml`
+- Menu is non-blocking (`noinsert,noselect`) — keep typing to narrow, `<C-y>` to accept

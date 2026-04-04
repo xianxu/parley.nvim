@@ -635,7 +635,7 @@ M.setup = function(opts)
 	register_issue_shortcut("global_shortcut_vision_goto", "Vision Goto Ref", function() M.cmd.VisionGoto() end)
 	register_issue_shortcut("global_shortcut_vision_finder", "Vision Finder", function() M.cmd.VisionShow() end)
 
-	-- Set up omnifunc for vision YAML files
+	-- Set up typeahead completion for vision YAML files
 	vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, {
 		pattern = "*.yaml",
 		callback = function(ev)
@@ -646,7 +646,12 @@ M.setup = function(opts)
 			local abs_vision = vim.fn.resolve(git_root .. "/" .. vision_dir)
 			local file_dir = vim.fn.resolve(vim.fn.fnamemodify(ev.file, ":p:h"))
 			if file_dir:sub(1, #abs_vision) == abs_vision then
-				vim.bo[ev.buf].omnifunc = "v:lua.require'parley.vision'.omnifunc"
+				vim.api.nvim_create_autocmd("TextChangedI", {
+					buffer = ev.buf,
+					callback = function()
+						vision_mod.on_text_changed_i(ev.buf)
+					end,
+				})
 			end
 		end,
 	})
