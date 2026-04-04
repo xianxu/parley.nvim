@@ -3,16 +3,16 @@
   size: M
   need_by: 25Q1
   depends_on:
-    - sync.data
+    - sync: data
 
 - project: Self-Serve Onboarding
   type: business
   size: L
   need_by: 25Q4
   depends_on:
-    - sync.data
-    - sync.auth
-    - px.some-secrete-project-1
+    - sync: data
+    - sync: auth
+    - px:some secrete ... 1
 
 - project: some secrete project
   type: tech
@@ -28,4 +28,4 @@
   need_by: 25Q4
   depends_on:
     - mobile
-    - sync.data
+    - sync: data

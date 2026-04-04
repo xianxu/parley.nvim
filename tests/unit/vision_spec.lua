@@ -196,11 +196,11 @@ end)
 
 describe("full_id", function()
     it("combines namespace and name", function()
-        assert.equals("px.mobile-app", vision.full_id("px", "Mobile App"))
+        assert.equals("px:mobile-app", vision.full_id("px", "Mobile App"))
     end)
 
     it("works with multi-word names", function()
-        assert.equals("sync.auth-service-rewrite", vision.full_id("sync", "Auth Service Rewrite"))
+        assert.equals("sync:auth-service-rewrite", vision.full_id("sync", "Auth Service Rewrite"))
     end)
 end)
 
@@ -210,32 +210,32 @@ end)
 
 describe("resolve_ref", function()
     local all_ids = {
-        "sync.auth-rewrite",
-        "sync.data-platform",
-        "px.mobile-app",
-        "px.self-serve",
+        "sync:auth-rewrite",
+        "sync:data-platform",
+        "px:mobile-app",
+        "px:self-serve",
     }
 
     it("resolves bare prefix within local namespace", function()
         local resolved, err = vision.resolve_ref("auth", "sync", all_ids)
         assert.is_nil(err)
-        assert.equals("sync.auth-rewrite", resolved)
+        assert.equals("sync:auth-rewrite", resolved)
     end)
 
     it("resolves namespaced prefix", function()
-        local resolved, err = vision.resolve_ref("px.mobile", "", all_ids)
+        local resolved, err = vision.resolve_ref("px:mobile", "", all_ids)
         assert.is_nil(err)
-        assert.equals("px.mobile-app", resolved)
+        assert.equals("px:mobile-app", resolved)
     end)
 
     it("resolves cross-namespace with bare prefix when no local match", function()
         local resolved, err = vision.resolve_ref("mobile", "sync", all_ids)
         assert.is_nil(err)
-        assert.equals("px.mobile-app", resolved)
+        assert.equals("px:mobile-app", resolved)
     end)
 
     it("errors on ambiguous prefix", function()
-        local all = { "sync.service-a", "sync.service-b" }
+        local all = { "sync:service-a", "sync:service-b" }
         local resolved, err = vision.resolve_ref("service", "sync", all)
         assert.is_nil(resolved)
         assert.truthy(err:find("ambiguous"))
@@ -256,35 +256,98 @@ describe("resolve_ref", function()
     it("prefers local namespace over global", function()
         local resolved, err = vision.resolve_ref("data", "sync", all_ids)
         assert.is_nil(err)
-        assert.equals("sync.data-platform", resolved)
+        assert.equals("sync:data-platform", resolved)
     end)
 
     it("prefers exact match over prefix when names overlap", function()
-        local all = { "sync.auth", "sync.auth-v2" }
+        local all = { "sync:auth", "sync:auth-v2" }
         local resolved, err = vision.resolve_ref("auth", "sync", all)
         assert.is_nil(err)
-        assert.equals("sync.auth", resolved)
+        assert.equals("sync:auth", resolved)
     end)
 
     it("prefers exact match with namespaced ref", function()
-        local all = { "sync.auth", "sync.auth-v2" }
-        local resolved, err = vision.resolve_ref("sync.auth", "", all)
+        local all = { "sync:auth", "sync:auth-v2" }
+        local resolved, err = vision.resolve_ref("sync:auth", "", all)
         assert.is_nil(err)
-        assert.equals("sync.auth", resolved)
+        assert.equals("sync:auth", resolved)
     end)
 
     it("resolves hyphenated refs naturally", function()
-        local all = { "px.self-serve-onboarding" }
+        local all = { "px:self-serve-onboarding" }
         local resolved, err = vision.resolve_ref("self-serve", "px", all)
         assert.is_nil(err)
-        assert.equals("px.self-serve-onboarding", resolved)
+        assert.equals("px:self-serve-onboarding", resolved)
     end)
 
     it("resolves namespaced hyphenated refs", function()
-        local all = { "px.self-serve-onboarding" }
-        local resolved, err = vision.resolve_ref("px.self-serve", "", all)
+        local all = { "px:self-serve-onboarding" }
+        local resolved, err = vision.resolve_ref("px:self-serve", "", all)
         assert.is_nil(err)
-        assert.equals("px.self-serve-onboarding", resolved)
+        assert.equals("px:self-serve-onboarding", resolved)
+    end)
+
+    it("resolves multi-prefix with ...", function()
+        local all = { "sync:scope-deletion-in-onprem-within-a-quarter" }
+        local resolved, err = vision.resolve_ref("scope ... onprem", "sync", all)
+        assert.is_nil(err)
+        assert.equals("sync:scope-deletion-in-onprem-within-a-quarter", resolved)
+    end)
+
+    it("multi-prefix first segment must match at start", function()
+        local all = { "sync:scope-deletion-in-onprem-within-a-quarter" }
+        local resolved, err = vision.resolve_ref("deletion ... onprem", "sync", all)
+        assert.is_nil(resolved)
+        assert.truthy(err:find("matches no"))
+    end)
+
+    it("multi-prefix errors on ambiguous match", function()
+        local all = {
+            "sync:scope-deletion-in-onprem-v1",
+            "sync:scope-deletion-in-onprem-v2",
+        }
+        local resolved, err = vision.resolve_ref("scope ... onprem", "sync", all)
+        assert.is_nil(resolved)
+        assert.truthy(err:find("ambiguous"))
+    end)
+
+    it("multi-prefix resolves unique match across multiple segments", function()
+        local all = {
+            "sync:scope-deletion-in-onprem-within-a-quarter",
+            "sync:scope-creation-in-cloud",
+        }
+        local resolved, err = vision.resolve_ref("scope ... onprem", "sync", all)
+        assert.is_nil(err)
+        assert.equals("sync:scope-deletion-in-onprem-within-a-quarter", resolved)
+    end)
+
+    it("multi-prefix tries local namespace first", function()
+        local all = {
+            "sync:scope-deletion-in-onprem",
+            "px:scope-deletion-in-onprem",
+        }
+        local resolved, err = vision.resolve_ref("scope ... onprem", "sync", all)
+        assert.is_nil(err)
+        assert.equals("sync:scope-deletion-in-onprem", resolved)
+    end)
+
+    it("multi-prefix with explicit namespace", function()
+        local all = {
+            "px:some-secrete-project-1",
+            "px:some-secrete-project",
+        }
+        local resolved, err = vision.resolve_ref("px:some ... 1", "sync", all)
+        assert.is_nil(err)
+        assert.equals("px:some-secrete-project-1", resolved)
+    end)
+
+    it("multi-prefix with explicit namespace doesn't fall back to global", function()
+        local all = {
+            "sync:scope-deletion-in-onprem",
+        }
+        local resolved, err = vision.resolve_ref("px:scope ... onprem", "", all)
+        assert.is_nil(resolved)
+        assert.truthy(err:find("matches no"))
     end)
 end)
 
@@ -349,7 +412,7 @@ describe("validate_graph", function()
     it("validates cross-namespace references", function()
         local items = {
             { project = "Auth", _namespace = "sync", depends_on = {} },
-            { project = "Mobile", _namespace = "px", depends_on = { "sync.auth" } },
+            { project = "Mobile", _namespace = "px", depends_on = { "sync:auth" } },
         }
         local errors = vision.validate_graph(items)
         assert.same({}, errors)
@@ -449,9 +512,9 @@ describe("export_dot", function()
         local dot, errors = vision.export_dot(items)
         assert.is_nil(errors)
         assert.truthy(dot:find("digraph vision"))
-        assert.truthy(dot:find('"sync.auth"'))
-        assert.truthy(dot:find('"sync.data"'))
-        assert.truthy(dot:find('"sync.auth" %-> "sync.data"'))
+        assert.truthy(dot:find('"sync:auth"'))
+        assert.truthy(dot:find('"sync:data"'))
+        assert.truthy(dot:find('"sync:auth" %-> "sync:data"'))
     end)
 
     it("maps size to node width", function()
@@ -490,9 +553,9 @@ describe("export_dot", function()
             { project = "C", _namespace = "ns", type = "tech", size = "L",
               need_by = "", depends_on = {} },
         }
-        local dot = vision.export_dot(items, { root = "ns.b" })
-        assert.truthy(dot:find('"ns.a"'))  -- ancestor of B
-        assert.truthy(dot:find('"ns.b"'))  -- root
-        assert.is_nil(dot:find('"ns.c"'))  -- unrelated, excluded
+        local dot = vision.export_dot(items, { root = "ns:b" })
+        assert.truthy(dot:find('"ns:a"'))  -- ancestor of B
+        assert.truthy(dot:find('"ns:b"'))  -- root
+        assert.is_nil(dot:find('"ns:c"'))  -- unrelated, excluded
     end)
 end)

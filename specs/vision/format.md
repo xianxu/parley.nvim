@@ -41,9 +41,10 @@ Additional fields are preserved but not semantically interpreted.
 ## ID Resolution
 
 - IDs are derived from names: `"Data Platform"` → `data-platform`, `"Self-Serve Onboarding"` → `self-serve-onboarding`
-- Full ID includes namespace: `sync.data-platform`
+- Full ID includes namespace: `sync:data-platform`
 - `depends_on` references use prefix matching:
-  - Bare prefix resolves locally first: `auth` → `sync.auth-service-rewrite` (if in sync.yaml)
-  - Namespaced prefix resolves globally: `px.mobile` → `px.mobile-app`
-  - Exact match preferred over prefix when names overlap: `auth` resolves to `sync.auth` not `sync.auth-v2`
+  - Bare prefix resolves locally first: `auth` → `sync:auth-service-rewrite` (if in sync.yaml)
+  - Cross-namespace with `ns:` prefix: `px: mobile` → `px:mobile-app`
+  - Exact match preferred over prefix when names overlap: `auth` resolves to `sync:auth` not `sync:auth-v2`
+  - Multi-prefix with `...`: `scope ... onprem` matches `scope-deletion-in-onprem-within-a-quarter`
   - Ambiguous or zero matches produce errors

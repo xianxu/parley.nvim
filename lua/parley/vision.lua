@@ -142,9 +142,36 @@ M.name_to_id = function(name)
     return id
 end
 
--- Build a fully qualified ID: namespace.hyphenated-name
+-- Build a fully qualified ID: namespace:hyphenated-name
 M.full_id = function(namespace, name)
-    return namespace .. "." .. M.name_to_id(name)
+    return namespace .. ":" .. M.name_to_id(name)
+end
+
+-- Multi-prefix match: "scope ... onprem" matches "scope-deletion-in-onprem-within-a-quarter"
+-- Each segment (split by ...) must match as a prefix at a hyphen boundary, in order.
+local function multi_prefix_match(segments, id)
+    local pos = 1
+    for i, seg in ipairs(segments) do
+        if seg == "" then goto continue end
+        -- Find seg as a prefix starting at some hyphen boundary from pos
+        local found = false
+        local search_from = pos
+        while search_from <= #id do
+            if id:sub(search_from, search_from + #seg - 1) == seg then
+                pos = search_from + #seg
+                found = true
+                break
+            end
+            if i == 1 then break end  -- first segment must match at the start
+            -- Advance to next hyphen boundary
+            local next_hyphen = id:find("-", search_from)
+            if not next_hyphen then break end
+            search_from = next_hyphen + 1
+        end
+        if not found then return false end
+        ::continue::
+    end
+    return true
 end
 
 -- Resolve a reference prefix against a set of all known full IDs.
@@ -164,18 +191,82 @@ M.resolve_ref = function(ref, current_ns, all_ids)
         return nil, "empty reference"
     end
 
+    -- Multi-prefix match: "scope ... onprem" splits by "..." into segments
+    if ref:find("%.%.%.") then
+        -- Split on "..." (literal three dots), not on individual dots
+        local parts = {}
+        local rest = ref
+        while true do
+            local s, e = rest:find("%.%.%.")
+            if not s then
+                table.insert(parts, rest)
+                break
+            end
+            table.insert(parts, rest:sub(1, s - 1))
+            rest = rest:sub(e + 1)
+        end
+
+        -- Check for namespace prefix: "px:seg1 ... seg2" or "px: seg1 ... seg2"
+        local explicit_ns = nil
+        local first = trim(parts[1])
+        local colon_pos = first:find(":")
+        if colon_pos then
+            explicit_ns = trim(first:sub(1, colon_pos - 1))
+            parts[1] = first:sub(colon_pos + 1)
+        end
+
+        local segments = {}
+        for _, part in ipairs(parts) do
+            local normed = M.name_to_id(trim(part))
+            if normed ~= "" then table.insert(segments, normed) end
+        end
+        if #segments == 0 then
+            return nil, "empty multi-prefix reference"
+        end
+
+        local matches = {}
+        local search_ns = explicit_ns or current_ns
+        -- Try target namespace first
+        for _, fid in ipairs(all_ids) do
+            local ns, name_part = fid:match("^([^:]+):(.+)$")
+            if ns == search_ns and name_part and multi_prefix_match(segments, name_part) then
+                table.insert(matches, fid)
+            end
+        end
+        -- If no namespace match and no explicit namespace, try global
+        if #matches == 0 and not explicit_ns then
+            for _, fid in ipairs(all_ids) do
+                local name_part = fid:match("^[^:]+:(.+)$")
+                if name_part and multi_prefix_match(segments, name_part) then
+                    table.insert(matches, fid)
+                end
+            end
+        end
+
+        if #matches == 0 then
+            return nil, string.format('"%s" matches no initiatives', ref)
+        elseif #matches == 1 then
+            return matches[1], nil
+        else
+            return nil, string.format('"%s" is ambiguous — matches: %s',
+                ref, table.concat(matches, ", "))
+        end
+    end
+
     -- Normalize ref through name_to_id so hyphens/special chars match
+    -- Check for namespace prefix with ":"
+    local has_ns = ref:find(":")
     local norm_ref
-    if ref:find("%.") then
-        local ns, name = ref:match("^([^%.]+)%.(.+)$")
-        norm_ref = ns .. "." .. M.name_to_id(name)
+    if has_ns then
+        local ns, name = ref:match("^([^:]+):%s*(.+)$")
+        norm_ref = trim(ns) .. ":" .. M.name_to_id(name)
     else
         norm_ref = M.name_to_id(ref)
     end
 
     local matches = {}
 
-    if ref:find("%.") then
+    if has_ns then
         -- Namespaced ref: match as prefix against full IDs
         for _, fid in ipairs(all_ids) do
             if fid:sub(1, #norm_ref) == norm_ref then
@@ -184,7 +275,7 @@ M.resolve_ref = function(ref, current_ns, all_ids)
         end
     else
         -- Bare ref: try local namespace first
-        local local_prefix = current_ns .. "." .. norm_ref
+        local local_prefix = current_ns .. ":" .. norm_ref
         for _, fid in ipairs(all_ids) do
             if fid:sub(1, #local_prefix) == local_prefix then
                 table.insert(matches, fid)
@@ -194,7 +285,7 @@ M.resolve_ref = function(ref, current_ns, all_ids)
         -- If no local match, try global (match against the name part of any ID)
         if #matches == 0 then
             for _, fid in ipairs(all_ids) do
-                local name_part = fid:match("^[^%.]+%.(.+)$")
+                local name_part = fid:match("^[^:]+:(.+)$")
                 if name_part and name_part:sub(1, #norm_ref) == norm_ref then
                     table.insert(matches, fid)
                 end
@@ -208,7 +299,7 @@ M.resolve_ref = function(ref, current_ns, all_ids)
         return matches[1], nil
     else
         -- Prefer exact match over prefix matches
-        local exact = ref:find("%.") and norm_ref or (current_ns .. "." .. norm_ref)
+        local exact = has_ns and norm_ref or (current_ns .. ":" .. norm_ref)
         for _, fid in ipairs(matches) do
             if fid == exact then return fid, nil end
         end
