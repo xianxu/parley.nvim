@@ -1,52 +1,65 @@
-# Debugging ~293s API delay in OpenShell sandbox
+# Debugging: ~290s hang in AI agents inside OpenShell sandbox
 
-## Symptom
-Claude Code (and Codex) interactive sessions experience ~293s delay on every
-API round-trip after the first call. First call is fast (~5s).
+## Filed issues
 
-## What we know
-- Proxy logs show requests leave immediately, responses take ~290s
-- `--print` mode (non-interactive) is fast even with large payloads + tool use
-- Interactive mode is slow — loads superpowers skills, project context, etc.
-- Same account/tier from host is fast (100k+ token context, normal speed)
-- OpenShell proxy does L7 inspection inside CONNECT tunnels (MitM via CA cert)
-- Proxy forces HTTP/1.1; host uses HTTP/2 direct
-- `datadoghq.com` telemetry blocked by policy (denied after each API call)
-- OpenShell sandbox binary: 0.0.16, Node: 22.22.1
+- **OpenShell**: https://github.com/NVIDIA/OpenShell/issues/759
+  - Filed copy: `issue-openshell-final.md`
+- **Claude Code**: https://github.com/anthropics/claude-code/issues/43954
+  - Filed copy: `issue-claude-code-final.md`
 
-## Theories tested
-1. HTTP/1.1 downgrade (proxy forces it) — DISPROVED by curl tests (fast)
-2. Large payload — DISPROVED (--print with 60k system prompt is fast)
-3. SSE streaming — DISPROVED (curl streaming is fast)
-4. NODE_USE_ENV_PROXY / undici EnvHttpProxyAgent — DISPROVED (still slow with it disabled)
-5. Node.js undici connection reuse — CONFIRMED in isolated test (test-09: req2 hangs)
-   but Claude Code has its own proxy handling, so this may not be the direct cause
-6. Piped vs manual interactive — piped tests always fast, manual always slow
-   Piped sessions are short-lived; the bug requires a long-lived process
+## Problem
 
-## Key finding from proxy logs
-Claude Code waits ~67s AFTER tool results before even opening a new CONNECT
-tunnel. Then the CONNECT tunnel never sends an HTTP_REQUEST (or it hangs).
-This means something inside Claude Code is blocking the event loop for ~67s
-before it can make the next API call. The blocked datadoghq.com telemetry
-connection (denied by proxy policy) is the top suspect.
+Claude Code and OpenAI Codex interactive sessions hang for ~290 seconds
+between every API round-trip inside OpenShell sandboxes. First message is
+fast (~4s), every subsequent message hangs ~290s then responds in ~4s.
 
-## What to test manually
-In sandbox, start an interactive claude session with:
-```bash
-export DO_NOT_TRACK=1
-export no_proxy="127.0.0.1,localhost,::1,http-intake.logs.us5.datadoghq.com"
-export NO_PROXY="$no_proxy"
-claude --permission-mode bypassPermissions
-```
-Then run: "read ARCH.md and say project name"
-Compare speed to a normal session without these env vars.
+**Not affected**: `--print` mode, `--print --resume`, same session on host.
+
+## Minimal repro
+
+1. `make sandbox` → `claude --permission-mode bypassPermissions`
+2. Type `hello` → fast response (~4s)
+3. Type `hello` again → hangs ~290s → then responds (~4s)
+
+## Root cause (unknown)
+
+During the ~290s gaps, the proxy log shows zero network activity from the
+Claude Code process. The process is sleeping, not blocked on I/O. Something
+internal to the interactive mode event loop is blocking before the next API
+call can be sent. `--print` mode does not have this blocking dependency.
+
+## What we ruled out
+
+| Hypothesis | Result |
+|-----------|--------|
+| Proxy cold start / latency | curl is 1.5s consistently |
+| API server slowness | No request sent during gap |
+| HTTP/1.1 vs HTTP/2 | Both fast via curl |
+| Large payload / context | --print with 60k system prompt: fast |
+| Telemetry blocking (datadoghq.com) | DO_NOT_TRACK=1: still slow |
+| Node.js EnvHttpProxyAgent | NODE_USE_ENV_PROXY=: still slow |
+| Tool use required | Repros with just "hello" twice |
+| --print mode | Always fast, even --resume |
+
+## Evidence
+
+- `evidence-session-f44890db.md` — detailed proxy + JSONL log analysis
 
 ## Test scripts
-- `test-01-baseline.sh` — Single-turn --print (fast baseline)
-- `test-02-tool-use.sh` — Multi-turn --print with tool use
-- `test-03-large-context.sh` — Large system prompt via --print
-- `test-04-interactive.sh` — Interactive session (the slow path)
-- `test-05-no-telemetry.sh` — Interactive with DO_NOT_TRACK=1
-- `test-06-no-plugins.sh` — Interactive with --disable-slash-commands
-- `test-07-concurrent.sh` — Parallel API calls to test connection pooling
+
+Tests run inside sandbox (`/sandbox/repo/debug-slowness/`):
+
+| Script | What it tests | Result |
+|--------|--------------|--------|
+| test-01 | --print baseline | Fast (8s) |
+| test-02 | --print with tool use | Fast (15s) |
+| test-03 | --print with 60k system prompt | Fast (12s) |
+| test-04 | Interactive piped | Fast (14s) — piped doesn't repro |
+| test-05 | Interactive + DO_NOT_TRACK | Fast piped / slow manual |
+| test-06 | Interactive + no plugins | Fast piped / slow manual |
+| test-07 | Concurrent --print calls | Fast |
+| test-08 | curl idle connection reuse | Fast |
+| test-09 | Node.js keepalive + reuse | **req2 TIMEOUT 30s** (undici bug, but not root cause) |
+| test-10 | Node.js streaming + idle | N/A |
+| test-11 | Interactive + all telemetry blocked | Fast piped / slow manual |
+| test-12 | --print + --resume (hello→hello) | Fast (12s) |

@@ -37,6 +37,10 @@ On every `make sandbox`, compares the GHCR registry digest of `base:latest` agai
 - SSH keepalive: `ServerAliveInterval 15`, `ServerAliveCountMax 480` — tolerates up to 2 hours of missed heartbeats (e.g. laptop sleep/wake).
 - `stty sane` run after disconnect to restore terminal state after abnormal disconnects.
 
+## Known Issues
+
+- **~300s interactive agent delay** — Claude Code and Codex interactive sessions hang ~290s between every API round-trip inside the sandbox. Root cause: the L7 proxy creates zombie CONNECT tunnels that block the agent's event loop until a 300s internal timeout fires. `--print` (non-interactive) mode is unaffected. No workaround found yet. See `debug-slowness/` for full investigation, evidence, and filed issues ([OpenShell #759](https://github.com/NVIDIA/OpenShell/issues/759)).
+
 ## Gotchas
 
 - **Policy `binaries` field** — every `network_policies` entry must have `binaries` or OPA silently denies all traffic.
