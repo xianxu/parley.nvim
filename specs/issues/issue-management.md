@@ -3,7 +3,9 @@
 Repo-local issue tracking with single-file-per-issue markdown format, designed for agentic coding workflows.
 
 ## File Format
-Each issue is `{issues_dir}/NNNN-slug.md` with YAML frontmatter (`status`, `deps`, `github_issue`, `created`, `updated`) and markdown sections (title, done-when, plan checklist, log).
+Each issue is `{issues_dir}/NNNNNN-slug.md` with YAML frontmatter (`id`, `status`, `deps`, `github_issue`, `created`, `updated`) and markdown sections (title, done-when, plan checklist, log).
+
+IDs are sequential integers (e.g., `000066`, `000067`). Sub-ticket IDs must NOT use letter suffixes (e.g., `000065a` is wrong). Always allocate the next available integer ID.
 
 Status lifecycle: `open` -> `working` -> `blocked` -> `done` | `wontfix`.
 
