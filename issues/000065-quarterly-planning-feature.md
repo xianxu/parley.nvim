@@ -58,14 +58,14 @@ Design: `design/2026-04-03.22-21-53.719.md`
 
 | ID | Title | Deps | Status |
 |----|-------|------|--------|
-| #66 | Time parsing, month sizes, capacity | #65 | open |
-| #67 | Overlay filesystem loader | #66 | open |
-| #68 | Quarterly charge calculation | #66 | open |
-| #69 | DOT export with completion visualization | #66, #68 | open |
-| #70 | Allocation report export | #68 | open |
-| #71 | Validation updates | #66 | open |
-| #72 | Specs and sample data | #69, #70 | open |
-| #73 | Typeahead completion updates | #67 | open |
+| [#66](./000066-time-and-size-parsing.md) | Time parsing, month sizes, capacity | #65 | open |
+| [#67](./000067-overlay-filesystem.md) | Overlay filesystem loader | #66 | open |
+| [#68](./000068-quarterly-charge-calculation.md) | Quarterly charge calculation | #66 | open |
+| [#69](./000069-dot-export-completion-visualization.md) | DOT export with completion visualization | #66, #68 | open |
+| [#70](./000070-allocation-report.md) | Allocation report export | #68 | open |
+| [#71](./000071-validation-updates.md) | Validation updates | #66 | open |
+| [#72](./000072-specs-and-sample-data.md) | Specs and sample data | #69, #70 | open |
+| [#73](./000073-typeahead-completion.md) | Typeahead completion updates | #67 | open |
 
 ## Plan
 
