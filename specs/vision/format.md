@@ -51,10 +51,32 @@ Additional fields are preserved but not semantically interpreted.
 
 ## Typeahead Completion
 
-When editing `depends_on` list lines in vision YAML files, typeahead completion auto-triggers as you type:
+Auto-triggers as you type in vision YAML files. nvim-cmp is disabled for vision buffers.
 
-- Local projects shown as bare names (e.g., `auth-service-rewrite`)
-- Cross-namespace projects shown as `ns: name` (e.g., `sync: data-platform`)
-- Supports multi-prefix filtering with `...` (e.g., `some ... 1`)
-- Typing `sync:` narrows to only projects from `sync.yaml`
-- Menu is non-blocking (`noinsert,noselect`) — keep typing to narrow, `<C-y>` to accept
+### `depends_on` list items
+
+Two-level navigation:
+
+1. **Default view** — bare local project names + namespace prefixes as entry points:
+   ```
+   mobile-app-v2            Mobile App v2
+   self-serve-onboarding    Self-Serve Onboarding
+   px:                      local namespace
+   sync:                    sync.yaml
+   ```
+2. **After typing a namespace prefix** (e.g., `sync:`) — expands to that namespace's projects:
+   ```
+   sync: data-platform          Data Platform
+   sync: auth-service-rewrite   Auth Service Rewrite
+   ```
+3. **Backspace** to remove prefix reverts to the default view.
+
+Supports multi-prefix filtering with `...` (e.g., `some ... 1`).
+
+### `type`, `size`, `need_by` fields
+
+- `type` — `tech`, `business`, plus custom types seen in data
+- `size` — `S`, `M`, `L`, `XL`
+- `need_by` — existing `need_by` values from data, sorted
+
+Menu is non-blocking (`noinsert,noselect`) — keep typing to narrow, `<C-y>` to accept.
