@@ -387,6 +387,7 @@ local config = {
 	global_shortcut_issue_next = { modes = { "n", "i" }, shortcut = "<C-y>x" },
 	global_shortcut_issue_status = { modes = { "n" }, shortcut = "<C-y>s" },
 	global_shortcut_issue_decompose = { modes = { "n" }, shortcut = "<C-y>i" },
+	global_shortcut_issue_goto = { modes = { "n" }, shortcut = "<C-y>g" },
 	issue_finder_mappings = {
 		delete = { modes = { "n", "i", "v", "x" }, shortcut = "<C-d>" },
 		cycle_status = { modes = { "n", "i", "v", "x" }, shortcut = "<C-s>" },

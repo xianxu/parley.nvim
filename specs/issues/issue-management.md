@@ -14,7 +14,13 @@ Status lifecycle: `open` -> `working` -> `blocked` -> `done` | `wontfix`.
 - `:ParleyIssueFinder` (`<C-y>f`): float picker with status badges and view mode cycling (active/all/all+history)
 - `:ParleyIssueNext` (`<C-y>x`): open next runnable issue (oldest open with all deps done)
 - `:ParleyIssueStatus` (`<C-y>s`): cycle frontmatter status
-- `:ParleyIssueDecompose` (`<C-y>i`): create child issue from plan line, add to parent deps
+- `:ParleyIssueDecompose` (`<C-y>i`): create child issue from plan line, add to parent deps, and write a markdown link `[issue NNNNNN](./NNNNNN-slug.md)` into the parent's plan line; the new child file gets a `Parent: [issue PPPPPP](./PPPPPP-...md)` backlink under its title
+- `:ParleyIssueGoto` (`<C-y>g`): follow a markdown link `[...](./NNNNNN-*.md)` under the cursor to the linked issue; if there is no link under the cursor, jump to the current issue's parent (derived from `deps`). Use `<C-o>` to return.
+
+## Parent/Child Links
+- `deps` is the canonical machine-readable representation of parent→child (an issue's `deps` lists the IDs of its children).
+- Cross-issue references inserted by parley use **standard markdown links** (`[issue NNNNNN](./NNNNNN-slug.md)`, path relative to the file containing the link), so they render correctly in any markdown viewer and are followable by `:ParleyIssueGoto`.
+- Child→parent navigation is derived from `deps` at scan time, not from the body backlink, so issues decomposed before this feature was added still navigate correctly.
 
 ## Archival
 Done issues moved to `history/` by `make push` or `make merge`. GitHub issues auto-closed. History is low-signal — agents should avoid reading it unless directed.

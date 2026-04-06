@@ -218,6 +218,57 @@ M.topo_sort = function(issues)
     return sorted
 end
 
+-- Find a markdown link [text](url) whose span contains the 1-indexed cursor column.
+-- Returns { text, url, start_col, end_col } or nil. Pure function (no vim deps).
+M.parse_md_link_at_cursor = function(line, col)
+    if not line or not col then
+        return nil
+    end
+    local init = 1
+    while true do
+        local s, e, text, url = line:find("%[([^%]]*)%]%(([^)]+)%)", init)
+        if not s then
+            return nil
+        end
+        if col >= s and col <= e then
+            return { text = text, url = url, start_col = s, end_col = e }
+        end
+        init = e + 1
+    end
+end
+
+-- Resolve a markdown link (as returned by parse_md_link_at_cursor) to an
+-- absolute path, given the directory of the file the link lives in. Returns
+-- the resolved path string, or nil if the link's url is not a .md file.
+-- Pure function (no vim deps); the caller is responsible for normalization
+-- (e.g. vim.fn.simplify) and existence checks (e.g. filereadable).
+M.resolve_link_target = function(link, cur_dir)
+    if not link or not link.url or not link.url:match("%.md$") then
+        return nil
+    end
+    local url = link.url
+    if url:sub(1, 1) == "/" then
+        return url
+    end
+    return (cur_dir or "") .. "/" .. url
+end
+
+-- Find the parent of an issue: the first issue whose deps contains child_id.
+-- Returns the parent issue table or nil. Pure function.
+M.find_parent = function(issues, child_id)
+    if not child_id or not issues then
+        return nil
+    end
+    for _, issue in ipairs(issues) do
+        for _, dep in ipairs(issue.deps or {}) do
+            if dep == child_id then
+                return issue
+            end
+        end
+    end
+    return nil
+end
+
 -- Format deps list back to YAML string
 M.format_deps = function(deps)
     if not deps or #deps == 0 then
@@ -561,6 +612,9 @@ M.cmd_issue_decompose = function()
 
     vim.fn.mkdir(issues_dir, "p")
     local child_id = M.next_issue_id(issues_dir)
+    local child_slug = M.slugify(task_text)
+    local child_filename = child_id .. "-" .. child_slug .. ".md"
+    local child_filepath = issues_dir .. "/" .. child_filename
 
     -- Get current issue's frontmatter to add child as dependency
     local parent_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
@@ -572,24 +626,80 @@ M.cmd_issue_decompose = function()
         M.write_updated(buf)
     end
 
-    -- Update the plan line to reference the child issue
-    local updated_line = line:gsub("(.+)$", "%1 → issue " .. child_id)
+    -- Update the parent's plan line: append a markdown link to the child
+    local child_link = string.format("[issue %s](./%s)", child_id, child_filename)
+    local updated_line = line .. " → " .. child_link
     vim.api.nvim_buf_set_lines(buf, line_nr - 1, line_nr, false, { updated_line })
 
     -- Save parent buffer before switching
     vim.cmd("write")
 
+    -- Build a Parent: backlink for the child body (markdown link to the parent file)
+    local parent_filename = vim.fn.expand("%:t")
+    local parent_id = parent_fm and parent_fm.id or (parent_filename:match("^(%d+)%-"))
+    local parent_link_line = ""
+    if parent_id and parent_filename and parent_filename ~= "" then
+        parent_link_line = string.format("\n\nParent: [issue %s](./%s)", parent_id, parent_filename)
+    end
+
     -- Create the child issue
-    local child_slug = M.slugify(task_text)
-    local child_filename = child_id .. "-" .. child_slug .. ".md"
-    local child_filepath = issues_dir .. "/" .. child_filename
     local date = os.date("%Y-%m-%d")
-    local content = ISSUE_TEMPLATE:gsub("{{title}}", task_text):gsub("{{date}}", date)
+    local title_replacement = task_text .. parent_link_line
+    local content = ISSUE_TEMPLATE
+        :gsub("{{id}}", child_id)
+        :gsub("{{title}}", function() return title_replacement end)
+        :gsub("{{date}}", date)
     local lines = vim.split(content, "\n", { plain = true })
     vim.fn.writefile(lines, child_filepath)
 
     vim.cmd("edit " .. vim.fn.fnameescape(child_filepath))
     _parley.logger.info("Decomposed into issue " .. child_id .. ": " .. task_text)
+end
+
+-- Goto a linked issue. If the cursor is on a markdown link to a .md file,
+-- open it (resolved relative to the current buffer's directory). Otherwise,
+-- treat the current buffer as a child issue and jump to its parent (the first
+-- issue whose deps contains the current issue's id).
+M.cmd_issue_goto = function()
+    local line = vim.api.nvim_get_current_line()
+    local col = vim.api.nvim_win_get_cursor(0)[2] + 1 -- 1-indexed
+
+    -- 1) Markdown link under cursor
+    local link = M.parse_md_link_at_cursor(line, col)
+    local target = M.resolve_link_target(link, vim.fn.expand("%:p:h"))
+    if target then
+        target = vim.fn.simplify(target)
+        if vim.fn.filereadable(target) == 1 then
+            vim.cmd("edit " .. vim.fn.fnameescape(target))
+            return
+        end
+        _parley.logger.warning("Issue link target not found: " .. target)
+        return
+    end
+
+    -- 2) Fall back to parent of current issue
+    local current_file = vim.fn.expand("%:t")
+    local current_id = current_file and current_file:match("^(%d+)%-")
+    if not current_id then
+        _parley.logger.warning("No issue link under cursor and current buffer is not an issue")
+        return
+    end
+
+    local issues_dir = M.get_issues_dir()
+    if not issues_dir then
+        _parley.logger.warning("issues_dir is not configured")
+        return
+    end
+
+    local issues = M.scan_issues(issues_dir, { include_history = true })
+    local parent = M.find_parent(issues, current_id)
+    if not parent then
+        _parley.logger.warning("No parent issue found for " .. current_id)
+        return
+    end
+
+    vim.cmd("edit " .. vim.fn.fnameescape(parent.path))
+    _parley.logger.info("Parent issue: " .. parent.id .. " " .. (parent.title or ""))
 end
 
 return M

@@ -145,7 +145,11 @@ fi
 _git_diff_base() {
     local base
     base=$(git_diff_base)
-    git diff "$base"..HEAD "$@" 2>/dev/null || true
+    # No "..HEAD" — include uncommitted working-tree changes so pre-merge
+    # checks can review work-in-progress, not just committed history.
+    # (parallel-checks.sh:measure_diff already counts the working tree;
+    # this keeps the prompt context consistent with that count.)
+    git diff "$base" "$@" 2>/dev/null || true
 }
 
 git_diff_context()        { _git_diff_base -- ':!issues/' ':!history/'; }

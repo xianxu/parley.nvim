@@ -680,6 +680,7 @@ M.setup = function(opts)
 	register_issue_shortcut("global_shortcut_issue_next", "Open Next Runnable Issue", function() M.cmd.IssueNext() end)
 	register_issue_shortcut("global_shortcut_issue_status", "Cycle Issue Status", function() M.cmd.IssueStatus() end)
 	register_issue_shortcut("global_shortcut_issue_decompose", "Decompose Issue", function() M.cmd.IssueDecompose() end)
+	register_issue_shortcut("global_shortcut_issue_goto", "Goto Linked Issue", function() M.cmd.IssueGoto() end)
 
 	-- Set up global keymaps for vision tracker
 	register_issue_shortcut("global_shortcut_vision_validate", "Vision Validate", function() M.cmd.VisionValidate() end)
@@ -1353,6 +1354,10 @@ local function keybinding_help_lines(context)
 		add(
 			resolve_shortcut("Decompose Issue", shortcut_modes(cfg.global_shortcut_issue_decompose, { "n" }), cfg.global_shortcut_issue_decompose, "<C-y>i", current_buf),
 			"Decompose issue"
+		)
+		add(
+			resolve_shortcut("Goto Linked Issue", shortcut_modes(cfg.global_shortcut_issue_goto, { "n" }), cfg.global_shortcut_issue_goto, "<C-y>g", current_buf),
+			"Goto linked issue (markdown link / parent)"
 		)
 	end
 
@@ -3739,6 +3744,7 @@ M.cmd.IssueFinder = function(opts) issue_finder_mod.open(opts) end
 M.cmd.IssueNext = function() issues_mod.cmd_issue_next() end
 M.cmd.IssueStatus = function() issues_mod.cmd_issue_status() end
 M.cmd.IssueDecompose = function() issues_mod.cmd_issue_decompose() end
+M.cmd.IssueGoto = function() issues_mod.cmd_issue_goto() end
 
 -- Vision tracker commands
 M.cmd.VisionValidate = function() vision_mod.cmd_validate() end

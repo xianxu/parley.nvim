@@ -409,3 +409,121 @@ describe("format_deps", function()
         assert.equals("[]", issues.format_deps(nil))
     end)
 end)
+
+--------------------------------------------------------------------------------
+-- parse_md_link_at_cursor
+--------------------------------------------------------------------------------
+
+describe("parse_md_link_at_cursor", function()
+    it("returns the link when cursor is inside it", function()
+        local line = "see [issue 000067](./000067-foo.md) for details"
+        local link = issues.parse_md_link_at_cursor(line, 10)
+        assert.is_not_nil(link)
+        assert.equals("issue 000067", link.text)
+        assert.equals("./000067-foo.md", link.url)
+    end)
+
+    it("returns nil when cursor is outside any link", function()
+        local line = "see [issue 000067](./000067-foo.md) for details"
+        assert.is_nil(issues.parse_md_link_at_cursor(line, 40))
+    end)
+
+    it("picks the link under the cursor when there are multiple", function()
+        local line = "[a](./a.md) and [b](./b.md)"
+        local first = issues.parse_md_link_at_cursor(line, 2)
+        assert.equals("./a.md", first.url)
+        local second = issues.parse_md_link_at_cursor(line, 18)
+        assert.equals("./b.md", second.url)
+    end)
+
+    it("matches a link at the very start of the line", function()
+        local line = "[issue 000001](./000001-foo.md)"
+        local link = issues.parse_md_link_at_cursor(line, 1)
+        assert.is_not_nil(link)
+        assert.equals("./000001-foo.md", link.url)
+    end)
+
+    it("returns nil for nil inputs", function()
+        assert.is_nil(issues.parse_md_link_at_cursor(nil, 1))
+        assert.is_nil(issues.parse_md_link_at_cursor("[a](b)", nil))
+    end)
+end)
+
+--------------------------------------------------------------------------------
+-- resolve_link_target
+--------------------------------------------------------------------------------
+
+describe("resolve_link_target", function()
+    it("joins a relative .md link against cur_dir", function()
+        local link = { url = "./000067-foo.md" }
+        assert.equals("/repo/issues/./000067-foo.md", issues.resolve_link_target(link, "/repo/issues"))
+    end)
+
+    it("returns an absolute .md link unchanged", function()
+        local link = { url = "/abs/path/000067-foo.md" }
+        assert.equals("/abs/path/000067-foo.md", issues.resolve_link_target(link, "/repo/issues"))
+    end)
+
+    it("joins a bare relative .md link (no ./ prefix)", function()
+        local link = { url = "000067-foo.md" }
+        assert.equals("/repo/issues/000067-foo.md", issues.resolve_link_target(link, "/repo/issues"))
+    end)
+
+    it("returns nil when link url is not a .md file", function()
+        assert.is_nil(issues.resolve_link_target({ url = "https://example.com" }, "/repo/issues"))
+        assert.is_nil(issues.resolve_link_target({ url = "./other.txt" }, "/repo/issues"))
+    end)
+
+    it("returns nil when link is nil", function()
+        assert.is_nil(issues.resolve_link_target(nil, "/repo/issues"))
+    end)
+
+    it("returns nil when link has no url field", function()
+        assert.is_nil(issues.resolve_link_target({}, "/repo/issues"))
+    end)
+end)
+
+--------------------------------------------------------------------------------
+-- find_parent
+--------------------------------------------------------------------------------
+
+describe("find_parent", function()
+    it("finds the issue whose deps contains child_id", function()
+        local list = {
+            { id = "000010", deps = {} },
+            { id = "000011", deps = { "000020", "000021" } },
+            { id = "000012", deps = { "000022" } },
+        }
+        local parent = issues.find_parent(list, "000021")
+        assert.is_not_nil(parent)
+        assert.equals("000011", parent.id)
+    end)
+
+    it("returns nil when no parent exists", function()
+        local list = {
+            { id = "000010", deps = {} },
+            { id = "000011", deps = { "000020" } },
+        }
+        assert.is_nil(issues.find_parent(list, "000099"))
+    end)
+
+    it("returns the first matching parent deterministically", function()
+        local list = {
+            { id = "000010", deps = { "000050" } },
+            { id = "000011", deps = { "000050" } },
+        }
+        local parent = issues.find_parent(list, "000050")
+        assert.equals("000010", parent.id)
+    end)
+
+    it("handles nil inputs gracefully", function()
+        assert.is_nil(issues.find_parent(nil, "000001"))
+        assert.is_nil(issues.find_parent({}, nil))
+    end)
+
+    it("tolerates issues with missing deps field", function()
+        local list = { { id = "000010" }, { id = "000011", deps = { "000020" } } }
+        local parent = issues.find_parent(list, "000020")
+        assert.equals("000011", parent.id)
+    end)
+end)
