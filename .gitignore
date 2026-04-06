@@ -9,3 +9,4 @@ tasks/*
 .constitution-check-state
 COMPARE-SHA
 .openshell/.bootstrap/
+vision

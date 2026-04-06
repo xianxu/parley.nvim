@@ -22,6 +22,7 @@ cat >> "$HOME/.bashrc" << 'BASHEOF'
 export PATH="$HOME/.luarocks/bin:$HOME/.local/bin:$PATH"
 export EDITOR="nvim"
 export VISUAL="nvim"
+unset LC_ALL
 
 # Vi mode
 set -o vi
