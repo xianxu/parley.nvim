@@ -41,6 +41,7 @@ This index provides a central directory for all specifications of the `parley.nv
 - [Syntax Highlighting](ui/highlights.md): Highlighting groups and rules.
 
 ## 7. Infrastructure & Security
+- [Repo Mode](infra/repo_mode.md): Marker-file detection for parley-enabled repos with auto-created local directories.
 - [Configuration System](infra/config.md): Settings and merging logic.
 - [Vault (Secret Management)](infra/vault.md): Secret retrieval and storage.
 - [Logging System](infra/logging.md): Logging and inspection tools.

@@ -252,13 +252,18 @@ M.get_issues_dir = function()
     return git_root .. "/" .. issues_dir
 end
 
--- Resolve the history directory (sibling to issues_dir at git root)
+-- Resolve the history directory (repo-local, relative to git root)
 M.get_history_dir = function()
+    local history_dir = _parley.config.history_dir or "history"
+    if history_dir:sub(1, 1) == "/" then
+        return history_dir
+    end
+
     local git_root = _parley.helpers.find_git_root(vim.fn.getcwd())
     if git_root == "" then
         git_root = vim.fn.getcwd()
     end
-    return git_root .. "/history"
+    return git_root .. "/" .. history_dir
 end
 
 -- Scan a directory for max issue ID (4-digit prefix pattern)

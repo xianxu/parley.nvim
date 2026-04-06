@@ -351,11 +351,65 @@ M.setup = function(opts)
 		M.config[k] = v
 	end
 
+	-- Detect parley-enabled repo via marker file and set up repo-local directories
+	-- Skip if user explicitly set chat_dir in opts (e.g. tests)
+	local function apply_repo_local()
+		if opts.chat_dir then return end
+
+		local marker = M.config.repo_marker
+		if not marker then return end
+
+		local git_root = M.helpers.find_git_root(vim.fn.getcwd())
+		if git_root == "" then return end
+
+		local marker_path = git_root .. "/" .. marker
+		if vim.fn.filereadable(marker_path) ~= 1 then return end
+
+		M.config.repo_root = git_root
+
+		-- Ensure repo-local directories exist
+		local repo_dirs = { M.config.repo_chat_dir, M.config.issues_dir, M.config.vision_dir, M.config.history_dir }
+		for _, dir in ipairs(repo_dirs) do
+			if dir and dir ~= "" and not dir:match("^/") then
+				M.helpers.prepare_dir(git_root .. "/" .. dir, "repo")
+			end
+		end
+
+		-- Prepend repo chat dir as primary, demoting global chat_dir to extra
+		if M.config.repo_chat_dir and M.config.repo_chat_dir ~= "" then
+			local repo_chat = git_root .. "/" .. M.config.repo_chat_dir
+			local old_dir = M.config.chat_dir
+			local old_dirs = M.config.chat_dirs
+
+			M.config.chat_dir = repo_chat
+			-- Preserve existing dirs as extras
+			local extras = {}
+			if type(old_dirs) == "table" and #old_dirs > 0 then
+				extras = vim.deepcopy(old_dirs)
+			end
+			if old_dir and old_dir ~= repo_chat then
+				table.insert(extras, 1, old_dir)
+			end
+			M.config.chat_dirs = extras
+			M.config.chat_roots = {}
+		end
+
+		-- Disable chat memory and memory prefs for repo-local chats
+		if type(M.config.chat_memory) == "table" then
+			M.config.chat_memory.enable = false
+		end
+		if type(M.config.memory_prefs) == "table" then
+			M.config.memory_prefs.enable = false
+		end
+	end
+	apply_repo_local()
+
 	apply_chat_roots(normalize_chat_roots(M.config.chat_dir, M.config.chat_dirs, M.config.chat_roots))
 
-	-- make sure _dirs exists
+	-- make sure _dirs exists (skip repo_chat_dir — it's a relative name resolved in apply_repo_local)
+	local skip_prepare = { chat_dir = true, repo_chat_dir = true }
 	for k, v in pairs(M.config) do
-		if k ~= "chat_dir" and k:match("_dir$") and type(v) == "string" then
+		if not skip_prepare[k] and k:match("_dir$") and type(v) == "string" then
 			M.config[k] = M.helpers.prepare_dir(v, k)
 		end
 	end
@@ -959,6 +1013,28 @@ M.refresh_state = function(update)
 	else
 		M._state.chat_roots = vim.deepcopy(M.get_chat_roots())
 		M._state.chat_dirs = vim.deepcopy(M.get_chat_dirs())
+	end
+
+	-- In repo mode, ensure repo chat dir is the primary root (overrides persisted state)
+	if M.config.repo_root and M.config.repo_chat_dir then
+		local repo_chat = M.config.repo_root .. "/" .. M.config.repo_chat_dir
+		local resolved_repo = vim.fn.resolve(vim.fn.expand(repo_chat)):gsub("/+$", "")
+		local current_roots = M.get_chat_roots()
+		local already_primary = #current_roots > 0
+			and vim.fn.resolve(vim.fn.expand(current_roots[1].dir)):gsub("/+$", "") == resolved_repo
+
+		if not already_primary then
+			-- Remove repo_chat from extras if present, then prepend as primary
+			local new_roots = { { dir = repo_chat, label = "repo" } }
+			for _, root in ipairs(current_roots) do
+				if vim.fn.resolve(vim.fn.expand(root.dir)):gsub("/+$", "") ~= resolved_repo then
+					table.insert(new_roots, root)
+				end
+			end
+			apply_chat_roots(new_roots)
+			M._state.chat_roots = vim.deepcopy(M.get_chat_roots())
+			M._state.chat_dirs = vim.deepcopy(M.get_chat_dirs())
+		end
 	end
 
 	if not M._state.agent or not M.agents[M._state.agent] then

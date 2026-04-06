@@ -364,8 +364,14 @@ local config = {
 		months = 3,
 		presets = { 3, 6, 12 },
 	},
+	-- repo-local parley detection (marker file in git root enables repo mode)
+	repo_marker = ".parley",
+	-- chat dir within repo when repo mode is active (relative to git root)
+	repo_chat_dir = "design",
 	-- issue management (repo-local, relative to git root)
 	issues_dir = "issues",
+	-- issue history (repo-local, relative to git root)
+	history_dir = "history",
 	-- vision tracker (repo-local, relative to git root)
 	vision_dir = "vision",
 	-- global shortcuts for vision tracker
