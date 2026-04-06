@@ -20,7 +20,6 @@ Two entity types: **projects** and **persons**.
   capacity: 11w
 
 - project: Auth Service Rewrite
-  type: tech
   size: 3m
   start_by: 25Q2
   need_by: 25Q4
@@ -47,7 +46,6 @@ Inline list syntax `depends_on: [auth, data]` is also supported.
 | Field | Description |
 |-------|-------------|
 | `project` | Human-readable project name (required) |
-| `type` | Category: `tech`, `business`, or any custom string |
 | `size` | Month duration (`3m`, `0.5m`) or T-shirt (`S`=1m, `M`=3m, `L`=6m, `XL`=12m) |
 | `start_by` | Structured time: `25Q2` (quarter) or `25M6` (month) |
 | `need_by` | Structured time: `25Q4` or `25M12` |
@@ -91,9 +89,8 @@ Two-level navigation:
 
 Supports multi-prefix filtering with `...` (e.g., `some ... 1`).
 
-### `type`, `size`, `start_by`, `need_by` fields
+### `size`, `start_by`, `need_by` fields
 
-- `type` — `tech`, `business`, plus custom types seen in data
 - `size` — `S`, `M`, `L`, `XL`, or month values like `3m`
 - `start_by` / `need_by` — existing values from data, sorted
 

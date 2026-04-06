@@ -25,7 +25,6 @@ describe("parse_vision_yaml", function()
     it("parses a single item", function()
         local text = [[
 - project: Auth Service
-  type: tech
   size: S
   need_by: Q3
   depends_on: []
@@ -33,7 +32,6 @@ describe("parse_vision_yaml", function()
         local items = vision.parse_vision_yaml(text)
         assert.equals(1, #items)
         assert.equals("Auth Service", items[1].project)
-        assert.equals("tech", items[1].type)
         assert.equals("S", items[1].size)
         assert.equals("Q3", items[1].need_by)
         assert.same({}, items[1].depends_on)
@@ -42,13 +40,11 @@ describe("parse_vision_yaml", function()
     it("parses multiple items", function()
         local text = [[
 - project: Auth Service
-  type: tech
   size: S
   need_by: Q3
   depends_on: []
 
 - project: Data Platform
-  type: tech
   size: XL
   need_by: Q3-Q4
   depends_on: [auth]
@@ -96,7 +92,6 @@ describe("parse_vision_yaml", function()
         local text = [[
 # This is a comment
 - project: Auth Service
-  type: tech
   # inline comment
   size: S
 ]]
@@ -571,21 +566,21 @@ end)
 describe("export_csv", function()
     it("exports header and rows", function()
         local items = {
-            { project = "Auth", _namespace = "sync", type = "tech", size = "S",
+            { project = "Auth", _namespace = "sync", size = "S",
               need_by = "Q3", depends_on = {} },
-            { project = "Data", _namespace = "sync", type = "tech", size = "XL",
+            { project = "Data", _namespace = "sync", size = "XL",
               need_by = "Q3-Q4", depends_on = { "auth" } },
         }
         local csv = vision.export_csv(items)
         local lines = vim.split(csv, "\n")
-        assert.equals("namespace,project,type,size,need_by,depends_on", lines[1])
-        assert.equals("sync,Auth,tech,S,Q3,", lines[2])
-        assert.equals("sync,Data,tech,XL,Q3-Q4,auth", lines[3])
+        assert.equals("namespace,project,size,need_by,depends_on", lines[1])
+        assert.equals("sync,Auth,S,Q3,", lines[2])
+        assert.equals("sync,Data,XL,Q3-Q4,auth", lines[3])
     end)
 
     it("escapes commas in values", function()
         local items = {
-            { project = "A, B", _namespace = "ns", type = "", size = "", need_by = "",
+            { project = "A, B", _namespace = "ns", size = "", need_by = "",
               depends_on = {} },
         }
         local csv = vision.export_csv(items)
@@ -595,7 +590,7 @@ describe("export_csv", function()
 
     it("handles multiple deps", function()
         local items = {
-            { project = "X", _namespace = "ns", type = "", size = "", need_by = "",
+            { project = "X", _namespace = "ns", size = "", need_by = "",
               depends_on = { "a", "b", "c" } },
         }
         local csv = vision.export_csv(items)
@@ -610,9 +605,9 @@ end)
 describe("export_dot", function()
     it("generates valid DOT", function()
         local items = {
-            { project = "Auth", _namespace = "sync", type = "tech", size = "S",
+            { project = "Auth", _namespace = "sync", size = "S",
               need_by = "25Q3", depends_on = {} },
-            { project = "Data", _namespace = "sync", type = "tech", size = "XL",
+            { project = "Data", _namespace = "sync", size = "XL",
               need_by = "25Q4", depends_on = { "auth" } },
         }
         local dot, errors = vision.export_dot(items)
@@ -626,7 +621,7 @@ describe("export_dot", function()
     it("maps size to node width with linear month scaling", function()
         -- XL=12m → width = 1.5 + 12*0.4 = 6.3
         local items = {
-            { project = "Big", _namespace = "ns", type = "tech", size = "XL",
+            { project = "Big", _namespace = "ns", size = "XL",
               need_by = "", depends_on = {} },
         }
         local dot = vision.export_dot(items)
@@ -636,7 +631,7 @@ describe("export_dot", function()
     it("maps month size to node width", function()
         -- 3m → width = 1.5 + 3*0.4 = 2.7
         local items = {
-            { project = "Med", _namespace = "ns", type = "tech", size = "3m",
+            { project = "Med", _namespace = "ns", size = "3m",
               need_by = "", depends_on = {} },
         }
         local dot = vision.export_dot(items)
@@ -646,7 +641,7 @@ describe("export_dot", function()
     it("maps namespace to color scheme via setting", function()
         local items = {
             { setting = true, color = "color2", _namespace = "ns" },
-            { project = "Biz", _namespace = "ns", type = "business", size = "M",
+            { project = "Biz", _namespace = "ns", size = "M",
               need_by = "", depends_on = {} },
         }
         local dot = vision.export_dot(items)
@@ -655,7 +650,7 @@ describe("export_dot", function()
 
     it("uses default color scheme when no setting", function()
         local items = {
-            { project = "Auth", _namespace = "ns", type = "tech", size = "S",
+            { project = "Auth", _namespace = "ns", size = "S",
               need_by = "", depends_on = {} },
         }
         local dot = vision.export_dot(items)
@@ -673,11 +668,11 @@ describe("export_dot", function()
 
     it("filters subgraph by root", function()
         local items = {
-            { project = "A", _namespace = "ns", type = "tech", size = "S",
+            { project = "A", _namespace = "ns", size = "S",
               need_by = "", depends_on = {} },
-            { project = "B", _namespace = "ns", type = "tech", size = "M",
+            { project = "B", _namespace = "ns", size = "M",
               need_by = "", depends_on = { "a" } },
-            { project = "C", _namespace = "ns", type = "tech", size = "L",
+            { project = "C", _namespace = "ns", size = "L",
               need_by = "", depends_on = {} },
         }
         local dot = vision.export_dot(items, { root = "ns:b" })
@@ -688,7 +683,7 @@ describe("export_dot", function()
 
     it("shows completion in label", function()
         local items = {
-            { project = "Auth", _namespace = "ns", type = "tech", size = "3m",
+            { project = "Auth", _namespace = "ns", size = "3m",
               need_by = "25Q3", completion = "33", depends_on = {} },
         }
         local dot = vision.export_dot(items)
@@ -698,7 +693,7 @@ describe("export_dot", function()
 
     it("uses striped fill for partial completion", function()
         local items = {
-            { project = "Auth", _namespace = "ns", type = "tech", size = "3m",
+            { project = "Auth", _namespace = "ns", size = "3m",
               need_by = "25Q3", completion = "50", depends_on = {} },
         }
         local dot = vision.export_dot(items)
@@ -709,7 +704,7 @@ describe("export_dot", function()
 
     it("uses solid fill for 0% completion", function()
         local items = {
-            { project = "Auth", _namespace = "ns", type = "tech", size = "3m",
+            { project = "Auth", _namespace = "ns", size = "3m",
               need_by = "25Q3", depends_on = {} },
         }
         local dot = vision.export_dot(items)
@@ -719,9 +714,9 @@ describe("export_dot", function()
 
     it("filters by quarter", function()
         local items = {
-            { project = "Active", _namespace = "ns", type = "tech", size = "3m",
+            { project = "Active", _namespace = "ns", size = "3m",
               start_by = "25Q3", need_by = "25Q3", depends_on = {} },
-            { project = "Future", _namespace = "ns", type = "tech", size = "3m",
+            { project = "Future", _namespace = "ns", size = "3m",
               start_by = "26Q1", need_by = "26Q2", depends_on = {} },
         }
         local dot = vision.export_dot(items, { quarter = "25Q3" })
@@ -732,7 +727,7 @@ describe("export_dot", function()
     it("skips person entries in DOT", function()
         local items = {
             { person = "Alice", capacity = "11w", _namespace = "ns" },
-            { project = "Auth", _namespace = "ns", type = "tech", size = "S",
+            { project = "Auth", _namespace = "ns", size = "S",
               need_by = "", depends_on = {} },
         }
         local dot = vision.export_dot(items)

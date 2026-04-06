@@ -2,7 +2,7 @@
 
 ## CSV Export
 
-Generates a CSV spreadsheet with columns: `namespace, project, type, size, need_by, depends_on`.
+Generates a CSV spreadsheet with columns: `namespace, project, size, need_by, depends_on`.
 
 - `depends_on` values joined with `; ` separator
 - CSV-escapes fields containing commas or quotes
@@ -14,7 +14,7 @@ Generates a CSV spreadsheet with columns: `namespace, project, type, size, need_
 Generates Graphviz DOT format for dependency visualization.
 
 - Node width scales linearly with size in months (1.5 + months × 0.4 inches); T-shirt sizes use legacy fixed widths as fallback
-- Completion shown as striped fill (done color / base color ratio) — tech=blue, business=orange
+- Completion shown as striped fill (done color / base color ratio); colors come from each namespace's color scheme
 - Label includes size in months and completion percentage when > 0%
 - Edges follow `depends_on` relationships
 - Optional `--root=node` filters to subgraph (ancestors + descendants)

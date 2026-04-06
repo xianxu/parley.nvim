@@ -71,7 +71,6 @@ end
 --
 -- Expected format:
 --   - project: Some Initiative
---     type: tech
 --     size: XL
 --     depends_on: [auth, data]
 --
@@ -1118,17 +1117,16 @@ end
 -- Export initiatives to CSV format. Returns the CSV string.
 M.export_csv = function(initiatives)
     local lines = {}
-    table.insert(lines, "namespace,project,type,size,need_by,depends_on")
+    table.insert(lines, "namespace,project,size,need_by,depends_on")
 
     for _, item in ipairs(initiatives) do
         local deps = item.depends_on or {}
         if type(deps) == "string" then deps = { deps } end
         local deps_str = table.concat(deps, "; ")
 
-        table.insert(lines, string.format("%s,%s,%s,%s,%s,%s",
+        table.insert(lines, string.format("%s,%s,%s,%s,%s",
             csv_escape(item._namespace or ""),
             csv_escape(item.project or ""),
-            csv_escape(str(item.type)),
             csv_escape(str(item.size)),
             csv_escape(str(item.need_by)),
             csv_escape(deps_str)))
@@ -1690,7 +1688,6 @@ M.cmd_new = function()
     local template = {
         "",
         "- project: New Project",
-        "  type: tech",
         "  size: M",
         "  need_by: ",
         "  depends_on: []",
@@ -1836,28 +1833,6 @@ end
 -- Completable fields and their candidate sources.
 -- Each returns a list of {word, menu} tables.
 local completion_sources = {}
-
--- type: tech, business, or values seen in existing data
-completion_sources.type = function()
-    local items = load_all()
-    if not items then return {} end
-    local seen = {}
-    local candidates = {}
-    -- Always include built-in types
-    for _, t in ipairs({ "tech", "business" }) do
-        seen[t] = true
-        table.insert(candidates, { word = t })
-    end
-    -- Add any custom types from data
-    for _, item in ipairs(items) do
-        local t = str(item.type)
-        if t ~= "" and not seen[t] then
-            seen[t] = true
-            table.insert(candidates, { word = t })
-        end
-    end
-    return candidates
-end
 
 -- size: month sizes + T-shirt sizes
 completion_sources.size = function()
