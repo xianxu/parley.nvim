@@ -1,6 +1,6 @@
 ---
 id: 000070
-status: open
+status: done
 deps: [68]
 created: 2026-04-05
 updated: 2026-04-05
@@ -35,9 +35,10 @@ Balance: -0.7w ⚠ over-committed (3%)
 
 ## Plan
 
-- [ ] Add `export_allocation_report` pure function
-- [ ] Add `cmd_export_allocation` IO command
-- [ ] Unit tests
+- [x] Add `export_allocation_report` pure function
+- [x] Add `cmd_export_allocation` IO command (scratch buffer output)
+- [x] Updated `cmd_export_dot` to accept `--quarter=` flag
+- [x] Unit tests (4 tests)
 
 ## Files
 
@@ -45,3 +46,8 @@ Balance: -0.7w ⚠ over-committed (3%)
 - `tests/unit/vision_spec.lua`
 
 ## Log
+
+### 2026-04-05
+- Report shows per-namespace: persons+capacity, projects+demand, balance with warning
+- cmd_export_allocation: --quarter=25Q3 flag, auto-detects from quarterly folders
+- cmd_export_dot: added --quarter= flag for quarterly filtering

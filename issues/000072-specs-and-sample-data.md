@@ -1,6 +1,6 @@
 ---
 id: 000072
-status: open
+status: done
 deps: [69, 70]
 created: 2026-04-05
 updated: 2026-04-05
@@ -18,14 +18,17 @@ Update specs to reflect new schema and restructure sample data into quarter fold
 
 ## Plan
 
-- [ ] Update `specs/vision/format.md`
-- [ ] Update `specs/vision/exports.md`
-- [ ] Restructure `vision/` into `vision/25Q2/` and `vision/25Q3/` with persons
+- [x] Update `specs/vision/format.md` (already current with new schema)
+- [x] Update `specs/vision/exports.md` (added allocation report section)
+- [ ] Restructure `vision/` sample data into quarter folders (deferred — user's live data)
 
 ## Files
 
 - `specs/vision/format.md`
 - `specs/vision/exports.md`
-- `vision/`
 
 ## Log
+
+### 2026-04-05
+- Specs were preemptively updated during design phase
+- Added allocation report section to exports spec

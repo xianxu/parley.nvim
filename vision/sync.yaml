@@ -1,4 +1,7 @@
-- project: Auth Service Rewrite
+- setting:
+  color: color2
+
+- project: Auth Service Rewrite for onprem
   type: tech
   size: S
   need_by: 24Q3

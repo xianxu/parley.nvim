@@ -14,7 +14,7 @@ Design: `design/2026-04-03.22-21-53.719.md`
 
 ## Done when
 
-- Person entities parseable from YAML with `capacity: 11w`
+- Person entities parseable from YAML as `- person: Name` with `capacity: 11w`
 - Quarter folders with file-level overlay work (`vision/25Q3/` over `vision/25Q2/`)
 - Quarterly charge calculated from size, completion, start_by, need_by
 - DOT export shows completion fill and linear month sizing
@@ -37,49 +37,48 @@ Design: `design/2026-04-03.22-21-53.719.md`
 ## YAML Schema
 
 ```yaml
-- person:
-    name: Alice Chen
-    capacity: 11w
+- person: Alice Chen
+  capacity: 11w
 
-- project:
-    name: ehr-sync-v2
-    type: tech
-    size: 6m
-    start_by: 25Q2
-    need_by: 25Q4
-    completion: 33
-    description: "Bi-directional patient sync via CDC + FHIR adapters"
-    link: "https://notion.so/ehr-sync"
-    depends_on:
-      - api-gateway
+- project: EHR Sync V2
+  type: tech
+  size: 6m
+  start_by: 25Q2
+  need_by: 25Q4
+  completion: 33
+  description: "Bi-directional patient sync via CDC + FHIR adapters"
+  link: "https://notion.so/ehr-sync"
+  depends_on:
+    - api-gateway
 ```
 
 ## Sub-tickets
 
 | ID | Title | Deps | Status |
 |----|-------|------|--------|
-| [#66](./000066-time-and-size-parsing.md) | Time parsing, month sizes, capacity | #65 | open |
-| [#67](./000067-overlay-filesystem.md) | Overlay filesystem loader | #66 | open |
-| [#68](./000068-quarterly-charge-calculation.md) | Quarterly charge calculation | #66 | open |
-| [#69](./000069-dot-export-completion-visualization.md) | DOT export with completion visualization | #66, #68 | open |
-| [#70](./000070-allocation-report.md) | Allocation report export | #68 | open |
-| [#71](./000071-validation-updates.md) | Validation updates | #66 | open |
-| [#72](./000072-specs-and-sample-data.md) | Specs and sample data | #69, #70 | open |
-| [#73](./000073-typeahead-completion.md) | Typeahead completion updates | #67 | open |
+| [#66](./000066-time-and-size-parsing.md) | Time parsing, month sizes, capacity | #65 | done |
+| [#67](./000067-overlay-filesystem.md) | Overlay filesystem loader | #66 | done |
+| [#68](./000068-quarterly-charge-calculation.md) | Quarterly charge calculation | #66 | done |
+| [#69](./000069-dot-export-completion-visualization.md) | DOT export with completion visualization | #66, #68 | done |
+| [#70](./000070-allocation-report.md) | Allocation report export | #68 | done |
+| [#71](./000071-validation-updates.md) | Validation updates | #66 | done |
+| [#72](./000072-specs-and-sample-data.md) | Specs and sample data | #69, #70 | done |
+| [#73](./000073-typeahead-completion.md) | Typeahead completion updates | #67 | done |
 
 ## Plan
 
-- [ ] #66: time/size/capacity parsing
-- [ ] #67: overlay filesystem
-- [ ] #68: quarterly charge
-- [ ] #69: DOT export
-- [ ] #70: allocation report
-- [ ] #71: validation
-- [ ] #72: specs + sample data
-- [ ] #73: typeahead
+- [x] #66: time/size/capacity parsing
+- [x] #67: overlay filesystem
+- [x] #68: quarterly charge
+- [x] #69: DOT export
+- [x] #70: allocation report
+- [x] #71: validation
+- [x] #72: specs + sample data
+- [x] #73: typeahead
 
 ## Log
 
 ### 2026-04-05
 
 - Created issue from design doc `design/2026-04-03.22-21-53.719.md`
+- Implemented all 8 sub-tickets. All tests pass (0 failures). Lint clean (no new warnings)

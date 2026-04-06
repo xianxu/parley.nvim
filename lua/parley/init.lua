@@ -634,6 +634,7 @@ M.setup = function(opts)
 	register_issue_shortcut("global_shortcut_vision_new", "Vision New Project", function() M.cmd.VisionNew() end)
 	register_issue_shortcut("global_shortcut_vision_goto", "Vision Goto Ref", function() M.cmd.VisionGoto() end)
 	register_issue_shortcut("global_shortcut_vision_finder", "Vision Finder", function() M.cmd.VisionShow() end)
+	register_issue_shortcut("global_shortcut_vision_allocation", "Vision Allocation", function() M.cmd.VisionAllocation({}) end)
 
 	-- Set up typeahead completion for vision YAML files
 	vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, {
@@ -3670,6 +3671,7 @@ M.cmd.VisionExportDot = function(params) vision_mod.cmd_export_dot(params) end
 M.cmd.VisionNew = function() vision_mod.cmd_new() end
 M.cmd.VisionGoto = function() vision_mod.cmd_goto_ref() end
 M.cmd.VisionShow = function() vision_finder_mod.open() end
+M.cmd.VisionAllocation = function(params) vision_mod.cmd_export_allocation(params) end
 
 -- Memory preferences command
 M.cmd.MemoryPrefs = function() memory_prefs.generate() end

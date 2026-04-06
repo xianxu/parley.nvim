@@ -1,6 +1,6 @@
 ---
 id: 000071
-status: open
+status: done
 deps: [66]
 created: 2026-04-05
 updated: 2026-04-05
@@ -22,11 +22,12 @@ Extend `validate_graph()` for new schema fields and person entities.
 
 ## Plan
 
-- [ ] Skip person entries in project validation
-- [ ] Add time field format validation
-- [ ] Add person field validation
-- [ ] Add completion/size validation
-- [ ] Unit tests
+- [x] Skip person entries in project validation
+- [x] Add time field format validation (start_by, need_by)
+- [x] Add person field validation (name, capacity format)
+- [x] Add completion/size validation
+- [x] Warn when need_by < start_by
+- [x] Unit tests (10 new tests)
 
 ## Files
 
@@ -34,3 +35,7 @@ Extend `validate_graph()` for new schema fields and person entities.
 - `tests/unit/vision_spec.lua`
 
 ## Log
+
+### 2026-04-05
+- Updated existing test data from old free-form need_by to structured format
+- Person entries skip project validation, get own name+capacity checks

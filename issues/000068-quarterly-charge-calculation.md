@@ -1,6 +1,6 @@
 ---
 id: 000068
-status: open
+status: done
 deps: [66]
 created: 2026-04-05
 updated: 2026-04-05
@@ -27,9 +27,9 @@ Calculate how much effort a project charges to a given planning range, accountin
 
 ## Plan
 
-- [ ] Add `quarterly_charge` pure function
-- [ ] Add `allocation_summary` pure function
-- [ ] Unit tests with edge cases
+- [x] Add `quarterly_charge` pure function
+- [x] Add `allocation_summary` pure function
+- [x] Unit tests with edge cases (12 tests)
 
 ## Files
 
@@ -37,3 +37,7 @@ Calculate how much effort a project charges to a given planning range, accountin
 - `tests/unit/vision_spec.lua`
 
 ## Log
+
+### 2026-04-05
+- quarterly_charge handles: completion, overdue, pre-start, defaults, T-shirt compat
+- allocation_summary groups by namespace, separates persons/projects

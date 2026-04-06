@@ -26,15 +26,17 @@ M.open = function()
 
     local initiatives = vision_mod.load_vision_dir(dir)
 
-    -- Build picker items
+    -- Build picker items (projects only — skip persons and settings)
     local items = {}
     for _, item in ipairs(initiatives) do
+        if not item.project or item.project == "" then goto continue end
         local size_str = item.size and ("[" .. item.size .. "]") or ""
         local type_str = item.type or ""
         local need_by_str = type(item.need_by) == "string" and item.need_by or ""
         local ns = item._namespace or ""
+        local clean_name = vision_mod.parse_priority(item.project or "?")
         local display = string.format("%s  %s  %s  %s  %s",
-            ns, item.project or "?", size_str, type_str, need_by_str)
+            ns, clean_name, size_str, type_str, need_by_str)
 
         local deps = item.depends_on or {}
         if type(deps) == "table" then deps = table.concat(deps, " ") end
@@ -42,11 +44,12 @@ M.open = function()
         table.insert(items, {
             display = display,
             search_text = string.format("%s %s %s %s %s %s",
-                ns, item.project or "", item.type or "", item.size or "",
+                ns, clean_name, item.type or "", item.size or "",
                 type(item.need_by) == "string" and item.need_by or "", deps),
             value = item._file,
             line = item._line,
         })
+        ::continue::
     end
 
     local source_win = vim.api.nvim_get_current_win()

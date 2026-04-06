@@ -4,39 +4,57 @@
 
 The vision tracker uses a directory of YAML files to track company initiatives. Each file represents a namespace (e.g., `sync.yaml` → namespace `sync`), and contains a list of initiatives.
 
+## Directory Layout
+
+Two modes, auto-detected:
+
+- **Flat mode**: `vision/*.yaml` files in a single directory (original behavior)
+- **Quarterly mode**: `vision/25Q1/`, `vision/25Q2/`, etc. subdirectories. Each quarter folder contains YAML files. The latest quarter overlays on the previous — files with the same name in the current quarter override the base quarter's version. New files in the current quarter are added.
+
 ## File Format
 
+Two entity types: **projects** and **persons**.
+
 ```yaml
-# Each file is a list of initiative maps
+- person: Alice Chen
+  capacity: 11w
+
 - project: Auth Service Rewrite
   type: tech
-  size: S
-  need_by: Q3
+  size: 3m
+  start_by: 25Q2
+  need_by: 25Q4
+  completion: 33
+  description: "Bi-directional sync"
+  link: "https://notion.so/auth"
   depends_on:
-
-- project: Data Platform
-  type: tech
-  size: XL
-  need_by: Q3-Q4
-  depends_on:
-    - auth
+    - data-platform
 ```
 
 Inline list syntax `depends_on: [auth, data]` is also supported.
 
 ## Fields
 
-All fields are strings. No strict typing — evolved incrementally.
+### Person fields
+
+| Field | Description |
+|-------|-------------|
+| `person` | Person name (required) |
+| `capacity` | Available capacity, e.g. `11w` (weeks) |
+
+### Project fields
 
 | Field | Description |
 |-------|-------------|
 | `project` | Human-readable project name (required) |
 | `type` | Category: `tech`, `business`, or any custom string |
-| `size` | T-shirt size: `S`, `M`, `L`, `XL` (used for graph node sizing) |
-| `need_by` | Timing, free-form string (e.g., `Q3`, `Q3-Q4`, `late Q3`) |
+| `size` | Month duration (`3m`, `0.5m`) or T-shirt (`S`=1m, `M`=3m, `L`=6m, `XL`=12m) |
+| `start_by` | Structured time: `25Q2` (quarter) or `25M6` (month) |
+| `need_by` | Structured time: `25Q4` or `25M12` |
+| `completion` | Percent complete, 0-100 |
 | `depends_on` | List of ID references (multiline or inline) |
 
-Additional fields are preserved but not semantically interpreted.
+Additional fields (`description`, `link`, etc.) are preserved but not semantically interpreted.
 
 ## ID Resolution
 
@@ -73,10 +91,10 @@ Two-level navigation:
 
 Supports multi-prefix filtering with `...` (e.g., `some ... 1`).
 
-### `type`, `size`, `need_by` fields
+### `type`, `size`, `start_by`, `need_by` fields
 
 - `type` — `tech`, `business`, plus custom types seen in data
-- `size` — `S`, `M`, `L`, `XL`
-- `need_by` — existing `need_by` values from data, sorted
+- `size` — `S`, `M`, `L`, `XL`, or month values like `3m`
+- `start_by` / `need_by` — existing values from data, sorted
 
 Menu is non-blocking (`noinsert,noselect`) — keep typing to narrow, `<C-y>` to accept.

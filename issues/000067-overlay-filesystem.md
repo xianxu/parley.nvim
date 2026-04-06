@@ -1,6 +1,6 @@
 ---
 id: 000067
-status: open
+status: done
 deps: [66]
 created: 2026-04-05
 updated: 2026-04-05
@@ -26,11 +26,11 @@ Support quarter folders (`vision/25Q2/`, `vision/25Q3/`) with file-level overlay
 
 ## Plan
 
-- [ ] Add `overlay_files` pure function
-- [ ] Add `discover_quarters` IO function
-- [ ] Add `load_vision_quarterly` IO function
-- [ ] Update `load_all()` for auto-detection
-- [ ] Unit tests for overlay merging
+- [x] Add `overlay_files` pure function
+- [x] Add `discover_quarters` IO function
+- [x] Add `load_vision_quarterly` IO function
+- [x] Update `load_all()` for auto-detection (returns quarter as 3rd value)
+- [x] Unit tests for overlay merging (6 tests)
 
 ## Files
 
@@ -38,3 +38,9 @@ Support quarter folders (`vision/25Q2/`, `vision/25Q3/`) with file-level overlay
 - `tests/unit/vision_spec.lua`
 
 ## Log
+
+### 2026-04-05
+- overlay_files: file-level merge, sorted by filename, current overrides base
+- discover_quarters: finds YYQ[1-4] subdirs, sorted
+- load_vision_quarterly: loads base quarter, overlays current
+- load_all: auto-detects quarterly vs flat mode, defaults to latest quarter

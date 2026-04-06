@@ -31,6 +31,17 @@ local function str(val)
     return ""
 end
 
+-- Strip trailing ! from a project name and return (clean_name, priority).
+-- "EHR Sync V2!!" → ("EHR Sync V2", 2), "Auth" → ("Auth", 0)
+M.parse_priority = function(name)
+    if not name or name == "" then return name, 0 end
+    local base, bangs = name:match("^(.-)(!+)%s*$")
+    if base then
+        return trim(base), #bangs
+    end
+    return name, 0
+end
+
 -- Parse an inline YAML list: "[a, b, c]" → {"a", "b", "c"}, "[]" → {}
 local function parse_inline_list(value)
     local inner = value:match("^%[(.*)%]$")
@@ -87,6 +98,7 @@ M.parse_vision_yaml = function(text)
             list_key = key
         else
             current[key] = val
+            current["_" .. key .. "_line"] = ln
             list_key = nil
         end
     end
@@ -129,6 +141,440 @@ M.parse_vision_yaml = function(text)
     end
 
     return items
+end
+
+--------------------------------------------------------------------------------
+-- Time & Size Parsing
+--------------------------------------------------------------------------------
+
+local QUARTER_START_MONTH = { 1, 4, 7, 10 }  -- Q1=1, Q2=4, Q3=7, Q4=10
+local TSHIRT_TO_MONTHS = { S = 1, M = 3, L = 6, XL = 12 }
+local WEEKS_PER_MONTH = 4.33
+
+-- Parse a time string: "25Q3" → {year=25, q=3}, "25M11" → {year=25, m=11}
+-- Returns nil on invalid input.
+M.parse_time = function(s)
+    if not s or s == "" then return nil end
+    s = trim(s)
+    local y, q = s:match("^(%d+)Q(%d)$")
+    if y and q then
+        q = tonumber(q)
+        if q >= 1 and q <= 4 then
+            return { year = tonumber(y), q = q }
+        end
+        return nil
+    end
+    local y2, m = s:match("^(%d+)M(%d+)$")
+    if y2 and m then
+        m = tonumber(m)
+        if m >= 1 and m <= 12 then
+            return { year = tonumber(y2), m = m }
+        end
+        return nil
+    end
+    return nil
+end
+
+-- Convert a parsed time to absolute months for comparison.
+-- Quarter → first month of that quarter.
+M.time_to_months = function(t)
+    if not t then return nil end
+    if t.q then
+        return t.year * 12 + QUARTER_START_MONTH[t.q]
+    elseif t.m then
+        return t.year * 12 + t.m
+    end
+    return nil
+end
+
+-- Return the number of quarters between two parsed times (inclusive of both endpoints).
+-- Fractional quarters are rounded up.
+M.quarters_between = function(t1, t2)
+    if not t1 or not t2 then return nil end
+    local m1 = M.time_to_months(t1)
+    local m2 = M.time_to_months(t2)
+    if not m1 or not m2 then return nil end
+    if m2 < m1 then return 0 end
+    return math.ceil((m2 - m1 + 1) / 3)
+end
+
+-- Parse a size string to months. Accepts "3m" or T-shirt sizes.
+-- Returns nil on invalid input.
+M.parse_size_months = function(s)
+    if not s or s == "" then return nil end
+    s = trim(s)
+    -- T-shirt sizes
+    if TSHIRT_TO_MONTHS[s] then
+        return TSHIRT_TO_MONTHS[s]
+    end
+    -- Month format: "3m", "6m", "0.5m"
+    local n = s:match("^([%d%.]+)m$")
+    if n then
+        local num = tonumber(n)
+        if num and num > 0 then return num end
+    end
+    return nil
+end
+
+-- Parse a capacity string to weeks. Accepts "11w".
+-- Returns nil on invalid input.
+M.parse_capacity_weeks = function(s)
+    if not s or s == "" then return nil end
+    s = trim(s)
+    local n = s:match("^([%d%.]+)w$")
+    if n then
+        local num = tonumber(n)
+        if num and num > 0 then return num end
+    end
+    return nil
+end
+
+-- Expose constants for tests and other modules
+M.WEEKS_PER_MONTH = WEEKS_PER_MONTH
+M.TSHIRT_TO_MONTHS = TSHIRT_TO_MONTHS
+
+--------------------------------------------------------------------------------
+-- Quarterly Charge Calculation
+--------------------------------------------------------------------------------
+
+-- Calculate how many months of effort a project charges to a given quarter range.
+-- project: table with size, completion, start_by, need_by fields
+-- range_start, range_end: parsed time tables (from parse_time)
+-- Returns months charged (number).
+M.quarterly_charge = function(project, range_start, range_end)
+    if not project or not range_start or not range_end then return 0 end
+
+    local size = M.parse_size_months(str(project.size))
+    if not size then return 0 end
+
+    local completion = tonumber(project.completion) or 0
+    local remaining = size * (1 - completion / 100)
+    if remaining <= 0 then return 0 end
+
+    local rs = M.time_to_months(range_start)
+    local re = M.time_to_months(range_end)
+
+    -- Parse start_by / need_by, defaulting to range boundaries
+    local sb = project.start_by and M.parse_time(str(project.start_by)) or range_start
+    local nb = project.need_by and M.parse_time(str(project.need_by)) or range_end
+    local sb_m = M.time_to_months(sb) or rs
+    local nb_m = M.time_to_months(nb) or re
+
+    -- Project hasn't started yet and won't start until after range
+    if sb_m > re then return 0 end
+
+    -- Overdue: need_by is before range_start, charge full remaining
+    if nb_m < rs then return remaining end
+
+    -- Quarters the project spans
+    local total_q = M.quarters_between(sb, nb)
+    if not total_q or total_q <= 0 then total_q = 1 end
+
+    -- Quarters of that span that overlap with the range
+    local overlap_start = math.max(sb_m, rs)
+    local overlap_end = math.min(nb_m, re)
+    if overlap_end < overlap_start then return 0 end
+
+    local overlap_q = math.ceil((overlap_end - overlap_start + 1) / 3)
+    if overlap_q <= 0 then overlap_q = 1 end
+
+    return remaining * overlap_q / total_q
+end
+
+-- Build an allocation summary: per-namespace capacity vs demand.
+-- items: list of parsed YAML items (projects + persons)
+-- range_start, range_end: parsed time tables
+-- Returns table: { [namespace] = { capacity_weeks, persons, projects, demand_weeks } }
+M.allocation_summary = function(items, range_start, range_end)
+    if not items then return {} end
+
+    local by_ns = {}
+    local function ensure_ns(ns)
+        if not by_ns[ns] then
+            by_ns[ns] = {
+                capacity_weeks = 0,
+                persons = {},
+                projects = {},
+                demand_weeks = 0,
+            }
+        end
+    end
+
+    for _, item in ipairs(items) do
+        local ns = item._namespace or ""
+        if item.person and item.person ~= "" then
+            ensure_ns(ns)
+            local cap = M.parse_capacity_weeks(str(item.capacity)) or 0
+            by_ns[ns].capacity_weeks = by_ns[ns].capacity_weeks + cap
+            table.insert(by_ns[ns].persons, {
+                name = item.person,
+                capacity_weeks = cap,
+            })
+        elseif item.project and item.project ~= "" then
+            ensure_ns(ns)
+            local charge_months = M.quarterly_charge(item, range_start, range_end)
+            local charge_weeks = charge_months * WEEKS_PER_MONTH
+            by_ns[ns].demand_weeks = by_ns[ns].demand_weeks + charge_weeks
+            local clean_proj_name = M.parse_priority(item.project)
+            table.insert(by_ns[ns].projects, {
+                name = clean_proj_name,
+                charge_months = charge_months,
+                charge_weeks = charge_weeks,
+                completion = tonumber(item.completion) or 0,
+                size = str(item.size),
+            })
+        end
+    end
+
+    return by_ns
+end
+
+--------------------------------------------------------------------------------
+-- Capacity-Aware Projection
+--------------------------------------------------------------------------------
+
+-- Topological sort of project full IDs within a namespace.
+-- adj: full_id → list of full_ids it depends on (from validate_graph)
+-- ns_ids: list of full_ids in this namespace
+-- Returns sorted list (dependencies first).
+local function topo_sort_ns(ns_ids, adj)
+    local id_set = {}
+    for _, fid in ipairs(ns_ids) do id_set[fid] = true end
+
+    local WHITE, GRAY, BLACK = 0, 1, 2
+    local color = {}
+    for _, fid in ipairs(ns_ids) do color[fid] = WHITE end
+
+    local sorted = {}
+    local function dfs(node)
+        color[node] = GRAY
+        for _, dep in ipairs(adj[node] or {}) do
+            -- Only follow deps within this namespace
+            if id_set[dep] and color[dep] == WHITE then
+                dfs(dep)
+            end
+        end
+        color[node] = BLACK
+        table.insert(sorted, node)  -- append: deps finish first, come first
+    end
+
+    for _, fid in ipairs(ns_ids) do
+        if color[fid] == WHITE then dfs(fid) end
+    end
+    return sorted
+end
+
+-- Compute projected end-of-quarter completion for each project.
+-- items: parsed YAML items (projects + persons)
+-- quarter: string like "25Q3"
+-- Returns: { [full_id] = { current, achievable, planned } }
+-- Requires valid graph (no cycles). Returns empty on validation errors.
+M.project_projections = function(items, quarter)
+    if not items or not quarter then return {} end
+
+    local range_start = M.parse_time(quarter)
+    if not range_start then return {} end
+
+    -- Validate to get adjacency
+    local errors, all_ids, adj = M.validate_graph(items)
+    if #errors > 0 then return {} end
+
+    -- Build lookup
+    local by_id = {}
+    for _, item in ipairs(items) do
+        if item.project and item.project ~= "" then
+            local fid = M.full_id(item._namespace or "", item.project)
+            by_id[fid] = item
+        end
+    end
+
+    -- Group projects by namespace, collect capacity
+    local ns_ids = {}      -- namespace → list of fids
+    local ns_capacity = {} -- namespace → total weeks
+    for _, item in ipairs(items) do
+        local ns = item._namespace or ""
+        if item.person and item.person ~= "" then
+            ns_capacity[ns] = (ns_capacity[ns] or 0) + (M.parse_capacity_weeks(str(item.capacity)) or 0)
+        elseif item.project and item.project ~= "" then
+            local fid = M.full_id(ns, item.project)
+            if not ns_ids[ns] then ns_ids[ns] = {} end
+            table.insert(ns_ids[ns], fid)
+        end
+    end
+
+    local projections = {}
+
+    for ns, ids in pairs(ns_ids) do
+        local remaining_capacity = ns_capacity[ns] or 0
+        local topo = topo_sort_ns(ids, adj)
+
+        -- Build own priority from project name
+        local own_priority = {}
+        for _, fid in ipairs(topo) do
+            local item = by_id[fid]
+            if item then
+                local _, prio = M.parse_priority(item.project or "")
+                own_priority[fid] = prio
+            else
+                own_priority[fid] = 0
+            end
+        end
+
+        -- Propagate priority: if B depends on A, A inherits max(A's priority, B's priority)
+        -- Walk in reverse topo order (dependents before their deps)
+        local effective_priority = {}
+        for _, fid in ipairs(topo) do
+            effective_priority[fid] = own_priority[fid]
+        end
+        for i = #topo, 1, -1 do
+            local fid = topo[i]
+            for _, dep in ipairs(adj[fid] or {}) do
+                if effective_priority[dep] then
+                    effective_priority[dep] = math.max(
+                        effective_priority[dep], effective_priority[fid])
+                end
+            end
+        end
+
+        -- Sort by: effective priority descending, then topo order within same priority
+        -- Assign topo index for stable sort
+        local topo_idx = {}
+        for i, fid in ipairs(topo) do topo_idx[fid] = i end
+
+        local scheduled = {}
+        for _, fid in ipairs(topo) do table.insert(scheduled, fid) end
+        table.sort(scheduled, function(a, b)
+            local pa, pb = effective_priority[a], effective_priority[b]
+            if pa ~= pb then return pa > pb end
+            return topo_idx[a] < topo_idx[b]
+        end)
+
+        -- Allocate capacity in scheduled order
+        for _, fid in ipairs(scheduled) do
+            local item = by_id[fid]
+            if item then
+                local current = tonumber(item.completion) or 0
+                local size_months = M.parse_size_months(str(item.size))
+                local charge_months = M.quarterly_charge(item, range_start, range_start)
+                local charge_weeks = charge_months * WEEKS_PER_MONTH
+
+                -- Planned completion if fully funded
+                local planned = current
+                if size_months and size_months > 0 and charge_months > 0 then
+                    planned = math.min(100, current + (charge_months / size_months) * 100)
+                end
+
+                -- How much can we actually fund?
+                local achievable = current
+                if charge_weeks > 0 and size_months and size_months > 0 then
+                    local funded_weeks = math.min(charge_weeks, remaining_capacity)
+                    local funded_months = funded_weeks / WEEKS_PER_MONTH
+                    achievable = math.min(100, current + (funded_months / size_months) * 100)
+                    remaining_capacity = remaining_capacity - funded_weeks
+                    if remaining_capacity < 0 then remaining_capacity = 0 end
+                end
+
+                projections[fid] = {
+                    current = current,
+                    achievable = math.floor(achievable + 0.5),
+                    planned = math.floor(planned + 0.5),
+                }
+            end
+        end
+    end
+
+    return projections
+end
+
+-- Format an allocation report for a quarter.
+-- items: parsed YAML items, quarter: string like "25Q3"
+-- Returns formatted text string.
+M.export_allocation_report = function(items, quarter)
+    if not items or not quarter then return "" end
+
+    local range_start = M.parse_time(quarter)
+    if not range_start then return "" end
+
+    local summary = M.allocation_summary(items, range_start, range_start)
+    local proj = M.project_projections(items, quarter)
+
+    local out = {}
+    local namespaces = {}
+    for ns in pairs(summary) do
+        table.insert(namespaces, ns)
+    end
+    table.sort(namespaces)
+
+    for _, ns in ipairs(namespaces) do
+        local data = summary[ns]
+        table.insert(out, string.format("## %s — %s", ns, quarter))
+        table.insert(out, "")
+
+        -- Team capacity
+        table.insert(out, string.format("**Team capacity: %.1fw** (%d persons)", data.capacity_weeks, #data.persons))
+        table.insert(out, "")
+        if #data.persons > 0 then
+            table.insert(out, "| Person | Capacity |")
+            table.insert(out, "|--------|----------|")
+            for _, p in ipairs(data.persons) do
+                table.insert(out, string.format("| %s | %gw |", p.name, p.capacity_weeks))
+            end
+            table.insert(out, "")
+        end
+
+        -- Project demand
+        table.insert(out, string.format("**Project demand: %.1fw**", data.demand_weeks))
+        table.insert(out, "")
+        local has_projects = false
+        for _, p in ipairs(data.projects) do
+            if p.charge_weeks > 0 then has_projects = true; break end
+        end
+        if has_projects then
+            table.insert(out, "| Project | Charged | Projection | Details |")
+            table.insert(out, "|---------|---------|------------|---------|")
+            for _, p in ipairs(data.projects) do
+                if p.charge_weeks > 0 then
+                    local fid = M.full_id(ns, p.name)
+                    local p_proj = proj[fid]
+                    local comp = p.completion
+                    local size_months = M.parse_size_months(p.size) or 0
+                    local planned = comp
+                    if size_months > 0 then
+                        planned = math.floor(math.min(100, comp + (p.charge_months / size_months) * 100) + 0.5)
+                    end
+                    local projection_str
+                    if p_proj and p_proj.achievable < planned then
+                        projection_str = string.format("%d%% → %d%% ⚠", comp, p_proj.achievable)
+                    else
+                        projection_str = string.format("%d%% → %d%%", comp, planned)
+                    end
+                    table.insert(out, string.format("| %s | %.1fw | %s | %.1fm charged, %d%% target |",
+                        p.name, p.charge_weeks, projection_str, p.charge_months, planned))
+                end
+            end
+            table.insert(out, "")
+        end
+
+        -- Balance
+        local balance = data.capacity_weeks - data.demand_weeks
+        if data.capacity_weeks > 0 then
+            local pct = math.abs(balance) / data.capacity_weeks * 100
+            if balance >= 0 then
+                table.insert(out, string.format("**Balance: +%.1fw** (%.0f%% slack)", balance, pct))
+            else
+                table.insert(out, string.format("**Balance: %.1fw** ⚠ over-committed (%.0f%%)", balance, pct))
+            end
+        else
+            if data.demand_weeks > 0 then
+                table.insert(out, string.format("**Balance: %.1fw** (no capacity assigned)", -data.demand_weeks))
+            else
+                table.insert(out, "**Balance: 0.0w**")
+            end
+        end
+        table.insert(out, "")
+    end
+
+    return table.concat(out, "\n")
 end
 
 --------------------------------------------------------------------------------
@@ -331,13 +777,17 @@ M.validate_graph = function(initiatives)
         })
     end
 
-    -- Build full ID list
+    -- Build full ID list (skip person entries)
     local all_ids = {}
     local id_set = {}
     for _, item in ipairs(initiatives) do
-        if not item.project or item.project == "" then
+        if item.person then
+            -- Person entry — validate separately below
+        elseif item.setting then
+            -- Setting entry — no validation needed
+        elseif not item.project or item.project == "" then
             add_error(string.format(
-                "item at line %d in %s is not a project",
+                "item at line %d in %s is not a project, person, or setting",
                 item._line or 0, item._namespace or "?"), item)
         else
             local fid = M.full_id(item._namespace or "", item.project)
@@ -349,6 +799,74 @@ M.validate_graph = function(initiatives)
                 table.insert(all_ids, fid)
                 id_set[fid] = true
             end
+        end
+    end
+
+    -- Validate person entries
+    for _, item in ipairs(initiatives) do
+        if item.person then
+            if item.person == "" then
+                add_error("person entry has no name", item)
+            end
+            if item.capacity then
+                if not M.parse_capacity_weeks(str(item.capacity)) then
+                    local cap_item = { _file = item._file, _line = item._capacity_line or item._line }
+                    add_error(string.format(
+                        'person "%s" has invalid capacity "%s" (expected e.g. "11w")',
+                        item.person or "?", str(item.capacity)), cap_item)
+                end
+            end
+        end
+    end
+
+    -- Validate project fields
+    for _, item in ipairs(initiatives) do
+        if item.project and item.project ~= "" then
+            -- Helper: error item pointing to a specific field's line
+            local function field_item(key)
+                return { _file = item._file, _line = item["_" .. key .. "_line"] or item._line }
+            end
+
+            -- Validate size
+            if item.size and str(item.size) ~= "" then
+                if not M.parse_size_months(str(item.size)) then
+                    add_error(string.format(
+                        '"%s" has invalid size "%s" (expected e.g. "3m" or S/M/L/XL)',
+                        item.project, str(item.size)), field_item("size"))
+                end
+            end
+
+            -- Validate completion
+            if item.completion then
+                local c = tonumber(item.completion)
+                if not c or c < 0 or c > 100 then
+                    add_error(string.format(
+                        '"%s" has invalid completion "%s" (expected 0-100)',
+                        item.project, tostring(item.completion)), field_item("completion"))
+                end
+            end
+
+            -- Validate start_by / need_by format: must be YYQ[1-4]
+            local sb = str(item.start_by)
+            local nb = str(item.need_by)
+            if sb ~= "" and not sb:match("^%d+Q[1-4]$") then
+                add_error(string.format(
+                    '"%s" has invalid start_by "%s" (expected YYQ[1-4], e.g. "25Q2")',
+                    item.project, sb), field_item("start_by"))
+            end
+            if nb ~= "" and not nb:match("^%d+Q[1-4]$") then
+                add_error(string.format(
+                    '"%s" has invalid need_by "%s" (expected YYQ[1-4], e.g. "25Q4")',
+                    item.project, nb), field_item("need_by"))
+            end
+
+            -- Warn if need_by < start_by (lexical order)
+            if sb ~= "" and nb ~= "" and nb < sb then
+                add_error(string.format(
+                    '"%s" need_by "%s" is before start_by "%s"',
+                    item.project, nb, sb), field_item("need_by"))
+            end
+
         end
     end
 
@@ -491,6 +1009,99 @@ M.load_vision_dir = function(dir)
 end
 
 --------------------------------------------------------------------------------
+-- Overlay Filesystem
+--------------------------------------------------------------------------------
+
+-- Merge two lists of file paths: current overrides base by filename.
+-- Pure function — operates on path strings, not filesystem.
+-- Returns merged list of paths, sorted by filename.
+M.overlay_files = function(base_files, current_files)
+    local by_name = {}
+    local names = {}
+    for _, f in ipairs(base_files or {}) do
+        local name = f:match("([^/]+)$")
+        if name and not by_name[name] then
+            table.insert(names, name)
+        end
+        by_name[name] = f
+    end
+    for _, f in ipairs(current_files or {}) do
+        local name = f:match("([^/]+)$")
+        if name and not by_name[name] then
+            table.insert(names, name)
+        end
+        by_name[name] = f  -- override base
+    end
+    table.sort(names)
+    local result = {}
+    for _, name in ipairs(names) do
+        table.insert(result, by_name[name])
+    end
+    return result
+end
+
+-- Discover quarter subdirectories in a vision dir.
+-- Returns sorted list of quarter folder names (e.g. {"25Q1", "25Q2", "25Q3"}).
+-- IO function — reads filesystem.
+M.discover_quarters = function(dir)
+    local quarters = {}
+    local entries = vim.fn.glob(dir .. "/*", false, true)
+    for _, entry in ipairs(entries) do
+        if vim.fn.isdirectory(entry) == 1 then
+            local name = entry:match("([^/]+)$")
+            if name and name:match("^%d+Q[1-4]$") then
+                table.insert(quarters, name)
+            end
+        end
+    end
+    table.sort(quarters)
+    return quarters
+end
+
+-- Load vision with quarterly overlay.
+-- Loads base (previous quarter) and overlays current quarter's files on top.
+-- IO function — reads filesystem.
+M.load_vision_quarterly = function(dir, quarter, quarters)
+    quarters = quarters or M.discover_quarters(dir)
+
+    -- Find previous quarter
+    local prev_quarter = nil
+    for i, q in ipairs(quarters) do
+        if q == quarter and i > 1 then
+            prev_quarter = quarters[i - 1]
+            break
+        end
+    end
+
+    local current_dir = dir .. "/" .. quarter
+    local current_files = vim.fn.glob(current_dir .. "/*.yaml", false, true)
+
+    local merged_files
+    if prev_quarter then
+        local base_dir = dir .. "/" .. prev_quarter
+        local base_files = vim.fn.glob(base_dir .. "/*.yaml", false, true)
+        merged_files = M.overlay_files(base_files, current_files)
+    else
+        table.sort(current_files)
+        merged_files = current_files
+    end
+
+    local items = {}
+    for _, filepath in ipairs(merged_files) do
+        local namespace = vim.fn.fnamemodify(filepath, ":t:r")
+        local lines = vim.fn.readfile(filepath)
+        local parsed = M.parse_vision_yaml(lines)
+        for _, item in ipairs(parsed) do
+            item._namespace = namespace
+            item._file = filepath
+            table.insert(items, item)
+        end
+    end
+
+    return items
+end
+
+--------------------------------------------------------------------------------
 -- CSV Export
 --------------------------------------------------------------------------------
 
@@ -531,7 +1142,25 @@ end
 --------------------------------------------------------------------------------
 
 local BASE_SIZE_MAP = { S = 1.0, M = 1.5, L = 2.2, XL = 3.0 }
-local COLOR_MAP = { tech = "#a0d8ef", business = "#ffe0b2" }
+
+-- Universal shortfall color — bright red, unmistakable, distinct from all schemes
+local SHORTFALL_COLOR = "#d32f2f"
+
+-- 10 named color schemes: { done, achievable, base }
+-- done = completed work, achievable = will complete this quarter, base = remaining
+M.COLOR_SCHEMES = {
+    color1  = { done = "#5b9bd5", achievable = "#89c4e8", base = "#a0d8ef" },  -- blue
+    color2  = { done = "#e6a23c", achievable = "#f0c06e", base = "#ffe0b2" },  -- orange
+    color3  = { done = "#6ab04c", achievable = "#8fd470", base = "#c8e6c9" },  -- green
+    color4  = { done = "#9b59b6", achievable = "#b87fd4", base = "#e1bee7" },  -- purple
+    color5  = { done = "#c0392b", achievable = "#e67e73", base = "#ffcdd2" },  -- crimson
+    color6  = { done = "#1abc9c", achievable = "#5dd4b8", base = "#b2dfdb" },  -- teal
+    color7  = { done = "#f39c12", achievable = "#f7bc52", base = "#fff3cd" },  -- gold
+    color8  = { done = "#3498db", achievable = "#6db8ea", base = "#bbdefb" },  -- sky
+    color9  = { done = "#e91e63", achievable = "#f06292", base = "#f8bbd0" },  -- pink
+    color10 = { done = "#607d8b", achievable = "#8fa4ad", base = "#cfd8dc" },  -- slate
+}
+local DEFAULT_SCHEME = M.COLOR_SCHEMES.color1
 local CHARS_PER_INCH = 7  -- approx characters per inch for wrapping decisions
 local SCALE_CHARS_PER_INCH = 4  -- conservative estimate for Graphviz box sizing
 
@@ -605,11 +1234,90 @@ local function collect_subgraph(root, adj, all_ids, direction)
     return visited
 end
 
+-- Compute node width from size: linear month scaling with T-shirt fallback.
+-- Returns width in inches.
+local function size_to_width(size_str)
+    local months = M.parse_size_months(size_str)
+    if months then
+        return 1.5 + months * 0.4
+    end
+    return BASE_SIZE_MAP[size_str] or 1.5
+end
+
+-- Resolve color scheme for a namespace from items.
+-- Looks for a setting entity with color: field in the namespace.
+local function resolve_ns_scheme(items)
+    local ns_scheme = {}
+    for _, item in ipairs(items) do
+        if item.setting and item.color then
+            local ns = item._namespace or ""
+            local scheme = M.COLOR_SCHEMES[str(item.color)]
+            if scheme then
+                ns_scheme[ns] = scheme
+            end
+        end
+    end
+    return ns_scheme
+end
+
+-- Build striped fill style for completion visualization.
+-- scheme: color scheme table {done, achievable, base}
+-- projection: optional {current, achievable, planned} from project_projections
+-- Returns style string and fillcolor string for DOT attributes.
+local function completion_fill(scheme, completion, projection)
+    scheme = scheme or DEFAULT_SCHEME
+    completion = tonumber(completion) or 0
+
+    -- 4-segment mode when projection data is available
+    if projection and projection.planned > completion then
+        local segments = {}
+        local cur = completion / 100
+        local ach = projection.achievable / 100
+        local pln = projection.planned / 100
+
+        if cur > 0 then
+            table.insert(segments, string.format("%s;%.2f", scheme.done, cur))
+        end
+        if ach > cur then
+            table.insert(segments, string.format("%s;%.2f", scheme.achievable, ach - cur))
+        end
+        if pln > ach then
+            table.insert(segments, string.format("%s;%.2f", SHORTFALL_COLOR, pln - ach))
+        end
+        if pln < 1 then
+            table.insert(segments, string.format("%s;%.2f", scheme.base, 1 - pln))
+        end
+
+        if #segments <= 1 then
+            local color = #segments == 1 and segments[1]:match("^([^;]+)") or scheme.base
+            return "filled", '"' .. color .. '"'
+        end
+        return "striped", '"' .. table.concat(segments, ":") .. '"'
+    end
+
+    -- Simple 2-segment mode (no projection)
+    if completion <= 0 then
+        return "filled", '"' .. scheme.base .. '"'
+    elseif completion >= 100 then
+        return "filled", '"' .. scheme.done .. '"'
+    else
+        local colors = string.format('"%s;%.2f:%s;%.2f"',
+            scheme.done, completion / 100,
+            scheme.base, 1 - completion / 100)
+        return "striped", colors
+    end
+end
+
 -- Export initiatives to Graphviz DOT format. Returns the DOT string.
 -- opts.root: optional root node ID for subgraph filtering
 -- opts.direction: "down" (default), "up", or "both"
+-- opts.quarter: optional quarter string for filtering (only non-zero charge projects)
+-- opts.range: optional {start, end} parsed time range for charge calculation
 M.export_dot = function(initiatives, opts)
     opts = opts or {}
+
+    -- Resolve namespace color schemes
+    local ns_scheme = resolve_ns_scheme(initiatives)
 
     -- First validate to get resolved adjacency
     local errors, all_ids, adj = M.validate_graph(initiatives)
@@ -626,6 +1334,28 @@ M.export_dot = function(initiatives, opts)
         end
     end
 
+    -- Quarterly filter and projections
+    local charge_filter = nil
+    local projections = nil
+    if opts.quarter then
+        local range_start = opts.range and opts.range[1] or M.parse_time(opts.quarter)
+        local range_end = opts.range and opts.range[2] or range_start
+        if range_start then
+            charge_filter = {}
+            for _, fid in ipairs(all_ids) do
+                local item = by_id[fid]
+                if item then
+                    local charge = M.quarterly_charge(item, range_start, range_end)
+                    if charge > 0 then
+                        charge_filter[fid] = true
+                    end
+                end
+            end
+        end
+        -- Compute capacity-aware projections
+        projections = M.project_projections(initiatives, opts.quarter)
+    end
+
     -- Determine which nodes to include
     local include
     if opts.root then
@@ -636,21 +1366,29 @@ M.export_dot = function(initiatives, opts)
         include = collect_subgraph(resolved_root, adj, all_ids, opts.direction or "both")
     end
 
+    local function is_included(fid)
+        if include and not include[fid] then return false end
+        if charge_filter and not charge_filter[fid] then return false end
+        return true
+    end
+
     -- Pass 1: compute global scale factor so all text fits in its size box
-    -- Wrap at CHARS_PER_INCH (generous), scale at SCALE_CHARS_PER_INCH (conservative)
     local scale = 1.0
     for _, fid in ipairs(all_ids) do
-        if not include or include[fid] then
+        if is_included(fid) then
             local item = by_id[fid]
             if item then
-                local base_w = BASE_SIZE_MAP[item.size] or 1.5
+                local base_w = size_to_width(str(item.size))
                 local wrap_chars = math.floor(base_w * CHARS_PER_INCH)
                 local fit_chars = math.floor(base_w * SCALE_CHARS_PER_INCH)
                 local ns_prefix = (item._namespace or ""):upper()
-                local name = ns_prefix .. ": " .. (item.project or fid)
+                local clean_name = M.parse_priority(item.project or fid)
+                local name = ns_prefix .. ": " .. clean_name
                 local _, longest_name = wrap_text(name, wrap_chars)
-                -- Also consider the metadata line: "[S] 25Q3"
-                local meta_len = 2 + #(item.size or "?") + 2 + #str(item.need_by)
+                local size_months = M.parse_size_months(str(item.size))
+                local size_label = size_months and string.format("%gm", size_months) or (item.size or "?")
+                local comp = tonumber(item.completion) or 0
+                local meta_len = #size_label + #str(item.need_by) + (comp > 0 and 6 or 0) + 4
                 local longest = math.max(longest_name, meta_len)
                 if longest > fit_chars then
                     local needed = longest / SCALE_CHARS_PER_INCH
@@ -665,38 +1403,59 @@ M.export_dot = function(initiatives, opts)
     local lines = {}
     table.insert(lines, 'digraph vision {')
     table.insert(lines, '    rankdir=TB;')
-    table.insert(lines, '    node [shape=box, style="filled,rounded", fixedsize=true];')
+    table.insert(lines, '    node [shape=box, style="filled", fixedsize=true];')
     table.insert(lines, '')
 
     -- Pass 2: precompute node data and heights
-    local size_order = { S = 1, M = 2, L = 3, XL = 4 }
     local nodes = {}
     for _, fid in ipairs(all_ids) do
-        if not include or include[fid] then
+        if is_included(fid) then
             local item = by_id[fid]
             if item then
-                local base_w = BASE_SIZE_MAP[item.size] or 1.5
+                local base_w = size_to_width(str(item.size))
                 local w = base_w * scale
-                local color = COLOR_MAP[item.type] or "#eeeeee"
                 local max_chars = math.floor(w * CHARS_PER_INCH)
                 local ns_prefix = (item._namespace or ""):upper()
-                local name = ns_prefix .. ": " .. (item.project or fid)
+                local clean_name = M.parse_priority(item.project or fid)
+                local name = ns_prefix .. ": " .. clean_name
                 local wrapped, _ = wrap_text(name, max_chars)
                 local wrapped_name = table.concat(wrapped, "\\n")
 
-                local label = string.format("%s\\n[%s] %s",
-                    wrapped_name,
-                    item.size or "?",
-                    str(item.need_by))
+                -- Build label with size in months and completion
+                local size_months = M.parse_size_months(str(item.size))
+                local size_label = size_months and string.format("%gm", size_months) or (item.size or "?")
+                local comp = tonumber(item.completion) or 0
+                local proj = projections and projections[fid]
+                local label
+                if proj and proj.planned > comp then
+                    -- [size current%|achievable%|planned%] — collapse middle when no shortfall
+                    if proj.achievable < proj.planned then
+                        label = string.format("%s\\n[%s %d%%|%d%%|%d%%] %s",
+                            wrapped_name, size_label, comp, proj.achievable, proj.planned, str(item.need_by))
+                    else
+                        label = string.format("%s\\n[%s %d%%|%d%%] %s",
+                            wrapped_name, size_label, comp, proj.planned, str(item.need_by))
+                    end
+                elseif comp > 0 then
+                    label = string.format("%s\\n[%s %d%%] %s",
+                        wrapped_name, size_label, comp, str(item.need_by))
+                else
+                    label = string.format("%s\\n[%s] %s",
+                        wrapped_name, size_label, str(item.need_by))
+                end
+
+                local scheme = ns_scheme[item._namespace or ""] or DEFAULT_SCHEME
+                local style, fillcolor = completion_fill(scheme, comp, proj)
 
                 local fontsize = 10 + math.floor(w * 3)
                 local num_lines = #wrapped + 1
                 local h = num_lines * fontsize / 72 + 0.3
+                local size_rank = math.floor(base_w * 10)  -- continuous ranking by width
 
                 table.insert(nodes, {
                     fid = fid, label = label, w = w, h = h,
-                    color = color, fontsize = fontsize,
-                    size_rank = size_order[item.size] or 2,
+                    style = style, fillcolor = fillcolor,
+                    fontsize = fontsize, size_rank = size_rank,
                 })
             end
         end
@@ -707,11 +1466,15 @@ M.export_dot = function(initiatives, opts)
     for _, n in ipairs(nodes) do
         max_h_by_rank[n.size_rank] = math.max(max_h_by_rank[n.size_rank] or 0, n.h)
     end
+    -- Collect and sort unique ranks
+    local ranks = {}
+    for rank in pairs(max_h_by_rank) do
+        table.insert(ranks, rank)
+    end
+    table.sort(ranks)
     local floor_h = 0
-    for rank = 1, 4 do
-        if max_h_by_rank[rank] then
-            floor_h = math.max(floor_h, max_h_by_rank[rank])
-        end
+    for _, rank in ipairs(ranks) do
+        floor_h = math.max(floor_h, max_h_by_rank[rank])
         max_h_by_rank[rank] = floor_h
     end
     for _, n in ipairs(nodes) do
@@ -721,17 +1484,17 @@ M.export_dot = function(initiatives, opts)
     -- Emit nodes
     for _, n in ipairs(nodes) do
         table.insert(lines, string.format(
-            '    "%s" [label="%s", width=%.1f, height=%.1f, fillcolor="%s", fontsize=%d];',
-            n.fid, n.label, n.w, n.h, n.color, n.fontsize))
+            '    "%s" [label="%s", width=%.1f, height=%.1f, style="%s", fillcolor=%s, fontsize=%d];',
+            n.fid, n.label, n.w, n.h, n.style, n.fillcolor, n.fontsize))
     end
 
     table.insert(lines, '')
 
     -- Edges
     for _, fid in ipairs(all_ids) do
-        if not include or include[fid] then
+        if is_included(fid) then
             for _, dep in ipairs(adj[fid] or {}) do
-                if not include or include[dep] then
+                if is_included(dep) then
                     table.insert(lines, string.format(
                         '    "%s" -> "%s";', dep, fid))
                 end
@@ -779,14 +1542,25 @@ local function save_vision_buffers(dir)
     end
 end
 
--- Load all initiatives from vision_dir, or nil + warning if not configured
-local function load_all()
+-- Load all initiatives from vision_dir, or nil + warning if not configured.
+-- Auto-detects quarterly mode (subdirs like 25Q3/) vs flat mode (*.yaml files).
+-- In quarterly mode, uses the latest quarter folder by default.
+local function load_all(quarter_override)
     local dir = M.get_vision_dir()
     if not dir then
         _parley.logger.warning("vision_dir is not configured")
         return nil
     end
     save_vision_buffers(dir)
+
+    -- Check for quarterly mode
+    local quarters = M.discover_quarters(dir)
+    if #quarters > 0 then
+        local quarter = quarter_override or quarters[#quarters]  -- default: latest
+        return M.load_vision_quarterly(dir, quarter, quarters), dir, quarter
+    end
+
+    -- Flat mode (existing behavior)
     return M.load_vision_dir(dir), dir
 end
 
@@ -843,12 +1617,13 @@ M.cmd_export_dot = function(params)
     local items = load_all()
     if not items then return end
 
-    -- Parse args: optional output path and --root=node
+    -- Parse args: optional output path, --root=node, --quarter=25Q3
     local args = params and params.args or ""
     local root = args:match("%-%-root=(%S+)")
-    local output = args:gsub("%-%-root=%S+", ""):match("^%s*(%S+)")
+    local quarter = args:match("%-%-quarter=(%S+)")
+    local output = args:gsub("%-%-root=%S+", ""):gsub("%-%-quarter=%S+", ""):match("^%s*(%S+)")
 
-    local dot, errors = M.export_dot(items, { root = root })
+    local dot, errors = M.export_dot(items, { root = root, quarter = quarter })
     if errors then
         for _, e in ipairs(errors) do
             vim.notify("Vision: " .. e.text, vim.log.levels.ERROR)
@@ -869,6 +1644,39 @@ M.cmd_export_dot = function(params)
     else
         vim.notify("Vision: failed to write " .. output, vim.log.levels.ERROR)
     end
+end
+
+-- :ParleyVisionAllocation [--quarter=25Q3] — show allocation report
+M.cmd_export_allocation = function(params)
+    local args = params and params.args or ""
+    local quarter = args:match("%-%-quarter=(%S+)")
+
+    local items, _, detected_quarter = load_all(quarter)
+    if not items then return end
+
+    -- Use detected quarter or default
+    quarter = quarter or detected_quarter
+    if not quarter then
+        vim.notify("Vision: no quarter specified and no quarterly folders found", vim.log.levels.WARN)
+        return
+    end
+
+    local report = M.export_allocation_report(items, quarter)
+    if report == "" then
+        vim.notify("Vision: could not generate allocation report", vim.log.levels.WARN)
+        return
+    end
+
+    -- Show in a scratch markdown buffer
+    vim.cmd("new")
+    local buf = vim.api.nvim_get_current_buf()
+    vim.bo[buf].buftype = "nofile"
+    vim.bo[buf].bufhidden = "wipe"
+    vim.bo[buf].swapfile = false
+    vim.bo[buf].filetype = "markdown"
+    vim.api.nvim_buf_set_name(buf, "Vision Allocation: " .. quarter)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(report, "\n"))
+    vim.bo[buf].modifiable = false
 end
 
 -- :ParleyVisionNew — insert a new project template at cursor or end of current file
@@ -1051,30 +1859,67 @@ completion_sources.type = function()
     return candidates
 end
 
--- size: T-shirt sizes
+-- size: month sizes + T-shirt sizes
 completion_sources.size = function()
-    return {
-        { word = "S" },
-        { word = "M" },
-        { word = "L" },
-        { word = "XL" },
-    }
+    local candidates = {}
+    -- Common month sizes
+    for _, m in ipairs({ "0.5m", "1m", "2m", "3m", "6m", "9m", "12m" }) do
+        table.insert(candidates, { word = m })
+    end
+    -- T-shirt sizes (backward compat)
+    for _, t in ipairs({ "S", "M", "L", "XL" }) do
+        table.insert(candidates, { word = t, menu = TSHIRT_TO_MONTHS[t] .. "m" })
+    end
+    return candidates
 end
 
--- need_by: values seen in existing data
-completion_sources.need_by = function()
-    local items = load_all()
-    if not items then return {} end
+-- start_by / need_by: shared pool from both fields + quarter folder names
+local function quarter_values()
     local seen = {}
     local candidates = {}
-    for _, item in ipairs(items) do
-        local nb = item.need_by
-        if type(nb) == "string" and nb ~= "" and not seen[nb] then
-            seen[nb] = true
-            table.insert(candidates, { word = nb })
+
+    -- Quarter folder names (e.g. "25Q3" from vision/25Q3/)
+    local dir = M.get_vision_dir()
+    if dir then
+        for _, q in ipairs(M.discover_quarters(dir)) do
+            if not seen[q] then
+                seen[q] = true
+                table.insert(candidates, { word = q })
+            end
         end
     end
+
+    -- Values from start_by / need_by fields
+    local items = load_all()
+    if items then
+        for _, item in ipairs(items) do
+            for _, key in ipairs({ "start_by", "need_by" }) do
+                local val = item[key]
+                if type(val) == "string" and val ~= "" and not seen[val] then
+                    seen[val] = true
+                    table.insert(candidates, { word = val })
+                end
+            end
+        end
+    end
+
     table.sort(candidates, function(a, b) return a.word < b.word end)
+    return candidates
+end
+
+completion_sources.start_by = quarter_values
+completion_sources.need_by = quarter_values
+
+-- color: named color schemes
+completion_sources.color = function()
+    local candidates = {}
+    for i = 1, 10 do
+        local name = "color" .. i
+        local scheme = M.COLOR_SCHEMES[name]
+        if scheme then
+            table.insert(candidates, { word = name, menu = scheme.done })
+        end
+    end
     return candidates
 end
 

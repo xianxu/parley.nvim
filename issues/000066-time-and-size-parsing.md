@@ -1,6 +1,6 @@
 ---
 id: 000066
-status: open
+status: done
 deps: [65]
 created: 2026-04-05
 updated: 2026-04-05
@@ -27,9 +27,9 @@ Add pure functions (no vim deps) for parsing the new schema fields.
 
 ## Plan
 
-- [ ] Add `parse_time`, `time_to_months`, `quarters_between`
-- [ ] Add `parse_size_months`, `parse_capacity_weeks`
-- [ ] Unit tests for all functions
+- [x] Add `parse_time`, `time_to_months`, `quarters_between`
+- [x] Add `parse_size_months`, `parse_capacity_weeks`
+- [x] Unit tests for all functions (23 tests, all passing)
 
 ## Files
 
@@ -37,3 +37,8 @@ Add pure functions (no vim deps) for parsing the new schema fields.
 - `tests/unit/vision_spec.lua`
 
 ## Log
+
+### 2026-04-05
+- Implemented all 5 pure functions in vision.lua (lines 137-211)
+- 23 unit tests covering normal, edge, and invalid inputs
+- Exposed WEEKS_PER_MONTH and TSHIRT_TO_MONTHS constants for downstream use
