@@ -7,6 +7,7 @@ filesystem_policy:
   read_write:
     - /home/sandbox              # user home — repo and worktree live under here
     - /tmp
+    - /dev/null                  # required by scp, shells, and many Unix tools
   read_only:
     - /usr
     - /etc

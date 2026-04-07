@@ -6,6 +6,12 @@ set -euo pipefail
 ACTION="${1:-}"
 SANDBOX_NAME="${2:-}"
 SANDBOX_SSH_HOST="openshell-${SANDBOX_NAME}"
+
+# Use Apple's system SSH/SCP throughout — Homebrew openssh lacks macOS-specific
+# options (UseKeychain) and causes "Bad configuration option: usekeychain" errors.
+SSH=/usr/bin/ssh
+SCP=/usr/bin/scp
+export MUTAGEN_SSH_PATH=/usr/bin/ssh
 PLENARY_HOST="${HOME}/.local/share/nvim/lazy/plenary.nvim"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -104,11 +110,11 @@ ensure_bootstrap_sync() {
 
 ensure_setup() {
     # Re-run post-install if any expected tool is missing
-    if ! ssh "$SANDBOX_SSH_HOST" "test -x \$HOME/.local/bin/nvim && test -x \$HOME/.local/bin/zellij" 2>/dev/null; then
+    if ! $SSH "$SANDBOX_SSH_HOST" "test -x \$HOME/.local/bin/nvim && test -x \$HOME/.local/bin/zellij" 2>/dev/null; then
         echo "==> Running post-install on sandbox..."
         mutagen sync flush "${SANDBOX_NAME}-bootstrap" 2>/dev/null || true
-        scp -q "$SCRIPT_DIR/overlay/post-install.sh" "$SANDBOX_SSH_HOST:/tmp/post-install.sh"
-        ssh "$SANDBOX_SSH_HOST" "bash /tmp/post-install.sh"
+        $SCP -q "$SCRIPT_DIR/overlay/post-install.sh" "$SANDBOX_SSH_HOST:/tmp/post-install.sh"
+        $SSH "$SANDBOX_SSH_HOST" "bash /tmp/post-install.sh"
     fi
     apply_config
 }
@@ -131,30 +137,30 @@ apply_config() {
     echo "==> Applying config to sandbox..."
     gather_credentials
     mutagen sync flush "${SANDBOX_NAME}-bootstrap" 2>/dev/null || true
-    scp -q "$SCRIPT_DIR/overlay/setup.sh" "$SANDBOX_SSH_HOST:/tmp/setup.sh"
-    ssh "$SANDBOX_SSH_HOST" "bash /tmp/setup.sh"
+    $SCP -q "$SCRIPT_DIR/overlay/setup.sh" "$SANDBOX_SSH_HOST:/tmp/setup.sh"
+    $SSH "$SANDBOX_SSH_HOST" "bash /tmp/setup.sh"
 
     local git_name git_email
     git_name=$(git config user.name 2>/dev/null || true)
     git_email=$(git config user.email 2>/dev/null || true)
     if [ -n "$git_name" ]; then
-        ssh "$SANDBOX_SSH_HOST" "git config --global user.name '$git_name'" 2>/dev/null || true
+        $SSH "$SANDBOX_SSH_HOST" "git config --global user.name '$git_name'" 2>/dev/null || true
     fi
     if [ -n "$git_email" ]; then
-        ssh "$SANDBOX_SSH_HOST" "git config --global user.email '$git_email'" 2>/dev/null || true
+        $SSH "$SANDBOX_SSH_HOST" "git config --global user.email '$git_email'" 2>/dev/null || true
     fi
 
     # Copy dotfiles to sandbox
     echo "  Copying dotfiles..."
-    ssh "$SANDBOX_SSH_HOST" "mkdir -p ~/.config/zellij"
-    scp -q "$SCRIPT_DIR/dotfiles/zellij/config.kdl" "$SANDBOX_SSH_HOST:~/.config/zellij/config.kdl"
+    $SSH "$SANDBOX_SSH_HOST" "mkdir -p ~/.config/zellij"
+    $SCP -q "$SCRIPT_DIR/dotfiles/zellij/config.kdl" "$SANDBOX_SSH_HOST:~/.config/zellij/config.kdl"
 
     # Forward GitHub CLI auth from host to sandbox (write config directly — fast)
     local gh_token
     gh_token=$(gh auth token 2>/dev/null || true)
     if [ -n "$gh_token" ]; then
         echo "  Forwarding gh auth to sandbox..."
-        ssh "$SANDBOX_SSH_HOST" "mkdir -p ~/.config/gh && cat > ~/.config/gh/hosts.yml" <<EOF
+        $SSH "$SANDBOX_SSH_HOST" "mkdir -p ~/.config/gh && cat > ~/.config/gh/hosts.yml" <<EOF
 github.com:
     oauth_token: ${gh_token}
     user: $(gh api user --jq .login 2>/dev/null || echo "")
@@ -222,7 +228,7 @@ terminate_all_syncs() {
 soft_cleanup() {
     echo "==> Soft cleanup (keeping sandbox + tools)..."
     terminate_all_syncs
-    ssh "$SANDBOX_SSH_HOST" "rm -rf /sandbox/repo /sandbox/worktree && mkdir -p /sandbox/repo /sandbox/worktree" 2>/dev/null || true
+    $SSH "$SANDBOX_SSH_HOST" "rm -rf /sandbox/repo /sandbox/worktree && mkdir -p /sandbox/repo /sandbox/worktree" 2>/dev/null || true
     echo "==> Re-syncing files..."
     ensure_mutagen_sync
     echo "==> Re-applying config..."
@@ -239,6 +245,16 @@ cleanup() {
         sed "/^# BEGIN openshell-${SANDBOX_NAME}/,/^# END openshell-${SANDBOX_NAME}/d" \
             "$HOME/.ssh/config" > "$HOME/.ssh/config.tmp" \
         && mv "$HOME/.ssh/config.tmp" "$HOME/.ssh/config"
+    fi
+}
+
+# Nuclear cleanup: full cleanup + wipe bootstrap cache so deps are re-downloaded.
+cleanup_nuke() {
+    cleanup
+    local bootstrap_dir="$SCRIPT_DIR/../.openshell/.bootstrap"
+    if [ -d "$bootstrap_dir" ]; then
+        echo "==> Removing bootstrap cache..."
+        rm -rf "$bootstrap_dir"
     fi
 }
 
@@ -320,7 +336,7 @@ cmd_connect() {
         cmd_build
     fi
 
-    openshell sandbox connect "$SANDBOX_NAME" || true
+    PATH="/usr/bin:$PATH" openshell sandbox connect "$SANDBOX_NAME" || true
     stty sane 2>/dev/null  # restore terminal after abnormal disconnect (e.g. sleep/wake)
 }
 
@@ -334,10 +350,17 @@ cmd_stop() {
     echo "Sandbox stopped."
 }
 
+cmd_nuke() {
+    echo "==> Nuking sandbox (including bootstrap cache)..."
+    cleanup_nuke
+    echo "Sandbox nuked."
+}
+
 case "$ACTION" in
     build)   cmd_build ;;
     connect) cmd_connect ;;
     clean)   cmd_clean ;;
     stop)    cmd_stop ;;
-    *)       echo "Usage: $0 {build|connect|stop|clean} <sandbox-name>"; exit 1 ;;
+    nuke)    cmd_nuke ;;
+    *)       echo "Usage: $0 {build|connect|stop|clean|nuke} <sandbox-name>"; exit 1 ;;
 esac

@@ -15,7 +15,7 @@ help-sandbox:
 	"  make sandbox-shell    Alias for sandbox" \
 	"  make sandbox-clean    Reset repo sync (keeps sandbox + tools)" \
 	"  make sandbox-stop     Stop sync, delete sandbox, clean up" \
-	"  make sandbox-nuke     Same as sandbox-stop (no persistent state)" \
+	"  make sandbox-nuke     sandbox-stop + wipe bootstrap cache (full re-download)" \
 	""
 
 # Install sandbox dependencies and configure auth.
@@ -69,5 +69,6 @@ sandbox-clean:
 sandbox-stop:
 	@.openshell/sandbox.sh stop $(SANDBOX_NAME)
 
-# Same as stop — no persistent state with OpenShell
-sandbox-nuke: sandbox-stop
+# Nuclear reset: stop + wipe bootstrap cache so everything re-downloads on next build
+sandbox-nuke:
+	@.openshell/sandbox.sh nuke $(SANDBOX_NAME)

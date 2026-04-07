@@ -145,6 +145,14 @@ function M.chat_dir_picker(plugin, initial_dir)
                         vim.notify("Cannot remove the primary chat directory", vim.log.levels.WARN)
                         return
                     end
+                    if plugin.config.base_chat_dir then
+                        local r_item = vim.fn.resolve(vim.fn.expand(item.dir)):gsub("/+$", "")
+                        local r_base = vim.fn.resolve(vim.fn.expand(plugin.config.base_chat_dir)):gsub("/+$", "")
+                        if r_item == r_base then
+                            vim.notify("Cannot remove the base chat directory", vim.log.levels.WARN)
+                            return
+                        end
+                    end
 
                     context.skip_focus_restore = true
                     context.suspend_for_external_ui()
