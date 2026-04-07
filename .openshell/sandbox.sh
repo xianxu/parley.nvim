@@ -7,14 +7,17 @@ ACTION="${1:-}"
 SANDBOX_NAME="${2:-}"
 SANDBOX_SSH_HOST="openshell-${SANDBOX_NAME}"
 
-# Use Apple's system SSH/SCP throughout — Homebrew openssh lacks macOS-specific
-# options (UseKeychain) and causes "Bad configuration option: usekeychain" errors.
-SSH=/usr/bin/ssh
-SCP=/usr/bin/scp
-export MUTAGEN_SSH_PATH=/usr/bin/ssh
 PLENARY_HOST="${HOME}/.local/share/nvim/lazy/plenary.nvim"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Use Apple's system SSH/SCP throughout — Homebrew openssh lacks macOS-specific
+# options (UseKeychain) and causes "Bad configuration option: usekeychain" errors.
+# Use a repo-local SSH config so the sandbox Host entry never touches ~/.ssh/config.
+SSH_CONFIG="$SCRIPT_DIR/ssh_config"
+SSH="/usr/bin/ssh -F $SSH_CONFIG"
+SCP="/usr/bin/scp -F $SSH_CONFIG"
+export MUTAGEN_SSH_PATH="$SCRIPT_DIR/ssh_wrapper.sh"
 BASE_IMAGE="ghcr.io/nvidia/openshell-community/sandboxes/base"
 DIGEST_FILE="$SCRIPT_DIR/.base-image-digest"
 
@@ -85,11 +88,7 @@ get_phase() {
 }
 
 ensure_ssh_config() {
-    mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
-    touch "$HOME/.ssh/config" && chmod 600 "$HOME/.ssh/config"
-    # Always regenerate to pick up keepalive settings
-    sed "/^# BEGIN openshell-${SANDBOX_NAME}/,/^# END openshell-${SANDBOX_NAME}/d" \
-        "$HOME/.ssh/config" > "$HOME/.ssh/config.tmp" || true
+    # Write the sandbox Host block to a repo-local file, not ~/.ssh/config.
     {
         echo "# BEGIN openshell-${SANDBOX_NAME}"
         openshell sandbox ssh-config "$SANDBOX_NAME"
@@ -97,10 +96,8 @@ ensure_ssh_config() {
         echo "    ServerAliveInterval 15"
         echo "    ServerAliveCountMax 480"
         echo "# END openshell-${SANDBOX_NAME}"
-        echo ""
-        cat "$HOME/.ssh/config.tmp"
-    } > "$HOME/.ssh/config"
-    rm -f "$HOME/.ssh/config.tmp"
+    } > "$SSH_CONFIG"
+    chmod 600 "$SSH_CONFIG"
 }
 
 ensure_bootstrap_sync() {
@@ -241,11 +238,7 @@ cleanup() {
     mutagen sync terminate "${SANDBOX_NAME}-bootstrap" 2>/dev/null || true
     terminate_all_syncs
     openshell sandbox delete "$SANDBOX_NAME" 2>/dev/null || true
-    if [ -f "$HOME/.ssh/config" ]; then
-        sed "/^# BEGIN openshell-${SANDBOX_NAME}/,/^# END openshell-${SANDBOX_NAME}/d" \
-            "$HOME/.ssh/config" > "$HOME/.ssh/config.tmp" \
-        && mv "$HOME/.ssh/config.tmp" "$HOME/.ssh/config"
-    fi
+    rm -f "$SSH_CONFIG"
 }
 
 # Nuclear cleanup: full cleanup + wipe bootstrap cache so deps are re-downloaded.

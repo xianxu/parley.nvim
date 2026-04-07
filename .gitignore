@@ -9,4 +9,5 @@ tasks/*
 .constitution-check-state
 COMPARE-SHA
 .openshell/.bootstrap/
+.openshell/ssh_config
 vision
