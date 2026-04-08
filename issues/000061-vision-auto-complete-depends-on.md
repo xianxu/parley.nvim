@@ -1,6 +1,6 @@
 ---
 id: 000061
-status: open
+status: done
 deps: [58]
 created: 2026-04-04
 updated: 2026-04-04
@@ -32,3 +32,7 @@ Builds on: #58
 - [ ] Test: local refs use bare names, cross-namespace use full IDs
 
 ## Log
+
+### 2026-04-07
+
+- Marked done retroactively. Feature was already implemented and documented in `specs/vision/format.md` (Typeahead Completion section) before this issue was reviewed. Issue file was never updated at the time.

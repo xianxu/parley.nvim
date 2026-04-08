@@ -31,15 +31,23 @@ local function str(val)
     return ""
 end
 
+-- Return true if a project name is a background project (prefixed with ~).
+-- Background projects are kept in mind as waypoints but not actively worked on.
+M.is_background = function(name)
+    return type(name) == "string" and name:sub(1, 1) == "~"
+end
+
 -- Strip trailing ! from a project name and return (clean_name, priority).
--- "EHR Sync V2!!" → ("EHR Sync V2", 2), "Auth" → ("Auth", 0)
+-- Also strips a leading ~ background marker for display.
+-- "EHR Sync V2!!" → ("EHR Sync V2", 2), "~Foo!" → ("Foo", 1), "Auth" → ("Auth", 0)
 M.parse_priority = function(name)
     if not name or name == "" then return name, 0 end
-    local base, bangs = name:match("^(.-)(!+)%s*$")
+    local stripped = name:match("^~(.*)$") or name
+    local base, bangs = stripped:match("^(.-)(!+)%s*$")
     if base then
         return trim(base), #bangs
     end
-    return name, 0
+    return stripped, 0
 end
 
 -- Parse an inline YAML list: "[a, b, c]" → {"a", "b", "c"}, "[]" → {}
@@ -311,9 +319,12 @@ M.allocation_summary = function(items, range_start, range_end)
             })
         elseif item.project and item.project ~= "" then
             ensure_ns(ns)
+            local is_bg = M.is_background(item.project)
             local charge_months = M.quarterly_charge(item, range_start, range_end)
             local charge_weeks = charge_months * WEEKS_PER_MONTH
-            by_ns[ns].demand_weeks = by_ns[ns].demand_weeks + charge_weeks
+            if not is_bg then
+                by_ns[ns].demand_weeks = by_ns[ns].demand_weeks + charge_weeks
+            end
             local clean_proj_name = M.parse_priority(item.project)
             table.insert(by_ns[ns].projects, {
                 name = clean_proj_name,
@@ -321,6 +332,7 @@ M.allocation_summary = function(items, range_start, range_end)
                 charge_weeks = charge_weeks,
                 completion = tonumber(item.completion) or 0,
                 size = str(item.size),
+                background = is_bg,
             })
         end
     end
@@ -526,13 +538,13 @@ M.export_allocation_report = function(items, quarter)
         table.insert(out, "")
         local has_projects = false
         for _, p in ipairs(data.projects) do
-            if p.charge_weeks > 0 then has_projects = true; break end
+            if p.charge_weeks > 0 and not p.background then has_projects = true; break end
         end
         if has_projects then
             table.insert(out, "| Project | Charged | Projection | Details |")
             table.insert(out, "|---------|---------|------------|---------|")
             for _, p in ipairs(data.projects) do
-                if p.charge_weeks > 0 then
+                if p.charge_weeks > 0 and not p.background then
                     local fid = M.full_id(ns, p.name)
                     local p_proj = proj[fid]
                     local comp = p.completion
@@ -550,6 +562,20 @@ M.export_allocation_report = function(items, quarter)
                     table.insert(out, string.format("| %s | %.1fw | %s | %.1fm charged, %d%% target |",
                         p.name, p.charge_weeks, projection_str, p.charge_months, planned))
                 end
+            end
+            table.insert(out, "")
+        end
+
+        -- Background projects (not charged to capacity)
+        local bg_projects = {}
+        for _, p in ipairs(data.projects) do
+            if p.background then table.insert(bg_projects, p) end
+        end
+        if #bg_projects > 0 then
+            table.insert(out, "**Background (not charged):**")
+            table.insert(out, "")
+            for _, p in ipairs(bg_projects) do
+                table.insert(out, string.format("- %s [bg] (%s, %d%% done)", p.name, p.size or "?", p.completion))
             end
             table.insert(out, "")
         end
@@ -1147,16 +1173,16 @@ local SHORTFALL_COLOR = "#d32f2f"
 -- 10 named color schemes: { done, achievable, base }
 -- done = completed work, achievable = will complete this quarter, base = remaining
 M.COLOR_SCHEMES = {
-    color1  = { done = "#5b9bd5", achievable = "#89c4e8", base = "#a0d8ef" },  -- blue
-    color2  = { done = "#e6a23c", achievable = "#f0c06e", base = "#ffe0b2" },  -- orange
-    color3  = { done = "#6ab04c", achievable = "#8fd470", base = "#c8e6c9" },  -- green
-    color4  = { done = "#9b59b6", achievable = "#b87fd4", base = "#e1bee7" },  -- purple
-    color5  = { done = "#c0392b", achievable = "#e67e73", base = "#ffcdd2" },  -- crimson
-    color6  = { done = "#1abc9c", achievable = "#5dd4b8", base = "#b2dfdb" },  -- teal
-    color7  = { done = "#f39c12", achievable = "#f7bc52", base = "#fff3cd" },  -- gold
-    color8  = { done = "#3498db", achievable = "#6db8ea", base = "#bbdefb" },  -- sky
-    color9  = { done = "#e91e63", achievable = "#f06292", base = "#f8bbd0" },  -- pink
-    color10 = { done = "#607d8b", achievable = "#8fa4ad", base = "#cfd8dc" },  -- slate
+    color1  = { done = "#5b9bd5", achievable = "#89c4e8", base = "#a0d8ef", bg = "#dff0f8" },  -- blue
+    color2  = { done = "#e6a23c", achievable = "#f0c06e", base = "#ffe0b2", bg = "#fff5e6" },  -- orange
+    color3  = { done = "#6ab04c", achievable = "#8fd470", base = "#c8e6c9", bg = "#edf7ee" },  -- green
+    color4  = { done = "#9b59b6", achievable = "#b87fd4", base = "#e1bee7", bg = "#f5edf8" },  -- purple
+    color5  = { done = "#c0392b", achievable = "#e67e73", base = "#ffcdd2", bg = "#ffeef0" },  -- crimson
+    color6  = { done = "#1abc9c", achievable = "#5dd4b8", base = "#b2dfdb", bg = "#e8f5f4" },  -- teal
+    color7  = { done = "#f39c12", achievable = "#f7bc52", base = "#fff3cd", bg = "#fffae8" },  -- gold
+    color8  = { done = "#3498db", achievable = "#6db8ea", base = "#bbdefb", bg = "#e8f4fe" },  -- sky
+    color9  = { done = "#e91e63", achievable = "#f06292", base = "#f8bbd0", bg = "#fde8f1" },  -- pink
+    color10 = { done = "#607d8b", achievable = "#8fa4ad", base = "#cfd8dc", bg = "#edf1f3" },  -- slate
 }
 local DEFAULT_SCHEME = M.COLOR_SCHEMES.color1
 local CHARS_PER_INCH = 7  -- approx characters per inch for wrapping decisions
@@ -1412,7 +1438,10 @@ M.export_dot = function(initiatives, opts)
             if item then
                 local base_w = size_to_width(str(item.size))
                 local w = base_w * scale
-                local max_chars = math.floor(w * CHARS_PER_INCH)
+                -- Font grows with scaled width; compensate so wrap threshold stays accurate.
+                local base_fontsize = 10 + math.floor(base_w * 3)
+                local fontsize = 10 + math.floor(w * 3)
+                local max_chars = math.floor(w * CHARS_PER_INCH * base_fontsize / fontsize)
                 local ns_prefix = (item._namespace or ""):upper()
                 local clean_name = M.parse_priority(item.project or fid)
                 local name = ns_prefix .. ": " .. clean_name
@@ -1444,8 +1473,10 @@ M.export_dot = function(initiatives, opts)
 
                 local scheme = ns_scheme[item._namespace or ""] or DEFAULT_SCHEME
                 local style, fillcolor = completion_fill(scheme, comp, proj)
-
-                local fontsize = 10 + math.floor(w * 3)
+                if M.is_background(item.project) then
+                    style = "filled,dashed"
+                    fillcolor = '"' .. (scheme.bg or scheme.base) .. '"'
+                end
                 local num_lines = #wrapped + 1
                 local h = num_lines * fontsize / 72 + 0.3
                 local size_rank = math.floor(base_w * 10)  -- continuous ranking by width

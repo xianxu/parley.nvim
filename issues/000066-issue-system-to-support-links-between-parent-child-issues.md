@@ -1,9 +1,9 @@
 ---
 id: 000066
-status: working
-deps: []
+status: done
+deps: [000078]
 created: 2026-04-05
-updated: 2026-04-06
+updated: 2026-04-07
 ---
 
 # issue system to support links between parent/child issues
@@ -29,7 +29,7 @@ and keyboard short cut to jump between them
 - [x] Add unit tests in `tests/unit/issues_spec.lua`
 - [x] Update `specs/issues/issue-management.md`
 - [x] Run `make test` and `make lint`
-- [ ] Manual end-to-end check (decompose → goto child → goto parent → jumplist back) — to be performed by user
+- [x] Manual end-to-end check (decompose → goto child → goto parent → jumplist back) — to be performed by user → [issue 000078](./000078-manual-end-to-end-check-decompose-goto-child-goto-parent-jumplist-back-to-be-performed-by-user.md)
 
 ## Log
 

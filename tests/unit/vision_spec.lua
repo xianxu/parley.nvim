@@ -101,6 +101,18 @@ describe("parse_vision_yaml", function()
         assert.equals("S", items[1].size)
     end)
 
+    it("skips trailing comment at end of file", function()
+        local text = [[
+- project: Auth Service
+  size: S
+# trailing comment at end of file
+]]
+        local items = vision.parse_vision_yaml(text)
+        assert.equals(1, #items)
+        assert.equals("Auth Service", items[1].project)
+        assert.equals("S", items[1].size)
+    end)
+
     it("handles empty input", function()
         local items = vision.parse_vision_yaml("")
         assert.same({}, items)
@@ -734,6 +746,20 @@ describe("export_dot", function()
         assert.truthy(dot:find('"ns:auth"'))
         assert.is_nil(dot:find("Alice"))
     end)
+
+    it("renders background project with dashed style and bg color", function()
+        local items = {
+            { project = "~Future Thing", _namespace = "ns", size = "3m",
+              need_by = "", depends_on = {} },
+        }
+        local dot = vision.export_dot(items)
+        -- node should exist (~ stripped from display name, ID from stripped name)
+        assert.truthy(dot:find("future%-thing") or dot:find("future.thing"))
+        -- style must include dashed
+        assert.truthy(dot:find("dashed"))
+        -- bg color for default scheme (color1 blue) is #dff0f8
+        assert.truthy(dot:find("#dff0f8"))
+    end)
 end)
 
 --------------------------------------------------------------------------------
@@ -1107,6 +1133,23 @@ describe("export_allocation_report", function()
         local report = vision.export_allocation_report(items, "25Q3")
         assert.truthy(report:find("Projection"))
     end)
+
+    it("excludes background projects from demand and lists them separately", function()
+        local items = {
+            { person = "Alice", capacity = "11w", _namespace = "team" },
+            { project = "Active Work", size = "3m", start_by = "25Q3", need_by = "25Q3",
+              _namespace = "team" },
+            { project = "~Future Thing", size = "6m", start_by = "25Q4", need_by = "25Q4",
+              _namespace = "team" },
+        }
+        local report = vision.export_allocation_report(items, "25Q3")
+        -- background project appears in bg section
+        assert.truthy(report:find("Future Thing %[bg%]"))
+        -- background project not in demand table
+        assert.falsy(report:find("| Future Thing |"))
+        -- demand only counts active work (3m × 1q = 3m ≈ 13w), not background
+        assert.truthy(report:find("Balance: %+"))  -- should not be over-committed
+    end)
 end)
 
 --------------------------------------------------------------------------------
@@ -1271,5 +1314,43 @@ describe("parse_priority", function()
     it("does not affect name_to_id", function()
         assert.equals("ehr-sync", vision.name_to_id("EHR Sync!!"))
         assert.equals("auth", vision.name_to_id("Auth!"))
+    end)
+
+    it("strips leading ~ background marker", function()
+        local name, prio = vision.parse_priority("~Foo Bar")
+        assert.equals("Foo Bar", name)
+        assert.equals(0, prio)
+    end)
+
+    it("strips ~ and bangs together", function()
+        local name, prio = vision.parse_priority("~Foo Bar!")
+        assert.equals("Foo Bar", name)
+        assert.equals(1, prio)
+    end)
+end)
+
+--------------------------------------------------------------------------------
+-- is_background
+--------------------------------------------------------------------------------
+
+describe("is_background", function()
+    it("returns true for ~ prefix", function()
+        assert.is_true(vision.is_background("~Auth Service"))
+    end)
+
+    it("returns false for regular names", function()
+        assert.is_false(vision.is_background("Auth Service"))
+    end)
+
+    it("returns false for nil", function()
+        assert.is_false(vision.is_background(nil))
+    end)
+
+    it("returns false for empty string", function()
+        assert.is_false(vision.is_background(""))
+    end)
+
+    it("returns false for bang-only names", function()
+        assert.is_false(vision.is_background("Urgent!"))
     end)
 end)
