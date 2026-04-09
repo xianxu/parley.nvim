@@ -4,12 +4,15 @@
 
 ### 1. Overall Workflow
 - Enter brainstorming mode when requirement is unclear 
-- Enter plan mode for ANY non-trivial task (3+ steps, architectural decisions, change more than 2 files, 50 lines)
-- Work is tracked in `issues/` folder as single-file-per-issue markdown file 
-    - Plan within the issue file's `## Plan` section (checklist)
-    - Log discoveries, tools you used or installed in `## Log`
-    - Detailed design goes into `## Spec` section
-    - Write out your thinking to the `issues/` file you are working on often to preserve your design state.
+- Enter plan mode for ANY non-trivial task (change more than 2 files, 50 lines)
+- Work is offered in issues system and tracked in `issues/` folder as single-file-per-issue markdown file 
+    - Write overall within the issue file's `## Plan` section
+    - Log discoveries, tools you used or installed in the issue file's `## Log`section
+    - Write brainstorming result in `## Spec` section
+    - Record your progress in the `issues/` file incrementally and often
+- For complex work when skills like `superpowers` is used, write detailed designs in `docs/plans/` using similar file name with -plan at the end. 
+    - For example, for `issues/000042-an-complex-issue.md`, write design in `docs/plans/000042-an-complex-issue-plan.md`
+    - You will discover problems during design stage as you understand more of existing codebase. ALWAYS add tests to test against those unexpected problems
 - AVOID READING `history/*` unless explicitly asked to, they are history, low signal
 - Wait for user approval before implementation for ANY non-trivial task
 - If something goes sideways, STOP and re-plan immediately: don't keep pushing
@@ -19,40 +22,46 @@
 - Failing automated verification, plan for manual verification steps in the issue's Plan section
 - Leverage trace-driven debugging when your fix had no effect. Produce clear repro steps for user to follow.
 
-### 2. Subagent Strategy
+### 2. Artifact Hierarchy
+- Simple case, operate in the single file in `issues/`
+- Complex case, start in `issues/`, write detailed design in `docs/plans`. Complex case involves thousands of lines in the design file
+- In all cases, `specs/` is for big picture pointers, terminologies to facilitate future high level understanding of this codebase
+- When done, the artifacts in `issues/` and `docs/plans/` are moved to `history/`
+
+### 3. Subagent Strategy
 - Use subagents to keep main context window clean
 - Offload research, brainstorming, exploration, and parallel analysis to subagents
 - One task per subagent for focused execution
 
-### 3. Self-Improvement Loop
+### 4. Self-Improvement Loop
 - You MUST update `tasks/lessons.md` with the pattern what went wrong when you make mistakes
 - Write rules for yourself that prevent the same mistake
-- You MUST Review lessons at session start for relevant project
+- You MUST Review lessons at session start for relevant project. You should also simplify what is in lessons to keep it concise
 
-### 4. Verification Before Done
+### 5. Verification Before Done
 - NEVER mark a task complete without proving it works
 - Diff behavior between main and your changes
 - Ask yourself: "Would a staff engineer approve this?"
 - Run tests, check logs, demonstrate correctness
 
-### 5. Demand Elegance
+### 6. Demand Elegance
 - For non-trivial changes: pause and ask "is there a more general and elegant way?"
 - If a fix feels hacky: "Knowing everything I know now, implement the elegant solution"
 - If a change feels repetitive: "How can I refactor to reuse existing code?"
 - Skip this for simple, obvious fixes - don't over-engineer
 - Challenge your own work before presenting it
 
-### 6. Autonomous Bug Fixing
+### 7. Autonomous Bug Fixing
 - When given a bug report: just fix it. Don't ask for hand-holding
 - Point at logs, errors, failing tests — then resolve them
 - Zero context switching required from the user
 
-### 7. Maintenance of Specs and Documentation
+### 8. Maintenance of Specs and Documentation
 - As you update issue plans and code, continuously update corresponding specs in `specs/` folder
 - Maintain the `specs/index.md` that links to all spec files with brief descriptions of their contents.
 - Synthesize what we just built into a reusable spec document. DO NOT over specify — `specs/` is a practical way pointer for future developers to know the sketch of functionalities, history and intention behind them. Details should live in the code
 
-### 8. Pay attention to User Questions
+### 9. Pay attention to User Questions
 - When user poses question, answer the question as clearly and directly as possible
 - DO NOT proceed to change code, when user asks a question
 
