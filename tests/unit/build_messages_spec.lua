@@ -864,3 +864,297 @@ describe("_build_messages: remote file references", function()
         assert.is_true(messages[2].content:match("Remote URL content is not cached") ~= nil)
     end)
 end)
+
+--------------------------------------------------------------------------------
+-- M2 Task 2.6: content_blocks → Anthropic content-block message shape
+--
+-- When an answer carries content_blocks with tool_use or tool_result
+-- entries (populated by chat_parser Task 2.5 when 🔧: / 📎: appear in
+-- the buffer), build_messages must split it into the sequence of
+-- messages Anthropic's API expects: an `assistant` message carries
+-- [text, tool_use] content blocks, immediately followed by a `user`
+-- message carrying [tool_result] content blocks, continuing that
+-- pattern for every round of the tool loop.
+--
+-- Answers WITHOUT tool blocks continue to emit a single flat-string
+-- assistant message (byte-identical to pre-#81 behavior — this is
+-- the vanilla chat invariant locked in by dispatcher_spec.lua:190
+-- and config_tools_spec.lua's byte-identity checks).
+--------------------------------------------------------------------------------
+
+-- Helper: build an exchange whose answer carries content_blocks.
+-- The flat answer.content is also populated for backward compat
+-- (mirrors what chat_parser produces).
+local function ex_with_blocks(question_content, content_blocks, flat_content)
+    local ex = {
+        question = {
+            line_start = 10,
+            line_end = 10,
+            content = question_content or "Test question",
+            file_references = {},
+        },
+        answer = {
+            line_start = 12,
+            line_end = 20,
+            content = flat_content or "",
+            content_blocks = content_blocks,
+        },
+    }
+    return ex
+end
+
+describe("_build_messages: content_blocks with tool round-trips", function()
+    it("emits a single flat assistant message when content_blocks has only text", function()
+        -- Vanilla-chat case: answer has content_blocks = [{text=...}].
+        -- build_messages should IGNORE the blocks and emit the same
+        -- flat `{role="assistant", content=<string>}` shape as pre-#81.
+        local ex = ex_with_blocks(
+            "What is Lua?",
+            { { type = "text", text = "Lua is a scripting language." } },
+            "Lua is a scripting language."
+        )
+        local pc = parsed_chat({ ex, exchange("Next question") })
+        pc.exchanges[2].question.line_start = 14
+
+        local messages = parley._build_messages({
+            parsed_chat = pc,
+            start_index = 1,
+            end_index = 100,
+            exchange_idx = 2,
+            agent = agent(),
+            config = parley.config,
+            helpers = stub_helpers,
+            logger = stub_logger,
+        })
+
+        -- system + Q1 + A1 + Q2 = 4 messages
+        assert.equals(4, #messages)
+        assert.equals("assistant", messages[3].role)
+        -- Flat string, not a content-block list
+        assert.equals("string", type(messages[3].content))
+        assert.equals("Lua is a scripting language.", messages[3].content)
+    end)
+
+    it("emits assistant-with-content-blocks + user-with-tool_result for a single round", function()
+        -- Single tool_use → tool_result → final text round.
+        -- Expected message sequence for this exchange:
+        --   user:      "Q"
+        --   assistant: [text "I'll read it", tool_use toolu_1 read_file]
+        --   user:      [tool_result toolu_1 "file contents"]
+        --   assistant: [text "The file says hi"]
+        local blocks = {
+            { type = "text", text = "I'll read it" },
+            { type = "tool_use", id = "toolu_1", name = "read_file", input = { path = "foo.txt" } },
+            { type = "tool_result", id = "toolu_1", content = "hi", is_error = false },
+            { type = "text", text = "The file says hi" },
+        }
+        local ex = ex_with_blocks("Read foo.txt", blocks, "I'll read it\n🔧: read_file id=toolu_1\n...etc...")
+        local pc = parsed_chat({ ex, exchange("follow-up") })
+        pc.exchanges[2].question.line_start = 50
+
+        local messages = parley._build_messages({
+            parsed_chat = pc,
+            start_index = 1,
+            end_index = 100,
+            exchange_idx = 2,
+            agent = agent(),
+            config = parley.config,
+            helpers = stub_helpers,
+            logger = stub_logger,
+        })
+
+        -- Expected: system, user(Q1), assistant([text, tool_use]),
+        --           user([tool_result]), assistant([text]), user(Q2)
+        -- That's 6 messages.
+        assert.equals(6, #messages)
+
+        assert.equals("system", messages[1].role)
+        assert.equals("user", messages[2].role)
+        assert.equals("Read foo.txt", messages[2].content)
+
+        -- Assistant message 3 has content-block list: [text, tool_use]
+        assert.equals("assistant", messages[3].role)
+        assert.equals("table", type(messages[3].content))
+        assert.equals(2, #messages[3].content)
+        assert.equals("text", messages[3].content[1].type)
+        assert.equals("I'll read it", messages[3].content[1].text)
+        assert.equals("tool_use", messages[3].content[2].type)
+        assert.equals("toolu_1", messages[3].content[2].id)
+        assert.equals("read_file", messages[3].content[2].name)
+        assert.equals("foo.txt", messages[3].content[2].input.path)
+
+        -- User message 4 carries the tool_result content block
+        assert.equals("user", messages[4].role)
+        assert.equals("table", type(messages[4].content))
+        assert.equals(1, #messages[4].content)
+        assert.equals("tool_result", messages[4].content[1].type)
+        assert.equals("toolu_1", messages[4].content[1].tool_use_id)
+        assert.equals("hi", messages[4].content[1].content)
+        assert.equals(false, messages[4].content[1].is_error)
+
+        -- Assistant message 5 has the final text
+        assert.equals("assistant", messages[5].role)
+        assert.equals("table", type(messages[5].content))
+        assert.equals(1, #messages[5].content)
+        assert.equals("text", messages[5].content[1].type)
+        assert.equals("The file says hi", messages[5].content[1].text)
+
+        -- User message 6 is the next question
+        assert.equals("user", messages[6].role)
+        assert.equals("follow-up", messages[6].content)
+    end)
+
+    it("emits multiple rounds of tool_use → tool_result correctly", function()
+        -- Two sequential rounds: read one file, then read another.
+        local blocks = {
+            { type = "text", text = "Reading two files" },
+            { type = "tool_use", id = "toolu_A", name = "read_file", input = { path = "a.txt" } },
+            { type = "tool_result", id = "toolu_A", content = "A body", is_error = false },
+            { type = "tool_use", id = "toolu_B", name = "read_file", input = { path = "b.txt" } },
+            { type = "tool_result", id = "toolu_B", content = "B body", is_error = false },
+            { type = "text", text = "Both files read" },
+        }
+        local ex = ex_with_blocks("Read two files", blocks, "flat")
+        local pc = parsed_chat({ ex, exchange("next") })
+        pc.exchanges[2].question.line_start = 99
+
+        local messages = parley._build_messages({
+            parsed_chat = pc,
+            start_index = 1,
+            end_index = 100,
+            exchange_idx = 2,
+            agent = agent(),
+            config = parley.config,
+            helpers = stub_helpers,
+            logger = stub_logger,
+        })
+
+        -- Expected sequence:
+        --   1 system
+        --   2 user "Read two files"
+        --   3 assistant [text, tool_use A]
+        --   4 user [tool_result A]
+        --   5 assistant [tool_use B]
+        --   6 user [tool_result B]
+        --   7 assistant [text "Both files read"]
+        --   8 user "next"
+        assert.equals(8, #messages)
+
+        -- Verify role sequence
+        local roles = {}
+        for _, m in ipairs(messages) do table.insert(roles, m.role) end
+        assert.same(
+            { "system", "user", "assistant", "user", "assistant", "user", "assistant", "user" },
+            roles
+        )
+
+        -- Verify tool ids flow correctly
+        assert.equals("toolu_A", messages[3].content[2].id)
+        assert.equals("toolu_A", messages[4].content[1].tool_use_id)
+        assert.equals("toolu_B", messages[5].content[1].id)
+        assert.equals("toolu_B", messages[6].content[1].tool_use_id)
+    end)
+
+    it("emits is_error=true tool_results correctly", function()
+        local blocks = {
+            { type = "tool_use", id = "toolu_err", name = "edit_file",
+              input = { path = "x", old_string = "a", new_string = "b" } },
+            { type = "tool_result", id = "toolu_err", content = "old_string not found", is_error = true },
+        }
+        local ex = ex_with_blocks("Edit x", blocks, "flat")
+        local pc = parsed_chat({ ex, exchange("next") })
+        pc.exchanges[2].question.line_start = 50
+
+        local messages = parley._build_messages({
+            parsed_chat = pc,
+            start_index = 1,
+            end_index = 100,
+            exchange_idx = 2,
+            agent = agent(),
+            config = parley.config,
+            helpers = stub_helpers,
+            logger = stub_logger,
+        })
+
+        -- user(Q1), assistant[tool_use], user[tool_result error=true], user(Q2)
+        -- Find the tool_result message
+        local found = nil
+        for _, m in ipairs(messages) do
+            if type(m.content) == "table" and m.content[1] and m.content[1].type == "tool_result" then
+                found = m.content[1]
+                break
+            end
+        end
+        assert.is_not_nil(found)
+        assert.equals(true, found.is_error)
+        assert.equals("old_string not found", found.content)
+    end)
+
+    it("includes the CURRENT exchange's partial answer when it has tool blocks (tool-loop recursion)", function()
+        -- During tool loop recursion, the current exchange has a partial
+        -- answer with tool blocks already written to the buffer. Those
+        -- blocks must be re-sent to Anthropic so the model can continue.
+        local blocks = {
+            { type = "text", text = "Reading" },
+            { type = "tool_use", id = "toolu_R", name = "read_file", input = { path = "x.txt" } },
+            { type = "tool_result", id = "toolu_R", content = "x body", is_error = false },
+        }
+        local ex = ex_with_blocks("Please read x.txt", blocks, "flat")
+        local pc = parsed_chat({ ex })
+
+        -- IMPORTANT: exchange_idx = 1 (the current exchange). Pre-#81
+        -- build_messages would skip the current exchange's answer. Tool
+        -- loop recursion requires including it.
+        local messages = parley._build_messages({
+            parsed_chat = pc,
+            start_index = 1,
+            end_index = 100,
+            exchange_idx = 1,
+            agent = agent(),
+            config = parley.config,
+            helpers = stub_helpers,
+            logger = stub_logger,
+        })
+
+        -- system, user, assistant[text, tool_use], user[tool_result] = 4
+        assert.equals(4, #messages)
+        assert.equals("system", messages[1].role)
+        assert.equals("user", messages[2].role)
+        assert.equals("Please read x.txt", messages[2].content)
+        assert.equals("assistant", messages[3].role)
+        assert.equals("table", type(messages[3].content))
+        assert.equals("user", messages[4].role)
+        assert.equals("table", type(messages[4].content))
+        assert.equals("tool_result", messages[4].content[1].type)
+        assert.equals("toolu_R", messages[4].content[1].tool_use_id)
+    end)
+
+    it("does NOT include the current exchange's answer when it has NO tool blocks (vanilla resubmit)", function()
+        -- Regression safeguard: if someone re-submits a vanilla chat at
+        -- the current exchange, we should not echo the previously-
+        -- generated answer back. Only exchanges with tool blocks in
+        -- content_blocks get the current-exchange inclusion.
+        local ex = exchange("Q", "A")
+        ex.question.line_start = 10
+        ex.answer.line_start = 12
+        local pc = parsed_chat({ ex })
+
+        local messages = parley._build_messages({
+            parsed_chat = pc,
+            start_index = 1,
+            end_index = 100,
+            exchange_idx = 1,
+            agent = agent(),
+            config = parley.config,
+            helpers = stub_helpers,
+            logger = stub_logger,
+        })
+
+        -- Only system + user. The answer "A" is NOT included because
+        -- this is the current exchange without tool blocks.
+        assert.equals(2, #messages)
+        assert.equals("system", messages[1].role)
+        assert.equals("user", messages[2].role)
+        assert.equals("Q", messages[2].content)
+    end)
+end)

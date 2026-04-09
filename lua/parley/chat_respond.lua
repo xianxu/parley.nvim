@@ -278,6 +278,85 @@ end
 -- _build_messages
 --------------------------------------------------------------------------------
 
+--- Convert an answer's content_blocks list into a sequence of
+--- Anthropic-shaped messages for the request payload.
+---
+--- Anthropic requires a specific interleaving when tool_use is
+--- involved: the assistant message emits `[text, tool_use]` content
+--- blocks, and the IMMEDIATELY FOLLOWING user message carries the
+--- `tool_result` content blocks for those tool_uses. That pattern
+--- repeats for every round of the tool loop.
+---
+--- This helper is the DRY consumer of content_blocks — parallel to
+--- lua/parley/tools/serialize.lua which is the producer that
+--- renders the same blocks back into buffer text. Together they
+--- close the loop: buffer text → chat_parser → content_blocks →
+--- build_messages → Anthropic API → streaming decoder → content_blocks
+--- → serialize → buffer text.
+---
+--- Empty input or text-only input still produces a single-assistant
+--- message wrapping the text blocks, but in practice this helper is
+--- only called when at least one tool_use or tool_result block is
+--- present (the text-only path stays on the byte-identical flat
+--- string emission in build_messages).
+---
+--- @param content_blocks table[] list from chat_parser
+--- @return table[] messages suitable for dispatcher.prepare_payload
+M._emit_content_blocks_as_messages = function(content_blocks)
+    local messages = {}
+    local current_assistant = nil -- accumulating [text, tool_use] for an assistant message
+    local current_user = nil      -- accumulating [tool_result] for a user message
+
+    local function flush_assistant()
+        if current_assistant and #current_assistant > 0 then
+            table.insert(messages, { role = "assistant", content = current_assistant })
+            current_assistant = nil
+        end
+    end
+    local function flush_user()
+        if current_user and #current_user > 0 then
+            table.insert(messages, { role = "user", content = current_user })
+            current_user = nil
+        end
+    end
+
+    for _, block in ipairs(content_blocks or {}) do
+        if block.type == "tool_result" then
+            -- Flush any open assistant batch so the tool_result
+            -- lands in its own user message directly after.
+            flush_assistant()
+            current_user = current_user or {}
+            table.insert(current_user, {
+                type = "tool_result",
+                tool_use_id = block.id,
+                content = block.content or "",
+                is_error = block.is_error == true,
+            })
+        else
+            -- text or tool_use — these belong to an assistant message.
+            -- Flush any open user batch first.
+            flush_user()
+            current_assistant = current_assistant or {}
+            if block.type == "text" then
+                table.insert(current_assistant, { type = "text", text = block.text or "" })
+            elseif block.type == "tool_use" then
+                table.insert(current_assistant, {
+                    type = "tool_use",
+                    id = block.id,
+                    name = block.name,
+                    input = block.input or {},
+                })
+            end
+        end
+    end
+
+    -- Flush whichever role was last accumulating.
+    flush_assistant()
+    flush_user()
+
+    return messages
+end
+
 M.build_messages = function(opts)
     local parsed_chat = opts.parsed_chat
     local start_index = opts.start_index
@@ -416,19 +495,55 @@ M.build_messages = function(opts)
                     table.insert(messages, { role = "user", content = omit_user_text })
                 end
 
-            -- Process the answer if it exists and is within our range
-            if exchange.answer and exchange.answer.line_start <= end_index and idx < exchange_idx then
+            -- Process the answer if it exists and is within our range.
+            -- M2 Task 2.6 of #81: if the answer carries tool_use / tool_result
+            -- content_blocks (populated by chat_parser when 🔧:/📎: appear in
+            -- the buffer), the CURRENT exchange's partial answer ALSO needs
+            -- to be emitted so the tool loop recursion can continue the
+            -- conversation with Anthropic. Vanilla resubmit still skips the
+            -- current exchange's answer (idx < exchange_idx preserved).
+            local answer_has_tool_blocks = false
+            if exchange.answer and exchange.answer.content_blocks then
+                for _, b in ipairs(exchange.answer.content_blocks) do
+                    if b.type == "tool_use" or b.type == "tool_result" then
+                        answer_has_tool_blocks = true
+                        break
+                    end
+                end
+            end
+            local include_answer = exchange.answer
+                and exchange.answer.line_start <= end_index
+                and (idx < exchange_idx or answer_has_tool_blocks)
+
+            if include_answer then
                 -- when we preserve due to have file inclusion in question, we still summarize the answer
                 if should_preserve and not (exchange.question.file_references and #exchange.question.file_references > 0) then
-                    -- Use the full answer content
-                    table.insert(messages, { role = "assistant", content = exchange.answer.content })
+                    -- Emit the answer. Two paths:
+                    --   A. Tool blocks present → split into Anthropic
+                    --      content-block messages (assistant[text,tool_use],
+                    --      user[tool_result], ...).
+                    --   B. No tool blocks → single flat-string assistant
+                    --      message (byte-identical to pre-#81).
+                    if answer_has_tool_blocks then
+                        for _, m in ipairs(M._emit_content_blocks_as_messages(exchange.answer.content_blocks)) do
+                            table.insert(messages, m)
+                        end
+                    else
+                        table.insert(messages, { role = "assistant", content = exchange.answer.content })
+                    end
                 else
                     -- Use the summary if available
                     if exchange.summary then
                         table.insert(messages, { role = "assistant", content = exchange.summary.content })
                     else
                         -- If no summary is available, use the full content (fallback)
-                        table.insert(messages, { role = "assistant", content = exchange.answer.content })
+                        if answer_has_tool_blocks then
+                            for _, m in ipairs(M._emit_content_blocks_as_messages(exchange.answer.content_blocks)) do
+                                table.insert(messages, m)
+                            end
+                        else
+                            table.insert(messages, { role = "assistant", content = exchange.answer.content })
+                        end
                     end
                 end
             end
@@ -447,9 +562,14 @@ M.build_messages = function(opts)
         end
     end
 
-    -- strip whitespace from ends of content
+    -- strip whitespace from ends of content. Messages built from
+    -- content_blocks carry a table in .content (Anthropic's content-
+    -- block shape); those have already been trimmed at the block
+    -- level by chat_parser cb_finalize_block so we leave them alone.
     for _, message in ipairs(messages) do
-        message.content = message.content:gsub("^%s*(.-)%s*$", "%1")
+        if type(message.content) == "string" then
+            message.content = message.content:gsub("^%s*(.-)%s*$", "%1")
+        end
     end
 
     -- Preserve a trailing newline for appended system prompt lines.
