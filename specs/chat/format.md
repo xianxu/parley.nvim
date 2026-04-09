@@ -9,6 +9,7 @@ Front matter (`---`/`---`) with `topic`, `file` (required) and optional override
 - `🔒:` local section — excluded from LLM context
 - `🌿:` branch link — excluded from LLM context
 - `🧠:` thinking, `📝:` summary (within assistant answer)
+- `🔧:` tool_use, `📎:` tool_result (within assistant answer, client-side tool-use loop — #81). Body is a dynamic-length fenced block (≥3 backticks, longer than any run in the content). Single source of truth for the schema: `lua/parley/tools/serialize.lua`.
 
 ## Branch Links
 - First `🌿:` after header = parent back-link; later ones = child forward-links
