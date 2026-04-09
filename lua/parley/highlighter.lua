@@ -255,25 +255,32 @@ end
 ---@param agent_name string
 ---@param ag_conf table|nil
 ---@return string
---- Returns "[🔧]" when the agent has a non-empty client-side tools list
---- (M1 Task 1.7 of #81), else "". Pure; no _parley state dependency so
---- it can be reused from lualine, highlighter, and the agent picker.
+--- Returns the bare tool indicator symbol ("🔧") when the agent has a
+--- non-empty client-side tools list (M1 Task 1.7 of #81), else "".
+--- Callers concatenate this with other indicators (web_search, etc.)
+--- and wrap the whole group with a single pair of square brackets.
+--- Pure; no _parley state dependency so it can be reused from lualine,
+--- highlighter, and the agent picker.
 ---@param ag_conf table|nil agent config table (from _parley.agents[name])
 ---@return string
 M.agent_tool_badge = function(ag_conf)
     if ag_conf and type(ag_conf.tools) == "table" and #ag_conf.tools > 0 then
-        return "[🔧]"
+        return "🔧"
     end
     return ""
 end
 
-M.agent_display_name_with_web_search = function(agent_name, ag_conf)
-    local display_name = agent_name
-    -- Tool badge is independent of web_search state, so append unconditionally.
-    display_name = display_name .. M.agent_tool_badge(ag_conf)
-
-    if not _parley._state.web_search then
-        return display_name
+--- Returns the bare web-search indicator symbol ("🌎" or "🌎?") based on
+--- _parley._state.web_search and the agent's provider/model support.
+--- Returns "" when web_search is off. Pure w.r.t. ag_conf but reads
+--- _parley._state.web_search.
+--- Defensive: returns "" when _parley is not yet injected (e.g. isolated
+--- unit tests that load the module without running parley.setup()).
+---@param ag_conf table|nil agent config table
+---@return string
+M.agent_web_search_badge = function(ag_conf)
+    if not _parley or not (_parley._state and _parley._state.web_search) then
+        return ""
     end
 
     local prov = require("parley.providers")
@@ -294,7 +301,21 @@ M.agent_display_name_with_web_search = function(agent_name, ag_conf)
         end
     end
 
-    return display_name .. (supported and "[w]" or "[w?]")
+    return supported and "🌎" or "🌎?"
+end
+
+--- Build the agent display name with a combined `[🔧🌎]`-style indicator
+--- group wrapping any enabled badges. Returns just the bare name when
+--- no badges apply.
+--- Historical name — kept for backward compat with callers that already
+--- use it. The behavior changed in M1 Task 1.7: tool + web are now
+--- combined into a single bracket group.
+M.agent_display_name_with_web_search = function(agent_name, ag_conf)
+    local indicators = M.agent_tool_badge(ag_conf) .. M.agent_web_search_badge(ag_conf)
+    if indicators == "" then
+        return agent_name
+    end
+    return agent_name .. "[" .. indicators .. "]"
 end
 
 M.display_agent = function(buf, file_name)

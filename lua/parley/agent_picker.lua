@@ -14,11 +14,19 @@ function M._build_items(plugin)
         local model_name = type(agent.model) == "table" and agent.model.model or agent.model
 
         local description = model_name .. " (" .. provider .. ")"
-        -- [🔧] badge for agents opting into client-side tool use (M1 Task 1.7
-        -- of issue #81). Non-empty agent.tools = agentic agent.
-        local tool_badge = (type(agent.tools) == "table" and #agent.tools > 0) and " [🔧]" or ""
+        -- Combined [🔧🌎]-style indicator group for tool-enabled agents and
+        -- web search (M1 Task 1.7 of #81). Reuse the highlighter helpers
+        -- so picker, buffer-top extmark, and lualine agree on the badge
+        -- string. (pcall so the picker still works if highlighter isn't
+        -- loaded yet, e.g. in isolated unit tests that stub plugin.)
+        local ok_h, highlighter = pcall(require, "parley.highlighter")
+        local indicators = ""
+        if ok_h then
+            indicators = highlighter.agent_tool_badge(agent) .. highlighter.agent_web_search_badge(agent)
+        end
+        local indicator_group = (indicators ~= "") and (" [" .. indicators .. "]") or ""
         local is_current = agent_name == plugin._state.agent
-        local display = (is_current and "✓ " or "  ") .. agent_name .. tool_badge .. " - " .. description
+        local display = (is_current and "✓ " or "  ") .. agent_name .. indicator_group .. " - " .. description
 
         table.insert(items, {
             name = agent_name,

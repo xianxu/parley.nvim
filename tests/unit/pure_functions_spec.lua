@@ -279,42 +279,42 @@ describe("agent_display_name_with_web_search", function()
         assert.equals("Proxy-Claude-Sonnet", name)
     end)
 
-    it("returns [w] for openai model with search_model when web_search is enabled", function()
+    it("returns [🌎] for openai model with search_model when web_search is enabled", function()
         parley._state.web_search = true
         local name = parley.agent_display_name_with_web_search("GPT5.4", {
             provider = "openai",
             model = { model = "gpt-5.4", search_model = "gpt-5-search-api" },
         })
-        assert.equals("GPT5.4[w]", name)
+        assert.equals("GPT5.4[🌎]", name)
     end)
 
-    it("returns [w?] for openai model without search_model when web_search is enabled", function()
+    it("returns [🌎?] for openai model without search_model when web_search is enabled", function()
         parley._state.web_search = true
         local name = parley.agent_display_name_with_web_search("GPT5.4", {
             provider = "openai",
             model = { model = "gpt-5.4" },
         })
-        assert.equals("GPT5.4[w?]", name)
+        assert.equals("GPT5.4[🌎?]", name)
     end)
 
-    it("returns [w?] for cliproxyapi when strategy is none", function()
+    it("returns [🌎?] for cliproxyapi when strategy is none", function()
         parley._state.web_search = true
         parley.dispatcher.providers.cliproxyapi.web_search_strategy = "none"
         local name = parley.agent_display_name_with_web_search("Proxy-Claude-Sonnet", {
             provider = "cliproxyapi",
             model = { model = "claude-sonnet-4-6" },
         })
-        assert.equals("Proxy-Claude-Sonnet[w?]", name)
+        assert.equals("Proxy-Claude-Sonnet[🌎?]", name)
     end)
 
-    it("returns [w] for cliproxyapi claude model in anthropic_tools_route", function()
+    it("returns [🌎] for cliproxyapi claude model in anthropic_tools_route", function()
         parley._state.web_search = true
         parley.dispatcher.providers.cliproxyapi.web_search_strategy = "anthropic_tools_route"
         local name = parley.agent_display_name_with_web_search("Proxy-Claude-Sonnet", {
             provider = "cliproxyapi",
             model = { model = "claude-sonnet-4-6" },
         })
-        assert.equals("Proxy-Claude-Sonnet[w]", name)
+        assert.equals("Proxy-Claude-Sonnet[🌎]", name)
     end)
 
     it("uses per-model strategy override for cliproxyapi labels", function()
@@ -327,26 +327,48 @@ describe("agent_display_name_with_web_search", function()
                 web_search_strategy = "anthropic_tools_route",
             },
         })
-        assert.equals("Proxy-Claude-Sonnet[w]", name)
+        assert.equals("Proxy-Claude-Sonnet[🌎]", name)
     end)
 
-    it("returns [w?] for cliproxyapi openai_search_model without search_model", function()
+    it("returns [🌎?] for cliproxyapi openai_search_model without search_model", function()
         parley._state.web_search = true
         parley.dispatcher.providers.cliproxyapi.web_search_strategy = "openai_search_model"
         local name = parley.agent_display_name_with_web_search("Proxy-GPT5.4", {
             provider = "cliproxyapi",
             model = { model = "gpt-5.4" },
         })
-        assert.equals("Proxy-GPT5.4[w?]", name)
+        assert.equals("Proxy-GPT5.4[🌎?]", name)
     end)
 
-    it("returns [w] for cliproxyapi openai_tools_route without search_model", function()
+    it("returns [🌎] for cliproxyapi openai_tools_route without search_model", function()
         parley._state.web_search = true
         parley.dispatcher.providers.cliproxyapi.web_search_strategy = "openai_tools_route"
         local name = parley.agent_display_name_with_web_search("Proxy-GPT5.4", {
             provider = "cliproxyapi",
             model = { model = "gpt-5.4" },
         })
-        assert.equals("Proxy-GPT5.4[w]", name)
+        assert.equals("Proxy-GPT5.4[🌎]", name)
+    end)
+
+    -- Task 1.7 (#81): tool + web combined into a single bracket group
+    it("returns [🔧🌎] when tool-enabled agent also has web_search supported", function()
+        parley._state.web_search = true
+        parley.dispatcher.providers.cliproxyapi.web_search_strategy = "anthropic_tools_route"
+        local name = parley.agent_display_name_with_web_search("ClaudeAgentTools", {
+            provider = "anthropic",
+            model = { model = "claude-sonnet-4-6" },
+            tools = { "read_file", "edit_file" },
+        })
+        assert.equals("ClaudeAgentTools[🔧🌎]", name)
+    end)
+
+    it("returns [🔧] when tool-enabled agent has web_search disabled", function()
+        parley._state.web_search = false
+        local name = parley.agent_display_name_with_web_search("ClaudeAgentTools", {
+            provider = "anthropic",
+            model = { model = "claude-sonnet-4-6" },
+            tools = { "read_file" },
+        })
+        assert.equals("ClaudeAgentTools[🔧]", name)
     end)
 end)

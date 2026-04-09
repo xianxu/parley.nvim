@@ -153,8 +153,11 @@ end)
 describe("highlighter.agent_tool_badge", function()
     local highlighter = require("parley.highlighter")
 
-    it("returns [🔧] when ag_conf has a non-empty tools list", function()
-        assert.equals("[🔧]", highlighter.agent_tool_badge({ tools = { "read_file" } }))
+    -- Returns the bare "🔧" symbol (no brackets). Callers concatenate
+    -- this with other indicators and wrap the whole group in a single
+    -- "[...]" — see agent_display_name_with_web_search.
+    it("returns '🔧' when ag_conf has a non-empty tools list", function()
+        assert.equals("🔧", highlighter.agent_tool_badge({ tools = { "read_file" } }))
     end)
 
     it("returns empty string for nil ag_conf", function()

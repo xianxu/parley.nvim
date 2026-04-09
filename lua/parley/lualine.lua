@@ -178,33 +178,18 @@ M.create_component = function(parley_instance)
         agent_info = parley.get_agent_info({}, parley.get_agent(agent_name))
       end
       local prov = require("parley.providers")
-      -- [🔧] badge for tool-enabled agents (M1 Task 1.7 of #81).
-      -- Reuse the highlighter helper so both the buffer-top extmark and
-      -- the lualine indicator compute the badge identically (DRY).
-      local ok_h, highlighter = pcall(require, "parley.highlighter")
+      -- Combined [🔧🌎]-style indicator group for tool-enabled agents and
+      -- web search (M1 Task 1.7 of #81). Reuse the highlighter helpers so
+      -- the lualine, buffer-top extmark, and agent picker all compute the
+      -- same string (DRY). Raw-mode indicators remain as separate brackets
+      -- further below.
+      local highlighter = require("parley.highlighter")
       local agent_conf = parley.agents and parley.agents[agent_name]
-      local tool_badge = (ok_h and highlighter.agent_tool_badge)
-        and highlighter.agent_tool_badge(agent_conf) or ""
-      -- Add [w] or [w?] indicator for web_search when enabled
-      local display_name = agent_name .. tool_badge
-      if parley._state.web_search then
-        local model_conf = agent_info and agent_info.model or nil
-        local supported = agent_info and prov.has_feature(agent_info.provider, "web_search", model_conf)
-        -- For OpenAI, also require search_model to be defined
-        if supported and agent_info and prov.resolve_name(agent_info.provider) == "openai" then
-          local agent_conf = parley.agents and parley.agents[agent_name]
-          local agent_model_conf = agent_conf and agent_conf.model
-          if type(agent_model_conf) == "table" and not agent_model_conf.search_model then
-            supported = false
-          end
-        end
-        if supported and agent_info and prov.resolve_name(agent_info.provider) == "cliproxyapi" then
-          local strategy = prov.get_web_search_strategy(agent_info.provider, model_conf) or "none"
-          if strategy == "openai_search_model" and type(model_conf) == "table" and not model_conf.search_model then
-            supported = false
-          end
-        end
-        display_name = display_name .. (supported and "[w]" or "[w?]")
+      local indicators = highlighter.agent_tool_badge(agent_conf)
+        .. highlighter.agent_web_search_badge(agent_conf)
+      local display_name = agent_name
+      if indicators ~= "" then
+        display_name = display_name .. "[" .. indicators .. "]"
       end
       if parley.config.raw_mode then
         local raw_req = parley.config.raw_mode.parse_raw_request
