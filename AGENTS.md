@@ -2,11 +2,15 @@
 
 ## Workflow Orchestration
 
-### 1. Overall
+### 1. Overall Workflow
+- Enter brainstorming mode when requirement is unclear 
 - Enter plan mode for ANY non-trivial task (3+ steps, architectural decisions, change more than 2 files, 50 lines)
-- Work is tracked in `issues/` folder as single-file-per-issue markdown file. Issue status are: open, working, blocked, done, wontfix. You should maintain them
-- Plan within the issue file's `## Plan` section (checklist), log discoveries, tools you used or installed in `## Log`
-- AVOID READING `history/*`, they are history, low signal
+- Work is tracked in `issues/` folder as single-file-per-issue markdown file 
+    - Plan within the issue file's `## Plan` section (checklist)
+    - Log discoveries, tools you used or installed in `## Log`
+    - Detailed design goes into `## Spec` section
+    - Write out your thinking to the `issues/` file you are working on often to preserve your design state.
+- AVOID READING `history/*` unless explicitly asked to, they are history, low signal
 - Wait for user approval before implementation for ANY non-trivial task
 - If something goes sideways, STOP and re-plan immediately: don't keep pushing
 - Use plan mode for verification steps, not just building

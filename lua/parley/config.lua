@@ -149,22 +149,22 @@ local config = {
 			-- system prompt (use this to specify the persona/role of the AI)
 			system_prompt = require("parley.defaults").chat_system_prompt,
 		},
-		-- {
-		-- 	provider = "anthropic",
-		-- 	name = "Claude-Opus",
-		-- 	-- string with model name or table with model name and parameters
-		-- 	model = { model = "claude-opus-4-6", temperature = 0.8 },
-		-- 	-- system prompt (use this to specify the persona/role of the AI)
-		-- 	system_prompt = require("parley.defaults").chat_system_prompt,
-		-- },
-		-- {
-		-- 	provider = "anthropic",
-		-- 	name = "Claude-Sonnet",
-		-- 	-- string with model name or table with model name and parameters
-		-- 	model = { model = "claude-sonnet-4-6", temperature = 0.8 },
-		-- 	-- system prompt (use this to specify the persona/role of the AI)
-		-- 	system_prompt = require("parley.defaults").chat_system_prompt,
-		-- },
+		{
+			provider = "anthropic",
+			name = "Claude-Opus",
+			-- string with model name or table with model name and parameters
+			model = { model = "claude-opus-4-6", temperature = 0.8 },
+			-- system prompt (use this to specify the persona/role of the AI)
+			system_prompt = require("parley.defaults").chat_system_prompt,
+		},
+		{
+			provider = "anthropic",
+			name = "Claude-Sonnet",
+			-- string with model name or table with model name and parameters
+			model = { model = "claude-sonnet-4-6", temperature = 0.8 },
+			-- system prompt (use this to specify the persona/role of the AI)
+			system_prompt = require("parley.defaults").chat_system_prompt,
+		},
 		-- {
 		-- 	provider = "anthropic",
 		-- 	name = "Claude-Haiku",
