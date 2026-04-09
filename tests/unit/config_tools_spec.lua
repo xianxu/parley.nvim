@@ -1,0 +1,173 @@
+-- Unit tests for per-agent tools config and ClaudeAgentTools default.
+--
+-- M1 Task 1.4: agents can declare a `tools` field (list of builtin tool
+-- names) plus optional `max_tool_iterations` and `tool_result_max_bytes`
+-- overrides. Setup validates that referenced tool names exist in the
+-- registry, raises with the offending name on unknown entries, and
+-- applies default values for the two numeric fields when absent.
+--
+-- Also verifies that the default `ClaudeAgentTools` agent ships in the
+-- default config with all six builtin tools enabled (the headline M1
+-- deliverable — users get an agentic Claude out of the box).
+
+local tmp_dir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-config-tools-" .. os.time()
+
+local parley = require("parley")
+
+-- parley.setup() merges into M.agents rather than resetting; wipe it
+-- before each run so stale agents from prior tests (including one that
+-- raised during validation) do not leak across fresh_setup calls.
+local function fresh_setup(agents_override)
+    parley.agents = {}
+    parley.system_prompts = {}
+    parley.hooks = {}
+    parley.setup({
+        chat_dir = tmp_dir,
+        state_dir = tmp_dir .. "/state",
+        providers = {},
+        api_keys = {},
+        agents = agents_override,
+    })
+end
+
+describe("per-agent tools config", function()
+    it("accepts an agent with a valid tools list", function()
+        fresh_setup({
+            {
+                provider = "anthropic",
+                name = "TestToolsAgent",
+                model = { model = "claude-sonnet-4-6", temperature = 0.8 },
+                system_prompt = "test",
+                tools = { "read_file" },
+            },
+        })
+        assert.is_not_nil(parley.agents["TestToolsAgent"])
+        assert.same({ "read_file" }, parley.agents["TestToolsAgent"].tools)
+    end)
+
+    it("raises on unknown tool name, mentioning the offending name", function()
+        local ok, err = pcall(fresh_setup, {
+            {
+                provider = "anthropic",
+                name = "BadToolsAgent",
+                model = { model = "claude-sonnet-4-6", temperature = 0.8 },
+                system_prompt = "test",
+                tools = { "nonexistent_tool" },
+            },
+        })
+        assert.is_false(ok)
+        assert.matches("nonexistent_tool", tostring(err))
+    end)
+
+    it("backward compatible: agent without tools field works unchanged", function()
+        fresh_setup({
+            {
+                provider = "anthropic",
+                name = "VanillaAgent",
+                model = { model = "claude-sonnet-4-6", temperature = 0.8 },
+                system_prompt = "test",
+            },
+        })
+        assert.is_not_nil(parley.agents["VanillaAgent"])
+        assert.is_nil(parley.agents["VanillaAgent"].tools)
+        -- Defaults should NOT be applied to agents without tools
+        assert.is_nil(parley.agents["VanillaAgent"].max_tool_iterations)
+        assert.is_nil(parley.agents["VanillaAgent"].tool_result_max_bytes)
+    end)
+
+    it("defaults max_tool_iterations to 20 when tools set but override absent", function()
+        fresh_setup({
+            {
+                provider = "anthropic",
+                name = "DefaultIterAgent",
+                model = { model = "claude-sonnet-4-6", temperature = 0.8 },
+                system_prompt = "test",
+                tools = { "read_file" },
+            },
+        })
+        assert.equals(20, parley.agents["DefaultIterAgent"].max_tool_iterations)
+    end)
+
+    it("defaults tool_result_max_bytes to 102400 when tools set but override absent", function()
+        fresh_setup({
+            {
+                provider = "anthropic",
+                name = "DefaultBytesAgent",
+                model = { model = "claude-sonnet-4-6", temperature = 0.8 },
+                system_prompt = "test",
+                tools = { "read_file" },
+            },
+        })
+        assert.equals(102400, parley.agents["DefaultBytesAgent"].tool_result_max_bytes)
+    end)
+
+    it("respects explicit max_tool_iterations override", function()
+        fresh_setup({
+            {
+                provider = "anthropic",
+                name = "CustomIterAgent",
+                model = { model = "claude-sonnet-4-6", temperature = 0.8 },
+                system_prompt = "test",
+                tools = { "read_file" },
+                max_tool_iterations = 3,
+            },
+        })
+        assert.equals(3, parley.agents["CustomIterAgent"].max_tool_iterations)
+    end)
+
+    it("respects explicit tool_result_max_bytes override", function()
+        fresh_setup({
+            {
+                provider = "anthropic",
+                name = "CustomBytesAgent",
+                model = { model = "claude-sonnet-4-6", temperature = 0.8 },
+                system_prompt = "test",
+                tools = { "read_file" },
+                tool_result_max_bytes = 50000,
+            },
+        })
+        assert.equals(50000, parley.agents["CustomBytesAgent"].tool_result_max_bytes)
+    end)
+end)
+
+describe("default ClaudeAgentTools", function()
+    it("ships in the default config with all six builtin tools", function()
+        fresh_setup(nil) -- use default agents from config
+        local agent = parley.agents["ClaudeAgentTools"]
+        assert.is_not_nil(agent, "ClaudeAgentTools should ship as a default agent")
+        assert.equals("anthropic", agent.provider)
+        assert.is_table(agent.tools)
+        assert.equals(6, #agent.tools)
+        local names = {}
+        for _, n in ipairs(agent.tools) do names[n] = true end
+        assert.is_true(names.read_file)
+        assert.is_true(names.list_dir)
+        assert.is_true(names.grep)
+        assert.is_true(names.glob)
+        assert.is_true(names.edit_file)
+        assert.is_true(names.write_file)
+    end)
+
+    it("has default loop limits applied", function()
+        fresh_setup(nil)
+        local agent = parley.agents["ClaudeAgentTools"]
+        assert.equals(20, agent.max_tool_iterations)
+        assert.equals(102400, agent.tool_result_max_bytes)
+    end)
+end)
+
+describe("new config prefix + shortcut defaults", function()
+    it("defines chat_tool_use_prefix and chat_tool_result_prefix", function()
+        fresh_setup(nil)
+        assert.equals("🔧:", parley.config.chat_tool_use_prefix)
+        assert.equals("📎:", parley.config.chat_tool_result_prefix)
+    end)
+
+    it("defines chat_shortcut_toggle_tool_folds", function()
+        fresh_setup(nil)
+        local s = parley.config.chat_shortcut_toggle_tool_folds
+        assert.is_table(s)
+        assert.equals("<C-g>b", s.shortcut)
+        assert.same({ "n" }, s.modes)
+    end)
+end)

@@ -438,10 +438,27 @@ M.setup = function(opts)
 
 	-- prepare agent list
 	M._agents = {}
+	local tools_mod = require("parley.tools")
 	for name, _ in pairs(M.agents) do
 		M.agents[name].provider = M.agents[name].provider or "openai"
 
 		if M.dispatcher.providers[M.agents[name].provider] then
+			-- Validate per-agent tool-use config (M1 of #81). Agents opting
+			-- into client-side tool use must reference only registered
+			-- builtin names. Unknown names raise with the offending name.
+			-- Defaults for max_tool_iterations and tool_result_max_bytes
+			-- are applied here, not on vanilla agents (byte-identity lock).
+			local agent = M.agents[name]
+			if agent.tools and #agent.tools > 0 then
+				-- `tools_mod.select` raises on unknown names
+				local ok, err = pcall(tools_mod.select, agent.tools)
+				if not ok then
+					error(string.format("agent %q: %s", name, tostring(err)))
+				end
+				agent.max_tool_iterations = agent.max_tool_iterations or 20
+				agent.tool_result_max_bytes = agent.tool_result_max_bytes or 102400
+			end
+
 			table.insert(M._agents, name)
 		else
 			M.agents[name] = nil

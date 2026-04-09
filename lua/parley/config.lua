@@ -165,6 +165,19 @@ local config = {
 			-- system prompt (use this to specify the persona/role of the AI)
 			system_prompt = require("parley.defaults").chat_system_prompt,
 		},
+		{
+			-- Agentic Claude: enables client-side filesystem tool use so the
+			-- model can read, edit, and write files inside the working
+			-- directory. Headline M1 deliverable of issue #81.
+			provider = "anthropic",
+			name = "ClaudeAgentTools",
+			model = { model = "claude-sonnet-4-6", temperature = 0.8 },
+			system_prompt = require("parley.defaults").chat_system_prompt,
+			tools = { "read_file", "list_dir", "grep", "glob", "edit_file", "write_file" },
+			-- Optional: defaults applied at setup time when absent
+			-- max_tool_iterations = 20,
+			-- tool_result_max_bytes = 102400,
+		},
 		-- {
 		-- 	provider = "anthropic",
 		-- 	name = "Claude-Haiku",
@@ -289,6 +302,10 @@ local config = {
 	chat_local_prefix = "🔒:",
 	-- chat branch prefix (for tree-of-chat links: parent back-link on first line, child branches in body)
 	chat_branch_prefix = "🌿:",
+	-- tool use prefix (client-side tool call emitted by the LLM during agentic loop)
+	chat_tool_use_prefix = "🔧:",
+	-- tool result prefix (parley's response to a tool_use, or synthetic cancel/cap marker)
+	chat_tool_result_prefix = "📎:",
 	-- The banner shown at the top of each chat file.
 	chat_template = require("parley.defaults").short_chat_template,
 	-- if you want more real estate in your chat files and don't need the helper text
@@ -308,6 +325,8 @@ local config = {
 	chat_shortcut_delete = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>d" },
 	chat_shortcut_delete_tree = { modes = { "n" }, shortcut = "<C-g>D" },
 	chat_shortcut_stop = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>x" },
+	-- Toggle folds of 🔧:/📎: components within the exchange under cursor
+	chat_shortcut_toggle_tool_folds = { modes = { "n" }, shortcut = "<C-g>b" },
 	chat_shortcut_agent = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>a" },
 	chat_shortcut_system_prompt = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>s" },
 	chat_shortcut_follow_cursor = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>l" },
