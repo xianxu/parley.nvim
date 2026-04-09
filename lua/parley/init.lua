@@ -281,6 +281,11 @@ M.setup = function(opts)
 	-- reset M.config
 	M.config = vim.deepcopy(config)
 
+	-- Register builtin tool-use tools (M1 of #81). Runs before any
+	-- agent validation so agents can reference tools by name. The
+	-- registry module handles reset-idempotence internally.
+	require("parley.tools").register_builtins()
+
 	local curl_params = opts.curl_params or M.config.curl_params
 		local state_dir = opts.state_dir or M.config.state_dir
 

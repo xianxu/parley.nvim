@@ -71,4 +71,27 @@ function M.select(names)
     return out
 end
 
+--- Canonical list of builtin tool names. Single source of truth for
+--- which tools ship with parley. Adding a new builtin requires editing
+--- this list AND creating the corresponding file under builtin/.
+M.BUILTIN_NAMES = {
+    "read_file",
+    "list_dir",
+    "grep",
+    "glob",
+    "edit_file",
+    "write_file",
+}
+
+--- Register all six builtin tools. Called from `parley.setup()`. Calls
+--- `reset()` first so repeated `setup()` invocations (common during
+--- development and in tests) do not accumulate stale definitions or
+--- leak state across sessions. Idempotent.
+function M.register_builtins()
+    M.reset()
+    for _, name in ipairs(M.BUILTIN_NAMES) do
+        M.register(require("parley.tools.builtin." .. name))
+    end
+end
+
 return M
