@@ -146,6 +146,63 @@ describe("agent_picker item building", function()
 end)
 
 -- ---------------------------------------------------------------------------
+-- highlighter.agent_tool_badge — DRY helper shared by picker, highlighter
+-- extmark (buffer top line), and lualine status. Ensures all three sites
+-- render the [🔧] badge identically.
+-- ---------------------------------------------------------------------------
+describe("highlighter.agent_tool_badge", function()
+    local highlighter = require("parley.highlighter")
+
+    it("returns [🔧] when ag_conf has a non-empty tools list", function()
+        assert.equals("[🔧]", highlighter.agent_tool_badge({ tools = { "read_file" } }))
+    end)
+
+    it("returns empty string for nil ag_conf", function()
+        assert.equals("", highlighter.agent_tool_badge(nil))
+    end)
+
+    it("returns empty string when tools field is absent", function()
+        assert.equals("", highlighter.agent_tool_badge({ provider = "anthropic" }))
+    end)
+
+    it("returns empty string when tools is an empty list", function()
+        assert.equals("", highlighter.agent_tool_badge({ tools = {} }))
+    end)
+
+    it("returns empty string when tools is not a table", function()
+        assert.equals("", highlighter.agent_tool_badge({ tools = "read_file" }))
+    end)
+end)
+
+describe("highlighter.agent_display_name_with_web_search includes tool badge", function()
+    local highlighter = require("parley.highlighter")
+    -- agent_display_name_with_web_search depends on _parley._state which is
+    -- set up when parley is loaded in the test harness. The test verifies
+    -- that the tool badge appends regardless of web_search state.
+
+    it("appends [🔧] for tool-enabled agent", function()
+        local parley = require("parley")
+        parley._state = parley._state or {}
+        parley._state.web_search = false
+        local name = highlighter.agent_display_name_with_web_search("TestAgent", {
+            tools = { "read_file" },
+            provider = "anthropic",
+        })
+        assert.truthy(name:find("[🔧]", 1, true))
+    end)
+
+    it("does NOT append [🔧] for vanilla agent", function()
+        local parley = require("parley")
+        parley._state = parley._state or {}
+        parley._state.web_search = false
+        local name = highlighter.agent_display_name_with_web_search("TestAgent", {
+            provider = "anthropic",
+        })
+        assert.falsy(name:find("[🔧]", 1, true))
+    end)
+end)
+
+-- ---------------------------------------------------------------------------
 -- system_prompt_picker._build_items
 -- ---------------------------------------------------------------------------
 describe("system_prompt_picker item building", function()

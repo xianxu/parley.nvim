@@ -178,8 +178,15 @@ M.create_component = function(parley_instance)
         agent_info = parley.get_agent_info({}, parley.get_agent(agent_name))
       end
       local prov = require("parley.providers")
+      -- [🔧] badge for tool-enabled agents (M1 Task 1.7 of #81).
+      -- Reuse the highlighter helper so both the buffer-top extmark and
+      -- the lualine indicator compute the badge identically (DRY).
+      local ok_h, highlighter = pcall(require, "parley.highlighter")
+      local agent_conf = parley.agents and parley.agents[agent_name]
+      local tool_badge = (ok_h and highlighter.agent_tool_badge)
+        and highlighter.agent_tool_badge(agent_conf) or ""
       -- Add [w] or [w?] indicator for web_search when enabled
-      local display_name = agent_name
+      local display_name = agent_name .. tool_badge
       if parley._state.web_search then
         local model_conf = agent_info and agent_info.model or nil
         local supported = agent_info and prov.has_feature(agent_info.provider, "web_search", model_conf)

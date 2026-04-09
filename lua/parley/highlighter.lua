@@ -255,8 +255,23 @@ end
 ---@param agent_name string
 ---@param ag_conf table|nil
 ---@return string
+--- Returns "[🔧]" when the agent has a non-empty client-side tools list
+--- (M1 Task 1.7 of #81), else "". Pure; no _parley state dependency so
+--- it can be reused from lualine, highlighter, and the agent picker.
+---@param ag_conf table|nil agent config table (from _parley.agents[name])
+---@return string
+M.agent_tool_badge = function(ag_conf)
+    if ag_conf and type(ag_conf.tools) == "table" and #ag_conf.tools > 0 then
+        return "[🔧]"
+    end
+    return ""
+end
+
 M.agent_display_name_with_web_search = function(agent_name, ag_conf)
     local display_name = agent_name
+    -- Tool badge is independent of web_search state, so append unconditionally.
+    display_name = display_name .. M.agent_tool_badge(ag_conf)
+
     if not _parley._state.web_search then
         return display_name
     end
