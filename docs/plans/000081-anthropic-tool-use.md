@@ -93,7 +93,7 @@ Files that will be created or modified. Held here so decomposition decisions are
 
 This step runs on **current main**, BEFORE any #81 code lands. It captures the ground-truth request payload that a vanilla Claude agent produces today, so Task 9.3 (M9 regression lockdown) has a golden JSON to diff against. Without this, byte-identity verification in M9 is unverifiable.
 
-- [ ] **Step 1.0.1: Capture the baseline**
+- [x] **Step 1.0.1: Capture the baseline**
 
 1. Confirm you are on current main with no #81 changes (`git status` clean, `git log --oneline -1`).
 2. Start Neovim with parley configured with an existing vanilla Anthropic agent.
@@ -101,7 +101,7 @@ This step runs on **current main**, BEFORE any #81 code lands. It captures the g
 4. Copy the three most recent JSON files from `vim.fn.stdpath("cache") .. "/parley/query/"` to `tests/fixtures/pre_81_vanilla_claude_request_{1,2,3}.json`.
 5. Record the three prompts in `tests/fixtures/pre_81_vanilla_claude_prompts.lua` so Task 9.3 can replay them.
 
-- [ ] **Step 1.0.2: Commit the baseline**
+- [x] **Step 1.0.2: Commit the baseline**
 
 ```bash
 git add tests/fixtures/pre_81_vanilla_claude_request_*.json tests/fixtures/pre_81_vanilla_claude_prompts.lua
@@ -562,17 +562,29 @@ In `lua/parley/dispatcher.lua` `prepare_payload`, locate the anthropic branch. A
 
 **Signature decision (pinned):** `prepare_payload(messages, model, provider, agent_tools)`. The new `agent_tools` parameter (4th positional) is optional — `nil` or empty for vanilla agents. Matches the existing parameter style in `dispatcher.lua` which already takes flat positional args. Callers in `chat_respond.lua` pass `agent.tools` explicitly. This avoids passing the whole agent table (keeps `prepare_payload` ignorant of agent-table shape) and avoids globals.
 
+**CRITICAL — APPEND, do not CLOBBER, `payload.tools`:**
+
+The Task 1.0 baseline capture revealed that the existing `providers.lua:568+` code already populates `payload.tools` with Anthropic's **server-side tools** (`web_search`, `web_fetch`) when the agent has web search enabled. Our client-side tool encoding MUST append to the existing `payload.tools` list, not overwrite it, otherwise users with web search lose it the moment they select an agent with client-side tools, AND vanilla agents with web search fail the M9 byte-identity check if the append logic is wrong.
+
 ```lua
 function D.prepare_payload(messages, model, provider, agent_tools)
-  -- ... existing body ...
-  -- In the anthropic branch, after messages are assembled:
+  -- ... existing body (which may have set payload.tools to server-side tools) ...
+  -- In the anthropic branch, after messages are assembled AND after the
+  -- existing server-side-tools logic has run:
   if agent_tools and #agent_tools > 0 then
     local defs = require("parley.tools").select(agent_tools)
-    payload.tools = require("parley.providers").anthropic_encode_tools(defs)
+    local client_tools = require("parley.providers").anthropic_encode_tools(defs)
+    -- APPEND, do not overwrite:
+    payload.tools = payload.tools or {}
+    for _, t in ipairs(client_tools) do
+      table.insert(payload.tools, t)
+    end
   end
   -- ...
 end
 ```
+
+**Test requirement added to Task 1.5:** the dispatcher spec for tool encoding MUST include a case where the payload already has `tools = [web_search]` from the existing server-side logic, and verify that after client-side tool encoding the result is `tools = [web_search, read_file, ...]` — not `tools = [read_file, ...]`.
 
 Update all existing callers of `prepare_payload` to pass `nil` or the agent's tools list as the new 4th arg. Grep: `prepare_payload(` across the repo — there should be a small number of callers in `chat_respond.lua` and tests.
 
