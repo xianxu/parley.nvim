@@ -354,6 +354,13 @@ describe("prepare_payload: anthropic client-side tools (Task 1.5)", function()
         assert.is_false(ok)
         assert.matches("tools not supported", tostring(err))
     end)
+
+    it("ollama provider raises when agent_tools is provided", function()
+        local olm = { model = "llama3.1", temperature = 0.6, top_p = 1.0, max_tokens = 1024 }
+        local ok, err = pcall(dispatcher.prepare_payload, msgs(user("hi")), olm, "ollama", { "read_file" })
+        assert.is_false(ok)
+        assert.matches("tools not supported", tostring(err))
+    end)
 end)
 
 describe("prepare_payload: googleai provider", function()
