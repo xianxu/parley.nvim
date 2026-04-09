@@ -156,7 +156,7 @@ Six builtin tools in a new `lua/parley/tools/` module. Each tool is one file, ~5
 
 ### Implementation milestones (each gated on its manual test stage)
 
-- [ ] **M1 — Plumbing**: `ToolDefinition`/`ToolCall`/`ToolResult` types, agent `tools` config field, Anthropic payload `tools` encoding, new `ClaudeAgentTools` agent, picker `[🔧]` badge. No loop yet; model can respond but if it emits tool_use, we error. → gated on **Stage 1**
+- [x] **M1 — Plumbing**: `ToolDefinition`/`ToolCall`/`ToolResult` types, agent `tools` config field, Anthropic payload `tools` encoding, new `ClaudeAgentTools` agent, picker `[🔧]` badge. No loop yet; model can respond but if it emits tool_use, we error. → gated on **Stage 1** ✅ 2026-04-09
 - [ ] **M2 — Single read_file round-trip**: buffer prefixes `🔧:`/`📎:`, parser changes, streaming tool_use accumulator in Anthropic adapter, dispatcher tool loop with single-round execution, `read_file` handler, fold setup, `<C-g>b` shortcut. → gated on **Stage 2**
 - [ ] **M3 — Remaining read tools**: `list_dir`, `grep`, `glob`. → gated on **Stage 3**
 - [ ] **M4 — Multi-round loop & iteration cap**: loop recursion, iteration counter, synthetic `(iteration limit reached)` result, lualine progress indicator. → gated on **Stage 4**
@@ -170,14 +170,14 @@ Six builtin tools in a new `lua/parley/tools/` module. Each tool is one file, ~5
 
 Every stage is end-to-end in a live Neovim session. Log pass / fail / issues found in the Log section as each stage is attempted.
 
-#### Stage 1 — Plumbing (no loop yet)
+#### Stage 1 — Plumbing (no loop yet) ✅ 2026-04-09
 
-- [ ] `ClaudeAgentTools` agent loads with `tools` field configured
-- [ ] Unknown tool name in config raises setup-time error with the offending name
-- [ ] Agent picker (`<C-g>a`) shows `[🔧]` badge next to the new agent
-- [ ] Sending a vanilla "Hi, what is 2+2?" to the new agent produces a normal text response (verifies tool-enabled payloads don't break non-tool conversations)
-- [ ] Query cache file contains the outgoing request JSON with a `tools: [...]` field
-- [ ] Vanilla (non-tools) agents: query cache JSON is byte-identical to pre-#81 for the same prompts
+- [x] `ClaudeAgentTools` agent loads with `tools` field configured
+- [x] Unknown tool name in config raises setup-time error with the offending name
+- [x] Agent picker (`<C-g>a`) shows `[🔧]` badge next to the new agent
+- [x] Sending a vanilla "Hi, what is 2+2?" to the new agent produces a normal text response (verifies tool-enabled payloads don't break non-tool conversations)
+- [x] Query cache file contains the outgoing request JSON with a `tools: [...]` field (verified 8 tools: 6 client + web_search + web_fetch)
+- [x] Vanilla (non-tools) agents: query cache JSON is byte-identical to pre-#81 for the same prompts (all fields match except the user message content)
 
 #### Stage 2 — Single read_file round-trip
 
@@ -300,3 +300,6 @@ Every stage is end-to-end in a live Neovim session. Log pass / fail / issues fou
 - **Task 1.0 completed** (2026-04-09): user ran 3 prompts through a vanilla `claude-sonnet-4-6` agent on current main; captured the 3 request-payload JSONs into `tests/fixtures/pre_81_vanilla_claude_request_{1,2,3}.json` and recorded metadata in `tests/fixtures/pre_81_vanilla_claude_prompts.lua`.
 - **Important finding during Task 1.0** — the baseline JSONs already contain `tools = [web_search, web_fetch]` because the user's agent has Anthropic's server-side web search enabled. This means M1 Task 1.5's client-side tool encoding MUST APPEND to the existing `payload.tools` list, not overwrite it. If we assign `payload.tools = <client tools>`, we clobber server-side web search AND break byte-identity for vanilla agents with web search. Spec section 4 and plan Task 1.5 both updated with the append-not-overwrite rule + a dedicated test case.
 - Next: M1 Task 1.1 (tool types module). Ready to proceed.
+- **M1 COMPLETE** (2026-04-09). All 7 implementation tasks landed across 10 commits (1f55a4d Task 1.0 baseline, 92d36e8 Task 1.1 types, 8fb49c6 Task 1.2 registry, b72265c Task 1.3 stubs, 5f3d9fc TMPDIR sweep, 216ae98 Task 1.4 config, 82b047c Task 1.5 encoder+append-not-clobber, 4de7b91 Task 1.6 ollama stub test, 50e750d Task 1.7 picker badge, d3376a6/2e45549 badge refactor, 1b8ceb8 get_agent fix). Stage 1 all 6 items verified — 8 tools in payload (6 client + web_search + web_fetch), vanilla byte-identity confirmed field-by-field against Task 1.0 baseline fixtures. Ready for M2.
+- **Bug caught by manual verification** (Task 1.8 Stage 1 item 5): `M.get_agent()` returned a sanitized snapshot without the tool-config fields, so the first end-to-end call submitted a vanilla payload even though `M.agents['ClaudeAgentTools'].tools` was correct. Fixed in 1b8ceb8 with 4 new regression tests covering the full `M.agents → get_agent → get_agent_info → prepare_payload` chain — the missing end-to-end integration test coverage that unit tests in isolation couldn't catch. This is a lesson for M2+: integration tests that exercise the whole wiring matter as much as component unit tests.
+- Next: M2 (single read_file round-trip) — the first milestone with a real tool loop.
