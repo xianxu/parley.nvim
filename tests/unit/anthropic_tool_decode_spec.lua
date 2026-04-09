@@ -246,3 +246,103 @@ describe("anthropic.decode_tool_calls_from_stream (synthetic fixtures)", functio
         assert.equals("a", calls[1].input.path)
     end)
 end)
+
+-- ---------------------------------------------------------------------------
+-- Real-data fixture — captured by scripts/capture_anthropic_tool_use_stream.sh
+-- against the live Anthropic API (claude-sonnet-4-6). The prompt asks the
+-- model to read lua/parley/init.lua. This second test block is the doc-vs-
+-- reality parity gate. If any assertion here fails after a future Anthropic
+-- API change, real-data wins and the decoder is updated.
+--
+-- Observed real-stream shape vs synthetic (captured 2026-04-09):
+--   - Trailing whitespace on JSON payload lines (decoder must tolerate — it
+--     does, because vim.json.decode accepts trailing whitespace).
+--   - Extra `event: ping` / `data: {"type": "ping"}` events interleaved with
+--     content events. Decoder ignores unknown types correctly.
+--   - `content_block_start` carries `caller: {type: "direct"}` on the tool_use
+--     block (field we don't use). Harmless.
+--   - First `input_json_delta` may have `partial_json = ""` before real JSON
+--     starts streaming. Decoder handles by appending empty string.
+--   - `message_delta` carries `stop_reason = "tool_use"` (not used by decoder).
+--   - `message_start` has extra fields (cache_creation, inference_geo,
+--     service_tier) not modeled in synthetic. Decoder ignores them.
+-- ---------------------------------------------------------------------------
+describe("anthropic.decode_tool_calls_from_stream (real fixture)", function()
+    local function read_fixture()
+        local f = io.open("tests/fixtures/anthropic_tool_use_stream_real.jsonl", "r")
+        if not f then return nil end
+        local raw = f:read("*a")
+        f:close()
+        return raw
+    end
+
+    it("real fixture exists (skip if user hasn't run capture script)", function()
+        local raw = read_fixture()
+        if not raw then
+            pending("tests/fixtures/anthropic_tool_use_stream_real.jsonl not found — run scripts/capture_anthropic_tool_use_stream.sh")
+            return
+        end
+        assert.is_string(raw)
+        assert.is_true(#raw > 0)
+    end)
+
+    it("decodes the captured stream to exactly one ToolCall", function()
+        local raw = read_fixture()
+        if not raw then pending("no real fixture"); return end
+        local calls = providers.decode_anthropic_tool_calls_from_stream(raw)
+        assert.equals(1, #calls)
+    end)
+
+    it("the ToolCall has a toolu_* id", function()
+        local raw = read_fixture()
+        if not raw then pending("no real fixture"); return end
+        local calls = providers.decode_anthropic_tool_calls_from_stream(raw)
+        assert.matches("^toolu_", calls[1].id)
+    end)
+
+    it("the ToolCall name is read_file (the prompt was deliberate)", function()
+        local raw = read_fixture()
+        if not raw then pending("no real fixture"); return end
+        local calls = providers.decode_anthropic_tool_calls_from_stream(raw)
+        assert.equals("read_file", calls[1].name)
+    end)
+
+    it("the ToolCall input has a path field (assembled from partial_json chunks)", function()
+        -- The prompt asked Claude to read lua/parley/init.lua. The model
+        -- may pick "lua/parley/init.lua" exactly, or a trivially different
+        -- variant. We assert the path field is present and looks like a
+        -- parley source file path.
+        local raw = read_fixture()
+        if not raw then pending("no real fixture"); return end
+        local calls = providers.decode_anthropic_tool_calls_from_stream(raw)
+        assert.is_string(calls[1].input.path)
+        assert.matches("parley", calls[1].input.path)
+        assert.matches("%.lua$", calls[1].input.path)
+    end)
+
+    it("real captured input parses to a proper table (not a string of JSON)", function()
+        -- Guards against a decoder bug where we'd return the raw JSON
+        -- string instead of a decoded table.
+        local raw = read_fixture()
+        if not raw then pending("no real fixture"); return end
+        local calls = providers.decode_anthropic_tool_calls_from_stream(raw)
+        assert.is_table(calls[1].input)
+        -- And it's not the empty fallback
+        assert.is_not_nil(next(calls[1].input))
+    end)
+
+    it("trailing whitespace on data lines does not break decoding", function()
+        -- The real fixture has lines like `data: {...}    ` with
+        -- trailing spaces. This test verifies the decoder's JSON
+        -- parse tolerates that. If vim.json.decode ever becomes
+        -- strict, we'll catch it here rather than in a production
+        -- tool loop.
+        local raw = read_fixture()
+        if not raw then pending("no real fixture"); return end
+        -- A successful decode above proves this implicitly, but
+        -- re-check the literal whitespace is in the fixture so we
+        -- don't regress the observation. Use plain-text find() so
+        -- the whitespace survives Lua pattern interpretation.
+        assert.is_not_nil(raw:find("}   ", 1, true), "expected trailing whitespace after } on some data line in the captured fixture")
+    end)
+end)
