@@ -1,0 +1,48 @@
+{
+  "model": "claude-sonnet-4-6",
+  "stream": true,
+  "max_tokens": 1024,
+  "temperature": 0.8,
+  "system": [
+    {
+      "type": "text",
+      "text": "You are a helpful coding assistant. When the user asks about a file, you MUST use the read_file tool — do not guess or apologize. Use tools decisively."
+    }
+  ],
+  "messages": [
+    {
+      "role": "user",
+      "content": "Please read the file at lua/parley/init.lua and tell me the first function definition you see."
+    }
+  ],
+  "tools": [
+    {
+      "name": "read_file",
+      "description": "Read a file from the working directory and return its contents with line numbers.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Relative or absolute path to the file."
+          },
+          "line_start": { "type": "integer" },
+          "line_end":   { "type": "integer" }
+        },
+        "required": ["path"]
+      }
+    },
+    {
+      "name": "list_dir",
+      "description": "List directory contents.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string" },
+          "max_depth": { "type": "integer" }
+        },
+        "required": ["path"]
+      }
+    }
+  ]
+}
