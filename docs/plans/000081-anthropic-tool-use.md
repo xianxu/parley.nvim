@@ -536,7 +536,73 @@ describe("Anthropic encode_tools", function()
 end)
 ```
 
-Also add test to `tests/unit/dispatcher_spec.lua` verifying that `prepare_payload` for an Anthropic agent with `tools = {...}` produces a payload with a top-level `tools` field.
+Also add tests to `tests/unit/dispatcher_spec.lua` verifying that `prepare_payload` for an Anthropic agent with `tools = {...}` produces a payload with a top-level `tools` field, AND — critically — that client-side tools are APPENDED to the existing server-side tools list (`web_search`, `web_fetch`) rather than clobbering it. The append-not-clobber case is the one Task 1.0 baseline capture flagged:
+
+```lua
+describe("prepare_payload anthropic client-side tools", function()
+  local parley = require("parley")
+  local model = { model = "claude-sonnet-4-6", temperature = 0.8, top_p = 1.0, max_tokens = 1024 }
+  local msgs = { { role = "user", content = "hi" } }
+
+  before_each(function()
+    parley._state = parley._state or {}
+    parley._state.web_search = false
+    -- Ensure client-side builtins are registered for the test
+    require("parley.tools").reset()
+    require("parley.tools").register({
+      name = "read_file", description = "Read a file.",
+      input_schema = { type = "object", properties = { path = { type = "string" } } },
+      handler = function() return { content = "", is_error = false } end,
+    })
+  end)
+
+  it("adds client-side tools to payload when agent has tools configured", function()
+    local payload = dispatcher.prepare_payload(msgs, model, "anthropic", { "read_file" })
+    assert.is_not_nil(payload.tools)
+    assert.equals(1, #payload.tools)
+    assert.equals("read_file", payload.tools[1].name)
+  end)
+
+  it("does NOT add client-side tools when agent_tools is nil (backward compat)", function()
+    local payload = dispatcher.prepare_payload(msgs, model, "anthropic", nil)
+    assert.is_nil(payload.tools)
+  end)
+
+  it("does NOT add client-side tools when agent_tools is empty (backward compat)", function()
+    local payload = dispatcher.prepare_payload(msgs, model, "anthropic", {})
+    assert.is_nil(payload.tools)
+  end)
+
+  -- THE Task-1.0-finding test: APPEND, do not CLOBBER
+  it("APPENDS client-side tools to existing server-side web_search/web_fetch tools", function()
+    parley._state.web_search = true -- triggers existing providers.lua server-side tools
+    local payload = dispatcher.prepare_payload(msgs, model, "anthropic", { "read_file" })
+    assert.is_not_nil(payload.tools)
+    assert.equals(3, #payload.tools) -- web_search + web_fetch + read_file
+
+    local names = {}
+    for _, t in ipairs(payload.tools) do names[t.name] = true end
+    assert.is_true(names["web_search"], "web_search must be preserved")
+    assert.is_true(names["web_fetch"],  "web_fetch must be preserved")
+    assert.is_true(names["read_file"],  "read_file must be appended")
+
+    parley._state.web_search = false
+  end)
+
+  it("byte-identity: vanilla agent (no agent_tools) + web_search=true matches existing dispatcher_spec expectations", function()
+    -- This test pins the existing dispatcher_spec.lua:190 expectation
+    -- under the new signature. Guards against accidental breakage of the
+    -- existing web_search path by our signature change.
+    parley._state.web_search = true
+    local payload = dispatcher.prepare_payload(msgs, model, "anthropic", nil)
+    assert.is_not_nil(payload.tools)
+    assert.equals(2, #payload.tools)
+    parley._state.web_search = false
+  end)
+end)
+```
+
+**Note on existing test coverage:** `tests/unit/dispatcher_spec.lua` already has tests at lines 184, 190, 209, 223 covering the anthropic `web_search` branch (vanilla-no-tools, with-tools, haiku allowed_callers, non-haiku). Those tests MUST continue to pass unchanged after M1 — they guard the server-side tools path against regression. The new tests above fill the gap the existing ones do NOT cover: the combination of server-side tools AND client-side tools in the same payload. That combination is the exact bug Task 1.0 flagged.
 
 - [ ] **Step 1.5.2: Run, verify fail**
 
