@@ -1054,7 +1054,17 @@ M.respond = function(params, callback, override_free_cursor, force)
             raw_request_offset = #request_lines
         end
 
-        local progress_line = response_line + 3 + raw_request_offset
+        -- progress_line points at the initial_progress_text line inside
+        -- response_block_lines. Offset depends on whether we wrote a
+        -- fresh `🤖: [Agent]` header or not (M2 Task 2.7 of #81):
+        --   normal      → { "", "🤖: [Agent]", "", progress }  offset = 3
+        --   recursion   → { "", progress }                     offset = 1
+        local progress_line
+        if in_tool_loop_recursion then
+            progress_line = response_line + 1 + raw_request_offset
+        else
+            progress_line = response_line + 3 + raw_request_offset
+        end
         local response_start_line = spinner_active and (progress_line + 2) or progress_line
 
         local function set_progress_indicator_line(text)
@@ -1194,8 +1204,14 @@ M.respond = function(params, callback, override_free_cursor, force)
                 -- runs on the final iteration (when outcome == "done").
                 if agent_info and agent_info.tools and #agent_info.tools > 0 then
                     local tool_loop = require("parley.tool_loop")
+                    -- M2 hardcodes max_tool_iterations = 1 (single round).
+                    -- M4 Task 4.1 lifts this cap and uses the
+                    -- agent-configured max instead. Even if the agent
+                    -- config says 20, M2 stops after one round to keep
+                    -- failure modes contained while the loop machinery
+                    -- is still being hardened.
                     local outcome = tool_loop.process_response(buf, qt.raw_response or "", {
-                        max_tool_iterations = agent_info.max_tool_iterations or 20,
+                        max_tool_iterations = 1,
                         tool_result_max_bytes = agent_info.tool_result_max_bytes or 102400,
                         cwd = vim.fn.getcwd(),
                     })
