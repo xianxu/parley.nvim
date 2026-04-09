@@ -111,7 +111,8 @@ D.prepare_payload = function(messages, model, provider, agent_tools)
 		elseif provider == "ollama" then
 			client_tools = providers.ollama_encode_tools(defs) -- raises
 		else
-			error("tools not supported for provider: " .. tostring(provider))
+			error("tools not supported for this provider yet — see #81 follow-up (provider: "
+				.. tostring(provider) .. ")")
 		end
 
 		-- APPEND, do not CLOBBER: preserves server-side tools (web_search,

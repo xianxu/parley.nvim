@@ -27,6 +27,13 @@ describe("providers.anthropic_encode_tools", function()
         registry.reset()
     end)
 
+    -- Restore builtins after each test so later specs in the same process
+    -- (that rely on parley.setup() having registered the 6 builtins) don't
+    -- see an empty registry. register_builtins is idempotent.
+    after_each(function()
+        registry.register_builtins()
+    end)
+
     it("converts a single ToolDefinition to the Anthropic payload shape", function()
         registry.register(fresh_def("read_file", "Read a file.", {
             type = "object",

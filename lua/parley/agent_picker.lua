@@ -17,13 +17,15 @@ function M._build_items(plugin)
         -- Combined [🔧🌎]-style indicator group for tool-enabled agents and
         -- web search (M1 Task 1.7 of #81). Reuse the highlighter helpers
         -- so picker, buffer-top extmark, and lualine agree on the badge
-        -- string. (pcall so the picker still works if highlighter isn't
-        -- loaded yet, e.g. in isolated unit tests that stub plugin.)
-        local ok_h, highlighter = pcall(require, "parley.highlighter")
-        local indicators = ""
-        if ok_h then
-            indicators = highlighter.agent_tool_badge(agent) .. highlighter.agent_web_search_badge(agent)
-        end
+        -- string. The `require` itself is NOT pcall-wrapped: a real load
+        -- failure in parley.highlighter should surface loudly, not silently
+        -- hide the badge. The pcall only guards the `agent_web_search_badge`
+        -- state read (_parley._state) which may be nil in isolated unit tests.
+        local highlighter = require("parley.highlighter")
+        local tool_part = highlighter.agent_tool_badge(agent) or ""
+        local ok_ws, web_part = pcall(highlighter.agent_web_search_badge, agent)
+        if not ok_ws then web_part = "" end
+        local indicators = tool_part .. (web_part or "")
         local indicator_group = (indicators ~= "") and (" [" .. indicators .. "]") or ""
         local is_current = agent_name == plugin._state.agent
         local display = (is_current and "✓ " or "  ") .. agent_name .. indicator_group .. " - " .. description

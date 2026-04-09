@@ -131,8 +131,9 @@ describe("per-agent tools config", function()
 end)
 
 describe("default ClaudeAgentTools", function()
+    before_each(function() fresh_setup(nil) end)
+
     it("ships in the default config with all six builtin tools", function()
-        fresh_setup(nil) -- use default agents from config
         local agent = parley.agents["ClaudeAgentTools"]
         assert.is_not_nil(agent, "ClaudeAgentTools should ship as a default agent")
         assert.equals("anthropic", agent.provider)
@@ -149,7 +150,6 @@ describe("default ClaudeAgentTools", function()
     end)
 
     it("has default loop limits applied", function()
-        fresh_setup(nil)
         local agent = parley.agents["ClaudeAgentTools"]
         assert.equals(20, agent.max_tool_iterations)
         assert.equals(102400, agent.tool_result_max_bytes)
@@ -162,9 +162,14 @@ end)
 -- get_agent_info.tools was silently nil and prepare_payload never
 -- received the agent's client-side tools. The user's first tool-use
 -- request hit Anthropic as a vanilla call with only web_search/web_fetch.
-describe("get_agent forwards client-side tool config", function()
+--
+-- The tests walk the FULL wiring chain M.agents → get_agent →
+-- get_agent_info → prepare_payload to lock in the end-to-end
+-- invariant, not just one hop at a time.
+describe("get_agent forwards client-side tool config (full wiring chain)", function()
+    before_each(function() fresh_setup(nil) end)
+
     it("get_agent(ClaudeAgentTools) carries the tools field from M.agents", function()
-        fresh_setup(nil) -- default agents incl. ClaudeAgentTools
         parley._state = parley._state or {}
         parley._state.agent = "ClaudeAgentTools"
         local agent = parley.get_agent("ClaudeAgentTools")
@@ -174,14 +179,12 @@ describe("get_agent forwards client-side tool config", function()
     end)
 
     it("get_agent(ClaudeAgentTools) forwards max_tool_iterations and tool_result_max_bytes", function()
-        fresh_setup(nil)
         local agent = parley.get_agent("ClaudeAgentTools")
         assert.equals(20, agent.max_tool_iterations)
         assert.equals(102400, agent.tool_result_max_bytes)
     end)
 
     it("get_agent on a vanilla agent has nil tools (no defaults leak)", function()
-        fresh_setup(nil)
         local agent = parley.get_agent("Claude-Sonnet")
         assert.is_nil(agent.tools)
         assert.is_nil(agent.max_tool_iterations)
@@ -189,11 +192,68 @@ describe("get_agent forwards client-side tool config", function()
     end)
 
     it("get_agent_info(headers, get_agent('ClaudeAgentTools')).tools is the 6-item list", function()
-        fresh_setup(nil)
         local agent = parley.get_agent("ClaudeAgentTools")
         local info = parley.get_agent_info({}, agent)
         assert.is_table(info.tools)
         assert.equals(6, #info.tools)
+    end)
+
+    -- THE end-to-end test that regresses the exact 1b8ceb8 bug. Walks all
+    -- four hops: M.agents → get_agent → get_agent_info → prepare_payload
+    -- and verifies the final payload.tools actually contains the 6
+    -- client-side tools. A naive bug anywhere in this chain (sanitized
+    -- snapshot in get_agent, dropped field in get_agent_info, missing
+    -- 4th arg in chat_respond, append-not-clobber regression in
+    -- prepare_payload) would be caught here.
+    it("full wiring chain: ClaudeAgentTools request payload contains 6 client-side tools", function()
+        local dispatcher = require("parley.dispatcher")
+        local agent = parley.get_agent("ClaudeAgentTools")
+        local info = parley.get_agent_info({}, agent)
+        local msgs = { { role = "user", content = "hi" } }
+
+        -- Disable web_search to isolate the 6 client-side tools in the output
+        parley._state = parley._state or {}
+        parley._state.web_search = false
+
+        local payload = dispatcher.prepare_payload(msgs, info.model, info.provider, info.tools)
+        assert.is_not_nil(payload.tools, "payload.tools must not be nil for a tools-enabled agent")
+        assert.equals(6, #payload.tools, "expected exactly 6 client-side tools in payload")
+
+        local names = {}
+        for _, t in ipairs(payload.tools) do names[t.name] = true end
+        assert.is_true(names.read_file)
+        assert.is_true(names.list_dir)
+        assert.is_true(names.grep)
+        assert.is_true(names.glob)
+        assert.is_true(names.edit_file)
+        assert.is_true(names.write_file)
+    end)
+
+    -- Same end-to-end chain but with web_search ENABLED, to verify that
+    -- the append-not-clobber invariant holds when driven through the
+    -- real agent/info objects (not just a hand-crafted agent_tools
+    -- argument like dispatcher_spec.lua does).
+    it("full wiring chain + web_search: 6 client tools APPEND to web_search/web_fetch", function()
+        local dispatcher = require("parley.dispatcher")
+        local agent = parley.get_agent("ClaudeAgentTools")
+        local info = parley.get_agent_info({}, agent)
+        local msgs = { { role = "user", content = "hi" } }
+
+        parley._state = parley._state or {}
+        parley._state.web_search = true
+
+        local payload = dispatcher.prepare_payload(msgs, info.model, info.provider, info.tools)
+        assert.is_not_nil(payload.tools)
+        assert.equals(8, #payload.tools, "expected 6 client-side + 2 server-side tools")
+
+        local names = {}
+        for _, t in ipairs(payload.tools) do names[t.name] = true end
+        assert.is_true(names.web_search, "web_search must be preserved")
+        assert.is_true(names.web_fetch, "web_fetch must be preserved")
+        assert.is_true(names.read_file, "read_file must be appended")
+        assert.is_true(names.write_file, "write_file must be appended")
+
+        parley._state.web_search = false
     end)
 end)
 

@@ -251,10 +251,6 @@ end
 -- Exported functions
 --------------------------------------------------------------------------------
 
---- Build display label for an agent, including web_search indicator suffix.
----@param agent_name string
----@param ag_conf table|nil
----@return string
 --- Returns the bare tool indicator symbol ("🔧") when the agent has a
 --- non-empty client-side tools list (M1 Task 1.7 of #81), else "".
 --- Callers concatenate this with other indicators (web_search, etc.)

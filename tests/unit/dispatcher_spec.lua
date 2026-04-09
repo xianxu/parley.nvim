@@ -273,6 +273,13 @@ describe("prepare_payload: anthropic client-side tools (Task 1.5)", function()
         })
     end)
 
+    -- Restore the 6 builtins after these tests so later specs in the
+    -- same process don't see a registry containing only our fake
+    -- `read_file`. register_builtins is idempotent.
+    after_each(function()
+        tools_mod.register_builtins()
+    end)
+
     it("adds client-side tools to payload when agent_tools is provided", function()
         local payload = dispatcher.prepare_payload(msgs(user("hi")), model, "anthropic", { "read_file" })
         assert.is_not_nil(payload.tools)

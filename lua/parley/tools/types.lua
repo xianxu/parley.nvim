@@ -32,6 +32,14 @@
 --- @field name string|nil Optional tool name for convenience; the dispatcher
 ---        stamps this alongside id so serialization can render it without
 ---        looking up the originating call.
+---
+--- CONTRACT: tool handlers MAY return a partial ToolResult WITHOUT `id`
+--- (and without `name`). The dispatcher (`lua/parley/tools/dispatcher.lua`
+--- landing in M2 Task 2.3) stamps both fields from the originating
+--- ToolCall before the result is validated or serialized. This split
+--- keeps handlers pure — they do not need to know anything about call
+--- identity. `M.validate_result` should be called ONLY on
+--- dispatcher-stamped results, not on raw handler output.
 
 local M = {}
 
