@@ -32,6 +32,8 @@
 - Use subagents to keep main context window clean
 - Offload research, brainstorming, exploration, and parallel analysis to subagents
 - One task per subagent for focused execution
+- **For complex work with a written plan (`docs/plans/*`): prefer `superpowers:subagent-driven-development` over manual execution.** It dispatches a fresh implementer subagent per task (TDD built-in via `superpowers:test-driven-development`) and runs a two-stage review after each task (spec compliance → code quality) plus a final full-implementation review. This catches integration-layer bugs that unit-tests-in-isolation miss, and keeps the coordinator's context clean. The alternative `superpowers:executing-plans` has no built-in review and should only be used when the plan itself embeds explicit review gates.
+- **Post-milestone code review is mandatory** for any multi-milestone plan. Invoke `superpowers:requesting-code-review` → `superpowers:code-reviewer` subagent with `BASE_SHA` = previous milestone close, `HEAD_SHA` = current HEAD. Address Critical and Important findings before starting the next milestone. Log review outcome in the issue's `## Log` section.
 
 ### 4. Self-Improvement Loop
 - You MUST update `tasks/lessons.md` with the pattern what went wrong when you make mistakes

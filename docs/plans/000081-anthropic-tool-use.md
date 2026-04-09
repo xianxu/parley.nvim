@@ -17,6 +17,19 @@
 
 **Commit hygiene:** Frequent, one commit per passing step-group. Never amend pushed commits. Conventional-commits prefix (`feat:`, `test:`, `refactor:`, `fix:`, `docs:`). Each commit co-authored as per repo norm.
 
+**Post-milestone code review gate (MANDATORY):** At the end of **every** milestone (M1, M2, M3, …), BEFORE starting the next milestone, invoke `superpowers:requesting-code-review` and dispatch the `superpowers:code-reviewer` subagent to review all commits from the previous milestone boundary to HEAD. The reviewer receives:
+- `BASE_SHA` = the commit hash of the last commit BEFORE this milestone's first task (e.g. for M2: `HEAD` of M1 completion commit)
+- `HEAD_SHA` = current HEAD
+- `WHAT_WAS_IMPLEMENTED` = milestone name + brief summary
+- `PLAN_OR_REQUIREMENTS` = the milestone section of this plan
+- Reference to `issues/000081-support-anthropic-tool-use-protocol.md` `## Spec` for the authoritative invariants
+
+Address **Critical** and **Important** issues before proceeding. Minor/advisory items can be deferred to a polish commit at the end of the next milestone or to M9 regression lockdown. Record the review outcome (approved / fixes applied) in the issue's `## Log` section.
+
+**Why this gate is mandatory:** M1 caught a real wiring-chain bug (`1b8ceb8`) only during manual end-to-end verification, because the plan's unit tests mocked each hop in isolation and no test exercised the full chain. The post-milestone code review is a second net that catches integration-layer bugs AND coverage gaps before they compound into the next milestone. See `tasks/lessons.md` 2026-04-09 entry.
+
+**Rationale for skipping this in M1:** It wasn't in the plan. The reviewer gate was introduced mid-M1 based on the user's feedback after M1 was already complete. M1 DID get a retroactive full review (commit `6f5c8b9` addressed all 7 advisory items). M2 onward is gated.
+
 ---
 
 ## File Structure
@@ -1852,6 +1865,23 @@ Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
 - [ ] Manual verification per Stage 2 in issue #81. Mark boxes, log entry.
 - [ ] Commit the checklist update.
 
+### Task 2.11: M2 post-milestone code review gate
+
+**Mandatory** per the post-milestone review rule at the top of this plan. Dispatch the superpowers code-reviewer subagent against the full M2 commit range before starting M3.
+
+- [ ] **Step 2.11.1:** Identify `BASE_SHA` = the M1-complete commit (the commit immediately before Task 2.0/2.1 touched any file). Use `git log --oneline` to find it.
+- [ ] **Step 2.11.2:** Identify `HEAD_SHA` = current HEAD (after Task 2.10 commit lands).
+- [ ] **Step 2.11.3:** Dispatch `superpowers:code-reviewer` subagent via the Task tool with:
+  - `WHAT_WAS_IMPLEMENTED`: "M2 — Single read_file round-trip: serialize schema, read_file handler, tool dispatcher with safety helpers, Anthropic SSE ToolCall accumulator, chat parser content-block recognition, build_messages Anthropic content blocks, chat_respond tool loop driver (single-round), fold setup, `<C-g>b` shortcut."
+  - `PLAN_OR_REQUIREMENTS`: paste the full "Chunk 2: M2" section from this plan file
+  - `BASE_SHA`, `HEAD_SHA` from steps 1-2
+  - `DESCRIPTION`: "M2 — first real tool loop end-to-end. Biggest architectural shift of #81."
+  - Extra context: reference `issues/000081-support-anthropic-tool-use-protocol.md` `## Spec` sections 1 (loop model), 2 (buffer representation), and 4 (provider scope)
+  - Emphasize the invariants: buffer-is-state (every tool_use has matching tool_result), append-not-clobber (continues from M1), no globals (tool_loop state is per-bufnr), PURE handlers + DRY dispatcher (safety checks in one place)
+- [ ] **Step 2.11.4:** Address every **Critical** and **Important** issue the reviewer finds. Minor/advisory items can be deferred to M3's polish or M9 regression lockdown, but MUST be tracked in the issue's `## Log` section.
+- [ ] **Step 2.11.5:** Log the review outcome (approved / issues found + count + fix commit SHAs) in `issues/000081-support-anthropic-tool-use-protocol.md` `## Log`.
+- [ ] **Step 2.11.6:** Commit the log update. This commit closes M2.
+
 ---
 
 ## Chunk 3: M3 + M4 — Remaining read tools and multi-round loop
@@ -2208,6 +2238,12 @@ Per Stage 3 in issue #81.
 - [ ] Mark Stage 3 checkboxes in `issues/000081-*.md`. Add log entry.
 - [ ] Commit issue updates.
 
+### Task 3.5: M3 post-milestone code review gate
+
+**Mandatory** — same procedure as Task 2.11. Dispatch `superpowers:code-reviewer` with `BASE_SHA` = commit that closed M2 (Task 2.11 commit) and `HEAD_SHA` = current HEAD. `WHAT_WAS_IMPLEMENTED` = "M3 — list_dir / grep / glob read-only tool handlers". Emphasize PURE handlers (no dispatcher concerns leaked in), grep fallback correctness when ripgrep is absent, and 1000-entry cap in list_dir. Address Critical and Important issues before M4.
+
+- [ ] Dispatch review, address issues, log outcome in issue, commit.
+
 ### M4 — Multi-round loop + iteration cap + lualine indicator
 
 ### Task 4.1: Lift single-round cap in `tool_loop.run_iteration`
@@ -2436,6 +2472,12 @@ Per Stage 4 in issue #81.
 - [ ] Verify all three Stage 4 checks (5+ tool calls in one turn render correctly; max_tool_iterations=3 stops with synthetic cap result; resubmit after cap parses cleanly).
 - [ ] Mark Stage 4 boxes in the issue. Add log entry.
 - [ ] Commit issue updates.
+
+### Task 4.4: M4 post-milestone code review gate
+
+**Mandatory** — same procedure as Task 2.11. `BASE_SHA` = M3 close commit. `WHAT_WAS_IMPLEMENTED` = "M4 — multi-round tool loop with iteration cap and lualine indicator. Introduces `lua/parley/tools/synthetic.lua` (shared with M6 cancellation)." Emphasize: cap-check happens BEFORE next LLM call, synthetic `(iteration limit reached)` result preserves buffer-reparsable invariant, no globals for loop state, lualine indicator reads per-bufnr state only.
+
+- [ ] Dispatch review, address issues, log outcome, commit.
 
 ---
 
@@ -2904,6 +2946,12 @@ Per Stage 5 in issue #81. This is the most safety-critical stage.
 - [ ] **Step 5.7.2:** Mark each Stage 5 box in the issue file and add a `### YYYY-MM-DD` log entry summarizing what was verified.
 - [ ] **Step 5.7.3:** Commit the issue updates.
 
+### Task 5.8: M5 post-milestone code review gate
+
+**Mandatory + CRITICAL for M5 specifically** — write tools are the highest-risk code in #81. `BASE_SHA` = M4 close commit. `WHAT_WAS_IMPLEMENTED` = "M5 — edit_file / write_file handlers + dispatcher write-path orchestration (cwd scope, dirty-buffer guard, .parley-backup pre-image capture, gitignore auto-add in repo-mode, post-write :checktime reload, metadata-preserving truncation)". Emphasize: cwd-scope via `vim.loop.fs_realpath` handles symlinks, `.parley-backup` is created only on first write AND never overwritten, `pre-image:` metadata footer survives truncation, dirty-buffer guard cannot be bypassed, edit_file is reversible via old_string without backup. This is a SECURITY review as much as a correctness review.
+
+- [ ] Dispatch review, address ALL Critical issues (no deferring), address Important issues, log outcome, commit.
+
 ---
 
 ## Chunk 5: M6 + M7 + M8 + M9
@@ -3258,6 +3306,12 @@ Per Stage 6 in issue #81.
 - [ ] Mark Stage 6 boxes in the issue. Add log entry.
 - [ ] Commit issue updates.
 
+### Task 6.7: M6 post-milestone code review gate
+
+**Mandatory.** `BASE_SHA` = M5 close commit. `WHAT_WAS_IMPLEMENTED` = "M6 — cancellation hardening for all 4 cases. `<Esc>` buffer-local keymap, partial JSON drop via dynamic-fence regex, synthetic `(cancelled by user)` results via `lua/parley/tools/synthetic.lua` (shared with M4 iteration-cap)". Emphasize: the buffer-reparsable invariant MUST hold after any cancel path, the `^(`+)[%w_%-]*%s*$` opening-fence regex handles info-string fences correctly, `cleanup_after_cancel` walks the buffer tail correctly, and the M6 tests use `assert_buffer_reparsable` helper consistently.
+
+- [ ] Dispatch review, address issues, log outcome, commit.
+
 ### M7 — Buffer-is-state invariants
 
 **Note:** Task 7.1 is a *safety net* for user hand-edits. It is NOT a substitute for the M6 cancel-cleanup correctness — cancel paths MUST leave the buffer reparsable on their own. Do not weaken M6 because M7 exists.
@@ -3362,6 +3416,12 @@ git commit -m "test(chat): manual-edit survivability for 🔧:/📎: blocks"
 - [ ] Mark Stage 7 boxes. Add log entry.
 - [ ] Commit issue updates.
 
+### Task 7.4: M7 post-milestone code review gate
+
+**Mandatory.** `BASE_SHA` = M6 close commit. `WHAT_WAS_IMPLEMENTED` = "M7 — parser diagnostics for unmatched `🔧:` / `📎:` (symmetric: both orphan tool_use and orphan tool_result flagged), chat_respond refuses to submit when diagnostics present, manual-edit survivability tests". Emphasize: M7 is a SAFETY NET for user hand-edits, NOT a substitute for M6 cancel-cleanup correctness; the diagnostic gate at submit time must not regress the "transcript IS state" invariant.
+
+- [ ] Dispatch review, address issues, log outcome, commit.
+
 ### M8 — UX polish
 
 ### Task 8.1: Syntax highlighting for `🔧:` / `📎:`
@@ -3445,6 +3505,12 @@ Already landed in Task 4.2. Verification pass.
 - [ ] Mark Stage 8 boxes. Add log entry.
 - [ ] Commit issue updates.
 
+### Task 8.6: M8 post-milestone code review gate
+
+**Mandatory.** `BASE_SHA` = M7 close commit. `WHAT_WAS_IMPLEMENTED` = "M8 — UX polish: syntax highlighting for `🔧:` / `📎:`, outline navigation entries for tool components, picker/lualine indicator polish". Lightweight review scope because M8 is pure UI polish with no new correctness invariants.
+
+- [ ] Dispatch review, address issues, log outcome, commit.
+
 ### M9 — Regression lockdown
 
 ### Task 9.1: Full `make lint` pass
@@ -3518,7 +3584,13 @@ Per-agent `tools = { ... }` field. See `lua/parley/config.lua` for the
 - [ ] Add entry to `specs/index.md` under "LLM Providers & Agents" section.
 - [ ] Commit.
 
-### Task 9.5: Close issue #81
+### Task 9.5: M9 final full-issue code review gate
+
+**Mandatory final review** — the whole of #81 in one pass, not just M9. `BASE_SHA` = the commit immediately before Task 1.0 baseline capture (the pre-#81 boundary). `HEAD_SHA` = current HEAD after Task 9.4. `WHAT_WAS_IMPLEMENTED` = "Full Anthropic tool use protocol implementation, M1-M9 complete". Include a summary table of each milestone's scope and cite the per-milestone review commits as prior art. This is the last gate before closing the issue.
+
+- [ ] Dispatch review, address Critical and Important issues (any that slipped past per-milestone reviews), log outcome, commit.
+
+### Task 9.6: Close issue #81
 
 - [ ] Mark all `## Done when` items in `issues/000081-*.md` as checked.
 - [ ] Final log entry summarizing implementation.
