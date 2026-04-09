@@ -14,8 +14,11 @@ function M._build_items(plugin)
         local model_name = type(agent.model) == "table" and agent.model.model or agent.model
 
         local description = model_name .. " (" .. provider .. ")"
+        -- [🔧] badge for agents opting into client-side tool use (M1 Task 1.7
+        -- of issue #81). Non-empty agent.tools = agentic agent.
+        local tool_badge = (type(agent.tools) == "table" and #agent.tools > 0) and " [🔧]" or ""
         local is_current = agent_name == plugin._state.agent
-        local display = (is_current and "✓ " or "  ") .. agent_name .. " - " .. description
+        local display = (is_current and "✓ " or "  ") .. agent_name .. tool_badge .. " - " .. description
 
         table.insert(items, {
             name = agent_name,

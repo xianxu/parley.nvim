@@ -78,6 +78,71 @@ describe("agent_picker item building", function()
         local alpha = items[1]
         assert.truthy(alpha.display:find("openai", 1, true))
     end)
+
+    -- Task 1.7 of #81: [🔧] badge for agents opting into client-side tool use
+    describe("tool badge", function()
+        local function make_tool_plugin(current_agent)
+            return {
+                _agents = { "vanilla", "agentic", "empty_tools" },
+                agents = {
+                    vanilla = {
+                        provider = "anthropic",
+                        model = "claude-sonnet-4-6",
+                    },
+                    agentic = {
+                        provider = "anthropic",
+                        model = "claude-sonnet-4-6",
+                        tools = { "read_file", "edit_file" },
+                    },
+                    empty_tools = {
+                        provider = "anthropic",
+                        model = "claude-sonnet-4-6",
+                        tools = {},
+                    },
+                },
+                _state = { agent = current_agent },
+            }
+        end
+
+        it("shows [🔧] next to agents with a non-empty tools list", function()
+            local items = agent_picker._build_items(make_tool_plugin("vanilla"))
+            local agentic = nil
+            for _, it in ipairs(items) do
+                if it.name == "agentic" then agentic = it end
+            end
+            assert.is_not_nil(agentic)
+            assert.truthy(agentic.display:find("[🔧]", 1, true))
+        end)
+
+        it("does NOT show [🔧] on vanilla agents (no tools field)", function()
+            local items = agent_picker._build_items(make_tool_plugin("agentic"))
+            local vanilla = nil
+            for _, it in ipairs(items) do
+                if it.name == "vanilla" then vanilla = it end
+            end
+            assert.is_not_nil(vanilla)
+            assert.falsy(vanilla.display:find("[🔧]", 1, true))
+        end)
+
+        it("does NOT show [🔧] on agents with empty tools list", function()
+            local items = agent_picker._build_items(make_tool_plugin("vanilla"))
+            local empty = nil
+            for _, it in ipairs(items) do
+                if it.name == "empty_tools" then empty = it end
+            end
+            assert.is_not_nil(empty)
+            assert.falsy(empty.display:find("[🔧]", 1, true))
+        end)
+
+        it("badge appears even when the agentic agent is the current one", function()
+            local items = agent_picker._build_items(make_tool_plugin("agentic"))
+            -- current agent is first
+            assert.equals("agentic", items[1].name)
+            assert.truthy(items[1].display:find("[🔧]", 1, true))
+            -- and the current-agent check mark still renders
+            assert.truthy(items[1].display:find("✓", 1, true))
+        end)
+    end)
 end)
 
 -- ---------------------------------------------------------------------------
