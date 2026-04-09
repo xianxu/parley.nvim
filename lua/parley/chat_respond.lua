@@ -1134,6 +1134,34 @@ M.respond = function(params, callback, override_free_cursor, force)
                     return
                 end
                 request_clear_progress_indicator(qt)
+
+                -- M2 Task 2.7 of #81: tool loop hook. If the streamed
+                -- response contained tool_use blocks, write 🔧:/📎:
+                -- into the buffer and re-submit the updated chat so
+                -- Claude can continue. Finalization (user prompt
+                -- append, topic generation, cursor placement) only
+                -- runs on the final iteration (when outcome == "done").
+                if agent_info and agent_info.tools and #agent_info.tools > 0 then
+                    local tool_loop = require("parley.tool_loop")
+                    local outcome = tool_loop.process_response(buf, qt.raw_response or "", {
+                        max_tool_iterations = agent_info.max_tool_iterations or 20,
+                        tool_result_max_bytes = agent_info.tool_result_max_bytes or 102400,
+                        cwd = vim.fn.getcwd(),
+                    })
+                    if outcome == "recurse" then
+                        -- Re-parse the (now updated) buffer and submit
+                        -- again. force=true bypasses the is_busy check
+                        -- that would otherwise reject an immediate
+                        -- re-submit. The recursive respond() inherits
+                        -- the same callback so user-provided
+                        -- callbacks still fire on the final iteration.
+                        vim.schedule(function()
+                            M.respond({}, callback, override_free_cursor, true)
+                        end)
+                        return
+                    end
+                end
+
                 local streamed_cursor_line = query_cursor_line(qt)
 
                 -- Only add a new user prompt at the end if we're not in the middle of the document
