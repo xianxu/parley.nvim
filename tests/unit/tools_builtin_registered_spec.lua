@@ -1,15 +1,22 @@
 -- Unit tests for builtin tool registration.
 --
--- At M1, all six builtin tools (read_file, list_dir, grep, glob,
--- edit_file, write_file) ship as stubs returning `is_error=true` with
--- a "not yet implemented" body. Real handlers land in M2–M5. This
--- spec verifies that:
+-- Checks structural invariants independent of how many handlers
+-- have been replaced with real implementations so far. The set of
+-- registered names is fixed at 6 for the life of #81; individual
+-- handlers land task by task through M2-M5. Tests that exercise
+-- specific handler behavior live in their own
+-- tools_builtin_<name>_spec.lua files.
+--
+-- This spec verifies:
 --
 --   1. `parley.tools.register_builtins()` registers exactly the six
 --      expected names.
 --   2. Each builtin is a valid ToolDefinition per types.validate_definition.
---   3. Each stub handler returns is_error=true (they MUST be stubs
---      at M1; real handlers replace them in later milestones).
+--   3. Handlers return a well-shaped ToolResult on empty input —
+--      either a real error for a required field (real handler) or
+--      a stub "not yet implemented" error (stub handler). Both cases
+--      yield is_error=true + is_string(content), which is what the
+--      dispatcher and serializer depend on.
 --   4. `register_builtins()` is idempotent — calling it twice does
 --      not duplicate or error.
 
@@ -67,14 +74,20 @@ describe("register_builtins", function()
         end
     end)
 
-    it("each M1 stub handler returns is_error=true", function()
+    it("each handler returns a well-shaped error ToolResult on empty input", function()
+        -- Empty input = {} triggers either:
+        --   - stub handlers: "not yet implemented" error
+        --   - real handlers: "missing required field" error (e.g. path)
+        -- Either way, every builtin must return a table with
+        -- is_error=true and a string content. This is what the
+        -- dispatcher and serializer depend on downstream.
         registry.register_builtins()
         for _, name in ipairs(EXPECTED_BUILTINS) do
             local def = registry.get(name)
             local result = def.handler({})
-            assert.is_table(result)
-            assert.is_true(result.is_error, name .. " stub should return is_error=true")
-            assert.is_string(result.content)
+            assert.is_table(result, name .. " handler must return a table")
+            assert.is_true(result.is_error, name .. " empty input should produce is_error=true")
+            assert.is_string(result.content, name .. " must return a string content")
         end
     end)
 
