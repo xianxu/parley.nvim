@@ -1184,4 +1184,71 @@ M.get_secret_name = function(name)
     return adapter.secret_name or name
 end
 
+--------------------------------------------------------------------------------
+-- Tool-use encoders (issue #81 M1)
+--
+-- These are pure table-transformation helpers that convert parley's
+-- provider-agnostic internal ToolDefinition shape into the wire format
+-- each provider expects in its `tools` request field. Only Anthropic
+-- is implemented in v1; OpenAI / Google / Ollama stubs raise a clear
+-- "not yet implemented" error so tool-enabled agents fail fast.
+--
+-- Convention: the dispatcher's prepare_payload APPENDS the result of
+-- these encoders onto any existing `payload.tools` (e.g. server-side
+-- web_search / web_fetch already populated by existing code paths).
+-- See dispatcher.lua for the append logic.
+--------------------------------------------------------------------------------
+
+--- Convert a list of parley ToolDefinitions into the Anthropic payload
+--- shape for the `tools` array. Each entry contains only the fields
+--- Anthropic cares about: name, description, input_schema. Internal
+--- fields (handler, kind, needs_backup) are intentionally dropped.
+---
+--- Pure. Accepts nil or empty list and returns an empty table.
+---@param tool_definitions ToolDefinition[]|nil
+---@return table[] anthropic_tools
+function M.anthropic_encode_tools(tool_definitions)
+    local out = {}
+    for _, def in ipairs(tool_definitions or {}) do
+        table.insert(out, {
+            name = def.name,
+            description = def.description,
+            input_schema = def.input_schema,
+        })
+    end
+    return out
+end
+
+--- OpenAI tool encoder — stub that raises. Deferred to a #81 follow-up.
+---@diagnostic disable-next-line: unused-local
+function M.openai_encode_tools(_tool_definitions)
+    error("tools not supported for this provider yet — see #81 follow-up")
+end
+
+--- Google AI tool encoder — stub that raises. Deferred to a #81 follow-up.
+---@diagnostic disable-next-line: unused-local
+function M.googleai_encode_tools(_tool_definitions)
+    error("tools not supported for this provider yet — see #81 follow-up")
+end
+
+--- Ollama tool encoder — stub that raises. Deferred to a #81 follow-up.
+---@diagnostic disable-next-line: unused-local
+function M.ollama_encode_tools(_tool_definitions)
+    error("tools not supported for this provider yet — see #81 follow-up")
+end
+
+--- CLIProxyAPI tool encoder — delegates to the Anthropic encoder only
+--- when the target model name begins with "claude-" (i.e. routed to
+--- an Anthropic-family model). Otherwise raises with an
+--- anthropic-family-only message so the error is specific and actionable.
+---@param tool_definitions ToolDefinition[]
+---@param model_name string|table the model name (or table containing .model)
+function M.cliproxyapi_encode_tools(tool_definitions, model_name)
+    local name = type(model_name) == "table" and model_name.model or model_name
+    if type(name) ~= "string" or not name:match("^claude%-") then
+        error("tools not supported for this provider yet — cliproxyapi requires an anthropic-family model (see #81 follow-up)")
+    end
+    return M.anthropic_encode_tools(tool_definitions)
+end
+
 return M

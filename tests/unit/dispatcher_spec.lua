@@ -242,6 +242,120 @@ describe("prepare_payload: anthropic provider", function()
     end)
 end)
 
+--------------------------------------------------------------------------------
+-- Task 1.5 (issue #81): client-side tools append to payload.tools without
+-- clobbering existing server-side web_search / web_fetch entries.
+--
+-- The existing providers.lua:568+ path already emits
+-- payload.tools = [web_search, web_fetch] when web_search is enabled.
+-- M1 Task 1.5 adds a 4th positional arg to prepare_payload for agent-
+-- declared client-side tool names, which must be APPENDED to whatever
+-- server-side tools are already there. This guards the Task 1.0
+-- baseline-capture discovery: user with web search enabled must not
+-- lose it when they pick a tools-enabled agent.
+--------------------------------------------------------------------------------
+
+describe("prepare_payload: anthropic client-side tools (Task 1.5)", function()
+    local tools_mod = require("parley.tools")
+    local model = { model = "claude-sonnet-4-6", temperature = 0.8, top_p = 1.0, max_tokens = 1024 }
+
+    before_each(function()
+        parley._state = parley._state or {}
+        parley._state.web_search = false
+        -- Ensure a real tool is registered so select() succeeds
+        tools_mod.reset()
+        tools_mod.register({
+            name = "read_file",
+            description = "Read a file.",
+            input_schema = { type = "object", properties = { path = { type = "string" } } },
+            handler = function() return { content = "", is_error = false } end,
+            kind = "read",
+        })
+    end)
+
+    it("adds client-side tools to payload when agent_tools is provided", function()
+        local payload = dispatcher.prepare_payload(msgs(user("hi")), model, "anthropic", { "read_file" })
+        assert.is_not_nil(payload.tools)
+        assert.equals(1, #payload.tools)
+        assert.equals("read_file", payload.tools[1].name)
+    end)
+
+    it("does NOT add client-side tools when agent_tools is nil (backward compat)", function()
+        local payload = dispatcher.prepare_payload(msgs(user("hi")), model, "anthropic", nil)
+        assert.is_nil(payload.tools)
+    end)
+
+    it("does NOT add client-side tools when agent_tools is empty (backward compat)", function()
+        local payload = dispatcher.prepare_payload(msgs(user("hi")), model, "anthropic", {})
+        assert.is_nil(payload.tools)
+    end)
+
+    it("APPENDS client-side tools to existing server-side web_search/web_fetch", function()
+        -- THE test: Task 1.0 baseline capture showed users with web search
+        -- get payload.tools = [web_search, web_fetch] from the existing
+        -- providers.lua code. Client-side tools MUST append to that list,
+        -- not overwrite it.
+        parley._state.web_search = true
+        local payload = dispatcher.prepare_payload(msgs(user("hi")), model, "anthropic", { "read_file" })
+        assert.is_not_nil(payload.tools)
+        assert.equals(3, #payload.tools)
+
+        local names = {}
+        for _, t in ipairs(payload.tools) do names[t.name] = true end
+        assert.is_true(names["web_search"], "web_search must be preserved")
+        assert.is_true(names["web_fetch"], "web_fetch must be preserved")
+        assert.is_true(names["read_file"], "read_file must be appended")
+
+        parley._state.web_search = false
+    end)
+
+    it("byte-identity: vanilla agent (nil agent_tools) + web_search=true matches pre-#81", function()
+        -- Guards against accidental breakage of the existing web_search
+        -- path by the new 4th-arg signature. Mirrors dispatcher_spec.lua:190.
+        parley._state.web_search = true
+        local payload = dispatcher.prepare_payload(msgs(user("hi")), model, "anthropic", nil)
+        assert.is_not_nil(payload.tools)
+        assert.equals(2, #payload.tools)
+        local names = {}
+        for _, t in ipairs(payload.tools) do names[t.name] = true end
+        assert.is_true(names["web_search"])
+        assert.is_true(names["web_fetch"])
+        parley._state.web_search = false
+    end)
+
+    it("cliproxyapi routing: anthropic-family model gets client-side tools", function()
+        local payload = dispatcher.prepare_payload(msgs(user("hi")), model, "cliproxyapi", { "read_file" })
+        assert.is_not_nil(payload.tools)
+        -- Look for read_file in the list (may be mixed with server-side tools)
+        local has_read_file = false
+        for _, t in ipairs(payload.tools) do
+            if t.name == "read_file" then has_read_file = true end
+        end
+        assert.is_true(has_read_file)
+    end)
+
+    it("cliproxyapi routing: non-anthropic model raises with anthropic-family message", function()
+        local openai_model = { model = "gpt-5.4", temperature = 0.8, max_tokens = 1024 }
+        local ok, err = pcall(dispatcher.prepare_payload, msgs(user("hi")), openai_model, "cliproxyapi", { "read_file" })
+        assert.is_false(ok)
+        assert.matches("anthropic%-family", tostring(err))
+    end)
+
+    it("openai provider raises when agent_tools is provided", function()
+        local openai_model = { model = "gpt-5.4", temperature = 0.8, max_tokens = 1024 }
+        local ok, err = pcall(dispatcher.prepare_payload, msgs(user("hi")), openai_model, "openai", { "read_file" })
+        assert.is_false(ok)
+        assert.matches("tools not supported", tostring(err))
+    end)
+
+    it("googleai provider raises when agent_tools is provided", function()
+        local gm = { model = "gemini-2.5-flash", temperature = 1.0, top_p = 1.0, top_k = 64, max_tokens = 8192 }
+        local ok, err = pcall(dispatcher.prepare_payload, msgs(user("hi")), gm, "googleai", { "read_file" })
+        assert.is_false(ok)
+        assert.matches("tools not supported", tostring(err))
+    end)
+end)
+
 describe("prepare_payload: googleai provider", function()
     before_each(function()
         parley._state = parley._state or {}

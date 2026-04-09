@@ -3998,6 +3998,13 @@ M.get_agent_info = function(headers, agent)
 		model = agent.model,
 		system_prompt = system_prompt,
 		display_name = agent.name,
+		-- Client-side tool use config (M1 Task 1.4 of #81). Nil for
+		-- vanilla agents; carries through to dispatcher.prepare_payload
+		-- as the 4th arg so chat_respond can drive tool-enabled requests
+		-- without needing to re-read the agents table.
+		tools = agent.tools,
+		max_tool_iterations = agent.max_tool_iterations,
+		tool_result_max_bytes = agent.tool_result_max_bytes,
 	}
 
 	-- Override with header values if they exist

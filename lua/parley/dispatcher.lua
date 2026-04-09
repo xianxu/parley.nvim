@@ -69,7 +69,20 @@ end
 ---@param messages table
 ---@param model string | table
 ---@param provider string | nil
-D.prepare_payload = function(messages, model, provider)
+--- Build the provider-specific request payload for a chat turn.
+---
+--- @param messages table[]     # messages array in parley's internal shape
+--- @param model string|table   # model name or params table
+--- @param provider string      # provider name ("anthropic", "openai", ...)
+--- @param agent_tools string[]|nil # optional list of client-side tool names
+---   declared by the agent (M1 of issue #81). When non-empty, the dispatcher
+---   resolves the names against the registry, encodes them via the provider's
+---   tool encoder, and APPENDS the result to payload.tools — never overwriting
+---   any server-side tools the adapter may have already emitted (e.g. Anthropic
+---   web_search / web_fetch). Nil or empty = no client-side tools; byte-
+---   identical to pre-#81 behavior for vanilla agents.
+--- @return table payload
+D.prepare_payload = function(messages, model, provider, agent_tools)
 	if type(model) == "string" then
 		return {
 			model = model,
@@ -80,6 +93,36 @@ D.prepare_payload = function(messages, model, provider)
 
 	local adapter = providers.get(provider)
 	local payload = adapter.format_payload(messages, model, provider)
+
+	-- M1 Task 1.5: append client-side tools to whatever the adapter emitted.
+	-- Non-Anthropic providers raise here when agent_tools is non-empty.
+	if agent_tools and #agent_tools > 0 then
+		local tools_registry = require("parley.tools")
+		local defs = tools_registry.select(agent_tools)
+		local client_tools
+		if provider == "anthropic" then
+			client_tools = providers.anthropic_encode_tools(defs)
+		elseif provider == "cliproxyapi" then
+			client_tools = providers.cliproxyapi_encode_tools(defs, model)
+		elseif provider == "openai" then
+			client_tools = providers.openai_encode_tools(defs) -- raises
+		elseif provider == "googleai" then
+			client_tools = providers.googleai_encode_tools(defs) -- raises
+		elseif provider == "ollama" then
+			client_tools = providers.ollama_encode_tools(defs) -- raises
+		else
+			error("tools not supported for provider: " .. tostring(provider))
+		end
+
+		-- APPEND, do not CLOBBER: preserves server-side tools (web_search,
+		-- web_fetch) that the adapter may have already written into
+		-- payload.tools. Task 1.0 baseline capture discovery.
+		payload.tools = payload.tools or {}
+		for _, t in ipairs(client_tools) do
+			table.insert(payload.tools, t)
+		end
+	end
+
 	logger.debug("payload: " .. vim.inspect(payload))
 	return payload
 end

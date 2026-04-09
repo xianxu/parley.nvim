@@ -854,8 +854,12 @@ M.respond = function(params, callback, override_free_cursor, force)
             _parley.logger.debug("Using raw payload for request: " .. vim.inspect(raw_payload))
         end
 
-        -- Compute payload once for both display and query
-        local final_payload = raw_payload or _parley.dispatcher.prepare_payload(messages, agent_info.model, agent_info.provider)
+        -- Compute payload once for both display and query.
+        -- agent_info.tools (from M1 Task 1.4) is passed as the 4th arg so
+        -- tool-enabled agents get their client-side tools appended to the
+        -- payload. Vanilla agents have agent_info.tools = nil and stay
+        -- byte-identical to pre-#81 behavior.
+        local final_payload = raw_payload or _parley.dispatcher.prepare_payload(messages, agent_info.model, agent_info.provider, agent_info.tools)
 
         -- In raw request mode, insert the request payload after the question, before the agent response
         -- Skip if the question already contains a typed request fence (raw_payload was parsed from it)
