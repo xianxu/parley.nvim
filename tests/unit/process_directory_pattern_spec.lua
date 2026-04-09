@@ -16,7 +16,7 @@ describe("helper.process_directory_pattern", function()
     before_each(function()
         -- Create a unique temp directory
         local random_suffix = string.format("%x", math.random(0, 0xFFFFFF))
-        tmpdir = "/tmp/parley-test-dirpattern-" .. random_suffix
+        tmpdir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-dirpattern-" .. random_suffix
         vim.fn.mkdir(tmpdir, "p")
 
         -- Create a known file tree:

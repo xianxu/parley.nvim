@@ -17,7 +17,7 @@ describe("Export commands", function()
 
         -- Create temp directories
         local random_suffix = string.format("%x", math.random(0, 0xFFFFFF))
-        tmpdir = "/tmp/parley-test-export-" .. random_suffix
+        tmpdir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-export-" .. random_suffix
         export_html_dir = tmpdir .. "/html"
         export_markdown_dir = tmpdir .. "/markdown"
 
@@ -123,7 +123,7 @@ def hello():
 
         it("A3: rejects non-chat files", function()
             -- Create a non-chat file (outside chat_dir)
-            local non_chat = "/tmp/non-chat-" .. math.random(999999) .. ".md"
+            local non_chat = (os.getenv("TMPDIR") or "/tmp") .. "/claude/non-chat-" .. math.random(999999) .. ".md"
             local f = io.open(non_chat, "w")
             f:write("# Not a chat\n\nJust some text.")
             f:close()
@@ -389,7 +389,7 @@ def hello():
 
         it("B6: rejects non-chat files", function()
             -- Create a non-chat file (outside chat_dir)
-            local non_chat = "/tmp/non-chat-md-" .. math.random(999999) .. ".md"
+            local non_chat = (os.getenv("TMPDIR") or "/tmp") .. "/claude/non-chat-md-" .. math.random(999999) .. ".md"
             local f = io.open(non_chat, "w")
             f:write("# Not a chat\n\nJust some text.")
             f:close()

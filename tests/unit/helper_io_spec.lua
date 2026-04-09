@@ -14,7 +14,7 @@ describe("helper I/O functions", function()
 
     before_each(function()
         local random_suffix = string.format("%x", math.random(0, 0xFFFFFF))
-        tmpdir = "/tmp/parley-test-helper-io-" .. random_suffix
+        tmpdir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-helper-io-" .. random_suffix
         vim.fn.mkdir(tmpdir, "p")
     end)
 

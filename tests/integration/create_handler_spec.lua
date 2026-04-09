@@ -4,10 +4,11 @@
 -- These tests verify the incremental writing behavior.
 
 -- Bootstrap parley
+local _tmp_base = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-handler"
 local parley = require("parley")
 parley.setup({
-    chat_dir = "/tmp/parley-test-handler",
-    state_dir = "/tmp/parley-test-handler/state",
+    chat_dir = _tmp_base,
+    state_dir = _tmp_base .. "/state",
     providers = {},
     api_keys = {},
 })

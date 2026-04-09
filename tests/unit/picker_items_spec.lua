@@ -34,7 +34,7 @@ local function make_prompt_plugin(current_prompt)
 end
 
 -- Set up custom_prompts with a temp dir so source() works
-local _tmpdir = "/tmp/parley-test-picker-items-" .. string.format("%x", math.random(0, 0xFFFFFF))
+local _tmpdir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-picker-items-" .. string.format("%x", math.random(0, 0xFFFFFF))
 vim.fn.mkdir(_tmpdir, "p")
 custom_prompts.setup(helper, _tmpdir)
 

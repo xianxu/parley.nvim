@@ -1,4 +1,4 @@
-local tmp_dir = "/tmp/parley-test-remote-references-" .. os.time()
+local tmp_dir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-remote-references-" .. os.time()
 
 local parley = require("parley")
 parley.setup({

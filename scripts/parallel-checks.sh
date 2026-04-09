@@ -24,7 +24,7 @@ THRESHOLD_FILES=5
 GROWTH_GATE_PCT=50
 FORCE_MULTIPLIER=3   # When diff >= 3x nag threshold, force-run (can't be postponed)
 STATE_FILE=".constitution-check-state"
-LOCK_DIR="/tmp/parallel-checks-$(pwd | (md5sum 2>/dev/null || shasum) | cut -c1-8).lock"
+LOCK_DIR="${TMPDIR:-/tmp}/claude/parallel-checks-$(pwd | (md5sum 2>/dev/null || shasum) | cut -c1-8).lock"
 
 # ── TTY detection ────────────────────────────────────────────────────────────
 IS_TTY=false
@@ -206,6 +206,8 @@ main() {
     # Hook gate mode: drain stdin (Claude sends JSON), check lock, then decide action
     if [[ "$hook_gate" -eq 1 ]]; then
         cat >/dev/null 2>&1 || true  # consume stdin from Claude hook
+        # Ensure parent of LOCK_DIR exists (preserves race semantics of mkdir for the lock itself)
+        mkdir -p "$(dirname "$LOCK_DIR")" 2>/dev/null
         if ! mkdir "$LOCK_DIR" 2>/dev/null; then
             return 0  # another run in progress, skip silently
         fi

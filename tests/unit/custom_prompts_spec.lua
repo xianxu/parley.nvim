@@ -9,7 +9,7 @@ describe("custom_prompts", function()
 
     before_each(function()
         local random_suffix = string.format("%x", math.random(0, 0xFFFFFF))
-        tmpdir = "/tmp/parley-test-custom-prompts-" .. random_suffix
+        tmpdir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-custom-prompts-" .. random_suffix
         vim.fn.mkdir(tmpdir, "p")
         custom_prompts.setup(helper, tmpdir)
     end)
@@ -110,7 +110,7 @@ describe("system_prompt_picker._build_items source tags", function()
     local picker = require("parley.system_prompt_picker")
 
     it("C1: shows source tags for custom and modified prompts", function()
-        local tmpdir = "/tmp/parley-test-picker-items-" .. string.format("%x", math.random(0, 0xFFFFFF))
+        local tmpdir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-picker-items-" .. string.format("%x", math.random(0, 0xFFFFFF))
         vim.fn.mkdir(tmpdir, "p")
         custom_prompts.setup(helper, tmpdir)
 

@@ -4,7 +4,7 @@
 -- validate_graph, export_csv, export_dot,
 -- parse_time, time_to_months, quarters_between, parse_size_months, parse_capacity_weeks
 
-local tmp_dir = "/tmp/parley-test-vision-" .. os.time()
+local tmp_dir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-vision-" .. os.time()
 
 -- Bootstrap parley (needed for vim.split dependency in parser)
 local parley = require("parley")

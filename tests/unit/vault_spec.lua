@@ -217,21 +217,23 @@ describe("vault", function()
 
     describe("Group D: setup", function()
         it("D1: sets curl_params from opts", function()
+            local _base = (os.getenv("TMPDIR") or "/tmp") .. "/claude"
             local original_prepare = helpers.prepare_dir
-            helpers.prepare_dir = function() return "/tmp" end
+            helpers.prepare_dir = function() return _base end
 
-            vault.setup({ curl_params = { "--proxy", "http://proxy" }, state_dir = "/tmp/vault-test" })
+            vault.setup({ curl_params = { "--proxy", "http://proxy" }, state_dir = _base .. "/vault-test" })
             assert.same({ "--proxy", "http://proxy" }, vault.config.curl_params)
 
             helpers.prepare_dir = original_prepare
         end)
 
         it("D2: sets state_dir from opts", function()
+            local _state_dir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/vault-state"
             local original_prepare = helpers.prepare_dir
-            helpers.prepare_dir = function() return "/tmp/vault-state" end
+            helpers.prepare_dir = function() return _state_dir end
 
-            vault.setup({ state_dir = "/tmp/vault-state" })
-            assert.equals("/tmp/vault-state", vault.config.state_dir)
+            vault.setup({ state_dir = _state_dir })
+            assert.equals(_state_dir, vault.config.state_dir)
 
             helpers.prepare_dir = original_prepare
         end)

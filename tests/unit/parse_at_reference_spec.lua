@@ -2,7 +2,7 @@
 --
 -- Uses canonical @@ref@@ syntax with explicit closing marker.
 
-local tmp_dir = "/tmp/parley-test-parse-at-ref-" .. os.time()
+local tmp_dir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-parse-at-ref-" .. os.time()
 
 -- Bootstrap parley
 local parley = require("parley")

@@ -3,7 +3,7 @@
 -- These tests exercise the full chat_respond flow including the completion callback,
 -- which requires mocking the dispatcher and tasker.
 
-local tmp_dir = "/tmp/parley-test-chat-respond-" .. os.time()
+local tmp_dir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-chat-respond-" .. os.time()
 
 -- Bootstrap parley
 local parley = require("parley")
@@ -804,7 +804,7 @@ describe("chat_respond: guard branches", function()
 
     it("returns early without calling dispatcher for non-chat file", function()
         -- Create a file outside chat_dir
-        local non_chat_file = "/tmp/not-a-chat-file.md"
+        local non_chat_file = (os.getenv("TMPDIR") or "/tmp") .. "/claude/not-a-chat-file.md"
         local content = [[
 # Just a markdown file
 Not a chat file.
@@ -992,7 +992,7 @@ describe("chat_respond_all", function()
     end)
 
     it("returns early without calling dispatcher for non-chat file", function()
-        local non_chat_file = "/tmp/not-a-chat-all.md"
+        local non_chat_file = (os.getenv("TMPDIR") or "/tmp") .. "/claude/not-a-chat-all.md"
         vim.fn.writefile({"# Not a chat"}, non_chat_file)
         vim.cmd("edit " .. non_chat_file)
 

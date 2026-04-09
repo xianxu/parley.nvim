@@ -60,8 +60,8 @@ describe("ChatFinder logic", function()
 
         -- Create a temp directory for chat files
         local random_suffix = string.format("%x", math.random(0, 0xFFFFFF))
-        tmpdir = "/tmp/parley-test-chatfinder-" .. random_suffix
-        secondary_tmpdir = "/tmp/parley-test-chatfinder-secondary-" .. random_suffix
+        tmpdir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-chatfinder-" .. random_suffix
+        secondary_tmpdir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-chatfinder-secondary-" .. random_suffix
         special_tmpdir = nil
         vim.fn.mkdir(tmpdir, "p")
         vim.fn.mkdir(secondary_tmpdir, "p")
@@ -604,7 +604,7 @@ describe("ChatFinder logic", function()
         end)
 
         it("finds moved chats in roots whose paths contain glob characters", function()
-            special_tmpdir = "/tmp/parley-test-chatfinder-[archive]-" .. string.format("%x", math.random(0, 0xFFFFFF))
+            special_tmpdir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-chatfinder-[archive]-" .. string.format("%x", math.random(0, 0xFFFFFF))
             local picker_calls = {}
             require("parley.file_tracker").track_file_access = function() end
             vim.fn.mkdir(special_tmpdir, "p")
@@ -645,7 +645,7 @@ describe("ChatFinder logic", function()
         end)
 
         it("reopens on moved chats when the destination root was configured with a tilde path", function()
-            special_tmpdir = "/tmp/parley-test-chatfinder-tilde-" .. string.format("%x", math.random(0, 0xFFFFFF))
+            special_tmpdir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-chatfinder-tilde-" .. string.format("%x", math.random(0, 0xFFFFFF))
             local tilde_root = special_tmpdir:gsub("^" .. vim.pesc(vim.env.HOME), "~")
             local picker_calls = {}
             require("parley.file_tracker").track_file_access = function() end

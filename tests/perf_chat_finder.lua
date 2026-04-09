@@ -111,7 +111,7 @@ local function run_benchmark(file_count)
 		vim.fn.delete(tmpdir, "rf")
 	end
 	local random_suffix = string.format("%x", math.random(0, 0xFFFFFF))
-	tmpdir = "/tmp/parley-perf-chatfinder-" .. random_suffix
+	tmpdir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-perf-chatfinder-" .. random_suffix
 	generate_files(tmpdir, file_count)
 
 	-- Wire up stubs

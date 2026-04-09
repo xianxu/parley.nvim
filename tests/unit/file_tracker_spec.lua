@@ -17,7 +17,7 @@ describe("file_tracker", function()
 
     before_each(function()
         local random_suffix = string.format("%x", math.random(0, 0xFFFFFF))
-        tmpdir = "/tmp/parley-test-tracker-" .. random_suffix
+        tmpdir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-tracker-" .. random_suffix
         vim.fn.mkdir(tmpdir .. "/parley", "p")
 
         -- Monkey-patch stdpath to redirect data directory

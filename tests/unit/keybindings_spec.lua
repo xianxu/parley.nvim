@@ -1,4 +1,4 @@
-local base_tmp_dir = "/tmp/parley-test-keybindings-" .. os.time()
+local base_tmp_dir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-keybindings-" .. os.time()
 local parley = require("parley")
 
 local function has_line(lines, shortcut, description)

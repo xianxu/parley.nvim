@@ -37,7 +37,7 @@ describe("NoteFinder logic", function()
         original_create_note_file = M._create_note_file
         original_notify = vim.notify
 
-        notes_dir = "/tmp/parley-test-notefinder-" .. string.format("%x", math.random(0, 0xFFFFFF))
+        notes_dir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-notefinder-" .. string.format("%x", math.random(0, 0xFFFFFF))
         vim.fn.mkdir(notes_dir, "p")
 
         M.config.notes_dir = notes_dir

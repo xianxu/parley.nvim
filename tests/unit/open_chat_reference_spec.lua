@@ -1,4 +1,4 @@
-local tmp_dir = "/tmp/parley-open-chat-reference-" .. os.time()
+local tmp_dir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-open-chat-reference-" .. os.time()
 vim.fn.mkdir(tmp_dir, "p")
 
 local parley = require("parley")

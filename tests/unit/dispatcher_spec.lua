@@ -4,7 +4,7 @@
 -- It does require("parley") inside provider branches to read _state.web_search,
 -- so we set parley._state directly in test setup.
 
-local tmp_dir = "/tmp/parley-test-dispatcher-" .. os.time()
+local tmp_dir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-dispatcher-" .. os.time()
 
 -- Bootstrap parley so that require("parley") works and _state is populated.
 local parley = require("parley")

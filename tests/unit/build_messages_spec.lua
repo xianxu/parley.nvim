@@ -4,7 +4,7 @@
 -- It's pure logic except for file I/O via helpers.format_file_content,
 -- which we stub out in tests.
 
-local tmp_dir = "/tmp/parley-test-build-messages-" .. os.time()
+local tmp_dir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-build-messages-" .. os.time()
 
 -- Bootstrap parley
 local parley = require("parley")

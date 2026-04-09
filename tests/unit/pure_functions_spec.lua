@@ -3,7 +3,7 @@
 -- These functions are completely pure (no vim.*, no I/O, no side effects)
 -- and were previously untested.
 
-local tmp_dir = "/tmp/parley-test-pure-functions-" .. os.time()
+local tmp_dir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-pure-functions-" .. os.time()
 
 -- Bootstrap parley
 local parley = require("parley")

@@ -20,7 +20,7 @@ describe("logger", function()
         logger = require("parley.logger")
 
         local random_suffix = string.format("%x", math.random(0, 0xFFFFFF))
-        tmpdir = "/tmp/parley-test-logger-" .. random_suffix
+        tmpdir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-logger-" .. random_suffix
         vim.fn.mkdir(tmpdir, "p")
         log_file = tmpdir .. "/test.log"
     end)

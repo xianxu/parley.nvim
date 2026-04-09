@@ -3,7 +3,7 @@
 -- Tests parse_frontmatter, parse_deps_value, next_runnable,
 -- cycle_status_value, topo_sort, slugify, extract_title, format_deps
 
-local tmp_dir = "/tmp/parley-test-issues-" .. os.time()
+local tmp_dir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-issues-" .. os.time()
 
 -- Bootstrap parley (needed for chat_parser dependency)
 local parley = require("parley")

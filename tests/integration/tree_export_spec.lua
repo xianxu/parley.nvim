@@ -15,7 +15,7 @@ describe("Tree export", function()
 		original_config = vim.deepcopy(M.config)
 
 		local random_suffix = string.format("%x", math.random(0, 0xFFFFFF))
-		tmpdir = "/tmp/parley-test-tree-export-" .. random_suffix
+		tmpdir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-tree-export-" .. random_suffix
 		export_html_dir = tmpdir .. "/html"
 		export_markdown_dir = tmpdir .. "/markdown"
 

@@ -11,7 +11,7 @@ describe("Exporter tree helpers", function()
 
 	before_each(function()
 		local random_suffix = string.format("%x", math.random(0, 0xFFFFFF))
-		tmpdir = "/tmp/parley-test-tree-" .. random_suffix
+		tmpdir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-tree-" .. random_suffix
 		vim.fn.mkdir(tmpdir, "p")
 		M.config.chat_dir = tmpdir
 	end)

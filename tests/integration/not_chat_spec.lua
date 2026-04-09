@@ -70,7 +70,7 @@ describe("not_chat: invalid files", function()
 
     it("returns a reason string for a file outside chat_dir", function()
         local buf = vim.api.nvim_create_buf(false, true)
-        local path = "/tmp/some-random-file.lua"
+        local path = (os.getenv("TMPDIR") or "/tmp") .. "/claude/some-random-file.lua"
         vim.api.nvim_buf_set_name(buf, path)
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "-- just lua" })
         local result = parley.not_chat(buf, path)
