@@ -214,6 +214,10 @@ M.parse_chat = function(lines, header_end, config)
 	local user_prefix = config.chat_user_prefix
 	local local_prefix = config.chat_local_prefix
 	local branch_prefix = config.chat_branch_prefix or "🌿:"
+	-- M2 Task 2.5 of #81: tool_use / tool_result prefixes for the
+	-- content_blocks list on an assistant answer.
+	local tool_use_prefix = config.chat_tool_use_prefix or "🔧:"
+	local tool_result_prefix = config.chat_tool_result_prefix or "📎:"
 	logger.debug("memory config: " .. vim.inspect({memory_enabled, summary_prefix, reasoning_prefix}))
 
 	-- Determine agent prefix
@@ -239,6 +243,121 @@ M.parse_chat = function(lines, header_end, config)
 			current_exchange[current_component].content = table.concat(content_parts, "\n"):gsub("^%s*(.-)%s*$", "%1")
 			content_parts = {}
 		end
+	end
+
+	--------------------------------------------------------------------------
+	-- M2 Task 2.5 of #81: content_blocks state machine
+	--
+	-- Parallel to the existing content_parts flow (which builds the flat
+	-- answer.content for backward compat), this state machine builds a
+	-- structured `answer.content_blocks` list preserving the buffer order
+	-- of text / tool_use / tool_result sub-components inside a `🤖:`
+	-- answer region. Tool block body decoding is delegated to
+	-- lua/parley/tools/serialize.lua so any schema change there
+	-- automatically propagates here without re-writing regex.
+	--
+	-- The machine is only "alive" inside an answer region. It's (re-)
+	-- initialized by the `🤖:` branch and finalized + attached to the
+	-- answer object by the next `💬:` branch (or at end of file).
+	--------------------------------------------------------------------------
+	local cb_state = nil -- nil when not inside an answer
+	local serialize_ok, serialize = pcall(require, "parley.tools.serialize")
+
+	local function cb_start_block(kind)
+		if not cb_state then return end
+		cb_state.current_kind = kind
+		cb_state.current_lines = {}
+		-- Fence tracking resets for each new block. Only used inside
+		-- tool_use / tool_result blocks to detect the end of the
+		-- fenced body so we can auto-transition back to a text block
+		-- when subsequent plain text follows.
+		cb_state.tool_fence_len = nil
+		cb_state.tool_body_complete = false
+	end
+
+	local function cb_finalize_block()
+		if not cb_state or not cb_state.current_kind then return end
+		local body = table.concat(cb_state.current_lines, "\n")
+		local kind = cb_state.current_kind
+		if kind == "text" then
+			local trimmed = body:gsub("^%s*(.-)%s*$", "%1")
+			if trimmed ~= "" then
+				table.insert(cb_state.blocks, { type = "text", text = trimmed })
+			end
+		elseif kind == "tool_use" then
+			local parsed = serialize_ok and serialize.parse_call(body) or nil
+			if parsed then
+				table.insert(cb_state.blocks, {
+					type = "tool_use",
+					id = parsed.id,
+					name = parsed.name,
+					input = parsed.input,
+				})
+			end
+		elseif kind == "tool_result" then
+			local parsed = serialize_ok and serialize.parse_result(body) or nil
+			if parsed then
+				table.insert(cb_state.blocks, {
+					type = "tool_result",
+					id = parsed.id,
+					name = parsed.name,
+					content = parsed.content,
+					is_error = parsed.is_error,
+				})
+			end
+		end
+		cb_state.current_kind = nil
+		cb_state.current_lines = {}
+		cb_state.tool_fence_len = nil
+		cb_state.tool_body_complete = false
+	end
+
+	-- Append a line to the current content block, auto-transitioning
+	-- out of a tool block whose fenced body has already been closed.
+	-- Tracks fence open/close state inside tool blocks so the parser
+	-- knows when subsequent text should start a new text block vs
+	-- belong to the tool block's body.
+	local function cb_append_line(line)
+		if not cb_state or not cb_state.current_kind then return end
+
+		-- Auto-transition: if we're in a tool block whose closing
+		-- fence was already seen, this line belongs to a NEW text
+		-- block, not the tool block. Finalize the tool block first.
+		if cb_state.tool_body_complete then
+			cb_finalize_block()
+			cb_start_block("text")
+		end
+
+		table.insert(cb_state.current_lines, line)
+
+		-- Track fence state inside tool blocks to detect body end.
+		-- Opening fence: any run of 3+ backticks optionally followed
+		-- by an info string (e.g. "```json"). Closing fence: exactly
+		-- the same number of bare backticks with no info string.
+		if cb_state.current_kind == "tool_use" or cb_state.current_kind == "tool_result" then
+			if not cb_state.tool_fence_len then
+				local fence = line:match("^(`+)[%w_%-]*%s*$")
+				if fence and #fence >= 3 then
+					cb_state.tool_fence_len = #fence
+				end
+			else
+				local expected_close = string.rep("`", cb_state.tool_fence_len)
+				if line == expected_close then
+					cb_state.tool_body_complete = true
+				end
+			end
+		end
+	end
+
+	-- Attach accumulated blocks to the current exchange's answer
+	-- component (called on answer → next-question transition and at
+	-- end of file).
+	local function cb_attach_to_current_answer()
+		if cb_state and current_exchange and current_exchange.answer then
+			cb_finalize_block()
+			current_exchange.answer.content_blocks = cb_state.blocks
+		end
+		cb_state = nil
 	end
 
 	-- Helper to extract @@ref@@ file references from a line of text.
@@ -289,6 +408,9 @@ M.parse_chat = function(lines, header_end, config)
 		-- Check for user message start
 		elseif line:sub(1, #user_prefix) == user_prefix then
 			first_question_seen = true
+			-- Content_blocks for the closing answer (if any) get attached
+			-- before we finalize the old component and start a new exchange.
+			cb_attach_to_current_answer()
 			-- If we were building a previous exchange, finalize it
 			local current_component_start = line_before_local or i
 			finalize_component(current_component_start - 1)
@@ -341,9 +463,18 @@ M.parse_chat = function(lines, header_end, config)
 
 		-- Check for assistant message start
 		elseif line:sub(1, #agent_prefix) == agent_prefix then
-			-- If we were building a previous component, finalize it
+			-- If we were building a previous component, finalize it.
+			-- (If the previous component was an answer, its content_blocks
+			-- were already attached by the preceding `💬:` branch or by
+			-- this branch if there was no question in between — see
+			-- the cb_attach below after we start the new block.)
 			local current_component_start = line_before_local or i
 			finalize_component(current_component_start - 1)
+
+			-- Defensive attach: if we had a previous answer with unflushed
+			-- content_blocks (rare — two 🤖: without a 💬: between them),
+			-- attach to it now before overwriting current_exchange.answer.
+			cb_attach_to_current_answer()
 
 			-- Make sure we have an exchange to add this answer to
 			if not current_exchange then
@@ -368,6 +499,33 @@ M.parse_chat = function(lines, header_end, config)
 			content_parts = {}
 			current_component = "answer"
 			line_before_local = nil
+
+			-- Initialize content_blocks state for this answer. Start with
+			-- an empty "text" block; content continuation lines will fill
+			-- it until a 🔧:/📎: boundary splits it.
+			cb_state = { blocks = {}, current_kind = nil, current_lines = {} }
+			cb_start_block("text")
+
+		-- Check for tool_use (🔧:) header — only meaningful inside an answer.
+		-- This closes the current content_block (text / tool_use /
+		-- tool_result) and starts a new tool_use block whose first
+		-- accumulated line IS the 🔧: header, so serialize.parse_call
+		-- can extract id/name from it later.
+		elseif current_component == "answer" and line:sub(1, #tool_use_prefix) == tool_use_prefix then
+			cb_finalize_block()
+			cb_start_block("tool_use")
+			cb_append_line(line)
+			-- Also feed the raw line into content_parts so answer.content
+			-- (backward-compat flat text) still reflects the full answer
+			-- region exactly as it appears in the buffer.
+			table.insert(content_parts, line)
+
+		-- Check for tool_result (📎:) header — same pattern as tool_use.
+		elseif current_component == "answer" and line:sub(1, #tool_result_prefix) == tool_result_prefix then
+			cb_finalize_block()
+			cb_start_block("tool_result")
+			cb_append_line(line)
+			table.insert(content_parts, line)
 
 		-- Check for summary line
 		elseif current_component == "answer" and line:sub(1, #summary_prefix) == summary_prefix then
@@ -403,6 +561,11 @@ M.parse_chat = function(lines, header_end, config)
 				or line
 			table.insert(content_parts, content_line)
 
+			-- Feed the line into the current content_block (M2 Task 2.5).
+			-- Only meaningful when we're inside an answer; cb_append_line
+			-- is a no-op when cb_state is nil or has no current_kind.
+			cb_append_line(content_line)
+
 			-- Check for file references in question content
 			if current_component == "question" then
 				local refs = extract_file_refs(line)
@@ -420,6 +583,10 @@ M.parse_chat = function(lines, header_end, config)
 
 	-- Finalize the last component if needed
 	finalize_component(#lines)
+
+	-- Finalize and attach content_blocks for the last open answer, if any
+	-- (M2 Task 2.5 of #81).
+	cb_attach_to_current_answer()
 
 	return result
 end
