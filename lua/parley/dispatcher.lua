@@ -333,7 +333,19 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 				end
 
 				if qt.response == "" then
-					logger.error(qt.provider .. " response is empty: \n" .. vim.inspect(qt.raw_response))
+					-- Tool-use-only responses (#81 M2): Anthropic streams
+					-- content_block_start with type=tool_use plus
+					-- input_json_delta chunks, but none of those carry
+					-- a `delta.text` field, so qt.response stays empty.
+					-- The response is perfectly valid — the tool_loop
+					-- driver will extract the tool_use blocks from
+					-- qt.raw_response and handle them. Only warn if
+					-- raw_response also has no tool_use events.
+					local has_tool_use = type(qt.raw_response) == "string"
+						and qt.raw_response:find('"type":"tool_use"', 1, true) ~= nil
+					if not has_tool_use then
+						logger.error(qt.provider .. " response is empty: \n" .. vim.inspect(qt.raw_response))
+					end
 				end
 
 				-- optional on_exit handler

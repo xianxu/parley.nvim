@@ -617,10 +617,28 @@ end
 -- @param spinner   table|nil optional {buf, find_line} — buf is the buffer to animate,
 --                  find_line() returns 0-indexed line number of the topic line (or nil to skip)
 M.generate_topic = function(messages, provider, model, callback, spinner)
-    -- Build a clean copy: strip whitespace, drop empty messages and cache_control
+    -- Build a clean copy: strip whitespace, drop empty messages and cache_control.
+    -- Messages carrying content-block arrays (Anthropic tool-use shape, M2
+    -- Task 2.6 of #81) are flattened to a plain-text excerpt for topic
+    -- generation — the topic model doesn't care about tool blocks.
     local msgs = {}
     for _, m in ipairs(messages) do
-        local content = (m.content or ""):gsub("^%s*(.-)%s*$", "%1")
+        local content = m.content
+        if type(content) == "table" then
+            -- Content-block list: concatenate text-typed block bodies.
+            -- Non-text blocks (tool_use, tool_result) contribute nothing
+            -- useful to a topic string, so we drop them.
+            local parts = {}
+            for _, block in ipairs(content) do
+                if block.type == "text" and type(block.text) == "string" then
+                    table.insert(parts, block.text)
+                end
+            end
+            content = table.concat(parts, " ")
+        elseif type(content) ~= "string" then
+            content = ""
+        end
+        content = content:gsub("^%s*(.-)%s*$", "%1")
         if content ~= "" then
             table.insert(msgs, { role = m.role, content = content })
         end
@@ -902,9 +920,23 @@ M.respond = function(params, callback, override_free_cursor, force)
         -- Find where to insert assistant response
         local response_line = _parley.helpers.last_content_line(buf)
 
+        -- M2 Task 2.7 of #81: tool loop recursion detection.
+        -- If we're mid-tool-loop (iter > 0), we're continuing the same
+        -- exchange's answer — the existing 🔧:/📎: blocks are live
+        -- state we MUST preserve, not stale content to discard. Append
+        -- the next response chunk after the existing answer instead of
+        -- replacing it.
+        local in_tool_loop_recursion = false
+        do
+            local ok, tool_loop_mod = pcall(require, "parley.tool_loop")
+            if ok and tool_loop_mod.get_iter(buf) > 0 then
+                in_tool_loop_recursion = true
+            end
+        end
+
         -- If cursor is on a question, handle insertion based on question position
         if exchange_idx and (component == "question" or component == "answer") then
-            if parsed_chat.exchanges[exchange_idx].answer then
+            if parsed_chat.exchanges[exchange_idx].answer and not in_tool_loop_recursion then
                 -- If question already has an answer, replace it
                 local answer = parsed_chat.exchanges[exchange_idx].answer
 
@@ -913,6 +945,11 @@ M.respond = function(params, callback, override_free_cursor, force)
 
                 -- Set response line to insert at answer position
                 response_line = answer.line_start - 2
+            elseif parsed_chat.exchanges[exchange_idx].answer and in_tool_loop_recursion then
+                -- Tool-loop recursion: append after the existing answer
+                -- (which already has 🔧:/📎: blocks) so Claude's next
+                -- response streams below them in the same answer region.
+                response_line = parsed_chat.exchanges[exchange_idx].answer.line_end
             else
                 -- New question (no answer yet)
                 -- Insert right after the question
@@ -952,9 +989,23 @@ M.respond = function(params, callback, override_free_cursor, force)
             initial_progress_text = "🔎 " .. spinner_frames[spinner_frame_index] .. " " .. spinner_message
         end
 
-        local response_block_lines = { "", agent_prefix .. agent_suffix, "", initial_progress_text }
-        if spinner_active then
-            table.insert(response_block_lines, "")
+        -- During tool-loop recursion, the current answer already has a
+        -- 🤖: [Agent] header and the 🔧:/📎: blocks we just wrote.
+        -- Skip the new agent_prefix line so the continuation streams
+        -- directly after the 📎: closing fence, keeping everything in
+        -- one answer region (content_blocks model). Otherwise, the
+        -- normal path inserts a fresh agent prefix + spacing.
+        local response_block_lines
+        if in_tool_loop_recursion then
+            response_block_lines = { "", initial_progress_text }
+            if spinner_active then
+                table.insert(response_block_lines, "")
+            end
+        else
+            response_block_lines = { "", agent_prefix .. agent_suffix, "", initial_progress_text }
+            if spinner_active then
+                table.insert(response_block_lines, "")
+            end
         end
 
         -- Write assistant prompt with extra newline; progress line starts at
