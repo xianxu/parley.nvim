@@ -993,14 +993,21 @@ M.respond = function(params, callback, override_free_cursor, force)
         -- 🤖: [Agent] header and the 🔧:/📎: blocks we just wrote.
         -- Skip the new agent_prefix line so the continuation streams
         -- directly after the 📎: closing fence, keeping everything in
-        -- one answer region (content_blocks model). Otherwise, the
-        -- normal path inserts a fresh agent prefix + spacing.
+        -- one answer region (content_blocks model). Also skip the
+        -- spinner progress line entirely on recursion — the tool loop
+        -- is fast (local file I/O + one LLM call), users can see the
+        -- tool blocks already landed, and the cleanup machinery for
+        -- the spinner is a source of corner-case bugs during recursion.
+        -- Force spinner_active = false so clear_progress_indicator
+        -- becomes a no-op for this recursive call. M4 can add a
+        -- better progress indicator via the lualine tool_indicator.
         local response_block_lines
         if in_tool_loop_recursion then
-            response_block_lines = { "", initial_progress_text }
-            if spinner_active then
-                table.insert(response_block_lines, "")
-            end
+            -- Just a single blank separator. Streaming will write
+            -- directly after it, flowing the final text response
+            -- right below the 📎: block's closing fence.
+            response_block_lines = { "" }
+            spinner_active = false
         else
             response_block_lines = { "", agent_prefix .. agent_suffix, "", initial_progress_text }
             if spinner_active then
