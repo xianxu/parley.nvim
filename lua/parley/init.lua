@@ -3849,9 +3849,10 @@ M.get_agent = function(name)
 	end
 	local template = M.config.command_prompt_prefix_template
 	local cmd_prefix = M.render.template(template, { ["{{agent}}"] = name })
-	local model = M.agents[name].model
-	local system_prompt = M.agents[name].system_prompt
-	local provider = M.agents[name].provider
+	local agent_rec = M.agents[name]
+	local model = agent_rec.model
+	local system_prompt = agent_rec.system_prompt
+	local provider = agent_rec.provider
 	-- M.logger.debug("getting agent: " .. name)
 	return {
 		cmd_prefix = cmd_prefix,
@@ -3859,6 +3860,13 @@ M.get_agent = function(name)
 		model = model,
 		system_prompt = system_prompt,
 		provider = provider,
+		-- Forward client-side tool-use config (M1 of #81) so downstream
+		-- get_agent_info / prepare_payload can see it. Without these,
+		-- get_agent_info receives a sanitized snapshot and agent_info.tools
+		-- is nil, silently dropping the tools from the request payload.
+		tools = agent_rec.tools,
+		max_tool_iterations = agent_rec.max_tool_iterations,
+		tool_result_max_bytes = agent_rec.tool_result_max_bytes,
 	}
 end
 

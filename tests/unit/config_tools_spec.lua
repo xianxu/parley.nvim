@@ -156,6 +156,47 @@ describe("default ClaudeAgentTools", function()
     end)
 end)
 
+-- Regression for the bug discovered during M1 Task 1.8 Stage 1 manual
+-- verification: get_agent() returned a sanitized snapshot without the
+-- tools / max_tool_iterations / tool_result_max_bytes fields, so
+-- get_agent_info.tools was silently nil and prepare_payload never
+-- received the agent's client-side tools. The user's first tool-use
+-- request hit Anthropic as a vanilla call with only web_search/web_fetch.
+describe("get_agent forwards client-side tool config", function()
+    it("get_agent(ClaudeAgentTools) carries the tools field from M.agents", function()
+        fresh_setup(nil) -- default agents incl. ClaudeAgentTools
+        parley._state = parley._state or {}
+        parley._state.agent = "ClaudeAgentTools"
+        local agent = parley.get_agent("ClaudeAgentTools")
+        assert.is_not_nil(agent)
+        assert.is_table(agent.tools)
+        assert.equals(6, #agent.tools)
+    end)
+
+    it("get_agent(ClaudeAgentTools) forwards max_tool_iterations and tool_result_max_bytes", function()
+        fresh_setup(nil)
+        local agent = parley.get_agent("ClaudeAgentTools")
+        assert.equals(20, agent.max_tool_iterations)
+        assert.equals(102400, agent.tool_result_max_bytes)
+    end)
+
+    it("get_agent on a vanilla agent has nil tools (no defaults leak)", function()
+        fresh_setup(nil)
+        local agent = parley.get_agent("Claude-Sonnet")
+        assert.is_nil(agent.tools)
+        assert.is_nil(agent.max_tool_iterations)
+        assert.is_nil(agent.tool_result_max_bytes)
+    end)
+
+    it("get_agent_info(headers, get_agent('ClaudeAgentTools')).tools is the 6-item list", function()
+        fresh_setup(nil)
+        local agent = parley.get_agent("ClaudeAgentTools")
+        local info = parley.get_agent_info({}, agent)
+        assert.is_table(info.tools)
+        assert.equals(6, #info.tools)
+    end)
+end)
+
 describe("new config prefix + shortcut defaults", function()
     it("defines chat_tool_use_prefix and chat_tool_result_prefix", function()
         fresh_setup(nil)
