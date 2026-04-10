@@ -66,16 +66,32 @@ end
 -- Buffer append
 --------------------------------------------------------------------------------
 
---- Append a section to the end of a buffer via buffer_edit.
---- TEMPORARY: appends at end of buffer. Will be replaced by
---- exchange_model-based positioning (#90).
+--- Append a section to the active exchange's answer using the exchange
+--- model for position computation. Inserts at model:answer_append_pos(),
+--- which is always INSIDE the active answer region — never past the
+--- placeholder 💬: of the next exchange.
 ---
 --- @param bufnr integer
+--- @param model ExchangeModel  from exchange_model.from_parsed_chat or state
+--- @param exchange_idx integer  1-based exchange index
 --- @param section table {kind, ...kind-specific fields}
-function M._append_section_to_buffer(bufnr, section)
+function M._append_section_to_answer(bufnr, model, exchange_idx, section)
     local buffer_edit = require("parley.buffer_edit")
-    local last = vim.api.nvim_buf_line_count(bufnr)
-    buffer_edit.append_section_to_answer(bufnr, last - 1, section)
+    local render_buffer = require("parley.render_buffer")
+    local lines = render_buffer.render_section(section)
+    local pos = model:add_section(exchange_idx, section.kind, #lines)
+    -- If there are preceding sections, we need a margin (blank line) before
+    -- this section. The model's add_section accounts for margins in its
+    -- position computation, so `pos` already includes the margin offset.
+    -- We need to actually INSERT the margin blank into the buffer.
+    local insert_lines = {}
+    if #model.exchanges[exchange_idx].answer.sections > 1 then
+        table.insert(insert_lines, "")  -- margin blank
+    end
+    for _, l in ipairs(lines) do
+        table.insert(insert_lines, l)
+    end
+    buffer_edit.insert_lines_at(bufnr, pos - (#insert_lines > #lines and 1 or 0), insert_lines)
 end
 
 --------------------------------------------------------------------------------
@@ -123,6 +139,33 @@ function M.process_response(bufnr, raw_response, agent_info)
         return "done"
     end
 
+    -- Build the exchange model from the current buffer state so we know
+    -- exactly where to insert sections. The model computes positions
+    -- from sizes, bounded within the active exchange — never past the
+    -- placeholder 💬: of the next exchange (#90 root cause fix).
+    local chat_parser = require("parley.chat_parser")
+    local exchange_model = require("parley.exchange_model")
+    local cfg = require("parley.config")
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    local header_end = chat_parser.find_header_end(lines) or 0
+    local parsed = chat_parser.parse_chat(lines, header_end, cfg)
+    local model = exchange_model.from_parsed_chat(parsed)
+
+    -- Find the active exchange (the one with the 🔧:/📎: blocks will be appended to).
+    -- It's the LAST exchange that has an answer.
+    local active_exchange_idx = nil
+    for i = #model.exchanges, 1, -1 do
+        if model.exchanges[i].answer then
+            active_exchange_idx = i
+            break
+        end
+    end
+    if not active_exchange_idx then
+        -- No answer found — can't append tool blocks. Bail to "done".
+        M.reset(bufnr)
+        return "done"
+    end
+
     -- Execute each tool call and write 🔧:/📎: blocks in streaming order.
     local dispatcher = require("parley.tools.dispatcher")
     local registry = require("parley.tools")
@@ -134,7 +177,7 @@ function M.process_response(bufnr, raw_response, agent_info)
 
     for _, call in ipairs(tool_calls) do
         -- 🔧: section for the tool_use
-        M._append_section_to_buffer(bufnr, {
+        M._append_section_to_answer(bufnr, model, active_exchange_idx, {
             kind = "tool_use",
             id = call.id,
             name = call.name,
@@ -149,7 +192,7 @@ function M.process_response(bufnr, raw_response, agent_info)
         local result = dispatcher.execute_call(call, registry, exec_opts)
 
         -- 📎: section for the tool_result
-        M._append_section_to_buffer(bufnr, {
+        M._append_section_to_answer(bufnr, model, active_exchange_idx, {
             kind = "tool_result",
             id = result.id,
             name = result.name,
