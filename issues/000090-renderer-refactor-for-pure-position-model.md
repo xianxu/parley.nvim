@@ -51,15 +51,19 @@ As #81 M3/M4/M5/M6 add more states (multi-round tool use, iteration-cap syntheti
 
 ## Spec
 
-_TBD — will be filled out in the brainstorm phase of the fresh session._
+Full design at [`docs/plans/000090-renderer-refactor.md`](../docs/plans/000090-renderer-refactor.md). Brainstormed and approved 2026-04-09.
 
-Placeholder structure:
-- Pure data model (sections with line spans)
-- Pure render module (`render_buffer.lua`)
-- Single mutation entry point (`buffer_edit.lua`)
-- Extmark-backed position handles for streaming
-- Golden-snapshot catalog
-- Migration order (incremental, never big-bang)
+**Three new modules + one extension:**
+1. **`chat_parser.lua` extension** — every section in `answer.sections` (renamed from `content_blocks`) gains `line_start/line_end` line spans recorded as the parser walks. Backward-compat alias kept.
+2. **`lua/parley/render_buffer.lua` (NEW, pure)** — `render_section`, `render_exchange`, `positions`, plus standalone helpers (`agent_header_lines`, `raw_request_fence_lines`). No buffer access, no nvim API beyond `vim.json/vim.tbl_*`. Goes in `PURE_FILES` arch list.
+3. **`lua/parley/buffer_edit.lua` (NEW)** — single entry point for all `nvim_buf_set_lines`/`nvim_buf_set_text` calls in the plugin. Returns opaque `PosHandle` (extmark-backed) so callers chain operations without ever computing line offsets.
+4. **`tests/arch/arch_helper.lua` (NEW)** — architectural fitness functions. `assert_pattern_scoping({pattern, scope, allow_only_in, rationale, ignore_comments})`. Initial 3 rules: `nvim_buf_set_lines` only in `buffer_edit.lua`; `nvim_buf_set_text` only in `buffer_edit.lua`; pure files contain no `vim.api/cmd/schedule/defer_fn`.
+
+**Plus the test harness** (`scripts/test-anthropic-interaction.sh` + `scripts/parley_harness.lua`) — one-shot payload sender that takes a parley transcript file (`💬/🤖/🔧/📎` shape), runs it through parser → build_messages → prepare_payload → curl Anthropic, prints status + body. Dry-run mode skips curl and prints just the JSON payload (CI-safe). Seven fixture transcripts in `tests/fixtures/transcripts/` doubling as round-trip golden snapshots for `render_buffer.render_exchange`.
+
+**Migration**: ~25 commits across 5 phases. Phase 0 = infrastructure (arch helper, harness, fixtures, golden payloads). Phase 1 = pure layers (chat_parser extension, render_buffer, buffer_edit). Phase 2 = migrate `chat_respond.lua` mutation sites in 7 logical groups. Phase 3 = migrate `tool_loop.lua` and `dispatcher.create_handler` streaming, then tighten arch test #1 to `allow_only_in = { "lua/parley/buffer_edit.lua" }`. Phase 4 = re-validate #81 M2.
+
+**Definition of done**: `grep -rn "nvim_buf_set_lines\|nvim_buf_set_text" lua/parley/` returns ONLY `lua/parley/buffer_edit.lua`. `chat_respond.lua` ≥300 lines lighter. All ~406 tests green (~321 existing + ~85 new). Manual verification: vanilla chat byte-identical, ClaudeAgentTools round-trip clean.
 
 ## Plan
 
