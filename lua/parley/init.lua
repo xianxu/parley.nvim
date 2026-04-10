@@ -2898,6 +2898,38 @@ M.resubmit_questions_recursively = function(...) return chat_respond.resubmit_qu
 
 M.cmd.ChatRespond = function(p) chat_respond.cmd_respond(p) end
 
+-- Debug: print the exchange structure of the current buffer.
+-- Invoke with :lua require('parley').dump_exchanges()
+M.dump_exchanges = function()
+	local buf = vim.api.nvim_get_current_buf()
+	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+	local chat_parser = require("parley.chat_parser")
+	local header_end = chat_parser.find_header_end(lines) or 0
+	local parsed = chat_parser.parse_chat(lines, header_end, require("parley.config"))
+	local out = { "=== Exchanges (buf=" .. buf .. ", " .. #lines .. " lines, header_end=" .. header_end .. ") ===" }
+	for i, ex in ipairs(parsed.exchanges) do
+		local q = ex.question
+		local a = ex.answer
+		table.insert(out, string.format("  [%d] Q: lines %s..%s  %q",
+			i, tostring(q and q.line_start), tostring(q and q.line_end),
+			(q and q.content or ""):sub(1, 60)))
+		if a then
+			local n_sec = a.sections and #a.sections or (a.content_blocks and #a.content_blocks or 0)
+			table.insert(out, string.format("       A: lines %s..%s  sections=%d",
+				tostring(a.line_start), tostring(a.line_end), n_sec))
+			for j, s in ipairs(a.sections or a.content_blocks or {}) do
+				table.insert(out, string.format("         [%d] %s lines %s..%s size=%s",
+					j, s.kind or s.type or "?",
+					tostring(s.line_start), tostring(s.line_end),
+					tostring(s.line_end and s.line_start and (s.line_end - s.line_start + 1))))
+			end
+		else
+			table.insert(out, "       A: nil")
+		end
+	end
+	print(table.concat(out, "\n"))
+end
+
 -- Prune: move cursored exchange + all following into a new child chat file.
 -- Replaces pruned content in parent with a 🌿: branch reference.
 M.cmd.ChatPrune = function()

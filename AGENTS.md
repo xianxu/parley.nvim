@@ -20,7 +20,8 @@
 - Keep specs in `specs/*` and the issue's Plan section up to date during your work
 - Automate verification steps wherever possible: either by having end to end test; or by adding temporary tracing to mimic manual test
 - Failing automated verification, plan for manual verification steps in the issue's Plan section
-- Leverage trace-driven debugging when your fix had no effect. Produce clear repro steps for user to follow.
+- Collaborate with user to do trace-driven debugging. Produce clear repro steps for user to follow
+- Run commands yourself, don't ask user to
 
 ### 2. Artifact Hierarchy
 - Simple case, operate in the single file in `issues/`

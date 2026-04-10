@@ -508,6 +508,13 @@ D.create_handler = function(buf, win, line, first_undojoin, prefix, cursor)
 
 		first_line = vim.api.nvim_buf_get_extmark_by_id(buf, ns_id, ex_id, {})[1]
 
+		-- TRACE #90 — remove after diagnosing
+		logger.debug(string.format(
+			"[#90 trace] streaming chunk: chunk_len=%d first_line=%s finished_lines=%d buf_line_count=%d has_started=%s pending_line_len=%d",
+			#chunk, tostring(first_line), finished_lines,
+			vim.api.nvim_buf_line_count(buf), tostring(has_started), #pending_line
+		))
+
 		local buffer_edit = require("parley.buffer_edit")
 		local previous_pending_index = finished_lines
 		local completed, new_pending
