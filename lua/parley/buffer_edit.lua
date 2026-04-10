@@ -213,6 +213,27 @@ function M.delete_lines_after(buf, line_0_indexed, n)
     vim.api.nvim_buf_set_lines(buf, line_0_indexed, line_0_indexed + n, false, {})
 end
 
+--- Delete from `line_0_indexed` to the end of the buffer.
+function M.delete_to_end(buf, line_0_indexed)
+    vim.api.nvim_buf_set_lines(buf, line_0_indexed, -1, false, {})
+end
+
+--- Insert raw lines at the given 0-indexed line. Used for the
+--- end-of-stream "next user prompt" insert which is structurally
+--- distinct from append_section_to_answer (no rendering, no separator
+--- handling — caller passes the exact lines).
+function M.insert_lines_at(buf, line_0_indexed, lines)
+    vim.api.nvim_buf_set_lines(buf, line_0_indexed, line_0_indexed, false, lines)
+end
+
+--- Replace the line at line_0_indexed with the given text. Distinct
+--- from set_topic_header_line in name only — semantically identical,
+--- but kept separate so the call sites read clearly at the migration
+--- boundary. Used for the progress spinner line update path.
+function M.replace_line_at(buf, line_0_indexed, text)
+    vim.api.nvim_buf_set_lines(buf, line_0_indexed, line_0_indexed + 1, false, { text or "" })
+end
+
 --- Append a blank line at the very end of the buffer.
 function M.append_blank_at_end(buf)
     vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "" })

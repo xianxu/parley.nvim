@@ -20,7 +20,7 @@ describe("arch: buffer mutation boundary", function()
                 -- After Phase 3, ONLY buffer_edit.lua remains in this group.
                 -- ============================================================
                 "lua/parley/buffer_edit.lua",   -- THE intended home (added Phase 1)
-                "lua/parley/chat_respond.lua",  -- removed in Phase 2
+                -- chat_respond.lua removed in Phase 2 (all sites migrated)
                 "lua/parley/dispatcher.lua",     -- removed in Phase 3
                 "lua/parley/tool_loop.lua",      -- removed in Phase 3
 

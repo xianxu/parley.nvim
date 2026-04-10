@@ -661,7 +661,7 @@ M.generate_topic = function(messages, provider, model, callback, spinner)
             local line_nr = spinner.find_line()
             if line_nr then
                 local text = "topic: " .. spinner_frames[spinner_idx] .. " generating..."
-                vim.api.nvim_buf_set_lines(spinner.buf, line_nr, line_nr + 1, false, { text })
+                require("parley.buffer_edit").replace_line_at(spinner.buf, line_nr, text)
             end
             spinner_idx = spinner_idx % #spinner_frames + 1
         end))
@@ -942,7 +942,7 @@ M.respond = function(params, callback, override_free_cursor, force)
                 local answer = parsed_chat.exchanges[exchange_idx].answer
 
                 -- Delete the existing answer, keeping one blank line as separator before next question
-                vim.api.nvim_buf_set_lines(buf, answer.line_start - 1, answer.line_end, false, { "" })
+                require("parley.buffer_edit").replace_answer(buf, answer.line_start - 1, answer.line_end - 1)
 
                 -- Set response line to insert at answer position
                 response_line = answer.line_start - 2
@@ -973,7 +973,7 @@ M.respond = function(params, callback, override_free_cursor, force)
         -- If the line isn't empty, insert an empty line to ensure proper spacing
         if last_question_line and last_question_line:match("%S") then
             _parley.logger.debug("Adding empty line after question for proper spacing")
-            vim.api.nvim_buf_set_lines(buf, response_line + 1, response_line + 1, false, { "" })
+            require("parley.buffer_edit").pad_question_with_blank(buf, response_line)
             response_line = response_line + 1
         end
 
@@ -1018,7 +1018,7 @@ M.respond = function(params, callback, override_free_cursor, force)
 
         -- Write assistant prompt with extra newline; progress line starts at
         -- response_line + 3 and may shift by raw_request_offset.
-        vim.api.nvim_buf_set_lines(buf, response_line, response_line, false, response_block_lines)
+        require("parley.buffer_edit").insert_lines_at(buf, response_line, response_block_lines)
 
         _parley.logger.debug("messages to send: " .. vim.inspect(messages))
 
@@ -1058,7 +1058,7 @@ M.respond = function(params, callback, override_free_cursor, force)
             end
             table.insert(request_lines, "```")
             -- Insert right before the agent header (at response_line, pushing agent header down)
-            vim.api.nvim_buf_set_lines(buf, response_line, response_line, false, request_lines)
+            require("parley.buffer_edit").insert_raw_request_fence(buf, response_line, request_lines)
             raw_request_offset = #request_lines
         end
 
@@ -1092,7 +1092,7 @@ M.respond = function(params, callback, override_free_cursor, force)
             if existing == nil then
                 return
             end
-            vim.api.nvim_buf_set_lines(buf, progress_line, progress_line + 1, false, { text or "" })
+            require("parley.buffer_edit").replace_line_at(buf, progress_line, text)
         end
 
         local function render_spinner_line()
@@ -1134,7 +1134,7 @@ M.respond = function(params, callback, override_free_cursor, force)
                 local existing = vim.api.nvim_buf_get_lines(buf, progress_line, delete_end, false)
                 if #existing > 0 then
                     local deleted_line_count = delete_end - progress_line
-                    vim.api.nvim_buf_set_lines(buf, progress_line, delete_end, false, {})
+                    require("parley.buffer_edit").delete_lines_after(buf, progress_line, deleted_line_count)
                     if qt then
                         if type(qt.first_line) == "number" and qt.first_line >= progress_line then
                             qt.first_line = qt.first_line - deleted_line_count
@@ -1243,24 +1243,19 @@ M.respond = function(params, callback, override_free_cursor, force)
                 _parley.logger.debug("exchange_idx: " .. tostring(exchange_idx) .. " and #parsed_chat: " .. tostring(#parsed_chat))
 
                 if exchange_idx == #parsed_chat.exchanges then
+                    local buffer_edit = require("parley.buffer_edit")
                     -- write user prompt at the end
                     last_content_line = _parley.helpers.last_content_line(buf)
                     _parley.helpers.undojoin(buf)
-                    vim.api.nvim_buf_set_lines(
-                        buf,
-                        last_content_line,
-                        last_content_line,
-                        false,
-                        { "", _parley.config.chat_user_prefix, "" }
-                    )
+                    buffer_edit.insert_lines_at(buf, last_content_line, { "", _parley.config.chat_user_prefix, "" })
 
                     -- delete whitespace lines at the end of the file
                     last_content_line = _parley.helpers.last_content_line(buf)
                     _parley.helpers.undojoin(buf)
-                    vim.api.nvim_buf_set_lines(buf, last_content_line, -1, false, {})
+                    buffer_edit.delete_to_end(buf, last_content_line)
                     -- insert a new line at the end of the file
                     _parley.helpers.undojoin(buf)
-                    vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "" })
+                    buffer_edit.append_blank_at_end(buf)
                 end
 
                 -- if topic is ?, then generate it
