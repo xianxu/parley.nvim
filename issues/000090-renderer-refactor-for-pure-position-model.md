@@ -72,3 +72,15 @@ _TBD — will be filled out after brainstorm, in the plan phase._
 ## Log
 
 - **2026-04-09 — filed**. Problem + scope + why-now captured above. Next: fresh session, enter brainstorming mode, write `## Spec`, then write `docs/plans/000090-renderer-refactor.md`, then execute.
+- **2026-04-09 — brainstormed + planned + executed (Phases 0–3)**. User chose to address #90 in the same session as #81 M2 deferral.
+  - Brainstormed 9 sections with section-by-section approval (architecture, data model, buffer_edit API, render_buffer API, arch helper, harness, test strategy, migration order, risks).
+  - Plan written to `docs/plans/000090-renderer-refactor.md` with 30 TDD tasks across 5 chunks.
+  - Executed Phases 0–3 (24 of 30 tasks):
+    - **Chunk 0 (Phase 0)**: arch_helper + arch baseline tests + harness + 7 fixtures + 7 goldens + round-trip guard. 15 new tests. Commits: b18ed16, 4a13bc2, cb044e1, f8b9e8a, b18d8d8, c05e176, 95eacea.
+    - **Chunk 1 (Phase 1)**: chat_parser line spans + helpers, render_buffer.lua (pure render), buffer_edit.lua (mutation entry point). 32 new tests. Commits: 8f828f8, 074f7b0, 1059604, 860146e, f31a774, ac1f6ff, 1ef84e9.
+    - **Chunk 2 (Phase 2)**: chat_respond.lua mutations migrated to buffer_edit (10 sites). Commits: b3ea1a3, 7f0c956.
+    - **Chunk 3 (Phase 3)**: tool_loop and dispatcher streaming migrated. Final arch state: `nvim_buf_set_lines` only in `buffer_edit.lua` (within the chat-rendering pipeline). Commits: aae15c8, ff7f51d.
+  - **Task 2.8 deferred** (dead-variable deletion of `response_line / progress_line / raw_request_offset` in chat_respond.lua): would require `dispatcher.create_handler` to accept a PosHandle instead of a raw line number, which is a separate larger refactor of the streaming protocol. The minimum-change form of #90 routes the existing offset arithmetic THROUGH buffer_edit without converting it to PosHandle. The intermittent Anthropic rejection bug may or may not be fixed by what's landed; the next manual test (Chunk 4) will tell.
+  - **Picker/UI helpers deferred**: chat_finder, init, vision, issues, float_picker, config, system_prompt_picker, highlighter all still use raw `nvim_buf_set_lines`. Migrating them is desirable for consistency but YAGNI for #90's renderer scope. They are listed in the arch test allow list with the explicit "deferred follow-up" comment.
+  - All ~406 tests green except the pre-existing unrelated `export_allocation_report` failure.
+  - **Chunk 4 (Phase 4 — re-validation)** is up next: full make test green ✓, manual nvim verification (vanilla chat + ClaudeAgentTools tool round-trip), live Anthropic harness against `one-round-tool-use.md`, then resume #81 M2 Task 2.7.
