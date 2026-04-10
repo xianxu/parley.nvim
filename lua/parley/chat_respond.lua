@@ -154,24 +154,25 @@ local function collect_ancestor_messages(current_file, parsed_chat)
 end
 
 local function set_chat_topic_line(buf, lines, topic)
+    local buffer_edit = require("parley.buffer_edit")
     local header_end = find_chat_header_end(lines)
     if not header_end then
-        vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "# topic: " .. topic })
+        buffer_edit.set_topic_header_line(buf, 0, "# topic: " .. topic)
         return
     end
 
     if lines[1] and lines[1]:gsub("^%s*(.-)%s*$", "%1") == "---" then
         for i = 2, header_end - 1 do
             if lines[i]:match("^%s*topic:%s*") then
-                vim.api.nvim_buf_set_lines(buf, i - 1, i, false, { "topic: " .. topic })
+                buffer_edit.set_topic_header_line(buf, i - 1, "topic: " .. topic)
                 return
             end
         end
-        vim.api.nvim_buf_set_lines(buf, 1, 1, false, { "topic: " .. topic })
+        buffer_edit.insert_topic_line(buf, 0, "topic: " .. topic)
         return
     end
 
-    vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "# topic: " .. topic })
+    buffer_edit.set_topic_header_line(buf, 0, "# topic: " .. topic)
 end
 
 local function is_follow_cursor_enabled(override_free_cursor)
