@@ -396,6 +396,23 @@ M.build_messages = function(opts)
     -- Process each exchange, determining whether to preserve or summarize
     local total_exchanges = #parsed_chat.exchanges
 
+    -- TRACE #90
+    logger.warning(string.format(
+        "[#90 trace] build_messages opts: start_index=%s end_index=%s exchange_idx=%s n_exchanges=%d",
+        tostring(start_index), tostring(end_index), tostring(exchange_idx), total_exchanges
+    ))
+    for idx_dump, ex_dump in ipairs(parsed_chat.exchanges) do
+        local q_start = ex_dump.question and ex_dump.question.line_start
+        local q_end = ex_dump.question and ex_dump.question.line_end
+        local a_start = ex_dump.answer and ex_dump.answer.line_start
+        local a_end = ex_dump.answer and ex_dump.answer.line_end
+        local n_blocks = ex_dump.answer and ex_dump.answer.content_blocks and #ex_dump.answer.content_blocks
+        logger.warning(string.format(
+            "  exchange[%d]: q=[%s..%s] a=[%s..%s] n_blocks=%s",
+            idx_dump, tostring(q_start), tostring(q_end), tostring(a_start), tostring(a_end), tostring(n_blocks)
+        ))
+    end
+
     -- Single pass through all exchanges
     for idx, exchange in ipairs(parsed_chat.exchanges) do
         if exchange.question and exchange.question.line_start >= start_index and idx <= exchange_idx then
@@ -510,6 +527,21 @@ M.build_messages = function(opts)
                         answer_has_tool_blocks = true
                         break
                     end
+                end
+            end
+            -- TRACE #90
+            logger.warning(string.format(
+                "[#90 trace] build_messages exchange %d: has_answer=%s has_content_blocks=%s n_blocks=%s answer_has_tool_blocks=%s exchange_idx=%s",
+                idx,
+                tostring(exchange.answer ~= nil),
+                tostring(exchange.answer and exchange.answer.content_blocks ~= nil),
+                tostring(exchange.answer and exchange.answer.content_blocks and #exchange.answer.content_blocks),
+                tostring(answer_has_tool_blocks),
+                tostring(exchange_idx)
+            ))
+            if exchange.answer and exchange.answer.content_blocks then
+                for bi, b in ipairs(exchange.answer.content_blocks) do
+                    logger.warning(string.format("  block[%d] type=%s kind=%s", bi, tostring(b.type), tostring(b.kind)))
                 end
             end
             local include_answer = exchange.answer
@@ -934,6 +966,27 @@ M.respond = function(params, callback, override_free_cursor, force)
                 in_tool_loop_recursion = true
             end
         end
+        -- TRACE #90 — remove after diagnosing tool-loop recursion issue
+        _parley.logger.debug(string.format(
+            "[#90 trace] M.respond entry: buf=%d in_tool_loop_recursion=%s buf_line_count=%d cursor_line=%s",
+            buf, tostring(in_tool_loop_recursion), vim.api.nvim_buf_line_count(buf), tostring(cursor_line)
+        ))
+        if in_tool_loop_recursion then
+            -- Dump full buffer state to a file so we can see exactly what
+            -- the parser is looking at on the recursive call.
+            pcall(function()
+                local dpath = "/tmp/claude/parley-90-debug/recursion_buffer_" .. _parley.logger.now() .. ".txt"
+                local df = io.open(dpath, "w")
+                if df then
+                    local lns = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+                    for i, l in ipairs(lns) do
+                        df:write(string.format("[%d] %s\n", i, l))
+                    end
+                    df:close()
+                    _parley.logger.debug("[#90 trace] dumped recursion buffer to " .. dpath)
+                end
+            end)
+        end
 
         -- If cursor is on a question, handle insertion based on question position
         if exchange_idx and (component == "question" or component == "answer") then
@@ -951,6 +1004,13 @@ M.respond = function(params, callback, override_free_cursor, force)
                 -- (which already has 🔧:/📎: blocks) so Claude's next
                 -- response streams below them in the same answer region.
                 response_line = parsed_chat.exchanges[exchange_idx].answer.line_end
+                -- TRACE #90 — remove after diagnosing
+                _parley.logger.debug(string.format(
+                    "[#90 trace] recursion branch: answer.line_start=%s answer.line_end=%s response_line=%s",
+                    tostring(parsed_chat.exchanges[exchange_idx].answer.line_start),
+                    tostring(parsed_chat.exchanges[exchange_idx].answer.line_end),
+                    tostring(response_line)
+                ))
             else
                 -- New question (no answer yet)
                 -- Insert right after the question
@@ -1019,6 +1079,13 @@ M.respond = function(params, callback, override_free_cursor, force)
         -- Write assistant prompt with extra newline; progress line starts at
         -- response_line + 3 and may shift by raw_request_offset.
         require("parley.buffer_edit").insert_lines_at(buf, response_line, response_block_lines)
+        -- TRACE #90 — remove after diagnosing
+        _parley.logger.debug(string.format(
+            "[#90 trace] after insert response_block_lines: response_line=%s response_block_lines=%s buf_line_count=%d",
+            tostring(response_line),
+            vim.inspect(response_block_lines),
+            vim.api.nvim_buf_line_count(buf)
+        ))
 
         _parley.logger.debug("messages to send: " .. vim.inspect(messages))
 
@@ -1074,6 +1141,14 @@ M.respond = function(params, callback, override_free_cursor, force)
             progress_line = response_line + 3 + raw_request_offset
         end
         local response_start_line = spinner_active and (progress_line + 2) or progress_line
+        -- TRACE #90 — remove after diagnosing
+        _parley.logger.debug(string.format(
+            "[#90 trace] line targets: progress_line=%s response_start_line=%s buf_line_count=%d max_0idx=%d",
+            tostring(progress_line),
+            tostring(response_start_line),
+            vim.api.nvim_buf_line_count(buf),
+            vim.api.nvim_buf_line_count(buf) - 1
+        ))
 
         local function set_progress_indicator_line(text)
             if not spinner_active then
@@ -1210,6 +1285,49 @@ M.respond = function(params, callback, override_free_cursor, force)
                 -- Claude can continue. Finalization (user prompt
                 -- append, topic generation, cursor placement) only
                 -- runs on the final iteration (when outcome == "done").
+                -- TRACE #90 — remove after diagnosing
+                _parley.logger.debug(string.format(
+                    "[#90 trace] on_exit: qt.response_len=%d qt.raw_response_len=%d has_tools=%s buf_line_count=%d",
+                    #(qt.response or ""),
+                    #(qt.raw_response or ""),
+                    tostring(agent_info and agent_info.tools and #agent_info.tools > 0),
+                    vim.api.nvim_buf_line_count(buf)
+                ))
+                -- TRACE #90 — dump full request payload + raw response to per-call files
+                -- so we can compare across rounds and find the "prefill not supported"
+                -- pattern. Files land in /tmp/claude/parley-90-debug/.
+                do
+                    local debug_dir = "/tmp/claude/parley-90-debug"
+                    vim.fn.mkdir(debug_dir, "p")
+                    local stamp = _parley.logger.now() .. "." .. string.format("%x", math.random(0, 0xFFFFFF))
+                    local req_path = debug_dir .. "/" .. stamp .. ".request.json"
+                    local resp_path = debug_dir .. "/" .. stamp .. ".response.txt"
+                    local meta_path = debug_dir .. "/" .. stamp .. ".meta.txt"
+                    -- Write request payload (final_payload is in scope)
+                    pcall(function()
+                        local rf = io.open(req_path, "w")
+                        if rf then rf:write(vim.json.encode(final_payload)); rf:close() end
+                    end)
+                    pcall(function()
+                        local af = io.open(resp_path, "w")
+                        if af then af:write(qt.raw_response or ""); af:close() end
+                    end)
+                    pcall(function()
+                        local mf = io.open(meta_path, "w")
+                        if mf then
+                            mf:write(string.format(
+                                "in_tool_loop_recursion=%s\nresponse_len=%d\nraw_response_len=%d\nbuf_line_count=%d\nresponse_text=%s\n",
+                                tostring(in_tool_loop_recursion),
+                                #(qt.response or ""),
+                                #(qt.raw_response or ""),
+                                vim.api.nvim_buf_line_count(buf),
+                                (qt.response or ""):sub(1, 200)
+                            ))
+                            mf:close()
+                        end
+                    end)
+                    _parley.logger.debug("[#90 trace] dumped req+resp to " .. stamp)
+                end
                 if agent_info and agent_info.tools and #agent_info.tools > 0 then
                     local tool_loop = require("parley.tool_loop")
                     -- M2 hardcodes max_tool_iterations = 1 (single round).
@@ -1218,11 +1336,20 @@ M.respond = function(params, callback, override_free_cursor, force)
                     -- config says 20, M2 stops after one round to keep
                     -- failure modes contained while the loop machinery
                     -- is still being hardened.
+                    -- TODO(#90): pass exchange_model writer so tool_loop
+                    -- appends inside the active answer, not at buffer end.
                     local outcome = tool_loop.process_response(buf, qt.raw_response or "", {
                         max_tool_iterations = 1,
                         tool_result_max_bytes = agent_info.tool_result_max_bytes or 102400,
                         cwd = vim.fn.getcwd(),
                     })
+                    -- TRACE #90 — remove after diagnosing
+                    _parley.logger.debug(string.format(
+                        "[#90 trace] process_response → outcome=%s tool_loop_iter=%d buf_line_count=%d",
+                        tostring(outcome),
+                        tool_loop.get_iter(buf),
+                        vim.api.nvim_buf_line_count(buf)
+                    ))
                     if outcome == "recurse" then
                         -- Re-parse the (now updated) buffer and submit
                         -- again. force=true bypasses the is_busy check

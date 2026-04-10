@@ -66,18 +66,15 @@ end
 -- Buffer append
 --------------------------------------------------------------------------------
 
---- Append a section (kind, ...) to the end of a buffer via buffer_edit.
---- Used by process_response to write 🔧:/📎: blocks. Replaces the old
---- _append_block_to_buffer (which used raw nvim_buf_set_lines and a
---- pre-rendered string). #90 Task 3.1.
+--- Append a section to the end of a buffer via buffer_edit.
+--- TEMPORARY: appends at end of buffer. Will be replaced by
+--- exchange_model-based positioning (#90).
 ---
 --- @param bufnr integer
 --- @param section table {kind, ...kind-specific fields}
 function M._append_section_to_buffer(bufnr, section)
     local buffer_edit = require("parley.buffer_edit")
     local last = vim.api.nvim_buf_line_count(bufnr)
-    -- Append after the last existing line. buffer_edit.append_section_to_answer
-    -- handles the "blank separator if previous line is non-empty" logic.
     buffer_edit.append_section_to_answer(bufnr, last - 1, section)
 end
 
