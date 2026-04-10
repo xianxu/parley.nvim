@@ -437,7 +437,7 @@ end
 ---@param first_undojoin boolean | nil # whether to skip first undojoin
 ---@param prefix string | nil # prefix to insert before each response line
 ---@param cursor boolean | function # whether to move cursor to the end of the response
-D.create_handler = function(buf, win, line, first_undojoin, prefix, cursor)
+D.create_handler = function(buf, win, line, first_undojoin, prefix, cursor, on_lines_changed)
 	buf = buf or vim.api.nvim_get_current_buf()
 	prefix = prefix or ""
 	local first_line = line or vim.api.nvim_win_get_cursor(win or 0)[1] - 1
@@ -508,23 +508,18 @@ D.create_handler = function(buf, win, line, first_undojoin, prefix, cursor)
 
 		first_line = vim.api.nvim_buf_get_extmark_by_id(buf, ns_id, ex_id, {})[1]
 
-		-- TRACE #90 — remove after diagnosing
-		logger.debug(string.format(
-			"[#90 trace] streaming chunk: chunk_len=%d first_line=%s finished_lines=%d buf_line_count=%d has_started=%s pending_line_len=%d",
-			#chunk, tostring(first_line), finished_lines,
-			vim.api.nvim_buf_line_count(buf), tostring(has_started), #pending_line
-		))
-
 		local buffer_edit = require("parley.buffer_edit")
 		local previous_pending_index = finished_lines
 		local completed, new_pending
+		local delta
 		if has_started then
 			completed, new_pending = split_pending_and_completed(pending_line .. chunk)
 			table.insert(completed, new_pending)
 			local replacement = with_prefix(completed)
 			local start_line = first_line + finished_lines
 			buffer_edit.stream_replace_at_line(buf, start_line, replacement)
-			finished_lines = finished_lines + (#completed - 1)
+			delta = #completed - 1
+			finished_lines = finished_lines + delta
 		else
 			-- Strip leading newlines from the first chunk for consistent spacing across providers
 			chunk = chunk:gsub("^\n+", "")
@@ -532,8 +527,12 @@ D.create_handler = function(buf, win, line, first_undojoin, prefix, cursor)
 			table.insert(completed, new_pending)
 			local replacement = with_prefix(completed)
 			buffer_edit.stream_replace_at_line(buf, first_line, replacement)
-			finished_lines = #completed - 1
+			delta = #completed - 1
+			finished_lines = delta
 			has_started = true
+		end
+		if on_lines_changed and delta > 0 then
+			on_lines_changed(delta)
 		end
 		pending_line = new_pending
 		helpers.undojoin(buf)

@@ -186,6 +186,7 @@ end
 
 M.parse_chat = function(lines, header_end, config)
 	local result = {
+		header_end = header_end,
 		headers = {},
 		exchanges = {},
 		parent_link = nil,
@@ -285,7 +286,17 @@ M.parse_chat = function(lines, header_end, config)
 	-- Helper to finalize the current component's content from accumulated parts
 	local function finalize_component(end_line)
 		if current_exchange and current_component then
-			current_exchange[current_component].line_end = end_line
+			-- Trim trailing blank lines from all components so the
+			-- model's margins are the single source of truth for gaps
+			-- between blocks/exchanges. Without this, trailing blanks
+			-- in the parser's line_end would double-count with the
+			-- model's MARGIN constant.
+			local trimmed_end = end_line
+			while trimmed_end > current_exchange[current_component].line_start
+				and (not lines[trimmed_end] or not lines[trimmed_end]:match("%S")) do
+				trimmed_end = trimmed_end - 1
+			end
+			current_exchange[current_component].line_end = trimmed_end
 			current_exchange[current_component].content = table.concat(content_parts, "\n"):gsub("^%s*(.-)%s*$", "%1")
 			content_parts = {}
 		end
@@ -361,9 +372,16 @@ M.parse_chat = function(lines, header_end, config)
 		end
 		if block then
 			-- #90: line spans + `kind` alias for `type` (forward-compat).
+			-- Trim trailing blank lines — the model's margins are the
+			-- single source of truth for gaps between blocks.
+			local trimmed_end = end_line_no
+			while trimmed_end > cb_state.current_line_start
+				and (not lines[trimmed_end] or not lines[trimmed_end]:match("%S")) do
+				trimmed_end = trimmed_end - 1
+			end
 			block.kind = block.type
 			block.line_start = cb_state.current_line_start
-			block.line_end = end_line_no
+			block.line_end = trimmed_end
 			table.insert(cb_state.blocks, block)
 		end
 		cb_state.current_kind = nil
@@ -650,7 +668,8 @@ M.parse_chat = function(lines, header_end, config)
 		end
 	end
 
-	-- Finalize the last component if needed
+	-- Finalize the last component. The trimming for questions is
+	-- handled inside finalize_component itself.
 	finalize_component(#lines)
 
 	-- Finalize and attach content_blocks for the last open answer, if any

@@ -2881,6 +2881,23 @@ M.find_exchange_at_line = function(parsed_chat, line_number)
 		if exchange.answer and line_number >= exchange.answer.line_start and line_number <= exchange.answer.line_end then
 			return i, "answer"
 		end
+
+		-- Check if the line is in the margin after the question (between
+		-- question.line_end and answer.line_start, or after the last
+		-- question when there's no answer). Associate with the question.
+		if exchange.question and line_number > exchange.question.line_end then
+			if exchange.answer then
+				if line_number < exchange.answer.line_start then
+					return i, "question"
+				end
+			else
+				-- No answer — check if before the next exchange
+				local next_ex = parsed_chat.exchanges[i + 1]
+				if not next_ex or line_number < next_ex.question.line_start then
+					return i, "question"
+				end
+			end
+		end
 	end
 
 	return nil, nil
@@ -2898,33 +2915,32 @@ M.resubmit_questions_recursively = function(...) return chat_respond.resubmit_qu
 
 M.cmd.ChatRespond = function(p) chat_respond.cmd_respond(p) end
 
--- Debug: print the exchange structure of the current buffer.
--- Invoke with :lua require('parley').dump_exchanges()
-M.dump_exchanges = function()
+-- Debug: print the exchange model structure of the current buffer.
+-- Invoke with :lua require('parley').dump_model()
+M.dump_model = function()
 	local buf = vim.api.nvim_get_current_buf()
 	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 	local chat_parser = require("parley.chat_parser")
 	local header_end = chat_parser.find_header_end(lines) or 0
 	local parsed = chat_parser.parse_chat(lines, header_end, require("parley.config"))
-	local out = { "=== Exchanges (buf=" .. buf .. ", " .. #lines .. " lines, header_end=" .. header_end .. ") ===" }
-	for i, ex in ipairs(parsed.exchanges) do
-		local q = ex.question
-		local a = ex.answer
-		table.insert(out, string.format("  [%d] Q: lines %s..%s  %q",
-			i, tostring(q and q.line_start), tostring(q and q.line_end),
-			(q and q.content or ""):sub(1, 60)))
-		if a then
-			local n_sec = a.sections and #a.sections or (a.content_blocks and #a.content_blocks or 0)
-			table.insert(out, string.format("       A: lines %s..%s  sections=%d",
-				tostring(a.line_start), tostring(a.line_end), n_sec))
-			for j, s in ipairs(a.sections or a.content_blocks or {}) do
-				table.insert(out, string.format("         [%d] %s lines %s..%s size=%s",
-					j, s.kind or s.type or "?",
-					tostring(s.line_start), tostring(s.line_end),
-					tostring(s.line_end and s.line_start and (s.line_end - s.line_start + 1))))
+	local em = require("parley.exchange_model")
+	local model = em.from_parsed_chat(parsed)
+	local out = { "=== Model (buf=" .. buf .. ", " .. #lines .. " lines, header=" .. model.header_lines .. ") ===" }
+	out[#out + 1] = "  Stored fields per block: kind, size (positions are computed on the fly)"
+	for k, ex in ipairs(model.exchanges) do
+		if k > 1 then out[#out + 1] = "" end
+		table.insert(out, string.format("  Exchange %d (%d blocks, total_size=%d):",
+			k, #ex.blocks, model:exchange_total_size(k)))
+		for b, blk in ipairs(ex.blocks) do
+			-- start is computed (not stored) — shown here for debugging only
+			local computed_start = model:block_start(k, b)
+			local preview = ""
+			if blk.size > 0 and computed_start < #lines then
+				local l = vim.api.nvim_buf_get_lines(buf, computed_start, computed_start + 1, false)[1] or ""
+				preview = l:sub(1, 60)
 			end
-		else
-			table.insert(out, "       A: nil")
+			table.insert(out, string.format("    [%d] %-18s size=%-3d (line %d) %q",
+				b, blk.kind, blk.size, computed_start, preview))
 		end
 	end
 	print(table.concat(out, "\n"))

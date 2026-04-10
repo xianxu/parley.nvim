@@ -111,3 +111,14 @@ _TBD — will be filled out after brainstorm, in the plan phase._
   **Key lesson**: having TWO code paths (legacy + model-based) in the same function is WORSE than having just one (even if wrong). The paths interact through shared variables and produce unpredictable buffer states. The next session must commit to ONE path.
 
   **How to start the next session**: say "work on issues/90" — the issue file, exchange_model, and all infrastructure are committed and ready. The rewrite is surgical: one function in one file, backed by the existing test suite + arch tests + golden payloads as regression guards.
+
+- **2026-04-09 — Phase 4 complete: unified code path + trace cleanup**
+  - Removed ALL 19 trace logging blocks from `chat_respond.lua` (17) and `dispatcher.lua` (2)
+  - Removed `dump_exchanges` debug helper from `init.lua`
+  - **Unified the insert block**: removed `in_tool_loop_recursion`, `use_model_insert`, `response_line`, `raw_request_offset`, `has_tools` — all dead variables. ONE code path using `exchange_model` for all agents (tool and non-tool).
+  - Two branches remain (recursion vs fresh answer) — these are genuinely different states, not a tool/non-tool split.
+  - Fixed `chat_parser.parse_chat` to store `header_end` in result (was nil, causing `exchange_model.from_parsed_chat` to default to `header_lines=0`).
+  - Fixed double-margin bug: model's `answer_start` includes a margin, but parser includes trailing blanks in question `line_end`. Solution: check actual buffer before inserting margin.
+  - Removed shadowed `buffer_edit` local in completion callback.
+  - All tests green (same 1 pre-existing unrelated failure). Lint clean on all changed files.
+  - **Awaiting manual verification**: fresh chat vanilla, ClaudeAgentTools tool round-trip, raw_request_fence mode, middle-document resubmit.

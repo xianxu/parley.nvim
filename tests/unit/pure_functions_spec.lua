@@ -99,14 +99,16 @@ describe("find_exchange_at_line", function()
         assert.equals("answer", kind)
     end)
 
-    it("returns (nil, nil) when line is after question in exchange with no answer", function()
+    it("returns exchange when line is in margin after question with no answer", function()
         local pc = parsed_chat_with_exchanges({
             exchange(10, 15) -- No answer
         })
 
+        -- Line 17 is in the margin after the question — still belongs
+        -- to this exchange (margin lines associate with the preceding question).
         local idx, kind = parley.find_exchange_at_line(pc, 17)
-        assert.is_nil(idx)
-        assert.is_nil(kind)
+        assert.equals(1, idx)
+        assert.equals("question", kind)
     end)
 
     it("includes line at exact question boundary (line_start)", function()

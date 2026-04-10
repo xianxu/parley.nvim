@@ -79,19 +79,16 @@ function M._append_section_to_answer(bufnr, model, exchange_idx, section)
     local buffer_edit = require("parley.buffer_edit")
     local render_buffer = require("parley.render_buffer")
     local lines = render_buffer.render_section(section)
-    local pos = model:add_section(exchange_idx, section.kind, #lines)
-    -- If there are preceding sections, we need a margin (blank line) before
-    -- this section. The model's add_section accounts for margins in its
-    -- position computation, so `pos` already includes the margin offset.
-    -- We need to actually INSERT the margin blank into the buffer.
-    local insert_lines = {}
-    if #model.exchanges[exchange_idx].answer.sections > 1 then
-        table.insert(insert_lines, "")  -- margin blank
-    end
+    model:add_block(exchange_idx, section.kind, #lines)
+    local blk_idx = #model.exchanges[exchange_idx].blocks
+    local pos = model:block_start(exchange_idx, blk_idx)
+    -- Insert margin + content. The model's block_start is where
+    -- the content goes; the margin is one line before it.
+    local insert_lines = { "" }  -- margin blank
     for _, l in ipairs(lines) do
         table.insert(insert_lines, l)
     end
-    buffer_edit.insert_lines_at(bufnr, pos - (#insert_lines > #lines and 1 or 0), insert_lines)
+    buffer_edit.insert_lines_at(bufnr, pos - 1, insert_lines)
 end
 
 --------------------------------------------------------------------------------
@@ -114,8 +111,10 @@ end
 --- @param bufnr integer the chat buffer
 --- @param raw_response string the captured SSE stream from qt.raw_response
 --- @param agent_info table|nil { max_tool_iterations, tool_result_max_bytes, cwd? }
+--- @param live_model Model|nil  live exchange_model from chat_respond (preferred)
+--- @param exchange_idx integer|nil  active exchange index (required when live_model is passed)
 --- @return "done"|"recurse"
-function M.process_response(bufnr, raw_response, agent_info)
+function M.process_response(bufnr, raw_response, agent_info, live_model, exchange_idx)
     agent_info = agent_info or {}
 
     local providers = require("parley.providers")
@@ -139,29 +138,29 @@ function M.process_response(bufnr, raw_response, agent_info)
         return "done"
     end
 
-    -- Build the exchange model from the current buffer state so we know
-    -- exactly where to insert sections. The model computes positions
-    -- from sizes, bounded within the active exchange — never past the
-    -- placeholder 💬: of the next exchange (#90 root cause fix).
-    local chat_parser = require("parley.chat_parser")
-    local exchange_model = require("parley.exchange_model")
-    local cfg = require("parley.config")
-    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-    local header_end = chat_parser.find_header_end(lines) or 0
-    local parsed = chat_parser.parse_chat(lines, header_end, cfg)
-    local model = exchange_model.from_parsed_chat(parsed)
-
-    -- Find the active exchange (the one with the 🔧:/📎: blocks will be appended to).
-    -- It's the LAST exchange that has an answer.
-    local active_exchange_idx = nil
-    for i = #model.exchanges, 1, -1 do
-        if model.exchanges[i].answer then
-            active_exchange_idx = i
-            break
+    -- Use the live model from chat_respond if provided. Otherwise
+    -- fall back to rebuilding from the buffer (backward compat for
+    -- callers that don't pass a model).
+    local model = live_model
+    local active_exchange_idx = exchange_idx
+    if not model then
+        local chat_parser = require("parley.chat_parser")
+        local exchange_model_mod = require("parley.exchange_model")
+        local cfg = require("parley.config")
+        local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+        local header_end = chat_parser.find_header_end(lines) or 0
+        local parsed = chat_parser.parse_chat(lines, header_end, cfg)
+        model = exchange_model_mod.from_parsed_chat(parsed)
+        -- Find the active exchange (last one with an answer).
+        for i = #model.exchanges, 1, -1 do
+            -- An exchange has an answer if it has more than just the question block
+            if #model.exchanges[i].blocks > 1 then
+                active_exchange_idx = i
+                break
+            end
         end
     end
     if not active_exchange_idx then
-        -- No answer found — can't append tool blocks. Bail to "done".
         M.reset(bufnr)
         return "done"
     end

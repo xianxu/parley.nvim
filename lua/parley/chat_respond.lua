@@ -14,10 +14,9 @@ end
 
 --------------------------------------------------------------------------------
 -- Module-level state shared between async callbacks while responding
--- (mirrors the former init.lua locals `original_free_cursor_value` and `last_content_line`)
+-- (mirrors the former init.lua local `original_free_cursor_value`)
 --------------------------------------------------------------------------------
 local original_free_cursor_value = nil
-local last_content_line = nil
 
 --------------------------------------------------------------------------------
 -- Local helpers copied from init.lua (functions that are too small to expose
@@ -276,6 +275,114 @@ M.cmd_stop = function(signal)
 end
 
 --------------------------------------------------------------------------------
+-- build_messages_from_model — reads content directly from buffer using
+-- the model's block positions. No re-parsing. Used by recursive tool-loop
+-- calls where the live model is the source of truth.
+--------------------------------------------------------------------------------
+
+--- Build the Anthropic messages array from the live model + buffer.
+--- Reads block content at model-computed positions.
+--- @param buf integer  buffer handle
+--- @param model Model  live exchange model
+--- @param target_idx integer  exchange to include up to (inclusive)
+--- @param agent_info table  { system_prompt, ... }
+--- @return table[] messages
+M.build_messages_from_model = function(buf, model, target_idx, agent_info)
+    local serialize = require("parley.tools.serialize")
+    local messages = {}
+
+    -- System prompt (role = "system" so format_payload extracts it correctly)
+    local sys = agent_info.system_prompt
+    if sys and sys:match("%S") then
+        local sys_msg = { role = "system", content = sys }
+        local prov = require("parley.providers")
+        if prov.has_feature(agent_info.provider, "cache_control") then
+            sys_msg.cache_control = { type = "ephemeral" }
+        end
+        table.insert(messages, sys_msg)
+    end
+
+    local function read_block_text(k, b)
+        local start_line = model:block_start(k, b)
+        local end_line = model:block_end(k, b)
+        if end_line < start_line then return "" end
+        local buf_lines = vim.api.nvim_buf_get_lines(buf, start_line, end_line + 1, false)
+        return table.concat(buf_lines, "\n")
+    end
+
+    for k = 1, target_idx do
+        local blocks = model.exchanges[k].blocks
+        local assistant_content = {}
+
+        local function flush_assistant()
+            if #assistant_content > 0 then
+                table.insert(messages, { role = "assistant", content = assistant_content })
+                assistant_content = {}
+            end
+        end
+
+        for b = 1, #blocks do
+            local blk = blocks[b]
+            if blk.size <= 0 then goto continue end
+
+            if blk.kind == "question" then
+                local text = read_block_text(k, b)
+                -- Strip 💬: prefix and trim
+                text = text:gsub("^💬:%s*", ""):gsub("^%s*(.-)%s*$", "%1")
+                if text ~= "" then
+                    table.insert(messages, { role = "user", content = text })
+                end
+
+            elseif blk.kind == "agent_header" or blk.kind == "spinner" then
+                goto continue  -- not part of messages
+
+            elseif blk.kind == "text" or blk.kind == "stream_placeholder" then
+                local text = read_block_text(k, b)
+                if text:match("%S") then
+                    table.insert(assistant_content, { type = "text", text = text })
+                end
+
+            elseif blk.kind == "tool_use" then
+                local text = read_block_text(k, b)
+                local parsed = serialize.parse_call(text)
+                if parsed then
+                    table.insert(assistant_content, {
+                        type = "tool_use",
+                        id = parsed.id,
+                        name = parsed.name,
+                        input = parsed.input or {},
+                    })
+                end
+
+            elseif blk.kind == "tool_result" then
+                -- Anthropic requires tool_result in a user message
+                -- immediately after the assistant's tool_use.
+                flush_assistant()
+                local text = read_block_text(k, b)
+                local parsed = serialize.parse_result(text)
+                if parsed then
+                    table.insert(messages, {
+                        role = "user",
+                        content = { {
+                            type = "tool_result",
+                            tool_use_id = parsed.id,
+                            content = parsed.content or "",
+                            is_error = parsed.is_error == true,
+                        } },
+                    })
+                end
+            end
+
+            ::continue::
+        end
+
+        flush_assistant()
+    end
+
+    return messages
+end
+
+--------------------------------------------------------------------------------
 -- _build_messages
 --------------------------------------------------------------------------------
 
@@ -396,23 +503,6 @@ M.build_messages = function(opts)
     -- Process each exchange, determining whether to preserve or summarize
     local total_exchanges = #parsed_chat.exchanges
 
-    -- TRACE #90
-    logger.warning(string.format(
-        "[#90 trace] build_messages opts: start_index=%s end_index=%s exchange_idx=%s n_exchanges=%d",
-        tostring(start_index), tostring(end_index), tostring(exchange_idx), total_exchanges
-    ))
-    for idx_dump, ex_dump in ipairs(parsed_chat.exchanges) do
-        local q_start = ex_dump.question and ex_dump.question.line_start
-        local q_end = ex_dump.question and ex_dump.question.line_end
-        local a_start = ex_dump.answer and ex_dump.answer.line_start
-        local a_end = ex_dump.answer and ex_dump.answer.line_end
-        local n_blocks = ex_dump.answer and ex_dump.answer.content_blocks and #ex_dump.answer.content_blocks
-        logger.warning(string.format(
-            "  exchange[%d]: q=[%s..%s] a=[%s..%s] n_blocks=%s",
-            idx_dump, tostring(q_start), tostring(q_end), tostring(a_start), tostring(a_end), tostring(n_blocks)
-        ))
-    end
-
     -- Single pass through all exchanges
     for idx, exchange in ipairs(parsed_chat.exchanges) do
         if exchange.question and exchange.question.line_start >= start_index and idx <= exchange_idx then
@@ -527,21 +617,6 @@ M.build_messages = function(opts)
                         answer_has_tool_blocks = true
                         break
                     end
-                end
-            end
-            -- TRACE #90
-            logger.warning(string.format(
-                "[#90 trace] build_messages exchange %d: has_answer=%s has_content_blocks=%s n_blocks=%s answer_has_tool_blocks=%s exchange_idx=%s",
-                idx,
-                tostring(exchange.answer ~= nil),
-                tostring(exchange.answer and exchange.answer.content_blocks ~= nil),
-                tostring(exchange.answer and exchange.answer.content_blocks and #exchange.answer.content_blocks),
-                tostring(answer_has_tool_blocks),
-                tostring(exchange_idx)
-            ))
-            if exchange.answer and exchange.answer.content_blocks then
-                for bi, b in ipairs(exchange.answer.content_blocks) do
-                    logger.warning(string.format("  block[%d] type=%s kind=%s", bi, tostring(b.type), tostring(b.kind)))
                 end
             end
             local include_answer = exchange.answer
@@ -807,7 +882,7 @@ end
 -- chat_respond  (main streaming response handler)
 --------------------------------------------------------------------------------
 
-M.respond = function(params, callback, override_free_cursor, force)
+M.respond = function(params, callback, override_free_cursor, force, live_model, live_target_idx)
     local buf = vim.api.nvim_get_current_buf()
     local win = vim.api.nvim_get_current_win()
     local cursor_pos = vim.api.nvim_win_get_cursor(0)
@@ -907,18 +982,27 @@ M.respond = function(params, callback, override_free_cursor, force)
         chat_file = file_name,
         exchange_idx = exchange_idx,
     }, function(resolved_remote_content)
-        -- Build messages array using extracted testable function
-        local messages = M.build_messages({
-            parsed_chat = parsed_chat,
-            start_index = start_index,
-            end_index = end_index,
-            exchange_idx = exchange_idx,
-            agent = agent,
-            config = _parley.config,
-            helpers = _parley.helpers,
-            logger = _parley.logger,
-            resolved_remote_content = resolved_remote_content,
-        })
+        -- Get agent info early — needed by build_messages_from_model
+        local agent_info = _parley.get_agent_info(headers, agent)
+
+        -- Build messages: use the live model when available (recursive
+        -- tool-loop call), otherwise parse-based build (initial call).
+        local messages
+        if live_model then
+            messages = M.build_messages_from_model(buf, live_model, live_target_idx, agent_info)
+        else
+            messages = M.build_messages({
+                parsed_chat = parsed_chat,
+                start_index = start_index,
+                end_index = end_index,
+                exchange_idx = exchange_idx,
+                agent = agent,
+                config = _parley.config,
+                helpers = _parley.helpers,
+                logger = _parley.logger,
+                resolved_remote_content = resolved_remote_content,
+            })
+        end
 
         -- Inject ancestor context (tree-of-chat): walk parent chain and prepend
         -- ancestor Q+A exchanges after the system prompt (messages[1]).
@@ -935,8 +1019,6 @@ M.respond = function(params, callback, override_free_cursor, force)
             end
         end
 
-        -- Get agent info for display and dispatcher
-        local agent_info = _parley.get_agent_info(headers, agent)
         local agent_name = agent_info.display_name
 
         -- Set up agent prefixes
@@ -950,66 +1032,44 @@ M.respond = function(params, callback, override_free_cursor, force)
         end
         agent_suffix = _parley.render.template(agent_suffix, { ["{{agent}}"] = agent_name })
 
-        -- Find where to insert assistant response
-        local response_line = _parley.helpers.last_content_line(buf)
-
-        -- M2 Task 2.7 of #81: tool loop recursion detection.
-        -- If we're mid-tool-loop (iter > 0), we're continuing the same
-        -- exchange's answer — the existing 🔧:/📎: blocks are live
-        -- state we MUST preserve, not stale content to discard. Append
-        -- the next response chunk after the existing answer instead of
-        -- replacing it.
-        local in_tool_loop_recursion = false
-        do
-            local ok, tool_loop_mod = pcall(require, "parley.tool_loop")
-            if ok and tool_loop_mod.get_iter(buf) > 0 then
-                in_tool_loop_recursion = true
-            end
-        end
-        -- TRACE #90 — remove after diagnosing tool-loop recursion issue
-        _parley.logger.debug(string.format(
-            "[#90 trace] M.respond entry: buf=%d in_tool_loop_recursion=%s buf_line_count=%d cursor_line=%s",
-            buf, tostring(in_tool_loop_recursion), vim.api.nvim_buf_line_count(buf), tostring(cursor_line)
-        ))
-        if in_tool_loop_recursion then
-            -- Dump full buffer state to a file so we can see exactly what
-            -- the parser is looking at on the recursive call.
-            pcall(function()
-                local dpath = "/tmp/claude/parley-90-debug/recursion_buffer_" .. _parley.logger.now() .. ".txt"
-                local df = io.open(dpath, "w")
-                if df then
-                    local lns = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-                    for i, l in ipairs(lns) do
-                        df:write(string.format("[%d] %s\n", i, l))
-                    end
-                    df:close()
-                    _parley.logger.debug("[#90 trace] dumped recursion buffer to " .. dpath)
-                end
-            end)
-        end
-
         -- ================================================================
         -- Use exchange_model to compute where to insert the response.
-        -- This replaces the absolute-line arithmetic that was the root
-        -- cause of #90 — all positions are derived from section SIZES,
-        -- never stored as absolute line numbers.
+        -- All positions are derived from section SIZES via the model,
+        -- never from stored absolute line numbers. ONE code path for
+        -- all agents (tool and non-tool alike).
         -- ================================================================
         local exchange_model = require("parley.exchange_model")
-        local model = exchange_model.from_parsed_chat(parsed_chat)
+        local buffer_edit = require("parley.buffer_edit")
+        local tool_loop_mod = require("parley.tool_loop")
+        local is_recursion = tool_loop_mod.get_iter(buf) > 0
 
-        -- If cursor is on a question, handle insertion based on question position
-        if exchange_idx and (component == "question" or component == "answer") then
-            if parsed_chat.exchanges[exchange_idx].answer and not in_tool_loop_recursion then
-                -- If question already has an answer, replace it.
-                -- Delete the existing answer, keeping one blank line as separator.
-                local answer = parsed_chat.exchanges[exchange_idx].answer
-                require("parley.buffer_edit").replace_answer(buf, answer.line_start - 1, answer.line_end - 1)
-                -- Re-parse after deletion to rebuild the model with correct sizes.
-                local new_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-                local new_header_end = find_chat_header_end(new_lines) or 0
-                parsed_chat = _parley.parse_chat(new_lines, new_header_end)
-                model = exchange_model.from_parsed_chat(parsed_chat)
+        -- Reuse the live model if passed from a recursive tool-loop call.
+        -- The live model is the single source of truth — it survived
+        -- streaming and tool_loop block additions. Only parse fresh on
+        -- the first call.
+        local model = live_model
+        local target_idx = live_target_idx
+        if not model then
+            model = exchange_model.from_parsed_chat(parsed_chat)
+
+            -- Handle resubmit: if cursor is on a question/answer with an
+            -- existing answer (and we're not mid-tool-loop), delete the old
+            -- answer so we can regenerate it.
+            if exchange_idx and (component == "question" or component == "answer") then
+                if parsed_chat.exchanges[exchange_idx].answer and not is_recursion then
+                    local answer = parsed_chat.exchanges[exchange_idx].answer
+                    buffer_edit.replace_answer(buf, answer.line_start - 1, answer.line_end - 1)
+                    -- Re-parse after deletion to rebuild the model.
+                    local new_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+                    local new_header_end = find_chat_header_end(new_lines) or 0
+                    parsed_chat = _parley.parse_chat(new_lines, new_header_end)
+                    model = exchange_model.from_parsed_chat(parsed_chat)
+                end
             end
+
+            -- Target exchange: cursor-based when on a question/answer,
+            -- otherwise the last exchange in the buffer.
+            target_idx = exchange_idx or #model.exchanges
         end
 
         local spinner_frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
@@ -1018,12 +1078,11 @@ M.respond = function(params, callback, override_free_cursor, force)
         local progress_detail_key = nil
         local spinner_frame_index = 1
         local spinner_timer = nil
-        -- Skip spinner for tool-use agents and recursion — tool rounds are
-        -- fast and the spinner's line management conflicts with model-based
-        -- positioning (#90).
+        -- Skip spinner for tool-use agents and recursion — tool rounds
+        -- are fast and the spinner's line management is unnecessary.
         local spinner_active = _parley._state.web_search
             and (not (agent_info.tools and #agent_info.tools > 0))
-            and (not in_tool_loop_recursion)
+            and (not is_recursion)
             and true or false
         local spinner_running = false
         local initial_progress_text = ""
@@ -1031,69 +1090,77 @@ M.respond = function(params, callback, override_free_cursor, force)
             initial_progress_text = "🔎 " .. spinner_frames[spinner_frame_index] .. " " .. spinner_message
         end
 
-        -- Compute where to insert using the exchange model.
-        -- The model guarantees the position is INSIDE the active exchange,
-        -- never past the placeholder 💬: of the next exchange.
+        -- Compute response_start_line using the model.
         --
-        -- For non-tool agents or when exchange_idx is nil (cursor not on
-        -- a question/answer), fall back to the legacy last_content_line
-        -- approach — those paths don't need the model because there's no
-        -- tool loop to cause the placeholder-overwrite bug.
-        local response_start_line
-        local has_tools = agent_info.tools and #agent_info.tools > 0
-        local use_model_insert = exchange_idx
-            and (component == "question" or component == "answer")
-            and (has_tools or in_tool_loop_recursion)
-        if not use_model_insert then
-            -- Legacy: insert at last content line. No model needed.
-            local insert_lines
-            if spinner_active then
-                insert_lines = { "", agent_prefix .. agent_suffix, "", initial_progress_text, "" }
-            else
-                insert_lines = { "", agent_prefix .. agent_suffix, "", "" }
-            end
-            require("parley.buffer_edit").insert_lines_at(buf, response_line, insert_lines)
-            -- Streaming writes at the LAST line of the insert block.
-            response_start_line = response_line + #insert_lines - 1
-        elseif in_tool_loop_recursion then
-            -- Recursion: append after the existing answer's last section.
-            -- The model knows where the answer ends.
-            local append_pos = model:answer_append_pos(exchange_idx)
-            require("parley.buffer_edit").insert_lines_at(buf, append_pos, { "" })
-            model:add_section(exchange_idx, "stream_placeholder", 1)
-            response_start_line = append_pos
+        -- Every visible element is a block in the model. The model
+        -- handles margins between non-empty blocks automatically.
+        -- We just add blocks and ask for positions.
+        --
+        -- spinner_block_idx / stream_block_idx: indices into
+        -- model.exchanges[target_idx].blocks for the spinner and
+        -- streaming blocks. Used by clear_progress_indicator and
+        -- on_lines_changed respectively.
+        -- Every visible element is a block in the model. The model
+        -- handles margins between non-empty blocks automatically.
+        -- We add blocks to the model, then insert the corresponding
+        -- lines (margin + content) into the buffer.
+        --
+        -- spinner_block_idx / stream_block_idx: block indices used by
+        -- clear_progress_indicator and on_lines_changed.
+        local spinner_block_idx
+        local stream_block_idx
+        if is_recursion then
+            -- Recursion: append streaming placeholder after existing blocks.
+            model:add_block(target_idx, "stream_placeholder", 1)
+            stream_block_idx = #model.exchanges[target_idx].blocks
+            local pos = model:block_start(target_idx, stream_block_idx)
+            buffer_edit.insert_lines_at(buf, pos - 1, { "", "" })  -- margin + blank content
         else
-            -- Fresh answer: create the answer header + a blank line for streaming.
-            if not model.exchanges[exchange_idx].answer then
-                model:create_answer(exchange_idx)
-            end
-            local header_pos = model:answer_start(exchange_idx)
-            -- Insert: margin(blank) + agent_header + blank_for_streaming
-            -- Insert: margin + agent_header + gap + streaming_target (+ spinner if active)
-            -- Layout matches the legacy response_block_lines exactly:
-            --   { "", "🤖:[A]", "", "" }           (no spinner, 4 lines)
-            --   { "", "🤖:[A]", "", spinner, "" }  (with spinner, 5 lines)
-            local insert_lines
+            -- Fresh answer: add agent_header + optional spinner + streaming placeholder.
+            model:add_block(target_idx, "agent_header", 1)
+            model:add_block(target_idx, "stream_placeholder", 1)
             if spinner_active then
-                insert_lines = { "", agent_prefix .. agent_suffix, "", initial_progress_text, "" }
-            else
-                insert_lines = { "", agent_prefix .. agent_suffix, "", "" }
+                -- Insert spinner between agent_header and stream_placeholder.
+                -- We added stream_placeholder already, so spinner goes before it.
+                -- Actually, let's just add blocks in order. Remove stream_placeholder,
+                -- add spinner, then re-add stream_placeholder.
+                model:remove_block(target_idx, #model.exchanges[target_idx].blocks)
+                model:add_block(target_idx, "spinner", 1)
+                spinner_block_idx = #model.exchanges[target_idx].blocks
+                model:add_block(target_idx, "stream_placeholder", 1)
             end
-            require("parley.buffer_edit").insert_lines_at(buf, header_pos - 1, insert_lines)
-            -- Track the streamed-text area as a section in the model.
-            model:add_section(exchange_idx, "stream_placeholder", 1)
-            -- Streaming writes at the LAST line of the insert block.
-            response_start_line = header_pos - 1 + #insert_lines - 1
-        end
-        -- TRACE #90
-        _parley.logger.debug(string.format(
-            "[#90 trace] model-based insert: response_start_line=%s buf_line_count=%d exchange_idx=%s",
-            tostring(response_start_line), vim.api.nvim_buf_line_count(buf), tostring(exchange_idx)
-        ))
+            stream_block_idx = #model.exchanges[target_idx].blocks
 
-        -- Legacy variables kept for compatibility with progress indicator
-        -- and raw_request_fence paths. TODO: migrate these to model too.
-        local response_line = response_start_line
+            -- Before inserting, clean up any trailing blank lines after
+            -- the question in the buffer. The model's margin will be the
+            -- only blank between question and agent_header.
+            local agent_blk_idx = 2  -- block 1 is question, block 2 is agent_header
+            local insert_start = model:block_start(target_idx, agent_blk_idx) - 1  -- -1 for margin
+            local buf_line_count = vim.api.nvim_buf_line_count(buf)
+            if insert_start < buf_line_count then
+                -- Count trailing blanks at insert_start
+                local blank_count = 0
+                local check_lines = vim.api.nvim_buf_get_lines(buf, insert_start, buf_line_count, false)
+                for _, l in ipairs(check_lines) do
+                    if not l:match("%S") then
+                        blank_count = blank_count + 1
+                    else
+                        break
+                    end
+                end
+                if blank_count > 0 then
+                    buffer_edit.delete_lines_after(buf, insert_start, blank_count)
+                end
+            end
+            local insert_lines = { "", agent_prefix .. agent_suffix }
+            if spinner_active then
+                table.insert(insert_lines, "")  -- margin before spinner
+                table.insert(insert_lines, initial_progress_text)
+            end
+            table.insert(insert_lines, "")  -- margin before stream_placeholder
+            table.insert(insert_lines, "")  -- stream_placeholder content (blank)
+            buffer_edit.insert_lines_at(buf, insert_start, insert_lines)
+        end
 
         _parley.logger.debug("messages to send: " .. vim.inspect(messages))
 
@@ -1117,7 +1184,6 @@ M.respond = function(params, callback, override_free_cursor, force)
 
         -- In raw request mode, insert the request payload after the question, before the agent response
         -- Skip if the question already contains a typed request fence (raw_payload was parsed from it)
-        local raw_request_offset = 0
         if _parley.config.raw_mode and _parley.config.raw_mode.parse_raw_request and not raw_payload then
             local json_str = vim.json.encode(final_payload)
             -- Pretty-print via python3 json.tool
@@ -1132,24 +1198,25 @@ M.respond = function(params, callback, override_free_cursor, force)
                 table.insert(request_lines, line)
             end
             table.insert(request_lines, "```")
-            -- Insert right before the agent header (at response_line, pushing agent header down)
-            require("parley.buffer_edit").insert_raw_request_fence(buf, response_line, request_lines)
-            raw_request_offset = #request_lines
+            -- Insert right before the answer region. The fence is
+            -- semantically part of the question (shows what was sent),
+            -- so grow question_size in the model to keep positions correct.
+            local fence_pos = model:answer_start(target_idx)
+            buffer_edit.insert_raw_request_fence(buf, fence_pos, request_lines)
+            model:grow_question(target_idx, #request_lines)
         end
 
-        -- progress_line and response_start_line are now computed by the
-        -- model-based insert above. The spinner_active flag determines
-        -- whether the progress indicator exists. If it does, progress_line
-        -- is 2 lines before response_start_line; if not, they're the same.
-        local progress_line = spinner_active and (response_start_line - 2) or response_start_line
-        -- TRACE #90 — remove after diagnosing
-        _parley.logger.debug(string.format(
-            "[#90 trace] line targets: progress_line=%s response_start_line=%s buf_line_count=%d max_0idx=%d",
-            tostring(progress_line),
-            tostring(response_start_line),
-            vim.api.nvim_buf_line_count(buf),
-            vim.api.nvim_buf_line_count(buf) - 1
-        ))
+        -- Compute response_start_line from the model. This is always
+        -- correct because any prior inserts (fence, etc.) updated the
+        -- model via grow_question.
+        local response_start_line = model:block_start(target_idx, stream_block_idx)
+        -- progress_line: if spinner is active, it's the spinner block's position.
+        local progress_line
+        if spinner_active and spinner_block_idx then
+            progress_line = model:block_start(target_idx, spinner_block_idx)
+        else
+            progress_line = response_start_line
+        end
 
         local function set_progress_indicator_line(text)
             if not spinner_active then
@@ -1204,20 +1271,24 @@ M.respond = function(params, callback, override_free_cursor, force)
             end
             stop_spinner()
             spinner_active = false
-            if vim.api.nvim_buf_is_valid(buf) then
-                local line_count = vim.api.nvim_buf_line_count(buf)
-                local delete_end = math.min(progress_line + 2, line_count)
-                local existing = vim.api.nvim_buf_get_lines(buf, progress_line, delete_end, false)
-                if #existing > 0 then
-                    local deleted_line_count = delete_end - progress_line
-                    require("parley.buffer_edit").delete_lines_after(buf, progress_line, deleted_line_count)
-                    if qt then
-                        if type(qt.first_line) == "number" and qt.first_line >= progress_line then
-                            qt.first_line = qt.first_line - deleted_line_count
-                        end
-                        if type(qt.last_line) == "number" and qt.last_line >= progress_line then
-                            qt.last_line = qt.last_line - deleted_line_count
-                        end
+            if vim.api.nvim_buf_is_valid(buf) and spinner_block_idx then
+                -- Delete the spinner block + its margin from the buffer.
+                local spin_start = model:block_start(target_idx, spinner_block_idx)
+                local spin_size = model.exchanges[target_idx].blocks[spinner_block_idx].size
+                -- Delete: margin (1 line before content) + content lines.
+                local delete_start = spin_start - 1
+                local delete_count = 1 + spin_size
+                buffer_edit.delete_lines_after(buf, delete_start, delete_count)
+                -- Set size to 0 — model treats it as invisible (rule 3).
+                model:set_block_size(target_idx, spinner_block_idx, 0)
+                spinner_block_idx = nil
+                -- Update qt line tracking.
+                if qt then
+                    if type(qt.first_line) == "number" and qt.first_line >= delete_start then
+                        qt.first_line = qt.first_line - delete_count
+                    end
+                    if type(qt.last_line) == "number" and qt.last_line >= delete_start then
+                        qt.last_line = qt.last_line - delete_count
                     end
                 end
             end
@@ -1248,9 +1319,12 @@ M.respond = function(params, callback, override_free_cursor, force)
 
         start_spinner()
 
+        local function on_stream_lines_changed(delta)
+            model:grow_block(target_idx, stream_block_idx, delta)
+        end
         local base_handler = _parley.dispatcher.create_handler(buf, win, response_start_line, true, "", function()
             return is_follow_cursor_enabled(override_free_cursor)
-        end)
+        end, on_stream_lines_changed)
         local function request_clear_progress_indicator(qt)
             if vim.in_fast_event() then
                 vim.schedule(function()
@@ -1286,71 +1360,13 @@ M.respond = function(params, callback, override_free_cursor, force)
                 -- Claude can continue. Finalization (user prompt
                 -- append, topic generation, cursor placement) only
                 -- runs on the final iteration (when outcome == "done").
-                -- TRACE #90 — remove after diagnosing
-                _parley.logger.debug(string.format(
-                    "[#90 trace] on_exit: qt.response_len=%d qt.raw_response_len=%d has_tools=%s buf_line_count=%d",
-                    #(qt.response or ""),
-                    #(qt.raw_response or ""),
-                    tostring(agent_info and agent_info.tools and #agent_info.tools > 0),
-                    vim.api.nvim_buf_line_count(buf)
-                ))
-                -- TRACE #90 — dump full request payload + raw response to per-call files
-                -- so we can compare across rounds and find the "prefill not supported"
-                -- pattern. Files land in /tmp/claude/parley-90-debug/.
-                do
-                    local debug_dir = "/tmp/claude/parley-90-debug"
-                    vim.fn.mkdir(debug_dir, "p")
-                    local stamp = _parley.logger.now() .. "." .. string.format("%x", math.random(0, 0xFFFFFF))
-                    local req_path = debug_dir .. "/" .. stamp .. ".request.json"
-                    local resp_path = debug_dir .. "/" .. stamp .. ".response.txt"
-                    local meta_path = debug_dir .. "/" .. stamp .. ".meta.txt"
-                    -- Write request payload (final_payload is in scope)
-                    pcall(function()
-                        local rf = io.open(req_path, "w")
-                        if rf then rf:write(vim.json.encode(final_payload)); rf:close() end
-                    end)
-                    pcall(function()
-                        local af = io.open(resp_path, "w")
-                        if af then af:write(qt.raw_response or ""); af:close() end
-                    end)
-                    pcall(function()
-                        local mf = io.open(meta_path, "w")
-                        if mf then
-                            mf:write(string.format(
-                                "in_tool_loop_recursion=%s\nresponse_len=%d\nraw_response_len=%d\nbuf_line_count=%d\nresponse_text=%s\n",
-                                tostring(in_tool_loop_recursion),
-                                #(qt.response or ""),
-                                #(qt.raw_response or ""),
-                                vim.api.nvim_buf_line_count(buf),
-                                (qt.response or ""):sub(1, 200)
-                            ))
-                            mf:close()
-                        end
-                    end)
-                    _parley.logger.debug("[#90 trace] dumped req+resp to " .. stamp)
-                end
                 if agent_info and agent_info.tools and #agent_info.tools > 0 then
                     local tool_loop = require("parley.tool_loop")
-                    -- M2 hardcodes max_tool_iterations = 1 (single round).
-                    -- M4 Task 4.1 lifts this cap and uses the
-                    -- agent-configured max instead. Even if the agent
-                    -- config says 20, M2 stops after one round to keep
-                    -- failure modes contained while the loop machinery
-                    -- is still being hardened.
-                    -- TODO(#90): pass exchange_model writer so tool_loop
-                    -- appends inside the active answer, not at buffer end.
                     local outcome = tool_loop.process_response(buf, qt.raw_response or "", {
                         max_tool_iterations = 1,
                         tool_result_max_bytes = agent_info.tool_result_max_bytes or 102400,
                         cwd = vim.fn.getcwd(),
-                    })
-                    -- TRACE #90 — remove after diagnosing
-                    _parley.logger.debug(string.format(
-                        "[#90 trace] process_response → outcome=%s tool_loop_iter=%d buf_line_count=%d",
-                        tostring(outcome),
-                        tool_loop.get_iter(buf),
-                        vim.api.nvim_buf_line_count(buf)
-                    ))
+                    }, model, target_idx)
                     if outcome == "recurse" then
                         -- Re-parse the (now updated) buffer and submit
                         -- again. force=true bypasses the is_busy check
@@ -1359,7 +1375,7 @@ M.respond = function(params, callback, override_free_cursor, force)
                         -- the same callback so user-provided
                         -- callbacks still fire on the final iteration.
                         vim.schedule(function()
-                            M.respond({}, callback, override_free_cursor, true)
+                            M.respond({}, callback, override_free_cursor, true, model, target_idx)
                         end)
                         return
                     end
@@ -1367,21 +1383,44 @@ M.respond = function(params, callback, override_free_cursor, force)
 
                 local streamed_cursor_line = query_cursor_line(qt)
 
+                -- Clean up trailing blanks after the current exchange.
+                -- The model tracks content sizes precisely, but streaming
+                -- may leave stray blank lines in the buffer. Delete
+                -- everything between the exchange's model-computed end
+                -- and the next exchange (or end of buffer).
+                local exchange_end = model:exchange_start(target_idx) + model:exchange_total_size(target_idx)
+                local line_count = vim.api.nvim_buf_line_count(buf)
+                -- Find where the next content starts (next 💬: or end of buffer).
+                local next_content_start = line_count  -- default: end of buffer
+                if exchange_idx and exchange_idx < #parsed_chat.exchanges then
+                    -- There's a next exchange — find where it starts in the
+                    -- current buffer. Re-read to account for streaming mutations.
+                    local cur_lines = vim.api.nvim_buf_get_lines(buf, exchange_end, line_count, false)
+                    for i, l in ipairs(cur_lines) do
+                        if l:match("%S") then
+                            next_content_start = exchange_end + i - 1
+                            break
+                        end
+                    end
+                end
+                -- Delete excess blanks: keep exactly 1 margin line between
+                -- current exchange end and next content.
+                local excess = next_content_start - exchange_end - 1  -- -1 for the 1 margin we keep
+                if excess > 0 then
+                    _parley.helpers.undojoin(buf)
+                    buffer_edit.delete_lines_after(buf, exchange_end + 1, excess)
+                end
+
                 -- Only add a new user prompt at the end if we're not in the middle of the document
                 _parley.logger.debug("exchange_idx: " .. tostring(exchange_idx) .. " and #parsed_chat: " .. tostring(#parsed_chat))
 
                 if exchange_idx == #parsed_chat.exchanges then
-                    local buffer_edit = require("parley.buffer_edit")
-                    -- write user prompt at the end
-                    last_content_line = _parley.helpers.last_content_line(buf)
-                    _parley.helpers.undojoin(buf)
-                    buffer_edit.insert_lines_at(buf, last_content_line, { "", _parley.config.chat_user_prefix, "" })
+                    -- Insert position is right after the cleaned-up exchange.
+                    local insert_at = exchange_end
 
-                    -- delete whitespace lines at the end of the file
-                    last_content_line = _parley.helpers.last_content_line(buf)
                     _parley.helpers.undojoin(buf)
-                    buffer_edit.delete_to_end(buf, last_content_line)
-                    -- insert a new line at the end of the file
+                    -- Insert: margin + user_prefix + trailing blank
+                    buffer_edit.insert_lines_at(buf, insert_at, { "", _parley.config.chat_user_prefix, "" })
                     _parley.helpers.undojoin(buf)
                     buffer_edit.append_blank_at_end(buf)
                 end
@@ -1429,7 +1468,7 @@ M.respond = function(params, callback, override_free_cursor, force)
                     local line = streamed_cursor_line
                     if not line then
                         if exchange_idx and component == "question" then
-                            line = response_line + 2
+                            line = response_start_line + 2
                         else
                             line = vim.api.nvim_buf_line_count(buf)
                         end

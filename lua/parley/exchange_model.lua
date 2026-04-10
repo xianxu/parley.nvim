@@ -1,33 +1,40 @@
 -- Pure positional model for chat buffer layout.
 --
--- Tracks exchange/section sizes and computes absolute 0-indexed buffer
+-- Tracks exchange/block sizes and computes absolute 0-indexed buffer
 -- line positions. No nvim API — this module is fully testable without
 -- a running Neovim instance.
 --
--- The model is the single source of truth for "where does section K
--- of exchange J live in the buffer?" Callers mutate the model (add
--- sections, grow sections) and the model recomputes positions on demand
+-- The model is the single source of truth for "where does block S
+-- of exchange K live in the buffer?" Callers mutate the model (add
+-- blocks, grow blocks) and the model recomputes positions on demand
 -- from accumulated sizes. No absolute line numbers are ever stored —
 -- only sizes.
 --
 -- See #90 design: size-based architecture.
 --
+-- Rules:
+--   1. Everything is a block (question, agent_header, text, tool_use,
+--      tool_result, spinner, thinking, note, ...).
+--   2. 1 blank margin line between adjacent non-empty blocks.
+--   3. Empty block (size 0) cancels one margin — effectively invisible.
+--
 -- Layout convention:
 --   HEADER (header_lines lines)
 --   MARGIN (1 blank)
 --   EXCHANGE 1:
---     QUESTION (question_size lines)
+--     block 1: question (size lines)
 --     MARGIN (1 blank)
---     ANSWER HEADER (🤖: line, 1 line)
---     SECTION 1 (size lines)
---     MARGIN (1 blank) — only between sections, not before first
---     SECTION 2 (size lines)
+--     block 2: agent_header (1 line)
+--     MARGIN (1 blank)
+--     block 3: text (size lines)
+--     MARGIN (1 blank) — only between non-empty blocks
+--     block 4: tool_use (size lines)
 --     ...
 --   MARGIN (1 blank) — between exchanges
 --   EXCHANGE 2:
 --     ...
 
-local MARGIN = 1  -- blank line between components
+local MARGIN = 1  -- blank line between non-empty blocks
 
 local Model = {}
 Model.__index = Model
@@ -44,82 +51,75 @@ function M.new(header_lines)
     }, Model)
 end
 
---- Add an exchange (question only, no answer yet).
+--- Add an exchange. The question is block 1 (always present).
 --- @param question_size integer  number of lines the question occupies
 function Model:add_exchange(question_size)
     table.insert(self.exchanges, {
-        question_size = question_size,
-        answer = nil,
+        blocks = {
+            { kind = "question", size = question_size },
+        },
     })
 end
 
---- Create an answer stub for exchange K.
+--- Add a block to exchange K. Returns the 0-indexed buffer line where
+--- the block content should be inserted.
 --- @param k integer  exchange index (1-based)
-function Model:create_answer(k)
-    self.exchanges[k].answer = {
-        agent_header_size = 1,  -- the 🤖: line
-        sections = {},
-    }
-end
-
---- Add a section to exchange K's answer. Returns the 0-indexed buffer
---- line where the section content should be inserted.
---- @param k integer  exchange index
---- @param kind string  section kind (text/tool_use/tool_result)
---- @param size integer  number of lines the section occupies
+--- @param kind string  block kind (agent_header/text/tool_use/tool_result/spinner/...)
+--- @param size integer  number of lines the block occupies
 --- @return integer  0-indexed insert position
-function Model:add_section(k, kind, size)
-    local pos = self:answer_append_pos(k)
-    table.insert(self.exchanges[k].answer.sections, {
+function Model:add_block(k, kind, size)
+    local pos = self:append_pos(k)
+    table.insert(self.exchanges[k].blocks, {
         kind = kind,
         size = size,
     })
     return pos
 end
 
---- Grow a section's size by delta lines (e.g. streaming added content).
+--- Grow a block's size by delta lines (e.g. streaming added content).
 --- @param k integer  exchange index
---- @param s integer  section index within exchange K's answer
+--- @param b integer  block index within exchange K
 --- @param delta integer  number of lines to add
-function Model:grow_section(k, s, delta)
-    self.exchanges[k].answer.sections[s].size = self.exchanges[k].answer.sections[s].size + delta
+function Model:grow_block(k, b, delta)
+    self.exchanges[k].blocks[b].size = self.exchanges[k].blocks[b].size + delta
 end
 
---- Update a section's size to an exact value.
-function Model:set_section_size(k, s, new_size)
-    self.exchanges[k].answer.sections[s].size = new_size
+--- Update a block's size to an exact value.
+function Model:set_block_size(k, b, new_size)
+    self.exchanges[k].blocks[b].size = new_size
+end
+
+--- Remove a block from exchange K. All subsequent block positions
+--- shift automatically since they're computed from sizes.
+--- @param k integer  exchange index
+--- @param b integer  block index to remove
+function Model:remove_block(k, b)
+    table.remove(self.exchanges[k].blocks, b)
 end
 
 -- ============================================================================
 -- Position queries (all return 0-indexed buffer line)
 -- ============================================================================
 
---- Total size of an answer (header + sections + margins between sections).
-function Model:answer_total_size(k)
-    local answer = self.exchanges[k].answer
-    if not answer then return 0 end
-    local size = answer.agent_header_size
-    for i, sec in ipairs(answer.sections) do
-        if i > 1 then
-            size = size + MARGIN  -- margin between sections
-        end
-        size = size + sec.size
-    end
-    return size
-end
-
---- Total size of exchange K (question + margin + answer).
+--- Total size of exchange K in buffer lines (all non-empty blocks +
+--- margins between them).
 function Model:exchange_total_size(k)
-    local ex = self.exchanges[k]
-    local size = ex.question_size
-    if ex.answer then
-        size = size + MARGIN  -- margin between question and answer
-        size = size + self:answer_total_size(k)
+    local size = 0
+    local has_prev = false
+    for _, blk in ipairs(self.exchanges[k].blocks) do
+        if blk.size > 0 then
+            if has_prev then
+                size = size + MARGIN
+            end
+            size = size + blk.size
+            has_prev = true
+        end
     end
     return size
 end
 
---- 0-indexed buffer line where exchange K's question starts.
+--- 0-indexed buffer line where exchange K starts (= where its first
+--- non-empty block starts).
 function Model:exchange_start(k)
     local line = self.header_lines + MARGIN  -- after header + 1 margin
     for i = 1, k - 1 do
@@ -129,39 +129,99 @@ function Model:exchange_start(k)
     return line
 end
 
---- 0-indexed buffer line where exchange K's 🤖: header is.
-function Model:answer_start(k)
-    local ex = self.exchanges[k]
-    return self:exchange_start(k) + ex.question_size + MARGIN
-end
-
---- 0-indexed buffer line where section S of exchange K starts.
-function Model:section_start(k, s)
-    local line = self:answer_start(k) + self.exchanges[k].answer.agent_header_size
-    for i = 1, s - 1 do
-        line = line + self.exchanges[k].answer.sections[i].size
-        line = line + MARGIN  -- margin between sections
+--- 0-indexed buffer line where block B of exchange K starts.
+--- Skips empty blocks (they're invisible per rule 3).
+function Model:block_start(k, b)
+    local line = self:exchange_start(k)
+    local has_prev = false
+    for i = 1, b do
+        local blk = self.exchanges[k].blocks[i]
+        if i == b then
+            -- Margin before this block if there's preceding content
+            if has_prev and blk.size > 0 then
+                line = line + MARGIN
+            elseif has_prev then
+                -- Block is empty — position it where it would be
+                -- (after the margin), but it occupies 0 lines.
+                line = line + MARGIN
+            end
+            return line
+        end
+        if blk.size > 0 then
+            if has_prev then
+                line = line + MARGIN
+            end
+            line = line + blk.size
+            has_prev = true
+        end
     end
     return line
 end
 
---- 0-indexed buffer line of the last line of section S.
-function Model:section_end(k, s)
-    return self:section_start(k, s) + self.exchanges[k].answer.sections[s].size - 1
+--- 0-indexed buffer line of the last line of block B.
+function Model:block_end(k, b)
+    return self:block_start(k, b) + self.exchanges[k].blocks[b].size - 1
 end
 
---- 0-indexed buffer line where the NEXT section would be inserted.
---- If there are existing sections, this is after the last section + margin.
---- If no sections, this is right after the agent header.
-function Model:answer_append_pos(k)
-    local answer = self.exchanges[k].answer
-    if not answer then return nil end
-    local n = #answer.sections
+--- 0-indexed buffer line where the NEXT block would be inserted
+--- (after all existing blocks + margin).
+function Model:append_pos(k)
+    local n = #self.exchanges[k].blocks
     if n == 0 then
-        return self:answer_start(k) + answer.agent_header_size
+        return self:exchange_start(k)
     end
-    -- After last section + margin
-    return self:section_end(k, n) + 1 + MARGIN
+    -- Find the last non-empty block
+    for i = n, 1, -1 do
+        if self.exchanges[k].blocks[i].size > 0 then
+            return self:block_end(k, i) + 1 + MARGIN
+        end
+    end
+    -- All blocks are empty — append at exchange start + margin
+    return self:exchange_start(k) + MARGIN
+end
+
+-- ============================================================================
+-- Convenience aliases (backward compat with callers using old API names)
+-- ============================================================================
+
+--- @deprecated Use add_block
+function Model:add_section(k, kind, size)
+    return self:add_block(k, kind, size)
+end
+
+--- @deprecated Use grow_block
+function Model:grow_section(k, s, delta)
+    return self:grow_block(k, s, delta)
+end
+
+--- @deprecated Use remove_block
+function Model:remove_section(k, s)
+    return self:remove_block(k, s)
+end
+
+--- @deprecated Use block_start
+function Model:section_start(k, s)
+    return self:block_start(k, s)
+end
+
+--- @deprecated Use block_end
+function Model:section_end(k, s)
+    return self:block_end(k, s)
+end
+
+--- @deprecated Use append_pos
+function Model:answer_append_pos(k)
+    return self:append_pos(k)
+end
+
+--- Convenience: question_size is blocks[1].size
+function Model:question_size(k)
+    return self.exchanges[k].blocks[1].size
+end
+
+--- Convenience: grow question (block 1) size.
+function Model:grow_question(k, delta)
+    self:grow_block(k, 1, delta)
 end
 
 -- ============================================================================
@@ -183,13 +243,14 @@ function M.from_parsed_chat(parsed_chat)
         model:add_exchange(q_size)
         if ex.answer then
             local k = #model.exchanges
-            model:create_answer(k)
+            -- Agent header is the first answer block (🤖: line, 1 line)
+            model:add_block(k, "agent_header", 1)
             for _, sec in ipairs(ex.answer.sections or {}) do
                 local sec_size = 1
                 if sec.line_start and sec.line_end then
                     sec_size = sec.line_end - sec.line_start + 1
                 end
-                model:add_section(k, sec.kind or sec.type or "text", sec_size)
+                model:add_block(k, sec.kind or sec.type or "text", sec_size)
             end
         end
     end
