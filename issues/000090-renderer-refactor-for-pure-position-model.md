@@ -84,3 +84,30 @@ _TBD — will be filled out after brainstorm, in the plan phase._
   - **Picker/UI helpers deferred**: chat_finder, init, vision, issues, float_picker, config, system_prompt_picker, highlighter all still use raw `nvim_buf_set_lines`. Migrating them is desirable for consistency but YAGNI for #90's renderer scope. They are listed in the arch test allow list with the explicit "deferred follow-up" comment.
   - All ~406 tests green except the pre-existing unrelated `export_allocation_report` failure.
   - **Chunk 4 (Phase 4 — re-validation)** is up next: full make test green ✓, manual nvim verification (vanilla chat + ClaudeAgentTools tool round-trip), live Anthropic harness against `one-round-tool-use.md`, then resume #81 M2 Task 2.7.
+
+- **2026-04-09 — Manual testing + diagnosis + exchange_model**. Multiple rounds of manual testing exposed a deeper architectural issue than the initial scope anticipated:
+
+  **Root cause identified**: `chat_respond.M.respond` computes `response_start_line` as `response_line + N` using absolute line offsets. When the buffer has a placeholder `💬:` (parley's standard convention for the next-question prompt), `response_start_line` lands ON the placeholder. The streaming handler then OVERWRITES the placeholder with Claude's response text. Subsequently, `tool_loop` appends `🔧:/📎:` blocks at the end of the buffer (past the destroyed placeholder), which the parser sees as belonging to a DIFFERENT exchange. The recursive call then sends only the original question (without tool_result), and Claude re-requests the same file.
+
+  **What was built and is solid (keep all of this)**:
+  - `lua/parley/exchange_model.lua` (pure, 13 tests) — size-based positional model. Computes "section K in exchange J → buffer line N" from sizes, never from stored absolute positions. answer_append_pos() is always bounded inside the active exchange.
+  - `tests/arch/arch_helper.lua` + `tests/arch/buffer_mutation_spec.lua` — architectural fitness functions
+  - `scripts/parley_harness.lua` + `scripts/test-anthropic-interaction.sh` — offline payload tester
+  - 7 fixture transcripts + 7 golden payloads + round-trip tests
+  - `lua/parley/render_buffer.lua` — pure render layer
+  - `lua/parley/buffer_edit.lua` — single mutation entry point
+  - `chat_parser.lua` line span extension + helpers
+  - `M.dump_exchanges()` debug helper — invoke `:lua require('parley').dump_exchanges()`
+  - Trace infrastructure in chat_respond/dispatcher (temporary, remove after fix)
+
+  **What needs to be done in the NEXT session**:
+  1. **Rewrite the ~100-line insert block in `chat_respond.M.respond`** (roughly lines 950–1080). Remove ALL of: `response_line`, `response_block_lines`, `progress_line`, `response_start_line`, `raw_request_offset`, `in_tool_loop_recursion` branching. Replace with exchange_model calls. ONE code path for ALL agents (not two paths for tool vs non-tool).
+  2. **Change `dispatcher.create_handler` signature** to receive the streaming target position from the exchange_model (not compute it independently via extmarks).
+  3. **Handle the spinner** as part of the model (or skip it for tool-use agents — they're fast enough).
+  4. **Handle `raw_request_fence`** insert via the model.
+  5. **Remove all trace logging** once the fix is verified.
+  6. **Run manual test**: fresh chat, ClaudeAgentTools, "read ./ARCH.md and tell me what it is about" → expect clean 🔧:/📎: blocks inside the answer, Claude's text response streaming below them, no buffer corruption.
+
+  **Key lesson**: having TWO code paths (legacy + model-based) in the same function is WORSE than having just one (even if wrong). The paths interact through shared variables and produce unpredictable buffer states. The next session must commit to ONE path.
+
+  **How to start the next session**: say "work on issues/90" — the issue file, exchange_model, and all infrastructure are committed and ready. The rewrite is surgical: one function in one file, backed by the existing test suite + arch tests + golden payloads as regression guards.
