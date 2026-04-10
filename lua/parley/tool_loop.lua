@@ -66,29 +66,19 @@ end
 -- Buffer append
 --------------------------------------------------------------------------------
 
---- Append a multi-line block of text to the end of a buffer. Ensures
---- there is a blank line separator between the existing content and
---- the new block so serialized 🔧:/📎: blocks don't concatenate onto
---- trailing non-empty lines.
+--- Append a section (kind, ...) to the end of a buffer via buffer_edit.
+--- Used by process_response to write 🔧:/📎: blocks. Replaces the old
+--- _append_block_to_buffer (which used raw nvim_buf_set_lines and a
+--- pre-rendered string). #90 Task 3.1.
 ---
 --- @param bufnr integer
---- @param block string multi-line text (no trailing newline required)
-function M._append_block_to_buffer(bufnr, block)
+--- @param section table {kind, ...kind-specific fields}
+function M._append_section_to_buffer(bufnr, section)
+    local buffer_edit = require("parley.buffer_edit")
     local last = vim.api.nvim_buf_line_count(bufnr)
-    local last_line = vim.api.nvim_buf_get_lines(bufnr, math.max(last - 1, 0), last, false)[1] or ""
-
-    local lines_to_insert = {}
-    if last_line:match("%S") then
-        table.insert(lines_to_insert, "")
-    end
-    -- Split the block on newlines. `block .. "\n"` ensures the final
-    -- line is captured by the ([^\n]*)\n pattern even when block has
-    -- no trailing newline.
-    for line in (block .. "\n"):gmatch("([^\n]*)\n") do
-        table.insert(lines_to_insert, line)
-    end
-
-    vim.api.nvim_buf_set_lines(bufnr, last, last, false, lines_to_insert)
+    -- Append after the last existing line. buffer_edit.append_section_to_answer
+    -- handles the "blank separator if previous line is non-empty" logic.
+    buffer_edit.append_section_to_answer(bufnr, last - 1, section)
 end
 
 --------------------------------------------------------------------------------
@@ -139,7 +129,6 @@ function M.process_response(bufnr, raw_response, agent_info)
     -- Execute each tool call and write 🔧:/📎: blocks in streaming order.
     local dispatcher = require("parley.tools.dispatcher")
     local registry = require("parley.tools")
-    local serialize = require("parley.tools.serialize")
 
     local exec_opts = {
         cwd = agent_info.cwd or vim.fn.getcwd(),
@@ -147,9 +136,13 @@ function M.process_response(bufnr, raw_response, agent_info)
     }
 
     for _, call in ipairs(tool_calls) do
-        -- 🔧: block for the tool_use
-        local use_block = serialize.render_call(call)
-        M._append_block_to_buffer(bufnr, use_block)
+        -- 🔧: section for the tool_use
+        M._append_section_to_buffer(bufnr, {
+            kind = "tool_use",
+            id = call.id,
+            name = call.name,
+            input = call.input,
+        })
 
         -- Execute the tool via the dispatcher (handles cwd-scope,
         -- pcall-guard, truncation, id/name stamping). A raising or
@@ -158,9 +151,14 @@ function M.process_response(bufnr, raw_response, agent_info)
         -- state.
         local result = dispatcher.execute_call(call, registry, exec_opts)
 
-        -- 📎: block for the tool_result
-        local result_block = serialize.render_result(result)
-        M._append_block_to_buffer(bufnr, result_block)
+        -- 📎: section for the tool_result
+        M._append_section_to_buffer(bufnr, {
+            kind = "tool_result",
+            id = result.id,
+            name = result.name,
+            content = result.content,
+            is_error = result.is_error,
+        })
     end
 
     M.increment_iter(bufnr)
