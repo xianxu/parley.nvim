@@ -295,9 +295,11 @@ M.build_messages_from_model = function(buf, model, target_idx, agent_info)
     local sys = agent_info.system_prompt
     if sys and sys:match("%S") then
         local sys_msg = { role = "system", content = sys }
-        local prov = require("parley.providers")
-        if prov.has_feature(agent_info.provider, "cache_control") then
-            sys_msg.cache_control = { type = "ephemeral" }
+        if agent_info.provider then
+            local prov = require("parley.providers")
+            if prov.has_feature(agent_info.provider, "cache_control") then
+                sys_msg.cache_control = { type = "ephemeral" }
+            end
         end
         table.insert(messages, sys_msg)
     end
@@ -1182,6 +1184,18 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
         -- byte-identical to pre-#81 behavior.
         local final_payload = raw_payload or _parley.dispatcher.prepare_payload(messages, agent_info.model, agent_info.provider, agent_info.tools)
 
+        -- Debug: dump payload + messages to /tmp/claude/ for inspection.
+        -- Remove after debugging tool-loop recursion.
+        pcall(function()
+            local debug_dir = "/tmp/claude/parley-debug"
+            vim.fn.mkdir(debug_dir, "p")
+            local stamp = os.date("%H%M%S") .. "." .. (is_recursion and "recurse" or "initial")
+            local f = io.open(debug_dir .. "/" .. stamp .. ".messages.json", "w")
+            if f then f:write(vim.json.encode(messages)); f:close() end
+            local f2 = io.open(debug_dir .. "/" .. stamp .. ".payload.json", "w")
+            if f2 then f2:write(vim.json.encode(final_payload)); f2:close() end
+        end)
+
         -- In raw request mode, insert the request payload after the question, before the agent response
         -- Skip if the question already contains a typed request fence (raw_payload was parsed from it)
         if _parley.config.raw_mode and _parley.config.raw_mode.parse_raw_request and not raw_payload then
@@ -1354,16 +1368,48 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                 end
                 request_clear_progress_indicator(qt)
 
-                -- M2 Task 2.7 of #81: tool loop hook. If the streamed
-                -- response contained tool_use blocks, write 🔧:/📎:
-                -- into the buffer and re-submit the updated chat so
-                -- Claude can continue. Finalization (user prompt
-                -- append, topic generation, cursor placement) only
-                -- runs on the final iteration (when outcome == "done").
+                -- Debug: dump response for inspection. Remove after debugging.
+                pcall(function()
+                    local debug_dir = "/tmp/claude/parley-debug"
+                    vim.fn.mkdir(debug_dir, "p")
+                    local stamp = os.date("%H%M%S") .. "." .. (is_recursion and "recurse" or "initial")
+                    local f = io.open(debug_dir .. "/" .. stamp .. ".response.txt", "w")
+                    if f then
+                        f:write("response_len=" .. #(qt.response or "") .. "\n")
+                        f:write("raw_response_len=" .. #(qt.raw_response or "") .. "\n")
+                        f:write("response:\n" .. (qt.response or "") .. "\n---\n")
+                        f:write("raw_response:\n" .. (qt.raw_response or "") .. "\n")
+                        f:close()
+                    end
+                end)
+
+                -- If the stream_placeholder has no real content (Claude
+                -- responded with only tool_use, no text), collapse it to
+                -- size 0 so it doesn't produce extra blank lines.
+                if stream_block_idx then
+                    local sblk = model.exchanges[target_idx].blocks[stream_block_idx]
+                    if sblk and sblk.size == 1 then
+                        local spos = model:block_start(target_idx, stream_block_idx)
+                        local sline = vim.api.nvim_buf_get_lines(buf, spos, spos + 1, false)[1] or ""
+                        if not sline:match("%S") then
+                            -- It's just a blank — remove it + its margin
+                            -- from the buffer, then set size 0 in the model
+                            -- (empty-block rule cancels the margin).
+                            local del_start = math.max(spos - 1, 0)  -- margin line
+                            local del_count = spos - del_start + 1   -- margin + blank
+                            buffer_edit.delete_lines_after(buf, del_start, del_count)
+                            model:set_block_size(target_idx, stream_block_idx, 0)
+                        end
+                    end
+                end
+
+                -- Tool loop hook: if the streamed response contained
+                -- tool_use blocks, write 🔧:/📎: into the buffer and
+                -- re-submit. Finalization only runs on "done".
                 if agent_info and agent_info.tools and #agent_info.tools > 0 then
                     local tool_loop = require("parley.tool_loop")
                     local outcome = tool_loop.process_response(buf, qt.raw_response or "", {
-                        max_tool_iterations = 1,
+                        max_tool_iterations = agent_info.max_tool_iterations or 10,
                         tool_result_max_bytes = agent_info.tool_result_max_bytes or 102400,
                         cwd = vim.fn.getcwd(),
                     }, model, target_idx)

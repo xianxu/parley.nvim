@@ -372,15 +372,20 @@ M.parse_chat = function(lines, header_end, config)
 		end
 		if block then
 			-- #90: line spans + `kind` alias for `type` (forward-compat).
-			-- Trim trailing blank lines — the model's margins are the
-			-- single source of truth for gaps between blocks.
+			-- Trim leading and trailing blank lines — the model's margins
+			-- are the single source of truth for gaps between blocks.
+			local trimmed_start = cb_state.current_line_start
+			while trimmed_start < end_line_no
+				and (not lines[trimmed_start] or not lines[trimmed_start]:match("%S")) do
+				trimmed_start = trimmed_start + 1
+			end
 			local trimmed_end = end_line_no
-			while trimmed_end > cb_state.current_line_start
+			while trimmed_end > trimmed_start
 				and (not lines[trimmed_end] or not lines[trimmed_end]:match("%S")) do
 				trimmed_end = trimmed_end - 1
 			end
 			block.kind = block.type
-			block.line_start = cb_state.current_line_start
+			block.line_start = trimmed_start
 			block.line_end = trimmed_end
 			table.insert(cb_state.blocks, block)
 		end

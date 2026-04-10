@@ -186,7 +186,7 @@ describe("execute_call", function()
         local call = { id = "toolu_02", name = "nonexistent", input = {} }
         local result = dispatcher.execute_call(call, registry, {})
         assert.is_true(result.is_error)
-        assert.matches("unknown tool", result.content)
+        assert.matches("not available", result.content)
         assert.matches("nonexistent", result.content)
         assert.equals("toolu_02", result.id)
     end)

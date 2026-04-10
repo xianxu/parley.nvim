@@ -142,7 +142,7 @@ function M.execute_call(call, tools_registry, opts)
         return {
             id = call.id,
             name = call.name,
-            content = "unknown tool: " .. call.name,
+            content = "Tool '" .. call.name .. "' is not available on this client. Please continue without it.",
             is_error = true,
         }
     end
