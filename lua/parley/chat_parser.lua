@@ -138,6 +138,52 @@ end
 ---@param header_end number  # index of the "---" separator line
 ---@param config table       # parley config table (or a minimal stub for tests)
 ---@return table             # parsed_chat structure described above
+--- Find which exchange (1-indexed) contains the given buffer line.
+--- Returns nil if the line is outside any exchange (e.g. in the header).
+--- #90 Task 1.2.
+function M.find_exchange_at_line(parsed, line_no)
+	for i, ex in ipairs(parsed.exchanges or {}) do
+		local q_start = ex.question and ex.question.line_start or math.huge
+		local a_end = (ex.answer and ex.answer.line_end)
+			or (ex.question and ex.question.line_end)
+			or 0
+		if line_no >= q_start and line_no <= a_end then
+			return i
+		end
+	end
+	return nil
+end
+
+--- Find the (exchange_idx, section_idx) of the section containing the
+--- given buffer line. Returns (exchange_idx, nil) if the line is inside
+--- an exchange but not inside any section, or (nil, nil) if outside any
+--- exchange. #90 Task 1.2.
+function M.find_section_at_line(parsed, line_no)
+	local idx = M.find_exchange_at_line(parsed, line_no)
+	if not idx then
+		return nil, nil
+	end
+	local secs = parsed.exchanges[idx].answer
+		and parsed.exchanges[idx].answer.sections
+		or {}
+	for s_idx, s in ipairs(secs) do
+		if line_no >= s.line_start and line_no <= s.line_end then
+			return idx, s_idx
+		end
+	end
+	return idx, nil
+end
+
+--- Return the last section of the given exchange's answer, or nil.
+--- #90 Task 1.2.
+function M.last_section_in_answer(parsed, exchange_idx)
+	local ex = parsed.exchanges and parsed.exchanges[exchange_idx]
+	if not ex or not ex.answer or not ex.answer.sections then
+		return nil
+	end
+	return ex.answer.sections[#ex.answer.sections]
+end
+
 M.parse_chat = function(lines, header_end, config)
 	local result = {
 		headers = {},

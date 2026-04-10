@@ -92,6 +92,59 @@ describe("chat_parser: section line spans", function()
         assert.equals(18, secs[4].line_start); assert.equals(18, secs[4].line_end)
     end)
 
+    describe("section helper functions (#90 Task 1.2)", function()
+        local function fixture()
+            return parse({
+                "---", "topic: t", "file: f.md", "---", "",  -- 1-5
+                "💬: q1",                                    -- 6
+                "",                                          -- 7
+                "🤖: [A]",                                   -- 8
+                "hi",                                        -- 9
+                "💬: q2",                                    -- 10
+                "",                                          -- 11
+                "🤖: [B]",                                   -- 12
+                "🔧: read_file id=X",                        -- 13
+                "```json",                                   -- 14
+                '{"p":"x"}',                                  -- 15
+                "```",                                       -- 16
+                "📎: read_file id=X",                        -- 17
+                "````",                                      -- 18
+                "body",                                      -- 19
+                "````",                                      -- 20
+            })
+        end
+
+        it("find_exchange_at_line", function()
+            local p = fixture()
+            assert.equals(1, chat_parser.find_exchange_at_line(p, 6))
+            assert.equals(1, chat_parser.find_exchange_at_line(p, 9))
+            assert.equals(2, chat_parser.find_exchange_at_line(p, 10))
+            assert.equals(2, chat_parser.find_exchange_at_line(p, 19))
+            assert.is_nil(chat_parser.find_exchange_at_line(p, 1))
+        end)
+
+        it("find_section_at_line", function()
+            local p = fixture()
+            local ex_idx, sec_idx = chat_parser.find_section_at_line(p, 14)
+            assert.equals(2, ex_idx)
+            assert.equals(1, sec_idx)  -- inside the tool_use section
+            local ex2, sec2 = chat_parser.find_section_at_line(p, 19)
+            assert.equals(2, ex2)
+            assert.equals(2, sec2)  -- inside the tool_result section
+        end)
+
+        it("last_section_in_answer", function()
+            local p = fixture()
+            local s = chat_parser.last_section_in_answer(p, 2)
+            assert.is_not_nil(s)
+            assert.equals("tool_result", s.kind)
+
+            local s1 = chat_parser.last_section_in_answer(p, 1)
+            assert.equals("text", s1.kind)
+            assert.equals("hi", s1.text)
+        end)
+    end)
+
     it("answer.content_blocks alias still works", function()
         local lines = {
             "---", "topic: t", "file: f.md", "---", "",
