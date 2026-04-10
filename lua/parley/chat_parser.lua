@@ -267,6 +267,10 @@ M.parse_chat = function(lines, header_end, config)
 		if not cb_state then return end
 		cb_state.current_kind = kind
 		cb_state.current_lines = {}
+		-- line_start is set lazily on the first cb_append_line so that
+		-- it reflects the line that actually contains content (not the
+		-- pre-content header line where cb_start_block was called).
+		cb_state.current_line_start = nil
 		-- Fence tracking resets for each new block. Only used inside
 		-- tool_use / tool_result blocks to detect the end of the
 		-- fenced body so we can auto-transition back to a text block
@@ -275,39 +279,50 @@ M.parse_chat = function(lines, header_end, config)
 		cb_state.tool_body_complete = false
 	end
 
-	local function cb_finalize_block()
+	-- Finalize the current content block. end_line_no is the 1-indexed
+	-- buffer line where this block's last content lives (#90 Task 1.1).
+	local function cb_finalize_block(end_line_no)
 		if not cb_state or not cb_state.current_kind then return end
 		local body = table.concat(cb_state.current_lines, "\n")
 		local kind = cb_state.current_kind
+		local block
 		if kind == "text" then
 			local trimmed = body:gsub("^%s*(.-)%s*$", "%1")
 			if trimmed ~= "" then
-				table.insert(cb_state.blocks, { type = "text", text = trimmed })
+				block = { type = "text", text = trimmed }
 			end
 		elseif kind == "tool_use" then
 			local parsed = serialize_ok and serialize.parse_call(body) or nil
 			if parsed then
-				table.insert(cb_state.blocks, {
+				block = {
 					type = "tool_use",
 					id = parsed.id,
 					name = parsed.name,
 					input = parsed.input,
-				})
+				}
 			end
 		elseif kind == "tool_result" then
 			local parsed = serialize_ok and serialize.parse_result(body) or nil
 			if parsed then
-				table.insert(cb_state.blocks, {
+				block = {
 					type = "tool_result",
 					id = parsed.id,
 					name = parsed.name,
 					content = parsed.content,
 					is_error = parsed.is_error,
-				})
+				}
 			end
+		end
+		if block then
+			-- #90: line spans + `kind` alias for `type` (forward-compat).
+			block.kind = block.type
+			block.line_start = cb_state.current_line_start
+			block.line_end = end_line_no
+			table.insert(cb_state.blocks, block)
 		end
 		cb_state.current_kind = nil
 		cb_state.current_lines = {}
+		cb_state.current_line_start = nil
 		cb_state.tool_fence_len = nil
 		cb_state.tool_body_complete = false
 	end
@@ -317,17 +332,22 @@ M.parse_chat = function(lines, header_end, config)
 	-- Tracks fence open/close state inside tool blocks so the parser
 	-- knows when subsequent text should start a new text block vs
 	-- belong to the tool block's body.
-	local function cb_append_line(line)
+	-- line_no is the 1-indexed buffer line being appended (#90 Task 1.1).
+	local function cb_append_line(line, line_no)
 		if not cb_state or not cb_state.current_kind then return end
 
 		-- Auto-transition: if we're in a tool block whose closing
 		-- fence was already seen, this line belongs to a NEW text
 		-- block, not the tool block. Finalize the tool block first.
 		if cb_state.tool_body_complete then
-			cb_finalize_block()
+			cb_finalize_block(line_no - 1)
 			cb_start_block("text")
 		end
 
+		-- Lazy line_start: the first line we see is where the block begins.
+		if cb_state.current_line_start == nil then
+			cb_state.current_line_start = line_no
+		end
 		table.insert(cb_state.current_lines, line)
 
 		-- Track fence state inside tool blocks to detect body end.
@@ -351,10 +371,13 @@ M.parse_chat = function(lines, header_end, config)
 
 	-- Attach accumulated blocks to the current exchange's answer
 	-- component (called on answer → next-question transition and at
-	-- end of file).
-	local function cb_attach_to_current_answer()
+	-- end of file). end_line_no is the last buffer line of the answer
+	-- region (#90 Task 1.1).
+	local function cb_attach_to_current_answer(end_line_no)
 		if cb_state and current_exchange and current_exchange.answer then
-			cb_finalize_block()
+			cb_finalize_block(end_line_no)
+			current_exchange.answer.sections = cb_state.blocks
+			-- Backward-compat alias.
 			current_exchange.answer.content_blocks = cb_state.blocks
 		end
 		cb_state = nil
@@ -410,9 +433,9 @@ M.parse_chat = function(lines, header_end, config)
 			first_question_seen = true
 			-- Content_blocks for the closing answer (if any) get attached
 			-- before we finalize the old component and start a new exchange.
-			cb_attach_to_current_answer()
-			-- If we were building a previous exchange, finalize it
 			local current_component_start = line_before_local or i
+			cb_attach_to_current_answer(current_component_start - 1)
+			-- If we were building a previous exchange, finalize it
 			finalize_component(current_component_start - 1)
 
 			-- Extract question content
@@ -474,7 +497,7 @@ M.parse_chat = function(lines, header_end, config)
 			-- Defensive attach: if we had a previous answer with unflushed
 			-- content_blocks (rare — two 🤖: without a 💬: between them),
 			-- attach to it now before overwriting current_exchange.answer.
-			cb_attach_to_current_answer()
+			cb_attach_to_current_answer(current_component_start - 1)
 
 			-- Make sure we have an exchange to add this answer to
 			if not current_exchange then
@@ -512,9 +535,9 @@ M.parse_chat = function(lines, header_end, config)
 		-- accumulated line IS the 🔧: header, so serialize.parse_call
 		-- can extract id/name from it later.
 		elseif current_component == "answer" and line:sub(1, #tool_use_prefix) == tool_use_prefix then
-			cb_finalize_block()
+			cb_finalize_block(i - 1)
 			cb_start_block("tool_use")
-			cb_append_line(line)
+			cb_append_line(line, i)
 			-- Also feed the raw line into content_parts so answer.content
 			-- (backward-compat flat text) still reflects the full answer
 			-- region exactly as it appears in the buffer.
@@ -522,9 +545,9 @@ M.parse_chat = function(lines, header_end, config)
 
 		-- Check for tool_result (📎:) header — same pattern as tool_use.
 		elseif current_component == "answer" and line:sub(1, #tool_result_prefix) == tool_result_prefix then
-			cb_finalize_block()
+			cb_finalize_block(i - 1)
 			cb_start_block("tool_result")
-			cb_append_line(line)
+			cb_append_line(line, i)
 			table.insert(content_parts, line)
 
 		-- Check for summary line
@@ -564,7 +587,7 @@ M.parse_chat = function(lines, header_end, config)
 			-- Feed the line into the current content_block (M2 Task 2.5).
 			-- Only meaningful when we're inside an answer; cb_append_line
 			-- is a no-op when cb_state is nil or has no current_kind.
-			cb_append_line(content_line)
+			cb_append_line(content_line, i)
 
 			-- Check for file references in question content
 			if current_component == "question" then
@@ -585,8 +608,8 @@ M.parse_chat = function(lines, header_end, config)
 	finalize_component(#lines)
 
 	-- Finalize and attach content_blocks for the last open answer, if any
-	-- (M2 Task 2.5 of #81).
-	cb_attach_to_current_answer()
+	-- (M2 Task 2.5 of #81; #90 Task 1.1 added the end_line_no arg).
+	cb_attach_to_current_answer(#lines)
 
 	return result
 end
