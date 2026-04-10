@@ -1184,18 +1184,6 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
         -- byte-identical to pre-#81 behavior.
         local final_payload = raw_payload or _parley.dispatcher.prepare_payload(messages, agent_info.model, agent_info.provider, agent_info.tools)
 
-        -- Debug: dump payload + messages to /tmp/claude/ for inspection.
-        -- Remove after debugging tool-loop recursion.
-        pcall(function()
-            local debug_dir = "/tmp/claude/parley-debug"
-            vim.fn.mkdir(debug_dir, "p")
-            local stamp = os.date("%H%M%S") .. "." .. (is_recursion and "recurse" or "initial")
-            local f = io.open(debug_dir .. "/" .. stamp .. ".messages.json", "w")
-            if f then f:write(vim.json.encode(messages)); f:close() end
-            local f2 = io.open(debug_dir .. "/" .. stamp .. ".payload.json", "w")
-            if f2 then f2:write(vim.json.encode(final_payload)); f2:close() end
-        end)
-
         -- In raw request mode, insert the request payload after the question, before the agent response
         -- Skip if the question already contains a typed request fence (raw_payload was parsed from it)
         if _parley.config.raw_mode and _parley.config.raw_mode.parse_raw_request and not raw_payload then
@@ -1367,21 +1355,6 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                     return
                 end
                 request_clear_progress_indicator(qt)
-
-                -- Debug: dump response for inspection. Remove after debugging.
-                pcall(function()
-                    local debug_dir = "/tmp/claude/parley-debug"
-                    vim.fn.mkdir(debug_dir, "p")
-                    local stamp = os.date("%H%M%S") .. "." .. (is_recursion and "recurse" or "initial")
-                    local f = io.open(debug_dir .. "/" .. stamp .. ".response.txt", "w")
-                    if f then
-                        f:write("response_len=" .. #(qt.response or "") .. "\n")
-                        f:write("raw_response_len=" .. #(qt.raw_response or "") .. "\n")
-                        f:write("response:\n" .. (qt.response or "") .. "\n---\n")
-                        f:write("raw_response:\n" .. (qt.raw_response or "") .. "\n")
-                        f:close()
-                    end
-                end)
 
                 -- If the stream_placeholder has no real content (Claude
                 -- responded with only tool_use, no text), collapse it to

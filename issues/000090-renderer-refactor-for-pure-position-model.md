@@ -1,8 +1,9 @@
 ---
 id: 000090
-status: open
+status: done
 deps: [000081]
 created: 2026-04-09
+closed: 2026-04-10
 ---
 
 # Renderer refactor — pure position model for chat buffer
