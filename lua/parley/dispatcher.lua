@@ -508,6 +508,7 @@ D.create_handler = function(buf, win, line, first_undojoin, prefix, cursor)
 
 		first_line = vim.api.nvim_buf_get_extmark_by_id(buf, ns_id, ex_id, {})[1]
 
+		local buffer_edit = require("parley.buffer_edit")
 		local previous_pending_index = finished_lines
 		local completed, new_pending
 		if has_started then
@@ -515,7 +516,7 @@ D.create_handler = function(buf, win, line, first_undojoin, prefix, cursor)
 			table.insert(completed, new_pending)
 			local replacement = with_prefix(completed)
 			local start_line = first_line + finished_lines
-			vim.api.nvim_buf_set_lines(buf, start_line, start_line + 1, false, replacement)
+			buffer_edit.stream_replace_at_line(buf, start_line, replacement)
 			finished_lines = finished_lines + (#completed - 1)
 		else
 			-- Strip leading newlines from the first chunk for consistent spacing across providers
@@ -523,7 +524,7 @@ D.create_handler = function(buf, win, line, first_undojoin, prefix, cursor)
 			completed, new_pending = split_pending_and_completed(chunk)
 			table.insert(completed, new_pending)
 			local replacement = with_prefix(completed)
-			vim.api.nvim_buf_set_lines(buf, first_line, first_line + 1, false, replacement)
+			buffer_edit.stream_replace_at_line(buf, first_line, replacement)
 			finished_lines = #completed - 1
 			has_started = true
 		end

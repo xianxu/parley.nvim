@@ -19,10 +19,10 @@ describe("arch: buffer mutation boundary", function()
                 -- Chat buffer rendering pipeline — narrowed through #90 phases.
                 -- After Phase 3, ONLY buffer_edit.lua remains in this group.
                 -- ============================================================
-                "lua/parley/buffer_edit.lua",   -- THE intended home (added Phase 1)
-                -- chat_respond.lua removed in Phase 2 (all sites migrated)
-                "lua/parley/dispatcher.lua",     -- removed later in Phase 3
-                -- tool_loop.lua removed in Phase 3 (Task 3.1)
+                "lua/parley/buffer_edit.lua",   -- THE intended home (final state)
+                -- chat_respond.lua removed in Phase 2
+                -- dispatcher.lua removed in Phase 3 Task 3.2
+                -- tool_loop.lua removed in Phase 3 Task 3.1
 
                 -- ============================================================
                 -- Picker UIs and orthogonal helpers — deferred to a follow-up.
