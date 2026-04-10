@@ -137,4 +137,85 @@ function M.append_section_to_answer(buf, after_line_0_indexed, section)
     return M.make_handle(buf, insert_at + #insert_lines - 1)
 end
 
+-- ============================================================================
+-- Streaming
+-- ============================================================================
+--
+-- The streaming protocol receives chunks of text that may not align on
+-- newline boundaries. We accumulate any trailing partial line in
+-- handle._stream.pending and write complete lines to the buffer as they
+-- arrive. The pending partial line is also written to the buffer as a
+-- "ghost" trailing line so the user sees streaming progress in real
+-- time; subsequent chunks overwrite that line.
+--
+-- finished_lines counts complete (newline-terminated) lines we've
+-- already written, so we know how far the handle has advanced from its
+-- original anchor.
+-- ============================================================================
+
+local function ensure_stream_state(handle)
+    handle._stream = handle._stream or { pending = "", finished_lines = 0 }
+    return handle._stream
+end
+
+--- Write a chunk of text at the position indicated by `handle`.
+function M.stream_into(handle, chunk)
+    if handle.dead then
+        return
+    end
+    local s = ensure_stream_state(handle)
+    s.pending = s.pending .. chunk
+    -- Split on \n, plain mode. The last entry is the new pending text.
+    local parts = vim.split(s.pending, "\n", { plain = true })
+    s.pending = parts[#parts]
+    table.remove(parts)
+    local first_line = M.handle_line(handle)
+    local write_at = first_line + s.finished_lines
+    table.insert(parts, s.pending)
+    vim.api.nvim_buf_set_lines(handle.buf, write_at, write_at + 1, false, parts)
+    s.finished_lines = s.finished_lines + (#parts - 1)
+end
+
+--- Finalize the stream — currently just invalidates the handle. The
+--- pending partial line is already in the buffer as a ghost.
+function M.stream_finalize(handle)
+    M.handle_invalidate(handle)
+end
+
+-- ============================================================================
+-- Progress indicator
+-- ============================================================================
+
+--- Replace the line at the handle's position with `text`.
+function M.set_progress_line(handle, text)
+    if handle.dead then
+        return
+    end
+    local line = M.handle_line(handle)
+    vim.api.nvim_buf_set_lines(handle.buf, line, line + 1, false, { text or "" })
+end
+
+--- Delete `count` lines starting at the handle's position.
+function M.clear_progress_lines(handle, count)
+    if handle.dead then
+        return
+    end
+    local line = M.handle_line(handle)
+    vim.api.nvim_buf_set_lines(handle.buf, line, line + count, false, {})
+end
+
+-- ============================================================================
+-- Cancellation cleanup
+-- ============================================================================
+
+--- Delete `n` lines starting at the given 0-indexed line.
+function M.delete_lines_after(buf, line_0_indexed, n)
+    vim.api.nvim_buf_set_lines(buf, line_0_indexed, line_0_indexed + n, false, {})
+end
+
+--- Append a blank line at the very end of the buffer.
+function M.append_blank_at_end(buf)
+    vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "" })
+end
+
 return M
