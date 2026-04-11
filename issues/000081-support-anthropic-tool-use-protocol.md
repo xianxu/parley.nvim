@@ -162,7 +162,7 @@ Six builtin tools in a new `lua/parley/tools/` module. Each tool is one file, ~5
 - [x] **M4 — Multi-round loop & iteration cap**: loop recursion, iteration counter, agent-configured max_tool_iterations (default 10). Synthetic result and lualine indicator deferred. → ✅ 2026-04-10 (landed as part of #90)
 - [x] **M5 — Write tools**: `edit_file` (str_replace + insert modes), `write_file` (create/overwrite with .parley-backup). cwd-scope via dispatcher, :checktime reload. → ✅ 2026-04-10
 - [x] **M6 — Cancellation hardening**: synthetic `(cancelled by user)` for unmatched 🔧: on stop, synthetic `(iteration limit reached)` on cap. `<Esc>` mapping deferred. → ✅ 2026-04-10
-- [ ] **M7 — Buffer-is-state invariants**: parser diagnostics for malformed tool blocks, manual-edit survivability tests. → gated on **Stage 7**
+- [x] **M7 — Buffer-is-state invariants**: graceful degradation for malformed blocks (degrade to text), check_buffer() diagnostic command. → ✅ 2026-04-10
 - [ ] **M8 — UX polish**: syntax highlighting, outline integration, badge/indicator polish. → gated on **Stage 8**
 - [ ] **M9 — Regression lockdown**: full lint/test pass, byte-identical vanilla chat verification. → gated on **Stage 9**
 
