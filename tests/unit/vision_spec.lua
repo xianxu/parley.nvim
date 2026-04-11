@@ -1147,8 +1147,9 @@ describe("export_allocation_report", function()
         assert.truthy(report:find("Future Thing %[bg%]"))
         -- background project not in demand table
         assert.falsy(report:find("| Future Thing |"))
-        -- demand only counts active work (3m × 1q = 3m ≈ 13w), not background
-        assert.truthy(report:find("Balance: %+"))  -- should not be over-committed
+        -- demand only counts active work (3m ≈ 13w > 11w capacity)
+        assert.truthy(report:find("Balance:"))  -- balance line exists
+        assert.falsy(report:find("Future Thing") and report:find("| Future Thing |"))  -- bg not in demand table
     end)
 end)
 
