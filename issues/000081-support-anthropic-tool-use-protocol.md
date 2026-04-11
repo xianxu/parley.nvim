@@ -157,9 +157,9 @@ Six builtin tools in a new `lua/parley/tools/` module. Each tool is one file, ~5
 ### Implementation milestones (each gated on its manual test stage)
 
 - [x] **M1 — Plumbing**: `ToolDefinition`/`ToolCall`/`ToolResult` types, agent `tools` config field, Anthropic payload `tools` encoding, new `ClaudeAgentTools` agent, picker `[🔧]` badge. No loop yet; model can respond but if it emits tool_use, we error. → gated on **Stage 1** ✅ 2026-04-09
-- [ ] **M2 — Single read_file round-trip**: buffer prefixes `🔧:`/`📎:`, parser changes, streaming tool_use accumulator in Anthropic adapter, dispatcher tool loop with single-round execution, `read_file` handler, fold setup, `<C-g>b` shortcut. → gated on **Stage 2**
+- [x] **M2 — Single read_file round-trip**: buffer prefixes `🔧:`/`📎:`, parser changes, streaming tool_use accumulator in Anthropic adapter, dispatcher tool loop with multi-round execution, `read_file` handler. Fold/shortcut deferred to #95. → gated on **Stage 2** ✅ 2026-04-10 (via #90 refactor)
 - [ ] **M3 — Remaining read tools**: `list_dir`, `grep`, `glob`. → gated on **Stage 3**
-- [ ] **M4 — Multi-round loop & iteration cap**: loop recursion, iteration counter, synthetic `(iteration limit reached)` result, lualine progress indicator. → gated on **Stage 4**
+- [x] **M4 — Multi-round loop & iteration cap**: loop recursion, iteration counter, agent-configured max_tool_iterations (default 10). Synthetic result and lualine indicator deferred. → ✅ 2026-04-10 (landed as part of #90)
 - [ ] **M5 — Write tools with safety**: `edit_file`, `write_file`, cwd-scope check, dirty-buffer guard, `.parley-backup` helper, auto-gitignore in repo-mode, post-write `:checktime` reload. → gated on **Stage 5**
 - [ ] **M6 — Cancellation hardening**: `<Esc>` buffer-local mapping, synthetic `(cancelled by user)` result for all 4 cancel scenarios, partial-JSON drop path. → gated on **Stage 6**
 - [ ] **M7 — Buffer-is-state invariants**: parser diagnostics for malformed tool blocks, manual-edit survivability tests. → gated on **Stage 7**
