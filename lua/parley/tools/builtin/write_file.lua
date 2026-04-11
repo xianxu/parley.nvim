@@ -82,9 +82,6 @@ return {
         end)
 
         local msg = "Written " .. #content .. " bytes to " .. path
-        if existing then
-            msg = msg .. " (backup at " .. backup_path .. ")"
-        end
 
         return {
             content = msg,

@@ -113,7 +113,6 @@ function M.repair_unmatched_tool_blocks(bufnr)
 
     -- Scan blocks: every tool_use must be followed by a tool_result
     local blocks = model.exchanges[ex_idx].blocks
-    local sections = parsed.exchanges[ex_idx].answer and parsed.exchanges[ex_idx].answer.sections or {}
     local serialize = require("parley.tools.serialize")
     for i, blk in ipairs(blocks) do
         if blk.kind == "tool_use" then

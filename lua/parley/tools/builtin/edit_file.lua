@@ -86,9 +86,7 @@ return {
                 table.insert(lines, line)
             end
             -- Remove the extra empty line added by the trailing \n trick
-            if #lines > 0 and content:sub(-1) ~= "\n" then
-                -- Content didn't end with newline, last entry is real
-            elseif #lines > 0 and lines[#lines] == "" and content:sub(-1) == "\n" then
+            if #lines > 0 and lines[#lines] == "" and content:sub(-1) == "\n" then
                 table.remove(lines)
             end
 
