@@ -1,12 +1,14 @@
 # Parley-specific targets (Lua/Neovim plugin) — include from your project Makefile:
 #   include Makefile.parley
 
-.PHONY: help-parley test test-spec test-changed lint fixtures model-check model-checker test-clean-env
+.PHONY: help-parley test test-unit test-integration test-spec test-changed lint fixtures model-check model-checker test-clean-env
 
 help-parley:
 	@printf '%s\n' \
 	"Parley (Lua/Neovim):" \
-	"  make test             Run all tests (unit + integration)" \
+	"  make test             Run all tests (unit parallel + integration sequential)" \
+	"  make test-unit        Run unit tests in parallel" \
+	"  make test-integration Run integration tests sequentially" \
 	"  make test-spec SPEC=  Run tests for a specific spec key" \
 	"  make test-changed     Run tests for changed spec files" \
 	"  make lint             Run luacheck on lua/ and tests/" \
@@ -28,13 +30,32 @@ define PREP_TEST_ENV
 mkdir -p "$(TEST_HOME)" "$(TEST_XDG)/data" "$(TEST_XDG)/state" "$(TEST_XDG)/cache" "$(TEST_TMP)"
 endef
 
-# Run all tests (unit + integration) via plenary in headless Neovim.
-# Each spec file runs sequentially to avoid state bleed.
-test:
+# Run all tests: unit in parallel, integration sequentially.
+test: test-unit test-integration
+
+# Number of parallel test processes (override with JOBS=N).
+JOBS ?= 8
+
+# Run unit tests in parallel — each file in its own Neovim process.
+# Safe because unit tests have no shared state.
+test-unit:
 	@$(PREP_TEST_ENV)
-	@$(TEST_ENV) nvim --headless --noplugin -u tests/minimal_init.vim \
-	  -c "PlenaryBustedDirectory tests/ {sequential = true}" \
-	  -c "qa!"
+	@export $(TEST_ENV); \
+	find tests/unit -name '*_spec.lua' | sort | \
+	  xargs -P $(JOBS) -I {} nvim -n --headless --noplugin -u tests/minimal_init.vim \
+	    -c "PlenaryBustedFile {}" -c "qa!" || { echo "Unit tests failed"; exit 1; }
+
+# Run integration tests sequentially to avoid state bleed.
+test-integration:
+	@$(PREP_TEST_ENV)
+	@for f in tests/integration/*_spec.lua; do \
+		$(TEST_ENV) nvim -n --headless --noplugin -u tests/minimal_init.vim \
+		  -c "PlenaryBustedFile $$f" -c "qa!" || exit $$?; \
+	done
+	@for f in tests/arch/*_spec.lua; do \
+		$(TEST_ENV) nvim -n --headless --noplugin -u tests/minimal_init.vim \
+		  -c "PlenaryBustedFile $$f" -c "qa!" || exit $$?; \
+	done
 
 # Run tests mapped to one spec key/path from specs/traceability.yaml.
 # Example: make test-spec SPEC=chat/lifecycle
