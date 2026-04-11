@@ -1,35 +1,89 @@
 -- `write_file` — create or overwrite a file.
 --
--- M1 STUB: handler returns is_error=true. Real handler lands in M5
--- Task 5.5. `write_file` is write-type with `needs_backup=true`: the
--- dispatcher write-path prelude (M5 Task 5.6) captures the pre-image
--- to `<path>.parley-backup` on first write, enforces cwd-scope,
--- dirty-buffer protection, and appends a `pre-image:` metadata
--- footer to the result body so #84's replay has the data it needs.
+-- PURE: writes content to disk. The dispatcher handles cwd-scope.
+-- On first write to a path, captures the prior contents to
+-- <path>.parley-backup for safety.
+--
+-- After writing, triggers :checktime so Neovim reloads the buffer.
 
 return {
     name = "write_file",
     kind = "write",
     needs_backup = true,
-    description = "Create or overwrite a file. Confined to the working directory. On first write to a path within a chat, the prior contents are captured to `<path>.parley-backup` for safety and future replay.",
+    description = "Create or overwrite a file with the given content. On first write, the prior contents (if any) are saved to <path>.parley-backup. Confined to the working directory.",
     input_schema = {
         type = "object",
         properties = {
-            path = {
+            file_path = {
                 type = "string",
-                description = "Path to the file, relative to or absolute within the working directory.",
+                description = "Path to the file.",
             },
             content = {
                 type = "string",
                 description = "Full file content to write.",
             },
         },
-        required = { "path", "content" },
+        required = { "file_path", "content" },
     },
-    handler = function(_input)
+    handler = function(input)
+        input = input or {}
+        local path = input.file_path or input.path
+        local content = input.content
+
+        if type(path) ~= "string" or path == "" then
+            return { content = "missing or invalid required field: file_path", is_error = true, name = "write_file" }
+        end
+        if type(content) ~= "string" then
+            return { content = "missing or invalid required field: content", is_error = true, name = "write_file" }
+        end
+
+        -- Backup: save prior contents if file exists and no backup yet
+        local backup_path = path .. ".parley-backup"
+        local existing = io.open(path, "r")
+        if existing then
+            local backup_exists = io.open(backup_path, "r")
+            if backup_exists then
+                backup_exists:close()
+            else
+                -- First write — capture pre-image
+                local prior = existing:read("*a")
+                existing:close()
+                local bf = io.open(backup_path, "w")
+                if bf then
+                    bf:write(prior)
+                    bf:close()
+                end
+            end
+            if existing then existing:close() end
+        end
+
+        -- Ensure parent directory exists
+        local dir = path:match("(.+)/[^/]+$")
+        if dir then
+            vim.fn.mkdir(dir, "p")
+        end
+
+        -- Write the file
+        local f, err = io.open(path, "w")
+        if not f then
+            return { content = "cannot write: " .. (err or path), is_error = true, name = "write_file" }
+        end
+        f:write(content)
+        f:close()
+
+        -- Trigger Neovim to reload if buffer was open
+        vim.schedule(function()
+            pcall(vim.cmd, "checktime")
+        end)
+
+        local msg = "Written " .. #content .. " bytes to " .. path
+        if existing then
+            msg = msg .. " (backup at " .. backup_path .. ")"
+        end
+
         return {
-            content = "write_file: not yet implemented (M1 stub)",
-            is_error = true,
+            content = msg,
+            is_error = false,
             name = "write_file",
         }
     end,
