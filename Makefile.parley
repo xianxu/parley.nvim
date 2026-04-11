@@ -45,17 +45,13 @@ test-unit:
 	  xargs -P $(JOBS) -I {} nvim -n --headless --noplugin -u tests/minimal_init.vim \
 	    -c "PlenaryBustedFile {}" -c "qa!" || { echo "Unit tests failed"; exit 1; }
 
-# Run integration tests sequentially to avoid state bleed.
+# Run integration + arch tests in parallel — each file in its own Neovim process.
 test-integration:
 	@$(PREP_TEST_ENV)
-	@for f in tests/integration/*_spec.lua; do \
-		$(TEST_ENV) nvim -n --headless --noplugin -u tests/minimal_init.vim \
-		  -c "PlenaryBustedFile $$f" -c "qa!" || exit $$?; \
-	done
-	@for f in tests/arch/*_spec.lua; do \
-		$(TEST_ENV) nvim -n --headless --noplugin -u tests/minimal_init.vim \
-		  -c "PlenaryBustedFile $$f" -c "qa!" || exit $$?; \
-	done
+	@export $(TEST_ENV); \
+	find tests/integration tests/arch -name '*_spec.lua' | sort | \
+	  xargs -P $(JOBS) -I {} nvim -n --headless --noplugin -u tests/minimal_init.vim \
+	    -c "PlenaryBustedFile {}" -c "qa!" || { echo "Integration tests failed"; exit 1; }
 
 # Run tests mapped to one spec key/path from specs/traceability.yaml.
 # Example: make test-spec SPEC=chat/lifecycle
