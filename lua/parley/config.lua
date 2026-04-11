@@ -32,6 +32,7 @@ local config = {
 
 		openai = os.getenv("OPENAI_API_KEY"),
 		anthropic = os.getenv("ANTHROPIC_API_KEY"),
+
 		googleai = os.getenv("GOOGLEAI_API_KEY"),
 		ollama = "dummy_secret", -- ollama typically uses a dummy token for local instances
 		copilot = os.getenv("GITHUB_TOKEN"), -- for GitHub Copilot
@@ -170,8 +171,15 @@ local config = {
 			-- model can read, edit, and write files inside the working
 			-- directory. Headline M1 deliverable of issue #81.
 			provider = "anthropic",
-			name = "ClaudeAgentTools",
+			name = "ToolSonnet",
 			model = { model = "claude-sonnet-4-6", temperature = 0.8 },
+			system_prompt = require("parley.defaults").chat_system_prompt,
+			tools = { "read_file", "ls", "find", "grep", "edit_file", "write_file" },
+		},
+		{
+			provider = "anthropic",
+			name = "ToolOpus",
+			model = { model = "claude-Opus-4-6", temperature = 0.8 },
 			system_prompt = require("parley.defaults").chat_system_prompt,
 			tools = { "read_file", "ls", "find", "grep", "edit_file", "write_file" },
 			-- Optional: defaults applied at setup time when absent
