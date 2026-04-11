@@ -176,10 +176,16 @@ local function compute_chat_highlights(buf, start_line, end_line)
     local lines = vim.api.nvim_buf_get_lines(buf, start_line - 1, end_line, false)
     local in_block, in_code_block = bootstrap_chat_highlight_state(buf, start_line, patterns)
 
+    local in_tool_block = false  -- inside 🔧:/📎: fenced content
+
     for offset, line in ipairs(lines) do
         local line_nr = start_line + offset - 1
         if line:match("^%s*```") then
             in_code_block = not in_code_block
+            -- Exiting a code block while in a tool region ends the tool region
+            if not in_code_block and in_tool_block then
+                in_tool_block = false
+            end
         end
 
         local highlighted_regions = {}
@@ -199,6 +205,17 @@ local function compute_chat_highlights(buf, start_line, end_line)
         end
 
         if line:match(patterns.reasoning_pattern) or line:match(patterns.summary_pattern) then
+            table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
+        elseif line:match("^🔧:") or line:match("^📎:") then
+            -- Tool block headers — dim (plumbing, not prose)
+            if line:match("error=true") then
+                table.insert(result[row], { hl_group = "ParleyToolError", col_start = 0, col_end = -1 })
+            else
+                table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
+            end
+            in_tool_block = true
+        elseif in_tool_block and not in_block then
+            -- Inside tool block fenced content — dim
             table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
         elseif line:match(patterns.user_pattern) then
             table.insert(result[row], { hl_group = "ParleyQuestion", col_start = 0, col_end = -1 })
@@ -375,6 +392,15 @@ M.setup_highlights = function()
     else
         vim.api.nvim_set_hl(0, "ParleyThinking", {
             link = "Comment", -- Comments are usually appropriately dimmed in all themes
+        })
+    end
+
+    -- Tool error results — visually distinct from normal tool blocks
+    if user_highlights.tool_error then
+        vim.api.nvim_set_hl(0, "ParleyToolError", user_highlights.tool_error)
+    else
+        vim.api.nvim_set_hl(0, "ParleyToolError", {
+            link = "DiagnosticError",
         })
     end
 
