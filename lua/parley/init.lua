@@ -609,6 +609,11 @@ M.setup = function(opts)
 			vim.keymap.set(mode, M.config.global_shortcut_copy_context.shortcut, M.cmd.CopyContext, { silent = true, desc = "Copy location + context to clipboard" })
 		end
 	end
+	if M.config.global_shortcut_copy_context_wide then
+		for _, mode in ipairs(M.config.global_shortcut_copy_context_wide.modes) do
+			vim.keymap.set(mode, M.config.global_shortcut_copy_context_wide.shortcut, M.cmd.CopyContextWide, { silent = true, desc = "Copy location + wide context to clipboard" })
+		end
+	end
 
 	-- Set up global shortcuts for note-taking
 	if M.config.global_shortcut_note_new then
@@ -2094,6 +2099,16 @@ local function format_branch_ref(rel_path, topic)
 end
 
 M.setup_markdown_keymaps = function(buf)
+	-- <C-g>eh: export markdown to HTML via pandoc
+	local export_html = M.config.chat_shortcut_export_html
+	if export_html then
+		for _, mode in ipairs(export_html.modes) do
+			M.helpers.set_keymap({ buf }, mode, export_html.shortcut, function()
+				exporter.pandoc_export_html()
+			end, "Parley export markdown to HTML (pandoc)")
+		end
+	end
+
 	-- Add <C-g>o keybinding to open chat file references
 	local of = M.config.chat_shortcut_open_file
 	if of then
@@ -3560,9 +3575,8 @@ M.cmd.CopyLocationContent = function()
 end
 
 -- Copy location + selected text query + surrounding context to clipboard.
--- Normal mode: copies file:line:col with +/-2 lines of context.
--- Visual mode: copies file:line:col, "tell me more about `selection`", and +/-2 lines around the selection.
-M.cmd.CopyContext = function()
+-- before/after control how many lines of context around the cursor/selection.
+local function copy_context(before, after)
 	local buf = vim.api.nvim_get_current_buf()
 	local filename = vim.fn.expand("%")
 	local line_count = vim.api.nvim_buf_line_count(buf)
@@ -3572,8 +3586,8 @@ M.cmd.CopyContext = function()
 	local row, col = cursor[1], cursor[2]
 
 	local function context_lines(from, to)
-		local start = math.max(1, from - 2)
-		local finish = math.min(line_count, to + 2)
+		local start = math.max(1, from - before)
+		local finish = math.min(line_count, to + after)
 		return vim.api.nvim_buf_get_lines(buf, start - 1, finish, false), start
 	end
 
@@ -3612,6 +3626,16 @@ M.cmd.CopyContext = function()
 		vim.fn.setreg("+", table.concat(parts, "\n"))
 	end
 	vim.notify("Context copied to clipboard", vim.log.levels.INFO)
+end
+
+-- Normal: file:line:col with +/-2 lines. Visual: file:line:col + selection query + +/-2 context.
+M.cmd.CopyContext = function()
+	copy_context(2, 2)
+end
+
+-- Wide context variant: 5 lines before, 10 lines after.
+M.cmd.CopyContextWide = function()
+	copy_context(5, 10)
 end
 
 -- Command to extract and open a file referenced with @@ syntax

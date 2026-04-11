@@ -342,6 +342,7 @@ local config = {
 	global_shortcut_copy_location = { modes = { "n", "v" }, shortcut = "<leader>cl" },
 	global_shortcut_copy_location_content = { modes = { "n", "v" }, shortcut = "<leader>cL" },
 	global_shortcut_copy_context = { modes = { "n", "v" }, shortcut = "<leader>cc" },
+	global_shortcut_copy_context_wide = { modes = { "n", "v" }, shortcut = "<leader>cC" },
 	global_shortcut_new = { modes = { "n", "i" }, shortcut = "<C-g>c" },
 	global_shortcut_review = { modes = { "n" }, shortcut = "<C-g>C" },
 	global_shortcut_finder = { modes = { "n", "i" }, shortcut = "<C-g>f" },

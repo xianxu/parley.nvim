@@ -41,6 +41,7 @@ Despite of such simple interface, it's very powerful, sometimes more so than off
 Optional dependencies:
 - [`lualine.nvim`](https://github.com/nvim-lualine/lualine.nvim) for status line integration. Not missing much if not available.
 - `curl` for oauth and fetching web content.
+- [`pandoc`](https://pandoc.org/) for exporting non-chat markdown files to HTML (`<C-g>eh`). Install with `brew install pandoc`.
 
 Example with `lazy.nvim`
 

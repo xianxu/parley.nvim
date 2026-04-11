@@ -883,6 +883,57 @@ M.export_markdown = function(params)
 end
 
 -- Expose helpers for testing
+--------------------------------------------------------------------------------
+-- Pandoc export for non-chat markdown files
+--------------------------------------------------------------------------------
+
+--- Export current markdown buffer to a self-contained HTML file via pandoc.
+--- Output goes next to the source file with .html extension.
+M.pandoc_export_html = function()
+	-- Check pandoc is available
+	if vim.fn.executable("pandoc") ~= 1 then
+		_parley.logger.error("pandoc not found. Install with: brew install pandoc")
+		return
+	end
+
+	local buf = vim.api.nvim_get_current_buf()
+	local file_path = vim.api.nvim_buf_get_name(buf)
+	if file_path == "" then
+		_parley.logger.error("Buffer has no file name — save it first")
+		return
+	end
+
+	-- Save buffer if modified
+	if vim.bo[buf].modified then
+		vim.cmd("silent! write")
+	end
+
+	local output_path = file_path:gsub("%.md$", ""):gsub("%.markdown$", "") .. ".html"
+
+	local cmd = {
+		"pandoc",
+		file_path,
+		"-s",
+		"--self-contained",
+		"-o",
+		output_path,
+	}
+
+	vim.fn.jobstart(cmd, {
+		on_exit = function(_, code)
+			vim.schedule(function()
+				if code == 0 then
+					vim.fn.setreg("+", output_path)
+					_parley.logger.info("Exported HTML (path copied): " .. output_path)
+					vim.fn.jobstart({ "open", "-R", output_path })
+				else
+					_parley.logger.error("pandoc failed (exit " .. code .. "). Try: pandoc " .. file_path .. " -s -o " .. output_path)
+				end
+			end)
+		end,
+	})
+end
+
 -- Pure functions (no _parley, no vim.fn, no IO — fully unit-testable)
 M._sanitize_title = sanitize_title
 M._extract_date = extract_date
