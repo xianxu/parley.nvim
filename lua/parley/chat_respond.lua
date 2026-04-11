@@ -994,8 +994,14 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             local tool_loop_check = require("parley.tool_loop")
             if parsed_chat.exchanges[exchange_idx].answer and tool_loop_check.get_iter(buf) == 0 then
                 local be = require("parley.buffer_edit")
+                local question = parsed_chat.exchanges[exchange_idx].question
                 local answer = parsed_chat.exchanges[exchange_idx].answer
-                be.replace_answer(buf, answer.line_start - 1, answer.line_end - 1)
+                -- Delete everything after the question content through the
+                -- answer end. This removes the old margin + answer, leaving
+                -- just the question. The model will add its own margins.
+                local del_start = question.line_end  -- 0-indexed: line after question content
+                local del_end = answer.line_end - 1  -- 0-indexed: last line of answer
+                be.delete_answer(buf, del_start, del_end)
                 -- Re-parse after deletion so build_messages sees clean state.
                 local new_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
                 local new_header_end = find_chat_header_end(new_lines) or 0
