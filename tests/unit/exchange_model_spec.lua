@@ -192,3 +192,131 @@ describe("exchange_model: from_parsed_chat", function()
         assert.equals(1, #m.exchanges[2].blocks)
     end)
 end)
+
+describe("exchange_model: from_parsed_chat with real parser", function()
+    local cp = require("parley.chat_parser")
+    local cfg = require("parley.config")
+
+    it("positions match buffer lines for simple Q+A", function()
+        local lines = {
+            "---", "topic: test", "file: t.md", "---",
+            "",
+            "💬: hello",
+            "",
+            "🤖:[Agent]",
+            "",
+            "Hi there!",
+            "",
+            "💬:",
+        }
+        local he = cp.find_header_end(lines)
+        local parsed = cp.parse_chat(lines, he, cfg)
+        local m = em.from_parsed_chat(parsed)
+
+        assert.equals(2, #m.exchanges)
+        -- Exchange 1: question + agent_header + text
+        assert.equals(3, #m.exchanges[1].blocks)
+        -- 0-indexed positions should match buffer (1-indexed - 1)
+        assert.equals("💬: hello", lines[m:block_start(1, 1) + 1])
+        assert.equals("🤖:[Agent]", lines[m:block_start(1, 2) + 1])
+        assert.equals("Hi there!", lines[m:block_start(1, 3) + 1])
+        -- Exchange 2: question only
+        assert.equals("💬:", lines[m:block_start(2, 1) + 1])
+    end)
+
+    it("positions match buffer lines with thinking + tool blocks", function()
+        local lines = {
+            "---", "topic: test", "file: t.md", "---",
+            "",
+            "💬: read file",
+            "",
+            "🤖:[Agent]",
+            "",
+            "🧠: thinking about it",
+            "",
+            "🔧: read_file id=toolu_01",
+            '```json',
+            '{"path":"./f.txt"}',
+            "```",
+            "",
+            "📎: read_file id=toolu_01",
+            "```",
+            "file content here",
+            "```",
+            "",
+            "The file says something.",
+            "",
+            "📝: summary line",
+            "",
+            "💬:",
+        }
+        local he = cp.find_header_end(lines)
+        local parsed = cp.parse_chat(lines, he, cfg)
+        local m = em.from_parsed_chat(parsed)
+
+        assert.equals(2, #m.exchanges)
+        -- Exchange 1: question + agent_header + text(thinking) + tool_use + tool_result + text(response+summary)
+        local blocks = m.exchanges[1].blocks
+        assert.equals(6, #blocks)
+        assert.equals("question", blocks[1].kind)
+        assert.equals("agent_header", blocks[2].kind)
+        assert.equals("text", blocks[3].kind)         -- thinking
+        assert.equals("tool_use", blocks[4].kind)
+        assert.equals("tool_result", blocks[5].kind)
+        assert.equals("text", blocks[6].kind)          -- response + summary
+
+        -- Positions match actual buffer content
+        assert.equals("💬: read file", lines[m:block_start(1, 1) + 1])
+        assert.equals("🤖:[Agent]", lines[m:block_start(1, 2) + 1])
+        assert.equals("🧠: thinking about it", lines[m:block_start(1, 3) + 1])
+        assert.equals("🔧: read_file id=toolu_01", lines[m:block_start(1, 4) + 1])
+        assert.equals("📎: read_file id=toolu_01", lines[m:block_start(1, 5) + 1])
+        assert.equals("The file says something.", lines[m:block_start(1, 6) + 1])
+    end)
+
+    it("parser trims trailing blanks from question", function()
+        local lines = {
+            "---", "topic: test", "file: t.md", "---",
+            "",
+            "💬: hello",
+            "",   -- trailing blank — parser should trim this from question
+            "🤖:[Agent]",
+            "",
+            "response",
+        }
+        local he = cp.find_header_end(lines)
+        local parsed = cp.parse_chat(lines, he, cfg)
+        local m = em.from_parsed_chat(parsed)
+
+        -- Question should be trimmed to size 1 (just the 💬: line)
+        assert.equals(1, m.exchanges[1].blocks[1].size)
+        -- With exactly 1 blank between components, model matches buffer
+        assert.equals("💬: hello", lines[m:block_start(1, 1) + 1])
+        assert.equals("🤖:[Agent]", lines[m:block_start(1, 2) + 1])
+    end)
+
+    it("parser trims trailing blanks from answer sections", function()
+        local lines = {
+            "---", "topic: test", "file: t.md", "---",
+            "",
+            "💬: q1",
+            "",
+            "🤖:[A]",
+            "",
+            "answer text",
+            "",
+            "💬: q2",
+        }
+        local he = cp.find_header_end(lines)
+        local parsed = cp.parse_chat(lines, he, cfg)
+        local m = em.from_parsed_chat(parsed)
+
+        assert.equals(2, #m.exchanges)
+        -- Answer text block should not include trailing blanks
+        local text_blk = m.exchanges[1].blocks[3]
+        assert.equals("text", text_blk.kind)
+        assert.equals(1, text_blk.size)  -- just "answer text"
+        -- Second question position matches buffer
+        assert.equals("💬: q2", lines[m:block_start(2, 1) + 1])
+    end)
+end)
