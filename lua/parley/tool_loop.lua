@@ -66,6 +66,82 @@ end
 -- Buffer append
 --------------------------------------------------------------------------------
 
+--- Write synthetic 📎: results for a list of tool_calls that won't be
+--- executed (iteration cap or cancellation). Each tool_use gets a 🔧:
+--- block AND a matching 📎: with the given reason, preserving the
+--- buffer-is-valid-transcript invariant.
+function M._write_synthetic_results(bufnr, tool_calls, model, exchange_idx, reason)
+    for _, call in ipairs(tool_calls) do
+        M._append_section_to_answer(bufnr, model, exchange_idx, {
+            kind = "tool_use",
+            id = call.id,
+            name = call.name,
+            input = call.input,
+        })
+        M._append_section_to_answer(bufnr, model, exchange_idx, {
+            kind = "tool_result",
+            id = call.id,
+            name = call.name,
+            content = reason,
+            is_error = true,
+        })
+    end
+end
+
+--- Repair unmatched 🔧: blocks in the buffer after cancellation.
+--- Scans the active exchange for tool_use blocks without a following
+--- tool_result and writes synthetic 📎: results for them.
+--- @param bufnr integer
+function M.repair_unmatched_tool_blocks(bufnr)
+    local chat_parser = require("parley.chat_parser")
+    local exchange_model_mod = require("parley.exchange_model")
+    local cfg = require("parley.config")
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    local header_end = chat_parser.find_header_end(lines) or 0
+    local parsed = chat_parser.parse_chat(lines, header_end, cfg)
+    local model = exchange_model_mod.from_parsed_chat(parsed)
+
+    -- Find the last exchange with an answer
+    local ex_idx = nil
+    for i = #model.exchanges, 1, -1 do
+        if #model.exchanges[i].blocks > 1 then
+            ex_idx = i
+            break
+        end
+    end
+    if not ex_idx then return end
+
+    -- Scan blocks: every tool_use must be followed by a tool_result
+    local blocks = model.exchanges[ex_idx].blocks
+    local sections = parsed.exchanges[ex_idx].answer and parsed.exchanges[ex_idx].answer.sections or {}
+    local serialize = require("parley.tools.serialize")
+    for i, blk in ipairs(blocks) do
+        if blk.kind == "tool_use" then
+            -- Check if next block is a tool_result
+            local next_blk = blocks[i + 1]
+            if not next_blk or next_blk.kind ~= "tool_result" then
+                -- Unmatched — read the tool_use to get id/name
+                local start_line = model:block_start(ex_idx, i)
+                local end_line = model:block_end(ex_idx, i)
+                local buf_lines = vim.api.nvim_buf_get_lines(bufnr, start_line, end_line + 1, false)
+                local text = table.concat(buf_lines, "\n")
+                local parsed_call = serialize.parse_call(text)
+                if parsed_call then
+                    M._append_section_to_answer(bufnr, model, ex_idx, {
+                        kind = "tool_result",
+                        id = parsed_call.id,
+                        name = parsed_call.name,
+                        content = "(cancelled by user)",
+                        is_error = true,
+                    })
+                end
+            end
+        end
+    end
+
+    M.reset(bufnr)
+end
+
 --- Append a section to the active exchange's answer using the exchange
 --- model for position computation. Inserts at model:answer_append_pos(),
 --- which is always INSIDE the active answer region — never past the
@@ -126,18 +202,6 @@ function M.process_response(bufnr, raw_response, agent_info, live_model, exchang
         return "done"
     end
 
-    -- Iteration cap guard. M2 ships with a hard single-recursion cap
-    -- enforced inside chat_respond; this check is defensive and M4
-    -- Task 4.1 is where the cap check becomes authoritative.
-    local max_iter = agent_info.max_tool_iterations or 20
-    if M.get_iter(bufnr) >= max_iter then
-        -- TODO(M4): synthesize a "(iteration limit reached)" 📎:
-        -- result here for the last unmatched 🔧: so the LLM sees
-        -- the cap explicitly on resubmit. For now, just stop.
-        M.reset(bufnr)
-        return "done"
-    end
-
     -- Use the live model from chat_respond if provided. Otherwise
     -- fall back to rebuilding from the buffer (backward compat for
     -- callers that don't pass a model).
@@ -161,6 +225,15 @@ function M.process_response(bufnr, raw_response, agent_info, live_model, exchang
         end
     end
     if not active_exchange_idx then
+        M.reset(bufnr)
+        return "done"
+    end
+
+    -- Iteration cap check (after model setup so we can write synthetic results).
+    local max_iter = agent_info.max_tool_iterations or 20
+    if M.get_iter(bufnr) >= max_iter then
+        M._write_synthetic_results(bufnr, tool_calls, model, active_exchange_idx,
+            "(iteration limit reached — max " .. max_iter .. " rounds)")
         M.reset(bufnr)
         return "done"
     end

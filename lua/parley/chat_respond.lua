@@ -272,6 +272,18 @@ M.cmd_stop = function(signal)
     end
 
     _parley.tasker.stop(signal)
+
+    -- After stopping, repair any unmatched 🔧: blocks in the buffer.
+    -- A cancelled tool loop may have written 🔧: without matching 📎:.
+    -- The repair writes synthetic 📎: (cancelled by user) results to
+    -- keep the buffer valid for resubmit.
+    vim.schedule(function()
+        local buf = vim.api.nvim_get_current_buf()
+        local ok, tool_loop = pcall(require, "parley.tool_loop")
+        if ok then
+            tool_loop.repair_unmatched_tool_blocks(buf)
+        end
+    end)
 end
 
 --------------------------------------------------------------------------------
