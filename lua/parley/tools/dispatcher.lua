@@ -80,7 +80,7 @@ function M.resolve_path_in_cwd(path, cwd)
     -- A path is inside cwd iff it equals cwd OR starts with cwd + "/".
     -- String comparison is safe because both sides are canonical
     -- absolute paths produced by fs_realpath.
-    if real_path ~= real_cwd and not (real_path:sub(1, #real_cwd + 1) == real_cwd .. "/") then
+    if real_path ~= real_cwd and real_path:sub(1, #real_cwd + 1) ~= real_cwd .. "/" then
         return nil, "path outside working directory: " .. path
     end
 

@@ -387,7 +387,7 @@ M.project_projections = function(items, quarter)
     if not range_start then return {} end
 
     -- Validate to get adjacency
-    local errors, all_ids, adj = M.validate_graph(items)
+    local errors, _, adj = M.validate_graph(items)
     if #errors > 0 then return {} end
 
     -- Build lookup
@@ -806,23 +806,21 @@ M.validate_graph = function(initiatives)
     local all_ids = {}
     local id_set = {}
     for _, item in ipairs(initiatives) do
-        if item.person then
-            -- Person entry — validate separately below
-        elseif item.setting then
-            -- Setting entry — no validation needed
-        elseif not item.project or item.project == "" then
-            add_error(string.format(
-                "item at line %d in %s is not a project, person, or setting",
-                item._line or 0, item._namespace or "?"), item)
-        else
-            local fid = M.full_id(item._namespace or "", item.project)
-            if id_set[fid] then
+        if not item.person and not item.setting then
+            if not item.project or item.project == "" then
                 add_error(string.format(
-                    'duplicate ID "%s" (from "%s" in %s)',
-                    fid, item.project, item._namespace or "?"), item)
+                    "item at line %d in %s is not a project, person, or setting",
+                    item._line or 0, item._namespace or "?"), item)
             else
-                table.insert(all_ids, fid)
-                id_set[fid] = true
+                local fid = M.full_id(item._namespace or "", item.project)
+                if id_set[fid] then
+                    add_error(string.format(
+                        'duplicate ID "%s" (from "%s" in %s)',
+                        fid, item.project, item._namespace or "?"), item)
+                else
+                    table.insert(all_ids, fid)
+                    id_set[fid] = true
+                end
             end
         end
     end
@@ -1934,9 +1932,6 @@ end
 completion_sources.depends_on = function(current_ns, partial)
     local items = load_all()
     if not items then return {} end
-
-    -- Check if user has typed the local namespace prefix
-    local local_prefixed = partial and partial:match("^" .. current_ns .. ":%s*")
 
     -- Detect if user has typed a namespace prefix
     local typed_ns = partial and partial:match("^(%w+):%s*")

@@ -369,7 +369,7 @@ M._scan_note_files = scan_note_files
 -- Main NoteFinder open function (was M.cmd.NoteFinder body)
 --------------------------------------------------------------------------------
 
-M.open = function(options) -- luacheck: ignore options
+M.open = function(options)
 	if _parley._note_finder.opened then
 		_parley.logger.warning("Note finder is already open")
 		return
@@ -388,7 +388,7 @@ M.open = function(options) -- luacheck: ignore options
 		_parley.logger.debug("NoteFinder: waiting for prewarm to finish")
 		_parley._note_finder.opened = false
 		table.insert(_prewarm_callbacks, function()
-			M.open(_options)
+			M.open(options)
 		end)
 		return
 	end

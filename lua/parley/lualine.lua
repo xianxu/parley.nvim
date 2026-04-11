@@ -171,12 +171,7 @@ M.create_component = function(parley_instance)
       local agent_name = parley._state.agent or ""
       -- Check if a response is being generated (using cached state)
       local is_busy = check_is_busy(buf)
-      -- Get provider info and check if it's Anthropic/Claude
-      local agent_info = nil
-      if parley.get_agent_info then
-        -- Get agent info with empty headers since we don't have any here
-        agent_info = parley.get_agent_info({}, parley.get_agent(agent_name))
-      end
+      -- Provider info is fetched on demand below (current_agent_info).
       local prov = require("parley.providers")
       -- Combined [🔧🌎]-style indicator group for tool-enabled agents and
       -- web search (M1 Task 1.7 of #81). Reuse the highlighter helpers so

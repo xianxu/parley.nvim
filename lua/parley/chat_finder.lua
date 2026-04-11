@@ -537,7 +537,7 @@ M._scan_chat_files = scan_chat_files
 -- Main ChatFinder open function (was M.cmd.ChatFinder body)
 --------------------------------------------------------------------------------
 
-M.open = function(options) -- luacheck: ignore options
+M.open = function(options)
 	if _parley._chat_finder.opened then
 		_parley.logger.warning("Chat finder is already open")
 		return
@@ -560,7 +560,7 @@ M.open = function(options) -- luacheck: ignore options
 		_parley.logger.debug("ChatFinder: waiting for prewarm to finish")
 		_parley._chat_finder.opened = false
 		table.insert(_prewarm_callbacks, function()
-			M.open(_options)
+			M.open(options)
 		end)
 		return
 	end

@@ -1263,14 +1263,6 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
         -- correct because any prior inserts (fence, etc.) updated the
         -- model via grow_question.
         local response_start_line = model:block_start(target_idx, stream_block_idx)
-        -- progress_line: if spinner is active, it's the spinner block's position.
-        local progress_line
-        if spinner_active and spinner_block_idx then
-            progress_line = model:block_start(target_idx, spinner_block_idx)
-        else
-            progress_line = response_start_line
-        end
-
         local function set_progress_indicator_line(text)
             if not spinner_active or not spinner_block_idx then
                 return
