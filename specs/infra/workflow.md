@@ -1,25 +1,86 @@
 # AI Workflow
 
-## Issue-Based Development
-Work tracked via single-file-per-issue markdown in `issues/`. Two modes:
-- **On main**: `make fetch` -> work -> `make push` (auto-commit, close GH issues, archive)
-- **On branch**: `make issue` -> work in worktree -> `make pull-request` -> `make merge`
+## Overview
+Issue-driven development workflow for AI coding agents. Work is tracked in single-file-per-issue markdown files under `issues/`, with completed work archived to `history/`. Two operational modes: direct-on-main for small changes, worktree-based branches for larger work.
 
-Completed issues moved to `history/` (low-signal, avoid in agent workflows). Worktrees under `../worktree/` for portability between local and openshell.
+## Issue File Format
+Each issue is a markdown file at `issues/NNNNNN-slug.md` with YAML frontmatter:
+
+```yaml
+---
+id: "000042"
+status: open        # open | done
+deps: []
+github_issue: 42    # optional, links to GitHub issue
+created: 2026-03-01
+updated: 2026-03-01
+---
+```
+
+Standard sections: `# Title`, `## Done when`, `## Plan` (checkable items, steps to follow), `## Log` (dated entries), `##Spec` (specification of what to change). For complex issues, detailed designs go in `docs/plans/NNNNNN-slug-plan.md`.
+
+## Two Workflows
+
+### Direct-on-Main (small changes)
+1. `make fetch 42` — fetches GitHub issue #42, creates `issues/NNNNNN-slug.md`
+2. Work directly on main branch
+3. `make push` — auto-commits, runs pre-merge checks, pushes, closes done GitHub issues, archives done issue files to `history/`
+
+### Worktree Branch (larger changes)
+1. `make issue 42` — fetches GitHub issue, creates worktree at `../worktree/<repo>-42/` on branch `<repo>-42`, creates issue file inside worktree
+2. Work in the worktree directory
+3. `make pull-request` — pushes branch, creates GitHub PR (auto-discovers `github_issue` frontmatter for "Fixes #N" linking)
+4. `make merge` — merges PR via GitHub API, archives done issues in main, removes worktree and branch
+
+Worktrees live under `../worktree/` (portable between local and OpenShell sandbox).
 
 ## Pre-Merge Checks
-Agent-driven verification before `push` and `merge`. Each check invokes a coding agent with a focused prompt, then detects repo changes for user accept/discard.
+Agent-driven verification runs before `push` and `merge`. Six checks, each invoking a coding agent (default: `claude`, configurable via `AGENT_CMD`) with a focused review prompt:
 
-| Target | Purpose |
-|--------|---------|
-| `check-dry` | DRY violations in diff |
-| `check-pure` | Pure/impure separation |
-| `check-plan` | Issue plans complete |
-| `check-test` | Tests + lint pass |
-| `check-specs` | Specs match code |
-| `check-lessons` | Lessons review reminder |
+| Check | What it does | Agent mode |
+|-------|-------------|------------|
+| `dry` | DRY violations in diff | read-only |
+| `pure` | Pure/impure separation | read-only |
+| `plan` | Issue plan completeness (skipped if no issue files changed) | read-only |
+| `test` | Runs `make test` + `make test-agents` + `make lint`, then agent analyzes results | read-only |
+| `specs` | Checks specs/ docs match code changes | **read-write** (may update docs) |
+| `lessons` | Reminder to review `tasks/lessons.md` | no agent |
 
-Supports interactive (sequential accept/discard) and audit mode (parallel, report-only). Defaults to `codex`; override with `AGENT_CMD` (`claude`, `codex`, or `gemini`).
+### Execution Modes
+- **Interactive** (`make check` or `make pre-merge`): sequential, prompts accept/discard for each check that modifies files
+- **Audit** (`scripts/parallel-checks.sh --audit` or `make c`): all checks run in parallel (concurrency limit `MAX_PARALLEL_CHECKS`, default 3), report-only, updates state file
+- **Single check**: `make check-dry`, `make check-specs`, etc.
+- **Preset selection**: `PRE_MERGE_CHECKS=yynnyn make pre-merge` (y/n per check in order: dry, pure, plan, test, specs, lessons)
+
+Agent adapters exist for `claude`, `codex`, and `gemini`. Claude uses `--permission-mode bypassPermissions` with stream-json progress output.
 
 ## Constitution Hook
-`PostToolUse` hooks on `Write`/`Edit` trigger constitution checks during coding sessions. Three-tier gate based on diff size: **none** (below threshold), **nag** (reminder to run audit), **force** (runs checks immediately). Gate state is stored in repo-root `.constitution-check-state` and resets when merge base advances. Hook output uses the `additionalContext` JSON field so the active coding agent receives the reminder or forced-check result without surfacing it as a user-visible system message.
+A `PostToolUse` hook on `Write`/`Edit` events triggers constitution checks during coding sessions. Three-tier gate based on diff size since the merge base:
+
+| Tier | Trigger | Behavior |
+|------|---------|----------|
+| **none** | Below threshold (300 lines / 5 files) | Silent, no action |
+| **nag** | Above threshold | Sends `additionalContext` reminder to the agent |
+| **force** | Above 3× nag threshold | Runs all checks immediately, blocks agent until violations are fixed |
+
+Thresholds are relative: after a check runs, the state file (`.constitution-check-state`) records the current diff size, and the next threshold is +50% growth from that point. State resets when the merge base SHA changes (new commits on main).
+
+The hook uses `additionalContext` in its JSON response so reminders reach the coding agent without appearing as user-visible messages. A filesystem lock (`mkdir`-based, cross-platform) prevents concurrent hook invocations.
+
+## Artifact Lifecycle
+```
+GitHub Issue → make fetch/issue → issues/NNNNNN-slug.md
+                                  docs/plans/NNNNNN-slug-plan.md (complex only)
+                                  specs/*.md (updated incrementally)
+              work...
+              make push/merge  → history/NNNNNN-slug.md (archived)
+                                 GitHub issue closed
+```
+
+## AGENTS.md Integration
+The workflow enforces the AGENTS.md constitution:
+- **Plan First**: issue file's `## Plan` section with checkable items
+- **Track Progress**: mark items complete, log discoveries in `## Log`
+- **Verify**: pre-merge checks enforce DRY, PURE, test passing, spec sync
+- **Lessons**: `tasks/lessons.md` captures patterns from mistakes
+- **Post-milestone review**: mandatory code review subagent at milestone boundaries
