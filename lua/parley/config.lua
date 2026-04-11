@@ -173,7 +173,7 @@ local config = {
 			name = "ClaudeAgentTools",
 			model = { model = "claude-sonnet-4-6", temperature = 0.8 },
 			system_prompt = require("parley.defaults").chat_system_prompt,
-			tools = { "read_file", "list_dir", "grep", "glob", "edit_file", "write_file" },
+			tools = { "read_file", "ls", "find", "grep", "edit_file", "write_file" },
 			-- Optional: defaults applied at setup time when absent
 			-- max_tool_iterations = 20,
 			-- tool_result_max_bytes = 102400,

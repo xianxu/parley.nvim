@@ -25,9 +25,9 @@ local types = require("parley.tools.types")
 
 local EXPECTED_BUILTINS = {
     "read_file",
-    "list_dir",
+    "ls",
+    "find",
     "grep",
-    "glob",
     "edit_file",
     "write_file",
 }
@@ -37,13 +37,13 @@ describe("register_builtins", function()
         registry.reset()
     end)
 
-    it("registers all six expected builtin names", function()
+    it("registers all expected builtin names", function()
         registry.register_builtins()
-        local names = registry.list_names()
-        table.sort(names)
-        local expected = vim.deepcopy(EXPECTED_BUILTINS)
-        table.sort(expected)
-        assert.same(expected, names)
+        local names_set = {}
+        for _, n in ipairs(registry.list_names()) do names_set[n] = true end
+        for _, expected in ipairs(EXPECTED_BUILTINS) do
+            assert.is_true(names_set[expected], "missing builtin: " .. expected)
+        end
     end)
 
     it("each builtin passes types.validate_definition", function()
@@ -93,9 +93,10 @@ describe("register_builtins", function()
 
     it("is idempotent — calling register_builtins twice does not error", function()
         registry.register_builtins()
+        local count1 = #registry.list_names()
         registry.register_builtins()
-        local names = registry.list_names()
-        assert.equals(6, #names)
+        local count2 = #registry.list_names()
+        assert.equals(count1, count2)
     end)
 
     it("write-type builtins declare kind = 'write'", function()
@@ -118,7 +119,7 @@ describe("register_builtins", function()
 
     it("read-type builtins declare kind = 'read' (or nil defaulting to read)", function()
         registry.register_builtins()
-        for _, name in ipairs({ "read_file", "list_dir", "grep", "glob" }) do
+        for _, name in ipairs({ "read_file", "ls", "find", "grep" }) do
             local kind = registry.get(name).kind
             assert.is_true(kind == "read" or kind == nil,
                 name .. " expected kind 'read' or nil, got " .. tostring(kind))

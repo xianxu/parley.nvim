@@ -76,21 +76,32 @@ end
 --- this list AND creating the corresponding file under builtin/.
 M.BUILTIN_NAMES = {
     "read_file",
-    "list_dir",
+    "ls",
+    "find",
     "grep",
-    "glob",
     "edit_file",
     "write_file",
 }
 
---- Register all six builtin tools. Called from `parley.setup()`. Calls
---- `reset()` first so repeated `setup()` invocations (common during
---- development and in tests) do not accumulate stale definitions or
---- leak state across sessions. Idempotent.
+--- Optional tools that are only registered if the underlying command
+--- is available on the system.
+M.OPTIONAL_NAMES = {
+    "ack",
+}
+
+--- Register all builtin tools + any optional tools whose commands are
+--- available. Called from `parley.setup()`. Calls `reset()` first so
+--- repeated `setup()` invocations do not accumulate stale definitions.
 function M.register_builtins()
     M.reset()
     for _, name in ipairs(M.BUILTIN_NAMES) do
         M.register(require("parley.tools.builtin." .. name))
+    end
+    for _, name in ipairs(M.OPTIONAL_NAMES) do
+        local def = require("parley.tools.builtin." .. name)
+        if def.available ~= false then
+            M.register(def)
+        end
     end
 end
 

@@ -155,19 +155,22 @@ function M.execute_call(call, tools_registry, opts)
     -- the dispatcher does not need to know about vim.fn.getcwd() from
     -- pure test contexts. When absent, the check is skipped (caller
     -- accepts responsibility).
-    if opts.cwd and call.input and type(call.input.path) == "string" then
-        local abs, scope_err = M.resolve_path_in_cwd(call.input.path, opts.cwd)
-        if not abs then
-            return {
-                id = call.id,
-                name = call.name,
-                content = scope_err,
-                is_error = true,
-            }
+    -- Resolve path fields: tools may use `path` or `file_path`.
+    -- Check both so the cwd-scope guard applies uniformly.
+    local path_fields = { "path", "file_path" }
+    for _, field in ipairs(path_fields) do
+        if opts.cwd and call.input and type(call.input[field]) == "string" then
+            local abs, scope_err = M.resolve_path_in_cwd(call.input[field], opts.cwd)
+            if not abs then
+                return {
+                    id = call.id,
+                    name = call.name,
+                    content = scope_err,
+                    is_error = true,
+                }
+            end
+            call.input[field] = abs
         end
-        -- Mutate the input in place so the handler sees the canonical
-        -- absolute path and does not need to repeat the resolution.
-        call.input.path = abs
     end
 
     -- HANDLER invocation, pcall-guarded. A raising handler becomes an

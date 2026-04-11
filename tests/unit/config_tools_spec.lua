@@ -133,7 +133,7 @@ end)
 describe("default ClaudeAgentTools", function()
     before_each(function() fresh_setup(nil) end)
 
-    it("ships in the default config with all six builtin tools", function()
+    it("ships in the default config with all builtin tools", function()
         local agent = parley.agents["ClaudeAgentTools"]
         assert.is_not_nil(agent, "ClaudeAgentTools should ship as a default agent")
         assert.equals("anthropic", agent.provider)
@@ -142,9 +142,9 @@ describe("default ClaudeAgentTools", function()
         local names = {}
         for _, n in ipairs(agent.tools) do names[n] = true end
         assert.is_true(names.read_file)
-        assert.is_true(names.list_dir)
+        assert.is_true(names.ls)
+        assert.is_true(names.find)
         assert.is_true(names.grep)
-        assert.is_true(names.glob)
         assert.is_true(names.edit_file)
         assert.is_true(names.write_file)
     end)
@@ -205,13 +205,13 @@ describe("get_agent forwards client-side tool config (full wiring chain)", funct
     -- snapshot in get_agent, dropped field in get_agent_info, missing
     -- 4th arg in chat_respond, append-not-clobber regression in
     -- prepare_payload) would be caught here.
-    it("full wiring chain: ClaudeAgentTools request payload contains 6 client-side tools", function()
+    it("full wiring chain: ClaudeAgentTools request payload contains 7 client-side tools", function()
         local dispatcher = require("parley.dispatcher")
         local agent = parley.get_agent("ClaudeAgentTools")
         local info = parley.get_agent_info({}, agent)
         local msgs = { { role = "user", content = "hi" } }
 
-        -- Disable web_search to isolate the 6 client-side tools in the output
+        -- Disable web_search to isolate client-side tools in the output
         parley._state = parley._state or {}
         parley._state.web_search = false
 
@@ -222,9 +222,9 @@ describe("get_agent forwards client-side tool config (full wiring chain)", funct
         local names = {}
         for _, t in ipairs(payload.tools) do names[t.name] = true end
         assert.is_true(names.read_file)
-        assert.is_true(names.list_dir)
+        assert.is_true(names.ls)
+        assert.is_true(names.find)
         assert.is_true(names.grep)
-        assert.is_true(names.glob)
         assert.is_true(names.edit_file)
         assert.is_true(names.write_file)
     end)
@@ -233,7 +233,7 @@ describe("get_agent forwards client-side tool config (full wiring chain)", funct
     -- the append-not-clobber invariant holds when driven through the
     -- real agent/info objects (not just a hand-crafted agent_tools
     -- argument like dispatcher_spec.lua does).
-    it("full wiring chain + web_search: 6 client tools APPEND to web_search/web_fetch", function()
+    it("full wiring chain + web_search: 7 client tools APPEND to web_search/web_fetch", function()
         local dispatcher = require("parley.dispatcher")
         local agent = parley.get_agent("ClaudeAgentTools")
         local info = parley.get_agent_info({}, agent)

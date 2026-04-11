@@ -1,51 +1,41 @@
 -- `read_file` — read a file from the working directory.
 --
--- Real implementation landed in M2 Task 2.2 of issue #81.
---
 -- PURE: no filesystem I/O beyond the target file, no vim state, no
 -- caching. Returns a partial ToolResult without `id` — the
--- dispatcher (landing in Task 2.3) stamps id and name before the
--- result is serialized or validated. See lua/parley/tools/types.lua
--- ToolResult contract note.
+-- dispatcher stamps id and name before the result is serialized.
 --
--- Safety concerns NOT handled here (dispatcher handles them):
---   - cwd-scope check on the resolved path
---   - symlink resolution via vim.loop.fs_realpath
---   - truncation at tool_result_max_bytes
---
--- Content format: each line prefixed with a right-aligned 5-column
--- line number and two spaces, e.g. "    1  first line". This mirrors
--- common tool-output conventions (ripgrep, Claude Code's Read tool)
--- and makes it easy for the LLM to reference specific lines.
+-- Parameter names match Claude Code conventions (file_path, offset,
+-- limit) so Claude uses them naturally.
 
 return {
     name = "read_file",
     kind = "read",
-    description = "Read a file from the working directory and return its contents with line numbers (1-indexed). Optional line_start and line_end select a subrange.",
+    description = "Read a file and return its contents with line numbers. Use offset to start from a specific line, limit to cap the number of lines returned (default: all lines).",
     input_schema = {
         type = "object",
         properties = {
-            path = {
+            file_path = {
                 type = "string",
-                description = "Relative or absolute path to the file. Must be inside the working directory.",
+                description = "Path to the file. Relative to the working directory or absolute.",
             },
-            line_start = {
+            offset = {
                 type = "integer",
-                description = "Optional starting line number (1-indexed, inclusive).",
+                description = "Line number to start reading from (1-indexed). Default: 1.",
             },
-            line_end = {
+            limit = {
                 type = "integer",
-                description = "Optional ending line number (inclusive).",
+                description = "Maximum number of lines to return. Default: no limit.",
             },
         },
-        required = { "path" },
+        required = { "file_path" },
     },
     handler = function(input)
         input = input or {}
-        local path = input.path
+        -- Accept both file_path (Claude Code convention) and path (legacy)
+        local path = input.file_path or input.path
         if type(path) ~= "string" or path == "" then
             return {
-                content = "missing or invalid required field: path",
+                content = "missing or invalid required field: file_path",
                 is_error = true,
                 name = "read_file",
             }
@@ -60,17 +50,19 @@ return {
             }
         end
 
-        local line_start = input.line_start -- may be nil (no lower bound)
-        local line_end = input.line_end     -- may be nil (no upper bound)
+        -- Accept both offset/limit (Claude Code) and line_start/line_end (legacy)
+        local start_line = input.offset or input.line_start or 1
+        local max_lines = input.limit  -- nil = no limit
+        if not max_lines and input.line_end then
+            max_lines = input.line_end - start_line + 1
+        end
 
         local out = {}
         local n = 0
         for line in f:lines() do
             n = n + 1
-            -- Short-circuit past line_end to avoid walking the rest of
-            -- a large file.
-            if line_end and n > line_end then break end
-            if not line_start or n >= line_start then
+            if max_lines and #out >= max_lines then break end
+            if n >= start_line then
                 table.insert(out, string.format("%5d  %s", n, line))
             end
         end
