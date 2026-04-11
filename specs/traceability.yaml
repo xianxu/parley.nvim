@@ -44,7 +44,22 @@ specs:
       - lua/parley/helper.lua
     tests:
       - tests/unit/parse_chat_spec.lua
+      - tests/unit/chat_parser_section_lines_spec.lua
+      - tests/unit/chat_parser_tools_spec.lua
       - tests/unit/chat_finder_logic_spec.lua
+
+  chat/exchange_model:
+    code:
+      - lua/parley/exchange_model.lua
+      - lua/parley/buffer_edit.lua
+      - lua/parley/render_buffer.lua
+      - lua/parley/tool_folds.lua
+    tests:
+      - tests/unit/exchange_model_spec.lua
+      - tests/unit/buffer_edit_spec.lua
+      - tests/unit/render_buffer_spec.lua
+      - tests/unit/render_buffer_roundtrip_spec.lua
+      - tests/arch/buffer_mutation_spec.lua
 
   chat/inline_branch_links:
     code:
@@ -238,6 +253,37 @@ specs:
       - tests/unit/dispatcher_query_spec.lua
       - tests/unit/sse_parsing_spec.lua
       - tests/unit/build_messages_spec.lua
+
+  providers/tool_use:
+    code:
+      - lua/parley/tool_loop.lua
+      - lua/parley/tools/init.lua
+      - lua/parley/tools/dispatcher.lua
+      - lua/parley/tools/serialize.lua
+      - lua/parley/tools/types.lua
+      - lua/parley/tools/builtin/read_file.lua
+      - lua/parley/tools/builtin/ls.lua
+      - lua/parley/tools/builtin/find.lua
+      - lua/parley/tools/builtin/grep.lua
+      - lua/parley/tools/builtin/ack.lua
+      - lua/parley/tools/builtin/edit_file.lua
+      - lua/parley/tools/builtin/write_file.lua
+      - lua/parley/chat_respond.lua
+    tests:
+      - tests/unit/tool_loop_spec.lua
+      - tests/unit/tools_registry_spec.lua
+      - tests/unit/tools_dispatcher_spec.lua
+      - tests/unit/tools_serialize_spec.lua
+      - tests/unit/tools_types_spec.lua
+      - tests/unit/tools_builtin_read_file_spec.lua
+      - tests/unit/tools_builtin_registered_spec.lua
+      - tests/unit/tools_builtin_glob_spec.lua
+      - tests/unit/tools_builtin_list_dir_spec.lua
+      - tests/unit/tools_builtin_grep_spec.lua
+      - tests/unit/anthropic_tool_decode_spec.lua
+      - tests/unit/anthropic_tool_encode_spec.lua
+      - tests/unit/config_tools_spec.lua
+      - tests/unit/parley_harness_golden_spec.lua
 
   providers/system_prompts:
     code:
