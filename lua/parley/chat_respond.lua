@@ -1116,12 +1116,8 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
         local progress_detail_key = nil
         local spinner_frame_index = 1
         local spinner_timer = nil
-        -- Skip spinner for tool-use agents and recursion — tool rounds
-        -- are fast and the spinner's line management is unnecessary.
-        local spinner_active = _parley._state.web_search
-            and (not (agent_info.tools and #agent_info.tools > 0))
-            and (not is_recursion)
-            and true or false
+        -- Spinner shows on every API call to Claude (initial and recursive).
+        local spinner_active = _parley._state.web_search and true or false
         local spinner_running = false
         local initial_progress_text = ""
         if spinner_active then
@@ -1276,7 +1272,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
         end
 
         local function set_progress_indicator_line(text)
-            if not spinner_active then
+            if not spinner_active or not spinner_block_idx then
                 return
             end
             if vim.in_fast_event() then
@@ -1288,11 +1284,14 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             if not vim.api.nvim_buf_is_valid(buf) then
                 return
             end
-            local existing = vim.api.nvim_buf_get_lines(buf, progress_line, progress_line + 1, false)[1]
+            -- Recompute position from the model (streaming may have
+            -- shifted it via grow_block).
+            local pos = model:block_start(target_idx, spinner_block_idx)
+            local existing = vim.api.nvim_buf_get_lines(buf, pos, pos + 1, false)[1]
             if existing == nil then
                 return
             end
-            require("parley.buffer_edit").replace_line_at(buf, progress_line, text)
+            require("parley.buffer_edit").replace_line_at(buf, pos, text)
         end
 
         local function render_spinner_line()

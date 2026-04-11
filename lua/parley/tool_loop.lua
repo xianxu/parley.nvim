@@ -273,6 +273,12 @@ function M.process_response(bufnr, raw_response, agent_info, live_model, exchang
     end
 
     M.increment_iter(bufnr)
+
+    -- Auto-close tool folds so the buffer stays compact
+    pcall(function()
+        require("parley.tool_folds").close_tool_folds(bufnr)
+    end)
+
     return "recurse"
 end
 

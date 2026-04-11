@@ -204,7 +204,7 @@ local function compute_chat_highlights(buf, start_line, end_line)
             pos = tag_end + 1
         end
 
-        if line:match(patterns.reasoning_pattern) or line:match(patterns.summary_pattern) then
+        if line:match(patterns.reasoning_pattern) or line:match(patterns.summary_pattern) or line:match("^👂:") then
             table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
         elseif line:match("^🔧:") or line:match("^📎:") then
             -- Tool block headers — dim (plumbing, not prose)
