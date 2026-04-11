@@ -987,6 +987,27 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
         -- Get agent info early — needed by build_messages_from_model
         local agent_info = _parley.get_agent_info(headers, agent)
 
+        -- Handle resubmit BEFORE building messages: if cursor is on a
+        -- question/answer with an existing answer (and not mid-tool-loop),
+        -- delete the old answer so build_messages sees the clean state.
+        if not live_model and exchange_idx and (component == "question" or component == "answer") then
+            local tool_loop_check = require("parley.tool_loop")
+            if parsed_chat.exchanges[exchange_idx].answer and tool_loop_check.get_iter(buf) == 0 then
+                local be = require("parley.buffer_edit")
+                local answer = parsed_chat.exchanges[exchange_idx].answer
+                be.replace_answer(buf, answer.line_start - 1, answer.line_end - 1)
+                -- Re-parse after deletion so build_messages sees clean state.
+                local new_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+                local new_header_end = find_chat_header_end(new_lines) or 0
+                parsed_chat = _parley.parse_chat(new_lines, new_header_end)
+                -- Re-determine exchange_idx after re-parse.
+                local cursor_pos = vim.api.nvim_win_get_cursor(0)
+                exchange_idx, component = _parley.find_exchange_at_line(parsed_chat, cursor_pos[1])
+                start_index = new_header_end + 1
+                end_index = #new_lines
+            end
+        end
+
         -- Build messages: use the live model when available (recursive
         -- tool-loop call), otherwise parse-based build (initial call).
         local messages
@@ -1053,24 +1074,6 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
         local target_idx = live_target_idx
         if not model then
             model = exchange_model.from_parsed_chat(parsed_chat)
-
-            -- Handle resubmit: if cursor is on a question/answer with an
-            -- existing answer (and we're not mid-tool-loop), delete the old
-            -- answer so we can regenerate it.
-            if exchange_idx and (component == "question" or component == "answer") then
-                if parsed_chat.exchanges[exchange_idx].answer and not is_recursion then
-                    local answer = parsed_chat.exchanges[exchange_idx].answer
-                    buffer_edit.replace_answer(buf, answer.line_start - 1, answer.line_end - 1)
-                    -- Re-parse after deletion to rebuild the model.
-                    local new_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-                    local new_header_end = find_chat_header_end(new_lines) or 0
-                    parsed_chat = _parley.parse_chat(new_lines, new_header_end)
-                    model = exchange_model.from_parsed_chat(parsed_chat)
-                end
-            end
-
-            -- Target exchange: cursor-based when on a question/answer,
-            -- otherwise the last exchange in the buffer.
             target_idx = exchange_idx or #model.exchanges
         end
 
@@ -1183,6 +1186,17 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
         -- payload. Vanilla agents have agent_info.tools = nil and stay
         -- byte-identical to pre-#81 behavior.
         local final_payload = raw_payload or _parley.dispatcher.prepare_payload(messages, agent_info.model, agent_info.provider, agent_info.tools)
+
+        -- Debug: dump messages for inspection (temporary).
+        pcall(function()
+            local debug_dir = "/tmp/claude/parley-debug"
+            vim.fn.mkdir(debug_dir, "p")
+            local stamp = os.date("%H%M%S") .. "." .. (is_recursion and "recurse" or "initial")
+            local f = io.open(debug_dir .. "/" .. stamp .. ".messages.json", "w")
+            if f then f:write(vim.json.encode(messages)); f:close() end
+            local f2 = io.open(debug_dir .. "/" .. stamp .. ".payload.json", "w")
+            if f2 then f2:write(vim.json.encode(final_payload)); f2:close() end
+        end)
 
         -- In raw request mode, insert the request payload after the question, before the agent response
         -- Skip if the question already contains a typed request fence (raw_payload was parsed from it)

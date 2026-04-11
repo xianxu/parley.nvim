@@ -625,6 +625,9 @@ M.parse_chat = function(lines, header_end, config)
 				line = i,
 				content = line:sub(#summary_prefix + 1):gsub("^%s*(.-)%s*$", "%1")
 			}
+			-- Also feed into content_blocks so the model tracks it.
+			table.insert(content_parts, line)
+			cb_append_line(line, i)
 
 		-- Check for reasoning line
 		elseif current_component == "answer" and line:sub(1, #reasoning_prefix) == reasoning_prefix then
@@ -632,6 +635,10 @@ M.parse_chat = function(lines, header_end, config)
 				line = i,
 				content = line:sub(#reasoning_prefix + 1):gsub("^%s*(.-)%s*$", "%1")
 			}
+			-- Also feed into content_blocks so the model tracks it as
+			-- part of the text section (🧠: is just text content).
+			table.insert(content_parts, line)
+			cb_append_line(line, i)
 
 		-- Handle content continuation, ignore lines if we are in local_prefix section, aka line_before_local is set
 		--   note, in this mode, both plain text and file reference pattern @@ are ignored.
