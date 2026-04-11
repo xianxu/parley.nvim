@@ -348,11 +348,17 @@ M.build_messages_from_model = function(buf, model, target_idx, agent_info)
                 local text = read_block_text(k, b)
                 local parsed = serialize.parse_call(text)
                 if parsed then
+                    -- Ensure input is a dict (not array). Empty Lua table
+                    -- {} encodes as JSON []; Anthropic requires {}.
+                    local input = parsed.input
+                    if not input or not next(input) then
+                        input = vim.empty_dict()
+                    end
                     table.insert(assistant_content, {
                         type = "tool_use",
                         id = parsed.id,
                         name = parsed.name,
-                        input = parsed.input or {},
+                        input = input,
                     })
                 end
 

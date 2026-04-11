@@ -37,24 +37,29 @@ return {
             return { content = "missing or invalid required field: content", is_error = true, name = "write_file" }
         end
 
-        -- Backup: save prior contents if file exists and no backup yet
-        local backup_path = path .. ".parley-backup"
+        -- Backup: save prior contents before every write.
+        -- Numbered backups: .parley-backup.1, .parley-backup.2, etc.
         local existing = io.open(path, "r")
         if existing then
-            local backup_exists = io.open(backup_path, "r")
-            if backup_exists then
-                backup_exists:close()
-            else
-                -- First write — capture pre-image
-                local prior = existing:read("*a")
-                existing:close()
-                local bf = io.open(backup_path, "w")
-                if bf then
-                    bf:write(prior)
-                    bf:close()
+            local prior = existing:read("*a")
+            existing:close()
+            -- Find next available backup number
+            local n = 1
+            while true do
+                local bp = path .. ".parley-backup." .. n
+                local f_check = io.open(bp, "r")
+                if f_check then
+                    f_check:close()
+                    n = n + 1
+                else
+                    break
                 end
             end
-            if existing then existing:close() end
+            local bf = io.open(path .. ".parley-backup." .. n, "w")
+            if bf then
+                bf:write(prior)
+                bf:close()
+            end
         end
 
         -- Ensure parent directory exists
