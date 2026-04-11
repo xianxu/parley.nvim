@@ -21,7 +21,7 @@ During `setup()`, after config merging:
 | Key | Default | Description |
 |-----|---------|-------------|
 | `repo_marker` | `".parley"` | Marker file name; set to `nil`/`false` to disable |
-| `repo_chat_dir` | `"design"` | Chat dir name within repo (primary in repo mode) |
+| `repo_chat_dir` | `"brainstorm"` | Chat dir name within repo (primary in repo mode) |
 | `issues_dir` | `"issues"` | Issue tracker dir (pre-existing config) |
 | `history_dir` | `"history"` | Archived issues dir |
 | `vision_dir` | `"vision"` | Vision tracker dir (pre-existing config) |

@@ -386,7 +386,7 @@ local config = {
 	-- repo-local parley detection (marker file in git root enables repo mode)
 	repo_marker = ".parley",
 	-- chat dir within repo when repo mode is active (relative to git root)
-	repo_chat_dir = "design",
+	repo_chat_dir = "brainstorm",
 	-- issue management (repo-local, relative to git root)
 	issues_dir = "issues",
 	-- issue history (repo-local, relative to git root)
