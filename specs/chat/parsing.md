@@ -5,7 +5,10 @@
 - **Transcript**: everything after header
 
 ## Turn Detection
-`💬:` starts user turn, `🤖:` starts assistant turn. Special lines within assistant: `🧠:` (thinking), `📝:` (summary).
+`💬:` starts user turn, `🤖:` starts assistant turn. Within assistant answers: `🧠:` (thinking), `📝:` (summary), `🔧:` (tool call), `📎:` (tool result). All are tracked as blocks in the [exchange model](exchange_model.md).
+
+## Parser → Model Pipeline
+`chat_parser.parse_chat` produces structured exchanges with `line_start`/`line_end` spans. `exchange_model.from_parsed_chat` converts these to size-based blocks. The parser trims leading/trailing blank lines from all components so the model's margins are the single source of truth.
 
 ## Excluded from LLM Context
 `🔒:` local sections, `🌿:` branch links (full-line).

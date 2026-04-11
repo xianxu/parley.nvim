@@ -9,6 +9,7 @@ This index provides a central directory for all specifications of the `parley.nv
 - [Chat Memory](chat/memory.md): History management, summarization, and preservation.
 - [Memory Preferences](chat/memory_prefs.md): Per-tag user preference profiles from chat history summaries.
 - [Chat Parsing](chat/parsing.md): Buffer segmentation, turn identification, and branch link parsing.
+- [Exchange Model](chat/exchange_model.md): Size-based positional model — single source of truth for buffer layout. Everything is a block.
 - [Inline Branch Links](chat/inline_branch_links.md): Footnote-style `[🌿:text](file)` links within chat text.
 
 ## 2. LLM Providers & Agents
@@ -18,6 +19,7 @@ This index provides a central directory for all specifications of the `parley.nv
 - [Anthropic Provider](providers/anthropic.md): Implementation for Claude models.
 - [Google AI Provider](providers/googleai.md): Implementation for Gemini models.
 - [Agents](providers/agents.md): Agent configuration and selection mechanisms.
+- [Tool Use](providers/tool_use.md): Client-side tool loop, Unix tools (ls/find/grep), file operations (read/edit/write), safety mechanisms.
 - [System Prompts](providers/system_prompts.md): Editable system prompts with built-in/custom/modified sources.
 
 ## 3. Context & References

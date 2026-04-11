@@ -10,7 +10,7 @@ Moves entire chat tree (root + descendants) to another chat root; rewrites all `
 Splits current exchange + following into a new child chat with `🌿:` links. Async LLM topic generation.
 
 ## Response (`:ParleyChatRespond` / `<C-g><C-g>`)
-Assembles context (with memory summarization), streams LLM response into buffer. Web search shows animated progress. Concurrent guard prevents duplicate calls.
+Assembles context (with memory summarization), streams LLM response into buffer. The [exchange model](exchange_model.md) is the single source of truth for all buffer mutations during the response lifecycle — streaming text growth, tool block insertion, spinner management, and prompt append all go through the model. Concurrent guard prevents duplicate calls.
 
 ## Follow Cursor (`:ParleyToggleFollowCursor` / `<C-g>l`)
 Toggles auto-follow of streaming insertion point.
