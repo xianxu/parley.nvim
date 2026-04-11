@@ -2946,6 +2946,78 @@ M.dump_model = function()
 	print(table.concat(out, "\n"))
 end
 
+-- Diagnostic: validate buffer for tool-use invariants.
+-- Invoke with :lua require('parley').check_buffer()
+M.check_buffer = function()
+	local buf = vim.api.nvim_get_current_buf()
+	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+	local chat_parser = require("parley.chat_parser")
+	local header_end = chat_parser.find_header_end(lines)
+	if not header_end then
+		print("Not a chat buffer (no header separator found)")
+		return
+	end
+	local parsed = chat_parser.parse_chat(lines, header_end, require("parley.config"))
+	local serialize = require("parley.tools.serialize")
+	local issues = {}
+
+	for i, ex in ipairs(parsed.exchanges) do
+		local sections = ex.answer and ex.answer.sections or {}
+		-- Track tool_use ids that need matching tool_result
+		local pending_tool_ids = {}
+
+		for j, sec in ipairs(sections) do
+			local sec_lines = {}
+			for ln = sec.line_start, sec.line_end do
+				table.insert(sec_lines, lines[ln] or "")
+			end
+			local text = table.concat(sec_lines, "\n")
+
+			if sec.kind == "tool_use" then
+				local parsed_call = serialize.parse_call(text)
+				if not parsed_call then
+					table.insert(issues, string.format(
+						"Exchange %d, section %d (line %d): malformed 🔧: block — cannot parse tool_use",
+						i, j, sec.line_start))
+				else
+					pending_tool_ids[parsed_call.id] = { name = parsed_call.name, line = sec.line_start }
+				end
+			elseif sec.kind == "tool_result" then
+				local parsed_result = serialize.parse_result(text)
+				if not parsed_result then
+					table.insert(issues, string.format(
+						"Exchange %d, section %d (line %d): malformed 📎: block — cannot parse tool_result",
+						i, j, sec.line_start))
+				else
+					if pending_tool_ids[parsed_result.id] then
+						pending_tool_ids[parsed_result.id] = nil
+					else
+						table.insert(issues, string.format(
+							"Exchange %d, section %d (line %d): 📎: %s has no matching 🔧: (id=%s)",
+							i, j, sec.line_start, parsed_result.name, parsed_result.id))
+					end
+				end
+			end
+		end
+
+		-- Report unmatched tool_use blocks
+		for id, info in pairs(pending_tool_ids) do
+			table.insert(issues, string.format(
+				"Exchange %d (line %d): 🔧: %s has no matching 📎: (id=%s)",
+				i, info.line, info.name, id))
+		end
+	end
+
+	if #issues == 0 then
+		print("✓ Buffer is valid — no tool-use invariant violations found")
+	else
+		print("⚠ Found " .. #issues .. " issue(s):")
+		for _, issue in ipairs(issues) do
+			print("  " .. issue)
+		end
+	end
+end
+
 -- Prune: move cursored exchange + all following into a new child chat file.
 -- Replaces pruned content in parent with a 🌿: branch reference.
 M.cmd.ChatPrune = function()

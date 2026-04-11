@@ -372,15 +372,19 @@ M.build_messages_from_model = function(buf, model, target_idx, agent_info)
                         name = parsed.name,
                         input = input,
                     })
+                else
+                    -- Malformed tool_use — degrade to text so it's not
+                    -- silently dropped. Claude sees the raw block text.
+                    table.insert(assistant_content, { type = "text", text = text })
                 end
 
             elseif blk.kind == "tool_result" then
-                -- Anthropic requires tool_result in a user message
-                -- immediately after the assistant's tool_use.
-                flush_assistant()
                 local text = read_block_text(k, b)
                 local parsed = serialize.parse_result(text)
                 if parsed then
+                    -- Anthropic requires tool_result in a user message
+                    -- immediately after the assistant's tool_use.
+                    flush_assistant()
                     table.insert(messages, {
                         role = "user",
                         content = { {
@@ -390,6 +394,11 @@ M.build_messages_from_model = function(buf, model, target_idx, agent_info)
                             is_error = parsed.is_error == true,
                         } },
                     })
+                else
+                    -- Malformed tool_result — degrade to user text message
+                    -- to preserve user/assistant alternation.
+                    flush_assistant()
+                    table.insert(messages, { role = "user", content = text })
                 end
             end
 
