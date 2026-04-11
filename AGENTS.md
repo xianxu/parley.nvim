@@ -4,7 +4,7 @@
 
 ### 1. Overall Workflow
 - Enter brainstorming mode when requirement is unclear 
-- Enter plan mode for ANY non-trivial task (change more than 2 files, 50 lines)
+- Enter plan mode for ANY non-trivial task (change more than 2 files, 100 lines)
 - Work is offered in issues system and tracked in `issues/` folder as single-file-per-issue markdown file 
     - Write overall within the issue file's `## Plan` section
     - Log discoveries, tools you used or installed in the issue file's `## Log`section
