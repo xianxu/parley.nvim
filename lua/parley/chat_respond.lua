@@ -994,15 +994,21 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             local tool_loop_check = require("parley.tool_loop")
             if parsed_chat.exchanges[exchange_idx].answer and tool_loop_check.get_iter(buf) == 0 then
                 local be = require("parley.buffer_edit")
+                local question = parsed_chat.exchanges[exchange_idx].question
                 local answer = parsed_chat.exchanges[exchange_idx].answer
-                be.replace_answer(buf, answer.line_start - 1, answer.line_end - 1)
+                -- Delete from after question content through answer end.
+                -- Removes old margin + answer. The inter-exchange margin
+                -- (if next exchange exists) survives because it's past
+                -- answer.line_end. The insert cleanup keeps exactly 1.
+                be.delete_answer(buf, question.line_end, answer.line_end - 1)
                 -- Re-parse after deletion so build_messages sees clean state.
                 local new_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
                 local new_header_end = find_chat_header_end(new_lines) or 0
                 parsed_chat = _parley.parse_chat(new_lines, new_header_end)
-                -- Re-determine exchange_idx after re-parse.
-                local cursor_pos = vim.api.nvim_win_get_cursor(0)
-                exchange_idx, component = _parley.find_exchange_at_line(parsed_chat, cursor_pos[1])
+                -- Move cursor to the question line (it may have been on
+                -- the now-deleted answer) and re-determine exchange_idx.
+                vim.api.nvim_win_set_cursor(0, { question.line_start, 0 })
+                exchange_idx, component = _parley.find_exchange_at_line(parsed_chat, question.line_start)
                 start_index = new_header_end + 1
                 end_index = #new_lines
             end
@@ -1141,9 +1147,12 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             -- only blank between question and agent_header.
             local agent_blk_idx = 2  -- block 1 is question, block 2 is agent_header
             local insert_start = model:block_start(target_idx, agent_blk_idx) - 1  -- -1 for margin
+            -- Clean up excess blank lines at the insert point. Keep
+            -- exactly 1 blank if there's a following exchange (the
+            -- inter-exchange margin). Delete all blanks only if this
+            -- is the last exchange.
             local buf_line_count = vim.api.nvim_buf_line_count(buf)
             if insert_start < buf_line_count then
-                -- Count trailing blanks at insert_start
                 local blank_count = 0
                 local check_lines = vim.api.nvim_buf_get_lines(buf, insert_start, buf_line_count, false)
                 for _, l in ipairs(check_lines) do
@@ -1153,8 +1162,13 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                         break
                     end
                 end
-                if blank_count > 0 then
-                    buffer_edit.delete_lines_after(buf, insert_start, blank_count)
+                -- If there's content after the blanks (next exchange),
+                -- keep 1 blank as the inter-exchange margin.
+                local has_next = (insert_start + blank_count) < buf_line_count
+                local keep = has_next and 1 or 0
+                local to_delete = blank_count - keep
+                if to_delete > 0 then
+                    buffer_edit.delete_lines_after(buf, insert_start, to_delete)
                 end
             end
             local insert_lines = { "", agent_prefix .. agent_suffix }
