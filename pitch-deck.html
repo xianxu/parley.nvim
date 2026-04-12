@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Ariadne</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Ariadne</h1>
+</header>
+<h1 id="pitch-deck-collaborative-ai-harness">Pitch Deck: Collaborative
+AI Harness</h1>
+<p><strong>Status:</strong> Draft v1 <strong>Date:</strong> 2026-04-11
+<strong>Purpose:</strong> Seed-stage funding pitch deck outline</p>
+<hr />
+<h2 id="slide-1-ariadne">Slide 1: Ariadne</h2>
+<p><strong>[Collaborative AI Harness]</strong></p>
+<p><em>“Life takes 42 shots.”</em></p>
+<p>One-liner: “AI runs the loops. Humans steer. AI learns. ⟳””</p>
+<hr />
+<h2 id="slide-2-problem">Slide 2: Problem</h2>
+<p><strong>AI is powerful but unsustainable to use well.</strong></p>
+<ul>
+<li>Real problems don’t get solved in one shot: human language is
+imprecise, domain understanding is patchy, market conditions change.
+They shift as you build and learn new potentials and new constraints.
+This is an iterative process.</li>
+<li>Effective AI use requires <strong>multi-shot to convergence</strong>
+— narrowing infinite possibilities to a concrete outcome. It’s a search
+problem with a stochastic machine.</li>
+<li>The hard part: at each step, the still infinite remaining choices
+all look <strong>plausible</strong>. Think AlphaZero — it works because
+it learns a board evaluation function through self-play. In knowledge
+work, there often aren’t and won’t be enough training examples, to guide
+the search. We take the position that <strong>the human is the
+evaluation function</strong>. Our job merely is to make this setup
+sustainable.</li>
+<li>Today’s tools, the structure of the agentic loop, and epidemic
+knowledge are in separate plane, not co-designable. This needs to
+change.</li>
+</ul>
+<hr />
+<h2 id="slide-3-the-faster-horse-problem">Slide 3: The Faster Horse
+Problem</h2>
+<p><strong>Most people are building a faster horse</strong></p>
+<ul>
+<li>Ford: “If I asked customers what they want, they’d say a faster
+horse.”</li>
+<li>Today’s AI tools are horse carriages with a motor strapped on.
+Copilot autocompletes in your IDE. A chatbot sits in your doc editor.
+The new capability is forced into the old shape.</li>
+<li>Human-executes-step-by-step, with AI whispering suggestions, is not
+the car. It’s the faster horse.</li>
+</ul>
+<hr />
+<h2 id="slide-4-insight">Slide 4: Insight</h2>
+<p><strong>LLMs are a new stochastic OS. New applications layer needs to
+be built</strong></p>
+<ul>
+<li>Every platform shift spawns a new application paradigm. GUI →
+WYSIWYG. Mobile → apps. Internet → SaaS.</li>
+<li>LLMs are the next platform — a stochastic OS that can execute
+cognitive tasks, <strong>plausibly</strong>. The application layer race
+starts now.</li>
+<li>The native app looks fundamentally different:
+<ul>
+<li>AI runs the process loops, humans steer</li>
+<li>The human role is managerial: providing structure (how loops work)
+and content (judgment, context, choices)</li>
+<li>Workflows evolve through use — living structures, not static
+templates</li>
+<li>And a natural way for human to define what is
+<strong>correct</strong>, not only <strong>plausible</strong></li>
+</ul></li>
+</ul>
+<hr />
+<h2 id="slide-5-solution">Slide 5: Solution</h2>
+<p><strong>A knowledge OS where AI runs the loops and humans
+steer.</strong></p>
+<ul>
+<li><strong>Multi-shot convergence</strong> as the core primitive. Every
+task is a loop: AI proposes → human evaluates → AI narrows → human
+steers. Sustainable across sessions, days, weeks.</li>
+<li><strong>Living skills.</strong> Workflow patterns that evolve
+through usage. The system develops institutional knowledge about how
+<em>you</em> solve problems.</li>
+<li><strong>Human as evaluation function.</strong> Structured
+checkpoints where human judgment is most leveraged — not “approve/reject
+a wall of text.”</li>
+<li><strong>Human as architect.</strong> Human understands the
+underlying agentic loop, and evolve them explicitly, not just letting AI
+to evolve the structure alone.</li>
+<li><strong>Persistent, editable state.</strong> Full history is
+transparent, editable, replayable. Go back, change a decision,
+re-converge from that point.</li>
+</ul>
+<hr />
+<h2 id="slide-6-how-it-works">Slide 6: How It Works</h2>
+<p><em>(Visual diagram needed. Convey the following:)</em></p>
+<p><strong>The convergence loop:</strong></p>
+<pre><code>Human sets direction
+    → AI executes loop (proposes, uses tools, explores)
+        → System surfaces structured checkpoint
+            → Human evaluates, steers, provides context
+                → AI narrows and continues
+                    → ... until convergence</code></pre>
+<p><strong>Skills evolve:</strong> Each loop run feeds back into the
+skill. What the user modifies, skips, or repeats reshapes future runs.
+The harness molds to the user over time.</p>
+<p><strong>Not just individual — organizational.</strong> Team-level
+skills capture how <em>this team</em> works. New members inherit evolved
+workflows. This changes how companies are structured.</p>
+<hr />
+<h2 id="slide-7-demo-the-dogfood-story">Slide 7: Demo / The Dogfood
+Story</h2>
+<p><strong>We’re building the company using the product.</strong></p>
+<ul>
+<li>The founder uses an early version of the harness daily to do real
+work — architecture, planning, coding, decision-making.</li>
+<li>Every milestone of the company is built through multi-shot AI
+convergence loops.</li>
+<li>This is the proof: if the harness can’t accelerate building its own
+company, the thesis is wrong.</li>
+</ul>
+<p><em>(Include concrete example: “Here’s how I used the harness to
+[specific task] — what would have taken X days took Y hours, with better
+outcomes because…”)</em></p>
+<hr />
+<h2 id="slide-8-why-now">Slide 8: Why Now</h2>
+<ul>
+<li><strong>Capability just arrived.</strong> LLMs can now reliably
+execute multi-step cognitive tasks as evidently in coding agents’
+capabilities. Two years ago they couldn’t. The stochastic OS just booted
+up.</li>
+<li><strong>Tool use is maturing.</strong> Models call tools, execute
+code, interact with APIs — they’re “loop executors” now, not just text
+generators.</li>
+<li><strong>The economics are already there.</strong> If an AI loop can
+do the work, it’s cheaper than a human. The question was never cost — it
+was capability. Capability just arrived.</li>
+<li><strong>The window is open.</strong> The industry is in its “faster
+horse” phase. Once someone demonstrates the native paradigm, the shift
+will be obvious in hindsight.</li>
+</ul>
+<hr />
+<h2 id="slide-9-market">Slide 9: Market</h2>
+<ul>
+<li><strong>Wedge:</strong> Programmers and technical founders. They
+feel the pain most, can evaluate the product, and software is the most
+mature domain for AI tool use.</li>
+<li><strong>Expansion:</strong> All knowledge work — consulting, legal,
+product, operations. Any domain where complex multi-step work requires
+iterative refinement and human judgment.</li>
+<li><strong>This is not a tool market — it’s a platform shift.</strong>
+We won’t capture the whole market, but a slice would have handsome
+reward.</li>
+</ul>
+<hr />
+<h2 id="slide-10-business-model">Slide 10: Business Model</h2>
+<ul>
+<li><strong>Phase 1: Dogfood.</strong> Build a boodstrap in nvim with
+the capabilities, but rough on interactions. If multi-shot AI
+convergence can’t accelerate building its own company, the thesis is
+wrong.</li>
+<li><strong>Phase 2: The Product.</strong> Build a product with the
+bootstrap, same capabilities, multiple different interfaces to meet
+where users are. This will be a SaaS of intelligent workflow.</li>
+<li><strong>Moat: process knowledge lock-in.</strong> The longer you use
+it, the more your skills evolve to fit you. Switching means losing
+institutional knowledge. This compounds.</li>
+</ul>
+<hr />
+<h2 id="slide-11-team">Slide 11: Team</h2>
+<ul>
+<li><strong>[Founder Name]</strong> — Engineering leadership at Meta,
+Twitter, Microsoft. Builder and manager at scale.</li>
+<li>Dual perspective that produces the insight: deep understanding of
+both the technical capability of AI <em>and</em> the organizational
+processes it replaces — and the technical details of <em>how</em> to
+replace them. What visibility and safeguards are needed. How to create
+virtuous loops where human oversight improves AI execution, which earns
+more autonomy.</li>
+<li>Already building and using the harness daily. Not theorizing —
+operating.</li>
+</ul>
+<hr />
+<h2 id="slide-12-the-ask">Slide 12: The Ask</h2>
+<ul>
+<li>Raising $1M seed round.</li>
+<li>Use of funds: keying founding team.</li>
+<li>Goal: demonstrate the paradigm with paying dev teams within 1
+year.</li>
+</ul>
+<hr />
+<h2 id="competitive-positioning">Competitive Positioning</h2>
+<p><strong>vs. OpenClaw</strong> (open-source AI agent, 247K GitHub
+stars): OpenClaw is a task executor — “do this for me.” It automates
+well-defined tasks (send email, run test, manage files). The
+collaborative AI harness solves a different problem: convergence on
+ill-defined outcomes when you <em>don’t</em> know exactly what you want.
+OpenClaw is the faster horse. We’re building the car.</p>
+<p><strong>vs. Copilots (GitHub Copilot, Cursor, etc.):</strong>
+Code-level assistants bolted onto existing IDE workflows. They help
+humans execute faster. We restructure the loop so AI executes and humans
+steer.</p>
+<p><strong>vs. Agent frameworks (LangChain, CrewAI, etc.):</strong>
+Infrastructure for developers building AI apps. We’re building the
+end-user application — the cockpit — not the plumbing.</p>
+<p><strong>vs. Claude Code / Codex CLI:</strong> Operate at the code
+plane. We operate at the decision and convergence plane — a higher
+knowledge level.</p>
+<hr />
+<h2 id="key-thesis-summary">Key Thesis Summary</h2>
+<ol type="1">
+<li>LLMs are a new stochastic OS</li>
+<li>Frontier lab handles AI intelligence — we make it work in knowledge
+economy, sustainably</li>
+<li>The native application layer for this OS hasn’t been built</li>
+<li>We’re building it: a knowledge OS with living, evolving
+workflows</li>
+<li>This changes not just productivity but how organizations are
+structured</li>
+<li>Start with dev teams, expand to all knowledge work, become the
+platform</li>
+</ol>
+</body>
+</html>

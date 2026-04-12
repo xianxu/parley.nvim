@@ -53,7 +53,7 @@ test-integration:
 	  xargs -P $(JOBS) -I {} nvim -n --headless --noplugin -u tests/minimal_init.vim \
 	    -c "PlenaryBustedFile {}" -c "qa!" || { echo "Integration tests failed"; exit 1; }
 
-# Run tests mapped to one spec key/path from specs/traceability.yaml.
+# Run tests mapped to one spec key/path from atlas/traceability.yaml.
 # Example: make test-spec SPEC=chat/lifecycle
 test-spec:
 	@if [ -z "$(SPEC)" ]; then \
@@ -64,7 +64,7 @@ test-spec:
 	tests="$$(scripts/spec_test_map.sh list-tests "$(SPEC)")"; \
 	if [ -z "$$tests" ]; then \
 		echo "No tests mapped for spec: $(SPEC)"; \
-		echo "Update specs/traceability.yaml to add mappings."; \
+		echo "Update atlas/traceability.yaml to add mappings."; \
 		exit 1; \
 	fi; \
 	for test_file in $$tests; do \
@@ -74,7 +74,7 @@ test-spec:
 		  -c "qa!" || exit $$?; \
 	done
 
-# Run tests mapped to changed spec files under specs/*/*.md.
+# Run tests mapped to changed spec files under atlas/*/*.md.
 # Uses tracked and untracked file changes since feature-branch base
 # (default base ref: remote/main, fallback origin/main, then main).
 test-changed:
@@ -82,7 +82,7 @@ test-changed:
 	scripts/spec_test_map.sh base-info; \
 	changed_specs="$$(scripts/spec_test_map.sh list-changed-specs)"; \
 	if [ -z "$$changed_specs" ]; then \
-		echo "No changed spec files under specs/*/*.md"; \
+		echo "No changed spec files under atlas/*/*.md"; \
 		exit 0; \
 	fi; \
 	echo "Changed specs:"; \
@@ -95,7 +95,7 @@ test-changed:
 		fi; \
 	done; \
 	if [ "$$missing" -ne 0 ]; then \
-		echo "Please update specs/traceability.yaml for missing mappings."; \
+		echo "Please update atlas/traceability.yaml for missing mappings."; \
 		exit 1; \
 	fi; \
 	all_tests="$$(scripts/spec_test_map.sh list-tests-from-changed-specs)"; \

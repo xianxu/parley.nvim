@@ -22,7 +22,7 @@ help-workflow:
 	"    make check-pure     Check PURE principle" \
 	"    make check-plan     Check issue plan completeness" \
 	"    make check-test     Run tests + test-agents + lint, inspect results" \
-	"    make check-specs    Check specs/README sync" \
+	"    make check-specs    Check atlas/README sync" \
 	"    make check-lessons  Check for lessons to capture" \
 	"    PRE_MERGE_CHECKS=yynnyn make pre-merge   Preset selection" \
 	"" \

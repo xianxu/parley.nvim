@@ -23,7 +23,7 @@ Status lifecycle: `open` -> `working` -> `blocked` -> `done` | `wontfix`.
 - Child→parent navigation is derived from `deps` at scan time, not from the body backlink, so issues decomposed before this feature was added still navigate correctly.
 
 ## Archival
-Done issues moved to `history/` by `make push` or `make merge`. GitHub issues auto-closed. History is low-signal — agents should avoid reading it unless directed.
+Done issues moved to `workshop/history/` by `make push` or `make merge`. GitHub issues auto-closed. History is low-signal — agents should avoid reading it unless directed.
 
 ## Makefile Integration
 - `make fetch N` / `make issue N`: create local issue from GitHub issue

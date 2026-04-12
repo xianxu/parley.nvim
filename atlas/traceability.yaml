@@ -1,8 +1,8 @@
 version: 1
 
-# Maps a feature spec to the code and tests that verify it.
-# Key format intentionally omits the leading "specs/" and trailing ".md".
-specs:
+# Maps a feature entry to the code and tests that verify it.
+# Key format intentionally omits the leading "atlas/" and trailing ".md".
+atlas:
   chat/format:
     code:
       - lua/parley/render.lua

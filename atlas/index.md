@@ -1,7 +1,7 @@
-# Parley.nvim Specifications
+# Parley.nvim Atlas
 
 ## Overview
-This index provides a central directory for all specifications of the `parley.nvim` plugin.
+This index provides a central directory for all atlas entries of the `parley.nvim` plugin — practical pointers for future developers and agents to understand the sketch of functionalities, history, and intention. Details live in the code.
 
 ## 1. Core Chat System
 - [Chat Format](chat/format.md): Transcript prefixes and front matter header metadata.
@@ -63,5 +63,5 @@ This index provides a central directory for all specifications of the `parley.nv
 - [Vision Format](vision/format.md): YAML schema, multi-file namespacing, and ID resolution rules.
 - [Vision Exports](vision/exports.md): CSV, DOT graph export, and validation.
 
-## 11. Spec Traceability
-- [Traceability Map](traceability.yaml): Mapping from each feature spec to implementation files and related tests. 
+## 11. Traceability
+- [Traceability Map](traceability.yaml): Mapping from each feature entry to implementation files and related tests.

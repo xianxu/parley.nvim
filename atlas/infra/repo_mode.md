@@ -11,8 +11,8 @@ During `setup()`, after config merging:
 
 ## Behavior when active
 - `config.repo_root` is set to the git root path
-- Repo-local directories are auto-created: `design/`, `issues/`, `vision/`, `history/`
-- `design/` (configurable via `repo_chat_dir`) becomes the primary chat directory
+- Repo-local directories are auto-created: `workshop/parley/`, `workshop/issues/`, `workshop/vision/`, `workshop/history/`
+- `workshop/parley/` (configurable via `repo_chat_dir`) becomes the primary chat directory
 - The user's global `chat_dir` is demoted to an extra search directory (still findable, not written to)
 - `chat_memory` and `memory_prefs` are disabled (not useful for repo-scoped brainstorming, and would pollute the repo chat dir with preference files)
 - Persisted state (`state.json`) is overridden: repo chat dir is always forced as primary root on startup, regardless of what was previously saved
@@ -21,10 +21,10 @@ During `setup()`, after config merging:
 | Key | Default | Description |
 |-----|---------|-------------|
 | `repo_marker` | `".parley"` | Marker file name; set to `nil`/`false` to disable |
-| `repo_chat_dir` | `"brainstorm"` | Chat dir name within repo (primary in repo mode) |
-| `issues_dir` | `"issues"` | Issue tracker dir (pre-existing config) |
-| `history_dir` | `"history"` | Archived issues dir |
-| `vision_dir` | `"vision"` | Vision tracker dir (pre-existing config) |
+| `repo_chat_dir` | `"workshop/parley"` | Chat dir name within repo (primary in repo mode) |
+| `issues_dir` | `"workshop/issues"` | Issue tracker dir |
+| `history_dir` | `"workshop/history"` | Archived issues dir |
+| `vision_dir` | `"workshop/vision"` | Vision tracker dir |
 
 All directory names are relative to git root unless they start with `/`.
 

@@ -1,10 +1,10 @@
 # AI Workflow
 
 ## Overview
-Issue-driven development workflow for AI coding agents. Work is tracked in single-file-per-issue markdown files under `issues/`, with completed work archived to `history/`. Two operational modes: direct-on-main for small changes, worktree-based branches for larger work.
+Issue-driven development workflow for AI coding agents. Work is tracked in single-file-per-issue markdown files under `workshop/issues/`, with completed work archived to `workshop/history/`. Two operational modes: direct-on-main for small changes, worktree-based branches for larger work.
 
 ## Issue File Format
-Each issue is a markdown file at `issues/NNNNNN-slug.md` with YAML frontmatter:
+Each issue is a markdown file at `workshop/issues/NNNNNN-slug.md` with YAML frontmatter:
 
 ```yaml
 ---
@@ -17,14 +17,14 @@ updated: 2026-03-01
 ---
 ```
 
-Standard sections: `# Title`, `## Done when`, `## Plan` (checkable items, steps to follow), `## Log` (dated entries), `##Spec` (specification of what to change). For complex issues, detailed designs go in `docs/plans/NNNNNN-slug-plan.md`.
+Standard sections: `# Title`, `## Done when`, `## Plan` (checkable items, steps to follow), `## Log` (dated entries), `##Spec` (specification of what to change). For complex issues, detailed designs go in `workshop/plans/NNNNNN-slug-plan.md`.
 
 ## Two Workflows
 
 ### Direct-on-Main (small changes)
-1. `make fetch 42` — fetches GitHub issue #42, creates `issues/NNNNNN-slug.md`
+1. `make fetch 42` — fetches GitHub issue #42, creates `workshop/issues/NNNNNN-slug.md`
 2. Work directly on main branch
-3. `make push` — auto-commits, runs pre-merge checks, pushes, closes done GitHub issues, archives done issue files to `history/`
+3. `make push` — auto-commits, runs pre-merge checks, pushes, closes done GitHub issues, archives done issue files to `workshop/history/`
 
 ### Worktree Branch (larger changes)
 1. `make issue 42` — fetches GitHub issue, creates worktree at `../worktree/<repo>-42/` on branch `<repo>-42`, creates issue file inside worktree
@@ -43,8 +43,8 @@ Agent-driven verification runs before `push` and `merge`. Six checks, each invok
 | `pure` | Pure/impure separation | read-only |
 | `plan` | Issue plan completeness (skipped if no issue files changed) | read-only |
 | `test` | Runs `make test` + `make test-agents` + `make lint`, then agent analyzes results | read-only |
-| `specs` | Checks specs/ docs match code changes | **read-write** (may update docs) |
-| `lessons` | Reminder to review `tasks/lessons.md` | no agent |
+| `atlas` | Checks atlas/ docs match code changes | **read-write** (may update docs) |
+| `lessons` | Reminder to review `workshop/tasks/lessons.md` | no agent |
 
 ### Execution Modes
 - **Interactive** (`make check` or `make pre-merge`): sequential, prompts accept/discard for each check that modifies files
@@ -69,11 +69,11 @@ The hook uses `additionalContext` in its JSON response so reminders reach the co
 
 ## Artifact Lifecycle
 ```
-GitHub Issue → make fetch/issue → issues/NNNNNN-slug.md
-                                  docs/plans/NNNNNN-slug-plan.md (complex only)
-                                  specs/*.md (updated incrementally)
+GitHub Issue → make fetch/issue → workshop/issues/NNNNNN-slug.md
+                                  workshop/plans/NNNNNN-slug-plan.md (complex only)
+                                  atlas/*.md (updated incrementally)
               work...
-              make push/merge  → history/NNNNNN-slug.md (archived)
+              make push/merge  → workshop/history/NNNNNN-slug.md (archived)
                                  GitHub issue closed
 ```
 
@@ -82,5 +82,5 @@ The workflow enforces the AGENTS.md constitution:
 - **Plan First**: issue file's `## Plan` section with checkable items
 - **Track Progress**: mark items complete, log discoveries in `## Log`
 - **Verify**: pre-merge checks enforce DRY, PURE, test passing, spec sync
-- **Lessons**: `tasks/lessons.md` captures patterns from mistakes
+- **Lessons**: `workshop/tasks/lessons.md` captures patterns from mistakes
 - **Post-milestone review**: mandatory code review subagent at milestone boundaries

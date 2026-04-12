@@ -169,11 +169,11 @@ Chat storage roots:
 
 For full defaults and examples, see [`lua/parley/config.lua`](lua/parley/config.lua).
 
-## Detailed Docs (Specs)
+## Detailed Docs (Atlas)
 
-Advanced behavior is intentionally kept out of this README and documented in specs:
+Advanced behavior is intentionally kept out of this README and documented in the atlas:
 
-- Overview index: [`specs/index.md`](specs/index.md)
+- Overview index: [`atlas/index.md`](atlas/index.md)
 
 ## Acknowledgement
 

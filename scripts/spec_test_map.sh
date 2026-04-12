@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MAP_FILE="${MAP_FILE:-specs/traceability.yaml}"
+MAP_FILE="${MAP_FILE:-atlas/traceability.yaml}"
 
 resolve_base_ref() {
     if [ -n "${BASE_REF:-}" ]; then
@@ -43,7 +43,7 @@ resolve_base_ref() {
 normalize_spec_key() {
     local input="$1"
     local key="${input#./}"
-    key="${key#specs/}"
+    key="${key#atlas/}"
     key="${key%.md}"
     printf '%s\n' "$key"
 }
@@ -59,7 +59,7 @@ list_tests_for_spec() {
             in_tests = 0
         }
 
-        /^specs:[[:space:]]*$/ {
+        /^atlas:[[:space:]]*$/ {
             in_specs = 1
             next
         }
@@ -119,17 +119,17 @@ list_changed_specs() {
     {
         # Committed changes vs base
         if [ "$current_branch" = "main" ] || [ "$has_compare_sha" = "true" ]; then
-            git diff --name-only --diff-filter=ACMR "$base_ref..HEAD" -- specs
+            git diff --name-only --diff-filter=ACMR "$base_ref..HEAD" -- atlas
         else
-            git diff --name-only --diff-filter=ACMR "$(git merge-base HEAD "$base_ref")" -- specs
+            git diff --name-only --diff-filter=ACMR "$(git merge-base HEAD "$base_ref")" -- atlas
         fi
         # Staged (index) changes
-        git diff --cached --name-only -- specs
+        git diff --cached --name-only -- atlas
         # Unstaged working tree changes
-        git diff --name-only -- specs
+        git diff --name-only -- atlas
         # Untracked files
-        git ls-files --others --exclude-standard -- specs
-    } | awk '/^specs\/.+\/.+\.md$/ { print }' | sort -u
+        git ls-files --others --exclude-standard -- atlas
+    } | awk '/^atlas\/.+\/.+\.md$/ { print }' | sort -u
 }
 
 cmd="${1:-}"
@@ -155,10 +155,10 @@ case "$cmd" in
         fi
         spec="$1"
         key="$spec"
-        key="${key#specs/}"
+        key="${key#atlas/}"
         key="${key%.md}"
         awk -v key="$key" '
-            /^specs:[[:space:]]*$/ { in_specs = 1; next }
+            /^atlas:[[:space:]]*$/ { in_specs = 1; next }
             !in_specs { next }
             /^  [^[:space:]][^:]*:[[:space:]]*$/ {
                 current = $0

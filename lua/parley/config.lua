@@ -395,13 +395,13 @@ local config = {
 	-- repo-local parley detection (marker file in git root enables repo mode)
 	repo_marker = ".parley",
 	-- chat dir within repo when repo mode is active (relative to git root)
-	repo_chat_dir = "brainstorm",
+	repo_chat_dir = "workshop/parley",
 	-- issue management (repo-local, relative to git root)
-	issues_dir = "issues",
+	issues_dir = "workshop/issues",
 	-- issue history (repo-local, relative to git root)
-	history_dir = "history",
+	history_dir = "workshop/history",
 	-- vision tracker (repo-local, relative to git root)
-	vision_dir = "vision",
+	vision_dir = "workshop/vision",
 	-- global shortcuts for vision tracker
 	global_shortcut_vision_validate = { modes = { "n" }, shortcut = "<C-j>v" },
 	global_shortcut_vision_export_csv = { modes = { "n" }, shortcut = "<C-j>ec" },
