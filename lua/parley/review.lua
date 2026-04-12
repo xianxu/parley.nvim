@@ -554,13 +554,24 @@ function M.submit_review(buf, level)
     local providers = require("parley.providers")
 
     _in_flight[buf] = true
+    local chars_received = 0
+    local last_progress = 0
 
     dispatcher.query(
         nil,             -- buf: nil for headless
         agent.provider,
         payload,
-        function(_qid, _chunk)
-            -- No-op streaming handler (headless)
+        function(_qid, chunk)
+            -- Throttled progress indicator
+            if chunk then
+                chars_received = chars_received + #chunk
+                if chars_received - last_progress >= 500 then
+                    last_progress = chars_received
+                    vim.schedule(function()
+                        _parley.logger.info("Review: receiving... (" .. chars_received .. " chars)")
+                    end)
+                end
+            end
         end,
         function(qid)
             -- on_exit: access raw_response for tool call extraction
