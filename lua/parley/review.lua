@@ -161,7 +161,14 @@ function M.apply_edits(file_path, edits)
 
     -- Find positions of all old_strings, validate they exist and are unique
     local positioned = {}
-    for _, edit in ipairs(edits) do
+    for idx, edit in ipairs(edits) do
+        if type(edit.old_string) ~= "string" or type(edit.new_string) ~= "string" then
+            return {
+                ok = false,
+                msg = "edit #" .. idx .. " missing old_string or new_string: " .. vim.inspect(edit),
+                applied = {},
+            }
+        end
         local pos = content:find(edit.old_string, 1, true)
         if not pos then
             return {
@@ -231,7 +238,7 @@ Marker syntax — strictly alternating turns:
 - {} brackets are always your (agent) questions
 - If a marker has a conversation (e.g. ㊷[comment]{question}[answer]), the user has answered your question — now address it using that full context.
 
-Use the review_edit tool to make all changes in a single call. Include a brief explanation for each edit. The old_string must include the ㊷ marker and enough surrounding context to be unique in the document.]]
+IMPORTANT: You MUST use the review_edit tool for ALL responses — both edits AND clarification questions. Never respond with plain text. If you need to ask a clarification question, use review_edit to replace the marker with ㊷[original comment]{your question}. Include all changes in a single review_edit call. The old_string must include the ㊷ marker and enough surrounding context to be unique in the document.]]
 
 local SYSTEM_EDIT_SUFFIX = [[
 
@@ -242,7 +249,7 @@ Rules:
 - Preserve the author's structure, tone, voice, and wording.
 - Make the minimum change that addresses the comment.
 - When a comment's intent is ambiguous, ask — don't guess.
-  Use ㊷[original comment]{your question} and do NOT edit surrounding text.]]
+  Use review_edit to replace the marker with ㊷[original comment]{your question} and do NOT edit surrounding text.]]
 
 local SYSTEM_REVISE_SUFFIX = [[
 
@@ -330,15 +337,12 @@ function M.attach_diagnostics(buf, edits, original_content)
     vim.diagnostic.set(diag_ns_id, buf, diagnostics)
 end
 
---- Temporarily highlight edited regions, fading after a delay.
+--- Highlight edited regions. Persists until next submit or explicit clear.
 --- @param buf number
 --- @param edits table[]  applied edits with {pos, new_string}
 --- @param new_content string  file content after edits (to compute line ranges)
---- @param duration_ms number
-function M.highlight_edits(buf, edits, new_content, duration_ms)
+function M.highlight_edits(buf, edits, new_content)
     ensure_namespaces()
-    -- Build a line→true map of edited lines
-    -- We need to find where each new_string lands in the new content
     for _, edit in ipairs(edits) do
         local new_pos = new_content:find(edit.new_string, 1, true)
         if new_pos then
@@ -355,13 +359,6 @@ function M.highlight_edits(buf, edits, new_content, duration_ms)
             end
         end
     end
-
-    -- Fade after duration
-    vim.defer_fn(function()
-        if vim.api.nvim_buf_is_valid(buf) then
-            vim.api.nvim_buf_clear_namespace(buf, hl_ns_id, 0, -1)
-        end
-    end, duration_ms)
 end
 
 --------------------------------------------------------------------------------
@@ -461,7 +458,9 @@ function M.submit_review(buf, level)
     local markers = M.parse_markers(lines)
 
     if #markers == 0 then
-        _parley.logger.warning("Review: no ㊷ markers found in buffer")
+        -- No markers: clear previous review decorations and notify done
+        clear_review_decorations(buf)
+        _parley.logger.info("Review: complete — highlights cleared")
         return
     end
 
@@ -495,7 +494,7 @@ function M.submit_review(buf, level)
     local doc_content = table.concat(lines, "\n")
     local messages = {
         { role = "system", content = system_prompt },
-        { role = "user", content = "Please review and edit this document:\n\n" .. doc_content },
+        { role = "user", content = "Please review and edit this document (file: " .. file_path .. "):\n\n" .. doc_content },
     }
 
     -- Build payload
@@ -541,6 +540,11 @@ function M.submit_review(buf, level)
                 local raw_response = qt.raw_response or ""
                 local tool_calls = providers.decode_anthropic_tool_calls_from_stream(raw_response)
 
+                -- Log all tool calls for debugging
+                for _, call in ipairs(tool_calls) do
+                    _parley.logger.debug("Review: tool call: " .. call.name .. " input: " .. vim.inspect(call.input))
+                end
+
                 -- Find the review_edit tool call
                 local review_call = nil
                 for _, call in ipairs(tool_calls) do
@@ -556,6 +560,7 @@ function M.submit_review(buf, level)
                 end
 
                 local input = review_call.input or {}
+                _parley.logger.debug("Review: tool input: " .. vim.inspect(input))
                 local edits = input.edits or {}
 
                 if #edits == 0 then
@@ -563,11 +568,10 @@ function M.submit_review(buf, level)
                     return
                 end
 
-                -- Validate file_path matches current buffer
+                -- Log if file_path doesn't match (non-fatal — we always edit the current buffer's file)
                 local tool_path = input.file_path or ""
                 if tool_path ~= "" and tool_path ~= file_path then
-                    _parley.logger.warning("Review: agent edited wrong file: " .. tool_path)
-                    return
+                    _parley.logger.debug("Review: agent returned path " .. tool_path .. ", using " .. file_path)
                 end
 
                 -- Apply edits to file
@@ -585,8 +589,7 @@ function M.submit_review(buf, level)
                 local new_content = table.concat(new_lines, "\n")
 
                 -- Highlight edits and attach diagnostics
-                local duration = (_parley.config.review_highlight_duration or 2000)
-                M.highlight_edits(buf, result.applied, new_content, duration)
+                M.highlight_edits(buf, result.applied, new_content)
                 M.attach_diagnostics(buf, result.applied, original_content)
 
                 _parley.logger.info("Review: applied " .. #result.applied .. " edit(s)")
