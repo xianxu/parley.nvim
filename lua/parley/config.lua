@@ -368,8 +368,8 @@ local config = {
 	review_shortcut_insert = { modes = { "n", "v" }, shortcut = "<C-g>vi" },
 	review_shortcut_edit = { modes = { "n" }, shortcut = "<C-g>ve" },
 	review_shortcut_revise = { modes = { "n" }, shortcut = "<C-g>vr" },
-	-- agent to use for document review (empty = last-used agent)
-	review_agent = "",
+	-- agent to use for document review (defaults to Claude-Sonnet)
+	review_agent = "Claude-Sonnet",
 	-- how long review edit highlights persist (ms)
 	review_highlight_duration = 2000,
 	-- default search term when using :ParleyChatFinder
