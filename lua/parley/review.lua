@@ -458,8 +458,10 @@ function M.submit_review(buf, level)
     local markers = M.parse_markers(lines)
 
     if #markers == 0 then
-        -- No markers: clear previous review decorations and notify done
+        -- No markers: clear all review state and notify done
         clear_review_decorations(buf)
+        vim.fn.setqflist({}, "r")
+        pcall(vim.cmd, "cclose")
         _parley.logger.info("Review: complete — highlights cleared")
         return
     end
