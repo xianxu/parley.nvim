@@ -1,6 +1,6 @@
 ---
 id: 000098
-status: working
+status: done
 deps: []
 created: 2026-04-11
 updated: 2026-04-12
@@ -84,7 +84,7 @@ brackets; quickfix used to navigate pending items.
 ### M4: Syntax highlighting + polish
 - [x] 4.1 `ParleyReviewUser` (DiagnosticWarn) + `ParleyReviewAgent` (DiagnosticInfo) highlight groups in highlighter.lua. Decoration provider highlights ㊷[...] and {...} in markdown buffers.
 - [x] 4.2 Notification messages via `_parley.logger.info/warning` throughout submit_review flow
-- [ ] 4.3 Manual testing with real LLM — verify end-to-end flow
+- [x] 4.3 Manual testing with real LLM — verified: edits applied, highlights persist, clarification questions via quickfix, clear on completion
 - [x] 4.4 Atlas updated: `atlas/modes/review.md` + index entry
 
 ## Log
