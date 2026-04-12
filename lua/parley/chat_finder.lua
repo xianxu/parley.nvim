@@ -484,6 +484,11 @@ local function scan_chat_files(chat_roots, cutoff_time, is_filtering)
 		end
 		local tags_searchable = #tags > 0 and (" [" .. table.concat(tags, "] [") .. "]") or " []"
 		local display_filename = vim.fn.fnamemodify(file, ":t")
+		-- Strip slug from display (redundant with topic); keep just timestamp.md
+		local ts = display_filename:match("^(%d%d%d%d%-%d%d%-%d%d%.%d%d%-%d%d%-%d%d%.%d%d%d)")
+		if ts then
+			display_filename = ts .. ".md"
+		end
 		local root_prefix = is_primary_root and "" or string.format("{%s} ", root.label)
 		local root_searchable = is_primary_root and " {}" or (" {" .. root.label .. "}")
 

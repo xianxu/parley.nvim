@@ -35,6 +35,9 @@ chat_parser = require("parley.chat_parser"), -- chat file parser
 	float_picker = require("parley.float_picker"), -- shared floating window picker
 }
 
+-- Chat slug module for filename slug generation and parsing
+local chat_slug = require("parley.chat_slug")
+
 -- Custom system prompts persistence (loaded here; wired up via custom_prompts.setup() inside M.setup())
 local custom_prompts = require("parley.custom_prompts")
 
@@ -741,6 +744,26 @@ M.setup = function(opts)
 					end,
 				})
 			end
+		end,
+	})
+
+	-- Auto-rename chat files to include slug from topic header
+	local slug_augroup = vim.api.nvim_create_augroup("ParleySlug", { clear = true })
+	vim.api.nvim_create_autocmd("BufWritePost", {
+		group = slug_augroup,
+		pattern = "*.md",
+		callback = function(ev)
+			-- Guard: skip if we're already inside a slug rename (prevents recursion)
+			if M._in_slug_rename then
+				return
+			end
+			local buf = ev.buf
+			local file = vim.api.nvim_buf_get_name(buf)
+			-- Only for chat files in configured roots
+			if M.not_chat(buf, file) then
+				return
+			end
+			M._slug_rename_chat(buf)
 		end,
 	})
 
@@ -2337,6 +2360,130 @@ local function sync_moved_chat_buffers(old_path, new_path)
 	end
 end
 
+-- Rename a chat file to include/update slug from topic header.
+-- Returns (new_path, nil) on success, (nil, reason) on skip/error.
+M._slug_rename_chat = function(buf)
+	local file_path = vim.api.nvim_buf_get_name(buf)
+	if file_path == "" then
+		return nil, "no file"
+	end
+
+	-- Don't rename during streaming
+	if M.tasker and M.tasker.is_busy(buf, true) then
+		return nil, "busy"
+	end
+
+	local dir = vim.fn.fnamemodify(file_path, ":h")
+	local basename = vim.fn.fnamemodify(file_path, ":t")
+
+	local ts, old_slug = chat_slug.parse_filename(basename)
+	if not ts then
+		return nil, "not a timestamp chat file"
+	end
+
+	-- Read topic from buffer header
+	local lines = vim.api.nvim_buf_get_lines(buf, 0, 20, false)
+	local headers = parse_chat_headers(lines)
+	if not headers or not headers.topic or headers.topic == "" or headers.topic == "?" then
+		return nil, "no topic"
+	end
+
+	local new_slug = chat_slug.slugify(headers.topic)
+	if new_slug == old_slug then
+		return nil, "slug unchanged"
+	end
+
+	local new_basename = chat_slug.make_filename(ts, new_slug)
+	local new_path = dir .. "/" .. new_basename
+
+	-- Rename on disk
+	local ok = vim.fn.rename(file_path, new_path)
+	if ok ~= 0 then
+		return nil, "rename failed"
+	end
+
+	-- Update all buffers pointing to old path
+	sync_moved_chat_buffers(file_path, new_path)
+
+	-- Update file: header in buffer
+	for i, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, 20, false)) do
+		if line:match("^file:") then
+			vim.api.nvim_buf_set_lines(buf, i - 1, i, false, { "file: " .. new_basename })
+			-- Save the updated header; guard flag prevents recursive rename
+			M._in_slug_rename = true
+			local write_ok, write_err = pcall(function()
+				vim.api.nvim_buf_call(buf, function()
+					vim.cmd("silent! write!")
+					-- Reload to clear "new file" flag so next :w doesn't warn "file exists"
+					vim.cmd("silent! edit!")
+				end)
+			end)
+			M._in_slug_rename = false
+			if not write_ok then
+				M.logger.warning("Slug rename write failed: " .. tostring(write_err))
+			end
+			break
+		end
+	end
+
+	-- Invalidate topic cache for old path, prime for new
+	if M._chat_topic_cache then
+		M._chat_topic_cache[file_path] = nil
+	end
+
+	return new_path, nil
+end
+
+-- Best-effort read repair: update a stale filename reference in a file.
+-- Called when fuzzy resolution finds a file under a different name.
+-- Does NOT repair if the referring buffer is mid-stream.
+M._read_repair_reference = function(referring_file, old_basename, new_basename)
+	if old_basename == new_basename then
+		return
+	end
+
+	-- Check if referring file's buffer is busy
+	for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+		if vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_buf_is_loaded(buf) then
+			local buf_name = vim.api.nvim_buf_get_name(buf)
+			if buf_name ~= "" and vim.fn.resolve(buf_name) == vim.fn.resolve(referring_file) then
+				if M.tasker and M.tasker.is_busy(buf, true) then
+					return -- defer
+				end
+			end
+		end
+	end
+
+	if vim.fn.filereadable(referring_file) ~= 1 then
+		return
+	end
+
+	local lines = vim.fn.readfile(referring_file)
+	local changed = false
+	for i, line in ipairs(lines) do
+		if line:find(old_basename, 1, true) then
+			-- Escape % in replacement string (Lua gsub treats % as capture ref)
+			local safe_new = new_basename:gsub("%%", "%%%%")
+			lines[i] = line:gsub(vim.pesc(old_basename), safe_new)
+			changed = true
+		end
+	end
+	if changed then
+		vim.fn.writefile(lines, referring_file)
+		-- Reload if open in a buffer
+		for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+			if vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_buf_is_loaded(buf) then
+				local buf_name = vim.api.nvim_buf_get_name(buf)
+				if buf_name ~= "" and vim.fn.resolve(buf_name) == vim.fn.resolve(referring_file) then
+					vim.api.nvim_buf_call(buf, function()
+						vim.cmd("silent! edit!")
+					end)
+				end
+			end
+		end
+	end
+end
+
 M.move_chat = function(file_name, target_dir)
 	local current_root, resolved_file = find_chat_root(file_name)
 	if not current_root then
@@ -2396,14 +2543,59 @@ M._resolve_chat_path_candidates = function(path, base_dir, dirs)
 end
 
 -- Resolve a chat path: absolute/~ paths directly, relative paths by searching
--- base_dir first, then all registered chat roots. Used by init.lua and highlighter.
-local function resolve_chat_path(path, base_dir)
+-- base_dir first, then all registered chat roots. Falls back to fuzzy timestamp
+-- glob when exact match not found (supports slugged filenames).
+-- Optional referring_file enables read-repair of stale references.
+local function resolve_chat_path(path, base_dir, referring_file)
 	local candidates = M._resolve_chat_path_candidates(path, base_dir, M.get_chat_dirs())
 	for _, candidate in ipairs(candidates) do
 		if vim.fn.filereadable(candidate) == 1 then
 			return candidate
 		end
 	end
+
+	-- Fuzzy fallback: extract timestamp, glob for any slug variant
+	local basename = vim.fn.fnamemodify(path, ":t")
+	local ts = chat_slug.parse_filename(basename)
+	if ts then
+		local pattern = chat_slug.glob_pattern(ts)
+		-- Search in base_dir and all chat roots
+		local search_dirs = { base_dir }
+		for _, d in ipairs(M.get_chat_dirs() or {}) do
+			if d ~= base_dir then
+				table.insert(search_dirs, d)
+			end
+		end
+		for _, dir in ipairs(search_dirs) do
+			local matches = vim.fn.glob(dir .. "/" .. pattern, false, true)
+			-- Post-filter: verify each match has the exact same timestamp
+			local verified = {}
+			for _, m in ipairs(matches) do
+				local m_ts = chat_slug.parse_filename(vim.fn.fnamemodify(m, ":t"))
+				if m_ts == ts then
+					table.insert(verified, m)
+				end
+			end
+			if #verified > 0 then
+				-- Prefer the match with a slug (most recent rename)
+				table.sort(verified, function(a, b)
+					return #a > #b
+				end)
+				local found = verified[1]
+				-- Schedule read repair if we have a referring file
+				if referring_file and referring_file ~= "" then
+					local new_basename = vim.fn.fnamemodify(found, ":t")
+					if new_basename ~= basename then
+						vim.schedule(function()
+							M._read_repair_reference(referring_file, basename, new_basename)
+						end)
+					end
+				end
+				return found
+			end
+		end
+	end
+
 	return candidates[1]
 end
 M.resolve_chat_path = resolve_chat_path
@@ -2435,8 +2627,9 @@ local function try_open_inline_branch_link(current_line, cursor_col, parent_buf)
 	for _, link in ipairs(inline_links) do
 		-- cursor_col is 0-indexed, col_start/col_end are 1-indexed
 		if cursor_col + 1 >= link.col_start and cursor_col + 1 <= link.col_end then
-			local current_dir = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(parent_buf), ":p:h")
-			local expanded = resolve_chat_path(link.path, current_dir)
+			local referring = vim.api.nvim_buf_get_name(parent_buf)
+			local current_dir = vim.fn.fnamemodify(referring, ":p:h")
+			local expanded = resolve_chat_path(link.path, current_dir, referring)
 			if vim.fn.filereadable(expanded) == 1 then
 				M.open_buf(expanded)
 			elseif expanded:match("%d%d%d%d%-%d%d%-%d%d%.%d%d%-%d%d%-%d%d%.%d+%.md$") then
@@ -2464,7 +2657,7 @@ local function find_tree_root_file(file_path, depth)
 	local parsed = M.chat_parser.parse_chat(lines, header_end, M.config)
 	if not parsed.parent_link then return abs_path end
 	local parent_dir = vim.fn.fnamemodify(abs_path, ":h")
-	local parent_abs = resolve_chat_path(parsed.parent_link.path, parent_dir)
+	local parent_abs = resolve_chat_path(parsed.parent_link.path, parent_dir, abs_path)
 	if vim.fn.filereadable(parent_abs) == 0 then return abs_path end
 	return find_tree_root_file(parent_abs, depth + 1)
 end
@@ -2485,7 +2678,7 @@ local function collect_tree_files(file_path, visited)
 	local file_dir = vim.fn.fnamemodify(abs_path, ":h")
 
 	for _, branch in ipairs(parsed.branches) do
-		local child_abs = resolve_chat_path(branch.path, file_dir)
+		local child_abs = resolve_chat_path(branch.path, file_dir, abs_path)
 		local child_files = collect_tree_files(child_abs, visited)
 		for _, f in ipairs(child_files) do
 			table.insert(result, f)
@@ -3351,8 +3544,9 @@ local function open_branch_ref(current_line, buf)
 		return false
 	end
 
-	local current_dir = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ":p:h")
-	local expanded = resolve_chat_path(parsed.path, current_dir)
+	local referring = vim.api.nvim_buf_get_name(buf)
+	local current_dir = vim.fn.fnamemodify(referring, ":p:h")
+	local expanded = resolve_chat_path(parsed.path, current_dir, referring)
 
 	if vim.fn.filereadable(expanded) == 1 then
 		M.open_buf(expanded)

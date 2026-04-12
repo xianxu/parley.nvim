@@ -5,7 +5,7 @@ This index provides a central directory for all atlas entries of the `parley.nvi
 
 ## 1. Core Chat System
 - [Chat Format](chat/format.md): Transcript prefixes and front matter header metadata.
-- [Chat Lifecycle](chat/lifecycle.md): Creation, response, resubmission, and deletion.
+- [Chat Lifecycle](chat/lifecycle.md): Creation, slug rename (auto from topic), response, resubmission, and deletion.
 - [Chat Memory](chat/memory.md): History management, summarization, and preservation.
 - [Memory Preferences](chat/memory_prefs.md): Per-tag user preference profiles from chat history summaries.
 - [Chat Parsing](chat/parsing.md): Buffer segmentation, turn identification, and branch link parsing.

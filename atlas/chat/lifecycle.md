@@ -3,6 +3,9 @@
 ## Creation (`:ParleyChatNew` / `<C-g>c`)
 Creates timestamped `.md` in primary `chat_dir`. Multi-root: all roots scanned for discovery; new chats always in primary.
 
+## Slug Rename (auto, on save)
+When a chat's `topic:` header changes, the file is auto-renamed to include a slug: `YYYY-MM-DD.HH-MM-SS.mmm_slug-words.md`. The slug is derived from the topic (stop words stripped, kebab-case, max 5 words / 40 chars). The `_` separator ensures unambiguous parsing. References to old filenames resolve via fuzzy timestamp glob with read-repair of stale `🌿:` links. See `lua/parley/chat_slug.lua` for the pure slug logic.
+
 ## Move (`:ParleyChatMove`)
 Moves entire chat tree (root + descendants) to another chat root; rewrites all `🌿:` references.
 

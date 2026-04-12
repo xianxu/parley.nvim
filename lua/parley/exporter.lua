@@ -30,13 +30,7 @@ local function extract_date(name)
 end
 
 local function resolve_chat_path(path, base_dir)
-	if path:match("^~/") or path == "~" then
-		return vim.fn.resolve(vim.fn.expand(path))
-	elseif path:sub(1, 1) == "/" then
-		return vim.fn.resolve(path)
-	else
-		return vim.fn.resolve(base_dir .. "/" .. path)
-	end
+	return _parley.resolve_chat_path(path, base_dir)
 end
 
 local function get_parse_config()

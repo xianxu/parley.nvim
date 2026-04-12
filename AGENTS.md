@@ -19,6 +19,7 @@
     - Steps and plans SHOULD be written to `## Plan` section of the issue file
     - Log discoveries, tools you used or installed in `## Log`section of the issue file
     - Update your progress in the issue file incrementally and often
+	- An issue has state: open, working, blocked, done, wontfix
 - For complex work when skills like `superpowers` is used, write detailed designs in `workshop/plans/` using similar file name with -plan at the end.
     - For example, for `workshop/issues/000042-slug.md`, write design in `workshop/plans/000042-slug-plan.md`
 - You will discover problems during design stage as you understand more of existing codebase. ALWAYS add tests to test against those unexpected problems
