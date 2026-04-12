@@ -273,13 +273,6 @@ end
 ---@param tag string
 ---@param text string preference content
 M.save_tag = function(tag, text)
-	-- Guard: repo mode may have disabled memory_prefs after generation started
-	local config = _parley.config.memory_prefs
-	if not config or not config.enable then
-		_parley.logger.debug("memory_prefs: save_tag skipped (disabled), tag=" .. tag)
-		return
-	end
-
 	local out = {}
 	table.insert(out, "<!-- last_generated: " .. os.date("!%Y-%m-%dT%H:%M:%S") .. " -->")
 	table.insert(out, "")
@@ -287,11 +280,8 @@ M.save_tag = function(tag, text)
 		table.insert(out, line)
 	end
 
-	local dir = prefs_dir()
-	local path = prefs_path(tag)
-	_parley.logger.warning("memory_prefs: WRITING " .. path .. " | traceback: " .. debug.traceback("", 2))
-	_parley.helpers.prepare_dir(dir, "chat")
-	vim.fn.writefile(out, path)
+	_parley.helpers.prepare_dir(prefs_dir(), "chat")
+	vim.fn.writefile(out, prefs_path(tag))
 	-- Invalidate cache so next load picks up changes
 	_cached_prefs = nil
 end
@@ -402,11 +392,6 @@ end
 --- Run the full generation pipeline (extract → summarize → save).
 --- Async. Respects lock.
 M.generate = function()
-	local config = _parley.config.memory_prefs
-	if not config or not config.enable then
-		_parley.logger.debug("memory_prefs: generate skipped (disabled)")
-		return
-	end
 	if _generating then
 		_parley.logger.debug("memory_prefs: generation already in progress")
 		return
