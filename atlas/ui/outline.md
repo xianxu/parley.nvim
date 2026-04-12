@@ -3,8 +3,14 @@
 ## Command
 - `:ParleyOutline` (`<C-g>t`): floating picker with headings and conversation turns
 
+## Scope
+- **Chat files**: tree-aware outline with questions, branches, annotations
+- **Any `.md` file**: flat outline of `#`, `##`, `###` headings
+
 ## Logic
-- Identifies: `💬:` (user questions), `#`/`##` (headings as 🧭/`•`), `🌿:` (branch refs)
+- Identifies: `💬:` (user questions), `#`/`##`/`###` (headings), `@@…@@` (annotations), `🌿:` (branch refs)
+- Headings indented by level: `#` → 2sp, `##` → 4sp, `###` → 6sp
+- Lines inside code blocks (``` / ~~~) are excluded
 - Document order (ascending line number)
 
 ## Tree-Aware Outline (Chat Files)

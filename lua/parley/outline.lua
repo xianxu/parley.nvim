@@ -63,6 +63,13 @@ local function is_outline_item(bufnr, line_number, config, code_block_memo, all_
   -- Match branch references
   elseif line:match("^" .. vim.pesc(config.chat_branch_prefix or "🌿:")) then
     return true, "branch", "🌿 " .. line
+  -- Match markdown headings (### before ## before # to avoid prefix collision)
+  elseif line:match("^### ") then
+    return true, "heading", "      " .. line
+  elseif line:match("^## ") then
+    return true, "heading", "    " .. line
+  elseif line:match("^# ") then
+    return true, "heading", "  " .. line
   end
 
   -- Not an outline item

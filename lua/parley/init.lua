@@ -2281,6 +2281,9 @@ M.setup_markdown_keymaps = function(buf)
 		end
 	end, "Parley delete current file and buffer")
 
+	-- <C-g>t: outline navigator for markdown files
+	M.helpers.set_keymap({ buf }, "n", "<C-g>t", M.cmd.Outline, "Parley prompt Outline Navigator")
+
 end
 
 M.setup_buf_handler = function()
@@ -3493,11 +3496,11 @@ end
 
 -- Command for navigating questions and headers in chat documents
 M.cmd.Outline = function()
-	-- Check if current buffer is a chat file
+	-- Allow outline on any markdown file, not just chat files
 	local buf = vim.api.nvim_get_current_buf()
 	local file_name = vim.api.nvim_buf_get_name(buf)
-	if M.not_chat(buf, file_name) then
-		M.logger.warning("Outline command is only available in chat files")
+	if not file_name:match("%.md$") and M.not_chat(buf, file_name) then
+		M.logger.warning("Outline command is only available in markdown files")
 		return
 	end
 

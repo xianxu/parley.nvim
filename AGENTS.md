@@ -11,7 +11,7 @@
 
 ### 2. Overall Workflow
 - Enter brainstorming mode when requirement is unclear
-- Enter plan mode for ANY non-trivial task (change more than 2 files, 100 lines)
+- Enter plan mode for ANY non-trivial task (change more than 3 files, 100 lines)
 - Work is offered in issues system and tracked in `workshop/issues/` folder as single-file-per-issue markdown file, and each issue file has the following structure:
     - It may refer to file in `workshop/parley`, parley chats, they serve as a starting point of product exploration between user and AI
 	- Brainstorming agent SHOULD use parley chat as a starting point when available
