@@ -54,6 +54,7 @@ This index provides a central directory for all atlas entries of the `parley.nvi
 ## 8. Special Modes
 - [Interview Mode](modes/interview.md): Mechanics and automatic timestamps.
 - [Raw Mode](modes/raw_mode.md): API debugging via raw requests/responses.
+- [Document Review](modes/review.md): LLM-powered document review via ㊷ comment markers.
 
 ## 9. Export
 - [Export Formats](export/formats.md): Jekyll HTML and Markdown export logic.

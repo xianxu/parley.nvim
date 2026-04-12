@@ -1114,7 +1114,30 @@ M.refresh_state = function(update)
 		end
 	end
 
-	M.helpers.table_to_file(M._state, state_file)
+	-- Repo-mode roots are transient (determined by cwd + marker at startup).
+	-- Never persist them — otherwise a later session with a different cwd
+	-- restores repo roots it shouldn't have access to.
+	local persist_state = vim.deepcopy(M._state)
+	if type(persist_state.chat_roots) == "table" then
+		local filtered = {}
+		for _, root in ipairs(persist_state.chat_roots) do
+			if root.label ~= "repo" then
+				table.insert(filtered, root)
+			end
+		end
+		persist_state.chat_roots = #filtered > 0 and filtered or nil
+	end
+	-- Rebuild chat_dirs from filtered chat_roots to keep them in sync
+	if type(persist_state.chat_roots) == "table" then
+		local dirs = {}
+		for _, root in ipairs(persist_state.chat_roots) do
+			table.insert(dirs, root.dir)
+		end
+		persist_state.chat_dirs = #dirs > 0 and dirs or nil
+	else
+		persist_state.chat_dirs = nil
+	end
+	M.helpers.table_to_file(persist_state, state_file)
 
 	local buf = vim.api.nvim_get_current_buf()
 	local file_name = vim.api.nvim_buf_get_name(buf)
@@ -2122,6 +2145,10 @@ local function format_branch_ref(rel_path, topic)
 end
 
 M.setup_markdown_keymaps = function(buf)
+	-- Document review keybindings
+	local review = require("parley.review")
+	review.setup_keymaps(buf)
+
 	-- <C-g>eh: export markdown to HTML via pandoc
 	local export_html = M.config.chat_shortcut_export_html
 	if export_html then

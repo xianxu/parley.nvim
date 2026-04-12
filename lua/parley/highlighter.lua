@@ -253,12 +253,52 @@ end
 local function compute_markdown_highlights(buf, start_line, end_line)
     local result = {}
     local branch_prefix = _parley.config.chat_branch_prefix or "🌿:"
+    local marker_char = "㊷"
     local lines = vim.api.nvim_buf_get_lines(buf, start_line - 1, end_line, false)
     for offset, line in ipairs(lines) do
         local row = start_line + offset - 2
         if line:sub(1, #branch_prefix) == branch_prefix then
             result[row] = result[row] or {}
             table.insert(result[row], { hl_group = "ParleyChatReference", col_start = 0, col_end = -1 })
+        end
+        -- Highlight ㊷[...] user markers and {...} agent questions
+        local search_start = 1
+        while true do
+            local pos = line:find(marker_char, search_start, true)
+            if not pos then break end
+            -- Walk the bracket chain starting after ㊷
+            local cursor = pos + 3  -- skip 3-byte UTF-8 char
+            while cursor <= #line do
+                local ch = line:sub(cursor, cursor)
+                local open, close, hl
+                if ch == "[" then
+                    open, close, hl = "[", "]", "ParleyReviewUser"
+                elseif ch == "{" then
+                    open, close, hl = "{", "}", "ParleyReviewAgent"
+                else
+                    break
+                end
+                -- Find matching close bracket (with nesting)
+                local depth = 0
+                local end_pos = nil
+                for i = cursor, #line do
+                    local c = line:sub(i, i)
+                    if c == open then depth = depth + 1
+                    elseif c == close then
+                        depth = depth - 1
+                        if depth == 0 then end_pos = i; break end
+                    end
+                end
+                if not end_pos then break end
+                result[row] = result[row] or {}
+                table.insert(result[row], {
+                    hl_group = hl,
+                    col_start = cursor - 1,  -- 0-indexed
+                    col_end = end_pos,        -- exclusive end
+                })
+                cursor = end_pos + 1
+            end
+            search_start = cursor
         end
     end
     return result
@@ -449,6 +489,11 @@ M.setup_highlights = function()
             link = "IncSearch",
         })
     end
+
+    -- Review markers — ㊷[user comment] in markdown files
+    vim.api.nvim_set_hl(0, "ParleyReviewUser", { link = "DiagnosticWarn" })
+    -- Review markers — {agent question} in ㊷ marker chains
+    vim.api.nvim_set_hl(0, "ParleyReviewAgent", { link = "DiagnosticInfo" })
 
     -- Interview timestamps - Highlighted timestamp lines like :15min
     -- Use only background color to allow search highlights to show through

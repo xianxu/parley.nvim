@@ -364,6 +364,14 @@ local config = {
 	global_shortcut_year_root = { modes = { "n", "i" }, shortcut = "<C-n>r" },
 	-- shortcut for opening oil.nvim file explorer
 	global_shortcut_oil = { modes = { "n" }, shortcut = "<leader>fo" },
+	-- document review shortcuts (markdown files only, not chat buffers)
+	review_shortcut_insert = { modes = { "n", "v" }, shortcut = "<C-g>vi" },
+	review_shortcut_edit = { modes = { "n" }, shortcut = "<C-g>ve" },
+	review_shortcut_revise = { modes = { "n" }, shortcut = "<C-g>vr" },
+	-- agent to use for document review (empty = last-used agent)
+	review_agent = "",
+	-- how long review edit highlights persist (ms)
+	review_highlight_duration = 2000,
 	-- default search term when using :ParleyChatFinder
 	chat_finder_pattern = "",
 	chat_finder_mappings = {
