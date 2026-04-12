@@ -1,4 +1,4 @@
--- Unit tests for per-agent tools config and ClaudeAgentTools default.
+-- Unit tests for per-agent tools config and ToolSonnet default.
 --
 -- M1 Task 1.4: agents can declare a `tools` field (list of builtin tool
 -- names) plus optional `max_tool_iterations` and `tool_result_max_bytes`
@@ -6,7 +6,7 @@
 -- registry, raises with the offending name on unknown entries, and
 -- applies default values for the two numeric fields when absent.
 --
--- Also verifies that the default `ClaudeAgentTools` agent ships in the
+-- Also verifies that the default `ToolSonnet` agent ships in the
 -- default config with all six builtin tools enabled (the headline M1
 -- deliverable — users get an agentic Claude out of the box).
 
@@ -130,12 +130,12 @@ describe("per-agent tools config", function()
     end)
 end)
 
-describe("default ClaudeAgentTools", function()
+describe("default ToolSonnet", function()
     before_each(function() fresh_setup(nil) end)
 
     it("ships in the default config with all builtin tools", function()
-        local agent = parley.agents["ClaudeAgentTools"]
-        assert.is_not_nil(agent, "ClaudeAgentTools should ship as a default agent")
+        local agent = parley.agents["ToolSonnet"]
+        assert.is_not_nil(agent, "ToolSonnet should ship as a default agent")
         assert.equals("anthropic", agent.provider)
         assert.is_table(agent.tools)
         assert.equals(6, #agent.tools)
@@ -150,7 +150,7 @@ describe("default ClaudeAgentTools", function()
     end)
 
     it("has default loop limits applied", function()
-        local agent = parley.agents["ClaudeAgentTools"]
+        local agent = parley.agents["ToolSonnet"]
         assert.equals(20, agent.max_tool_iterations)
         assert.equals(102400, agent.tool_result_max_bytes)
     end)
@@ -169,17 +169,17 @@ end)
 describe("get_agent forwards client-side tool config (full wiring chain)", function()
     before_each(function() fresh_setup(nil) end)
 
-    it("get_agent(ClaudeAgentTools) carries the tools field from M.agents", function()
+    it("get_agent(ToolSonnet) carries the tools field from M.agents", function()
         parley._state = parley._state or {}
-        parley._state.agent = "ClaudeAgentTools"
-        local agent = parley.get_agent("ClaudeAgentTools")
+        parley._state.agent = "ToolSonnet"
+        local agent = parley.get_agent("ToolSonnet")
         assert.is_not_nil(agent)
         assert.is_table(agent.tools)
         assert.equals(6, #agent.tools)
     end)
 
-    it("get_agent(ClaudeAgentTools) forwards max_tool_iterations and tool_result_max_bytes", function()
-        local agent = parley.get_agent("ClaudeAgentTools")
+    it("get_agent(ToolSonnet) forwards max_tool_iterations and tool_result_max_bytes", function()
+        local agent = parley.get_agent("ToolSonnet")
         assert.equals(20, agent.max_tool_iterations)
         assert.equals(102400, agent.tool_result_max_bytes)
     end)
@@ -191,8 +191,8 @@ describe("get_agent forwards client-side tool config (full wiring chain)", funct
         assert.is_nil(agent.tool_result_max_bytes)
     end)
 
-    it("get_agent_info(headers, get_agent('ClaudeAgentTools')).tools is the 6-item list", function()
-        local agent = parley.get_agent("ClaudeAgentTools")
+    it("get_agent_info(headers, get_agent('ToolSonnet')).tools is the 6-item list", function()
+        local agent = parley.get_agent("ToolSonnet")
         local info = parley.get_agent_info({}, agent)
         assert.is_table(info.tools)
         assert.equals(6, #info.tools)
@@ -205,9 +205,9 @@ describe("get_agent forwards client-side tool config (full wiring chain)", funct
     -- snapshot in get_agent, dropped field in get_agent_info, missing
     -- 4th arg in chat_respond, append-not-clobber regression in
     -- prepare_payload) would be caught here.
-    it("full wiring chain: ClaudeAgentTools request payload contains 7 client-side tools", function()
+    it("full wiring chain: ToolSonnet request payload contains 7 client-side tools", function()
         local dispatcher = require("parley.dispatcher")
-        local agent = parley.get_agent("ClaudeAgentTools")
+        local agent = parley.get_agent("ToolSonnet")
         local info = parley.get_agent_info({}, agent)
         local msgs = { { role = "user", content = "hi" } }
 
@@ -235,7 +235,7 @@ describe("get_agent forwards client-side tool config (full wiring chain)", funct
     -- argument like dispatcher_spec.lua does).
     it("full wiring chain + web_search: 7 client tools APPEND to web_search/web_fetch", function()
         local dispatcher = require("parley.dispatcher")
-        local agent = parley.get_agent("ClaudeAgentTools")
+        local agent = parley.get_agent("ToolSonnet")
         local info = parley.get_agent_info({}, agent)
         local msgs = { { role = "user", content = "hi" } }
 

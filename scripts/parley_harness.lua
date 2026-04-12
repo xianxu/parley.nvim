@@ -3,11 +3,11 @@
 --
 -- Usage from Lua:
 --   local payload = require("scripts.parley_harness").build_payload("path/to/transcript.md")
---   local payload = require("scripts.parley_harness").build_payload(path, { agent_name = "ClaudeAgentTools" })
+--   local payload = require("scripts.parley_harness").build_payload(path, { agent_name = "ToolSonnet" })
 --
 -- Usage from shell (via the .sh wrapper):
 --   PARLEY_HARNESS_DRY_RUN=1 scripts/test-anthropic-interaction.sh transcript.md
---   PARLEY_HARNESS_AGENT=ClaudeAgentTools scripts/test-anthropic-interaction.sh transcript.md
+--   PARLEY_HARNESS_AGENT=ToolSonnet scripts/test-anthropic-interaction.sh transcript.md
 --
 -- See docs/plans/000090-renderer-refactor.md section 6.
 

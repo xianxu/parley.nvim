@@ -28,7 +28,7 @@ describe("parley_harness golden round-trip", function()
         it("payload for " .. name .. " matches golden", function()
             local payload = harness.build_payload(
                 "tests/fixtures/transcripts/" .. name .. ".md",
-                { agent_name = "ClaudeAgentTools" }
+                { agent_name = "ToolSonnet" }
             )
             local golden = read_json("tests/fixtures/golden_payloads/" .. name .. ".json")
             assert.same(golden, payload)
