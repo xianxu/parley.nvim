@@ -273,10 +273,16 @@ describe("outline picker item building", function()
         end
     end)
 
-    it("excludes markdown headers from outline", function()
+    it("excludes markdown headers from outline in chat mode", function()
         local bufnr = make_buf({ "# Top heading", "## Sub heading" })
-        local items = outline._build_picker_items(bufnr, config)
+        local items = outline._build_picker_items(bufnr, config, { is_chat = true })
         assert.equals(0, #items)
+    end)
+
+    it("includes markdown headers in outline for non-chat markdown", function()
+        local bufnr = make_buf({ "# Top heading", "## Sub heading", "### Third level" })
+        local items = outline._build_picker_items(bufnr, config, { is_chat = false })
+        assert.equals(3, #items)
     end)
 
     it("includes user-prefix lines", function()

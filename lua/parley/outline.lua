@@ -41,7 +41,8 @@ end
 -- Function to check if a line should be included in the outline
 -- Returns: boolean (should be included), string (type), string (formatted content)
 -- Optional all_lines parameter avoids per-line buffer reads when bulk lines are available.
-local function is_outline_item(bufnr, line_number, config, code_block_memo, all_lines)
+local function is_outline_item(bufnr, line_number, config, code_block_memo, all_lines, opts)
+  opts = opts or {}
   -- Get the line content (use pre-fetched lines if available)
   local line = all_lines and all_lines[line_number]
     or vim.api.nvim_buf_get_lines(bufnr, line_number - 1, line_number, false)[1] or ""
@@ -63,13 +64,15 @@ local function is_outline_item(bufnr, line_number, config, code_block_memo, all_
   -- Match branch references
   elseif line:match("^" .. vim.pesc(config.chat_branch_prefix or "🌿:")) then
     return true, "branch", "🌿 " .. line
-  -- Match markdown headings (### before ## before # to avoid prefix collision)
-  elseif line:match("^### ") then
-    return true, "heading", "      " .. line
-  elseif line:match("^## ") then
-    return true, "heading", "    " .. line
-  elseif line:match("^# ") then
-    return true, "heading", "  " .. line
+  -- Match markdown headings — only for non-chat markdown files
+  elseif not opts.is_chat then
+    if line:match("^### ") then
+      return true, "heading", "      " .. line
+    elseif line:match("^## ") then
+      return true, "heading", "    " .. line
+    elseif line:match("^# ") then
+      return true, "heading", "  " .. line
+    end
   end
 
   -- Not an outline item
@@ -189,12 +192,12 @@ M._jump_to_outline_location = jump_to_outline_location
 
 -- Build the list of picker items from a buffer. Exposed for testing.
 -- Returns items in document order: { display: string, value: { lnum: number } }
-function M._build_picker_items(bufnr, config)
+function M._build_picker_items(bufnr, config, opts)
   local all_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local code_block_memo = build_code_block_memo(bufnr)
   local items = {}
   for i = 1, #all_lines do
-    local is_item, item_type, formatted_line = is_outline_item(bufnr, i, config, code_block_memo, all_lines)
+    local is_item, item_type, formatted_line = is_outline_item(bufnr, i, config, code_block_memo, all_lines, opts)
     if is_item then
       table.insert(items, { display = formatted_line, value = { lnum = i }, type = item_type })
     end
@@ -398,8 +401,8 @@ function M.question_picker(config)
   local is_chat = not parley.not_chat(current_bufnr, buf_name)
 
   if not is_chat then
-    -- Non-chat: use flat outline
-    local items = M._build_picker_items(current_bufnr, config)
+    -- Non-chat: use flat outline (include markdown headings)
+    local items = M._build_picker_items(current_bufnr, config, { is_chat = false })
     local keybindings_key = (parley.config.global_shortcut_keybindings or { shortcut = "<C-g>?" }).shortcut
     float_picker.open({
       title = "💬 Q&A Outline",
@@ -437,7 +440,7 @@ function M.question_picker(config)
   local function open_tree_picker(sel_index)
     local items = M._build_tree_outline_items(root, config, expanded_set)
     if #items == 0 then
-      items = M._build_picker_items(current_bufnr, config)
+      items = M._build_picker_items(current_bufnr, config, { is_chat = true })
     end
 
     local keybindings_key = (parley.config.global_shortcut_keybindings or { shortcut = "<C-g>?" }).shortcut
