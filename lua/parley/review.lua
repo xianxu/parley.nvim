@@ -608,7 +608,11 @@ function M.submit_review(buf, level)
 
                 local input = review_call.input or {}
                 _parley.logger.debug("Review: tool input: " .. vim.inspect(input))
-                local edits = input.edits or {}
+                local edits = input.edits
+                if type(edits) ~= "table" then
+                    _parley.logger.error("Review: edits field is " .. type(edits) .. ", expected table: " .. tostring(edits))
+                    return
+                end
 
                 if #edits == 0 then
                     _parley.logger.warning("Review: agent returned empty edits")
