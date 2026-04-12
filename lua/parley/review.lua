@@ -41,7 +41,7 @@ end
 --- Returns the list of sections and the end position in the text.
 --- @param text string   the full line (or joined text)
 --- @param pos number    byte position of the ㊷ character
---- @return table sections  list of {type="user"|"agent", text=string}
+--- @return table sections  list of {type, text, byte_start, byte_end}
 --- @return number end_pos  byte position after the last bracket
 local function parse_marker_sections(text, pos)
     local sections = {}
@@ -56,6 +56,8 @@ local function parse_marker_sections(text, pos)
             table.insert(sections, {
                 type = "user",
                 text = text:sub(cursor + 1, close - 1),
+                byte_start = cursor,  -- opening bracket position
+                byte_end = close,     -- closing bracket position
             })
             cursor = close + 1
         elseif ch == "{" then
@@ -64,6 +66,8 @@ local function parse_marker_sections(text, pos)
             table.insert(sections, {
                 type = "agent",
                 text = text:sub(cursor + 1, close - 1),
+                byte_start = cursor,
+                byte_end = close,
             })
             cursor = close + 1
         else
@@ -110,6 +114,9 @@ local function compute_fence_ranges(lines)
     return ranges
 end
 
+-- Expose for reuse by highlighter (DRY)
+M._parse_marker_sections = parse_marker_sections
+
 --- Parse all ㊷ markers in a list of lines.
 --- @param lines string[]  buffer lines
 --- @return table[]  list of {line=0-indexed, col=0-indexed byte, sections=[], ready=bool}
@@ -146,19 +153,11 @@ function M.parse_markers(lines)
     return markers
 end
 
---- Apply a list of {old_string, new_string, explain} edits to a file.
---- Edits are applied in reverse document order to prevent position shifts.
---- @param file_path string
+--- Pure: validate and apply edits to a content string.
+--- @param content string  file content
 --- @param edits table[]  list of {old_string, new_string, explain}
---- @return table  {ok=bool, msg=string, applied=table[]}
-function M.apply_edits(file_path, edits)
-    local f, err = io.open(file_path, "r")
-    if not f then
-        return { ok = false, msg = "cannot open: " .. (err or file_path), applied = {} }
-    end
-    local content = f:read("*a")
-    f:close()
-
+--- @return table  {ok=bool, msg=string, content=string|nil, applied=table[]}
+function M.compute_edits(content, edits)
     -- Find positions of all old_strings, validate they exist and are unique
     local positioned = {}
     for idx, edit in ipairs(edits) do
@@ -211,18 +210,42 @@ function M.apply_edits(file_path, edits)
         })
     end
 
-    -- Write back
+    return {
+        ok = true,
+        msg = "Applied " .. #applied .. " edit(s)",
+        content = content,
+        applied = applied,
+    }
+end
+
+--- IO boundary: read file, apply edits, write file.
+--- @param file_path string
+--- @param edits table[]  list of {old_string, new_string, explain}
+--- @return table  {ok=bool, msg=string, applied=table[]}
+function M.apply_edits(file_path, edits)
+    local f, err = io.open(file_path, "r")
+    if not f then
+        return { ok = false, msg = "cannot open: " .. (err or file_path), applied = {} }
+    end
+    local content = f:read("*a")
+    f:close()
+
+    local result = M.compute_edits(content, edits)
+    if not result.ok then
+        return result
+    end
+
     local wf, werr = io.open(file_path, "w")
     if not wf then
         return { ok = false, msg = "cannot write: " .. (werr or file_path), applied = {} }
     end
-    wf:write(content)
+    wf:write(result.content)
     wf:close()
 
     return {
         ok = true,
-        msg = "Applied " .. #applied .. " edit(s)",
-        applied = applied,
+        msg = result.msg,
+        applied = result.applied,
     }
 end
 

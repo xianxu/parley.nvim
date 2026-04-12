@@ -263,42 +263,21 @@ local function compute_markdown_highlights(buf, start_line, end_line)
         end
         -- Highlight ㊷[...] user markers and {...} agent questions
         local search_start = 1
+        local review = require("parley.review")
         while true do
             local pos = line:find(marker_char, search_start, true)
             if not pos then break end
-            -- Walk the bracket chain starting after ㊷
-            local cursor = pos + 3  -- skip 3-byte UTF-8 char
-            while cursor <= #line do
-                local ch = line:sub(cursor, cursor)
-                local open, close, hl
-                if ch == "[" then
-                    open, close, hl = "[", "]", "ParleyReviewUser"
-                elseif ch == "{" then
-                    open, close, hl = "{", "}", "ParleyReviewAgent"
-                else
-                    break
-                end
-                -- Find matching close bracket (with nesting)
-                local depth = 0
-                local end_pos = nil
-                for i = cursor, #line do
-                    local c = line:sub(i, i)
-                    if c == open then depth = depth + 1
-                    elseif c == close then
-                        depth = depth - 1
-                        if depth == 0 then end_pos = i; break end
-                    end
-                end
-                if not end_pos then break end
+            local sections, end_pos = review._parse_marker_sections(line, pos)
+            for _, section in ipairs(sections) do
+                local hl = section.type == "agent" and "ParleyReviewAgent" or "ParleyReviewUser"
                 result[row] = result[row] or {}
                 table.insert(result[row], {
                     hl_group = hl,
-                    col_start = cursor - 1,  -- 0-indexed
-                    col_end = end_pos,        -- exclusive end
+                    col_start = section.byte_start - 1,  -- 0-indexed
+                    col_end = section.byte_end,           -- exclusive end
                 })
-                cursor = end_pos + 1
             end
-            search_start = cursor
+            search_start = end_pos
         end
     end
     return result
