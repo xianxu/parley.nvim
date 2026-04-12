@@ -457,11 +457,18 @@ end
 -- Submit review
 --------------------------------------------------------------------------------
 
+local _in_flight = {}  -- buf → true while a review is in progress
+
 --- Submit the current buffer for review.
 --- @param buf number
 --- @param level string  "edit" or "revise"
 function M.submit_review(buf, level)
     _parley = _parley or require("parley")
+
+    if _in_flight[buf] then
+        _parley.logger.warning("Review: already in progress for this buffer")
+        return
+    end
 
     local file_path = vim.api.nvim_buf_get_name(buf)
     if file_path == "" then
@@ -546,6 +553,8 @@ function M.submit_review(buf, level)
     local tasker = require("parley.tasker")
     local providers = require("parley.providers")
 
+    _in_flight[buf] = true
+
     dispatcher.query(
         nil,             -- buf: nil for headless
         agent.provider,
@@ -556,6 +565,8 @@ function M.submit_review(buf, level)
         function(qid)
             -- on_exit: access raw_response for tool call extraction
             vim.schedule(function()
+                _in_flight[buf] = nil
+
                 local qt = tasker.get_query(qid)
                 if not qt then
                     _parley.logger.error("Review: query not found")
