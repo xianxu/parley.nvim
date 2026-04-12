@@ -476,6 +476,10 @@ function M.submit_review(buf, level)
         return
     end
 
+    -- Clear stale quickfix and decorations from previous round
+    vim.fn.setqflist({}, "r")
+    pcall(vim.cmd, "cclose")
+
     -- Save if modified
     if vim.bo[buf].modified then
         vim.api.nvim_buf_call(buf, function()
