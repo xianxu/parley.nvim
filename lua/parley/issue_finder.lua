@@ -114,8 +114,8 @@ M.open = function(_options)
     local filtered = {}
     for _, issue in ipairs(all_issues) do
         if view_mode == 0 then
-            -- Active issues only: open, working, blocked (exclude done, wontfix, archived)
-            if issue.status ~= "done" and issue.status ~= "wontfix" and not issue.archived then
+            -- Active issues only: open, working, blocked (exclude done, wontfix, punt, archived)
+            if issue.status ~= "done" and issue.status ~= "wontfix" and issue.status ~= "punt" and not issue.archived then
                 table.insert(filtered, issue)
             end
         else

@@ -243,11 +243,13 @@ push:
 		for f in issues/[0-9][0-9][0-9][0-9][0-9][0-9]-*.md; do \
 			[ -f "$$f" ] || continue; \
 			status=$$(grep -m1 '^status:' "$$f" | sed 's/^status:[[:space:]]*//'); \
-			if [ "$$status" = "done" ]; then \
-				gh_num=$$(grep -m1 '^github_issue:' "$$f" | sed 's/^github_issue:[[:space:]]*//'); \
-				if [ -n "$$gh_num" ] && [ "$$gh_num" != "" ]; then \
-					echo "==> Closing GitHub issue #$$gh_num..."; \
-					gh issue close "$$gh_num" --repo "$$repo" --comment "Fixed on main." || true; \
+			if [ "$$status" = "done" ] || [ "$$status" = "wontfix" ] || [ "$$status" = "punt" ]; then \
+				if [ "$$status" = "done" ]; then \
+					gh_num=$$(grep -m1 '^github_issue:' "$$f" | sed 's/^github_issue:[[:space:]]*//'); \
+					if [ -n "$$gh_num" ] && [ "$$gh_num" != "" ]; then \
+						echo "==> Closing GitHub issue #$$gh_num..."; \
+						gh issue close "$$gh_num" --repo "$$repo" --comment "Fixed on main." || true; \
+					fi; \
 				fi; \
 				mkdir -p history; \
 				echo "==> Archiving $$f to history/..."; \
@@ -259,7 +261,7 @@ push:
 	if [ "$$moved" -eq 1 ]; then \
 		echo "==> Committing archived history..."; \
 		git add issues/ history/ && \
-		git commit -m "archive done issues to history" && \
+		git commit -m "archive completed issues to history" && \
 		git push; \
 	fi; \
 	echo "Done."
@@ -381,13 +383,13 @@ merge:
 			fi; \
 		fi; \
 	fi; \
-	echo "==> Archiving done issues to history/..."; \
+	echo "==> Archiving completed issues to history/..."; \
 	moved=0; \
 	if [ -d "$$main_path/issues" ]; then \
 		for f in "$$main_path"/issues/[0-9][0-9][0-9][0-9][0-9][0-9]-*.md; do \
 			[ -f "$$f" ] || continue; \
 			status=$$(grep -m1 '^status:' "$$f" | sed 's/^status:[[:space:]]*//'); \
-			if [ "$$status" = "done" ]; then \
+			if [ "$$status" = "done" ] || [ "$$status" = "wontfix" ] || [ "$$status" = "punt" ]; then \
 				mkdir -p "$$main_path/history"; \
 				echo "  Moving $$(basename $$f) to history/"; \
 				mv "$$f" "$$main_path/history/$$(basename $$f)"; \
@@ -406,7 +408,7 @@ merge:
 	git -C "$$main_path" branch -D "$$branch" 2>/dev/null || true; \
 	echo "Done. Run: cd $$main_path"
 
-# Warn if any touched issue files are not marked status: done.
+# Warn if any touched issue files are not marked as resolved (done/wontfix/punt).
 # Usage: $(call check_undone_issues,<base-ref>,<issues-dir>)
 #   base-ref:   git ref to diff against (e.g. origin/main, main)
 #   issues-dir: path to issues directory (e.g. issues, $$main_path/issues)
@@ -417,7 +419,7 @@ define check_undone_issues
 		target="$(2)/$$(basename $$f)"; \
 		[ -f "$$target" ] || continue; \
 		status=$$(grep -m1 '^status:' "$$target" | sed 's/^status:[[:space:]]*//'); \
-		if [ "$$status" != "done" ]; then \
+		if [ "$$status" != "done" ] && [ "$$status" != "wontfix" ] && [ "$$status" != "punt" ]; then \
 			not_done="$$not_done\n  $$f (status: $${status:-unset})"; \
 		fi; \
 	done; \

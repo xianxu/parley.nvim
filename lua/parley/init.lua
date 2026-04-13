@@ -747,6 +747,45 @@ M.setup = function(opts)
 		end,
 	})
 
+	-- Set up typeahead completion for status: field in issue files
+	vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, {
+		pattern = "*.md",
+		callback = function(ev)
+			local issues_dir = M.config.issues_dir
+			if not issues_dir or issues_dir == "" then return end
+			local git_root = M.helpers.find_git_root(vim.fn.getcwd())
+			if git_root == "" then git_root = vim.fn.getcwd() end
+			local abs_issues = vim.fn.resolve(git_root .. "/" .. issues_dir)
+			local file_dir = vim.fn.resolve(vim.fn.fnamemodify(ev.file, ":p:h"))
+			if file_dir:sub(1, #abs_issues) == abs_issues then
+				vim.api.nvim_create_autocmd("TextChangedI", {
+					buffer = ev.buf,
+					callback = function()
+						local line = vim.api.nvim_get_current_line()
+						local row = vim.api.nvim_win_get_cursor(0)[1]
+						-- Only complete within frontmatter on status: lines
+						if row > 10 or not line:match("^status:%s*") then return end
+						local prefix_end = line:find(":%s*")
+						if not prefix_end then return end
+						local col = prefix_end + (line:sub(prefix_end + 1, prefix_end + 1) == " " and 1 or 0)
+						local partial = line:sub(col + 1)
+						local matches = {}
+						for _, s in ipairs(issues_mod.status_values) do
+							if s:sub(1, #partial) == partial then
+								table.insert(matches, s)
+							end
+						end
+						if #matches == 0 then return end
+						local saved = vim.o.completeopt
+						vim.o.completeopt = "menuone,noinsert,noselect"
+						vim.fn.complete(col + 1, matches)
+						vim.defer_fn(function() vim.o.completeopt = saved end, 100)
+					end,
+				})
+			end
+		end,
+	})
+
 	-- Auto-rename chat files to include slug from topic header
 	local slug_augroup = vim.api.nvim_create_augroup("ParleySlug", { clear = true })
 	vim.api.nvim_create_autocmd("BufWritePost", {

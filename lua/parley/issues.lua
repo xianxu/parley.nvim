@@ -134,17 +134,21 @@ M.extract_title = function(lines, header_end)
     return ""
 end
 
--- Cycle status: open → working → blocked → done → wontfix → open
+-- Cycle status: open → working → blocked → done → wontfix → punt → open
 M.cycle_status_value = function(current)
     local next_status = {
         open = "working",
         working = "blocked",
         blocked = "done",
         done = "wontfix",
-        wontfix = "open",
+        wontfix = "punt",
+        punt = "open",
     }
     return next_status[current] or "open"
 end
+
+-- All valid status values (used for completion/typeahead)
+M.status_values = { "open", "working", "blocked", "done", "wontfix", "punt" }
 
 -- Find the next runnable issue: oldest open issue whose deps are all done.
 -- issues: list of {id, status, deps, ...}
@@ -206,7 +210,7 @@ M.topo_sort = function(issues)
     for _, issue in ipairs(issues) do
         table.insert(sorted, issue)
     end
-    local status_priority = { open = 1, working = 2, blocked = 3, done = 4, wontfix = 5 }
+    local status_priority = { open = 1, working = 2, blocked = 3, done = 4, wontfix = 5, punt = 6 }
     table.sort(sorted, function(a, b)
         local pa = status_priority[a.status] or 4
         local pb = status_priority[b.status] or 4
@@ -703,6 +707,38 @@ M.cmd_issue_goto = function()
 
     vim.cmd("edit " .. vim.fn.fnameescape(parent.path))
     _parley.logger.info("Parent issue: " .. parent.id .. " " .. (parent.title or ""))
+end
+
+-- Omnifunc for issue files: provides status value completion on the status: line.
+-- Set as omnifunc on issue buffers via setup_issue_completion().
+M.omnifunc = function(findstart, base)
+    if findstart == 1 then
+        local line = vim.api.nvim_get_current_line()
+        -- Only complete on status: lines
+        if not line:match("^status:") then
+            return -3 -- cancel completion
+        end
+        -- Find start of the value after "status: "
+        local col = line:find(":%s*") -- find ": "
+        if col then
+            return col + (line:sub(col + 1, col + 1) == " " and 1 or 0)
+        end
+        return -3
+    end
+
+    -- Return matching status values
+    local matches = {}
+    for _, s in ipairs(M.status_values) do
+        if s:sub(1, #base) == base then
+            table.insert(matches, s)
+        end
+    end
+    return matches
+end
+
+-- Attach omnifunc to an issue buffer for status field typeahead
+M.setup_issue_completion = function(buf)
+    vim.api.nvim_buf_set_option(buf, "omnifunc", "v:lua.require'parley.issues'.omnifunc")
 end
 
 return M
