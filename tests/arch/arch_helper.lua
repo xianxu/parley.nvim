@@ -5,7 +5,7 @@
 -- no vim.api calls". They run as part of `make test` and fail with a
 -- human-readable list of violations + the rule's rationale.
 --
--- See docs/plans/000090-renderer-refactor.md sections 5 + 8 for the
+-- See workshop/plans/000090-renderer-refactor.md sections 5 + 8 for the
 -- design and the initial rule set.
 
 local M = {}

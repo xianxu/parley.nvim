@@ -4,7 +4,7 @@
 -- rendering pipeline live here. The architectural fitness function in
 -- tests/arch/buffer_mutation_spec.lua enforces this invariant.
 --
--- See docs/plans/000090-renderer-refactor.md section 3.
+-- See workshop/plans/000090-renderer-refactor.md section 3.
 
 local M = {}
 

@@ -1,5 +1,11 @@
 # AI issue-based workflow — include from your project Makefile:
 #   include Makefile.workflow
+# Override WF_ISSUES_DIR / WF_HISTORY_DIR before the include if your
+# issues and history live somewhere other than issues/ and history/.
+
+WF_ISSUES_DIR ?= issues
+WF_HISTORY_DIR ?= history
+export WF_ISSUES_DIR WF_HISTORY_DIR
 
 .PHONY: help-workflow worktree issue fetch push pull-request merge check pre-merge test-agents
 
@@ -8,11 +14,11 @@ help-workflow:
 	"AI Workflow (issue-based):" \
 	"" \
 	"  Work on main:" \
-	"    make fetch 42       Fetch GitHub issue, create issues/NNNN-slug.md" \
-	"    make push           Auto-commit, push, close done issues, archive to history/" \
+	"    make fetch 42       Fetch GitHub issue, create $(WF_ISSUES_DIR)/NNNN-slug.md" \
+	"    make push           Auto-commit, push, close done issues, archive to $(WF_HISTORY_DIR)/" \
 	"" \
 	"  Work on a larger issue:" \
-	"    make issue 42       Fetch issue into issues/, create worktree in ../worktree/" \
+	"    make issue 42       Fetch issue into $(WF_ISSUES_DIR)/, create worktree in ../worktree/" \
 	"    make pull-request   Push branch, open PR referencing GitHub issues" \
 	"    make merge          Merge PR, archive done issues, clean up worktree" \
 	"" \
@@ -114,10 +120,10 @@ issue:
 	gh_title=$$(echo "$$gh_json" | jq -r '.title'); \
 	gh_body=$$(echo "$$gh_json" | jq -r '.body // ""'); \
 	slug=$$(echo "$$gh_title" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$$//'); \
-	mkdir -p "$$wt_path/issues"; \
-	max_id=$$(ls "$$wt_path/issues/" "$$wt_path/history/" 2>/dev/null | grep -oE '^[0-9]{6}-' | sed 's/-//' | sort -n | tail -1); \
+	mkdir -p "$$wt_path/$(WF_ISSUES_DIR)"; \
+	max_id=$$(ls "$$wt_path/$(WF_ISSUES_DIR)/" "$$wt_path/$(WF_HISTORY_DIR)/" 2>/dev/null | grep -oE '^[0-9]{6}-' | sed 's/-//' | sort -n | tail -1); \
 	next_id=$$(printf '%06d' $$(( $${max_id:-0} + 1 )) ); \
-	issue_file="$$wt_path/issues/$${next_id}-$${slug}.md"; \
+	issue_file="$$wt_path/$(WF_ISSUES_DIR)/$${next_id}-$${slug}.md"; \
 	today=$$(date +%Y-%m-%d); \
 	printf '%s\n' \
 		"---" \
@@ -163,10 +169,10 @@ fetch:
 	gh_title=$$(echo "$$gh_json" | jq -r '.title'); \
 	gh_body=$$(echo "$$gh_json" | jq -r '.body // ""'); \
 	slug=$$(echo "$$gh_title" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$$//'); \
-	mkdir -p issues; \
-	max_id=$$(ls issues/ history/ 2>/dev/null | grep -oE '^[0-9]{6}-' | sed 's/-//' | sort -n | tail -1); \
+	mkdir -p $(WF_ISSUES_DIR); \
+	max_id=$$(ls $(WF_ISSUES_DIR)/ $(WF_HISTORY_DIR)/ 2>/dev/null | grep -oE '^[0-9]{6}-' | sed 's/-//' | sort -n | tail -1); \
 	next_id=$$(printf '%06d' $$(( $${max_id:-0} + 1 )) ); \
-	issue_file="issues/$${next_id}-$${slug}.md"; \
+	issue_file="$(WF_ISSUES_DIR)/$${next_id}-$${slug}.md"; \
 	today=$$(date +%Y-%m-%d); \
 	printf '%s\n' \
 		"---" \
@@ -216,7 +222,7 @@ push:
 	if [ -n "$$dirty" ]; then \
 		echo "==> Auto-committing tracked changes..."; \
 		commit_msg=""; \
-		for f in issues/[0-9][0-9][0-9][0-9][0-9][0-9]-*.md; do \
+		for f in $(WF_ISSUES_DIR)/[0-9][0-9][0-9][0-9][0-9][0-9]-*.md; do \
 			[ -f "$$f" ] || continue; \
 			if ! git diff --quiet -- "$$f" 2>/dev/null || ! git diff --cached --quiet -- "$$f" 2>/dev/null; then \
 				topic=$$(grep -m1 '^# ' "$$f" | sed 's/^# *//'); \
@@ -235,12 +241,12 @@ push:
 		git commit -a -m "$$commit_msg" || exit 1; \
 	fi
 	@$(MAKE) pre-merge
-	@$(call check_undone_issues,origin/main,issues) \
+	@$(call check_undone_issues,origin/main,$(WF_ISSUES_DIR)) \
 	git push || exit 1; \
 	repo=$$(git remote get-url origin | sed 's|.*github.com[:/]\(.*\)\.git|\1|;s|.*github.com[:/]\(.*\)$$|\1|'); \
 	moved=0; \
-	if [ -d issues ]; then \
-		for f in issues/[0-9][0-9][0-9][0-9][0-9][0-9]-*.md; do \
+	if [ -d $(WF_ISSUES_DIR) ]; then \
+		for f in $(WF_ISSUES_DIR)/[0-9][0-9][0-9][0-9][0-9][0-9]-*.md; do \
 			[ -f "$$f" ] || continue; \
 			status=$$(grep -m1 '^status:' "$$f" | sed 's/^status:[[:space:]]*//'); \
 			if [ "$$status" = "done" ] || [ "$$status" = "wontfix" ] || [ "$$status" = "punt" ]; then \
@@ -251,16 +257,16 @@ push:
 						gh issue close "$$gh_num" --repo "$$repo" --comment "Fixed on main." || true; \
 					fi; \
 				fi; \
-				mkdir -p history; \
-				echo "==> Archiving $$f to history/..."; \
-				mv "$$f" "history/$$(basename $$f)"; \
+				mkdir -p $(WF_HISTORY_DIR); \
+				echo "==> Archiving $$f to $(WF_HISTORY_DIR)/..."; \
+				mv "$$f" "$(WF_HISTORY_DIR)/$$(basename $$f)"; \
 				moved=1; \
 			fi; \
 		done; \
 	fi; \
 	if [ "$$moved" -eq 1 ]; then \
 		echo "==> Committing archived history..."; \
-		git add issues/ history/ && \
+		git add $(WF_ISSUES_DIR)/ $(WF_HISTORY_DIR)/ && \
 		git commit -m "archive completed issues to history" && \
 		git push; \
 	fi; \
@@ -278,7 +284,7 @@ pull-request:
 	git push -u origin "$$branch" || exit 1; \
 	repo=$$(git remote get-url origin | sed 's|.*github.com[:/]\(.*\)\.git|\1|;s|.*github.com[:/]\(.*\)$$|\1|'); \
 	base=$$(git merge-base main HEAD 2>/dev/null || echo main); \
-	touched_issues=$$(git diff --name-only "$$base"..HEAD -- 'issues/*.md' 2>/dev/null); \
+	touched_issues=$$(git diff --name-only "$$base"..HEAD -- '$(WF_ISSUES_DIR)/*.md' 2>/dev/null); \
 	gh_nums=""; \
 	for f in $$touched_issues; do \
 		[ -f "$$f" ] || continue; \
@@ -352,7 +358,7 @@ merge:
 	else \
 		echo "  [ok] No unmerged local commits (branch is clean)"; \
 	fi; \
-	$(call check_undone_issues,main,issues) \
+	$(call check_undone_issues,main,$(WF_ISSUES_DIR)) \
 	printf "Final confirmation: proceed with irreversible merge/cleanup actions? [y/N] "; \
 	read final_answer; \
 	if [ "$$final_answer" != "y" ] && [ "$$final_answer" != "Y" ]; then \
@@ -383,24 +389,24 @@ merge:
 			fi; \
 		fi; \
 	fi; \
-	echo "==> Archiving completed issues to history/..."; \
+	echo "==> Archiving completed issues to $(WF_HISTORY_DIR)/..."; \
 	moved=0; \
-	if [ -d "$$main_path/issues" ]; then \
-		for f in "$$main_path"/issues/[0-9][0-9][0-9][0-9][0-9][0-9]-*.md; do \
+	if [ -d "$$main_path/$(WF_ISSUES_DIR)" ]; then \
+		for f in "$$main_path"/$(WF_ISSUES_DIR)/[0-9][0-9][0-9][0-9][0-9][0-9]-*.md; do \
 			[ -f "$$f" ] || continue; \
 			status=$$(grep -m1 '^status:' "$$f" | sed 's/^status:[[:space:]]*//'); \
 			if [ "$$status" = "done" ] || [ "$$status" = "wontfix" ] || [ "$$status" = "punt" ]; then \
-				mkdir -p "$$main_path/history"; \
-				echo "  Moving $$(basename $$f) to history/"; \
-				mv "$$f" "$$main_path/history/$$(basename $$f)"; \
+				mkdir -p "$$main_path/$(WF_HISTORY_DIR)"; \
+				echo "  Moving $$(basename $$f) to $(WF_HISTORY_DIR)/"; \
+				mv "$$f" "$$main_path/$(WF_HISTORY_DIR)/$$(basename $$f)"; \
 				moved=1; \
 			fi; \
 		done; \
 	fi; \
 	if [ "$$moved" -eq 1 ]; then \
 		echo "==> Committing archived history in main..."; \
-		git -C "$$main_path" add issues/ history/ && \
-		git -C "$$main_path" commit -m "archive done issues to history" && \
+		git -C "$$main_path" add $(WF_ISSUES_DIR)/ $(WF_HISTORY_DIR)/ && \
+		git -C "$$main_path" commit -m "archive completed issues to history" && \
 		git -C "$$main_path" push; \
 	fi; \
 	echo "==> Removing worktree at $$wt_path..."; \
@@ -411,10 +417,10 @@ merge:
 # Warn if any touched issue files are not marked as resolved (done/wontfix/punt).
 # Usage: $(call check_undone_issues,<base-ref>,<issues-dir>)
 #   base-ref:   git ref to diff against (e.g. origin/main, main)
-#   issues-dir: path to issues directory (e.g. issues, $$main_path/issues)
+#   issues-dir: path to issues directory (e.g. $(WF_ISSUES_DIR), $$main_path/$(WF_ISSUES_DIR))
 define check_undone_issues
 	not_done=""; \
-	touched=$$(git diff --name-only $(1)..HEAD -- 'issues/*.md' 2>/dev/null); \
+	touched=$$(git diff --name-only $(1)..HEAD -- '$(WF_ISSUES_DIR)/*.md' 2>/dev/null); \
 	for f in $$touched; do \
 		target="$(2)/$$(basename $$f)"; \
 		[ -f "$$target" ] || continue; \

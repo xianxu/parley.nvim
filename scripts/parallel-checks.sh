@@ -50,9 +50,9 @@ progress_done() {
 measure_diff() {
     local base
     base=$(git_diff_base)
-    DIFF_LINES=$(git diff "$base" --numstat -- ':!issues/' ':!history/' 2>/dev/null \
+    DIFF_LINES=$(git diff "$base" --numstat -- ":!${WF_ISSUES_DIR:-issues}/" ":!${WF_HISTORY_DIR:-history}/" 2>/dev/null \
         | awk '{s+=$1+$2} END {print s+0}')
-    DIFF_FILES=$(git diff "$base" --name-only -- ':!issues/' ':!history/' 2>/dev/null | wc -l | tr -d ' ')
+    DIFF_FILES=$(git diff "$base" --name-only -- ":!${WF_ISSUES_DIR:-issues}/" ":!${WF_HISTORY_DIR:-history}/" 2>/dev/null | wc -l | tr -d ' ')
 }
 
 # Read last check state into LAST_LINES and LAST_FILES.

@@ -3,7 +3,7 @@
 -- Inputs are pure data (sections from chat_parser); outputs are line
 -- arrays. No buffer access, no nvim API beyond vim.json/vim.tbl_*.
 --
--- See docs/plans/000090-renderer-refactor.md section 4.
+-- See workshop/plans/000090-renderer-refactor.md section 4.
 
 local serialize = require("parley.tools.serialize")
 

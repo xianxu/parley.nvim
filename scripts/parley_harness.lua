@@ -9,7 +9,7 @@
 --   PARLEY_HARNESS_DRY_RUN=1 scripts/test-anthropic-interaction.sh transcript.md
 --   PARLEY_HARNESS_AGENT=ToolSonnet scripts/test-anthropic-interaction.sh transcript.md
 --
--- See docs/plans/000090-renderer-refactor.md section 6.
+-- See workshop/plans/000090-renderer-refactor.md section 6.
 
 local M = {}
 

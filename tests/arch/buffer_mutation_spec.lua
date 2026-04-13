@@ -1,6 +1,6 @@
 -- Architecture tests for buffer mutation boundaries.
 --
--- See docs/plans/000090-renderer-refactor.md sections 5 + 8.
+-- See workshop/plans/000090-renderer-refactor.md sections 5 + 8.
 --
 -- The `nvim_buf_set_lines` baseline allow list starts wide (every file
 -- currently calling it on `main`) and tightens through Phases 2 and 3

@@ -1,7 +1,7 @@
 -- Pre-#81 vanilla Claude baseline fixture metadata
 --
 -- Captured at Task 1.0 (PRE-M1 prerequisite) per
--- docs/plans/000081-anthropic-tool-use.md.
+-- workshop/plans/000081-anthropic-tool-use.md.
 --
 -- These prompts were run against a vanilla (non-tools) Claude agent on
 -- current main BEFORE any #81 code landed, producing the three

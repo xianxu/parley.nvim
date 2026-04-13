@@ -152,9 +152,9 @@ _git_diff_base() {
     git diff "$base" "$@" 2>/dev/null || true
 }
 
-git_diff_context()        { _git_diff_base -- ':!issues/' ':!history/'; }
-git_diff_context_issues() { _git_diff_base -- 'issues/*.md'; }
-git_changed_issues()      { _git_diff_base --name-only -- 'issues/*.md'; }
+git_diff_context()        { _git_diff_base -- ":!${WF_ISSUES_DIR:-issues}/" ":!${WF_HISTORY_DIR:-history}/"; }
+git_diff_context_issues() { _git_diff_base -- "${WF_ISSUES_DIR:-issues}/*.md"; }
+git_changed_issues()      { _git_diff_base --name-only -- "${WF_ISSUES_DIR:-issues}/*.md"; }
 
 # ── Check table ───────────────────────────────────────────────────────────────
 # Each check: name|label|pre-command (empty if none)

@@ -9,7 +9,7 @@
 #   PARLEY_HARNESS_AGENT=...   Override the agent (e.g. ClaudeAgentTools)
 #   ANTHROPIC_API_KEY=...      Required for live mode
 #
-# See docs/plans/000090-renderer-refactor.md section 6.
+# See workshop/plans/000090-renderer-refactor.md section 6.
 set -euo pipefail
 
 TRANSCRIPT="${1:?usage: $0 <transcript.md>}"
