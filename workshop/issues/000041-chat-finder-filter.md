@@ -1,6 +1,6 @@
 ---
 id: 000041
-status: open
+status: wontfix
 deps: []
 created: 2026-03-30
 updated: 2026-03-30
@@ -21,6 +21,10 @@ so we need to:
 
 1/ automatically insert such tag when creating chat file from the above mechanisms: 1/ <C-g>C, 2/ <C-g>i on visual selection. 
 2/ default chat finder, select all tags but not [~]. 
+
+## Reason to abandon
+
+Feels too complex, and heavily depending on how user uses things. Also with the new review feature, this might be a lesser of an issue.
 
 ## Done when
 
