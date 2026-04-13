@@ -17,6 +17,8 @@ think through this for me
 
 first describe what's current behavior, on a fresh start, without any state file. then think through the several workflows 1/ worktree; 2/ work on main. both may have multiple commits over the cause of a feature.
 
+Apr 12, 2026 5:07:13 PM: as far as I remember, this nagging hook don't quite work, for now, we will need to run `make c` explicitly
+
 ## Done when
 
 -
