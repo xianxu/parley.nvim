@@ -1,6 +1,6 @@
 ---
 id: 000096
-status: open
+status: working
 deps: [000090]
 created: 2026-04-10
 ---
