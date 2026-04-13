@@ -2,12 +2,19 @@
 
 ## Workflow Orchestration
 
+### 0. Synchronization
+- You MUST update issue status to working, commit, and push to origin, before
+  commencing work.
+- If push fails, pull and check — if another agent claimed the issue, move on.
+- This is the locking mechanism for parallelized work.
+
 ### 1. Artifact Hierarchy
 - Simple case, operate in the single file in `workshop/issues/`
 - Complex case, start in `workshop/issues/`, write detailed design in `workshop/plans/`
 - In all cases, `atlas/` is for big picture pointers, terminologies to facilitate future high level understanding of this codebase. It is your first level onboarding material for human and agents
 - When done, the artifacts in `workshop/issues/` and `workshop/plans/` are moved to `workshop/history/`
 - `workshop/parley` contain parley chats related to this project
+- `workshop/vision/` — roadmap planning system
 
 ### 2. Overall Workflow
 - Enter brainstorming mode when requirement is unclear
@@ -19,7 +26,7 @@
     - Steps and plans SHOULD be written to `## Plan` section of the issue file
     - Log discoveries, tools you used or installed in `## Log`section of the issue file
     - Update your progress in the issue file incrementally and often
-	- An issue has state: open, working, blocked, done, wontfix
+	- An issue has status: open, working, blocked, done, wontfix
 - For complex work when skills like `superpowers` is used, write detailed designs in `workshop/plans/` using similar file name with -plan at the end.
     - For example, for `workshop/issues/000042-slug.md`, write design in `workshop/plans/000042-slug-plan.md`
 - You will discover problems during design stage as you understand more of existing codebase. ALWAYS add tests to test against those unexpected problems
@@ -90,7 +97,7 @@
 ## Core Design Principles
 - **Keep It DRY**: Don't Repeat Yourself. Refactor to reuse existing code when possible.
 - **Keep It PURE**: Write majority code as pure functions, then with limited code to integrate with UI and IO.
-- **Simplicity First**: Make every change as simple as possible. Minimal impact.
+- **Simplicity First**: Make every change as simple as possible. Minimal impact. You should be able to explain in one sentence why a thing is needed before creating it.
 - **Find Root Cause**: Find root causes. No temporary fixes, lazy null checks. Senior developer standards.
 - **Minimize Impact**: Changes should only touch what's necessary. Avoid introducing bugs.
 
