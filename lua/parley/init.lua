@@ -414,8 +414,9 @@ M.setup = function(opts)
 
 	apply_chat_roots(normalize_chat_roots(M.config.chat_dir, M.config.chat_dirs, M.config.chat_roots))
 
-	-- make sure _dirs exists (skip repo_chat_dir — it's a relative name resolved in apply_repo_local)
-	local skip_prepare = { chat_dir = true, repo_chat_dir = true }
+	-- repo-local dirs (issues, history, vision) are resolved in apply_repo_local
+	-- against git root; skip them here to avoid creating in CWD
+	local skip_prepare = { chat_dir = true, repo_chat_dir = true, issues_dir = true, history_dir = true, vision_dir = true }
 	for k, v in pairs(M.config) do
 		if not skip_prepare[k] and k:match("_dir$") and type(v) == "string" then
 			M.config[k] = M.helpers.prepare_dir(v, k)
@@ -523,7 +524,7 @@ M.setup = function(opts)
 	end
 
 	-- set up global keymaps for commands
-	if M.config.global_shortcut_finder then
+if M.config.global_shortcut_finder then
 		for _, mode in ipairs(M.config.global_shortcut_finder.modes) do
 			if mode == "n" then
 				vim.keymap.set(
@@ -543,7 +544,7 @@ M.setup = function(opts)
 		end
 	end
 
-	if M.config.global_shortcut_new then
+if M.config.global_shortcut_new then
 		for _, mode in ipairs(M.config.global_shortcut_new.modes) do
 			if mode == "n" then
 				vim.keymap.set(mode, M.config.global_shortcut_new.shortcut, function()
@@ -596,7 +597,7 @@ M.setup = function(opts)
 		end
 	end
 
-	-- Global copy shortcuts (work in any buffer)
+-- Global copy shortcuts (work in any buffer)
 	if M.config.global_shortcut_copy_location then
 		for _, mode in ipairs(M.config.global_shortcut_copy_location.modes) do
 			vim.keymap.set(mode, M.config.global_shortcut_copy_location.shortcut, M.cmd.CopyLocation, { silent = true, desc = "Copy file:line to clipboard" })
@@ -618,7 +619,7 @@ M.setup = function(opts)
 		end
 	end
 
-	-- Set up global shortcuts for note-taking
+-- Set up global shortcuts for note-taking
 	if M.config.global_shortcut_note_new then
 		for _, mode in ipairs(M.config.global_shortcut_note_new.modes) do
 			if mode == "n" then
@@ -671,7 +672,7 @@ M.setup = function(opts)
 		end
 	end
 
-	-- Set up global shortcut for opening oil.nvim
+-- Set up global shortcut for opening oil.nvim
 	if M.config.global_shortcut_oil then
 		for _, mode in ipairs(M.config.global_shortcut_oil.modes) do
 			if mode == "n" then
@@ -688,7 +689,7 @@ M.setup = function(opts)
 		end
 	end
 
-	-- Issue management shortcuts
+-- Issue management shortcuts
 	local function register_issue_shortcut(config_key, desc, callback)
 		local shortcut = M.config[config_key]
 		if shortcut then
@@ -705,7 +706,7 @@ M.setup = function(opts)
 		end
 	end
 
-	register_issue_shortcut("global_shortcut_issue_new", "Create New Issue", function() M.cmd.IssueNew() end)
+register_issue_shortcut("global_shortcut_issue_new", "Create New Issue", function() M.cmd.IssueNew() end)
 	register_issue_shortcut("global_shortcut_issue_finder", "Open Issue Finder", function() M.cmd.IssueFinder({}) end)
 	register_issue_shortcut("global_shortcut_issue_next", "Open Next Runnable Issue", function() M.cmd.IssueNext() end)
 	register_issue_shortcut("global_shortcut_issue_status", "Cycle Issue Status", function() M.cmd.IssueStatus() end)
