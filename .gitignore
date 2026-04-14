@@ -12,6 +12,3 @@ COMPARE-SHA
 .openshell/ssh_config
 vision
 
-# Construct — private AI substrate (symlinked from ariadne)
-construct
-.claude/skills/construct
