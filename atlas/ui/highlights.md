@@ -1,7 +1,7 @@
 # Spec: Syntax Highlighting
 
 ## Highlight Groups
-Custom groups (`ParleyQuestion`, `ParleyFileReference`, `ParleyChatReference`, `ParleyThinking`, `ParleyAnnotation`, `ParleyPickerApproximateMatch`, `InterviewTimestamp`) linked to standard Neovim groups.
+Custom groups (`ParleyQuestion`, `ParleyFileReference`, `ParleyChatReference`, `ParleyThinking`, `ParleyAnnotation`, `ParleyPickerApproximateMatch`, `InterviewTimestamp`, `InterviewThought`) linked to standard Neovim groups.
 
 ## Key Behaviors
 - Applied via decoration providers with ephemeral extmarks per window viewport

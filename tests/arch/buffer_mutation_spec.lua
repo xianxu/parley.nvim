@@ -40,6 +40,7 @@ describe("arch: buffer mutation boundary", function()
                 "lua/parley/issues.lua",
                 "lua/parley/system_prompt_picker.lua",
                 "lua/parley/vision.lua",
+                "lua/parley/skills/review/init.lua", -- marker insertion keybindings
             },
             rationale = "#90: buffer mutation must flow through buffer_edit.lua (baseline scope; tightens through phases)",
         })

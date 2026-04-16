@@ -175,7 +175,7 @@ M.skill = {
           complete = function() return { "edit", "revise" } end },
     },
 
-    system_prompt = function(args, file_path, content, skill_md)
+    system_prompt = function(args, _file_path, _content, skill_md)
         local level = args.level or "edit"
         local section_header = level == "edit" and "## LIGHT_EDIT" or "## HEAVY_REVISION"
         -- Extract base (everything before first section header)
@@ -187,7 +187,7 @@ M.skill = {
         return base .. "\n" .. section
     end,
 
-    pre_submit = function(buf, args)
+    pre_submit = function(buf, _args)
         local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
         local markers = M.parse_markers(lines)
 
@@ -215,7 +215,7 @@ M.skill = {
         return true
     end,
 
-    post_apply = function(buf, args, result, new_content, resubmit_count)
+    post_apply = function(buf, args, _result, _new_content, resubmit_count)
         local new_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
         local remaining = M.parse_markers(new_lines)
         if #remaining == 0 then

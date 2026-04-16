@@ -25,7 +25,7 @@ return {
         { name = "slug", description = "Voice style",
           complete = scan_voice_slugs },
     },
-    system_prompt = function(args, file_path, content, skill_md)
+    system_prompt = function(args, _file_path, _content, skill_md)
         local style_path = vim.fn.expand("~/.personal/" .. args.slug .. "-writing-style.md")
         local f = io.open(style_path, "r")
         if not f then

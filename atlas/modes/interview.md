@@ -6,4 +6,5 @@
 - Resume: `<C-n>i` on existing timestamp resumes timer from that point
 - Lualine: flashing timer display
 - `InterviewTimestamp` highlight group on timestamp lines
+- `InterviewThought` highlight group on `{thought text}` blocks (linked to `DiagnosticInfo`)
 - Globally overrides Enter key in insert mode when active

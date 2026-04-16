@@ -1,6 +1,6 @@
 ---
 id: 000107
-status: open
+status: done
 deps: []
 created: 2026-04-15
 updated: 2026-04-15
@@ -28,7 +28,7 @@ Add `InterviewThought` highlight group (italic, dimmed `#7c8f9f` foreground) and
 - [x] Define `InterviewThought` highlight group in highlighter.lua
 - [x] Add `matchadd` for `{...}` in interview.lua `highlight_timestamps`
 - [x] Clean up match cache on buffer delete
-- [ ] Manual verification
+- [x] Manual verification
 
 ## Log
 

@@ -116,10 +116,11 @@ Most-used defaults:
 - `<C-g>?` show key bindings
 - `<C-g><C-g>` respond
 - `<C-g>G` respond all
-- `<C-g>s` stop
+- `<C-g>x` stop
 - `<C-g>t` chat outline
 - `<C-g>a` change agent
-- `<C-g>p` next system prompt
+- `<C-g>P` next system prompt
+- `<C-g>s` skill picker (review, voice-apply, etc.)
 - `<C-g>l` toggle follow cursor
 - `<C-g>i` to insert a fork in the chat tree, can be inline or standalone
 

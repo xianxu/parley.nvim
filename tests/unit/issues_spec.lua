@@ -199,8 +199,12 @@ describe("cycle_status_value", function()
         assert.equals("wontfix", issues.cycle_status_value("done"))
     end)
 
-    it("cycles wontfix to open", function()
-        assert.equals("open", issues.cycle_status_value("wontfix"))
+    it("cycles wontfix to punt", function()
+        assert.equals("punt", issues.cycle_status_value("wontfix"))
+    end)
+
+    it("cycles punt to open", function()
+        assert.equals("open", issues.cycle_status_value("punt"))
     end)
 
     it("defaults unknown to open", function()
