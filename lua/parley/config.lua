@@ -336,7 +336,7 @@ local config = {
 	-- Toggle folds of 🔧:/📎: components within the exchange under cursor
 	chat_shortcut_toggle_tool_folds = { modes = { "n" }, shortcut = "<C-g>b" },
 	chat_shortcut_agent = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>a" },
-	chat_shortcut_system_prompt = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>s" },
+	chat_shortcut_system_prompt = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>P" },
 	chat_shortcut_follow_cursor = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>l" },
 	chat_shortcut_search = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>n" },
 	chat_shortcut_open_file = { modes = { "n", "i" }, shortcut = "<C-g>o" },
@@ -372,6 +372,10 @@ local config = {
 	review_agent = "Claude-Sonnet",
 	-- how long review edit highlights persist (ms)
 	review_highlight_duration = 2000,
+	-- Skill system
+	skill_shortcut = { modes = { "n" }, shortcut = "<C-g>s" },
+	skill_agent = "Claude-Sonnet",
+	skills = {},
 	-- default search term when using :ParleyChatFinder
 	chat_finder_pattern = "",
 	chat_finder_mappings = {

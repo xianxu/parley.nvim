@@ -482,6 +482,9 @@ M.setup_highlights = function()
         -- Explicitly don't set fg to allow other highlights to show through
     })
 
+    -- Interview thoughts - {text} rendered in a distinct color via theme-aware link
+    vim.api.nvim_set_hl(0, "InterviewThought", { link = "DiagnosticInfo" })
+
     return ns
 end
 

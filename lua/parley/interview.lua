@@ -115,6 +115,15 @@ M.highlight_timestamps = function(buf)
 	-- to ensure all search highlights (incsearch, Search, CurSearch) can take precedence
 	local match_id = vim.fn.matchadd("InterviewTimestamp", "^\\s*:\\d\\+min.*$", -1)
 	_interview_match_ids[match_id_key] = match_id
+
+	-- Add highlighting for {thought} blocks — interviewer's private thoughts
+	local thought_key = "parley_interview_thoughts_" .. buf
+	if _interview_match_ids[thought_key] then
+		pcall(vim.fn.matchdelete, _interview_match_ids[thought_key])
+		_interview_match_ids[thought_key] = nil
+	end
+	local thought_id = vim.fn.matchadd("InterviewThought", "{[^}]\\+}", -1)
+	_interview_match_ids[thought_key] = thought_id
 end
 
 --- Clear the cached match ID entry for a buffer (call on BufDelete/BufUnload).
@@ -123,6 +132,10 @@ M.clear_match_cache = function(buf)
 	local match_id_key = "parley_interview_timestamps_" .. buf
 	if _interview_match_ids[match_id_key] then
 		_interview_match_ids[match_id_key] = nil
+	end
+	local thought_key = "parley_interview_thoughts_" .. buf
+	if _interview_match_ids[thought_key] then
+		_interview_match_ids[thought_key] = nil
 	end
 end
 

@@ -25,7 +25,7 @@ You MUST create a task for each of these items and complete them in order:
 2. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria
 3. **Propose 2-3 approaches** — with trade-offs and your recommendation
 4. **Present design** — in sections scaled to their complexity, get user approval after each section
-5. **Write design doc** — save to `workshop/plans/<issue-slug>-plan.md` and commit
+5. **Write spec** — save to the `## Spec` section of the issue file (`issues/<issue-slug>.md`) and commit
 6. **Spec review loop** — dispatch spec-document-reviewer subagent with precisely crafted review context (never your session history); fix issues and re-dispatch until approved (max 5 iterations, then surface to human)
 7. **User reviews written spec** — ask user to review the spec file before proceeding
 8. **Update atlas** — update relevant entries in `atlas/` to reflect the new design
@@ -40,7 +40,7 @@ digraph brainstorming {
     "Propose 2-3 approaches" [shape=box];
     "Present design sections" [shape=box];
     "User approves design?" [shape=diamond];
-    "Write design doc" [shape=box];
+    "Write spec to issue file" [shape=box];
     "Spec review loop" [shape=box];
     "Spec review passed?" [shape=diamond];
     "User reviews spec?" [shape=diamond];
@@ -52,12 +52,12 @@ digraph brainstorming {
     "Propose 2-3 approaches" -> "Present design sections";
     "Present design sections" -> "User approves design?";
     "User approves design?" -> "Present design sections" [label="no, revise"];
-    "User approves design?" -> "Write design doc" [label="yes"];
-    "Write design doc" -> "Spec review loop";
+    "User approves design?" -> "Write spec to issue file" [label="yes"];
+    "Write spec to issue file" -> "Spec review loop";
     "Spec review loop" -> "Spec review passed?";
     "Spec review passed?" -> "Spec review loop" [label="issues found,\nfix and re-dispatch"];
     "Spec review passed?" -> "User reviews spec?" [label="approved"];
-    "User reviews spec?" -> "Write design doc" [label="changes requested"];
+    "User reviews spec?" -> "Write spec to issue file" [label="changes requested"];
     "User reviews spec?" -> "Update atlas" [label="approved"];
     "Update atlas" -> "Invoke superpowers-writing-plans skill";
 }
@@ -108,10 +108,9 @@ digraph brainstorming {
 
 **Documentation:**
 
-- Write the validated design (spec) to `workshop/plans/<issue-slug>-plan.md`
-  - (User preferences for spec location override this default)
+- Write the validated design (spec) to the `## Spec` section of the issue file (`issues/<issue-slug>.md`)
 - Use elements-of-style:writing-clearly-and-concisely skill if available
-- Commit the design document to git
+- Commit the issue file to git
 
 **Spec Review Loop:**
 After writing the spec document:

@@ -689,7 +689,16 @@ if M.config.global_shortcut_new then
 		end
 	end
 
--- Issue management shortcuts
+	-- Skill picker shortcut
+	if M.config.skill_shortcut then
+		for _, mode in ipairs(M.config.skill_shortcut.modes) do
+			vim.keymap.set(mode, M.config.skill_shortcut.shortcut, function()
+				require("parley.skill_picker").open()
+			end, { silent = true, desc = "Open Skill Picker" })
+		end
+	end
+
+	-- Issue management shortcuts
 	local function register_issue_shortcut(config_key, desc, callback)
 		local shortcut = M.config[config_key]
 		if shortcut then
@@ -2185,9 +2194,9 @@ local function format_branch_ref(rel_path, topic)
 end
 
 M.setup_markdown_keymaps = function(buf)
-	-- Document review keybindings
-	local review = require("parley.review")
-	review.setup_keymaps(buf)
+	-- Document review keybindings (via skill system)
+	local review_skill = require("parley.skills.review")
+	review_skill.setup_keymaps(buf)
 
 	-- <C-g>eh: export markdown to HTML via pandoc
 	local export_html = M.config.chat_shortcut_export_html
