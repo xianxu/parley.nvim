@@ -3811,7 +3811,7 @@ end
 M.cmd.CopyLocation = function()
 	local mode = vim.fn.mode()
 	if mode == "v" or mode == "V" or mode == "\22" then
-		local filename = vim.fn.expand("%")
+		local filename = vim.fn.expand("%:p")
 		local start_line = vim.fn.line("v")
 		local end_line = vim.fn.line(".")
 		if start_line > end_line then
@@ -3820,7 +3820,7 @@ M.cmd.CopyLocation = function()
 		vim.fn.setreg("+", string.format("%s:%d-%d", filename, start_line, end_line))
 		vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "n", false)
 	else
-		vim.fn.setreg("+", vim.fn.expand("%") .. ":" .. vim.fn.line("."))
+		vim.fn.setreg("+", vim.fn.expand("%:p") .. ":" .. vim.fn.line("."))
 	end
 end
 
@@ -3828,7 +3828,7 @@ end
 M.cmd.CopyLocationContent = function()
 	local mode = vim.fn.mode()
 	if mode == "v" or mode == "V" or mode == "\22" then
-		local filename = vim.fn.expand("%")
+		local filename = vim.fn.expand("%:p")
 		local start_line = vim.fn.line("v")
 		local end_line = vim.fn.line(".")
 		if start_line > end_line then
@@ -3839,7 +3839,7 @@ M.cmd.CopyLocationContent = function()
 		vim.fn.setreg("+", output)
 		vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "n", false)
 	else
-		local filename = vim.fn.expand("%")
+		local filename = vim.fn.expand("%:p")
 		local line_num = vim.fn.line(".")
 		local line_content = vim.fn.getline(".")
 		vim.fn.setreg("+", string.format("%s:%d\n%s", filename, line_num, line_content))
@@ -3851,7 +3851,7 @@ end
 -- before/after control how many lines of context around the cursor/selection.
 local function copy_context(before, after)
 	local buf = vim.api.nvim_get_current_buf()
-	local filename = vim.fn.expand("%")
+	local filename = vim.fn.expand("%:p")
 	local line_count = vim.api.nvim_buf_line_count(buf)
 	local mode = vim.fn.mode()
 
