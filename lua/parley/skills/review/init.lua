@@ -1,8 +1,9 @@
--- review skill — Edit document based on ㊷ review markers.
+-- review skill — Edit document based on 🤖 review markers.
 --
--- Marker syntax:  ㊷[user]{agent}[user]{agent}...
---   [] = user turns, {} = agent turns, strictly alternating
---   Odd section count = ready for agent, even = awaiting user response
+-- Marker syntax:  🤖[user]{agent}[user]... or 🤖{agent}[user]...
+--   [] = human turns, {} = agent turns, any order
+--   Ready for agent = last section is [] (human spoke last)
+--   Pending (quickfix) = last section is non-empty {} (agent asked, human hasn't replied)
 
 local M = {}
 
@@ -41,7 +42,7 @@ end
 
 local function parse_marker_sections(text, pos, byte_len)
     local sections = {}
-    local cursor = pos + (byte_len or 3)  -- ㊷=3 bytes, 🤖=4 bytes
+    local cursor = pos + (byte_len or 4)  -- 🤖=4 bytes
 
     while cursor <= #text do
         local ch = text:sub(cursor, cursor)
@@ -101,13 +102,44 @@ local function compute_fence_ranges(lines)
     return ranges
 end
 
--- marker_defs: { char, byte_len, marker_type }
--- human (㊷): [] = user turns, {} = agent turns. odd section count = ready.
--- machine (🤖): [] = agent turns, {} = user turns. even section count = ready.
-local MARKER_DEFS = {
-    { char = "㊷", byte_len = 3, marker_type = "human" },
-    { char = "🤖", byte_len = 4, marker_type = "machine" },
-}
+local MARKER_CHAR = "🤖"
+local MARKER_BYTE_LEN = 4
+
+-- Returns list of {start, finish} byte ranges for inline code spans on a line.
+-- Handles `` ` `` and ``` `` ``` delimiters.
+local function inline_code_ranges(line)
+    local ranges = {}
+    local i = 1
+    while i <= #line do
+        -- Count consecutive backticks
+        local bt_start = i
+        while i <= #line and line:sub(i, i) == "`" do
+            i = i + 1
+        end
+        local bt_len = i - bt_start
+        if bt_len > 0 then
+            -- Find matching closing backticks of same length
+            local delimiter = string.rep("`", bt_len)
+            local close = line:find(delimiter, i, true)
+            if close then
+                table.insert(ranges, { bt_start, close + bt_len - 1 })
+                i = close + bt_len
+            end
+        else
+            i = i + 1
+        end
+    end
+    return ranges
+end
+
+local function in_inline_code(ranges, pos)
+    for _, r in ipairs(ranges) do
+        if pos >= r[1] and pos <= r[2] then
+            return true
+        end
+    end
+    return false
+end
 
 M.parse_markers = function(lines)
     local fence_ranges = compute_fence_ranges(lines)
@@ -115,31 +147,34 @@ M.parse_markers = function(lines)
 
     for i, line in ipairs(lines) do
         if not in_code_fence(fence_ranges, i - 1) then
-            for _, md in ipairs(MARKER_DEFS) do
-                local search_start = 1
-                while true do
-                    local pos = line:find(md.char, search_start, true)
-                    if not pos then break end
-
-                    local sections, end_pos = parse_marker_sections(line, pos, md.byte_len)
-                    if #sections > 0 then
-                        local ready
-                        if md.marker_type == "human" then
-                            ready = (#sections % 2) == 1
-                        else
-                            ready = (#sections % 2) == 0
-                        end
-                        table.insert(markers, {
-                            line = i - 1,
-                            col = pos - 1,
-                            sections = sections,
-                            ready = ready,
-                            raw = line:sub(pos, end_pos - 1),
-                            marker_type = md.marker_type,
-                        })
-                    end
-                    search_start = end_pos
+            local code_ranges = inline_code_ranges(line)
+            local search_start = 1
+            while true do
+                local pos = line:find(MARKER_CHAR, search_start, true)
+                if not pos then break end
+                if in_inline_code(code_ranges, pos) then
+                    search_start = pos + MARKER_BYTE_LEN
+                    goto continue
                 end
+
+                local sections, end_pos = parse_marker_sections(line, pos, MARKER_BYTE_LEN)
+                if #sections > 0 then
+                    local last = sections[#sections]
+                    -- Ready = last section is non-empty [] (human spoke last, agent should act)
+                    local ready = last.type == "user" and last.text ~= ""
+                    -- Pending = last section is non-empty {} (agent asked, needs human reply)
+                    local pending = last.type == "agent" and last.text ~= ""
+                    table.insert(markers, {
+                        line = i - 1,
+                        col = pos - 1,
+                        sections = sections,
+                        ready = ready,
+                        pending = pending,
+                        raw = line:sub(pos, end_pos - 1),
+                    })
+                end
+                search_start = end_pos
+                ::continue::
             end
         end
     end
@@ -157,14 +192,10 @@ M._parse_marker_sections = parse_marker_sections
 local function marker_summary(marker)
     local last = marker.sections[#marker.sections]
     if not last then return marker.raw end
-    if marker.marker_type == "machine" then
-        return last.type == "user"
-            and "🤖 " .. last.text
-            or "🤖 You: " .. last.text
+    if last.type == "agent" then
+        return "🤖 Agent: " .. last.text
     else
-        return last.type == "agent"
-            and "㊷ Agent asks: " .. last.text
-            or "㊷ " .. last.text
+        return "🤖 " .. last.text
     end
 end
 
@@ -172,7 +203,7 @@ M.populate_quickfix = function(buf, markers, filter)
     local file_name = vim.api.nvim_buf_get_name(buf)
     local items = {}
     for _, marker in ipairs(markers) do
-        local include = (filter ~= "pending") or (not marker.ready)
+        local include = (filter ~= "pending") or (marker.pending)
         if include then
             table.insert(items, {
                 filename = file_name,
@@ -206,7 +237,7 @@ M.scan_pending = function(dir)
             if ok and lines then
                 local markers = M.parse_markers(lines)
                 for _, marker in ipairs(markers) do
-                    if not marker.ready then
+                    if marker.pending then
                         table.insert(results, { filepath = filepath, marker = marker })
                     end
                 end
@@ -293,7 +324,7 @@ M.skill = {
 
         local pending = {}
         for _, marker in ipairs(markers) do
-            if not marker.ready then table.insert(pending, marker) end
+            if marker.pending then table.insert(pending, marker) end
         end
 
         if #pending > 0 then
@@ -317,7 +348,7 @@ M.skill = {
 
         local has_questions = false
         for _, marker in ipairs(remaining) do
-            if not marker.ready then
+            if marker.pending then
                 has_questions = true
                 break
             end
@@ -339,24 +370,34 @@ M.skill = {
 
 local _qf_scanned_bufs = {}
 
--- Called once per buffer on first BufEnter. Populates quickfix if there are
--- pending markers (waiting for human response) so the human sees them immediately.
-local function scan_on_enter(buf)
-    if _qf_scanned_bufs[buf] then return end
-    _qf_scanned_bufs[buf] = true
-    vim.api.nvim_buf_attach(buf, false, {
-        on_detach = function() _qf_scanned_bufs[buf] = nil end,
-    })
-
+local function rescan_quickfix(buf)
+    if not vim.api.nvim_buf_is_valid(buf) then return end
     local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
     local markers = M.parse_markers(lines)
     local pending = {}
     for _, marker in ipairs(markers) do
-        if not marker.ready then table.insert(pending, marker) end
+        if marker.pending then table.insert(pending, marker) end
     end
     if #pending > 0 then
         M.populate_quickfix(buf, pending, "pending")
+    else
+        vim.fn.setqflist({}, "r")
+        pcall(vim.cmd, "cclose")
     end
+end
+
+-- Called once per buffer on first BufEnter. Populates quickfix and sets up
+-- BufWritePost autocmd to rescan on save.
+local function scan_on_enter(buf)
+    if _qf_scanned_bufs[buf] then return end
+    _qf_scanned_bufs[buf] = true
+
+    vim.api.nvim_create_autocmd("BufWritePost", {
+        buffer = buf,
+        callback = function() rescan_quickfix(buf) end,
+    })
+
+    rescan_quickfix(buf)
 end
 
 --------------------------------------------------------------------------------
@@ -370,7 +411,7 @@ M.setup_keymaps = function(buf)
 
     scan_on_enter(buf)
 
-    -- <C-g>vi: insert ㊷[] marker
+    -- <C-g>vi: insert 🤖[] marker (human-initiated)
     local insert_cfg = cfg.review_shortcut_insert
     if insert_cfg then
         for _, mode in ipairs(insert_cfg.modes or {}) do
@@ -389,7 +430,7 @@ M.setup_keymaps = function(buf)
                         local selected = line:sub(start_col, end_col)
                         local after = line:sub(end_col + 1)
                         vim.api.nvim_buf_set_lines(buf, start_line - 1, start_line, false, {
-                            before .. "㊷[" .. selected .. "]" .. after,
+                            before .. "🤖[" .. selected .. "]" .. after,
                         })
                     end
                 end, "Parley review: wrap selection with marker")
@@ -402,16 +443,16 @@ M.setup_keymaps = function(buf)
                     local before = line:sub(1, col)
                     local after = line:sub(col + 1)
                     vim.api.nvim_buf_set_lines(buf, row, row + 1, false, {
-                        before .. "㊷[]" .. after,
+                        before .. "🤖[]" .. after,
                     })
-                    vim.api.nvim_win_set_cursor(0, { row + 1, col + 4 })
+                    vim.api.nvim_win_set_cursor(0, { row + 1, col + 5 })
                     vim.cmd("startinsert")
                 end, "Parley review: insert marker")
             end
         end
     end
 
-    -- <C-g>vR: insert 🤖[] machine-initiated marker (for testing/debugging)
+    -- <C-g>vR: insert 🤖{} marker (agent-initiated)
     local insert_machine_cfg = cfg.review_shortcut_insert_machine
     if insert_machine_cfg then
         for _, mode in ipairs(insert_machine_cfg.modes or {}) do
@@ -423,7 +464,7 @@ M.setup_keymaps = function(buf)
                 local before = line:sub(1, col)
                 local after = line:sub(col + 1)
                 vim.api.nvim_buf_set_lines(buf, row, row + 1, false, {
-                    before .. "🤖[]" .. after,
+                    before .. "🤖{}" .. after,
                 })
                 vim.api.nvim_win_set_cursor(0, { row + 1, col + 5 })
                 vim.cmd("startinsert")

@@ -21,7 +21,7 @@ lua/parley/skills/<name>/
 
 ## Built-in Skills
 
-- **review** — edit document based on ㊷ markers (light edit / heavy revision)
+- **review** — edit document based on 🤖 markers (light edit / heavy revision)
 - **voice-apply** — rewrite to match a personal writing voice from `~/.personal/<slug>-writing-style.md`
 
 ## Config

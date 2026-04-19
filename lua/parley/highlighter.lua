@@ -253,7 +253,6 @@ end
 local function compute_markdown_highlights(buf, start_line, end_line)
     local result = {}
     local branch_prefix = _parley.config.chat_branch_prefix or "🌿:"
-    local marker_char = "㊷"
     local lines = vim.api.nvim_buf_get_lines(buf, start_line - 1, end_line, false)
     for offset, line in ipairs(lines) do
         local row = start_line + offset - 2
@@ -261,13 +260,13 @@ local function compute_markdown_highlights(buf, start_line, end_line)
             result[row] = result[row] or {}
             table.insert(result[row], { hl_group = "ParleyChatReference", col_start = 0, col_end = -1 })
         end
-        -- Highlight ㊷[...] user markers and {...} agent questions
-        local search_start = 1
+        -- Highlight 🤖{...}[...] review markers
         local review = require("parley.review")
+        local search_start = 1
         while true do
-            local pos = line:find(marker_char, search_start, true)
+            local pos = line:find("🤖", search_start, true)
             if not pos then break end
-            local sections, end_pos = review._parse_marker_sections(line, pos)
+            local sections, end_pos = review._parse_marker_sections(line, pos, 4)
             for _, section in ipairs(sections) do
                 local hl = section.type == "agent" and "ParleyReviewAgent" or "ParleyReviewUser"
                 result[row] = result[row] or {}

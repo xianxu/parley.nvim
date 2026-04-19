@@ -1,24 +1,28 @@
 # Document Review
 
 Headless LLM-powered review workflow for markdown files. Users annotate
-documents with `㊷[comment]` markers, then an agent rewrites the document
+documents with `🤖[comment]` markers, then an agent rewrites the document
 to address the comments.
 
 ## Marker Syntax
 
+Single marker `🤖`. `[]` = human turns, `{}` = agent turns, any order.
+
 ```
-㊷[user comment]{agent question}[user reply]{agent question}...
+🤖[human comment]{agent question}[human reply]...
+🤖{agent finding}[human response]{agent follow-up}...
 ```
 
-- `[]` = user turns, `{}` = agent turns, strictly alternating
-- Odd section count = ready for agent, even = awaiting user response
+- Ready for agent = last section is `[]` (human spoke last)
+- Pending (quickfix) = last section is non-empty `{}` (agent asked, needs human reply)
 - Markers inside fenced code blocks are ignored
 
 ## Keybindings (non-chat markdown only)
 
 | Binding    | Action                                          |
 |------------|-------------------------------------------------|
-| `<C-g>vi`  | Insert `㊷[]` marker (visual: wrap selection)   |
+| `<C-g>vi`  | Insert `🤖[]` marker (visual: wrap selection)  |
+| `<C-g>vR`  | Insert `🤖{}` agent-initiated marker            |
 | `<C-g>ve`  | Light edit — conservative, preserve voice/tone  |
 | `<C-g>vr`  | Heavy revision — substantive rewriting allowed  |
 

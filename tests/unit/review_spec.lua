@@ -3,40 +3,72 @@
 local review = require("parley.review")
 
 describe("parse_markers", function()
-    it("parses a simple single-section marker", function()
-        local markers = review.parse_markers({ "Hello ㊷[too offensive] world" })
+    it("parses a human-initiated marker (ready)", function()
+        local markers = review.parse_markers({ "Hello 🤖[fix this] world" })
         assert.equals(1, #markers)
         assert.equals(0, markers[1].line)
         assert.equals(1, #markers[1].sections)
         assert.equals("user", markers[1].sections[1].type)
-        assert.equals("too offensive", markers[1].sections[1].text)
+        assert.equals("fix this", markers[1].sections[1].text)
+        assert.is_true(markers[1].ready)
+        assert.is_false(markers[1].pending)
+    end)
+
+    it("parses an agent-initiated marker (pending)", function()
+        local markers = review.parse_markers({ "🤖{typo here}" })
+        assert.equals(1, #markers)
+        assert.equals(1, #markers[1].sections)
+        assert.equals("agent", markers[1].sections[1].type)
+        assert.is_false(markers[1].ready)
+        assert.is_true(markers[1].pending)
+    end)
+
+    it("agent-initiated with human response is ready", function()
+        local markers = review.parse_markers({ "🤖{typo here}[ok fix it]" })
+        assert.equals(1, #markers)
+        assert.equals(2, #markers[1].sections)
+        assert.is_true(markers[1].ready)
+        assert.is_false(markers[1].pending)
+    end)
+
+    it("human comment with agent question is pending", function()
+        local markers = review.parse_markers({ "🤖[comment]{which part?}" })
+        assert.equals(1, #markers)
+        assert.equals(2, #markers[1].sections)
+        assert.is_false(markers[1].ready)
+        assert.is_true(markers[1].pending)
+    end)
+
+    it("full round-trip ending with human is ready", function()
+        local markers = review.parse_markers({ "🤖[offensive]{which part?}[the joke]" })
+        assert.equals(1, #markers)
+        assert.equals(3, #markers[1].sections)
         assert.is_true(markers[1].ready)
     end)
 
-    it("parses a two-section marker (user + agent question)", function()
-        local markers = review.parse_markers({ "㊷[comment]{question?}" })
-        assert.equals(1, #markers)
-        assert.equals(2, #markers[1].sections)
-        assert.equals("user", markers[1].sections[1].type)
-        assert.equals("comment", markers[1].sections[1].text)
-        assert.equals("agent", markers[1].sections[2].type)
-        assert.equals("question?", markers[1].sections[2].text)
-        assert.is_false(markers[1].ready)  -- even count = awaiting user
-    end)
-
-    it("parses a three-section marker (user + agent + user reply)", function()
-        local markers = review.parse_markers({ "㊷[offensive]{which part?}[the joke]" })
+    it("full round-trip ending with agent is pending", function()
+        local markers = review.parse_markers({ "🤖{finding}[noted]{more detail?}" })
         assert.equals(1, #markers)
         assert.equals(3, #markers[1].sections)
-        assert.equals("user", markers[1].sections[1].type)
-        assert.equals("agent", markers[1].sections[2].type)
-        assert.equals("user", markers[1].sections[3].type)
-        assert.equals("the joke", markers[1].sections[3].text)
-        assert.is_true(markers[1].ready)  -- odd count = ready
+        assert.is_true(markers[1].pending)
+    end)
+
+    it("empty agent section is not pending", function()
+        local markers = review.parse_markers({ "🤖{}" })
+        assert.equals(1, #markers)
+        assert.is_false(markers[1].pending)
+        assert.is_false(markers[1].ready)
+    end)
+
+    it("empty user section is not ready", function()
+        local markers = review.parse_markers({ "🤖{finding}[]" })
+        assert.equals(1, #markers)
+        assert.is_false(markers[1].ready)
+        assert.is_false(markers[1].pending)
     end)
 
     it("handles multiple markers on the same line", function()
-        local markers = review.parse_markers({ "㊷[first] text ㊷[second]" })
+        local markers = review.parse_markers({ "🤖[first] text 🤖[second]" })
         assert.equals(2, #markers)
         assert.equals("first", markers[1].sections[1].text)
         assert.equals("second", markers[2].sections[1].text)
@@ -44,24 +76,24 @@ describe("parse_markers", function()
 
     it("handles markers on different lines", function()
         local markers = review.parse_markers({
-            "Line one ㊷[fix this]",
+            "Line one 🤖[fix this]",
             "Line two is fine",
-            "Line three ㊷[rewrite]{how?}",
+            "Line three 🤖{rewrite}",
         })
         assert.equals(2, #markers)
         assert.equals(0, markers[1].line)
         assert.equals(2, markers[2].line)
         assert.is_true(markers[1].ready)
-        assert.is_false(markers[2].ready)
+        assert.is_true(markers[2].pending)
     end)
 
     it("skips markers inside fenced code blocks", function()
         local markers = review.parse_markers({
             "Before",
             "```",
-            "㊷[inside code fence]",
+            "🤖[inside code fence]",
             "```",
-            "㊷[outside code fence]",
+            "🤖[outside code fence]",
         })
         assert.equals(1, #markers)
         assert.equals(4, markers[1].line)
@@ -71,33 +103,49 @@ describe("parse_markers", function()
     it("skips markers inside fenced code blocks with language tag", function()
         local markers = review.parse_markers({
             "```lua",
-            "㊷[inside]",
+            "🤖{inside}",
             "```",
-            "㊷[outside]",
+            "🤖{outside}",
         })
         assert.equals(1, #markers)
         assert.equals("outside", markers[1].sections[1].text)
     end)
 
+    it("skips markers inside inline code spans", function()
+        local markers = review.parse_markers({ "Use `🤖[not a marker]` for examples" })
+        assert.equals(0, #markers)
+    end)
+
+    it("skips markers inside double-backtick inline code", function()
+        local markers = review.parse_markers({ "Use ``🤖{not a marker}`` for examples" })
+        assert.equals(0, #markers)
+    end)
+
+    it("parses markers outside inline code on same line", function()
+        local markers = review.parse_markers({ "`code` then 🤖[real marker]" })
+        assert.equals(1, #markers)
+        assert.equals("real marker", markers[1].sections[1].text)
+    end)
+
     it("handles unclosed code fence (extends to end)", function()
         local markers = review.parse_markers({
             "```",
-            "㊷[inside unclosed]",
+            "🤖[inside unclosed]",
             "more text",
         })
         assert.equals(0, #markers)
     end)
 
     it("handles nested brackets in user comment", function()
-        local markers = review.parse_markers({ "㊷[comment with [nested] brackets]" })
+        local markers = review.parse_markers({ "🤖[comment with [nested] brackets]" })
         assert.equals(1, #markers)
         assert.equals("comment with [nested] brackets", markers[1].sections[1].text)
     end)
 
-    it("handles nested curly braces in agent question", function()
-        local markers = review.parse_markers({ "㊷[comment]{question with {nested} braces}" })
+    it("handles nested curly braces in agent section", function()
+        local markers = review.parse_markers({ "🤖{question with {nested} braces}[ok]" })
         assert.equals(2, #markers[1].sections)
-        assert.equals("question with {nested} braces", markers[1].sections[2].text)
+        assert.equals("question with {nested} braces", markers[1].sections[1].text)
     end)
 
     it("returns empty list when no markers present", function()
@@ -105,19 +153,19 @@ describe("parse_markers", function()
         assert.equals(0, #markers)
     end)
 
-    it("ignores ㊷ not followed by brackets", function()
-        local markers = review.parse_markers({ "The character ㊷ alone" })
+    it("ignores 🤖 not followed by brackets", function()
+        local markers = review.parse_markers({ "The character 🤖 alone" })
         assert.equals(0, #markers)
     end)
 
     it("captures the raw marker text", function()
-        local markers = review.parse_markers({ "text ㊷[comment]{question} more" })
-        assert.equals("㊷[comment]{question}", markers[1].raw)
+        local markers = review.parse_markers({ "text 🤖{comment}[response] more" })
+        assert.equals("🤖{comment}[response]", markers[1].raw)
     end)
 
     it("records correct column position", function()
-        -- "text " is 5 bytes, so ㊷ starts at byte 6 (0-indexed: 5)
-        local markers = review.parse_markers({ "text ㊷[comment]" })
+        -- "text " is 5 bytes, so 🤖 starts at byte 6 (0-indexed: 5)
+        local markers = review.parse_markers({ "text 🤖[finding]" })
         assert.equals(5, markers[1].col)
     end)
 end)
@@ -147,9 +195,9 @@ describe("apply_edits", function()
     end
 
     it("applies a single edit", function()
-        write_file("Hello world.\n㊷[fix greeting]\nGoodbye.\n")
+        write_file("Hello world.\n🤖[fix greeting]\nGoodbye.\n")
         local result = review.apply_edits(tmpfile, {
-            { old_string = "Hello world.\n㊷[fix greeting]", new_string = "Hi there.", explain = "simplified" },
+            { old_string = "Hello world.\n🤖[fix greeting]", new_string = "Hi there.", explain = "simplified" },
         })
         assert.is_true(result.ok)
         assert.equals(1, #result.applied)

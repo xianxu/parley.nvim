@@ -55,7 +55,7 @@ This index provides a central directory for all atlas entries of the `parley.nvi
 - [Skill System](skills/skill-system.md): Unified pipeline for AI-powered buffer editing skills (`<C-g>s` picker, skill_runner, skill definitions).
 - [Interview Mode](modes/interview.md): Mechanics, automatic timestamps, and `{thought}` highlighting.
 - [Raw Mode](modes/raw_mode.md): API debugging via raw requests/responses.
-- [Document Review](modes/review.md): LLM-powered document review via ㊷ comment markers (implemented as a skill).
+- [Document Review](modes/review.md): LLM-powered document review via 🤖 markers (implemented as a skill).
 
 ## 9. Export
 - [Export Formats](export/formats.md): Jekyll HTML and Markdown export logic.
