@@ -3666,8 +3666,52 @@ local function open_branch_ref(current_line, buf)
 	return true
 end
 
+-- Resolve a src: path to an absolute filesystem path.
+-- Tries git rev-parse --show-toplevel from the buffer file's directory first;
+-- falls back to M.config.src_root. Returns absolute path or nil.
+local resolve_src_link = function(src_path, buf_file)
+	local buf_dir = vim.fn.fnamemodify(buf_file, ":p:h")
+	local git_root = vim.fn.system(
+		"git -C " .. vim.fn.shellescape(buf_dir) .. " rev-parse --show-toplevel 2>/dev/null"
+	):gsub("\n$", "")
+	if vim.v.shell_error == 0 and git_root ~= "" then
+		return vim.fn.fnamemodify(git_root, ":h") .. "/" .. src_path
+	end
+	if M.config.src_root then
+		return vim.fn.expand(M.config.src_root) .. "/" .. src_path
+	end
+	return nil
+end
+
+-- Try to open a src: markdown link under cursor_col (0-indexed). Returns true if handled.
+local try_open_src_link = function(line, cursor_col, buf)
+	local issues_mod = require("parley.issues")
+	local link = issues_mod.parse_md_link_at_cursor(line, cursor_col + 1)
+	if not link then return false end
+	local src_path = issues_mod.parse_src_url(link.url)
+	if not src_path then return false end
+	local buf_file = vim.api.nvim_buf_get_name(buf)
+	local abs_path = resolve_src_link(src_path, buf_file)
+	if not abs_path then
+		M.logger.warning("src: link: no git root found and src_root not configured")
+		return true
+	end
+	abs_path = vim.fn.simplify(abs_path)
+	if vim.fn.filereadable(abs_path) == 1 or vim.fn.isdirectory(abs_path) == 1 then
+		M.open_buf(abs_path)
+	else
+		M.logger.warning("src: link target not found: " .. abs_path)
+	end
+	return true
+end
+
 -- Function to open a chat reference from a markdown file
 M.open_chat_reference = function(current_line, cursor_col, _in_insert_mode, full_line)
+	-- Check for src: links first
+	if try_open_src_link(current_line, cursor_col, vim.api.nvim_get_current_buf()) then
+		return true
+	end
+
 	-- Check for inline branch links [🌿:text](file) first
 	if try_open_inline_branch_link(current_line, cursor_col, vim.api.nvim_get_current_buf()) then
 		return true

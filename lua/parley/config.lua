@@ -410,6 +410,8 @@ local config = {
 	repo_chat_dir = "workshop/parley",
 	-- issue management (repo-local, relative to git root)
 	issues_dir = "workshop/issues",
+	-- root for src: URL scheme (parent of sibling repos). nil = auto-detect via git rev-parse.
+	src_root = nil,
 	-- issue history (repo-local, relative to git root)
 	history_dir = "workshop/history",
 	-- vision tracker (repo-local, relative to git root)

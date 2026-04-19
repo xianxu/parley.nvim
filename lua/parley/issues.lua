@@ -257,6 +257,13 @@ M.resolve_link_target = function(link, cur_dir)
     return (cur_dir or "") .. "/" .. url
 end
 
+-- Extract the path from a src: URL. Returns the path string after "src:/" or nil.
+-- Pure function (no vim deps).
+M.parse_src_url = function(url)
+    if not url then return nil end
+    return url:match("^src:/(.+)$")
+end
+
 -- Find the parent of an issue: the first issue whose deps contains child_id.
 -- Returns the parent issue table or nil. Pure function.
 M.find_parent = function(issues, child_id)

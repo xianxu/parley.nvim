@@ -488,6 +488,30 @@ describe("resolve_link_target", function()
 end)
 
 --------------------------------------------------------------------------------
+-- parse_src_url
+--------------------------------------------------------------------------------
+
+describe("parse_src_url", function()
+    it("extracts path from a src: URL", function()
+        assert.equals("backend/app/models/user.rb", issues.parse_src_url("src:/backend/app/models/user.rb"))
+    end)
+
+    it("extracts a nested path", function()
+        assert.equals("nex-integrations-platform/nexhealth_integrations/sync_runner.py",
+            issues.parse_src_url("src:/nex-integrations-platform/nexhealth_integrations/sync_runner.py"))
+    end)
+
+    it("returns nil for non-src: URLs", function()
+        assert.is_nil(issues.parse_src_url("./000067-foo.md"))
+        assert.is_nil(issues.parse_src_url("https://example.com"))
+    end)
+
+    it("returns nil for nil input", function()
+        assert.is_nil(issues.parse_src_url(nil))
+    end)
+end)
+
+--------------------------------------------------------------------------------
 -- find_parent
 --------------------------------------------------------------------------------
 
