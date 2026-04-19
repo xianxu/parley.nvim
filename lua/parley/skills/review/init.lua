@@ -154,34 +154,31 @@ M._parse_marker_sections = parse_marker_sections
 -- Quickfix helpers
 --------------------------------------------------------------------------------
 
+local function marker_summary(marker)
+    local last = marker.sections[#marker.sections]
+    if not last then return marker.raw end
+    if marker.marker_type == "machine" then
+        return last.type == "user"
+            and "🤖 " .. last.text
+            or "🤖 You: " .. last.text
+    else
+        return last.type == "agent"
+            and "㊷ Agent asks: " .. last.text
+            or "㊷ " .. last.text
+    end
+end
+
 M.populate_quickfix = function(buf, markers, filter)
     local file_name = vim.api.nvim_buf_get_name(buf)
     local items = {}
     for _, marker in ipairs(markers) do
         local include = (filter ~= "pending") or (not marker.ready)
         if include then
-            local last_section = marker.sections[#marker.sections]
-            local text
-            if last_section then
-                if marker.marker_type == "machine" then
-                    -- 🤖: [] = agent turns, {} = user turns
-                    text = last_section.type == "user"
-                        and "🤖 Agent: " .. last_section.text
-                        or "🤖 You: " .. last_section.text
-                else
-                    -- ㊷: [] = user turns, {} = agent turns
-                    text = last_section.type == "agent"
-                        and "Agent asks: " .. last_section.text
-                        or "User: " .. last_section.text
-                end
-            else
-                text = marker.raw
-            end
             table.insert(items, {
                 filename = file_name,
                 lnum = marker.line + 1,
                 col = marker.col + 1,
-                text = text,
+                text = marker_summary(marker),
             })
         end
     end
@@ -189,6 +186,84 @@ M.populate_quickfix = function(buf, markers, filter)
     if #items > 0 then
         vim.cmd("copen")
     end
+end
+
+-- Scan all .md files under dir for pending (non-ready) markers.
+-- Returns list of { filepath, marker } sorted by filepath then line.
+M.scan_pending = function(dir)
+    local results = {}
+    local files = vim.fn.glob(dir .. "/**/*.md", false, true)
+    -- also catch top-level .md files (** may not match depth-0 on all systems)
+    for _, f in ipairs(vim.fn.glob(dir .. "/*.md", false, true)) do
+        table.insert(files, f)
+    end
+    local seen = {}
+    for _, filepath in ipairs(files) do
+        filepath = vim.fn.resolve(filepath)
+        if not seen[filepath] then
+            seen[filepath] = true
+            local ok, lines = pcall(vim.fn.readfile, filepath)
+            if ok and lines then
+                local markers = M.parse_markers(lines)
+                for _, marker in ipairs(markers) do
+                    if not marker.ready then
+                        table.insert(results, { filepath = filepath, marker = marker })
+                    end
+                end
+            end
+        end
+    end
+    return results
+end
+
+-- Open a float picker listing all pending review markers under cwd.
+-- Only runs inside a parley-enabled repo (.parley marker file present at git root).
+M.cmd_review_finder = function()
+    local parley = get_parley()
+    if not parley.config.repo_root then
+        parley.logger.warning("Review finder: not in a parley-enabled repo")
+        return
+    end
+
+    local cwd = vim.fn.getcwd()
+    local pending = M.scan_pending(cwd)
+
+    if #pending == 0 then
+        parley.logger.info("Review finder: no pending markers found")
+        return
+    end
+
+    -- Group by file, preserving first-occurrence order
+    local file_order = {}
+    local counts = {}
+    for _, entry in ipairs(pending) do
+        local fp = entry.filepath
+        if not counts[fp] then
+            counts[fp] = 0
+            table.insert(file_order, fp)
+        end
+        counts[fp] = counts[fp] + 1
+    end
+
+    local items = {}
+    for _, fp in ipairs(file_order) do
+        local rel = vim.fn.fnamemodify(fp, ":~:.")
+        local n = counts[fp]
+        table.insert(items, {
+            display = rel .. "  (" .. n .. ")",
+            search_text = rel,
+            value = fp,
+        })
+    end
+
+    require("parley.float_picker").open({
+        title = "Pending Review (" .. #items .. " files)",
+        items = items,
+        anchor = "top",
+        on_select = function(item)
+            vim.cmd("edit " .. vim.fn.fnameescape(item.value))
+        end,
+    })
 end
 
 --------------------------------------------------------------------------------

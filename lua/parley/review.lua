@@ -27,6 +27,8 @@ end
 M.parse_markers = function(lines) return get_review().parse_markers(lines) end
 M._parse_marker_sections = nil  -- set lazily below
 M.populate_quickfix = function(buf, markers, filter) return get_review().populate_quickfix(buf, markers, filter) end
+M.scan_pending = function(dir) return get_review().scan_pending(dir) end
+M.cmd_review_finder = function() return get_review().cmd_review_finder() end
 
 -- Edit computation (delegated to skill_runner)
 M.compute_edits = function(content, edits) return get_runner().compute_edits(content, edits) end

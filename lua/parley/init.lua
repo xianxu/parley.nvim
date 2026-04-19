@@ -715,7 +715,18 @@ if M.config.global_shortcut_new then
 		end
 	end
 
-register_issue_shortcut("global_shortcut_issue_new", "Create New Issue", function() M.cmd.IssueNew() end)
+-- Review finder (global, available in any buffer)
+	local review_finder_cfg = M.config.review_shortcut_finder
+	if review_finder_cfg then
+		for _, mode in ipairs(review_finder_cfg.modes or {}) do
+			vim.keymap.set(mode, review_finder_cfg.shortcut, function()
+				if mode == "i" then vim.cmd("stopinsert") end
+				require("parley.skills.review").cmd_review_finder()
+			end, { silent = true, desc = "Parley review finder" })
+		end
+	end
+
+	register_issue_shortcut("global_shortcut_issue_new", "Create New Issue", function() M.cmd.IssueNew() end)
 	register_issue_shortcut("global_shortcut_issue_finder", "Open Issue Finder", function() M.cmd.IssueFinder({}) end)
 	register_issue_shortcut("global_shortcut_issue_next", "Open Next Runnable Issue", function() M.cmd.IssueNext() end)
 	register_issue_shortcut("global_shortcut_issue_status", "Cycle Issue Status", function() M.cmd.IssueStatus() end)

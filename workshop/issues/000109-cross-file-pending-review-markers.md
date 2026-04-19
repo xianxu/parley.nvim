@@ -1,7 +1,7 @@
 ---
 id: "000109"
 title: "Cross-file pending review marker finder"
-status: open
+status: done
 ---
 
 ## Summary
@@ -10,27 +10,30 @@ When a folder contains `.md` files with pending review markers (🤖 or ㊷), th
 
 ## Spec
 
-A keybinding (`<C-g>vf`) that scans all `.md` files under `cwd` for pending markers and populates the quickfix list.
+A float picker (same infrastructure as `ChatFinder`) triggered by a keybinding (`<C-g>vf`) that lists all `.md` files under cwd containing pending review markers, with preview of the marker text. Selecting an entry jumps directly to the marker line.
+
+**Precondition:** only active when the repo is parley-enabled (`.parley` marker file present at git root). If not in a parley repo, show a warning.
+
+**Scan root:** the current nvim cwd (`vim.fn.getcwd()`), not the repo-relative paths used by the issue tracker. This lets it work on any subdirectory the user is working in.
 
 **Pending marker definition** (turn-aware):
 - `㊷` markers with even section count — agent asked a question, awaiting human reply
 - `🤖` markers with odd section count — agent made a finding, awaiting human reply
-- Both types can have multi-turn conversations, e.g. `🤖[]{}[]` (3 sections = odd = pending)
+- Multi-turn is handled correctly, e.g. `🤖[]{}[]` (3 sections = odd = pending)
 
-**Behavior:**
-- Scan all `.md` files under cwd (recursive, using `vim.fn.glob`)
-- For each file, run `parse_markers` and collect pending (non-ready) markers
-- Populate quickfix with one entry per pending marker, with `filename`, `lnum`, `col`, and the marker text
-- Open quickfix if any found; show info message if none
-- Reuses existing `parse_markers` and `populate_quickfix` infrastructure
+**Picker behavior** (follow `ChatFinder` / `float_picker` conventions):
+- One entry per pending marker: `filename (relative to cwd) | line | marker text preview`
+- Preview pane shows the file around the marker line
+- Enter → open file, jump to marker line
+- Reuses `parse_markers` for detection; `float_picker` for display
 
-**Config:** add `review_shortcut_finder` (default `<C-g>vf`) alongside other review shortcuts.
+**Config:** `review_shortcut_finder` (default `<C-g>vf`), registered as a global shortcut (available in any buffer, not just markdown).
 
 ## Plan
 
-- [ ] Add `M.scan_folder(dir)` to `skills/review/init.lua` — returns list of `{filename, marker}` pairs
-- [ ] Add `M.populate_quickfix_multi(items)` or extend existing `populate_quickfix` to accept cross-file items (it already supports `filename` field)
-- [ ] Wire keybinding in `setup_keymaps` and add `review_shortcut_finder` to `config.lua`
-- [ ] Register global shortcut (available in any buffer, not just markdown)
+- [x] Add `M.scan_pending(dir)` to `skills/review/init.lua` — walks `.md` files under `dir`, returns `{filepath, marker}` list
+- [x] Build picker entries + preview using existing `float_picker` infrastructure
+- [x] Add `review_shortcut_finder` to `config.lua` and register as global shortcut in `init.lua`
+- [x] Guard: check for `.parley` at git root before scanning; warn if absent
 
 ## Log

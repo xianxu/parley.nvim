@@ -368,6 +368,7 @@ local config = {
 	review_shortcut_insert = { modes = { "n", "v" }, shortcut = "<C-g>vi" },
 	review_shortcut_insert_machine = { modes = { "n" }, shortcut = "<C-g>vr" },
 	review_shortcut_edit = { modes = { "n" }, shortcut = "<C-g>ve" },
+	review_shortcut_finder = { modes = { "n", "i" }, shortcut = "<C-g>vf" },
 	-- agent to use for document review (defaults to Claude-Sonnet)
 	review_agent = "Claude-Sonnet",
 	-- how long review edit highlights persist (ms)
