@@ -366,8 +366,8 @@ local config = {
 	global_shortcut_oil = { modes = { "n" }, shortcut = "<leader>fo" },
 	-- document review shortcuts (markdown files only, not chat buffers)
 	review_shortcut_insert = { modes = { "n", "v" }, shortcut = "<C-g>vi" },
+	review_shortcut_insert_machine = { modes = { "n" }, shortcut = "<C-g>vr" },
 	review_shortcut_edit = { modes = { "n" }, shortcut = "<C-g>ve" },
-	review_shortcut_revise = { modes = { "n" }, shortcut = "<C-g>vr" },
 	-- agent to use for document review (defaults to Claude-Sonnet)
 	review_agent = "Claude-Sonnet",
 	-- how long review edit highlights persist (ms)
