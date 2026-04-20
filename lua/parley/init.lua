@@ -91,6 +91,10 @@ chat_finder_mod.setup(M)
 local note_finder_mod = require("parley.note_finder")
 note_finder_mod.setup(M)
 
+-- Markdown finder module
+local markdown_finder_mod = require("parley.markdown_finder")
+markdown_finder_mod.setup(M)
+
 -- Highlighter module (loaded here; wired up immediately since it only needs M reference)
 local highlighter = require("parley.highlighter")
 highlighter.setup(M)
@@ -725,6 +729,9 @@ if M.config.global_shortcut_new then
 			end, { silent = true, desc = "Parley review finder" })
 		end
 	end
+
+	-- Markdown finder shortcut
+	register_issue_shortcut("global_shortcut_markdown_finder", "Open Markdown Finder", function() M.cmd.MarkdownFinder() end)
 
 	register_issue_shortcut("global_shortcut_issue_new", "Create New Issue", function() M.cmd.IssueNew() end)
 	register_issue_shortcut("global_shortcut_issue_finder", "Open Issue Finder", function() M.cmd.IssueFinder({}) end)
@@ -1419,6 +1426,16 @@ local function keybinding_help_lines(context)
 			current_buf
 		),
 		"Open note finder"
+	)
+	add(
+		resolve_shortcut(
+			"Open Markdown Finder",
+			shortcut_modes(cfg.global_shortcut_markdown_finder, { "n", "i" }),
+			cfg.global_shortcut_markdown_finder,
+			"<C-m>f",
+			current_buf
+		),
+		"Find markdown files in repo"
 	)
 	add(
 		resolve_shortcut(
@@ -4233,6 +4250,8 @@ M.cmd.ChatFinder = function(opts) chat_finder_mod.open(opts) end
 
 
 M.cmd.NoteFinder = function(opts) note_finder_mod.open(opts) end
+
+M.cmd.MarkdownFinder = function() markdown_finder_mod.open() end
 
 
 -- Issue management commands
