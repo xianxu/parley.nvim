@@ -43,7 +43,9 @@ download_zellij() {
 download_ohmybash() {
     if [ ! -d "$BOOTSTRAP_DIR/oh-my-bash" ]; then
         echo "  [dl] Oh My Bash..."
-        git clone --depth 1 https://github.com/ohmybash/oh-my-bash.git "$BOOTSTRAP_DIR/oh-my-bash"
+        mkdir -p "$BOOTSTRAP_DIR/oh-my-bash"
+        curl -fsSL https://github.com/ohmybash/oh-my-bash/archive/refs/heads/master.tar.gz \
+            | tar xz --strip-components=1 -C "$BOOTSTRAP_DIR/oh-my-bash"
     else
         echo "  [ok] Oh My Bash"
     fi
@@ -65,7 +67,9 @@ download_lua() {
 download_luacheck() {
     if [ ! -d "$BOOTSTRAP_DIR/luacheck" ]; then
         echo "  [dl] Luacheck..."
-        git clone --depth 1 https://github.com/lunarmodules/luacheck.git "$BOOTSTRAP_DIR/luacheck"
+        mkdir -p "$BOOTSTRAP_DIR/luacheck"
+        curl -fsSL https://github.com/lunarmodules/luacheck/archive/refs/heads/master.tar.gz \
+            | tar xz --strip-components=1 -C "$BOOTSTRAP_DIR/luacheck"
     else
         echo "  [ok] Luacheck"
     fi
@@ -74,7 +78,9 @@ download_luacheck() {
 download_argparse() {
     if [ ! -d "$BOOTSTRAP_DIR/argparse" ]; then
         echo "  [dl] argparse..."
-        git clone --depth 1 https://github.com/luarocks/argparse.git "$BOOTSTRAP_DIR/argparse"
+        mkdir -p "$BOOTSTRAP_DIR/argparse"
+        curl -fsSL https://github.com/luarocks/argparse/archive/refs/heads/master.tar.gz \
+            | tar xz --strip-components=1 -C "$BOOTSTRAP_DIR/argparse"
     else
         echo "  [ok] argparse"
     fi
@@ -83,7 +89,9 @@ download_argparse() {
 download_luafilesystem() {
     if [ ! -d "$BOOTSTRAP_DIR/luafilesystem" ]; then
         echo "  [dl] luafilesystem..."
-        git clone --depth 1 https://github.com/lunarmodules/luafilesystem.git "$BOOTSTRAP_DIR/luafilesystem"
+        mkdir -p "$BOOTSTRAP_DIR/luafilesystem"
+        curl -fsSL https://github.com/lunarmodules/luafilesystem/archive/refs/heads/master.tar.gz \
+            | tar xz --strip-components=1 -C "$BOOTSTRAP_DIR/luafilesystem"
     else
         echo "  [ok] luafilesystem"
     fi
