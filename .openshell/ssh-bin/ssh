@@ -1,0 +1,4 @@
+#!/bin/bash
+# SSH wrapper for mutagen — uses repo-local SSH config for sandbox hosts.
+# Mutagen 0.18+ expects MUTAGEN_SSH_PATH to be a directory containing an 'ssh' binary.
+exec /usr/bin/ssh -F "$(dirname "$0")/../ssh_config" "$@"

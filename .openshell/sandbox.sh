@@ -3,6 +3,16 @@
 # Called by Makefile targets: sandbox, sandbox-build, sandbox-stop
 set -euo pipefail
 
+# Auto-detect Docker socket for Docker Desktop (macOS uses a non-standard path)
+if [ -z "${DOCKER_HOST:-}" ] && [ ! -S /var/run/docker.sock ]; then
+    for sock in "$HOME/.docker/run/docker.sock" "$HOME/.docker/desktop/docker.sock"; do
+        if [ -S "$sock" ]; then
+            export DOCKER_HOST="unix://$sock"
+            break
+        fi
+    done
+fi
+
 ACTION="${1:-}"
 SANDBOX_NAME="${2:-}"
 SANDBOX_SSH_HOST="openshell-${SANDBOX_NAME}"
@@ -17,7 +27,7 @@ REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 SSH_CONFIG="$SCRIPT_DIR/ssh_config"
 SSH="/usr/bin/ssh -F $SSH_CONFIG"
 SCP="/usr/bin/scp -F $SSH_CONFIG"
-export MUTAGEN_SSH_PATH="$SCRIPT_DIR/ssh_wrapper.sh"
+export MUTAGEN_SSH_PATH="$SCRIPT_DIR/ssh-bin"
 BASE_IMAGE="ghcr.io/nvidia/openshell-community/sandboxes/base"
 DIGEST_FILE="$SCRIPT_DIR/.base-image-digest"
 
