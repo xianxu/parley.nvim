@@ -425,7 +425,7 @@ local config = {
 	global_shortcut_vision_new = { modes = { "n" }, shortcut = "<C-j>n" },
 	global_shortcut_vision_goto = { modes = { "n" }, shortcut = "<C-j>o" },
 	-- global shortcuts for markdown file finder
-	global_shortcut_markdown_finder = { modes = { "n", "i" }, shortcut = "<C-m>f" },
+	global_shortcut_markdown_finder = { modes = { "n", "i" }, shortcut = "<C-g>m" },
 	-- maximum directory depth for markdown finder (from repo root)
 	markdown_finder_max_depth = 4,
 	-- global shortcuts for issue management

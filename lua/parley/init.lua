@@ -1432,7 +1432,7 @@ local function keybinding_help_lines(context)
 			"Open Markdown Finder",
 			shortcut_modes(cfg.global_shortcut_markdown_finder, { "n", "i" }),
 			cfg.global_shortcut_markdown_finder,
-			"<C-m>f",
+			"<C-g>m",
 			current_buf
 		),
 		"Find markdown files in repo"
