@@ -1,0 +1,1 @@
+../../../ariadne/construct/scripts/sync-local-skills.sh

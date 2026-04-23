@@ -1,6 +1,18 @@
 {
-  "enabledPlugins": {
-    "superpowers@claude-plugins-official": false
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(cp:*)",
+      "Bash(rm:*)",
+      "WebSearch"
+    ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true,
+    "filesystem": {
+      "allowWrite": []
+    }
   },
   "hooks": {
     "PostToolUse": [
@@ -22,6 +34,20 @@
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./construct/scripts/sync-local-skills.sh",
+            "timeout": 5
+          }
+        ]
+      }
     ]
+  },
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": false
   }
 }

@@ -42,15 +42,14 @@ Agent-driven verification runs before `push` and `merge`. Six checks, each invok
 | `dry` | DRY violations in diff | read-only |
 | `pure` | Pure/impure separation | read-only |
 | `plan` | Issue plan completeness (skipped if no issue files changed) | read-only |
-| `test` | Runs `make test` + `make test-agents` + `make lint`, then agent analyzes results | read-only |
-| `atlas` | Checks atlas/ docs match code changes | **read-write** (may update docs) |
-| `lessons` | Reminder to review `workshop/tasks/lessons.md` | no agent |
+| `specs` | Checks atlas/ and README.md match code changes | **read-write** (may update docs) |
+| `lessons` | Reminder to review `workshop/lessons.md` | no agent |
 
 ### Execution Modes
 - **Interactive** (`make check` or `make pre-merge`): sequential, prompts accept/discard for each check that modifies files
 - **Audit** (`scripts/parallel-checks.sh --audit` or `make c`): all checks run in parallel (concurrency limit `MAX_PARALLEL_CHECKS`, default 3), report-only, updates state file
 - **Single check**: `make check-dry`, `make check-specs`, etc.
-- **Preset selection**: `PRE_MERGE_CHECKS=yynnyn make pre-merge` (y/n per check in order: dry, pure, plan, test, specs, lessons)
+- **Preset selection**: `PRE_MERGE_CHECKS=yynyn make pre-merge` (y/n per check in order: dry, pure, plan, specs, lessons)
 
 Agent adapters exist for `claude`, `codex`, and `gemini`. Claude uses `--permission-mode bypassPermissions` with stream-json progress output.
 
@@ -82,5 +81,5 @@ The workflow enforces the AGENTS.md constitution:
 - **Plan First**: issue file's `## Plan` section with checkable items
 - **Track Progress**: mark items complete, log discoveries in `## Log`
 - **Verify**: pre-merge checks enforce DRY, PURE, test passing, spec sync
-- **Lessons**: `workshop/tasks/lessons.md` captures patterns from mistakes
+- **Lessons**: `workshop/lessons.md` captures patterns from mistakes
 - **Post-milestone review**: mandatory code review subagent at milestone boundaries

@@ -1,16 +1,17 @@
-# Canonical repo name from git remote (portable across worktrees and containers)
+# Canonical repo name from git remote
 REPO_NAME := $(shell git remote get-url origin 2>/dev/null | sed 's|.*/||; s|\.git$$||')
 
-# This project nests issues and history under workshop/
+# Issue/history paths (override before include if non-standard)
 WF_ISSUES_DIR = workshop/issues
 WF_HISTORY_DIR = workshop/history
 
-# Assemble sub-Makefiles
-include Makefile.parley
+# Include ariadne workflow targets
 include Makefile.workflow
--include .openshell/Makefile
+
+# Include local targets (repo-specific)
+-include Makefile.local
 
 .PHONY: help
 
-help: help-parley help-workflow help-sandbox
+help: help-workflow help-parley
 	@true

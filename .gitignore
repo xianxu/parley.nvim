@@ -12,3 +12,6 @@ COMPARE-SHA
 .openshell/ssh_config
 vision
 
+.ariadne-backup/
+.goto
+.openshell/.base-image-digest
