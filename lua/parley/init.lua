@@ -77,6 +77,9 @@ vision_mod.setup(M)
 local vision_finder_mod = require("parley.vision_finder")
 vision_finder_mod.setup(M)
 
+-- Keybinding registry (scope hierarchy, entries, help generation, registration)
+local kb_registry = require("parley.keybinding_registry")
+
 -- Exporter module (loaded here; wired up at module-load time with M reference)
 local exporter = require("parley.exporter")
 exporter.setup(M)
@@ -527,227 +530,65 @@ M.setup = function(opts)
 		end)
 	end
 
-	-- set up global keymaps for commands
-if M.config.global_shortcut_finder then
-		for _, mode in ipairs(M.config.global_shortcut_finder.modes) do
-			if mode == "n" then
-				vim.keymap.set(
-					mode,
-					M.config.global_shortcut_finder.shortcut,
-					":" .. M.config.cmd_prefix .. "ChatFinder<CR>",
-					{ silent = true, desc = "Open Chat Finder" }
-				)
-			elseif mode == "i" then
-				vim.keymap.set(
-					mode,
-					M.config.global_shortcut_finder.shortcut,
-					"<ESC>:" .. M.config.cmd_prefix .. "ChatFinder<CR>",
-					{ silent = true, desc = "Open Chat Finder" }
-				)
-			end
-		end
-	end
-
-if M.config.global_shortcut_new then
-		for _, mode in ipairs(M.config.global_shortcut_new.modes) do
-			if mode == "n" then
-				vim.keymap.set(mode, M.config.global_shortcut_new.shortcut, function()
-					M.cmd.ChatNew({})
-				end, { silent = true, desc = "Create New Chat" })
-			elseif mode == "i" then
-				vim.keymap.set(mode, M.config.global_shortcut_new.shortcut, function()
-					vim.cmd("stopinsert")
-					M.cmd.ChatNew({})
-				end, { silent = true, desc = "Create New Chat" })
-			end
-		end
-	end
-
-	if M.config.global_shortcut_chat_dirs then
-		for _, mode in ipairs(M.config.global_shortcut_chat_dirs.modes) do
-			if mode == "n" then
-				vim.keymap.set(mode, M.config.global_shortcut_chat_dirs.shortcut, function()
-					M.cmd.ChatDirs({})
-				end, { silent = true, desc = "Manage chat roots" })
-			elseif mode == "i" then
-				vim.keymap.set(mode, M.config.global_shortcut_chat_dirs.shortcut, function()
-					vim.cmd("stopinsert")
-					M.cmd.ChatDirs({})
-				end, { silent = true, desc = "Manage chat roots" })
-			end
-		end
-	end
-
-	if M.config.global_shortcut_keybindings then
-		for _, mode in ipairs(M.config.global_shortcut_keybindings.modes) do
-			if mode == "n" then
-				vim.keymap.set(mode, M.config.global_shortcut_keybindings.shortcut, function()
-					M.cmd.KeyBindings()
-				end, { silent = true, desc = "Show Parley key bindings" })
-			elseif mode == "i" then
-				vim.keymap.set(mode, M.config.global_shortcut_keybindings.shortcut, function()
-					vim.cmd("stopinsert")
-					M.cmd.KeyBindings()
-				end, { silent = true, desc = "Show Parley key bindings" })
-			end
-		end
-	end
-
-	if M.config.global_shortcut_review then
-		for _, mode in ipairs(M.config.global_shortcut_review.modes) do
-			vim.keymap.set(mode, M.config.global_shortcut_review.shortcut, function()
-				M.cmd.ChatReview({})
-			end, { silent = true, desc = "Review current file in new Chat" })
-		end
-	end
-
--- Global copy shortcuts (work in any buffer)
-	if M.config.global_shortcut_copy_location then
-		for _, mode in ipairs(M.config.global_shortcut_copy_location.modes) do
-			vim.keymap.set(mode, M.config.global_shortcut_copy_location.shortcut, M.cmd.CopyLocation, { silent = true, desc = "Copy file:line to clipboard" })
-		end
-	end
-	if M.config.global_shortcut_copy_location_content then
-		for _, mode in ipairs(M.config.global_shortcut_copy_location_content.modes) do
-			vim.keymap.set(mode, M.config.global_shortcut_copy_location_content.shortcut, M.cmd.CopyLocationContent, { silent = true, desc = "Copy file:line + content to clipboard" })
-		end
-	end
-	if M.config.global_shortcut_copy_context then
-		for _, mode in ipairs(M.config.global_shortcut_copy_context.modes) do
-			vim.keymap.set(mode, M.config.global_shortcut_copy_context.shortcut, M.cmd.CopyContext, { silent = true, desc = "Copy location + context to clipboard" })
-		end
-	end
-	if M.config.global_shortcut_copy_context_wide then
-		for _, mode in ipairs(M.config.global_shortcut_copy_context_wide.modes) do
-			vim.keymap.set(mode, M.config.global_shortcut_copy_context_wide.shortcut, M.cmd.CopyContextWide, { silent = true, desc = "Copy location + wide context to clipboard" })
-		end
-	end
-
--- Set up global shortcuts for note-taking
-	if M.config.global_shortcut_note_new then
-		for _, mode in ipairs(M.config.global_shortcut_note_new.modes) do
-			if mode == "n" then
-				vim.keymap.set(mode, M.config.global_shortcut_note_new.shortcut, function()
-					M.cmd.NoteNew()
-				end, { silent = true, desc = "Create New Note" })
-			elseif mode == "i" then
-				vim.keymap.set(mode, M.config.global_shortcut_note_new.shortcut, function()
-					vim.cmd("stopinsert")
-					M.cmd.NoteNew()
-				end, { silent = true, desc = "Create New Note" })
-			end
-		end
-	end
-
-	if M.config.global_shortcut_note_finder then
-		for _, mode in ipairs(M.config.global_shortcut_note_finder.modes) do
-			if mode == "n" then
-				vim.keymap.set(mode, M.config.global_shortcut_note_finder.shortcut, function()
-					M.cmd.NoteFinder({})
-				end, { silent = true, desc = "Open Note Finder" })
-			elseif mode == "i" then
-				vim.keymap.set(mode, M.config.global_shortcut_note_finder.shortcut, function()
-					vim.cmd("stopinsert")
-					M.cmd.NoteFinder({})
-				end, { silent = true, desc = "Open Note Finder" })
-			end
-		end
-	end
-
-	-- Set up global shortcut for navigating to current year's note directory
-	if M.config.global_shortcut_year_root then
-		for _, mode in ipairs(M.config.global_shortcut_year_root.modes) do
-			if mode == "n" then
-				vim.keymap.set(mode, M.config.global_shortcut_year_root.shortcut, function()
-					local current_year = os.date("%Y")
-					local year_dir = M.config.notes_dir .. "/" .. current_year
-					M.helpers.prepare_dir(year_dir, "year")
-					vim.cmd("cd " .. year_dir)
-				end, { silent = true, desc = "Change directory to current year's note directory" })
-			elseif mode == "i" then
-				vim.keymap.set(mode, M.config.global_shortcut_year_root.shortcut, function()
-					vim.cmd("stopinsert")
-					local current_year = os.date("%Y")
-					local year_dir = M.config.notes_dir .. "/" .. current_year
-					M.helpers.prepare_dir(year_dir, "year")
-					vim.cmd("cd " .. year_dir)
-				end, { silent = true, desc = "Change directory to current year's note directory" })
-			end
-		end
-	end
-
--- Set up global shortcut for opening oil.nvim
-	if M.config.global_shortcut_oil then
-		for _, mode in ipairs(M.config.global_shortcut_oil.modes) do
-			if mode == "n" then
-				vim.keymap.set(mode, M.config.global_shortcut_oil.shortcut, function()
-					-- Check if oil.nvim is available
-					local ok, oil = pcall(require, "oil")
-					if ok then
-						oil.open()
-					else
-						M.logger.error("oil.nvim is not installed. Please install it with your package manager.")
-					end
-				end, { silent = true, desc = "Open oil.nvim file explorer" })
-			end
-		end
-	end
-
-	-- Skill picker shortcut
-	if M.config.skill_shortcut then
-		for _, mode in ipairs(M.config.skill_shortcut.modes) do
-			vim.keymap.set(mode, M.config.skill_shortcut.shortcut, function()
-				require("parley.skill_picker").open()
-			end, { silent = true, desc = "Open Skill Picker" })
-		end
-	end
-
-	-- Issue management shortcuts
-	local function register_issue_shortcut(config_key, desc, callback)
-		local shortcut = M.config[config_key]
-		if shortcut then
-			for _, mode in ipairs(shortcut.modes) do
-				if mode == "n" then
-					vim.keymap.set(mode, shortcut.shortcut, callback, { silent = true, desc = desc })
-				elseif mode == "i" then
-					vim.keymap.set(mode, shortcut.shortcut, function()
-						vim.cmd("stopinsert")
-						callback()
-					end, { silent = true, desc = desc })
+	-- Register all global keymaps from the keybinding registry
+	kb_registry.register_global(
+		{ "global", "repo", "note", "issue", "vision", "chat" },
+		M.config,
+		{
+			help = function() M.cmd.KeyBindings() end,
+			chat_new = function() M.cmd.ChatNew({}) end,
+			chat_finder = function() M.cmd.ChatFinder() end,
+			chat_dirs = function() M.cmd.ChatDirs({}) end,
+			chat_review = function() M.cmd.ChatReview({}) end,
+			note_new = function() M.cmd.NoteNew() end,
+			note_finder = function() M.cmd.NoteFinder({}) end,
+			year_root = function()
+				local current_year = os.date("%Y")
+				local year_dir = M.config.notes_dir .. "/" .. current_year
+				M.helpers.prepare_dir(year_dir, "year")
+				vim.cmd("cd " .. year_dir)
+			end,
+			markdown_finder = function() M.cmd.MarkdownFinder() end,
+			oil = function()
+				local ok, oil = pcall(require, "oil")
+				if ok then
+					oil.open()
+				else
+					M.logger.error("oil.nvim is not installed. Please install it with your package manager.")
 				end
-			end
-		end
-	end
-
--- Review finder (global, available in any buffer)
-	local review_finder_cfg = M.config.review_shortcut_finder
-	if review_finder_cfg then
-		for _, mode in ipairs(review_finder_cfg.modes or {}) do
-			vim.keymap.set(mode, review_finder_cfg.shortcut, function()
-				if mode == "i" then vim.cmd("stopinsert") end
-				require("parley.skills.review").cmd_review_finder()
-			end, { silent = true, desc = "Parley review finder" })
-		end
-	end
-
-	-- Markdown finder shortcut
-	register_issue_shortcut("global_shortcut_markdown_finder", "Open Markdown Finder", function() M.cmd.MarkdownFinder() end)
-
-	register_issue_shortcut("global_shortcut_issue_new", "Create New Issue", function() M.cmd.IssueNew() end)
-	register_issue_shortcut("global_shortcut_issue_finder", "Open Issue Finder", function() M.cmd.IssueFinder({}) end)
-	register_issue_shortcut("global_shortcut_issue_next", "Open Next Runnable Issue", function() M.cmd.IssueNext() end)
-	register_issue_shortcut("global_shortcut_issue_status", "Cycle Issue Status", function() M.cmd.IssueStatus() end)
-	register_issue_shortcut("global_shortcut_issue_decompose", "Decompose Issue", function() M.cmd.IssueDecompose() end)
-	register_issue_shortcut("global_shortcut_issue_goto", "Goto Linked Issue", function() M.cmd.IssueGoto() end)
-
-	-- Set up global keymaps for vision tracker
-	register_issue_shortcut("global_shortcut_vision_validate", "Vision Validate", function() M.cmd.VisionValidate() end)
-	register_issue_shortcut("global_shortcut_vision_export_csv", "Vision Export CSV", function() M.cmd.VisionExportCsv({}) end)
-	register_issue_shortcut("global_shortcut_vision_export_dot", "Vision Export DOT", function() M.cmd.VisionExportDot({}) end)
-	register_issue_shortcut("global_shortcut_vision_new", "Vision New Project", function() M.cmd.VisionNew() end)
-	register_issue_shortcut("global_shortcut_vision_goto", "Vision Goto Ref", function() M.cmd.VisionGoto() end)
-	register_issue_shortcut("global_shortcut_vision_finder", "Vision Finder", function() M.cmd.VisionShow() end)
-	register_issue_shortcut("global_shortcut_vision_allocation", "Vision Allocation", function() M.cmd.VisionAllocation({}) end)
+			end,
+			copy_location = function() M.cmd.CopyLocation() end,
+			copy_location_content = function() M.cmd.CopyLocationContent() end,
+			copy_context = function() M.cmd.CopyContext() end,
+			copy_context_wide = function() M.cmd.CopyContextWide() end,
+			review_finder = function() require("parley.skills.review").cmd_review_finder() end,
+			skill_picker = function() require("parley.skill_picker").open() end,
+			-- Repo scope
+			issue_new = function() M.cmd.IssueNew() end,
+			issue_finder = function() M.cmd.IssueFinder({}) end,
+			issue_next = function() M.cmd.IssueNext() end,
+			-- Issue scope (globally registered, shown in issue context)
+			issue_status = function() M.cmd.IssueStatus() end,
+			issue_decompose = function() M.cmd.IssueDecompose() end,
+			issue_goto = function() M.cmd.IssueGoto() end,
+			-- Vision scope
+			vision_finder = function() M.cmd.VisionShow() end,
+			vision_new = function() M.cmd.VisionNew() end,
+			vision_goto = function() M.cmd.VisionGoto() end,
+			vision_validate = function() M.cmd.VisionValidate() end,
+			vision_export_csv = function() M.cmd.VisionExportCsv({}) end,
+			vision_export_dot = function() M.cmd.VisionExportDot({}) end,
+			vision_allocation = function() M.cmd.VisionAllocation({}) end,
+			-- Note scope (globally registered)
+			interview_start = function() M.cmd.EnterInterview() end,
+			interview_stop = function() M.cmd.ExitInterview() end,
+			note_template = function() M.cmd.NoteNewFromTemplate() end,
+			-- Chat scope (globally registered toggles)
+			chat_toggle_web_search = function() vim.cmd(M.config.cmd_prefix .. "ToggleWebSearch") end,
+			chat_toggle_raw_request = function() vim.cmd(M.config.cmd_prefix .. "ToggleRawRequest") end,
+			chat_toggle_raw_response = function() vim.cmd(M.config.cmd_prefix .. "ToggleRawResponse") end,
+		}
+	)
 
 	-- Set up typeahead completion for vision YAML files
 	vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, {
@@ -834,18 +675,7 @@ if M.config.global_shortcut_new then
 		end,
 	})
 
-	-- Set up global keymaps for interview mode
-	vim.keymap.set("n", "<C-n>i", function()
-		M.cmd.EnterInterview()
-	end, { silent = true, desc = "Enter Interview Mode" })
-	vim.keymap.set("n", "<C-n>I", function()
-		M.cmd.ExitInterview()
-	end, { silent = true, desc = "Exit Interview Mode" })
-
-	-- Set up global keymap for template-based note creation
-	vim.keymap.set("n", "<C-n>t", function()
-		M.cmd.NoteNewFromTemplate()
-	end, { silent = true, desc = "Create Note from Template" })
+	-- Interview mode and note template keymaps now registered via kb_registry.register_global above
 
 	local completions = {
 		ChatNew = {},
@@ -1021,26 +851,7 @@ if M.config.global_shortcut_new then
 
 	-- set up buffer update handler
 	M.setup_buf_handler()
-	-- bind <C-g>w to toggle web_search tool
-	vim.keymap.set(
-		"n",
-		"<C-g>w",
-		string.format("<cmd>%sToggleWebSearch<CR>", M.config.cmd_prefix),
-		{ noremap = true, silent = true, desc = "Toggle web_search tool" }
-	)
-	-- bind <C-g>r to toggle raw request mode, <C-g>R to toggle raw response mode
-	vim.keymap.set(
-		"n",
-		"<C-g>r",
-		string.format("<cmd>%sToggleRawRequest<CR>", M.config.cmd_prefix),
-		{ noremap = true, silent = true, desc = "Toggle raw request mode" }
-	)
-	vim.keymap.set(
-		"n",
-		"<C-g>R",
-		string.format("<cmd>%sToggleRawResponse<CR>", M.config.cmd_prefix),
-		{ noremap = true, silent = true, desc = "Toggle raw response mode" }
-	)
+	-- Toggle keymaps (web_search, raw request/response) now registered via kb_registry.register_global above
 
 	-- Setup lualine integration if lualine is enabled
 	pcall(function()
@@ -1224,73 +1035,17 @@ M._format_missing_remote_reference_cache_content = function(u) return chat_respo
 M.cmd.Stop = function(s) chat_respond.cmd_stop(s) end
 
 --------------------------------------------------------------------------------
--- Keybinding help
+-- Keybinding help (driven by keybinding_registry)
 --------------------------------------------------------------------------------
 
-local function shortcut_value(shortcut_config, fallback)
-	if type(shortcut_config) == "table" and type(shortcut_config.shortcut) == "string" and shortcut_config.shortcut ~= "" then
-		return shortcut_config.shortcut
-	end
-	return fallback
-end
-
-local function shortcut_modes(shortcut_config, fallback)
-	if type(shortcut_config) == "table" and type(shortcut_config.modes) == "table" and #shortcut_config.modes > 0 then
-		return shortcut_config.modes
-	end
-	return fallback
-end
-
-local function keymaps_for_mode(mode, bufnr)
-	local opts = nil
-	if bufnr ~= nil then
-		opts = { buffer = bufnr }
-	end
-	local ok, maps = pcall(vim.keymap.get, mode, nil, opts)
-	if ok and type(maps) == "table" then
-		return maps
-	end
-	return {}
-end
-
-local function find_mapping_lhs_by_desc(desc, modes, bufnr)
-	for _, mode in ipairs(modes) do
-		if bufnr ~= nil then
-			for _, map in ipairs(keymaps_for_mode(mode, bufnr)) do
-				if map.desc == desc and type(map.lhs) == "string" and map.lhs ~= "" then
-					return map.lhs
-				end
-			end
-		end
-		for _, map in ipairs(keymaps_for_mode(mode, nil)) do
-			if map.desc == desc and type(map.lhs) == "string" and map.lhs ~= "" then
-				return map.lhs
-			end
-		end
-	end
-	return nil
-end
-
-local function resolve_shortcut(descs, modes, shortcut_config, fallback, bufnr)
-	local descriptions = type(descs) == "table" and descs or { descs }
-	for _, desc in ipairs(descriptions) do
-		local lhs = find_mapping_lhs_by_desc(desc, modes, bufnr)
-		if lhs then
-			return lhs
-		end
-	end
-	return shortcut_value(shortcut_config, fallback)
-end
-
 -- Detect the buffer context for scoped keybinding help.
--- Returns one of: "chat", "note", "issue", "markdown", "other"
+-- Returns a scope from the registry forest.
 local function detect_buffer_context(buf)
 	local file_name = vim.api.nvim_buf_get_name(buf)
 	if not M.not_chat(buf, file_name) then
 		return "chat"
 	end
 	if M.is_markdown(buf, file_name) then
-		-- Normalize: resolve symlinks and ensure trailing /
 		local resolved = vim.fn.resolve(vim.fn.fnamemodify(file_name, ":p"))
 		-- Check note
 		local notes_dir = M.config.notes_dir
@@ -1313,6 +1068,29 @@ local function detect_buffer_context(buf)
 		end
 		return "markdown"
 	end
+	-- Check vision YAML
+	if file_name:match("%.yaml$") or file_name:match("%.yml$") then
+		local vision_dir = M.config.vision_dir
+		if vision_dir and vision_dir ~= "" then
+			local git_root = M.helpers.find_git_root(vim.fn.getcwd())
+			if git_root ~= "" then
+				local abs_vision = vim.fn.resolve(git_root .. "/" .. vision_dir)
+				local resolved = vim.fn.resolve(vim.fn.fnamemodify(file_name, ":p"))
+				if not abs_vision:match("/$") then abs_vision = abs_vision .. "/" end
+				if resolved:sub(1, #abs_vision) == abs_vision then
+					return "vision"
+				end
+			end
+		end
+	end
+	-- Check if in a repo (has .parley marker)
+	local git_root = M.helpers.find_git_root(vim.fn.getcwd())
+	if git_root ~= "" then
+		local marker = git_root .. "/" .. (M.config.repo_marker or ".parley")
+		if vim.fn.filereadable(marker) == 1 then
+			return "repo"
+		end
+	end
 	return "other"
 end
 
@@ -1321,378 +1099,8 @@ M._detect_buffer_context = detect_buffer_context
 local function keybinding_help_lines(context)
 	local cfg = M.config or {}
 	local current_buf = vim.api.nvim_get_current_buf()
-
-	-- Auto-detect context if not provided (finders pass explicit context)
 	context = context or detect_buffer_context(current_buf)
-
-	-- Title with context suffix
-	local title_suffix = {
-		chat = " (Chat)",
-		note = " (Note)",
-		issue = " (Issue)",
-		markdown = " (Markdown)",
-		chat_finder = " (Chat Finder)",
-		note_finder = " (Note Finder)",
-		issue_finder = " (Issue Finder)",
-	}
-	local lines = {
-		"Parley Key Bindings" .. (title_suffix[context] or ""),
-		"",
-	}
-
-	local function add(shortcut, description)
-		table.insert(lines, string.format("  %-12s %s", shortcut, description))
-	end
-
-	-- Finder contexts: show only finder-specific keys
-	if context == "chat_finder" then
-		table.insert(lines, "Chat Finder")
-		local finder_mappings = cfg.chat_finder_mappings or {}
-		add(shortcut_value(finder_mappings.next_recency, "<C-a>"), "Cycle recency window left")
-		add(shortcut_value(finder_mappings.previous_recency, "<C-s>"), "Cycle recency window right")
-		add(shortcut_value(finder_mappings.delete, "<C-d>"), "Delete selected chat")
-		add(shortcut_value(finder_mappings.delete_tree, "<C-D>"), "Delete chat tree")
-		add(shortcut_value(finder_mappings.move, "<C-x>"), "Move selected chat")
-		table.insert(lines, string.format("  %-12s %s", "", "(Recent window default: last " .. tostring((cfg.chat_finder_recency or {}).months or 6) .. " months)"))
-		table.insert(lines, "")
-		table.insert(lines, "Close: q or <Esc>")
-		return lines
-	end
-
-	if context == "note_finder" then
-		table.insert(lines, "Note Finder")
-		local note_finder_mappings = cfg.note_finder_mappings or {}
-		add(shortcut_value(note_finder_mappings.next_recency, "<C-a>"), "Cycle recency window left")
-		add(shortcut_value(note_finder_mappings.previous_recency, "<C-s>"), "Cycle recency window right")
-		add(shortcut_value(note_finder_mappings.delete, "<C-d>"), "Delete selected note")
-		table.insert(lines, string.format("  %-12s %s", "", "(Recent window default: last " .. tostring((cfg.note_finder_recency or {}).months or 6) .. " months)"))
-		table.insert(lines, "")
-		table.insert(lines, "Close: q or <Esc>")
-		return lines
-	end
-
-	if context == "issue_finder" then
-		table.insert(lines, "Issue Finder")
-		local issue_finder_mappings = cfg.issue_finder_mappings or {}
-		add(shortcut_value(issue_finder_mappings.cycle_status, "<C-s>"), "Cycle issue status")
-		add(shortcut_value(issue_finder_mappings.toggle_done, "<C-a>"), "Toggle show done/history")
-		add(shortcut_value(issue_finder_mappings.delete, "<C-d>"), "Delete selected issue")
-		table.insert(lines, "")
-		table.insert(lines, "Close: q or <Esc>")
-		return lines
-	end
-
-	-- Non-finder contexts: Global section
-	table.insert(lines, "Global")
-
-	add(
-		resolve_shortcut(
-			"Show Parley key bindings",
-			shortcut_modes(cfg.global_shortcut_keybindings, { "n", "i" }),
-			cfg.global_shortcut_keybindings,
-			"<C-g>?",
-			current_buf
-		),
-		"Show key bindings"
-	)
-	add(
-		resolve_shortcut("Create New Chat", shortcut_modes(cfg.global_shortcut_new, { "n", "i" }), cfg.global_shortcut_new, "<C-g>c", current_buf),
-		"New chat"
-	)
-	add(
-		resolve_shortcut("Open Chat Finder", shortcut_modes(cfg.global_shortcut_finder, { "n", "i" }), cfg.global_shortcut_finder, "<C-g>f", current_buf),
-		"Open chat finder"
-	)
-	add(
-		resolve_shortcut(
-			"Manage chat roots",
-			shortcut_modes(cfg.global_shortcut_chat_dirs, { "n", "i" }),
-			cfg.global_shortcut_chat_dirs,
-			"<C-g>h",
-			current_buf
-		),
-		"Manage chat roots"
-	)
-	add(
-		resolve_shortcut("Create New Note", shortcut_modes(cfg.global_shortcut_note_new, { "n", "i" }), cfg.global_shortcut_note_new, "<C-n>c", current_buf),
-		"New note"
-	)
-	add(
-		resolve_shortcut(
-			"Open Note Finder",
-			shortcut_modes(cfg.global_shortcut_note_finder, { "n", "i" }),
-			cfg.global_shortcut_note_finder,
-			"<C-n>f",
-			current_buf
-		),
-		"Open note finder"
-	)
-	add(
-		resolve_shortcut(
-			"Open Markdown Finder",
-			shortcut_modes(cfg.global_shortcut_markdown_finder, { "n", "i" }),
-			cfg.global_shortcut_markdown_finder,
-			"<C-g>m",
-			current_buf
-		),
-		"Find markdown files in repo"
-	)
-	add(
-		resolve_shortcut(
-			"Change directory to current year's note directory",
-			shortcut_modes(cfg.global_shortcut_year_root, { "n", "i" }),
-			cfg.global_shortcut_year_root,
-			"<C-n>r",
-			current_buf
-		),
-		"Jump to note year root"
-	)
-	add(
-		resolve_shortcut("Open oil.nvim file explorer", shortcut_modes(cfg.global_shortcut_oil, { "n" }), cfg.global_shortcut_oil, "<leader>fo", current_buf),
-		"Open oil file explorer"
-	)
-
-	-- Context-specific global keys
-	-- Chat-specific keys collected into a list, rendered as one section below
-	local chat_extra_lines = {}
-	if context == "chat" then
-		local function add_chat(shortcut, description)
-			table.insert(chat_extra_lines, string.format("  %-12s %s", shortcut, description))
-		end
-		add_chat(
-			resolve_shortcut(
-				"Review current file in new Chat",
-				shortcut_modes(cfg.global_shortcut_review, { "n" }),
-				cfg.global_shortcut_review,
-				"<C-g>C",
-				current_buf
-			),
-			"Review current file in chat"
-		)
-		add_chat(resolve_shortcut("Toggle web_search tool", { "n" }, nil, "<C-g>w", current_buf), "Toggle web_search")
-		add_chat(resolve_shortcut("Toggle raw request mode", { "n" }, nil, "<C-g>r", current_buf), "Toggle raw request mode")
-		add_chat(resolve_shortcut("Toggle raw response mode", { "n" }, nil, "<C-g>R", current_buf), "Toggle raw response mode")
-	end
-
-	if context == "note" then
-		table.insert(lines, "")
-		table.insert(lines, "Note")
-		add(resolve_shortcut("Enter Interview Mode", { "n" }, nil, "<C-n>i", current_buf), "Enter interview mode")
-		add(resolve_shortcut("Exit Interview Mode", { "n" }, nil, "<C-n>I", current_buf), "Exit interview mode")
-		add(resolve_shortcut("Create Note from Template", { "n" }, nil, "<C-n>t", current_buf), "New note from template")
-	end
-
-	if context == "issue" then
-		table.insert(lines, "")
-		table.insert(lines, "Issue")
-		add(
-			resolve_shortcut("Create New Issue", shortcut_modes(cfg.global_shortcut_issue_new, { "n", "i" }), cfg.global_shortcut_issue_new, "<C-y>c", current_buf),
-			"New issue"
-		)
-		add(
-			resolve_shortcut("Open Issue Finder", shortcut_modes(cfg.global_shortcut_issue_finder, { "n", "i" }), cfg.global_shortcut_issue_finder, "<C-y>f", current_buf),
-			"Open issue finder"
-		)
-		add(
-			resolve_shortcut("Pick Next Issue", shortcut_modes(cfg.global_shortcut_issue_next, { "n", "i" }), cfg.global_shortcut_issue_next, "<C-y>x", current_buf),
-			"Next issue"
-		)
-		add(
-			resolve_shortcut("Cycle Issue Status", shortcut_modes(cfg.global_shortcut_issue_status, { "n" }), cfg.global_shortcut_issue_status, "<C-y>s", current_buf),
-			"Cycle issue status"
-		)
-		add(
-			resolve_shortcut("Decompose Issue", shortcut_modes(cfg.global_shortcut_issue_decompose, { "n" }), cfg.global_shortcut_issue_decompose, "<C-y>i", current_buf),
-			"Decompose issue"
-		)
-		add(
-			resolve_shortcut("Goto Linked Issue", shortcut_modes(cfg.global_shortcut_issue_goto, { "n" }), cfg.global_shortcut_issue_goto, "<C-y>g", current_buf),
-			"Goto linked issue (markdown link / parent)"
-		)
-	end
-
-	-- Chat buffer keys
-	if context == "chat" then
-		table.insert(lines, "")
-		table.insert(lines, "Chat")
-		for _, l in ipairs(chat_extra_lines) do
-			table.insert(lines, l)
-		end
-		add(
-			resolve_shortcut("Parley prompt Chat Respond", shortcut_modes(cfg.chat_shortcut_respond, { "n", "i", "v", "x" }), cfg.chat_shortcut_respond, "<C-g><C-g>", current_buf),
-			"Respond"
-		)
-		add(
-			resolve_shortcut(
-				"Parley prompt Chat Respond All",
-				shortcut_modes(cfg.chat_shortcut_respond_all, { "n", "i", "v", "x" }),
-				cfg.chat_shortcut_respond_all,
-				"<C-g>G",
-				current_buf
-			),
-			"Respond all"
-		)
-		add(
-			resolve_shortcut("Parley prompt Chat Stop", shortcut_modes(cfg.chat_shortcut_stop, { "n", "i", "v", "x" }), cfg.chat_shortcut_stop, "<C-g>x", current_buf),
-			"Stop active response"
-		)
-		add(
-			resolve_shortcut(
-				"Parley prompt Chat Delete",
-				shortcut_modes(cfg.chat_shortcut_delete, { "n", "i", "v", "x" }),
-				cfg.chat_shortcut_delete,
-				"<C-g>d",
-				current_buf
-			),
-			"Delete chat"
-		)
-		add(
-			resolve_shortcut(
-				"Parley prompt Next Agent",
-				shortcut_modes(cfg.chat_shortcut_agent, { "n", "i", "v", "x" }),
-				cfg.chat_shortcut_agent,
-				"<C-g>a",
-				current_buf
-			),
-			"Next agent"
-		)
-		add(
-			resolve_shortcut(
-				"Parley prompt System Prompt Selector",
-				shortcut_modes(cfg.chat_shortcut_system_prompt, { "n", "i", "v", "x" }),
-				cfg.chat_shortcut_system_prompt,
-				"<C-g>s",
-				current_buf
-			),
-			"Next system prompt"
-		)
-		add(
-			resolve_shortcut(
-				"Parley prompt Toggle Follow Cursor",
-				shortcut_modes(cfg.chat_shortcut_follow_cursor, { "n", "i", "v", "x" }),
-				cfg.chat_shortcut_follow_cursor,
-				"<C-g>l",
-				current_buf
-			),
-			"Toggle follow cursor"
-		)
-		add(
-			resolve_shortcut(
-				"Parley prompt Search Chat Sections",
-				shortcut_modes(cfg.chat_shortcut_search, { "n", "i", "v", "x" }),
-				cfg.chat_shortcut_search,
-				"<C-g>n",
-				current_buf
-			),
-			"Search chat sections"
-		)
-		add(
-			resolve_shortcut(
-				"Parley create and insert new chat",
-				{ "n", "i", "v" },
-				nil,
-				"<C-g>i",
-				current_buf
-			),
-			"Insert branch reference"
-		)
-		add(
-			resolve_shortcut(
-				"Parley open file under cursor",
-				shortcut_modes(cfg.chat_shortcut_open_file, { "n", "i" }),
-				cfg.chat_shortcut_open_file,
-				"<C-g>o",
-				current_buf
-			),
-			"Open @@ file reference"
-		)
-		add(resolve_shortcut("Parley prompt Outline Navigator", { "n" }, nil, "<C-g>t", current_buf), "Outline picker")
-		add(
-			resolve_shortcut(
-				"Parley prune chat",
-				shortcut_modes(cfg.chat_shortcut_prune, { "n" }),
-				cfg.chat_shortcut_prune,
-				"<C-g>p",
-				current_buf
-			),
-			"Prune: move exchange + following to child"
-		)
-		add(
-			resolve_shortcut(
-				"Parley export markdown",
-				shortcut_modes(cfg.chat_shortcut_export_markdown, { "n" }),
-				cfg.chat_shortcut_export_markdown,
-				"<C-g>em",
-				current_buf
-			),
-			"Export markdown (Jekyll)"
-		)
-		add(
-			resolve_shortcut(
-				"Parley export HTML",
-				shortcut_modes(cfg.chat_shortcut_export_html, { "n" }),
-				cfg.chat_shortcut_export_html,
-				"<C-g>eh",
-				current_buf
-			),
-			"Export HTML"
-		)
-		add(
-			resolve_shortcut(
-				"Parley cut exchange",
-				shortcut_modes(cfg.chat_shortcut_exchange_cut, { "n", "v" }),
-				cfg.chat_shortcut_exchange_cut,
-				"<C-g>X",
-				current_buf
-			),
-			"Cut exchange(s)"
-		)
-		add(
-			resolve_shortcut(
-				"Parley paste exchange",
-				shortcut_modes(cfg.chat_shortcut_exchange_paste, { "n" }),
-				cfg.chat_shortcut_exchange_paste,
-				"<C-g>V",
-				current_buf
-			),
-			"Paste exchange(s)"
-		)
-		add(
-			resolve_shortcut(
-				"Parley copy code fence",
-				shortcut_modes(cfg.chat_shortcut_copy_fence, { "n" }),
-				cfg.chat_shortcut_copy_fence,
-				"<leader>cf",
-				current_buf
-			),
-			"Copy code fence to clipboard"
-		)
-	end
-
-	-- Markdown buffer keys (shown for markdown, note, and issue contexts)
-	if context == "markdown" or context == "note" or context == "issue" then
-		table.insert(lines, "")
-		table.insert(lines, "Markdown Buffer")
-		add(
-			resolve_shortcut(
-				"Parley open chat reference under cursor",
-				shortcut_modes(cfg.chat_shortcut_open_file, { "n", "i" }),
-				cfg.chat_shortcut_open_file,
-				"<C-g>o",
-				current_buf
-			),
-			"Open file reference"
-		)
-		add(resolve_shortcut("Parley find chat", { "n" }, nil, "<C-g>f", current_buf), "Find chat references")
-		add(resolve_shortcut("Parley add chat reference", { "n", "i" }, nil, "<C-g>a", current_buf), "Add chat reference")
-		add(resolve_shortcut("Parley create and insert new chat", { "n", "i", "v" }, nil, "<C-g>i", current_buf), "Insert new chat reference")
-		add(resolve_shortcut("Parley delete current file and buffer", { "n" }, nil, "<C-g>d", current_buf), "Delete file")
-		add(resolve_shortcut("Parley prompt Chat Delete Tree", { "n" }, cfg.chat_shortcut_delete_tree, "<C-g>D", current_buf), "Delete chat tree")
-	end
-
-	table.insert(lines, "")
-	table.insert(lines, "Close: q or <Esc>")
-	return lines
+	return kb_registry.help_lines(context, cfg, current_buf)
 end
 
 M._keybinding_help_lines = function(context)
@@ -1883,83 +1291,29 @@ M.prep_chat = function(buf, file_name)
 		end)
 	end
 
-	-- setup chat specific commands
-	local range_commands = {
-		{
-			command = "ChatRespond",
-			modes = M.config.chat_shortcut_respond.modes,
-			shortcut = M.config.chat_shortcut_respond.shortcut,
-			comment = "Parley prompt Chat Respond",
-		},
-		{
-			command = "ChatRespondAll",
-			modes = M.config.chat_shortcut_respond_all.modes,
-			shortcut = M.config.chat_shortcut_respond_all.shortcut,
-			comment = "Parley prompt Chat Respond All",
-		},
-	}
-
-	for _, rc in ipairs(range_commands) do
-		local cmd = M.config.cmd_prefix .. rc.command .. "<cr>"
-		for _, mode in ipairs(rc.modes) do
-			if mode == "n" or mode == "i" then
-				M.helpers.set_keymap({ buf }, mode, rc.shortcut, function()
-					vim.api.nvim_command(M.config.cmd_prefix .. rc.command)
-					-- go to normal mode
-					vim.api.nvim_command("stopinsert")
-					M.helpers.feedkeys("<esc>", "xn")
-				end, rc.comment)
-			else
-				M.helpers.set_keymap({ buf }, mode, rc.shortcut, ":<C-u>'<,'>" .. cmd, rc.comment)
-			end
-		end
+	-- Register chat buffer-local keymaps from registry
+	-- Helper: make respond callback for a given command name
+	local function make_respond_cb(command_name)
+		local cmd_str = M.config.cmd_prefix .. command_name
+		local range_cmd = ":<C-u>'<,'>" .. cmd_str .. "<cr>"
+		return {
+			n = function()
+				vim.api.nvim_command(cmd_str)
+				vim.api.nvim_command("stopinsert")
+				M.helpers.feedkeys("<esc>", "xn")
+			end,
+			i = function()
+				vim.api.nvim_command(cmd_str)
+				vim.api.nvim_command("stopinsert")
+				M.helpers.feedkeys("<esc>", "xn")
+			end,
+			v = range_cmd,
+			x = range_cmd,
+		}
 	end
 
-	local ds = M.config.chat_shortcut_delete
-	M.helpers.set_keymap({ buf }, ds.modes, ds.shortcut, M.cmd.ChatDelete, "Parley prompt Chat Delete")
-
-	local dts = M.config.chat_shortcut_delete_tree
-	if dts then
-		M.helpers.set_keymap({ buf }, dts.modes, dts.shortcut, M.cmd.ChatDeleteTree, "Parley prompt Chat Delete Tree")
-	end
-
-	local ss = M.config.chat_shortcut_stop
-	M.helpers.set_keymap({ buf }, ss.modes, ss.shortcut, M.cmd.Stop, "Parley prompt Chat Stop")
-
-	-- Note: ChatFinder is now handled by global shortcuts
-
-	local as = M.config.chat_shortcut_agent
-	M.helpers.set_keymap({ buf }, as.modes, as.shortcut, M.cmd.NextAgent, "Parley prompt Next Agent")
-
-	local sps = M.config.chat_shortcut_system_prompt
-	M.helpers.set_keymap({ buf }, sps.modes, sps.shortcut, M.cmd.NextSystemPrompt, "Parley prompt System Prompt Selector")
-
-	local fcs = M.config.chat_shortcut_follow_cursor
-	if fcs then
-		M.helpers.set_keymap({ buf }, fcs.modes, fcs.shortcut, M.cmd.ToggleFollowCursor, "Parley prompt Toggle Follow Cursor")
-	end
-
-	local search_shortcut = M.config.chat_shortcut_search
-	if search_shortcut then
-		-- Create a function for searching chat sections (questions and branch points)
-		local function search_chat_sections()
-			local user_prefix = M.config.chat_user_prefix
-			local branch_prefix = M.config.chat_branch_prefix
-			vim.cmd("/^" .. vim.pesc(user_prefix) .. "\\|^" .. vim.pesc(branch_prefix))
-		end
-
-		for _, mode in ipairs(search_shortcut.modes) do
-			M.helpers.set_keymap({ buf }, mode, search_shortcut.shortcut, search_chat_sections, "Parley prompt Search Chat Sections")
-		end
-	end
-
-	-- Set outline navigation keybinding
-	M.helpers.set_keymap({ buf }, "n", "<C-g>t", M.cmd.Outline, "Parley prompt Outline Navigator")
-
-	-- <C-g>i: create and insert new child chat branch reference
-	-- Normal/insert mode: standalone 🌿: line after current line.
-	-- Visual mode: wrap selected text as inline [🌿:text](file) link and create child chat.
-	local function insert_branch_ref()
+	-- Branch ref helpers (chat-specific: uses relative path)
+	local function chat_insert_branch_ref()
 		local cursor_pos = vim.api.nvim_win_get_cursor(0)
 		local new_chat_file = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
 		local rel_path = vim.fn.fnamemodify(new_chat_file, ":t")
@@ -1968,123 +1322,94 @@ M.prep_chat = function(buf, file_name)
 			branch_prefix .. " " .. rel_path .. ": ",
 		})
 		vim.api.nvim_win_set_cursor(0, { cursor_pos[1] + 1, 0 })
-		-- Enter insert mode at end of line so user can type the topic immediately
 		vim.schedule(function() vim.cmd("startinsert!") end)
 		M.logger.info("Created branch reference to new chat: " .. rel_path)
-		-- Trigger branch ref rendering to show ⚠️ for non-existent file
 		M.highlight_chat_branch_refs(buf)
 	end
 
-	local function insert_inline_branch_ref()
-		-- Get visual selection range
+	local function chat_insert_inline_branch_ref()
 		local start_pos = vim.fn.getpos("'<")
 		local end_pos = vim.fn.getpos("'>")
 		local start_line, start_col = start_pos[2], start_pos[3]
 		local end_line, end_col = end_pos[2], end_pos[3]
-
-		-- Only support single-line selections
 		if start_line ~= end_line then
 			M.logger.warning("Inline branch links only support single-line selections")
 			return
 		end
-
 		local line = vim.api.nvim_buf_get_lines(buf, start_line - 1, start_line, false)[1]
 		local selected_text = line:sub(start_col, end_col)
 		if selected_text == "" then
 			M.logger.warning("No text selected")
 			return
 		end
-
-		-- Create the child chat file
 		local new_chat_file = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
 		local rel_path = vim.fn.fnamemodify(new_chat_file, ":t")
 		local branch_prefix = M.config.chat_branch_prefix or "🌿:"
 		local topic = 'what is "' .. selected_text .. '"'
-
-		-- Replace selected text with inline branch link
 		local before = line:sub(1, start_col - 1)
 		local after = line:sub(end_col + 1)
 		local inline_link = "[" .. branch_prefix .. selected_text .. "](" .. rel_path .. ")"
-		local new_line = before .. inline_link .. after
-		vim.api.nvim_buf_set_lines(buf, start_line - 1, start_line, false, { new_line })
-
-		-- Create the child chat file with topic, parent back-link, and question
+		vim.api.nvim_buf_set_lines(buf, start_line - 1, start_line, false, { before .. inline_link .. after })
 		M.create_child_chat(new_chat_file, topic, buf, topic .. "?")
 		M.logger.debug("Created inline branch to new chat: " .. rel_path .. " (" .. topic .. ")")
 		M.highlight_chat_branch_refs(buf)
 	end
 
-	M.helpers.set_keymap({ buf }, "n", "<C-g>i", insert_branch_ref, "Parley create and insert new chat")
-	M.helpers.set_keymap({ buf }, "i", "<C-g>i", function()
-		vim.cmd("stopinsert")
-		insert_branch_ref()
-	end, "Parley create and insert new chat")
-	M.helpers.set_keymap({ buf }, "v", "<C-g>i", function()
-		-- Exit visual mode first so '< and '> marks are set
-		vim.cmd("normal! " .. vim.api.nvim_replace_termcodes("<Esc>", true, false, true))
-		insert_inline_branch_ref()
-	end, "Parley create inline branch from selection")
-
-	-- <C-g>p: prune exchange + following into new child chat
-	local prune_shortcut = M.config.chat_shortcut_prune
-	if prune_shortcut then
-		for _, mode in ipairs(prune_shortcut.modes) do
-			M.helpers.set_keymap({ buf }, mode, prune_shortcut.shortcut, M.cmd.ChatPrune, "Parley prune chat")
-		end
-	end
-
-	-- <C-g>em: export markdown, <C-g>eh: export HTML
-	local export_md = M.config.chat_shortcut_export_markdown
-	if export_md then
-		for _, mode in ipairs(export_md.modes) do
-			M.helpers.set_keymap({ buf }, mode, export_md.shortcut, M.cmd.ExportMarkdown, "Parley export markdown")
-		end
-	end
-	local export_html = M.config.chat_shortcut_export_html
-	if export_html then
-		for _, mode in ipairs(export_html.modes) do
-			M.helpers.set_keymap({ buf }, mode, export_html.shortcut, M.cmd.ExportHTML, "Parley export HTML")
-		end
-	end
-
-	-- <C-g>X: cut exchange, <C-g>V: paste exchange
-	local cut_shortcut = M.config.chat_shortcut_exchange_cut
-	if cut_shortcut then
-		for _, mode in ipairs(cut_shortcut.modes) do
-			if mode == "v" or mode == "x" then
-				M.helpers.set_keymap({ buf }, mode, cut_shortcut.shortcut, function()
+	kb_registry.register_buffer(
+		{ "parley_buffer", "chat" },
+		buf,
+		M.config,
+		{
+			-- parley_buffer scope (shared with markdown)
+			open_file = M.cmd.OpenFileUnderCursor,
+			copy_fence = M.cmd.CopyCodeFence,
+			outline = M.cmd.Outline,
+			branch_ref = {
+				n = chat_insert_branch_ref,
+				i = function()
+					vim.cmd("stopinsert")
+					chat_insert_branch_ref()
+				end,
+				v = function()
+					vim.cmd("normal! " .. vim.api.nvim_replace_termcodes("<Esc>", true, false, true))
+					chat_insert_inline_branch_ref()
+				end,
+			},
+			-- chat scope
+			chat_respond = make_respond_cb("ChatRespond"),
+			chat_respond_all = make_respond_cb("ChatRespondAll"),
+			chat_stop = M.cmd.Stop,
+			chat_delete = M.cmd.ChatDelete,
+			chat_delete_tree = M.cmd.ChatDeleteTree,
+			chat_agent = M.cmd.NextAgent,
+			chat_system_prompt = M.cmd.NextSystemPrompt,
+			chat_follow_cursor = M.cmd.ToggleFollowCursor,
+			chat_search = function()
+				local user_prefix = M.config.chat_user_prefix
+				local branch_prefix = M.config.chat_branch_prefix
+				vim.cmd("/^" .. vim.pesc(user_prefix) .. "\\|^" .. vim.pesc(branch_prefix))
+			end,
+			chat_prune = M.cmd.ChatPrune,
+			chat_export_markdown = M.cmd.ExportMarkdown,
+			chat_export_html = M.cmd.ExportHTML,
+			chat_exchange_cut = {
+				n = function() M.cmd.ExchangeCut() end,
+				v = function()
 					vim.cmd("normal! " .. vim.api.nvim_replace_termcodes("<Esc>", true, false, true))
 					M.cmd.ExchangeCut({ visual = true })
-				end, "Parley cut exchange(s)")
-			else
-				M.helpers.set_keymap({ buf }, mode, cut_shortcut.shortcut, function()
-					M.cmd.ExchangeCut()
-				end, "Parley cut exchange")
-			end
-		end
-	end
-	local paste_shortcut = M.config.chat_shortcut_exchange_paste
-	if paste_shortcut then
-		for _, mode in ipairs(paste_shortcut.modes) do
-			M.helpers.set_keymap({ buf }, mode, paste_shortcut.shortcut, M.cmd.ExchangePaste, "Parley paste exchange")
-		end
-	end
-
-	-- <leader>cf: copy code fence content to clipboard
-	local copy_fence = M.config.chat_shortcut_copy_fence
-	if copy_fence then
-		for _, mode in ipairs(copy_fence.modes) do
-			M.helpers.set_keymap({ buf }, mode, copy_fence.shortcut, M.cmd.CopyCodeFence, "Parley copy code fence")
-		end
-	end
-
-	-- Set file opening keybinding
-	local of = M.config.chat_shortcut_open_file
-	if of then
-		for _, mode in ipairs(of.modes) do
-			M.helpers.set_keymap({ buf }, mode, of.shortcut, M.cmd.OpenFileUnderCursor, "Parley open file under cursor")
-		end
-	end
+				end,
+				x = function()
+					vim.cmd("normal! " .. vim.api.nvim_replace_termcodes("<Esc>", true, false, true))
+					M.cmd.ExchangeCut({ visual = true })
+				end,
+			},
+			chat_exchange_paste = M.cmd.ExchangePaste,
+			chat_toggle_tool_folds = function()
+				vim.wo.foldenable = not vim.wo.foldenable
+			end,
+		},
+		M.helpers.set_keymap
+	)
 
 	-- conceallevel=2 for inline branch link concealing and model header params
 	vim.opt_local.conceallevel = 2
@@ -2222,95 +1547,11 @@ local function format_branch_ref(rel_path, topic)
 end
 
 M.setup_markdown_keymaps = function(buf)
-	-- Document review keybindings (via skill system)
+	-- Document review keybindings (via skill system, not registry-managed)
 	local review_skill = require("parley.skills.review")
 	review_skill.setup_keymaps(buf)
 
-	-- <C-g>eh: export markdown to HTML via pandoc
-	local export_html = M.config.chat_shortcut_export_html
-	if export_html then
-		for _, mode in ipairs(export_html.modes) do
-			M.helpers.set_keymap({ buf }, mode, export_html.shortcut, function()
-				exporter.pandoc_export_html()
-			end, "Parley export markdown to HTML (pandoc)")
-		end
-	end
-
-	-- Add <C-g>o keybinding to open chat file references
-	local of = M.config.chat_shortcut_open_file
-	if of then
-		for _, mode in ipairs(of.modes) do
-			M.helpers.set_keymap(
-				{ buf },
-				mode,
-				of.shortcut,
-				M.cmd.OpenFileUnderCursor,
-				"Parley open chat reference under cursor"
-			)
-		end
-	end
-
-	-- <leader>cf: copy code fence content to clipboard
-	local copy_fence = M.config.chat_shortcut_copy_fence
-	if copy_fence then
-		for _, mode in ipairs(copy_fence.modes) do
-			M.helpers.set_keymap({ buf }, mode, copy_fence.shortcut, M.cmd.CopyCodeFence, "Parley copy code fence")
-		end
-	end
-
-	-- Add <C-g>f keybinding to FIND chat references
-	M.helpers.set_keymap({ buf }, "n", "<C-g>f", function()
-		-- Remember source window for returning after selection
-		M._chat_finder.insert_mode = false
-		M._chat_finder.source_win = nil
-		M._chat_finder.source_win = vim.api.nvim_get_current_win()
-
-		M.logger.debug("FIND MODE: Passing window: " .. M._chat_finder.source_win)
-		M.cmd.ChatFinder()
-	end, "Parley find chat")
-
-	-- Add <C-g>a keybinding to ADD chat references via ChatFinder (NORMAL MODE)
-	M.helpers.set_keymap({ buf }, "n", "<C-g>a", function()
-		-- Remember cursor position
-		local cursor_pos = vim.api.nvim_win_get_cursor(0)
-
-		-- Set chat finder in insert mode and store cursor position
-		M._chat_finder.insert_mode = true
-		M._chat_finder.insert_buf = buf
-		M._chat_finder.insert_line = cursor_pos[1]
-		M._chat_finder.insert_normal_mode = true
-
-		-- IMPORTANT: Clear and set source window immediately before opening
-		M._chat_finder.source_win = nil
-		M._chat_finder.source_win = vim.api.nvim_get_current_win()
-		M.logger.debug("NORMAL MODE ADD: Passing window: " .. M._chat_finder.source_win)
-		M.cmd.ChatFinder()
-	end, "Parley add chat reference")
-
-		-- Add <C-g>a keybinding to ADD chat references via ChatFinder (INSERT MODE)
-		M.helpers.set_keymap({ buf }, "i", "<C-g>a", function()
-			-- Remember cursor position
-			local cursor_pos = vim.api.nvim_win_get_cursor(0)
-
-			-- Store position for later insertion
-		M._chat_finder.insert_mode = true
-		M._chat_finder.insert_buf = buf
-		M._chat_finder.insert_line = cursor_pos[1]
-		M._chat_finder.insert_col = cursor_pos[2]
-		M._chat_finder.insert_normal_mode = false
-
-		-- IMPORTANT: Clear and set source window immediately before opening
-		M._chat_finder.source_win = nil
-		M._chat_finder.source_win = vim.api.nvim_get_current_win()
-		M.logger.debug("INSERT MODE ADD: Passing window: " .. M._chat_finder.source_win)
-
-		-- Exit insert mode before opening chat finder
-		vim.cmd("stopinsert")
-		M.cmd.ChatFinder()
-	end, "Parley add chat reference")
-
-	-- Add <C-g>i keybinding to create and insert new chat (branch link format)
-	-- Normal mode: full-line 🌿: branch ref, enter insert mode for topic
+	-- Branch ref helpers (markdown-specific: uses format_branch_ref and absolute paths)
 	local function md_insert_branch_ref()
 		local cursor_pos = vim.api.nvim_win_get_cursor(0)
 		local new_chat_file = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
@@ -2324,69 +1565,95 @@ M.setup_markdown_keymaps = function(buf)
 		M.highlight_chat_branch_refs(buf)
 	end
 
-	M.helpers.set_keymap({ buf }, "n", "<C-g>i", md_insert_branch_ref, "Parley create and insert new chat")
-	M.helpers.set_keymap({ buf }, "i", "<C-g>i", function()
-		vim.cmd("stopinsert")
-		md_insert_branch_ref()
-	end, "Parley create and insert new chat")
-
-	-- Visual mode: wrap selected text as inline [🌿:text](file) link and create child chat
-	M.helpers.set_keymap({ buf }, "v", "<C-g>i", function()
-		-- Exit visual mode first so '< and '> marks are set
+	local function md_insert_inline_branch_ref()
 		vim.cmd("normal! " .. vim.api.nvim_replace_termcodes("<Esc>", true, false, true))
-
-		-- Get visual selection range
 		local start_pos = vim.fn.getpos("'<")
 		local end_pos = vim.fn.getpos("'>")
 		local start_line, start_col = start_pos[2], start_pos[3]
 		local end_line, end_col = end_pos[2], end_pos[3]
-
-		-- Only support single-line selections
 		if start_line ~= end_line then
 			M.logger.warning("Inline branch links only support single-line selections")
 			return
 		end
-
 		local line = vim.api.nvim_buf_get_lines(buf, start_line - 1, start_line, false)[1]
 		local selected_text = line:sub(start_col, end_col)
 		if selected_text == "" then
 			M.logger.warning("No text selected")
 			return
 		end
-
-		-- Create the child chat file
 		local new_chat_file = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
 		local chat_path = vim.fn.fnamemodify(new_chat_file, ":p")
 		local branch_prefix = M.config.chat_branch_prefix or "🌿:"
 		local topic = 'what is "' .. selected_text .. '"'
-
-		-- Replace selected text with inline branch link (absolute path for non-chat files)
 		local before = line:sub(1, start_col - 1)
 		local after = line:sub(end_col + 1)
 		local inline_link = "[" .. branch_prefix .. selected_text .. "](" .. chat_path .. ")"
-		local new_line = before .. inline_link .. after
-		vim.api.nvim_buf_set_lines(buf, start_line - 1, start_line, false, { new_line })
-
-		-- Create the child chat file with topic, parent back-link, and question
+		vim.api.nvim_buf_set_lines(buf, start_line - 1, start_line, false, { before .. inline_link .. after })
 		M.create_child_chat(new_chat_file, topic, buf, topic .. "?")
 		M.logger.debug("Created inline branch to new chat: " .. chat_path .. " (" .. topic .. ")")
 		M.highlight_chat_branch_refs(buf)
-	end, "Parley create inline branch from selection")
+	end
 
-	-- Add <C-g>d keybinding to delete current file and buffer
-	M.helpers.set_keymap({ buf }, "n", "<C-g>d", function()
-		local file = vim.api.nvim_buf_get_name(buf)
-		if file ~= "" then
-			local rel = vim.fn.fnamemodify(file, ":~:.")
-			local choice = vim.fn.confirm("Delete " .. rel .. "?", "&Yes\n&No", 2)
-			if choice == 1 then
-				M.helpers.delete_file(file)
-			end
-		end
-	end, "Parley delete current file and buffer")
-
-	-- <C-g>t: outline navigator for markdown files
-	M.helpers.set_keymap({ buf }, "n", "<C-g>t", M.cmd.Outline, "Parley prompt Outline Navigator")
+	-- Register markdown buffer-local keymaps from registry
+	kb_registry.register_buffer(
+		{ "parley_buffer", "markdown" },
+		buf,
+		M.config,
+		{
+			-- parley_buffer scope (shared with chat)
+			open_file = M.cmd.OpenFileUnderCursor,
+			copy_fence = M.cmd.CopyCodeFence,
+			outline = M.cmd.Outline,
+			branch_ref = {
+				n = md_insert_branch_ref,
+				i = function()
+					vim.cmd("stopinsert")
+					md_insert_branch_ref()
+				end,
+				v = md_insert_inline_branch_ref,
+			},
+			-- markdown scope
+			md_add_chat_ref = {
+				n = function()
+					local cursor_pos = vim.api.nvim_win_get_cursor(0)
+					M._chat_finder.insert_mode = true
+					M._chat_finder.insert_buf = buf
+					M._chat_finder.insert_line = cursor_pos[1]
+					M._chat_finder.insert_normal_mode = true
+					M._chat_finder.source_win = nil
+					M._chat_finder.source_win = vim.api.nvim_get_current_win()
+					M.logger.debug("NORMAL MODE ADD: Passing window: " .. M._chat_finder.source_win)
+					M.cmd.ChatFinder()
+				end,
+				i = function()
+					local cursor_pos = vim.api.nvim_win_get_cursor(0)
+					M._chat_finder.insert_mode = true
+					M._chat_finder.insert_buf = buf
+					M._chat_finder.insert_line = cursor_pos[1]
+					M._chat_finder.insert_col = cursor_pos[2]
+					M._chat_finder.insert_normal_mode = false
+					M._chat_finder.source_win = nil
+					M._chat_finder.source_win = vim.api.nvim_get_current_win()
+					M.logger.debug("INSERT MODE ADD: Passing window: " .. M._chat_finder.source_win)
+					vim.cmd("stopinsert")
+					M.cmd.ChatFinder()
+				end,
+			},
+			md_delete_file = function()
+				local file = vim.api.nvim_buf_get_name(buf)
+				if file ~= "" then
+					local rel = vim.fn.fnamemodify(file, ":~:.")
+					local choice = vim.fn.confirm("Delete " .. rel .. "?", "&Yes\n&No", 2)
+					if choice == 1 then
+						M.helpers.delete_file(file)
+					end
+				end
+			end,
+			md_delete_tree = M.cmd.ChatDeleteTree,
+			md_export_html = function() exporter.pandoc_export_html() end,
+		},
+		M.helpers.set_keymap
+	)
 
 end
 
@@ -3713,7 +2980,6 @@ end
 
 -- Try to open a src: markdown link under cursor_col (0-indexed). Returns true if handled.
 local try_open_src_link = function(line, cursor_col, buf)
-	local issues_mod = require("parley.issues")
 	local link = issues_mod.parse_md_link_at_cursor(line, cursor_col + 1)
 	if not link then return false end
 	local src_path = issues_mod.parse_src_url(link.url)
