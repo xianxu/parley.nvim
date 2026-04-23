@@ -128,3 +128,4 @@ if [ -f "$HOME/.codex/auth.json" ]; then
     cp "$HOME/.codex/auth.json" "$CREDS_DIR/codex-auth.json"
     echo "  [ok] codex auth"
 fi
+

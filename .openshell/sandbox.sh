@@ -208,16 +208,12 @@ ensure_setup() {
 }
 
 # Gather host credentials into bootstrap cache so mutagen syncs them to sandbox.
-# Called before setup.sh runs on the sandbox side.
 gather_credentials() {
     local creds_dir="$SCRIPT_DIR/.bootstrap/credentials"
     mkdir -p "$creds_dir"
-
-    # Codex CLI auth
     if [ -f "$HOME/.codex/auth.json" ]; then
         cp "$HOME/.codex/auth.json" "$creds_dir/codex-auth.json"
     fi
-
 }
 
 # Apply setup.sh, dotfiles, and credentials to sandbox. Idempotent — safe to re-run.

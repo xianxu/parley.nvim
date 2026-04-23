@@ -19,7 +19,8 @@ echo "==> Configuring shell..."
 sed -i '/^# BEGIN openshell-overlay/,/^# END openshell-overlay/d' "$HOME/.bashrc"
 cat >> "$HOME/.bashrc" << 'BASHEOF'
 # BEGIN openshell-overlay
-export PATH="$HOME/.luarocks/bin:$HOME/.local/bin:$PATH"
+export PATH="$HOME/.npm-global/bin:$HOME/.luarocks/bin:$HOME/.local/bin:$PATH"
+export NPM_CONFIG_PREFIX="$HOME/.npm-global"
 export EDITOR="nvim"
 export VISUAL="nvim"
 export TZ="__HOST_TZ__"
@@ -48,7 +49,7 @@ alias za="zellij a"
 
 # AI agent sandbox permissions — agents get full auto-approve
 alias claude="claude --permission-mode bypassPermissions"
-alias codex="codex --full-auto"
+alias codex='NPM_CONFIG_PREFIX="$HOME/.npm-global" codex --full-auto'
 export GEMINI_CLI_AUTO_APPROVE=true
 
 # ── Output capture (Ctrl+Y to copy last cmd+output) ─────────────────────────
