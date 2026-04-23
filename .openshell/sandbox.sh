@@ -17,17 +17,82 @@ ACTION="${1:-}"
 SANDBOX_NAME="${2:-}"
 SANDBOX_SSH_HOST="openshell-${SANDBOX_NAME}"
 
+# Pre-flight checks: validate prerequisites before doing real work.
+# Only runs for actions that need the full stack (build, connect, clean).
+preflight() {
+    local failed=0
+
+    # 1. openshell CLI
+    if ! command -v openshell >/dev/null 2>&1; then
+        echo "ERROR: 'openshell' CLI not found in PATH."
+        echo "  Install it per OpenShell docs, then retry."
+        failed=1
+    fi
+
+    # 2. Docker daemon — auto-start on macOS
+    if ! docker info >/dev/null 2>&1; then
+        if [ "$(uname)" = "Darwin" ] && [ -d "/Applications/Docker.app" ]; then
+            echo "  Docker not running — starting Docker Desktop..."
+            open -a Docker
+            local retries=0
+            while ! docker info >/dev/null 2>&1; do
+                retries=$((retries + 1))
+                if [ "$retries" -ge 30 ]; then
+                    echo "ERROR: Docker Desktop did not start within 60s."
+                    failed=1
+                    break
+                fi
+                sleep 2
+            done
+            if [ "$retries" -lt 30 ]; then
+                echo "  Docker Desktop started."
+            fi
+        else
+            echo "ERROR: Docker is not running or not accessible."
+            echo "  Start Docker Desktop, then retry."
+            failed=1
+        fi
+    fi
+
+    # 3. mutagen CLI
+    if ! command -v mutagen >/dev/null 2>&1; then
+        echo "ERROR: 'mutagen' CLI not found in PATH."
+        echo "  Install: brew install mutagen-io/mutagen/mutagen"
+        failed=1
+    fi
+
+    # 4. OpenShell gateway — auto-restart if unreachable
+    if command -v openshell >/dev/null 2>&1; then
+        if ! openshell sandbox list >/dev/null 2>&1; then
+            echo "  OpenShell gateway not reachable — restarting..."
+            openshell gateway destroy --name openshell 2>/dev/null || true
+            if openshell gateway start; then
+                echo "  OpenShell gateway started."
+            else
+                echo "ERROR: Failed to start OpenShell gateway."
+                failed=1
+            fi
+        fi
+    fi
+
+    if [ "$failed" -ne 0 ]; then
+        echo ""
+        echo "Pre-flight checks failed. Fix the above issues and retry."
+        exit 1
+    fi
+}
+
 PLENARY_HOST="${HOME}/.local/share/nvim/lazy/plenary.nvim"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Use Apple's system SSH/SCP throughout — Homebrew openssh lacks macOS-specific
 # options (UseKeychain) and causes "Bad configuration option: usekeychain" errors.
-# Use a repo-local SSH config so the sandbox Host entry never touches ~/.ssh/config.
-SSH_CONFIG="$SCRIPT_DIR/ssh_config"
-SSH="/usr/bin/ssh -F $SSH_CONFIG"
-SCP="/usr/bin/scp -F $SSH_CONFIG"
-export MUTAGEN_SSH_PATH="$SCRIPT_DIR/ssh-bin"
+# Write sandbox Host blocks to ~/.ssh/config so the mutagen daemon (a separate
+# long-lived process) can reach all sandboxes without MUTAGEN_SSH_PATH.
+SSH_CONFIG="$HOME/.ssh/config"
+SSH="/usr/bin/ssh"
+SCP="/usr/bin/scp"
 BASE_IMAGE="ghcr.io/nvidia/openshell-community/sandboxes/base"
 DIGEST_FILE="$SCRIPT_DIR/.base-image-digest"
 
@@ -98,16 +163,30 @@ get_phase() {
 }
 
 ensure_ssh_config() {
-    # Write the sandbox Host block to a repo-local file, not ~/.ssh/config.
-    {
-        echo "# BEGIN openshell-${SANDBOX_NAME}"
-        openshell sandbox ssh-config "$SANDBOX_NAME"
-        # Keep connection alive through the proxy (every 15s, tolerate 3 misses)
-        echo "    ServerAliveInterval 15"
-        echo "    ServerAliveCountMax 480"
-        echo "# END openshell-${SANDBOX_NAME}"
-    } > "$SSH_CONFIG"
+    # Upsert this sandbox's Host block into ~/.ssh/config.
+    # Each sandbox gets a BEGIN/END-delimited block; other sandboxes' blocks are preserved.
+    local marker_begin="# BEGIN openshell-${SANDBOX_NAME}"
+    local marker_end="# END openshell-${SANDBOX_NAME}"
+    local new_block
+    new_block=$(cat <<SSHEOF
+${marker_begin}
+$(openshell sandbox ssh-config "$SANDBOX_NAME")
+    ServerAliveInterval 60
+    ServerAliveCountMax 3
+${marker_end}
+SSHEOF
+    )
+
+    mkdir -p "$HOME/.ssh"
+    touch "$SSH_CONFIG"
     chmod 600 "$SSH_CONFIG"
+
+    # Remove old block if present, then append new one
+    if grep -qF "$marker_begin" "$SSH_CONFIG" 2>/dev/null; then
+        sed -i.bak "/${marker_begin}/,/${marker_end}/d" "$SSH_CONFIG"
+        rm -f "${SSH_CONFIG}.bak"
+    fi
+    echo "$new_block" >> "$SSH_CONFIG"
 }
 
 ensure_bootstrap_sync() {
@@ -144,8 +223,10 @@ apply_config() {
     echo "==> Applying config to sandbox..."
     gather_credentials
     mutagen sync flush "${SANDBOX_NAME}-bootstrap" 2>/dev/null || true
+    local host_tz
+    host_tz=$(readlink /etc/localtime 2>/dev/null | sed 's|.*/zoneinfo/||' || echo "UTC")
     $SCP -q "$SCRIPT_DIR/overlay/setup.sh" "$SANDBOX_SSH_HOST:/tmp/setup.sh"
-    $SSH "$SANDBOX_SSH_HOST" "bash /tmp/setup.sh"
+    $SSH "$SANDBOX_SSH_HOST" "HOST_TZ='$host_tz' bash /tmp/setup.sh"
 
     local git_name git_email
     git_name=$(git config user.name 2>/dev/null || true)
@@ -159,8 +240,11 @@ apply_config() {
 
     # Copy dotfiles to sandbox
     echo "  Copying dotfiles..."
-    $SSH "$SANDBOX_SSH_HOST" "mkdir -p ~/.config/zellij"
+    $SSH "$SANDBOX_SSH_HOST" "mkdir -p ~/.config/zellij/layouts"
     $SCP -q "$SCRIPT_DIR/dotfiles/zellij/config.kdl" "$SANDBOX_SSH_HOST:~/.config/zellij/config.kdl"
+    $SCP -q "$SCRIPT_DIR/dotfiles/zellij/layouts/default.kdl" "$SANDBOX_SSH_HOST:~/.config/zellij/layouts/default.kdl"
+    $SCP -q "$SCRIPT_DIR/dotfiles/zellij/clock.sh" "$SANDBOX_SSH_HOST:~/.config/zellij/clock.sh"
+    $SSH "$SANDBOX_SSH_HOST" "chmod +x ~/.config/zellij/clock.sh"
 
     # Forward GitHub CLI auth from host to sandbox (write config directly — fast)
     local gh_token
@@ -248,7 +332,13 @@ cleanup() {
     mutagen sync terminate "${SANDBOX_NAME}-bootstrap" 2>/dev/null || true
     terminate_all_syncs
     openshell sandbox delete "$SANDBOX_NAME" 2>/dev/null || true
-    rm -f "$SSH_CONFIG"
+    # Remove this sandbox's block from the shared SSH config
+    local marker_begin="# BEGIN openshell-${SANDBOX_NAME}"
+    local marker_end="# END openshell-${SANDBOX_NAME}"
+    if [ -f "$SSH_CONFIG" ] && grep -qF "$marker_begin" "$SSH_CONFIG" 2>/dev/null; then
+        sed -i.bak "/${marker_begin}/,/${marker_end}/d" "$SSH_CONFIG"
+        rm -f "${SSH_CONFIG}.bak"
+    fi
 }
 
 # Nuclear cleanup: full cleanup + wipe bootstrap cache so deps are re-downloaded.
@@ -266,6 +356,7 @@ timer_show() { echo "    (${1}: $(( $(date +%s) - $2 ))s)"; }
 
 # Ensure sandbox exists and is fully set up. Idempotent.
 cmd_build() {
+    preflight
     local phase t0 t_total
     t_total=$(timer_start)
     phase=$(get_phase)
@@ -308,6 +399,24 @@ cmd_build() {
         timer_show "bootstrap" "$t0"
     fi
 
+    # Wait for sandbox to be Running before proceeding to SSH/mutagen
+    echo "==> Waiting for sandbox to be Running..."
+    t0=$(timer_start)
+    local retries=0
+    while true; do
+        phase=$(get_phase)
+        if [ "$phase" = "Running" ] || [ "$phase" = "Ready" ]; then
+            break
+        fi
+        retries=$((retries + 1))
+        if [ "$retries" -ge 30 ]; then
+            echo "ERROR: Sandbox did not reach Running state within 60s (current: ${phase:-unknown})."
+            exit 1
+        fi
+        sleep 2
+    done
+    timer_show "sandbox ready" "$t0"
+
     echo "==> Ensuring SSH config..."
     t0=$(timer_start)
     ensure_ssh_config
@@ -339,7 +448,7 @@ cmd_connect() {
         cmd_build
     fi
 
-    PATH="/usr/bin:$PATH" openshell sandbox connect "$SANDBOX_NAME" || true
+    caffeinate -i env PATH="/usr/bin:$PATH" openshell sandbox connect "$SANDBOX_NAME" || true
     stty sane 2>/dev/null  # restore terminal after abnormal disconnect (e.g. sleep/wake)
 }
 

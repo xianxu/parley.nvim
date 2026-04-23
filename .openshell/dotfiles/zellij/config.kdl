@@ -1,3 +1,22 @@
+themes {
+    // gruvbox-dark
+    default {
+        fg 213 196 161
+        bg 40 40 40
+        black 60 56 54
+        red 204 36 29
+        green 152 151 26
+        yellow 215 153 33
+        blue 69 133 136
+        magenta 177 98 134
+        cyan 104 157 106
+        white 251 241 199
+        orange 214 93 14
+    }
+}
+
+default_layout "default"
+
 keybinds {
     normal clear-defaults=true {
         // tmux
@@ -11,16 +30,9 @@ keybinds {
         bind "Alt x" { CloseFocus; SwitchToMode "Normal"; }
         bind "Alt w" { ToggleFloatingPanes;}
         bind "Alt t" { NewTab;}
-        bind "Alt h" { MoveFocusOrTab "Left"; }
-        bind "Alt l" { MoveFocusOrTab "Right"; }
-        bind "Alt j" { MoveFocus "Down"; }
-        bind "Alt k" { MoveFocus "Up"; }
-        bind "Alt =" { Resize "Increase"; }
-        bind "Alt -" { Resize "Decrease"; }
-        bind "Alt [" { PreviousSwapLayout; }
-        bind "Alt ]" { NextSwapLayout; }
         bind "Alt i" { MoveTab "Left"; }
         bind "Alt o" { MoveTab "Right"; }
+        bind "Alt /" { SwitchToMode "Scroll"; }
     }
 
     tmux clear-defaults=true {
@@ -36,7 +48,4 @@ keybinds {
         bind "q" { Quit; }
     }
 
-	shared_except "locked" {
-        bind "Alt /" { SwitchToMode "Scroll"; }
-    }
 }

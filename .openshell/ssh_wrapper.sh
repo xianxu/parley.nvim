@@ -1,4 +1,4 @@
 #!/bin/bash
-# SSH wrapper that uses the repo-local SSH config.
-# Used as MUTAGEN_SSH_PATH so mutagen doesn't need ~/.ssh/config for sandbox hosts.
-exec /usr/bin/ssh -F "$(dirname "$0")/ssh_config" "$@"
+# SSH wrapper — delegates to system SSH which reads ~/.ssh/config.
+# Kept for manual use; mutagen uses ssh-bin/ssh instead.
+exec /usr/bin/ssh "$@"
