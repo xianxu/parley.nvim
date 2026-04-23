@@ -4,8 +4,9 @@
 # Run from host before sandbox post-install.
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BOOTSTRAP_DIR="$SCRIPT_DIR/../../.openshell/.bootstrap"
+# BOOTSTRAP_DIR passed by sandbox.sh (avoids symlink resolution issues).
+# Fallback: derive from script location (works when overlay/ is not a symlink).
+BOOTSTRAP_DIR="${BOOTSTRAP_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/.openshell/.bootstrap}"
 
 mkdir -p "$BOOTSTRAP_DIR"
 

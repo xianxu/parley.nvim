@@ -83,8 +83,10 @@ preflight() {
 }
 
 PLENARY_HOST="${HOME}/.local/share/nvim/lazy/plenary.nvim"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+# All paths derive from $0. .openshell/ is a real dir in every repo (even when
+# its contents are symlinks), so dirname/$0/.. always gives the local repo.
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+SCRIPT_DIR="$REPO_DIR/.openshell"
 
 # Use Apple's system SSH/SCP throughout — Homebrew openssh lacks macOS-specific
 # options (UseKeychain) and causes "Bad configuration option: usekeychain" errors.
@@ -190,7 +192,7 @@ SSHEOF
 }
 
 ensure_bootstrap_sync() {
-    local bootstrap_dir="$SCRIPT_DIR/overlay/../../.openshell/.bootstrap"
+    local bootstrap_dir="$SCRIPT_DIR/.bootstrap"
     ensure_sync bootstrap "$bootstrap_dir" /tmp/bootstrap one-way-replica --ignore-vcs
 }
 
@@ -208,7 +210,7 @@ ensure_setup() {
 # Gather host credentials into bootstrap cache so mutagen syncs them to sandbox.
 # Called before setup.sh runs on the sandbox side.
 gather_credentials() {
-    local creds_dir="$SCRIPT_DIR/../.openshell/.bootstrap/credentials"
+    local creds_dir="$SCRIPT_DIR/.bootstrap/credentials"
     mkdir -p "$creds_dir"
 
     # Codex CLI auth
@@ -344,7 +346,7 @@ cleanup() {
 # Nuclear cleanup: full cleanup + wipe bootstrap cache so deps are re-downloaded.
 cleanup_nuke() {
     cleanup
-    local bootstrap_dir="$SCRIPT_DIR/../.openshell/.bootstrap"
+    local bootstrap_dir="$SCRIPT_DIR/.bootstrap"
     if [ -d "$bootstrap_dir" ]; then
         echo "==> Removing bootstrap cache..."
         rm -rf "$bootstrap_dir"
@@ -386,7 +388,7 @@ cmd_build() {
             --auto-providers \
             -- true &
         local sandbox_pid=$!
-        bash "$SCRIPT_DIR/overlay/bootstrap.sh" &
+        BOOTSTRAP_DIR="$SCRIPT_DIR/.bootstrap" bash "$SCRIPT_DIR/overlay/bootstrap.sh" &
         local bootstrap_pid=$!
         wait "$sandbox_pid" || true
         wait "$bootstrap_pid"
@@ -395,7 +397,7 @@ cmd_build() {
     else
         echo "==> Bootstrapping dependencies on host..."
         t0=$(timer_start)
-        bash "$SCRIPT_DIR/overlay/bootstrap.sh"
+        BOOTSTRAP_DIR="$SCRIPT_DIR/.bootstrap" bash "$SCRIPT_DIR/overlay/bootstrap.sh"
         timer_show "bootstrap" "$t0"
     fi
 
