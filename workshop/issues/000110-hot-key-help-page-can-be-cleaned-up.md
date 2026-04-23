@@ -1,6 +1,6 @@
 ---
 id: 000110
-status: working
+status: done
 deps: []
 created: 2026-04-20
 updated: 2026-04-22
@@ -97,7 +97,7 @@ Help for a buffer = collect all scopes from leaf to root:
 - [x] Wire init.lua setup() to use `register_global()` — replaced ~220 lines of ad-hoc registration
 - [x] Wire `setup_chat_mappings()` to use `register_buffer("chat", ...)` — replaced ~200 lines
 - [x] Wire `setup_markdown_keymaps()` to use `register_buffer("markdown", ...)` — replaced ~170 lines
-- [ ] Manual verification: help in each context
+- [x] Manual verification: help in each context
 
 ## Log
 
