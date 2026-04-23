@@ -9,3 +9,5 @@ The ariadne workflow is an issue-based development loop designed for AI-assisted
 - [Pre-merge Checks](pre-merge-checks.md) — constitution enforcement via agent-driven review
 - [Issue Sync](issue-sync.md) — syncing issue state to main from any branch
 - [Directory Conventions](directory-conventions.md) — the `workshop/` structure and why
+- [OpenShell Sandbox](openshell-sandbox.md) — containerized dev environment setup, daily use, base layer integration
+- [Base Layer](base-layer.md) — how to adopt ariadne's base layer, modes, path conventions, runtime artifacts
