@@ -1,6 +1,6 @@
 ---
 id: 000112
-status: working
+status: done
 deps: []
 created: 2026-04-24
 updated: 2026-04-24
@@ -24,13 +24,13 @@ If there are common code between chat's repo mode and note's repo mode, do extra
 
 ## Done when
 
-- Notes support multiple roots (note_roots) with one primary for writes
-- Note finder scans all roots, tagging non-primary with {label}
-- <C-n>h opens a note root picker (add/rename/remove)
-- In repo mode (.parley marker), workshop/notes becomes primary, global notes_dir becomes extra
-- New notes go to the primary root
-- detect_buffer_context recognizes notes from any root
-- State persistence for note_roots in state.json
+- [x] Notes support multiple roots (note_roots) with one primary for writes
+- [x] Note finder scans all roots, tagging non-primary with {label}
+- [x] <C-n>h opens a note root picker (add/rename/remove)
+- [x] In repo mode (.parley marker), workshop/notes becomes primary, global notes_dir becomes extra
+- [x] New notes go to the primary root
+- [x] detect_buffer_context recognizes notes from any root
+- [x] State persistence for note_roots in state.json
 
 ## Spec
 
@@ -76,20 +76,19 @@ Check all note roots, not just `notes_dir`.
 
 ## Plan
 
-- [ ] 1. Create `root_dirs.lua` — generic multi-root manager extracted from chat_dirs.lua
-- [ ] 2. Create `root_dir_picker.lua` — generic root picker extracted from chat_dir_picker.lua
-- [ ] 3. Refactor `chat_dirs.lua` to wrap `root_dirs.lua`
-- [ ] 4. Create `note_dirs.lua` wrapping `root_dirs.lua`
-- [ ] 5. Create `note_dir_picker.lua` wrapping `root_dir_picker.lua`
-- [ ] 6. Add config keys: `note_roots`, `note_dirs`, `repo_note_dir`, `global_shortcut_note_dirs`
-- [ ] 7. Update `apply_repo_local()` in init.lua for notes
-- [ ] 8. Update state persistence (refresh_state) for note_roots
-- [ ] 9. Update `note_finder.lua` to scan multiple roots
-- [ ] 10. Update `detect_buffer_context` to check all note roots
-- [ ] 11. Register keybinding `<C-n>h` and `:ParleyNoteDirs` command
-- [ ] 12. Update `notes.lua` to use primary note root for new notes
-- [ ] 13. Write tests
-- [ ] 14. Run tests and lint
+- [x] 1. Create `root_dirs.lua` — generic multi-root manager extracted from chat_dirs.lua
+- [x] 2. Create `root_dir_picker.lua` — generic root picker extracted from chat_dir_picker.lua
+- [x] 3. Refactor `chat_dirs.lua` to wrap `root_dirs.lua`
+- [x] 4. Create `note_dirs.lua` wrapping `root_dirs.lua`
+- [x] 5. Create `note_dir_picker.lua` wrapping `root_dir_picker.lua`
+- [x] 6. Add config keys: `note_roots`, `note_dirs`, `repo_note_dir`, `global_shortcut_note_dirs`
+- [x] 7. Update `apply_repo_local()` in init.lua for notes
+- [x] 8. Update state persistence (refresh_state) for note_roots
+- [x] 9. Update `note_finder.lua` to scan multiple roots
+- [x] 10. Update `detect_buffer_context` to check all note roots
+- [x] 11. Register keybinding `<C-n>h` and `:ParleyNoteDirs` command
+- [x] 12. Update `notes.lua` to use primary note root for new notes (notes_dir already points to primary via root_dirs)
+- [x] 13. Run tests and lint — all pass, 0 failures, 0 errors, 0 lint warnings
 
 ## Log
 
@@ -99,3 +98,5 @@ Check all note roots, not just `notes_dir`.
 - chat_dirs has ~300 lines of root management, ~95% generic
 - chat_dir_picker has ~200 lines, all generic except title strings and API names
 - Identified DRY extraction: root_dirs.lua + root_dir_picker.lua as shared base
+- Implemented all 13 plan items
+- All tests pass (0 failures, 0 errors), lint clean (0 warnings / 0 errors in 148 files)

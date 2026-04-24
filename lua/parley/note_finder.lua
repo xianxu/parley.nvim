@@ -246,75 +246,98 @@ end
 -- File scanning with mtime cache
 --------------------------------------------------------------------------------
 
---- Scan notes directory and return sorted entries using the cache.
+--- Scan note roots and return sorted entries using the cache.
 --- Shared by M.open() and M.prewarm().
-local function scan_note_files(notes_root, cutoff_time)
-	local files = _parley.helpers.find_files(notes_root, "*.md", true)
-	local expanded_root_prefix = vim.fn.resolve(vim.fn.fnamemodify(vim.fn.expand(notes_root), ":p")):gsub("/+$", "") .. "/"
+--- @param note_roots table array of root records {dir, label, is_primary} or a single dir string
+--- @param cutoff_time number|nil optional recency cutoff
+local function scan_note_files(note_roots, cutoff_time)
+	-- Normalize: accept a single string (legacy) or a roots array
+	if type(note_roots) == "string" then
+		note_roots = { { dir = note_roots, label = "main", is_primary = true } }
+	end
 
-	-- Track seen files for cache pruning
+	-- Track seen files for cache pruning and deduplication
 	local seen_files = {}
-
 	local entries = {}
-	for _, file in ipairs(files) do
-		local resolved = vim.fn.resolve(file)
-		seen_files[resolved] = true
 
-		-- Check cache: skip classify + infer if file unchanged
-		local stat = vim.loop.fs_stat(file)
-		if not stat then
-			goto continue
+	for _, root in ipairs(note_roots) do
+		local root_dir = root.dir
+		local is_primary_root = root.is_primary
+		local root_label = root.label or "extra"
+
+		local files = _parley.helpers.find_files(root_dir, "*.md", true)
+		local expanded_root_prefix = vim.fn.resolve(vim.fn.fnamemodify(vim.fn.expand(root_dir), ":p")):gsub("/+$", "") .. "/"
+
+		for _, file in ipairs(files) do
+			local resolved = vim.fn.resolve(file)
+			if seen_files[resolved] then
+				goto continue
+			end
+			seen_files[resolved] = true
+
+			-- Check cache: skip classify + infer if file unchanged
+			local stat = vim.loop.fs_stat(file)
+			if not stat then
+				goto continue
+			end
+
+			local cached = _file_cache[resolved]
+			local classification, inferred_time
+			if cached and cached.mtime == stat.mtime.sec then
+				classification = cached.classification
+				inferred_time = cached.inferred_time
+			else
+				local relative = relative_to_root(resolved, expanded_root_prefix)
+				classification = classify_note_finder_path(relative)
+				inferred_time = infer_note_directory_cutoff_time(relative, file)
+				_file_cache[resolved] = {
+					mtime = stat.mtime.sec,
+					classification = classification,
+					inferred_time = inferred_time,
+				}
+			end
+
+			if classification.is_template then
+				goto continue
+			end
+
+			local modified_time = stat.mtime.sec
+			local sort_time = inferred_time or modified_time
+			local range_time = inferred_time or modified_time
+			local is_special_folder = classification.base_folder ~= nil
+
+			if not is_special_folder and cutoff_time and range_time < cutoff_time then
+				goto continue
+			end
+
+			local root_prefix = is_primary_root and "" or string.format("{%s} ", root_label)
+
+			local display, search_text
+			if is_special_folder then
+				local file_name = vim.fn.fnamemodify(file, ":t")
+				display = string.format("%s{%s} %s [%s]", root_prefix, classification.base_folder, file_name, os.date("%Y-%m-%d", sort_time))
+				search_text = string.format("{%s} %s %s", classification.base_folder, file_name, classification.relative_path:gsub("%-", " "))
+			else
+				display = root_prefix .. classification.relative_path .. " [" .. os.date("%Y-%m-%d", sort_time) .. "]"
+				search_text = "{} " .. classification.relative_path:gsub("%-", " ")
+			end
+
+			-- For non-primary roots, add root label to search text for filtering
+			if not is_primary_root then
+				search_text = "{" .. root_label .. "} " .. search_text
+			end
+
+			table.insert(entries, {
+				value = file,
+				display = display,
+				ordinal = search_text,
+				timestamp = sort_time,
+				modified_time = modified_time,
+				base_folder = classification.base_folder,
+			})
+
+			::continue::
 		end
-
-		local cached = _file_cache[resolved]
-		local classification, inferred_time
-		if cached and cached.mtime == stat.mtime.sec then
-			classification = cached.classification
-			inferred_time = cached.inferred_time
-		else
-			local relative = relative_to_root(resolved, expanded_root_prefix)
-			classification = classify_note_finder_path(relative)
-			inferred_time = infer_note_directory_cutoff_time(relative, file)
-			_file_cache[resolved] = {
-				mtime = stat.mtime.sec,
-				classification = classification,
-				inferred_time = inferred_time,
-			}
-		end
-
-		if classification.is_template then
-			goto continue
-		end
-
-		local modified_time = stat.mtime.sec
-		local sort_time = inferred_time or modified_time
-		local range_time = inferred_time or modified_time
-		local is_special_folder = classification.base_folder ~= nil
-
-		if not is_special_folder and cutoff_time and range_time < cutoff_time then
-			goto continue
-		end
-
-		local display, search_text
-		if is_special_folder then
-			local file_name = vim.fn.fnamemodify(file, ":t")
-			display = string.format("{%s} %s [%s]", classification.base_folder, file_name, os.date("%Y-%m-%d", sort_time))
-			search_text = string.format("{%s} %s %s", classification.base_folder, file_name, classification.relative_path:gsub("%-", " "))
-		else
-			display = classification.relative_path .. " [" .. os.date("%Y-%m-%d", sort_time) .. "]"
-			search_text = "{} " .. classification.relative_path:gsub("%-", " ")
-		end
-
-		table.insert(entries, {
-			value = file,
-			display = display,
-			ordinal = search_text,
-			timestamp = sort_time,
-			modified_time = modified_time,
-			base_folder = classification.base_folder,
-		})
-
-		::continue::
 	end
 
 	-- Prune stale cache entries
@@ -345,9 +368,9 @@ M.prewarm = function()
 	_prewarm_pending = true
 	vim.defer_fn(function()
 		local ok, err = pcall(function()
-			local notes_root = vim.fn.expand(_parley.config.notes_dir)
-			if notes_root and notes_root ~= "" then
-				scan_note_files(notes_root, nil)
+			local note_roots = _parley.get_note_roots()
+			if note_roots and #note_roots > 0 then
+				scan_note_files(note_roots, nil)
 			end
 		end)
 		if not ok and _parley then
@@ -381,7 +404,7 @@ M.open = function(options)
 	local next_recency_shortcut = note_finder_mappings.next_recency or { shortcut = "<C-a>" }
 	local previous_recency_shortcut = note_finder_mappings.previous_recency or { shortcut = "<C-s>" }
 	local keybindings_shortcut = _parley.config.global_shortcut_keybindings or { shortcut = "<C-g>?" }
-	local notes_root = vim.fn.expand(_parley.config.notes_dir)
+	local note_roots = _parley.get_note_roots()
 
 	-- If a prewarm is in flight, wait for it instead of scanning again
 	if _prewarm_pending then
@@ -406,7 +429,7 @@ M.open = function(options)
 		cutoff_time = os.time() - (resolved_recency.current.months * 30 * 24 * 60 * 60)
 	end
 
-	local entries = scan_note_files(notes_root, cutoff_time)
+	local entries = scan_note_files(note_roots, cutoff_time)
 
 	local items = {}
 	for _, entry in ipairs(entries) do

@@ -32,6 +32,7 @@ chat_parser = require("parley.chat_parser"), -- chat file parser
 	agent_picker = require("parley.agent_picker"), -- agent selection UI
 	system_prompt_picker = require("parley.system_prompt_picker"), -- system prompt selection UI
 	chat_dir_picker = require("parley.chat_dir_picker"), -- chat root management UI
+	note_dir_picker = require("parley.note_dir_picker"), -- note root management UI
 	float_picker = require("parley.float_picker"), -- shared floating window picker
 }
 
@@ -56,6 +57,10 @@ local find_chat_root = function(f) return chat_dirs.find_chat_root(f) end
 local find_chat_root_record = function(f) return chat_dirs.find_chat_root_record(f) end
 local registered_chat_dir = function(d) return chat_dirs.registered_chat_dir(d) end
 local chat_root_display = function(r, i) return chat_dirs.chat_root_display(r, i) end
+
+-- Note dirs module (loaded here; wired up immediately since it only needs M reference)
+local note_dirs = require("parley.note_dirs")
+note_dirs.setup(M)
 
 -- Memory preferences module (loaded here; wired up immediately since it only needs M reference)
 local memory_prefs = require("parley.memory_prefs")
@@ -196,6 +201,18 @@ M.set_chat_roots = function(r, p) return chat_dirs.set_chat_roots(r, p) end
 M.add_chat_dir = function(d, p, l) return chat_dirs.add_chat_dir(d, p, l) end
 M.remove_chat_dir = function(d, p) return chat_dirs.remove_chat_dir(d, p) end
 M.rename_chat_dir = function(d, l, p) return chat_dirs.rename_chat_dir(d, l, p) end
+
+-- Passthroughs to note_dirs module (see lua/parley/note_dirs.lua)
+local apply_note_roots = function(...) return note_dirs.apply_note_roots(...) end
+local normalize_note_roots = function(...) return note_dirs.normalize_note_roots(...) end
+
+M.get_note_roots = function() return note_dirs.get_note_roots() end
+M.get_note_dirs = function() return note_dirs.get_note_dirs() end
+M.set_note_dirs = function(d, p) return note_dirs.set_note_dirs(d, p) end
+M.set_note_roots = function(r, p) return note_dirs.set_note_roots(r, p) end
+M.add_note_dir = function(d, p, l) return note_dirs.add_note_dir(d, p, l) end
+M.remove_note_dir = function(d, p) return note_dirs.remove_note_dir(d, p) end
+M.rename_note_dir = function(d, l, p) return note_dirs.rename_note_dir(d, l, p) end
 
 
 local function set_chat_topic_line(buf, lines, topic)
@@ -383,7 +400,7 @@ M.setup = function(opts)
 		M.config.repo_root = git_root
 
 		-- Ensure repo-local directories exist
-		local repo_dirs = { M.config.repo_chat_dir, M.config.issues_dir, M.config.vision_dir, M.config.history_dir }
+		local repo_dirs = { M.config.repo_chat_dir, M.config.repo_note_dir, M.config.issues_dir, M.config.vision_dir, M.config.history_dir }
 		for _, dir in ipairs(repo_dirs) do
 			if dir and dir ~= "" and not dir:match("^/") then
 				M.helpers.prepare_dir(git_root .. "/" .. dir, "repo")
@@ -409,6 +426,24 @@ M.setup = function(opts)
 			M.config.chat_roots = {}
 		end
 
+		-- Prepend repo note dir as primary, demoting global notes_dir to extra
+		if M.config.repo_note_dir and M.config.repo_note_dir ~= "" then
+			local repo_note = git_root .. "/" .. M.config.repo_note_dir
+			local old_dir = M.config.notes_dir
+			local old_dirs = M.config.note_dirs
+
+			M.config.notes_dir = repo_note
+			local extras = {}
+			if type(old_dirs) == "table" and #old_dirs > 0 then
+				extras = vim.deepcopy(old_dirs)
+			end
+			if old_dir and old_dir ~= repo_note then
+				table.insert(extras, 1, old_dir)
+			end
+			M.config.note_dirs = extras
+			M.config.note_roots = {}
+		end
+
 		-- Disable chat memory and memory prefs for repo-local chats
 		if type(M.config.chat_memory) == "table" then
 			M.config.chat_memory.enable = false
@@ -420,10 +455,11 @@ M.setup = function(opts)
 	apply_repo_local()
 
 	apply_chat_roots(normalize_chat_roots(M.config.chat_dir, M.config.chat_dirs, M.config.chat_roots))
+	apply_note_roots(normalize_note_roots(M.config.notes_dir, M.config.note_dirs, M.config.note_roots))
 
-	-- repo-local dirs (issues, history, vision) are resolved in apply_repo_local
+	-- repo-local dirs (issues, history, vision, notes) are resolved in apply_repo_local
 	-- against git root; skip them here to avoid creating in CWD
-	local skip_prepare = { chat_dir = true, repo_chat_dir = true, issues_dir = true, history_dir = true, vision_dir = true }
+	local skip_prepare = { chat_dir = true, repo_chat_dir = true, repo_note_dir = true, issues_dir = true, history_dir = true, vision_dir = true }
 	for k, v in pairs(M.config) do
 		if not skip_prepare[k] and k:match("_dir$") and type(v) == "string" then
 			M.config[k] = M.helpers.prepare_dir(v, k)
@@ -542,6 +578,7 @@ M.setup = function(opts)
 			chat_review = function() M.cmd.ChatReview({}) end,
 			note_new = function() M.cmd.NoteNew() end,
 			note_finder = function() M.cmd.NoteFinder({}) end,
+			note_dirs = function() M.cmd.NoteDirs({}) end,
 			year_root = function()
 				local current_year = os.date("%Y")
 				local year_dir = M.config.notes_dir .. "/" .. current_year
@@ -944,6 +981,14 @@ M.refresh_state = function(update)
 		M._state.chat_dirs = vim.deepcopy(M.get_chat_dirs())
 	end
 
+	-- Restore note roots from persisted state
+	if type(M._state.note_roots) == "table" and #M._state.note_roots > 0 then
+		apply_note_roots(M._state.note_roots)
+	else
+		M._state.note_roots = vim.deepcopy(M.get_note_roots())
+		M._state.note_dirs = vim.deepcopy(M.get_note_dirs())
+	end
+
 	-- In repo mode, ensure repo chat dir is the primary root (overrides persisted state)
 	if M.config.repo_root and M.config.repo_chat_dir then
 		local repo_chat = M.config.repo_root .. "/" .. M.config.repo_chat_dir
@@ -963,6 +1008,27 @@ M.refresh_state = function(update)
 			apply_chat_roots(new_roots)
 			M._state.chat_roots = vim.deepcopy(M.get_chat_roots())
 			M._state.chat_dirs = vim.deepcopy(M.get_chat_dirs())
+		end
+	end
+
+	-- In repo mode, ensure repo note dir is the primary root (overrides persisted state)
+	if M.config.repo_root and M.config.repo_note_dir then
+		local repo_note = M.config.repo_root .. "/" .. M.config.repo_note_dir
+		local resolved_repo = vim.fn.resolve(vim.fn.expand(repo_note)):gsub("/+$", "")
+		local current_roots = M.get_note_roots()
+		local already_primary = #current_roots > 0
+			and vim.fn.resolve(vim.fn.expand(current_roots[1].dir)):gsub("/+$", "") == resolved_repo
+
+		if not already_primary then
+			local new_roots = { { dir = repo_note, label = "repo" } }
+			for _, root in ipairs(current_roots) do
+				if vim.fn.resolve(vim.fn.expand(root.dir)):gsub("/+$", "") ~= resolved_repo then
+					table.insert(new_roots, root)
+				end
+			end
+			apply_note_roots(new_roots)
+			M._state.note_roots = vim.deepcopy(M.get_note_roots())
+			M._state.note_dirs = vim.deepcopy(M.get_note_dirs())
 		end
 	end
 
@@ -1047,10 +1113,10 @@ local function detect_buffer_context(buf)
 	end
 	if M.is_markdown(buf, file_name) then
 		local resolved = vim.fn.resolve(vim.fn.fnamemodify(file_name, ":p"))
-		-- Check note
-		local notes_dir = M.config.notes_dir
-		if notes_dir and notes_dir ~= "" then
-			local norm_notes = vim.fn.resolve(vim.fn.fnamemodify(vim.fn.expand(notes_dir), ":p"))
+		-- Check note (across all note roots)
+		local note_roots = M.get_note_roots()
+		for _, root in ipairs(note_roots) do
+			local norm_notes = vim.fn.resolve(vim.fn.fnamemodify(vim.fn.expand(root.dir), ":p"))
 			if not norm_notes:match("/$") then norm_notes = norm_notes .. "/" end
 			if resolved:sub(1, #norm_notes) == norm_notes then
 				return "note"
@@ -3398,6 +3464,10 @@ M.cmd.ChatDirs = function(p) chat_dirs.cmd_chat_dirs(p) end
 M.cmd.ChatMove = function(p) chat_dirs.cmd_chat_move(p) end
 M.cmd.ChatDirAdd = function(p) chat_dirs.cmd_chat_dir_add(p) end
 M.cmd.ChatDirRemove = function(p) chat_dirs.cmd_chat_dir_remove(p) end
+
+M.cmd.NoteDirs = function(p) note_dirs.cmd_note_dirs(p) end
+M.cmd.NoteDirAdd = function(p) note_dirs.cmd_note_dir_add(p) end
+M.cmd.NoteDirRemove = function(p) note_dirs.cmd_note_dir_remove(p) end
 
 --------------------------------------------------------------------------------
 -- Agent functionality

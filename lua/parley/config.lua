@@ -296,6 +296,12 @@ local config = {
 	chat_dirs = {},
 	-- directory for storing notes
 	notes_dir = vim.fn.expand("~/Library/Mobile Documents/com~apple~CloudDocs/notes"),
+	-- structured note roots metadata; if empty, it is derived from notes_dir + note_dirs
+	note_roots = {},
+	-- additional note roots searched by note-aware features; new notes still use notes_dir
+	note_dirs = {},
+	-- note dir within repo when repo mode is active (relative to git root)
+	repo_note_dir = "workshop/notes",
 	-- export directories for different formats
 	export_html_dir = vim.fn.expand("~/blogs/static"),
 	export_markdown_dir = vim.fn.expand("~/blogs/posts"),
@@ -362,6 +368,7 @@ local config = {
 	global_shortcut_note_new = { modes = { "n", "i" }, shortcut = "<C-n>c" },
 	global_shortcut_note_finder = { modes = { "n", "i" }, shortcut = "<C-n>f" },
 	global_shortcut_year_root = { modes = { "n", "i" }, shortcut = "<C-n>r" },
+	global_shortcut_note_dirs = { modes = { "n", "i" }, shortcut = "<C-n>h" },
 	-- shortcut for opening oil.nvim file explorer
 	global_shortcut_oil = { modes = { "n" }, shortcut = "<leader>fo" },
 	-- document review shortcuts (markdown files only, not chat buffers)

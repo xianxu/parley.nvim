@@ -181,6 +181,15 @@ M.entries = {
 		help_desc = "Jump to note year root",
 	},
 	{
+		id = "note_dirs",
+		config_key = "global_shortcut_note_dirs",
+		default_key = "<C-n>h",
+		default_modes = { "n", "i" },
+		scope = "global",
+		desc = "Manage Note Roots",
+		help_desc = "Manage note roots",
+	},
+	{
 		id = "markdown_finder",
 		config_key = "global_shortcut_markdown_finder",
 		default_key = "<C-g>m",
