@@ -90,6 +90,10 @@
 - Work with user to create scripts and leverage less expensive LLMs, and local models to do the heavy lifting.
 - When generating scripts, you should generate a SKILL.md on the same folder, explaining how to use it. Keep SKILL.md updated for all the scripts you create.
 
+### 11. SKILL.md
+- Follow standard in https://agentskills.io/home, generally speaking. Agent skill is a way to modularize and harmonize agent prompting and deterministic code
+- Treat any folder with SKILL.md as Agent Skills, regardless where they are
+
 ## Task Management
 1. **Note starting point**: save current state before making changes (e.g. git commit or branch)
 2. **Plan First**: Write plan in the issue file's `## Plan` section with checkable items

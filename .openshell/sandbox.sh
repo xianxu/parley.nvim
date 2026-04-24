@@ -86,6 +86,8 @@ PLENARY_HOST="${HOME}/.local/share/nvim/lazy/plenary.nvim"
 # All paths derive from $0. .openshell/ is a real dir in every repo (even when
 # its contents are symlinks), so dirname/$0/.. always gives the local repo.
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+REPO_NAME_LOCAL="$(basename "$REPO_DIR")"
+WORKSPACE_DIR="$(cd "$REPO_DIR/.." && pwd)"
 SCRIPT_DIR="$REPO_DIR/.openshell"
 
 # Use Apple's system SSH/SCP throughout — Homebrew openssh lacks macOS-specific
@@ -279,10 +281,32 @@ ensure_sync() {
 }
 
 ensure_mutagen_sync() {
+    # Main repo: two-way sync (this is where you work)
     ensure_sync repo "$REPO_DIR" /sandbox/repo two-way-resolved \
         --ignore-vcs \
         --ignore node_modules \
         --ignore .test-home --ignore .test-xdg --ignore .test-tmp
+
+    # Workspace peers: one-way read-only sync of the parent directory,
+    # excluding the main repo (already synced above) and heavy dirs.
+    ensure_sync workspace "$WORKSPACE_DIR" /sandbox/workspace one-way-replica \
+        --ignore-vcs \
+        --ignore "$REPO_NAME_LOCAL" \
+        --ignore node_modules \
+        --ignore .test-home --ignore .test-xdg --ignore .test-tmp
+
+    # Create flat peer symlinks under /sandbox/ so repos are true peers:
+    #   /sandbox/brain → /sandbox/repo (main)
+    #   /sandbox/ariadne → /sandbox/workspace/ariadne (peer)
+    # Also link inside /sandbox/workspace/ for consistency.
+    $SSH "$SANDBOX_SSH_HOST" "ln -sfn /sandbox/repo /sandbox/$REPO_NAME_LOCAL" 2>/dev/null || true
+    $SSH "$SANDBOX_SSH_HOST" "ln -sfn /sandbox/repo /sandbox/workspace/$REPO_NAME_LOCAL" 2>/dev/null || true
+    for dir in "$WORKSPACE_DIR"/*/; do
+        local name
+        name=$(basename "$dir")
+        [ "$name" = "$REPO_NAME_LOCAL" ] && continue
+        $SSH "$SANDBOX_SSH_HOST" "ln -sfn /sandbox/workspace/$name /sandbox/$name" 2>/dev/null || true
+    done
 
     mkdir -p "$REPO_DIR/../worktree"
     ensure_sync worktree "$REPO_DIR/../worktree" /sandbox/worktree two-way-resolved \
@@ -301,10 +325,19 @@ ensure_mutagen_sync() {
         ensure_sync plenary "$PLENARY_HOST" /sandbox/.local/share/nvim/lazy/plenary.nvim one-way-replica \
             --ignore-vcs
     fi
+
+    # Claude Code sessions: bi-directional so sessions can be resumed across
+    # host and sandbox (use `claude --resume <session-id>`).
+    local claude_projects="${HOME}/.claude/projects"
+    if [ -d "$claude_projects" ]; then
+        $SSH "$SANDBOX_SSH_HOST" "mkdir -p /sandbox/.claude/projects" 2>/dev/null || true
+        ensure_sync claude-sessions "$claude_projects" /sandbox/.claude/projects two-way-resolved \
+            --ignore-vcs
+    fi
 }
 
 # All mutagen sync names (add new syncs here)
-SYNC_NAMES="repo git worktree plenary nvim-state"
+SYNC_NAMES="repo git workspace worktree plenary nvim-state claude-sessions"
 
 terminate_all_syncs() {
     for name in $SYNC_NAMES; do

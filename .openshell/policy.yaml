@@ -8,6 +8,8 @@ filesystem_policy:
     - /home/sandbox              # user home — repo and worktree live under here
     - /tmp
     - /dev/null                  # required by scp, shells, and many Unix tools
+    - /dev/ptmx                  # pty creation (needed by script(1) for ^Y capture)
+    - /dev/pts                   # pty slave devices
   read_only:
     - /usr
     - /etc

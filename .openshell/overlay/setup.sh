@@ -61,8 +61,6 @@ if [[ -z "$_BASH_SCRIPT_LOG" ]]; then
     export _BASH_SCRIPT_LOG=$(mktemp)
     exec script -q --flush "$_BASH_SCRIPT_LOG" -c /bin/bash
 fi
-trap 'rm -f "$_BASH_SCRIPT_LOG" "$_bash_last_out" "$_bash_collect_out"' EXIT
-
 shopt -s extglob
 _bash_last_out=$(mktemp)
 _bash_collect_out=$(mktemp)
@@ -100,6 +98,7 @@ _bash_preexec_trap() {
     _hist=$(HISTTIMEFORMAT='' history 1)
     _hist="${_hist##*([[:space:]])+([0-9])*([[:space:]])}"
     _bash_last_cmd="$_hist"
+    [[ -f "$_BASH_SCRIPT_LOG" ]] || { _bash_cmd_offset=0; return; }
     _bash_cmd_offset=$(stat -c%s "$_BASH_SCRIPT_LOG")
 }
 trap '_bash_preexec_trap' DEBUG
@@ -109,6 +108,7 @@ _bash_precmd() {
     _bash_in_precmd=true
     if $_bash_cmd_active; then
         _bash_cmd_active=false
+        [[ -f "$_BASH_SCRIPT_LOG" ]] || { _bash_in_precmd=false; return; }
         local end_offset=$(stat -c%s "$_BASH_SCRIPT_LOG")
         local size=$(( end_offset - _bash_cmd_offset ))
         if (( size > 0 && _bash_cmd_offset > 0 )); then
@@ -165,6 +165,17 @@ bind -m vi-insert -x '"\ey": clast_append'
 BASHEOF
 # Inject host timezone (heredoc is single-quoted so can't expand inside)
 sed -i "s|__HOST_TZ__|${HOST_TZ:-UTC}|" "$HOME/.bashrc"
+
+# ── Python/Node proxy config ────────────────────────────────────────────────
+# pip (Python) and npm (Node) don't auto-detect https_proxy env var.
+# Without explicit config, they try direct connections, DNS fails in the
+# sandbox, and each request hangs for 15s before retrying through the proxy.
+if [ -n "${https_proxy:-}" ]; then
+    echo "==> Configuring pip/npm proxy..."
+    pip config set global.proxy "$https_proxy" 2>/dev/null || true
+    npm config set proxy "$http_proxy" 2>/dev/null || true
+    npm config set https-proxy "$https_proxy" 2>/dev/null || true
+fi
 
 # ── Workspace dirs ───────────────────────────────────────────────────────────
 echo "==> Creating workspace dirs..."
