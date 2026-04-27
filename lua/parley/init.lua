@@ -62,6 +62,13 @@ local chat_root_display = function(r, i) return chat_dirs.chat_root_display(r, i
 local note_dirs = require("parley.note_dirs")
 note_dirs.setup(M)
 
+-- Super-repo module (loaded here; wired up immediately since it only needs M reference)
+local super_repo = require("parley.super_repo")
+super_repo.setup(M)
+M.super_repo = super_repo
+M.toggle_super_repo = function() return super_repo.toggle() end
+M.is_super_repo_active = function() return super_repo.is_active() end
+
 -- Memory preferences module (loaded here; wired up immediately since it only needs M reference)
 local memory_prefs = require("parley.memory_prefs")
 memory_prefs.setup(M)
@@ -586,6 +593,26 @@ M.setup = function(opts)
 				vim.cmd("cd " .. year_dir)
 			end,
 			markdown_finder = function() M.cmd.MarkdownFinder() end,
+			super_repo_toggle = function()
+				local before = M.is_super_repo_active()
+				M.toggle_super_repo()
+				local after = M.is_super_repo_active()
+				if after and not before then
+					local members = M.config.super_repo_members or {}
+					local count = #members
+					if count <= 1 then
+						vim.notify(
+							"super-repo: ON, but no sibling .parley repos found under " ..
+								(M.config.super_repo_root or "?"),
+							vim.log.levels.WARN
+						)
+					else
+						vim.notify("super-repo: ON (" .. count .. " members)", vim.log.levels.INFO)
+					end
+				elseif not after and before then
+					vim.notify("super-repo: OFF", vim.log.levels.INFO)
+				end
+			end,
 			oil = function()
 				local ok, oil = pcall(require, "oil")
 				if ok then
@@ -1058,29 +1085,46 @@ M.refresh_state = function(update)
 		end
 	end
 
-	-- Repo-mode roots are transient (determined by cwd + marker at startup).
-	-- Never persist them — otherwise a later session with a different cwd
-	-- restores repo roots it shouldn't have access to.
+	-- Repo-mode roots are transient (determined by cwd + marker at startup,
+	-- or by super-repo toggle). Never persist them — otherwise a later
+	-- session with a different cwd restores repo roots it shouldn't have.
+	-- Two sources of transient roots:
+	--   * Plain repo mode: primary chat/note root tagged with label = "repo".
+	--   * Super-repo mode: sibling chat/note dirs pushed by super_repo module.
 	local persist_state = vim.deepcopy(M._state)
-	if type(persist_state.chat_roots) == "table" then
-		local filtered = {}
-		for _, root in ipairs(persist_state.chat_roots) do
-			if root.label ~= "repo" then
-				table.insert(filtered, root)
+	local function resolve_dir(d)
+		local out = vim.fn.resolve(vim.fn.expand(d)):gsub("/+$", "")
+		return out
+	end
+	local function set_of(list)
+		local s = {}
+		for _, d in ipairs(list or {}) do s[d] = true end
+		return s
+	end
+	local pushed_chat = set_of(super_repo.get_pushed_chat_dirs())
+	local pushed_note = set_of(super_repo.get_pushed_note_dirs())
+	local function strip_transient(roots_key, dirs_key, pushed_set)
+		if type(persist_state[roots_key]) == "table" then
+			local filtered = {}
+			for _, root in ipairs(persist_state[roots_key]) do
+				if root.label ~= "repo" and not pushed_set[resolve_dir(root.dir)] then
+					table.insert(filtered, root)
+				end
 			end
+			persist_state[roots_key] = #filtered > 0 and filtered or nil
 		end
-		persist_state.chat_roots = #filtered > 0 and filtered or nil
-	end
-	-- Rebuild chat_dirs from filtered chat_roots to keep them in sync
-	if type(persist_state.chat_roots) == "table" then
-		local dirs = {}
-		for _, root in ipairs(persist_state.chat_roots) do
-			table.insert(dirs, root.dir)
+		if type(persist_state[roots_key]) == "table" then
+			local dirs = {}
+			for _, root in ipairs(persist_state[roots_key]) do
+				table.insert(dirs, root.dir)
+			end
+			persist_state[dirs_key] = #dirs > 0 and dirs or nil
+		else
+			persist_state[dirs_key] = nil
 		end
-		persist_state.chat_dirs = #dirs > 0 and dirs or nil
-	else
-		persist_state.chat_dirs = nil
 	end
+	strip_transient("chat_roots", "chat_dirs", pushed_chat)
+	strip_transient("note_roots", "note_dirs", pushed_note)
 	M.helpers.table_to_file(persist_state, state_file)
 
 	local buf = vim.api.nvim_get_current_buf()

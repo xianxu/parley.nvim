@@ -98,8 +98,27 @@ M.open = function(_options)
     local cycle_status_shortcut = issue_finder_mappings.cycle_status or { shortcut = "<C-s>" }
     local toggle_done_shortcut = issue_finder_mappings.toggle_done or { shortcut = "<C-a>" }
 
-    local issues_dir = issues_mod.get_issues_dir()
-    if not issues_dir then
+    -- Compute issue roots: in super-repo mode, one per member; otherwise just the single repo.
+    local sr_issues = _parley.super_repo and _parley.super_repo.expand_roots(_parley.config.issues_dir) or nil
+    local sr_history = _parley.super_repo and _parley.super_repo.expand_roots(_parley.config.history_dir) or nil
+    local roots
+    if sr_issues then
+        roots = {}
+        for i, r in ipairs(sr_issues) do
+            table.insert(roots, {
+                issues_dir = r.dir,
+                history_dir = sr_history and sr_history[i] and sr_history[i].dir or nil,
+                repo_name = r.repo_name,
+            })
+        end
+    else
+        roots = { {
+            issues_dir = issues_mod.get_issues_dir(),
+            history_dir = issues_mod.get_history_dir(),
+            repo_name = nil,
+        } }
+    end
+    if #roots == 0 or not roots[1].issues_dir then
         _parley.logger.warning("issues_dir is not configured")
         _parley._issue_finder.opened = false
         return
@@ -108,7 +127,17 @@ M.open = function(_options)
     -- View mode: 0=active (open+working+blocked), 1=all (incl done+wontfix), 2=all+history
     local view_mode = _parley._issue_finder.view_mode or 0
     local include_history = view_mode == 2
-    local all_issues = issues_mod.scan_issues(issues_dir, { include_history = include_history })
+    local all_issues = {}
+    for _, root in ipairs(roots) do
+        if root.issues_dir then
+            local got = issues_mod.scan_issues(root.issues_dir, {
+                include_history = include_history,
+                history_dir_override = root.history_dir,
+                repo_name = root.repo_name,
+            })
+            vim.list_extend(all_issues, got)
+        end
+    end
 
     -- Filter based on view mode
     local filtered = {}
@@ -130,7 +159,8 @@ M.open = function(_options)
     for _, issue in ipairs(sorted) do
         local prefix = issue.archived and "[archived]" or string.format("[%s]", issue.status)
         local label = issue.title ~= "" and issue.title or issue.slug
-        local display = string.format("%s %s %s", prefix, issue.id, label)
+        local repo_prefix = issue.repo_name and ("{" .. issue.repo_name .. "} ") or ""
+        local display = string.format("%s%s %s %s", repo_prefix, prefix, issue.id, label)
         if issue.github_issue then
             display = display .. " (#" .. issue.github_issue .. ")"
         end
@@ -139,7 +169,7 @@ M.open = function(_options)
         end
         table.insert(items, {
             display = display,
-            search_text = string.format("%s %s %s %s", issue.status, issue.id, issue.title, issue.slug),
+            search_text = string.format("%s%s %s %s %s", repo_prefix, issue.status, issue.id, issue.title, issue.slug),
             value = issue.path,
             issue = issue,
         })

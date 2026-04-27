@@ -435,6 +435,8 @@ local config = {
 	global_shortcut_markdown_finder = { modes = { "n", "i" }, shortcut = "<C-g>m" },
 	-- maximum directory depth for markdown finder (from repo root)
 	markdown_finder_max_depth = 4,
+	-- super-repo mode toggle (aggregates reads across sibling .parley repos)
+	global_shortcut_super_repo_toggle = { modes = { "n", "i" }, shortcut = "<C-g>S" },
 	-- global shortcuts for issue management
 	global_shortcut_issue_new = { modes = { "n", "i" }, shortcut = "<C-y>c" },
 	global_shortcut_issue_finder = { modes = { "n", "i" }, shortcut = "<C-y>f" },
@@ -508,6 +510,9 @@ local config = {
 		enable = true,
 		-- which section to add the component to
 		section = "lualine_x",
+		-- replace the user's filetype component with a parley mode glyph
+		-- (○ global / ⊚ repo / ⦿ super-repo). Set to false to keep filetype.
+		replace_filetype = true,
 	},
 
 	-- raw_mode configuration for easier debugging and iteration

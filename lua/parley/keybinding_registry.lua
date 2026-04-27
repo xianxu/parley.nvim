@@ -199,6 +199,15 @@ M.entries = {
 		help_desc = "Find markdown files in repo",
 	},
 	{
+		id = "super_repo_toggle",
+		config_key = "global_shortcut_super_repo_toggle",
+		default_key = "<C-g>S",
+		default_modes = { "n", "i" },
+		scope = "global",
+		desc = "Toggle super-repo mode (aggregate reads across sibling .parley repos)",
+		help_desc = "Toggle super-repo mode",
+	},
+	{
 		id = "oil",
 		config_key = "global_shortcut_oil",
 		default_key = "<leader>fo",

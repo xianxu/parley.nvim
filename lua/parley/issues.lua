@@ -419,6 +419,8 @@ end
 
 -- Scan all issue files and return parsed list
 -- opts.include_history: if true, also scan history/ for archived issues
+-- opts.history_dir_override: explicit history dir (super-repo per-member); else M.get_history_dir()
+-- opts.repo_name: if set, every returned issue is tagged with .repo_name (super-repo display)
 M.scan_issues = function(issues_dir, opts)
     if not issues_dir then
         return {}
@@ -429,9 +431,15 @@ M.scan_issues = function(issues_dir, opts)
     scan_dir_issues(issues_dir, issues, false)
 
     if opts.include_history then
-        local history_dir = M.get_history_dir()
+        local history_dir = opts.history_dir_override or M.get_history_dir()
         if history_dir then
             scan_dir_issues(history_dir, issues, true)
+        end
+    end
+
+    if opts.repo_name then
+        for _, issue in ipairs(issues) do
+            issue.repo_name = opts.repo_name
         end
     end
 

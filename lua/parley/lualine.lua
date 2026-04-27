@@ -40,6 +40,39 @@ local function stop_flash_timer()
   timer_visible = true  -- Reset to visible state
 end
 
+-- Parley mode glyph for lualine. Replaces the much-wider "markdown" filetype
+-- string with a single-character mode indicator.
+--   ○  global     — no parley repo context (global writes)
+--   ⊚  repo       — cwd is inside a .parley repo
+--   ⦿  super-repo — super-repo toggle is on (read-aggregation across siblings)
+M.format_mode = function(parley_instance)
+  local parley = parley_instance or _parley
+  if not parley then
+    local ok, parley_module = pcall(require, "parley")
+    if ok then parley = parley_module end
+  end
+  if not parley then return "○" end
+
+  if parley.is_super_repo_active and parley.is_super_repo_active() then
+    return "⦿"
+  end
+  if parley.config and parley.config.repo_root and parley.config.repo_root ~= "" then
+    return "⊚"
+  end
+  return "○"
+end
+
+-- Lualine component returning the mode glyph. Designed as a drop-in replacement
+-- for the user's `filetype` component.
+M.create_mode_component = function(parley_instance)
+  local parley = parley_instance or _parley
+  return {
+    function()
+      return M.format_mode(parley)
+    end,
+  }
+end
+
 -- Notes folder detection and formatting
 M.format_directory = function(parley_instance)
   local cwd = vim.fn.getcwd()
@@ -293,26 +326,42 @@ function M.setup(parley)
       existing_config = existing_config or {}
       existing_config.sections = existing_config.sections or {}
 
-      -- Enhance existing directory components with notes detection
+      -- Enhance existing directory components with notes detection,
+      -- and (when enabled) replace filetype components with the parley mode glyph.
+      local replace_filetype = config.lualine and config.lualine.replace_filetype ~= false
       for section_name, section_components in pairs(existing_config.sections) do
         if type(section_components) == "table" then
           for i, component in ipairs(section_components) do
-            -- Look for directory display functions
-            if type(component) == "table" and type(component[1]) == "function" then
-              local func = component[1]
-              local func_str = string.dump(func)
-
-              -- Check if this looks like a directory display function
-              if func_str:find("getcwd") and func_str:find("HOME") then
-                -- Replace with our enhanced version, pass parley instance
-                existing_config.sections[section_name][i] = {
-                  function()
-                    return M.format_directory(parley)
-                  end,
-                  color = function()
-                    return M.get_directory_color(parley)
-                  end
-                }
+            -- "filetype" as a string component → swap directly
+            if replace_filetype and component == "filetype" then
+              existing_config.sections[section_name][i] = M.create_mode_component(parley)
+            elseif type(component) == "table" then
+              local first = component[1]
+              -- {"filetype", ...opts}
+              if replace_filetype and first == "filetype" then
+                existing_config.sections[section_name][i] = M.create_mode_component(parley)
+              elseif type(first) == "function" then
+                local func_str = string.dump(first)
+                -- Directory display function (existing behaviour)
+                if func_str:find("getcwd") and func_str:find("HOME") then
+                  existing_config.sections[section_name][i] = {
+                    function()
+                      return M.format_directory(parley)
+                    end,
+                    color = function()
+                      return M.get_directory_color(parley)
+                    end
+                  }
+                -- Filetype-display function: must explicitly read bo.filetype.
+                -- A bare "filetype" substring match would false-positive on any
+                -- function that branches on filetype for unrelated reasons.
+                elseif replace_filetype and (
+                  func_str:find("bo%.filetype")
+                  or func_str:find("bo%[\"filetype\"%]")
+                  or func_str:find("bo%['filetype'%]")
+                ) then
+                  existing_config.sections[section_name][i] = M.create_mode_component(parley)
+                end
               end
             end
           end
@@ -351,6 +400,17 @@ function M.setup(parley)
       -- Refresh lualine when a query starts/finishes
       vim.api.nvim_create_autocmd({"User"}, {
         pattern = {"ParleyQueryStarted", "ParleyQueryFinished", "ParleyDone"},
+        group = augroup,
+        callback = function()
+          pcall(function()
+            require("lualine").refresh()
+          end)
+        end
+      })
+
+      -- Refresh lualine when super-repo toggles (mode glyph changes)
+      vim.api.nvim_create_autocmd("User", {
+        pattern = "ParleySuperRepoChanged",
         group = augroup,
         callback = function()
           pcall(function()

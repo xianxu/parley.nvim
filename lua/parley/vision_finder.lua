@@ -17,14 +17,26 @@ M.open = function()
     end
     _parley._vision_finder.opened = true
 
-    local dir = vision_mod.get_vision_dir()
-    if not dir then
+    -- Compute vision roots: in super-repo mode, one per member; else just the single repo.
+    local sr_vision = _parley.super_repo and _parley.super_repo.expand_roots(_parley.config.vision_dir) or nil
+    local roots = sr_vision or { { dir = vision_mod.get_vision_dir(), repo_name = nil } }
+    if #roots == 0 or not roots[1].dir then
         _parley.logger.warning("vision_dir is not configured")
         _parley._vision_finder.opened = false
         return
     end
 
-    local initiatives = vision_mod.load_vision_dir(dir)
+    -- Aggregate initiatives across roots, tagging each with its repo_name.
+    local initiatives = {}
+    for _, root in ipairs(roots) do
+        if root.dir and vim.fn.isdirectory(root.dir) == 1 then
+            local got = vision_mod.load_vision_dir(root.dir)
+            for _, item in ipairs(got) do
+                item._repo_name = root.repo_name
+                table.insert(initiatives, item)
+            end
+        end
+    end
 
     -- Build picker items (projects only — skip persons and settings)
     local items = {}
@@ -35,16 +47,17 @@ M.open = function()
         local need_by_str = type(item.need_by) == "string" and item.need_by or ""
         local ns = item._namespace or ""
         local clean_name = vision_mod.parse_priority(item.project or "?")
-        local display = string.format("%s  %s  %s  %s  %s",
-            ns, clean_name, size_str, type_str, need_by_str)
+        local repo_prefix = item._repo_name and ("{" .. item._repo_name .. "} ") or ""
+        local display = string.format("%s%s  %s  %s  %s  %s",
+            repo_prefix, ns, clean_name, size_str, type_str, need_by_str)
 
         local deps = item.depends_on or {}
         if type(deps) == "table" then deps = table.concat(deps, " ") end
 
         table.insert(items, {
             display = display,
-            search_text = string.format("%s %s %s %s %s %s",
-                ns, clean_name, item.type or "", item.size or "",
+            search_text = string.format("%s%s %s %s %s %s %s",
+                repo_prefix, ns, clean_name, item.type or "", item.size or "",
                 type(item.need_by) == "string" and item.need_by or "", deps),
             value = item._file,
             line = item._line,

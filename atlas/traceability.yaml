@@ -173,6 +173,19 @@ atlas:
       - tests/unit/dispatcher_query_spec.lua
       - tests/unit/dispatcher_spec.lua
 
+  modes/super_repo:
+    code:
+      - lua/parley/super_repo.lua
+      - lua/parley/init.lua
+      - lua/parley/issues.lua
+      - lua/parley/issue_finder.lua
+      - lua/parley/vision_finder.lua
+      - lua/parley/markdown_finder.lua
+      - lua/parley/lualine.lua
+      - lua/parley/keybinding_registry.lua
+    tests:
+      - tests/unit/super_repo_spec.lua
+
   notes/structure:
     code:
       - lua/parley/notes.lua

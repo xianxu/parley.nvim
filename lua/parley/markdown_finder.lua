@@ -1,5 +1,7 @@
 -- Markdown file finder module for Parley
--- Finds markdown files from repo root, excluding parley-managed directories
+-- Finds markdown files from repo root, including parley-managed directories
+-- (chats, notes, issues, history, vision). The tag bar lets users filter by
+-- top-level directory if they want to hide categories.
 
 local M = {}
 local _parley
@@ -9,43 +11,6 @@ local _tag_state = {} -- { [dir_name] = true/false }
 
 M.setup = function(parley)
 	_parley = parley
-end
-
---- Build the set of absolute directory prefixes that parley manages.
---- Files under these prefixes are excluded from results.
-local function managed_prefixes(repo_root, config)
-	local prefixes = {}
-	local managed_dirs = {
-		config.repo_chat_dir,
-		config.issues_dir,
-		config.history_dir,
-		config.vision_dir,
-	}
-	for _, dir in ipairs(managed_dirs) do
-		if dir and dir ~= "" and not dir:match("^/") then
-			local abs = repo_root .. "/" .. dir
-			table.insert(prefixes, vim.fn.resolve(abs) .. "/")
-		end
-	end
-	-- Also exclude notes_dir if it falls within the repo
-	local notes = vim.fn.expand(config.notes_dir or "")
-	if notes ~= "" then
-		local resolved_notes = vim.fn.resolve(notes) .. "/"
-		if resolved_notes:sub(1, #repo_root) == repo_root then
-			table.insert(prefixes, resolved_notes)
-		end
-	end
-	return prefixes
-end
-
---- Check if a resolved path is under any managed prefix.
-local function is_managed(resolved_path, prefixes)
-	for _, prefix in ipairs(prefixes) do
-		if resolved_path:sub(1, #prefix) == prefix then
-			return true
-		end
-	end
-	return false
 end
 
 --- Extract the top-level directory tag from a relative path.
@@ -61,9 +26,8 @@ end
 --- Scan markdown files from repo_root up to max_depth levels.
 --- @param repo_root string absolute path to git root
 --- @param max_depth number maximum directory depth to search
---- @param prefixes table list of managed directory prefixes to exclude
 --- @return table list of {value, display, search_text, mtime, tag}
-local function scan_markdown_files(repo_root, max_depth, prefixes)
+local function scan_markdown_files(repo_root, max_depth)
 	local files = {}
 	local seen = {}
 
@@ -79,9 +43,7 @@ local function scan_markdown_files(repo_root, max_depth, prefixes)
 			local resolved = vim.fn.resolve(file)
 			if not seen[resolved] and vim.fn.isdirectory(file) == 0 then
 				seen[resolved] = true
-				if not is_managed(resolved, prefixes) then
-					table.insert(files, resolved)
-				end
+				table.insert(files, resolved)
 			end
 		end
 	end
@@ -163,20 +125,50 @@ local function build_picker_data(entries)
 	return items, tag_bar_tags
 end
 
-M.open = function()
-	local config = _parley.config
-	local repo_root = config.repo_root
-	if not repo_root or repo_root == "" then
-		repo_root = _parley.helpers.find_git_root(vim.fn.getcwd())
-		if repo_root == "" then
-			_parley.logger.warning("Markdown finder: not in a git repository")
-			return
+--- Aggregate markdown entries across super-repo members.
+--- Each entry is tagged by repo name and its display becomes "<repo>/<relative>".
+M._scan_members = function(members, max_depth)
+	local entries = {}
+	for _, m in ipairs(members or {}) do
+		local root_prefix = vim.fn.resolve(m.path):gsub("/+$", "") .. "/"
+		local sub_entries = scan_markdown_files(m.path, max_depth)
+		for _, e in ipairs(sub_entries) do
+			local relative = e.value:sub(1, #root_prefix) == root_prefix
+				and e.value:sub(#root_prefix + 1)
+				or vim.fn.fnamemodify(e.value, ":t")
+			e.display = m.name .. "/" .. relative .. "  [" .. os.date("%Y-%m-%d", e.mtime) .. "]"
+			e.search_text = m.name .. " " .. (relative:gsub("[/%-_]", " "))
+			e.tag = m.name
+			table.insert(entries, e)
 		end
 	end
+	table.sort(entries, function(a, b) return a.mtime > b.mtime end)
+	return entries
+end
 
+M.open = function()
+	local config = _parley.config
 	local max_depth = config.markdown_finder_max_depth or 4
-	local prefixes = managed_prefixes(repo_root, config)
-	local entries = scan_markdown_files(repo_root, max_depth, prefixes)
+
+	-- Compute scan roots: super-repo members or single repo_root.
+	local sr_active = _parley.is_super_repo_active and _parley.is_super_repo_active()
+	local sr_members = config.super_repo_members or {}
+
+	local entries
+	if sr_active and #sr_members > 0 then
+		entries = M._scan_members(sr_members, max_depth)
+	else
+		local repo_root = config.repo_root
+		if not repo_root or repo_root == "" then
+			repo_root = _parley.helpers.find_git_root(vim.fn.getcwd())
+			if repo_root == "" then
+				_parley.logger.warning("Markdown finder: not in a git repository")
+				return
+			end
+		end
+		entries = scan_markdown_files(repo_root, max_depth)
+	end
+
 	local items, tag_bar_tags = build_picker_data(entries)
 
 	local source_win = vim.api.nvim_get_current_win()

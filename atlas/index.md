@@ -56,6 +56,7 @@ This index provides a central directory for all atlas entries of the `parley.nvi
 - [Interview Mode](modes/interview.md): Mechanics, automatic timestamps, and `{thought}` highlighting.
 - [Raw Mode](modes/raw_mode.md): API debugging via raw requests/responses.
 - [Document Review](modes/review.md): LLM-powered document review via 🤖 markers (implemented as a skill).
+- [Super-Repo Mode](modes/super_repo.md): Toggle (`<C-g>S`) to aggregate reads across sibling `.parley` repos under the workspace root.
 
 ## 9. Export
 - [Export Formats](export/formats.md): Jekyll HTML and Markdown export logic.
