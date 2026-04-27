@@ -48,6 +48,9 @@ All directory names are relative to git root unless they start with `/`.
 
 ## Implementation notes
 - `repo_chat_dir` and `repo_note_dir` are excluded from the generic `_dir$` prepare loop in setup
-- `refresh_state()` re-asserts repo dirs as primary after restoring persisted state
+- `refresh_state()` re-asserts repo dirs as primary after restoring persisted state, and strips both `chat_roots`/`note_roots` entries marked transient (plain repo's `label = "repo"` and super-repo's pushed sibling dirs) from `state.json`
 - `detect_buffer_context` checks all note roots (not just primary) for scope detection
 - Note finder scans all roots, tagging non-primary entries with `{label}` prefix
+
+## Related
+- [Super-Repo Mode](../modes/super_repo.md) — read-aggregation overlay across sibling `.parley` repos.
