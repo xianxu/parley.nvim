@@ -12,7 +12,7 @@ A *type prototype* is a markdown file that describes one kind of data artifact t
 2. **Body skeleton** — sections, ordering, leading summary blocks.
 3. **Authoring instructions** — guidance the agent reads when creating or editing an instance of this type.
 
-The dispatcher skill (`xx-data`) reads the prototype at write/edit time and applies it. New types are pure data — adding one does not require a code or skill change.
+The dispatcher skill (`xx-datatype`) reads the prototype at write/edit time and applies it. New types are pure data — adding one does not require a code or skill change.
 
 This file is itself a prototype with `type: type`, so it self-hosts: applying `type.md` produces a new prototype file.
 
@@ -52,8 +52,8 @@ When the dispatcher applies `type.md` (i.e., the user wants to add a new type to
    - Where should instances of this type live by default? (e.g., `memory/work/`, `workshop/staging/`, etc.) The dispatcher's location-discovery logic still applies, but the prototype can hint at a sensible default.
 
 2. **Decide where the new prototype itself lives:**
-   - **Shared** (`construct/data/<name>.md` in ariadne) — when the type is broadly useful and should propagate to every descendant repo via construct.
-   - **Project-local** (`<repo>/data/meta/<name>.md`) — when the type is repo-specific (e.g., a `release-checklist` for a particular product). The `meta/` segment keeps prototypes namespaced separately from instances; instances of any type live elsewhere under `data/` or `memory/`.
+   - **Shared** (`construct/datatype/<name>.md` in ariadne) — when the type is broadly useful and should propagate to every descendant repo via construct.
+   - **Project-local** (`<repo>/datatype/<name>.md`) — when the type is repo-specific (e.g., a `release-checklist` for a particular product). Top-level `datatype/` keeps prototype definitions separate from instances; instances of any type live under `<repo>/data/` or `memory/`.
    - Ask the user explicitly. Default suggestion: project-local unless the type is obviously generic.
 
 3. **Write the prototype file** following the body skeleton above. The prototype should be self-contained — a fresh agent reading only this file should be able to create good instances without further context.
@@ -64,13 +64,13 @@ When the dispatcher applies `type.md` (i.e., the user wants to add a new type to
 
 ```sh
 # List every type prototype on disk
-rg -l "^type: type" construct/data/ data/meta/ 2>/dev/null
+rg -l "^type: type" construct/datatype/ datatype/ 2>/dev/null
 
 # Find which prototype declares a specific field (e.g., a "purpose" field)
-rg -l "^type: type" construct/data/ data/meta/ | xargs rg -l "^| \`purpose\`"
+rg -l "^type: type" construct/datatype/ datatype/ | xargs rg -l "^| \`purpose\`"
 
 # Find prototypes whose lede mentions a domain
-rg -l "^type: type" construct/data/ data/meta/ | xargs rg -l -i "deadline"
+rg -l "^type: type" construct/datatype/ datatype/ | xargs rg -l -i "deadline"
 ```
 
 ## Rules

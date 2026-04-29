@@ -1,7 +1,7 @@
 ---
 type: pensive
 name: pensive
-description: Use when the user wants to capture a train of thought, insight, brainstorm, or thinking-out-loud into a durable note. Triggers on "let's capture this", "record this as pensive", "save this thought", or `/xx-data pensive`.
+description: Use when the user wants to capture a train of thought, insight, brainstorm, or thinking-out-loud into a durable note. Triggers on "let's capture this", "record this as pensive", "save this thought", or `/xx-datatype pensive`.
 ---
 
 # pensive

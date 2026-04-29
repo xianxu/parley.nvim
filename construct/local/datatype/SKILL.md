@@ -1,11 +1,11 @@
 ---
-name: xx-data
-description: "Use only when the user issues an explicit capture instruction — a verb like 'capture', 'save', 'remember', 'record', 'write down', 'log', 'track', 'note', or 'file' — applied to substance worth keeping. Do NOT trigger on descriptive statements about plans or events ('we're visiting X this summer', 'I had a meeting with Y', 'the launch is next Tuesday'); a domain noun alone ('trip', 'meeting', 'launch') is not a trigger. Also fires on the slash command `/xx-data <type> [path]`, and when editing a markdown file whose frontmatter has a known `type:`."
+name: xx-datatype
+description: "Use only when the user issues an explicit capture instruction — a verb like 'capture', 'save', 'remember', 'record', 'write down', 'log', 'track', 'note', or 'file' — applied to substance worth keeping. Do NOT trigger on descriptive statements about plans or events ('we're visiting X this summer', 'I had a meeting with Y', 'the launch is next Tuesday'); a domain noun alone ('trip', 'meeting', 'launch') is not a trigger. Also fires on the slash command `/xx-datatype <type> [path]`, and when editing a markdown file whose frontmatter has a known `type:`."
 ---
 
-# Data
+# Datatype
 
-Create and edit *typed data artifacts* — markdown files whose shape is declared by a prototype in `construct/data/`. Types are pluggable data: adding one means writing a new prototype file, not changing this skill.
+Create and edit *typed data artifacts* — markdown files whose shape is declared by a prototype in `construct/datatype/`. Datatypes are pluggable: adding one means writing a new prototype file, not changing this skill. (Skill name is `datatype` to keep the meta-concept distinctive; artifacts produced by it are still called *data* and live under `data/`.)
 
 ## When to use
 
@@ -28,7 +28,7 @@ This skill is the primary way the agent captures conversational substance into a
 
    When the user is just sharing context, treat it as conversation. Do not proactively offer to capture unless the user has signaled the intent — a domain noun on its own is **not** sufficient.
 
-2. **Slash invocation:** `/xx-data <type> [path]` — explicit, used when the user already knows the type and wants no inference.
+2. **Slash invocation:** `/xx-datatype <type> [path]` — explicit, used when the user already knows the type and wants no inference.
 
 3. **Edit-time application:** when opening a markdown file whose frontmatter has `type: <X>` and `<X>.md` exists in a known prototype location, follow that prototype's authoring instructions for the edit.
 
@@ -40,8 +40,8 @@ If the trigger is unclear (the user said "remember this" with no domain hint), l
 
 Prototypes live in two places. Lookup precedence is local-first:
 
-1. `<repo>/data/meta/<name>.md` — project-local override.
-2. `<repo>/construct/data/<name>.md` — shared, symlinked from ariadne.
+1. `<repo>/datatype/<name>.md` — project-local override.
+2. `<repo>/construct/datatype/<name>.md` — shared, symlinked from ariadne.
 
 Local fully shadows shared (no merging). If `<name>.md` is not found in either, list the available types from both directories and ask the user, or offer to create a new one (which routes to applying `type.md` — the meta-prototype).
 
@@ -145,7 +145,7 @@ If no existing file matches what the user referenced, fall through to creating a
    - **Extend the existing prototype.** A small addition (one new field, one new optional section) is better than a fork. Edit the prototype directly and apply.
    - **Create a new type.** The delta is large enough that overloading the existing one would hurt both. Proceed to the brainstorm.
 
-Only after that triage: route to the meta-prototype — apply `type.md` to design a new prototype via `superpowers-brainstorming`. That brainstorm produces a new file under `construct/data/` (shared) or `<repo>/data/meta/` (project-local), and from then on it's available like any other type.
+Only after that triage: route to the meta-prototype — apply `type.md` to design a new prototype via `superpowers-brainstorming`. That brainstorm produces a new file under `construct/datatype/` (shared) or `<repo>/datatype/` (project-local), and from then on it's available like any other type.
 
 Do not skip the brainstorm step for new types. The frontmatter / body / instructions trinity is non-obvious to design, and getting it wrong upfront makes the prototype useless.
 
