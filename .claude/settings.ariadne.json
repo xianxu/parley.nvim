@@ -1,20 +1,104 @@
 {
-  "$comment": "Ariadne base-layer settings. Merged UNDER settings.local.json by setup.sh.",
-  "$merge_keys": ["permissions.allow", "hooks.SessionStart", "sandbox.filesystem.allowWrite"],
+  "$comment": "Ariadne base-layer settings. Cloned to every adopted repo; deep-merged UNDER settings.local.json by construct/scripts/merge-settings.sh.",
+  "$merge_keys": [
+    "permissions.allow",
+    "permissions.deny",
+    "hooks.SessionStart",
+    "sandbox.network.allowedDomains",
+    "sandbox.network.allowUnixSockets",
+    "sandbox.filesystem.allowWrite",
+    "sandbox.filesystem.denyWrite",
+    "sandbox.filesystem.denyRead",
+    "sandbox.excludedCommands"
+  ],
   "permissions": {
     "allow": [
       "Bash(mkdir:*)",
       "Bash(cp:*)",
+      "Bash(mv:*)",
       "Bash(rm:*)",
+      "Bash(ln:*)",
       "WebSearch"
+    ],
+    "deny": [
+      "Bash(tsh *)",
+      "Bash(tctl *)",
+      "Bash(teleport *)",
+      "Bash(ssh *)",
+      "Bash(kubectl *)"
     ]
+  },
+  "enabledPlugins": {
+    "pyright-lsp@claude-plugins-official": true
   },
   "sandbox": {
     "enabled": true,
     "autoAllowBashIfSandboxed": true,
+    "allowUnsandboxedCommands": true,
+    "enableWeakerNestedSandbox": false,
+    "enableWeakerNetworkIsolation": true,
+    "network": {
+      "allowedDomains": [
+        "www.lua.org",
+        "github.com",
+        "*.github.com",
+        "*.githubusercontent.com",
+        "ghcr.io",
+        "*.ghcr.io",
+        "*.npmjs.org",
+        "registry.yarnpkg.com",
+        "pypi.org",
+        "*.pypi.org",
+        "rubygems.org",
+        "localhost",
+        "127.0.0.1",
+        "0.0.0.0",
+        "host.docker.internal",
+        "api.moesif.net",
+        "*.local"
+      ],
+      "allowUnixSockets": [
+        "~/.mutagen/daemon/daemon.sock",
+        "~/.docker/run/docker.sock",
+        "/var/run/docker.sock",
+        "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
+      ],
+      "allowAllUnixSockets": false,
+      "allowLocalBinding": true
+    },
     "filesystem": {
-      "allowWrite": []
-    }
+      "allowWrite": [
+        ".",
+        "..",
+        "/tmp",
+        "~/.npm",
+        "~/.cache",
+        "~/.local",
+        "~/.config/openshell",
+        "~/.mutagen"
+      ],
+      "denyWrite": [],
+      "denyRead": [
+        "~/.aws",
+        "~/.kube",
+        "~/.tsh",
+        "~/.teleport",
+        "~/.config/gcloud",
+        "~/.env",
+        "~/.bashrc",
+        "~/.zshrc",
+        "~/.profile",
+        "~/.bash_profile"
+      ]
+    },
+    "excludedCommands": [
+      "git",
+      "gh",
+      "docker",
+      "npm",
+      "npx",
+      "/Applications/1Password.app/Contents/MacOS/op-ssh-sign"
+    ]
   },
   "hooks": {
     "SessionStart": [

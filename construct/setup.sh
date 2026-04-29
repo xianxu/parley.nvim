@@ -14,7 +14,9 @@
 set -euo pipefail
 
 # ── Parse flags ───────────────────────────────────────────────────────────────
-MODE="symlink"
+# MODE empty here = "use previous mode if .ariadne-mode exists, else symlink".
+# Explicit --vendor / --symlink overrides.
+MODE=""
 ASSUME_YES=false
 for arg in "$@"; do
     case "$arg" in
@@ -163,6 +165,11 @@ MODE_MARKER="$TARGET_DIR/.ariadne-mode"
 PREVIOUS_MODE=""
 if [[ -f "$MODE_MARKER" ]]; then
     PREVIOUS_MODE="$(tr -d '[:space:]' < "$MODE_MARKER")"
+fi
+
+# If no flag passed: preserve previous mode, else default to symlink (first-time).
+if [[ -z "$MODE" ]]; then
+    MODE="${PREVIOUS_MODE:-symlink}"
 fi
 
 if [[ -n "$PREVIOUS_MODE" && "$PREVIOUS_MODE" != "$MODE" ]]; then

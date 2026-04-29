@@ -48,19 +48,28 @@ issue-sync:
 	@scripts/issue-sync.sh
 
 # ── Refresh (setup + merge) ───────────────────────────────────────────────────
-# In ariadne: just merge settings. In target repos: full setup (link + merge).
+# Detection:
+#   .ariadne-mode present → adopted target. Run ../ariadne/construct/setup.sh so
+#     vendored copies are refreshed from the source of truth. If ../ariadne is
+#     missing, fall back to merging settings with the local vendored merge script
+#     (skips the re-vendor — local construct/ may be stale).
+#   .ariadne-mode absent + construct/setup.sh present → ariadne itself; just merge.
+#   .ariadne-mode absent + ../ariadne present → uninitialized target; first-time adopt.
 refresh:
-	@if [ -f construct/setup.sh ]; then \
-		echo "Ariadne repo detected — merging settings only."; \
-		construct/scripts/merge-settings.sh .claude/settings.ariadne.json .claude; \
-		echo "Done. .claude/settings.json updated."; \
-	elif [ -d ../ariadne ]; then \
+	@if [ -f .ariadne-mode ]; then \
 		if [ -f ../ariadne/construct/setup.sh ]; then \
 			../ariadne/construct/setup.sh; \
 		else \
-			echo "Error: ../ariadne exists but construct/setup.sh not found."; \
-			exit 1; \
+			echo "../ariadne not found — merging settings only (skipping re-vendor)."; \
+			construct/scripts/merge-settings.sh .claude/settings.ariadne.json .claude; \
+			echo "Done. .claude/settings.json updated."; \
 		fi; \
+	elif [ -f construct/setup.sh ]; then \
+		echo "Ariadne repo detected — merging settings only."; \
+		construct/scripts/merge-settings.sh .claude/settings.ariadne.json .claude; \
+		echo "Done. .claude/settings.json updated."; \
+	elif [ -f ../ariadne/construct/setup.sh ]; then \
+		../ariadne/construct/setup.sh; \
 	else \
 		echo "Error: ariadne not found. Clone it as a sibling directory:"; \
 		echo "  cd .. && git clone <ariadne-repo-url>"; \

@@ -5,6 +5,19 @@
 #   base-file:  path to settings.ariadne.json
 #   target-dir: directory containing settings.local.json and where settings.json is written
 #
+# Semantics:
+#   - Dicts are deep-merged (local keys override base keys at matching paths).
+#   - Arrays at paths listed in base's $merge_keys are unioned (base order, then new local items).
+#   - Arrays at other paths are replaced by local.
+#   - Scalars: local replaces base.
+#   - $comment / $merge_keys / $remove keys are stripped from output.
+#
+# $remove (in settings.local.json):
+#   - Shape: {"$remove": {"<dotted.path>": ["item1", "item2", ...]}}
+#   - Filters base's array at <dotted.path> to drop matching items BEFORE the union step.
+#   - Use to tighten base — e.g. drop "Bash(rm:*)" from permissions.allow then add it to permissions.deny.
+#   - Items not present in base are silently ignored.
+#
 # If settings.local.json doesn't exist, output is base with meta keys stripped.
 set -euo pipefail
 
@@ -18,32 +31,26 @@ if [[ ! -f "$BASE_FILE" ]]; then
     exit 1
 fi
 
-if [[ ! -f "$LOCAL_FILE" ]]; then
-    # No local overrides — strip meta keys from base
-    python3 -c "
-import json, sys
-base = json.load(open('$BASE_FILE'))
-base.pop('\$comment', None)
-base.pop('\$merge_keys', None)
-json.dump(base, sys.stdout, indent=2)
-print()
-" > "$TARGET_FILE"
-else
-    # Merge base + local
-    python3 -c "
+LOCAL_ARG="$LOCAL_FILE"
+[[ -f "$LOCAL_FILE" ]] || LOCAL_ARG=""
+
+python3 - "$BASE_FILE" "$LOCAL_ARG" > "$TARGET_FILE" <<'PY'
 import json, sys
 
-base = json.load(open('$BASE_FILE'))
-local = json.load(open('$LOCAL_FILE'))
-merge_keys = base.get('\$merge_keys', [])
+base_path, local_path = sys.argv[1], sys.argv[2]
+base = json.load(open(base_path))
+merge_keys = set(base.get('$merge_keys', []))
+
+def strip_meta(obj):
+    if isinstance(obj, dict):
+        return {k: strip_meta(v) for k, v in obj.items() if not k.startswith('$')}
+    return obj
 
 def get_nested(obj, path):
-    parts = path.split('.')
-    for p in parts:
-        if isinstance(obj, dict):
-            obj = obj.get(p)
-        else:
+    for p in path.split('.'):
+        if not isinstance(obj, dict) or p not in obj:
             return None
+        obj = obj[p]
     return obj
 
 def set_nested(obj, path, value):
@@ -52,30 +59,50 @@ def set_nested(obj, path, value):
         obj = obj.setdefault(p, {})
     obj[parts[-1]] = value
 
-result = dict(base)
-result.pop('\$comment', None)
-result.pop('\$merge_keys', None)
+def deep_merge(b, l, path=""):
+    if isinstance(b, dict) and isinstance(l, dict):
+        out = {}
+        for k in b:
+            if k.startswith('$'):
+                continue
+            sub = f"{path}.{k}" if path else k
+            out[k] = deep_merge(b[k], l[k], sub) if k in l else b[k]
+        for k in l:
+            if k.startswith('$') or k in b:
+                continue
+            out[k] = l[k]
+        return out
+    if isinstance(b, list) and isinstance(l, list):
+        if path in merge_keys:
+            combined = list(b)
+            for item in l:
+                if item not in combined:
+                    combined.append(item)
+            return combined
+        return l
+    return l
 
-# Apply local on top (scalars replace)
-for key in local:
-    if key.startswith('\$'):
-        continue
-    result[key] = local[key]
-
-# For merge keys, combine base + local arrays
-for mk in merge_keys:
-    base_val = get_nested(base, mk)
-    local_val = get_nested(local, mk)
-    if isinstance(base_val, list) and isinstance(local_val, list):
-        combined = list(base_val)
-        for item in local_val:
-            if item not in combined:
-                combined.append(item)
-        set_nested(result, mk, combined)
-    elif isinstance(base_val, list) and local_val is None:
-        set_nested(result, mk, base_val)
+if local_path:
+    local = json.load(open(local_path))
+    # Apply $remove against base BEFORE merging.
+    removals = local.get('$remove', {}) or {}
+    if removals:
+        base_filtered = json.loads(json.dumps(base))  # deep copy
+        for path, items in removals.items():
+            current = get_nested(base_filtered, path)
+            if isinstance(current, list):
+                drop = set(items) if all(isinstance(i, (str, int, float, bool)) for i in items) else None
+                if drop is not None:
+                    filtered = [x for x in current if x not in drop]
+                else:
+                    filtered = [x for x in current if x not in items]
+                set_nested(base_filtered, path, filtered)
+        result = deep_merge(strip_meta(base_filtered), local)
+    else:
+        result = deep_merge(strip_meta(base), local)
+else:
+    result = strip_meta(base)
 
 json.dump(result, sys.stdout, indent=2)
 print()
-" > "$TARGET_FILE"
-fi
+PY

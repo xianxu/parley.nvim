@@ -17,6 +17,10 @@ symlink   AGENTS.md
 symlink   CLAUDE.md
 
 # ── Claude Code settings ──────────────────────────────────────────────────────
+# settings.ariadne.json is symlinked (or copied in vendor mode) so the local
+# merge script can read it without ../ariadne, and so updates to the base
+# propagate via the standard refresh flow.
+symlink   .claude/settings.ariadne.json
 merge     .claude/settings.ariadne.json        .claude/settings.json
 
 # ── Skills ──────────────────────────────────────────────────────────────────────
@@ -39,6 +43,7 @@ symlink   scripts/pre-merge-checks.sh
 
 # ── Construct system ──────────────────────────────────────────────────────────
 symlink   construct/scripts/sync-local-skills.sh
+symlink   construct/scripts/merge-settings.sh
 symlink   construct/local
 symlink   construct/adapted
 copy      construct/config.json
