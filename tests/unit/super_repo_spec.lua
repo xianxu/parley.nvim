@@ -241,7 +241,7 @@ describe("super_repo.toggle", function()
 		assert.same(dirs(chat_before), dirs(parley.get_chat_roots()))
 	end)
 
-	it("markdown_finder._scan_members aggregates with <repo>/ prefix and repo_name tag", function()
+	it("markdown_finder._scan_members aggregates with {repo} prefix and repo_name tag", function()
 		local md_finder = require("parley.markdown_finder")
 		md_finder.setup(parley)
 
@@ -260,23 +260,23 @@ describe("super_repo.toggle", function()
 		assert.is_true(#entries >= 3)
 		local found_a_root, found_a_nested, found_b = false, false, false
 		for _, e in ipairs(entries) do
-			if e.display:match("^ariadne/notes%.md") then
+			if e.display:match("^{ariadne} notes%.md") then
 				found_a_root = true
 				assert.equal("ariadne", e.tag)
-				assert.is_true(e.search_text:find("ariadne", 1, true) == 1)
+				assert.is_true(e.search_text:find("{ariadne}", 1, true) == 1)
 			end
-			if e.display:match("^ariadne/workshop/foo%.md") then
+			if e.display:match("^{ariadne} workshop/foo%.md") then
 				found_a_nested = true
 				assert.equal("ariadne", e.tag)
 			end
-			if e.display:match("^brain/README%.md") then
+			if e.display:match("^{brain} README%.md") then
 				found_b = true
 				assert.equal("brain", e.tag)
 			end
 		end
-		assert.is_true(found_a_root, "expected 'ariadne/notes.md' entry")
-		assert.is_true(found_a_nested, "expected 'ariadne/workshop/foo.md' entry")
-		assert.is_true(found_b, "expected 'brain/README.md' entry")
+		assert.is_true(found_a_root, "expected '{ariadne} notes.md' entry")
+		assert.is_true(found_a_nested, "expected '{ariadne} workshop/foo.md' entry")
+		assert.is_true(found_b, "expected '{brain} README.md' entry")
 	end)
 
 	it("scan_issues honours repo_name and history_dir_override (multi-root)", function()

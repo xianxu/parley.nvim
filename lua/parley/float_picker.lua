@@ -77,6 +77,14 @@ local function tokenize_query(query)
         elseif token:match("^%b{}$") then
             normalized = token:sub(2, -2)
             kind = "root"
+        elseif token:sub(1, 1) == "[" and not token:find("]", 2, true) then
+            -- in-progress tag: user typed `[xxx` without closing `]`
+            normalized = token:sub(2)
+            kind = "tag"
+        elseif token:sub(1, 1) == "{" and not token:find("}", 2, true) then
+            -- in-progress root: user typed `{xxx` without closing `}`
+            normalized = token:sub(2)
+            kind = "root"
         end
         if normalized ~= "" or (kind == "root" and token == "{}") then
             table.insert(tokens, {
@@ -419,6 +427,8 @@ end
 -- Score a multi-word query against a haystack.
 -- Splits query on whitespace; ALL words must match (order irrelevant).
 -- Returns total score (sum of per-word scores) or nil if any word fails.
+M._tokenize_query = tokenize_query
+
 function M._fuzzy_score(query, haystack)
     local query_tokens = tokenize_query(query)
     if #query_tokens == 0 then

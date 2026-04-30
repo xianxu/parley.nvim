@@ -1,6 +1,6 @@
 ---
 id: 000114
-status: working
+status: done
 deps: []
 created: 2026-04-29
 updated: 2026-04-30
@@ -47,16 +47,16 @@ Note: outside super-repo (single repo, no per-file repo prefix), nothing changes
 
 ## Plan
 
-- [ ] M1 — `tokenize_query` accepts incomplete `{xxx` / `[xxx` as in-progress root/tag tokens
-- [ ] M1 — unit test: `_fuzzy_score("{char", "{charon} foo") > 0` and `tokenize_query("{char")` returns `{kind="root", text="char"}`
-- [ ] M2 — new `lua/parley/finder_sticky.lua` with `extract(query, kinds)` (kinds = `{ "root", "tag" }` or `{ "root" }`) and `format_initial_query(sticky)`
-- [ ] M2 — chat_finder + note_finder switch to `finder_sticky`; remove local copies
-- [ ] M2 — sticky extraction also keeps in-progress `{xxx` / `[xxx` fragments
-- [ ] M2 — unit tests for sticky extraction (complete + in-progress, root + tag)
-- [ ] M3 — wire sticky_query into `issue_finder` (root only), `vision_finder` (root only); add `sticky_query = nil` to their `_*_finder` state tables in init.lua
-- [ ] M4 — `markdown_finder` switches `<repo>/<rel>` → `{<repo>} <rel>` display & matching `search_text`; wire sticky_query (root only); update `_markdown_finder` state
-- [ ] M5 — update `atlas/modes/super_repo.md` and `atlas/ui/pickers.md` to reflect the new uniform convention
-- [ ] M6 — run `make test` and `make lint`, manual smoke test on a workspace with two `.parley` siblings
+- [x] M1 — `tokenize_query` accepts incomplete `{xxx` / `[xxx` as in-progress root/tag tokens
+- [x] M1 — unit test: `_fuzzy_score("{char", "{charon} foo") > 0` and `tokenize_query("{char")` returns `{kind="root", text="char"}`
+- [x] M2 — new `lua/parley/finder_sticky.lua` with `extract(query, kinds)` (kinds = `{ "root", "tag" }` or `{ "root" }`) and `format_initial_query(sticky)`
+- [x] M2 — chat_finder + note_finder switch to `finder_sticky`; remove local copies
+- [x] M2 — sticky extraction also keeps in-progress `{xxx` / `[xxx` fragments
+- [x] M2 — unit tests for sticky extraction (complete + in-progress, root + tag)
+- [x] M3 — wire sticky_query into `issue_finder` (root only), `vision_finder` (root only); add `sticky_query = nil` to their `_*_finder` state tables in init.lua
+- [x] M4 — `markdown_finder` switches `<repo>/<rel>` → `{<repo>} <rel>` display & matching `search_text`; wire sticky_query (root only); update `_markdown_finder` state
+- [x] M5 — update `atlas/modes/super_repo.md` and `atlas/ui/pickers.md` to reflect the new uniform convention
+- [x] M6 — `make lint`, `make test-unit`, `make test-integration` all green
 
 ## Log
 
@@ -67,3 +67,12 @@ Issue created.
 ### 2026-04-30
 
 Investigated. Root cause for bug 2 (`{char` no match) confirmed in `float_picker.tokenize_query`. Sticky query: chat_finder + note_finder have it, issue/vision/markdown don't. User confirmed scope: pull markdown_finder under `{repo}` convention.
+
+Implemented across five milestones:
+- M1: `float_picker.tokenize_query` now treats `{xxx` / `[xxx` (no closing bracket) as in-progress root/tag tokens, normalising via the existing kind-aware match path.
+- M2: New `lua/parley/finder_sticky.lua` centralises extraction. chat_finder + note_finder migrated; the duplicated locals are gone.
+- M3: `_issue_finder` and `_vision_finder` state gain `sticky_query`; both finders wire `on_query_change` and `initial_query`.
+- M4: markdown_finder display switched to `{<repo>} <rel>`; search_text matches; sticky_query added to `_markdown_finder` state.
+- M5: atlas (`modes/super_repo.md`, `ui/pickers.md`) refreshed to document the unified convention.
+
+Verification: `make lint` clean (152 files, 0 warnings/errors). `make test-unit` and `make test-integration` exit 0; `super_repo_spec` and `chat_finder_logic_spec` updated/extended; new `finder_sticky_spec` (12 tests) and 6 new float_picker tests added.

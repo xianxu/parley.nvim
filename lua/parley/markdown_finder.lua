@@ -5,6 +5,7 @@
 
 local M = {}
 local _parley
+local finder_sticky = require("parley.finder_sticky")
 
 -- Tag state persists across opens within a session
 local _tag_state = {} -- { [dir_name] = true/false }
@@ -136,8 +137,8 @@ M._scan_members = function(members, max_depth)
 			local relative = e.value:sub(1, #root_prefix) == root_prefix
 				and e.value:sub(#root_prefix + 1)
 				or vim.fn.fnamemodify(e.value, ":t")
-			e.display = m.name .. "/" .. relative .. "  [" .. os.date("%Y-%m-%d", e.mtime) .. "]"
-			e.search_text = m.name .. " " .. (relative:gsub("[/%-_]", " "))
+			e.display = "{" .. m.name .. "} " .. relative .. "  [" .. os.date("%Y-%m-%d", e.mtime) .. "]"
+			e.search_text = "{" .. m.name .. "} " .. (relative:gsub("[/%-_]", " "))
 			e.tag = m.name
 			table.insert(entries, e)
 		end
@@ -207,6 +208,10 @@ M.open = function()
 		title = "Markdown Files",
 		items = items,
 		anchor = "bottom",
+		initial_query = finder_sticky.format_initial_query(_parley._markdown_finder.sticky_query),
+		on_query_change = function(query)
+			_parley._markdown_finder.sticky_query = finder_sticky.extract(query, { "root" })
+		end,
 		tag_bar = tag_bar,
 		on_select = function(item)
 			if source_win and vim.api.nvim_win_is_valid(source_win) then

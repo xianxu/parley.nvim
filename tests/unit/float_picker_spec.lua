@@ -689,6 +689,40 @@ describe("float_picker", function()
             assert.is_nil(float_picker._fuzzy_score("{}", "{family} release notes"))
             assert.is_nil(float_picker._fuzzy_score("{}", "release notes"))
         end)
+
+        it("matches in-progress { query (no closing brace) against braced haystack labels", function()
+            assert.is_not_nil(float_picker._fuzzy_score("{char", "{charon} release notes"))
+            assert.is_not_nil(float_picker._fuzzy_score("{c", "{charon} release notes"))
+            -- still scoped to braced haystack tokens, not plain words
+            assert.is_nil(float_picker._fuzzy_score("{char", "charon release notes"))
+        end)
+
+        it("matches in-progress [ query (no closing bracket) against bracketed haystack tags", function()
+            assert.is_not_nil(float_picker._fuzzy_score("[te", "release notes [tech] roadmap"))
+            assert.is_nil(float_picker._fuzzy_score("[te", "release notes tech roadmap"))
+        end)
+    end)
+
+    describe("_tokenize_query", function()
+        it("classifies completed brace tokens as root", function()
+            local tokens = float_picker._tokenize_query("{charon}")
+            assert.same({ { kind = "root", text = "charon" } }, tokens)
+        end)
+
+        it("classifies in-progress brace tokens as root", function()
+            local tokens = float_picker._tokenize_query("{char")
+            assert.same({ { kind = "root", text = "char" } }, tokens)
+        end)
+
+        it("classifies in-progress bracket tokens as tag", function()
+            local tokens = float_picker._tokenize_query("[te")
+            assert.same({ { kind = "tag", text = "te" } }, tokens)
+        end)
+
+        it("ignores lone { or [ with no payload", function()
+            assert.same({}, float_picker._tokenize_query("{"))
+            assert.same({}, float_picker._tokenize_query("["))
+        end)
     end)
 
     describe("_fuzzy_match_details", function()

@@ -3,6 +3,7 @@
 
 local M = {}
 local _parley
+local finder_sticky = require("parley.finder_sticky")
 
 -- Mtime-based metadata cache: avoids re-reading unchanged files on repeated opens.
 -- Key: resolved file path, Value: { mtime = number, topic = string, tags = {} }
@@ -31,47 +32,6 @@ end
 
 M.invalidate_path = function(path)
 	_file_cache[vim.fn.resolve(path)] = nil
-end
-
---------------------------------------------------------------------------------
--- Local helpers: sticky query extraction and initial query formatting
---------------------------------------------------------------------------------
-
-local function extract_chat_finder_sticky_query(query)
-	if type(query) ~= "string" or query == "" then
-		return nil
-	end
-
-	local fragments = {}
-	for token in query:gmatch("%S+") do
-		if token:match("^%b[]$") then
-			local value = vim.trim(token:sub(2, -2))
-			if value ~= "" and not value:find("[%[%]]") then
-				table.insert(fragments, "[" .. value .. "]")
-			end
-		elseif token:match("^%b{}$") then
-			local value = vim.trim(token:sub(2, -2))
-			if value == "" then
-				table.insert(fragments, "{}")
-			elseif not value:find("[{}]") then
-				table.insert(fragments, "{" .. value .. "}")
-			end
-		end
-	end
-
-	if #fragments == 0 then
-		return nil
-	end
-
-	return table.concat(fragments, " ")
-end
-
-local function format_finder_initial_query(sticky_query)
-	if type(sticky_query) ~= "string" or sticky_query == "" then
-		return nil
-	end
-
-	return sticky_query .. " "
 end
 
 --------------------------------------------------------------------------------
@@ -741,10 +701,10 @@ M.open = function(options)
 			title = prompt_title,
 			items = items,
 			initial_index = M.resolve_finder_initial_index(_parley._chat_finder, items, "ChatFinder"),
-			initial_query = format_finder_initial_query(_parley._chat_finder.sticky_query),
+			initial_query = finder_sticky.format_initial_query(_parley._chat_finder.sticky_query),
 			tag_bar = tag_bar,
 			on_query_change = function(query)
-				_parley._chat_finder.sticky_query = extract_chat_finder_sticky_query(query)
+				_parley._chat_finder.sticky_query = finder_sticky.extract(query, { "root", "tag" })
 			end,
 			on_select = function(item)
 				local file_path = item.value

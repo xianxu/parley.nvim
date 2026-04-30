@@ -2,6 +2,7 @@
 -- Float picker UI for browsing, filtering, and managing issues
 
 local issues_mod = require("parley.issues")
+local finder_sticky = require("parley.finder_sticky")
 
 local M = {}
 local _parley
@@ -194,7 +195,11 @@ M.open = function(_options)
         title = prompt_title,
         items = items,
         initial_index = chat_finder_mod.resolve_finder_initial_index(_parley._issue_finder, items, "IssueFinder"),
+        initial_query = finder_sticky.format_initial_query(_parley._issue_finder.sticky_query),
         anchor = "bottom",
+        on_query_change = function(query)
+            _parley._issue_finder.sticky_query = finder_sticky.extract(query, { "root" })
+        end,
         on_select = function(item)
             if source_win and vim.api.nvim_win_is_valid(source_win) then
                 vim.api.nvim_set_current_win(source_win)

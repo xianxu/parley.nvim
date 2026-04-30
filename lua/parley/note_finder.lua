@@ -4,6 +4,7 @@
 local M = {}
 local _parley
 local _chat_finder_mod  -- set after both modules are loaded
+local finder_sticky = require("parley.finder_sticky")
 
 -- Mtime-based cache: avoids re-classifying and re-stating unchanged files.
 -- Key: resolved file path, Value: { mtime, classification, inferred_time }
@@ -37,38 +38,6 @@ end
 --------------------------------------------------------------------------------
 -- Local helpers
 --------------------------------------------------------------------------------
-
-local function extract_note_finder_sticky_query(query)
-	if type(query) ~= "string" or query == "" then
-		return nil
-	end
-
-	local fragments = {}
-	for token in query:gmatch("%S+") do
-		if token:match("^%b{}$") then
-			local value = vim.trim(token:sub(2, -2))
-			if value == "" then
-				table.insert(fragments, "{}")
-			elseif not value:find("[{}]") then
-				table.insert(fragments, "{" .. value .. "}")
-			end
-		end
-	end
-
-	if #fragments == 0 then
-		return nil
-	end
-
-	return table.concat(fragments, " ")
-end
-
-local function format_finder_initial_query(sticky_query)
-	if type(sticky_query) ~= "string" or sticky_query == "" then
-		return nil
-	end
-
-	return sticky_query .. " "
-end
 
 --- Compute relative path from resolved root to resolved file.
 local function relative_to_root(resolved_file, expanded_root_prefix)
@@ -457,10 +426,10 @@ M.open = function(options)
 		title = prompt_title,
 		items = items,
 		initial_index = _chat_finder_mod.resolve_finder_initial_index(_parley._note_finder, items, "NoteFinder"),
-		initial_query = format_finder_initial_query(_parley._note_finder.sticky_query),
+		initial_query = finder_sticky.format_initial_query(_parley._note_finder.sticky_query),
 		anchor = "bottom",
 		on_query_change = function(query)
-			_parley._note_finder.sticky_query = extract_note_finder_sticky_query(query)
+			_parley._note_finder.sticky_query = finder_sticky.extract(query, { "root" })
 		end,
 		on_select = function(item)
 			if source_win and vim.api.nvim_win_is_valid(source_win) then

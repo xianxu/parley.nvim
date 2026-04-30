@@ -2492,12 +2492,18 @@ M._issue_finder = {
 	view_mode = 0, -- 0=open+blocked, 1=all, 2=all+history
 	initial_index = nil,
 	initial_value = nil,
+	sticky_query = nil, -- Preserved {repo} filter across invocations
 }
 
 M._vision_finder = {
 	opened = false,
 	initial_index = nil,
 	initial_value = nil,
+	sticky_query = nil, -- Preserved {repo} filter across invocations
+}
+
+M._markdown_finder = {
+	sticky_query = nil, -- Preserved {repo} filter across invocations (super-repo mode)
 }
 
 -- Create a new note with given subject

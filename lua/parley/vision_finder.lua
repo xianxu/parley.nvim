@@ -2,6 +2,7 @@
 -- Float picker UI for browsing initiatives across vision YAML files
 
 local vision_mod = require("parley.vision")
+local finder_sticky = require("parley.finder_sticky")
 
 local M = {}
 local _parley
@@ -73,7 +74,11 @@ M.open = function()
         title = string.format("Vision (%d initiatives)", #items),
         items = items,
         initial_index = chat_finder_mod.resolve_finder_initial_index(_parley._vision_finder, items, "VisionFinder"),
+        initial_query = finder_sticky.format_initial_query(_parley._vision_finder.sticky_query),
         anchor = "bottom",
+        on_query_change = function(query)
+            _parley._vision_finder.sticky_query = finder_sticky.extract(query, { "root" })
+        end,
         on_select = function(item)
             _parley._vision_finder.opened = false
             if source_win and vim.api.nvim_win_is_valid(source_win) then

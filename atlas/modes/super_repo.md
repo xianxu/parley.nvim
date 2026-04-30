@@ -35,12 +35,25 @@ Refresh fires on `User ParleySuperRepoChanged`.
 | Note (`<C-n>f`)  | `<member>/workshop/notes` | `{<repo_name>} `|
 | Issue (`<C-y>f`) | `<member>/workshop/issues`| `{<repo_name>} `|
 | Vision (`<C-j>f`)| `<member>/workshop/vision`| `{<repo_name>} `|
-| Markdown (`<C-g>m`) | `<member>` at `markdown_finder_max_depth` | `<repo_name>/<relative>` |
+| Markdown (`<C-g>m`) | `<member>` at `markdown_finder_max_depth` | `{<repo_name>} <relative>` |
 
 Chat & note finders inherit multi-root behaviour from `root_dirs.lua` —
 super-repo simply pushes each member's chat/note dir into `chat_roots` /
 `note_roots` with `label = <repo_name>`. Issue / vision / markdown finders
 were extended explicitly during M3-M5.
+
+## Sticky `{repo}` filter
+
+Every super-repo-aware finder (chat, note, issue, vision, markdown) preserves
+`{repo}` filter fragments across reopens via `lua/parley/finder_sticky.lua`.
+Both completed (`{charon}`) and in-progress (`{char`) prompt fragments are
+extracted on every keystroke, normalised to the completed form, and re-seeded
+as `initial_query` next time. Chat finder additionally preserves `[tag]`
+fragments.
+
+Matching is also forgiving of in-progress brackets: `{char` matches the same
+items as `{charon}` would (prefix match against the haystack `{repo}` token),
+fixing the case where typing was abandoned before the closing brace.
 
 ## Writes — unchanged
 
@@ -68,6 +81,8 @@ side fix during M1).
   `history_dir_override` opts.
 - `lua/parley/issue_finder.lua`, `vision_finder.lua`, `markdown_finder.lua`
   — multi-root aggregation when `super_repo_members` is non-empty.
+- `lua/parley/finder_sticky.lua` — shared `{root}` / `[tag]` extraction and
+  initial-query formatter used by every finder for sticky filters.
 - `lua/parley/lualine.lua` — `format_mode`, `create_mode_component`, and
   the filetype-component auto-replace at setup time.
 - `lua/parley/keybinding_registry.lua` — `super_repo_toggle` entry.
