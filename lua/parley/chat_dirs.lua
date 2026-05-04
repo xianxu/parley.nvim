@@ -34,6 +34,11 @@ M.normalize_chat_roots = function(primary, extras, structured) return _root_mgr.
 
 M.set_chat_dirs = function(dirs, persist) return _root_mgr.set_dirs(dirs, persist) end
 M.set_chat_roots = function(roots, persist) return _root_mgr.set_roots(roots, persist) end
+-- DEPRECATED (issue #117 M1): freeform multi-root mutation is going
+-- away. add/remove/rename are no longer reachable from any command or
+-- keybinding; repo mode and super-repo mode are the only supported
+-- ways to extend the chat-roots list. Kept callable for one release as
+-- a rollback safety net; will be removed in M2.
 M.add_chat_dir = function(dir, persist, label) return _root_mgr.add_dir(dir, persist, label) end
 M.remove_chat_dir = function(dir, persist) return _root_mgr.remove_dir(dir, persist) end
 M.rename_chat_dir = function(dir, label, persist) return _root_mgr.rename_dir(dir, label, persist) end
@@ -42,6 +47,10 @@ M.rename_chat_dir = function(dir, label, persist) return _root_mgr.rename_dir(di
 -- Commands (chat-specific)
 --------------------------------------------------------------------------------
 
+-- DEPRECATED (issue #117 M1): :ParleyChatDirs / :ParleyChatDirAdd /
+-- :ParleyChatDirRemove are no longer registered as user commands. The
+-- handlers below are kept for one release in case M1 needs to be
+-- rolled back. M2 will delete them.
 M.cmd_chat_dirs = function(_params)
     _parley.chat_dir_picker.chat_dir_picker(_parley)
 end

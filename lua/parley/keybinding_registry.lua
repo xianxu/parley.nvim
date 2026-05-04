@@ -137,14 +137,6 @@ M.entries = {
 		help_desc = "Open chat finder",
 	},
 	{
-		id = "chat_dirs",
-		config_key = "global_shortcut_chat_dirs",
-		default_key = "<C-g>h",
-		default_modes = { "n", "i" },
-		scope = "global",
-		desc = "Manage chat roots",
-	},
-	{
 		id = "chat_review",
 		config_key = "global_shortcut_review",
 		default_key = "<C-g>C",

@@ -50,7 +50,13 @@ describe("chat dir management", function()
         end
     end)
 
-    it("persists added chat dirs into state", function()
+    -- Issue #117 M1: freeform chat-root commands are disabled and the
+    -- chat_dirs / chat_roots fields are no longer written to
+    -- state.json. add_chat_dir still mutates the in-memory list (kept
+    -- as a rollback safety net) but persistence is off. These two
+    -- tests previously asserted the persisted-and-reloaded round-trip;
+    -- they now assert the inverted contract.
+    it("does not persist added chat dirs into state.json", function()
         local dirs = parley.add_chat_dir(third_dir, true)
 
         assert.same({
@@ -58,10 +64,14 @@ describe("chat dir management", function()
             vim.fn.resolve(secondary_dir),
             vim.fn.resolve(third_dir),
         }, dirs)
-        assert.same(dirs, read_state().chat_dirs)
+        local persisted = read_state()
+        assert.is_nil(persisted.chat_dirs,
+            "chat_dirs should not be written to state.json")
+        assert.is_nil(persisted.chat_roots,
+            "chat_roots should not be written to state.json")
     end)
 
-    it("reloads persisted chat dirs on setup", function()
+    it("does not reload added chat dirs across setup() calls", function()
         parley.add_chat_dir(third_dir, true)
 
         parley.setup({
@@ -71,11 +81,9 @@ describe("chat dir management", function()
             api_keys = {},
         })
 
-        assert.same({
-            vim.fn.resolve(primary_dir),
-            vim.fn.resolve(secondary_dir),
-            vim.fn.resolve(third_dir),
-        }, parley.get_chat_dirs())
+        -- After re-setup with no chat_dirs= override, the previously
+        -- added third_dir is gone — only config.chat_dir survives.
+        assert.same({ vim.fn.resolve(primary_dir) }, parley.get_chat_dirs())
     end)
 
     it("does not allow removing the primary root", function()
@@ -89,12 +97,15 @@ describe("chat dir management", function()
         }, parley.get_chat_dirs())
     end)
 
-    it("removing a secondary root keeps the primary intact", function()
+    it("removing a secondary root keeps the primary intact (no persistence)", function()
         local dirs = parley.remove_chat_dir(secondary_dir, true)
 
         assert.same({ vim.fn.resolve(primary_dir) }, dirs)
         assert.equals(vim.fn.resolve(primary_dir), parley.config.chat_dir)
-        assert.same(dirs, read_state().chat_dirs)
+        -- Issue #117 M1: removal still mutates the in-memory list but
+        -- does not write to state.json.
+        assert.is_nil(read_state().chat_dirs,
+            "chat_dirs should not be written to state.json")
     end)
 
     it("picker items preserve order and mark the primary root", function()

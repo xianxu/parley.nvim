@@ -126,10 +126,6 @@ local agent_completion = function()
 	return M._agents
 end
 
-local function dir_completion(arg_lead)
-	return vim.fn.getcompletion(arg_lead or "", "dir")
-end
-
 local function chat_dir_completion(arg_lead)
 	local lead = (arg_lead or ""):lower()
 	local matches = {}
@@ -414,23 +410,35 @@ M.setup = function(opts)
 			end
 		end
 
-		-- Prepend repo chat dir as primary, demoting global chat_dir to extra
+		-- Prepend repo chat dir as primary, demoting global chat_dir to extra.
+		-- Use the structured chat_roots list so labels are explicit:
+		-- repo dir → "repo", original config.chat_dir → "global". Without
+		-- explicit labels, the normalizer derives labels from the directory
+		-- basename, which surfaces as e.g. {parley} in the finder when the
+		-- global chat dir's basename is "parley".
 		if M.config.repo_chat_dir and M.config.repo_chat_dir ~= "" then
 			local repo_chat = git_root .. "/" .. M.config.repo_chat_dir
 			local old_dir = M.config.chat_dir
 			local old_dirs = M.config.chat_dirs
 
 			M.config.chat_dir = repo_chat
-			-- Preserve existing dirs as extras
-			local extras = {}
-			if type(old_dirs) == "table" and #old_dirs > 0 then
-				extras = vim.deepcopy(old_dirs)
-			end
+			local roots = { { dir = repo_chat, label = "repo" } }
 			if old_dir and old_dir ~= repo_chat then
-				table.insert(extras, 1, old_dir)
+				table.insert(roots, { dir = old_dir, label = "global" })
 			end
-			M.config.chat_dirs = extras
-			M.config.chat_roots = {}
+			-- Preserve any pre-existing extras (legacy multi-root from setup
+			-- config). They keep their default basename labels — the only
+			-- relabels here are repo_chat → "repo" and config.chat_dir →
+			-- "global". Issue #117 M2 will drop this preservation entirely.
+			if type(old_dirs) == "table" then
+				for _, d in ipairs(old_dirs) do
+					if d ~= repo_chat and d ~= old_dir then
+						table.insert(roots, { dir = d })
+					end
+				end
+			end
+			M.config.chat_roots = roots
+			M.config.chat_dirs = vim.tbl_map(function(r) return r.dir end, roots)
 		end
 
 		-- Prepend repo note dir as primary, demoting global notes_dir to extra
@@ -581,7 +589,6 @@ M.setup = function(opts)
 			help = function() M.cmd.KeyBindings() end,
 			chat_new = function() M.cmd.ChatNew({}) end,
 			chat_finder = function() M.cmd.ChatFinder() end,
-			chat_dirs = function() M.cmd.ChatDirs({}) end,
 			chat_review = function() M.cmd.ChatReview({}) end,
 			note_new = function() M.cmd.NoteNew() end,
 			note_finder = function() M.cmd.NoteFinder({}) end,
@@ -744,8 +751,6 @@ M.setup = function(opts)
 	local completions = {
 		ChatNew = {},
 		Agent = agent_completion,
-		ChatDirAdd = dir_completion,
-		ChatDirRemove = chat_dir_completion,
 		ChatMove = chat_dir_completion,
 	}
 
@@ -1125,6 +1130,14 @@ M.refresh_state = function(update)
 	end
 	strip_transient("chat_roots", "chat_dirs", pushed_chat)
 	strip_transient("note_roots", "note_dirs", pushed_note)
+	-- Issue #117 M1: chat roots are no longer freeform-configurable.
+	-- The list is derived from config.chat_dir + repo mode + super-repo
+	-- on every read, so persisting it is meaningless. Stop writing the
+	-- chat keys to state.json. Reading remains intact for back-compat
+	-- with state files written by older versions; in M2 the read path
+	-- and the strip_transient call above will both go away.
+	persist_state.chat_roots = nil
+	persist_state.chat_dirs = nil
 	M.helpers.table_to_file(persist_state, state_file)
 
 	local buf = vim.api.nvim_get_current_buf()
@@ -3510,10 +3523,13 @@ M.cmd.VisionAllocation = function(params) vision_mod.cmd_export_allocation(param
 -- Memory preferences command
 M.cmd.MemoryPrefs = function() memory_prefs.generate() end
 
-M.cmd.ChatDirs = function(p) chat_dirs.cmd_chat_dirs(p) end
+-- Issue #117 M1: freeform chat-root commands disabled. The
+-- corresponding handlers (cmd_chat_dirs / cmd_chat_dir_add /
+-- cmd_chat_dir_remove) and the underlying mutators (add_chat_dir /
+-- remove_chat_dir / rename_chat_dir in root_dirs.lua) are kept in
+-- place for one release as a rollback safety net but are not wired to
+-- any user command or keybinding. They will be deleted in M2.
 M.cmd.ChatMove = function(p) chat_dirs.cmd_chat_move(p) end
-M.cmd.ChatDirAdd = function(p) chat_dirs.cmd_chat_dir_add(p) end
-M.cmd.ChatDirRemove = function(p) chat_dirs.cmd_chat_dir_remove(p) end
 
 M.cmd.NoteDirs = function(p) note_dirs.cmd_note_dirs(p) end
 M.cmd.NoteDirAdd = function(p) note_dirs.cmd_note_dir_add(p) end
