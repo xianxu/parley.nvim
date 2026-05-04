@@ -224,6 +224,135 @@ describe("decoration provider cache", function()
         assert.is_true(saw_bottom, "expected second split to keep its own viewport highlight cache")
     end)
 
+    it("dims thinking-block continuation lines when viewport top falls between 🧠: and 🧠:[END]", function()
+        -- Regression: prior to the buffer-aware lookahead in
+        -- reasoning_block_has_end_marker, this case rendered
+        -- continuation lines in default color because the slice-based
+        -- lookahead couldn't see [END] beyond prefix_lines / visible
+        -- window. Symptom: clicking a line "fixed" it because the
+        -- viewport scrolled and a different lookahead horizon hit.
+        local provider = capture_decoration_provider()
+        assert.is_table(provider)
+        assert.is_function(provider.on_win)
+        assert.is_function(provider.on_line)
+
+        local buf = vim.api.nvim_create_buf(false, true)
+        local lines = {
+            "💬: question",
+            "🤖:[Agent]",
+            "🧠: opening line of reasoning",
+            "Continuation paragraph one.",
+            "",
+            "Continuation paragraph two with a blank line above it.",
+            "Continuation paragraph three.",
+            "🧠:[END]",
+            "",
+            "Answer body.",
+            "📝: summary",
+        }
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+
+        local win = vim.api.nvim_get_current_win()
+        vim.api.nvim_win_set_buf(win, buf)
+        parley._parley_bufs[buf] = "chat"
+
+        -- Viewport top sits AFTER 🧠: but BEFORE 🧠:[END]. Continuation
+        -- paragraphs (rows 3-6, 0-indexed) and the [END] marker (row 7)
+        -- are visible; the 🧠: opener (row 2) is in the bootstrap walk.
+        -- toprow=3 (row index of "Continuation paragraph one."), botrow=7.
+        provider.on_win(nil, win, buf, 3, 7)
+
+        local original_set_extmark = vim.api.nvim_buf_set_extmark
+        local extmarks = {}
+        vim.api.nvim_buf_set_extmark = function(_, _, row, _, opts)
+            table.insert(extmarks, { row = row, hl_group = opts.hl_group })
+            return #extmarks
+        end
+
+        for _, row in ipairs({ 3, 4, 5, 6, 7 }) do
+            provider.on_line(nil, win, buf, row)
+        end
+
+        vim.api.nvim_buf_set_extmark = original_set_extmark
+
+        local thinking_rows = {}
+        for _, mark in ipairs(extmarks) do
+            if mark.hl_group == "ParleyThinking" then
+                thinking_rows[mark.row] = true
+            end
+        end
+
+        assert.is_true(thinking_rows[3] == true,
+            "continuation paragraph one should be dimmed (ParleyThinking)")
+        assert.is_true(thinking_rows[5] == true,
+            "continuation paragraph two (after blank line) should be dimmed — explicit-end mode allows blanks inside")
+        assert.is_true(thinking_rows[6] == true,
+            "continuation paragraph three should be dimmed")
+        assert.is_true(thinking_rows[7] == true,
+            "🧠:[END] marker should be dimmed (closing delimiter)")
+    end)
+
+    it("dims streaming thinking-block continuation lines before 🧠:[END] is emitted", function()
+        -- Optimistic-during-streaming: while tasker reports is_busy
+        -- for this buffer, the highlighter assumes explicit-end mode
+        -- so blank-line paragraph breaks inside the in-progress
+        -- reasoning region stay dimmed. After streaming ends, normal
+        -- lookahead resumes — legacy single-line 🧠: chats unaffected.
+        local provider = capture_decoration_provider()
+        assert.is_table(provider)
+
+        local buf = vim.api.nvim_create_buf(false, true)
+        -- Mid-stream snapshot: 🧠: opener + a few continuation lines
+        -- with a paragraph break, but no 🧠:[END] yet.
+        local lines = {
+            "💬: question",
+            "🤖:[Agent]",
+            "🧠: opening line of reasoning",
+            "Continuation paragraph one.",
+            "",
+            "Continuation paragraph two.",
+        }
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+
+        local win = vim.api.nvim_get_current_win()
+        vim.api.nvim_win_set_buf(win, buf)
+        parley._parley_bufs[buf] = "chat"
+
+        -- Stub is_busy → true to simulate an in-flight stream for buf.
+        local tasker = require("parley.tasker")
+        local original_is_busy = tasker.is_busy
+        tasker.is_busy = function(b, _) return b == buf end
+
+        provider.on_win(nil, win, buf, 0, 5)
+
+        local original_set_extmark = vim.api.nvim_buf_set_extmark
+        local extmarks = {}
+        vim.api.nvim_buf_set_extmark = function(_, _, row, _, opts)
+            table.insert(extmarks, { row = row, hl_group = opts.hl_group })
+            return #extmarks
+        end
+
+        for _, row in ipairs({ 2, 3, 4, 5 }) do
+            provider.on_line(nil, win, buf, row)
+        end
+
+        vim.api.nvim_buf_set_extmark = original_set_extmark
+        tasker.is_busy = original_is_busy
+
+        local thinking_rows = {}
+        for _, mark in ipairs(extmarks) do
+            if mark.hl_group == "ParleyThinking" then
+                thinking_rows[mark.row] = true
+            end
+        end
+
+        assert.is_true(thinking_rows[2] == true, "🧠: opener should be dimmed")
+        assert.is_true(thinking_rows[3] == true, "first continuation should be dimmed mid-stream")
+        assert.is_true(thinking_rows[5] == true,
+            "continuation after blank line should stay dimmed mid-stream — optimistic explicit-end mode")
+    end)
+
+
     it("restores question highlights when redraw starts inside a long unanswered question", function()
         local provider = capture_decoration_provider()
         assert.is_table(provider)

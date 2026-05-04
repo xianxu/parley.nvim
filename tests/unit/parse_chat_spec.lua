@@ -279,6 +279,214 @@ describe("parse_chat: summary and reasoning lines", function()
         )
     end)
 
+    it("extracts multi-line 🧠: reasoning terminated by blank line", function()
+        local lines, header_end = make_chat(std_header, {
+            "💬: Why is sky blue?",
+            "🤖:[Claude] ",
+            "🧠: First line of reasoning.",
+            "Second line, more detail.",
+            "Third line, plan.",
+            "",
+            "Due to Rayleigh scattering.",
+            "📝: physics question",
+        })
+        local result = parse_chat(lines, header_end)
+        assert.is_not_nil(result.exchanges[1].reasoning)
+        assert.equals(
+            "First line of reasoning.\nSecond line, more detail.\nThird line, plan.",
+            result.exchanges[1].reasoning.content
+        )
+        assert.is_not_nil(result.exchanges[1].summary)
+        assert.equals("physics question", result.exchanges[1].summary.content)
+    end)
+
+    it("📝: terminates reasoning even without blank-line separator", function()
+        -- Backward compat with chats authored under the previous
+        -- single-line 🧠: convention, where 📝: directly followed
+        -- the answer text with no blank between thinking and 📝.
+        local lines, header_end = make_chat(std_header, {
+            "💬: hello",
+            "🤖:[Claude] Here is my answer.",
+            "🧠: thinking about it",
+            "First part of answer.",
+            "📝: one-liner summary",
+        })
+        local result = parse_chat(lines, header_end)
+        assert.is_not_nil(result.exchanges[1].reasoning)
+        assert.is_not_nil(result.exchanges[1].summary)
+        assert.equals("one-liner summary", result.exchanges[1].summary.content)
+    end)
+
+    it("🔧: terminates reasoning and is parsed as tool_use", function()
+        -- Use a properly-formed tool_use header (id=...) so
+        -- serialize.parse_call materializes the block.
+        local lines, header_end = make_chat(std_header, {
+            "💬: list files",
+            "🤖:[Claude]",
+            "🧠: I need to call ls",
+            "🔧: ls id=toolu_01",
+            "```",
+            '{"command": "."}',
+            "```",
+        })
+        local result = parse_chat(lines, header_end)
+        assert.is_not_nil(result.exchanges[1].reasoning)
+        assert.equals("I need to call ls", result.exchanges[1].reasoning.content)
+        local blocks = result.exchanges[1].answer.content_blocks
+        assert.is_not_nil(blocks)
+        local saw_tool_use = false
+        for _, b in ipairs(blocks) do
+            if b.type == "tool_use" then saw_tool_use = true end
+        end
+        assert.is_true(saw_tool_use)
+    end)
+
+    it("singletons: one-line 🧠: still parses identically", function()
+        local lines, header_end = make_chat(std_header, {
+            "💬: Why is sky blue?",
+            "🤖:[Claude] Due to Rayleigh scattering.",
+            "🧠: the user wants a physics explanation",
+        })
+        local result = parse_chat(lines, header_end)
+        assert.is_not_nil(result.exchanges[1].reasoning)
+        assert.equals(
+            "the user wants a physics explanation",
+            result.exchanges[1].reasoning.content
+        )
+    end)
+
+    it("🧠:[END] explicit terminator closes reasoning block", function()
+        -- Models struggle to obey the blank-line terminator (they want
+        -- to use blank lines inside reasoning). The 🧠:[END] marker is
+        -- the canonical, model-friendly closer.
+        local lines, header_end = make_chat(std_header, {
+            "💬: Why is sky blue?",
+            "🤖:[Claude] ",
+            "🧠: First line of reasoning.",
+            "",
+            "Second paragraph of reasoning, after a blank line.",
+            "Third line.",
+            "🧠:[END]",
+            "",
+            "Due to Rayleigh scattering.",
+            "📝: physics question",
+        })
+        local result = parse_chat(lines, header_end)
+        assert.is_not_nil(result.exchanges[1].reasoning)
+        assert.equals(
+            "First line of reasoning.\n\nSecond paragraph of reasoning, after a blank line.\nThird line.",
+            result.exchanges[1].reasoning.content
+        )
+        assert.equals("physics question", result.exchanges[1].summary.content)
+    end)
+
+    it("🧠:[END] block followed by tool_use parses correctly", function()
+        -- Verifies that a multi-line thinking block in [END] mode
+        -- (with internal blank lines) cleanly hands off to a 🔧:
+        -- tool_use block. The reasoning lookahead stops at 🔧:, so
+        -- if the model forgets [END], legacy mode kicks in and 🔧:
+        -- terminates reasoning anyway.
+        local lines, header_end = make_chat(std_header, {
+            "💬: list files please",
+            "🤖:[Claude]",
+            "🧠: I'll use the ls tool.",
+            "",
+            "Listing the working directory should be enough.",
+            "🧠:[END]",
+            "",
+            "🔧: ls id=toolu_01",
+            "```",
+            '{"command": "."}',
+            "```",
+        })
+        local result = parse_chat(lines, header_end)
+        assert.is_not_nil(result.exchanges[1].reasoning)
+        assert.equals(
+            "I'll use the ls tool.\n\nListing the working directory should be enough.",
+            result.exchanges[1].reasoning.content
+        )
+        local blocks = result.exchanges[1].answer.content_blocks
+        assert.is_not_nil(blocks)
+        local saw_tool_use = false
+        for _, b in ipairs(blocks) do
+            if b.type == "tool_use" then
+                saw_tool_use = true
+                assert.equals("toolu_01", b.id)
+                assert.equals("ls", b.name)
+            end
+        end
+        assert.is_true(saw_tool_use, "expected a tool_use block")
+    end)
+
+    it("multiple 🧠: blocks within one answer accumulate into reasoning.content", function()
+        -- Realistic tool-round flow: plan → 🔧: → 📎: → reflect →
+        -- final answer. Both thinking blocks must be preserved (the
+        -- earlier behavior overwrote the first when the second opened).
+        local lines, header_end = make_chat(std_header, {
+            "💬: list files and tell me what's there",
+            "🤖:[Claude]",
+            "🧠: I'll call ls first.",
+            "🧠:[END]",
+            "",
+            "🔧: ls id=toolu_01",
+            "```",
+            '{"command": "."}',
+            "```",
+            "📎: ls id=toolu_01",
+            "```",
+            "lua/  tests/  README.md",
+            "```",
+            "🧠: Now I can summarize what's there.",
+            "🧠:[END]",
+            "",
+            "Lua sources, tests, and a README.",
+            "📝: list working directory",
+        })
+        local result = parse_chat(lines, header_end)
+        assert.is_not_nil(result.exchanges[1].reasoning)
+        assert.equals(
+            "I'll call ls first.\n\nNow I can summarize what's there.",
+            result.exchanges[1].reasoning.content
+        )
+        -- .line stays anchored to the first opener.
+        assert.is_not_nil(result.exchanges[1].reasoning.line)
+        local first_opener_line
+        for k, l in ipairs(lines) do
+            if l == "🧠: I'll call ls first." then first_opener_line = k; break end
+        end
+        assert.equals(first_opener_line, result.exchanges[1].reasoning.line)
+    end)
+
+    it("🧠:[END] outside an active block is plain text, never opens one", function()
+        local lines, header_end = make_chat(std_header, {
+            "💬: hello",
+            "🤖:[Claude] Plain answer text.",
+            "🧠:[END]",
+            "📝: hi",
+        })
+        local result = parse_chat(lines, header_end)
+        assert.is_nil(result.exchanges[1].reasoning)
+        assert.equals("hi", result.exchanges[1].summary.content)
+    end)
+
+    it("preserves indentation in continuation lines", function()
+        local lines, header_end = make_chat(std_header, {
+            "💬: Q",
+            "🤖:[Claude]",
+            "🧠: Plan:",
+            "- option A",
+            "  - sub-detail",
+            "- option B",
+            "",
+            "Answer.",
+        })
+        local result = parse_chat(lines, header_end)
+        assert.equals(
+            "Plan:\n- option A\n  - sub-detail\n- option B",
+            result.exchanges[1].reasoning.content
+        )
+    end)
+
     it("does not attach 📝: to question block", function()
         -- summary prefix at question level should just be content, not a summary field
         local lines, header_end = make_chat(std_header, {

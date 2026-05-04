@@ -65,6 +65,7 @@ local function get_chat_highlight_prefix_patterns()
     local branch_prefix = _parley.config.chat_branch_prefix or "🌿:"
     return {
         reasoning_pattern = "^" .. vim.pesc(reasoning_prefix),
+        reasoning_end_pattern = "^%s*" .. vim.pesc(reasoning_prefix) .. "%[END%]%s*$",
         summary_pattern = "^" .. vim.pesc(summary_prefix),
         user_pattern = "^" .. vim.pesc(user_prefix),
         assistant_pattern = "^" .. vim.pesc(assistant_prefix),
@@ -73,9 +74,48 @@ local function get_chat_highlight_prefix_patterns()
     }
 end
 
-local function bootstrap_chat_highlight_state(buf, start_line, patterns)
+-- Hard cap on how far forward the buffer-aware lookahead will scan
+-- when deciding a reasoning block's termination mode. Reasoning blocks
+-- in practice are well under this; the cap exists to bound work on a
+-- pathologically long buffer with no terminator.
+local REASONING_LOOKAHEAD_MAX = 500
+
+-- Scan forward from a 🧠: opener at 1-indexed `from_line` in the buffer
+-- to decide the block's termination mode. Returns true if a 🧠:[END]
+-- marker appears before the next structural marker — explicit-end mode
+-- (blank lines inside the block stay highlighted as ParleyThinking).
+--
+-- Reads directly from the buffer rather than a line slice so the result
+-- is consistent regardless of the visible viewport. The earlier
+-- slice-based lookahead missed [END] markers that fell beyond the
+-- prefix_lines / visible window, causing continuation lines to lose
+-- their dim highlight whenever the viewport top fell between 🧠: and
+-- 🧠:[END]. Mirrors the parser's lookahead in chat_parser.lua.
+local function reasoning_block_has_end_marker(buf, from_line, patterns)
+    local line_count = vim.api.nvim_buf_line_count(buf)
+    local stop = math.min(from_line + REASONING_LOOKAHEAD_MAX, line_count)
+    if from_line + 1 > stop then return false end
+    local ahead_lines = vim.api.nvim_buf_get_lines(buf, from_line, stop, false)
+    for _, ahead in ipairs(ahead_lines) do
+        if ahead:match(patterns.reasoning_end_pattern) then
+            return true
+        end
+        if ahead:match(patterns.user_pattern)
+            or ahead:match(patterns.assistant_pattern)
+            or ahead:match(patterns.local_pattern)
+            or ahead:match(patterns.summary_pattern)
+            or ahead:match(patterns.branch_pattern)
+            or ahead:match("^🔧:")
+            or ahead:match("^📎:") then
+            return false
+        end
+    end
+    return false
+end
+
+local function bootstrap_chat_highlight_state(buf, start_line, patterns, streaming)
     if start_line <= 1 then
-        return false, false
+        return false, false, false, false
     end
 
     local scan_start = math.max(1, start_line - HIGHLIGHT_CONTEXT_LINES)
@@ -98,24 +138,57 @@ local function bootstrap_chat_highlight_state(buf, start_line, patterns)
 
     local in_block = bootstrap_in_block
     local in_code_block = false
+    local in_reasoning_block = false
     if start_line <= bootstrap_start then
-        return in_block, in_code_block
+        return in_block, in_code_block, in_reasoning_block, false
     end
 
     local prefix_lines = vim.api.nvim_buf_get_lines(buf, bootstrap_start - 1, start_line - 1, false)
-    for _, line in ipairs(prefix_lines) do
+    local in_reasoning_explicit_end = false
+    for idx, line in ipairs(prefix_lines) do
         if line:match("^%s*```") then
             in_code_block = not in_code_block
         end
 
         if line:match(patterns.user_pattern) then
             in_block = true
+            in_reasoning_block = false
         elseif line:match(patterns.assistant_pattern) or line:match(patterns.local_pattern) then
             in_block = false
+            in_reasoning_block = false
+        elseif line:match(patterns.branch_pattern)
+            or line:match(patterns.summary_pattern)
+            or line:match("^🔧:")
+            or line:match("^📎:") then
+            in_reasoning_block = false
+        elseif line:match(patterns.reasoning_end_pattern) then
+            -- 🧠:[END] explicit terminator. Checked before
+            -- reasoning_pattern since the END marker also starts with
+            -- the reasoning prefix.
+            in_reasoning_block = false
+        elseif line:match(patterns.reasoning_pattern) then
+            in_reasoning_block = true
+            -- prefix_lines starts at bootstrap_start (1-indexed). The
+            -- 🧠: opener at array index `idx` corresponds to buffer
+            -- line `bootstrap_start + idx - 1`. The buffer-aware
+            -- lookahead scans forward from there into the live buffer
+            -- so it sees [END] markers that fall outside prefix_lines.
+            -- During streaming the [END] marker hasn't been emitted
+            -- yet, so optimistically assume explicit-end mode — blank
+            -- lines inside the in-progress reasoning stay dimmed
+            -- instead of prematurely terminating the block.
+            if streaming then
+                in_reasoning_explicit_end = true
+            else
+                local opener_line_nr = bootstrap_start + idx - 1
+                in_reasoning_explicit_end = reasoning_block_has_end_marker(buf, opener_line_nr, patterns)
+            end
+        elseif in_reasoning_block and line:match("^%s*$") and not in_reasoning_explicit_end then
+            in_reasoning_block = false
         end
     end
 
-    return in_block, in_code_block
+    return in_block, in_code_block, in_reasoning_block, in_reasoning_explicit_end
 end
 
 local function merge_line_ranges(ranges)
@@ -174,7 +247,16 @@ local function compute_chat_highlights(buf, start_line, end_line)
     local result = {}
     local patterns = get_chat_highlight_prefix_patterns()
     local lines = vim.api.nvim_buf_get_lines(buf, start_line - 1, end_line, false)
-    local in_block, in_code_block = bootstrap_chat_highlight_state(buf, start_line, patterns)
+    -- While a stream is in flight for this buffer, the model has not
+    -- yet emitted 🧠:[END]. Assume explicit-end mode so blank-line
+    -- paragraph breaks inside the in-progress thinking region keep
+    -- their dim highlight instead of prematurely terminating the
+    -- block. After the stream completes (is_busy → false), the
+    -- lookahead-decided mode takes over and a real [END] / structural
+    -- marker controls termination.
+    local streaming = require("parley.tasker").is_busy(buf, true)
+    local in_block, in_code_block, in_reasoning_block, in_reasoning_explicit_end =
+        bootstrap_chat_highlight_state(buf, start_line, patterns, streaming)
 
     local in_tool_block = false  -- inside 🔧:/📎: fenced content
 
@@ -204,9 +286,49 @@ local function compute_chat_highlights(buf, start_line, end_line)
             pos = tag_end + 1
         end
 
-        if line:match(patterns.reasoning_pattern) or line:match(patterns.summary_pattern) or line:match("^👂:") then
+        -- Any structural marker terminates an in-progress reasoning
+        -- block. This mirrors chat_parser's lenient termination so the
+        -- highlight tracks parse boundaries even when the model omits
+        -- the canonical blank-line terminator (or in pre-existing
+        -- chats authored under the old single-line 🧠: convention).
+        local is_user = line:match(patterns.user_pattern)
+        local is_assistant = line:match(patterns.assistant_pattern)
+        local is_branch = line:match(patterns.branch_pattern)
+        local is_local = line:match(patterns.local_pattern)
+        local is_summary = line:match(patterns.summary_pattern)
+        local is_tool_use = line:match("^🔧:")
+        local is_tool_result = line:match("^📎:")
+        if is_user or is_assistant or is_branch or is_local
+            or is_summary or is_tool_use or is_tool_result then
+            in_reasoning_block = false
+        end
+
+        if line:match(patterns.reasoning_end_pattern) then
+            -- 🧠:[END] explicit terminator. Highlight the marker line
+            -- itself as ParleyThinking (it's the closing delimiter of
+            -- the thinking region), then close the block. Must be
+            -- checked before reasoning_pattern since the END marker
+            -- also starts with the reasoning prefix.
             table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
-        elseif line:match("^🔧:") or line:match("^📎:") then
+            in_reasoning_block = false
+        elseif line:match(patterns.reasoning_pattern) then
+            table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
+            in_reasoning_block = true
+            -- Buffer-aware lookahead: line_nr is the current 1-indexed
+            -- buffer line. Scanning the live buffer (rather than the
+            -- visible `lines` slice) catches [END] markers that fall
+            -- below the viewport bottom, which is the common case
+            -- after the cursor has moved up into the thinking region.
+            -- While streaming, force explicit-end mode (see comment at
+            -- the top of compute_chat_highlights).
+            if streaming then
+                in_reasoning_explicit_end = true
+            else
+                in_reasoning_explicit_end = reasoning_block_has_end_marker(buf, line_nr, patterns)
+            end
+        elseif is_summary or line:match("^👂:") then
+            table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
+        elseif is_tool_use or is_tool_result then
             -- Tool block headers — dim (plumbing, not prose)
             if line:match("error=true") then
                 table.insert(result[row], { hl_group = "ParleyToolError", col_start = 0, col_end = -1 })
@@ -217,15 +339,26 @@ local function compute_chat_highlights(buf, start_line, end_line)
         elseif in_tool_block and not in_block then
             -- Inside tool block fenced content — dim
             table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
-        elseif line:match(patterns.user_pattern) then
+        elseif in_reasoning_block then
+            -- Multi-line thinking continuation. In legacy mode (no
+            -- 🧠:[END] marker downstream) blank line terminates; in
+            -- explicit-end mode blank lines are preserved as part of
+            -- the reasoning region and stay dimmed. Non-blank lines
+            -- always stay dimmed as ParleyThinking.
+            if line:match("^%s*$") and not in_reasoning_explicit_end then
+                in_reasoning_block = false
+            else
+                table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
+            end
+        elseif is_user then
             table.insert(result[row], { hl_group = "ParleyQuestion", col_start = 0, col_end = -1 })
             in_block = true
-        elseif line:match(patterns.assistant_pattern) then
+        elseif is_assistant then
             in_block = false
-        elseif line:match(patterns.branch_pattern) then
+        elseif is_branch then
             table.insert(result[row], { hl_group = "ParleyChatReference", col_start = 0, col_end = -1 })
             in_block = false
-        elseif line:match(patterns.local_pattern) then
+        elseif is_local then
             in_block = false
         elseif in_block and not in_code_block then
             table.insert(result[row], { hl_group = "ParleyQuestion", col_start = 0, col_end = -1 })

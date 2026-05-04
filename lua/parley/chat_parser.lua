@@ -280,6 +280,22 @@ M.parse_chat = function(lines, header_end, config)
 	local current_component = nil
 	local line_before_local = nil
 	local first_question_seen = false
+	-- Multi-line reasoning state: opened by a 🧠: line inside an answer.
+	-- Two termination modes, decided per-block at open time:
+	--   - explicit-end mode (in_reasoning_explicit_end = true): a
+	--     🧠:[END] line was found before the next structural marker.
+	--     Blank lines inside the block are content; only 🧠:[END] or a
+	--     structural marker (📝/🔧/📎/💬/🤖/🌿/🔒) terminates. This
+	--     lets the model emit blank-line paragraphs inside reasoning.
+	--   - legacy mode (in_reasoning_explicit_end = false): no 🧠:[END]
+	--     follows. The first blank line terminates. Preserves backward
+	--     compat with chats authored under the previous convention.
+	-- Continuation lines are appended to current_exchange.reasoning.content
+	-- (joined by \n) and also fed into the answer's content_parts /
+	-- content_blocks like normal answer text, so subsequent turns replay
+	-- the model's prior reasoning verbatim.
+	local in_reasoning_block = false
+	local in_reasoning_explicit_end = false
 	-- Use table accumulation instead of string concat for content (avoids O(n²))
 	local content_parts = {}
 
@@ -477,6 +493,7 @@ M.parse_chat = function(lines, header_end, config)
 		-- Before the first question: first 🌿: is parent_link, subsequent ones are children.
 		-- After the first question: all 🌿: are child branches.
 		if line:sub(1, #branch_prefix) == branch_prefix then
+			in_reasoning_block = false
 			local rest = line:sub(#branch_prefix + 1):gsub("^%s*(.-)%s*$", "%1")
 			local path, topic = rest:match("^%s*([^:]+)%s*:%s*(.-)%s*$")
 			if not path then
@@ -495,10 +512,12 @@ M.parse_chat = function(lines, header_end, config)
 
 		-- Check for local section (excluded from LLM context)
 		elseif (not line_before_local) and line:sub(1, #local_prefix) == local_prefix then
+			in_reasoning_block = false
 			line_before_local = i
 
 		-- Check for user message start
 		elseif line:sub(1, #user_prefix) == user_prefix then
+			in_reasoning_block = false
 			first_question_seen = true
 			-- Content_blocks for the closing answer (if any) get attached
 			-- before we finalize the old component and start a new exchange.
@@ -555,6 +574,7 @@ M.parse_chat = function(lines, header_end, config)
 
 		-- Check for assistant message start
 		elseif line:sub(1, #agent_prefix) == agent_prefix then
+			in_reasoning_block = false
 			-- If we were building a previous component, finalize it.
 			-- (If the previous component was an answer, its content_blocks
 			-- were already attached by the preceding `💬:` branch or by
@@ -602,8 +622,11 @@ M.parse_chat = function(lines, header_end, config)
 		-- This closes the current content_block (text / tool_use /
 		-- tool_result) and starts a new tool_use block whose first
 		-- accumulated line IS the 🔧: header, so serialize.parse_call
-		-- can extract id/name from it later.
+		-- can extract id/name from it later. Tool markers also
+		-- terminate any in-progress reasoning block (defensive — they
+		-- denote a structurally distinct region).
 		elseif current_component == "answer" and line:sub(1, #tool_use_prefix) == tool_use_prefix then
+			in_reasoning_block = false
 			cb_finalize_block(i - 1)
 			cb_start_block("tool_use")
 			cb_append_line(line, i)
@@ -614,13 +637,18 @@ M.parse_chat = function(lines, header_end, config)
 
 		-- Check for tool_result (📎:) header — same pattern as tool_use.
 		elseif current_component == "answer" and line:sub(1, #tool_result_prefix) == tool_result_prefix then
+			in_reasoning_block = false
 			cb_finalize_block(i - 1)
 			cb_start_block("tool_result")
 			cb_append_line(line, i)
 			table.insert(content_parts, line)
 
-		-- Check for summary line
+		-- Check for summary line. 📝: also terminates any in-progress
+		-- reasoning block (defensive against missing blank-line
+		-- terminator, plus backward-compat with chats authored under
+		-- the previous single-line 🧠: convention).
 		elseif current_component == "answer" and line:sub(1, #summary_prefix) == summary_prefix then
+			in_reasoning_block = false
 			current_exchange.summary = {
 				line = i,
 				content = line:sub(#summary_prefix + 1):gsub("^%s*(.-)%s*$", "%1")
@@ -629,16 +657,90 @@ M.parse_chat = function(lines, header_end, config)
 			table.insert(content_parts, line)
 			cb_append_line(line, i)
 
-		-- Check for reasoning line
+		-- 🧠:[END] terminator — explicit end-of-reasoning marker.
+		-- Must be checked before the 🧠: opener, since this line
+		-- also starts with the reasoning prefix. The marker line is
+		-- preserved in content_parts for replay but is not appended
+		-- to reasoning.content (it's a delimiter, not reasoning).
+		-- Outside an active block it's treated as plain text and
+		-- never opens a new block.
+		elseif current_component == "answer"
+			and line:match("^%s*" .. vim.pesc(reasoning_prefix) .. "%[END%]%s*$") then
+			in_reasoning_block = false
+			table.insert(content_parts, line)
+			cb_append_line(line, i)
+
+		-- Check for reasoning line — opens a multi-line reasoning block
+		-- that ends at the first 🧠:[END], blank line (legacy mode
+		-- only), structural marker (📝/🔧/📎/💬/🤖/🌿/🔒), or end of
+		-- answer. Lookahead determines which termination mode applies
+		-- to this block (see in_reasoning_explicit_end declaration).
 		elseif current_component == "answer" and line:sub(1, #reasoning_prefix) == reasoning_prefix then
-			current_exchange.reasoning = {
-				line = i,
-				content = line:sub(#reasoning_prefix + 1):gsub("^%s*(.-)%s*$", "%1")
-			}
+			local has_end_marker = false
+			local end_marker_pat = "^%s*" .. vim.pesc(reasoning_prefix) .. "%[END%]%s*$"
+			for j = i + 1, #lines do
+				local ahead = lines[j]
+				if ahead:match(end_marker_pat) then
+					has_end_marker = true
+					break
+				end
+				if ahead:sub(1, #summary_prefix) == summary_prefix
+					or ahead:sub(1, #tool_use_prefix) == tool_use_prefix
+					or ahead:sub(1, #tool_result_prefix) == tool_result_prefix
+					or ahead:sub(1, #user_prefix) == user_prefix
+					or (agent_prefix and ahead:sub(1, #agent_prefix) == agent_prefix)
+					or ahead:sub(1, #branch_prefix) == branch_prefix
+					or ahead:match("^🔒:") then
+					break
+				end
+			end
+			-- Accumulate across multiple 🧠: blocks within the same
+			-- answer (e.g. plan → tool round → reflect → answer). New
+			-- block content is appended with a blank-line separator so
+			-- prior reasoning is preserved verbatim for replay. .line
+			-- stays anchored to the FIRST opener as the block-start
+			-- reference; subsequent openers extend the content only.
+			local opener_text = line:sub(#reasoning_prefix + 1):gsub("^%s*(.-)%s*$", "%1")
+			if current_exchange.reasoning and current_exchange.reasoning.content ~= "" then
+				current_exchange.reasoning.content = current_exchange.reasoning.content
+					.. "\n\n" .. opener_text
+			else
+				current_exchange.reasoning = {
+					line = i,
+					content = opener_text,
+				}
+			end
+			in_reasoning_block = true
+			in_reasoning_explicit_end = has_end_marker
 			-- Also feed into content_blocks so the model tracks it as
 			-- part of the text section (🧠: is just text content).
 			table.insert(content_parts, line)
 			cb_append_line(line, i)
+
+		-- Multi-line reasoning continuation. Reaches here only after
+		-- all structural-marker branches above have failed to match,
+		-- i.e. the line is plain text (or blank). In legacy mode a
+		-- blank line ends the block; in explicit-end mode blank lines
+		-- are part of the reasoning content and only 🧠:[END] /
+		-- structural markers terminate. Either way, non-blank
+		-- continuations are appended to reasoning.content (joined by
+		-- \n) and also fed to content_parts / cb_append_line for replay.
+		elseif in_reasoning_block and current_component == "answer" then
+			if line:match("^%s*$") and not in_reasoning_explicit_end then
+				in_reasoning_block = false
+				table.insert(content_parts, line)
+				cb_append_line(line, i)
+			else
+				if current_exchange.reasoning then
+					if current_exchange.reasoning.content == "" then
+						current_exchange.reasoning.content = line
+					else
+						current_exchange.reasoning.content = current_exchange.reasoning.content .. "\n" .. line
+					end
+				end
+				table.insert(content_parts, line)
+				cb_append_line(line, i)
+			end
 
 		-- Handle content continuation, ignore lines if we are in local_prefix section, aka line_before_local is set
 		--   note, in this mode, both plain text and file reference pattern @@ are ignored.
