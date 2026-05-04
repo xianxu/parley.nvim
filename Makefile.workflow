@@ -10,6 +10,16 @@ WF_ISSUES_DIR ?= issues
 WF_HISTORY_DIR ?= history
 export WF_ISSUES_DIR WF_HISTORY_DIR
 
+# ── Upstream config ──────────────────────────────────────────────────────────
+# Defaults assume ariadne is upstream. Descendants of nous (or other re-export
+# hosts) override these in their root Makefile before `include Makefile.workflow`:
+#   UPSTREAM_NAME    := nous
+#   UPSTREAM_REFRESH := ../nous/nous/setup.sh
+UPSTREAM_NAME      ?= ariadne
+UPSTREAM_DIR       ?= ../$(UPSTREAM_NAME)
+UPSTREAM_MODE_FILE ?= .$(UPSTREAM_NAME)-mode
+UPSTREAM_REFRESH   ?= $(UPSTREAM_DIR)/construct/setup.sh
+
 .PHONY: help-workflow worktree fetch push pull-request merge check pre-merge refresh issue-sync
 
 help-workflow:
@@ -39,7 +49,7 @@ help-workflow:
 	"    make issue-sync     Sync $(WF_ISSUES_DIR)/ changes to main and push" \
 	"" \
 	"  Setup:" \
-	"    make refresh        Re-run ariadne setup (link + merge settings)" \
+	"    make refresh        Re-run $(UPSTREAM_NAME) setup (link + merge settings)" \
 	""
 
 # ── Issue sync ────────────────────────────────────────────────────────────────
@@ -48,31 +58,32 @@ issue-sync:
 	@scripts/issue-sync.sh
 
 # ── Refresh (setup + merge) ───────────────────────────────────────────────────
-# Detection:
-#   .ariadne-mode present → adopted target. Run ../ariadne/construct/setup.sh so
-#     vendored copies are refreshed from the source of truth. If ../ariadne is
-#     missing, fall back to merging settings with the local vendored merge script
-#     (skips the re-vendor — local construct/ may be stale).
-#   .ariadne-mode absent + construct/setup.sh present → ariadne itself; just merge.
-#   .ariadne-mode absent + ../ariadne present → uninitialized target; first-time adopt.
+# Detection (all keyed off UPSTREAM_* vars; defaults target ariadne):
+#   $(UPSTREAM_MODE_FILE) present → adopted target. Run $(UPSTREAM_REFRESH) so
+#     vendored copies are refreshed from the source of truth. If upstream is
+#     missing, fall back to merging settings with the local vendored merge
+#     script (skips the re-vendor — local construct/ may be stale).
+#   $(UPSTREAM_MODE_FILE) absent + construct/setup.sh present → upstream itself
+#     (e.g. running inside ariadne); just merge.
+#   $(UPSTREAM_MODE_FILE) absent + upstream present → uninitialized target; first-time adopt.
 refresh:
-	@if [ -f .ariadne-mode ]; then \
-		if [ -f ../ariadne/construct/setup.sh ]; then \
-			../ariadne/construct/setup.sh; \
+	@if [ -f $(UPSTREAM_MODE_FILE) ]; then \
+		if [ -f $(UPSTREAM_REFRESH) ]; then \
+			$(UPSTREAM_REFRESH); \
 		else \
-			echo "../ariadne not found — merging settings only (skipping re-vendor)."; \
+			echo "$(UPSTREAM_DIR) not found — merging settings only (skipping re-vendor)."; \
 			construct/scripts/merge-settings.sh .claude/settings.ariadne.json .claude; \
 			echo "Done. .claude/settings.json updated."; \
 		fi; \
 	elif [ -f construct/setup.sh ]; then \
-		echo "Ariadne repo detected — merging settings only."; \
+		echo "$(UPSTREAM_NAME) repo detected — merging settings only."; \
 		construct/scripts/merge-settings.sh .claude/settings.ariadne.json .claude; \
 		echo "Done. .claude/settings.json updated."; \
-	elif [ -f ../ariadne/construct/setup.sh ]; then \
-		../ariadne/construct/setup.sh; \
+	elif [ -f $(UPSTREAM_REFRESH) ]; then \
+		$(UPSTREAM_REFRESH); \
 	else \
-		echo "Error: ariadne not found. Clone it as a sibling directory:"; \
-		echo "  cd .. && git clone <ariadne-repo-url>"; \
+		echo "Error: $(UPSTREAM_NAME) not found at $(UPSTREAM_DIR)."; \
+		echo "  Clone it as a sibling directory."; \
 		exit 1; \
 	fi
 

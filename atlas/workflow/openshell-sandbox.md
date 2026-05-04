@@ -54,7 +54,7 @@ The `.openshell/` directory is listed in `construct/base.manifest`. In symlink m
 | `.openshell/overlay/setup.sh` | Shell config, aliases, output capture (^Y) |
 | `.openshell/policy.yaml` | Network egress allowlist |
 | `.openshell/dotfiles/` | Zellij config, layouts |
-| `.openshell/ssh_config`, `ssh_wrapper.sh`, `ssh-bin/` | SSH connectivity |
+| `.openshell/ssh_wrapper.sh`, `ssh-bin/` | SSH connectivity (`~/.ssh/config` block managed at runtime by `sandbox.sh:ensure_ssh_config`) |
 
 ### Runtime artifacts (local per-repo, gitignored)
 

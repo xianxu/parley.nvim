@@ -1,6 +1,6 @@
 ---
 name: xx-datatype
-description: "Use only when the user issues an explicit capture instruction — a verb like 'capture', 'save', 'remember', 'record', 'write down', 'log', 'track', 'note', or 'file' — applied to substance worth keeping. Do NOT trigger on descriptive statements about plans or events ('we're visiting X this summer', 'I had a meeting with Y', 'the launch is next Tuesday'); a domain noun alone ('trip', 'meeting', 'launch') is not a trigger. Also fires on the slash command `/xx-datatype <type> [path]`, and when editing a markdown file whose frontmatter has a known `type:`."
+description: "Use when the user issues an explicit capture or authoring instruction — a verb like 'capture', 'save', 'remember', 'record', 'write down', 'log', 'track', 'note', 'file', 'create', 'set up', 'draft', 'author', or 'start' — applied to substance worth keeping or to a typed-artifact noun. The noun MUST match a known datatype (product, roadmap, meeting-notes, travel-plan, pensive, reference, procedure, event, plus any project-local types in <repo>/datatype/); if it doesn't, do NOT trigger — that's code/conversation territory. Do NOT trigger on descriptive statements ('we're visiting X this summer', 'I had a meeting with Y'); a domain noun alone ('trip', 'meeting') is not a trigger. Do NOT trigger on authoring verbs applied to non-datatype nouns ('create a function', 'create a feature', 'create a branch', 'set up the dev environment', 'draft an email'). Also fires on the slash command `/xx-datatype <type> [path]`, and when editing a markdown file whose frontmatter has a known `type:`."
 ---
 
 # Datatype
@@ -11,22 +11,32 @@ Create and edit *typed data artifacts* — markdown files whose shape is declare
 
 This skill is the primary way the agent captures conversational substance into a durable, structured file. It activates on three triggers, in priority order:
 
-1. **Conversational capture** (the common case). The user uses an explicit capture verb — `capture`, `save`, `remember`, `record`, `write down`, `log`, `track`, `note`, `file` — applied to substance worth keeping. Examples that DO trigger:
+1. **Conversational capture or authoring** (the common case). The user uses one of two patterns:
+
+   **(a) Capture verb + substance** — `capture`, `save`, `remember`, `record`, `write down`, `log`, `track`, `note`, `file` applied to material worth keeping. Examples that DO trigger:
    - "capture this trip to Rome"
    - "save these meeting notes"
    - "remember these contractors"
    - "let's track this launch"
    - "write that down as a procedure"
 
-   Once triggered, pick the type by the domain noun ("trip" → `travel-plan`, "meeting" → `meeting-notes`, "list" / "set of" / "these contractors" → `reference`, "steps" / "procedure" / "how to" → `procedure`, "launch" / "deadline" / "conference" → `event`). When the noun is ambiguous, ask once.
+   **(b) Authoring verb + typed-artifact noun** — `create`, `set up`, `draft`, `author`, `start` applied to a noun that MATCHES A KNOWN DATATYPE. Known datatypes are the prototypes in `construct/datatype/` plus any project-local prototypes in `<repo>/datatype/`. **If the noun doesn't match a known datatype, do NOT trigger — it's code-writing or general conversation territory, not capture territory.** Enumerate available types via `ls construct/datatype/ <repo>/datatype/ 2>/dev/null` before deciding ambiguous cases.
 
-   Examples that do NOT trigger — descriptive statements without a capture verb:
-   - "we're visiting France this summer" — describing plans, not asking to file them
-   - "I had a meeting with Alice today" — recounting, not capturing
-   - "the launch is next Tuesday" — stating a fact
-   - "here's how I usually deploy" — explaining, not recording
+   Examples that DO trigger (noun matches a known datatype):
+   - "create nous as a product"
+   - "set up a product file for ariadne"
+   - "draft a roadmap for charon for 202610"
+   - "let's start a product for the workshop tool"
+   - "author a pensive on the rename"
 
-   When the user is just sharing context, treat it as conversation. Do not proactively offer to capture unless the user has signaled the intent — a domain noun on its own is **not** sufficient.
+   Once triggered, pick the type. For (a), the domain noun selects it ("trip" → `travel-plan`, "meeting" → `meeting-notes`, "list" / "set of" / "these contractors" → `reference`, "steps" / "procedure" / "how to" → `procedure`, "launch" / "deadline" / "conference" → `event`). For (b), the type is named explicitly. When ambiguous, ask once.
+
+   Examples that do NOT trigger:
+   - **Descriptive statements without a verb:** "we're visiting France this summer" (describing), "I had a meeting with Alice" (recounting), "the launch is next Tuesday" (stating).
+   - **Authoring verbs on nouns that aren't known datatypes:** "create a function", "create a feature", "create a class", "create a directory", "create a branch", "set up the dev environment", "draft an email", "start the server". These are code/process work — outside this skill's scope.
+   - **A domain noun alone:** "the trip", "the meeting" — no verb, no trigger.
+
+   When the user is just sharing context, treat it as conversation. Do not proactively offer to capture unless the user has signaled the intent.
 
 2. **Slash invocation:** `/xx-datatype <type> [path]` — explicit, used when the user already knows the type and wants no inference.
 

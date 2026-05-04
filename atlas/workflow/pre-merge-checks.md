@@ -18,20 +18,12 @@ Automated constitution enforcement. Before code lands on main, agent-driven chec
 
 - `make check` or `make pre-merge` — interactive selection
 - `make check-dry` — single check
-- `scripts/parallel-checks.sh --audit` — all checks in parallel (read-only)
-- `scripts/parallel-checks.sh --hook-gate` — threshold-based auto-trigger
+- `make c` / `scripts/parallel-checks.sh --audit` — all checks in parallel (read-only)
 
-## Threshold gate (hook mode)
-
-The hook gate measures diff size since last check. Based on growth:
-- **Below threshold**: silent (no interruption)
-- **Nag threshold**: reminds agent to run checks voluntarily
-- **Force threshold** (3x nag): runs checks immediately, blocks if violations found
-
-State tracked in `.constitution-check-state` (git-ignored).
+Checks are run on demand; there is no automatic threshold-based hook.
 
 ## Scripts
 
 - `scripts/lib.sh` — shared helpers (colors, git diff base, output classification)
 - `scripts/pre-merge-checks.sh` — individual check runner with agent invocation
-- `scripts/parallel-checks.sh` — parallel orchestrator with threshold logic
+- `scripts/parallel-checks.sh` — parallel orchestrator
