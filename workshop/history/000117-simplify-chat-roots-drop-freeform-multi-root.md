@@ -1,6 +1,6 @@
 ---
 id: 000117
-status: working
+status: done
 deps: []
 created: 2026-05-04
 updated: 2026-05-04
@@ -86,30 +86,38 @@ Verification (manual) — completed 2026-05-04:
       `{<sibling-repo-name>}`; toggle off removes them; state
       untouched.
 
-### M2 — delete
+### M2 — delete (revised scope, executed)
 
-- [ ] Remove `add_chat_dir` / `remove_chat_dir` / `rename_chat_dir`
-      from `lua/parley/root_dirs.lua:266-333`.
-- [ ] Remove `<C-n>/<C-r>/<C-d>` hotkeys from
-      `lua/parley/root_dir_picker.lua` (or delete the picker module
-      if `:ParleyChatDirs` is its only caller).
-- [ ] Drop the `persist` parameter from `set_chat_roots` /
-      `set_chat_dirs`; the only remaining callers (repo,
-      super-repo) all pass `persist = false`.
-- [ ] Drop `chat_dirs` field from `state.json` entirely. Stop reading
-      it on load.
-- [ ] Convert `get_chat_roots()` to a pure derivation:
-      `[config.chat_dir] + repo_local + super_repo_pushed` — no
-      stored `M._state.chat_roots`. Remove the `label = "repo"` /
-      persistence-gate logic from
-      `lua/parley/init.lua:1020-1039, 1106-1127`.
-- [ ] Update `atlas/infra/repo_mode.md`: shorten the multi-root
-      section, remove freeform-add references.
-- [ ] Update `atlas/modes/super_repo.md` if it references the
-      persistence gate.
-- [ ] Drop tests that exercise `add_chat_dir` / `:ParleyChatDirAdd`.
-      Add a test asserting that `state.json` after a repo-mode
-      session contains no `chat_dirs` field.
+The original draft had two items that turned out to be wrong on
+inspection — `root_dirs.lua` mutators and `root_dir_picker.lua`
+hotkeys are shared with the *note* system, which still has UI commands
+and persists. Notes were left untouched. The "pure derivation" item
+was also dropped — the existing cached `M._state.chat_roots` shape
+works fine once freeform mutation is gone, and the refactor would
+touch hot read paths for marginal gain. Final M2 scope:
+
+- [x] Delete `M.add_chat_dir` / `M.remove_chat_dir` / `M.rename_chat_dir`
+      from `lua/parley/chat_dirs.lua` and the matching forwarders in
+      `lua/parley/init.lua` (root_dirs.lua mutators kept for notes).
+- [x] Delete `M.cmd_chat_dirs`, `M.cmd_chat_dir_add`,
+      `M.cmd_chat_dir_remove` from `chat_dirs.lua`.
+- [x] Delete `lua/parley/chat_dir_picker.lua` and its require in
+      `init.lua`.
+- [x] Stop reading `chat_dirs` / `chat_roots` from `state.json` on
+      load — `init.lua` `refresh_state` chat branch removed.
+- [x] Delete the chat-side defensive re-injection at
+      `init.lua:1020-1043` (note-side block kept).
+- [x] Drop chat half of `strip_transient` and inline the note-side
+      logic; chat is unconditionally nil-ed before persist.
+- [x] Delete `global_shortcut_chat_dirs` from `config.lua`.
+- [x] Replace `tests/unit/chat_dirs_spec.lua` with the new contract:
+      single-root derivation, no chat keys in state.json, stale chat
+      keys ignored on load, stale chat keys removed from state.json
+      on next persist.
+- [x] Update `atlas/infra/repo_mode.md` and `atlas/modes/super_repo.md`
+      to reflect the new chat/note asymmetry.
+- [x] All tests pass; lint clean (151 files, was 152 — chat_dir_picker
+      deleted).
 
 ### Verification
 

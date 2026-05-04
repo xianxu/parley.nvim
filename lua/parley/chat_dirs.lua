@@ -34,26 +34,10 @@ M.normalize_chat_roots = function(primary, extras, structured) return _root_mgr.
 
 M.set_chat_dirs = function(dirs, persist) return _root_mgr.set_dirs(dirs, persist) end
 M.set_chat_roots = function(roots, persist) return _root_mgr.set_roots(roots, persist) end
--- DEPRECATED (issue #117 M1): freeform multi-root mutation is going
--- away. add/remove/rename are no longer reachable from any command or
--- keybinding; repo mode and super-repo mode are the only supported
--- ways to extend the chat-roots list. Kept callable for one release as
--- a rollback safety net; will be removed in M2.
-M.add_chat_dir = function(dir, persist, label) return _root_mgr.add_dir(dir, persist, label) end
-M.remove_chat_dir = function(dir, persist) return _root_mgr.remove_dir(dir, persist) end
-M.rename_chat_dir = function(dir, label, persist) return _root_mgr.rename_dir(dir, label, persist) end
 
 --------------------------------------------------------------------------------
 -- Commands (chat-specific)
 --------------------------------------------------------------------------------
-
--- DEPRECATED (issue #117 M1): :ParleyChatDirs / :ParleyChatDirAdd /
--- :ParleyChatDirRemove are no longer registered as user commands. The
--- handlers below are kept for one release in case M1 needs to be
--- rolled back. M2 will delete them.
-M.cmd_chat_dirs = function(_params)
-    _parley.chat_dir_picker.chat_dir_picker(_parley)
-end
 
 M.cmd_chat_move = function(params)
     local file_name = vim.api.nvim_buf_get_name(0)
@@ -71,49 +55,6 @@ M.cmd_chat_move = function(params)
     end
 
     _parley.prompt_chat_move(file_name)
-end
-
-M.cmd_chat_dir_add = function(params)
-    local dir = params and params.args or ""
-    if dir == "" then
-        dir = vim.fn.input({
-            prompt = "Add chat dir: ",
-            default = vim.fn.getcwd() .. "/",
-            completion = "dir",
-        })
-        vim.cmd("redraw")
-    end
-
-    if not dir or dir == "" then
-        return
-    end
-
-    local normalized, err = M.add_chat_dir(dir, true)
-    if not normalized then
-        vim.notify("Failed to add chat dir: " .. err, vim.log.levels.WARN)
-        return
-    end
-
-    local added_dir = normalized[#normalized]
-    _parley.logger.info("Added chat dir: " .. added_dir)
-    vim.notify("Added chat dir: " .. added_dir, vim.log.levels.INFO)
-end
-
-M.cmd_chat_dir_remove = function(params)
-    local dir = params and params.args or ""
-    if dir == "" then
-        vim.notify("Usage: :" .. _parley.config.cmd_prefix .. "ChatDirRemove <dir>", vim.log.levels.WARN)
-        return
-    end
-
-    local normalized, err = M.remove_chat_dir(dir, true)
-    if not normalized then
-        vim.notify("Failed to remove chat dir: " .. err, vim.log.levels.WARN)
-        return
-    end
-
-    _parley.logger.info("Removed chat dir: " .. dir)
-    vim.notify("Removed chat dir: " .. dir, vim.log.levels.INFO)
 end
 
 return M

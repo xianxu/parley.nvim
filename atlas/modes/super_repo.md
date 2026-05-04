@@ -64,12 +64,17 @@ design (see `workshop/issues/000113-create-a-super-repo-mode.md`).
 
 ## Persistence safety
 
-Super-repo-pushed sibling roots are excluded from `state.json` by the
-persistence gate in `init.lua`. The gate consults
-`super_repo.get_pushed_chat_dirs()` and `super_repo.get_pushed_note_dirs()`,
-in addition to the existing `label = "repo"` filter for plain repo mode's
-primary root. The gate now also covers `note_roots` (was chat-only —
-side fix during M1).
+For **chat** roots: trivially safe. Issue #117 stopped persisting
+`chat_roots` / `chat_dirs` to `state.json` entirely — the chat root list
+is derived on every read from `config.chat_dir + repo + super-repo`.
+Super-repo's `get_pushed_chat_dirs()` is still called by the (now
+chat-less) persistence gate sibling note path indirectly, but on the
+chat side there is nothing to filter.
+
+For **note** roots: the persistence gate still runs. Super-repo-pushed
+sibling note dirs are excluded from `state.json` via
+`super_repo.get_pushed_note_dirs()`, in addition to the `label = "repo"`
+filter for plain repo mode's primary note root.
 
 ## Code
 

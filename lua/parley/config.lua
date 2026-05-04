@@ -360,10 +360,6 @@ local config = {
 	global_shortcut_new = { modes = { "n", "i" }, shortcut = "<C-g>c" },
 	global_shortcut_review = { modes = { "n" }, shortcut = "<C-g>C" },
 	global_shortcut_finder = { modes = { "n", "i" }, shortcut = "<C-g>f" },
-	-- DEPRECATED (issue #117 M1): the chat-dirs picker is no longer
-	-- registered as a keybinding. Setting this in user config is now a
-	-- no-op. Will be removed in M2.
-	global_shortcut_chat_dirs = { modes = { "n", "i" }, shortcut = "<C-g>h" },
 	global_shortcut_keybindings = { modes = { "n", "i" }, shortcut = "<C-g>?" },
 	-- shortcut for adding chat references in markdown files
 	global_shortcut_add_chat_ref = { modes = { "n", "i" }, shortcut = "<C-g>a" },

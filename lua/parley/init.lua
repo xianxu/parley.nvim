@@ -31,7 +31,6 @@ chat_parser = require("parley.chat_parser"), -- chat file parser
 	lualine = require("parley.lualine"), -- lualine integration
 	agent_picker = require("parley.agent_picker"), -- agent selection UI
 	system_prompt_picker = require("parley.system_prompt_picker"), -- system prompt selection UI
-	chat_dir_picker = require("parley.chat_dir_picker"), -- chat root management UI
 	note_dir_picker = require("parley.note_dir_picker"), -- note root management UI
 	float_picker = require("parley.float_picker"), -- shared floating window picker
 }
@@ -191,9 +190,8 @@ end
 
 -- Passthroughs to chat_dirs module (see lua/parley/chat_dirs.lua)
 -- Local helpers are defined as wrappers at the top of this file (near require).
--- apply_chat_roots / apply_chat_dirs / normalize_chat_roots accessed via chat_dirs.*
+-- apply_chat_roots / normalize_chat_roots accessed via chat_dirs.*
 local apply_chat_roots = function(...) return chat_dirs.apply_chat_roots(...) end
-local apply_chat_dirs = function(...) return chat_dirs.apply_chat_dirs(...) end
 local normalize_chat_roots = function(...) return chat_dirs.normalize_chat_roots(...) end
 local resolve_dir_key = function(d) return vim.fn.resolve(vim.fn.expand(d)):gsub("/+$", "") end
 
@@ -201,9 +199,6 @@ M.get_chat_roots = function() return chat_dirs.get_chat_roots() end
 M.get_chat_dirs = function() return chat_dirs.get_chat_dirs() end
 M.set_chat_dirs = function(d, p) return chat_dirs.set_chat_dirs(d, p) end
 M.set_chat_roots = function(r, p) return chat_dirs.set_chat_roots(r, p) end
-M.add_chat_dir = function(d, p, l) return chat_dirs.add_chat_dir(d, p, l) end
-M.remove_chat_dir = function(d, p) return chat_dirs.remove_chat_dir(d, p) end
-M.rename_chat_dir = function(d, l, p) return chat_dirs.rename_chat_dir(d, l, p) end
 
 -- Passthroughs to note_dirs module (see lua/parley/note_dirs.lua)
 local apply_note_roots = function(...) return note_dirs.apply_note_roots(...) end
@@ -1003,15 +998,9 @@ M.refresh_state = function(update)
 		M._state.follow_cursor = not M.config.chat_free_cursor
 	end
 
-	if type(M._state.chat_roots) == "table" and #M._state.chat_roots > 0 then
-		apply_chat_roots(M._state.chat_roots)
-	elseif type(M._state.chat_dirs) == "table" and #M._state.chat_dirs > 0 then
-		apply_chat_dirs(M._state.chat_dirs)
-		M._state.chat_roots = vim.deepcopy(M.get_chat_roots())
-	else
-		M._state.chat_roots = vim.deepcopy(M.get_chat_roots())
-		M._state.chat_dirs = vim.deepcopy(M.get_chat_dirs())
-	end
+	-- Issue #117 M2: chat roots are derived from config.chat_dir + repo
+	-- mode + super-repo, never restored from state.json. Old state files
+	-- may still carry chat_dirs/chat_roots fields — they are ignored.
 
 	-- Restore note roots from persisted state
 	if type(M._state.note_roots) == "table" and #M._state.note_roots > 0 then
@@ -1021,27 +1010,12 @@ M.refresh_state = function(update)
 		M._state.note_dirs = vim.deepcopy(M.get_note_dirs())
 	end
 
-	-- In repo mode, ensure repo chat dir is the primary root (overrides persisted state)
-	if M.config.repo_root and M.config.repo_chat_dir then
-		local repo_chat = M.config.repo_root .. "/" .. M.config.repo_chat_dir
-		local resolved_repo = vim.fn.resolve(vim.fn.expand(repo_chat)):gsub("/+$", "")
-		local current_roots = M.get_chat_roots()
-		local already_primary = #current_roots > 0
-			and vim.fn.resolve(vim.fn.expand(current_roots[1].dir)):gsub("/+$", "") == resolved_repo
-
-		if not already_primary then
-			-- Remove repo_chat from extras if present, then prepend as primary
-			local new_roots = { { dir = repo_chat, label = "repo" } }
-			for _, root in ipairs(current_roots) do
-				if vim.fn.resolve(vim.fn.expand(root.dir)):gsub("/+$", "") ~= resolved_repo then
-					table.insert(new_roots, root)
-				end
-			end
-			apply_chat_roots(new_roots)
-			M._state.chat_roots = vim.deepcopy(M.get_chat_roots())
-			M._state.chat_dirs = vim.deepcopy(M.get_chat_dirs())
-		end
-	end
+	-- Issue #117 M2: the chat-side defensive re-injection of repo_chat
+	-- as primary lived here. With state.json no longer carrying chat
+	-- roots, apply_repo_local at setup is the single source of truth
+	-- for the chat roots list — there's no stale state to defend
+	-- against. The note-side block below is unchanged because notes
+	-- still persist their roots (separate cleanup, separate issue).
 
 	-- In repo mode, ensure repo note dir is the primary root (overrides persisted state)
 	if M.config.repo_root and M.config.repo_note_dir then
@@ -1090,13 +1064,15 @@ M.refresh_state = function(update)
 		end
 	end
 
-	-- Repo-mode roots are transient (determined by cwd + marker at startup,
-	-- or by super-repo toggle). Never persist them — otherwise a later
-	-- session with a different cwd restores repo roots it shouldn't have.
-	-- Two sources of transient roots:
-	--   * Plain repo mode: primary chat/note root tagged with label = "repo".
-	--   * Super-repo mode: sibling chat/note dirs pushed by super_repo module.
+	-- Note-mode roots are transient (super-repo toggle, or plain repo
+	-- mode tagging the primary with label = "repo"). Never persist them
+	-- — otherwise a later session with a different cwd would restore
+	-- roots it shouldn't have. Issue #117 M2: chat roots are no longer
+	-- persisted at all (derived from config + repo + super-repo); only
+	-- the note side still goes through strip_transient.
 	local persist_state = vim.deepcopy(M._state)
+	persist_state.chat_roots = nil
+	persist_state.chat_dirs = nil
 	local function resolve_dir(d)
 		local out = vim.fn.resolve(vim.fn.expand(d)):gsub("/+$", "")
 		return out
@@ -1106,38 +1082,25 @@ M.refresh_state = function(update)
 		for _, d in ipairs(list or {}) do s[d] = true end
 		return s
 	end
-	local pushed_chat = set_of(super_repo.get_pushed_chat_dirs())
 	local pushed_note = set_of(super_repo.get_pushed_note_dirs())
-	local function strip_transient(roots_key, dirs_key, pushed_set)
-		if type(persist_state[roots_key]) == "table" then
-			local filtered = {}
-			for _, root in ipairs(persist_state[roots_key]) do
-				if root.label ~= "repo" and not pushed_set[resolve_dir(root.dir)] then
-					table.insert(filtered, root)
-				end
+	if type(persist_state.note_roots) == "table" then
+		local filtered = {}
+		for _, root in ipairs(persist_state.note_roots) do
+			if root.label ~= "repo" and not pushed_note[resolve_dir(root.dir)] then
+				table.insert(filtered, root)
 			end
-			persist_state[roots_key] = #filtered > 0 and filtered or nil
 		end
-		if type(persist_state[roots_key]) == "table" then
-			local dirs = {}
-			for _, root in ipairs(persist_state[roots_key]) do
-				table.insert(dirs, root.dir)
-			end
-			persist_state[dirs_key] = #dirs > 0 and dirs or nil
-		else
-			persist_state[dirs_key] = nil
-		end
+		persist_state.note_roots = #filtered > 0 and filtered or nil
 	end
-	strip_transient("chat_roots", "chat_dirs", pushed_chat)
-	strip_transient("note_roots", "note_dirs", pushed_note)
-	-- Issue #117 M1: chat roots are no longer freeform-configurable.
-	-- The list is derived from config.chat_dir + repo mode + super-repo
-	-- on every read, so persisting it is meaningless. Stop writing the
-	-- chat keys to state.json. Reading remains intact for back-compat
-	-- with state files written by older versions; in M2 the read path
-	-- and the strip_transient call above will both go away.
-	persist_state.chat_roots = nil
-	persist_state.chat_dirs = nil
+	if type(persist_state.note_roots) == "table" then
+		local dirs = {}
+		for _, root in ipairs(persist_state.note_roots) do
+			table.insert(dirs, root.dir)
+		end
+		persist_state.note_dirs = #dirs > 0 and dirs or nil
+	else
+		persist_state.note_dirs = nil
+	end
 	M.helpers.table_to_file(persist_state, state_file)
 
 	local buf = vim.api.nvim_get_current_buf()
