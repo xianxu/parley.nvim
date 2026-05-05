@@ -1,9 +1,9 @@
 ---
 id: 000104
-status: open
+status: punt
 deps: []
 created: 2026-04-13
-updated: 2026-04-13
+updated: 2026-05-05
 ---
 
 # Chat-to-document lineage and context threading
@@ -57,3 +57,7 @@ sources:
 ### 2026-04-13
 
 Issue created from brainstorming. Key insight: chat tree is the reasoning process, documents are the fruits. "Path to root" naturally scopes context. Multiple chats touching one document form a DAG — each source should explain its relationship to the document.
+
+### 2026-05-05
+
+Punted. Direction shift: parley is being scoped down to the marking layer (place 🤖[] markers), with Claude Code driving the actual content creation/resolution. Lineage-fed review context was designed to power parley's own review pipeline, which is no longer the primary surface for content creation.

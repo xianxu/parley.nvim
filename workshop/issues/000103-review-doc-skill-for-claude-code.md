@@ -1,11 +1,11 @@
 ---
 id: 000103
-status: open
+status: done
 deps: []
 created: 2026-04-13
-updated: 2026-04-13
+updated: 2026-05-05
 ---
-🤖[]
+
 # Review-doc skill for Claude Code
 
 The `㊷[comment]` review marker system in `parley/review.lua` is powerful but currently Parley-only. The system prompt and edit protocol are tool-agnostic — they should be portable to Claude Code as a skill (e.g. `/review-doc`).
@@ -31,3 +31,7 @@ What we lose vs Parley: diagnostics, color-coded markers, quickfix navigation. B
 ### 2026-04-13
 
 Issue created from brainstorming session about cross-pollination between Parley and Claude Code.
+
+### 2026-05-05
+
+Closed as done. The `xx-fix` skill now provides the cross-tool equivalent: write `🤖{finding}` markers inline during review, then run `/xx-fix <path>` to process them. Different sigil from Parley's `㊷[]` but the same annotate-then-resolve flow.

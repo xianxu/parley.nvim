@@ -1,9 +1,9 @@
 ---
 id: 000105
-status: open
+status: punt
 deps: []
 created: 2026-04-13
-updated: 2026-04-13
+updated: 2026-05-05
 ---
 
 # Review visual feedback and progress component
@@ -49,3 +49,7 @@ Lualine, floating window, or virtual text can subscribe and render. Keep data la
 ### 2026-04-13
 
 Issue created from brainstorming. Current review is batch (correct — one-by-one has interaction problems between markers). Visual feedback should come from parsing the streaming response, not changing the processing model.
+
+### 2026-05-05
+
+Punted. Direction shift: parley is being scoped down to the marking layer (place 🤖[] markers), with Claude Code driving the actual content creation/resolution via `xx-fix`. Progress feedback for parley's own review pipeline becomes lower priority under that split.
