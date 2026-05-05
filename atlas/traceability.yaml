@@ -278,6 +278,7 @@ atlas:
       - lua/parley/tools/builtin/ls.lua
       - lua/parley/tools/builtin/find.lua
       - lua/parley/tools/builtin/grep.lua
+      - lua/parley/tools/builtin/chat_history_search.lua
       - lua/parley/tools/builtin/ack.lua
       - lua/parley/tools/builtin/edit_file.lua
       - lua/parley/tools/builtin/write_file.lua
@@ -293,6 +294,7 @@ atlas:
       - tests/unit/tools_builtin_glob_spec.lua
       - tests/unit/tools_builtin_list_dir_spec.lua
       - tests/unit/tools_builtin_grep_spec.lua
+      - tests/unit/tools_builtin_chat_history_search_spec.lua
       - tests/unit/anthropic_tool_decode_spec.lua
       - tests/unit/anthropic_tool_encode_spec.lua
       - tests/unit/config_tools_spec.lua

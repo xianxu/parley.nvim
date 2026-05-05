@@ -15,3 +15,6 @@
 
 ## Per-Chat Override
 - Header `max_full_exchanges: <number>` overrides global config
+
+## Cross-Chat Recall
+- The `chat_history_search` tool lets agents search across ALL configured chat roots (global + repo + super-repo siblings). Use this when the user asks "do you remember when we talked about X?". Output paths are prefixed with `{<repo>}/...` so the agent can identify which repo each hit belongs to. See [Tool Use](../providers/tool_use.md).

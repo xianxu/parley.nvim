@@ -28,6 +28,7 @@ local EXPECTED_BUILTINS = {
     "ls",
     "find",
     "grep",
+    "chat_history_search",
     "edit_file",
     "write_file",
 }
@@ -119,7 +120,7 @@ describe("register_builtins", function()
 
     it("read-type builtins declare kind = 'read' (or nil defaulting to read)", function()
         registry.register_builtins()
-        for _, name in ipairs({ "read_file", "ls", "find", "grep" }) do
+        for _, name in ipairs({ "read_file", "ls", "find", "grep", "chat_history_search" }) do
             local kind = registry.get(name).kind
             assert.is_true(kind == "read" or kind == nil,
                 name .. " expected kind 'read' or nil, got " .. tostring(kind))

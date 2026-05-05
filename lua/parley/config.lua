@@ -170,18 +170,28 @@ local config = {
 			-- Agentic Claude: enables client-side filesystem tool use so the
 			-- model can read, edit, and write files inside the working
 			-- directory. Headline M1 deliverable of issue #81.
+			provider = "cliproxyapi",
+			name = "ToolSonnet*",
+			model = { model = "claude-sonnet-4-6", temperature = 0.8, web_search_strategy = "anthropic_tools_route" },
+			system_prompt = require("parley.defaults").chat_system_prompt,
+			tools = { "read_file", "ls", "find", "grep", "chat_history_search", "edit_file", "write_file" },
+		},
+		{
+			-- Agentic Claude: enables client-side filesystem tool use so the
+			-- model can read, edit, and write files inside the working
+			-- directory. Headline M1 deliverable of issue #81.
 			provider = "anthropic",
 			name = "ToolSonnet",
 			model = { model = "claude-sonnet-4-6", temperature = 0.8 },
 			system_prompt = require("parley.defaults").chat_system_prompt,
-			tools = { "read_file", "ls", "find", "grep", "edit_file", "write_file" },
+			tools = { "read_file", "ls", "find", "grep", "chat_history_search", "edit_file", "write_file" },
 		},
 		{
 			provider = "anthropic",
 			name = "ToolOpus",
-			model = { model = "claude-Opus-4-6", temperature = 0.8 },
+			model = { model = "claude-Opus-4-7", temperature = 0.8 },
 			system_prompt = require("parley.defaults").chat_system_prompt,
-			tools = { "read_file", "ls", "find", "grep", "edit_file", "write_file" },
+			tools = { "read_file", "ls", "find", "grep", "chat_history_search", "edit_file", "write_file" },
 			-- Optional: defaults applied at setup time when absent
 			-- max_tool_iterations = 20,
 			-- tool_result_max_bytes = 102400,

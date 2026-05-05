@@ -138,13 +138,14 @@ describe("default ToolSonnet", function()
         assert.is_not_nil(agent, "ToolSonnet should ship as a default agent")
         assert.equals("anthropic", agent.provider)
         assert.is_table(agent.tools)
-        assert.equals(6, #agent.tools)
+        assert.equals(7, #agent.tools)
         local names = {}
         for _, n in ipairs(agent.tools) do names[n] = true end
         assert.is_true(names.read_file)
         assert.is_true(names.ls)
         assert.is_true(names.find)
         assert.is_true(names.grep)
+        assert.is_true(names.chat_history_search)
         assert.is_true(names.edit_file)
         assert.is_true(names.write_file)
     end)
@@ -175,7 +176,7 @@ describe("get_agent forwards client-side tool config (full wiring chain)", funct
         local agent = parley.get_agent("ToolSonnet")
         assert.is_not_nil(agent)
         assert.is_table(agent.tools)
-        assert.equals(6, #agent.tools)
+        assert.equals(7, #agent.tools)
     end)
 
     it("get_agent(ToolSonnet) forwards max_tool_iterations and tool_result_max_bytes", function()
@@ -191,11 +192,11 @@ describe("get_agent forwards client-side tool config (full wiring chain)", funct
         assert.is_nil(agent.tool_result_max_bytes)
     end)
 
-    it("get_agent_info(headers, get_agent('ToolSonnet')).tools is the 6-item list", function()
+    it("get_agent_info(headers, get_agent('ToolSonnet')).tools is the 7-item list", function()
         local agent = parley.get_agent("ToolSonnet")
         local info = parley.get_agent_info({}, agent)
         assert.is_table(info.tools)
-        assert.equals(6, #info.tools)
+        assert.equals(7, #info.tools)
     end)
 
     -- THE end-to-end test that regresses the exact 1b8ceb8 bug. Walks all
@@ -217,7 +218,7 @@ describe("get_agent forwards client-side tool config (full wiring chain)", funct
 
         local payload = dispatcher.prepare_payload(msgs, info.model, info.provider, info.tools)
         assert.is_not_nil(payload.tools, "payload.tools must not be nil for a tools-enabled agent")
-        assert.equals(6, #payload.tools, "expected exactly 6 client-side tools in payload")
+        assert.equals(7, #payload.tools, "expected exactly 7 client-side tools in payload")
 
         local names = {}
         for _, t in ipairs(payload.tools) do names[t.name] = true end
@@ -225,6 +226,7 @@ describe("get_agent forwards client-side tool config (full wiring chain)", funct
         assert.is_true(names.ls)
         assert.is_true(names.find)
         assert.is_true(names.grep)
+        assert.is_true(names.chat_history_search)
         assert.is_true(names.edit_file)
         assert.is_true(names.write_file)
     end)
@@ -244,7 +246,7 @@ describe("get_agent forwards client-side tool config (full wiring chain)", funct
 
         local payload = dispatcher.prepare_payload(msgs, info.model, info.provider, info.tools)
         assert.is_not_nil(payload.tools)
-        assert.equals(8, #payload.tools, "expected 6 client-side + 2 server-side tools")
+        assert.equals(9, #payload.tools, "expected 7 client-side + 2 server-side tools")
 
         local names = {}
         for _, t in ipairs(payload.tools) do names[t.name] = true end

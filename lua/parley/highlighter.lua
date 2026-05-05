@@ -491,7 +491,11 @@ M.display_agent = function(buf, file_name)
         return
     end
 
-    local ns_id = vim.api.nvim_create_namespace("ParleyChatExt_" .. file_name)
+    -- Stable namespace (not keyed by file_name) so the badge is correctly
+    -- replaced when the chat is auto-renamed by topic-slug. Previously the
+    -- per-filename namespace meant a renamed buffer kept its old extmark in
+    -- the prior namespace and the new badge was rendered alongside it.
+    local ns_id = vim.api.nvim_create_namespace("ParleyChatExt")
     vim.api.nvim_buf_clear_namespace(buf, ns_id, 0, -1)
 
     local agent = _parley._state.agent

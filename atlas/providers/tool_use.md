@@ -12,6 +12,7 @@ Standard Unix tools exposed to Claude, plus file operations:
 | `ls` | read | Shell out to system `ls`. Param: `command` |
 | `find` | read | Shell out to system `find`. Param: `command` |
 | `grep` | read | Shell out to `rg` or system `grep`. Param: `command` |
+| `chat_history_search` | read | Search past chats across ALL chat roots (global + repo + super-repo siblings). Output is `{<repo>}/...`-prefixed. Default context `-B1 -A2`, `*.md` glob, case-insensitive. Params: `pattern`, `before`, `after`, `glob`, `case_insensitive`, `max_count` |
 | `edit_file` | write | String replacement (`old_string`/`new_string`) or line insertion (`insert_line`/`insert_text`) |
 | `write_file` | write | Create/overwrite file. Numbered `.parley-backup.N` on each write |
 | `ack` | read | Optional, registered only if `ack` is installed |
@@ -46,7 +47,7 @@ Tool blocks in the transcript:
 
 ## Safety
 
-- **cwd-scope**: dispatcher checks both `path` and `file_path` fields against working directory
+- **cwd-scope**: dispatcher checks both `path` and `file_path` fields against working directory. `chat_history_search` deliberately accepts neither, so it can search chat roots that live outside cwd (global iCloud dir, super-repo siblings).
 - **Iteration cap**: `max_tool_iterations` (default 10) — writes synthetic `📎: (iteration limit reached)` when hit
 - **Cancellation**: `cmd_stop` triggers `repair_unmatched_tool_blocks` — writes `📎: (cancelled by user)` for any 🔧: without matching 📎:
 - **Backup**: `write_file` creates numbered `.parley-backup.N` on every write

@@ -79,6 +79,7 @@ M.BUILTIN_NAMES = {
     "ls",
     "find",
     "grep",
+    "chat_history_search",
     "edit_file",
     "write_file",
 }
