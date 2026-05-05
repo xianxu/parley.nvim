@@ -36,22 +36,46 @@ test: lint test-unit test-integration
 # Number of parallel test processes (override with JOBS=N).
 JOBS ?= 8
 
+# Per-file test runner. Captures the file's output; prints `PASS: <path>` on
+# success or a labelled `===FAIL: <path>===` block (with indented output) on
+# failure; appends the failing path to $FAILED_LOG so the recipe can print a
+# reliable summary after xargs finishes. Single-line PASS writes are atomic;
+# the FAIL block is best-effort across parallel jobs but the end-of-run
+# summary is authoritative either way.
+RUN_SPEC = sh -c 'out=$$(mktemp "$$TMPDIR/parley-test.XXXXXX"); if nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile $$1" -c "qa!" >"$$out" 2>&1; then printf "PASS: %s\n" "$$1"; rm -f "$$out"; else { printf "===FAIL: %s===\n" "$$1"; sed "s/^/  /" "$$out"; }; echo "$$1" >> "$$FAILED_LOG"; rm -f "$$out"; exit 1; fi' _
+
 # Run unit tests in parallel — each file in its own Neovim process.
 # Safe because unit tests have no shared state.
 test-unit:
 	@$(PREP_TEST_ENV)
 	@export $(TEST_ENV); \
+	FAILED_LOG=$$(mktemp "$$TMPDIR/parley-failed.XXXXXX"); export FAILED_LOG; \
 	find tests/unit -name '*_spec.lua' | sort | \
-	  xargs -P $(JOBS) -I {} nvim -n --headless --noplugin -u tests/minimal_init.vim \
-	    -c "PlenaryBustedFile {}" -c "qa!" || { echo "Unit tests failed"; exit 1; }
+	  xargs -P $(JOBS) -I {} $(RUN_SPEC) {}; \
+	rc=0; \
+	if [ -s "$$FAILED_LOG" ]; then \
+	  printf '\n=== Failed unit test files ===\n'; \
+	  sort -u "$$FAILED_LOG"; \
+	  rc=1; \
+	fi; \
+	rm -f "$$FAILED_LOG"; \
+	exit $$rc
 
 # Run integration + arch tests in parallel — each file in its own Neovim process.
 test-integration:
 	@$(PREP_TEST_ENV)
 	@export $(TEST_ENV); \
+	FAILED_LOG=$$(mktemp "$$TMPDIR/parley-failed.XXXXXX"); export FAILED_LOG; \
 	find tests/integration tests/arch -name '*_spec.lua' | sort | \
-	  xargs -P $(JOBS) -I {} nvim -n --headless --noplugin -u tests/minimal_init.vim \
-	    -c "PlenaryBustedFile {}" -c "qa!" || { echo "Integration tests failed"; exit 1; }
+	  xargs -P $(JOBS) -I {} $(RUN_SPEC) {}; \
+	rc=0; \
+	if [ -s "$$FAILED_LOG" ]; then \
+	  printf '\n=== Failed integration test files ===\n'; \
+	  sort -u "$$FAILED_LOG"; \
+	  rc=1; \
+	fi; \
+	rm -f "$$FAILED_LOG"; \
+	exit $$rc
 
 # Run tests mapped to one spec key/path from atlas/traceability.yaml.
 # Example: make test-spec SPEC=chat/lifecycle
