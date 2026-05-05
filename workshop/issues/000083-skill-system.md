@@ -1,9 +1,9 @@
 ---
 id: 000083
-status: open
+status: punt
 deps: [000081, 000082]
 created: 2026-04-08
-updated: 2026-04-08
+updated: 2026-05-05
 ---
 
 # skill system (folder of markdown pulled on demand)
@@ -27,3 +27,9 @@ Depends on #81 (tool use) for the discovery/read mechanism and #82 (constitution
 ### 2026-04-08
 
 - Split out from original issue #81
+
+### 2026-05-05
+
+- Punted alongside #82. Both unlock technically post-#81, but parley's
+  harness direction is still experimental and the user isn't ready to
+  commit to a full agent harness. Revisit if/when that firms up.

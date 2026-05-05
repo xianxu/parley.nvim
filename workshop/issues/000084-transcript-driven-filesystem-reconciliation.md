@@ -1,9 +1,9 @@
 ---
 id: 000084
-status: open
+status: punt
 deps: [000081]
 created: 2026-04-09
-updated: 2026-04-09
+updated: 2026-05-05
 ---
 
 # transcript-driven filesystem reconciliation (backtrack)
@@ -57,3 +57,11 @@ apply(initial_filesystem, transcript) → current_filesystem
 
 - Created as a follow-up to the #81 brainstorm when the user described "transcript as source of truth" backtrack modes
 - #81 will capture pre-image data via `.parley-backup` files so this ticket has the raw data it needs
+
+### 2026-05-05
+
+- Punted alongside #82 and #83. This is the full agentic-harness capability
+  — transcript-as-declarative-filesystem-spec only earns its keep once parley
+  is committed to being a real agent harness. The user is keeping that
+  question open for now. The `.parley-backup` capture from #81 is already in
+  place, so the raw data will be ready whenever this comes back.
