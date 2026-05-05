@@ -11,6 +11,8 @@ AND-matching across whitespace-split tokens. Token-prefix scoring, bounded edit-
 ## Sticky Query
 `lua/parley/finder_sticky.lua` extracts `{root}` (and `[tag]` for chat finder) fragments from the prompt on every keystroke and re-seeds them on the next reopen. Plain text is intentionally not preserved. Wired into chat, note, issue, vision, and markdown finders.
 
+The chat finder additionally pre-seeds `{repo}` on the first open of a parley session in plain repo mode, so the default view is scoped to repo chats and global chats are filtered out. The pre-seed is a one-shot — once the user clears or modifies the filter, sticky-query takes over and the default is never re-applied. Skipped in super-repo mode (whose whole point is aggregating siblings, which a `{repo}` narrowing would defeat).
+
 ## Tag Bar
 Optional filterable tag row between results and prompt. OR logic — file visible if any enabled tag matches. Caller owns state; picker fires toggle callbacks.
 

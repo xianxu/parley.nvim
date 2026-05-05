@@ -3406,6 +3406,7 @@ M._chat_finder = {
 	initial_index = nil, -- Optional selection index to restore when reopening the picker
 	initial_value = nil, -- Preferred item value to restore when reopening after list changes
 	sticky_query = nil, -- Preserved [tag] / {root-label} filter fragments carried across invocations
+	sticky_query_initialized = false, -- One-shot guard: chat_finder.M.open seeds the default {repo} filter on first open in repo mode
 	insert_mode = false, -- Whether we're in insert mode (inserting chat references)
 	insert_buf = nil, -- The buffer to insert into
 	insert_line = nil, -- The line to insert at

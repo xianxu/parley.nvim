@@ -97,6 +97,7 @@ describe("ChatFinder logic", function()
             initial_index = nil,
             initial_value = nil,
             sticky_query = nil,
+            sticky_query_initialized = false,
         }
     end)
 
@@ -869,6 +870,31 @@ describe("ChatFinder logic", function()
             assert.equals(42, reopen_calls[1].source_win)
             assert.equals(2, reopen_calls[1].selection_index)
             assert.equals("/tmp/chat-b.md", reopen_calls[1].selection_value)
+        end)
+    end)
+
+    describe("default_sticky_query_for_repo_mode", function()
+        local chat_finder = require("parley.chat_finder")
+
+        it("returns {repo} in plain repo mode", function()
+            local got = chat_finder.default_sticky_query_for_repo_mode({
+                repo_root = "/some/repo",
+            })
+            assert.equals("{repo}", got)
+        end)
+
+        it("returns nil when not in repo mode", function()
+            assert.is_nil(chat_finder.default_sticky_query_for_repo_mode({}))
+            assert.is_nil(chat_finder.default_sticky_query_for_repo_mode({ repo_root = "" }))
+            assert.is_nil(chat_finder.default_sticky_query_for_repo_mode(nil))
+        end)
+
+        it("returns nil in super-repo mode (don't override aggregation intent)", function()
+            local got = chat_finder.default_sticky_query_for_repo_mode({
+                repo_root = "/some/repo",
+                super_repo_root = "/some/workspace",
+            })
+            assert.is_nil(got)
         end)
     end)
 end)

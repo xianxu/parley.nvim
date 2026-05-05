@@ -34,6 +34,24 @@ M.invalidate_path = function(path)
 	_file_cache[vim.fn.resolve(path)] = nil
 end
 
+-- In plain repo mode, default the chat finder's sticky filter to `{repo}` so
+-- chats from the global chat root (and other roots) are filtered out — the
+-- user is almost always looking for chats from the repo they're working in.
+-- Skipped in super-repo mode: that mode's whole point is aggregating siblings,
+-- and narrowing to the local repo would defeat it. Returns the value to set,
+-- or nil to leave sticky_query alone.
+function M.default_sticky_query_for_repo_mode(config)
+	local repo_root = config and config.repo_root
+	if type(repo_root) ~= "string" or repo_root == "" then
+		return nil
+	end
+	local super_repo_root = config.super_repo_root
+	if type(super_repo_root) == "string" and super_repo_root ~= "" then
+		return nil
+	end
+	return "{repo}"
+end
+
 --------------------------------------------------------------------------------
 -- Shared recency helpers (also exported for use by note_finder)
 --------------------------------------------------------------------------------
@@ -508,6 +526,17 @@ M.open = function(options)
 		return
 	end
 	_parley._chat_finder.opened = true
+
+	-- One-shot: on the first open of a parley session, in plain repo mode,
+	-- pre-seed sticky_query to "{repo}" so the finder defaults to repo chats.
+	-- After the user clears or modifies the filter, sticky_query takes over and
+	-- the default is never re-applied.
+	if not _parley._chat_finder.sticky_query_initialized then
+		_parley._chat_finder.sticky_query_initialized = true
+		if _parley._chat_finder.sticky_query == nil then
+			_parley._chat_finder.sticky_query = M.default_sticky_query_for_repo_mode(_parley.config)
+		end
+	end
 
 	-- IMPORTANT: The window should have been captured from the keybinding
 	_parley.logger.debug("ChatFinder using source_win: " .. (_parley._chat_finder.source_win or "nil"))
