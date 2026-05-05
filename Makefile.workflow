@@ -48,6 +48,10 @@ help-workflow:
 	"  Sync issues:" \
 	"    make issue-sync     Sync $(WF_ISSUES_DIR)/ changes to main and push" \
 	"" \
+	"  Close (mechanical §5 checklist):" \
+	"    make close-issue ISSUE=N [MILESTONE=Mx] ACTUAL=h VERIFIED='...'" \
+	"                        Tick checkboxes, set status/actual_hours, update project file" \
+	"" \
 	"  Setup:" \
 	"    make refresh        Re-run $(UPSTREAM_NAME) setup (link + merge settings)" \
 	""
@@ -56,6 +60,30 @@ help-workflow:
 # Sync issue file changes to main and push, even when on a feature branch.
 issue-sync:
 	@scripts/issue-sync.sh
+
+# ── Close (issue or milestone) ────────────────────────────────────────────────
+# Mechanical part of AGENTS.md §5: tick checkboxes, flip status, write
+# actual_hours, update the project file's task row + detail block.
+# Does NOT commit — the agent commits, usually bundling other content.
+#
+# Usage:
+#   make close-issue ISSUE=15 MILESTONE=M4 ACTUAL=2.5 VERIFIED="ran ./test, saw X"
+#   make close-issue ISSUE=15 ACTUAL=7 VERIFIED="end-to-end run, captured in Log"
+# Required for issue close: ACTUAL + VERIFIED.
+# Flags:
+#   FORCE=1   skip "already done" / "Plan unchecked" / "atlas untouched" guards
+#   DRY=1     print what would change, write nothing
+#   BRAIN_DIR=../brain   override project-file lookup root
+.PHONY: close-issue
+close-issue: export ISSUE       := $(ISSUE)
+close-issue: export MILESTONE   := $(MILESTONE)
+close-issue: export ACTUAL      := $(ACTUAL)
+close-issue: export VERIFIED    := $(VERIFIED)
+close-issue: export FORCE       := $(FORCE)
+close-issue: export DRY         := $(DRY)
+close-issue: export BRAIN_DIR   := $(BRAIN_DIR)
+close-issue:
+	@scripts/close-issue.py
 
 # ── Refresh (setup + merge) ───────────────────────────────────────────────────
 # Detection (all keyed off UPSTREAM_* vars; defaults target ariadne):

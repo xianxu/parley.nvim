@@ -76,12 +76,7 @@
 - Diff behavior between main and your changes
 - Ask yourself: "Would a staff engineer approve this?"
 - Run tests, check logs, demonstrate correctness
-- **Closing checklist** when an issue or milestone flips to done. Do these in one sweep — partial closure causes status drift across artifact layers:
-  1. Verify behavior (the four bullets above).
-  2. Tick the milestone in the issue's `## Plan` and flip `status` frontmatter to `done`.
-  3. Record `actual_hours: <N>` in the issue's frontmatter — feel-time across the issue's commit window, and timestamps in your transcript file, including side-quests it triggered. Mechanical; not optional.
-  4. Update the parent project file (if any) — tick the corresponding task in `## tasks`, update its detail block under `## details` with `**actual:** <N>` and `**closed:** <date>`.
-  5. Update `atlas/` for any new architectural surface introduced by the work (see ### 8).
+- **To close** an issue or milestone: `make close-issue ISSUE=N [MILESTONE=Mx] ACTUAL=h VERIFIED='<evidence>'`. Refuses without verification, actuals, and an atlas update in the commit window — its errors are next-action specs; fix and re-run.
 
 ### 6. Demand Elegance
 - For non-trivial changes: pause and ask "is there a more general and elegant way?"
