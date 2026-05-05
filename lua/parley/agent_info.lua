@@ -58,6 +58,8 @@ function M.resolve(headers, agent, state, system_prompts, memory_prefs, logger)
 		tools = agent.tools,
 		max_tool_iterations = agent.max_tool_iterations,
 		tool_result_max_bytes = agent.tool_result_max_bytes,
+		synthetic_system_prompt = agent.synthetic_system_prompt,
+		synthetic_system_prompt_ack = agent.synthetic_system_prompt_ack,
 	}
 
 	-- Override with header values if they exist

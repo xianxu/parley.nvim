@@ -259,6 +259,47 @@ describe("get_agent forwards client-side tool config (full wiring chain)", funct
     end)
 end)
 
+-- Issue #118: get_agent must forward synthetic_system_prompt and
+-- synthetic_system_prompt_ack through its sanitized snapshot, otherwise
+-- agent_info.resolve sees nil and the synthetic transformation never
+-- fires. Same sanitized-snapshot pitfall as the M1 tools field above.
+describe("get_agent forwards synthetic_system_prompt config", function()
+    before_each(function() fresh_setup(nil) end)
+
+    it("forwards both fields when present on the agent record", function()
+        parley.agents["SynTest"] = {
+            provider = "anthropic",
+            name = "SynTest",
+            model = { model = "claude-sonnet-4-6" },
+            system_prompt = "Be helpful.",
+            synthetic_system_prompt = true,
+            synthetic_system_prompt_ack = "Understood.",
+        }
+        local agent = parley.get_agent("SynTest")
+        assert.is_true(agent.synthetic_system_prompt)
+        assert.equals("Understood.", agent.synthetic_system_prompt_ack)
+    end)
+
+    it("forwards as nil when the agent has no synthetic config", function()
+        local agent = parley.get_agent("ToolSonnet")
+        assert.is_nil(agent.synthetic_system_prompt)
+        assert.is_nil(agent.synthetic_system_prompt_ack)
+    end)
+
+    it("flag survives the full wiring chain into agent_info", function()
+        parley.agents["SynTest"] = {
+            provider = "anthropic",
+            name = "SynTest",
+            model = { model = "claude-sonnet-4-6" },
+            system_prompt = "Be helpful.",
+            synthetic_system_prompt = true,
+        }
+        local agent = parley.get_agent("SynTest")
+        local info = parley.get_agent_info({}, agent)
+        assert.is_true(info.synthetic_system_prompt)
+    end)
+end)
+
 describe("new config prefix + shortcut defaults", function()
     it("defines chat_tool_use_prefix and chat_tool_result_prefix", function()
         fresh_setup(nil)

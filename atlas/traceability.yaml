@@ -267,6 +267,16 @@ atlas:
       - tests/unit/sse_parsing_spec.lua
       - tests/unit/build_messages_spec.lua
 
+  providers/system_prompts:
+    code:
+      - lua/parley/custom_prompts.lua
+      - lua/parley/system_prompt_msgs.lua
+      - lua/parley/agent_info.lua
+      - lua/parley/chat_respond.lua
+    tests:
+      - tests/unit/system_prompt_msgs_spec.lua
+      - tests/unit/build_messages_spec.lua
+
   providers/tool_use:
     code:
       - lua/parley/tool_loop.lua

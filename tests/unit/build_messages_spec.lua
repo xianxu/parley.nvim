@@ -1158,3 +1158,102 @@ describe("_build_messages: content_blocks with tool round-trips", function()
         assert.equals("Q", messages[2].content)
     end)
 end)
+
+-- Issue #118: synthetic_system_prompt sends the system content as a
+-- leading user/assistant pair instead of a real system message, for
+-- compatibility with providers/models that handle a real system field
+-- poorly. Cache control rides on the user content block when the
+-- provider supports it.
+describe("_build_messages: synthetic_system_prompt", function()
+    local function synthetic_agent(provider, ack)
+        local a = agent("syn", provider or "anthropic", "Be helpful.")
+        a.synthetic_system_prompt = true
+        if ack ~= nil then a.synthetic_system_prompt_ack = ack end
+        return a
+    end
+
+    it("anthropic: emits user-with-content-blocks + assistant ack instead of system", function()
+        local pc = parsed_chat({ exchange("What is Lua?") })
+        pc.headers.system_prompt = "Be helpful."
+        local messages = parley._build_messages({
+            parsed_chat = pc,
+            start_index = 1,
+            end_index = 100,
+            exchange_idx = 1,
+            agent = synthetic_agent("anthropic"),
+            config = parley.config,
+            helpers = stub_helpers,
+            logger = stub_logger,
+        })
+
+        assert.equals(3, #messages)
+        assert.equals("user", messages[1].role)
+        assert.is_table(messages[1].content)
+        assert.equals("text", messages[1].content[1].type)
+        assert.equals("Be helpful.", messages[1].content[1].text)
+        assert.same({ type = "ephemeral" }, messages[1].content[1].cache_control)
+
+        assert.equals("assistant", messages[2].role)
+        assert.equals("Got it. I will follow this.", messages[2].content)
+
+        assert.equals("user", messages[3].role)
+        assert.equals("What is Lua?", messages[3].content)
+    end)
+
+    it("openai (no cache_control): plain string user content + assistant ack", function()
+        local pc = parsed_chat({ exchange("What is Lua?") })
+        pc.headers.system_prompt = "Be helpful."
+        local messages = parley._build_messages({
+            parsed_chat = pc,
+            start_index = 1,
+            end_index = 100,
+            exchange_idx = 1,
+            agent = synthetic_agent("openai"),
+            config = parley.config,
+            helpers = stub_helpers,
+            logger = stub_logger,
+        })
+
+        assert.equals(3, #messages)
+        assert.equals("user", messages[1].role)
+        assert.equals("Be helpful.", messages[1].content)
+        assert.equals("assistant", messages[2].role)
+        assert.equals("user", messages[3].role)
+    end)
+
+    it("custom ack overrides the default", function()
+        local pc = parsed_chat({ exchange("Q") })
+        pc.headers.system_prompt = "Be helpful."
+        local messages = parley._build_messages({
+            parsed_chat = pc,
+            start_index = 1,
+            end_index = 100,
+            exchange_idx = 1,
+            agent = synthetic_agent("anthropic", "Understood."),
+            config = parley.config,
+            helpers = stub_helpers,
+            logger = stub_logger,
+        })
+        assert.equals("Understood.", messages[2].content)
+    end)
+
+    it("flag = false produces the default single system message", function()
+        local a = agent("nosyn", "anthropic", "Be helpful.")
+        a.synthetic_system_prompt = false
+        local pc = parsed_chat({ exchange("Q") })
+        pc.headers.system_prompt = "Be helpful."
+        local messages = parley._build_messages({
+            parsed_chat = pc,
+            start_index = 1,
+            end_index = 100,
+            exchange_idx = 1,
+            agent = a,
+            config = parley.config,
+            helpers = stub_helpers,
+            logger = stub_logger,
+        })
+        assert.equals(2, #messages)
+        assert.equals("system", messages[1].role)
+        assert.equals("Be helpful.", messages[1].content)
+    end)
+end)

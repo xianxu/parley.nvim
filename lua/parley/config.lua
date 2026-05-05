@@ -174,6 +174,7 @@ local config = {
 			name = "ToolSonnet*",
 			model = { model = "claude-sonnet-4-6", temperature = 0.8, web_search_strategy = "anthropic_tools_route" },
 			system_prompt = require("parley.defaults").chat_system_prompt,
+			synthetic_system_prompt = true,
 			tools = { "read_file", "ls", "find", "grep", "chat_history_search", "edit_file", "write_file" },
 		},
 		{

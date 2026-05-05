@@ -3580,6 +3580,11 @@ M.get_agent = function(name)
 		tools = agent_rec.tools,
 		max_tool_iterations = agent_rec.max_tool_iterations,
 		tool_result_max_bytes = agent_rec.tool_result_max_bytes,
+		-- Issue #118: forward synthetic-system-prompt config too. Same
+		-- sanitized-snapshot pitfall as the tools field above — leaving
+		-- these out silently drops them before agent_info.resolve sees them.
+		synthetic_system_prompt = agent_rec.synthetic_system_prompt,
+		synthetic_system_prompt_ack = agent_rec.synthetic_system_prompt_ack,
 	}
 end
 

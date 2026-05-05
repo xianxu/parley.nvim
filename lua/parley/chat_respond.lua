@@ -301,20 +301,11 @@ end
 --- @return table[] messages
 M.build_messages_from_model = function(buf, model, target_idx, agent_info)
     local serialize = require("parley.tools.serialize")
-    local messages = {}
-
-    -- System prompt (role = "system" so format_payload extracts it correctly)
-    local sys = agent_info.system_prompt
-    if sys and sys:match("%S") then
-        local sys_msg = { role = "system", content = sys }
-        if agent_info.provider then
-            local prov = require("parley.providers")
-            if prov.has_feature(agent_info.provider, "cache_control") then
-                sys_msg.cache_control = { type = "ephemeral" }
-            end
-        end
-        table.insert(messages, sys_msg)
-    end
+    local system_prompt_msgs = require("parley.system_prompt_msgs")
+    local prov = require("parley.providers")
+    local messages = system_prompt_msgs.build(agent_info, function(provider)
+        return prov.has_feature(provider, "cache_control")
+    end)
 
     local function read_block_text(k, b)
         local start_line = model:block_start(k, b)
@@ -526,8 +517,32 @@ M.build_messages = function(opts)
     -- Get combined agent information using the helper function
     local agent_info = _parley.get_agent_info(headers, agent)
 
-    -- Convert parsed_chat to messages for the model using a single-pass approach
-    local messages = { { role = "", content = "" } } -- Start with empty message for system prompt
+    -- Normalize the system prompt: trim outer whitespace, then re-add a
+    -- trailing newline when system_prompt+ header appends were applied.
+    -- Done on agent_info.system_prompt directly (not on messages[1]) so
+    -- the normalization is independent of how the leading messages are
+    -- shaped (real system message vs. synthetic user/assistant pair).
+    if type(agent_info.system_prompt) == "string" then
+        agent_info.system_prompt = agent_info.system_prompt:gsub("^%s*(.-)%s*$", "%1")
+    end
+    local has_system_prompt_append = false
+    if type(headers) == "table" and type(headers._append) == "table" then
+        local canonical = headers._append.system_prompt
+        local legacy = headers._append.role
+        has_system_prompt_append = (type(canonical) == "table" and #canonical > 0) or (type(legacy) == "table" and #legacy > 0)
+    end
+    if has_system_prompt_append
+        and type(agent_info.system_prompt) == "string"
+        and agent_info.system_prompt ~= ""
+        and agent_info.system_prompt:sub(-1) ~= "\n"
+    then
+        agent_info.system_prompt = agent_info.system_prompt .. "\n"
+    end
+
+    -- Convert parsed_chat to messages for the model using a single-pass approach.
+    -- Leading messages (system prompt or synthetic pair) are prepended after the
+    -- exchange loop, not seeded as a placeholder.
+    local messages = {}
 
     -- Process each exchange, determining whether to preserve or summarize
     local total_exchanges = #parsed_chat.exchanges
@@ -687,18 +702,6 @@ M.build_messages = function(opts)
         end
     end
 
-    -- replace first empty message with system prompt (use agent_info which has already resolved this)
-    local content = agent_info.system_prompt
-    if content and content:match("%S") then
-        messages[1] = { role = "system", content = content }
-
-        -- For providers that support cache_control, add ephemeral caching to system prompt
-        local prov = require("parley.providers")
-        if prov.has_feature(agent_info.provider, "cache_control") then
-            messages[1].cache_control = { type = "ephemeral" }
-        end
-    end
-
     -- strip whitespace from ends of content. Messages built from
     -- content_blocks carry a table in .content (Anthropic's content-
     -- block shape); those have already been trimmed at the block
@@ -709,17 +712,19 @@ M.build_messages = function(opts)
         end
     end
 
-    -- Preserve a trailing newline for appended system prompt lines.
-    local has_system_prompt_append = false
-    if type(headers) == "table" and type(headers._append) == "table" then
-        local canonical = headers._append.system_prompt
-        local legacy = headers._append.role
-        has_system_prompt_append = (type(canonical) == "table" and #canonical > 0) or (type(legacy) == "table" and #legacy > 0)
-    end
-    if has_system_prompt_append and messages[1] and messages[1].role == "system" and messages[1].content ~= "" then
-        if messages[1].content:sub(-1) ~= "\n" then
-            messages[1].content = messages[1].content .. "\n"
-        end
+    -- Prepend the leading system-prompt messages. Either:
+    --   * one role="system" message (default), or
+    --   * a role="user" message with the system text + a role="assistant"
+    --     ack ("Got it. I will follow this.") when the agent has
+    --     synthetic_system_prompt = true.
+    -- Helper handles cache_control parity and is provider-aware.
+    local system_prompt_msgs = require("parley.system_prompt_msgs")
+    local prov = require("parley.providers")
+    local leading = system_prompt_msgs.build(agent_info, function(provider)
+        return prov.has_feature(provider, "cache_control")
+    end)
+    for i = #leading, 1, -1 do
+        table.insert(messages, 1, leading[i])
     end
 
     return messages
