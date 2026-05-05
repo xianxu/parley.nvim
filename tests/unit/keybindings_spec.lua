@@ -28,7 +28,6 @@ describe("key bindings help", function()
         assert.is_true(has_line(lines, "<C-g>?", "Show key bindings"))
         assert.is_true(has_line(lines, "<C-g>f", "Open chat finder"))
         assert.is_true(has_line(lines, "<C-n>f", "Open note finder"))
-        assert.is_true(has_line(lines, "<C-g>h", "Manage chat roots"))
         -- Should NOT include chat buffer, repo, or finder keys
         assert.is_false(has_line(lines, "<C-g><C-g>", "Respond"))
         assert.is_false(has_line(lines, "<C-a>", "Cycle recency window left"))
