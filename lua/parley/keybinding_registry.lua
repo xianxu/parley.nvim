@@ -456,7 +456,7 @@ M.entries = {
 	{
 		id = "chat_respond",
 		config_key = "chat_shortcut_respond",
-		default_key = "<C-g><C-g>",
+		default_key = { "<C-g><C-g>", "<M-CR>" },
 		default_modes = { "n", "i", "v", "x" },
 		scope = "chat",
 		desc = "Parley prompt Chat Respond",
@@ -828,13 +828,33 @@ end
 --- Resolve the key and modes for an entry, checking config overrides.
 --- Handles both flat config keys (e.g. "global_shortcut_new") and
 --- nested dot-notation (e.g. "chat_finder_mappings.delete").
+--- For entries with multiple bound keys (default_key as list), returns the
+--- primary (first) key. Use `resolve_keys` to get the full list.
 --- @param entry table
 --- @param config table
 --- @return string|nil key
 --- @return string[]|nil modes
 function M.resolve_key(entry, config)
+	local keys, modes = M.resolve_keys(entry, config)
+	return keys and keys[1] or nil, modes
+end
+
+--- Resolve all bound keys (primary + aliases) and modes for an entry.
+--- Both `default_key` and config-supplied `shortcut` may be a single string
+--- or a list of strings — both shapes are normalized to a list.
+--- @param entry table
+--- @param config table
+--- @return string[]|nil keys
+--- @return string[]|nil modes
+function M.resolve_keys(entry, config)
+	local function as_list(v)
+		if v == nil then return nil end
+		if type(v) == "string" then return { v } end
+		return v
+	end
+
 	if not entry.config_key then
-		return entry.default_key, entry.default_modes
+		return as_list(entry.default_key), entry.default_modes
 	end
 
 	-- Handle dot-notation for nested config (e.g. "chat_finder_mappings.delete")
@@ -857,9 +877,10 @@ function M.resolve_key(entry, config)
 	end
 
 	if cfg_val and type(cfg_val) == "table" then
-		return cfg_val.shortcut or entry.default_key, cfg_val.modes or entry.default_modes
+		return as_list(cfg_val.shortcut) or as_list(entry.default_key),
+			cfg_val.modes or entry.default_modes
 	end
-	return entry.default_key, entry.default_modes
+	return as_list(entry.default_key), entry.default_modes
 end
 
 -------------------------------------------------------------------
@@ -953,19 +974,21 @@ function M.register_global(scopes, config, callbacks)
 		if scope_set[entry.scope] and not entry.buffer_local and not entry.help_only then
 			local cb = callbacks[entry.id]
 			if cb then
-				local key, modes = M.resolve_key(entry, config)
-				if key and modes then
-					for _, mode in ipairs(modes) do
-						local wrapped
-						if mode == "i" then
-							wrapped = function()
-								vim.cmd("stopinsert")
-								cb()
+				local keys, modes = M.resolve_keys(entry, config)
+				if keys and modes then
+					for _, key in ipairs(keys) do
+						for _, mode in ipairs(modes) do
+							local wrapped
+							if mode == "i" then
+								wrapped = function()
+									vim.cmd("stopinsert")
+									cb()
+								end
+							else
+								wrapped = cb
 							end
-						else
-							wrapped = cb
+							vim.keymap.set(mode, key, wrapped, { silent = true, desc = entry.desc })
 						end
-						vim.keymap.set(mode, key, wrapped, { silent = true, desc = entry.desc })
 					end
 				end
 			end
@@ -989,20 +1012,22 @@ function M.register_buffer(scopes, buf, config, callbacks, set_keymap)
 		if scope_set[entry.scope] and entry.buffer_local and not entry.help_only then
 			local cb = callbacks[entry.id]
 			if cb then
-				local key, modes = M.resolve_key(entry, config)
-				if key and modes then
-					if type(cb) == "table" then
-						-- Mode-specific callbacks: { n = fn, i = fn, v = fn }
-						for _, mode in ipairs(modes) do
-							local mode_cb = cb[mode]
-							if mode_cb then
-								set_keymap({ buf }, mode, key, mode_cb, entry.desc)
+				local keys, modes = M.resolve_keys(entry, config)
+				if keys and modes then
+					for _, key in ipairs(keys) do
+						if type(cb) == "table" then
+							-- Mode-specific callbacks: { n = fn, i = fn, v = fn }
+							for _, mode in ipairs(modes) do
+								local mode_cb = cb[mode]
+								if mode_cb then
+									set_keymap({ buf }, mode, key, mode_cb, entry.desc)
+								end
 							end
-						end
-					else
-						-- Single callback for all modes
-						for _, mode in ipairs(modes) do
-							set_keymap({ buf }, mode, key, cb, entry.desc)
+						else
+							-- Single callback for all modes
+							for _, mode in ipairs(modes) do
+								set_keymap({ buf }, mode, key, cb, entry.desc)
+							end
 						end
 					end
 				end

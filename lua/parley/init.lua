@@ -2357,15 +2357,16 @@ M.new_chat = function(system_prompt, agent, initial_question)
 		end
 	end
 
+	local primary = function(s) return type(s) == "table" and s[1] or s end
 	local template = M.render.template(M.config.chat_template or require("parley.defaults").chat_template, {
 		["{{filename}}"] = string.match(filename, "([^/]+)$"),
 		["{{optional_headers}}"] = model .. provider .. system_prompt,
 		["{{user_prefix}}"] = M.config.chat_user_prefix,
-		["{{respond_shortcut}}"] = M.config.chat_shortcut_respond.shortcut,
+		["{{respond_shortcut}}"] = primary(M.config.chat_shortcut_respond.shortcut),
 		["{{cmd_prefix}}"] = M.config.cmd_prefix,
-		["{{stop_shortcut}}"] = M.config.chat_shortcut_stop.shortcut,
-		["{{delete_shortcut}}"] = M.config.chat_shortcut_delete.shortcut,
-		["{{new_shortcut}}"] = M.config.global_shortcut_new.shortcut,
+		["{{stop_shortcut}}"] = primary(M.config.chat_shortcut_stop.shortcut),
+		["{{delete_shortcut}}"] = primary(M.config.chat_shortcut_delete.shortcut),
+		["{{new_shortcut}}"] = primary(M.config.global_shortcut_new.shortcut),
 	})
 
 	-- escape underscores (for markdown)
@@ -3629,10 +3630,11 @@ M.get_default_template = function(agent, file_path)
 
 	-- Generate template using the same pattern as M.new_chat
 	-- Get shortcuts, handling potentially missing values
-	local respond_shortcut = M.config.chat_shortcut_respond and M.config.chat_shortcut_respond.shortcut or "<C-g><C-g>"
-	local stop_shortcut = M.config.chat_shortcut_stop and M.config.chat_shortcut_stop.shortcut or "<C-g>x"
-	local delete_shortcut = M.config.chat_shortcut_delete and M.config.chat_shortcut_delete.shortcut or "<C-g>d"
-	local new_shortcut = M.config.global_shortcut_new and M.config.global_shortcut_new.shortcut or "<C-g>c"
+	local primary = function(s) return type(s) == "table" and s[1] or s end
+	local respond_shortcut = M.config.chat_shortcut_respond and primary(M.config.chat_shortcut_respond.shortcut) or "<C-g><C-g>"
+	local stop_shortcut = M.config.chat_shortcut_stop and primary(M.config.chat_shortcut_stop.shortcut) or "<C-g>x"
+	local delete_shortcut = M.config.chat_shortcut_delete and primary(M.config.chat_shortcut_delete.shortcut) or "<C-g>d"
+	local new_shortcut = M.config.global_shortcut_new and primary(M.config.global_shortcut_new.shortcut) or "<C-g>c"
 
 	local template = M.render.template(M.config.chat_template or require("parley.defaults").chat_template, {
 		["{{filename}}"] = basename,
