@@ -107,9 +107,30 @@ Convention:
 
 Field semantics:
 - `**est:**` — estimate range, mirrors the issue's `estimate_hours` frontmatter when one exists. Free-form (`10–16h`, `~2h`, `medium`).
-- `**actual:**` — actual focused hours spent. Set on close.
+- `**actual:**` — actual focused hours spent. **Set on close.** Required for tasks linked to issues — propagate the same value to the issue's `actual_hours` frontmatter (xx-issues skill enforces). Without this the velocity calibration loop cannot close.
 - `**status:**` — used when state isn't conveyed by the checkbox alone. Common: `blocked — <reason>`, `in progress — <note>`. Drop when the checkbox is sufficient.
 - `**started:**` / `**closed:**` — ISO dates.
+
+#### Logging scope events (broaden / demote / punt)
+
+When a task's scope changes mid-stream — broadens to absorb deferred work, demotes from MVP to a successor project, gets punted — record it in the detail block as an append, **not** as a rewrite. Same posture as plan-doc revisions in ariadne AGENTS.md §1: original intent stays visible.
+
+```markdown
+<a id="charon-15-m4b"></a>
+### charon#15 M4b — catalog revoke dispatcher + list/manage TUI
+
+**est:** 0.4–0.8h (original)
+**actual:** 4h
+**closed:** 2026-05-04
+
+Original M4b: revoke dispatcher only (list_endpoint + revoke_endpoint).
+
+**Scope event 2026-05-03**: broadened to also include picker-row +
+per-provider account list TUI work originally split off from M4
+(see plan doc revision). New est ~3h. Drove the actuals overshoot.
+```
+
+Future calibration cycles depend on being able to compare *original-scope estimate* against *as-shipped scope* — overwriting the original `**est:**` would erase the data point.
 
 ### Jump-link convention
 

@@ -36,6 +36,8 @@ deps: []
 github_issue:
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
+estimate_hours:    # optional at create; required when status flips to working
+actual_hours:      # required when status flips to done
 ---
 
 # <Title>
@@ -54,8 +56,27 @@ updated: YYYY-MM-DD
 
 ## Log
 
+### YYYY-MM-DD — session summary
+<one paragraph per major sitting (or milestone close): what was
+attempted, what landed, what got deferred, in-flight design
+decisions worth remembering. Replaces "you'd have to read
+transcripts" with explicit handoff to future-you / future agent.>
+
 ### YYYY-MM-DD
-<dated entries as work progresses>
+<dated entries for individual decisions, discoveries, side-quests
+that don't fit a session-summary block>
+
+## Side quests
+<optional; recommended for multi-day issues. One line per
+unbudgeted-but-shipped piece of work — name + ~time + commit ref.
+Example:
+
+  - Makefile dev-unsign rule (~30 min) — `802c1bf`
+  - OSC 8 hyperlinks on catalog URLs (~40 min) — `cb98234`
+
+Pairs with the `side-quest:` commit verb (see ariadne AGENTS.md
+§12). Lets retrospective + velocity calibration count effort that
+otherwise dissolves into the diff.>
 ```
 
 ### Frontmatter Fields
@@ -68,13 +89,20 @@ updated: YYYY-MM-DD
 | `github_issue` | No | GitHub issue number if linked |
 | `created` | Yes | ISO date |
 | `updated` | Yes | ISO date |
+| `estimate_hours` | When status≥working | Single integer (P50 of estimate range). Pulled from a `## Estimate` section if one exists; produced by the velocity skill or equivalent. Empty when an estimate hasn't been done yet (e.g., status=open). |
+| `actual_hours` | When status=done | Required at close. Feel-time across the issue's commit window, including side-quests it triggered. Without this the velocity calibration loop cannot close — see ariadne AGENTS.md §4 + §5 closing checklist. |
 
 ### Required Sections
 
 - **Problem** — what's wrong or needed (for bugs/features) or **Context** (for tasks)
 - **Spec** — desired behavior, can start empty with `*(to be filled)*`
 - **Plan** — checkable items, update as work progresses
-- **Log** — dated entries tracking decisions, discoveries, progress
+- **Log** — dated entries tracking decisions, discoveries, progress. Use a `### YYYY-MM-DD — session summary` heading for major-sitting wrap-ups (one paragraph each); plain `### YYYY-MM-DD` for individual entries.
+
+### Optional Sections
+
+- **Estimate** — present when the issue was estimated. Carries the headline range, provenance string (which version-pair of the estimator produced it), and decomposition. See ariadne AGENTS.md §4 for the paired-versioned-files pattern.
+- **Side quests** — recommended for multi-day issues that trigger unbudgeted work. One line per item: name + ~time + commit ref. Pairs with the `side-quest:` commit-verb convention (ariadne AGENTS.md §12).
 
 ## Process
 
@@ -94,9 +122,16 @@ updated: YYYY-MM-DD
 
 ### Closing an issue
 
+Run the **closing checklist** from ariadne AGENTS.md §5 in one sweep — partial closure causes status drift across artifact layers. Specific to this skill:
+
 - Set `status` to `done` (or `wontfix`/`punt`)
 - Update the `updated` date
-- Do NOT move to `workshop/history/` — that happens during periodic cleanup
+- **Record `actual_hours: <N>` in the frontmatter.** REQUIRED at `done`. Feel-time across the issue's commit window, including side-quests the issue triggered. Without this the velocity calibration loop cannot close. (`wontfix`/`punt` issues don't need this — there's no work to record.)
+- Add a final `### YYYY-MM-DD — session summary` entry to the `## Log` if the closing session covered more than the last commit's worth of work.
+- If a `## Side quests` section exists, double-check it's complete — grep `git log --grep "side-quest:" <commit-range>` to confirm.
+- Do NOT move the file to `workshop/history/` — that happens during periodic cleanup, not at close.
+
+If the issue is part of a multi-issue project (see `construct/datatype/project.md`), also update the parent project file: tick the corresponding task, fill in the detail block's `**actual:** <N>` and `**closed:** <date>`. The project file is the portfolio view; if it lags the issue, the operator can't see real status when they reopen the project days later.
 
 ## Rules
 

@@ -55,6 +55,8 @@ deps: []
 github_issue: 42
 created: 2026-04-20
 updated: 2026-04-20
+estimate_hours:    # optional at create; required when status=working
+actual_hours:      # required when status=done
 ---
 
 # Title
@@ -69,6 +71,28 @@ updated: 2026-04-20
 - [ ] checklist of work
 
 ## Log
+### 2026-04-20 — session summary
+One paragraph: what was attempted, what landed, what got deferred.
+
 ### 2026-04-20
-- what happened
+- individual decisions, discoveries
+
+## Side quests
+- (optional; recommended for multi-day issues) name + ~time + commit ref
 ```
+
+For frontmatter and section conventions see the **xx-issues skill**
+(`construct/local/issues/SKILL.md`). For the cross-artifact closing
+sweep (actual_hours, project-file update, atlas update, validation
+log) see **AGENTS.md §5 closing checklist**.
+
+## Closing
+
+Each `make push` / `make merge` archives done issues into `history/`. Before that, run the **closing checklist** from AGENTS.md §5:
+
+1. Verify behavior.
+2. Tick the milestone in `## Plan` and flip `status` to `done`.
+3. **Record `actual_hours`** in the frontmatter (required at close).
+4. Update the parent project file (if any).
+5. Update `atlas/` for any new architectural surface.
+6. Append validation-log entry if estimated under a versioned playbook (AGENTS.md §4).
