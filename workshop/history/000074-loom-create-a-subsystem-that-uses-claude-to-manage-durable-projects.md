@@ -1,9 +1,9 @@
 ---
 id: 000074
-status: open
+status: done
 deps: []
 created: 2026-04-05
-updated: 2026-04-05
+updated: 2026-05-04
 ---
 
 # loom: create a subsystem that uses claude to manage durable projects
@@ -36,4 +36,17 @@ Those together, forms the new "operating system" of modern startup.
 ## Log
 
 ### 2026-04-05
+
+- Issue authored. Seed vision: a "loom" subsystem that lets coding agents manage durable projects via repo-stored markdown state, generalizing the chat/issue/vision patterns parley already demonstrates into a unified "operating system of modern startup."
+
+### 2026-05-04
+
+- Closing as done — superseded by Ariadne. The loom thesis ("coding agents manage workflows, repo holds state, markdown is the surface") was the seed; ~6 days later it grew into the named Ariadne vision (collaborative AI harness / knowledge OS for the AI era). The "loom" name was retired; "the Construct" stuck as the technical realization.
+- Successor artifacts:
+  - **In this repo:** issue #101 ("the Construct") and `workshop/plans/000101-construct-plan.md` — substrate / skill management for a hermetic repo. Closest direct heir to loom item 4.
+  - **In the ariadne repo:**
+    - `~/workspace/ariadne/docs/plans/2026-04-11-pitch-deck.md` — pitch deck draft
+    - `~/workspace/ariadne/docs/plans/2026-04-12-1-phases-of-ariadne.md` — product/org phases (solo founder → small team → platform)
+    - `~/workspace/ariadne/docs/plans/2026-04-12-2-single-repo-after-all.md` — repo-as-world-state resolution
+- The chat / issue / vision systems referenced in the original ticket continue to live in parley.nvim and are the dogfood substrate for the early phase. No further action needed in this issue.
 
