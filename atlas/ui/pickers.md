@@ -21,5 +21,4 @@ Optional filterable tag row between results and prompt. OR logic — file visibl
 - **System Prompt** (`:ParleySystemPrompt`): select active system prompt
 - **Chat Finder** (`:ParleyChatFinder` / `<C-g>f`): browse chats by recency, tags, and roots; mtime-cached metadata; sticky filter fragments across reopens
 - **Note Finder** (`:ParleyNoteFinder` / `<C-n>f`): same mechanics as Chat Finder for notes; special folders bypass recency
-- **Chat Roots** (`:ParleyChatDirs` / `<C-g>h`): manage configured chat directories
 - **Outline** (`:ParleySearchChat` / `:ParleyOutline`): jump to headings and turns
