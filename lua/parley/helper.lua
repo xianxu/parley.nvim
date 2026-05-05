@@ -390,13 +390,20 @@ _H.undojoin = function(buf)
 	if not buf or not vim.api.nvim_buf_is_loaded(buf) then
 		return
 	end
-	local status, result = pcall(vim.cmd.undojoin)
-	if not status then
-		if result:match("E790") then
-			return
+	-- :undojoin operates on the current buffer's undo state. If `buf` is
+	-- not the current buffer (e.g. a scheduled callback fired while focus
+	-- was elsewhere), the marker would land on the wrong buffer and the
+	-- next change in `buf` would not be merged. nvim_buf_call temporarily
+	-- sets the current buffer to `buf` for the duration of the callback.
+	vim.api.nvim_buf_call(buf, function()
+		local status, result = pcall(vim.cmd.undojoin)
+		if not status then
+			if result:match("E790") then
+				return
+			end
+			logger.error("Error running undojoin: " .. vim.inspect(result))
 		end
-		logger.error("Error running undojoin: " .. vim.inspect(result))
-	end
+	end)
 end
 
 ---@param tbl table # the table to be stored

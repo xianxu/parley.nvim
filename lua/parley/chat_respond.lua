@@ -802,6 +802,9 @@ M.generate_topic = function(messages, provider, model, callback, spinner)
             local line_nr = spinner.find_line()
             if line_nr then
                 local text = "topic: " .. spinner_frames[spinner_idx] .. " generating..."
+                -- Issue #80: same undo-pollution fix as the agent-response
+                -- spinner. Each frame joins the previous undo block.
+                require("parley.helper").undojoin(spinner.buf)
                 require("parley.buffer_edit").replace_line_at(spinner.buf, line_nr, text)
             end
             spinner_idx = spinner_idx % #spinner_frames + 1
@@ -1288,6 +1291,11 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             if existing == nil then
                 return
             end
+            -- Issue #80: join each spinner frame to the previous undo
+            -- block so 90ms-cadence updates don't pile up as separate
+            -- entries. Same pattern dispatcher.create_handler uses for
+            -- streaming chunks. helpers.undojoin swallows E790.
+            require("parley.helper").undojoin(buf)
             require("parley.buffer_edit").replace_line_at(buf, pos, text)
         end
 
@@ -1331,6 +1339,10 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                 -- Delete: margin (1 line before content) + content lines.
                 local delete_start = spin_start - 1
                 local delete_count = 1 + spin_size
+                -- Issue #80: join the cleanup delete to the prior undo
+                -- block so the entire response cycle (spinner frames +
+                -- streaming + cleanup) collapses to one undoable unit.
+                require("parley.helper").undojoin(buf)
                 buffer_edit.delete_lines_after(buf, delete_start, delete_count)
                 -- Set size to 0 — model treats it as invisible (rule 3).
                 model:set_block_size(target_idx, spinner_block_idx, 0)
