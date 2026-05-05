@@ -1,9 +1,9 @@
 ---
 id: 000097
-status: open
+status: wontfix
 deps: []
 created: 2026-04-10
-updated: 2026-04-10
+updated: 2026-05-05
 ---
 
 # add text to speech support for parley chat
@@ -23,4 +23,8 @@ If user wants to check on details, they can always read the generated text. so i
 ## Log
 
 ### 2026-04-10
+
+### 2026-05-05
+
+Closed as wontfix. User tried it; speech doesn't carry more information density than reading the buffer, at least for this user. Live-debrief value didn't materialize in practice.
 

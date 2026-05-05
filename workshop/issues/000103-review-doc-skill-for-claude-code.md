@@ -5,7 +5,7 @@ deps: []
 created: 2026-04-13
 updated: 2026-04-13
 ---
-
+🤖[]
 # Review-doc skill for Claude Code
 
 The `㊷[comment]` review marker system in `parley/review.lua` is powerful but currently Parley-only. The system prompt and edit protocol are tool-agnostic — they should be portable to Claude Code as a skill (e.g. `/review-doc`).
