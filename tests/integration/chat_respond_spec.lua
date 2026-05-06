@@ -1101,7 +1101,8 @@ describe("chat_respond: drill-in pre-processing", function()
         -- Cursor on a past exchange that has a drill-in marker → don't resubmit;
         -- instead strip the marker and insert a new user turn (with quote+question
         -- block) right after that exchange's answer. Subsequent exchanges below
-        -- stay in place but are no longer in the API context for this turn.
+        -- stay in place but are no longer in the API context for this turn. The
+        -- LLM response targets the inserted new turn, NOT the original exchange.
         local chat_content = table.concat({
             "# topic: Branch",
             "- file: test.md",
@@ -1117,6 +1118,15 @@ describe("chat_respond: drill-in pre-processing", function()
         vim.fn.writefile(vim.split(chat_content, "\n"), test_file)
         vim.cmd("edit " .. test_file)
         local buf = vim.api.nvim_get_current_buf()
+
+        -- Capture the messages payload the dispatcher receives so we can prove
+        -- the new turn (not the original Q) is the last user message — i.e.,
+        -- the API call is for the new turn and end_index didn't leak the stale
+        -- later exchange into the context.
+        local captured_messages = nil
+        parley.dispatcher.query = function(_buf, _provider, payload)
+            captured_messages = payload and payload.messages
+        end
 
         -- Cursor on the FIRST exchange's question line (which has a drill-in)
         vim.api.nvim_win_set_cursor(0, { 5, 0 })
@@ -1140,6 +1150,30 @@ describe("chat_respond: drill-in pre-processing", function()
         assert.truthy(later_q_pos, "later question should be preserved")
         assert.is_true(quote_pos < later_q_pos,
             "quote block must appear before the later unrelated question; got:\n" .. after)
+
+        -- Dispatcher payload: the LAST user message must be the inserted new
+        -- turn (containing "what is this?"), proving target_idx and end_index
+        -- both point at the new turn rather than the original Q or the stale
+        -- later exchange.
+        assert.is_not_nil(captured_messages, "dispatcher should have been invoked")
+        local last_user_msg = nil
+        for i = #captured_messages, 1, -1 do
+            if captured_messages[i].role == "user" then
+                last_user_msg = captured_messages[i]
+                break
+            end
+        end
+        assert.is_not_nil(last_user_msg, "expected a user message in payload")
+        local last_content
+        if type(last_user_msg.content) == "string" then
+            last_content = last_user_msg.content
+        else
+            last_content = vim.inspect(last_user_msg.content)
+        end
+        assert.truthy(last_content:find("what is this?", 1, true),
+            "last user message should be the new drill-in turn; got: " .. last_content)
+        assert.is_nil(last_content:find("a later unrelated question", 1, true),
+            "stale later exchange should NOT be part of the API call context")
     end)
 
     it("does true resubmit when cursor exchange has an answer but no drill-ins", function()

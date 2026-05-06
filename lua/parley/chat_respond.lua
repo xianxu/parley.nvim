@@ -1021,14 +1021,21 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                 #blocks, exchange_idx
             ))
 
-            -- Re-read state. Suppress resubmit handling by clearing
-            -- exchange_idx/component so the downstream block treats this as a
-            -- straight forward new turn capped at new_turn_end.
+            -- Re-read state and re-target. The newly inserted user turn becomes
+            -- a fresh exchange in parsed_chat — this is the exchange the LLM
+            -- response should populate (target_idx in the closure below derives
+            -- from exchange_idx). end_index is capped at new_turn_end so the
+            -- now-stale exchanges below the inserted turn aren't part of the
+            -- API context for this turn.
             lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
             parsed_chat = _parley.parse_chat(lines, header_end)
+            local new_idx = _parley.find_exchange_at_line(parsed_chat, new_turn_end)
+            exchange_idx = new_idx
+            component = "question"
             end_index = new_turn_end
-            exchange_idx = nil
-            component = nil
+            -- Move the cursor too so any cursor-driven follow-up logic
+            -- (highlights, post-stream cursor moves) lands on the new turn.
+            pcall(vim.api.nvim_win_set_cursor, 0, { new_turn_end, 0 })
             branch_handled = true
         end
     end
@@ -1066,8 +1073,10 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
     if params.range == 2 then
         start_index = math.max(start_index, params.line1)
         end_index = math.min(end_index, params.line2)
-    else
-        -- Check if cursor is in the middle of the document on a question
+    elseif not branch_handled then
+        -- Check if cursor is in the middle of the document on a question.
+        -- (Skip when the drill-in branch has already targeted a specific
+        -- new-turn exchange and capped end_index there.)
         if exchange_idx and component == "question" then
             -- Cursor is on a question - process up to the end of this question's answer
             _parley.logger.debug("Resubmitting question at exchange #" .. exchange_idx)
