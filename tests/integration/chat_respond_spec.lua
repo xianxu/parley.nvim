@@ -1097,32 +1097,77 @@ describe("chat_respond: drill-in pre-processing", function()
             "original question should be preserved; got:\n" .. after)
     end)
 
-    it("does not gather drill-ins on a resubmit (cursor on a past question)", function()
+    it("branches a new turn after the cursor exchange when it contains drill-ins", function()
+        -- Cursor on a past exchange that has a drill-in marker → don't resubmit;
+        -- instead strip the marker and insert a new user turn (with quote+question
+        -- block) right after that exchange's answer. Subsequent exchanges below
+        -- stay in place but are no longer in the API context for this turn.
         local chat_content = table.concat({
-            "# topic: Resubmit",
+            "# topic: Branch",
             "- file: test.md",
             "---",
             "",
-            "💬: explain 🤖{Term}[what?]",
+            "💬: explain 🤖{Term}[what is this?]",
             "",
-            "🤖: prior answer.",
+            "🤖: prior answer about Term.",
             "",
-            "💬: another question",
+            "💬: a later unrelated question",
         }, "\n")
 
         vim.fn.writefile(vim.split(chat_content, "\n"), test_file)
         vim.cmd("edit " .. test_file)
         local buf = vim.api.nvim_get_current_buf()
 
-        -- Cursor on the FIRST question (resubmit path)
+        -- Cursor on the FIRST exchange's question line (which has a drill-in)
+        vim.api.nvim_win_set_cursor(0, { 5, 0 })
+
+        pcall(function() parley.chat_respond({ range = 0 }) end)
+        local after = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+
+        -- Marker stripped to plain T in the original question
+        assert.is_nil(after:find("🤖{Term}", 1, true),
+            "drill-in marker should be stripped after branch; got:\n" .. after)
+        assert.truthy(after:find("explain Term", 1, true),
+            "stripped term should remain inline; got:\n" .. after)
+        -- Original answer preserved (we did NOT resubmit / overwrite it)
+        assert.truthy(after:find("prior answer about Term.", 1, true),
+            "original answer should be preserved; got:\n" .. after)
+        -- A new user turn with the quote+question block was inserted between
+        -- the original answer and the later unrelated question.
+        local quote_pos = after:find("> Term\nwhat is this?", 1, true)
+        local later_q_pos = after:find("a later unrelated question", 1, true)
+        assert.truthy(quote_pos, "quote block should be present; got:\n" .. after)
+        assert.truthy(later_q_pos, "later question should be preserved")
+        assert.is_true(quote_pos < later_q_pos,
+            "quote block must appear before the later unrelated question; got:\n" .. after)
+    end)
+
+    it("does true resubmit when cursor exchange has an answer but no drill-ins", function()
+        -- Sanity check that the branch path doesn't break the existing
+        -- resubmit path when there's nothing to drill in.
+        local chat_content = table.concat({
+            "# topic: Plain resubmit",
+            "- file: test.md",
+            "---",
+            "",
+            "💬: plain question",
+            "",
+            "🤖: prior answer.",
+        }, "\n")
+
+        vim.fn.writefile(vim.split(chat_content, "\n"), test_file)
+        vim.cmd("edit " .. test_file)
+        local buf = vim.api.nvim_get_current_buf()
         vim.api.nvim_win_set_cursor(0, { 5, 0 })
 
         local before = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
         pcall(function() parley.chat_respond({ range = 0 }) end)
         local after = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
 
-        -- Drill-in marker should still be present (resubmit shouldn't process it)
-        assert.truthy(after:find("🤖{Term}[what?]", 1, true),
-            "drill-in marker should be preserved on resubmit; got:\n" .. after)
+        -- No drill-in artifacts inserted
+        assert.is_nil(after:find("\n> ", 1, true),
+            "no quote block should appear when cursor exchange has no drill-ins; got:\n" .. after)
+        -- Original question preserved
+        assert.truthy(after:find("💬: plain question", 1, true))
     end)
 end)

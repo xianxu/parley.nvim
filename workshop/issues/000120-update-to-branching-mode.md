@@ -92,7 +92,10 @@ The current `find_matching_bracket` walks across newlines, so multi-line section
 - [x] `<C-g>q` (visual mode only) wired in registry + `prep_chat`. Selection wraps as `🤖{T}[]`, cursor inside `[]`, `startinsert`. Multi-line selection works; uses `nvim_buf_set_lines` with reconstructed prefix/suffix to stay within the buffer-mutation arch policy.
 - [x] `<C-g>r` (normal mode only) wired. Resolves every drill-in marker buffer-wide to plain T.
 - [x] Removed `chat_toggle_raw_request` / `chat_toggle_raw_response` registry entries and global callback wiring. `:ToggleRawRequest` / `:ToggleRawResponse` commands stay reachable.
-- [x] Drill-in pre-processing hooked into `chat_respond.respond` before message build. Resubmit detection refined: cursor on the *unanswered last question* counts as a new turn (drill-in fires); cursor on an answer or on a question that already has an answer is a true resubmit (drill-in skipped). Buffer rewrite goes through `buffer_edit.replace_all_lines` (new helper) to satisfy the buffer-mutation arch policy from #90.
+- [x] Drill-in pre-processing hooked into `chat_respond.respond` before message build, with two paths:
+  - **Branch path** — cursor on a past exchange that contains ready drill-in markers: strip them in place, insert a new user turn (with `> T` / `Q` block) right after the exchange's answer, cap `end_index` at the inserted turn. Original Q/A preserved.
+  - **End-append path** — cursor on unanswered last question or at end: gather all ready drill-ins buffer-wide, append blocks to the next user turn at end of buffer.
+  Resubmit detection runs after branch detection: cursor on past exchange with no drill-ins → true resubmit (existing behavior). Buffer rewrite goes through `buffer_edit.replace_all_lines` (new helper).
 - [x] 22 unit specs in `tests/unit/drill_in_spec.lua` (parse / gather_and_strip / resolve_all / format / wrap / append_blocks). 3 integration specs in `tests/integration/chat_respond_spec.lua` (gathers + strips on new turn / no quote block when no markers / preserves marker on resubmit). Full suite green.
 - [x] Atlas: new `atlas/chat/drill_in.md` (marker shape, lifecycle, skipped paths, quote format, cross-tool consistency, key files, keybindings). Cross-reference added to `atlas/modes/review.md`. `atlas/index.md` updated.
 - [ ] Manual smoke: drill-in on a real chat, send via `<C-g>g`, verify the expected blockquote-prefixed user turn and that markers strip cleanly. Manually verify `<C-g>r` resolves a discussion chain.
@@ -117,4 +120,12 @@ Implementation pass complete. Notes:
 - Resubmit detection in chat_respond was initially too coarse — treating any `cursor on question` as resubmit, which suppressed drill-in even when cursor sat on the last unanswered (next-turn) question. Refined to: resubmit only if the question has an answer or cursor is on an answer.
 
 Manual smoke still pending.
+
+### 2026-05-06 (revision)
+
+User clarified: when `<C-g>g` fires on a past exchange that contains drill-in markers, the markers should be interpreted as a *follow-up question*, not a resubmit. The exchange's Q/A stays intact and a new user turn is inserted right after it.
+
+Implemented as the "branch path" in `chat_respond.respond`. Detection runs before the resubmit decision. Original drill-in spec wording said "ready markers anywhere" → end-append; new wording is more nuanced and the branch path takes precedence when cursor is on a past exchange. The end-append path stays for the cursor-at-end case.
+
+Added two integration specs covering the branch (cursor on past exchange with marker → new turn inserted, original answer preserved) and the negative case (cursor on past exchange WITHOUT marker → traditional resubmit still works).
 

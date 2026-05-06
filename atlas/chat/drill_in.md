@@ -21,18 +21,18 @@ Drill-in's "needs machine attention" criterion is exactly `marker.ready and mark
 
 1. **Create** — visual-mode `<C-g>q` wraps the selection as `🤖{T}[]` and drops the cursor inside the empty `[]` in insert mode.
 2. **Compose** — user types the question (multi-line allowed).
-3. **Submit** — `<C-g>g` (chat respond) gathers all ready drill-ins buffer-wide, in document order, and:
-   - Strips each marker in place back to plain `T` (transcript reads naturally).
-   - Appends a blockquote-of-T followed by `Q` to the next user turn slot, separated from any user-typed text by exactly one blank line. Multiple drill-ins are stacked with one blank line between blocks.
+3. **Submit** — `<C-g>g` (chat respond) processes drill-ins. Two paths:
+
+   - **Branch path** (cursor on a past exchange that contains ready drill-ins): treats the drill-ins as a follow-up question for that exchange. Strips them in place inside the exchange and **inserts a new user turn after that exchange's answer**, populated with the gathered `> T` / `Q` blocks. The original Q/A is preserved (no resubmit). Pipeline `end_index` is capped at the inserted new turn, so subsequent (now stale) exchanges below stay in the buffer but are out of context for this turn.
+   - **End-append path** (cursor on the unanswered last question or at end of buffer): gathers every ready drill-in buffer-wide and appends the `> T` / `Q` blocks to the next user turn slot at the end. Markers are stripped in place. If the user already typed text in the next turn, exactly one blank line separates the user's text from the first block. Multiple blocks are stacked with one blank line between them.
+
 4. **Resolve** — `<C-g>r` (normal mode) buffer-wide strips every `🤖{T}[..](..)*` to plain `T` ("resolve discussion chain"). Plain review markers (no `{T}` body) are left alone.
 
-## Skipped paths
+## Resubmit interaction
 
-Drill-in pre-processing only fires on the *new turn* path of `chat_respond`. It is **not** triggered when:
+Cursor on a past exchange (Q has an answer, or cursor on an answer) is normally a *resubmit* — old answer deleted and re-generated. Drill-in detection runs **before** resubmit handling: if the cursor's exchange contains ready drill-in markers, the branch path takes over and the resubmit path is skipped. The original answer is preserved.
 
-- `params.range == 2` (explicit range respond).
-- Cursor sits on an existing answer.
-- Cursor sits on a past question that already has an answer (resubmit).
+If `params.range == 2` (explicit range), drill-in handling is skipped entirely; range request takes precedence.
 
 ## Quote block format
 

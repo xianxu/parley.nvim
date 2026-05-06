@@ -978,25 +978,78 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
     -- append them as quote+question blocks to the next user turn, then strip
     -- the markers in place back to plain T. Re-parse the buffer afterwards so
     -- the rest of the pipeline sees the modified state.
+    -- Drill-in handling, two paths:
+    --
+    -- (A) Branch path — when the cursor sits inside an existing exchange that
+    --     contains ready 🤖{T}[Q] markers, treat each marker as a follow-up
+    --     question and *insert a new user turn after the exchange*. The
+    --     original exchange's question/answer is preserved (with markers
+    --     stripped to plain T); the LLM then answers the inserted new turn.
+    --     This is what the user usually wants when they drill into a term in
+    --     a past exchange — not a resubmit of the original Q.
+    --
+    -- (B) End-append path — otherwise, on the new-turn path (cursor at end /
+    --     on the unanswered last question), gather every ready drill-in in
+    --     the buffer and append the blocks to the next user turn at the end.
+    local drill_in = require("parley.drill_in")
+    local branch_handled = false
+
+    if params.range ~= 2 and exchange_idx and component then
+        local exch = parsed_chat.exchanges[exchange_idx]
+        local exch_start = exch.question.line_start
+        local exch_end = (exch.answer and exch.answer.line_end) or exch.question.line_end
+        local exch_lines = {}
+        for i = exch_start, exch_end do table.insert(exch_lines, lines[i]) end
+        local blocks, stripped_text = drill_in.gather_and_strip(table.concat(exch_lines, "\n"))
+        if #blocks > 0 then
+            local stripped_lines = vim.split(stripped_text, "\n", { plain = true })
+            local user_prefix = _parley.config.chat_user_prefix or "💬:"
+            local block_lines = drill_in.format_blocks(blocks)
+
+            local new_lines = {}
+            for i = 1, exch_start - 1 do table.insert(new_lines, lines[i]) end
+            for _, l in ipairs(stripped_lines) do table.insert(new_lines, l) end
+            table.insert(new_lines, "")
+            table.insert(new_lines, user_prefix)
+            for _, l in ipairs(block_lines) do table.insert(new_lines, l) end
+            local new_turn_end = #new_lines
+            for i = exch_end + 1, #lines do table.insert(new_lines, lines[i]) end
+
+            require("parley.buffer_edit").replace_all_lines(buf, new_lines)
+            _parley.logger.info(string.format(
+                "Drill-in branch: %d marker(s) → new turn after exchange #%d",
+                #blocks, exchange_idx
+            ))
+
+            -- Re-read state. Suppress resubmit handling by clearing
+            -- exchange_idx/component so the downstream block treats this as a
+            -- straight forward new turn capped at new_turn_end.
+            lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+            parsed_chat = _parley.parse_chat(lines, header_end)
+            end_index = new_turn_end
+            exchange_idx = nil
+            component = nil
+            branch_handled = true
+        end
+    end
+
     -- Resubmit = explicit range, OR cursor on an existing answer, OR cursor on
     -- a past question that already has an answer. Cursor on the last unanswered
     -- question is the *new turn* and should still drive drill-in pre-processing.
     local is_resubmit = (params.range == 2)
-    if not is_resubmit and exchange_idx then
+    if not branch_handled and not is_resubmit and exchange_idx then
         if component == "answer" then
             is_resubmit = true
         elseif component == "question" and parsed_chat.exchanges[exchange_idx].answer then
             is_resubmit = true
         end
     end
-    if not is_resubmit then
-        local drill_in = require("parley.drill_in")
-        local buffer_edit = require("parley.buffer_edit")
+    if not branch_handled and not is_resubmit then
         local di_blocks, stripped_text = drill_in.gather_and_strip(table.concat(lines, "\n"))
         if #di_blocks > 0 then
             local stripped_lines = vim.split(stripped_text, "\n", { plain = true })
             local new_lines = drill_in.append_blocks(stripped_lines, di_blocks)
-            buffer_edit.replace_all_lines(buf, new_lines)
+            require("parley.buffer_edit").replace_all_lines(buf, new_lines)
             _parley.logger.info(string.format(
                 "Drill-in: gathered %d marker(s) into next turn", #di_blocks
             ))
