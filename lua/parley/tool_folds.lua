@@ -15,6 +15,57 @@ local FOLDABLE = {
     tool_result = true,
 }
 
+-- Structural prefixes that terminate a reasoning region (the prefix line
+-- itself is NOT part of the fold). 🧠: also terminates so consecutive
+-- thinking blocks fold individually.
+local REASONING_TERMINATORS = {
+    "💬:", "🤖:", "🔧:", "📎:", "📝:", "🌿:", "🔒:", "🧠:", "---",
+}
+
+local function line_starts_with_terminator(line)
+    for _, prefix in ipairs(REASONING_TERMINATORS) do
+        if line:sub(1, #prefix) == prefix then return true end
+    end
+    return false
+end
+
+-- Compute fold ranges (1-indexed inclusive) for `🧠:` reasoning regions.
+-- A region opens on a line starting with `🧠:` and closes at:
+--   1) a `🧠:[END]` line (inclusive), or
+--   2) the line immediately before the next structural-prefix line, or
+--   3) end of buffer.
+local function compute_reasoning_ranges(lines)
+    local ranges = {}
+    local i = 1
+    while i <= #lines do
+        if lines[i]:sub(1, #"🧠:") == "🧠:" then
+            local start_1 = i
+            local end_1 = #lines
+            local cursor = i + 1
+            while cursor <= #lines do
+                local line = lines[cursor]
+                if line:sub(1, #"🧠:[END]") == "🧠:[END]" then
+                    end_1 = cursor
+                    break
+                end
+                if line_starts_with_terminator(line) then
+                    end_1 = cursor - 1
+                    break
+                end
+                cursor = cursor + 1
+            end
+            if end_1 > start_1 then
+                table.insert(ranges, { start_1, end_1 })
+            end
+            i = end_1 + 1
+        else
+            i = i + 1
+        end
+    end
+    return ranges
+end
+M._compute_reasoning_ranges = compute_reasoning_ranges
+
 --- Compute and apply folds from the exchange model.
 --- @param buf integer
 function M.apply_folds(buf)
@@ -45,6 +96,16 @@ function M.apply_folds(buf)
                     pcall(vim.cmd, start_1 .. "," .. end_1 .. "fold")
                 end
             end
+        end
+    end
+
+    -- Reasoning (🧠:) blocks aren't represented as their own model blocks —
+    -- the parser folds reasoning content into the answer's text. Compute
+    -- their ranges directly from buffer lines.
+    for _, range in ipairs(compute_reasoning_ranges(lines)) do
+        local start_1, end_1 = range[1], range[2]
+        if start_1 <= #lines and end_1 <= #lines and start_1 <= end_1 then
+            pcall(vim.cmd, start_1 .. "," .. end_1 .. "fold")
         end
     end
 
