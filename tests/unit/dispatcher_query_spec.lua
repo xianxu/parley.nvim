@@ -190,81 +190,12 @@ describe("dispatcher.query internals", function()
         end)
     end)
 
-    describe("Group B: raw response mode", function()
-        it("B1: first chunk in raw mode emits ```json + raw content", function()
-            -- Enable raw response mode
-            local parley = require("parley")
-            parley.config = parley.config or {}
-            parley.config.raw_mode = { show_raw_response = true }
-
-            local handler = make_handler()
-            local payload = { model = "gpt-4", messages = {} }
-
-            dispatcher.query(nil, "openai", payload, handler, nil, nil)
-
-            -- Drive with first chunk (must include a second line or EOF to flush first line)
-            local chunk = 'data: {"choices":[{"delta":{"content":"Hello"}}]}\n'
-            captured_out_reader(nil, chunk .. '\n') -- Add extra newline to make first line "complete"
-
-            -- Handler should receive opening fence + raw content (without trailing newlines from chunking)
-            assert.equals(1, #handler_calls)
-            assert.is_true(handler_calls[1]:find("```json") ~= nil)
-            -- The handler gets the trimmed line content, check for the core data
-            assert.is_true(handler_calls[1]:find("choices") ~= nil)
-
-            -- Clean up
-            parley.config.raw_mode = nil
-        end)
-
-        it("B2: subsequent raw chunks pass through verbatim", function()
-            local parley = require("parley")
-            parley.config = parley.config or {}
-            parley.config.raw_mode = { show_raw_response = true }
-
-            local handler = make_handler()
-            local payload = { model = "gpt-4", messages = {} }
-
-            dispatcher.query(nil, "openai", payload, handler, nil, nil)
-
-            -- First chunk (with trailing newline to flush)
-            captured_out_reader(nil, 'data: line1\n\n')
-            -- Second chunk (with trailing newline to flush)
-            captured_out_reader(nil, 'data: line2\n\n')
-
-            -- Second handler call should be the raw lines_chunk
-            assert.equals(2, #handler_calls)
-            -- Check it contains the essential content
-            assert.is_true(handler_calls[2]:find('line2') ~= nil)
-
-            -- Clean up
-            parley.config.raw_mode = nil
-        end)
-
-        it("B3: EOF in raw mode appends closing fence", function()
-            local parley = require("parley")
-            parley.config = parley.config or {}
-            parley.config.raw_mode = { show_raw_response = true }
-
-            local handler = make_handler()
-            local payload = { model = "gpt-4", messages = {} }
-
-            dispatcher.query(nil, "openai", payload, handler, nil, nil)
-
-            -- Send some content
-            captured_out_reader(nil, 'data: content\n')
-
-            -- Send EOF
-            captured_out_reader(nil, nil)
-
-            -- Last handler call should be closing fence
-            assert.is_true(handler_calls[#handler_calls]:find("```") ~= nil)
-
-            -- Clean up
-            parley.config.raw_mode = nil
-        end)
-
-        it("B4: normal mode does not add fences", function()
-            -- Ensure raw mode is disabled
+    describe("Group B: response handling", function()
+        -- The legacy "raw response mode" (show_raw_response) that wrapped
+        -- streamed content in a ```json fence in-buffer was removed in #121
+        -- (raw API state is now logged to a side file instead). The dispatcher
+        -- now has a single response-handling path.
+        it("B1: handler receives parsed content, never fence wrappers", function()
             local parley = require("parley")
             parley.config = parley.config or {}
             parley.config.raw_mode = nil
@@ -274,11 +205,9 @@ describe("dispatcher.query internals", function()
 
             dispatcher.query(nil, "openai", payload, handler, nil, nil)
 
-            -- Send content
             local chunk = 'data: {"choices":[{"delta":{"content":"Hello"}}]}\n'
             captured_out_reader(nil, chunk)
 
-            -- Handler should receive just "Hello", not wrapped in fences
             assert.equals(1, #handler_calls)
             assert.equals("Hello", handler_calls[1])
             assert.is_true(handler_calls[1]:find("```") == nil)

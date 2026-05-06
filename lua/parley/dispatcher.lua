@@ -199,34 +199,6 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 
 			local lines = vim.split(lines_chunk, "\n")
 
-			-- Check if we're in raw response mode
-			local show_raw_response = require("parley").config and
-			                          require("parley").config.raw_mode and
-			                          require("parley").config.raw_mode.show_raw_response
-
-			-- In raw response mode, we'll accumulate the entire raw response and return it as JSON
-			if show_raw_response then
-				for _, line in ipairs(lines) do
-					if line ~= "" and line ~= nil then
-						qt.raw_response = qt.raw_response .. line .. "\n"
-					end
-				end
-
-				-- First response should include the code block start marker
-				if qt.response == "" then
-					-- Initial response with opening code fence
-					qt.response = '```json {"type": "response"}\n' .. qt.raw_response
-					handler(qid, '```json {"type": "response"}\n' .. lines_chunk)
-				else
-					-- Subsequent responses just add the new content
-					qt.response = qt.response .. lines_chunk
-					handler(qid, lines_chunk)
-				end
-
-				return
-			end
-
-			-- Standard response handling (non-raw mode)
 			for _, line in ipairs(lines) do
 				if line ~= "" and line ~= nil then
 					qt.raw_response = qt.raw_response .. line .. "\n"
@@ -281,18 +253,6 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 					process_lines(buffer)
 				end
 
-				-- Check if this was a raw response that needs a closing marker
-				if qt then
-					local show_raw_response = require("parley").config and
-											  require("parley").config.raw_mode and
-											  require("parley").config.raw_mode.show_raw_response
-
-					if show_raw_response and qt.response and not qt.response:match("```%s*$") then
-						-- Add closing fence for the JSON code block
-						handler(qid, "\n```")
-						qt.response = qt.response .. "\n```"
-					end
-				end
 				local raw_response = qt.raw_response
 				logger.debug(qt.provider .. " response: \n" .. vim.inspect(qt.raw_response))
 
@@ -300,6 +260,12 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 				local adapter = providers.get(qt.provider)
 				local metrics = adapter.parse_usage(raw_response)
 				tasker.set_cache_metrics(metrics)
+				-- Stash usage on the query object so raw-mode logging can
+				-- include it in the assembled-response YAML.
+				qt.usage = metrics
+				-- Best-effort stop_reason extraction for the log entry.
+				qt.stop_reason = raw_response:match('"stop_reason"%s*:%s*"([^"]+)"')
+					or raw_response:match('"finish_reason"%s*:%s*"([^"]+)"')
 
 				local content = qt.response
 

@@ -1,8 +1,14 @@
 # Raw Mode
 
-- `raw_mode.enable`, `raw_mode.show_raw_response`, `raw_mode.parse_raw_request`
-- **Raw response**: entire JSON response wrapped in ```json block, no content extraction
-- **Raw request**: fenced JSON block in question sent as-is as API request body, bypassing normal payload construction
-- `:ParleyToggleRaw`: toggle both
-- `:ParleyToggleRawRequest` (`<C-g>r`): toggle request parsing
-- `:ParleyToggleRawResponse` (`<C-g>R`): toggle response display
+Per-chat side-file logging of API state for debugging and learning. Replaces the previous in-buffer behavior (#121).
+
+See [`atlas/infra/raw_logging.md`](../infra/raw_logging.md) for the full spec — file layout, format, toggles, lualine indicator, and the typed-YAML input feature.
+
+Quick reference:
+
+- `raw_mode.enable` — master switch (default `true`).
+- `raw_mode.log_exchange` — per-turn message-list log to `<chat-dir>/.parley-logs/<basename>/exchange.md`.
+- `raw_mode.log_raw` — per-turn request payload + assembled response + raw SSE log to `…/raw.md`.
+- `:ParleyToggleExchangeLog`, `:ParleyToggleRawLog` — flip the toggles.
+- `:ParleyOpenExchangeLog`, `:ParleyOpenRawLog` — open the current chat's log in a vsplit.
+- A red `[LOG-EX]` / `[LOG-RAW]` flag appears in the lualine parley section while a toggle is on.

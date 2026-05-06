@@ -114,12 +114,6 @@ function M.replace_all_lines(buf, lines)
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 end
 
---- Insert pre-rendered raw_request fence lines at a 0-indexed line.
---- The lines come from render_buffer.raw_request_fence_lines.
-function M.insert_raw_request_fence(buf, at_line_0_indexed, fence_lines)
-    vim.api.nvim_buf_set_lines(buf, at_line_0_indexed, at_line_0_indexed, false, fence_lines)
-end
-
 --- Append a section to an answer. The section is rendered via
 --- render_buffer.render_section. If the line at `after_line_0_indexed`
 --- is non-empty, a blank separator is inserted first so blocks don't

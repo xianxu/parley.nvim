@@ -219,21 +219,28 @@ M.create_component = function(parley_instance)
       if indicators ~= "" then
         display_name = display_name .. "[" .. indicators .. "]"
       end
+      -- Raw-mode log indicators: prepend a red flag so it's impossible to
+      -- miss that you're writing debug logs to a side file. Both flags can
+      -- be on simultaneously.
+      local log_flags = {}
       if parley.config.raw_mode then
-        local raw_req = parley.config.raw_mode.parse_raw_request
-        local raw_resp = parley.config.raw_mode.show_raw_response
-        if raw_req and raw_resp then
-          display_name = display_name .. "[rR]"
-        elseif raw_req then
-          display_name = display_name .. "[r]"
-        elseif raw_resp then
-          display_name = display_name .. "[R]"
+        if parley.config.raw_mode.log_exchange then
+          table.insert(log_flags, "LOG-EX")
         end
+        if parley.config.raw_mode.log_raw then
+          table.insert(log_flags, "LOG-RAW")
+        end
+      end
+      local log_prefix = ""
+      if #log_flags > 0 then
+        -- ErrorMsg is the conventional red highlight group; if the colorscheme
+        -- doesn't define it, the statusline falls back to default.
+        log_prefix = "%#ErrorMsg# [" .. table.concat(log_flags, "|") .. "] %*"
       end
 
       -- Show agent name with icon (spinner if busy)
       if is_busy then
-        return "🔄 " .. display_name
+        return log_prefix .. "🔄 " .. display_name
       else
         -- Display cache metrics for any provider that has them
         local cache_metrics = parley.tasker.get_cache_metrics()
@@ -255,7 +262,7 @@ M.create_component = function(parley_instance)
           end
         end
 
-        return "🤖 " .. display_name .. " [" .. input_display .. "/" .. creation_display .. "/" .. read_display .. "]"
+        return log_prefix .. "🤖 " .. display_name .. " [" .. input_display .. "/" .. creation_display .. "/" .. read_display .. "]"
       end
     end,
 

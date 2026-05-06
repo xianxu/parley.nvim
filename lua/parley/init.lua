@@ -752,61 +752,52 @@ M.setup = function(opts)
 		M.chat_respond_all()
 	end
 
-	-- Toggle Raw Request mode (parse_raw_request)
-	M.cmd.ToggleRawRequest = function()
-		if M.config.raw_mode and M.config.raw_mode.enable then
-			M.config.raw_mode.parse_raw_request = not M.config.raw_mode.parse_raw_request
-			M.logger.info("Raw Request mode " .. (M.config.raw_mode.parse_raw_request and "enabled" or "disabled"))
-			vim.notify(
-				"Raw Request mode " .. (M.config.raw_mode.parse_raw_request and "enabled" or "disabled"),
-				vim.log.levels.INFO
-			)
-			pcall(function()
-				require("lualine").refresh()
-			end)
-		else
+	-- Open the current chat's exchange / raw log in a vertical split.
+	local function open_log_for_current_buffer(kind)
+		local buf = vim.api.nvim_get_current_buf()
+		local chat_path = vim.api.nvim_buf_get_name(buf)
+		if chat_path == "" then
+			vim.notify("Parley: current buffer has no file path; open a chat first", vim.log.levels.WARN)
+			return
+		end
+		local raw_log = require("parley.raw_log")
+		local path = raw_log.log_path_for(chat_path, kind)
+		if vim.fn.filereadable(path) == 0 then
+			vim.notify("Parley: no " .. kind .. " log yet at " .. path, vim.log.levels.INFO)
+			return
+		end
+		vim.cmd("vsplit " .. vim.fn.fnameescape(path))
+	end
+	M.cmd.OpenExchangeLog = function() open_log_for_current_buffer("exchange") end
+	M.cmd.OpenRawLog = function() open_log_for_current_buffer("raw") end
+
+	-- Toggle Exchange-level Logging (writes per-turn message lists to a side file).
+	M.cmd.ToggleExchangeLog = function()
+		if not (M.config.raw_mode and M.config.raw_mode.enable) then
 			M.logger.warning("Raw mode is disabled in configuration")
 			vim.notify("Raw mode is disabled in configuration", vim.log.levels.WARN)
+			return
 		end
+		M.config.raw_mode.log_exchange = not M.config.raw_mode.log_exchange
+		local state = M.config.raw_mode.log_exchange and "enabled" or "disabled"
+		M.logger.info("Exchange log " .. state)
+		vim.notify("Exchange log " .. state, vim.log.levels.INFO)
+		pcall(function() require("lualine").refresh() end)
 	end
 
-	-- Toggle Raw Response mode (show_raw_response)
-	M.cmd.ToggleRawResponse = function()
-		if M.config.raw_mode and M.config.raw_mode.enable then
-			M.config.raw_mode.show_raw_response = not M.config.raw_mode.show_raw_response
-			M.logger.info("Raw Response mode " .. (M.config.raw_mode.show_raw_response and "enabled" or "disabled"))
-			vim.notify(
-				"Raw Response mode " .. (M.config.raw_mode.show_raw_response and "enabled" or "disabled"),
-				vim.log.levels.INFO
-			)
-			pcall(function()
-				require("lualine").refresh()
-			end)
-		else
+	-- Toggle Raw API Logging (writes per-turn request payload + assembled
+	-- response YAML + raw SSE chunks to a side file).
+	M.cmd.ToggleRawLog = function()
+		if not (M.config.raw_mode and M.config.raw_mode.enable) then
 			M.logger.warning("Raw mode is disabled in configuration")
 			vim.notify("Raw mode is disabled in configuration", vim.log.levels.WARN)
+			return
 		end
-	end
-
-	-- Toggle both Raw Request and Raw Response modes
-	M.cmd.ToggleRaw = function()
-		if M.config.raw_mode and M.config.raw_mode.enable then
-			-- Toggle both settings to the same value (both on or both off)
-			local current_state = M.config.raw_mode.show_raw_response or M.config.raw_mode.parse_raw_request
-			M.config.raw_mode.show_raw_response = not current_state
-			M.config.raw_mode.parse_raw_request = not current_state
-			M.logger.info("Raw mode " .. (not current_state and "enabled" or "disabled") .. " (both request and response)")
-			vim.notify(
-				"Raw mode " .. (not current_state and "enabled" or "disabled") .. " (both request and response)",
-				vim.log.levels.INFO
-			)
-			pcall(function()
-				require("lualine").refresh()
-			end)
-		else
-			M.logger.warning("Raw mode is disabled in configuration")
-			vim.notify("Raw mode is disabled in configuration", vim.log.levels.WARN)
-		end
+		M.config.raw_mode.log_raw = not M.config.raw_mode.log_raw
+		local state = M.config.raw_mode.log_raw and "enabled" or "disabled"
+		M.logger.info("Raw log " .. state)
+		vim.notify("Raw log " .. state, vim.log.levels.INFO)
+		pcall(function() require("lualine").refresh() end)
 	end
 
 	-- Interview Mode commands

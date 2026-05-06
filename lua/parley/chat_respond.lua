@@ -576,23 +576,20 @@ M.build_messages = function(opts)
                     local question_content = exchange.question.content
                     local file_content_parts = {}
 
-                    -- Handle raw request mode - parse JSON from typed code fences
-                    -- Look for ```json {"type": "request"} fences; when present, use as raw payload
-                    -- regardless of parse_raw_request toggle (the fence metadata is authoritative)
+                    -- Raw request input feature: detect a `yaml {"type":"request"}`
+                    -- fence at the bottom of the question and use it verbatim as
+                    -- the API payload. The YAML form lets the user copy a turn
+                    -- from the raw log, paste, edit, and re-send.
                     do
-                        local json_content = question_content:match('```json%s+{"type":%s*"request"}%s*\n(.-)\n```')
-
-                        if json_content then
-                            logger.debug("Found typed JSON request block in question, using raw request mode")
-
-                            -- Try to parse the JSON
-                            local success, payload = pcall(vim.json.decode, json_content)
-                            if success and type(payload) == "table" then
-                                -- Store the raw payload for direct use
+                        local yaml_content = question_content:match('```yaml%s+{"type":%s*"request"}%s*\n(.-)\n```')
+                        if yaml_content then
+                            logger.debug("Found typed YAML request block in question, using raw request mode")
+                            local payload, err = require("parley.log_emit").parse_yaml(yaml_content)
+                            if payload and type(payload) == "table" then
                                 exchange.question.raw_payload = payload
-                                logger.debug("Successfully parsed JSON payload: " .. vim.inspect(payload))
+                                logger.debug("Successfully parsed YAML payload: " .. vim.inspect(payload))
                             else
-                                logger.warning("Failed to parse JSON in raw request mode: " .. tostring(payload))
+                                logger.warning("Failed to parse YAML in raw request mode: " .. tostring(err))
                             end
                         end
                     end
@@ -1330,41 +1327,6 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
         -- byte-identical to pre-#81 behavior.
         local final_payload = raw_payload or _parley.dispatcher.prepare_payload(messages, agent_info.model, agent_info.provider, agent_info.tools)
 
-        -- Debug: dump messages for inspection (temporary).
-        pcall(function()
-            local debug_dir = "/tmp/claude/parley-debug"
-            vim.fn.mkdir(debug_dir, "p")
-            local stamp = os.date("%H%M%S") .. "." .. (is_recursion and "recurse" or "initial")
-            local f = io.open(debug_dir .. "/" .. stamp .. ".messages.json", "w")
-            if f then f:write(vim.json.encode(messages)); f:close() end
-            local f2 = io.open(debug_dir .. "/" .. stamp .. ".payload.json", "w")
-            if f2 then f2:write(vim.json.encode(final_payload)); f2:close() end
-        end)
-
-        -- In raw request mode, insert the request payload after the question, before the agent response
-        -- Skip if the question already contains a typed request fence (raw_payload was parsed from it)
-        if _parley.config.raw_mode and _parley.config.raw_mode.parse_raw_request and not raw_payload then
-            local json_str = vim.json.encode(final_payload)
-            -- Pretty-print via python3 json.tool
-            local ok, formatted = pcall(function()
-                return vim.fn.system({ "python3", "-m", "json.tool" }, json_str)
-            end)
-            if not ok or vim.v.shell_error ~= 0 then
-                formatted = json_str
-            end
-            local request_lines = { '', '```json {"type": "request"}' }
-            for line in formatted:gmatch("[^\n]+") do
-                table.insert(request_lines, line)
-            end
-            table.insert(request_lines, "```")
-            -- Insert right before the answer region. The fence is
-            -- semantically part of the question (shows what was sent),
-            -- so grow question_size in the model to keep positions correct.
-            local fence_pos = model:answer_start(target_idx)
-            buffer_edit.insert_raw_request_fence(buf, fence_pos, request_lines)
-            model:grow_question(target_idx, #request_lines)
-        end
-
         -- Compute response_start_line from the model. This is always
         -- correct because any prior inserts (fence, etc.) updated the
         -- model via grow_question.
@@ -1669,6 +1631,35 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                 -- is idempotent and reads the current buffer state.
                 pcall(function()
                     require("parley.tool_folds").apply_folds(buf)
+                end)
+
+                -- Raw-mode logging (debug/learning aid). Writes per-turn
+                -- markdown logs to <chat-dir>/.parley-logs/<basename>/.
+                pcall(function()
+                    local rm = _parley.config.raw_mode or {}
+                    if not (rm.enable and (rm.log_exchange or rm.log_raw)) then return end
+                    local chat_path = vim.api.nvim_buf_get_name(buf)
+                    if chat_path == "" then return end
+                    local raw_log = require("parley.raw_log")
+                    if rm.log_exchange then
+                        raw_log.write_exchange_turn(chat_path, messages)
+                    end
+                    if rm.log_raw then
+                        local sse_lines
+                        if qt.raw_response and qt.raw_response ~= "" then
+                            sse_lines = vim.split(qt.raw_response, "\n", { plain = true })
+                        end
+                        local assembled = {
+                            stop_reason = qt.stop_reason,
+                            content = qt.response and { { type = "text", text = qt.response } } or nil,
+                            usage = qt.usage,
+                        }
+                        raw_log.write_raw_turn(chat_path, {
+                            request = final_payload,
+                            assembled = assembled,
+                            sse_lines = sse_lines,
+                        })
+                    end
                 end)
 
                 -- Call the callback if provided

@@ -48,6 +48,7 @@ This index provides a central directory for all atlas entries of the `parley.nvi
 - [Configuration System](infra/config.md): Settings and merging logic.
 - [Vault (Secret Management)](infra/vault.md): Secret retrieval and storage.
 - [Logging System](infra/logging.md): Logging and inspection tools.
+- [Raw-Mode Logging](infra/raw_logging.md): Per-chat side-file logs (exchange + raw API), YAML format, lualine red flag.
 - [Linting](infra/linting.md): Lua static analysis baseline and `make lint` behavior.
 - [OpenShell Sandbox](infra/openshell.md): Policy-enforced agent sandbox via NVIDIA OpenShell + mutagen file sync.
 - [AI Workflow](infra/workflow.md): Issue-based development, worktree management, and pre-merge checks.

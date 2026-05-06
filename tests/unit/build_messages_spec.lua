@@ -19,9 +19,22 @@ parley.setup({
         omit_user_text = "[Previous messages omitted]"
     },
     raw_mode = {
-        parse_raw_request = false
+        log_exchange = false,
+        log_raw = false,
     }
 })
+
+-- Stub the YAML parser so unit tests don't depend on python3/PyYAML being
+-- present. The stub decodes simple JSON-shaped YAML by trying vim.json.decode.
+local log_emit = require("parley.log_emit")
+log_emit._parse_yaml_impl = function(yaml_str)
+    -- For unit-test purposes, we author the fence body in JSON-compatible
+    -- YAML (flow style) so vim.json.decode can parse it directly. Production
+    -- still uses python3 + PyYAML for full YAML 1.2 support.
+    local ok, decoded = pcall(vim.json.decode, yaml_str)
+    if not ok then return nil, "stub-parse failed: " .. tostring(decoded) end
+    return decoded, nil
+end
 
 -- Helper to create a minimal agent
 local function agent(name, provider, system_prompt)
@@ -398,11 +411,11 @@ describe("_build_messages: header config overrides", function()
 end)
 
 describe("_build_messages: raw request mode", function()
-    it("when question contains typed JSON request fence, stores raw_payload", function()
+    it("when question contains typed YAML request fence, stores raw_payload", function()
         local json_question = [[
 What do you think?
 
-```json {"type": "request"}
+```yaml {"type": "request"}
 {"model": "gpt-4", "messages": [{"role": "user", "content": "custom"}]}
 ```
 ]]
@@ -430,11 +443,11 @@ What do you think?
         assert.equals("gpt-4", ex.question.raw_payload.model)
     end)
 
-    it("ignores plain JSON fences without type:request metadata", function()
+    it("ignores plain YAML fences without type:request metadata", function()
         local json_question = [[
-Here is some JSON:
+Here is some YAML:
 
-```json
+```yaml
 {"model": "gpt-4", "messages": [{"role": "user", "content": "custom"}]}
 ```
 ]]
@@ -460,11 +473,11 @@ Here is some JSON:
         assert.is_nil(ex.question.raw_payload)
     end)
 
-    it("parses typed request fence even when parse_raw_request config is false", function()
+    it("parses typed request fence regardless of raw_mode log toggles", function()
         local json_question = [[
 What do you think?
 
-```json {"type": "request"}
+```yaml {"type": "request"}
 {"model": "gpt-4", "messages": [{"role": "user", "content": "override"}]}
 ```
 ]]
@@ -473,9 +486,9 @@ What do you think?
 
         local pc = parsed_chat({ ex })
 
-        -- Explicitly set parse_raw_request to false
-        local config_no_raw = vim.deepcopy(parley.config)
-        config_no_raw.raw_mode = { parse_raw_request = false }
+        -- Explicitly set both log toggles off — the typed fence is independent.
+        local config_no_log = vim.deepcopy(parley.config)
+        config_no_log.raw_mode = { log_exchange = false, log_raw = false }
 
         parley._build_messages({
             parsed_chat = pc,
@@ -483,12 +496,12 @@ What do you think?
             end_index = 100,
             exchange_idx = 1,
             agent = agent(),
-            config = config_no_raw,
+            config = config_no_log,
             helpers = stub_helpers,
             logger = stub_logger
         })
 
-        -- Typed fence should be detected regardless of parse_raw_request toggle
+        -- Typed fence is detected on its own; the log toggles don't gate it.
         assert.is_not_nil(ex.question.raw_payload)
         assert.equals("override", ex.question.raw_payload.messages[1].content)
     end)
@@ -497,7 +510,7 @@ What do you think?
         local json_question = [[
 Test question
 
-```json {"type": "request"}
+```yaml {"type": "request"}
 {"model": "gpt-4o", "messages": [{"role": "system", "content": "sys"}, {"role": "user", "content": "hello"}], "temperature": 0.5}
 ```
 ]]
@@ -525,12 +538,12 @@ Test question
         assert.equals(0.5, ex.question.raw_payload.temperature)
     end)
 
-    it("handles invalid JSON in typed request fence gracefully", function()
+    it("handles invalid YAML in typed request fence gracefully", function()
         local json_question = [[
 Test question
 
-```json {"type": "request"}
-{this is not valid json}
+```yaml {"type": "request"}
+{this is not valid yaml}
 ```
 ]]
         local ex = exchange(json_question)
@@ -558,7 +571,7 @@ Test question
         local json_question = [[
 Test question
 
-```json {"type": "response"}
+```yaml {"type": "response"}
 {"id": "chatcmpl-123", "choices": [{"message": {"content": "hello"}}]}
 ```
 ]]

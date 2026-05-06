@@ -525,14 +525,17 @@ local config = {
 		replace_filetype = true,
 	},
 
-	-- raw_mode configuration for easier debugging and iteration
+	-- raw_mode configuration for debugging and learning. Writes per-turn
+	-- logs to side files at <chat-dir>/.parley-logs/<basename>/{exchange,raw}.md.
+	-- The lualine parley section turns red while either log toggle is on.
 	raw_mode = {
-		-- Enable raw mode functionality
+		-- Master switch — when false, the toggle commands no-op.
 		enable = true,
-		-- Mode 1: Show raw LLM JSON responses as code blocks
-		show_raw_response = false,
-		-- Mode 2: Parse user input as JSON to send directly to LLM
-		parse_raw_request = false,
+		-- Append per-turn exchange-level message lists (system/user/assistant).
+		log_exchange = false,
+		-- Append per-turn raw request payload (YAML), assembled response
+		-- (YAML), and raw SSE stream lines.
+		log_raw = false,
 	},
 
 	-- TODO: what are the following are needed?
