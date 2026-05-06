@@ -15,36 +15,38 @@ local FOLDABLE = {
     tool_result = true,
 }
 
--- Structural prefixes that terminate a reasoning region (the prefix line
--- itself is NOT part of the fold). 🧠: also terminates so consecutive
--- thinking blocks fold individually.
-local REASONING_TERMINATORS = {
+-- Structural prefixes that terminate a marker region (the terminator line
+-- itself is NOT part of the fold). All marker prefixes mutually terminate
+-- each other so consecutive blocks fold individually.
+local STRUCTURAL_TERMINATORS = {
     "💬:", "🤖:", "🔧:", "📎:", "📝:", "🌿:", "🔒:", "🧠:", "---",
 }
 
 local function line_starts_with_terminator(line)
-    for _, prefix in ipairs(REASONING_TERMINATORS) do
+    for _, prefix in ipairs(STRUCTURAL_TERMINATORS) do
         if line:sub(1, #prefix) == prefix then return true end
     end
     return false
 end
 
--- Compute fold ranges (1-indexed inclusive) for `🧠:` reasoning regions.
--- A region opens on a line starting with `🧠:` and closes at:
---   1) a `🧠:[END]` line (inclusive), or
---   2) the line immediately before the next structural-prefix line, or
---   3) end of buffer.
-local function compute_reasoning_ranges(lines)
+-- Compute fold ranges (1-indexed inclusive) for lines whose first content is
+-- the given marker prefix. A region opens at the marker line and extends to
+-- the line immediately before the next structural marker (or end of buffer).
+-- For `🧠:`, an explicit `🧠:[END]` line closes the region (inclusive).
+-- min_size = 1 produces folds even for single-line regions (suitable for the
+-- typically one-line `📝:` summary). min_size = 2 skips lone-marker lines.
+local function compute_marker_ranges(lines, prefix, min_size)
     local ranges = {}
+    local end_marker = (prefix == "🧠:") and "🧠:[END]" or nil
     local i = 1
     while i <= #lines do
-        if lines[i]:sub(1, #"🧠:") == "🧠:" then
+        if lines[i]:sub(1, #prefix) == prefix then
             local start_1 = i
             local end_1 = #lines
             local cursor = i + 1
             while cursor <= #lines do
                 local line = lines[cursor]
-                if line:sub(1, #"🧠:[END]") == "🧠:[END]" then
+                if end_marker and line:sub(1, #end_marker) == end_marker then
                     end_1 = cursor
                     break
                 end
@@ -54,7 +56,7 @@ local function compute_reasoning_ranges(lines)
                 end
                 cursor = cursor + 1
             end
-            if end_1 > start_1 then
+            if end_1 - start_1 + 1 >= min_size then
                 table.insert(ranges, { start_1, end_1 })
             end
             i = end_1 + 1
@@ -64,7 +66,11 @@ local function compute_reasoning_ranges(lines)
     end
     return ranges
 end
-M._compute_reasoning_ranges = compute_reasoning_ranges
+M._compute_marker_ranges = compute_marker_ranges
+-- Backward-compat alias for the original reasoning-only spec.
+M._compute_reasoning_ranges = function(lines)
+    return compute_marker_ranges(lines, "🧠:", 2)
+end
 
 --- Compute and apply folds from the exchange model.
 --- @param buf integer
@@ -99,10 +105,18 @@ function M.apply_folds(buf)
         end
     end
 
-    -- Reasoning (🧠:) blocks aren't represented as their own model blocks —
-    -- the parser folds reasoning content into the answer's text. Compute
-    -- their ranges directly from buffer lines.
-    for _, range in ipairs(compute_reasoning_ranges(lines)) do
+    -- Reasoning (🧠:) and summary (📝:) regions aren't their own model
+    -- blocks — the parser folds them into the answer's text. Compute their
+    -- ranges from buffer lines. 🧠: requires multi-line bodies; 📝: lines
+    -- are typically single and still benefit from being collapsed.
+    local marker_ranges = {}
+    for _, r in ipairs(compute_marker_ranges(lines, "🧠:", 2)) do
+        table.insert(marker_ranges, r)
+    end
+    for _, r in ipairs(compute_marker_ranges(lines, "📝:", 1)) do
+        table.insert(marker_ranges, r)
+    end
+    for _, range in ipairs(marker_ranges) do
         local start_1, end_1 = range[1], range[2]
         if start_1 <= #lines and end_1 <= #lines and start_1 <= end_1 then
             pcall(vim.cmd, start_1 .. "," .. end_1 .. "fold")

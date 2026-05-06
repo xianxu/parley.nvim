@@ -82,3 +82,39 @@ describe("tool_folds.compute_reasoning_ranges", function()
         end
     end)
 end)
+
+describe("tool_folds.compute_marker_ranges (📝: summary, min_size=1)", function()
+    local compute_marker = tool_folds._compute_marker_ranges
+
+    it("folds a single 📝: line on its own", function()
+        local lines = {
+            "🤖: header",
+            "answer body",
+            "📝: summary line",
+        }
+        assert.same({ { 3, 3 } }, compute_marker(lines, "📝:", 1))
+    end)
+
+    it("folds 📝: extending until the next structural marker", function()
+        -- Defensive: if the model ever emits multi-line summary, fold the
+        -- whole region together.
+        local lines = {
+            "📝: line one",         -- 1
+            "continued summary",     -- 2
+            "💬: next user turn",    -- 3 (terminator)
+        }
+        assert.same({ { 1, 2 } }, compute_marker(lines, "📝:", 1))
+    end)
+
+    it("folds two consecutive summaries separately", function()
+        local lines = {
+            "📝: a",
+            "📝: b",
+        }
+        assert.same({ { 1, 1 }, { 2, 2 } }, compute_marker(lines, "📝:", 1))
+    end)
+
+    it("returns no ranges when there are no 📝: lines", function()
+        assert.same({}, compute_marker({ "💬: q", "🤖: a", "ok" }, "📝:", 1))
+    end)
+end)
