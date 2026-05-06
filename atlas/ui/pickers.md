@@ -13,6 +13,9 @@ AND-matching across whitespace-split tokens. Token-prefix scoring, bounded edit-
 
 The chat finder additionally pre-seeds `{repo}` on the first open of a parley session in plain repo mode, so the default view is scoped to repo chats and global chats are filtered out. The pre-seed is a one-shot — once the user clears or modifies the filter, sticky-query takes over and the default is never re-applied. Skipped in super-repo mode (whose whole point is aggregating siblings, which a `{repo}` narrowing would defeat).
 
+## Recall (Last Selection)
+Pickers that opt in via `recall_key` remember the id of the last `<CR>`-confirmed item (in-memory only) and place the cursor there on the next open. `recall_id_fn` lets callers point at the stable identity field (defaults to `item.value`; e.g. `item.name` for agent_picker, `item.dir` for root_dir_picker). Stale recall (id no longer present in items) silently falls through to whatever `initial_index` resolves — typically the first item. Cancel/`<Esc>` does not update recall; only confirmation does. Storage lives on `float_picker._last_selection` keyed by the picker's `recall_key`.
+
 ## Tag Bar
 Optional filterable tag row between results and prompt. OR logic — file visible if any enabled tag matches. Caller owns state; picker fires toggle callbacks.
 

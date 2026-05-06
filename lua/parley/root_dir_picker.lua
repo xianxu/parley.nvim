@@ -65,6 +65,8 @@ function M.open(opts)
         title = opts.title or (opts.domain .. " Roots  <C-n>: add  <C-r>: label  <C-d>: remove"),
         items = items,
         anchor = "top",
+        recall_key = "parley.root_dir_picker:" .. opts.domain,
+        recall_id_fn = function(item) return item.dir end,
         initial_index = item_index_by_dir(items, opts.initial_dir) or 1,
         on_select = function()
         end,

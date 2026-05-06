@@ -729,6 +729,7 @@ M.open = function(options)
 		local picker = _parley.float_picker.open({
 			title = prompt_title,
 			items = items,
+			recall_key = "parley.chat_finder",
 			initial_index = M.resolve_finder_initial_index(_parley._chat_finder, items, "ChatFinder"),
 			initial_query = finder_sticky.format_initial_query(_parley._chat_finder.sticky_query),
 			tag_bar = tag_bar,

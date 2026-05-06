@@ -194,6 +194,7 @@ M.open = function(_options)
     _parley.float_picker.open({
         title = prompt_title,
         items = items,
+        recall_key = "parley.issue_finder",
         initial_index = chat_finder_mod.resolve_finder_initial_index(_parley._issue_finder, items, "IssueFinder"),
         initial_query = finder_sticky.format_initial_query(_parley._issue_finder.sticky_query),
         anchor = "bottom",

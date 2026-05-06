@@ -29,9 +29,12 @@ Stale handling: if the recalled value no longer appears in `items`, fall through
 
 ## Plan
 
-- [ ] Add `recall_key` opt and `M._last_selection` to `float_picker.lua`. Wrap `on_select` to record; fold recall into the initial-index resolution.
-- [ ] Pass a `recall_key` from each picker call site (chat_finder, note_finder, issue_finder, vision_finder, markdown_finder, agent_picker, system_prompt_picker, root_dir_picker, note_dir_picker, skill_picker, test_agent_picker, exchange_clipboard, exchange_model, custom_prompts).
-- [ ] Add a unit spec covering record + restore + stale fallback.
+- [x] Add `recall_key` opt and `M._last_selection` to `float_picker.lua`. Wrap `on_select` to record; fold recall into the initial-index resolution.
+- [x] Add `recall_id_fn` opt for pickers whose stable identity isn't on `item.value` (agent, root_dir, note template).
+- [x] Pass a `recall_key` from each picker call site that has well-defined "selection" semantics: chat_finder, note_finder, issue_finder, vision_finder, markdown_finder, agent_picker, system_prompt_picker, root_dir_picker (per-domain key), skill_picker (top-level + per skill+arg), notes.lua "Select Template", init.lua "Move Chat To".
+- [x] Skip pickers where recall doesn't fit semantics: outline (per-buffer line jump, not "same item across reopens"); test_agent_picker (test fixture, not a real picker); exchange_clipboard / exchange_model / custom_prompts (use Vim native UI, not float_picker).
+- [x] Add unit specs covering record + restore + stale fallback + initial_index precedence + recall_id_fn + cancel-no-update (`tests/unit/float_picker_spec.lua`).
+- [x] Update `atlas/ui/pickers.md` with the Recall section.
 - [ ] Manual smoke: open chat finder, pick a chat, reopen, confirm cursor lands on it. Repeat for one other picker.
 
 ## Log
@@ -39,4 +42,10 @@ Stale handling: if the recalled value no longer appears in `items`, fall through
 ### 2026-05-05
 
 Locked at status=working. Design aligned with user: in-memory, on-select only, all pickers, stale → initial_index fallback. Common mechanism via float_picker `recall_key`.
+
+Implemented centrally in `float_picker.M.open` via two opts: `recall_key` (string, namespacing) and `recall_id_fn` (item → stable id, defaults to `item.value`). Storage on module-level `M._last_selection` table. Recall is only consulted when `opts.initial_index` is unset, so transient post-action restore (delete + reopen) keeps precedence.
+
+Wired into 11 picker call sites; skipped 4 with justification above. 6 new unit specs; full suite green.
+
+Atlas: added Recall section to `atlas/ui/pickers.md` next to Sticky Query — same family of within-session state preservation.
 

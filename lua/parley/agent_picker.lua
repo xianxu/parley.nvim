@@ -59,6 +59,8 @@ function M.agent_picker(plugin)
         title = "🤖 Parley Agents",
         items = items,
         anchor = "top",
+        recall_key = "parley.agent_picker",
+        recall_id_fn = function(item) return item.name end,
         on_select = function(item)
             plugin.refresh_state({ agent = item.name })
             plugin.logger.info("Agent set to: " .. item.name)

@@ -2299,6 +2299,7 @@ M.prompt_chat_move = function(file_name, on_complete, on_cancel)
 		title = "Move Chat To",
 		items = items,
 		anchor = "top",
+		recall_key = "parley.move_chat_to",
 		on_select = function(item)
 			local new_file, err = M.move_chat_tree(resolved_file, item.value)
 			if not new_file then

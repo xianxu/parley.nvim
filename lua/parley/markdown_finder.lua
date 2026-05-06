@@ -207,6 +207,7 @@ M.open = function()
 	local picker = _parley.float_picker.open({
 		title = "Markdown Files",
 		items = items,
+		recall_key = "parley.markdown_finder",
 		anchor = "bottom",
 		initial_query = finder_sticky.format_initial_query(_parley._markdown_finder.sticky_query),
 		on_query_change = function(query)

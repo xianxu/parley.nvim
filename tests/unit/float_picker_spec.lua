@@ -749,4 +749,137 @@ describe("float_picker", function()
             assert.same({}, details[1].edit_positions)
         end)
     end)
+
+    -- -------------------------------------------------------------------------
+    -- Recall: remember last confirmed selection across reopens
+    -- -------------------------------------------------------------------------
+    describe("recall", function()
+        before_each(function()
+            float_picker._last_selection = {}
+        end)
+
+        local function feed_cr()
+            vim.api.nvim_feedkeys(
+                vim.api.nvim_replace_termcodes("<CR>", true, false, true), "x", true
+            )
+        end
+
+        it("records confirmed item.value under recall_key", function()
+            local picked = nil
+            float_picker.open({
+                title = "Test",
+                items = {
+                    { display = "alpha", value = "a" },
+                    { display = "beta",  value = "b" },
+                    { display = "gamma", value = "g" },
+                },
+                recall_key = "spec.basic",
+                on_select = function(item) picked = item.value end,
+            })
+            feed_cr()
+            vim.wait(200, function() return picked ~= nil end)
+            assert.equals("a", float_picker._last_selection["spec.basic"])
+        end)
+
+        it("restores cursor to recalled value on reopen", function()
+            float_picker._last_selection["spec.restore"] = "b"
+            float_picker.open({
+                title = "Test",
+                items = {
+                    { display = "alpha", value = "a" },
+                    { display = "beta",  value = "b" },
+                    { display = "gamma", value = "g" },
+                },
+                recall_key = "spec.restore",
+                on_select = function() end,
+            })
+
+            local picked = nil
+            -- Override on_select to capture what gets confirmed at the cursor.
+            -- Simpler: read back cursor row and verify it points to "beta".
+            local win = find_float_win()
+            local lines = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(win), 0, -1, false)
+            local cursor = vim.api.nvim_win_get_cursor(win)
+            assert.truthy(lines[cursor[1]]:find("beta", 1, true),
+                "expected cursor on beta, got: " .. lines[cursor[1]])
+            -- Suppress unused
+            local _ = picked
+        end)
+
+        it("falls back when recalled value is no longer in items", function()
+            float_picker._last_selection["spec.stale"] = "deleted_value"
+            float_picker.open({
+                title = "Test",
+                items = {
+                    { display = "alpha", value = "a" },
+                    { display = "beta",  value = "b" },
+                },
+                recall_key = "spec.stale",
+                on_select = function() end,
+            })
+            local win = find_float_win()
+            local cursor = vim.api.nvim_win_get_cursor(win)
+            -- With no recall match and no initial_index, cursor sits on the
+            -- first logical item, which renders on the bottom row.
+            local lines = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(win), 0, -1, false)
+            assert.truthy(lines[cursor[1]]:find("alpha", 1, true),
+                "expected fallback to first item, got: " .. lines[cursor[1]])
+        end)
+
+        it("explicit initial_index wins over recall", function()
+            float_picker._last_selection["spec.precedence"] = "a"
+            float_picker.open({
+                title = "Test",
+                items = {
+                    { display = "alpha", value = "a" },
+                    { display = "beta",  value = "b" },
+                    { display = "gamma", value = "g" },
+                },
+                recall_key = "spec.precedence",
+                initial_index = 3,  -- gamma
+                on_select = function() end,
+            })
+            local win = find_float_win()
+            local cursor = vim.api.nvim_win_get_cursor(win)
+            local lines = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(win), 0, -1, false)
+            assert.truthy(lines[cursor[1]]:find("gamma", 1, true),
+                "expected initial_index to win, got: " .. lines[cursor[1]])
+        end)
+
+        it("recall_id_fn extracts identity from a non-value field", function()
+            local picked = nil
+            float_picker.open({
+                title = "Test",
+                items = {
+                    { display = "agent-A", name = "agent-A" },
+                    { display = "agent-B", name = "agent-B" },
+                },
+                recall_key = "spec.agents",
+                recall_id_fn = function(item) return item.name end,
+                on_select = function(item) picked = item.name end,
+            })
+            feed_cr()
+            vim.wait(200, function() return picked ~= nil end)
+            assert.equals("agent-A", float_picker._last_selection["spec.agents"])
+        end)
+
+        it("Esc / cancel does not update recall", function()
+            float_picker._last_selection["spec.cancel"] = "preserved"
+            float_picker.open({
+                title = "Test",
+                items = {
+                    { display = "alpha", value = "a" },
+                    { display = "beta",  value = "b" },
+                },
+                recall_key = "spec.cancel",
+                on_select = function() end,
+                on_cancel = function() end,
+            })
+            vim.api.nvim_feedkeys(
+                vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "x", true
+            )
+            vim.wait(200, function() return find_any_float_win() == nil end)
+            assert.equals("preserved", float_picker._last_selection["spec.cancel"])
+        end)
+    end)
 end)

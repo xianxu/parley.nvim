@@ -30,6 +30,11 @@
 --   VimResized repositions both windows (global autocmd, cleaned up on close).
 
 local M = {}
+
+-- In-memory map of recall_key → last confirmed item.value, used to restore
+-- cursor position across reopens of the same picker within a session.
+M._last_selection = {}
+
 local logger = require("parley.logger")
 local MIN_W    = 20  -- minimum picker width  (chars)
 local MIN_H    = 1   -- minimum results height (lines)
@@ -548,6 +553,13 @@ end
 ---   on_query_change function(query) – called when prompt text changes (optional)
 ---   mappings   table    – list of { key: string, fn: function(item, close_fn) }
 ---                         keys are mapped in the prompt (insert mode)
+---   recall_key string   – optional. When set, the last confirmed item's id
+---                         is remembered and used as the initial cursor position
+---                         on the next open (falling back to initial_index when
+---                         the recalled id is no longer present).
+---   recall_id_fn function(item) – optional id extractor; defaults to item.value.
+---                         Used when item identity lives on a different field
+---                         (e.g. item.name for agents, item.dir for root dirs).
 function M.open(opts)
     local items          = opts.items or {}
     local title          = opts.title or "Select"
@@ -588,7 +600,25 @@ function M.open(opts)
 
     local anchor = opts.anchor or "bottom"
     local filtered = vim.deepcopy(items)
-    local initial_index = math.max(1, tonumber(opts.initial_index) or 1)
+
+    -- Recall: optionally remember the last confirmed selection for this picker
+    -- across reopens within the session, falling back to initial_index when the
+    -- recalled value is no longer present. recall_id_fn lets callers whose item
+    -- identity isn't on item.value (e.g. agent_picker uses item.name) pick the
+    -- stable field; defaults to item.value.
+    local recall_key = opts.recall_key
+    local recall_id_fn = opts.recall_id_fn or function(item) return item.value end
+    local resolved_initial = tonumber(opts.initial_index)
+    if not resolved_initial and recall_key and M._last_selection[recall_key] ~= nil then
+        local target = M._last_selection[recall_key]
+        for idx, item in ipairs(items) do
+            if recall_id_fn(item) == target then
+                resolved_initial = idx
+                break
+            end
+        end
+    end
+    local initial_index = math.max(1, resolved_initial or 1)
     local sel_idx = initial_index
     local query_text = type(opts.initial_query) == "string" and opts.initial_query or ""
     local query_cursor = #query_text
@@ -959,6 +989,12 @@ function M.open(opts)
         local item = get_selected_item()
         close_all()
         if item then
+            if recall_key then
+                local id = recall_id_fn(item)
+                if id ~= nil then
+                    M._last_selection[recall_key] = id
+                end
+            end
             vim.schedule(function() on_select(item) end)
         end
     end

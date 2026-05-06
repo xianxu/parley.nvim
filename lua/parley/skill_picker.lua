@@ -44,6 +44,7 @@ local function open_arg_picker(buf, skill, args, arg_index)
     float_picker.open({
         title = title,
         items = items,
+        recall_key = "parley.skill_arg_picker:" .. skill.name .. ":" .. arg_def.name,
         on_select = function(item)
             args[arg_def.name] = item.value
             -- Open next arg picker or run
@@ -76,6 +77,8 @@ M.open = function()
     float_picker.open({
         title = "Skills",
         items = items,
+        recall_key = "parley.skill_picker",
+        recall_id_fn = function(item) return item.value.name end,
         on_select = function(item)
             local skill = item.value
             vim.schedule(function()

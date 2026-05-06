@@ -123,6 +123,8 @@ function M.system_prompt_picker(plugin)
         title = "💬 System Prompts  <C-e>: edit  <C-n>: new  <C-d>: delete  <C-r>: rename",
         items = items,
         anchor = "top",
+        recall_key = "parley.system_prompt_picker",
+        recall_id_fn = function(item) return item.name end,
         on_select = function(item)
             plugin.refresh_state({ system_prompt = item.name })
             plugin.logger.info("System prompt set to: " .. item.name)

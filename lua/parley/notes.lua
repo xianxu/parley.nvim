@@ -477,6 +477,8 @@ M.cmd_note_new_from_template = function()
         title = "Select Template",
         items = items,
         anchor = "top",
+        recall_key = "parley.note_template_picker",
+        recall_id_fn = function(item) return item.value.path end,
         on_select = function(item)
             -- Read template lines to preserve blank lines
             local template_lines = vim.fn.readfile(item.value.path)

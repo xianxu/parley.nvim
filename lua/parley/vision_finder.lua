@@ -73,6 +73,7 @@ M.open = function()
     _parley.float_picker.open({
         title = string.format("Vision (%d initiatives)", #items),
         items = items,
+        recall_key = "parley.vision_finder",
         initial_index = chat_finder_mod.resolve_finder_initial_index(_parley._vision_finder, items, "VisionFinder"),
         initial_query = finder_sticky.format_initial_query(_parley._vision_finder.sticky_query),
         anchor = "bottom",

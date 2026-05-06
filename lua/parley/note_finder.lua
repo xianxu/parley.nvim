@@ -425,6 +425,7 @@ M.open = function(options)
 	_parley.float_picker.open({
 		title = prompt_title,
 		items = items,
+		recall_key = "parley.note_finder",
 		initial_index = _chat_finder_mod.resolve_finder_initial_index(_parley._note_finder, items, "NoteFinder"),
 		initial_query = finder_sticky.format_initial_query(_parley._note_finder.sticky_query),
 		anchor = "bottom",
