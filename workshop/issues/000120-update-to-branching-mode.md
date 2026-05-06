@@ -1,9 +1,10 @@
 ---
 id: 000120
-status: working
+status: done
 deps: []
 created: 2026-05-06
 updated: 2026-05-06
+actual_hours: 3.5
 ---
 
 # update to branching mode
@@ -98,10 +99,12 @@ The current `find_matching_bracket` walks across newlines, so multi-line section
   Resubmit detection runs after branch detection: cursor on past exchange with no drill-ins → true resubmit (existing behavior). Buffer rewrite goes through `buffer_edit.replace_all_lines` (new helper).
 - [x] 22 unit specs in `tests/unit/drill_in_spec.lua` (parse / gather_and_strip / resolve_all / format / wrap / append_blocks). 3 integration specs in `tests/integration/chat_respond_spec.lua` (gathers + strips on new turn / no quote block when no markers / preserves marker on resubmit). Full suite green.
 - [x] Atlas: new `atlas/chat/drill_in.md` (marker shape, lifecycle, skipped paths, quote format, cross-tool consistency, key files, keybindings). Cross-reference added to `atlas/modes/review.md`. `atlas/index.md` updated.
-- [ ] Manual smoke: drill-in on a real chat, send via `<C-g>g`, verify the expected blockquote-prefixed user turn and that markers strip cleanly. Manually verify `<C-g>r` resolves a discussion chain.
+- [x] Manual smoke: confirmed by user across the full flow — `<C-g>q` drill-in on selected text, `<C-g>g` triggers branch-after-cursor-exchange semantics, original answer preserved, target_idx points at the new turn (caught a regression where it pointed at stale exchanges), `<C-g>r` resolves chains. Side-quests during smoke also caught and fixed: re-apply folds after streaming completes; fold 🧠: thinking + 📝: summary by default; trim trailing blanks from fold ranges; `<M-q>` alias added for drill-in.
 
 ## Log
 
+
+- 2026-05-06: closed — Drill-in flow verified end-to-end via user smoke: <C-g>q wraps visual selection as 🤖{T}[]; <C-g>g on a past exchange with markers branches a new user turn after that exchange (original Q/A preserved, target_idx and end_index both pointing at the new turn — regression caught + fixed mid-session); end-of-buffer path gathers all ready drill-ins and appends to the next turn; <C-g>r resolves discussion chains. Side-quests caught and fixed: fold re-application after streaming, fold 🧠: thinking + 📝: summary by default, trim trailing blanks from folds, <M-q> alias for drill-in. Tests: 22 drill_in unit specs, 4 chat_respond integration specs, 11 tool_folds unit specs; full suite green.
 ### 2026-05-06
 
 Spec'd via brainstorming. Decisions:
