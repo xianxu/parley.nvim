@@ -613,7 +613,7 @@ M.entries = {
 	},
 	{
 		id = "chat_drill_in",
-		default_key = "<C-g>q",
+		default_key = { "<C-g>q", "<M-q>" },
 		default_modes = { "v", "x" },
 		scope = "chat",
 		desc = "Parley drill-in: wrap selection as 🤖{T}[]",
