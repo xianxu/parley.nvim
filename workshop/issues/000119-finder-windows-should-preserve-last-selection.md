@@ -1,9 +1,10 @@
 ---
 id: 000119
-status: working
+status: done
 deps: []
 created: 2026-05-05
-updated: 2026-05-05
+updated: 2026-05-06
+actual_hours: 1.5
 ---
 
 # finder windows should preserve last selection
@@ -35,10 +36,12 @@ Stale handling: if the recalled value no longer appears in `items`, fall through
 - [x] Skip pickers where recall doesn't fit semantics: outline (per-buffer line jump, not "same item across reopens"); test_agent_picker (test fixture, not a real picker); exchange_clipboard / exchange_model / custom_prompts (use Vim native UI, not float_picker).
 - [x] Add unit specs covering record + restore + stale fallback + initial_index precedence + recall_id_fn + cancel-no-update (`tests/unit/float_picker_spec.lua`).
 - [x] Update `atlas/ui/pickers.md` with the Recall section.
-- [ ] Manual smoke: open chat finder, pick a chat, reopen, confirm cursor lands on it. Repeat for one other picker.
+- [x] Manual smoke: user confirmed via screenshots — issue_finder works as intended; chat_finder also recalls correctly (the apparent surprise was downstream of a separate chat_finder sort bug, spun off as #122).
 
 ## Log
 
+
+- 2026-05-06: closed — Recall verified by user via screenshots showing chat_finder reopen lands on previously-confirmed chat by identity (issue_finder confirmed working as intended). 6 unit specs in tests/unit/float_picker_spec.lua cover record / restore / stale fallback / initial_index precedence / custom recall_id_fn / cancel-no-update — full suite green. Atlas updated: atlas/ui/pickers.md gained Recall section. Spun off #122 for the unrelated chat_finder sort surprise that came up during smoke.
 ### 2026-05-05
 
 Locked at status=working. Design aligned with user: in-memory, on-select only, all pickers, stale → initial_index fallback. Common mechanism via float_picker `recall_key`.
