@@ -1664,6 +1664,13 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
 
                 vim.cmd("doautocmd User ParleyDone")
 
+                -- Re-apply folds so freshly streamed 🧠:/🔧:/📎: blocks
+                -- collapse the same way they do on file open. apply_folds
+                -- is idempotent and reads the current buffer state.
+                pcall(function()
+                    require("parley.tool_folds").apply_folds(buf)
+                end)
+
                 -- Call the callback if provided
                 if callback then
                     callback()
