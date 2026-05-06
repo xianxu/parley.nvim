@@ -95,6 +95,17 @@ describe("tool_folds.compute_marker_ranges (📝: summary, min_size=1)", functio
         assert.same({ { 3, 3 } }, compute_marker(lines, "📝:", 1))
     end)
 
+    it("trims trailing blank lines so the fold doesn't swallow the separator", function()
+        -- The blank between the summary and the next 💬: is the inter-block
+        -- separator; it must stay outside the fold.
+        local lines = {
+            "📝: summary line",      -- 1 (marker)
+            "",                       -- 2 (separator — must NOT be folded)
+            "💬: next user turn",     -- 3 (terminator)
+        }
+        assert.same({ { 1, 1 } }, compute_marker(lines, "📝:", 1))
+    end)
+
     it("folds 📝: extending until the next structural marker", function()
         -- Defensive: if the model ever emits multi-line summary, fold the
         -- whole region together.

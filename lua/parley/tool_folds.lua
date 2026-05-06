@@ -56,6 +56,11 @@ local function compute_marker_ranges(lines, prefix, min_size)
                 end
                 cursor = cursor + 1
             end
+            -- Trim trailing blank lines from the fold so we don't pull the
+            -- inter-block separator into the marker's region.
+            while end_1 > start_1 and not lines[end_1]:match("%S") do
+                end_1 = end_1 - 1
+            end
             if end_1 - start_1 + 1 >= min_size then
                 table.insert(ranges, { start_1, end_1 })
             end
