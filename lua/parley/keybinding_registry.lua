@@ -612,18 +612,22 @@ M.entries = {
 		help_desc = "Toggle web_search",
 	},
 	{
-		id = "chat_toggle_raw_request",
+		id = "chat_drill_in",
+		default_key = "<C-g>q",
+		default_modes = { "v", "x" },
+		scope = "chat",
+		desc = "Parley drill-in: wrap selection as 🤖{T}[]",
+		help_desc = "Drill-in (wrap selection)",
+		buffer_local = true,
+	},
+	{
+		id = "chat_resolve_drill_in",
 		default_key = "<C-g>r",
 		default_modes = { "n" },
 		scope = "chat",
-		desc = "Toggle raw request mode",
-	},
-	{
-		id = "chat_toggle_raw_response",
-		default_key = "<C-g>R",
-		default_modes = { "n" },
-		scope = "chat",
-		desc = "Toggle raw response mode",
+		desc = "Parley resolve drill-in chain: strip 🤖{T}[..].. → T",
+		help_desc = "Resolve drill-in chain",
+		buffer_local = true,
 	},
 
 	-- ── Markdown (non-chat .md files) ───────────────────────────────────

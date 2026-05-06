@@ -973,6 +973,42 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
         "chat_respond: exchange_idx and component under cursor " .. tostring(exchange_idx) .. " " .. tostring(component)
     )
 
+    -- Drill-in pre-processing: when this is a *new turn* (not a resubmit and
+    -- not a range request), gather any ready 🤖{T}[Q] markers buffer-wide and
+    -- append them as quote+question blocks to the next user turn, then strip
+    -- the markers in place back to plain T. Re-parse the buffer afterwards so
+    -- the rest of the pipeline sees the modified state.
+    -- Resubmit = explicit range, OR cursor on an existing answer, OR cursor on
+    -- a past question that already has an answer. Cursor on the last unanswered
+    -- question is the *new turn* and should still drive drill-in pre-processing.
+    local is_resubmit = (params.range == 2)
+    if not is_resubmit and exchange_idx then
+        if component == "answer" then
+            is_resubmit = true
+        elseif component == "question" and parsed_chat.exchanges[exchange_idx].answer then
+            is_resubmit = true
+        end
+    end
+    if not is_resubmit then
+        local drill_in = require("parley.drill_in")
+        local buffer_edit = require("parley.buffer_edit")
+        local di_blocks, stripped_text = drill_in.gather_and_strip(table.concat(lines, "\n"))
+        if #di_blocks > 0 then
+            local stripped_lines = vim.split(stripped_text, "\n", { plain = true })
+            local new_lines = drill_in.append_blocks(stripped_lines, di_blocks)
+            buffer_edit.replace_all_lines(buf, new_lines)
+            _parley.logger.info(string.format(
+                "Drill-in: gathered %d marker(s) into next turn", #di_blocks
+            ))
+            -- Re-read so the rest of the pipeline sees the rewritten buffer.
+            lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+            parsed_chat = _parley.parse_chat(lines, header_end)
+            end_index = #lines
+            cursor_line = vim.api.nvim_win_get_cursor(0)[1]
+            exchange_idx, component = _parley.find_exchange_at_line(parsed_chat, cursor_line)
+        end
+    end
+
     -- If range was explicitly provided, respect it
     if params.range == 2 then
         start_index = math.max(start_index, params.line1)

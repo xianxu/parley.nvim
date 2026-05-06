@@ -11,6 +11,7 @@ This index provides a central directory for all atlas entries of the `parley.nvi
 - [Chat Parsing](chat/parsing.md): Buffer segmentation, turn identification, and branch link parsing.
 - [Exchange Model](chat/exchange_model.md): Size-based positional model — single source of truth for buffer layout. Everything is a block.
 - [Inline Branch Links](chat/inline_branch_links.md): Footnote-style `[🌿:text](file)` links within chat text.
+- [Drill-In Markers](chat/drill_in.md): Inline `🤖{T}[Q]` discussion markers — gather/strip into the next user turn on respond; reuses the review-skill marker syntax.
 
 ## 2. LLM Providers & Agents
 - [Provider Architecture](providers/architecture.md): Transport layer, payload construction, and streaming.

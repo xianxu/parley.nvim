@@ -651,8 +651,6 @@ M.setup = function(opts)
 			note_template = function() M.cmd.NoteNewFromTemplate() end,
 			-- Chat scope (globally registered toggles)
 			chat_toggle_web_search = function() vim.cmd(M.config.cmd_prefix .. "ToggleWebSearch") end,
-			chat_toggle_raw_request = function() vim.cmd(M.config.cmd_prefix .. "ToggleRawRequest") end,
-			chat_toggle_raw_response = function() vim.cmd(M.config.cmd_prefix .. "ToggleRawResponse") end,
 		}
 	)
 
@@ -1441,6 +1439,89 @@ M.prep_chat = function(buf, file_name)
 		M.highlight_chat_branch_refs(buf)
 	end
 
+	-- Drill-in: visual-mode wrap a selection as 🤖{T}[] and drop cursor inside
+	-- the empty []. Multi-line selections supported. Uses nvim_buf_set_lines
+	-- (allowed via the buffer-mutation arch policy) by reconstructing the
+	-- affected line range with prefix/suffix preserved.
+	local drill_in_mod = require("parley.drill_in")
+	local function chat_drill_in_visual()
+		local sp = vim.fn.getpos("'<")
+		local ep = vim.fn.getpos("'>")
+		local sr, sc = sp[2], sp[3]
+		local er, ec = ep[2], ep[3]
+		if sr == 0 or er == 0 then return end
+
+		local lines_in_range = vim.api.nvim_buf_get_lines(buf, sr - 1, er, false)
+		if #lines_in_range == 0 then return end
+
+		-- Clamp end col for V-line mode (col can be huge)
+		local end_line_text = lines_in_range[#lines_in_range]
+		if ec > #end_line_text then ec = #end_line_text end
+
+		local prefix = lines_in_range[1]:sub(1, sc - 1)
+		local suffix = end_line_text:sub(ec + 1)
+
+		local selected
+		if sr == er then
+			selected = lines_in_range[1]:sub(sc, ec)
+		else
+			local parts = { lines_in_range[1]:sub(sc) }
+			for i = 2, #lines_in_range - 1 do
+				table.insert(parts, lines_in_range[i])
+			end
+			table.insert(parts, end_line_text:sub(1, ec))
+			selected = table.concat(parts, "\n")
+		end
+
+		if selected == "" then
+			M.logger.warning("Drill-in: empty selection")
+			return
+		end
+
+		local wrapped_lines = vim.split(drill_in_mod.wrap(selected), "\n", { plain = true })
+		local new_lines = {}
+		if #wrapped_lines == 1 then
+			table.insert(new_lines, prefix .. wrapped_lines[1] .. suffix)
+		else
+			table.insert(new_lines, prefix .. wrapped_lines[1])
+			for i = 2, #wrapped_lines - 1 do
+				table.insert(new_lines, wrapped_lines[i])
+			end
+			table.insert(new_lines, wrapped_lines[#wrapped_lines] .. suffix)
+		end
+
+		vim.api.nvim_buf_set_lines(buf, sr - 1, er, false, new_lines)
+
+		-- Cursor between [ and ] in the last line of wrapped text. Since wrapped
+		-- always ends with `[]`, the `]` is the final byte of the last wrapped
+		-- line — placing cursor at that byte index (0-based) puts it between
+		-- `[` and `]`, ready for insert.
+		local last_wrapped = wrapped_lines[#wrapped_lines]
+		local target_row, target_col
+		if #wrapped_lines == 1 then
+			target_row = sr
+			target_col = #prefix + #last_wrapped - 1
+		else
+			target_row = sr + #wrapped_lines - 1
+			target_col = #last_wrapped - 1
+		end
+		vim.api.nvim_win_set_cursor(0, { target_row, target_col })
+		vim.schedule(function() vim.cmd("startinsert") end)
+	end
+
+	-- Resolve every 🤖{T}[..](..)* marker in the buffer back to plain T.
+	local function chat_resolve_drill_in()
+		local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+		local text = table.concat(lines, "\n")
+		local new_text, count = drill_in_mod.resolve_all(text)
+		if count == 0 then
+			M.logger.info("Drill-in resolve: no markers to strip")
+			return
+		end
+		vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(new_text, "\n", { plain = true }))
+		M.logger.info("Drill-in resolve: stripped " .. count .. " marker(s)")
+	end
+
 	kb_registry.register_buffer(
 		{ "parley_buffer", "chat" },
 		buf,
@@ -1493,6 +1574,17 @@ M.prep_chat = function(buf, file_name)
 			chat_toggle_tool_folds = function()
 				vim.wo.foldenable = not vim.wo.foldenable
 			end,
+			chat_drill_in = {
+				v = function()
+					vim.cmd("normal! " .. vim.api.nvim_replace_termcodes("<Esc>", true, false, true))
+					chat_drill_in_visual()
+				end,
+				x = function()
+					vim.cmd("normal! " .. vim.api.nvim_replace_termcodes("<Esc>", true, false, true))
+					chat_drill_in_visual()
+				end,
+			},
+			chat_resolve_drill_in = chat_resolve_drill_in,
 		},
 		M.helpers.set_keymap
 	)

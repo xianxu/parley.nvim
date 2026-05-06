@@ -106,6 +106,14 @@ function M.replace_answer(buf, line_start_0_indexed, line_end_0_indexed)
     return M.make_handle(buf, line_start_0_indexed)
 end
 
+--- Replace the entire chat buffer with the given lines. Used by full-buffer
+--- rewrites driven by pure transforms — the drill-in pipeline gathers ready
+--- markers, strips them, and appends a quote block, then writes the result
+--- back here in one shot.
+function M.replace_all_lines(buf, lines)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+end
+
 --- Insert pre-rendered raw_request fence lines at a 0-indexed line.
 --- The lines come from render_buffer.raw_request_fence_lines.
 function M.insert_raw_request_fence(buf, at_line_0_indexed, fence_lines)

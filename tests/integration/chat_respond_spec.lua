@@ -1008,3 +1008,121 @@ describe("chat_respond_all", function()
         vim.fn.delete(non_chat_file)
     end)
 end)
+
+describe("chat_respond: drill-in pre-processing", function()
+    local test_file
+    local original_query
+
+    before_each(function()
+        test_file = make_chat_filename()
+        original_query = parley.dispatcher.query
+        -- Stub dispatcher so chat_respond's network call is a no-op (we only
+        -- assert on buffer state, not on the API path).
+        parley.dispatcher.query = function() end
+    end)
+
+    after_each(function()
+        if original_query then
+            parley.dispatcher.query = original_query
+        end
+        if test_file and vim.fn.filereadable(test_file) == 1 then
+            vim.fn.delete(test_file)
+        end
+        for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+            if vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_buf_get_option(buf, "buftype") == "" then
+                pcall(vim.api.nvim_buf_delete, buf, { force = true })
+            end
+        end
+    end)
+
+    it("gathers ready drill-in markers and appends them to the next user turn", function()
+        local chat_content = table.concat({
+            "# topic: Drill-in test",
+            "- file: test.md",
+            "---",
+            "",
+            "💬: tell me about 🤖{RedShift}[what is this?]",
+            "",
+            "🤖: it's a data warehouse.",
+            "",
+            "💬: ",
+        }, "\n")
+
+        vim.fn.writefile(vim.split(chat_content, "\n"), test_file)
+        vim.cmd("edit " .. test_file)
+        local buf = vim.api.nvim_get_current_buf()
+
+        -- Cursor at end of buffer (next-turn slot — not on a past question)
+        local last_line = vim.api.nvim_buf_line_count(buf)
+        vim.api.nvim_win_set_cursor(0, { last_line, 0 })
+
+        local ok, err = pcall(function() parley.chat_respond({ range = 0 }) end)
+        assert.is_true(ok, "chat_respond should not error: " .. tostring(err))
+
+        local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+        local joined = table.concat(lines, "\n")
+
+        -- Marker stripped to plain term
+        assert.is_nil(joined:find("🤖{", 1, true), "drill-in marker should be stripped from buffer")
+        assert.truthy(joined:find("tell me about RedShift", 1, true),
+            "stripped term should remain inline; got:\n" .. joined)
+        -- Quote block appended at the end
+        assert.truthy(joined:find("> RedShift\nwhat is this?", 1, true),
+            "quote block should be appended; got:\n" .. joined)
+    end)
+
+    it("does not add a quote block when there are no drill-in markers", function()
+        local chat_content = table.concat({
+            "# topic: No drill-in",
+            "- file: test.md",
+            "---",
+            "",
+            "💬: plain question",
+        }, "\n")
+
+        vim.fn.writefile(vim.split(chat_content, "\n"), test_file)
+        vim.cmd("edit " .. test_file)
+        local buf = vim.api.nvim_get_current_buf()
+        local last_line = vim.api.nvim_buf_line_count(buf)
+        vim.api.nvim_win_set_cursor(0, { last_line, 0 })
+
+        pcall(function() parley.chat_respond({ range = 0 }) end)
+        local after = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+
+        -- No drill-in artifacts should appear (no `> ` blockquote lines added).
+        assert.is_nil(after:find("\n> ", 1, true),
+            "no quote block should be added when there were no drill-ins; got:\n" .. after)
+        -- Original question should still be present unchanged.
+        assert.truthy(after:find("💬: plain question", 1, true),
+            "original question should be preserved; got:\n" .. after)
+    end)
+
+    it("does not gather drill-ins on a resubmit (cursor on a past question)", function()
+        local chat_content = table.concat({
+            "# topic: Resubmit",
+            "- file: test.md",
+            "---",
+            "",
+            "💬: explain 🤖{Term}[what?]",
+            "",
+            "🤖: prior answer.",
+            "",
+            "💬: another question",
+        }, "\n")
+
+        vim.fn.writefile(vim.split(chat_content, "\n"), test_file)
+        vim.cmd("edit " .. test_file)
+        local buf = vim.api.nvim_get_current_buf()
+
+        -- Cursor on the FIRST question (resubmit path)
+        vim.api.nvim_win_set_cursor(0, { 5, 0 })
+
+        local before = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+        pcall(function() parley.chat_respond({ range = 0 }) end)
+        local after = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+
+        -- Drill-in marker should still be present (resubmit shouldn't process it)
+        assert.truthy(after:find("🤖{Term}[what?]", 1, true),
+            "drill-in marker should be preserved on resubmit; got:\n" .. after)
+    end)
+end)

@@ -4,6 +4,10 @@ Headless LLM-powered review workflow for markdown files. Users annotate
 documents with `🤖[comment]` markers, then an agent rewrites the document
 to address the comments.
 
+The same marker family `🤖{T}[Q]{A}…` is also used inside chat buffers for
+[drill-in discussions](../chat/drill_in.md) (different keybindings + a chat-
+side gather/strip on respond). The section parser is shared.
+
 ## Marker Syntax
 
 Single marker `🤖`. `[]` = human turns, `{}` = agent turns, any order.

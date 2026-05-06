@@ -88,13 +88,13 @@ The current `find_matching_bracket` walks across newlines, so multi-line section
 
 ## Plan
 
-- [ ] Pure-function module (likely `lua/parley/drill_in.lua`): extract conversion + strip logic. Inputs: buffer lines + ready markers from `parse_markers`. Outputs: (a) list of `{quoted_text, question}` blocks, (b) lines with converted markers stripped to `{T}` body.
-- [ ] Wire `<C-g>q` keybinding (visual mode only) in `keybinding_registry.lua` + chat-buffer setup. Selection → wrap as `🤖{<selection>}[]`, cursor inside `[]`, `startinsert`.
-- [ ] Wire `<C-g>r` keybinding (normal mode only) in registry + chat-buffer setup. Resolves all `🤖{T}[..]..` markers buffer-wide to `T`.
-- [ ] Remove `chat_toggle_raw_request` / `chat_toggle_raw_response` registry entries and their callback wiring in `init.lua`. Verify `:ToggleRawRequest` / `:ToggleRawResponse` commands still work.
-- [ ] Hook drill-in gather/append/strip into chat-respond pipeline (`chat_respond.lua`) before message build.
-- [ ] Tests: pure-function unit specs (single, multi, multi-line, mixed with non-`{T}` review markers, empty selection edge cases, blank-line separator logic). Integration spec for the chat-respond hook.
-- [ ] Atlas: locate the canonical marker doc (likely under `atlas/skills/` or `atlas/chat/`) and document the dual-purpose nature of `🤖{T}[..]..` — review skill on non-chat markdown, drill-in on chat.
+- [x] Pure-function module `lua/parley/drill_in.lua`: `parse`, `gather_and_strip`, `resolve_all`, `format_block`, `format_blocks`, `wrap`, `append_blocks`. Multi-line bracket content supported (parser walks the joined buffer text rather than per line).
+- [x] `<C-g>q` (visual mode only) wired in registry + `prep_chat`. Selection wraps as `🤖{T}[]`, cursor inside `[]`, `startinsert`. Multi-line selection works; uses `nvim_buf_set_lines` with reconstructed prefix/suffix to stay within the buffer-mutation arch policy.
+- [x] `<C-g>r` (normal mode only) wired. Resolves every drill-in marker buffer-wide to plain T.
+- [x] Removed `chat_toggle_raw_request` / `chat_toggle_raw_response` registry entries and global callback wiring. `:ToggleRawRequest` / `:ToggleRawResponse` commands stay reachable.
+- [x] Drill-in pre-processing hooked into `chat_respond.respond` before message build. Resubmit detection refined: cursor on the *unanswered last question* counts as a new turn (drill-in fires); cursor on an answer or on a question that already has an answer is a true resubmit (drill-in skipped). Buffer rewrite goes through `buffer_edit.replace_all_lines` (new helper) to satisfy the buffer-mutation arch policy from #90.
+- [x] 22 unit specs in `tests/unit/drill_in_spec.lua` (parse / gather_and_strip / resolve_all / format / wrap / append_blocks). 3 integration specs in `tests/integration/chat_respond_spec.lua` (gathers + strips on new turn / no quote block when no markers / preserves marker on resubmit). Full suite green.
+- [x] Atlas: new `atlas/chat/drill_in.md` (marker shape, lifecycle, skipped paths, quote format, cross-tool consistency, key files, keybindings). Cross-reference added to `atlas/modes/review.md`. `atlas/index.md` updated.
 - [ ] Manual smoke: drill-in on a real chat, send via `<C-g>g`, verify the expected blockquote-prefixed user turn and that markers strip cleanly. Manually verify `<C-g>r` resolves a discussion chain.
 
 ## Log
@@ -109,4 +109,12 @@ Spec'd via brainstorming. Decisions:
 - Multi-line `[]` content must parse end-to-end.
 - Multiple drill-ins are gathered in document order and resolved (stripped) once converted into the next turn.
 - Status stays `open` — implementation deferred until #119 closes.
+
+Implementation pass complete. Notes:
+
+- Buffer-mutation arch test (#90) caught two of my early calls (`nvim_buf_set_text` in init.lua's drill-in handler, and `nvim_buf_set_lines` in chat_respond.lua). Resolved by (a) rewriting the visual handler to compute prefix/suffix and use `set_lines` from init.lua (already allow-listed), (b) adding `buffer_edit.replace_all_lines` and routing chat_respond's full-buffer rewrite through it.
+
+- Resubmit detection in chat_respond was initially too coarse — treating any `cursor on question` as resubmit, which suppressed drill-in even when cursor sat on the last unanswered (next-turn) question. Refined to: resubmit only if the question has an answer or cursor is on an answer.
+
+Manual smoke still pending.
 
