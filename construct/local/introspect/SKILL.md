@@ -1,6 +1,6 @@
 ---
 name: xx-introspect
-description: Use when the user wants to extract reusable taste signals from past Claude Code sessions, author a strong human hint to seed a future extraction, or load a previously-extracted activity-typed introspect skill. Invoked as `/xx-introspect extract` (run the postmortem extraction pipeline), `/xx-introspect hint` (author/list/retire human hints), or `/xx-introspect load` (load introspect-<activity> matching the current session). Operates on `~/.claude/projects/*.jsonl` transcripts; all outputs land in user-global `~/.claude/introspect/`. See `workshop/issues/000018-...md` and `000019-...md` for full design context.
+description: use to learn from existing coding sessions
 ---
 
 # xx-introspect — postmortem introspect extraction

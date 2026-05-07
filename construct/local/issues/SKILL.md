@@ -1,6 +1,6 @@
 ---
 name: xx-issues
-description: "Use proactively when creating, updating, or closing issues in workshop/issues/. Ensures consistent frontmatter, section structure, and numbering."
+description: "Use when editing issues in workshop/issues/."
 ---
 
 # Issues

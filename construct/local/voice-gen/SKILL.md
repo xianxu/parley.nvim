@@ -1,6 +1,6 @@
 ---
 name: xx-voice-gen
-description: Generate a writing style guide from sample writing. Usage: /xx-voice-gen <slug> <folder-path>
+description: Generate a writing style guide
 ---
 
 # Voice Gen

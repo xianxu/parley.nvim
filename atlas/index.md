@@ -48,7 +48,7 @@ This index provides a central directory for all atlas entries of the `parley.nvi
 - [Configuration System](infra/config.md): Settings and merging logic.
 - [Vault (Secret Management)](infra/vault.md): Secret retrieval and storage.
 - [Logging System](infra/logging.md): Logging and inspection tools.
-- [Raw-Mode Logging](infra/raw_logging.md): Per-chat side-file logs (exchange + raw API), YAML format, lualine red flag.
+- [Raw-Mode Logging](infra/raw_logging.md): **First-line debug tool for LLM-pipeline bugs.** Per-chat side-file logs (exchange + raw API), YAML format, lualine red flag. `:ParleyToggleExchangeLog` / `:ParleyToggleRawLog`.
 - [Linting](infra/linting.md): Lua static analysis baseline and `make lint` behavior.
 - [OpenShell Sandbox](infra/openshell.md): Policy-enforced agent sandbox via NVIDIA OpenShell + mutagen file sync.
 - [AI Workflow](infra/workflow.md): Issue-based development, worktree management, and pre-merge checks.
@@ -56,7 +56,7 @@ This index provides a central directory for all atlas entries of the `parley.nvi
 ## 8. Skill System & Special Modes
 - [Skill System](skills/skill-system.md): Unified pipeline for AI-powered buffer editing skills (`<C-g>s` picker, skill_runner, skill definitions).
 - [Interview Mode](modes/interview.md): Mechanics, automatic timestamps, and `{thought}` highlighting.
-- [Raw Mode](modes/raw_mode.md): API debugging via raw requests/responses.
+- [Raw Mode](modes/raw_mode.md): API debugging via raw requests/responses — see [Raw-Mode Logging](infra/raw_logging.md) for the debug workflow.
 - [Document Review](modes/review.md): LLM-powered document review via 🤖 markers (implemented as a skill).
 - [Super-Repo Mode](modes/super_repo.md): Toggle (`<C-g>S`) to aggregate reads across sibling `.parley` repos under the workspace root.
 

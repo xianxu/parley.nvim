@@ -1,6 +1,6 @@
 ---
 name: xx-fix
-description: "Use proactively — without being asked — in two situations: (1) when performing a document review, write findings as `🤖{finding}` markers inline in the file rather than a separate report; (2) when a file contains 🤖 inline markers to process, apply them. Invoked as /xx-fix <path-to-file> for processing markers."
+description: Use when 🤖{} or 🤖[] line appear in markdown documents
 ---
 
 # Inline Review

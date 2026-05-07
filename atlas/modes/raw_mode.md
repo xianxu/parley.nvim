@@ -2,7 +2,7 @@
 
 Per-chat side-file logging of API state for debugging and learning. Replaces the previous in-buffer behavior (#121).
 
-See [`atlas/infra/raw_logging.md`](../infra/raw_logging.md) for the full spec — file layout, format, toggles, lualine indicator, and the typed-YAML input feature.
+**For agents debugging parley:** this is the first-line diagnostic tool for any LLM-pipeline issue (wrong prompt, missing messages, cache misses, tool_use shape, token usage, SSE oddities). Toggle on, reproduce, inspect the side files, toggle off. See [`atlas/infra/raw_logging.md`](../infra/raw_logging.md#when-to-use-this-debugging-entry-point) for the decision tree (exchange-level vs raw-API-level) and the full spec — file layout, format, toggles, lualine indicator, and the typed-YAML input feature.
 
 Quick reference:
 

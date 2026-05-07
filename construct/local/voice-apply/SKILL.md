@@ -1,6 +1,6 @@
 ---
 name: xx-voice-apply
-description: Rewrite a document to match a personal writing voice/style. Usage: /xx-voice-apply <slug> <document-path>
+description: apply a voice style
 ---
 
 # Voice Apply

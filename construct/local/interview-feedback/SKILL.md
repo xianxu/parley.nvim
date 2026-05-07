@@ -1,6 +1,6 @@
 ---
 name: xx-interview-feedback
-description: "Use when processing interview notes taken in parley.nvim interview mode into structured hiring feedback. Invoked as /xx-interview-feedback <path-to-notes>."
+description: "Use to process interview feedback"
 ---
 
 # Interview Feedback Generator

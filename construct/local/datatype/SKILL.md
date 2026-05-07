@@ -1,6 +1,6 @@
 ---
 name: xx-datatype
-description: "Use when the user issues an explicit capture or authoring instruction — a verb like 'capture', 'save', 'remember', 'record', 'write down', 'log', 'track', 'note', 'file', 'create', 'set up', 'draft', 'author', or 'start' — applied to substance worth keeping or to a typed-artifact noun. The noun MUST match a known datatype (product, roadmap, meeting-notes, travel-plan, pensive, reference, procedure, event, plus any project-local types in <repo>/datatype/); if it doesn't, do NOT trigger — that's code/conversation territory. Do NOT trigger on descriptive statements ('we're visiting X this summer', 'I had a meeting with Y'); a domain noun alone ('trip', 'meeting') is not a trigger. Do NOT trigger on authoring verbs applied to non-datatype nouns ('create a function', 'create a feature', 'create a branch', 'set up the dev environment', 'draft an email'). Also fires on the slash command `/xx-datatype <type> [path]`, and when editing a markdown file whose frontmatter has a known `type:`."
+description: "Use when the user explicitly asks to capture/save/record something — product, roadmap, meeting-notes, travel-plan, pensive, reference, procedure, event, plus project-local types under <repo>/datatype/. Skip without instruction for action. Trigger when editing markdown with known frontmatter type:"
 ---
 
 # Datatype

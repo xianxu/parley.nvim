@@ -2,6 +2,16 @@
 
 Per-chat side-file logging of LLM API state for debugging and learning. The previous behavior — inserting JSON fences in the chat buffer and replacing the response with raw stream content — was replaced wholesale (#121); raw-mode now writes to dedicated log files and never mutates the chat transcript.
 
+## When to use this (debugging entry point)
+
+**This is the first tool to reach for when investigating any LLM-pipeline bug** — wrong system prompt, missing/extra messages, stale cache hits, tool_use shape mismatches, surprising token usage, truncated streams, or "why did it answer like that." The two logs cover complementary layers:
+
+- **Symptom is conversational** ("the model didn't see X", "the wrong agent prompt got used", "tool result wasn't fed back") → toggle `:ParleyToggleExchangeLog` and inspect `exchange.md`. It's a clean per-turn message list — what parley *assembled* and what came back, before/after wire serialization.
+- **Symptom is at the API layer** (cache_control placement, token counts, `stop_reason`, SSE event ordering, tool block IDs, raw payload shape) → toggle `:ParleyToggleRawLog` and inspect `raw.md`. Three sub-blocks per turn: request payload (YAML), assembled response (YAML), raw SSE stream.
+- **Reproducing a bad request without re-running the whole flow** → copy the `### Request payload (yaml)` block from `raw.md` into a new question as a `\`\`\`yaml {"type": "request"}` fence (see Input feature below), tweak the failing field, and re-dispatch. Faster than restarting the chat.
+
+Both toggles default off. Turn them on, repro the bug, then turn them off again — the lualine red `[LOG-EX]`/`[LOG-RAW]` flag is your reminder they're hot. Logs are gitignored-by-convention via the `.parley-logs/` prefix but commit-safe; clean up with `rm -rf <chat-dir>/.parley-logs/` when done.
+
 ## On-disk layout
 
 For a chat at `<chat-dir>/<basename>.md`:
