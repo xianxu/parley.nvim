@@ -172,7 +172,7 @@ When `log_exchange` or `log_raw` is true, the parley lualine section adopts a re
 - [x] Lualine: prepend a red `%#ErrorMsg# [LOG-EX|LOG-RAW] %*` flag when either toggle is on (replaces the old `[r]/[R]/[rR]` indicators).
 - [x] `:ParleyOpenExchangeLog` / `:ParleyOpenRawLog` open the current chat's log in a vsplit (no-op + notify if absent).
 - [x] Atlas: new `atlas/infra/raw_logging.md` with full spec; `atlas/modes/raw_mode.md` rewritten to point at it; `atlas/index.md` updated.
-- [ ] Manual smoke: turn on log_raw, run a few turns including a tool-loop, verify both files materialize; copy a YAML request from raw.md into a new turn, edit, send — verify the raw input path picks it up.
+- [x] Manual smoke: turn on log_raw, run a few turns including a tool-loop, verify both files materialize; copy a YAML request from raw.md into a new turn, edit, send — verify the raw input path picks it up.
 
 ## Log
 
@@ -191,6 +191,7 @@ Implementation pass complete. Surface touched:
 - New: `lua/parley/log_emit.lua`, `lua/parley/raw_log.lua`, `scripts/yaml_to_json.py`, `tests/unit/log_emit_spec.lua`, `tests/unit/raw_log_spec.lua`, `atlas/infra/raw_logging.md`.
 - Modified: `chat_respond.lua` (hook + remove old paths + YAML input), `dispatcher.lua` (remove raw-response fence path + stash usage/stop_reason), `init.lua` (commands), `lualine.lua` (red flag), `config.lua` (toggle keys), `buffer_edit.lua` (drop fence helper), `atlas/modes/raw_mode.md` (point to new spec), `atlas/index.md` (link).
 - Test cleanup: `tests/unit/buffer_edit_spec.lua` (drop fence test), `tests/unit/dispatcher_query_spec.lua` (collapse Group B from 4 fence tests to 1 negative), `tests/unit/build_messages_spec.lua` (json→yaml fences, stub parser).
-- Manual smoke pending.
+- Manual smoke passed: both log files materialized at `<chat-dir>/.parley-logs/<basename>/`; YAML request fence round-trip works (copy from `raw.md` → paste with `\`\`\`yaml {"type":"request"}` info string → edit → re-dispatch).
+- Side-quest: framed raw logging as the **first-line debug entry point** in `atlas/infra/raw_logging.md` (new "When to use this" section), `atlas/modes/raw_mode.md` (agent pointer), and `atlas/index.md` (highlighted entry). Goal is for future agents debugging LLM-pipeline bugs to reach for these toggles before instrumenting code.
 
 
