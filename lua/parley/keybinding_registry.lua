@@ -614,10 +614,10 @@ M.entries = {
 	{
 		id = "chat_drill_in",
 		default_key = { "<C-g>q", "<M-q>" },
-		default_modes = { "v", "x" },
+		default_modes = { "v", "x", "i" },
 		scope = "parley_buffer",
-		desc = "Parley drill-in: wrap selection as 🤖<T>[]",
-		help_desc = "Drill-in (wrap selection)",
+		desc = "Parley drill-in: wrap selection as 🤖<T>[] (v/x); insert 🤖[] (i)",
+		help_desc = "Drill-in (wrap selection / insert annotation)",
 		buffer_local = true,
 	},
 	{

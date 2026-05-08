@@ -1419,6 +1419,22 @@ local function drill_in_resolve(buf)
 	M.logger.info("Drill-in resolve: stripped " .. count .. " marker(s)")
 end
 
+-- Insert-mode: drop a bare `🤖[]` annotation marker at the cursor and place
+-- the cursor between `[` and `]` so the user can type their comment without
+-- leaving insert mode. No `<>` quoted body — that form is for visual-mode
+-- wrap; here the marker refers to the surrounding text by position only.
+local function drill_in_insert(buf)
+	local cursor = vim.api.nvim_win_get_cursor(0)
+	local row = cursor[1] - 1
+	local col = cursor[2]
+	local line = vim.api.nvim_buf_get_lines(buf, row, row + 1, false)[1] or ""
+	local before = line:sub(1, col)
+	local after = line:sub(col + 1)
+	vim.api.nvim_buf_set_lines(buf, row, row + 1, false, { before .. "🤖[]" .. after })
+	-- 🤖 = 4 bytes, `[` = 1 byte → cursor between [ and ] sits at col + 5.
+	vim.api.nvim_win_set_cursor(0, { row + 1, col + 5 })
+end
+
 -- Build the registry callbacks table for drill-in. Identical shape used in
 -- both prep_chat and setup_markdown_keymaps.
 local function drill_in_callbacks(buf)
@@ -1432,6 +1448,7 @@ local function drill_in_callbacks(buf)
 				vim.cmd("normal! " .. vim.api.nvim_replace_termcodes("<Esc>", true, false, true))
 				drill_in_visual(buf)
 			end,
+			i = function() drill_in_insert(buf) end,
 		},
 		chat_resolve_drill_in = function() drill_in_resolve(buf) end,
 	}
