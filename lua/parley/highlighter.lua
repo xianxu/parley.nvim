@@ -401,11 +401,13 @@ local function compute_markdown_highlights(buf, start_line, end_line)
             if not pos then break end
             local sections, end_pos, quoted = review._parse_marker_sections(line, pos, 4)
             if quoted then
+                -- Highlight the 🤖 + `<…>` together so the whole "this marker
+                -- refers to a precise quote" prefix reads as one unit.
                 result[row] = result[row] or {}
                 table.insert(result[row], {
                     hl_group = "ParleyReviewQuoted",
-                    col_start = quoted.byte_start - 1,
-                    col_end = quoted.byte_end,
+                    col_start = pos - 1,             -- 0-indexed pos of 🤖
+                    col_end = quoted.byte_end,       -- inclusive close `>`
                 })
             end
             for _, section in ipairs(sections) do
@@ -617,8 +619,10 @@ M.setup_highlights = function()
     vim.api.nvim_set_hl(0, "ParleyReviewUser", { link = "DiagnosticWarn" })
     -- Review markers — {agent question} in 🤖 marker chains
     vim.api.nvim_set_hl(0, "ParleyReviewAgent", { link = "DiagnosticInfo" })
-    -- Review markers — <quoted body> identifying the text the chain refers to
-    vim.api.nvim_set_hl(0, "ParleyReviewQuoted", { link = "Comment" })
+    -- Review markers — <quoted body> identifying the text the chain refers to.
+    -- Reverse style (fg↔bg of Normal) makes `🤖<…>` stand out instantly so
+    -- the user can spot the precise-quote scope at a glance.
+    vim.api.nvim_set_hl(0, "ParleyReviewQuoted", { reverse = true })
 
     -- Interview timestamps - Highlighted timestamp lines like :15min
     -- Use only background color to allow search highlights to show through
