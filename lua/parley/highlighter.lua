@@ -620,9 +620,9 @@ M.setup_highlights = function()
     -- Review markers — {agent question} in 🤖 marker chains
     vim.api.nvim_set_hl(0, "ParleyReviewAgent", { link = "DiagnosticInfo" })
     -- Review markers — <quoted body> identifying the text the chain refers to.
-    -- Reverse style (fg↔bg of Normal) makes `🤖<…>` stand out instantly so
-    -- the user can spot the precise-quote scope at a glance.
-    vim.api.nvim_set_hl(0, "ParleyReviewQuoted", { reverse = true })
+    -- Reverse + bold makes `🤖<…>` pop against any colorscheme so the user
+    -- can spot the precise-quote scope at a glance.
+    vim.api.nvim_set_hl(0, "ParleyReviewQuoted", { reverse = true, bold = true })
 
     -- Interview timestamps - Highlighted timestamp lines like :15min
     -- Use only background color to allow search highlights to show through
@@ -865,7 +865,10 @@ M.setup_buf_handler = function()
                         end_col = end_col,
                         hl_group = hl.hl_group,
                         ephemeral = true,
-                        priority = 100,
+                        -- 200 > treesitter's default 100, so our marker
+                        -- highlights win over markdown syntax (which
+                        -- otherwise paints `<Amazon>` as an HTML tag).
+                        priority = 200,
                     })
                 end
             end
