@@ -1,9 +1,10 @@
 ---
 id: 000121
-status: working
+status: done
 deps: []
 created: 2026-05-06
 updated: 2026-05-06
+actual_hours: 5
 ---
 
 # improve raw mode
@@ -176,6 +177,8 @@ When `log_exchange` or `log_raw` is true, the parley lualine section adopts a re
 
 ## Log
 
+
+- 2026-05-06: closed — manual smoke passed: both logs materialize at <chat-dir>/.parley-logs/<basename>/{exchange,raw}.md; YAML request-fence round-trip works (copy from raw.md, edit, re-dispatch); unit tests in log_emit_spec/raw_log_spec green; in-buffer fence + /tmp dump confirmed gone
 ### 2026-05-06
 
 Locked at status=working. Brainstormed with user; key decisions:
