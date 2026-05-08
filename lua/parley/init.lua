@@ -1449,6 +1449,10 @@ local function drill_in_callbacks(buf)
 				drill_in_visual(buf)
 			end,
 			i = function() drill_in_insert(buf) end,
+			n = function()
+				drill_in_insert(buf)
+				vim.cmd("startinsert")
+			end,
 		},
 		chat_resolve_drill_in = function() drill_in_resolve(buf) end,
 	}
