@@ -42,6 +42,75 @@ def info(msg): print(f"{CYAN}==>{RESET} {msg}", file=sys.stderr)
 def ok(msg):   print(f"  {GREEN}[ok]{RESET} {msg}", file=sys.stderr)
 def warn(msg): print(f"  {YELLOW}[!]{RESET} {msg}", file=sys.stderr)
 
+# ── Warmup: print procedure on first N invocations per shell session ─────────
+# An agent that has never read the v3 procedure can guess ACTUAL=8 and slip
+# through unchallenged. The warmup pattern surfaces the procedure in their
+# transcript on the first 2 invocations from a given shell session, so by
+# the third close they've seen the contract twice. After that, silent mode.
+#
+# Tracking key: process group ID. Stable across subshells of the same
+# controlling shell; resets on new shell / new Claude Code session.
+
+WARMUP_THRESHOLD = 2  # show explanation this many times per shell session
+
+
+def warmup_state_path() -> Path:
+    try:
+        sess = os.getpgrp()
+    except OSError:
+        sess = 0
+    return Path("/tmp") / f"close-issue-warmup-{sess}"
+
+
+def warmup_count() -> int:
+    p = warmup_state_path()
+    try:
+        return int(p.read_text().strip())
+    except (FileNotFoundError, ValueError, OSError):
+        return 0
+
+
+def warmup_increment():
+    p = warmup_state_path()
+    try:
+        p.write_text(str(warmup_count() + 1))
+    except OSError:
+        pass
+
+
+def print_semantic_warmup():
+    """Print the close-issue contract. Shown on the first WARMUP_THRESHOLD
+    invocations per shell session, regardless of whether all params are
+    present — so an agent that 'guesses through' still has the procedure
+    in their transcript. After the threshold, silent."""
+    n = warmup_count()
+    if n >= WARMUP_THRESHOLD:
+        return
+    msg = []
+    msg.append(f"{CYAN}── close-issue contract ── (warmup {n + 1}/{WARMUP_THRESHOLD}){RESET}")
+    msg.append("")
+    msg.append(f"  Closing an issue records two values that feed into velocity")
+    msg.append(f"  calibration. Both must be earned, not guessed:")
+    msg.append("")
+    msg.append(f"  {CYAN}ACTUAL{RESET}   = focused dev-hours, derived via the v3 procedure.")
+    msg.append(f"             Run active-time-v3.py over the issue's commit window")
+    msg.append(f"             with --commit-weight 1.0; read the per-issue total.")
+    msg.append(f"             See brain/data/life/42shots/velocity/baseline-v3.md.")
+    msg.append(f"             Pass FORCE=1 only if you genuinely cannot run the script")
+    msg.append(f"             (e.g., wontfix issue with no commits) — record the reason.")
+    msg.append("")
+    msg.append(f"  {CYAN}VERIFIED{RESET} = one-line evidence of behavior matching done-when.")
+    msg.append(f"             'tests pass' beats 'code written'. See AGENTS.md §5.")
+    msg.append("")
+    msg.append(f"  This warmup auto-suppresses after {WARMUP_THRESHOLD} invocations per shell session.")
+    msg.append("")
+    print("\n".join(msg), file=sys.stderr)
+    warmup_increment()
+
+
+print_semantic_warmup()
+
+
 # ── Validate inputs ──────────────────────────────────────────────────────────
 if not ISSUE: die("ISSUE=<n> required")
 if not ISSUE.isdigit(): die(f"ISSUE must be numeric, got '{ISSUE}'")
@@ -50,15 +119,90 @@ mode = 'milestone' if MILESTONE else 'issue'
 if ACTUAL:
     try: float(ACTUAL)
     except ValueError: die(f"ACTUAL must be a number, got '{ACTUAL}'")
+
+
+def git_issue_commit_window(issue_num: str):
+    """Return (first_iso, last_iso) for commits referencing #issue_num,
+    or (None, None) if no such commits exist."""
+    try:
+        out = subprocess.check_output(
+            ["git", "log", f"--grep=#{issue_num}\\b", "--reverse",
+             "--pretty=%aI"], text=True, stderr=subprocess.DEVNULL).strip()
+    except subprocess.CalledProcessError:
+        return None, None
+    lines = [l for l in out.splitlines() if l.strip()]
+    if not lines:
+        return None, None
+    return lines[0], lines[-1]
+
+
+def explain_actual() -> NoReturn:
+    repo_dir = Path.cwd().resolve()
+    repo_slug = repo_dir.name
+    transcript_slug_repo = f"-Users-xianxu-workspace-{repo_slug}"
+    transcript_slug_brain = "-Users-xianxu-workspace-brain"
+    first_ts, last_ts = git_issue_commit_window(ISSUE)
+    msg = []
+    msg.append(f"{RED}ACTUAL=<hours> required for {mode} close (§5 step 3).{RESET}")
+    msg.append("")
+    msg.append(f"  {CYAN}Semantic:{RESET}  focused dev-hours spent on this {mode} (#{ISSUE}).")
+    msg.append(f"             Not wall-clock; not 'hours since I created the issue.'")
+    msg.append(f"             Method: v3 commit-anchored segment-local attribution.")
+    msg.append(f"             See brain/data/life/42shots/velocity/baseline-v3.md.")
+    msg.append("")
+    if first_ts and last_ts:
+        msg.append(f"  {CYAN}Compute via:{RESET}")
+        msg.append(f"    python3 construct/local/issues/active-time-v3.py \\")
+        msg.append(f"      --dir ~/.claude/projects/{transcript_slug_repo} \\")
+        msg.append(f"      --dir ~/.claude/projects/{transcript_slug_brain} \\")
+        msg.append(f"      --git-repo {repo_dir} \\")
+        msg.append(f"      --since {first_ts} --until {last_ts} \\")
+        msg.append(f"      --issue {ISSUE} --commit-weight 1.0 --threshold-min 15 --include-assistant")
+        msg.append(f"")
+        msg.append(f"  The 'per-issue totals' line for #{ISSUE} in the output is your ACTUAL.")
+        msg.append(f"  (Round to nearest 0.5; under 1 hr keep one decimal: 0.45 → 0.5.)")
+    else:
+        msg.append(f"  {YELLOW}No commits matching #{ISSUE} found — compute hours by judgment{RESET}")
+        msg.append(f"  {YELLOW}or wait until commits land. Set FORCE=1 to bypass.{RESET}")
+    msg.append("")
+    extra = f' MILESTONE={MILESTONE}' if MILESTONE else ''
+    msg.append(f"  {CYAN}Then re-run:{RESET}")
+    msg.append(f"    make close-issue ISSUE={ISSUE}{extra} ACTUAL=<hours> VERIFIED='<evidence>'")
+    msg.append("")
+    msg.append(f"  Set FORCE=1 to bypass this prerequisite check (record reason in VERIFIED).")
+    print("\n".join(msg), file=sys.stderr)
+    sys.exit(1)
+
+
+def explain_verified() -> NoReturn:
+    msg = []
+    msg.append(f"{RED}VERIFIED=\"<one-line evidence>\" required for {mode} close (§5 step 1).{RESET}")
+    msg.append("")
+    msg.append(f"  {CYAN}Semantic:{RESET}  one-line evidence the work meets the issue's done-when.")
+    msg.append(f"             Behavior, not artifacts: 'tests pass' beats 'code written'.")
+    msg.append("")
+    msg.append(f"  {CYAN}Examples:{RESET}")
+    msg.append(f"    VERIFIED='ran make test, all green'")
+    msg.append(f"    VERIFIED='e2e flow X→Y verified manually'")
+    msg.append(f"    VERIFIED='code-review subagent, all Important addressed in <sha>'")
+    msg.append(f"    VERIFIED='ran make nous-test-bootstrap, ROUND-TRIP-OK in 2:34'")
+    msg.append("")
+    extra = f' MILESTONE={MILESTONE}' if MILESTONE else ''
+    actual_arg = f' ACTUAL={ACTUAL}' if ACTUAL else ' ACTUAL=<hours>'
+    msg.append(f"  {CYAN}Then re-run:{RESET}")
+    msg.append(f"    make close-issue ISSUE={ISSUE}{extra}{actual_arg} VERIFIED='<evidence>'")
+    msg.append("")
+    msg.append(f"  Set FORCE=1 only if there's genuinely no behavior to verify.")
+    print("\n".join(msg), file=sys.stderr)
+    sys.exit(1)
+
+
 # §5 applies to both milestone and issue close — ACTUAL + VERIFIED required for both.
 if not ACTUAL and not FORCE:
-    die(f"ACTUAL=<hours> required for {mode} close (§5 step 3). "
-        "Set FORCE=1 to skip — record reason in VERIFIED.")
+    explain_actual()
 if not VERIFIED and not FORCE:
-    die(f'VERIFIED="<one-line evidence>" required for {mode} close (§5 step 1). '
-        'Examples: "ran make test, all green" / "e2e flow X→Y verified manually" / '
-        '"code-review subagent, all Important addressed in <sha>". '
-        'Set FORCE=1 only if you genuinely have no behavior to verify.')
+    explain_verified()
+
 TODAY = date.today().isoformat()
 
 # ── Locate issue file ────────────────────────────────────────────────────────

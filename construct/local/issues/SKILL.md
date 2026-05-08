@@ -143,15 +143,19 @@ For issues finished in a single session, eyeball the session's start/end and sub
    ```
    First line's timestamp = window start; last line's = end. Pad both ends by ~30 min (work happens before commits land; cleanup after). Side-quest commits (`side-quest:` prefix) made during the issue's life count too — `git log --grep "^#<N>\|side-quest:" --since=<start> --until=<end>` gives a sanity-check union.
 2. **Identify which transcript dirs to scan.** A session that worked on the issue lives under `~/.claude/projects/-Users-xianxu-workspace-<repo>/`. Always include the repo where the issue lives. Include `brain` if cross-cutting state was touched. Include any peer repo whose tree was edited in the commit window (`git log --name-only ...` will reveal it).
-3. **Run `active-time.py` against the window.** It ships alongside this SKILL.md:
+3. **Run `active-time-v3.py` against the window.** It ships alongside this SKILL.md (along with the older v2.1 `active-time.py`, kept for historical baseline reference):
    ```sh
-   python3 ~/workspace/ariadne/construct/local/issues/active-time.py \
+   python3 ~/workspace/ariadne/construct/local/issues/active-time-v3.py \
        --dir ~/.claude/projects/-Users-xianxu-workspace-<repo> \
        --dir ~/.claude/projects/-Users-xianxu-workspace-brain \
+       --git-repo ~/workspace/<repo> \
        --since <start-date> --until <end-date> \
-       --issue <N>
+       --issue <N> \
+       --commit-weight 1.0 --threshold-min 15 --include-assistant
    ```
-   Use the **UNIFIED WALL-CLOCK** number (per-session sum double-counts when sessions ran in parallel — worktree/pair workflow). When multiple issues shared the window, pass each as `--issue` and read the mention-weighted attribution. Round to integer hours.
+   v3 uses **commit-anchored segment-local attribution**: each commit defines an attribution segment, and the segment-ending commit's `#N` references determine where the segment's active time goes. This replaces v2.1's session-wide mention-weighted attribution, which over-counted small issues in heavy multi-issue sessions by 5–30× (see `brain/data/life/42shots/velocity/baseline-v3.md` for the rationale).
+
+   Read the `# per-issue totals` line for `#N` in the output. Round to nearest 0.5; under 1 hr keep one decimal (0.45 → 0.5).
 4. **Side-validation: inspect the current session.** The closing session's transcript (`~/.claude/projects/-Users-xianxu-workspace-<repo>/<this-session>.jsonl`) is the easiest to spot-check. Look at the first user message that mentioned the issue and the last user message before close — the wall-clock span (minus obvious idle gaps) should roughly match the script's contribution from this session. If they disagree by more than ~30%, investigate before recording: the regex may have missed a session that referred to the issue obliquely, or the commit window was wrong.
 
 ## Rules
