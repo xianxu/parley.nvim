@@ -60,6 +60,37 @@ describe("drill_in.parse", function()
         assert.equals("B", markers[2].quoted.text)
         assert.is_true(markers[1].byte_start < markers[2].byte_start)
     end)
+
+    -- ── Edge cases (#123 review) ────────────────────────────────────
+    it("normalizes empty 🤖<>[U] to no quoted body", function()
+        -- Empty <> carries no information — treat it the same as a no-quote
+        -- marker so downstream gather/resolve don't have to special-case it.
+        local markers = drill_in.parse("🤖<>[ask]")
+        assert.equals(1, #markers)
+        assert.is_nil(markers[1].quoted)
+        assert.is_false(markers[1].has_quoted_body)
+        assert.is_true(markers[1].ready)
+    end)
+
+    it("ignores 🤖<unclosed [U] (malformed) — no marker emitted", function()
+        -- An opening `<` without a matching `>` short-circuits the parser; the
+        -- inner `[U]` is never consumed. Pinning this so a future refactor
+        -- can't quietly change to recognizing the inner section.
+        local markers = drill_in.parse("🤖<noclose [Q]")
+        assert.equals(0, #markers)
+    end)
+
+    it("`>` inside [] / {} closes the <> early (parser limitation)", function()
+        -- find_matching_bracket only depth-tracks the same bracket pair, so a
+        -- `>` appearing inside a later `[` is still seen as the closer of `<`.
+        -- Result: `🤖<a [b> c]` parses with quoted="a [b" and zero sections.
+        -- Pinning this behavior; if it ever needs to change, the test must
+        -- be updated explicitly.
+        local markers = drill_in.parse("🤖<a [b> c]")
+        assert.equals(1, #markers)
+        assert.equals("a [b", markers[1].quoted.text)
+        assert.equals(0, #markers[1].sections)
+    end)
 end)
 
 describe("drill_in.gather_and_strip", function()

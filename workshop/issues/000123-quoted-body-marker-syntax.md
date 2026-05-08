@@ -184,8 +184,8 @@ distinguishable highlight. Suggested colors:
 - Manual: open a chat, select text, hit `<C-g>q`, type a question,
   `<C-g><C-g>` (chat respond), confirm `> Q` + question reaches the
   agent and the inline marker collapses to `Q`.
-- Manual: type `🤖[U]` standalone, hit chat respond, confirm prior-5-words
-  heuristic.
+- Manual: type `🤖[U]` standalone, hit chat respond, confirm `U` is sent
+  bare (no `>` quote prefix) and the inline marker is removed.
 - Manual: type a chain `🤖<Q>[U1]{A1}[U2]`, hit chat respond, confirm
   chain-replay format.
 - Manual: type `🤖{A}`, hit chat respond, confirm it stays inline.

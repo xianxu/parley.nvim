@@ -19,7 +19,7 @@ The marker syntax is the same one the [review skill](../modes/review.md) uses on
 
 The chat-respond pipeline gathers every ready marker (with or without `<T>`) — the difference is in how the marker collapses inline (see Lifecycle step 3).
 
-See [#123](../../workshop/history/) for the rationale behind `<T>` (disambiguates "agent commentary `{A}`" from "quoted body T" — both used to be `🤖{T}…`).
+See [#123](../../workshop/issues/000123-quoted-body-marker-syntax.md) for the rationale behind `<T>` (disambiguates "agent commentary `{A}`" from "quoted body T" — both used to be `🤖{T}…`).
 
 ## Lifecycle
 

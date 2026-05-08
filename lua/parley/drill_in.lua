@@ -68,6 +68,9 @@ function M.parse(text)
         local pos = text:find(MARKER_CHAR, search_start, true)
         if not pos then break end
         local sections, end_pos, quoted = parse_sections(text, pos, MARKER_BYTE_LEN)
+        -- Normalize: empty <> is semantically equivalent to no <> at all.
+        -- Drop the quoted entry so downstream gather/resolve stay simple.
+        if quoted and quoted.text == "" then quoted = nil end
         if #sections > 0 or quoted then
             local last = sections[#sections]
             table.insert(markers, {
@@ -76,8 +79,8 @@ function M.parse(text)
                 quoted = quoted,
                 sections = sections,
                 has_quoted_body = quoted ~= nil,
-                ready = last and last.type == "user" and last.text ~= "" or false,
-                pending = last and last.type == "agent" and last.text ~= "" or false,
+                ready = (last ~= nil) and last.type == "user" and last.text ~= "",
+                pending = (last ~= nil) and last.type == "agent" and last.text ~= "",
             })
             search_start = end_pos
         else
