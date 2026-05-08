@@ -616,8 +616,8 @@ M.entries = {
 		default_key = { "<C-g>q", "<M-q>" },
 		default_modes = { "v", "x", "i", "n" },
 		scope = "parley_buffer",
-		desc = "Parley drill-in: wrap selection as 🤖<T>[] (v/x); insert 🤖[] (i/n)",
-		help_desc = "Drill-in (wrap selection / insert annotation)",
+		desc = "Parley drill-in: wrap (v/x) / insert 🤖[] (i) / resolve-at-cursor or insert (n)",
+		help_desc = "Drill-in (wrap / insert / resolve)",
 		buffer_local = true,
 	},
 	{

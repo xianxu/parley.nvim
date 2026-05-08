@@ -91,7 +91,8 @@ same `drill_in_callbacks(buf)` table to `register_buffer`.
 | Binding   | Mode | Action                                               |
 |-----------|------|------------------------------------------------------|
 | `<C-g>q` / `<M-q>` | v/x  | Wrap selection as `🤖<T>[]`, cursor inside `[]` |
-| `<C-g>q` / `<M-q>` | i/n  | Insert bare `🤖[]` at cursor, enter insert mode inside `[]` |
-| `<C-g>r`  | n    | Resolve discussion chain: strip every `🤖<T>…` to `T` |
+| `<C-g>q` / `<M-q>` | i    | Insert bare `🤖[]` at cursor, stay in insert mode inside `[]` |
+| `<C-g>q` / `<M-q>` | n    | If cursor is inside a marker → resolve it (`<Q>…` → `Q`, no `<Q>` → remove). Otherwise insert bare `🤖[]` and enter insert. |
+| `<C-g>r`  | n    | Resolve every `🤖<T>…` in the buffer to `T` (whole-chain pass) |
 
 The `<C-g>r` slot was previously bound to `chat_toggle_raw_request` (and `<C-g>R` to `chat_toggle_raw_response`); both were removed. The underlying `:ToggleRawRequest` / `:ToggleRawResponse` commands stay reachable.

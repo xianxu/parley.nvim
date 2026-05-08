@@ -171,6 +171,74 @@ describe("drill_in.gather_and_strip", function()
     end)
 end)
 
+describe("drill_in.resolve_at", function()
+    it("resolves a marker at the cursor — `<Q>[U]` collapses to Q", function()
+        local input = "before 🤖<Term>[what?] after"
+        -- cursor on `<` at byte 12 (after "before 🤖" = 6 + 1 + 4 + 1 = 12)
+        local _, marker = require("parley.drill_in").resolve_at(input, 12)
+        assert.is_not_nil(marker)
+    end)
+
+    it("returns plain Q in place of `🤖<Q>[U]`", function()
+        -- "x 🤖<RedShift>[Q] y" — cursor on the `[` of `[Q]`
+        local input = "x 🤖<RedShift>[Q] y"
+        -- "x " = 2 bytes; 🤖 = 4; "<RedShift>" = 10; so byte_start of marker
+        -- = 3, and offset of `[` = 3 + 4 + 10 = 17. Pick offset 17.
+        local new_text, marker = require("parley.drill_in").resolve_at(input, 17)
+        assert.is_not_nil(marker)
+        assert.equals("x RedShift y", new_text)
+    end)
+
+    it("removes the marker entirely when there is no <Q>", function()
+        local input = "before 🤖[just a comment] after"
+        -- Pick a byte inside the [...]: "before " = 7, 🤖 = 4 → 11+; pick 13
+        local new_text, marker = require("parley.drill_in").resolve_at(input, 13)
+        assert.is_not_nil(marker)
+        assert.equals("before  after", new_text)
+    end)
+
+    it("resolves `🤖<Q>{A}` (no human turn) to Q too", function()
+        local input = "x 🤖<Q>{advice} y"
+        local new_text, marker = require("parley.drill_in").resolve_at(input, 6)
+        assert.is_not_nil(marker)
+        assert.equals("x Q y", new_text)
+    end)
+
+    it("returns nil + unchanged text when cursor is outside any marker", function()
+        local input = "before 🤖<Q>[U] after"
+        -- cursor at byte 1 ("b") — outside the marker
+        local new_text, marker = require("parley.drill_in").resolve_at(input, 1)
+        assert.is_nil(marker)
+        assert.equals(input, new_text)
+    end)
+
+    it("only resolves the marker the cursor sits in (not others)", function()
+        local input = "🤖<A>[Qa] 🤖<B>[Qb]"
+        -- Cursor on second marker — first should be untouched.
+        -- "🤖<A>[Qa] " = 4+1+1+1+1+2+1+1 = 12 bytes; pick byte 14 (inside <B>)
+        local new_text, marker = require("parley.drill_in").resolve_at(input, 14)
+        assert.is_not_nil(marker)
+        assert.equals("🤖<A>[Qa] B", new_text)
+    end)
+
+    it("works at the marker's leading 🤖 byte", function()
+        local input = "x 🤖<T>[U] y"
+        -- byte 3 = first byte of 🤖
+        local new_text, marker = require("parley.drill_in").resolve_at(input, 3)
+        assert.is_not_nil(marker)
+        assert.equals("x T y", new_text)
+    end)
+
+    it("works at the marker's trailing closing bracket", function()
+        local input = "x 🤖<T>[U] y"
+        -- byte_end = position of closing `]`. Marker spans 3 to 14
+        -- (🤖=4 + <T>=3 + [U]=3 = 10 bytes; 3..12). cursor at 12 = `]`.
+        local new_text, marker = require("parley.drill_in").resolve_at(input, 12)
+        assert.is_not_nil(marker)
+        assert.equals("x T y", new_text)
+    end)
+end)
+
 describe("drill_in.resolve_all", function()
     it("strips all 🤖<T>... markers regardless of state", function()
         local new_text, count = drill_in.resolve_all(

@@ -1419,6 +1419,50 @@ local function drill_in_resolve(buf)
 	M.logger.info("Drill-in resolve: stripped " .. count .. " marker(s)")
 end
 
+-- Resolve the single marker the cursor sits inside, if any. Returns true
+-- when a marker was resolved (so the caller knows to skip fallback action).
+-- - 🤖<Q>[…]  → buffer text becomes `Q`
+-- - 🤖[…]     → marker removed entirely
+-- Cursor lands at the byte position where the marker used to start.
+local function drill_in_resolve_at_cursor(buf)
+	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+	local text = table.concat(lines, "\n")
+	local cursor = vim.api.nvim_win_get_cursor(0)
+	local row = cursor[1]   -- 1-indexed
+	local col = cursor[2]   -- 0-indexed bytes
+
+	local offset = 0
+	for i = 1, row - 1 do
+		offset = offset + #lines[i] + 1   -- +1 for "\n"
+	end
+	offset = offset + col + 1            -- 1-based byte offset
+
+	local new_text, m = _drill_in_mod.resolve_at(text, offset)
+	if not m then return false end
+
+	local new_lines = vim.split(new_text, "\n", { plain = true })
+	vim.api.nvim_buf_set_lines(buf, 0, -1, false, new_lines)
+
+	-- Position cursor at the byte where the marker started (= start of the
+	-- replacement Q, or where the deletion happened). Map back to (row, col).
+	local target = m.byte_start
+	local target_row, target_col = 1, 0
+	local pos = 1
+	for i, line in ipairs(new_lines) do
+		if pos + #line >= target then
+			target_row = i
+			target_col = target - pos
+			break
+		end
+		pos = pos + #line + 1
+	end
+	local line_len = #(new_lines[target_row] or "")
+	if target_col > line_len then target_col = line_len end
+	if target_col < 0 then target_col = 0 end
+	vim.api.nvim_win_set_cursor(0, { target_row, target_col })
+	return true
+end
+
 -- Insert-mode: drop a bare `🤖[]` annotation marker at the cursor and place
 -- the cursor between `[` and `]` so the user can type their comment without
 -- leaving insert mode. No `<>` quoted body — that form is for visual-mode
@@ -1450,6 +1494,11 @@ local function drill_in_callbacks(buf)
 			end,
 			i = function() drill_in_insert(buf) end,
 			n = function()
+				-- If the cursor sits inside a marker, resolve it (collapse to
+				-- Q if `<Q>` is present, otherwise remove the marker). Falls
+				-- back to inserting a fresh `🤖[]` annotation when there's no
+				-- marker under the cursor.
+				if drill_in_resolve_at_cursor(buf) then return end
 				drill_in_insert(buf)
 				vim.cmd("startinsert")
 			end,

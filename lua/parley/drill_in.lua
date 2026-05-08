@@ -126,6 +126,26 @@ function M.gather_and_strip(text)
     return blocks, splice(text, replacements)
 end
 
+--- Resolve a single marker that contains the given byte offset.
+--- - If the marker has `<T>` body → replace the marker with plain T.
+--- - If the marker has no `<T>` → remove the marker entirely.
+--- The matched marker is returned so callers can position the cursor.
+--- @param text string
+--- @param offset integer  byte offset (1-based) into `text`
+--- @return string new_text
+--- @return table|nil marker  the resolved marker, or nil if cursor was outside any marker
+function M.resolve_at(text, offset)
+    local markers = M.parse(text)
+    for _, m in ipairs(markers) do
+        if offset >= m.byte_start and offset <= m.byte_end then
+            local replacement = m.quoted and m.quoted.text or ""
+            local new_text = text:sub(1, m.byte_start - 1) .. replacement .. text:sub(m.byte_end + 1)
+            return new_text, m
+        end
+    end
+    return text, nil
+end
+
 --- Resolve every marker with a `<T>` body back to plain T (any state).
 --- Markers without `<T>` are left alone (they're plain review annotations).
 --- @param text string
