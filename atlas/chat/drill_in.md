@@ -80,7 +80,13 @@ Both parley and ariadne (`/fix` skill) parse this marker family identically. The
 - `tests/unit/drill_in_spec.lua` — unit specs for the pure module.
 - `tests/integration/chat_respond_spec.lua` — integration specs for the chat-respond hook.
 
-## Keybindings (chat scope, buffer-local)
+## Keybindings (parley_buffer scope, buffer-local)
+
+The drill-in keymaps are wired into the shared `parley_buffer` scope so
+they work in both chat buffers and plain markdown buffers (notes, issues,
+parley files outside configured chat roots — anywhere `prep_md` runs).
+Register-side: `M.prep_chat` and `M.setup_markdown_keymaps` both pass the
+same `drill_in_callbacks(buf)` table to `register_buffer`.
 
 | Binding   | Mode | Action                                               |
 |-----------|------|------------------------------------------------------|
