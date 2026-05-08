@@ -1,9 +1,12 @@
 -- review skill — Edit document based on 🤖 review markers.
 --
--- Marker syntax:  🤖[user]{agent}[user]... or 🤖{agent}[user]...
---   [] = human turns, {} = agent turns, any order
+-- Marker grammar:  🤖<quoted>?([user]|{agent})*
+--   <> = quoted body (optional, at most one, only as the first slot)
+--   [] = human turns
+--   {} = agent turns (any order after an optional <>)
 --   Ready for agent = last section is [] (human spoke last)
 --   Pending (quickfix) = last section is non-empty {} (agent asked, human hasn't replied)
+--   See workshop/issues/000123-quoted-body-marker-syntax.md for the rationale.
 
 local M = {}
 
@@ -40,9 +43,33 @@ local function find_matching_bracket(text, start, open, close)
     return nil
 end
 
+-- Parse a marker starting at `pos` (the byte offset of 🤖). Returns:
+--   sections — list of `[user]` and `{agent}` sections (in document order)
+--   cursor   — byte offset just past the last consumed bracket (one past end)
+--   quoted   — optional `<...>` quoted-body section, only valid as the
+--              first slot immediately after 🤖. Shape: { text, byte_start,
+--              byte_end } (byte_end is the closing `>`). `nil` if absent.
+--
+-- See workshop/issues/000123-quoted-body-marker-syntax.md for the grammar.
 local function parse_marker_sections(text, pos, byte_len)
-    local sections = {}
     local cursor = pos + (byte_len or 4)  -- 🤖=4 bytes
+    local sections = {}
+    local quoted = nil
+
+    -- Optional leading <...>
+    if cursor <= #text and text:sub(cursor, cursor) == "<" then
+        local close = find_matching_bracket(text, cursor, "<", ">")
+        if close then
+            quoted = {
+                text = text:sub(cursor + 1, close - 1),
+                byte_start = cursor,
+                byte_end = close,
+            }
+            cursor = close + 1
+        end
+        -- If no matching `>`, fall through and treat `<` as plain text
+        -- (cursor stays put, the loop below will break immediately).
+    end
 
     while cursor <= #text do
         local ch = text:sub(cursor, cursor)
@@ -71,7 +98,7 @@ local function parse_marker_sections(text, pos, byte_len)
         end
     end
 
-    return sections, cursor
+    return sections, cursor, quoted
 end
 
 local function in_code_fence(fence_ranges, line_idx)
@@ -157,16 +184,19 @@ M.parse_markers = function(lines)
                     goto continue
                 end
 
-                local sections, end_pos = parse_marker_sections(line, pos, MARKER_BYTE_LEN)
-                if #sections > 0 then
+                local sections, end_pos, quoted = parse_marker_sections(line, pos, MARKER_BYTE_LEN)
+                -- Recognize a marker iff it has at least one `[]`/`{}` section
+                -- or a `<>` quoted body. Bare 🤖 with neither is plain text.
+                if #sections > 0 or quoted then
                     local last = sections[#sections]
                     -- Ready = last section is non-empty [] (human spoke last, agent should act)
-                    local ready = last.type == "user" and last.text ~= ""
+                    local ready = last and last.type == "user" and last.text ~= "" or false
                     -- Pending = last section is non-empty {} (agent asked, needs human reply)
-                    local pending = last.type == "agent" and last.text ~= ""
+                    local pending = last and last.type == "agent" and last.text ~= "" or false
                     table.insert(markers, {
                         line = i - 1,
                         col = pos - 1,
+                        quoted = quoted,
                         sections = sections,
                         ready = ready,
                         pending = pending,

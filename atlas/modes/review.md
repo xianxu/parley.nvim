@@ -4,22 +4,31 @@ Headless LLM-powered review workflow for markdown files. Users annotate
 documents with `🤖[comment]` markers, then an agent rewrites the document
 to address the comments.
 
-The same marker family `🤖{T}[Q]{A}…` is also used inside chat buffers for
+The same marker family is also used inside chat buffers for
 [drill-in discussions](../chat/drill_in.md) (different keybindings + a chat-
 side gather/strip on respond). The section parser is shared.
 
 ## Marker Syntax
 
-Single marker `🤖`. `[]` = human turns, `{}` = agent turns, any order.
+Single marker `🤖`. Three section types:
+
+- `<>` = quoted body (optional, at most one, must be the first slot)
+- `[]` = human turns
+- `{}` = agent turns
+
+After an optional `<>`, `[]` and `{}` may appear in any order.
 
 ```
 🤖[human comment]{agent question}[human reply]...
 🤖{agent finding}[human response]{agent follow-up}...
+🤖<the exact phrase>[fix this]
+🤖<paragraph snippet>{suggested rewrite}
 ```
 
 - Ready for agent = last section is `[]` (human spoke last)
 - Pending (quickfix) = last section is non-empty `{}` (agent asked, needs human reply)
 - Markers inside fenced code blocks are ignored
+- `<text>` disambiguates "which text the marker refers to" — use it whenever the surrounding-text rule would be ambiguous (added in #123)
 
 ## Keybindings (non-chat markdown only)
 

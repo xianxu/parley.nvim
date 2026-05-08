@@ -971,19 +971,21 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
     )
 
     -- Drill-in pre-processing: when this is a *new turn* (not a resubmit and
-    -- not a range request), gather any ready 🤖{T}[Q] markers buffer-wide and
-    -- append them as quote+question blocks to the next user turn, then strip
-    -- the markers in place back to plain T. Re-parse the buffer afterwards so
-    -- the rest of the pipeline sees the modified state.
+    -- not a range request), gather every ready 🤖...[U] marker buffer-wide
+    -- (with or without a `<T>` quoted body — see #123) and append them as
+    -- quote+question blocks to the next user turn, then strip the markers in
+    -- place. Markers with `<T>` collapse to plain T inline; markers without
+    -- `<T>` are removed entirely. Re-parse afterwards so the rest of the
+    -- pipeline sees the modified state.
     -- Drill-in handling, two paths:
     --
     -- (A) Branch path — when the cursor sits inside an existing exchange that
-    --     contains ready 🤖{T}[Q] markers, treat each marker as a follow-up
+    --     contains ready 🤖...[U] markers, treat each marker as a follow-up
     --     question and *insert a new user turn after the exchange*. The
     --     original exchange's question/answer is preserved (with markers
-    --     stripped to plain T); the LLM then answers the inserted new turn.
-    --     This is what the user usually wants when they drill into a term in
-    --     a past exchange — not a resubmit of the original Q.
+    --     collapsed); the LLM then answers the inserted new turn. This is
+    --     what the user usually wants when they drill into a term in a past
+    --     exchange — not a resubmit of the original Q.
     --
     -- (B) End-append path — otherwise, on the new-turn path (cursor at end /
     --     on the unanswered last question), gather every ready drill-in in

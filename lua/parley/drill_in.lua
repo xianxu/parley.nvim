@@ -1,14 +1,26 @@
 -- drill_in.lua — Pure-function drill-in marker handling for chat buffers.
 --
--- Drill-in reuses the existing 🤖{T}[Q]{A}... marker syntax from the review
--- skill but with chat-side semantics:
---   - <C-g>q (visual mode) wraps a selection as 🤖{T}[] for the user to type
+-- A drill-in marker is the 🤖 marker syntax with an optional `<quoted body>`
+-- first slot:
+--
+--    🤖<T>?([U]|{A})*
+--
+-- Drill-in semantics in chat buffers (see #123):
+--
+--   - <C-g>q (visual mode) wraps a selection as 🤖<T>[] for the user to type
 --     a question inside the empty [].
---   - On <C-g>g, ready drill-in markers (those with a leading {T} body AND a
---     trailing non-empty []) are gathered as `> T` + Q blockquotes prepended
---     to the next user turn, and stripped from the transcript back to plain T.
---   - <C-g>r resolves a discussion chain: every 🤖{T}[..]..  marker buffer-wide
---     is stripped back to plain T. Plain review markers (no {T} body) are left.
+--   - On <C-g>g (chat respond), every "ready" marker (last section is a
+--     non-empty []) is gathered and stripped from the inline text:
+--       * `🤖<Q>[U]`           → block `> Q` / `U`            ; inline → `Q`
+--       * `🤖[U]`              → block `U`                   ; inline removed
+--       * `🤖<Q>[U1]{A1}[U2]`  → block `> Q` / `> User: U1`
+--                                       / `> Agent: A1` / `U2`; inline → `Q`
+--       * `🤖[U1]{A1}[U2]`     → block `> User: U1`
+--                                       / `> Agent: A1` / `U2`; inline removed
+--     Markers ending in `{}` (annotations / pending agent turns) stay inline.
+--   - <C-g>r resolves a discussion chain: every marker with a `<T>` body is
+--     stripped back to plain T, regardless of state. Markers without `<T>`
+--     are left alone.
 --
 -- Section-parsing is delegated to review._parse_marker_sections so the syntax
 -- stays single-source-of-truth across review (per-line) and drill-in
@@ -43,9 +55,11 @@ end
 --- Parse all 🤖 markers in joined text. Multi-line bracket content is supported
 --- because the section parser walks the input text byte-by-byte.
 --- @param text string
---- @return table[]  each entry: { byte_start, byte_end, sections, ready, pending, has_quoted_body }
+--- @return table[]  each entry: { byte_start, byte_end, quoted, sections,
+---                                 ready, pending, has_quoted_body }
 ---                  byte_start = position of 🤖 (inclusive, 1-based)
----                  byte_end   = position of the trailing } or ] (inclusive)
+---                  byte_end   = position of the trailing `>`/`]`/`}` (inclusive)
+---                  quoted     = { text, byte_start, byte_end } or nil
 function M.parse(text)
     local parse_sections = get_review()._parse_marker_sections
     local markers = {}
@@ -53,17 +67,17 @@ function M.parse(text)
     while true do
         local pos = text:find(MARKER_CHAR, search_start, true)
         if not pos then break end
-        local sections, end_pos = parse_sections(text, pos, MARKER_BYTE_LEN)
-        if #sections > 0 then
-            local first = sections[1]
+        local sections, end_pos, quoted = parse_sections(text, pos, MARKER_BYTE_LEN)
+        if #sections > 0 or quoted then
             local last = sections[#sections]
             table.insert(markers, {
                 byte_start = pos,
                 byte_end = end_pos - 1,
+                quoted = quoted,
                 sections = sections,
-                has_quoted_body = first.type == "agent" and first.text ~= "",
-                ready = last.type == "user" and last.text ~= "",
-                pending = last.type == "agent" and last.text ~= "",
+                has_quoted_body = quoted ~= nil,
+                ready = last and last.type == "user" and last.text ~= "" or false,
+                pending = last and last.type == "agent" and last.text ~= "" or false,
             })
             search_start = end_pos
         else
@@ -83,33 +97,34 @@ local function splice(text, replacements)
     return result
 end
 
---- Gather ready drill-in markers and strip each back to its {T} body in place.
---- Returns the gathered blocks (in document order) and the rewritten text.
---- Plain review markers and pending markers are left untouched.
+--- Gather ready markers and strip each from the inline text.
+--- - Marker with `<Q>` body → inline replaced by Q.
+--- - Marker without `<Q>` body → inline removed entirely.
+--- Pending markers (last section non-empty `{}`) and annotation-only markers
+--- (no ready `[]` last section) are left untouched.
 --- @param text string
---- @return table[] blocks  list of { quoted, question } in document order
+--- @return table[] blocks  list of { quoted = string|nil, sections = list } in document order
 --- @return string new_text
 function M.gather_and_strip(text)
     local markers = M.parse(text)
     local blocks = {}
     local replacements = {}
     for _, m in ipairs(markers) do
-        if m.ready and m.has_quoted_body then
-            local quoted = m.sections[1].text
-            local question = m.sections[#m.sections].text
-            table.insert(blocks, { quoted = quoted, question = question })
+        if m.ready then
+            local quoted_text = m.quoted and m.quoted.text or nil
+            table.insert(blocks, { quoted = quoted_text, sections = m.sections })
             table.insert(replacements, {
                 byte_start = m.byte_start,
                 byte_end = m.byte_end,
-                replacement = quoted,
+                replacement = quoted_text or "",
             })
         end
     end
     return blocks, splice(text, replacements)
 end
 
---- Resolve every 🤖{T}[..](..)* marker back to plain T (any ready/pending state).
---- Plain review markers (no leading {T}) are left alone.
+--- Resolve every marker with a `<T>` body back to plain T (any state).
+--- Markers without `<T>` are left alone (they're plain review annotations).
 --- @param text string
 --- @return string new_text
 --- @return integer count
@@ -117,29 +132,58 @@ function M.resolve_all(text)
     local markers = M.parse(text)
     local replacements = {}
     for _, m in ipairs(markers) do
-        if m.has_quoted_body then
+        if m.quoted then
             table.insert(replacements, {
                 byte_start = m.byte_start,
                 byte_end = m.byte_end,
-                replacement = m.sections[1].text,
+                replacement = m.quoted.text,
             })
         end
     end
     return splice(text, replacements), #replacements
 end
 
---- Format one drill-in block as a blockquote-of-T followed by Q.
---- Multi-line T becomes multiple `> ` lines; multi-line Q is preserved verbatim.
---- @param quoted string
---- @param question string
+--- Format one drill-in block for the next user turn.
+---
+--- Layout:
+---   [`> <quoted line 1>`]              (only if block.quoted is non-nil)
+---   [`> <quoted line 2>` ...]
+---   `> User: <U1 line 1>`              (per chain section, except final)
+---   `> <U1 line 2>`                    (continuation lines stay quoted)
+---   `> Agent: <A1 line 1>`
+---   ...
+---   `<final user turn line 1>`         (unprefixed, the actual prompt)
+---   `<final user turn line 2>`
+---
+--- block = { quoted = string|nil, sections = list-of-{type,text} }
+--- The last section MUST be a user turn (caller filters by `m.ready`).
+--- @param block table
 --- @return string[]
-function M.format_block(quoted, question)
+function M.format_block(block)
     local out = {}
-    for _, line in ipairs(split_lines(quoted)) do
-        table.insert(out, "> " .. line)
+    if block.quoted then
+        for _, line in ipairs(split_lines(block.quoted)) do
+            table.insert(out, "> " .. line)
+        end
     end
-    for _, line in ipairs(split_lines(question)) do
-        table.insert(out, line)
+    local n = #block.sections
+    for i = 1, n - 1 do
+        local s = block.sections[i]
+        local label = s.type == "user" and "User: " or "Agent: "
+        local s_lines = split_lines(s.text)
+        for j, line in ipairs(s_lines) do
+            if j == 1 then
+                table.insert(out, "> " .. label .. line)
+            else
+                table.insert(out, "> " .. line)
+            end
+        end
+    end
+    if n >= 1 then
+        local last = block.sections[n]
+        for _, line in ipairs(split_lines(last.text)) do
+            table.insert(out, line)
+        end
     end
     return out
 end
@@ -151,7 +195,7 @@ function M.format_blocks(blocks)
     local out = {}
     for i, b in ipairs(blocks) do
         if i > 1 then table.insert(out, "") end
-        for _, line in ipairs(M.format_block(b.quoted, b.question)) do
+        for _, line in ipairs(M.format_block(b)) do
             table.insert(out, line)
         end
     end
@@ -160,9 +204,9 @@ end
 
 --- Wrap text as a drill-in marker awaiting a question.
 --- @param text string
---- @return string  "🤖{text}[]"
+--- @return string  "🤖<text>[]"
 function M.wrap(text)
-    return MARKER_CHAR .. "{" .. text .. "}[]"
+    return MARKER_CHAR .. "<" .. text .. ">[]"
 end
 
 --- Append formatted blocks to a list of buffer lines, separated from the

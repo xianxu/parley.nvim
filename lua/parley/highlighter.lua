@@ -393,13 +393,21 @@ local function compute_markdown_highlights(buf, start_line, end_line)
             result[row] = result[row] or {}
             table.insert(result[row], { hl_group = "ParleyChatReference", col_start = 0, col_end = -1 })
         end
-        -- Highlight 🤖{...}[...] review markers
+        -- Highlight 🤖<...>[...]{...} review markers
         local review = require("parley.review")
         local search_start = 1
         while true do
             local pos = line:find("🤖", search_start, true)
             if not pos then break end
-            local sections, end_pos = review._parse_marker_sections(line, pos, 4)
+            local sections, end_pos, quoted = review._parse_marker_sections(line, pos, 4)
+            if quoted then
+                result[row] = result[row] or {}
+                table.insert(result[row], {
+                    hl_group = "ParleyReviewQuoted",
+                    col_start = quoted.byte_start - 1,
+                    col_end = quoted.byte_end,
+                })
+            end
             for _, section in ipairs(sections) do
                 local hl = section.type == "agent" and "ParleyReviewAgent" or "ParleyReviewUser"
                 result[row] = result[row] or {}
@@ -605,10 +613,12 @@ M.setup_highlights = function()
         })
     end
 
-    -- Review markers — ㊷[user comment] in markdown files
+    -- Review markers — 🤖[user comment] in markdown files
     vim.api.nvim_set_hl(0, "ParleyReviewUser", { link = "DiagnosticWarn" })
-    -- Review markers — {agent question} in ㊷ marker chains
+    -- Review markers — {agent question} in 🤖 marker chains
     vim.api.nvim_set_hl(0, "ParleyReviewAgent", { link = "DiagnosticInfo" })
+    -- Review markers — <quoted body> identifying the text the chain refers to
+    vim.api.nvim_set_hl(0, "ParleyReviewQuoted", { link = "Comment" })
 
     -- Interview timestamps - Highlighted timestamp lines like :15min
     -- Use only background color to allow search highlights to show through

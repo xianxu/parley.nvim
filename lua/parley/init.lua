@@ -1430,7 +1430,7 @@ M.prep_chat = function(buf, file_name)
 		M.highlight_chat_branch_refs(buf)
 	end
 
-	-- Drill-in: visual-mode wrap a selection as 🤖{T}[] and drop cursor inside
+	-- Drill-in: visual-mode wrap a selection as 🤖<T>[] and drop cursor inside
 	-- the empty []. Multi-line selections supported. Uses nvim_buf_set_lines
 	-- (allowed via the buffer-mutation arch policy) by reconstructing the
 	-- affected line range with prefix/suffix preserved.
@@ -1500,7 +1500,7 @@ M.prep_chat = function(buf, file_name)
 		vim.schedule(function() vim.cmd("startinsert") end)
 	end
 
-	-- Resolve every 🤖{T}[..](..)* marker in the buffer back to plain T.
+	-- Resolve every 🤖<T>[..](..)* marker in the buffer back to plain T.
 	local function chat_resolve_drill_in()
 		local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 		local text = table.concat(lines, "\n")

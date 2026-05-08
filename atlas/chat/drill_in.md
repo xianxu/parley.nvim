@@ -1,40 +1,50 @@
 # Drill-In Markers
 
-Inline drill-in lets a user select text inside a chat transcript, wrap it as a marker `🤖{T}[Q]`, and have it resolved into a quote-and-question block prepended to the next user turn on the next chat-respond cycle.
+Inline drill-in lets a user select text inside a chat transcript, wrap it as a marker `🤖<T>[Q]`, and have it resolved into a quote-and-question block prepended to the next user turn on the next chat-respond cycle.
 
 The marker syntax is the same one the [review skill](../modes/review.md) uses on non-chat markdown. The parser is shared (`lua/parley/skills/review/init.lua` → `_parse_marker_sections`). Drill-in is the chat-buffer–side downstream of that syntax.
 
 ## Marker shape
 
 ```
-🤖{T}[Q]            — drill-in: human picks T from earlier text, types Q
-🤖{T}[Q]{A}[Q2]…    — discussion chain on T (alternating)
-🤖[only Q]          — plain review marker (no quoted body) — drill-in ignores this
+🤖<T>[Q]            — drill-in: human picks T from earlier text, types Q
+🤖<T>[Q]{A}[Q2]…    — discussion chain about T (alternating)
+🤖[Q]               — bare human turn, no quoted body
+🤖[Q1]{A1}[Q2]…     — chain without a quoted body
+🤖{A}               — agent annotation, no quoted body, no human turn
 ```
 
-- **Has quoted body** = first section is a non-empty `{T}`. Drill-in operates only on these.
-- **Ready** = last section is a non-empty `[]` (matches the existing review-skill ready definition).
+- **Has quoted body** = `<T>` is present (the first slot, immediately after 🤖). Optional and at most one. Drill-in's resolve-chain command only touches markers with `<T>`.
+- **Ready** = last section is a non-empty `[]` (matches the review-skill ready definition). Markers ending in `{}` are *pending* and stay inline as agent annotations.
 
-Drill-in's "needs machine attention" criterion is exactly `marker.ready and marker.has_quoted_body`.
+The chat-respond pipeline gathers every ready marker (with or without `<T>`) — the difference is in how the marker collapses inline (see Lifecycle step 3).
+
+See [#123](../../workshop/history/) for the rationale behind `<T>` (disambiguates "agent commentary `{A}`" from "quoted body T" — both used to be `🤖{T}…`).
 
 ## Lifecycle
 
-1. **Create** — visual-mode `<C-g>q` wraps the selection as `🤖{T}[]` and drops the cursor inside the empty `[]` in insert mode.
+1. **Create** — visual-mode `<C-g>q` (or `<M-q>`) wraps the selection as `🤖<T>[]` and drops the cursor inside the empty `[]` in insert mode.
 2. **Compose** — user types the question (multi-line allowed).
-3. **Submit** — `<C-g>g` (chat respond) processes drill-ins. Two paths:
+3. **Submit** — `<C-g>g` (chat respond) processes ready markers. Two paths:
 
-   - **Branch path** (cursor on a past exchange that contains ready drill-ins): treats the drill-ins as a follow-up question for that exchange. Strips them in place inside the exchange and **inserts a new user turn after that exchange's answer**, populated with the gathered `> T` / `Q` blocks. The original Q/A is preserved (no resubmit). Pipeline `end_index` is capped at the inserted new turn, so subsequent (now stale) exchanges below stay in the buffer but are out of context for this turn.
-   - **End-append path** (cursor on the unanswered last question or at end of buffer): gathers every ready drill-in buffer-wide and appends the `> T` / `Q` blocks to the next user turn slot at the end. Markers are stripped in place. If the user already typed text in the next turn, exactly one blank line separates the user's text from the first block. Multiple blocks are stacked with one blank line between them.
+   - **Branch path** (cursor on a past exchange that contains ready markers): treats them as follow-up questions for that exchange. Strips them in place inside the exchange and **inserts a new user turn after that exchange's answer**, populated with the gathered quote+question blocks. The original Q/A is preserved (no resubmit). Pipeline `end_index` is capped at the inserted new turn, so subsequent (now stale) exchanges below stay in the buffer but are out of context for this turn.
+   - **End-append path** (cursor on the unanswered last question or at end of buffer): gathers every ready marker buffer-wide and appends the gathered blocks to the next user turn slot at the end. Markers are stripped in place. If the user already typed text in the next turn, exactly one blank line separates the user's text from the first block. Multiple blocks are stacked with one blank line between them.
 
-4. **Resolve** — `<C-g>r` (normal mode) buffer-wide strips every `🤖{T}[..](..)*` to plain `T` ("resolve discussion chain"). Plain review markers (no `{T}` body) are left alone.
+   Inline collapse rule for stripped markers:
+   - Marker with `<T>` body → inline replaced by plain `T`.
+   - Marker without `<T>` body → marker removed entirely (whitespace not normalized).
+
+4. **Resolve** — `<C-g>r` (normal mode) buffer-wide strips every `🤖<T>…` to plain `T` ("resolve discussion chain"). Markers without `<T>` (plain review annotations / human turns) are left alone.
 
 ## Resubmit interaction
 
-Cursor on a past exchange (Q has an answer, or cursor on an answer) is normally a *resubmit* — old answer deleted and re-generated. Drill-in detection runs **before** resubmit handling: if the cursor's exchange contains ready drill-in markers, the branch path takes over and the resubmit path is skipped. The original answer is preserved.
+Cursor on a past exchange (Q has an answer, or cursor on an answer) is normally a *resubmit* — old answer deleted and re-generated. Drill-in detection runs **before** resubmit handling: if the cursor's exchange contains ready markers, the branch path takes over and the resubmit path is skipped. The original answer is preserved.
 
 If `params.range == 2` (explicit range), drill-in handling is skipped entirely; range request takes precedence.
 
 ## Quote block format
+
+For a marker `🤖<T>[Q]`:
 
 ```
 > T-line-1
@@ -43,7 +53,18 @@ Q-line-1
 Q-line-2
 ```
 
-Multi-line `T` becomes multiple `> ` lines. Multi-line `Q` is preserved verbatim. Between adjacent gathered blocks, one blank line.
+For a chain `🤖<T>[U1]{A1}[U2]`:
+
+```
+> T-line-1
+> User: U1
+> Agent: A1
+U2
+```
+
+Continuation lines inside chain sections (multi-line `U1`/`A1`) stay inside the blockquote with `> ` (no per-line `User:`/`Agent:` prefix).
+
+For a no-quote marker `🤖[Q]`, only `Q` is emitted (no leading `>` line). For a no-quote chain `🤖[U1]{A1}[U2]`, the chain lines are emitted without the leading `> T-…` block. Between adjacent gathered blocks, one blank line.
 
 ## Cross-tool consistency
 
@@ -63,7 +84,7 @@ Both parley and ariadne (`/fix` skill) parse this marker family identically. The
 
 | Binding   | Mode | Action                                               |
 |-----------|------|------------------------------------------------------|
-| `<C-g>q`  | v/x  | Wrap selection as `🤖{T}[]`, cursor inside `[]`     |
-| `<C-g>r`  | n    | Resolve discussion chain: strip every `🤖{T}[..]..` to `T` |
+| `<C-g>q` / `<M-q>` | v/x  | Wrap selection as `🤖<T>[]`, cursor inside `[]` |
+| `<C-g>r`  | n    | Resolve discussion chain: strip every `🤖<T>…` to `T` |
 
 The `<C-g>r` slot was previously bound to `chat_toggle_raw_request` (and `<C-g>R` to `chat_toggle_raw_response`); both were removed. The underlying `:ToggleRawRequest` / `:ToggleRawResponse` commands stay reachable.

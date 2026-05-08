@@ -1041,7 +1041,7 @@ describe("chat_respond: drill-in pre-processing", function()
             "- file: test.md",
             "---",
             "",
-            "💬: tell me about 🤖{RedShift}[what is this?]",
+            "💬: tell me about 🤖<RedShift>[what is this?]",
             "",
             "🤖: it's a data warehouse.",
             "",
@@ -1063,7 +1063,7 @@ describe("chat_respond: drill-in pre-processing", function()
         local joined = table.concat(lines, "\n")
 
         -- Marker stripped to plain term
-        assert.is_nil(joined:find("🤖{", 1, true), "drill-in marker should be stripped from buffer")
+        assert.is_nil(joined:find("🤖<", 1, true), "drill-in marker should be stripped from buffer")
         assert.truthy(joined:find("tell me about RedShift", 1, true),
             "stripped term should remain inline; got:\n" .. joined)
         -- Quote block appended at the end
@@ -1108,7 +1108,7 @@ describe("chat_respond: drill-in pre-processing", function()
             "- file: test.md",
             "---",
             "",
-            "💬: explain 🤖{Term}[what is this?]",
+            "💬: explain 🤖<Term>[what is this?]",
             "",
             "🤖: prior answer about Term.",
             "",
@@ -1135,7 +1135,7 @@ describe("chat_respond: drill-in pre-processing", function()
         local after = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
 
         -- Marker stripped to plain T in the original question
-        assert.is_nil(after:find("🤖{Term}", 1, true),
+        assert.is_nil(after:find("🤖<Term>", 1, true),
             "drill-in marker should be stripped after branch; got:\n" .. after)
         assert.truthy(after:find("explain Term", 1, true),
             "stripped term should remain inline; got:\n" .. after)
