@@ -31,7 +31,7 @@ ISSUE     = os.environ.get('ISSUE', '').strip()
 MILESTONE = os.environ.get('MILESTONE', '').strip()
 ACTUAL    = os.environ.get('ACTUAL', '').strip()
 VERIFIED  = os.environ.get('VERIFIED', '').strip()
-BRAIN_DIR = os.environ.get('BRAIN_DIR', '../brain').strip()
+BRAIN_DIR = (os.environ.get('BRAIN_DIR') or '../brain').strip()
 WF_ISSUES_DIR = os.environ.get('WF_ISSUES_DIR', 'workshop/issues').strip()
 DRY   = os.environ.get('DRY', '') == '1'
 FORCE = os.environ.get('FORCE', '') == '1'
@@ -136,6 +136,30 @@ def git_issue_commit_window(issue_num: str):
     return lines[0], lines[-1]
 
 
+def discover_window_issues(since_iso: str, until_iso: str, primary: str) -> list[str]:
+    """Find every distinct issue number referenced in commit subjects within
+    [since, until]. Always includes `primary` even if no commits match it.
+
+    The active-time-v3 algorithm requires every anchored issue in the window
+    to be passed via --issue; otherwise peer-issue-anchored segments fall
+    into mention-fallback and inflate the closing issue's share. Auto-
+    discovering from the window's commit subjects produces the right default
+    set so the agent isn't manually grepping git log to assemble the command.
+    """
+    try:
+        out = subprocess.check_output(
+            ["git", "log", f"--since={since_iso}", f"--until={until_iso}",
+             "--pretty=%s"], text=True, stderr=subprocess.DEVNULL).strip()
+    except subprocess.CalledProcessError:
+        return [primary]
+    found = sorted({m for line in out.splitlines()
+                    for m in re.findall(r"#(\d+)\b", line)},
+                   key=int)
+    if primary not in found:
+        found.append(primary)
+    return found
+
+
 def explain_actual() -> NoReturn:
     repo_dir = Path.cwd().resolve()
     repo_slug = repo_dir.name
@@ -151,14 +175,25 @@ def explain_actual() -> NoReturn:
     msg.append(f"             See brain/data/life/42shots/velocity/baseline-v3.md.")
     msg.append("")
     if first_ts and last_ts:
+        window_issues = discover_window_issues(first_ts, last_ts, ISSUE)
+        issue_flags = " ".join(f"--issue {n}" for n in window_issues)
         msg.append(f"  {CYAN}Compute via:{RESET}")
         msg.append(f"    python3 construct/local/issues/active-time-v3.py \\")
         msg.append(f"      --dir ~/.claude/projects/{transcript_slug_repo} \\")
         msg.append(f"      --dir ~/.claude/projects/{transcript_slug_brain} \\")
         msg.append(f"      --git-repo {repo_dir} \\")
         msg.append(f"      --since {first_ts} --until {last_ts} \\")
-        msg.append(f"      --issue {ISSUE} --commit-weight 1.0 --threshold-min 15 --include-assistant")
+        msg.append(f"      {issue_flags} \\")
+        msg.append(f"      --commit-weight 1.0 --threshold-min 15 --include-assistant")
         msg.append(f"")
+        peers = [n for n in window_issues if n != ISSUE]
+        if peers:
+            msg.append(f"  Issues auto-discovered from #refs in window subjects: "
+                       f"#{ISSUE} + peers #{', #'.join(peers)}.")
+            msg.append(f"  Why all of them: v3 anchors segments by commit-subject issue ref;")
+            msg.append(f"  unrecognized refs fall back to mention-fallback, inflating #{ISSUE} by 3-10x.")
+            msg.append(f"  If a discovered peer looks unrelated to real work, drop its --issue flag.")
+            msg.append(f"")
         msg.append(f"  The 'per-issue totals' line for #{ISSUE} in the output is your ACTUAL.")
         msg.append(f"  (Round to nearest 0.5; under 1 hr keep one decimal: 0.45 → 0.5.)")
     else:

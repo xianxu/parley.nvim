@@ -10,6 +10,13 @@ WF_ISSUES_DIR ?= issues
 WF_HISTORY_DIR ?= history
 export WF_ISSUES_DIR WF_HISTORY_DIR
 
+# BRAIN_DIR points at the brain repo for cross-cutting state (project files,
+# velocity baselines). close-issue.py reads it to update parent project tasks.
+# Must default *here* — without ?=, the close-issue: export below would emit
+# an empty string when BRAIN_DIR is unset, which silently overrides the
+# Python default in scripts/close-issue.py and suppresses project updates.
+BRAIN_DIR ?= ../brain
+
 # ── Upstream config ──────────────────────────────────────────────────────────
 # Defaults assume ariadne is upstream. Descendants of nous (or other re-export
 # hosts) override these in their root Makefile before `include Makefile.workflow`:

@@ -122,41 +122,30 @@ otherwise dissolves into the diff.>
 
 ### Closing an issue
 
-Run the **closing checklist** from ariadne AGENTS.md §5 in one sweep — partial closure causes status drift across artifact layers. Specific to this skill:
+Run `make close-issue` and follow the script's prompts:
 
-- Set `status` to `done` (or `wontfix`/`punt`)
-- Update the `updated` date
-- **Record `actual_hours: <N>` in the frontmatter.** REQUIRED at `done`. Feel-time across the issue's commit window, including side-quests the issue triggered. Without this the velocity calibration loop cannot close. (`wontfix`/`punt` issues don't need this — there's no work to record.) See **Determining `actual_hours`** below.
-- Add a final `### YYYY-MM-DD — session summary` entry to the `## Log` if the closing session covered more than the last commit's worth of work.
-- If a `## Side quests` section exists, double-check it's complete — grep `git log --grep "side-quest:" <commit-range>` to confirm.
-- Do NOT move the file to `workshop/history/` — that happens during periodic cleanup, not at close.
+```
+make close-issue ISSUE=<N> [MILESTONE=Mx] ACTUAL=<hours> VERIFIED='<one-line evidence>'
+```
 
-If the issue is part of a multi-issue project (see `construct/datatype/project.md`), also update the parent project file: tick the corresponding task, fill in the detail block's `**actual:** <N>` and `**closed:** <date>`. The project file is the portfolio view; if it lags the issue, the operator can't see real status when they reopen the project days later.
+The script enforces ariadne AGENTS.md §5: `status: done`, `actual_hours: <N>`, atlas/ change in the commit window, log entry. It refuses without ACTUAL or VERIFIED — its missing-arg explainer prints the exact `active-time-v3.py` command tailored to this issue's commit window (with peer issues auto-discovered, so the v3 attribution doesn't fall into mention-fallback). Run that command, read the `# per-issue totals` line for `#<N>`, re-run `make close-issue` with ACTUAL filled in.
 
-#### Determining `actual_hours`
+What the script doesn't do — judgment steps the agent owns:
+- Inspecting the per-segment table to spot misclassified work
+- Deciding whether a discovered peer issue is real work or a stray mention
+- Choosing the rounded ACTUAL value
+- Writing the VERIFIED one-liner (behavior evidence, not "code written")
 
-For issues finished in a single session, eyeball the session's start/end and subtract idle gaps. For issues spanning multiple sessions — common, since chat history is scattered across one `.jsonl` per session and possibly across multiple repos' transcript dirs — follow this procedure. **Start with git, then cross-check with the current session's transcript.**
+What the script does do automatically when invoked from a clean close:
+- Tick the milestone in the issue's `## Plan` (milestone close) or `status: done` flip (issue close)
+- Set `actual_hours`, `updated`
+- Append a `## Log` entry with VERIFIED
+- For project-tracked issues: tick the corresponding task in the parent project file, fill in the detail block's `**actual:**` and `**closed:**`
+- Refuse close if a milestone has unchecked plan items, or if no atlas/ change touched the commit window (set `FORCE=1` to bypass with VERIFIED rationale)
 
-1. **Anchor the commit window from git.** The issue's first and last commits frame it. Issue numbers appear at the start of subjects (`#15 M2: ...`):
-   ```sh
-   git log --all --grep "^#<N>" --pretty=format:"%ai %s" --reverse
-   ```
-   First line's timestamp = window start; last line's = end. Pad both ends by ~30 min (work happens before commits land; cleanup after). Side-quest commits (`side-quest:` prefix) made during the issue's life count too — `git log --grep "^#<N>\|side-quest:" --since=<start> --until=<end>` gives a sanity-check union.
-2. **Identify which transcript dirs to scan.** A session that worked on the issue lives under `~/.claude/projects/-Users-xianxu-workspace-<repo>/`. Always include the repo where the issue lives. Include `brain` if cross-cutting state was touched. Include any peer repo whose tree was edited in the commit window (`git log --name-only ...` will reveal it).
-3. **Run `active-time-v3.py` against the window.** It ships alongside this SKILL.md (along with the older v2.1 `active-time.py`, kept for historical baseline reference):
-   ```sh
-   python3 ~/workspace/ariadne/construct/local/issues/active-time-v3.py \
-       --dir ~/.claude/projects/-Users-xianxu-workspace-<repo> \
-       --dir ~/.claude/projects/-Users-xianxu-workspace-brain \
-       --git-repo ~/workspace/<repo> \
-       --since <start-date> --until <end-date> \
-       --issue <N> \
-       --commit-weight 1.0 --threshold-min 15 --include-assistant
-   ```
-   v3 uses **commit-anchored segment-local attribution**: each commit defines an attribution segment, and the segment-ending commit's `#N` references determine where the segment's active time goes. This replaces v2.1's session-wide mention-weighted attribution, which over-counted small issues in heavy multi-issue sessions by 5–30× (see `brain/data/life/42shots/velocity/baseline-v3.md` for the rationale).
+Do NOT move the file to `workshop/history/` — that happens during periodic cleanup, not at close.
 
-   Read the `# per-issue totals` line for `#N` in the output. Round to nearest 0.5; under 1 hr keep one decimal (0.45 → 0.5).
-4. **Side-validation: inspect the current session.** The closing session's transcript (`~/.claude/projects/-Users-xianxu-workspace-<repo>/<this-session>.jsonl`) is the easiest to spot-check. Look at the first user message that mentioned the issue and the last user message before close — the wall-clock span (minus obvious idle gaps) should roughly match the script's contribution from this session. If they disagree by more than ~30%, investigate before recording: the regex may have missed a session that referred to the issue obliquely, or the commit window was wrong.
+The full v3 attribution method (commit-anchored segment-local, why we ditched v2.1's session-wide mention-weighting, calibration data points) lives in `brain/data/life/42shots/velocity/baseline-v3.md` for when you want the deep-dive.
 
 ## Rules
 
