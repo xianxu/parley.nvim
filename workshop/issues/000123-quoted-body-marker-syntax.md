@@ -1,9 +1,10 @@
 ---
 id: 000123
-status: working
+status: done
 deps: []
 created: 2026-05-07
-updated: 2026-05-07
+updated: 2026-05-09
+actual_hours: 8.5
 ---
 
 # 🤖 marker: add `<quoted text>` slot for precise drill-in / quoting
@@ -192,4 +193,6 @@ distinguishable highlight. Suggested colors:
 
 ## Log
 
+
+- 2026-05-09: closed — user manually tested all 4 marker shapes (🤖<Q>[U], 🤖[U], 🤖{A}, chain) end-to-end
 (empty — to be filled during implementation)
