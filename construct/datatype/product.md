@@ -84,7 +84,11 @@ When the dispatcher applies this prototype:
 
 4. **Vision is human-load-bearing.** Don't invent it. If the user hasn't stated it, write `## vision` with a single placeholder line `<vision goes here>` and flag it to the user. Better empty than fabricated.
 
-5. **Default location:** `data/product/<slug>.md`. Filename is the slug.
+5. **Default location:** `data/product/<slug>.md`. Filename matches the slug.
+
+   **Owned by an entity.** When a product belongs to a containing entity that already has its own directory under `data/` (e.g., a company under `data/life/<entity>/`), the product may live in an entity-nested subdirectory: `data/<entity-path>/<slug>/<slug>.md`. Slug uniqueness across the brain and slug-as-filename are preserved. Example: `data/life/42shots/book-4/book-4.md`.
+
+   **What goes in the entity-nested folder vs. elsewhere.** The folder is the *home for the product spine plus the residue*: product-specific artifacts that don't fit any cross-cutting datatype (raw draft material, reader/customer-feedback notes, contract scans, asset files, marketing copy that hasn't earned its own type yet). It is **not** "everything related to the product." Cross-cutting datatypes — `project`, `roadmap`, `meeting-notes`, `pensive`, `reference`, `procedure`, `event`, `travel-plan` — stay in their canonical homes (e.g., `data/project/<slug>.md`) and link via a `product: <slug>` frontmatter field. This keeps `rg -l "^type: <type>"` queries one-liners regardless of which product an artifact serves, and lets cross-product instances (e.g., a marketing campaign covering two products) be a single canonical file with `products: [a, b]` rather than duplicated under two folders.
 
 6. **Updates preserve everything else.** Adding or modifying a component edits the existing file in place; rewriting the whole thing is forbidden. The most common edit is updating a component's `**State:**` line as work progresses.
 
@@ -93,14 +97,18 @@ When the dispatcher applies this prototype:
 ## Search recipes
 
 ```sh
-# All products
+# All products (regardless of location — works for both data/product/ and entity-nested)
 rg -l "^type: product"
+
+# Resolve product file path by slug (works regardless of location)
+rg -l "^name: book-4$" $(rg -l "^type: product")
 
 # Products that touch a repo
 rg -l "^type: product" | xargs rg -l "^repos:.*charon"
 
 # Components of a product (top-level slugs)
 rg "^### " data/product/ariadne.md
+rg "^### " data/life/42shots/book-4/book-4.md
 
 # All references to a component slug across products, roadmaps, and prose
 rg "\`(\w[\w-]*:)?substrate-skill-management\`"
@@ -108,11 +116,15 @@ rg "\`(\w[\w-]*:)?substrate-skill-management\`"
 # All cross-product references anywhere
 rg -o "\`[a-z][a-z0-9-]*:[a-z][a-z0-9-]*\`"
 
-# Lede lines for all products
-rg -A2 "^# " data/product/
+# Lede lines for all products (any location)
+rg -A2 "^# " $(rg -l "^type: product")
 
-# All components in a particular state across products
-rg "^\*\*State:\*\* in-progress" data/product/
+# All components in a particular state across products (any location)
+rg "^\*\*State:\*\* in-progress" $(rg -l "^type: product")
+
+# All artifacts linking to a given product
+rg "^product: book-4$" data/
+rg "^products:.*\bbook-4\b" data/
 
 # State of one component (history via git)
 git log -p --follow data/product/ariadne.md | rg -B1 "^\*\*State:\*\* " | head -50

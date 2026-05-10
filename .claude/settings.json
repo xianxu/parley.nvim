@@ -7,7 +7,8 @@
       "Bash(rm:*)",
       "Bash(ln:*)",
       "WebSearch",
-      "Bash(make test-spec *)"
+      "Bash(make test-spec *)",
+      "Bash(make close-issue *)"
     ],
     "deny": [
       "Bash(tsh *)",
