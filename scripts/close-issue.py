@@ -23,7 +23,7 @@ import re
 import sys
 import glob
 import subprocess
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import NoReturn
 
@@ -121,19 +121,72 @@ if ACTUAL:
     except ValueError: die(f"ACTUAL must be a number, got '{ACTUAL}'")
 
 
+# Sanity cap for the commit window. No real issue spans more than ~1 month
+# of focused work; if the earliest match is older, it's almost always a
+# fork-upstream collision (forked repo's history reusing the same #N for
+# a different historical issue) rather than legitimate ancient work.
+WINDOW_CAP_DAYS = 31
+
+
 def git_issue_commit_window(issue_num: str):
-    """Return (first_iso, last_iso) for commits referencing #issue_num,
-    or (None, None) if no such commits exist."""
+    """Return (first_iso, last_iso) for commits whose *subject* opens
+    with #issue_num (optionally prefixed with 'close '), capped at
+    WINDOW_CAP_DAYS in the past.
+
+    Subject-anchored, not whole-message: forked-upstream history may
+    contain commits referencing the same number in their *body*
+    (e.g., 'docs: setup snippet (issue: #123)' from a 2-year-old
+    upstream commit) but not the subject. Whole-message --grep would
+    pull those in and stretch the window by years, which then bloats
+    the auto-discovered peer-issue list.
+
+    Returns (None, None) if no in-window subject anchor exists; the
+    explainer falls through to its FORCE=1 path.
+    """
+    # Loose --grep first to narrow candidates; precise subject-anchor
+    # check happens in Python below. Git's POSIX regex doesn't support
+    # \b for word boundaries reliably across platforms, so we filter
+    # subjects ourselves.
     try:
         out = subprocess.check_output(
-            ["git", "log", f"--grep=#{issue_num}\\b", "--reverse",
-             "--pretty=%aI"], text=True, stderr=subprocess.DEVNULL).strip()
+            ["git", "log", f"--grep=#{issue_num}", "--reverse",
+             "--pretty=%aI%x00%H%x00%s"],
+            text=True, stderr=subprocess.DEVNULL).strip()
     except subprocess.CalledProcessError:
         return None, None
-    lines = [l for l in out.splitlines() if l.strip()]
-    if not lines:
+    if not out:
         return None, None
-    return lines[0], lines[-1]
+    subject_re = re.compile(rf"^(close\s+)?#{issue_num}(?!\d)")
+    matches = []  # [(iso, sha)]
+    for line in out.splitlines():
+        parts = line.split("\x00", 2)
+        if len(parts) != 3:
+            continue
+        iso, sha, subject = parts
+        if subject_re.match(subject):
+            matches.append((iso, sha))
+    if not matches:
+        return None, None
+    cap_iso = (datetime.now(timezone.utc)
+               - timedelta(days=WINDOW_CAP_DAYS)).isoformat(timespec='seconds')
+    recent = [(iso, sha) for iso, sha in matches if iso >= cap_iso]
+    if not recent:
+        return None, None
+    first_iso, first_sha = recent[0]
+    last_iso = recent[-1][0]
+    # v3 segments span [parent_commit_time, this_commit_time]. Use the
+    # parent of the first match as window-start so the first segment
+    # can extend backward and capture pre-commit work (typing,
+    # thinking). Still bounded by the cap.
+    try:
+        parent_iso = subprocess.check_output(
+            ["git", "log", "-1", "--pretty=%aI", f"{first_sha}^"],
+            text=True, stderr=subprocess.DEVNULL).strip()
+        if parent_iso and parent_iso >= cap_iso:
+            return parent_iso, last_iso
+    except subprocess.CalledProcessError:
+        pass
+    return first_iso, last_iso
 
 
 def discover_window_issues(since_iso: str, until_iso: str, primary: str) -> list[str]:
