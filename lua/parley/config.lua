@@ -444,7 +444,7 @@ local config = {
 	-- global shortcuts for markdown file finder
 	global_shortcut_markdown_finder = { modes = { "n", "i" }, shortcut = "<C-g>m" },
 	-- maximum directory depth for markdown finder (from repo root)
-	markdown_finder_max_depth = 4,
+	markdown_finder_max_depth = 6,
 	-- super-repo mode toggle (aggregates reads across sibling .parley repos)
 	global_shortcut_super_repo_toggle = { modes = { "n", "i" }, shortcut = "<C-g>S" },
 	-- global shortcuts for issue management
