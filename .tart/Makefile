@@ -2,17 +2,23 @@
 #   -include .tart/Makefile
 #
 # Provides:
-#   make tart        boot a clean macOS VM (headless), ssh in
-#   make tart-gui    same but with the Virtualization window
-#   make tart-mount  same as tart but bind-mounts $(CURDIR) read-only
-#                    at /Volumes/My Shared Files/$(REPO_NAME) and
-#                    creates ~/repo symlink to it
+#   make tart        boot $(TART_VM) headless, mount $(CURDIR) into the
+#                    guest at /Volumes/My Shared Files/$(REPO_NAME)
+#                    (read-only) + ~/repo symlink, ssh in
+#   make tart-gui    same but display via macOS Screen Sharing.app
+#                    (--vnc; built-in UI is broken on macOS Tahoe)
 #   make tart-stop   stop $(TART_VM), preserve disk state
-#   make tart-clean  stop + delete $(TART_VM)
+#   make tart-clean  stop + delete $(TART_VM) (base image stays cached)
+#
+# Mount is on by default in every boot target — there's no real downside
+# (read-only, only used if the operator cd's into ~/repo), and it makes
+# the two surfaces uniform. If you ever need a no-mount boot for a
+# specific test, override RUN_FLAGS on the command line:
+#   make tart RUN_FLAGS=
 #
 # Auto-derived per repo via $(REPO_NAME):
 #   - TART_VM defaults to <repo>-test (one VM per consuming repo)
-#   - Mount tag defaults to <repo>
+#   - Mount tag and mount path inside the VM both default to <repo>
 #
 # Cache (~/.tart/cache, ~/.tart/vms) is system-wide and shared across
 # every repo on this Mac — pulling the OCI image once is enough; only
@@ -30,22 +36,30 @@ TART_VM        ?= $(REPO_NAME)-test
 # creates a visible window — silent failure, no crash, no log). --vnc
 # routes through Screen Sharing.app and works reliably. Display mode
 # is a cold-boot setting, so tart-gui force-restarts a running
-# headless VM (parallel to tart-mount's --dir handling).
+# headless VM.
 #
 # When tart upstream fixes the Tahoe built-in-UI bug, the workaround
 # can be removed by setting GRAPHICS_FLAG := (empty) for tart-gui.
 GRAPHICS_FLAG  ?= --no-graphics
 
-.PHONY: tart tart-gui tart-mount tart-stop tart-clean help-tart
+# Always bind-mount $(CURDIR) into the VM at the canonical tag.
+# Overridable to empty on the command line for a no-mount boot.
+RUN_FLAGS      ?= --dir=$(REPO_NAME):$(CURDIR):ro
+
+.PHONY: tart tart-gui tart-stop tart-clean help-tart
 
 help-tart:
 	@printf '%s\n' \
 	"Tart (macOS VMs):" \
-	"  make tart           Boot $(TART_VM) headless and ssh in" \
-	"  make tart-gui       Same but with the macOS Virtualization window" \
-	"  make tart-mount     Same but bind-mounts \$$(CURDIR) into the VM (~/repo)" \
+	"  make tart           Boot $(TART_VM) headless, mount \$$(CURDIR) at" \
+	"                      /Volumes/My Shared Files/$(REPO_NAME), ssh in" \
+	"  make tart-gui       Same but display via macOS Screen Sharing.app" \
 	"  make tart-stop      Stop $(TART_VM), preserve disk state" \
 	"  make tart-clean     Stop + delete $(TART_VM) (base image stays cached)" \
+	"" \
+	"  Mount applies on cold boot; if a VM is already running without it," \
+	"  'make tart-stop && make tart' picks it up. Skip the mount entirely" \
+	"  with 'make tart RUN_FLAGS=' for a vanilla boot." \
 	""
 
 # Interactive multi-select to stop OTHER running tart VMs (4-8 GB
@@ -150,6 +164,9 @@ endef
 tart:
 	$(call _tart_check_others)
 	$(call _tart_ensure_vm)
+	@if [ -n "$(RUN_FLAGS)" ]; then \
+	    echo "==> Local tree will be mounted at /Volumes/My Shared Files/$(REPO_NAME) (read-only)"; \
+	fi
 	$(call _tart_boot_and_ssh)
 
 tart-gui: GRAPHICS_FLAG := --vnc
@@ -164,26 +181,12 @@ tart-gui:
 	    tart stop $(TART_VM); \
 	fi
 	$(call _tart_wait_for_stop)
-	@echo "==> Booting with VNC display — macOS Screen Sharing.app will open"
-	@echo "    First-time tip: choose 'Standard' in Screen Sharing's"
+	@echo "==> Booting with VNC display + local tree mount"
+	@echo "    Mount: /Volumes/My Shared Files/$(REPO_NAME) (read-only)"
+	@echo "    First-time Screen Sharing: choose 'Standard' in the"
 	@echo "    network-type dialog — 'High Performance' is incompatible"
-	@echo "    with tart's VNC stream on Tahoe. Screen Sharing remembers"
-	@echo "    the choice after the first connection."
-	$(call _tart_boot_and_ssh)
-
-tart-mount: RUN_FLAGS = --dir=$(REPO_NAME):$(CURDIR):ro
-tart-mount:
-	$(call _tart_check_others)
-	$(call _tart_ensure_vm)
-	@# `tart run --dir=...` is a cold-boot setting; can't be hot-attached
-	@# to a running VM. If the VM is already up (e.g., from a prior
-	@# `make tart`), stop it so the next boot applies the share.
-	@if tart list 2>/dev/null | awk -v vm=$(TART_VM) '$$2==vm {print $$NF}' | grep -qx running; then \
-	    echo "==> Stopping VM to apply --dir mount (cold-boot only setting)..."; \
-	    tart stop $(TART_VM); \
-	fi
-	$(call _tart_wait_for_stop)
-	@echo "==> Local tree will be mounted at /Volumes/My Shared Files/$(REPO_NAME) (read-only)"
+	@echo "    with tart's VNC stream on Tahoe (Screen Sharing remembers"
+	@echo "    the choice after the first connection)."
 	$(call _tart_boot_and_ssh)
 
 tart-stop:
