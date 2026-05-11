@@ -1,7 +1,7 @@
 ---
 type: pensive
 name: pensive
-description: Use when the user wants to capture a train of thought, insight, brainstorm, or thinking-out-loud into a durable note. Triggers on "let's capture this", "record this as pensive", "save this thought", or `/xx-datatype pensive`.
+description: Use when the user wants to capture a train of thought, insight, brainstorm, or thinking-out-loud into a durable standalone note. Triggers on "let's capture this", "record this as pensive", "save this thought" (without a parent reference), or `/xx-datatype pensive`. Distinct from `prose` — if the user names a long-running parent ("for book-4", "for the blog"), see `prose`. Heuristic: pensive is a session (one topic per file, hundreds-to-thousands of words); prose is a ledger (many fragments per file, sentence-to-paragraph each).
 ---
 
 # pensive

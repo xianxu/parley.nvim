@@ -1,6 +1,6 @@
 ---
 name: xx-datatype
-description: "Use when the user explicitly asks to capture/save/record something — product, roadmap, meeting-notes, travel-plan, pensive, reference, procedure, event, plus project-local types under <repo>/datatype/. Skip without instruction for action. Trigger when editing markdown with known frontmatter type:"
+description: "Use when the user is requesting an artifact (capture, save, record, create) AND the substance to preserve is conversational context they've already produced. Skip when the user is stating facts, asking questions, or asking the agent to generate substance from scratch. Also trigger when editing markdown with known frontmatter type:"
 ---
 
 # Datatype
@@ -11,38 +11,40 @@ Create and edit *typed data artifacts* — markdown files whose shape is declare
 
 This skill is the primary way the agent captures conversational substance into a durable, structured file. It activates on three triggers, in priority order:
 
-1. **Conversational capture or authoring** (the common case). The user uses one of two patterns:
+1. **Conversational capture or authoring** (the common case). Use judgment in three steps. Don't pattern-match a verb-noun grammar — read the turn as a whole.
 
-   **(a) Capture verb + substance** — `capture`, `save`, `remember`, `record`, `write down`, `log`, `track`, `note`, `file` applied to material worth keeping. Examples that DO trigger:
-   - "capture this trip to Rome"
-   - "save these meeting notes"
-   - "remember these contractors"
-   - "let's track this launch"
-   - "write that down as a procedure"
+   **Step 1 — classify the user's turn.** Conversational turns fall into three exhaustive buckets:
 
-   **(b) Authoring verb + typed-artifact noun** — `create`, `set up`, `draft`, `author`, `start` applied to a noun that MATCHES A KNOWN DATATYPE. Known datatypes are the prototypes in `construct/datatype/` plus any project-local prototypes in `<repo>/datatype/`. **If the noun doesn't match a known datatype, do NOT trigger — it's code-writing or general conversation territory, not capture territory.** Enumerate available types via `ls construct/datatype/ <repo>/datatype/ 2>/dev/null` before deciding ambiguous cases.
+   - **Stating a fact or sharing context.** *"We're going to France this summer."* *"I had a meeting with Alice."* *"The launch is next Tuesday."* The user is describing reality, not asking for it to be preserved. Don't trigger.
+   - **Asking a question.** *"How do I plan a trip?"* *"What's the right way to track this?"* Information is being requested, not deposited. Don't trigger.
+   - **Requesting an artifact.** *"Let's capture this trip."* *"Save these meeting notes."* *"Create a product for ariadne."* The user wants something to land in a file. Proceed.
 
-   Examples that DO trigger (noun matches a known datatype):
-   - "create nous as a product"
-   - "set up a product file for ariadne"
-   - "draft a roadmap for charon for 202610"
-   - "let's start a product for the workshop tool"
-   - "author a pensive on the rename"
+   The verb is a hint, not the determining factor. *"Remember this list"* requests an artifact; *"I'll remember to email her later"* states a fact. *"Capture the moment"* sounds capture-shaped but might be a metaphor inside a wider sentence. Read the whole turn, not the keywords.
 
-   Once triggered, pick the type. For (a), the domain noun selects it ("trip" → `travel-plan`, "meeting" → `meeting-notes`, "list" / "set of" / "these contractors" → `reference`, "steps" / "procedure" / "how to" → `procedure`, "launch" / "deadline" / "conference" → `event`). For (b), the type is named explicitly. When ambiguous, ask once.
+   **Step 2 — is the request durable capture of existing substance, or generative work?** Not every artifact request is datatype-dispatch territory. This skill captures conversational substance the user has *already produced* (described items, decisions, listed names, prior context). It does NOT generate substance from thin air.
 
-   Examples that do NOT trigger:
-   - **Descriptive statements without a verb:** "we're visiting France this summer" (describing), "I had a meeting with Alice" (recounting), "the launch is next Tuesday" (stating).
-   - **Authoring verbs on nouns that aren't known datatypes:** "create a function", "create a feature", "create a class", "create a directory", "create a branch", "set up the dev environment", "draft an email", "start the server". These are code/process work — outside this skill's scope.
-   - **A domain noun alone:** "the trip", "the meeting" — no verb, no trigger.
+   - *"Save the contractors we just listed"* — substance present (the listing) → capture.
+   - *"Capture this trip we've been planning"* — substance present (the prior conversation) → capture.
+   - *"Plan a trip to France for me"* — no substance, request is generative → fall through to general agent behavior; not this skill's job.
+   - *"Create a function that does X"* — generative request on a non-datatype noun → fall through.
+
+   If the user is asking the agent to *produce* the substance, it's coding / research / brainstorming territory. The dispatcher takes over only when there is existing substance worth preserving.
+
+   **Step 3 — which datatype fits?** Semantically match the user's artifact against the available prototypes' descriptions. Each prototype's `description:` field starts with "Use when…" and IS the matching surface. See [Type lookup](#type-lookup) for enumeration; matching uses `name` + `description` only. Three sub-cases:
+
+   - **Single clear fit** → apply that prototype. State the destination in your response so the user can redirect if you guessed wrong.
+   - **Multiple comparable fits** → present 2–3 candidates with a one-line context each (drawn from their descriptions), ask which.
+   - **No fit, but the request is capture-shaped** → offer either (a) route to `type.md` (the meta-prototype) to design a new type, or (b) write a freestanding markdown file under the user's chosen location, untyped.
+
+   **Updates to existing instances** (*"add Florence to our summer trip"*, *"update the contractors list"*) fold naturally into Step 3 — the artifact reference identifies the parent's type via semantic match, the dispatcher then routes to its §7 update flow (below) rather than creating a new file. No separate trigger logic needed.
 
    When the user is just sharing context, treat it as conversation. Do not proactively offer to capture unless the user has signaled the intent.
 
-2. **Slash invocation:** `/xx-datatype <type> [path]` — explicit, used when the user already knows the type and wants no inference.
+2. **Slash invocation:** `/xx-datatype <type> [path]` — explicit, used when the user already knows the type and wants no inference. Bypasses the three-step judgment.
 
 3. **Edit-time application:** when opening a markdown file whose frontmatter has `type: <X>` and `<X>.md` exists in a known prototype location, follow that prototype's authoring instructions for the edit.
 
-If the trigger is unclear (the user said "remember this" with no domain hint), list the available types and ask which fits.
+If the conversational trigger is unclear (the user said "remember this" with no clear referent), list the available types and ask which fits — but only after you've reached Step 3 and found no clear semantic match. Don't ask preemptively; use judgment first.
 
 ## Type lookup
 

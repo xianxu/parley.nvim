@@ -3,6 +3,9 @@
 
 # Include openshell targets if available
 -include .openshell/Makefile
+
+# Include tart targets if available (macOS VM testing — Apple Silicon)
+-include .tart/Makefile
 # Override WF_ISSUES_DIR / WF_HISTORY_DIR before the include if your
 # issues and history live somewhere other than issues/ and history/.
 

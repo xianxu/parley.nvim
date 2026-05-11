@@ -1,7 +1,7 @@
 ---
 type: travel-plan
 name: travel-plan
-description: Use when the user wants to capture or plan a trip — destination, dates, travelers, itinerary, bookings, references. Triggers on "capture this trip", "plan a trip to X", "save the Rome trip", etc.
+description: Use when the user wants to capture an existing or in-progress trip — destination, dates, travelers, itinerary, bookings, references. Substance must already exist in the conversation (decisions made, places named); a cold "plan a trip to X" with no prior context is generative work, not capture — fall through. Triggers on "capture this trip", "save the Rome trip", "plan our trip to X" (when X has been the subject of prior conversation).
 ---
 
 # travel-plan
