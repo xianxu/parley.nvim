@@ -48,24 +48,34 @@ if command -v fzf >/dev/null 2>&1; then
     # accepts the marked set; Esc cancels.
     #
     # Two non-default behaviors:
-    #   --bind 'enter:accept-non-empty' — without this, fzf in
-    #     --multi mode falls back to accepting the focused row when
-    #     no marks exist; meaning the operator hits Enter to "do
-    #     nothing" and a VM still gets stopped. accept-non-empty
-    #     refuses to accept until at least one row is marked, so
-    #     the Esc path is the only way to skip.
+    #   --bind 'enter:transform:...' — the obvious-looking
+    #     --bind 'enter:accept-non-empty' is a trap; it only
+    #     accepts-when-the-LIST-of-matches-is-non-empty, NOT
+    #     when ticks exist. fzf in --multi mode's default Enter
+    #     behavior is "accept ticks if any, else fall back to the
+    #     focused row" — so Enter on an empty selection still
+    #     stops whatever row the cursor sat on. The transform
+    #     action runs a shell snippet and uses its stdout as the
+    #     action chain: `set -- {+}` puts the ticked items into
+    #     $@ (fzf quotes them properly for the shell), then
+    #     `[ $# -gt 0 ]` distinguishes "ticks exist" from "ticks
+    #     are empty" robustly across multi-item ticks. On no
+    #     ticks, we change-header to nudge the operator rather
+    #     than silently accept.
     #   --bind 'space:toggle' — Tab works as the default fzf
     #     selector but feels keyboard-tax-y for a yes/no checkbox
     #     interaction. Space is the natural key for "tick this row";
-    #     Tab is left bound too in case muscle memory wants it.
+    #     Tab stays bound by default for muscle memory.
     #
-    # --marker="✓ " gives a visible checkbox indicator; --pointer="▶"
-    # highlights the focused row.
+    # --pointer="▶ " and --marker="✓ " both 2 cells wide so the
+    # rendered row is `▶ ✓ name` with a visible space between
+    # focus indicator and checkbox.
     selected=$(echo "$others" | fzf --multi --no-sort --reverse \
         --height=40% \
         --border \
-        --marker="✓ " --pointer="▶" \
-        --bind 'space:toggle,enter:accept-non-empty' \
+        --marker="✓ " --pointer="▶ " \
+        --bind 'space:toggle' \
+        --bind 'enter:transform:set -- {+}; if [ $# -gt 0 ]; then echo accept; else echo "change-header(Tip: tick at least one VM with Space, then Enter; or Esc to skip.)"; fi' \
         --header="Other tart VMs running (4-8 GB each). Space/Tab: toggle ✓, Enter: stop ticked, Esc: stop nothing." \
         --prompt="stop> " 2>/dev/null || true)
 else
