@@ -32,18 +32,51 @@ Defined in `construct/base.manifest` (in ariadne):
 - **Constitution**: `AGENTS.md`, `CLAUDE.md` — shared development rules
 - **Settings**: `.claude/settings.json` — merged from `.ariadne` and `.local` layers
 - **Skills**: `.claude/skills/xx-*` — local-origin skills (superpowers are per-repo via `/construct adapt`)
-- **Makefile system**: `Makefile.workflow`, `scripts/` — issue sync, pre-merge checks
-- **Construct system**: `construct/scripts/`, `construct/local/` — skill management
-- **Sandbox**: `.openshell/` — containerized dev environment (see below)
+- **Makefile system**:
+  - `Makefile` — generic root template (REPO_NAME, workflow + local include, help chain). Identical across consumers; per-repo concerns belong in `Makefile.local`.
+  - `Makefile.workflow` — issue lifecycle targets + auto-includes of `.openshell/Makefile` and `.tart/Makefile`.
+  - `scripts/` — issue-sync, pre-merge-checks, close-issue.py, lib.sh
+- **Construct system**: `construct/scripts/`, `construct/local/`, `construct/datatype/` — skill + datatype management
+- **Sandbox** (`.openshell/`) — Linux container dev environment (see below)
+- **Tart VMs** (`.tart/`) — `make tart` (headless + bind-mount `$(CURDIR)` at `/Volumes/My Shared Files/$(REPO_NAME)`) and `make tart-gui` (same but display via macOS Screen Sharing.app via `--vnc`; tart's built-in UI is broken on Tahoe as of 2026-05) for macOS VM testing (Apple Silicon only); helpers under `.tart/scripts/`. Override `RUN_FLAGS=` for a no-mount boot. `make help-tart` for the full surface.
 - **Directory scaffolds**: `workshop/`, `atlas/` — standard repo layout
 
 ## Repo-Specific Extensions
 
-- `AGENTS.local.md` — repo-specific rules (merged with `AGENTS.md` via `make refresh`)
-- `Makefile.local` — repo-specific make targets (included by `Makefile`)
-- `.claude/settings.local.json` — repo-specific Claude Code settings (merged into `settings.json`)
+These files are **not** overwritten by setup.sh and own everything
+that doesn't generalize across consumers:
 
-These files are NOT overwritten by setup.sh.
+- `AGENTS.local.md` — repo-specific rules (merged with `AGENTS.md`)
+- `Makefile.local` — repo-specific make targets and overrides:
+  - `UPSTREAM_NAME` / `UPSTREAM_REFRESH` for re-export layers (nous has its own `setup.sh` that re-vendors ariadne, so its `Makefile.local` points refresh through that path)
+  - `-include Makefile.nous` chain for repos that consume the nous layer (brain, brain.legacy*)
+  - Any genuinely one-of-a-kind target the repo needs
+- `.claude/settings.local.json` — repo-specific Claude Code settings (merged into `settings.json`)
+- `.openshell/.bootstrap/`, `.openshell/.base-image-digest` — runtime artifacts (gitignored)
+
+If you find yourself wanting to edit a vendored file directly, the
+right move is almost always to (a) generalize the change and push it
+into ariadne, or (b) override it in the `.local` layer. Direct edits
+get clobbered on the next `make refresh`.
+
+## Pushing Updates to All Consumers
+
+Ariadne maintainers can propagate base-layer changes in one shot:
+
+```bash
+cd /path/to/ariadne
+make refresh-recursive
+```
+
+This iterates every peer repo in the parent directory and runs
+`make refresh` in each one that has a `Makefile.workflow` (the universal
+"uses the ariadne base layer" signal — catches direct consumers via
+`.ariadne-mode`, indirect ones via `.nous-mode`, and re-export layers
+like nous itself). Failures are collected into a final summary; partial
+progress is better than aborting on the first hiccup.
+
+Defined in `ariadne/Makefile.local` — ariadne-only, not vendored
+(consumers don't push to their own peers).
 
 ## Sandbox (.openshell/)
 
