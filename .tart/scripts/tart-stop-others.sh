@@ -48,20 +48,25 @@ if command -v fzf >/dev/null 2>&1; then
     # accepts the marked set; Esc cancels.
     #
     # Two non-default behaviors:
-    #   --bind 'enter:transform:...' — the obvious-looking
-    #     --bind 'enter:accept-non-empty' is a trap; it only
-    #     accepts-when-the-LIST-of-matches-is-non-empty, NOT
-    #     when ticks exist. fzf in --multi mode's default Enter
-    #     behavior is "accept ticks if any, else fall back to the
-    #     focused row" — so Enter on an empty selection still
-    #     stops whatever row the cursor sat on. The transform
-    #     action runs a shell snippet and uses its stdout as the
-    #     action chain: `set -- {+}` puts the ticked items into
-    #     $@ (fzf quotes them properly for the shell), then
-    #     `[ $# -gt 0 ]` distinguishes "ticks exist" from "ticks
-    #     are empty" robustly across multi-item ticks. On no
-    #     ticks, we change-header to nudge the operator rather
-    #     than silently accept.
+    #   --bind 'enter:transform:...' — fzf in --multi mode's default
+    #     Enter behavior is "accept ticks if any, else fall back to
+    #     the focused row." Two earlier attempts at fixing this
+    #     (`accept-non-empty`, then `set -- {+}; [ $# -gt 0 ]`) both
+    #     failed for the same reason: the `{+}` placeholder ITSELF
+    #     falls back to the focused row when no ticks exist, so
+    #     downstream "is the result non-empty" checks always pass.
+    #
+    #     The actual reliable signal is the FZF_SELECT_COUNT
+    #     environment variable that fzf exports to bound commands.
+    #     It's 0 when no ticks are set and the positive tick count
+    #     otherwise — no fallback. transform runs a shell snippet
+    #     and uses its stdout as the action chain: emit `accept`
+    #     iff FZF_SELECT_COUNT > 0; otherwise emit a
+    #     change-header to nudge the operator.
+    #
+    #     Verified empirically by inspecting fzf 0.72.0's env-var
+    #     dump from a transform action (no docs example for this).
+    #
     #   --bind 'space:toggle' — Tab works as the default fzf
     #     selector but feels keyboard-tax-y for a yes/no checkbox
     #     interaction. Space is the natural key for "tick this row";
@@ -75,7 +80,7 @@ if command -v fzf >/dev/null 2>&1; then
         --border \
         --marker="✓ " --pointer="▶ " \
         --bind 'space:toggle' \
-        --bind 'enter:transform:set -- {+}; if [ $# -gt 0 ]; then echo accept; else echo "change-header(Tip: tick at least one VM with Space, then Enter; or Esc to skip.)"; fi' \
+        --bind 'enter:transform:[ "$FZF_SELECT_COUNT" -gt 0 ] && echo accept || echo "change-header:Tick at least one VM with Space, then Enter; or Esc to skip."' \
         --header="Other tart VMs running (4-8 GB each). Space/Tab: toggle ✓, Enter: stop ticked, Esc: stop nothing." \
         --prompt="stop> " 2>/dev/null || true)
 else
