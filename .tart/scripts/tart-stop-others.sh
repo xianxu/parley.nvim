@@ -44,13 +44,29 @@ fi
 
 selected=""
 if command -v fzf >/dev/null 2>&1; then
-    # Multi-select. Tab toggles, Enter confirms current selection,
-    # Esc cancels (treated as empty selection via || true). Layout
-    # tuned for a short list with a help-text header.
+    # Multi-select. Space (or Tab) toggles a row's checkbox; Enter
+    # accepts the marked set; Esc cancels.
+    #
+    # Two non-default behaviors:
+    #   --bind 'enter:accept-non-empty' — without this, fzf in
+    #     --multi mode falls back to accepting the focused row when
+    #     no marks exist; meaning the operator hits Enter to "do
+    #     nothing" and a VM still gets stopped. accept-non-empty
+    #     refuses to accept until at least one row is marked, so
+    #     the Esc path is the only way to skip.
+    #   --bind 'space:toggle' — Tab works as the default fzf
+    #     selector but feels keyboard-tax-y for a yes/no checkbox
+    #     interaction. Space is the natural key for "tick this row";
+    #     Tab is left bound too in case muscle memory wants it.
+    #
+    # --marker="✓ " gives a visible checkbox indicator; --pointer="▶"
+    # highlights the focused row.
     selected=$(echo "$others" | fzf --multi --no-sort --reverse \
         --height=40% \
         --border \
-        --header="Other tart VMs running (4-8 GB each). Tab: toggle, Enter: stop selected, Esc: stop nothing." \
+        --marker="✓ " --pointer="▶" \
+        --bind 'space:toggle,enter:accept-non-empty' \
+        --header="Other tart VMs running (4-8 GB each). Space/Tab: toggle ✓, Enter: stop ticked, Esc: stop nothing." \
         --prompt="stop> " 2>/dev/null || true)
 else
     echo "==> Other tart VMs running:"
