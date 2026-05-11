@@ -52,6 +52,25 @@ define _tart_check_others
 	@bash $(CURDIR)/.tart/scripts/tart-stop-others.sh $(TART_VM)
 endef
 
+# `tart stop` returns after sending shutdown, but tart list's State
+# column doesn't always reflect "stopped" instantly — there's a brief
+# window where it still reads "running". If _tart_boot_and_ssh runs
+# during that window, its state guard skips the boot (which means no
+# new tart run process, no log output, no GUI window — and ssh polling
+# either times out or attaches to the dying-but-not-dead VM, leaving
+# no obvious failure signal).
+#
+# Poll for the transition. 15s ceiling matches the longest delay seen
+# in practice; if state is still "running" after that, the cold-boot
+# branch wouldn't help anyway and we fall through.
+define _tart_wait_for_stop
+	@for i in $$(seq 1 15); do \
+	    state=$$(tart list 2>/dev/null | awk -v vm=$(TART_VM) '$$2==vm {print $$NF}'); \
+	    if [ "$$state" != "running" ]; then break; fi; \
+	    sleep 1; \
+	done
+endef
+
 # Common preamble: tart present, base pulled, VM cloned (idempotent).
 define _tart_ensure_vm
 	@command -v tart >/dev/null || \
@@ -138,6 +157,7 @@ tart-gui:
 	    echo "==> Stopping VM to switch to GUI mode (cold-boot only setting)..."; \
 	    tart stop $(TART_VM); \
 	fi
+	$(call _tart_wait_for_stop)
 	@echo "==> Booting with macOS Virtualization window (close window or 'make tart-stop' to stop)"
 	$(call _tart_boot_and_ssh)
 
@@ -152,6 +172,7 @@ tart-mount:
 	    echo "==> Stopping VM to apply --dir mount (cold-boot only setting)..."; \
 	    tart stop $(TART_VM); \
 	fi
+	$(call _tart_wait_for_stop)
 	@echo "==> Local tree will be mounted at /Volumes/My Shared Files/$(REPO_NAME) (read-only)"
 	$(call _tart_boot_and_ssh)
 
