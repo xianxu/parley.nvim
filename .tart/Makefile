@@ -24,10 +24,16 @@
 
 TART_BASE      ?= ghcr.io/cirruslabs/macos-tahoe-base:latest
 TART_VM        ?= $(REPO_NAME)-test
-# --no-graphics by default; tart-gui overrides to empty to bring up
-# the macOS Virtualization window. Graphics mode is a cold-boot
-# setting, so tart-gui force-restarts a running headless VM (parallel
-# to tart-mount's --dir handling).
+# --no-graphics by default; tart-gui overrides to --vnc to delegate
+# display to macOS Screen Sharing.app. Tart's built-in UI is broken
+# on macOS Tahoe (tart registers as a GUI app via Cmd-Tab but never
+# creates a visible window — silent failure, no crash, no log). --vnc
+# routes through Screen Sharing.app and works reliably. Display mode
+# is a cold-boot setting, so tart-gui force-restarts a running
+# headless VM (parallel to tart-mount's --dir handling).
+#
+# When tart upstream fixes the Tahoe built-in-UI bug, the workaround
+# can be removed by setting GRAPHICS_FLAG := (empty) for tart-gui.
 GRAPHICS_FLAG  ?= --no-graphics
 
 .PHONY: tart tart-gui tart-mount tart-stop tart-clean help-tart
@@ -146,19 +152,23 @@ tart:
 	$(call _tart_ensure_vm)
 	$(call _tart_boot_and_ssh)
 
-tart-gui: GRAPHICS_FLAG :=
+tart-gui: GRAPHICS_FLAG := --vnc
 tart-gui:
 	$(call _tart_check_others)
 	$(call _tart_ensure_vm)
-	@# Graphics mode is a cold-boot setting; can't be hot-attached
-	@# to a running VM. If the VM is up headless (e.g., from a prior
-	@# `make tart`), stop it so the next boot brings up the window.
+	@# Display mode is a cold-boot setting; can't be hot-attached to a
+	@# running VM. If the VM is up headless (e.g., from a prior
+	@# `make tart`), stop it so the next boot picks up --vnc.
 	@if tart list 2>/dev/null | awk -v vm=$(TART_VM) '$$2==vm {print $$NF}' | grep -qx running; then \
-	    echo "==> Stopping VM to switch to GUI mode (cold-boot only setting)..."; \
+	    echo "==> Stopping VM to switch to VNC mode (cold-boot only setting)..."; \
 	    tart stop $(TART_VM); \
 	fi
 	$(call _tart_wait_for_stop)
-	@echo "==> Booting with macOS Virtualization window (close window or 'make tart-stop' to stop)"
+	@echo "==> Booting with VNC display — macOS Screen Sharing.app will open"
+	@echo "    First-time tip: choose 'Standard' in Screen Sharing's"
+	@echo "    network-type dialog — 'High Performance' is incompatible"
+	@echo "    with tart's VNC stream on Tahoe. Screen Sharing remembers"
+	@echo "    the choice after the first connection."
 	$(call _tart_boot_and_ssh)
 
 tart-mount: RUN_FLAGS = --dir=$(REPO_NAME):$(CURDIR):ro
