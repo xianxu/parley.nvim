@@ -467,6 +467,21 @@ M.setup = function(opts)
 	apply_chat_roots(normalize_chat_roots(M.config.chat_dir, M.config.chat_dirs, M.config.chat_roots))
 	apply_note_roots(normalize_note_roots(M.config.notes_dir, M.config.note_dirs, M.config.note_roots))
 
+	-- Brain repos auto-enter super-repo mode. A repo is a brain iff it has a
+	-- `.brain/` directory at root (constitution convention). Deferred to
+	-- VimEnter so chat_roots/note_roots have settled before super_repo mutates
+	-- them, and to avoid racing other plugins' setup().
+	if M.config.repo_root and vim.fn.isdirectory(M.config.repo_root .. "/.brain") == 1 then
+		vim.api.nvim_create_autocmd("VimEnter", {
+			once = true,
+			callback = function()
+				if not super_repo.is_active() then
+					super_repo.toggle()
+				end
+			end,
+		})
+	end
+
 	-- repo-local dirs (issues, history, vision, notes) are resolved in apply_repo_local
 	-- against git root; skip them here to avoid creating in CWD
 	local skip_prepare = { chat_dir = true, repo_chat_dir = true, repo_note_dir = true, issues_dir = true, history_dir = true, vision_dir = true }
