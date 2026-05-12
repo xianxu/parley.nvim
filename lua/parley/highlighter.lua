@@ -381,6 +381,36 @@ local function compute_chat_highlights(buf, start_line, end_line)
     return result
 end
 
+-- Pure scanner for draft-block markers.
+-- A block opens at any line matching `^=== <label> ===$` where label != "end",
+-- and closes at the next `^=== end ===$`. Unmatched closers are ignored; an
+-- unmatched opener extends to EOF. No nesting — a second opener while a block
+-- is open is ignored.
+-- Returns { { open_row, close_row }, ... } in 0-indexed inclusive coords.
+local function scan_draft_blocks(lines)
+    local blocks = {}
+    local open_row = nil
+    for i, line in ipairs(lines) do
+        local label = line:match("^=== (.+) ===%s*$")
+        if label then
+            if label == "end" then
+                if open_row then
+                    table.insert(blocks, { open_row = open_row, close_row = i - 1 })
+                    open_row = nil
+                end
+            elseif not open_row then
+                open_row = i - 1
+            end
+        end
+    end
+    if open_row then
+        table.insert(blocks, { open_row = open_row, close_row = #lines - 1 })
+    end
+    return blocks
+end
+
+M._scan_draft_blocks = scan_draft_blocks
+
 -- Compute desired markdown highlights for a 1-indexed line range.
 -- Returns a table keyed by 0-indexed row: { [row] = { {hl_group, col_start, col_end}, ... } }
 local function compute_markdown_highlights(buf, start_line, end_line)
@@ -422,6 +452,30 @@ local function compute_markdown_highlights(buf, start_line, end_line)
             search_start = end_pos
         end
     end
+
+    -- Draft-block backgrounds (=== label === / === end ===). Full-buffer
+    -- scan so a block opened far above the viewport still paints visible
+    -- body lines. Bg-only highlight; markdown fg shows through.
+    local all_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    local blocks = scan_draft_blocks(all_lines)
+    local view_from = start_line - 1
+    local view_to = end_line - 1
+    for _, block in ipairs(blocks) do
+        local from = math.max(block.open_row, view_from)
+        local to = math.min(block.close_row, view_to)
+        for row = from, to do
+            result[row] = result[row] or {}
+            -- Multi-line range (row,0 → row+1,0) + hl_eol paints bg past EOL
+            -- so short and empty lines inside the block still get the shaded
+            -- background. Same trick diff/cursorline use.
+            table.insert(result[row], {
+                hl_group = "ParleyDraftBlock",
+                col_start = 0,
+                draft_block = true,
+            })
+        end
+    end
+
     return result
 end
 
@@ -613,6 +667,16 @@ M.setup_highlights = function()
         vim.api.nvim_set_hl(0, "ParleyPickerApproximateMatch", {
             link = "IncSearch",
         })
+    end
+
+    -- Draft block backgrounds — bg-only so markdown fg/syntax shows through.
+    -- CursorLine is themed to be visibly-but-subtly shifted from Normal in
+    -- every colorscheme, which is exactly what we want. User can override
+    -- via config.highlight.draft_block.
+    if user_highlights.draft_block then
+        vim.api.nvim_set_hl(0, "ParleyDraftBlock", user_highlights.draft_block)
+    else
+        vim.api.nvim_set_hl(0, "ParleyDraftBlock", { link = "CursorLine" })
     end
 
     -- Review markers — 🤖[user comment] in markdown files
@@ -856,20 +920,32 @@ M.setup_buf_handler = function()
 
             if highlights then
                 for _, hl in ipairs(highlights) do
-                    local end_col = hl.col_end
-                    if end_col == -1 then
-                        end_col = #line
+                    if hl.draft_block then
+                        -- Multi-line range so hl_eol can extend bg past EOL.
+                        pcall(vim.api.nvim_buf_set_extmark, bufnr, decor_ns, row, 0, {
+                            end_row = row + 1,
+                            end_col = 0,
+                            hl_group = hl.hl_group,
+                            hl_eol = true,
+                            ephemeral = true,
+                            priority = 100,
+                        })
+                    else
+                        local end_col = hl.col_end
+                        if end_col == -1 then
+                            end_col = #line
+                        end
+                        pcall(vim.api.nvim_buf_set_extmark, bufnr, decor_ns, row, hl.col_start, {
+                            end_row = row,
+                            end_col = end_col,
+                            hl_group = hl.hl_group,
+                            ephemeral = true,
+                            -- 200 > treesitter's default 100, so our marker
+                            -- highlights win over markdown syntax (which
+                            -- otherwise paints `<Amazon>` as an HTML tag).
+                            priority = 200,
+                        })
                     end
-                    pcall(vim.api.nvim_buf_set_extmark, bufnr, decor_ns, row, hl.col_start, {
-                        end_row = row,
-                        end_col = end_col,
-                        hl_group = hl.hl_group,
-                        ephemeral = true,
-                        -- 200 > treesitter's default 100, so our marker
-                        -- highlights win over markdown syntax (which
-                        -- otherwise paints `<Amazon>` as an HTML tag).
-                        priority = 200,
-                    })
                 end
             end
         end,
