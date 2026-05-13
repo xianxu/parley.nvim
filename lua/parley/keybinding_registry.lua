@@ -435,8 +435,8 @@ M.entries = {
 	},
 	{
 		id = "outline",
-		default_key = "<C-g>t",
-		default_modes = { "n" },
+		default_key = { "<C-g>t", "<M-t>" },
+		default_modes = { "n", "i" },
 		scope = "parley_buffer",
 		desc = "Parley prompt Outline Navigator",
 		help_desc = "Outline picker",

@@ -3148,6 +3148,11 @@ end
 
 -- Command for navigating questions and headers in chat documents
 M.cmd.Outline = function()
+	-- Stop insert before opening the picker — the outline takes over UI focus,
+	-- so leaving the buffer in insert mode would strand the cursor on return.
+	-- No-op outside insert mode.
+	vim.cmd("stopinsert")
+
 	-- Allow outline on any markdown file, not just chat files
 	local buf = vim.api.nvim_get_current_buf()
 	local file_name = vim.api.nvim_buf_get_name(buf)

@@ -405,7 +405,7 @@ function M.question_picker(config)
     local items = M._build_picker_items(current_bufnr, config, { is_chat = false })
     local keybindings_key = (parley.config.global_shortcut_keybindings or { shortcut = "<C-g>?" }).shortcut
     float_picker.open({
-      title = "💬 Q&A Outline",
+      title = "Outline",
       items = items,
       anchor = "top",
       on_select = function(item)
