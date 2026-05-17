@@ -35,43 +35,53 @@ if ! grep -q tart-vm-rc.zsh "$HOME/.zshrc" 2>/dev/null; then
 EOF
 fi
 
-# ── Clone (or refresh) the host repo into ~/repo ─────────────────
-# Earlier versions of this setup symlinked ~/repo to the read-only
-# shared mount. That made `make build` fail inside the VM with EPERM:
-# the host's bin/ outputs carried host-side xattrs (com.apple.provenance)
-# and codesign state that prevented the guest from overwriting them.
-# Cloning gives the VM a writable local working copy; the host mount
-# stays available read-only as the clone's origin for round-trip
-# refreshes.
+# ── Mirror the host repo into ~/repo (always fresh) ──────────────
+# Two earlier layouts and why neither stuck:
+#
+#   1. ~/repo as a SYMLINK to the read-only host share. Broke
+#      `make build` inside the VM with EPERM — host xattrs
+#      (com.apple.provenance) and codesign state on bin/ outputs
+#      blocked guest writes.
+#
+#   2. ~/repo as a GIT CLONE of the share, with fast-forward to
+#      host HEAD on subsequent boots. Picked up *committed* host
+#      changes but missed uncommitted-and-untracked edits — exactly
+#      what the operator usually wants to test in the VM before
+#      committing.
+#
+# Current layout: rsync --delete mirror. ~/repo is a writable byte-
+# for-byte copy of the host worktree (including .git, uncommitted
+# edits, and untracked files), refreshed on every `make tart`. The
+# VM is purely a slave; any VM-local changes to ~/repo are wiped on
+# next boot. Use ~/ outside ~/repo (e.g. ~/workspace/, ~/brain-*) for
+# anything you want to persist across boots.
 #
 # Mount path: tart exposes the shared dir at "/Volumes/My Shared
-# Files/<REPO_NAME>". We glob rather than depend on $REPO_NAME being
-# present in the VM env — one share per VM, so the first dir is
-# unambiguous.
+# Files/<REPO_NAME>". Glob rather than depend on $REPO_NAME being in
+# the VM env — one share per VM, so the first dir is unambiguous.
+#
+# Excludes: build outputs (host arch may match VM arch, but host
+# binaries carry codesign state that blocks guest re-codesign on
+# rebuild) and ariadne setup-state files. Override by editing this
+# block — operators with extra paths to exclude per repo should add
+# them here in a follow-up.
 MOUNT=$(ls -d "/Volumes/My Shared Files"/*/ 2>/dev/null | head -1)
 MOUNT=${MOUNT%/}
 if [ -n "$MOUNT" ] && [ -d "$MOUNT/.git" ]; then
-    # Migrate from the older symlink layout, if still in place.
+    # Migrate from older layouts: symlink → wipe; git clone → rsync
+    # will reconcile via --delete.
     if [ -L "$HOME/repo" ]; then
-        echo "==> Removing old ~/repo symlink (clone-into-VM convention now)..."
+        echo "==> Removing old ~/repo symlink (rsync-mirror convention now)..."
         rm "$HOME/repo"
     fi
-    if [ ! -d "$HOME/repo/.git" ]; then
-        echo "==> Cloning $MOUNT into ~/repo (writable local copy)..."
-        rm -rf "$HOME/repo" 2>/dev/null || true
-        git clone "$MOUNT" "$HOME/repo"
-    elif [ -z "$(git -C "$HOME/repo" status --porcelain 2>/dev/null)" ]; then
-        # Worktree clean — safe to fast-forward to match host HEAD.
-        host_branch=$(git -C "$MOUNT" symbolic-ref --short HEAD 2>/dev/null || echo main)
-        echo "==> ~/repo clean; refreshing to host's $host_branch..."
-        git -C "$HOME/repo" fetch origin >/dev/null 2>&1 || true
-        git -C "$HOME/repo" reset --hard "origin/$host_branch" >/dev/null 2>&1 \
-            || echo "    (couldn't fast-update; leaving as-is)"
-    else
-        echo "==> ~/repo has uncommitted changes — leaving as-is."
-        echo "    (commit or stash inside the VM, then re-run \`make tart\` to refresh,"
-        echo "     or \`rm -rf ~/repo && exit\` to force a fresh clone on next boot.)"
-    fi
+    mkdir -p "$HOME/repo"
+    echo "==> Mirroring host → ~/repo (always fresh; includes uncommitted edits)..."
+    rsync -a --delete \
+        --exclude='/bin/' \
+        --exclude='cmd/*/bin/' \
+        --exclude='/.nous-mode' \
+        --exclude='/.nous-plugins' \
+        "$MOUNT/" "$HOME/repo/"
 elif [ -L "$HOME/repo" ]; then
     # No mount but a leftover symlink — clean up. Don't touch a real
     # directory the operator might have created; only nuke our own

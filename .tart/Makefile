@@ -4,20 +4,25 @@
 # Provides:
 #   make tart        boot $(TART_VM) headless, mount $(CURDIR) into the
 #                    guest at /Volumes/My Shared Files/$(REPO_NAME)
-#                    (read-only), clone it into ~/repo (writable local
-#                    copy), ssh in
+#                    (read-only), rsync-mirror it into ~/repo
+#                    (writable, always-fresh, includes uncommitted host
+#                    edits), ssh in
 #   make tart-gui    same but display via macOS Screen Sharing.app
 #                    (--vnc; built-in UI is broken on macOS Tahoe)
 #   make tart-stop   stop $(TART_VM), preserve disk state
 #   make tart-clean  stop + delete $(TART_VM) (base image stays cached)
 #
 # Mount is on by default in every boot target. The mount serves only as
-# the clone source — `tart-vm-setup.sh` git-clones it into ~/repo on
-# first boot, and fast-forwards on subsequent boots when the VM tree is
-# clean. The clone-in-VM design replaces an earlier ~/repo-as-symlink
-# layout that produced EPERM on `make build` (host xattrs / codesign
-# state on bin/ outputs blocked guest writes). Override RUN_FLAGS empty
-# for a true no-mount, no-clone boot:
+# the rsync source — `tart-vm-setup.sh` mirrors it into ~/repo on every
+# boot via rsync --delete, so the VM's ~/repo is a byte-for-byte copy
+# of the host worktree (including .git and uncommitted/untracked files).
+# Any VM-local edits to ~/repo are wiped on next boot — keep persistent
+# work outside ~/repo (e.g. ~/workspace/, ~/brain-*).
+#
+# This replaces two earlier layouts: ~/repo-as-symlink (broke `make
+# build` with EPERM from host xattrs on bin/) and ~/repo-as-git-clone
+# (only picked up committed host state, missed uncommitted edits).
+# Override RUN_FLAGS empty for a true no-mount, no-mirror boot:
 #   make tart RUN_FLAGS=
 #
 # Auto-derived per repo via $(REPO_NAME):
@@ -57,15 +62,16 @@ help-tart:
 	"Tart (macOS VMs):" \
 	"  make tart           Boot $(TART_VM) headless, mount \$$(CURDIR) at" \
 	"                      /Volumes/My Shared Files/$(REPO_NAME) read-only," \
-	"                      clone into ~/repo (writable), ssh in" \
+	"                      rsync-mirror into ~/repo (writable), ssh in" \
 	"  make tart-gui       Same but display via macOS Screen Sharing.app" \
 	"  make tart-stop      Stop $(TART_VM), preserve disk state" \
 	"  make tart-clean     Stop + delete $(TART_VM) (base image stays cached)" \
 	"" \
-	"  Mount + clone happen on every boot; the clone fast-forwards if" \
-	"  ~/repo's worktree is clean, and is left untouched (with a hint)" \
-	"  if it has uncommitted VM-local changes. Skip both entirely with" \
-	"  'make tart RUN_FLAGS=' for a vanilla boot." \
+	"  Mount + mirror happen on every boot — VM's ~/repo is a byte-for-" \
+	"  byte copy of the host worktree (including uncommitted edits)." \
+	"  VM-local changes to ~/repo are wiped on next boot; keep persistent" \
+	"  work outside ~/repo. Skip both entirely with 'make tart RUN_FLAGS='" \
+	"  for a vanilla boot." \
 	""
 
 # Interactive multi-select to stop OTHER running tart VMs (4-8 GB
@@ -171,8 +177,8 @@ tart:
 	$(call _tart_check_others)
 	$(call _tart_ensure_vm)
 	@if [ -n "$(RUN_FLAGS)" ]; then \
-	    echo "==> Mount: /Volumes/My Shared Files/$(REPO_NAME) (read-only; clone source)"; \
-	    echo "    Clone: ~/repo in the VM (writable; setup.sh handles clone/refresh)"; \
+	    echo "==> Mount: /Volumes/My Shared Files/$(REPO_NAME) (read-only; rsync source)"; \
+	    echo "    Mirror: ~/repo in the VM (writable, always fresh, wipes on each boot)"; \
 	fi
 	$(call _tart_boot_and_ssh)
 
@@ -188,9 +194,9 @@ tart-gui:
 	    tart stop $(TART_VM); \
 	fi
 	$(call _tart_wait_for_stop)
-	@echo "==> Booting with VNC display + local tree mount"
-	@echo "    Mount: /Volumes/My Shared Files/$(REPO_NAME) (read-only; clone source)"
-	@echo "    Clone: ~/repo in the VM (writable; setup.sh handles clone/refresh)"
+	@echo "==> Booting with VNC display + local tree mirror"
+	@echo "    Mount: /Volumes/My Shared Files/$(REPO_NAME) (read-only; rsync source)"
+	@echo "    Mirror: ~/repo in the VM (writable, always fresh, wipes on each boot)"
 	@echo "    First-time Screen Sharing: choose 'Standard' in the"
 	@echo "    network-type dialog — 'High Performance' is incompatible"
 	@echo "    with tart's VNC stream on Tahoe (Screen Sharing remembers"
