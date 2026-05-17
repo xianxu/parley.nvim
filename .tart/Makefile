@@ -4,16 +4,20 @@
 # Provides:
 #   make tart        boot $(TART_VM) headless, mount $(CURDIR) into the
 #                    guest at /Volumes/My Shared Files/$(REPO_NAME)
-#                    (read-only) + ~/repo symlink, ssh in
+#                    (read-only), clone it into ~/repo (writable local
+#                    copy), ssh in
 #   make tart-gui    same but display via macOS Screen Sharing.app
 #                    (--vnc; built-in UI is broken on macOS Tahoe)
 #   make tart-stop   stop $(TART_VM), preserve disk state
 #   make tart-clean  stop + delete $(TART_VM) (base image stays cached)
 #
-# Mount is on by default in every boot target — there's no real downside
-# (read-only, only used if the operator cd's into ~/repo), and it makes
-# the two surfaces uniform. If you ever need a no-mount boot for a
-# specific test, override RUN_FLAGS on the command line:
+# Mount is on by default in every boot target. The mount serves only as
+# the clone source — `tart-vm-setup.sh` git-clones it into ~/repo on
+# first boot, and fast-forwards on subsequent boots when the VM tree is
+# clean. The clone-in-VM design replaces an earlier ~/repo-as-symlink
+# layout that produced EPERM on `make build` (host xattrs / codesign
+# state on bin/ outputs blocked guest writes). Override RUN_FLAGS empty
+# for a true no-mount, no-clone boot:
 #   make tart RUN_FLAGS=
 #
 # Auto-derived per repo via $(REPO_NAME):
@@ -52,14 +56,16 @@ help-tart:
 	@printf '%s\n' \
 	"Tart (macOS VMs):" \
 	"  make tart           Boot $(TART_VM) headless, mount \$$(CURDIR) at" \
-	"                      /Volumes/My Shared Files/$(REPO_NAME), ssh in" \
+	"                      /Volumes/My Shared Files/$(REPO_NAME) read-only," \
+	"                      clone into ~/repo (writable), ssh in" \
 	"  make tart-gui       Same but display via macOS Screen Sharing.app" \
 	"  make tart-stop      Stop $(TART_VM), preserve disk state" \
 	"  make tart-clean     Stop + delete $(TART_VM) (base image stays cached)" \
 	"" \
-	"  Mount applies on cold boot; if a VM is already running without it," \
-	"  'make tart-stop && make tart' picks it up. Skip the mount entirely" \
-	"  with 'make tart RUN_FLAGS=' for a vanilla boot." \
+	"  Mount + clone happen on every boot; the clone fast-forwards if" \
+	"  ~/repo's worktree is clean, and is left untouched (with a hint)" \
+	"  if it has uncommitted VM-local changes. Skip both entirely with" \
+	"  'make tart RUN_FLAGS=' for a vanilla boot." \
 	""
 
 # Interactive multi-select to stop OTHER running tart VMs (4-8 GB
@@ -153,7 +159,7 @@ define _tart_boot_and_ssh
 	    echo "==> ssh admin@$$ip"; \
 	    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
 	        -t admin@$$ip \
-	        'export TERM=xterm-256color; stty erase "^?"; M="/Volumes/My Shared Files/$(REPO_NAME)"; if [ -d "$$M" ]; then ln -sfn "$$M" "$$HOME/repo"; elif [ -L "$$HOME/repo" ]; then rm "$$HOME/repo"; fi; exec $$SHELL -l' \
+	        'export TERM=xterm-256color; stty erase "^?"; exec $$SHELL -l' \
 	        || true
 endef
 # `|| true` on the ssh: ssh propagates the remote shell's exit status.
@@ -165,7 +171,8 @@ tart:
 	$(call _tart_check_others)
 	$(call _tart_ensure_vm)
 	@if [ -n "$(RUN_FLAGS)" ]; then \
-	    echo "==> Local tree will be mounted at /Volumes/My Shared Files/$(REPO_NAME) (read-only)"; \
+	    echo "==> Mount: /Volumes/My Shared Files/$(REPO_NAME) (read-only; clone source)"; \
+	    echo "    Clone: ~/repo in the VM (writable; setup.sh handles clone/refresh)"; \
 	fi
 	$(call _tart_boot_and_ssh)
 
@@ -182,7 +189,8 @@ tart-gui:
 	fi
 	$(call _tart_wait_for_stop)
 	@echo "==> Booting with VNC display + local tree mount"
-	@echo "    Mount: /Volumes/My Shared Files/$(REPO_NAME) (read-only)"
+	@echo "    Mount: /Volumes/My Shared Files/$(REPO_NAME) (read-only; clone source)"
+	@echo "    Clone: ~/repo in the VM (writable; setup.sh handles clone/refresh)"
 	@echo "    First-time Screen Sharing: choose 'Standard' in the"
 	@echo "    network-type dialog — 'High Performance' is incompatible"
 	@echo "    with tart's VNC stream on Tahoe (Screen Sharing remembers"
