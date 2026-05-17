@@ -17,8 +17,14 @@
 # the last word on aliases/keybindings). Edit on the host, re-push
 # on next make tart.
 
-# PATH: ~/.local/bin first for any operator-installed tools.
-export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+# PATH:
+#   - ~/repo/bin first — VM-mirrored binaries from the host repo's
+#     `make build` (symlinks into cmd/<name>/bin/<name>). Empty until
+#     the operator runs `make build` inside ~/repo, then becomes the
+#     main test loop: edit on host, `make tart`, run binaries
+#     directly without per-cmd PATH gymnastics.
+#   - ~/.local/bin next, for any operator-installed tools.
+export PATH="$HOME/repo/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 
 # Editor preference. Fallback to vi (always present on macOS); the
 # operator can override to nvim once they `brew install neovim` in
