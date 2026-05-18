@@ -1,6 +1,6 @@
 ---
 name: xx-introspect
-description: use to learn from existing coding sessions
+description: use to learn from existing coding sessions, or record hints
 ---
 
 # xx-introspect — postmortem introspect extraction
