@@ -12,11 +12,13 @@
 #### This Repo
     - Simple case, operate in the single file in `workshop/issues/`
     - Complex case, start in `workshop/issues/`, write detailed design in `workshop/plans/`
+    - For work that has a durable narrative *intent* spanning multiple issues / projects, write a `target` in `workshop/targets/`. A target captures "what we want and what for," under-specified by design; projects and issues reference it via `target: <slug>` frontmatter. Sits above projects and issues in the dependency graph: target ← project (or issue) — many-to-one. See `construct/datatype/target.md`.
     - In all cases, `atlas/` is for big picture pointers, terminologies to facilitate future high level understanding of this codebase. It is your first level onboarding material for human and agents
-    - When done, the artifacts in `workshop/issues/` and `workshop/plans/` are moved to `workshop/history/`
-    - `workshop/parley` contains parley chats related to this repo, think them as brainstorming
-    - `docs/vision` - visionary notes about this repo. In particular -pensive- are less well structured notes, in a similar vein to `workshop/parley` but more focused on a topic
-    - When revising plan artifacts (`issue`, `plan`, `project`, `roadmap`) mid-stream (scope change), append a `## Revisions` section with timestamp + reason + delta. 
+    - When done, the artifacts in `workshop/issues/` and `workshop/plans/` are moved to `workshop/history/`. Targets are durable narrative; they stay in `workshop/targets/` indefinitely, with status transitions (`active` → `achieved` / `split` / `deferred` / `abandoned`) instead of moves to history.
+    - `workshop/parley` contains parley chats related to this repo, think them as brainstorming. Parley chats can promote to targets when intent crystallizes.
+    - `docs/vision` - visionary notes about this repo. In particular -pensive- are less well structured notes, in a similar vein to `workshop/parley` but more focused on a topic. Pensives can promote to targets when the operator's intent crystallizes from "thought-at-a-moment" into "durable commitment."
+    - When revising plan artifacts (`issue`, `plan`, `project`, `roadmap`, `target`) mid-stream (scope change), append a `## Revisions` section with timestamp + reason + delta.
+    - **Human-centric documents (targets, products, atlas drafts) take agent contributions via inline markers, never direct overwrites.** The grammar: `🤖{Y}` proposes adding Y; `🤖~X~` proposes deleting X (markdown strikethrough renders it as a visual deletion preview); `🤖~X~{Y}` proposes replacement; `🤖<X>[H]` is the operator's commentary referencing X. Each accept/reject is a one-edit-class operation in the operator's editor. Full table in `construct/datatype/target.md`. Applies even for solicited edits — inline markers iterate better than git-diff hunks because the editing surface stays in the file.
 
 #### Peer Repo
     - Peer = sibling repo in same parent directory with its own AGENTS.md and memory

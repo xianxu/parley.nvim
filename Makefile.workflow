@@ -470,3 +470,50 @@ define check_undone_issues
 		fi; \
 	fi;
 endef
+
+# ── make build ─────────────────────────────────────────────────────────────
+#
+# End-user-facing build verb. Convention:
+#
+#   - cmd/<name>/main.go  →  bin/<name>     (Go binaries; auto-discovered)
+#   - cmd/nous is skipped — it has its own developer-flow target
+#     (`make nous-build`) in nous's Makefile.nous. The point of the
+#     skip is that operators running `make build` aren't trying to
+#     rebuild the nous binary; they're building their own utilities.
+#   - For non-Go binaries (Python scripts to chmod, wheels, etc.),
+#     define a `local-build` target in Makefile.local — `make build`
+#     calls it after the Go build pass.
+#
+# Designed to be a no-op in repos that don't have a go.mod (brain
+# repos without authored binaries), so it's safe to define in the
+# shared base layer.
+.PHONY: build local-build
+build:
+	@if [ -f go.mod ]; then \
+	    found=0; \
+	    for d in cmd/*/; do \
+	        name=$$(basename "$$d"); \
+	        case "$$name" in nous) continue ;; esac; \
+	        if [ -f "$$d/main.go" ]; then \
+	            mkdir -p bin; \
+	            echo "==> Building $$name..."; \
+	            go build -o "bin/$$name" "./$$d" || exit 1; \
+	            found=1; \
+	        fi; \
+	    done; \
+	    if [ "$$found" = "0" ]; then \
+	        echo "  (no cmd/*/main.go to build)"; \
+	    fi; \
+	fi
+	@$(MAKE) --no-print-directory local-build
+
+# local-build is the operator-extensible hook for non-Go binaries
+# (shell scripts to chmod, Python wheels, anything else). Default
+# no-op; override in Makefile.local. Example:
+#
+#   # In your Makefile.local
+#   local-build:
+#   	@chmod +x bin/my-script
+#   	@cd python-utils && pip install --user -e .
+local-build:
+	@:

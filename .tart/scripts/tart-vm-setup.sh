@@ -35,53 +35,45 @@ if ! grep -q tart-vm-rc.zsh "$HOME/.zshrc" 2>/dev/null; then
 EOF
 fi
 
-# ── Mirror the host repo into ~/repo (always fresh) ──────────────
-# Two earlier layouts and why neither stuck:
+# ── Wire ~/repo to the host's APFS clone (ariadne#29) ────────────
+# Evolution of this layout:
 #
 #   1. ~/repo as a SYMLINK to the read-only host share. Broke
 #      `make build` inside the VM with EPERM — host xattrs
 #      (com.apple.provenance) and codesign state on bin/ outputs
 #      blocked guest writes.
 #
-#   2. ~/repo as a GIT CLONE of the share, with fast-forward to
-#      host HEAD on subsequent boots. Picked up *committed* host
-#      changes but missed uncommitted-and-untracked edits — exactly
-#      what the operator usually wants to test in the VM before
-#      committing.
+#   2. ~/repo as a GIT CLONE of the share. Picked up committed host
+#      changes but missed uncommitted edits — the dev-iteration
+#      workflow needs uncommitted-too.
 #
-# Current layout: rsync --delete mirror. ~/repo is a writable byte-
-# for-byte copy of the host worktree (including .git, uncommitted
-# edits, and untracked files), refreshed on every `make tart`. The
-# VM is purely a slave; any VM-local changes to ~/repo are wiped on
-# next boot. Use ~/ outside ~/repo (e.g. ~/workspace/, ~/brain-*) for
-# anything you want to persist across boots.
+#   3. ~/repo as an rsync-delete copy of the share. Worked, but
+#      ~5–10s at boot, linear in repo size.
 #
-# Mount path: tart exposes the shared dir at "/Volumes/My Shared
-# Files/<REPO_NAME>". Glob rather than depend on $REPO_NAME being in
-# the VM env — one share per VM, so the first dir is unambiguous.
+# Current (ariadne#29): the host prepares an APFS clone (cp -cR)
+# of $(CURDIR) at /tmp/<vm>-clone, strips the xattr-cursed bin/
+# dirs, and mounts THAT as the VM's writable share. APFS clonefile
+# is O(1) at boot regardless of repo size; writes from the VM
+# diverge into the clone via COW without touching the host source.
 #
-# Excludes: build outputs (host arch may match VM arch, but host
-# binaries carry codesign state that blocks guest re-codesign on
-# rebuild) and ariadne setup-state files. Override by editing this
-# block — operators with extra paths to exclude per repo should add
-# them here in a follow-up.
+# VM side: ~/repo is now a symlink straight to the writable share.
+# No rsync — the share IS the writable area.
 MOUNT=$(ls -d "/Volumes/My Shared Files"/*/ 2>/dev/null | head -1)
 MOUNT=${MOUNT%/}
 if [ -n "$MOUNT" ] && [ -d "$MOUNT/.git" ]; then
-    # Migrate from older layouts: symlink → wipe; git clone → rsync
-    # will reconcile via --delete.
-    if [ -L "$HOME/repo" ]; then
-        echo "==> Removing old ~/repo symlink (rsync-mirror convention now)..."
-        rm "$HOME/repo"
+    # Symlink ~/repo → the writable share.
+    # If ~/repo exists as a real dir (left over from rsync-era
+    # bootstrap), wipe it first — its content is stale anyway, and
+    # the symlink convention is now the single source of truth.
+    if [ -d "$HOME/repo" ] && [ ! -L "$HOME/repo" ]; then
+        echo "==> Removing old ~/repo directory (rsync-era artifact; symlink convention now)..."
+        rm -rf "$HOME/repo"
     fi
-    mkdir -p "$HOME/repo"
-    echo "==> Mirroring host → ~/repo (always fresh; includes uncommitted edits)..."
-    rsync -a --delete \
-        --exclude='/bin/' \
-        --exclude='cmd/*/bin/' \
-        --exclude='/.nous-mode' \
-        --exclude='/.nous-plugins' \
-        "$MOUNT/" "$HOME/repo/"
+    if [ ! -L "$HOME/repo" ] || [ "$(readlink "$HOME/repo")" != "$MOUNT" ]; then
+        rm -f "$HOME/repo"
+        ln -s "$MOUNT" "$HOME/repo"
+        echo "==> Symlinked ~/repo → $MOUNT (APFS-cloned writable share)"
+    fi
 elif [ -L "$HOME/repo" ]; then
     # No mount but a leftover symlink — clean up. Don't touch a real
     # directory the operator might have created; only nuke our own

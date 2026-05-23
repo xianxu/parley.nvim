@@ -1,7 +1,7 @@
 # Sandbox management — include from your project Makefile:
 #   include .openshell/Makefile
 
-.PHONY: help-sandbox bootstrap sandbox sandbox-build sandbox-clean sandbox-stop sandbox-shell sandbox-nuke
+.PHONY: help-sandbox sandbox-bootstrap sandbox sandbox-build sandbox-clean sandbox-stop sandbox-shell sandbox-nuke
 
 # K8s names must be DNS-1035: lowercase alphanumeric + hyphens only
 SANDBOX_NAME = $(shell echo "$(REPO_NAME)-sandbox" | tr '.' '-' | tr '[:upper:]' '[:lower:]')
@@ -9,17 +9,24 @@ SANDBOX_NAME = $(shell echo "$(REPO_NAME)-sandbox" | tr '.' '-' | tr '[:upper:]'
 help-sandbox:
 	@printf '%s\n' \
 	"Sandbox (OpenShell + mutagen):" \
-	"  make bootstrap        Install dependencies (openshell, gh, mutagen) and auth" \
-	"  make sandbox-build    Create sandbox, run setup, start sync (one-time)" \
-	"  make sandbox          Connect to sandbox (builds if needed)" \
-	"  make sandbox-shell    Alias for sandbox" \
-	"  make sandbox-clean    Reset repo sync (keeps sandbox + tools)" \
-	"  make sandbox-stop     Stop sync, delete sandbox, clean up" \
-	"  make sandbox-nuke     sandbox-stop + wipe bootstrap cache (full re-download)" \
+	"  make sandbox-bootstrap  Install dependencies (openshell, gh, mutagen) and auth" \
+	"  make sandbox-build      Create sandbox, run setup, start sync (one-time)" \
+	"  make sandbox            Connect to sandbox (builds if needed)" \
+	"  make sandbox-shell      Alias for sandbox" \
+	"  make sandbox-clean      Reset repo sync (keeps sandbox + tools)" \
+	"  make sandbox-stop       Stop sync, delete sandbox, clean up" \
+	"  make sandbox-nuke       sandbox-stop + wipe bootstrap cache (full re-download)" \
 	""
 
 # Install sandbox dependencies and configure auth.
-bootstrap:
+#
+# Renamed from `bootstrap` to `sandbox-bootstrap` so consuming repos
+# (nous in particular) can claim the top-level `make bootstrap` for
+# their own end-user setup umbrella. The other openshell verbs
+# already used the `sandbox-` prefix; this brings naming in line.
+# Operators upgrading across this rename: switch muscle memory from
+# `make bootstrap` → `make sandbox-bootstrap`.
+sandbox-bootstrap:
 	@echo "==> Checking homebrew dependencies..."
 	@for pkg in gh mutagen-io/mutagen/mutagen; do \
 		name=$$(echo "$$pkg" | sed 's|.*/||'); \
