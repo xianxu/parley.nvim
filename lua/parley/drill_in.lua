@@ -18,9 +18,14 @@
 --       * `🤖[U1]{A1}[U2]`     → block `> User: U1`
 --                                       / `> Agent: A1` / `U2`; inline removed
 --     Markers ending in `{}` (annotations / pending agent turns) stay inline.
---   - <C-g>r resolves a discussion chain: every marker with a `<T>` body is
---     stripped back to plain T, regardless of state. Markers without `<T>`
---     are left alone.
+--   - <C-g>r resolves a marker back to its accepted text, regardless of state:
+--       * Marker with `<T>` body → stripped to plain T (T wins even when a
+--         trailing `{A}` exists).
+--       * Marker without `<T>` whose last section is a non-empty `{A}` →
+--         stripped to A. This is the "accept agent suggestion" form: 🤖{A},
+--         🤖[U]{A}, 🤖{A1}[U]{A2} all collapse to the final `{}` body.
+--       * Other markers without `<T>` (e.g. `🤖[U]`, trailing `{}` is empty)
+--         are left alone — there is nothing to accept yet.
 --
 -- Section-parsing is delegated to review._parse_marker_sections so the syntax
 -- stays single-source-of-truth across review (per-line) and drill-in
@@ -146,8 +151,10 @@ function M.resolve_at(text, offset)
     return text, nil
 end
 
---- Resolve every marker with a `<T>` body back to plain T (any state).
---- Markers without `<T>` are left alone (they're plain review annotations).
+--- Resolve every marker that has an "accepted text" back to that text (any state):
+---   * marker with `<T>` body → T (T wins even if a trailing `{A}` exists)
+---   * marker without `<T>` whose last section is non-empty `{A}` → A
+--- Other markers (no `<T>`, no trailing non-empty `{}`) are left alone.
 --- @param text string
 --- @return string new_text
 --- @return integer count
@@ -155,11 +162,17 @@ function M.resolve_all(text)
     local markers = M.parse(text)
     local replacements = {}
     for _, m in ipairs(markers) do
+        local replacement
         if m.quoted then
+            replacement = m.quoted.text
+        elseif m.pending then
+            replacement = m.sections[#m.sections].text
+        end
+        if replacement then
             table.insert(replacements, {
                 byte_start = m.byte_start,
                 byte_end = m.byte_end,
-                replacement = m.quoted.text,
+                replacement = replacement,
             })
         end
     end

@@ -622,10 +622,10 @@ M.entries = {
 	},
 	{
 		id = "chat_resolve_drill_in",
-		default_key = "<C-g>r",
+		default_key = { "<C-g>r", "<M-r>" },
 		default_modes = { "n" },
 		scope = "parley_buffer",
-		desc = "Parley resolve drill-in chain: strip 🤖<T>[..].. → T",
+		desc = "Parley resolve drill-in chain: 🤖<T>… → T; 🤖…{A} → A (accept suggestion)",
 		help_desc = "Resolve drill-in chain",
 		buffer_local = true,
 	},
