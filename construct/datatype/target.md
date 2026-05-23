@@ -63,20 +63,7 @@ Targets transition on *intent* boundaries, not execution states:
 
 ## Agent ↔ human inline-marker convention
 
-Targets are human-centric documents. The operator must fully understand and own the content. Agent contributions go in via inline markers — never as direct edits to the operator's prose. A small grammar covers the full mutation set; each operator gesture is a one-edit-class operation.
-
-| Gesture | Meaning | Accept | Reject |
-|---|---|---|---|
-| `🤖{Y}` | agent proposes adding Y | delete `🤖{` and `}`, leaving Y | delete the whole block |
-| `🤖~X~` | agent proposes deleting X | delete the whole wrapper + content | remove only the wrapper, keep X |
-| `🤖~X~{Y}` | agent proposes replacing X with Y | delete `🤖~X~`, unwrap `{Y}` | remove the whole construct |
-| `🤖<X>[H]` | human's commentary H referencing text X | (remove when resolved) | (n/a) |
-
-`~X~` is markdown's native strikethrough — proposed deletions render visually as strikeout, giving the operator a preview before they decide. Same syntax serves both standalone deletion and the deletion-half of a replacement, so the grammar stays uniform. `🤖<X>[H]` is the one human→agent gesture, letting the operator pin commentary to a specific passage rather than scattering notes in chat; the agent picks it up on next read of the file.
-
-The convention applies even for *solicited* edits ("review and fix this"). git-diff is excellent for seeing changes but mediocre for iterating — typical editors don't support edits inside diff hunks. Inline markers keep the editing surface as the file itself, which is where the operator already is. Use the convention always; let git-diff review be a redundant safety net.
-
-The convention generalizes to any human-centric document where the agent should contribute proposals rather than overwrite — product files, atlas drafts, pensives. For target files specifically, agent edits without these markers are a discipline failure; the operator's narrative voice should remain unbroken in the canonical document.
+Targets are human-centric documents — the operator must fully understand and own the content. Agent contributions go in via inline `🤖{...}` / `🤖~X~` / `🤖<X>[H]` markers, never as direct edits to the operator's prose. The full grammar (markers, combinations, `Alt+q` / `Alt+a` / `Alt+r` resolution semantics, agentic resolution flow) is specified in [`workshop/targets/review-convention.md`](../../workshop/targets/review-convention.md). Direct overwrites of operator prose are a discipline failure.
 
 ## Authoring instructions
 
