@@ -25,6 +25,8 @@ The chat-respond pipeline gathers every ready marker (with or without `<T>`) —
 
 See [#123](../../workshop/issues/000123-quoted-body-marker-syntax.md) for the rationale behind `<T>`. See [#124](../../workshop/issues/000124-review-convention-alignment.md) and the canonical [review-convention target](../../../ariadne/workshop/targets/review-convention.md) for the strike family and the broader convention parley.nvim implements.
 
+> **Resolution semantics for `~X~` are TBD.** As of #124 M1, parsing and highlighting are done; accept/reject is wired in M2 (`<M-a>` / `<M-r>`). Until M2 ships, bulk `<C-g>r` and per-marker `<M-r>` skip strike markers rather than silently rewrite them.
+
 ## Lifecycle
 
 1. **Create** — visual-mode `<C-g>q` (or `<M-q>`) wraps the selection as `🤖<T>[]` and drops the cursor inside the empty `[]` in insert mode.

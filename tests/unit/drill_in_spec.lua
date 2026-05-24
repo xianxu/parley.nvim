@@ -135,10 +135,41 @@ describe("drill_in.parse", function()
         assert.equals("answer", markers[1].sections[2].text)
     end)
 
-    it("supports multi-line ~X~ text", function()
+    it("rejects multi-line ~X~ (bounded to a single line to avoid false positives)", function()
+        -- Multi-line strike would silently absorb tildes on later lines
+        -- (e.g. ~/path), so the lexer stops at \n. Operator marks each
+        -- line separately if they need to delete a multi-line span.
         local markers = drill_in.parse("🤖~line one\nline two~")
+        assert.equals(0, #markers)
+    end)
+
+    it("first ~ wins within a line — `🤖~D~/path` truncates at the path tilde", function()
+        -- Pinning the within-line false-positive boundary. If the
+        -- operator writes a strike followed by a `~/path` on the same
+        -- line, the lexer binds the `~` of `~/` as the closer. Documented
+        -- gotcha; mitigations are (a) avoid path tildes adjacent to a
+        -- marker, or (b) use `<X>` (which depth-counts) when quoting.
+        local markers = drill_in.parse("🤖~old~/path~")
         assert.equals(1, #markers)
-        assert.equals("line one\nline two", markers[1].strike.text)
+        assert.equals("old", markers[1].strike.text)
+        -- The trailing `/path~` is plain text — no second marker.
+    end)
+
+    it("records byte_end at the closing ~", function()
+        -- `x ` = 2 bytes; 🤖 = 4 bytes (pos 3..6); `~D~` = 3 bytes
+        -- (pos 7..9). byte_start = 7 (opening ~); byte_end = 9 (closing ~).
+        local markers = drill_in.parse("x 🤖~D~ y")
+        assert.equals(1, #markers)
+        assert.equals(7, markers[1].strike.byte_start)
+        assert.equals(9, markers[1].strike.byte_end)
+    end)
+
+    it("parses back-to-back strike markers 🤖~A~🤖~B~", function()
+        local markers = drill_in.parse("🤖~A~🤖~B~")
+        assert.equals(2, #markers)
+        assert.equals("A", markers[1].strike.text)
+        assert.equals("B", markers[2].strike.text)
+        assert.is_true(markers[1].byte_start < markers[2].byte_start)
     end)
 
     it("normalizes empty 🤖~~[H] to no strike", function()
@@ -341,6 +372,23 @@ describe("drill_in.resolve_at", function()
         assert.is_not_nil(marker)
         assert.equals("x T y", new_text)
     end)
+
+    -- Strike markers are gated out — M2's accept/reject (#124) owns them
+    it("leaves 🤖~D~ untouched (M2 will wire accept/reject)", function()
+        local input = "x 🤖~delete~ y"
+        local new_text, marker = drill_in.resolve_at(input, 7)
+        assert.is_nil(marker)
+        assert.equals(input, new_text)
+    end)
+
+    it("leaves 🤖~D~{N} untouched even though chain ends in {N}", function()
+        -- Without this gate, the old pending-path would replace ~D~{N}
+        -- with N silently — pre-empting M2's deliberate accept gesture.
+        local input = "x 🤖~old~{new} y"
+        local new_text, marker = drill_in.resolve_at(input, 7)
+        assert.is_nil(marker)
+        assert.equals(input, new_text)
+    end)
 end)
 
 describe("drill_in.resolve_all", function()
@@ -380,6 +428,17 @@ describe("drill_in.resolve_all", function()
         local new_text, count = drill_in.resolve_all("plain text")
         assert.equals("plain text", new_text)
         assert.equals(0, count)
+    end)
+
+    it("skips strike markers — bulk resolve never silently accepts deletions", function()
+        -- M2 (#124) will own accept/reject for ~D~ markers. Until then,
+        -- bulk resolve leaves them alone — a bulk pass should never
+        -- delete or rewrite content the operator hasn't explicitly OK'd.
+        local input = "x 🤖~delete~ 🤖~old~{new} 🤖<T>[Q] y"
+        local new_text, count = drill_in.resolve_all(input)
+        -- Only the 🤖<T>[Q] gets resolved.
+        assert.equals("x 🤖~delete~ 🤖~old~{new} T y", new_text)
+        assert.equals(1, count)
     end)
 end)
 

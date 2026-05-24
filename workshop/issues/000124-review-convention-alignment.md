@@ -124,3 +124,29 @@ Design tweak from the original plan: keep parallel `quoted` / `strike`
 fields (mutually exclusive) rather than a unified `ref` with `kind`.
 Rationale captured in plan doc — less invasive to existing tests, reads
 more naturally at call sites.
+
+**2026-05-23 — M1 code review (post-commit follow-up).** Dispatched
+general-purpose reviewer on diff `0c2cfa5..f273941`. Three Important
+findings, all addressed:
+
+1. *Greedy strike lexer false-positives.* `🤖~old code` followed by
+   `~/path` later on the same line silently bound the path tilde as the
+   closer. Bounded strike to single-line — multi-line strike rejected
+   (operator marks each line separately if needed). Within-line first-`~`
+   wins is documented as a known gotcha with a pinning test.
+
+2. *`resolve_at` / `resolve_all` silently mishandled strike.* `🤖~D~{N}`
+   would have been silently rewritten to `N` by the existing
+   pending-path code, pre-empting M2's deliberate accept gesture. Gated
+   strike out of both — they're no-ops until M2 ships the table-driven
+   resolution.
+
+3. *Test gaps.* Added: false-positive pinning (`🤖~old~/path~` → only
+   `old`), byte_end pin, back-to-back strike markers, resolve_at /
+   resolve_all gating tests, code-fence skip for strike, and the
+   never-ready assertion in review_spec.
+
+Two Nits also addressed: top-of-file grammar comment in drill_in.lua
+updated to include the strike branch; atlas `drill_in.md` got a TBD
+note pointing at M2 for resolution semantics. Test count up from 58 to
+66 in drill_in_spec, +2 in review_spec. All green.

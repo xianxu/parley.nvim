@@ -1,9 +1,9 @@
 -- drill_in.lua — Pure-function drill-in marker handling for chat buffers.
 --
--- A drill-in marker is the 🤖 marker syntax with an optional `<quoted body>`
--- first slot:
+-- A drill-in marker is the 🤖 marker syntax with an optional first-slot
+-- reference (`<quoted body>` or `~strike body~`, mutually exclusive):
 --
---    🤖<T>?([U]|{A})*
+--    🤖(<T>|~D~)?([U]|{A})*
 --
 -- Drill-in semantics in chat buffers (see #123):
 --
@@ -150,6 +150,10 @@ function M.resolve_at(text, offset)
     local markers = M.parse(text)
     for _, m in ipairs(markers) do
         if offset >= m.byte_start and offset <= m.byte_end then
+            -- Strike markers are out of scope here — accept/reject lives
+            -- in M2's table-driven resolution (#124). Until then, leave
+            -- them untouched rather than guess at intent.
+            if m.strike then return text, nil end
             local replacement = m.quoted and m.quoted.text or ""
             local new_text = text:sub(1, m.byte_start - 1) .. replacement .. text:sub(m.byte_end + 1)
             return new_text, m
@@ -169,18 +173,23 @@ function M.resolve_all(text)
     local markers = M.parse(text)
     local replacements = {}
     for _, m in ipairs(markers) do
-        local replacement
-        if m.quoted then
-            replacement = m.quoted.text
-        elseif m.pending then
-            replacement = m.sections[#m.sections].text
-        end
-        if replacement then
-            table.insert(replacements, {
-                byte_start = m.byte_start,
-                byte_end = m.byte_end,
-                replacement = replacement,
-            })
+        -- Strike markers (`~D~`, `~D~{N}`, `~D~[N]`) are skipped here;
+        -- accept/reject is M2's deliberate per-marker decision (#124),
+        -- and a bulk accept would silently rewrite D → N for replacements.
+        if not m.strike then
+            local replacement
+            if m.quoted then
+                replacement = m.quoted.text
+            elseif m.pending then
+                replacement = m.sections[#m.sections].text
+            end
+            if replacement then
+                table.insert(replacements, {
+                    byte_start = m.byte_start,
+                    byte_end = m.byte_end,
+                    replacement = replacement,
+                })
+            end
         end
     end
     return splice(text, replacements), #replacements

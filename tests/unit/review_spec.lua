@@ -211,6 +211,28 @@ describe("parse_markers", function()
         assert.is_true(markers[1].ready)
     end)
 
+    it("parses 🤖~D~ strike marker (deletion proposal, never ready)", function()
+        local markers = review.parse_markers({ "before 🤖~obsolete~ after" })
+        assert.equals(1, #markers)
+        assert.is_not_nil(markers[1].strike)
+        assert.equals("obsolete", markers[1].strike.text)
+        assert.is_nil(markers[1].quoted)
+        assert.is_false(markers[1].ready)
+        assert.is_false(markers[1].pending)
+    end)
+
+    it("skips 🤖~D~ inside fenced code blocks", function()
+        local markers = review.parse_markers({
+            "```",
+            "🤖~inside fence~",
+            "```",
+            "🤖~outside fence~",
+        })
+        assert.equals(1, #markers)
+        assert.equals(3, markers[1].line)
+        assert.equals("outside fence", markers[1].strike.text)
+    end)
+
     it("parses chain 🤖<Q>[U1]{A1}[U2]", function()
         local markers = review.parse_markers({ "🤖<term>[what?]{a thing}[ah]" })
         assert.equals(1, #markers)

@@ -77,8 +77,13 @@ local function parse_marker_sections(text, pos, byte_len)
             -- Unmatched `<`: fall through; the chain loop below will break.
         elseif ch == "~" then
             -- Tildes don't nest — find the next `~` literally.
+            -- Bounded to the same line: tildes are common in prose
+            -- (`~/path`, math `~`) and a multi-line greedy match would
+            -- absorb arbitrary text. If the operator needs to mark a
+            -- multi-line deletion, they can mark each line separately.
             local close = text:find("~", cursor + 1, true)
-            if close then
+            local nl = text:find("\n", cursor + 1, true)
+            if close and (not nl or close < nl) then
                 strike = {
                     text = text:sub(cursor + 1, close - 1),
                     byte_start = cursor,
@@ -86,7 +91,8 @@ local function parse_marker_sections(text, pos, byte_len)
                 }
                 cursor = close + 1
             end
-            -- Unmatched `~`: fall through; the chain loop below will break.
+            -- Unmatched `~` (or `\n` before next `~`): fall through; the
+            -- chain loop below will break.
         end
     end
 
