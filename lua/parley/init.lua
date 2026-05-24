@@ -1514,8 +1514,16 @@ local function drill_in_callbacks(buf)
 				vim.cmd("startinsert")
 			end,
 		},
-		chat_accept_drill_in = function() drill_in_accept_at_cursor(buf) end,
-		chat_reject_drill_in = function() drill_in_reject_at_cursor(buf) end,
+		chat_accept_drill_in = function()
+			if not drill_in_accept_at_cursor(buf) then
+				M.logger.warning("No 🤖 marker at cursor")
+			end
+		end,
+		chat_reject_drill_in = function()
+			if not drill_in_reject_at_cursor(buf) then
+				M.logger.warning("No 🤖 marker at cursor")
+			end
+		end,
 	}
 end
 

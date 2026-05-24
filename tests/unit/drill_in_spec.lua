@@ -391,10 +391,52 @@ describe("drill_in.resolve (pure)", function()
         assert.equals("X", drill_in.resolve(m, "reject"))
     end)
 
-    it("🤖~D~{N}[H]{R} → N (accept) / D (reject) — first {N} after strike wins", function()
+    it("🤖~D~{N}[H]{R} (strike + dialogue past proposal) → fall back to base deletion", function()
+        -- Only the spec's enumerated forms (~D~, ~D~{N}, ~D~[N]) get the
+        -- replacement-on-accept semantics. Longer chains are ambiguous —
+        -- e.g. [H]{R} after a strike could be dialogue about whether to
+        -- delete at all. Fall back to base deletion to avoid guessing.
         local m = only("🤖~D~{N}[discuss]{further}")
-        assert.equals("N", drill_in.resolve(m, "accept"))
+        assert.equals("", drill_in.resolve(m, "accept"))
         assert.equals("D", drill_in.resolve(m, "reject"))
+    end)
+
+    it("🤖~D~[H]{R} (strike + dialogue) accept does not splice the human's commentary", function()
+        -- Pinning the fix: previously sections[1].text was returned
+        -- unconditionally on accept, which would splice "is this right?"
+        -- into the prose. Now falls back to base deletion.
+        local m = only("🤖~old~[is this right?]{yes, delete it}")
+        assert.equals("", drill_in.resolve(m, "accept"))
+        assert.equals("old", drill_in.resolve(m, "reject"))
+    end)
+
+    -- Additional coverage (per M2 review nit #2): pin edge cases the spec
+    -- doesn't enumerate, so a refactor can't quietly change behavior.
+    it("🤖<X> (anchor, no chain) → X both modes", function()
+        local m = only("🤖<keep me>")
+        assert.equals("keep me", drill_in.resolve(m, "accept"))
+        assert.equals("keep me", drill_in.resolve(m, "reject"))
+    end)
+
+    it("🤖<X>{R} (anchor + agent only) → X both modes", function()
+        local m = only("🤖<keep>{suggest}")
+        assert.equals("keep", drill_in.resolve(m, "accept"))
+        assert.equals("keep", drill_in.resolve(m, "reject"))
+    end)
+
+    it("🤖{R}{R'} (consecutive agent sections, no anchor) → empty both", function()
+        -- Pinning: not a proposal (proposal is bare {R} only). Two
+        -- consecutive {R} blocks are dialogue (or malformed); resolve
+        -- to empty rather than silently accept the last one.
+        local m = only("🤖{first}{second}")
+        assert.equals("", drill_in.resolve(m, "accept"))
+        assert.equals("", drill_in.resolve(m, "reject"))
+    end)
+
+    it("rejects garbage mode with an assertion", function()
+        local m = only("🤖[hello]")
+        assert.has_error(function() drill_in.resolve(m, "Accept") end)
+        assert.has_error(function() drill_in.resolve(m, nil) end)
     end)
 end)
 
@@ -450,6 +492,45 @@ describe("drill_in.accept_at and reject_at", function()
         local new_text, m = drill_in.accept_at(input, 14)
         assert.is_not_nil(m)
         assert.equals("🤖{first} second", new_text)
+    end)
+
+    it("accepts at the marker's leading 🤖 byte (boundary)", function()
+        local input = "x 🤖{R} y"
+        -- byte 3 = first byte of 🤖
+        local new_text, m = drill_in.accept_at(input, 3)
+        assert.is_not_nil(m)
+        assert.equals("x R y", new_text)
+    end)
+
+    it("accepts at the marker's trailing closing bracket (boundary)", function()
+        local input = "x 🤖{R} y"
+        -- 🤖=4 + {R}=3 = 7 bytes; marker spans 3..9. cursor at 9 = `}`.
+        local new_text, m = drill_in.accept_at(input, 9)
+        assert.is_not_nil(m)
+        assert.equals("x R y", new_text)
+    end)
+
+    it("adjacent markers 🤖{R1}🤖{R2}: cursor on second's 🤖 picks the second", function()
+        local input = "🤖{R1}🤖{R2}"
+        -- First marker: 🤖=4 + {R1}=4 = 8 bytes (1..8). Second 🤖 starts at 9.
+        local new_text, m = drill_in.accept_at(input, 9)
+        assert.is_not_nil(m)
+        assert.equals("🤖{R1}R2", new_text)
+    end)
+
+    it("multi-line replacement positions correctly via 🤖{multi\\nline}", function()
+        local input = "before 🤖{line1\nline2} after"
+        -- cursor inside the {} somewhere; pick 12 (inside "line1")
+        local new_text, m = drill_in.accept_at(input, 12)
+        assert.is_not_nil(m)
+        assert.equals("before line1\nline2 after", new_text)
+    end)
+
+    it("rejects 🤖~D~{N} at cursor restores D", function()
+        local input = "x 🤖~old~{new} y"
+        local new_text, m = drill_in.reject_at(input, 7)
+        assert.is_not_nil(m)
+        assert.equals("x old y", new_text)
     end)
 end)
 

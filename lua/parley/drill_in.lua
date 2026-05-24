@@ -145,28 +145,36 @@ end
 --- Rules (see ariadne/workshop/targets/review-convention.md §5):
 ---   1. `<X>` anchor preserves X (both modes).
 ---   2. `~D~` anchor:
----        accept → first `{N}` or `[N]` after the strike (or "" if none).
----        reject → D.
+---        chain ∅       → accept "" / reject D
+---        chain {N}     → accept N  / reject D
+---        chain [N]     → accept N  / reject D
+---        longer chain  → treat as base deletion: accept "" / reject D
+---                        (dialogue past the proposal is ambiguous; spec
+---                        only enumerates single-section chains, so we
+---                        fall back to the bare proposal rather than
+---                        guess at intent)
 ---   3. No anchor:
 ---        bare `{R}` (chain length 1, single agent block) is the only
----        proposal form here:
----          accept → R, reject → "".
----        Anything else (just `[H]`, dialogue chains like `[H]{R}`,
----        `{R}[H]`, longer) is pure commentary: "" both modes.
+---        proposal: accept → R, reject → "".
+---        Everything else (just `[H]`, dialogue chains, longer) is pure
+---        commentary: "" both modes.
 --- @param marker table  parsed marker (from M.parse)
 --- @param mode string   "accept" | "reject"
 --- @return string
 function M.resolve(marker, mode)
+    assert(mode == "accept" or mode == "reject",
+        "drill_in.resolve: mode must be 'accept' or 'reject', got " .. tostring(mode))
     if marker.quoted then
         return marker.quoted.text
     end
     if marker.strike then
-        if mode == "accept" then
-            local first = marker.sections[1]
-            return first and first.text or ""
-        else
+        if mode == "accept" and #marker.sections == 1 then
+            return marker.sections[1].text
+        end
+        if mode == "reject" then
             return marker.strike.text
         end
+        return ""
     end
     -- No anchor: only a bare `{R}` is a proposal; everything else is commentary.
     if #marker.sections == 1 and marker.sections[1].type == "agent" then

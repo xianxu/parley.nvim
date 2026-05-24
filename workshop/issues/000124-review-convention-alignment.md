@@ -170,6 +170,32 @@ Keybinding split: `<M-a>` accepts, `<M-r>` rejects (single key each,
 resolve-or-insert overload — now always inserts; accept/reject have
 dedicated bindings.
 
-Test count: drill_in_spec at 85 (+19 net: 19 new for resolve/accept/
-reject, 16 old removed for deleted API). Lint clean, full unit +
-integration suite green. Code review pending.
+Test count: drill_in_spec at 67 unit cases after M2 commit. Lint clean,
+full unit + integration suite green.
+
+**2026-05-24 — M2 code review follow-up.** Two Important findings
+addressed:
+
+1. *`🤖~D~[H]{R}` accept spliced the human's commentary.* The original
+   `resolve` returned `sections[1].text` unconditionally on accept,
+   which would splice "is this right?" into the prose for chains like
+   `~old~[is this right?]{yes, delete it}`. Tightened the rule: only
+   single-section chains (`~D~{N}` / `~D~[N]`) trigger replacement on
+   accept; longer chains fall back to base deletion. Pinned with two
+   tests.
+
+2. *Mode validation silently fell through.* `resolve(marker, "Accept")`
+   (capital A) or `nil` mode would silently take the reject branch.
+   Added `assert(mode == "accept" or mode == "reject", ...)` so typos
+   in callers fail loud rather than silently invert intent.
+
+Also: silent no-op when cursor is not on a marker — added
+`M.logger.warning("No 🤖 marker at cursor")` on `<M-a>`/`<M-r>` for
+discoverability. Atlas footer tense updated. SKILL.md got a strike
+resolution paragraph for agentic resolution per §6.
+
+Test additions covering nit findings: `🤖<X>` alone, `🤖<X>{R}`,
+`🤖{R}{R'}`, mode assertion, accept boundary cursor positions
+(byte_start / byte_end), adjacent markers `🤖{R1}🤖{R2}`, multi-line
+replacement cursor positioning, reject of `~D~{N}`. drill_in_spec at
+76 cases.

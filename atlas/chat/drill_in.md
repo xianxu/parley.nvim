@@ -25,7 +25,7 @@ The chat-respond pipeline gathers every ready marker (with or without `<T>`) —
 
 See [#123](../../workshop/issues/000123-quoted-body-marker-syntax.md) for the rationale behind `<T>`. See [#124](../../workshop/issues/000124-review-convention-alignment.md) and the canonical [review-convention target](../../../ariadne/workshop/targets/review-convention.md) for the strike family and the broader convention parley.nvim implements.
 
-Accept/reject for `~X~` and the full §5 table land in #124 M2 (`<M-a>` / `<M-r>`).
+Accept and reject for `~X~` and the full §5 table are wired via `<M-a>` / `<M-r>` (#124 M2 — see the keybinding table below).
 
 ## Lifecycle
 
