@@ -1,35 +1,37 @@
--- drill_in.lua — Pure-function drill-in marker handling for chat buffers.
+-- drill_in.lua — Pure-function 🤖 marker handling.
 --
--- A drill-in marker is the 🤖 marker syntax with an optional first-slot
--- reference (`<quoted body>` or `~strike body~`, mutually exclusive):
+-- A marker is the 🤖 marker syntax with an optional first-slot reference
+-- (`<quoted body>` or `~strike body~`, mutually exclusive):
 --
 --    🤖(<T>|~D~)?([U]|{A})*
 --
--- Drill-in semantics in chat buffers (see #123):
+-- Used in two flows:
 --
---   - <C-g>q (visual mode) wraps a selection as 🤖<T>[] for the user to type
---     a question inside the empty [].
---   - On <C-g>g (chat respond), every "ready" marker (last section is a
---     non-empty []) is gathered and stripped from the inline text:
---       * `🤖<Q>[U]`           → block `> Q` / `U`            ; inline → `Q`
---       * `🤖[U]`              → block `U`                   ; inline removed
---       * `🤖<Q>[U1]{A1}[U2]`  → block `> Q` / `> User: U1`
---                                       / `> Agent: A1` / `U2`; inline → `Q`
---       * `🤖[U1]{A1}[U2]`     → block `> User: U1`
---                                       / `> Agent: A1` / `U2`; inline removed
---     Markers ending in `{}` (annotations / pending agent turns) stay inline.
---   - <C-g>r resolves a marker back to its accepted text, regardless of state:
---       * Marker with `<T>` body → stripped to plain T (T wins even when a
---         trailing `{A}` exists).
---       * Marker without `<T>` whose last section is a non-empty `{A}` →
---         stripped to A. This is the "accept agent suggestion" form: 🤖{A},
---         🤖[U]{A}, 🤖{A1}[U]{A2} all collapse to the final `{}` body.
---       * Other markers without `<T>` (e.g. `🤖[U]`, trailing `{}` is empty)
---         are left alone — there is nothing to accept yet.
+--   1. **Drill-in (chat respond).** On `<C-g>g`, every "ready" marker (last
+--      section is a non-empty [], strike markers excluded) is gathered and
+--      stripped from the inline text into a quoted block prepended to the
+--      next user turn. See `M.gather_and_strip` and `M.format_block`. Marker
+--      shapes:
+--        * `🤖<Q>[U]`          → block `> Q` / `U`            ; inline → `Q`
+--        * `🤖[U]`             → block `U`                   ; inline removed
+--        * `🤖<Q>[U1]{A1}[U2]` → block `> Q` / `> User: U1` /
+--                                `> Agent: A1` / `U2`        ; inline → `Q`
+--        * `🤖[U1]{A1}[U2]`    → block `> User: U1` / `> Agent: A1` / `U2`;
+--                                inline removed
+--      Markers ending in `{}` (pending agent turns) and `~D~` markers
+--      (proposals, not questions) stay inline.
 --
--- Section-parsing is delegated to review._parse_marker_sections so the syntax
--- stays single-source-of-truth across review (per-line) and drill-in
--- (multi-line, since drill-in operates on the joined buffer text).
+--   2. **Accept / reject (review-convention §5).** `<M-a>` and `<M-r>`
+--      resolve the marker at cursor per the §5 table — see `M.resolve`.
+--      Canonical spec: `../ariadne/workshop/targets/review-convention.md`.
+--      Bulk resolve was dropped in #124 M2; resolution is always
+--      operator-initiated per marker (or agentic, §6).
+--
+-- Section-parsing is delegated to review._parse_marker_sections so the
+-- syntax stays single-source-of-truth across review (per-line) and
+-- drill-in (multi-line; drill-in operates on joined buffer text).
+--
+-- See: #123 (quoted-body slot), #124 (strike family + accept/reject split).
 
 local M = {}
 

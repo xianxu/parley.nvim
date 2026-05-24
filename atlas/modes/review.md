@@ -40,8 +40,6 @@ After an optional `<>`, `[]` and `{}` may appear in any order.
 | `<C-g>ve`       | Run the review skill (agent edits per ready markers)            |
 | `<C-g>vf`       | Open the review finder (jump to files with pending markers)     |
 
-The earlier `<C-g>vi` / `<C-g>vr` insertion shortcuts were retired in #124 M3 — `<M-q>` is the single canonical insertion path, and `<M-a>` / `<M-r>` handle per-marker accept/reject.
-
 ## Architecture
 
 Review is implemented as a **skill** in the unified skill system (see `atlas/index.md` §8).
