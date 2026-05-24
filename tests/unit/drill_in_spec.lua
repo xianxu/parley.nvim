@@ -306,139 +306,150 @@ describe("drill_in.gather_and_strip", function()
     end)
 end)
 
-describe("drill_in.resolve_at", function()
-    it("resolves a marker at the cursor — `<Q>[U]` collapses to Q", function()
-        local input = "before 🤖<Term>[what?] after"
-        -- cursor on `<` at byte 12 (after "before 🤖" = 6 + 1 + 4 + 1 = 12)
-        local _, marker = require("parley.drill_in").resolve_at(input, 12)
-        assert.is_not_nil(marker)
+-- ─── §5 resolution table (#124 M2) ─────────────────────────────────────
+-- Pure resolve(marker, mode) implementing the spec §5 table:
+--   ref=nil, chain=[H]                → "" (both)
+--   ref=quote(X), chain=[H]           → X  (both)
+--   ref=quote(X), chain=[H]{R}        → X  (both)
+--   ref=nil, chain={R}                → R (accept) / "" (reject)
+--   ref=nil, chain=[H]{R}             → "" (both)
+--   ref=nil, chain={R}[H]             → "" (both)
+--   ref=strike(D), chain=∅            → "" (accept) / D  (reject)
+--   ref=strike(D), chain={N}          → N (accept) / D  (reject)
+--   ref=strike(D), chain=[N]          → N (accept) / D  (reject)
+--   long chains                       → anchor's kept text (both)
+describe("drill_in.resolve (pure)", function()
+    local function only(text)
+        local markers = drill_in.parse(text)
+        assert.equals(1, #markers, "expected exactly one marker in: " .. text)
+        return markers[1]
+    end
+
+    it("🤖[H] → empty (both modes)", function()
+        local m = only("🤖[hello]")
+        assert.equals("", drill_in.resolve(m, "accept"))
+        assert.equals("", drill_in.resolve(m, "reject"))
     end)
 
-    it("returns plain Q in place of `🤖<Q>[U]`", function()
-        -- "x 🤖<RedShift>[Q] y" — cursor on the `[` of `[Q]`
-        local input = "x 🤖<RedShift>[Q] y"
-        -- "x " = 2 bytes; 🤖 = 4; "<RedShift>" = 10; so byte_start of marker
-        -- = 3, and offset of `[` = 3 + 4 + 10 = 17. Pick offset 17.
-        local new_text, marker = require("parley.drill_in").resolve_at(input, 17)
-        assert.is_not_nil(marker)
-        assert.equals("x RedShift y", new_text)
+    it("🤖<X>[H] → X (both modes)", function()
+        local m = only("🤖<keep>[asks]")
+        assert.equals("keep", drill_in.resolve(m, "accept"))
+        assert.equals("keep", drill_in.resolve(m, "reject"))
     end)
 
-    it("removes the marker entirely when there is no <Q>", function()
-        local input = "before 🤖[just a comment] after"
-        -- Pick a byte inside the [...]: "before " = 7, 🤖 = 4 → 11+; pick 13
-        local new_text, marker = require("parley.drill_in").resolve_at(input, 13)
-        assert.is_not_nil(marker)
-        assert.equals("before  after", new_text)
+    it("🤖<X>[H]{R} → X (both modes, commentary chain discarded)", function()
+        local m = only("🤖<keep>[asks]{replies}")
+        assert.equals("keep", drill_in.resolve(m, "accept"))
+        assert.equals("keep", drill_in.resolve(m, "reject"))
     end)
 
-    it("resolves `🤖<Q>{A}` (no human turn) to Q too", function()
-        local input = "x 🤖<Q>{advice} y"
-        local new_text, marker = require("parley.drill_in").resolve_at(input, 6)
-        assert.is_not_nil(marker)
-        assert.equals("x Q y", new_text)
+    it("🤖{R} → R (accept) / empty (reject)", function()
+        local m = only("🤖{insert me}")
+        assert.equals("insert me", drill_in.resolve(m, "accept"))
+        assert.equals("", drill_in.resolve(m, "reject"))
     end)
 
-    it("returns nil + unchanged text when cursor is outside any marker", function()
-        local input = "before 🤖<Q>[U] after"
-        -- cursor at byte 1 ("b") — outside the marker
-        local new_text, marker = require("parley.drill_in").resolve_at(input, 1)
-        assert.is_nil(marker)
-        assert.equals(input, new_text)
+    it("🤖[H]{R} → empty (both, commentary chain)", function()
+        local m = only("🤖[question]{answer}")
+        assert.equals("", drill_in.resolve(m, "accept"))
+        assert.equals("", drill_in.resolve(m, "reject"))
     end)
 
-    it("only resolves the marker the cursor sits in (not others)", function()
-        local input = "🤖<A>[Qa] 🤖<B>[Qb]"
-        -- Cursor on second marker — first should be untouched.
-        -- "🤖<A>[Qa] " = 4+1+1+1+1+2+1+1 = 12 bytes; pick byte 14 (inside <B>)
-        local new_text, marker = require("parley.drill_in").resolve_at(input, 14)
-        assert.is_not_nil(marker)
-        assert.equals("🤖<A>[Qa] B", new_text)
+    it("🤖{R}[H] → empty (both, commentary chain)", function()
+        local m = only("🤖{suggest}[reply]")
+        assert.equals("", drill_in.resolve(m, "accept"))
+        assert.equals("", drill_in.resolve(m, "reject"))
     end)
 
-    it("works at the marker's leading 🤖 byte", function()
-        local input = "x 🤖<T>[U] y"
-        -- byte 3 = first byte of 🤖
-        local new_text, marker = require("parley.drill_in").resolve_at(input, 3)
-        assert.is_not_nil(marker)
-        assert.equals("x T y", new_text)
+    it("🤖~D~ → empty (accept) / D (reject)", function()
+        local m = only("🤖~delete me~")
+        assert.equals("", drill_in.resolve(m, "accept"))
+        assert.equals("delete me", drill_in.resolve(m, "reject"))
     end)
 
-    it("works at the marker's trailing closing bracket", function()
-        local input = "x 🤖<T>[U] y"
-        -- byte_end = position of closing `]`. Marker spans 3 to 14
-        -- (🤖=4 + <T>=3 + [U]=3 = 10 bytes; 3..12). cursor at 12 = `]`.
-        local new_text, marker = require("parley.drill_in").resolve_at(input, 12)
-        assert.is_not_nil(marker)
-        assert.equals("x T y", new_text)
+    it("🤖~D~{N} → N (accept) / D (reject)", function()
+        local m = only("🤖~old~{new}")
+        assert.equals("new", drill_in.resolve(m, "accept"))
+        assert.equals("old", drill_in.resolve(m, "reject"))
     end)
 
-    -- Strike markers are gated out — M2's accept/reject (#124) owns them
-    it("leaves 🤖~D~ untouched (M2 will wire accept/reject)", function()
-        local input = "x 🤖~delete~ y"
-        local new_text, marker = drill_in.resolve_at(input, 7)
-        assert.is_nil(marker)
-        assert.equals(input, new_text)
+    it("🤖~D~[N] → N (accept) / D (reject)", function()
+        local m = only("🤖~old~[new]")
+        assert.equals("new", drill_in.resolve(m, "accept"))
+        assert.equals("old", drill_in.resolve(m, "reject"))
     end)
 
-    it("leaves 🤖~D~{N} untouched even though chain ends in {N}", function()
-        -- Without this gate, the old pending-path would replace ~D~{N}
-        -- with N silently — pre-empting M2's deliberate accept gesture.
-        local input = "x 🤖~old~{new} y"
-        local new_text, marker = drill_in.resolve_at(input, 7)
-        assert.is_nil(marker)
-        assert.equals(input, new_text)
+    it("🤖[H]{R}[H']{R'} (long commentary chain) → empty (both)", function()
+        local m = only("🤖[q1]{a1}[q2]{a2}")
+        assert.equals("", drill_in.resolve(m, "accept"))
+        assert.equals("", drill_in.resolve(m, "reject"))
+    end)
+
+    it("🤖<X>[H]{R}[H']{R'} → X (both, anchor wins)", function()
+        local m = only("🤖<X>[q1]{a1}[q2]{a2}")
+        assert.equals("X", drill_in.resolve(m, "accept"))
+        assert.equals("X", drill_in.resolve(m, "reject"))
+    end)
+
+    it("🤖~D~{N}[H]{R} → N (accept) / D (reject) — first {N} after strike wins", function()
+        local m = only("🤖~D~{N}[discuss]{further}")
+        assert.equals("N", drill_in.resolve(m, "accept"))
+        assert.equals("D", drill_in.resolve(m, "reject"))
     end)
 end)
 
-describe("drill_in.resolve_all", function()
-    it("strips all 🤖<T>... markers regardless of state", function()
-        local new_text, count = drill_in.resolve_all(
-            "x 🤖<T>[Q] y 🤖<T2>[Q2]{A2} z"
-        )
-        assert.equals("x T y T2 z", new_text)
-        assert.equals(2, count)
+describe("drill_in.accept_at and reject_at", function()
+    it("accept at cursor inside 🤖{R} splices in R", function()
+        local input = "x 🤖{insert me} y"
+        local new_text, m = drill_in.accept_at(input, 7)
+        assert.is_not_nil(m)
+        assert.equals("x insert me y", new_text)
     end)
 
-    it("accepts a trailing `{A}` suggestion when there is no <T>", function()
-        local new_text, count = drill_in.resolve_all("x 🤖{some suggestion} y")
-        assert.equals("x some suggestion y", new_text)
-        assert.equals(1, count)
+    it("reject at cursor inside 🤖{R} removes the marker", function()
+        local input = "x 🤖{insert me} y"
+        local new_text, m = drill_in.reject_at(input, 7)
+        assert.is_not_nil(m)
+        assert.equals("x  y", new_text)
     end)
 
-    it("uses the last `{}` in a chain ending with `{A}`", function()
-        local new_text, count = drill_in.resolve_all("x 🤖{a1}[u1]{a2} y")
-        assert.equals("x a2 y", new_text)
-        assert.equals(1, count)
+    it("accept at cursor inside 🤖~D~{N} splices in N", function()
+        local input = "x 🤖~old~{new} y"
+        local new_text, m = drill_in.accept_at(input, 7)
+        assert.is_not_nil(m)
+        assert.equals("x new y", new_text)
     end)
 
-    it("leaves `[U]`-only markers and empty trailing `{}` alone", function()
-        local new_text, count = drill_in.resolve_all("x 🤖[just review] 🤖[u]{} y")
-        assert.equals("x 🤖[just review] 🤖[u]{} y", new_text)
-        assert.equals(0, count)
+    it("reject at cursor inside 🤖~D~{N} restores D", function()
+        local input = "x 🤖~old~{new} y"
+        local new_text, m = drill_in.reject_at(input, 7)
+        assert.is_not_nil(m)
+        assert.equals("x old y", new_text)
     end)
 
-    it("keeps <T> precedence when marker has both <T> and trailing `{A}`", function()
-        local new_text, count = drill_in.resolve_all("x 🤖<T>[u]{a} y")
-        assert.equals("x T y", new_text)
-        assert.equals(1, count)
+    it("accept at cursor inside 🤖<X>[H] preserves X", function()
+        local input = "x 🤖<keep>[ask] y"
+        local new_text, m = drill_in.accept_at(input, 7)
+        assert.is_not_nil(m)
+        assert.equals("x keep y", new_text)
     end)
 
-    it("returns input unchanged when nothing to resolve", function()
-        local new_text, count = drill_in.resolve_all("plain text")
-        assert.equals("plain text", new_text)
-        assert.equals(0, count)
+    it("returns nil + unchanged text when cursor is outside any marker", function()
+        local input = "before 🤖{R} after"
+        local new_text, m = drill_in.accept_at(input, 1)
+        assert.is_nil(m)
+        assert.equals(input, new_text)
+        new_text, m = drill_in.reject_at(input, 1)
+        assert.is_nil(m)
+        assert.equals(input, new_text)
     end)
 
-    it("skips strike markers — bulk resolve never silently accepts deletions", function()
-        -- M2 (#124) will own accept/reject for ~D~ markers. Until then,
-        -- bulk resolve leaves them alone — a bulk pass should never
-        -- delete or rewrite content the operator hasn't explicitly OK'd.
-        local input = "x 🤖~delete~ 🤖~old~{new} 🤖<T>[Q] y"
-        local new_text, count = drill_in.resolve_all(input)
-        -- Only the 🤖<T>[Q] gets resolved.
-        assert.equals("x 🤖~delete~ 🤖~old~{new} T y", new_text)
-        assert.equals(1, count)
+    it("only touches the marker the cursor sits in (not others)", function()
+        local input = "🤖{first} 🤖{second}"
+        -- cursor on second marker: "🤖{first} " = 4+1+5+1+1 = 12 bytes; pick 14
+        local new_text, m = drill_in.accept_at(input, 14)
+        assert.is_not_nil(m)
+        assert.equals("🤖{first} second", new_text)
     end)
 end)
 

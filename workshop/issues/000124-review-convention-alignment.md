@@ -78,18 +78,25 @@ Detailed design in
       `~X~` mutual exclusion. Also: `gather_and_strip` skips strike-only
       markers, even those with trailing `[N]`.
 
-### M2 — Accept/reject split + table-driven resolution
+### M2 — Accept/reject split + table-driven resolution ✅
 
-- [ ] Add `accept_at(text, offset)` and `reject_at(text, offset)` in
-      `drill_in.lua` implementing spec §5's 10-row table.
-- [ ] Wire `<M-a>` keybinding (new entry in `keybinding_registry.lua`,
-      handler in `init.lua` parallel to `drill_in_resolve_at_cursor`).
-- [ ] Repurpose `<M-r>` handler: replace `resolve_all` call with a
-      `reject_at(...)` cursor-relative call. Drop the second key slot
-      `<C-g>r`.
-- [ ] Delete `drill_in.resolve_all` and `drill_in_resolve` (the bulk
-      handler). Delete `chat_resolve_drill_in` registry entry.
-- [ ] Tests: every row of the 10-row table, both accept and reject.
+- [x] Added pure `resolve(marker, mode)` in `drill_in.lua` implementing
+      the §5 table; wrapped as `accept_at(text, offset)` and
+      `reject_at(text, offset)`. Deleted `resolve_at` (superseded) and
+      `resolve_all` (bulk dropped per operator decision).
+- [x] Added `chat_accept_drill_in` registry entry (`<M-a>`). Renamed
+      `chat_resolve_drill_in` → `chat_reject_drill_in` (`<M-r>` only,
+      `<C-g>r` slot dropped).
+- [x] In `init.lua`: `drill_in_accept_at_cursor` + `drill_in_reject_at_cursor`
+      parallel handlers; removed `drill_in_resolve` (bulk) and the
+      normal-mode resolve-on-marker fallback in `chat_drill_in` (n now
+      always inserts; accept/reject have dedicated keys).
+- [x] Updated both `drill_in_callbacks` wiring sites (prep_chat,
+      setup_markdown_keymaps).
+- [x] Tests: full §5 table coverage in new `describe("drill_in.resolve")`
+      block (12 cases) + `describe("drill_in.accept_at and reject_at")`
+      block (7 cases). Old `resolve_at` / `resolve_all` test blocks
+      deleted with their underlying API.
 
 ### M3 — `<M-q>` normalization + retire review-skill insertion
 
@@ -150,3 +157,19 @@ Two Nits also addressed: top-of-file grammar comment in drill_in.lua
 updated to include the strike branch; atlas `drill_in.md` got a TBD
 note pointing at M2 for resolution semantics. Test count up from 58 to
 66 in drill_in_spec, +2 in review_spec. All green.
+
+**2026-05-24 — M2 close.** Pure `resolve(marker, mode)` implementing
+the §5 table; `accept_at` / `reject_at` wrap with splice. Algorithm:
+quote anchor → preserve X (both); strike anchor → accept uses first
+section's text or "", reject restores D; no anchor → bare `{R}` is the
+only proposal (accept→R / reject→""), longer chains and bare `[H]` are
+commentary (→ "" both modes).
+
+Keybinding split: `<M-a>` accepts, `<M-r>` rejects (single key each,
+`<C-g>r` slot dropped). `<M-q>` normal-mode lost its
+resolve-or-insert overload — now always inserts; accept/reject have
+dedicated bindings.
+
+Test count: drill_in_spec at 85 (+19 net: 19 new for resolve/accept/
+reject, 16 old removed for deleted API). Lint clean, full unit +
+integration suite green. Code review pending.

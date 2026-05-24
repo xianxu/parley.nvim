@@ -138,23 +138,49 @@ function M.gather_and_strip(text)
     return blocks, splice(text, replacements)
 end
 
---- Resolve a single marker that contains the given byte offset.
---- - If the marker has `<T>` body → replace the marker with plain T.
---- - If the marker has no `<T>` → remove the marker entirely.
---- The matched marker is returned so callers can position the cursor.
---- @param text string
---- @param offset integer  byte offset (1-based) into `text`
---- @return string new_text
---- @return table|nil marker  the resolved marker, or nil if cursor was outside any marker
-function M.resolve_at(text, offset)
+--- Resolve a marker to its final inline text per the review-convention §5
+--- table. Pure — no buffer side effects. Used by accept_at / reject_at;
+--- exposed for direct testing.
+---
+--- Rules (see ariadne/workshop/targets/review-convention.md §5):
+---   1. `<X>` anchor preserves X (both modes).
+---   2. `~D~` anchor:
+---        accept → first `{N}` or `[N]` after the strike (or "" if none).
+---        reject → D.
+---   3. No anchor:
+---        bare `{R}` (chain length 1, single agent block) is the only
+---        proposal form here:
+---          accept → R, reject → "".
+---        Anything else (just `[H]`, dialogue chains like `[H]{R}`,
+---        `{R}[H]`, longer) is pure commentary: "" both modes.
+--- @param marker table  parsed marker (from M.parse)
+--- @param mode string   "accept" | "reject"
+--- @return string
+function M.resolve(marker, mode)
+    if marker.quoted then
+        return marker.quoted.text
+    end
+    if marker.strike then
+        if mode == "accept" then
+            local first = marker.sections[1]
+            return first and first.text or ""
+        else
+            return marker.strike.text
+        end
+    end
+    -- No anchor: only a bare `{R}` is a proposal; everything else is commentary.
+    if #marker.sections == 1 and marker.sections[1].type == "agent" then
+        if mode == "accept" then return marker.sections[1].text end
+        return ""
+    end
+    return ""
+end
+
+local function resolve_at_with_mode(text, offset, mode)
     local markers = M.parse(text)
     for _, m in ipairs(markers) do
         if offset >= m.byte_start and offset <= m.byte_end then
-            -- Strike markers are out of scope here — accept/reject lives
-            -- in M2's table-driven resolution (#124). Until then, leave
-            -- them untouched rather than guess at intent.
-            if m.strike then return text, nil end
-            local replacement = m.quoted and m.quoted.text or ""
+            local replacement = M.resolve(m, mode)
             local new_text = text:sub(1, m.byte_start - 1) .. replacement .. text:sub(m.byte_end + 1)
             return new_text, m
         end
@@ -162,37 +188,22 @@ function M.resolve_at(text, offset)
     return text, nil
 end
 
---- Resolve every marker that has an "accepted text" back to that text (any state):
----   * marker with `<T>` body → T (T wins even if a trailing `{A}` exists)
----   * marker without `<T>` whose last section is non-empty `{A}` → A
---- Other markers (no `<T>`, no trailing non-empty `{}`) are left alone.
+--- Accept the marker at `offset` per §5 — splice its accepted text in place.
 --- @param text string
+--- @param offset integer  byte offset (1-based) into `text`
 --- @return string new_text
---- @return integer count
-function M.resolve_all(text)
-    local markers = M.parse(text)
-    local replacements = {}
-    for _, m in ipairs(markers) do
-        -- Strike markers (`~D~`, `~D~{N}`, `~D~[N]`) are skipped here;
-        -- accept/reject is M2's deliberate per-marker decision (#124),
-        -- and a bulk accept would silently rewrite D → N for replacements.
-        if not m.strike then
-            local replacement
-            if m.quoted then
-                replacement = m.quoted.text
-            elseif m.pending then
-                replacement = m.sections[#m.sections].text
-            end
-            if replacement then
-                table.insert(replacements, {
-                    byte_start = m.byte_start,
-                    byte_end = m.byte_end,
-                    replacement = replacement,
-                })
-            end
-        end
-    end
-    return splice(text, replacements), #replacements
+--- @return table|nil marker  the resolved marker, or nil if cursor was outside any marker
+function M.accept_at(text, offset)
+    return resolve_at_with_mode(text, offset, "accept")
+end
+
+--- Reject the marker at `offset` per §5 — splice its rejection text in place.
+--- @param text string
+--- @param offset integer
+--- @return string new_text
+--- @return table|nil marker
+function M.reject_at(text, offset)
+    return resolve_at_with_mode(text, offset, "reject")
 end
 
 --- Format one drill-in block for the next user turn.

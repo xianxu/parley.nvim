@@ -25,7 +25,7 @@ The chat-respond pipeline gathers every ready marker (with or without `<T>`) —
 
 See [#123](../../workshop/issues/000123-quoted-body-marker-syntax.md) for the rationale behind `<T>`. See [#124](../../workshop/issues/000124-review-convention-alignment.md) and the canonical [review-convention target](../../../ariadne/workshop/targets/review-convention.md) for the strike family and the broader convention parley.nvim implements.
 
-> **Resolution semantics for `~X~` are TBD.** As of #124 M1, parsing and highlighting are done; accept/reject is wired in M2 (`<M-a>` / `<M-r>`). Until M2 ships, bulk `<C-g>r` and per-marker `<M-r>` skip strike markers rather than silently rewrite them.
+Accept/reject for `~X~` and the full §5 table land in #124 M2 (`<M-a>` / `<M-r>`).
 
 ## Lifecycle
 
@@ -40,7 +40,7 @@ See [#123](../../workshop/issues/000123-quoted-body-marker-syntax.md) for the ra
    - Marker with `<T>` body → inline replaced by plain `T`.
    - Marker without `<T>` body → marker removed entirely (whitespace not normalized).
 
-4. **Resolve** — `<C-g>r` (normal mode) buffer-wide strips every `🤖<T>…` to plain `T` ("resolve discussion chain"). Markers without `<T>` (plain review annotations / human turns) are left alone.
+4. **Resolve** — `<M-a>` accepts the marker at cursor and `<M-r>` rejects it, per the §5 table. Bulk-resolve was dropped in #124 M2 — operators resolve markers one at a time, or ask an agent to walk the chains (agentic resolution, §6 of the canonical target).
 
 ## Resubmit interaction
 
@@ -78,9 +78,9 @@ Both parley and ariadne (`/fix` skill) parse this marker family identically. The
 
 ## Key files
 
-- `lua/parley/drill_in.lua` — pure-function module (`parse`, `gather_and_strip`, `resolve_all`, `format_block`, `format_blocks`, `wrap`, `append_blocks`).
+- `lua/parley/drill_in.lua` — pure-function module (`parse`, `gather_and_strip`, `resolve`, `accept_at`, `reject_at`, `format_block`, `format_blocks`, `wrap`, `append_blocks`).
 - `lua/parley/chat_respond.lua` — pre-processing hook before message build (gates on resubmit detection).
-- `lua/parley/init.lua` — `<C-g>q` (visual) and `<C-g>r` (normal) wiring inside `prep_chat`.
+- `lua/parley/init.lua` — `<M-q>` (insert), `<M-a>` (accept), `<M-r>` (reject) wiring inside `prep_chat` / `setup_markdown_keymaps`.
 - `lua/parley/skills/review/init.lua` — shared section parser (`_parse_marker_sections`).
 - `lua/parley/buffer_edit.lua` — `replace_all_lines` helper used to write the rewritten buffer in one shot.
 - `tests/unit/drill_in_spec.lua` — unit specs for the pure module.
@@ -88,17 +88,22 @@ Both parley and ariadne (`/fix` skill) parse this marker family identically. The
 
 ## Keybindings (parley_buffer scope, buffer-local)
 
-The drill-in keymaps are wired into the shared `parley_buffer` scope so
+The marker keymaps are wired into the shared `parley_buffer` scope so
 they work in both chat buffers and plain markdown buffers (notes, issues,
 parley files outside configured chat roots — anywhere `prep_md` runs).
 Register-side: `M.prep_chat` and `M.setup_markdown_keymaps` both pass the
 same `drill_in_callbacks(buf)` table to `register_buffer`.
 
-| Binding   | Mode | Action                                               |
-|-----------|------|------------------------------------------------------|
-| `<C-g>q` / `<M-q>` | v/x  | Wrap selection as `🤖<T>[]`, cursor inside `[]` |
-| `<C-g>q` / `<M-q>` | i    | Insert bare `🤖[]` at cursor, stay in insert mode inside `[]` |
-| `<C-g>q` / `<M-q>` | n    | If cursor is inside a marker → resolve it (`<Q>…` → `Q`, no `<Q>` → remove). Otherwise insert bare `🤖[]` and enter insert. |
-| `<C-g>r`  | n    | Resolve every `🤖<T>…` in the buffer to `T` (whole-chain pass) |
+| Binding              | Mode | Action                                               |
+|----------------------|------|------------------------------------------------------|
+| `<C-g>q` / `<M-q>`   | v/x  | Wrap selection as `🤖<T>[]`, cursor inside `[]` |
+| `<C-g>q` / `<M-q>`   | i, n | Insert bare `🤖[]` at cursor, cursor inside `[]` |
+| `<M-a>`              | n    | Accept the marker at cursor per review-convention §5 |
+| `<M-r>`              | n    | Reject the marker at cursor per review-convention §5 |
 
-The `<C-g>r` slot was previously bound to `chat_toggle_raw_request` (and `<C-g>R` to `chat_toggle_raw_response`); both were removed. The underlying `:ToggleRawRequest` / `:ToggleRawResponse` commands stay reachable.
+Accept/reject semantics (the full table) live in the canonical [review-convention target](../../../ariadne/workshop/targets/review-convention.md) §5. In summary:
+
+- `<X>` anchor → X preserved (both modes)
+- `~D~` anchor → accept removes D (or splices in the first `{N}`/`[N]` after the strike); reject restores D
+- Bare `🤖{R}` → accept splices R; reject removes the marker
+- Everything else with no anchor (pure commentary chains) → empty (both modes)

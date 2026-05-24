@@ -1422,44 +1422,29 @@ local function drill_in_visual(buf)
 	vim.schedule(function() vim.cmd("startinsert") end)
 end
 
-local function drill_in_resolve(buf)
-	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-	local text = table.concat(lines, "\n")
-	local new_text, count = _drill_in_mod.resolve_all(text)
-	if count == 0 then
-		M.logger.info("Drill-in resolve: no markers to strip")
-		return
-	end
-	vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(new_text, "\n", { plain = true }))
-	M.logger.info("Drill-in resolve: stripped " .. count .. " marker(s)")
-end
-
--- Resolve the single marker the cursor sits inside, if any. Returns true
--- when a marker was resolved (so the caller knows to skip fallback action).
--- - 🤖<Q>[…]  → buffer text becomes `Q`
--- - 🤖[…]     → marker removed entirely
+-- Accept or reject the marker the cursor sits inside per review-convention
+-- §5 (#124). Returns true when a marker was acted on; false otherwise.
 -- Cursor lands at the byte position where the marker used to start.
-local function drill_in_resolve_at_cursor(buf)
+local function drill_in_resolve_at_cursor_with_mode(buf, mode)
 	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 	local text = table.concat(lines, "\n")
 	local cursor = vim.api.nvim_win_get_cursor(0)
-	local row = cursor[1]   -- 1-indexed
-	local col = cursor[2]   -- 0-indexed bytes
+	local row = cursor[1]
+	local col = cursor[2]
 
 	local offset = 0
 	for i = 1, row - 1 do
-		offset = offset + #lines[i] + 1   -- +1 for "\n"
+		offset = offset + #lines[i] + 1
 	end
-	offset = offset + col + 1            -- 1-based byte offset
+	offset = offset + col + 1
 
-	local new_text, m = _drill_in_mod.resolve_at(text, offset)
+	local fn = mode == "accept" and _drill_in_mod.accept_at or _drill_in_mod.reject_at
+	local new_text, m = fn(text, offset)
 	if not m then return false end
 
 	local new_lines = vim.split(new_text, "\n", { plain = true })
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, new_lines)
 
-	-- Position cursor at the byte where the marker started (= start of the
-	-- replacement Q, or where the deletion happened). Map back to (row, col).
 	local target = m.byte_start
 	local target_row, target_col = 1, 0
 	local pos = 1
@@ -1478,6 +1463,14 @@ local function drill_in_resolve_at_cursor(buf)
 	return true
 end
 
+local function drill_in_accept_at_cursor(buf)
+	return drill_in_resolve_at_cursor_with_mode(buf, "accept")
+end
+
+local function drill_in_reject_at_cursor(buf)
+	return drill_in_resolve_at_cursor_with_mode(buf, "reject")
+end
+
 -- Insert-mode: drop a bare `🤖[]` annotation marker at the cursor and place
 -- the cursor between `[` and `]` so the user can type their comment without
 -- leaving insert mode. No `<>` quoted body — that form is for visual-mode
@@ -1494,8 +1487,13 @@ local function drill_in_insert(buf)
 	vim.api.nvim_win_set_cursor(0, { row + 1, col + 5 })
 end
 
--- Build the registry callbacks table for drill-in. Identical shape used in
--- both prep_chat and setup_markdown_keymaps.
+-- Build the registry callbacks table for drill-in / review markers.
+-- Identical shape used in both prep_chat and setup_markdown_keymaps.
+--
+-- Marker convention bindings (see review-convention target, #124):
+--   <M-q> / <C-g>q  — insert a marker (wrap selection or insert bare)
+--   <M-a>           — accept the marker at cursor per §5
+--   <M-r>           — reject the marker at cursor per §5
 local function drill_in_callbacks(buf)
 	return {
 		chat_drill_in = {
@@ -1509,16 +1507,15 @@ local function drill_in_callbacks(buf)
 			end,
 			i = function() drill_in_insert(buf) end,
 			n = function()
-				-- If the cursor sits inside a marker, resolve it (collapse to
-				-- Q if `<Q>` is present, otherwise remove the marker). Falls
-				-- back to inserting a fresh `🤖[]` annotation when there's no
-				-- marker under the cursor.
-				if drill_in_resolve_at_cursor(buf) then return end
+				-- Always insert in normal mode. Accept/reject have their
+				-- own dedicated bindings (<M-a>, <M-r>) per the review
+				-- convention; <M-q> doesn't overload to mean both.
 				drill_in_insert(buf)
 				vim.cmd("startinsert")
 			end,
 		},
-		chat_resolve_drill_in = function() drill_in_resolve(buf) end,
+		chat_accept_drill_in = function() drill_in_accept_at_cursor(buf) end,
+		chat_reject_drill_in = function() drill_in_reject_at_cursor(buf) end,
 	}
 end
 
@@ -1673,7 +1670,8 @@ M.prep_chat = function(buf, file_name)
 				vim.wo.foldenable = not vim.wo.foldenable
 			end,
 			chat_drill_in = drill_in_cbs.chat_drill_in,
-			chat_resolve_drill_in = drill_in_cbs.chat_resolve_drill_in,
+			chat_accept_drill_in = drill_in_cbs.chat_accept_drill_in,
+			chat_reject_drill_in = drill_in_cbs.chat_reject_drill_in,
 		},
 		M.helpers.set_keymap
 	)
@@ -1884,7 +1882,8 @@ M.setup_markdown_keymaps = function(buf)
 				v = md_insert_inline_branch_ref,
 			},
 			chat_drill_in = drill_in_cbs.chat_drill_in,
-			chat_resolve_drill_in = drill_in_cbs.chat_resolve_drill_in,
+			chat_accept_drill_in = drill_in_cbs.chat_accept_drill_in,
+			chat_reject_drill_in = drill_in_cbs.chat_reject_drill_in,
 			-- markdown scope
 			md_add_chat_ref = {
 				n = function()
