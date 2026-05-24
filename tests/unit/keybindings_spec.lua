@@ -45,7 +45,7 @@ describe("key bindings help", function()
         assert.is_true(has_line(lines, "<C-g>o", "Open file reference"))
         -- Should NOT include markdown or finder keys
         assert.is_false(has_line(lines, "<C-a>", "Cycle recency window left"))
-        assert.is_false(has_line(lines, "<C-g>vi", "Insert review marker"))
+        assert.is_false(has_line(lines, "<C-g>ve", "Apply review marker"))
     end)
 
     it("chat_finder context shows only finder keys", function()
@@ -87,7 +87,7 @@ describe("key bindings help", function()
         assert.is_true(has_line(lines, "<C-g>?", "Show key bindings"))
         assert.is_true(has_line(lines, "<C-g>o", "Open file reference"))
         assert.is_true(has_line(lines, "<C-g>d", "Delete file"))
-        assert.is_true(has_line(lines, "<C-g>vi", "Insert review marker"))
+        assert.is_true(has_line(lines, "<C-g>ve", "Apply review marker"))
         -- Should NOT include chat-specific keys
         assert.is_false(has_line(lines, "<C-g><C-g>", "Respond"))
     end)
@@ -169,9 +169,8 @@ describe("key bindings help", function()
         setup_parley()
 
         local lines = parley._keybinding_help_lines("markdown")
-        assert.is_true(has_line(lines, "<C-g>vi", "Insert review marker"))
-        assert.is_true(has_line(lines, "<C-g>vr", "AI review"))
         assert.is_true(has_line(lines, "<C-g>ve", "Apply review marker"))
+        assert.is_true(has_line(lines, "<C-g>vf", "Review finder"))
     end)
 
     it("issue context includes vision shortcuts via repo ancestry", function()

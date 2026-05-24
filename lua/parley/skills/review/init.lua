@@ -475,66 +475,12 @@ M.setup_keymaps = function(buf)
 
     scan_on_enter(buf)
 
-    -- <C-g>vi: insert 🤖[] marker (human-initiated)
-    local insert_cfg = cfg.review_shortcut_insert
-    if insert_cfg then
-        for _, mode in ipairs(insert_cfg.modes or {}) do
-            if mode == "v" or mode == "x" then
-                set_keymap({ buf }, mode, insert_cfg.shortcut, function()
-                    local start_pos = vim.fn.getpos("'<")
-                    local end_pos = vim.fn.getpos("'>")
-                    local start_line = start_pos[2]
-                    local start_col = start_pos[3]
-                    local end_line = end_pos[2]
-                    local end_col = end_pos[3]
-
-                    if start_line == end_line then
-                        local line = vim.api.nvim_buf_get_lines(buf, start_line - 1, start_line, false)[1]
-                        local before = line:sub(1, start_col - 1)
-                        local selected = line:sub(start_col, end_col)
-                        local after = line:sub(end_col + 1)
-                        vim.api.nvim_buf_set_lines(buf, start_line - 1, start_line, false, {
-                            before .. "🤖[" .. selected .. "]" .. after,
-                        })
-                    end
-                end, "Parley review: wrap selection with marker")
-            else
-                set_keymap({ buf }, mode, insert_cfg.shortcut, function()
-                    local cursor = vim.api.nvim_win_get_cursor(0)
-                    local row = cursor[1] - 1
-                    local col = cursor[2]
-                    local line = vim.api.nvim_buf_get_lines(buf, row, row + 1, false)[1] or ""
-                    local before = line:sub(1, col)
-                    local after = line:sub(col + 1)
-                    vim.api.nvim_buf_set_lines(buf, row, row + 1, false, {
-                        before .. "🤖[]" .. after,
-                    })
-                    vim.api.nvim_win_set_cursor(0, { row + 1, col + 5 })
-                    vim.cmd("startinsert")
-                end, "Parley review: insert marker")
-            end
-        end
-    end
-
-    -- <C-g>vR: insert 🤖{} marker (agent-initiated)
-    local insert_machine_cfg = cfg.review_shortcut_insert_machine
-    if insert_machine_cfg then
-        for _, mode in ipairs(insert_machine_cfg.modes or {}) do
-            set_keymap({ buf }, mode, insert_machine_cfg.shortcut, function()
-                local cursor = vim.api.nvim_win_get_cursor(0)
-                local row = cursor[1] - 1
-                local col = cursor[2]
-                local line = vim.api.nvim_buf_get_lines(buf, row, row + 1, false)[1] or ""
-                local before = line:sub(1, col)
-                local after = line:sub(col + 1)
-                vim.api.nvim_buf_set_lines(buf, row, row + 1, false, {
-                    before .. "🤖{}" .. after,
-                })
-                vim.api.nvim_win_set_cursor(0, { row + 1, col + 5 })
-                vim.cmd("startinsert")
-            end, "Parley review: insert machine marker")
-        end
-    end
+    -- Marker insertion lives in the shared `chat_drill_in` binding
+    -- (<M-q> / <C-g>q) per the review-convention target — see
+    -- `drill_in_callbacks` in lua/parley/init.lua and #124. The
+    -- review-specific insertion shortcuts (<C-g>vi / <C-g>vr) were
+    -- retired because they duplicated that path with divergent
+    -- output shapes.
 
     -- <C-g>ve: run review
     local edit_cfg = cfg.review_shortcut_edit

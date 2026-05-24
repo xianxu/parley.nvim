@@ -98,24 +98,27 @@ Detailed design in
       block (7 cases). Old `resolve_at` / `resolve_all` test blocks
       deleted with their underlying API.
 
-### M3 — `<M-q>` normalization + retire review-skill insertion
+### M3 — `<M-q>` normalization + retire review-skill insertion ✅
 
-- [ ] Fix `<M-q>` insert path: drill-in's `wrap` already produces
-      `🤖<text>[]` (matches spec). Insert path (`drill_in_insert`)
-      already produces `🤖[]`. Adjust both so the cursor lands inside the
-      bracket consistently — current `<M-q>` may diverge slightly from
-      spec on cursor position; verify and align.
-- [ ] Remove `<C-g>vi` from `keybinding_registry.lua` (review_insert)
-      and `config.lua` (review_shortcut_insert).
-- [ ] Remove `<C-g>vr` from `keybinding_registry.lua`
-      (review_insert_machine) and `config.lua`
-      (review_shortcut_insert_machine).
-- [ ] Remove the corresponding handler block in
-      `lua/parley/skills/review/init.lua` (lines ~437-505).
-- [ ] Update `lua/parley/skills/review/SKILL.md` with the new grammar
-      and binding set.
-- [ ] Update atlas entry mentioning marker grammar to point at the
-      canonical target.
+- [x] `<M-q>` insertion paths verified spec-conformant. `drill_in.wrap`
+      produces `🤖<sel>[]` with cursor between `[` and `]` (visual);
+      `drill_in_insert` produces `🤖[]` with cursor between `[` and `]`
+      (normal/insert). No code change required — pinned by existing
+      tests.
+- [x] Removed `<C-g>vi` (review_insert) from `keybinding_registry.lua`
+      and `review_shortcut_insert` from `config.lua`.
+- [x] Removed `<C-g>vr` (review_insert_machine) from
+      `keybinding_registry.lua` and `review_shortcut_insert_machine`
+      from `config.lua`.
+- [x] Removed the corresponding insertion handler block from
+      `lua/parley/skills/review/init.lua` (M.setup_keymaps).
+- [x] Updated `keybindings_spec.lua` assertions to match the new
+      help-listing surface.
+- [x] Updated SKILL.md (M2 already did strike grammar + agentic
+      resolution; M3 didn't need to touch it again).
+- [x] Updated atlas: `atlas/modes/review.md` keybinding table rewritten,
+      config block updated; `atlas/skills/skill-system.md` fast-path
+      line corrected.
 
 ## Log
 
@@ -199,3 +202,15 @@ Test additions covering nit findings: `🤖<X>` alone, `🤖<X>{R}`,
 (byte_start / byte_end), adjacent markers `🤖{R1}🤖{R2}`, multi-line
 replacement cursor positioning, reject of `~D~{N}`. drill_in_spec at
 76 cases.
+
+**2026-05-24 — M3 close.** Insertion verified already
+spec-conformant — `drill_in.wrap` outputs `🤖<sel>[]` with cursor
+between `[` and `]`, `drill_in_insert` outputs `🤖[]` with the same
+cursor placement. No code change needed.
+
+Retired `<C-g>vi` (review_insert) and `<C-g>vr` (review_insert_machine):
+config keys, registry entries, and `M.setup_keymaps` handler block
+deleted. The `chat_drill_in` binding (`<M-q>` / `<C-g>q`) is now the
+single canonical insertion path. Atlas (`modes/review.md`,
+`skills/skill-system.md`) and `tests/unit/keybindings_spec.lua`
+updated accordingly. Full unit + integration suite green; lint clean.

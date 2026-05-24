@@ -32,19 +32,15 @@ After an optional `<>`, `[]` and `{}` may appear in any order.
 
 ## Keybindings (non-chat markdown only)
 
-| Binding    | Action                                          |
-|------------|-------------------------------------------------|
-| `<C-g>vi`  | Insert `🤖[]` marker (visual: wrap selection)  |
-| `<C-g>vR`  | Insert `🤖{}` agent-initiated marker            |
-| `<C-g>ve`  | Light edit — conservative, preserve voice/tone  |
-| `<C-g>vr`  | Heavy revision — substantive rewriting allowed  |
+| Binding         | Action                                                          |
+|-----------------|-----------------------------------------------------------------|
+| `<M-q>` / `<C-g>q` | Insert `🤖<sel>[]` (visual) or `🤖[]` (normal/insert). Shared with chat — see `atlas/chat/drill_in.md`. |
+| `<M-a>`         | Accept the marker at cursor per [review-convention §5](../../../ariadne/workshop/targets/review-convention.md) |
+| `<M-r>`         | Reject the marker at cursor per review-convention §5            |
+| `<C-g>ve`       | Run the review skill (agent edits per ready markers)            |
+| `<C-g>vf`       | Open the review finder (jump to files with pending markers)     |
 
-## Editing Levels
-
-- **Light edit** (`<C-g>ve`): Copy editing. Fix what's pointed out, preserve
-  structure/tone/wording. Agent asks `{}` questions when ambiguous.
-- **Heavy revision** (`<C-g>vr`): Substantive editing. Agent can rewrite
-  paragraphs, restructure sections. Uses best judgment on ambiguity.
+The earlier `<C-g>vi` / `<C-g>vr` insertion shortcuts were retired in #124 M3 — `<M-q>` is the single canonical insertion path, and `<M-a>` / `<M-r>` handle per-marker accept/reject.
 
 ## Architecture
 
@@ -66,10 +62,10 @@ Review is implemented as a **skill** in the unified skill system (see `atlas/ind
 ```lua
 review_agent = "",              -- agent name (deprecated; use skills config)
 review_highlight_duration = 2000, -- highlight fade time in ms
-review_shortcut_insert = { modes = { "n", "v" }, shortcut = "<C-g>vi" },
 review_shortcut_edit   = { modes = { "n" }, shortcut = "<C-g>ve" },
-review_shortcut_revise = { modes = { "n" }, shortcut = "<C-g>vr" },
--- Or via skill picker: <C-g>s → review → edit/revise
+review_shortcut_finder = { modes = { "n", "i" }, shortcut = "<C-g>vf" },
+-- Marker insertion: see drill_in_callbacks in lua/parley/init.lua
+-- (shared <M-q> / <C-g>q binding)
 ```
 
 ## Key Files

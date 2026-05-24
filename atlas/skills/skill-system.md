@@ -5,7 +5,7 @@ Unified pipeline for AI-powered buffer editing. A skill sends the current buffer
 ## Entry Points
 
 - `<C-g>s` — skill picker (cascading typeahead: select skill → select args → run)
-- `<C-g>ve` / `<C-g>vr` — fast paths for review skill (bypass picker)
+- `<C-g>ve` — fast path for review skill (bypass picker)
 
 ## Skill Definition
 

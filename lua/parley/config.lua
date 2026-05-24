@@ -381,9 +381,9 @@ local config = {
 	global_shortcut_note_dirs = { modes = { "n", "i" }, shortcut = "<C-n>h" },
 	-- shortcut for opening oil.nvim file explorer
 	global_shortcut_oil = { modes = { "n" }, shortcut = "<leader>fo" },
-	-- document review shortcuts (markdown files only, not chat buffers)
-	review_shortcut_insert = { modes = { "n", "v" }, shortcut = "<C-g>vi" },
-	review_shortcut_insert_machine = { modes = { "n" }, shortcut = "<C-g>vr" },
+	-- document review shortcuts (markdown files only, not chat buffers).
+	-- Marker insertion has moved to the shared <M-q> / <C-g>q drill-in
+	-- binding — see lua/parley/init.lua `drill_in_callbacks` and #124.
 	review_shortcut_edit = { modes = { "n" }, shortcut = "<C-g>ve" },
 	review_shortcut_finder = { modes = { "n", "i" }, shortcut = "<C-g>vf" },
 	-- agent to use for document review (defaults to Claude-Sonnet)

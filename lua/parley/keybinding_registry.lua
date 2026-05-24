@@ -680,28 +680,6 @@ M.entries = {
 		buffer_local = true,
 	},
 	{
-		id = "review_insert",
-		config_key = "review_shortcut_insert",
-		default_key = "<C-g>vi",
-		default_modes = { "n", "v" },
-		scope = "markdown",
-		desc = "Parley review: insert marker",
-		help_desc = "Insert review marker",
-		buffer_local = true,
-		help_only = true, -- registered by review skill
-	},
-	{
-		id = "review_insert_machine",
-		config_key = "review_shortcut_insert_machine",
-		default_key = "<C-g>vr",
-		default_modes = { "n" },
-		scope = "markdown",
-		desc = "Parley review: insert machine marker",
-		help_desc = "AI review (insert markers)",
-		buffer_local = true,
-		help_only = true, -- registered by review skill
-	},
-	{
 		id = "review_edit",
 		config_key = "review_shortcut_edit",
 		default_key = "<C-g>ve",
