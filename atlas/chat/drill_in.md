@@ -12,14 +12,18 @@ The marker syntax is the same one the [review skill](../modes/review.md) uses on
 🤖[Q]               — bare human turn, no quoted body
 🤖[Q1]{A1}[Q2]…     — chain without a quoted body
 🤖{A}               — agent annotation, no quoted body, no human turn
+🤖~D~               — proposed deletion of D
+🤖~D~{N}            — proposed replacement of D with N (agent-authored)
+🤖~D~[N]            — proposed replacement of D with N (human-authored)
 ```
 
 - **Has quoted body** = `<T>` is present (the first slot, immediately after 🤖). Optional and at most one. Drill-in's resolve-chain command only touches markers with `<T>`.
-- **Ready** = last section is a non-empty `[]` (matches the review-skill ready definition). Markers ending in `{}` are *pending* and stay inline as agent annotations.
+- **Has strike** = `~D~` is present (same slot as `<T>` — mutually exclusive). Strike markers are *proposals* (deletion or replacement), not questions to the agent.
+- **Ready** = last section is a non-empty `[]` (matches the review-skill ready definition). Markers ending in `{}` are *pending* and stay inline as agent annotations. Strike markers are *never* ready (even with trailing `[]`, since they're proposals not questions).
 
-The chat-respond pipeline gathers every ready marker (with or without `<T>`) — the difference is in how the marker collapses inline (see Lifecycle step 3).
+The chat-respond pipeline gathers every ready marker (with or without `<T>`) — the difference is in how the marker collapses inline (see Lifecycle step 3). Strike markers are skipped entirely.
 
-See [#123](../../workshop/issues/000123-quoted-body-marker-syntax.md) for the rationale behind `<T>` (disambiguates "agent commentary `{A}`" from "quoted body T" — both used to be `🤖{T}…`).
+See [#123](../../workshop/issues/000123-quoted-body-marker-syntax.md) for the rationale behind `<T>`. See [#124](../../workshop/issues/000124-review-convention-alignment.md) and the canonical [review-convention target](../../../ariadne/workshop/targets/review-convention.md) for the strike family and the broader convention parley.nvim implements.
 
 ## Lifecycle
 

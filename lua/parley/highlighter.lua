@@ -429,7 +429,7 @@ local function compute_markdown_highlights(buf, start_line, end_line)
         while true do
             local pos = line:find("🤖", search_start, true)
             if not pos then break end
-            local sections, end_pos, quoted = review._parse_marker_sections(line, pos, 4)
+            local sections, end_pos, quoted, strike = review._parse_marker_sections(line, pos, 4)
             if quoted then
                 -- Highlight the 🤖 + `<…>` together so the whole "this marker
                 -- refers to a precise quote" prefix reads as one unit.
@@ -438,6 +438,16 @@ local function compute_markdown_highlights(buf, start_line, end_line)
                     hl_group = "ParleyReviewQuoted",
                     col_start = pos - 1,             -- 0-indexed pos of 🤖
                     col_end = quoted.byte_end,       -- inclusive close `>`
+                })
+            elseif strike then
+                -- Strikethrough for the `~X~` content (custom rendering — we
+                -- own this since markdown's strikethrough is disabled
+                -- buffer-wide to avoid false positives on `~/path` tildes).
+                result[row] = result[row] or {}
+                table.insert(result[row], {
+                    hl_group = "ParleyReviewStrike",
+                    col_start = pos - 1,             -- 0-indexed pos of 🤖
+                    col_end = strike.byte_end,       -- inclusive close `~`
                 })
             end
             for _, section in ipairs(sections) do
@@ -687,6 +697,11 @@ M.setup_highlights = function()
     -- Reverse + bold makes `🤖<…>` pop against any colorscheme so the user
     -- can spot the precise-quote scope at a glance.
     vim.api.nvim_set_hl(0, "ParleyReviewQuoted", { reverse = true, bold = true })
+    -- Review markers — ~strike~ proposed-deletion body. Strikethrough is
+    -- the visual cue per the review-convention target. Markdown's native
+    -- strikethrough is disabled buffer-wide (see disable_strikethrough)
+    -- so this is the only place strikethrough renders.
+    vim.api.nvim_set_hl(0, "ParleyReviewStrike", { strikethrough = true })
 
     -- Interview timestamps - Highlighted timestamp lines like :15min
     -- Use only background color to allow search highlights to show through

@@ -91,6 +91,91 @@ describe("drill_in.parse", function()
         assert.equals("a [b", markers[1].quoted.text)
         assert.equals(0, #markers[1].sections)
     end)
+
+    -- ── ~X~ deletion family (#124 M1) ────────────────────────────────
+    it("parses 🤖~D~ as a strike-only marker (deletion proposal)", function()
+        local markers = drill_in.parse("foo 🤖~delete me~ bar")
+        assert.equals(1, #markers)
+        local m = markers[1]
+        assert.is_not_nil(m.strike)
+        assert.equals("delete me", m.strike.text)
+        assert.is_nil(m.quoted)
+        assert.equals(0, #m.sections)
+        assert.is_false(m.ready)
+        assert.is_false(m.pending)
+    end)
+
+    it("parses 🤖~D~{N} as strike + agent replacement", function()
+        local markers = drill_in.parse("🤖~old~{new}")
+        assert.equals(1, #markers)
+        assert.equals("old", markers[1].strike.text)
+        assert.is_nil(markers[1].quoted)
+        assert.equals(1, #markers[1].sections)
+        assert.equals("agent", markers[1].sections[1].type)
+        assert.equals("new", markers[1].sections[1].text)
+    end)
+
+    it("parses 🤖~D~[N] as strike + human replacement", function()
+        local markers = drill_in.parse("🤖~old~[new]")
+        assert.equals(1, #markers)
+        assert.equals("old", markers[1].strike.text)
+        assert.equals(1, #markers[1].sections)
+        assert.equals("user", markers[1].sections[1].type)
+        assert.equals("new", markers[1].sections[1].text)
+    end)
+
+    it("parses 🤖~D~[H]{R} chain (strike + dialogue)", function()
+        local markers = drill_in.parse("🤖~old~[question]{answer}")
+        assert.equals(1, #markers)
+        assert.equals("old", markers[1].strike.text)
+        assert.equals(2, #markers[1].sections)
+        assert.equals("user", markers[1].sections[1].type)
+        assert.equals("question", markers[1].sections[1].text)
+        assert.equals("agent", markers[1].sections[2].type)
+        assert.equals("answer", markers[1].sections[2].text)
+    end)
+
+    it("supports multi-line ~X~ text", function()
+        local markers = drill_in.parse("🤖~line one\nline two~")
+        assert.equals(1, #markers)
+        assert.equals("line one\nline two", markers[1].strike.text)
+    end)
+
+    it("normalizes empty 🤖~~[H] to no strike", function()
+        -- Same posture as empty <> normalization: empty strike carries no
+        -- information, drop it so downstream paths don't special-case it.
+        local markers = drill_in.parse("🤖~~[ask]")
+        assert.equals(1, #markers)
+        assert.is_nil(markers[1].strike)
+        assert.equals(1, #markers[1].sections)
+        assert.equals("ask", markers[1].sections[1].text)
+    end)
+
+    it("ignores 🤖~unclosed [N] (malformed) — no marker emitted", function()
+        -- Mirror of the <unclosed case: an opening `~` without a matching
+        -- closer short-circuits the parser. Pinning so a refactor can't
+        -- silently start recognizing the inner [N].
+        local markers = drill_in.parse("🤖~noclose [N]")
+        assert.equals(0, #markers)
+    end)
+
+    it("<X> and ~Y~ are mutually exclusive — second slot ignored", function()
+        -- After `<X>` is consumed, the chain only accepts [/{; a leading `~`
+        -- is plain text. Marker = quote-only, no sections.
+        local markers = drill_in.parse("🤖<X>~Y~")
+        assert.equals(1, #markers)
+        assert.equals("X", markers[1].quoted.text)
+        assert.is_nil(markers[1].strike)
+        assert.equals(0, #markers[1].sections)
+    end)
+
+    it("reverse mutual exclusion — 🤖~Y~<X> keeps strike, drops <X>", function()
+        local markers = drill_in.parse("🤖~Y~<X>")
+        assert.equals(1, #markers)
+        assert.equals("Y", markers[1].strike.text)
+        assert.is_nil(markers[1].quoted)
+        assert.equals(0, #markers[1].sections)
+    end)
 end)
 
 describe("drill_in.gather_and_strip", function()
@@ -165,6 +250,25 @@ describe("drill_in.gather_and_strip", function()
 
     it("returns original text when there are no ready markers", function()
         local input = "plain 🤖<T>{A}"  -- has <> but ends in {} (pending)
+        local blocks, new_text = drill_in.gather_and_strip(input)
+        assert.equals(0, #blocks)
+        assert.equals(input, new_text)
+    end)
+
+    -- ── ~X~ markers are NOT gathered (#124 M1) ───────────────────────
+    it("leaves 🤖~D~ untouched (deletion proposal, not a question)", function()
+        local input = "x 🤖~delete~ y"
+        local blocks, new_text = drill_in.gather_and_strip(input)
+        assert.equals(0, #blocks)
+        assert.equals(input, new_text)
+    end)
+
+    it("leaves 🤖~D~[N] untouched even though chain ends in [] (replacement, not a question)", function()
+        -- ~D~[N] is a human-authored replacement proposal per spec. The
+        -- presence of a trailing [] would normally make it "ready" for
+        -- chat-respond, but the strike presence overrides — replacements
+        -- are not questions to the agent.
+        local input = "x 🤖~old~[new] y"
         local blocks, new_text = drill_in.gather_and_strip(input)
         assert.equals(0, #blocks)
         assert.equals(input, new_text)

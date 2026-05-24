@@ -49,26 +49,45 @@ end
 --   quoted   — optional `<...>` quoted-body section, only valid as the
 --              first slot immediately after 🤖. Shape: { text, byte_start,
 --              byte_end } (byte_end is the closing `>`). `nil` if absent.
+--   strike   — optional `~...~` strikethrough section (deletion proposal).
+--              Same shape as quoted; byte_end is the closing `~`. Mutually
+--              exclusive with quoted — only one or neither is set.
 --
--- See workshop/issues/000123-quoted-body-marker-syntax.md for the grammar.
+-- See workshop/issues/000123-quoted-body-marker-syntax.md (quoted-body) and
+-- 000124-review-convention-alignment.md (strikethrough family) for grammar.
 local function parse_marker_sections(text, pos, byte_len)
     local cursor = pos + (byte_len or 4)  -- 🤖=4 bytes
     local sections = {}
     local quoted = nil
+    local strike = nil
 
-    -- Optional leading <...>
-    if cursor <= #text and text:sub(cursor, cursor) == "<" then
-        local close = find_matching_bracket(text, cursor, "<", ">")
-        if close then
-            quoted = {
-                text = text:sub(cursor + 1, close - 1),
-                byte_start = cursor,
-                byte_end = close,
-            }
-            cursor = close + 1
+    -- Optional leading <...> OR ~...~ (mutually exclusive, first slot only).
+    if cursor <= #text then
+        local ch = text:sub(cursor, cursor)
+        if ch == "<" then
+            local close = find_matching_bracket(text, cursor, "<", ">")
+            if close then
+                quoted = {
+                    text = text:sub(cursor + 1, close - 1),
+                    byte_start = cursor,
+                    byte_end = close,
+                }
+                cursor = close + 1
+            end
+            -- Unmatched `<`: fall through; the chain loop below will break.
+        elseif ch == "~" then
+            -- Tildes don't nest — find the next `~` literally.
+            local close = text:find("~", cursor + 1, true)
+            if close then
+                strike = {
+                    text = text:sub(cursor + 1, close - 1),
+                    byte_start = cursor,
+                    byte_end = close,
+                }
+                cursor = close + 1
+            end
+            -- Unmatched `~`: fall through; the chain loop below will break.
         end
-        -- If no matching `>`, fall through and treat `<` as plain text
-        -- (cursor stays put, the loop below will break immediately).
     end
 
     while cursor <= #text do
@@ -98,7 +117,7 @@ local function parse_marker_sections(text, pos, byte_len)
         end
     end
 
-    return sections, cursor, quoted
+    return sections, cursor, quoted, strike
 end
 
 local function in_code_fence(fence_ranges, line_idx)
@@ -184,19 +203,28 @@ M.parse_markers = function(lines)
                     goto continue
                 end
 
-                local sections, end_pos, quoted = parse_marker_sections(line, pos, MARKER_BYTE_LEN)
-                -- Recognize a marker iff it has at least one `[]`/`{}` section
-                -- or a `<>` quoted body. Bare 🤖 with neither is plain text.
-                if #sections > 0 or quoted then
+                local sections, end_pos, quoted, strike = parse_marker_sections(line, pos, MARKER_BYTE_LEN)
+                -- Normalize empty `~~` to nil so downstream doesn't have to
+                -- special-case it. (Empty `<>` is preserved here for review
+                -- semantics — see review_spec; drill_in.parse normalizes it
+                -- on its own surface.)
+                if strike and strike.text == "" then strike = nil end
+                -- Recognize a marker iff it has at least one `[]`/`{}` section,
+                -- a `<>` quoted body, or a `~...~` strike. Bare 🤖 with none
+                -- of these is plain text.
+                if #sections > 0 or quoted or strike then
                     local last = sections[#sections]
-                    -- Ready = last section is non-empty [] (human spoke last, agent should act)
-                    local ready = last and last.type == "user" and last.text ~= "" or false
+                    -- Ready = last section is non-empty [] (human spoke last,
+                    -- agent should act). Strike markers are proposals, not
+                    -- questions — they never count as ready.
+                    local ready = (not strike) and last and last.type == "user" and last.text ~= "" or false
                     -- Pending = last section is non-empty {} (agent asked, needs human reply)
                     local pending = last and last.type == "agent" and last.text ~= "" or false
                     table.insert(markers, {
                         line = i - 1,
                         col = pos - 1,
                         quoted = quoted,
+                        strike = strike,
                         sections = sections,
                         ready = ready,
                         pending = pending,

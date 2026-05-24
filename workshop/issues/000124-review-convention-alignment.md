@@ -63,16 +63,20 @@ favor of `<M-q>` as the single insertion path.
 Detailed design in
 [`workshop/plans/000124-review-convention-alignment-plan.md`](../plans/000124-review-convention-alignment-plan.md).
 
-### M1 — `~X~` parser + highlighter
+### M1 — `~X~` parser + highlighter ✅
 
-- [ ] Extend `parse_marker_sections` (`lua/parley/skills/review/init.lua`)
+- [x] Extend `parse_marker_sections` (`lua/parley/skills/review/init.lua`)
       to accept `~X~` as an alternative first-slot reference, mutually
-      exclusive with `<X>`. Surface as `{ kind = "delete", text, ... }`
-      vs. `{ kind = "quote", text, ... }`.
-- [ ] Update `drill_in.parse` to expose the reference kind.
-- [ ] Add highlighter rule for `~X~` content rendering as strikethrough.
-- [ ] Tests: parse `🤖~D~`, `🤖~D~{N}`, `🤖~D~[N]`, plus negative cases
-      (`<X>~Y~`, `~X~<Y>` rejected).
+      exclusive with `<X>`. Surfaced as parallel `quoted` / `strike`
+      fields (one or neither set) — see plan doc for the rationale on
+      separate fields vs. a unified `ref` with `kind`.
+- [x] Update `drill_in.parse` to expose `strike`.
+- [x] Add highlighter rule (`ParleyReviewStrike`, `strikethrough=true`)
+      and scan branch in the highlighter loop.
+- [x] Tests: parse `🤖~D~`, `🤖~D~{N}`, `🤖~D~[N]`, multi-line, empty-strike
+      normalization, unclosed-strike malformed, both directions of `<X>` ↔
+      `~X~` mutual exclusion. Also: `gather_and_strip` skips strike-only
+      markers, even those with trailing `[N]`.
 
 ### M2 — Accept/reject split + table-driven resolution
 
@@ -108,4 +112,15 @@ Detailed design in
 
 ## Log
 
-(populated during implementation)
+**2026-05-23 — M1 close.** Parser, drill_in, highlighter, and atlas
+entry updated for the `~X~` family. 12 new tests in drill_in_spec
+(parse + gather), all green. Full unit + integration suite green
+(`make test-unit && make test-integration`), lint clean. Highlighter
+visual verification deferred to operator — `ParleyReviewStrike` group
+defined with `strikethrough=true` and applied to byte range of the
+`~X~` content.
+
+Design tweak from the original plan: keep parallel `quoted` / `strike`
+fields (mutually exclusive) rather than a unified `ref` with `kind`.
+Rationale captured in plan doc — less invasive to existing tests, reads
+more naturally at call sites.

@@ -60,11 +60,13 @@ end
 --- Parse all 🤖 markers in joined text. Multi-line bracket content is supported
 --- because the section parser walks the input text byte-by-byte.
 --- @param text string
---- @return table[]  each entry: { byte_start, byte_end, quoted, sections,
----                                 ready, pending, has_quoted_body }
+--- @return table[]  each entry: { byte_start, byte_end, quoted, strike,
+---                                 sections, ready, pending, has_quoted_body }
 ---                  byte_start = position of 🤖 (inclusive, 1-based)
----                  byte_end   = position of the trailing `>`/`]`/`}` (inclusive)
----                  quoted     = { text, byte_start, byte_end } or nil
+---                  byte_end   = position of the trailing `>`/`~`/`]`/`}` (inclusive)
+---                  quoted     = { text, byte_start, byte_end } or nil — `<X>` ref
+---                  strike     = { text, byte_start, byte_end } or nil — `~X~` ref
+---                  quoted and strike are mutually exclusive.
 function M.parse(text)
     local parse_sections = get_review()._parse_marker_sections
     local markers = {}
@@ -72,19 +74,24 @@ function M.parse(text)
     while true do
         local pos = text:find(MARKER_CHAR, search_start, true)
         if not pos then break end
-        local sections, end_pos, quoted = parse_sections(text, pos, MARKER_BYTE_LEN)
-        -- Normalize: empty <> is semantically equivalent to no <> at all.
-        -- Drop the quoted entry so downstream gather/resolve stay simple.
+        local sections, end_pos, quoted, strike = parse_sections(text, pos, MARKER_BYTE_LEN)
+        -- Normalize: empty <> / ~~ carry no information — drop them so
+        -- downstream gather/resolve don't have to special-case them.
         if quoted and quoted.text == "" then quoted = nil end
-        if #sections > 0 or quoted then
+        if strike and strike.text == "" then strike = nil end
+        if #sections > 0 or quoted or strike then
             local last = sections[#sections]
             table.insert(markers, {
                 byte_start = pos,
                 byte_end = end_pos - 1,
                 quoted = quoted,
+                strike = strike,
                 sections = sections,
                 has_quoted_body = quoted ~= nil,
-                ready = (last ~= nil) and last.type == "user" and last.text ~= "",
+                -- Strike markers are proposals, not questions — they never
+                -- count as ready, even when a trailing [] is present (e.g.
+                -- 🤖~D~[N] is a human-authored replacement).
+                ready = (not strike) and (last ~= nil) and last.type == "user" and last.text ~= "",
                 pending = (last ~= nil) and last.type == "agent" and last.text ~= "",
             })
             search_start = end_pos

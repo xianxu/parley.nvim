@@ -63,12 +63,12 @@ human      ::= "[" TEXT "]"
 agent      ::= "{" TEXT "}"
 ```
 
-Parser surface change: instead of `quoted = { text, byte_start, byte_end }`
-or nil, expose `ref = { kind = "quote"|"strike", text, byte_start, byte_end }`
-or nil. `quoted` field stays as a deprecated alias pointing at the same
-table when `kind == "quote"`, to ease callers — actually no, per
-operator preference for no backwards-compat shims (CLAUDE.md guidance):
-just rename. All call sites get updated.
+Parser surface change: keep existing `quoted = { text, byte_start, byte_end }`
+for `<X>` (unchanged shape), add parallel `strike = { text, byte_start, byte_end }`
+for `~X~`. Mutually exclusive — exactly one or neither is set. This is
+less invasive than a unified `ref` field (existing tests reference
+`m.quoted` directly throughout) and reads more naturally at call sites
+(`if m.quoted` for one path, `if m.strike` for the other).
 
 ### `~X~` lexing
 
