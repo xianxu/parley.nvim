@@ -1,10 +1,11 @@
 ---
 id: 000124
-status: working
+status: done
 deps: []
 target: review-convention
 created: 2026-05-23
-updated: 2026-05-23
+updated: 2026-05-24
+actual_hours: 10
 ---
 
 # Align marker grammar and bindings with review-convention target
@@ -122,6 +123,8 @@ Detailed design in
 
 ## Log
 
+
+- 2026-05-24: closed — 3 milestones + 3 review follow-ups complete; drill_in_spec at 76 cases (parse, gather, resolve, accept/reject); full unit+integration suite green; lint clean; commits 0c2cfa5..7bdc491
 **2026-05-23 — M1 close.** Parser, drill_in, highlighter, and atlas
 entry updated for the `~X~` family. 12 new tests in drill_in_spec
 (parse + gather), all green. Full unit + integration suite green
