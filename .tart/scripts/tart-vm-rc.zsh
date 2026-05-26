@@ -18,11 +18,10 @@
 # on next make tart.
 
 # PATH:
-#   - ~/repo/bin first — VM-mirrored binaries from the host repo's
-#     `make build` (symlinks into cmd/<name>/bin/<name>). Empty until
-#     the operator runs `make build` inside ~/repo, then becomes the
-#     main test loop: edit on host, `make tart`, run binaries
-#     directly without per-cmd PATH gymnastics.
+#   - ~/repo/bin first — VM-mirrored binaries from the current-repo's
+#     `make build`. Post-ariadne#32 ~/repo is a symlink to
+#     ~/workspace/<current-repo>/, so this picks up whichever peer
+#     the operator was working on when they ran `make tart`.
 #   - ~/.local/bin next, for any operator-installed tools.
 export PATH="$HOME/repo/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 
@@ -48,11 +47,31 @@ alias p='git commit -a && git push'
 # Editor shortcut. Single keystroke to open whatever $EDITOR is.
 alias v='${EDITOR}'
 
-# Repo shortcut: ~/repo is the VM-local clone of the host tree
-# (created by tart-vm-setup.sh on first boot, fast-forwarded on
-# subsequent boots when the worktree is clean); cd straight in.
+# Repo shortcut: ~/repo (symlinked to ~/workspace/<current-repo>) is
+# the current-repo's working tree inside the workspace mount. cd
+# straight in.
 if [ -d "$HOME/repo" ] || [ -L "$HOME/repo" ]; then
     alias repo='cd $HOME/repo'
+fi
+
+# Workspace shortcut: ~/workspace holds every peer repo (ariadne,
+# nous, brain-*, parley.nvim, etc.), mounted as a single APFS clone
+# from the host. Lets agents resolve sibling-style replace directives
+# (post-ariadne#32) without per-peer mount management.
+if [ -d "$HOME/workspace" ] || [ -L "$HOME/workspace" ]; then
+    alias workspace='cd $HOME/workspace'
+fi
+
+# cd into the current-repo on shell start (interactive only). Marker
+# file is written by tart-vm-setup.sh from the REPO_NAME the host
+# Makefile knew at boot time. Falls back to $HOME if anything's missing
+# so a session in the VM is never stranded.
+if [[ -o interactive ]] && [ -f "$HOME/.tart-current-repo" ]; then
+    _tart_current_repo="$(cat "$HOME/.tart-current-repo" 2>/dev/null)"
+    if [ -n "$_tart_current_repo" ] && [ -d "$HOME/workspace/$_tart_current_repo" ]; then
+        cd "$HOME/workspace/$_tart_current_repo"
+    fi
+    unset _tart_current_repo
 fi
 
 # GPG: keep pinentry-curses self-healing across shells. gpg-agent

@@ -24,7 +24,10 @@ BRAIN_DIR ?= ../brain
 # Defaults assume ariadne is upstream. Descendants of nous (or other re-export
 # hosts) override these in their root Makefile before `include Makefile.workflow`:
 #   UPSTREAM_NAME    := nous
-#   UPSTREAM_REFRESH := ../nous/nous/setup.sh
+#   UPSTREAM_REFRESH := ../nous/construct/setup.sh
+# (Post-#32: every layer's substrate management lives at <repo>/construct/;
+# the canonical setup.sh — vendored from ariadne — handles the transitive
+# walk via go.mod's dep graph.)
 UPSTREAM_NAME      ?= ariadne
 UPSTREAM_DIR       ?= ../$(UPSTREAM_NAME)
 UPSTREAM_MODE_FILE ?= .$(UPSTREAM_NAME)-mode
@@ -476,10 +479,20 @@ endef
 # End-user-facing build verb. Convention:
 #
 #   - cmd/<name>/main.go  →  bin/<name>     (Go binaries; auto-discovered)
-#   - cmd/nous is skipped — it has its own developer-flow target
-#     (`make nous-build`) in nous's Makefile.nous. The point of the
-#     skip is that operators running `make build` aren't trying to
-#     rebuild the nous binary; they're building their own utilities.
+#   - Per-binary opt-out via sentinel file:
+#       cmd/<name>/.skip-make-build
+#     If this file exists, the scanner skips that binary. The base layer
+#     doesn't know any derivative's binary names — each opted-out binary
+#     drops its own sentinel and documents the rationale inside the file
+#     (free-form prose, for future operators).
+#
+#     Sentinels exist for binaries with distribution semantics that the
+#     generic scan would break — e.g., signed + notarized binaries
+#     (nous, future charon/gmail) where overwriting bin/<name> with an
+#     unsigned local build invalidates macOS keychain ACL grants and
+#     notification capabilities. Build those via their own targets
+#     (nous-build, etc.) when you need a local copy.
+#
 #   - For non-Go binaries (Python scripts to chmod, wheels, etc.),
 #     define a `local-build` target in Makefile.local — `make build`
 #     calls it after the Go build pass.
@@ -491,9 +504,14 @@ endef
 build:
 	@if [ -f go.mod ]; then \
 	    found=0; \
+	    skipped=0; \
 	    for d in cmd/*/; do \
 	        name=$$(basename "$$d"); \
-	        case "$$name" in nous) continue ;; esac; \
+	        if [ -f "$$d/.skip-make-build" ]; then \
+	            echo "  (skipping $$name — .skip-make-build sentinel present)"; \
+	            skipped=$$((skipped + 1)); \
+	            continue; \
+	        fi; \
 	        if [ -f "$$d/main.go" ]; then \
 	            mkdir -p bin; \
 	            echo "==> Building $$name..."; \
@@ -501,7 +519,7 @@ build:
 	            found=1; \
 	        fi; \
 	    done; \
-	    if [ "$$found" = "0" ]; then \
+	    if [ "$$found" = "0" ] && [ "$$skipped" = "0" ]; then \
 	        echo "  (no cmd/*/main.go to build)"; \
 	    fi; \
 	fi

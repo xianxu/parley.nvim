@@ -3,14 +3,17 @@
 #
 # Provides:
 #   make tart        cold-boot $(TART_VM) headless (stops first if
-#                    running), prepare an APFS clone of $(CURDIR) at
-#                    /tmp/$(TART_VM)-clone (cp -cR; O(1) on APFS),
-#                    mount it writable at /Volumes/My Shared
-#                    Files/$(REPO_NAME), ssh in. ~/repo in the VM is
-#                    a symlink to the writable share. Cold-boot is
-#                    the default for mount-cache freshness — see
-#                    ariadne#28 for why. Clone-based share is the
-#                    successor to rsync — see ariadne#29.
+#                    running), APFS-clone the current repo + every peer
+#                    declared via go.mod replace directives (recursive
+#                    walk) into ~/.tart/clones/$(TART_VM)-clone, mount
+#                    it writable at /Volumes/My Shared Files/workspace,
+#                    ssh in. ~/workspace in the VM is a symlink to the
+#                    share; ~/repo symlinks to ~/workspace/$(REPO_NAME).
+#                    Cold-boot is the default for mount-cache freshness
+#                    — see ariadne#28 for why. Clone-based share is the
+#                    successor to rsync — see ariadne#29. Selective
+#                    cloning per go.mod is ariadne#32 phase 2 (without
+#                    it, cloning a multi-GB workspace dominated boot).
 #   make tart-gui    same but display via macOS Screen Sharing.app
 #                    (--vnc; built-in UI is broken on macOS Tahoe)
 #   make tart-stop   stop $(TART_VM); remove its clone
@@ -63,11 +66,26 @@ TART_VM        ?= $(REPO_NAME)-$(or $(TART_SUFFIX),test)
 # can be removed by setting GRAPHICS_FLAG := (empty) for tart-gui.
 GRAPHICS_FLAG  ?= --no-graphics
 
-# Host-side APFS clone of the repo, used as the VM's writable share
-# (ariadne#29). cp -cR is metadata-only on APFS — initial cost is O(1)
-# regardless of repo size, and VM writes diverge into the clone via
-# COW without touching the source. Replaces the previous rsync-into-
-# VM-local-fs workflow.
+# What gets mounted into the VM: a workspace-shaped APFS clone holding
+# the current repo + each transitive peer declared via go.mod replace
+# (ariadne#32 phase 2). Required for the Go-based substrate model —
+# setup.sh resolves ancestors via replace directives pointing at sibling
+# paths; without peer access those resolutions would dangle in the VM.
+#
+# Cloning only the needed peers (vs. the whole sibling directory) is a
+# meaningful boot speedup — `cp -cR` is O(1) per file via clonefile(2)
+# but linear in total file count. Workspaces grow to many GB of
+# unrelated peers; restricting to go.mod peers keeps boot prep fast.
+#
+# Mount appears at /Volumes/My Shared Files/workspace inside the VM;
+# tart-vm-setup.sh symlinks $HOME/workspace there, then cd's into
+# $HOME/workspace/<current-repo>/ on shell start.
+WORKSPACE_DIR  := $(realpath $(CURDIR)/..)
+
+# Host-side APFS clone of the per-repo peer set (current repo + go.mod
+# replaces, transitively). Used as the VM's writable share. cp -cR
+# uses clonefile(2) on APFS — metadata-only per file, VM writes diverge
+# via COW without touching the source.
 #
 # Path choice: ~/.tart/clones/ rather than /tmp. macOS's Virtualization
 # framework + tart's app sandbox refuse to expose paths under
@@ -79,13 +97,15 @@ GRAPHICS_FLAG  ?= --no-graphics
 # tart's TCC permissions for its own state dir.
 TART_CLONE_DIR ?= $(HOME)/.tart/clones/$(TART_VM)-clone
 
-# Bind-mount the clone into the VM at the canonical tag. Writable by
-# default — tart's `--dir` syntax is `<name>:<path>` (writable) or
-# `<name>:<path>:ro` (read-only). There's no `:rw` suffix; passing one
-# makes tart treat ":rw" as part of the path, which then fails to
-# resolve (VZErrorDomain Code=2 "No such file or directory").
+# Bind-mount the workspace clone into the VM. Mount tag is fixed at
+# "workspace" so the VM-side path is always /Volumes/My Shared
+# Files/workspace, regardless of which repo's `make tart` was invoked.
+# Writable by default — tart's `--dir` syntax is `<name>:<path>`
+# (writable) or `<name>:<path>:ro` (read-only). There's no `:rw`
+# suffix; passing one makes tart treat ":rw" as part of the path,
+# which then fails to resolve.
 # Overridable to empty on the command line for a no-mount boot.
-RUN_FLAGS      ?= --dir=$(REPO_NAME):$(TART_CLONE_DIR)
+RUN_FLAGS      ?= --dir=workspace:$(TART_CLONE_DIR)
 
 .PHONY: tart tart-gui tart-stop tart-clean help-tart
 
@@ -93,22 +113,23 @@ help-tart:
 	@printf '%s\n' \
 	"Tart (macOS VMs):" \
 	"  make tart           Cold-boot $(TART_VM) headless (stops first if running)," \
-	"                      prepare APFS clone of \$$(CURDIR) at /tmp/$(TART_VM)-clone," \
-	"                      mount it writable at /Volumes/My Shared Files/$(REPO_NAME)," \
-	"                      ssh in. ~/repo in the VM symlinks to the writable share." \
-	"                      Cold-boot is the default for mount-cache freshness (ariadne#28)." \
-	"                      Clone-based share is the successor to rsync (ariadne#29)." \
-	"                      To attach without restart, ssh directly." \
+	"                      APFS-clone the current repo + go.mod-declared peers" \
+	"                      (recursive replace walk) into a workspace-shaped tree," \
+	"                      mount it writable at /Volumes/My Shared Files/workspace," \
+	"                      ssh in. ~/workspace in the VM symlinks the share;" \
+	"                      ~/repo symlinks to ~/workspace/$(REPO_NAME); shell" \
+	"                      cd's into the current-repo on login." \
+	"                      No-go.mod consumers clone only the current repo." \
 	"  make tart-gui       Same but display via macOS Screen Sharing.app" \
 	"  make tart-stop      Stop $(TART_VM) + remove its clone" \
 	"  make tart-clean     Stop + delete $(TART_VM) + remove its clone (base stays cached)" \
 	"" \
-	"  Writes in the VM diverge into the APFS clone via COW; host source" \
-	"  ($(CURDIR)) stays untouched. Clone wipes on tart-stop / next boot." \
+	"  Writes in the VM diverge into the APFS clone via COW; host workspace" \
+	"  ($(WORKSPACE_DIR)) stays untouched. Clone wipes on tart-stop / next boot." \
 	"  Skip the mount entirely with 'make tart RUN_FLAGS=' for a vanilla boot." \
 	"" \
 	"  Parallel VMs per repo: 'make tart TART_SUFFIX=emma' → $(REPO_NAME)-emma" \
-	"  (each VM gets its own clone at /tmp/$(REPO_NAME)-emma-clone)." \
+	"  (each VM gets its own workspace clone at ~/.tart/clones/$(REPO_NAME)-emma-clone)." \
 	""
 
 # Interactive multi-select to stop OTHER running tart VMs (4-8 GB
@@ -121,26 +142,46 @@ define _tart_check_others
 	@bash $(CURDIR)/.tart/scripts/tart-stop-others.sh $(TART_VM) $(TART_BASE)
 endef
 
-# _tart_prepare_clone: APFS-clone $(CURDIR) → $(TART_CLONE_DIR) and
-# strip the dirs that would carry codesign / provenance xattrs (the
-# previous rsync did this via --exclude). Also strips ariadne-local
-# state files (.nous-mode, .nous-plugins) that are operator-host-
-# specific and shouldn't propagate to the VM.
+# _tart_prepare_clone: APFS-clone the current repo + every peer it
+# transitively depends on (via go.mod's replace directives) into
+# $(TART_CLONE_DIR)/, one subdirectory per peer. Then strip codesign-
+# cursed dirs (bin/, cmd/*/bin/) and host-local mode markers
+# (.ariadne-mode, .nous-mode, .nous-plugins) across every peer.
+#
+# Peer list comes from .tart/scripts/tart-list-peers.sh, which does the
+# same recursive go.mod replace walk that construct/setup.sh's ancestor
+# discovery uses. Result: the VM clone contains exactly the peers the
+# current repo's substrate-resolution actually needs, plus the current
+# repo itself. No-go.mod consumers (pre-#32 fallback) just clone the
+# single current repo.
 #
 # cp -cR uses clonefile(2) under the hood on APFS — metadata-only,
-# O(1) regardless of repo size. Falls back to plain cp -R if
-# clonefile fails for any reason (rare; non-APFS volume, etc.).
+# O(1) per file regardless of file size. Per-file cost still adds up
+# for large repos, so cloning only the needed peers (not the whole
+# workspace) is the latency win.
 define _tart_prepare_clone
-	@echo "==> Preparing APFS clone at $(TART_CLONE_DIR) (write-isolated; replaces rsync)..."
+	@echo "==> Preparing APFS clone at $(TART_CLONE_DIR) (current repo + go.mod peers)..."
 	@mkdir -p "$(dir $(TART_CLONE_DIR))"
 	@rm -rf "$(TART_CLONE_DIR)"
-	@if ! cp -cR "$(CURDIR)" "$(TART_CLONE_DIR)" 2>/dev/null; then \
-	    echo "  [warn] cp -cR (clonefile) failed; falling back to plain cp -R"; \
-	    cp -R "$(CURDIR)" "$(TART_CLONE_DIR)"; \
-	fi
-	@rm -rf "$(TART_CLONE_DIR)/bin" "$(TART_CLONE_DIR)"/cmd/*/bin
-	@rm -f  "$(TART_CLONE_DIR)/.nous-mode" "$(TART_CLONE_DIR)/.nous-plugins"
-	@echo "  cloned + stripped build artifacts"
+	@mkdir -p "$(TART_CLONE_DIR)"
+	@$(CURDIR)/.tart/scripts/tart-list-peers.sh "$(CURDIR)" | while IFS= read -r peer; do \
+	    name=$$(basename "$$peer"); \
+	    echo "  cloning $$name ($$peer)"; \
+	    if ! cp -cR "$$peer" "$(TART_CLONE_DIR)/$$name" 2>/dev/null; then \
+	        echo "  [warn] cp -cR (clonefile) failed for $$name; falling back to plain cp -R"; \
+	        cp -R "$$peer" "$(TART_CLONE_DIR)/$$name"; \
+	    fi; \
+	done
+	@# Per-peer strip: bin/ and cmd/*/bin/ at peer-level; mode markers at
+	@# the same depth. Layout is unchanged from the workspace variant —
+	@# both old (`cp -cR WORKSPACE TART_CLONE_DIR` with TART_CLONE_DIR
+	@# removed first) and new (`cp -cR peer TART_CLONE_DIR/<name>`) put
+	@# peers at depth 1 from $(TART_CLONE_DIR), so the original maxdepth
+	@# values still apply — only the set of peers shrunk.
+	@find "$(TART_CLONE_DIR)" -maxdepth 2 -name 'bin' -type d -prune -exec rm -rf {} + 2>/dev/null || true
+	@find "$(TART_CLONE_DIR)" -maxdepth 4 -path '*/cmd/*/bin' -type d -prune -exec rm -rf {} + 2>/dev/null || true
+	@find "$(TART_CLONE_DIR)" -maxdepth 2 \( -name '.ariadne-mode' -o -name '.nous-mode' -o -name '.nous-plugins' \) -delete 2>/dev/null || true
+	@echo "  cloned $$(ls $(TART_CLONE_DIR) | wc -l | tr -d ' ') peer(s) + stripped build artifacts"
 endef
 
 # _tart_gc_orphan_clones: remove any ~/.tart/clones/*-clone older than
@@ -246,7 +287,7 @@ define _tart_boot_and_ssh
 	        scp -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
 	            "$(CURDIR)/.tart/scripts/tart-vm-setup.sh" admin@$$ip:.tart-vm-setup.sh; \
 	        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null admin@$$ip \
-	            'bash ~/.tart-vm-setup.sh'; \
+	            "bash ~/.tart-vm-setup.sh '$(REPO_NAME)'"; \
 	    fi; \
 	    echo "==> ssh admin@$$ip"; \
 	    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \

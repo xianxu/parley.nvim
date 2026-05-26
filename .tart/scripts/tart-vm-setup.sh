@@ -1,21 +1,19 @@
 #!/usr/bin/env bash
 # tart-vm-setup.sh — VM-side bootstrap for the tart-vm-* targets.
 # Pushed to the VM by the Makefile (alongside tart-vm-rc.zsh); runs
-# after every `make tart` / `make tart-mount`. Idempotent: skips
-# work that's already done.
+# after every `make tart`. Idempotent.
+#
+# Argument: $1 is the current repo name (the repo whose Makefile.workflow
+# the operator invoked). Used to write the current-repo marker so the rc
+# can cd into ~/workspace/<repo>/ on shell start.
 set -euo pipefail
+
+CURRENT_REPO="${1:-}"
 
 # ── oh-my-zsh ────────────────────────────────────────────────────
 # The macOS-native counterpart to openshell's oh-my-bash. Installer
 # replaces ~/.zshrc with a template that activates the framework
 # (default theme robbyrussell, default plugins=(git)).
-#
-# Flags:
-#   --unattended  skip interactive prompts
-#   CHSH=no       don't try to change login shell; admin user on
-#                 cirruslabs' tahoe base image already uses zsh
-#   RUNZSH=no     don't spawn an interactive zsh at install end;
-#                 we'd lose control of the ssh session if it did
 if [ ! -d "$HOME/.oh-my-zsh" ]; then
     echo "==> Installing oh-my-zsh..."
     CHSH=no RUNZSH=no sh -c \
@@ -24,9 +22,6 @@ if [ ! -d "$HOME/.oh-my-zsh" ]; then
 fi
 
 # ── Source the extension rc from ~/.zshrc ────────────────────────
-# oh-my-zsh's installer replaces ~/.zshrc on first run, so this line
-# gets re-appended; on subsequent runs grep finds it and the append
-# is a no-op.
 if ! grep -q tart-vm-rc.zsh "$HOME/.zshrc" 2>/dev/null; then
     cat >> "$HOME/.zshrc" <<'EOF'
 
@@ -35,51 +30,55 @@ if ! grep -q tart-vm-rc.zsh "$HOME/.zshrc" 2>/dev/null; then
 EOF
 fi
 
-# ── Wire ~/repo to the host's APFS clone (ariadne#29) ────────────
-# Evolution of this layout:
+# ── Wire ~/workspace to the host's workspace mount ───────────────
+# Post-ariadne#32 the host mounts a workspace-shaped APFS clone holding
+# the current repo + its go.mod-declared peers (recursive replace walk)
+# into the VM. The contents look like a sibling-checkout: each peer is
+# a top-level dir, so Go's replace directives pointing at sibling paths
+# resolve correctly inside the VM.
 #
-#   1. ~/repo as a SYMLINK to the read-only host share. Broke
-#      `make build` inside the VM with EPERM — host xattrs
-#      (com.apple.provenance) and codesign state on bin/ outputs
-#      blocked guest writes.
-#
-#   2. ~/repo as a GIT CLONE of the share. Picked up committed host
-#      changes but missed uncommitted edits — the dev-iteration
-#      workflow needs uncommitted-too.
-#
-#   3. ~/repo as an rsync-delete copy of the share. Worked, but
-#      ~5–10s at boot, linear in repo size.
-#
-# Current (ariadne#29): the host prepares an APFS clone (cp -cR)
-# of $(CURDIR) at /tmp/<vm>-clone, strips the xattr-cursed bin/
-# dirs, and mounts THAT as the VM's writable share. APFS clonefile
-# is O(1) at boot regardless of repo size; writes from the VM
-# diverge into the clone via COW without touching the host source.
-#
-# VM side: ~/repo is now a symlink straight to the writable share.
-# No rsync — the share IS the writable area.
-MOUNT=$(ls -d "/Volumes/My Shared Files"/*/ 2>/dev/null | head -1)
-MOUNT=${MOUNT%/}
-if [ -n "$MOUNT" ] && [ -d "$MOUNT/.git" ]; then
-    # Symlink ~/repo → the writable share.
-    # If ~/repo exists as a real dir (left over from rsync-era
-    # bootstrap), wipe it first — its content is stale anyway, and
-    # the symlink convention is now the single source of truth.
-    if [ -d "$HOME/repo" ] && [ ! -L "$HOME/repo" ]; then
-        echo "==> Removing old ~/repo directory (rsync-era artifact; symlink convention now)..."
-        rm -rf "$HOME/repo"
+# Mount appears at /Volumes/My Shared Files/workspace; symlink
+# ~/workspace there so paths like ~/workspace/parley.nvim feel
+# natural to operators. The set of peers under ~/workspace is
+# determined by the current repo's go.mod — not the host's full
+# sibling directory.
+MOUNT="/Volumes/My Shared Files/workspace"
+if [ -d "$MOUNT" ]; then
+    # Symlink ~/workspace → the writable share.
+    if [ -d "$HOME/workspace" ] && [ ! -L "$HOME/workspace" ]; then
+        echo "==> Removing old ~/workspace directory (pre-#32 artifact)..."
+        rm -rf "$HOME/workspace"
     fi
-    if [ ! -L "$HOME/repo" ] || [ "$(readlink "$HOME/repo")" != "$MOUNT" ]; then
-        rm -f "$HOME/repo"
-        ln -s "$MOUNT" "$HOME/repo"
-        echo "==> Symlinked ~/repo → $MOUNT (APFS-cloned writable share)"
+    if [ ! -L "$HOME/workspace" ] || [ "$(readlink "$HOME/workspace")" != "$MOUNT" ]; then
+        rm -f "$HOME/workspace"
+        ln -s "$MOUNT" "$HOME/workspace"
+        echo "==> Symlinked ~/workspace → $MOUNT"
     fi
-elif [ -L "$HOME/repo" ]; then
-    # No mount but a leftover symlink — clean up. Don't touch a real
-    # directory the operator might have created; only nuke our own
-    # symlink convention.
-    echo "==> No shared mount found; removing stale ~/repo symlink."
-    rm "$HOME/repo"
+
+    # Backward-compat: keep ~/repo pointing at the current repo inside
+    # the workspace. Anything that hardcoded ~/repo (PATH entries,
+    # legacy scripts) keeps working through the symlink chain.
+    if [ -n "$CURRENT_REPO" ] && [ -d "$MOUNT/$CURRENT_REPO" ]; then
+        if [ -d "$HOME/repo" ] && [ ! -L "$HOME/repo" ]; then
+            echo "==> Removing old ~/repo directory (pre-#32 artifact)..."
+            rm -rf "$HOME/repo"
+        fi
+        EXPECTED="$HOME/workspace/$CURRENT_REPO"
+        if [ ! -L "$HOME/repo" ] || [ "$(readlink "$HOME/repo")" != "$EXPECTED" ]; then
+            rm -f "$HOME/repo"
+            ln -s "$EXPECTED" "$HOME/repo"
+            echo "==> Symlinked ~/repo → $EXPECTED"
+        fi
+    fi
+
+    # Marker file for the rc: which repo to cd into on shell start.
+    if [ -n "$CURRENT_REPO" ]; then
+        printf '%s\n' "$CURRENT_REPO" > "$HOME/.tart-current-repo"
+    fi
+elif [ -L "$HOME/workspace" ]; then
+    # No mount but a leftover symlink — clean up.
+    echo "==> No workspace mount found; removing stale ~/workspace symlink."
+    rm "$HOME/workspace"
 fi
 
 echo "==> VM setup complete."
