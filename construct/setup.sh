@@ -363,13 +363,15 @@ walk_manifest() {
         # path) while protecting entries like `symlink Makefile.nous`
         # (declared for downstream consumers; tautological in nous itself).
         #
-        # Exception: the `merge` action has implicit source-rename semantics
-        # (reads .claude/settings.<layer>.json, writes .claude/settings.json
-        # — different files). On self-walk for ariadne, this regenerates
-        # the layer's own settings.json from its committed settings.X.json
-        # + local overlay. Skipping it would silently break ariadne's
-        # self-refresh.
-        if [[ "$action" != "merge" && "$upstream/$source" == "$TARGET_DIR/$target" ]]; then
+        # Exceptions: these actions are not file-shape operations and the
+        # self-reference filter doesn't apply to them.
+        #   merge — implicit source-rename (reads .X.<layer>.json, writes
+        #           .X.json; different files). On self-walk, regenerates
+        #           the layer's own settings.json from committed + local.
+        #   tool  — modifies the target's go.mod via `go mod edit`. On
+        #           self-walk, adds the tool directive to the upstream's
+        #           own go.mod (so `go tool sdlc` works locally there too).
+        if [[ "$action" != "merge" && "$action" != "tool" && "$upstream/$source" == "$TARGET_DIR/$target" ]]; then
             printf "  ${YELLOW}skipped${RESET} %s (self-reference at canonical location)\n" "$target"
             continue
         fi
@@ -415,11 +417,118 @@ walk_manifest() {
                     printf "  ${GREEN}created${RESET} %s\n" "$source"
                 fi
                 ;;
+            tool)
+                # Declare a Go tool dependency from this upstream in the
+                # target's go.mod. Adds (idempotently) the require + replace
+                # + tool directives so `go mod vendor` can populate the
+                # source for `make sdlc-build` etc.
+                #
+                # The single-arg form (`tool cmd/sdlc`) names the path
+                # within the upstream module. Self-walk for the upstream's
+                # own go.mod skips require+replace (would be circular) but
+                # still adds the tool directive (so `go tool sdlc` works
+                # locally in the upstream too).
+                ensure_go_tool_dependency "$upstream" "$source"
+                ;;
             *)
                 printf "  ${YELLOW}unknown action: %s${RESET}\n" "$action"
                 ;;
         esac
     done < "$manifest"
+}
+
+# ── ensure_go_tool_dependency — wire an upstream Go tool into target's go.mod
+ensure_go_tool_dependency() {
+    local upstream="$1"      # absolute upstream path
+    local tool_path="$2"     # relative path within upstream module (e.g. cmd/sdlc)
+
+    if ! command -v go >/dev/null 2>&1; then
+        printf "  ${YELLOW}skipped${RESET} tool %s (go toolchain not on PATH)\n" "$tool_path"
+        return 0
+    fi
+    if [[ ! -f "$upstream/go.mod" ]]; then
+        printf "  ${YELLOW}skipped${RESET} tool %s (no go.mod in upstream)\n" "$tool_path"
+        return 0
+    fi
+
+    local upstream_module
+    upstream_module=$(awk '/^module / {print $2; exit}' "$upstream/go.mod")
+
+    # Self-walk (target IS the upstream — ariadne adding its own tool
+    # directive): operates on target's root go.mod. require + replace
+    # would be circular, so only the tool directive is added.
+    if [[ "$upstream" == "$TARGET_DIR" ]]; then
+        if [[ ! -f "$TARGET_DIR/go.mod" ]]; then
+            printf "  ${YELLOW}skipped${RESET} tool %s (self-walk; no go.mod in target)\n" "$tool_path"
+            return 0
+        fi
+        ensure_go_directive_24 "$TARGET_DIR/go.mod"
+        ( cd "$TARGET_DIR" && go mod edit -tool "${upstream_module}/${tool_path}" ) \
+            && printf "  ${GREEN}declared${RESET} tool %s/%s in go.mod (self; tool only)\n" "$upstream_module" "$tool_path"
+        return 0
+    fi
+
+    # Cross-target: write to $TARGET_DIR/construct/go.mod. Substrate-tool
+    # deps live in a separate Go module from the derivative's app code.
+    # `go mod vendor` in construct/ then produces a vendor/ tree
+    # containing only the substrate-tool closure — not the derivative's
+    # app deps. See workshop/issues/000037 for the rationale.
+    local construct_dir="$TARGET_DIR/construct"
+    local construct_gomod="$construct_dir/go.mod"
+
+    mkdir -p "$construct_dir"
+
+    if [[ ! -f "$construct_gomod" ]]; then
+        # Stub the construct/go.mod. Module path: append "-construct" to
+        # the target's root module path (if any), else fall back to a
+        # local pseudo-path. Either is valid — the module is local-only
+        # (replace directives always resolve to sibling paths; never
+        # published to a registry).
+        local construct_module
+        if [[ -f "$TARGET_DIR/go.mod" ]]; then
+            local root_module
+            root_module=$(awk '/^module / {print $2; exit}' "$TARGET_DIR/go.mod")
+            construct_module="${root_module}-construct"
+        else
+            local repo_base
+            repo_base=$(basename "$TARGET_DIR")
+            construct_module="local.construct/${repo_base}"
+        fi
+        cat > "$construct_gomod" <<EOF
+module ${construct_module}
+
+go 1.24
+EOF
+        printf "  ${GREEN}created${RESET} construct/go.mod (module %s)\n" "$construct_module"
+    fi
+
+    ensure_go_directive_24 "$construct_gomod"
+
+    local rel_path
+    rel_path=$(python3 -c "import os; print(os.path.relpath('$upstream', '$construct_dir'))" 2>/dev/null || echo "$upstream")
+
+    ( cd "$construct_dir" && {
+        go mod edit -require "${upstream_module}@v0.0.0-00010101000000-000000000000"
+        go mod edit -replace "${upstream_module}=${rel_path}"
+        go mod edit -tool "${upstream_module}/${tool_path}"
+    } ) && printf "  ${GREEN}declared${RESET} tool %s/%s in construct/go.mod (require + replace + tool)\n" "$upstream_module" "$tool_path"
+}
+
+# Bump the go directive in <gomod> to at least 1.24 (needed for the
+# `tool` directive). No-op if already >= 1.24 or if directive absent.
+ensure_go_directive_24() {
+    local gomod="$1"
+    local current_go
+    current_go=$(awk '/^go / {print $2; exit}' "$gomod")
+    [[ -z "$current_go" ]] && return 0
+
+    local cur_major cur_minor
+    cur_major="${current_go%%.*}"
+    cur_minor="${current_go#*.}"; cur_minor="${cur_minor%%.*}"
+    if (( cur_major < 1 )) || { (( cur_major == 1 )) && (( cur_minor < 24 )); }; then
+        ( cd "$(dirname "$gomod")" && go mod edit -go=1.24 ) || true
+        printf "  ${YELLOW}bumped${RESET}  go directive in %s to 1.24 (required for tool directive)\n" "$(basename "$(dirname "$gomod")")/go.mod"
+    fi
 }
 
 # ── Process manifest(s) ───────────────────────────────────────────────────────
@@ -529,7 +638,7 @@ if [[ "$ARIADNE_DIR" != "$TARGET_DIR" ]] && { [[ ! -f "$MODE_MARKER" ]] || [[ "$
     printf "  ${GREEN}wrote${RESET}   .ariadne-mode (%s)\n" "$MODE"
 fi
 
-# ── Vendor Go source (vendor mode + go.mod present) ──────────────────────────
+# ── Vendor Go source (vendor mode + go.mod present + cross-target) ───────────
 # In vendor mode, the substrate isn't just text — Go binaries that ship
 # from ariadne (like cmd/sdlc) need their source available in the target
 # repo too. `go mod vendor` populates vendor/ with the source for every
@@ -538,11 +647,19 @@ fi
 #
 # Symlink mode skips this — sibling-checkout development resolves Go
 # imports via the replace directive's local path, no vendor/ needed.
-if [[ "$MODE" == "vendor" && -f "$TARGET_DIR/go.mod" ]]; then
+#
+# Self-walk (ARIADNE_DIR == TARGET_DIR) also skips — substrate vendoring
+# is for the cross-repo case where the consumer doesn't have ariadne
+# next door. Ariadne IS the source; vendoring its own deps into itself
+# via the substrate path would pollute the source tree with a vendor/
+# directory the substrate doesn't actually need. (If ariadne wants
+# vendor/ for its own Go-side reasons, the operator runs `go mod vendor`
+# directly — independent of substrate refresh.)
+if [[ "$MODE" == "vendor" && -f "$TARGET_DIR/construct/go.mod" && "$ARIADNE_DIR" != "$TARGET_DIR" ]]; then
     if command -v go >/dev/null 2>&1; then
-        printf "\n  ${CYAN}vendoring Go source (go mod vendor)${RESET}\n"
-        if ( cd "$TARGET_DIR" && go mod tidy && go mod vendor ) 2>&1 | sed 's/^/    /'; then
-            printf "  ${GREEN}vendored${RESET} Go source into vendor/\n"
+        printf "\n  ${CYAN}vendoring Go source into construct/vendor/${RESET}\n"
+        if ( cd "$TARGET_DIR/construct" && go mod tidy && go mod vendor ) 2>&1 | sed 's/^/    /'; then
+            printf "  ${GREEN}vendored${RESET} Go source into construct/vendor/\n"
         else
             printf "  ${YELLOW}skipped${RESET} go mod vendor (errors above; non-fatal)\n"
         fi

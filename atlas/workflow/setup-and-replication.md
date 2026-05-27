@@ -168,6 +168,54 @@ install/refresh path. The version of the binary determines the version of
 every derived artifact automatically — no text-vs-code lockstep drift
 possible.
 
+## Go source vendoring — `construct/go.mod` split
+
+Derivatives that consume Go tools from ancestors (cmd/sdlc from ariadne,
+future cmd/nous from nous, etc.) get a **second `go.mod`** scoped to
+substrate concerns only:
+
+```
+<derivative>/
+  go.mod                # app deps (charmbracelet, creack/pty, etc.)
+                        # operator-managed; vendoring is app-side choice
+  construct/
+    go.mod              # substrate-tool deps (require + replace + tool
+                        # for each ancestor that ships Go tools)
+    vendor/             # vendored substrate-tool sources only (~600KB
+                        # for sdlc-only; not 15MB+ with app closure)
+  bin/sdlc              # built from construct/vendor/
+```
+
+The two go.mods are independent Go modules (one go.mod per directory =
+one Go module — native Go semantics). setup.sh auto-manages
+`construct/go.mod`; the operator never edits it manually.
+
+**Why split:** `go mod vendor` operates module-level, vendoring the entire
+closure of whatever's in go.mod. With substrate-tool deps in the root
+go.mod, refreshing a derivative with its own Go app code (like `pair`
+with charmbracelet/* + creack/pty deps) vendored ~15MB / 800+ files —
+most of it the app closure, not the substrate concern. The split moves
+substrate-tool deps to `construct/go.mod`, so `go mod vendor` in
+construct/ vendors only the ~600KB substrate-tool closure.
+
+**Multi-layer composition.** When a derivative descends from multiple
+ancestors that each ship Go tools (e.g., baby-brain consuming both
+ariadne's sdlc + nous's cmd/nous), all require + tool entries land in
+one `construct/go.mod`. Go natively supports multiple require + tool
+entries; no custom walker needed.
+
+**Self-walk exception.** Ariadne itself has no `construct/go.mod` — ariadne
+IS the substrate source; its tool directive lives in the root go.mod.
+Same for any future top-of-chain layer.
+
+**Bootstrap vs refresh.** `make bootstrap` builds tools from the existing
+vendored sources — does NOT require sibling-checkout of the upstream. Use
+after a fresh `git clone <derivative>`. `make refresh` UPDATES the
+vendored sources from upstream — DOES require sibling-checkout. The split
+of verbs matches the split of when each operation needs the upstream.
+
+Design rationale: `workshop/issues/000037`.
+
 ## Related
 
 - `construct/base.manifest` — what ariadne contributes (action + path
