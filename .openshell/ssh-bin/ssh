@@ -1,4 +1,0 @@
-#!/bin/bash
-# SSH wrapper for mutagen — delegates to system SSH which reads ~/.ssh/config.
-# Mutagen 0.18+ expects MUTAGEN_SSH_PATH to be a directory containing an 'ssh' binary.
-exec /usr/bin/ssh "$@"

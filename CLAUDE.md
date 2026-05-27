@@ -1,1 +1,1 @@
-@AGENTS.md
+../ariadne/CLAUDE.md

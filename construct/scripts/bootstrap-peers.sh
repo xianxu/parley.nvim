@@ -1,0 +1,1 @@
+../../../ariadne/construct/scripts/bootstrap-peers.sh
