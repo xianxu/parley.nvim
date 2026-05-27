@@ -17,6 +17,16 @@ Do NOT invoke any implementation skill, write any code, scaffold any project, or
 
 Every project goes through this process. A todo list, a single-function utility, a config change — all of them. "Simple" projects are where unexamined assumptions cause the most wasted work. The design can be short (a few sentences for truly simple projects), but you MUST present it and get approval.
 
+## Brainstorming Modes
+
+Brainstorming comes in multiple shapes. **Infer which is in play from the operator's framing — do not ask.** Capable models tend to do this naturally; this section makes the behavior explicit so it's inspectable and overridable.
+
+- **Crystallization** — operator has an idea; scope is fuzzy; goal is to converge to a stable written shape. Lean on scope, success criteria, alternatives, what's explicitly out.
+- **Feasibility** — operator has a hypothesis ("X might work"); viability is open. Goal is updating belief cheaply. Lean on the smallest test that would change the answer, what signal would mean "stop and rethink," blocking constraints.
+- **Domain-learning** — operator is in unknown terrain. Goal is building enough vocabulary and pattern recognition to assess. Lean on prior art, the smallest end-to-end demo, what minimum the operator needs to learn first.
+
+Mode shapes the question budget. Crystallization: more questions converge value. Feasibility: fewer questions + cheap experiments converge value. Domain-learning: questions mostly offload research to the agent rather than back to the operator.
+
 ## Checklist
 
 You MUST create a task for each of these items and complete them in order:
@@ -79,6 +89,8 @@ digraph brainstorming {
 - Prefer multiple choice questions when possible, but open-ended is fine too
 - Only one question per message - if a topic needs more exploration, break it into multiple questions
 - Focus on understanding: purpose, constraints, success criteria
+- Tag each clarifying question with a short gist marker inline: `What's the boundary? (gist: scope)`. Starter vocabulary: `scope`, `alternative`, `success-criteria`, `constraint`, `assumption`, `prior-art`. Use these when they fit; introduce a new tag when nothing fits — new tags become candidates for the vocabulary to incorporate. Suggestion, not enforcement: don't contort a question to fit a tag.
+- When using `AskUserQuestion` with a "(Recommended)" option, after the user answers, emit an HTML-comment marker as the first line of your next message before continuing the brainstorm: `<!-- brainstorm-log: gist=scope chose=default option=A -->` or `<!-- brainstorm-log: gist=alternative chose=other option=C -->`. Skip the marker for free-form prose questions (no Recommended → no default-acceptance signal). Markers are grep-able in transcripts and committed files; they accumulate data without separate logging infrastructure.
 
 **Exploring approaches:**
 

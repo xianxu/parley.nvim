@@ -60,20 +60,6 @@ ARIADNE_DIR="$(dirname "$SCRIPT_REAL")"
 # symlink resolution.
 TARGET_DIR="$(pwd -P)"
 
-# ── Self-refresh short-circuit ────────────────────────────────────────────────
-# When the target IS the script's own upstream, there's nothing to apply
-# from this upstream (target already has its files at canonical locations).
-# Just sync local-skill symlinks and exit. Note: this fires only at depth 0
-# (ariadne self-refresh). For depth-N self-refresh of a non-top-of-chain
-# layer, the script proceeds to ancestor walk normally.
-if [[ "$ARIADNE_DIR" == "$TARGET_DIR" ]]; then
-    SYNC_SCRIPT="$ARIADNE_DIR/construct/scripts/sync-local-skills.sh"
-    if [[ -f "$SYNC_SCRIPT" ]]; then
-        bash "$SYNC_SCRIPT" 2>&1
-    fi
-    exit 0
-fi
-
 # ── Colors ────────────────────────────────────────────────────────────────────
 GREEN='\033[1;32m'
 YELLOW='\033[1;33m'
@@ -192,7 +178,12 @@ if [[ -z "$MODE" ]]; then
     MODE="${PREVIOUS_MODE:-symlink}"
 fi
 
-if [[ -z "$PREVIOUS_MODE" ]]; then
+if [[ -z "$PREVIOUS_MODE" && "$ARIADNE_DIR" != "$TARGET_DIR" ]]; then
+    # First-time-setup prompt only applies when ariadne is setting up a
+    # DIFFERENT target. Ariadne itself is the upstream — it has no .ariadne-
+    # mode marker by design (the marker records "this layer was set up from
+    # an upstream"), so absence of the marker for the ariadne-self case is
+    # normal, not first-time. Skip the prompt; the rest of the script runs.
     REPO_NAME=$(basename "$TARGET_DIR")
     printf "${YELLOW}First-time setup in:${RESET} ${BOLD_RED}%s${RESET}\n" "$REPO_NAME"
     printf "  Path: %s\n" "$TARGET_DIR"
@@ -371,7 +362,14 @@ walk_manifest() {
         # .claude/skills/X` exposes a skill via the Claude-Code-expected
         # path) while protecting entries like `symlink Makefile.nous`
         # (declared for downstream consumers; tautological in nous itself).
-        if [[ "$upstream/$source" == "$TARGET_DIR/$target" ]]; then
+        #
+        # Exception: the `merge` action has implicit source-rename semantics
+        # (reads .claude/settings.<layer>.json, writes .claude/settings.json
+        # — different files). On self-walk for ariadne, this regenerates
+        # the layer's own settings.json from its committed settings.X.json
+        # + local overlay. Skipping it would silently break ariadne's
+        # self-refresh.
+        if [[ "$action" != "merge" && "$upstream/$source" == "$TARGET_DIR/$target" ]]; then
             printf "  ${YELLOW}skipped${RESET} %s (self-reference at canonical location)\n" "$target"
             continue
         fi
@@ -431,13 +429,11 @@ while IFS= read -r dir; do
 done < <(discover_ancestors)
 
 if [[ ${#ANCESTORS[@]} -eq 0 ]]; then
-    printf "${YELLOW}No upstream layers found.${RESET}\n"
-    printf "  Target has no go.mod requiring a module with construct/base.manifest,\n"
-    printf "  and the script's own upstream is the target itself. Nothing to apply.\n"
-    exit 0
-fi
-
-if [[ ${#ANCESTORS[@]} -eq 1 ]]; then
+    # No upstreams — this is ariadne (the top of the chain). Skip the
+    # ancestor walk, but still run self-walk + post-processing below
+    # (settings merge, gitignore, skills sync, mode marker, go mod vendor).
+    printf "${YELLOW}No upstream layers found${RESET} — running self-walk + post-processing only.\n"
+elif [[ ${#ANCESTORS[@]} -eq 1 ]]; then
     printf "${CYAN}Setup:${RESET} %s → %s (mode: %s)\n" "${ANCESTORS[0]}" "$TARGET_DIR" "$MODE"
 else
     printf "${CYAN}Setup:${RESET} %d upstream layer(s) → %s (mode: %s)\n" "${#ANCESTORS[@]}" "$TARGET_DIR" "$MODE"
@@ -446,9 +442,11 @@ else
     done
 fi
 
-for upstream in "${ANCESTORS[@]}"; do
-    walk_manifest "$upstream"
-done
+if [[ ${#ANCESTORS[@]} -gt 0 ]]; then
+    for upstream in "${ANCESTORS[@]}"; do
+        walk_manifest "$upstream"
+    done
+fi
 
 # After ancestors: walk target's own manifest if it has one. This lets a
 # layer's manifest contain entries that ARE meaningful when applied to that
@@ -522,9 +520,35 @@ if [[ -f "$APPLY_GITIGNORE" ]]; then
 fi
 
 # ── Record mode ───────────────────────────────────────────────────────────────
-if [[ ! -f "$MODE_MARKER" ]] || [[ "$(tr -d '[:space:]' < "$MODE_MARKER")" != "$MODE" ]]; then
+# Skip mode marker for ariadne-self — the marker records "this target was
+# set up from an ariadne upstream," which is meaningless when target IS
+# ariadne. Writing `symlink` or `vendor` in ariadne/.ariadne-mode would
+# be misleading (ariadne has no upstream to be in symlink/vendor against).
+if [[ "$ARIADNE_DIR" != "$TARGET_DIR" ]] && { [[ ! -f "$MODE_MARKER" ]] || [[ "$(tr -d '[:space:]' < "$MODE_MARKER")" != "$MODE" ]]; }; then
     echo "$MODE" > "$MODE_MARKER"
     printf "  ${GREEN}wrote${RESET}   .ariadne-mode (%s)\n" "$MODE"
+fi
+
+# ── Vendor Go source (vendor mode + go.mod present) ──────────────────────────
+# In vendor mode, the substrate isn't just text — Go binaries that ship
+# from ariadne (like cmd/sdlc) need their source available in the target
+# repo too. `go mod vendor` populates vendor/ with the source for every
+# require / tool declaration in go.mod, so the binary can be built
+# locally without needing the ancestor checked out next door.
+#
+# Symlink mode skips this — sibling-checkout development resolves Go
+# imports via the replace directive's local path, no vendor/ needed.
+if [[ "$MODE" == "vendor" && -f "$TARGET_DIR/go.mod" ]]; then
+    if command -v go >/dev/null 2>&1; then
+        printf "\n  ${CYAN}vendoring Go source (go mod vendor)${RESET}\n"
+        if ( cd "$TARGET_DIR" && go mod tidy && go mod vendor ) 2>&1 | sed 's/^/    /'; then
+            printf "  ${GREEN}vendored${RESET} Go source into vendor/\n"
+        else
+            printf "  ${YELLOW}skipped${RESET} go mod vendor (errors above; non-fatal)\n"
+        fi
+    else
+        printf "  ${YELLOW}skipped${RESET} go mod vendor (go toolchain not on PATH)\n"
+    fi
 fi
 
 # ── Sync skill symlinks ───────────────────────────────────────────────────────

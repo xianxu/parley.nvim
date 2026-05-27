@@ -1,0 +1,22 @@
+# Skipped by Makefile.workflow's generic build: scanner.
+#
+# sdlc follows the same per-binary build convention as ../nous: build via a
+# dedicated `make sdlc-build` target that writes to cmd/sdlc/bin/sdlc and
+# symlinks bin/sdlc → ../cmd/sdlc/bin/sdlc. The generic `make build`
+# scanner intentionally leaves bin/sdlc alone so the symlink convention
+# isn't accidentally replaced by a real file.
+#
+# Today sdlc has no signing / notification requirements that strictly
+# demand this layout (unlike nous, which is signed + notarized and would
+# break keychain ACL grants if overwritten). The convention is held
+# anyway because:
+#
+#   1. Future sdlc features may add notification or other code-signing-
+#      sensitive surfaces (e.g., a "harness of harnesses" that sends OS
+#      signals). Establishing the per-binary build convention now keeps
+#      future migrations cheap.
+#   2. Convention parity with nous makes the cmd/<name>/ pattern
+#      consistent across ariadne-style repos.
+#
+# To build sdlc: `make sdlc-build`.
+# To install it on PATH: `make sdlc-bootstrap`.

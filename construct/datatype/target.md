@@ -1,23 +1,35 @@
 ---
 type: type
 name: target
-description: Use when capturing the durable narrative intent behind a piece of work — what we want and what for, sitting above projects and issues in the dependency graph. Triggers on "create a target for X", "write a target file", "extract this problem section to a target", "/xx-datatype target". Distinct from project (execution container with done_when), product (durable charter), pensive (moment-in-time thought). Under-specified by design — let the substrate derive specifics.
+description: Use when a pattern, convention, protocol, or invariant has crystallized through iteration and is worth committing to defend against drift. Captures a grounding truth — what we defend and why — sitting above projects and issues in the dependency graph. Triggers on "create a target for X", "extract this stabilized pattern to a target", "/xx-datatype target". Distinct from project (execution container with done_when), product (durable charter), pensive (moment-in-time, pre-stabilization). Backward-looking by default — recognition of what stabilized through use, not specification of what to build. Under-specified by design — let the substrate derive specifics.
 ---
 
 # target
 
-A target is the *intent layer* — durable narrative prose describing what the operator wants and what for. Distinct from execution containers (projects), durable charters (products), and moment-in-time thinking (pensives). A target gets referenced by one or more projects and issues that descend from it; the substrate of work flows down the dependency graph while the target itself stays slim.
+A target is the *commitment layer* — durable narrative prose recording a shape, convention, protocol, or invariant that crystallized through use and is now worth defending against drift. Distinct from execution containers (projects), durable charters (products), and moment-in-time thinking (pensives). A target gets referenced by one or more projects and issues that descend from it (or that have to honor it in future work); the substrate of work flows down the dependency graph while the target itself stays slim.
 
-Targets are deliberately under-specified. The discipline: **only get more specific when the agent fills the gap wrong.** A target that says "create a shared brain infrastructure and user interface" doesn't enumerate features; trust the projects and issues that descend from it to derive specifics, and only refine the target when a later read reveals that the agent's natural decomposition was wrong.
+Targets are deliberately under-specified. The discipline: **only get more specific when the agent fills the gap wrong.** A target that names a commitment (e.g., the shared brain infrastructure shape we maintain across consumers) doesn't enumerate features; trust the projects and issues that descend from it to derive specifics, and only refine the target when a later read reveals that the natural decomposition was missing something the commitment must honor.
 
 ## Distinct from sibling datatypes
 
 - `product` — durable *charter* ("what is being built"). A target is more narrative-driven and may not yet have a defined product behind it. Targets can crystallize into products as the shape firms up.
 - `project` — *execution container* ("what we've decided to do, by when"). A project advances one or more targets via tracked tasks and a `done_when` criterion.
-- `pensive` — captures a *moment of thought*. A target captures durable *commitment*, refined across many sessions. Pensives can promote to targets when the operator's intent crystallizes.
+- `pensive` — captures a *moment of thought* before patterns stabilize. A target captures *durable commitment* to defend a stabilized pattern. Pensives typically promote to issues; a pensive can directly promote to a target when the moment-in-time thought was recognition of a pattern that already crystallized through use, rather than a new direction.
 - `issue` — leaf *work unit*. Small issues embed their target inline as `## Problem`. Larger initiatives extract that section into a standalone target file and reference it via `target: <slug>` frontmatter.
 
-In short: **target describes what we still want and what for; project describes the execution flowing from it; issue describes a unit of work that advances it.**
+In short: **target describes what we defend and why; project describes execution flowing from it; issue describes a unit of work that advances or honors it.**
+
+## Where targets come from
+
+Target authoring is a datatype operation, not an SDLC stage — it happens whenever the operator recognizes a stabilized pattern worth defending, not at a fixed moment in the work flow. Three common upstream paths:
+
+1. **Pensive crystallization.** A pensive (`docs/vision/*-pensive-*.md` or `workshop/pensive/`) is the moment-in-time holding area for "I keep noticing this might be worth defending — let me think about it." When the thought stabilizes into a durable commitment, the pensive promotes to a target via `xx-datatype target` (or this skill).
+
+2. **Postmortem candidates.** The per-issue postmortem (`sdlc postmortem --issue N`, ariadne#35) surfaces "crystallization candidates" as one of its LLM-judgment sections. Each candidate is a pattern from the just-shipped work that may be worth defending across future work. Accepted candidates draft a target file.
+
+3. **Direct authoring.** The operator just decides to write a target — recognition fired, no upstream artifact needed. Fine. The pensive / postmortem paths exist so recognition is more likely to land somewhere durable instead of being forgotten; they're not gates.
+
+The trigger across all three is the same: *recognition that a pattern has stabilized*. Not a schedule, not a checklist item, not a workflow stage. See `sdlc --help` (TARGET AUTHORING block) for how this interacts with the SDLC arc.
 
 ## Frontmatter shape
 
@@ -39,10 +51,10 @@ Notably *absent* (relative to `project`): `done_when`, `operator`, `mvp_scope`, 
 An instance of `target` has, in order:
 
 1. `# Target: <title>` — first line of the file. Title is what shows up when someone greps for `^# Target:`.
-2. **Lede** — 1-3 paragraphs of "what we want and what for." The *what for* gets most of the words. This is the durable centerpiece; the rest is supporting.
+2. **Lede** — 1-3 paragraphs of "what shape we defend and why we defend it." The *why we defend* gets most of the words. Backward-looking by default: the lede names the pattern that crystallized, not the future we imagine. This is the durable centerpiece; the rest is supporting.
 3. `## Why now` — 1-2 paragraphs of motivation. What's making this matter at this moment? What changed that surfaced this target?
 4. `## What this is NOT` — under-specification by negation. Narrows the intent space *without* enumerating sub-features. Examples: "not a rewrite of X," "not solving Y," "scope stops at Z." The conversation about what's *out* is more useful than the in-list, same as it is for projects.
-5. `## Open questions` — intent-level uncertainties the operator is explicitly *not* committing on yet. Distinguished from project's task list (those are execution todos); these are commitments-not-yet-made. Live indefinitely; close out when the operator commits one way or the other (delete the question, fold the answer into the lede).
+5. `## Open questions` — edges of the commitment that haven't been decided yet (scope boundaries, edge cases, applicability questions). Distinguished from project's task list (those are execution todos); these are scope-of-commitment uncertainties, not commitments-not-yet-made — the commitment itself is settled by the lede, what's open is its perimeter. Live indefinitely; close out when the operator decides one way or the other (delete the question, fold the answer into the lede).
 
 Optional later additions:
 
@@ -73,7 +85,7 @@ When the dispatcher applies this prototype:
 
 2. **Required fields the dispatcher must resolve before writing:**
    - `slug` (kebab-case) — usually obvious from "target for X" or the conversation topic. Confirm if it's not unambiguous.
-   - Lede — distill 1-3 paragraphs from conversation. *What for* gets most of the words.
+   - Lede — distill 1-3 paragraphs from conversation. *Why we defend* (the motivation behind the commitment) gets most of the words.
 
 3. **Force the under-specification discipline.** Resist the PRD-shaped instinct to enumerate sub-features. If the operator starts listing features, redirect: those belong in projects/issues that descend from this target. The target itself stays narrative.
 
