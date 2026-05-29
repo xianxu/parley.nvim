@@ -16,3 +16,4 @@ vision
 .openshell/.base-image-digest
 .DS_Store
 /bin/sdlc
+bin/
