@@ -29,6 +29,7 @@ After an optional `<>`, `[]` and `{}` may appear in any order.
 - Pending (quickfix) = last section is non-empty `{}` (agent asked, needs human reply)
 - Markers inside fenced code blocks are ignored
 - `<text>` disambiguates "which text the marker refers to" — use it whenever the surrounding-text rule would be ambiguous (added in #123)
+- `<>`/`[]`/`{}` sections may span **multiple lines**, each bounded to ~50 lines (per-section budget) so a stray opener can't swallow the document; `~D~` strike stays single-line (added in #125). `parse_markers` parses over the whole buffer joined (offset→line/col map) rather than line-by-line; `find_matching_bracket` takes an optional `{budget, is_excluded}` so the shared `_parse_marker_sections` (highlighter, drill_in) keeps its single-text behavior. Unterminated openers fall back to silent non-recognition.
 
 ## Keybindings (non-chat markdown only)
 

@@ -22,6 +22,12 @@ Single marker: `🤖`. Two reference slots (mutually exclusive, optional, first 
 - **Ready for you** = last section is `[]` (human spoke last). Strike (`~D~`) markers are *never* ready — they're proposals, not questions.
 - **Pending** = last section is `{}` (agent spoke last, awaiting human — skip these).
 
+A marker's `<>`, `[]`, and `{}` sections may **span multiple lines** — useful when a
+turn or a proposed `{addition}` is a whole paragraph or headed section. Each section
+is bounded (it gives up after ~50 lines), so always balance your brackets; an
+unterminated opener is silently ignored. `~D~` strike is the exception — it stays
+single-line (tildes are common in prose).
+
 Markers inside fenced code blocks are ignored.
 
 ## Editing rules

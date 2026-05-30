@@ -27,16 +27,40 @@ end
 -- Marker parsing (extracted from review.lua)
 --------------------------------------------------------------------------------
 
-local function find_matching_bracket(text, start, open, close)
+-- Find the close that matches the `open` at `start`, tracking nesting depth.
+--
+-- `opts` (optional) enables bounded multi-line matching for parse_markers:
+--   budget       — max number of newlines the scan may cross before giving up
+--                  (returns nil). nil = unlimited (the historical behavior;
+--                  used by single-line callers and drill_in, which passes
+--                  already-multi-line text and relies on unbounded scanning).
+--   is_excluded  — predicate (offset) -> bool. When true for a given byte
+--                  offset, an `open`/`close` char there is ignored (does not
+--                  affect depth). Used to skip brackets inside fenced code
+--                  blocks / inline-code spans so a `}` in a code sample can't
+--                  close a marker opened in prose. Newlines still count toward
+--                  the budget regardless of exclusion.
+local function find_matching_bracket(text, start, open, close, opts)
+    opts = opts or {}
+    local budget = opts.budget
+    local is_excluded = opts.is_excluded
     local depth = 0
+    local newlines = 0
     for i = start, #text do
         local ch = text:sub(i, i)
-        if ch == open then
-            depth = depth + 1
-        elseif ch == close then
-            depth = depth - 1
-            if depth == 0 then
-                return i
+        if ch == "\n" then
+            newlines = newlines + 1
+            if budget and newlines > budget then
+                return nil
+            end
+        elseif (ch == open or ch == close) and not (is_excluded and is_excluded(i)) then
+            if ch == open then
+                depth = depth + 1
+            else
+                depth = depth - 1
+                if depth == 0 then
+                    return i
+                end
             end
         end
     end
@@ -55,7 +79,13 @@ end
 --
 -- See workshop/issues/000123-quoted-body-marker-syntax.md (quoted-body) and
 -- 000124-review-convention-alignment.md (strikethrough family) for grammar.
-local function parse_marker_sections(text, pos, byte_len)
+--
+-- `opts` (optional): { budget, is_excluded } forwarded to find_matching_bracket
+-- to enable bounded multi-line matching of <>, [], {} sections. Omitting it (the
+-- highlighter and drill_in callers) yields the historical single-text behavior.
+-- The ~...~ strike branch is always single-line regardless of opts — tildes are
+-- common in prose and a greedy multi-line `~` match would absorb arbitrary text.
+local function parse_marker_sections(text, pos, byte_len, opts)
     local cursor = pos + (byte_len or 4)  -- 🤖=4 bytes
     local sections = {}
     local quoted = nil
@@ -65,7 +95,7 @@ local function parse_marker_sections(text, pos, byte_len)
     if cursor <= #text then
         local ch = text:sub(cursor, cursor)
         if ch == "<" then
-            local close = find_matching_bracket(text, cursor, "<", ">")
+            local close = find_matching_bracket(text, cursor, "<", ">", opts)
             if close then
                 quoted = {
                     text = text:sub(cursor + 1, close - 1),
@@ -99,7 +129,7 @@ local function parse_marker_sections(text, pos, byte_len)
     while cursor <= #text do
         local ch = text:sub(cursor, cursor)
         if ch == "[" then
-            local close = find_matching_bracket(text, cursor, "[", "]")
+            local close = find_matching_bracket(text, cursor, "[", "]", opts)
             if not close then break end
             table.insert(sections, {
                 type = "user",
@@ -109,7 +139,7 @@ local function parse_marker_sections(text, pos, byte_len)
             })
             cursor = close + 1
         elseif ch == "{" then
-            local close = find_matching_bracket(text, cursor, "{", "}")
+            local close = find_matching_bracket(text, cursor, "{", "}", opts)
             if not close then break end
             table.insert(sections, {
                 type = "agent",
@@ -157,6 +187,17 @@ end
 local MARKER_CHAR = "🤖"
 local MARKER_BYTE_LEN = 4
 
+-- Each <>/[]/{} section may span at most this many newlines before its
+-- close-search gives up (the opener is then left unrecognized, as in the
+-- historical single-line behavior). The budget is PER SECTION — the counter
+-- resets at each opening bracket — so the relevant guarantee is the blast
+-- radius of a single *stray* opener: a typo'd `🤖{` absorbs at most this many
+-- lines, never the whole document. (A well-formed multi-section marker could
+-- therefore span a few × this; that's not a runaway, just a long marker.)
+-- Generous enough for multi-paragraph proposals (the motivating case spanned 2
+-- lines); see workshop/issues/000125-bounded-multiline-markers.md.
+local MULTILINE_LINE_BUDGET = 50
+
 -- Returns list of {start, finish} byte ranges for inline code spans on a line.
 -- Handles `` ` `` and ``` `` ``` delimiters.
 local function inline_code_ranges(line)
@@ -184,63 +225,104 @@ local function inline_code_ranges(line)
     return ranges
 end
 
-local function in_inline_code(ranges, pos)
-    for _, r in ipairs(ranges) do
-        if pos >= r[1] and pos <= r[2] then
-            return true
-        end
-    end
-    return false
-end
-
+-- Parse 🤖 markers over the whole buffer at once (not line-by-line), so a
+-- marker's <>/[]/{} sections may span multiple lines (bounded by
+-- MULTILINE_LINE_BUDGET). The buffer is joined into one `doc` string; byte
+-- offsets map back to (line, col) via `line_starts`. Brackets inside fenced
+-- code blocks / inline-code spans are excluded so they can't open or close a
+-- marker. See workshop/issues/000125-bounded-multiline-markers.md.
 M.parse_markers = function(lines)
     local fence_ranges = compute_fence_ranges(lines)
-    local markers = {}
+    local doc = table.concat(lines, "\n")
 
-    for i, line in ipairs(lines) do
-        if not in_code_fence(fence_ranges, i - 1) then
-            local code_ranges = inline_code_ranges(line)
-            local search_start = 1
-            while true do
-                local pos = line:find(MARKER_CHAR, search_start, true)
-                if not pos then break end
-                if in_inline_code(code_ranges, pos) then
-                    search_start = pos + MARKER_BYTE_LEN
-                    goto continue
-                end
+    -- 1-based byte offset where each line begins in `doc`.
+    local line_starts = {}
+    do
+        local off = 1
+        for i, line in ipairs(lines) do
+            line_starts[i] = off
+            off = off + #line + 1  -- +1 for the joining "\n"
+        end
+    end
 
-                local sections, end_pos, quoted, strike = parse_marker_sections(line, pos, MARKER_BYTE_LEN)
-                -- Normalize empty `~~` to nil so downstream doesn't have to
-                -- special-case it. (Empty `<>` is preserved here for review
-                -- semantics — see review_spec; drill_in.parse normalizes it
-                -- on its own surface.)
-                if strike and strike.text == "" then strike = nil end
-                -- Recognize a marker iff it has at least one `[]`/`{}` section,
-                -- a `<>` quoted body, or a `~...~` strike. Bare 🤖 with none
-                -- of these is plain text.
-                if #sections > 0 or quoted or strike then
-                    local last = sections[#sections]
-                    -- Ready = last section is non-empty [] (human spoke last,
-                    -- agent should act). Strike markers are proposals, not
-                    -- questions — they never count as ready.
-                    local ready = (not strike) and last and last.type == "user" and last.text ~= "" or false
-                    -- Pending = last section is non-empty {} (agent asked, needs human reply)
-                    local pending = last and last.type == "agent" and last.text ~= "" or false
-                    table.insert(markers, {
-                        line = i - 1,
-                        col = pos - 1,
-                        quoted = quoted,
-                        strike = strike,
-                        sections = sections,
-                        ready = ready,
-                        pending = pending,
-                        raw = line:sub(pos, end_pos - 1),
-                    })
-                end
-                search_start = end_pos
-                ::continue::
+    -- Map a 1-based doc offset to 0-based (line, col). Binary search over
+    -- line_starts (sorted ascending).
+    local function offset_to_pos(offset)
+        local lo, hi = 1, #line_starts
+        while lo < hi do
+            local mid = math.floor((lo + hi) / 2) + 1
+            if line_starts[mid] <= offset then
+                lo = mid
+            else
+                hi = mid - 1
             end
         end
+        return lo - 1, offset - line_starts[lo]  -- 0-based line, 0-based col
+    end
+
+    -- Excluded byte ranges (1-based, inclusive) in `doc`: whole fenced lines,
+    -- plus inline-code spans on non-fenced lines. Sorted by start for early-out.
+    local excluded = {}
+    for i, line in ipairs(lines) do
+        local base = line_starts[i]
+        if in_code_fence(fence_ranges, i - 1) then
+            table.insert(excluded, { base, base + #line })  -- whole line (+ its \n)
+        else
+            for _, r in ipairs(inline_code_ranges(line)) do
+                table.insert(excluded, { base + r[1] - 1, base + r[2] - 1 })
+            end
+        end
+    end
+    local function is_excluded(offset)
+        for _, r in ipairs(excluded) do
+            if r[1] > offset then break end       -- sorted: no later range can match
+            if offset <= r[2] then return true end
+        end
+        return false
+    end
+
+    local opts = { budget = MULTILINE_LINE_BUDGET, is_excluded = is_excluded }
+    local markers = {}
+    local search_start = 1
+    while true do
+        local pos = doc:find(MARKER_CHAR, search_start, true)
+        if not pos then break end
+        if is_excluded(pos) then
+            search_start = pos + MARKER_BYTE_LEN
+            goto continue
+        end
+
+        local sections, end_pos, quoted, strike = parse_marker_sections(doc, pos, MARKER_BYTE_LEN, opts)
+        -- Normalize empty `~~` to nil so downstream doesn't have to
+        -- special-case it. (Empty `<>` is preserved here for review
+        -- semantics — see review_spec; drill_in.parse normalizes it
+        -- on its own surface.)
+        if strike and strike.text == "" then strike = nil end
+        -- Recognize a marker iff it has at least one `[]`/`{}` section,
+        -- a `<>` quoted body, or a `~...~` strike. Bare 🤖 with none
+        -- of these is plain text.
+        if #sections > 0 or quoted or strike then
+            local last = sections[#sections]
+            local line0, col0 = offset_to_pos(pos)
+            -- Ready = last section is non-empty [] (human spoke last,
+            -- agent should act). Strike markers are proposals, not
+            -- questions — they never count as ready.
+            local ready = (not strike) and last and last.type == "user" and last.text ~= "" or false
+            -- Pending = last section is non-empty {} (agent asked, needs human reply)
+            local pending = last and last.type == "agent" and last.text ~= "" or false
+            table.insert(markers, {
+                line = line0,
+                col = col0,
+                quoted = quoted,
+                strike = strike,
+                sections = sections,
+                ready = ready,
+                pending = pending,
+                raw = doc:sub(pos, end_pos - 1),
+            })
+        end
+        search_start = end_pos
+        ::continue::
     end
 
     return markers

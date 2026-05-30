@@ -272,6 +272,129 @@ describe("parse_markers", function()
     end)
 end)
 
+describe("parse_markers multi-line (#000125)", function()
+    it("parses a {} agent section that spans lines (pending)", function()
+        local markers = review.parse_markers({
+            "### 🤖{2026-05-29 — local-only brains",
+            "",
+            "body paragraph ends here.}",
+        })
+        assert.equals(1, #markers)
+        assert.equals(0, markers[1].line)   -- opener line (the heading)
+        assert.equals(4, markers[1].col)    -- 0-based col of 🤖 after "### "
+        assert.is_true(markers[1].pending)
+        assert.equals(1, #markers[1].sections)
+        assert.equals("agent", markers[1].sections[1].type)
+        assert.equals("2026-05-29 — local-only brains\n\nbody paragraph ends here.", markers[1].sections[1].text)
+    end)
+
+    it("parses a [] human section that spans lines (ready)", function()
+        local markers = review.parse_markers({
+            "prose 🤖[please rewrite this",
+            "across two lines]",
+        })
+        assert.equals(1, #markers)
+        assert.is_true(markers[1].ready)
+        assert.equals("please rewrite this\nacross two lines", markers[1].sections[1].text)
+    end)
+
+    it("parses a <> quoted body that spans lines", function()
+        local markers = review.parse_markers({
+            "🤖<the exact phrase",
+            "continued>[fix it]",
+        })
+        assert.equals(1, #markers)
+        assert.is_not_nil(markers[1].quoted)
+        assert.equals("the exact phrase\ncontinued", markers[1].quoted.text)
+        assert.is_true(markers[1].ready)
+    end)
+
+    it("matches nested braces across lines", function()
+        local markers = review.parse_markers({
+            "🤖{outer {inner",
+            "still inner} outer}",
+        })
+        assert.equals(1, #markers)
+        assert.equals("outer {inner\nstill inner} outer", markers[1].sections[1].text)
+    end)
+
+    it("does NOT recognize an unterminated opener (graceful fallback)", function()
+        local markers = review.parse_markers({
+            "🤖{never closes",
+            "still open",
+            "and on and on",
+        })
+        assert.equals(0, #markers)
+    end)
+
+    it("runaway guard: close beyond the line budget is not matched", function()
+        local lines = { "🤖{open" }
+        for _ = 1, 60 do table.insert(lines, "filler") end  -- > MULTILINE_LINE_BUDGET (50)
+        table.insert(lines, "close}")
+        local markers = review.parse_markers(lines)
+        assert.equals(0, #markers)
+    end)
+
+    it("a } inside a fenced code block does not close a prose marker", function()
+        local markers = review.parse_markers({
+            "🤖{question about code",
+            "```lua",
+            "local x = {}",   -- the } here must NOT close the marker
+            "```",
+            "real close here}",
+        })
+        assert.equals(1, #markers)
+        assert.is_true(markers[1].pending)
+        -- section text spans through the fence to the real close
+        assert.is_truthy(markers[1].sections[1].text:find("real close here", 1, true))
+    end)
+
+    it("a } inside an inline-code span does not close a prose marker", function()
+        local markers = review.parse_markers({
+            "🤖{see `foo}` then",
+            "really close}",
+        })
+        assert.equals(1, #markers)
+        assert.equals("see `foo}` then\nreally close", markers[1].sections[1].text)
+    end)
+
+    it("~~ strike stays single-line: an unterminated ~ across lines is not a strike", function()
+        local markers = review.parse_markers({
+            "🤖~delete this",
+            "but tilde never closes on this line",
+        })
+        assert.equals(0, #markers)
+    end)
+
+    it("budget is per-section: a 2-section marker may total > budget lines", function()
+        -- Each section stays under the 50-line budget, but the marker as a whole
+        -- spans ~70 lines. This pins the per-section reset (see lesson #5) — the
+        -- runaway guard bounds a single *stray* opener, not a well-formed marker.
+        local lines = { "🤖[" }
+        for _ = 1, 35 do table.insert(lines, "u") end
+        table.insert(lines, "]{")            -- close [], open {} contiguously
+        for _ = 1, 35 do table.insert(lines, "a") end
+        table.insert(lines, "}")
+        local markers = review.parse_markers(lines)
+        assert.equals(1, #markers)
+        assert.equals(2, #markers[1].sections)
+        assert.is_true(markers[1].pending)
+    end)
+
+    it("first marker terminated, a second marker after it is still found", function()
+        local markers = review.parse_markers({
+            "🤖{first spans",
+            "to here} and then 🤖[second]",
+        })
+        assert.equals(2, #markers)
+        assert.is_true(markers[1].pending)
+        assert.equals(0, markers[1].line)   -- first opener on line 0
+        assert.is_true(markers[2].ready)
+        assert.equals(1, markers[2].line)   -- second marker on line 1
+        assert.equals("second", markers[2].sections[1].text)
+    end)
+end)
+
 describe("apply_edits", function()
     local tmpfile
 
