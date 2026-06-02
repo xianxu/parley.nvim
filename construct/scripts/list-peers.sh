@@ -1,0 +1,1 @@
+../../../ariadne/construct/scripts/list-peers.sh
