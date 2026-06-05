@@ -702,6 +702,16 @@ M.setup_highlights = function()
     -- strikethrough is disabled buffer-wide (see disable_strikethrough)
     -- so this is the only place strikethrough renders.
     vim.api.nvim_set_hl(0, "ParleyReviewStrike", { strikethrough = true })
+    -- Accept/reject flash animation (<M-a>/<M-r>). The resolver flashes removed
+    -- text red and inserted text green. Theme diff groups (DiffDelete/DiffAdd)
+    -- are too muted in many colorschemes — often a grey "filler" delete and a
+    -- pale add — so we set explicit, loud red/green backgrounds with a white
+    -- foreground for contrast. A flash is transient and meant to grab the eye;
+    -- subtlety defeats the purpose. Users can override these two groups.
+    vim.api.nvim_set_hl(0, "ParleyReviewFlashDelete",
+        { bg = "#d13438", fg = "#ffffff", ctermbg = 160, ctermfg = 231 })
+    vim.api.nvim_set_hl(0, "ParleyReviewFlashInsert",
+        { bg = "#2ea043", fg = "#ffffff", ctermbg = 34, ctermfg = 231 })
 
     -- Interview timestamps - Highlighted timestamp lines like :15min
     -- Use only background color to allow search highlights to show through

@@ -1422,13 +1422,83 @@ local function drill_in_visual(buf)
 	vim.schedule(function() vim.cmd("startinsert") end)
 end
 
+-- Accept/reject flash animation (#124). The resolver flashes the removed
+-- marker red, then the inserted replacement green, so the user sees what left
+-- and what landed. Persistent extmarks in their own namespace (not the
+-- ephemeral decoration-provider one) so they survive redraws for the flash.
+local drill_in_flash_ns = vim.api.nvim_create_namespace("parley_review_flash")
+-- 500 ms per phase matches ../pair's draft-window flash effects (copy-on-select
+-- paste, shell-output insert), so the two harnesses feel consistent.
+local DRILL_IN_FLASH_DELETE_MS = 500
+local DRILL_IN_FLASH_INSERT_MS = 500
+
+-- Per-buffer pending mutation. The buffer change is deferred behind the red
+-- phase so the removed text is visible before it goes; this holds the closure
+-- that applies it so a second accept/reject during the red window can flush
+-- the first to the buffer before reading fresh text (otherwise the second
+-- resolve computes against stale text and clobbers the first).
+local drill_in_pending = {}
+
+-- Convert a 0-based byte offset into the joined ("\n") buffer text to a
+-- 0-based (row, col) extmark position.
+local function byte_offset_to_rowcol(lines, off)
+	local pos = 0
+	for i, line in ipairs(lines) do
+		if off <= pos + #line then
+			return i - 1, off - pos
+		end
+		pos = pos + #line + 1
+	end
+	local last = #lines
+	return math.max(last - 1, 0), #(lines[last] or "")
+end
+
+-- Highlight byte range [start_off, end_off) (0-based, exclusive end) across
+-- `lines` with `hl_group` in the flash namespace.
+local function drill_in_flash(buf, lines, start_off, end_off, hl_group)
+	if end_off <= start_off then return end
+	local srow, scol = byte_offset_to_rowcol(lines, start_off)
+	local erow, ecol = byte_offset_to_rowcol(lines, end_off)
+	pcall(vim.api.nvim_buf_set_extmark, buf, drill_in_flash_ns, srow, scol, {
+		end_row = erow,
+		end_col = ecol,
+		hl_group = hl_group,
+		priority = 250,
+	})
+end
+
+local function drill_in_flash_clear(buf)
+	if vim.api.nvim_buf_is_valid(buf) then
+		vim.api.nvim_buf_clear_namespace(buf, drill_in_flash_ns, 0, -1)
+	end
+end
+
+-- Apply a pending mutation immediately (timer fired, or flushed by a new
+-- resolve). Idempotent: clears its own pending slot before running.
+local function drill_in_flush_pending(buf)
+	local p = drill_in_pending[buf]
+	if not p then return end
+	drill_in_pending[buf] = nil
+	-- vim.defer_fn auto-closes its timer on normal fire; here we're pre-empting
+	-- it, so stop+close ourselves to avoid leaking the handle.
+	if p.timer then
+		pcall(function() p.timer:stop() end)
+		pcall(function() p.timer:close() end)
+	end
+	p.apply()
+end
+
 -- Accept or reject the marker the cursor sits inside per review-convention
 -- §5 (#124). Returns true when a marker was acted on; false otherwise.
 -- Cursor lands at the byte position where the marker used to start.
 local function drill_in_resolve_at_cursor_with_mode(buf, mode)
+	-- Flush any mid-flash mutation first so we read post-change text.
+	drill_in_flush_pending(buf)
+
 	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 	local text = table.concat(lines, "\n")
-	local cursor = vim.api.nvim_win_get_cursor(0)
+	local win = vim.api.nvim_get_current_win()
+	local cursor = vim.api.nvim_win_get_cursor(win)
 	local row = cursor[1]
 	local col = cursor[2]
 
@@ -1442,24 +1512,59 @@ local function drill_in_resolve_at_cursor_with_mode(buf, mode)
 	local new_text, m = fn(text, offset)
 	if not m then return false end
 
-	local new_lines = vim.split(new_text, "\n", { plain = true })
-	vim.api.nvim_buf_set_lines(buf, 0, -1, false, new_lines)
+	-- Byte math: the marker spans [byte_start, byte_end] (1-based, inclusive)
+	-- in the old text; the replacement that lands in its place is inserted_len
+	-- bytes long (negative net = pure deletion → no green phase).
+	local marker_len = m.byte_end - m.byte_start + 1
+	local inserted_len = #new_text - #text + marker_len
 
-	local target = m.byte_start
-	local target_row, target_col = 1, 0
-	local pos = 1
-	for i, line in ipairs(new_lines) do
-		if pos + #line >= target then
-			target_row = i
-			target_col = target - pos
-			break
+	-- Phase 1: flash the text that's about to be removed, red. For a strike
+	-- marker (🤖~D~{R}) only `🤖~D~` is the deletion — the `{R}` chain is the
+	-- replacement that survives, so red stops at the strike's closing `~`
+	-- rather than spanning the whole marker. Other markers are removed whole.
+	local del_end = (m.strike and m.strike.byte_end) or m.byte_end
+	drill_in_flash_clear(buf)
+	drill_in_flash(buf, lines, m.byte_start - 1, del_end, "ParleyReviewFlashDelete")
+
+	-- Phase 2 (deferred): splice in the replacement, reposition the cursor,
+	-- and flash the inserted text green.
+	local function apply()
+		if not vim.api.nvim_buf_is_valid(buf) then return end
+		drill_in_flash_clear(buf)
+
+		local new_lines = vim.split(new_text, "\n", { plain = true })
+		vim.api.nvim_buf_set_lines(buf, 0, -1, false, new_lines)
+
+		local target = m.byte_start
+		local target_row, target_col = 1, 0
+		local pos = 1
+		for i, line in ipairs(new_lines) do
+			if pos + #line >= target then
+				target_row = i
+				target_col = target - pos
+				break
+			end
+			pos = pos + #line + 1
 		end
-		pos = pos + #line + 1
+		local line_len = #(new_lines[target_row] or "")
+		if target_col > line_len then target_col = line_len end
+		if target_col < 0 then target_col = 0 end
+		if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf then
+			pcall(vim.api.nvim_win_set_cursor, win, { target_row, target_col })
+		end
+
+		if inserted_len > 0 then
+			drill_in_flash(buf, new_lines, m.byte_start - 1, m.byte_start - 1 + inserted_len,
+				"ParleyReviewFlashInsert")
+			vim.defer_fn(function() drill_in_flash_clear(buf) end, DRILL_IN_FLASH_INSERT_MS)
+		end
 	end
-	local line_len = #(new_lines[target_row] or "")
-	if target_col > line_len then target_col = line_len end
-	if target_col < 0 then target_col = 0 end
-	vim.api.nvim_win_set_cursor(0, { target_row, target_col })
+
+	local timer = vim.defer_fn(function()
+		drill_in_pending[buf] = nil
+		apply()
+	end, DRILL_IN_FLASH_DELETE_MS)
+	drill_in_pending[buf] = { timer = timer, apply = apply }
 	return true
 end
 
