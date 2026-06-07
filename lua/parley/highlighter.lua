@@ -1003,6 +1003,10 @@ M.setup_buf_handler = function()
             _parley.setup_markdown_keymaps(buf)
             _parley.highlight_chat_branch_refs(buf)
             interview.highlight_timestamps(buf)
+            -- Disable native markdown strikethrough so only the 🤖-gated
+            -- review-deletion strike (🤖~X~, rendered in compute_markdown_highlights)
+            -- shows — a bare ~X~ or a `~/path` tilde must not cross out text.
+            M.disable_strikethrough(buf)
         end
     end, gid)
 
