@@ -5,9 +5,10 @@
 # A real committed file, not a symlink: every other entrypoint (Makefile,
 # construct/, AGENTS.md, …) is a sibling-relative symlink into ../<upstream>, so
 # on a peerless clone they all dangle and `make` can't even read its Makefile.
-# This reads the one file that survives — go.mod / construct/go.mod — clones the
-# upstream peers as siblings, then `exec make bootstrap` (symlinks now resolve)
-# for the full cascade (bootstrap-peers → refresh → tools → sdlc-install).
+# This reads the files that survive — construct/deps (substrate, #60) + the root
+# go.mod (Go app-dep siblings) — clones the upstream peers as siblings, then
+# `exec make bootstrap` (symlinks now resolve) for the full cascade
+# (ensure-go → bootstrap-peers → refresh → tools → sdlc-install → data-deps).
 #
 # The clone walk is TRANSITIVE (ariadne#45): each derivative declares only its
 # direct upstream, but a 3-deep chain (foo→mid→ariadne) symlinks the Makefile
@@ -41,10 +42,11 @@ handoff() {
     exec make bootstrap
 }
 
-# No substrate source at all → no peers to clone; hand off. (#60: construct/deps
-# is a third carrier — a deps-only derivative has no go.mod.)
-if [[ ! -f construct/go.mod && ! -f go.mod && ! -f construct/deps ]]; then
-    echo "bootstrap: no go.mod / construct/go.mod / construct/deps (no substrate peers) — handing off to make." >&2
+# No substrate source → no peers to clone; hand off. Substrate lives in
+# construct/deps (#60); root go.mod carries any real Go app-dep siblings. The
+# legacy construct/go.mod substrate carrier is no longer read (#60 M4).
+if [[ ! -f go.mod && ! -f construct/deps ]]; then
+    echo "bootstrap: no go.mod / construct/deps (no substrate peers) — handing off to make." >&2
     handoff
 fi
 
@@ -186,11 +188,11 @@ while [[ ${#queue[@]} -gt 0 ]]; do
     origin="$(git -C "$dir" remote get-url origin 2>/dev/null || true)"
     this_name="$(basename "$dir")"
 
-    # Substrate lives in root go.mod and/or construct/go.mod (legacy) and/or
-    # construct/deps (#60). Walk all three; the main loop's seen-set dedups a
-    # peer declared in more than one carrier during the transition.
+    # Substrate is in construct/deps (#60); the root go.mod carries any real Go
+    # app-dep siblings (e.g. brain's `replace nous`). Both walked; the main
+    # loop's seen-set dedups a peer named by more than one. The legacy
+    # construct/go.mod substrate carrier is no longer read (#60 M4).
     walk_gomod "$dir/go.mod" "$dir" "$origin" "$this_name" "$depth"
-    walk_gomod "$dir/construct/go.mod" "$dir/construct" "$origin" "$this_name" "$depth"
     walk_deps "$dir" "$origin" "$this_name" "$depth"
 done
 
