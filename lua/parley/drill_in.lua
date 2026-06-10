@@ -142,15 +142,19 @@ local function index_lines(text)
     return out
 end
 
--- Does `line` begin a non-prose turn region (a configured prefix)? Such lines
--- are hard stops for the backward scan — never cross into another turn or a
--- 🧠:/📎: block, and never use the prefix line itself as anchor prose.
-local function is_boundary_line(line, boundaries)
-    if not boundaries then return false end
+-- Length of the turn-prefix `line` begins with, else 0. Single source for both
+-- boundary detection and prefix stripping (a configured prefix marks a non-prose
+-- turn region — a hard stop for the backward scan, never used as anchor prose).
+local function boundary_prefix_len(line, boundaries)
+    if not boundaries then return 0 end
     for _, p in ipairs(boundaries) do
-        if p ~= "" and line:sub(1, #p) == p then return true end
+        if p ~= "" and line:sub(1, #p) == p then return #p end
     end
-    return false
+    return 0
+end
+
+local function is_boundary_line(line, boundaries)
+    return boundary_prefix_len(line, boundaries) > 0
 end
 
 local function is_blank(line) return line:match("^%s*$") ~= nil end
@@ -277,24 +281,14 @@ function M.generate_snippet(text, marker, opts)
 
     -- If the marker sits on a boundary (prefix) line, drop the prefix from the
     -- before-text so the prefix never leaks into classification.
-    if boundaries then
-        for _, p in ipairs(boundaries) do
-            if p ~= "" and before_on_line:sub(1, #p) == p then
-                before_on_line = before_on_line:sub(#p + 1)
-                break
-            end
-        end
-    end
+    before_on_line = before_on_line:sub(boundary_prefix_len(before_on_line, boundaries) + 1)
 
     -- Inline source region [lo, hi]: the paragraph prose before the marker.
     local function inline_region()
         local top = paragraph_top(idx, L, boundaries)
-        local lo = idx[top].off
-        if boundaries and is_boundary_line(idx[top].line, boundaries) then
-            for _, p in ipairs(boundaries) do
-                if p ~= "" and idx[top].line:sub(1, #p) == p then lo = lo + #p; break end
-            end
-        end
+        -- Skip a leading turn-prefix on the region's first line (rare: marker on
+        -- a boundary line) so the prefix never leaks into the anchor.
+        local lo = idx[top].off + boundary_prefix_len(idx[top].line, boundaries)
         return lo, marker.byte_start - 1
     end
 

@@ -112,9 +112,9 @@ agent turn — otherwise a standalone marker at a reply's start would anchor the
 agent's comment to the `💬:` user question or a `🧠:`/`📎:` block. The scan stops
 at any line beginning with a configured turn prefix. To keep `generate_snippet`
 pure, the prefixes are passed in as `opts.boundaries`; `chat_respond` assembles
-them from config (`💬: 🤖: 🧠: 📝: 🔧: 📎: 🌿:`) and threads them through
-`gather_and_strip`. Note `---` is a *body* section separator, **not** a turn
-boundary, so it never stops the scan.
+them from config (`💬: 🤖: 🧠: 📝: 🔧: 📎: 🌿:`, plus `chat_local_prefix` when
+set) and threads them through `gather_and_strip`. Note `---` is a *body* section
+separator, **not** a turn boundary, so it never stops the scan.
 
 **Referenced-span brackets + highlight.** `generate_snippet` also returns the
 **byte range** of the prose it drew from. With `opts.bracket` (set by

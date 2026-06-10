@@ -6,7 +6,7 @@ github_issue:
 created: 2026-06-10
 updated: 2026-06-10
 estimate_hours: 2.5
-actual_hours: 0.34
+actual_hours: 1.51
 ---
 
 # Smart-snippet anchoring for unquoted drill-in comments
@@ -124,10 +124,31 @@ it's a drop-in swap, not a rewrite.
 - [x] Ran the suite; demonstrated end-to-end on a realistic multi-paragraph
       reply (inline + standalone markers → correct `> snippet` blocks, header
       boundary respected).
+- [x] **Referenced-span enclosing (added per operator request).** Refactor
+      `generate_snippet` to offset-based selection returning the span byte range
+      (behavior-preserving for the snippet text). `gather_and_strip` gains
+      `opts.bracket`: explicit `<Q>` → `[Q]`; inferred span bracketed in place
+      (inline absorbs gap+marker into `]`; standalone inserts `]` + removes
+      marker). `chat_respond` enables it via `config.mark_reference_span`
+      (default on). `ParleyReference` highlight (underline; `highlight.reference`
+      override) + a conservative per-line matcher (skips `](` links, checkboxes,
+      `[^..]`, 1-char). Tests: span-range + bracket cases (101/101 unit, 20/20
+      integration). Brackets persist across reload; the experiment is one flag.
 
 ## Log
 
 ### 2026-06-10
+- 2026-06-10: FIX-THEN-SHIP follow-ups before merge. Important: extracted pure
+  `highlighter.is_reference_span` + `highlighter_spec.lua` (7 tests:
+  link/footnote/checkbox/1-char skips) and added a live-🤖-marker-section skip
+  (a marker's `[U]` chained after 🤖/`>`/`}` no longer double-marks while you
+  compose). Minors: DRY'd boundary-prefix logic into `boundary_prefix_len` (3
+  sites→1); dropped redundant checkbox checks; atlas notes `chat_local_prefix`.
+  Incidental `claude-Opus-4-7`→`claude-opus-4-7` id-casing fix swept in — kept
+  (correct). Forward notes (cosmetic/untested): nested bracket when a neighbor
+  marker sits in the span window; multi-line unquoted marker. drill_in 101/101,
+  highlighter 7/7, integration 20/20.
+- 2026-06-10: closed — referenced-span [] enclosing both forms; generate_snippet offset-refactor returns span range (behavior-preserving); drill_in 101/101, integration 20/20; matcher selectivity verified ([train on Soviet soil]/[RedShift] color, [docs](),[ ],[1] skip); operator verified the live effect and approved; gated by config.mark_reference_span; review verdict: FIX-THEN-SHIP
 - 2026-06-10: closed — drill_in_spec 90/90 (14 new+2 updated); generate_snippet inline+standalone+boundary+degradation covered; integration chat_respond_spec 20/20; e2e demo recovered correct > anchors for inline & standalone markers, header boundary respected; 8 unrelated pre-existing failures confirmed identical with edits stashed; review verdict: SHIP
 
 Design converged in-session (parley brainstorm). Started as a `[^-N]` reference
@@ -168,3 +189,23 @@ inline marker → `> Germany rebuilt its army…The Treaty of Rapallo let them`
 (cross-line collect + sentence extension); standalone marker → `> Blitzkrieg was
 less a new invention than a synthesis of old doctrine.` (prev-paragraph first
 sentence), correctly stopping before the `🤖:[Claude]` header.
+
+**Referenced-span enclosing (reopened — operator wants a persistent visual cue
+of the referenced segment).** Folded into #127 rather than a follow-up.
+- Chose literal `[]` per operator preference. It's the one cue that *persists*
+  across the flatten + a file reload (extmark-only color would not — parley's
+  inline-branch conceal re-derives extmarks from on-disk `[🌿:..]()` text each
+  render; after flatten there's no marker to re-derive from, so the cue must be
+  in the text). `ParleyReviewQuoted` (reverse+bold on `🤖<…>`) already marks the
+  scope but only while the *live* marker exists.
+- Needed the span's byte range → refactored `generate_snippet` to offset-based
+  token selection (`tokenize`/`select_tail`/`select_head`/`span_text`),
+  reproducing every prior snippet text (93→101 tests stay green) and returning
+  `(text, span_start, span_end)`. Removed now-dead `split_sentences`/`word_count`.
+- Coloring caveat (told operator): plain `[]` can't be told apart from
+  markdown links / incidental brackets / single-word explicit quotes
+  (`[RedShift]` looks like any bracketed word). The matcher is a heuristic
+  (skip `](`, checkboxes, `[^..]`, 1-char); residual false positives on genuine
+  multi-char agent `[brackets]`). Gated by `config.mark_reference_span` so the
+  whole experiment is one flag — operator will evaluate the rendered effect and
+  decide whether to keep it / switch to a distinguishable delimiter.
