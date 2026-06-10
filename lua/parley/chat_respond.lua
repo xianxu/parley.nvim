@@ -993,13 +993,24 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
     local drill_in = require("parley.drill_in")
     local branch_handled = false
 
+    -- Turn-prefix boundaries for unquoted-marker anchor inference (#127): the
+    -- backward prose scan must not cross out of the marker's own agent turn
+    -- (into the 💬: question, a 🧠:/📎: block, or a neighboring exchange). The
+    -- config→prefix mapping is a tested pure helper; drill_in's core stays pure.
+    -- `bracket` encloses each referenced span in `[]` in place so the reader can
+    -- see what the gathered comment points at (highlighted via ParleyReference).
+    local di_opts = {
+        boundaries = drill_in.chat_boundaries(_parley.config),
+        bracket = _parley.config.mark_reference_span ~= false,
+    }
+
     if params.range ~= 2 and exchange_idx and component then
         local exch = parsed_chat.exchanges[exchange_idx]
         local exch_start = exch.question.line_start
         local exch_end = (exch.answer and exch.answer.line_end) or exch.question.line_end
         local exch_lines = {}
         for i = exch_start, exch_end do table.insert(exch_lines, lines[i]) end
-        local blocks, stripped_text = drill_in.gather_and_strip(table.concat(exch_lines, "\n"))
+        local blocks, stripped_text = drill_in.gather_and_strip(table.concat(exch_lines, "\n"), di_opts)
         if #blocks > 0 then
             local stripped_lines = vim.split(stripped_text, "\n", { plain = true })
             local user_prefix = _parley.config.chat_user_prefix or "💬:"
@@ -1051,7 +1062,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
         end
     end
     if not branch_handled and not is_resubmit then
-        local di_blocks, stripped_text = drill_in.gather_and_strip(table.concat(lines, "\n"))
+        local di_blocks, stripped_text = drill_in.gather_and_strip(table.concat(lines, "\n"), di_opts)
         if #di_blocks > 0 then
             local stripped_lines = vim.split(stripped_text, "\n", { plain = true })
             local new_lines = drill_in.append_blocks(stripped_lines, di_blocks)

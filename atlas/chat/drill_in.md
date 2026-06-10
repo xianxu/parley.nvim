@@ -38,7 +38,15 @@ Accept and reject for `~X~` and the full §5 table are wired via `<M-a>` / `<M-r
 
    Inline collapse rule for stripped markers:
    - Marker with `<T>` body → inline replaced by plain `T`.
-   - Marker without `<T>` body → marker removed entirely (whitespace not normalized).
+   - Marker without `<T>` body → marker removed entirely (whitespace not
+     normalized). Its block quote is **inferred** from the surrounding reply
+     prose (#127) so the flattened comment keeps an anchor — see Anchor
+     inference below.
+   - **Referenced-span brackets** (#127, `config.mark_reference_span`, default
+     on): the referenced span is enclosed in `[]` *in place* so the reader can
+     see what each gathered comment points at — `T` → `[T]`; an inferred span is
+     bracketed where it already sits (the snippet is **not** re-inserted). The
+     enclosed spans are highlighted `ParleyReference` (see Anchor inference).
 
 4. **Resolve** — `<M-a>` accepts the marker at cursor and `<M-r>` rejects it, per the §5 table. Bulk-resolve was dropped in #124 M2 — operators resolve markers one at a time, or ask an agent to walk the chains (agentic resolution, §6 of the canonical target).
 
@@ -70,7 +78,63 @@ U2
 
 Continuation lines inside chain sections (multi-line `U1`/`A1`) stay inside the blockquote with `> ` (no per-line `User:`/`Agent:` prefix).
 
-For a no-quote marker `🤖[Q]`, only `Q` is emitted (no leading `>` line). For a no-quote chain `🤖[U1]{A1}[U2]`, the chain lines are emitted without the leading `> T-…` block. Between adjacent gathered blocks, one blank line.
+For a no-quote marker `🤖[Q]`, an anchor `Q̂` is inferred from surrounding prose
+(#127) and emitted as the `> Q̂` line above `Q`. When no anchor can be recovered
+(degradation cases below), only `Q` is emitted (the pre-#127 behavior). Same for
+a no-quote chain `🤖[U1]{A1}[U2]` — an inferred `> Q̂` line, else none. Between
+adjacent gathered blocks, one blank line.
+
+## Anchor inference (#127)
+
+An unquoted marker carries no anchor, so flattening it into the next turn would
+strip the comment of *what it's about*. `drill_in.generate_snippet` recovers a
+**verbatim anchor** from the reply prose around the marker — so an unquoted
+comment is treated as a quoted comment whose `<T>` we infer, routing through the
+same block pipeline. It is a *meaning* anchor (the text the model re-reads),
+deliberately not a position token; a reference-token scheme was considered and
+rejected (see #127 Spec — refs cost a counter + conceal + edit-sync for only
+look-alike disambiguation).
+
+Rules (pure function of text + the marker's byte span + optional turn
+boundaries):
+
+- **inline** (prose precedes the marker, or a bare marker sits mid-paragraph
+  with no blank separation): the preceding ~10–20 words ending at the marker,
+  snapped back to a sentence boundary (extends across boundaries if the current
+  sentence is <10 words; caps at 20 with a leading `…`).
+- **standalone** (the marker is its own blank-separated paragraph): the first
+  sentence of the previous prose block (capped ~20 words).
+- **degrades to empty** (→ no `>` line) when nothing is recoverable: inline with
+  no preceding prose, or standalone at a turn start.
+
+**Turn boundaries.** The backward scan must never cross out of the marker's own
+agent turn — otherwise a standalone marker at a reply's start would anchor the
+agent's comment to the `💬:` user question or a `🧠:`/`📎:` block. The scan stops
+at any line beginning with a configured turn prefix. To keep `generate_snippet`
+pure, the prefixes are passed in as `opts.boundaries`; `chat_respond` assembles
+them from config (`💬: 🤖: 🧠: 📝: 🔧: 📎: 🌿:`, plus `chat_local_prefix` when
+set) and threads them through `gather_and_strip`. Note `---` is a *body* section
+separator, **not** a turn boundary, so it never stops the scan.
+
+**Referenced-span brackets + highlight.** `generate_snippet` also returns the
+**byte range** of the prose it drew from. With `opts.bracket` (set by
+`chat_respond` from `config.mark_reference_span`, default on) `gather_and_strip`
+encloses that span in `[]` in place — inline spans absorb the trailing gap +
+marker into the closing `]`; standalone spans are bracketed in the previous
+paragraph with the marker removed separately. Explicit `<Q>` becomes `[Q]`. The
+snippet itself is **never re-inserted** (it's already in the reply — we only
+delimit it). The highlighter colors these spans `ParleyReference` (default
+underline; `config.highlight.reference` overrides) via a per-line matcher that
+skips markdown links `](`, checkboxes, footnote refs, and 1-char content — a
+*heuristic*, since plain `[]` can't be told apart from incidental brackets with
+certainty. Set `config.mark_reference_span = false` to strip markers without the
+brackets. This is the one persistent visual cue for "what this comment points
+at" — `ParleyReviewQuoted` (reverse+bold on `🤖<…>`) only marks the scope while
+the *live* marker exists; the brackets survive the flatten + file reload.
+
+A small-LLM summarizer fallback (for long/messy spans) is deferred (YAGNI): a
+verbatim quote is a strictly better meaning-anchor than a paraphrase, and the
+fallback would live behind the same `generate_snippet` seam if ever needed.
 
 ## Cross-tool consistency
 
@@ -78,8 +142,8 @@ Both parley and ariadne (`/fix` skill) parse this marker family identically. The
 
 ## Key files
 
-- `lua/parley/drill_in.lua` — pure-function module (`parse`, `gather_and_strip`, `resolve`, `accept_at`, `reject_at`, `format_block`, `format_blocks`, `wrap`, `append_blocks`).
-- `lua/parley/chat_respond.lua` — pre-processing hook before message build (gates on resubmit detection).
+- `lua/parley/drill_in.lua` — pure-function module (`parse`, `gather_and_strip`, `generate_snippet`, `resolve`, `accept_at`, `reject_at`, `format_block`, `format_blocks`, `wrap`, `append_blocks`).
+- `lua/parley/chat_respond.lua` — pre-processing hook before message build (gates on resubmit detection); assembles the turn-prefix `boundaries` from config and threads them into `gather_and_strip` (#127).
 - `lua/parley/init.lua` — `<M-q>` (insert), `<M-a>` (accept), `<M-r>` (reject) wiring inside `prep_chat` / `setup_markdown_keymaps`.
 - `lua/parley/skills/review/init.lua` — shared section parser (`_parse_marker_sections`).
 - `lua/parley/buffer_edit.lua` — `replace_all_lines` helper used to write the rewritten buffer in one shot.

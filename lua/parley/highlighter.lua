@@ -411,6 +411,27 @@ end
 
 M._scan_draft_blocks = scan_draft_blocks
 
+-- Is the bracketed run `[content]` at byte range [s, e) a drill-in
+-- referenced-span marker (#127), versus an incidental bracket? Pure predicate
+-- — plain `[]` is ambiguous, so this is a heuristic. `line` is the whole line,
+-- `s` = byte of `[`, `e` = byte just past `]`. Rejects:
+--   * markdown links `](`           — `[text](url)`
+--   * footnote refs                 — `[^1]`
+--   * 1-char content                — `[ ]`, `[x]`, `[1]`
+--   * a *live* 🤖 marker's section   — `[U]` chained after 🤖 / `>` / `~` / a
+--                                     prior `]`/`}` close (already highlighted
+--                                     ParleyReviewUser; don't double-mark it).
+-- A flattened reference span's `[` follows ordinary prose, so it passes.
+function M.is_reference_span(line, s, content, e)
+    if line:sub(e, e) == "(" then return false end
+    if content:sub(1, 1) == "^" then return false end
+    if #content < 2 then return false end
+    local prev = line:sub(s - 1, s - 1)
+    if prev == "]" or prev == "}" or prev == ">" or prev == "~" then return false end
+    if s > 4 and line:sub(s - 4, s - 1) == "🤖" then return false end
+    return true
+end
+
 -- Compute desired markdown highlights for a 1-indexed line range.
 -- Returns a table keyed by 0-indexed row: { [row] = { {hl_group, col_start, col_end}, ... } }
 local function compute_markdown_highlights(buf, start_line, end_line)
@@ -460,6 +481,22 @@ local function compute_markdown_highlights(buf, start_line, end_line)
                 })
             end
             search_start = end_pos
+        end
+
+        -- #127: highlight drill-in referenced-span markers `[…]` left in the
+        -- reply (what each gathered comment points at) via the pure
+        -- M.is_reference_span heuristic. Disable via mark_reference_span = false.
+        if _parley.config.mark_reference_span ~= false then
+            for s, content, e in line:gmatch("()%[([^%[%]]+)%]()") do
+                if M.is_reference_span(line, s, content, e) then
+                    result[row] = result[row] or {}
+                    table.insert(result[row], {
+                        hl_group = "ParleyReference",
+                        col_start = s - 1, -- 0-indexed `[`
+                        col_end = e - 1,   -- exclusive end (through `]`)
+                    })
+                end
+            end
         end
     end
 
@@ -659,6 +696,16 @@ M.setup_highlights = function()
             underline = true,
             link = "Special",
         })
+    end
+
+    -- Referenced-span markers `[…]` left in a reply by drill-in (#127): the
+    -- text a gathered comment points at. Underline reads as "this span is
+    -- marked" without the weight of a full background. Override via
+    -- config.highlight.reference.
+    if user_highlights.reference then
+        vim.api.nvim_set_hl(0, "ParleyReference", user_highlights.reference)
+    else
+        vim.api.nvim_set_hl(0, "ParleyReference", { underline = true })
     end
 
     -- Tags - Highlighted tags in @@tag@@ format
