@@ -42,6 +42,11 @@ Accept and reject for `~X~` and the full §5 table are wired via `<M-a>` / `<M-r
      normalized). Its block quote is **inferred** from the surrounding reply
      prose (#127) so the flattened comment keeps an anchor — see Anchor
      inference below.
+   - **Referenced-span brackets** (#127, `config.mark_reference_span`, default
+     on): the referenced span is enclosed in `[]` *in place* so the reader can
+     see what each gathered comment points at — `T` → `[T]`; an inferred span is
+     bracketed where it already sits (the snippet is **not** re-inserted). The
+     enclosed spans are highlighted `ParleyReference` (see Anchor inference).
 
 4. **Resolve** — `<M-a>` accepts the marker at cursor and `<M-r>` rejects it, per the §5 table. Bulk-resolve was dropped in #124 M2 — operators resolve markers one at a time, or ask an agent to walk the chains (agentic resolution, §6 of the canonical target).
 
@@ -110,6 +115,22 @@ pure, the prefixes are passed in as `opts.boundaries`; `chat_respond` assembles
 them from config (`💬: 🤖: 🧠: 📝: 🔧: 📎: 🌿:`) and threads them through
 `gather_and_strip`. Note `---` is a *body* section separator, **not** a turn
 boundary, so it never stops the scan.
+
+**Referenced-span brackets + highlight.** `generate_snippet` also returns the
+**byte range** of the prose it drew from. With `opts.bracket` (set by
+`chat_respond` from `config.mark_reference_span`, default on) `gather_and_strip`
+encloses that span in `[]` in place — inline spans absorb the trailing gap +
+marker into the closing `]`; standalone spans are bracketed in the previous
+paragraph with the marker removed separately. Explicit `<Q>` becomes `[Q]`. The
+snippet itself is **never re-inserted** (it's already in the reply — we only
+delimit it). The highlighter colors these spans `ParleyReference` (default
+underline; `config.highlight.reference` overrides) via a per-line matcher that
+skips markdown links `](`, checkboxes, footnote refs, and 1-char content — a
+*heuristic*, since plain `[]` can't be told apart from incidental brackets with
+certainty. Set `config.mark_reference_span = false` to strip markers without the
+brackets. This is the one persistent visual cue for "what this comment points
+at" — `ParleyReviewQuoted` (reverse+bold on `🤖<…>`) only marks the scope while
+the *live* marker exists; the brackets survive the flatten + file reload.
 
 A small-LLM summarizer fallback (for long/messy spans) is deferred (YAGNI): a
 verbatim quote is a strictly better meaning-anchor than a paraphrase, and the

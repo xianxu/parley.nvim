@@ -190,7 +190,7 @@ local config = {
 		{
 			provider = "anthropic",
 			name = "ToolOpus",
-			model = { model = "claude-Opus-4-7", temperature = 0.8 },
+			model = { model = "claude-opus-4-7", temperature = 0.8 },
 			system_prompt = require("parley.defaults").chat_system_prompt,
 			tools = { "read_file", "ls", "find", "grep", "chat_history_search", "edit_file", "write_file" },
 			-- Optional: defaults applied at setup time when absent
@@ -502,6 +502,12 @@ local config = {
 	-- how wide should the preview be, number between 0.0 and 1.0
 	style_chat_finder_preview_ratio = 0.5,
 
+	-- When drill-in gathers a 🤖 comment into the next turn (#127), enclose the
+	-- referenced span in `[]` in place so you can see what it points at, and
+	-- highlight those spans (ParleyReference). Set to false to strip markers
+	-- without leaving the brackets.
+	mark_reference_span = true,
+
 	-- highlight styling (set to nil to use defaults that match your colorscheme)
 	-- these settings override the default highlight links if provided
 	highlight = {
@@ -512,6 +518,7 @@ local config = {
 		annotation = nil, -- highlight for annotations (default: links to DiffAdd)
 		approximate_match = nil, -- highlight for typo-tolerance edit positions in picker matches (default: links to IncSearch)
 		chat_reference = nil, -- highlight for 🌿: chat branch/parent links (default: links to Special)
+		reference = nil, -- highlight for [referenced span] markers left by drill-in (#127) (default: underline)
 	},
 
 	-- lualine integration options

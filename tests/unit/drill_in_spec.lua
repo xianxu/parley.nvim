@@ -457,6 +457,75 @@ describe("drill_in.chat_boundaries (#127)", function()
     end)
 end)
 
+-- #127: generate_snippet reports the byte range of the prose it drew from, so a
+-- caller can enclose the span in place.
+describe("drill_in.generate_snippet span range (#127)", function()
+    it("returns the inline span's absolute byte range", function()
+        local text = "preamble words here 🤖[just ask] tail"
+        local m = drill_in.parse(text)[1]
+        local snip, s, e = drill_in.generate_snippet(text, m)
+        assert.equals("preamble words here", snip)
+        assert.equals(1, s)                       -- "preamble" starts at byte 1
+        assert.equals(19, e)                      -- "here" ends at byte 19
+        assert.equals("preamble words here", text:sub(s, e))
+    end)
+
+    it("returns the standalone span's byte range (prev paragraph first sentence)", function()
+        local text = "Para one here. More of it.\n\n🤖[c]\n\nx"
+        local m = drill_in.parse(text)[1]
+        local snip, s, e = drill_in.generate_snippet(text, m)
+        assert.equals("Para one here.", snip)
+        assert.equals("Para one here.", text:sub(s, e)) -- range maps to the verbatim sentence
+    end)
+
+    it("returns nil range when no anchor is recoverable", function()
+        local text = "🤖[c]\n\nbody"
+        local m = drill_in.parse(text)[1]
+        local snip, s, e = drill_in.generate_snippet(text, m)
+        assert.equals("", snip)
+        assert.is_nil(s)
+        assert.is_nil(e)
+    end)
+end)
+
+-- #127: opts.bracket encloses the referenced span in [] in place.
+describe("drill_in.gather_and_strip bracket=true (#127)", function()
+    it("brackets an explicit <Q> inline as [Q]", function()
+        local _, new_text = drill_in.gather_and_strip(
+            "this is 🤖<RedShift>[what?] cool", { bracket = true }
+        )
+        assert.equals("this is [RedShift] cool", new_text)
+    end)
+
+    it("brackets an inferred inline span, absorbing the marker into the close", function()
+        local blocks, new_text = drill_in.gather_and_strip(
+            "preamble words here 🤖[just ask] tail", { bracket = true }
+        )
+        assert.equals("[preamble words here] tail", new_text)
+        assert.equals("preamble words here", blocks[1].quoted) -- next-turn quote stays unbracketed
+    end)
+
+    it("brackets a standalone inferred span and removes the marker", function()
+        local _, new_text = drill_in.gather_and_strip(
+            "Para one here. More of it.\n\n🤖[expand]\n\nnext", { bracket = true }
+        )
+        -- The prev-paragraph first sentence is enclosed; the marker line empties.
+        assert.equals("[Para one here.] More of it.\n\n\n\nnext", new_text)
+    end)
+
+    it("default (no bracket) leaves the inline replacement bare", function()
+        local _, new_text = drill_in.gather_and_strip("this is 🤖<RedShift>[what?] cool")
+        assert.equals("this is RedShift cool", new_text) -- regression: unchanged
+    end)
+
+    it("brackets multiple markers (explicit + inferred) in one pass", function()
+        local _, new_text = drill_in.gather_and_strip(
+            "alpha beta 🤖[c1] gamma delta 🤖<Term>[c2] epsilon", { bracket = true }
+        )
+        assert.equals("[alpha beta] gamma delta [Term] epsilon", new_text)
+    end)
+end)
+
 -- ─── §5 resolution table (#124 M2) ─────────────────────────────────────
 -- Pure resolve(marker, mode) implementing the spec §5 table:
 --   ref=nil, chain=[H]                → "" (both)

@@ -461,6 +461,28 @@ local function compute_markdown_highlights(buf, start_line, end_line)
             end
             search_start = end_pos
         end
+
+        -- #127: enclose-reference spans `[…]` left in the reply by drill-in
+        -- (what each gathered comment points at). Heuristic — plain `[]` can't
+        -- be told apart from incidental brackets with certainty, so we skip
+        -- markdown links `](`, checkboxes, footnote refs, and 1-char content.
+        -- Disable wholesale via config.mark_reference_span = false.
+        if _parley.config.mark_reference_span ~= false then
+            for s, content, e in line:gmatch("()%[([^%[%]]+)%]()") do
+                local skip = line:sub(e, e) == "("                 -- markdown link
+                    or content == " " or content == "x" or content == "X" -- checkbox
+                    or content:sub(1, 1) == "^"                    -- footnote ref
+                    or #content < 2
+                if not skip then
+                    result[row] = result[row] or {}
+                    table.insert(result[row], {
+                        hl_group = "ParleyReference",
+                        col_start = s - 1, -- 0-indexed `[`
+                        col_end = e - 1,   -- exclusive end (through `]`)
+                    })
+                end
+            end
+        end
     end
 
     -- Draft-block backgrounds (=== label === / === end ===). Full-buffer
@@ -659,6 +681,16 @@ M.setup_highlights = function()
             underline = true,
             link = "Special",
         })
+    end
+
+    -- Referenced-span markers `[…]` left in a reply by drill-in (#127): the
+    -- text a gathered comment points at. Underline reads as "this span is
+    -- marked" without the weight of a full background. Override via
+    -- config.highlight.reference.
+    if user_highlights.reference then
+        vim.api.nvim_set_hl(0, "ParleyReference", user_highlights.reference)
+    else
+        vim.api.nvim_set_hl(0, "ParleyReference", { underline = true })
     end
 
     -- Tags - Highlighted tags in @@tag@@ format

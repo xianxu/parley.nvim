@@ -1062,10 +1062,11 @@ describe("chat_respond: drill-in pre-processing", function()
         local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
         local joined = table.concat(lines, "\n")
 
-        -- Marker stripped to plain term
+        -- Marker stripped; quoted term remains inline, enclosed in [] so the
+        -- reader can see the referenced span (#127 mark_reference_span).
         assert.is_nil(joined:find("🤖<", 1, true), "drill-in marker should be stripped from buffer")
-        assert.truthy(joined:find("tell me about RedShift", 1, true),
-            "stripped term should remain inline; got:\n" .. joined)
+        assert.truthy(joined:find("tell me about [RedShift]", 1, true),
+            "stripped term should remain inline, bracketed; got:\n" .. joined)
         -- Quote block appended at the end
         assert.truthy(joined:find("> RedShift\nwhat is this?", 1, true),
             "quote block should be appended; got:\n" .. joined)
@@ -1134,11 +1135,11 @@ describe("chat_respond: drill-in pre-processing", function()
         pcall(function() parley.chat_respond({ range = 0 }) end)
         local after = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
 
-        -- Marker stripped to plain T in the original question
+        -- Marker stripped; quoted term remains inline, enclosed in [] (#127)
         assert.is_nil(after:find("🤖<Term>", 1, true),
             "drill-in marker should be stripped after branch; got:\n" .. after)
-        assert.truthy(after:find("explain Term", 1, true),
-            "stripped term should remain inline; got:\n" .. after)
+        assert.truthy(after:find("explain [Term]", 1, true),
+            "stripped term should remain inline, bracketed; got:\n" .. after)
         -- Original answer preserved (we did NOT resubmit / overwrite it)
         assert.truthy(after:find("prior answer about Term.", 1, true),
             "original answer should be preserved; got:\n" .. after)
