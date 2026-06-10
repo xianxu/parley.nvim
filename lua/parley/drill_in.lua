@@ -13,11 +13,16 @@
 --      next user turn. See `M.gather_and_strip` and `M.format_block`. Marker
 --      shapes:
 --        * `🤖<Q>[U]`          → block `> Q` / `U`            ; inline → `Q`
---        * `🤖[U]`             → block `U`                   ; inline removed
+--        * `🤖[U]`             → block `> Q̂` / `U`            ; inline removed
 --        * `🤖<Q>[U1]{A1}[U2]` → block `> Q` / `> User: U1` /
 --                                `> Agent: A1` / `U2`        ; inline → `Q`
---        * `🤖[U1]{A1}[U2]`    → block `> User: U1` / `> Agent: A1` / `U2`;
---                                inline removed
+--        * `🤖[U1]{A1}[U2]`    → block `> Q̂` / `> User: U1` /
+--                                `> Agent: A1` / `U2`         ; inline removed
+--      For the unquoted forms, the block quote `Q̂` is *inferred* from the reply
+--      prose around the marker (#127) — an unquoted comment is a quoted comment
+--      whose anchor we recover, so it routes through the same block pipeline.
+--      See `M.generate_snippet`. When no anchor can be recovered the block has
+--      no `>` line (degrades to the pre-#127 behavior).
 --      Markers ending in `{}` (pending agent turns) and `~D~` markers
 --      (proposals, not questions) stay inline.
 --
@@ -114,26 +119,231 @@ local function splice(text, replacements)
     return result
 end
 
+-- ─── Snippet inference (#127) ───────────────────────────────────────────
+-- An unquoted ready marker `🤖[U]` carries no anchor: stripping it would drop
+-- the comment into the next turn with no pointer back. `generate_snippet`
+-- recovers a verbatim anchor from the reply prose *around* the marker, so the
+-- unquoted form routes through the same quoted pipeline as `🤖<Q>[U]` — we just
+-- infer the Q the operator didn't type. Pure: a function of text + the marker's
+-- byte range (+ optional turn boundaries). The anchor is a meaning-anchor, not
+-- a position token; precision is intentionally forgiving (see #127 Spec).
+
+local SNIPPET_MIN_WORDS = 10
+local SNIPPET_MAX_WORDS = 20
+
+-- Index `text` into lines, each tagged with its 1-based byte offset (`off`).
+local function index_lines(text)
+    local out = {}
+    local off = 1
+    for _, line in ipairs(split_lines(text)) do
+        table.insert(out, { line = line, off = off })
+        off = off + #line + 1 -- +1 for the stripped "\n"
+    end
+    return out
+end
+
+-- Does `line` begin a non-prose turn region (a configured prefix)? Such lines
+-- are hard stops for the backward scan — never cross into another turn or a
+-- 🧠:/📎: block, and never use the prefix line itself as anchor prose.
+local function is_boundary_line(line, boundaries)
+    if not boundaries then return false end
+    for _, p in ipairs(boundaries) do
+        if p ~= "" and line:sub(1, #p) == p then return true end
+    end
+    return false
+end
+
+local function is_blank(line) return line:match("^%s*$") ~= nil end
+local function word_count(s) local n = 0; for _ in s:gmatch("%S+") do n = n + 1 end; return n end
+
+local function collapse_ws(s)
+    return (s:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+-- Strip any 🤖-markers embedded in candidate prose — a neighboring marker's raw
+-- bytes can fall inside a snippet window; they are not prose. Reuses M.parse.
+local function strip_markers(s)
+    local markers = M.parse(s)
+    local repls = {}
+    for _, m in ipairs(markers) do
+        table.insert(repls, { byte_start = m.byte_start, byte_end = m.byte_end, replacement = "" })
+    end
+    return splice(s, repls)
+end
+
+-- Split prose into sentences at `.!?` followed by whitespace/end (punctuation
+-- kept with its sentence). Forgiving: mis-snaps on abbreviations/decimals are
+-- accepted per the meaning-anchor philosophy.
+local function split_sentences(s)
+    local sents, cur = {}, ""
+    for i = 1, #s do
+        local c = s:sub(i, i)
+        cur = cur .. c
+        if c:match("[%.%!%?]") then
+            local nxt = s:sub(i + 1, i + 1)
+            if nxt == "" or nxt:match("%s") then
+                table.insert(sents, cur)
+                cur = ""
+            end
+        end
+    end
+    if cur:match("%S") then table.insert(sents, cur) end
+    return sents
+end
+
+-- Keep only the last MAX words; prefix "… " when truncated.
+local function cap_tail(words)
+    if #words <= SNIPPET_MAX_WORDS then return table.concat(words, " ") end
+    local kept = {}
+    for i = #words - SNIPPET_MAX_WORDS + 1, #words do table.insert(kept, words[i]) end
+    return "… " .. table.concat(kept, " ")
+end
+
+-- Inline anchor: the prose immediately before the marker, snapped back to a
+-- sentence boundary, ≥MIN words (extending across boundaries) and ≤MAX words.
+local function tail_snippet(before)
+    before = collapse_ws(strip_markers(before))
+    if before == "" then return "" end
+    local sents = split_sentences(before)
+    local acc, count = {}, 0
+    for i = #sents, 1, -1 do
+        table.insert(acc, 1, sents[i])
+        count = count + word_count(sents[i])
+        if count >= SNIPPET_MIN_WORDS then break end
+    end
+    local words = {}
+    for w in collapse_ws(table.concat(acc, " ")):gmatch("%S+") do table.insert(words, w) end
+    return cap_tail(words)
+end
+
+-- Standalone anchor: the first sentence of a previous prose block, ≤MAX words.
+local function first_sentence_snippet(block)
+    block = collapse_ws(strip_markers(block))
+    if block == "" then return "" end
+    local first = split_sentences(block)[1] or block
+    local words = {}
+    for w in first:gmatch("%S+") do table.insert(words, w) end
+    if #words <= SNIPPET_MAX_WORDS then return first end
+    local kept = {}
+    for i = 1, SNIPPET_MAX_WORDS do table.insert(kept, words[i]) end
+    return table.concat(kept, " ") .. " …"
+end
+
+--- Infer a verbatim anchor snippet for an unquoted marker from surrounding
+--- reply prose. Pure.
+--- @param text string           joined reply text
+--- @param marker table          a parsed marker (M.parse) — uses byte_start/byte_end
+--- @param opts table|nil        { boundaries = string[] } turn-prefix hard stops
+--- @return string               anchor snippet, or "" when none can be recovered
+function M.generate_snippet(text, marker, opts)
+    opts = opts or {}
+    local boundaries = opts.boundaries
+    local idx = index_lines(text)
+
+    -- Locate the marker's line + its column span within that line.
+    local L, before_on_line, after_on_line
+    for i, e in ipairs(idx) do
+        local line_end = e.off + #e.line -- byte just past the line's content
+        if marker.byte_start >= e.off and marker.byte_start <= line_end then
+            L = i
+            before_on_line = e.line:sub(1, marker.byte_start - e.off)
+            after_on_line = e.line:sub(marker.byte_end - e.off + 2)
+            break
+        end
+    end
+    if not L then return "" end
+
+    -- If the marker sits on a boundary (prefix) line, drop the prefix from the
+    -- before-text so the prefix never leaks into the anchor.
+    if boundaries then
+        for _, p in ipairs(boundaries) do
+            if p ~= "" and before_on_line:sub(1, #p) == p then
+                before_on_line = before_on_line:sub(#p + 1)
+                break
+            end
+        end
+    end
+
+    -- Previous prose block (scan up past blanks; stop at a boundary/top).
+    local function prev_block_first_sentence()
+        local i = L - 1
+        while i >= 1 and is_blank(idx[i].line) do i = i - 1 end
+        if i < 1 or is_boundary_line(idx[i].line, boundaries) then return "" end
+        local top = i
+        while top - 1 >= 1
+            and not is_blank(idx[top - 1].line)
+            and not is_boundary_line(idx[top - 1].line, boundaries) do
+            top = top - 1
+        end
+        local parts = {}
+        for k = top, i do table.insert(parts, idx[k].line) end
+        return first_sentence_snippet(table.concat(parts, " "))
+    end
+
+    -- Prose preceding the marker within its own paragraph (stop at blank/boundary).
+    local function inline_before()
+        local top = L
+        while top - 1 >= 1
+            and not is_blank(idx[top - 1].line)
+            and not is_boundary_line(idx[top - 1].line, boundaries) do
+            top = top - 1
+        end
+        local parts = {}
+        for k = top, L - 1 do table.insert(parts, idx[k].line) end
+        table.insert(parts, before_on_line)
+        return table.concat(parts, " ")
+    end
+
+    local has_before = before_on_line:match("%S") ~= nil
+    local marker_only = (not has_before) and (after_on_line:match("%S") == nil)
+
+    if marker_only then
+        -- Standalone iff blank/boundary-separated above AND below.
+        local above_sep = (L == 1) or is_blank(idx[L - 1].line) or is_boundary_line(idx[L - 1].line, boundaries)
+        local below_sep = (L == #idx) or is_blank(idx[L + 1].line) or is_boundary_line(idx[L + 1].line, boundaries)
+        if above_sep and below_sep then
+            return prev_block_first_sentence()
+        end
+        -- Bare marker mid-paragraph → inline from preceding lines.
+    end
+
+    -- Inline (or bare-mid-paragraph): preceding words; fall back to the
+    -- previous block when there is nothing before the marker.
+    local snip = tail_snippet(inline_before())
+    if snip ~= "" then return snip end
+    return prev_block_first_sentence()
+end
+
 --- Gather ready markers and strip each from the inline text.
 --- - Marker with `<Q>` body → inline replaced by Q.
---- - Marker without `<Q>` body → inline removed entirely.
+--- - Marker without `<Q>` body → inline removed entirely; its block quote is
+---   inferred from surrounding prose (#127) when one can be recovered.
 --- Pending markers (last section non-empty `{}`) and annotation-only markers
 --- (no ready `[]` last section) are left untouched.
 --- @param text string
+--- @param opts table|nil  { boundaries = string[] } passed to generate_snippet
 --- @return table[] blocks  list of { quoted = string|nil, sections = list } in document order
 --- @return string new_text
-function M.gather_and_strip(text)
+function M.gather_and_strip(text, opts)
     local markers = M.parse(text)
     local blocks = {}
     local replacements = {}
     for _, m in ipairs(markers) do
         if m.ready then
-            local quoted_text = m.quoted and m.quoted.text or nil
-            table.insert(blocks, { quoted = quoted_text, sections = m.sections })
+            -- An explicit <Q> body restores inline to Q and anchors the block.
+            -- An unquoted marker is removed inline (the snippet is *already* in
+            -- the reply — do not re-insert it) and its block quote is inferred.
+            local explicit = m.quoted and m.quoted.text or nil
+            local block_quote = explicit
+            if not block_quote then
+                local snip = M.generate_snippet(text, m, opts)
+                if snip ~= "" then block_quote = snip end
+            end
+            table.insert(blocks, { quoted = block_quote, sections = m.sections })
             table.insert(replacements, {
                 byte_start = m.byte_start,
                 byte_end = m.byte_end,
-                replacement = quoted_text or "",
+                replacement = explicit or "",
             })
         end
     end

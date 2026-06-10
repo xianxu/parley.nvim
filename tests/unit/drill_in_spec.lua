@@ -221,14 +221,17 @@ describe("drill_in.gather_and_strip", function()
         assert.equals("this is RedShift cool", new_text)
     end)
 
-    it("strips 🤖[U] (no quote) and gathers the bare turn", function()
+    it("strips 🤖[U] (no quote) and infers an anchor from preceding prose (#127)", function()
         local blocks, new_text = drill_in.gather_and_strip(
             "preamble 🤖[just ask] tail"
         )
         assert.equals(1, #blocks)
-        assert.is_nil(blocks[1].quoted)
+        -- #127: the unquoted marker now carries an inferred anchor (the
+        -- preceding prose), not nil. Only one word precedes it here.
+        assert.equals("preamble", blocks[1].quoted)
         assert.equals("just ask", blocks[1].sections[1].text)
-        -- Marker removed entirely (single space remains where it sat).
+        -- Inline replacement is still empty — the snippet is NOT re-inserted
+        -- (it's already present in the reply); only the marker is removed.
         assert.equals("preamble  tail", new_text)
     end)
 
@@ -242,12 +245,13 @@ describe("drill_in.gather_and_strip", function()
         assert.equals("x term y", new_text)
     end)
 
-    it("strips ready chain without <>", function()
+    it("strips ready chain without <> (anchor inferred from preceding prose, #127)", function()
         local blocks, new_text = drill_in.gather_and_strip(
             "x 🤖[Q1]{A1}[Q2] y"
         )
         assert.equals(1, #blocks)
-        assert.is_nil(blocks[1].quoted)
+        -- #127: unquoted chain gets an inferred anchor ("x" precedes it).
+        assert.equals("x", blocks[1].quoted)
         assert.equals(3, #blocks[1].sections)
         assert.equals("x  y", new_text)
     end)
@@ -303,6 +307,133 @@ describe("drill_in.gather_and_strip", function()
         local blocks, new_text = drill_in.gather_and_strip(input)
         assert.equals(0, #blocks)
         assert.equals(input, new_text)
+    end)
+end)
+
+-- ─── #127: inferred snippet anchors for unquoted markers ───────────────
+describe("drill_in.generate_snippet (#127)", function()
+    -- Return the only marker in `text` (helper).
+    local function marker_in(text, n)
+        local ms = drill_in.parse(text)
+        return ms[n or 1]
+    end
+
+    -- ── inline: prose precedes the marker on its line ──────────────────
+    it("inline: grabs the preceding sentence when ≥10 words are present", function()
+        local text = "Germany had been rearming in secret all through the nineteen twenties already 🤖[source?] here"
+        assert.equals(
+            "Germany had been rearming in secret all through the nineteen twenties already",
+            drill_in.generate_snippet(text, marker_in(text))
+        )
+    end)
+
+    it("inline: a <10-word current sentence extends back across the boundary", function()
+        local text = "This matters a lot. It really does 🤖[why?] now."
+        -- "It really does" (3) < 10 → prepend "This matters a lot." (4) → 7 words.
+        assert.equals(
+            "This matters a lot. It really does",
+            drill_in.generate_snippet(text, marker_in(text))
+        )
+    end)
+
+    it("inline: caps at 20 words, keeping the words nearest the marker with a … prefix", function()
+        local words = {}
+        for i = 1, 25 do table.insert(words, "w" .. i) end
+        local text = table.concat(words, " ") .. " 🤖[q] end"
+        local last20 = {}
+        for i = 6, 25 do table.insert(last20, words[i]) end
+        local expect = "… " .. table.concat(last20, " ")
+        assert.equals(expect, drill_in.generate_snippet(text, marker_in(text)))
+    end)
+
+    it("inline: strips a neighboring marker's raw bytes out of the window", function()
+        local text = "context here 🤖<x>[c0] more words after 🤖[c1] end"
+        -- The 🤖[c1] window includes the raw 🤖<x>[c0]; it must not leak in.
+        assert.equals(
+            "context here more words after",
+            drill_in.generate_snippet(text, marker_in(text, 2))
+        )
+    end)
+
+    -- ── standalone: marker is its own blank-separated paragraph ─────────
+    it("standalone: anchors to the previous paragraph's first sentence", function()
+        local text = "Para one sentence here. More of it.\n\n🤖[comment]\n\nPara two."
+        assert.equals(
+            "Para one sentence here.",
+            drill_in.generate_snippet(text, marker_in(text))
+        )
+    end)
+
+    it("standalone: degrades to empty when there is no previous prose block", function()
+        local text = "🤖[comment]\n\nSome paragraph follows."
+        assert.equals("", drill_in.generate_snippet(text, marker_in(text)))
+    end)
+
+    -- ── degradation + classification edges ─────────────────────────────
+    it("inline at reply start (prose only after the marker) degrades to empty", function()
+        local text = "🤖[note] this is the very first line"
+        assert.equals("", drill_in.generate_snippet(text, marker_in(text)))
+    end)
+
+    it("bare marker mid-paragraph (no blank separation) is treated as inline", function()
+        local text = "first line of the paragraph here\n🤖[comment]\nsecond line continues"
+        assert.equals(
+            "first line of the paragraph here",
+            drill_in.generate_snippet(text, marker_in(text))
+        )
+    end)
+
+    -- ── turn boundaries: never pull an anchor across a speaker prefix ───
+    it("standalone: stops at a turn prefix instead of crossing into the user turn", function()
+        local text = "💬: tell me about tanks\n\n🤖:[Agent]\n\n🤖[expand here]\n\nTanks mattered a lot."
+        -- 🤖:[Agent] header is the marker's own turn start — the user's
+        -- question above it must NOT become the agent comment's anchor.
+        assert.equals(
+            "",
+            drill_in.generate_snippet(text, marker_in(text), { boundaries = { "💬:", "🤖:" } })
+        )
+    end)
+
+    it("standalone: anchors to the prior paragraph within the same turn, not across the header", function()
+        local text = "🤖:[Agent]\n\nFirst paragraph of the answer here.\n\n🤖[expand]\n\nsecond"
+        assert.equals(
+            "First paragraph of the answer here.",
+            drill_in.generate_snippet(text, marker_in(text), { boundaries = { "💬:", "🤖:" } })
+        )
+    end)
+
+    it("forgiving: mis-snaps on an abbreviation period (documented limitation)", function()
+        local text = "Dr. Smith presented the findings clearly.\n\n🤖[c]\n\nx"
+        -- "Dr." reads as a sentence end; accepted per the meaning-anchor
+        -- philosophy (a verbatim near-anchor still routes attention).
+        assert.equals("Dr.", drill_in.generate_snippet(text, marker_in(text)))
+    end)
+end)
+
+-- #127: gather_and_strip end-to-end — quoted unchanged, mixed order, inference.
+describe("drill_in.gather_and_strip + inferred anchors (#127)", function()
+    it("explicit <Q> is unchanged — no inference for quoted markers (regression)", function()
+        local blocks = drill_in.gather_and_strip("lots of prose before 🤖<Q>[ask] and after")
+        assert.equals(1, #blocks)
+        assert.equals("Q", blocks[1].quoted)
+    end)
+
+    it("mixes quoted + unquoted markers in document order, each anchored", function()
+        local blocks, new_text = drill_in.gather_and_strip(
+            "alpha beta 🤖[c1] gamma delta 🤖<Term>[c2] epsilon"
+        )
+        assert.equals(2, #blocks)
+        assert.equals("alpha beta", blocks[1].quoted) -- inferred
+        assert.equals("Term", blocks[2].quoted)        -- explicit
+        -- Inferred snippet is NOT re-inserted; explicit quote IS restored.
+        assert.equals("alpha beta  gamma delta Term epsilon", new_text)
+    end)
+
+    it("threads boundaries through to suppress a cross-turn anchor", function()
+        local text = "💬: a question\n\n🤖:[Agent]\n\n🤖[expand]\n\nbody"
+        local blocks = drill_in.gather_and_strip(text, { boundaries = { "💬:", "🤖:" } })
+        assert.equals(1, #blocks)
+        assert.is_nil(blocks[1].quoted) -- no anchor recoverable within the turn
     end)
 end)
 
