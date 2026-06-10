@@ -437,6 +437,26 @@ describe("drill_in.gather_and_strip + inferred anchors (#127)", function()
     end)
 end)
 
+describe("drill_in.chat_boundaries (#127)", function()
+    it("maps the default config prefixes, de-nil'd and ordered", function()
+        assert.same(
+            { "💬:", "🤖:", "🧠:", "📝:", "🔧:", "📎:", "🌿:" },
+            drill_in.chat_boundaries({})
+        )
+    end)
+
+    it("uses the first element when chat_assistant_prefix is a table", function()
+        local b = drill_in.chat_boundaries({ chat_assistant_prefix = { "🤖:", "[{{agent}}]" } })
+        assert.equals("🤖:", b[2])
+    end)
+
+    it("honors overrides and appends chat_local_prefix when set", function()
+        local b = drill_in.chat_boundaries({ chat_user_prefix = "U>", chat_local_prefix = "L>" })
+        assert.equals("U>", b[1])
+        assert.equals("L>", b[#b]) -- local prefix appended last
+    end)
+end)
+
 -- ─── §5 resolution table (#124 M2) ─────────────────────────────────────
 -- Pure resolve(marker, mode) implementing the spec §5 table:
 --   ref=nil, chain=[H]                → "" (both)

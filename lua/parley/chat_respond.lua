@@ -996,22 +996,8 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
     -- Turn-prefix boundaries for unquoted-marker anchor inference (#127): the
     -- backward prose scan must not cross out of the marker's own agent turn
     -- (into the 💬: question, a 🧠:/📎: block, or a neighboring exchange). The
-    -- config→prefix coupling lives here in the glue layer; drill_in stays pure.
-    local di_opts = { boundaries = (function()
-        local cfg = _parley.config
-        local function first(p) return type(p) == "table" and p[1] or p end
-        local out = {}
-        local function add(p) if p and p ~= "" then table.insert(out, p) end end
-        add(cfg.chat_user_prefix or "💬:")
-        add(first(cfg.chat_assistant_prefix) or "🤖:")
-        add((cfg.chat_memory and cfg.chat_memory.reasoning_prefix) or "🧠:")
-        add((cfg.chat_memory and cfg.chat_memory.summary_prefix) or "📝:")
-        add(cfg.chat_tool_use_prefix or "🔧:")
-        add(cfg.chat_tool_result_prefix or "📎:")
-        add(cfg.chat_branch_prefix or "🌿:")
-        add(cfg.chat_local_prefix)
-        return out
-    end)() }
+    -- config→prefix mapping is a tested pure helper; drill_in's core stays pure.
+    local di_opts = { boundaries = drill_in.chat_boundaries(_parley.config) }
 
     if params.range ~= 2 and exchange_idx and component then
         local exch = parsed_chat.exchanges[exchange_idx]

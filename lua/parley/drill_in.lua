@@ -156,6 +156,19 @@ end
 local function is_blank(line) return line:match("^%s*$") ~= nil end
 local function word_count(s) local n = 0; for _ in s:gmatch("%S+") do n = n + 1 end; return n end
 
+-- Topmost line of the contiguous content block ending at line `start` (scan up
+-- while the line above is neither blank nor a turn boundary). Shared by the
+-- inline and previous-block scans.
+local function paragraph_top(idx, start, boundaries)
+    local top = start
+    while top - 1 >= 1
+        and not is_blank(idx[top - 1].line)
+        and not is_boundary_line(idx[top - 1].line, boundaries) do
+        top = top - 1
+    end
+    return top
+end
+
 local function collapse_ws(s)
     return (s:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", ""))
 end
@@ -231,6 +244,12 @@ end
 
 --- Infer a verbatim anchor snippet for an unquoted marker from surrounding
 --- reply prose. Pure.
+---
+--- Tuned for single-line markers (the common `🤖[comment]` case): classification
+--- reasons line-locally off `byte_start`/`byte_end`, so a multi-line marker
+--- (`🤖[a\nb]`) whose `byte_end` lands on a later line may mis-pick inline vs
+--- standalone. It still degrades safely (a reasonable or empty anchor, never a
+--- crash) since both branches fall back to the previous prose block.
 --- @param text string           joined reply text
 --- @param marker table          a parsed marker (M.parse) — uses byte_start/byte_end
 --- @param opts table|nil        { boundaries = string[] } turn-prefix hard stops
@@ -269,12 +288,7 @@ function M.generate_snippet(text, marker, opts)
         local i = L - 1
         while i >= 1 and is_blank(idx[i].line) do i = i - 1 end
         if i < 1 or is_boundary_line(idx[i].line, boundaries) then return "" end
-        local top = i
-        while top - 1 >= 1
-            and not is_blank(idx[top - 1].line)
-            and not is_boundary_line(idx[top - 1].line, boundaries) do
-            top = top - 1
-        end
+        local top = paragraph_top(idx, i, boundaries)
         local parts = {}
         for k = top, i do table.insert(parts, idx[k].line) end
         return first_sentence_snippet(table.concat(parts, " "))
@@ -282,12 +296,7 @@ function M.generate_snippet(text, marker, opts)
 
     -- Prose preceding the marker within its own paragraph (stop at blank/boundary).
     local function inline_before()
-        local top = L
-        while top - 1 >= 1
-            and not is_blank(idx[top - 1].line)
-            and not is_boundary_line(idx[top - 1].line, boundaries) do
-            top = top - 1
-        end
+        local top = paragraph_top(idx, L, boundaries)
         local parts = {}
         for k = top, L - 1 do table.insert(parts, idx[k].line) end
         table.insert(parts, before_on_line)
@@ -312,6 +321,29 @@ function M.generate_snippet(text, marker, opts)
     local snip = tail_snippet(inline_before())
     if snip ~= "" then return snip end
     return prev_block_first_sentence()
+end
+
+--- Assemble the turn-prefix boundary list for snippet inference from a parley
+--- config table (#127). Pure (config in → string[] out) so the chat-structure
+--- knowledge has a single tested home instead of an inline closure in the
+--- chat_respond glue. These prefixes hard-stop the backward anchor scan so it
+--- never crosses out of the marker's own agent turn.
+--- @param cfg table  parley config (reads chat_*_prefix fields)
+--- @return string[]  ordered, de-nil'd prefix list
+function M.chat_boundaries(cfg)
+    cfg = cfg or {}
+    local function first(p) return type(p) == "table" and p[1] or p end
+    local out = {}
+    local function add(p) if p and p ~= "" then table.insert(out, p) end end
+    add(cfg.chat_user_prefix or "💬:")
+    add(first(cfg.chat_assistant_prefix) or "🤖:")
+    add((cfg.chat_memory and cfg.chat_memory.reasoning_prefix) or "🧠:")
+    add((cfg.chat_memory and cfg.chat_memory.summary_prefix) or "📝:")
+    add(cfg.chat_tool_use_prefix or "🔧:")
+    add(cfg.chat_tool_result_prefix or "📎:")
+    add(cfg.chat_branch_prefix or "🌿:")
+    add(cfg.chat_local_prefix)
+    return out
 end
 
 --- Gather ready markers and strip each from the inline text.
