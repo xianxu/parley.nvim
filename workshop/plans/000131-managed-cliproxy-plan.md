@@ -245,9 +245,11 @@ describe("render", function()
         assert.same({ "host", "port" }, overrides)
     end)
 
-    it("emits an empty api-keys list when no secret is present", function()
+    it("omits api-keys entirely when no secret is present", function()
+        -- NB: do NOT emit an empty table — vim.json.encode({}) is `{}` (object),
+        -- not `[]` (array), so cliproxy would see a malformed api-keys. Omit it.
         local cfg = cc.render({ host = "h", port = 8317, config = {} })
-        assert.same({}, cfg["api-keys"])
+        assert.is_nil(cfg["api-keys"])
     end)
 end)
 ```
@@ -278,9 +280,9 @@ function M.render(opts)
         cfg["auth-dir"] = opts.auth_dir
     end
     if opts.secret ~= nil and opts.secret ~= "" then
-        cfg["api-keys"] = { opts.secret }
+        cfg["api-keys"] = { opts.secret }  -- non-empty → encodes as a JSON array
     else
-        cfg["api-keys"] = {}
+        cfg["api-keys"] = nil  -- omit, not {} (empty table → JSON object, malformed)
     end
     return cfg, overrides
 end
@@ -300,6 +302,7 @@ describe("encode", function()
     it("emits JSON that round-trips and keeps api-keys a list", function()
         local cfg = cc.render({ host = "127.0.0.1", port = 8317, secret = "s", config = {} })
         local str = cc.encode(cfg)
+        assert.is_truthy(str:find('"api-keys":%s*%["s"%]'))  -- wire format: a JSON array, not {}
         local back = vim.json.decode(str)
         assert.equals(8317, back.port)
         assert.same({ "s" }, back["api-keys"])  -- list, not object
@@ -393,7 +396,7 @@ Also implement `M.is_managed()` → reads `require("parley").config.cliproxy` an
 ### Task 2.5: commands — `status|start|stop|restart|login`
 
 - [ ] **Step 1: Failing tests** — `status()` returns a table with binary source, health/auth state, host:port, auth-dir, config path, and a `config_drift` bool (rendered ≠ running). `stop()` only kills a parley-spawned PID (a reused/foreign daemon is left alone). `restart()` = stop-if-ours + ensure. `login()` builds the `cli-proxy-api login` argv.
-- [ ] **Step 2–4:** Implement. Keep each a thin wrapper; `status` composes `discover_binary` + `health_probe` + a config-drift check (compare on-disk rendered file to a fresh `render`).
+- [ ] **Step 2–4:** Implement. Keep each a thin wrapper; `status` composes `discover_binary` + `health_probe` + a config-drift check. **Drift compare:** decode both the on-disk YAML and a fresh `render`, then `vim.deep_equal` the tables — do NOT string-compare the encoded JSON (Lua table iteration order is unspecified, so `encode` key order isn't stable → string compare false-positives "restart needed").
 - [ ] **Step 5: Commit** `#131 M1: cliproxy commands (status/start/stop/restart/login)`
 
 > **Chunk 2 review:** the process-level fake + `ensure_running` failure-mode matrix is the riskiest surface — sanity-review before wiring.
