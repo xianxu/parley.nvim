@@ -131,4 +131,277 @@ function M.health_probe(host, port, secret, cb)
     end)
 end
 
+--------------------------------------------------------------------------------
+-- Rendered config (derived artifact)
+--------------------------------------------------------------------------------
+
+-- A derived, machine-local artifact under stdpath('data') — NOT in the user's
+-- dotfiles repo. The committed Lua setup{} is the source of truth.
+local function config_path()
+    local dir = vim.fn.stdpath("data") .. "/parley/cliproxy"
+    vim.fn.mkdir(dir, "p")
+    return dir .. "/config.yaml"
+end
+
+M._config_path = config_path -- exposed for tests
+
+-- Render the merged config from Lua + the resolved secret, write it 0600.
+-- Returns (path, host, port) or (nil, err).
+local function write_rendered_config()
+    local host, port = cc.parse_endpoint(endpoint())
+    if not host then
+        return nil, "cannot parse host:port from endpoint: " .. tostring(endpoint())
+    end
+    local c = cfg() or {}
+    local secret = require("parley.vault").get_secret(
+        require("parley.providers").get_secret_name("cliproxyapi"))
+    local rendered, overrides = cc.render({
+        host = host,
+        port = port,
+        auth_dir = c.auth_dir,
+        secret = secret,
+        config = c.config,
+    })
+    if #overrides > 0 then
+        logger.warning("cliproxy: managed host/port override raw config key(s): "
+            .. table.concat(overrides, ", "))
+    end
+    local path = config_path()
+    local f, ferr = io.open(path, "w")
+    if not f then
+        return nil, "cannot write config: " .. tostring(ferr)
+    end
+    f:write(cc.encode(rendered))
+    f:close()
+    local fs_chmod = uv.fs_chmod or vim.loop.fs_chmod
+    fs_chmod(path, tonumber("600", 8))
+    return path, host, port, secret
+end
+
+--------------------------------------------------------------------------------
+-- Spawn (detached, PID-tracked)
+--------------------------------------------------------------------------------
+
+--- Spawn the proxy detached so it outlives nvim and is shared across instances.
+--- Records the pid so stop() is scoped to a parley-spawned daemon only.
+---@param binary string
+---@param config_file string
+---@return number|nil pid, any handle_or_err
+function M.spawn(binary, config_file)
+    local handle, pid
+    handle, pid = uv.spawn(binary, {
+        args = { "-config", config_file },
+        detached = true,
+    }, function(code, _signal)
+        local rec = _spawned[pid]
+        if rec then
+            rec.exited = true
+            rec.code = code
+        end
+    end)
+    if not handle then
+        return nil, tostring(pid) -- pid carries the error message on failure
+    end
+    uv.unref(handle)
+    _spawned[pid] = { handle = handle, exited = false }
+    return pid, handle
+end
+
+--- pids of proxies parley spawned (for scoped stop()).
+---@return number[]
+function M.spawned_pids()
+    local pids = {}
+    for pid in pairs(_spawned) do
+        table.insert(pids, pid)
+    end
+    return pids
+end
+
+--- Test helper: forget all tracked spawns (does not kill them).
+function M._reset_spawned()
+    _spawned = {}
+end
+
+--------------------------------------------------------------------------------
+-- ensure_running — reuse-if-healthy, else spawn + poll; never hang
+--------------------------------------------------------------------------------
+
+local POLL_INTERVAL_MS = 250
+local POLL_BUDGET_MS = 5000
+
+local function poll_until_healthy(host, port, secret, pid, callback, on_error)
+    local deadline = uv.now() + POLL_BUDGET_MS
+    local function tick()
+        local rec = _spawned[pid]
+        if rec and rec.exited then
+            return on_error("cliproxy: process exited (code " .. tostring(rec.code)
+                .. ") right after spawn — check the binary/config")
+        end
+        M.health_probe(host, port, secret, function(state)
+            if state == "healthy" or state == "needs_login" then
+                return callback()
+            end
+            if uv.now() >= deadline then
+                return on_error("cliproxy: proxy did not become healthy within "
+                    .. (POLL_BUDGET_MS / 1000) .. "s — try :ParleyProxy status")
+            end
+            vim.defer_fn(tick, POLL_INTERVAL_MS)
+        end)
+    end
+    tick()
+end
+
+--- Ensure a healthy managed proxy is reachable, then call `callback`. On any
+--- failure call `on_error(msg)` so the dispatch path fails fast (never hangs).
+--- No-op pass-through when the feature isn't opted in.
+---@param callback fun()
+---@param on_error fun(msg: string)|nil
+function M.ensure_running(callback, on_error)
+    on_error = on_error or function() end
+    if not M.is_managed() then
+        return callback()
+    end
+
+    local path, host, port, secret = write_rendered_config()
+    if not path then
+        return on_error("cliproxy: " .. tostring(host)) -- host carries the err
+    end
+
+    M.health_probe(host, port, secret, function(state)
+        if state == "healthy" or state == "needs_login" then
+            return callback() -- reuse the already-running (brew service / other nvim)
+        end
+        if state == "client_key_mismatch" then
+            return on_error("cliproxy: client api-key mismatch — the rendered api-keys "
+                .. "do not match the bearer parley sends (check api_keys.cliproxyapi)")
+        end
+        if state == "foreign" then
+            return on_error("cliproxy: port " .. port .. " is held by a non-cliproxy process")
+        end
+        -- down → spawn our own
+        local bin = M.discover_binary()
+        if not bin then
+            return on_error("cliproxy: no cliproxy binary found — `brew install cliproxyapi`, "
+                .. "set cliproxy.binary_path, or enable auto_download (M2)")
+        end
+        local pid, err = M.spawn(bin, path)
+        if not pid then
+            return on_error("cliproxy: failed to spawn " .. bin .. ": " .. tostring(err))
+        end
+        poll_until_healthy(host, port, secret, pid, callback, on_error)
+    end)
+end
+
+--------------------------------------------------------------------------------
+-- Commands: status / start / stop / restart / login
+--------------------------------------------------------------------------------
+
+M.start = M.ensure_running
+
+--- Stop only proxies parley spawned (a reused/foreign daemon is left alone).
+---@return number killed
+function M.stop()
+    local killed = 0
+    for pid in pairs(_spawned) do
+        pcall(uv.kill, pid, "sigterm")
+        killed = killed + 1
+    end
+    _spawned = {}
+    return killed
+end
+
+--- Restart: stop our own daemon, then ensure-running (re-renders config).
+function M.restart(callback, on_error)
+    M.stop()
+    M.ensure_running(callback or function() end, on_error)
+end
+
+-- Does the on-disk rendered config differ from a fresh render of the current
+-- Lua config? Compares decoded tables (NOT encoded strings — key order is
+-- unstable across renders).
+local function config_drift()
+    local f = io.open(config_path(), "r")
+    if not f then
+        return false -- nothing rendered yet
+    end
+    local content = f:read("*a")
+    f:close()
+    local ok, on_disk = pcall(vim.json.decode, content)
+    if not ok then
+        return true
+    end
+    local host, port = cc.parse_endpoint(endpoint())
+    if not host then
+        return false
+    end
+    local c = cfg() or {}
+    local secret = require("parley.vault").get_secret(
+        require("parley.providers").get_secret_name("cliproxyapi"))
+    local fresh = cc.render({ host = host, port = port, auth_dir = c.auth_dir, secret = secret, config = c.config })
+    return not vim.deep_equal(on_disk, fresh)
+end
+
+--- Gather a status snapshot. Async (health is probed); calls cb(info).
+---@param cb fun(info: table)
+function M.status(cb)
+    local bin = M.discover_binary()
+    local c = cfg() or {}
+    local host, port = cc.parse_endpoint(endpoint())
+    local source = "none"
+    if bin then
+        source = (c.binary_path == bin) and "binary_path" or "PATH"
+    end
+    local info = {
+        managed = M.is_managed(),
+        binary = bin,
+        binary_source = source,
+        host = host,
+        port = port,
+        auth_dir = c.auth_dir,
+        config_path = config_path(),
+        spawned_by_parley = #M.spawned_pids() > 0,
+        config_drift = config_drift(),
+    }
+    if not host then
+        info.health = "unknown"
+        return cb(info)
+    end
+    local secret = require("parley.vault").get_secret(
+        require("parley.providers").get_secret_name("cliproxyapi"))
+    M.health_probe(host, port, secret, function(state)
+        info.health = state
+        cb(info)
+    end)
+end
+
+-- Per-provider login flags (NOT a `login` subcommand — confirmed Task 2.0).
+local LOGIN_FLAGS = {
+    claude = "-claude-login",
+    codex = "-codex-login",
+    ["codex-device"] = "-codex-device-login",
+    google = "-login",
+    kimi = "-kimi-login",
+    xai = "-xai-login",
+    antigravity = "-antigravity-login",
+}
+
+--- Build the argv for an interactive OAuth login for `provider`.
+--- Passes -config so login writes into parley's configured auth-dir.
+---@param provider string
+---@return string[]|nil argv, string|nil err
+function M.login_argv(provider)
+    local bin = M.discover_binary()
+    if not bin then
+        return nil, "no cliproxy binary found — `brew install cliproxyapi` or set cliproxy.binary_path"
+    end
+    local flag = LOGIN_FLAGS[provider]
+    if not flag then
+        local valid = vim.tbl_keys(LOGIN_FLAGS)
+        table.sort(valid)
+        return nil, "unknown login provider '" .. tostring(provider)
+            .. "' — valid: " .. table.concat(valid, ", ")
+    end
+    return { bin, "-config", config_path(), flag }
+end
+
 return M
