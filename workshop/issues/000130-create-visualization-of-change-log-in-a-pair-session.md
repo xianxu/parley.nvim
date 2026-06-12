@@ -1,6 +1,6 @@
 ---
 id: 000130
-status: open
+status: wontfix
 deps: []
 created: 2026-06-11
 updated: 2026-06-11
@@ -31,4 +31,7 @@ ideally we would have a changelog easily accessible to operator of the changes i
 ## Log
 
 ### 2026-06-11
+
+- wontfix here: created in parley by mistake. This is a pair concern (change-log
+  visualization in a pair session). Re-filed and lives on at pair workshop/issues/000053.
 
