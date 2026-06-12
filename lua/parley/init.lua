@@ -75,6 +75,11 @@ local discovery = require("parley.discovery")
 discovery.setup(M)
 M.discovery = discovery
 
+-- Skill registry (#128): declarative skill manifests unioned from providers
+-- (plugin-disk ∪ user-disk ∪ repo/virtual seams). current() discovers the live
+-- stack; the per-turn assembly + read_skill tool (M2) consume it.
+M.skills = require("parley.skill_registry")
+
 -- Memory preferences module (loaded here; wired up immediately since it only needs M reference)
 local memory_prefs = require("parley.memory_prefs")
 memory_prefs.setup(M)
