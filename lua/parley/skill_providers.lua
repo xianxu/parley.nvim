@@ -57,6 +57,9 @@ local function manifest_from_def(def, dir)
 end
 
 --- A disk provider over `root` (a dir of `<name>/init.lua` skill dirs).
+--- Emits CANDIDATE manifests — a dir with a `name` but no resolvable body
+--- (no `source`/SKILL.md/`system_prompt`) yields `source = nil`; the registry
+--- is the single validation point and validate-drops such a candidate.
 --- @param root string absolute directory path
 --- @return table provider with a `list()` method
 function M.disk(root)

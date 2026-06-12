@@ -115,7 +115,7 @@ Decomposed into review-boundary milestones — task detail in
 `workshop/plans/000128-skill-system-redesign-plan.md` (M1 task-detailed; M2–M5
 sketched). The original rough shape is folded into the milestones below.
 
-- [ ] M1 — declarative manifest + provider-based discovery: `SkillManifest` shape+`validate`; disk/virtual providers (closure `source`, kills the `debug.getinfo` dance); registry union+dedup; `review`/`voice_apply` re-expressed as manifests — **no chat-loop change**
+- [x] M1 — declarative manifest + provider-based discovery: `SkillManifest` shape+`validate`; disk/virtual providers (closure `source`, kills the `debug.getinfo` dance); registry union+dedup; `review`/`voice_apply` re-expressed as manifests — **no chat-loop change**
 - [ ] M2 — `read_skill` tool (cwd-exempt, transcript-visible) + per-turn assembly (per-buffer `ActiveSkills` state + pure `assemble_turn`) + route through the chat loop
 - [ ] M3 — `propose_edits` builtin (salvage `compute_edits`/`apply_edits` + highlight/diagnostics) + `force_tool`; port `review` end-to-end through the loop
 - [ ] M4 — port `voice_apply`; delete `skill_runner` forced pipeline; reconcile callers (`skill_picker`/`review.lua`/keybindings); resolve `glob`/`list_dir` (YAGNI decision — they don't exist)
@@ -126,6 +126,7 @@ sketched). The original rough shape is folded into the milestones below.
 ## Log
 
 ### 2026-06-12 — M1 implemented (declarative manifest + provider discovery)
+- 2026-06-12: closed M1 — declarative skill system M1: SkillManifest+validate (16 assertions), disk/virtual providers (5), registry union/dedup/current() incl real plugin skills (7); review+voice-apply discoverable as manifests; full suite lint 0/0 + 91 spec files pass; v1 skill_runner runtime untouched (9/9). No chat-loop change (M2); review verdict: FIX-THEN-SHIP
 
 Plan `workshop/plans/000128-skill-system-redesign-plan.md` (fresh-review CLEAN;
 change-code plan-quality: info). Executed M1 Tasks 1–5 TDD-first: `SkillManifest`

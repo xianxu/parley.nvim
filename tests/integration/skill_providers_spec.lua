@@ -85,6 +85,24 @@ describe("providers.disk", function()
         assert.are.equal("BETA INLINE", beta.source({}))
         assert.are.equal("repo", beta.scope)
     end)
+
+    it("falls back to a v1 system_prompt fn when there is no source/SKILL.md", function()
+        -- back-compat branch #3: init.lua with only a system_prompt fn.
+        vim.fn.mkdir(root .. "/legacy", "p")
+        write(root .. "/legacy/init.lua", {
+            "return {",
+            '  name = "legacy",',
+            '  description = "Legacy skill",',
+            '  scope = "global",',
+            "  activation = { manual = true },",
+            '  system_prompt = function(ctx) return "LEGACY:" .. (ctx.tag or "?") end,',
+            "}",
+        })
+        local legacy = by_name(providers.disk(root):list(), "legacy")
+        assert.is_not_nil(legacy)
+        assert.is_true(manifest.validate(legacy))
+        assert.are.equal("LEGACY:hi", legacy.source({ tag = "hi" }))
+    end)
 end)
 
 describe("providers.virtual", function()

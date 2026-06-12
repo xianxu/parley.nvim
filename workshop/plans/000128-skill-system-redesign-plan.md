@@ -39,7 +39,7 @@ Only **M1** is detailed to task granularity below; M2–M5 are milestone sketche
 | `SkillManifest` (shape + `validate`) | `lua/parley/skill_manifest.lua` | new |
 | `assemble_turn` (active set + scope → turn config) | `lua/parley/skill_assembly.lua` | new (M2) |
 | `compute_edits` (salvaged, pure) | `lua/parley/skill_edits.lua` | new (M3) — moved from `skill_runner.lua:54` |
-| `resolve_agent` (salvaged cascade, pure) | `lua/parley/skill_manifest.lua` | new — moved from `skill_runner.lua:284` |
+| `resolve_agent` (salvaged cascade) | `lua/parley/skill_assembly.lua` | new (M2) — moved from `skill_runner.lua:284`; pure given injected config |
 
 - **SkillManifest** — the declarative description of one skill: `{ name, description, scope, activation, source, tools, elevated, force_tool?, args?, agent? }`. `validate(m)` returns `(true)` or `(false, err)`.
   - `scope` ∈ `global | repo | super_repo`; `activation` = table of independent boolean flags `{ always?, auto?, manual? }` (any combination — `always`=preloaded by scope, `auto`=offered in the model's menu, `manual`=hotkey-activatable); `source` = `function(ctx) → string` (the body — unified across disk/virtual, see DiskProvider); `tools` = list of tool names granted whenever active; `elevated` = list granted only on **manual** activation (the #129 hook); `force_tool` = optional tool name to compel this turn; `args` = optional completable-arg specs (kept from v1); `agent` = optional model override.
@@ -48,7 +48,7 @@ Only **M1** is detailed to task granularity below; M2–M5 are milestone sketche
   - **Relationships:** consumes N SkillManifests; produces one turn-config. **DRY rationale:** the single place "what does this turn get" is decided — the chat loop and any future headless caller share it. **Future extensions:** #129 permission filtering slots in here (gate `elevated` on a capability check, not just `manual`).
 - **compute_edits** (M3, salvaged from `skill_runner.lua:54-109`) — pure: `(content, edits) → (ok, msg, new_content, applied)`; validates uniqueness, applies in reverse position order. Becomes the core of the `propose_edits` tool handler.
   - **DRY rationale:** the one batch-edit transform; the tool handler (IO) wraps it. **Future extensions:** none expected — stable.
-- **resolve_agent** (salvaged from `skill_runner.lua:284-322`) — pure cascade (per-skill config → skill default → global `skill_agent` → first tool-capable agent). Reused by the assembly to pick a model when a skill declares one.
+- **resolve_agent** (M2, salvaged from `skill_runner.lua:284-322`) — the agent cascade (per-skill config → skill default → global `skill_agent` → first tool-capable agent), reused by the assembly to pick a model when a skill declares one. v1's copy reads the parley module directly (not pure); **M2 salvages it as a pure function of *injected* config** (`(config, skill) → agent`) so the core stays pure and the IO (config read) lives at the assembly boundary (`ARCH-PURE`). Deferred from M1 Task 1 — it isn't part of the manifest schema and belongs where it's consumed.
 
 ### Integration points
 
@@ -56,7 +56,7 @@ Only **M1** is detailed to task granularity below; M2–M5 are milestone sketche
 |------|----------|--------|-------|
 | `DiskProvider` | `lua/parley/skill_providers.lua` | new | filesystem scan (`vim.loop.fs_scandir`) |
 | `VirtualProvider` | `lua/parley/skill_providers.lua` | new (seam in M1, used M5) | runtime-generated manifests |
-| `SkillRegistry` (`discover`/`get`/`names`) | `lua/parley/skill_registry.lua` | new | provider union + cache |
+| `SkillRegistry` (`discover`/`get`/`names`) | `lua/parley/skill_registry.lua` | new | provider union |
 | `ActiveSkills` (per-buffer state) | `lua/parley/skill_active.lua` | new (M2) | per-buffer mutable state |
 | `read_skill` tool | `lua/parley/tools/builtin/read_skill.lua` | new (M2) | registry lookup → transcript block |
 | `propose_edits` tool | `lua/parley/tools/builtin/propose_edits.lua` | new (M3) | file write + buffer diagnostics/highlights |
@@ -67,7 +67,7 @@ Only **M1** is detailed to task granularity below; M2–M5 are milestone sketche
   - **Future extensions:** a **RepoProvider** (the inspected repo ships skills via its readonly manifest) is a third disk-shaped provider — same emission shape, different root.
 - **VirtualProvider** — emits manifests generated at runtime (no disk). The M1 deliverable is the *seam* (a provider that returns a list of manifests built from registered generators); the first concrete virtual skill (`repo_discovery`) arrives in M5.
   - **Injected into:** the SkillRegistry. Tested by registering a fake generator and asserting the manifest appears in `discover`.
-- **SkillRegistry** — `discover()` unions all providers (dedup by name, defined precedence), caches; `get(name)` / `names()`. The single surface the assembly + `read_skill` read.
+- **SkillRegistry** — `discover()` unions all providers (dedup by name, last-wins precedence); `get(name)` / `names()` / `all()`. The single surface the assembly + `read_skill` read. (No cache built — `discover`/`current` recompute per call; add one only when a consumer needs it, YAGNI.)
   - **Injected into:** `read_skill`, `assemble_turn`'s caller, the picker. Tested with fake providers (no real fs).
 - **ActiveSkills** (M2) — per-buffer mutable set of currently-active skill names (+ which were manually activated). Mirrors `tool_loop`'s `state_by_buf` pattern (`tool_loop.lua:36`). `read_skill`/hotkey write it; turn-assembly reads it.
   - **Injected into:** the chat-loop turn hook. The *logic* (assemble_turn) stays pure; this is the thin state seam.
@@ -96,7 +96,7 @@ Follow parley conventions: modules `local M = {} … return M`; tests use `plena
 - Create: `lua/parley/skill_manifest.lua`
 - Test: `tests/unit/skill_manifest_spec.lua`
 
-- [ ] **Step 1: Write failing tests** — `M.validate(manifest)` returns `(ok, err)`:
+- [x] **Step 1: Write failing tests** — `M.validate(manifest)` returns `(ok, err)`:
   - a fully-formed manifest (name, description, scope, activation, source fn, tools list) → `(true, nil)`.
   - missing `name`/`description`/`source` → `(false, "<specific field>")`.
   - `scope` not in `{global, repo, super_repo}` → false.
@@ -104,10 +104,10 @@ Follow parley conventions: modules `local M = {} … return M`; tests use `plena
   - `source` not a function → false.
   - `tools`/`elevated` present but not a list-of-strings → false; absent → ok (default empty).
   - `force_tool` present but not a string → false; absent → ok.
-- [ ] **Step 2: Run, verify fail** (module missing).
-- [ ] **Step 3: Implement** `M.validate` (mirror `tools/types.lua`); expose `M.SCOPES` + `M.ACTIVATION_FLAGS` constants for reuse. Also move the salvaged pure `resolve_agent` cascade here (from `skill_runner.lua:284-322`) with its own tests.
-- [ ] **Step 4: Run, verify pass.**
-- [ ] **Step 5: Commit** — `#128 M1: SkillManifest shape + validate (declarative skill core)`.
+- [x] **Step 2: Run, verify fail** (module missing).
+- [x] **Step 3: Implement** `M.validate` (mirror `tools/types.lua`); expose `M.SCOPES` + `M.ACTIVATION_FLAGS` constants for reuse. ~~Also move the salvaged pure `resolve_agent` cascade here~~ — **deferred to M2** (it reads the parley module, so it's not pure; belongs where it's consumed at turn assembly — `ARCH-PURE`).
+- [x] **Step 4: Run, verify pass.** _16/16 green._
+- [x] **Step 5: Commit** — `#128 M1: SkillManifest shape + validate (declarative skill core)`. _8720009_
 
 ### Task 2: DiskProvider — manifests with closure `source` (INTEGRATION)
 
@@ -115,13 +115,13 @@ Follow parley conventions: modules `local M = {} … return M`; tests use `plena
 - Create: `lua/parley/skill_providers.lua`
 - Test: `tests/integration/skill_providers_spec.lua`
 
-- [ ] **Step 1: Write failing test** with a temp fixture skill root containing `myskill/init.lua` (returns declarative fields) + `myskill/SKILL.md` (body): `providers.disk(root):list()` → a list of valid `SkillManifest`s (each passes `manifest.validate`), and `manifest.source({})` returns the SKILL.md body **read from the captured absolute path** (no `debug.getinfo`).
+- [x] **Step 1: Write failing test** with a temp fixture skill root containing `myskill/init.lua` (returns declarative fields) + `myskill/SKILL.md` (body): `providers.disk(root):list()` → a list of valid `SkillManifest`s (each passes `manifest.validate`), and `manifest.source({})` returns the SKILL.md body **read from the captured absolute path** (no `debug.getinfo`).
   - edge: a dir missing `init.lua` → skipped (not an error).
   - edge: `init.lua` with no SKILL.md but a `source`/`system_prompt` fn → body from the fn (back-compat with how v1 skills define a prompt fn).
-- [ ] **Step 2: Run, verify fail.**
-- [ ] **Step 3: Implement** the disk provider: `vim.loop.fs_scandir` the root, for each dir load `init.lua`, build a manifest whose `source` is a closure over the dir's absolute path (`return read(dir .. "/SKILL.md")` or the supplied fn). Reuse the salvageable scan structure from `skill_runner.discover_skills` (`skill_runner.lua:221-259`) **but without** the `debug.getinfo` dance — the root path is passed in. Provide `providers.disk(root)` returning `{ list = fn }`.
-- [ ] **Step 4: Run, verify pass.**
-- [ ] **Step 5: Commit** — `#128 M1: DiskProvider (closure source, kills debug.getinfo dance)`.
+- [x] **Step 2: Run, verify fail.**
+- [x] **Step 3: Implement** the disk provider: `vim.loop.fs_scandir` the root, for each dir load `init.lua`, build a manifest whose `source` is a closure over the dir's absolute path. Reuse the scan structure from `skill_runner.discover_skills` **but without** the `debug.getinfo` dance — root passed in. `providers.disk(root)` → `{ list = fn }`. _Loads init.lua via `loadfile` (absolute path → generic across plugin/user roots); source priority: explicit fn → SKILL.md → v1 system_prompt._
+- [x] **Step 4: Run, verify pass.** _3/3 green._
+- [x] **Step 5: Commit** — `#128 M1: DiskProvider (closure source, kills debug.getinfo dance)`. _dd1c4ff_
 
 ### Task 3: VirtualProvider seam (INTEGRATION)
 
@@ -129,9 +129,9 @@ Follow parley conventions: modules `local M = {} … return M`; tests use `plena
 - Modify: `lua/parley/skill_providers.lua`
 - Test: `tests/integration/skill_providers_spec.lua` (extend)
 
-- [ ] **Step 1: Write failing test** — `providers.virtual({ generators })` where a generator is `function() → SkillManifest`: `:list()` returns the generated manifests, each valid. (No concrete virtual skill yet — `repo_discovery` is M5; this is just the seam.)
-- [ ] **Step 2–4:** fail → implement `providers.virtual(generators)` → pass.
-- [ ] **Step 5: Commit** — `#128 M1: VirtualProvider seam (runtime-generated manifests)`.
+- [x] **Step 1: Write failing test** — `providers.virtual({ generators })` where a generator is `function() → SkillManifest`: `:list()` returns the generated manifests, each valid. (No concrete virtual skill yet — `repo_discovery` is M5; this is just the seam.)
+- [x] **Step 2–4:** fail → implement `providers.virtual(generators)` → pass. _5/5 green; erroring generator skipped._
+- [x] **Step 5: Commit** — `#128 M1: VirtualProvider seam (runtime-generated manifests)`. _62f600b_
 
 ### Task 4: SkillRegistry — `discover` / `get` / `names` (INTEGRATION)
 
@@ -139,14 +139,14 @@ Follow parley conventions: modules `local M = {} … return M`; tests use `plena
 - Create: `lua/parley/skill_registry.lua`
 - Test: `tests/integration/skill_registry_spec.lua`
 
-- [ ] **Step 1: Write failing tests** (inject fake providers — lists of manifests — so the test needs no real fs):
+- [x] **Step 1: Write failing tests** (inject fake providers — lists of manifests — so the test needs no real fs):
   - `registry.discover({ providerA, providerB })` unions both providers' manifests; `get(name)` returns the manifest; `names()` lists all.
-  - **dedup by name with provider precedence** (e.g. user-disk shadows plugin-disk; assert the precedence order — operator-confirmable): a name in two providers appears once, the higher-precedence one wins.
-  - `get("nope")` → nil (mirrors discovery registry's miss contract).
-- [ ] **Step 2: Run, verify fail.**
-- [ ] **Step 3: Implement** `discover(providers)` (ordered union + dedup), `get`, `names`, and a cache (invalidatable). Wire `parley.skills.discover()`/`get()` in `init.lua` exposing the default provider stack (plugin-disk + user-disk; repo + virtual seams present but empty until M5).
-- [ ] **Step 4: Run, verify pass.**
-- [ ] **Step 5: Commit** — `#128 M1: SkillRegistry (provider union + dedup + cache)`.
+  - **dedup by name with provider precedence** — settled **LAST-provider-wins** (later overrides; default stack plugin→user→repo→virtual so user/repo shadow plugin; operator-confirmable). `names()` keeps first-appearance order; value is last-seen.
+  - `get("nope")` → nil; invalid manifests dropped (not fatal).
+- [x] **Step 2: Run, verify fail.**
+- [x] **Step 3: Implement** `discover(providers)` (ordered union + dedup), `get`, `names`, `all`, `default_stack`, `current()`. Wire `parley.skills` in `init.lua`. _`current()` resolves the plugin root via `nvim_get_runtime_file` (no debug.getinfo) ∪ `~/.config/parley/skills`; repo+virtual seams empty until M5._
+- [x] **Step 4: Run, verify pass.** _5/5 green; smoke-verified `current()` loads real skill dirs without error._
+- [x] **Step 5: Commit** — `#128 M1: SkillRegistry (provider union + dedup + cache)`. _cf6d7a3_
 
 ### Task 5: Express `review` + `voice_apply` as manifests (INTEGRATION)
 
@@ -154,9 +154,9 @@ Follow parley conventions: modules `local M = {} … return M`; tests use `plena
 - Modify: `lua/parley/skills/review/init.lua`, `lua/parley/skills/voice_apply/init.lua`
 - Test: `tests/integration/skill_registry_spec.lua` (extend, real plugin root)
 
-- [ ] **Step 1: Write failing test** — `registry.discover(default_providers)` (real plugin disk root) yields valid manifests for `review` and `voice_apply`, with the expected declarative fields (`review`: `scope=global`, `activation.manual=true`, and — anticipating M3 — `force_tool`/`elevated` placeholders documented; `voice_apply` similar). **Do not** wire the chat loop yet (that's M2) — this only proves the existing skills load as conformant manifests.
-- [ ] **Step 2–4:** fail → add the declarative fields to each skill's `init.lua` (keeping the existing `args`/prompt behavior; the engine-facing `pre_submit`/`post_apply` hooks are left for M3/M4 to retire) → pass.
-- [ ] **Step 5: Commit** — `#128 M1: express review + voice_apply as declarative manifests`.
+- [x] **Step 1: Write failing test** — `registry.current()` (real plugin disk root) yields valid manifests for `review` and `voice-apply`, with the expected declarative fields. Does NOT wire the chat loop (M2) — only proves they load as conformant manifests.
+- [x] **Step 2–4:** fail → add the declarative fields to each skill's `init.lua` (keeping the existing `args`/prompt behavior + `pre_submit`/`post_apply` for M3/M4 to retire) → pass. _7/7 green; skill_runner_spec still 9/9 (v1 behavior unchanged). voice-apply's manifest source is SKILL.md-only; its dynamic per-slug style-guide composition is wired into an explicit source(ctx) when ported in M4 (noted in-file)._
+- [x] **Step 5: Commit** — `#128 M1: express review + voice_apply as declarative manifests`. _b52beda_
 
 ### Task 6: Atlas + milestone close
 
@@ -195,3 +195,27 @@ A `VirtualProvider` generator emitting `repo_discovery` (`scope=repo`, `activati
 - **Reuse, don't re-implement** (`ARCH-DRY`): the tool registry/dispatcher (`tools/init.lua`, `tools/dispatcher.lua`), the cwd-bypass pattern (`chat_history_search.lua`), the per-buffer-state pattern (`tool_loop.lua:36`), the agent-resolution cascade + arg picker + scan structure salvaged from `skill_runner`/`skill_picker`. Name the existing thing in each task.
 - **The deletion of `skill_runner` is M4, not earlier** — `review`/`voice_apply` must already run through the loop (M3) before their old engine is removed, or the skills break mid-stream.
 - **#129 is the next issue, not a task here.** The `tools`/`elevated` split + the `assemble_turn` gate-point are the hooks it will use; don't build the permission model now (YAGNI).
+
+---
+
+## Revisions
+
+### 2026-06-12 — M1 boundary-review (FIX-THEN-SHIP → addressed)
+
+M1 implemented (Tasks 1–6); boundary review **FIX-THEN-SHIP** (no Critical; "no
+engine change" verified — `skill_runner` untouched, its spec 9/9). Findings were
+plan-doc traceability drift + minors, addressed:
+
+- **`resolve_agent` deferred M1 → M2** (Important): the Core-concepts table now
+  marks it `(M2)`, locates it in `skill_assembly.lua` (its consumer), and
+  commits M2 to salvaging it as a **pure function of injected config**
+  (`(config, skill) → agent`) so the core stays pure (`ARCH-PURE`) — reconciling
+  the earlier "PURE" label with the deferral's "reads the parley module" note.
+- **Registry cache not built** (YAGNI): dropped the "cache" claim from the
+  Integration-points table + the SkillRegistry prose; `discover`/`current`
+  recompute per call (add a cache only when a consumer needs it).
+- **DiskProvider candidate-manifest docstring** softened — `disk():list()` may
+  emit a `source = nil` candidate for a dir with a name but no body; the
+  registry is the single validate-drop point.
+- **Test gap closed**: added a provider test for the v1 `system_prompt` fallback
+  (branch #3) — a fixture skill with only a `system_prompt` fn, no SKILL.md.
