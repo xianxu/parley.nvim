@@ -29,7 +29,7 @@ M.descriptors = {
         scope = "base",
         locate = { config.repo_chat_dir .. "/*.md", config.chat_dir .. "/*.md" },
         matcher = { kind = "frontmatter_present", field = "file" },
-        blurb = "a parley chat session; find by the header `file:` key",
+        blurb = "a parley chat session",
     },
     -- note — parley-native; no fixed frontmatter discriminator, the locate
     -- glob alone homes it (repo note dir + demoted global notes_dir).
@@ -39,7 +39,7 @@ M.descriptors = {
         scope = "base",
         locate = { config.repo_note_dir .. "/*.md", config.notes_dir .. "/*.md" },
         matcher = { kind = "any" },
-        blurb = "a freeform note; find in the notes dir(s)",
+        blurb = "a freeform note",
     },
     -- vision — yaml tracker entries; the glob (and extension) discriminates.
     {
@@ -48,7 +48,7 @@ M.descriptors = {
         scope = "base",
         locate = { config.vision_dir .. "/*.yaml" },
         matcher = { kind = "any" },
-        blurb = "a vision-tracker node; find in the vision dir",
+        blurb = "a vision-tracker node",
     },
     -- issue — sdlc-owned; NNNNNN-slug filename convention (shared with plan,
     -- so the locate glob, not the basename, separates the two).
@@ -58,7 +58,7 @@ M.descriptors = {
         scope = "base",
         locate = { config.issues_dir .. "/*.md" },
         matcher = { kind = "filename", pattern = "^%d%d%d%d%d%d%-" },
-        blurb = "an sdlc work item (NNNNNN-slug); find in the issues dir",
+        blurb = "an sdlc work item (NNNNNN-slug)",
     },
     -- plan — durable design doc; same NNNNNN-slug convention as issue, but
     -- homed in workshop/plans/ (no config key — parley does not create it).
@@ -68,7 +68,7 @@ M.descriptors = {
         scope = "base",
         locate = { "workshop/plans/*.md" },
         matcher = { kind = "any" },
-        blurb = "a durable implementation plan; find in workshop/plans/",
+        blurb = "a durable implementation plan",
     },
     -- pensive — universal; per-topic thinking note, `type: pensive`.
     {
@@ -77,7 +77,7 @@ M.descriptors = {
         scope = "base",
         locate = { "**/*.md" },
         matcher = { kind = "frontmatter", field = "type", value = "pensive" },
-        blurb = "a per-topic thinking note; find by `type: pensive`",
+        blurb = "a per-topic thinking note",
     },
     -- prose — universal; long-form writing, `type: prose`.
     {
@@ -86,7 +86,7 @@ M.descriptors = {
         scope = "base",
         locate = { "**/*.md" },
         matcher = { kind = "frontmatter", field = "type", value = "prose" },
-        blurb = "long-form prose; find by `type: prose`",
+        blurb = "long-form prose",
     },
     -- continuation — universal; session hand-off doc, `type: continuation`.
     {
@@ -95,7 +95,7 @@ M.descriptors = {
         scope = "base",
         locate = { "**/*.md" },
         matcher = { kind = "frontmatter", field = "type", value = "continuation" },
-        blurb = "a session hand-off doc; find by `type: continuation`",
+        blurb = "a session hand-off doc",
     },
 }
 

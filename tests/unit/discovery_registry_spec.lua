@@ -97,3 +97,49 @@ describe("registry.spec_to_command", function()
         assert.are.equal("rg --files -g '" .. config.issues_dir .. "/*.md' .", cmd)
     end)
 end)
+
+describe("registry.render — the #128 repo_discovery body", function()
+    -- render()'s output is a CONTRACT with parley.nvim#128: when this format
+    -- changes the repo_discovery skill body changes. These verbatim-line
+    -- assertions are the guard.
+    local out = reg():render()
+
+    it("lists every type's label and blurb", function()
+        for _, d in ipairs(base.descriptors) do
+            assert.is_not_nil(out:find(d.label, 1, true), "missing label: " .. d.label)
+            assert.is_not_nil(out:find(d.blurb, 1, true), "missing blurb: " .. d.blurb)
+        end
+    end)
+
+    it("includes a derived search hint per type", function()
+        -- frontmatter → `type: <value>`; frontmatter_present → `header <field>:`
+        assert.is_not_nil(out:find("type: pensive", 1, true))
+        assert.is_not_nil(out:find("header `file:`", 1, true))
+    end)
+
+    it("renders the pensive and chat lines verbatim (the contract)", function()
+        assert.is_not_nil(
+            out:find("- Pensive (`pensive`) — a per-topic thinking note; find by type: pensive", 1, true),
+            "pensive line drifted:\n" .. out
+        )
+        assert.is_not_nil(
+            out:find("- Chat (`chat`) — a parley chat session; find by header `file:`", 1, true),
+            "chat line drifted:\n" .. out
+        )
+    end)
+
+    it("is stable / sorted by name", function()
+        local lines = vim.split(out, "\n", { plain = true })
+        local names = {}
+        for _, line in ipairs(lines) do
+            local n = line:match("^%- .- %(`([%w]+)`%)")
+            if n then
+                table.insert(names, n)
+            end
+        end
+        local sorted = vim.deepcopy(names)
+        table.sort(sorted)
+        assert.are.same(sorted, names, "render lines are not sorted by name")
+        assert.are.equal(#base.descriptors, #names)
+    end)
+end)

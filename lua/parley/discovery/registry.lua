@@ -68,6 +68,41 @@ function Registry:query(type_name, term)
     }
 end
 
+-- A stable, machine-independent "how to find instances" hint derived from the
+-- descriptor's matcher/locate — the single source for render()'s search column.
+-- Avoids embedding absolute (machine-specific) globs so the rendered contract
+-- stays deterministic.
+local function find_hint(d)
+    local m = d.matcher
+    if m.kind == "frontmatter" then
+        return "type: " .. m.value
+    elseif m.kind == "frontmatter_present" then
+        return "header `" .. m.field .. ":`"
+    end
+    -- filename / any → the (repo-relative) primary locate glob discriminates.
+    return d.locate[1]
+end
+
+--- Render the noun-vocabulary text — one bullet per type, sorted by name.
+--- This IS the body of parley.nvim#128's virtual `repo_discovery` skill:
+--- "what file types (nouns) exist in this repo and how to find their
+--- instances." Deterministic; the verbatim-line assertions in the spec guard
+--- the format as a contract with #128.
+--- @return string
+function Registry:render()
+    local names = self:names()
+    table.sort(names)
+    local lines = {}
+    for _, name in ipairs(names) do
+        local d = self._by_name[name]
+        table.insert(
+            lines,
+            "- " .. d.label .. " (`" .. d.name .. "`) — " .. d.blurb .. "; find by " .. find_hint(d)
+        )
+    end
+    return table.concat(lines, "\n")
+end
+
 local function glob_flags(roots)
     local parts = {}
     for _, g in ipairs(roots) do
