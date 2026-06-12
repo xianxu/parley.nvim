@@ -269,12 +269,14 @@ atlas:
       - lua/parley/chat_respond.lua
       - lua/parley/skill_runner.lua
       - lua/parley/memory_prefs.lua
+      - lua/parley/init.lua
     tests:
       - tests/unit/cliproxy_config_spec.lua
       - tests/unit/providers_pre_query_spec.lua
       - tests/unit/dispatcher_query_spec.lua
       - tests/integration/cliproxy_lifecycle_spec.lua
       - tests/integration/cliproxy_dispatch_spec.lua
+      - tests/integration/cliproxy_command_spec.lua
 
   providers/anthropic:
     code:

@@ -288,6 +288,77 @@ end
 -- Forward declaration so setup() closure can reference it (defined after setup())
 local show_keybindings
 
+--- Register `:<prefix>Proxy <subcommand>` to manage the optional bundled
+--- cliproxyapi instance (issue #131). Harmless when the feature isn't opted
+--- into — `status` just reports `managed: false`.
+---@param prefix string # M.config.cmd_prefix (e.g. "Parley")
+M.register_proxy_command = function(prefix)
+	local LOGIN_PROVIDERS = { "claude", "codex", "codex-device", "google", "kimi", "xai", "antigravity" }
+	local SUBS = { "status", "start", "stop", "restart", "login" }
+
+	vim.api.nvim_create_user_command(prefix .. "Proxy", function(params)
+		local cliproxy = require("parley.cliproxy")
+		local sub = params.fargs[1] or "status"
+		local arg = params.fargs[2]
+		if sub == "status" then
+			cliproxy.status(function(info)
+				vim.notify(table.concat({
+					"cliproxy status",
+					"  managed:       " .. tostring(info.managed),
+					"  health:        " .. tostring(info.health),
+					"  binary:        " .. tostring(info.binary) .. " (" .. info.binary_source .. ")",
+					"  endpoint:      " .. tostring(info.host) .. ":" .. tostring(info.port),
+					"  auth-dir:      " .. tostring(info.auth_dir),
+					"  config:        " .. tostring(info.config_path),
+					"  spawned by us: " .. tostring(info.spawned_by_parley),
+					"  config drift:  " .. tostring(info.config_drift),
+				}, "\n"), vim.log.levels.INFO)
+			end)
+		elseif sub == "start" then
+			cliproxy.start(function()
+				vim.notify("cliproxy: running", vim.log.levels.INFO)
+			end, function(msg)
+				vim.notify(msg, vim.log.levels.ERROR)
+			end)
+		elseif sub == "stop" then
+			local n = cliproxy.stop()
+			vim.notify("cliproxy: stopped " .. n .. " parley-spawned proxy(ies)", vim.log.levels.INFO)
+		elseif sub == "restart" then
+			cliproxy.restart(function()
+				vim.notify("cliproxy: restarted", vim.log.levels.INFO)
+			end, function(msg)
+				vim.notify(msg, vim.log.levels.ERROR)
+			end)
+		elseif sub == "login" then
+			local argv, err = cliproxy.login_argv(arg)
+			if not argv then
+				vim.notify(err, vim.log.levels.ERROR)
+				return
+			end
+			-- Interactive OAuth — run in a terminal split so the URL/flow is visible.
+			vim.cmd("botright new")
+			vim.fn.termopen(argv)
+			vim.cmd("startinsert")
+		else
+			vim.notify("usage: " .. prefix .. "Proxy {status|start|stop|restart|login <provider>}", vim.log.levels.WARN)
+		end
+	end, {
+		nargs = "*",
+		desc = "Manage the optional bundled cliproxyapi proxy",
+		complete = function(arglead, line)
+			local function starts(list)
+				return vim.tbl_filter(function(v)
+					return v:find(arglead, 1, true) == 1
+				end, list)
+			end
+			if line:match("Proxy%s+login%s+%S*$") then
+				return starts(LOGIN_PROVIDERS)
+			end
+			return starts(SUBS)
+		end,
+	})
+end
+
 -- setup function
 M._setup_called = false
 ---@param opts the one returned from config.lua, it can come from several sources, either fully specified
@@ -597,6 +668,9 @@ M.setup = function(opts)
 			M.logger.error("The hook '" .. hook .. "' does not exist.")
 		end)
 	end
+
+	-- :ParleyProxy <subcommand> — manage the optional bundled cliproxyapi (#131)
+	M.register_proxy_command(M.config.cmd_prefix)
 
 	-- Register all global keymaps from the keybinding registry
 	kb_registry.register_global(
