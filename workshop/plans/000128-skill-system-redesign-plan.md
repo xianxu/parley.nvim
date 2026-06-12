@@ -160,11 +160,11 @@ Follow parley conventions: modules `local M = {} … return M`; tests use `plena
 
 ### Task 6: Atlas + milestone close
 
-- [ ] **Step 1:** Add `atlas/skills/skill-system.md` (or update the existing §8 Skill System entry) describing the redesign surface: the one-engine principle, manifest shape, provider union, the pure assembly seam (forward-ref M2), `read_skill`/`propose_edits` (forward-ref M2/M3). Link in `atlas/index.md`. Note the supersession of the v1 entry.
-- [ ] **Step 2:** Update `atlas/traceability.yaml` mapping the new `skills/skill-system` key → the new modules + specs.
-- [ ] **Step 3:** `make test` green; `make lint` clean.
-- [ ] **Step 4:** `sdlc milestone-close --issue 128 --milestone M1` (runs the fresh-context judge; fix Critical/Important before crossing). Log the verdict in `## Log`.
-- [ ] **Step 5: Commit** — `#128 M1: atlas + traceability for declarative skill system`.
+- [x] **Step 1:** Update `atlas/skills/skill-system.md` with the redesign surface (one-engine principle, manifest shape, provider union, M1 modules, design points); v1 marked transitional. Linked + noted in `atlas/index.md` §8/§11.
+- [x] **Step 2:** Update `atlas/traceability.yaml` mapping the new `skills/skill-system` key → the new modules + specs.
+- [x] **Step 3:** `make test` green; `make lint` clean. _lint 0/0 (180 files), 91 spec files pass._
+- [x] **Step 4:** `sdlc milestone-close --issue 128 --milestone M1` (runs the fresh-context judge). _Arc: FIX-THEN-SHIP → addressed (resolve_agent table drift, cache claim, disk docstring, branch-3 removal) → re-judge FIX-THEN-SHIP (boundary clean, no Critical). Logged in `## Log`._
+- [x] **Step 5: Commit** — `#128 M1: atlas + traceability for declarative skill system`. _5abbf78_
 
 **M1 Done when:** `parley.skills.discover()` returns a registry unioning disk providers (with the virtual/repo seams present); `review`/`voice_apply` load as valid `SkillManifest`s with no `debug.getinfo` path-guessing; manifest validation rejects malformed manifests; all specs green; atlas updated. **No chat-loop code touched yet** — the engine integration is M2.
 
@@ -180,7 +180,7 @@ Move `compute_edits` (pure) to `skill_edits.lua`; build `propose_edits` builtin 
 
 ## M4 — port voice_apply; delete skill_runner; cleanup (sketch)
 
-Port `voice_apply` similarly. Delete `skill_runner.run` + `_in_flight`/resubmit/hardcoded `tool_choice`/`max_tokens`/`REVIEW_EDIT_TOOL`. Reconcile callers: `skill_picker.lua` (`:22,28,86` — repoint to activation, keep the arg picker), `review.lua` shim (`:43`), `keybinding_registry.lua` (hotkey → activate a `manual` skill). **Resolve glob/list_dir (Design note 2):** they don't exist; decide whether `repo_discovery` needs a structured glob tool vs. existing `ls`/`find`/`grep` — lean YAGNI (no new tool without a consumer); record the decision. To be expanded at M4 start.
+Port `voice_apply` similarly — including an explicit `source(ctx)` that composes its SKILL.md (`ctx.skill_md`) + the per-slug style guide, replacing the v1 `system_prompt` (the disk provider has no `system_prompt` fallback — that branch was removed in M1, so `voice_apply` must carry an explicit `source` once `skill_runner` is gone). Delete `skill_runner.run` + `_in_flight`/resubmit/hardcoded `tool_choice`/`max_tokens`/`REVIEW_EDIT_TOOL` + the now-unused `system_prompt` fields. Reconcile callers: `skill_picker.lua` (`:22,28,86` — repoint to activation, keep the arg picker), `review.lua` shim (`:43`), `keybinding_registry.lua` (hotkey → activate a `manual` skill). **Resolve glob/list_dir (Design note 2):** they don't exist; decide whether `repo_discovery` needs a structured glob tool vs. existing `ls`/`find`/`grep` — lean YAGNI (no new tool without a consumer); record the decision. To be expanded at M4 start.
 
 ## M5 — repo_discovery virtual skill (the #116 bridge) (sketch)
 

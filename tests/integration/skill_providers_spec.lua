@@ -86,22 +86,22 @@ describe("providers.disk", function()
         assert.are.equal("repo", beta.scope)
     end)
 
-    it("falls back to a v1 system_prompt fn when there is no source/SKILL.md", function()
-        -- back-compat branch #3: init.lua with only a system_prompt fn.
-        vim.fn.mkdir(root .. "/legacy", "p")
-        write(root .. "/legacy/init.lua", {
+    it("emits a source-less candidate for a dir with no source/SKILL.md (registry drops it)", function()
+        -- A named dir with no resolvable body → candidate with source=nil. There
+        -- is NO v1 system_prompt fallback (that 4-arg contract is retired in M4).
+        vim.fn.mkdir(root .. "/bodyless", "p")
+        write(root .. "/bodyless/init.lua", {
             "return {",
-            '  name = "legacy",',
-            '  description = "Legacy skill",',
+            '  name = "bodyless",',
+            '  description = "No body",',
             '  scope = "global",',
             "  activation = { manual = true },",
-            '  system_prompt = function(ctx) return "LEGACY:" .. (ctx.tag or "?") end,',
             "}",
         })
-        local legacy = by_name(providers.disk(root):list(), "legacy")
-        assert.is_not_nil(legacy)
-        assert.is_true(manifest.validate(legacy))
-        assert.are.equal("LEGACY:hi", legacy.source({ tag = "hi" }))
+        local cand = by_name(providers.disk(root):list(), "bodyless")
+        assert.is_not_nil(cand, "disk should still emit the candidate")
+        assert.is_nil(cand.source, "no source/SKILL.md → source is nil")
+        assert.is_false((manifest.validate(cand)), "the registry validate-drops it")
     end)
 end)
 
