@@ -3,7 +3,8 @@ id: 000116
 status: open
 deps: [000114, 000115]
 created: 2026-04-30
-updated: 2026-04-30
+updated: 2026-06-11
+estimate_hours: 20
 ---
 
 # datatype-aware navigation and creation via descriptor
@@ -65,8 +66,70 @@ Datatypes can reference instances across repos (e.g., `brain/data/project/charon
 - [ ] roll descriptor into remaining prototypes
 - [ ] update `construct/datatype/type.md` (the meta-prototype) so future prototypes ship with a descriptor by default
 
+## Revisions
+
+### 2026-06-11 — readonly-discovery framing; registry is multi-source + composed; descriptor leans structured
+
+Reason: a brain design conversation settled parley's direction as a **readonly**
+research/exploration harness, with *discovery* as the narrow, conflict-free
+slice it borrows from a repo's agent substrate. Deltas to this issue:
+
+- **The registry is multi-source — not just `construct/datatype/`.** The
+  discovery surfaces a research chat most wants — `issue`, `chat`, `note`,
+  `vision`, `atlas` — are exactly the ones *not* modeled as datatype prototypes
+  (`issue` lives in `sdlc issue`, chat/note/vision are parley-native, atlas is a
+  convention). So the type registry draws from datatype descriptors **+** the
+  `sdlc issue` contract **+** parley-native types **+** atlas. The
+  descriptor-per-prototype is *one* source of the registry, not the whole.
+- **Base ∪ local composition** (resolves the global / repo / super-repo modes).
+  Parley ships a *universal base registry* (chat/note/prose/pensive — types any
+  repo has); a repo declares only its *local delta* (its novel types); effective
+  = base ∪ local. Local discovery shrinks to the delta and is grep-cheap:
+  `rg -o '^type: \w+' | sort -u` minus the base. Global mode = base-minus-repo
+  types; super-repo = union of siblings' deltas over the shared base. The
+  hard-coded finders become the base registry's entries.
+- **Descriptor format leans option 1 (structured / machine-readable), and it
+  must be parseable, not prose** — so the assembler is deterministic and a
+  future indexer can emit it.
+- **Decouple the registry *interface* from its *production*.** The consumer reads
+  a registry abstraction; production is grep now and, later, a `datatype`
+  lifecycle binary maintaining an index as a write-side byproduct (loom/cloth).
+  Same interface, swappable producer — so this issue can ship grep-backed and
+  graduate without reworking the consumer.
+- **The registry's consumer is a virtual `repo_discovery` skill** (parley.nvim#128).
+  The noun-vocabulary is assembled into an always-on, read-only skill in repo
+  mode — the merge point between a repo's borrowed substrate and parley's own
+  (situational facts only, so conflict-free). Description framing: *"what file
+  types (nouns) exist in this repo and how to find their instances."*
+- **Write-side stays valid.** #116's scaffolding (template new-instance creation)
+  is *human-driven manual* creation — consistent with the readonly-*agent*
+  direction (the LLM is readonly; the human may scaffold via a template).
+
 ## Log
 
 ### 2026-04-30
 
 Issue filed off the duality pensive. See pensive for the framing context and the open questions that motivated this.
+
+### 2026-06-11
+
+Brain design conversation settled product behavior for the readonly-harness
+direction — see `## Revisions`. New siblings: **parley.nvim#128** (skill-system
+redesign — consumes this registry as a virtual `repo_discovery` skill) and
+**parley.nvim#129** (capability-based permission model). The descriptor-format
+open question is narrowed toward structured/machine-readable + multi-source; the
+read-side registry is now the higher-priority half (it feeds the harness),
+write-side scaffolding unchanged.
+
+Plan written: `workshop/plans/000116-discovery-registry-plan.md` — M1 registry
+core (the #128 unblock) / M2 typed picker / M3 descriptor format + scaffolding.
+Scope approved by operator; **descriptor-format deferred to M3** (M1 uses a
+parley-shipped Lua base registry ∪ grep-discovered local `type:` values — see
+source-map audit). Estimate 20h (M1 ≈ 8h). Fresh-context plan-document-reviewer
+pass → Issues Found (minor/moderate), all addressed: flat test paths,
+direct-plenary TDD runs (`make test-spec` is atlas-keyed, inert until Task 8),
+hyphen-safe `type:` regex `[A-Za-z0-9_-]+` (`\w+` truncates `meeting-notes`),
+config-derived dir globs (`ARCH-DRY`), and the filename-matcher locate-scoping
+invariant (issue vs plan share the `NNNNNN-slug` pattern). M1 does NOT depend on
+#115 (that's M2's `<C-g>m`). Execution: a fresh parley.nvim session runs
+`sdlc claim --issue 116` → `sdlc change-code` → `superpowers-executing-plans`.
