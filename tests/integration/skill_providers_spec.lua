@@ -86,3 +86,33 @@ describe("providers.disk", function()
         assert.are.equal("repo", beta.scope)
     end)
 end)
+
+describe("providers.virtual", function()
+    -- The seam for runtime-generated manifests (repo_discovery arrives in M5).
+    local function gen(name, body)
+        return function()
+            return {
+                name = name,
+                description = name .. " (virtual)",
+                scope = "repo",
+                activation = { always = true },
+                source = function()
+                    return body
+                end,
+            }
+        end
+    end
+
+    it("lists the manifests its generators produce", function()
+        local list = providers.virtual({ gen("repo_discovery", "NOUNS"), gen("other", "X") }):list()
+        assert.are.equal(2, #list)
+        for _, m in ipairs(list) do
+            assert.is_true(manifest.validate(m))
+        end
+        assert.are.equal("NOUNS", by_name(list, "repo_discovery").source({}))
+    end)
+
+    it("is empty with no generators", function()
+        assert.are.same({}, providers.virtual({}):list())
+    end)
+end)

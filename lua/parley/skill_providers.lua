@@ -95,4 +95,24 @@ function M.disk(root)
     }
 end
 
+--- A virtual provider over a list of generators (`function() → SkillManifest`).
+--- The seam for runtime-generated skills (the first, `repo_discovery`, arrives
+--- in M5). A generator that errors is skipped (it shouldn't sink discovery).
+--- @param generators table list of zero-arg manifest generators
+--- @return table provider with a `list()` method
+function M.virtual(generators)
+    return {
+        list = function()
+            local out = {}
+            for _, gen in ipairs(generators or {}) do
+                local ok, m = pcall(gen)
+                if ok and type(m) == "table" then
+                    table.insert(out, m)
+                end
+            end
+            return out
+        end,
+    }
+end
+
 return M
