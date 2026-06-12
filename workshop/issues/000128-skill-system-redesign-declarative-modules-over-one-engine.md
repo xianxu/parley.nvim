@@ -126,7 +126,8 @@ sketched). The original rough shape is folded into the milestones below.
 ## Log
 
 ### 2026-06-12 — M1 implemented (declarative manifest + provider discovery)
-- 2026-06-12: closed M1 — declarative skill system M1: SkillManifest+validate (16 assertions), disk/virtual providers (5), registry union/dedup/current() incl real plugin skills (7); review+voice-apply discoverable as manifests; full suite lint 0/0 + 91 spec files pass; v1 skill_runner runtime untouched (9/9). No chat-loop change (M2); review verdict: FIX-THEN-SHIP
+- 2026-06-12: closed M1 — declarative skill system M1: SkillManifest+validate (16 assertions), disk/virtual providers (8), registry union/dedup/current() incl real plugin skills (7); review+voice-apply discoverable as manifests; full suite lint 0/0 + 91 spec files pass; v1 skill_runner runtime untouched (9/9). No chat-loop change (M2); review verdict: FIX-THEN-SHIP.
+- 2026-06-12: **boundary findings addressed** (two re-judge rounds, both FIX-THEN-SHIP, no Critical): R1 — plan Core-concepts `resolve_agent` table drift (→ M2/`skill_assembly`, pure-given-injected-config), dropped unbuilt "cache" claim, softened disk docstring; R2 — removed the broken speculative v1 `system_prompt` source fallback (4-arg contract, no consumer; M4 retires it), fixed the resulting plan-doc self-contradiction, and added the missing `pcall` error-path tests (throwing init.lua + erroring generator). All surfaced M1 findings resolved; suite green throughout. See plan `## Revisions`.
 
 Plan `workshop/plans/000128-skill-system-redesign-plan.md` (fresh-review CLEAN;
 change-code plan-quality: info). Executed M1 Tasks 1–5 TDD-first: `SkillManifest`
