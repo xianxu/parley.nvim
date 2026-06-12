@@ -98,6 +98,24 @@ local config = {
 		},
 	},
 
+	-- OPT-IN: let parley manage the cliproxyapi process itself (issue #131).
+	-- Off by default. When enabled, parley renders config.yaml from this block
+	-- on demand, and lazily starts / reuses / health-checks the proxy whenever a
+	-- cliproxyapi-provider agent is used. host:port come from the
+	-- providers.cliproxyapi.endpoint above (single source of truth). The
+	-- generated config is a derived artifact under stdpath('data') — your
+	-- committed Lua is the source of truth; secrets never land in it.
+	-- One manual, per-machine step: `:ParleyProxy login <provider>` (OAuth).
+	-- cliproxy = {
+	--   manage = true,
+	--   auth_dir = "~/.cli-proxy-api",   -- where OAuth tokens are stored (machine-local)
+	--   binary_path = nil,               -- optional; else `cliproxyapi`/`cli-proxy-api` on PATH
+	--   config = {                       -- raw cliproxyapi schema (passed through verbatim)
+	--     -- e.g. avoid the management-panel download for faster startup:
+	--     ["remote-management"] = { ["disable-control-panel"] = true },
+	--   },
+	-- },
+
 	-- prefix for all commands
 	cmd_prefix = "Parley",
 	-- optional curl parameters (for proxy, etc.)
