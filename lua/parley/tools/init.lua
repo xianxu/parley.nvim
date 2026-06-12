@@ -53,20 +53,72 @@ function M.list_names()
     return out
 end
 
---- Return a list of ToolDefinitions matching the given names, preserving
---- the input order. Raises on the first unknown name with the offending
---- name in the error message so agent-config validation can surface
---- actionable errors to the user.
+--- Expand a group sentinel (a selector beginning with "@") into the set
+--- of registered tools it names. Supported groups:
+---   "@all"      → every registered tool.
+---   "@readonly" → every registered tool that is NOT a write tool, i.e.
+---                 kind == "read" or kind absent (absent defaults to
+---                 "read" per the ToolDefinition contract).
+--- Expansion is alphabetical by tool name so the resulting payload order
+--- is deterministic across sessions. Raises on an unknown group, mirroring
+--- the unknown-tool error so a typo'd sentinel surfaces at config
+--- validation just like a typo'd name.
+--- @param group string
+--- @return ToolDefinition[]
+local function expand_group(group)
+    local keep
+    if group == "@all" then
+        keep = function() return true end
+    elseif group == "@readonly" then
+        keep = function(def) return def.kind ~= "write" end
+    else
+        error("parley.tools.select: unknown tool group '" .. tostring(group) .. "'")
+    end
+    local names = {}
+    for name in pairs(registry) do
+        names[#names + 1] = name
+    end
+    table.sort(names)
+    local out = {}
+    for _, name in ipairs(names) do
+        if keep(registry[name]) then
+            out[#out + 1] = registry[name]
+        end
+    end
+    return out
+end
+
+--- Return a list of ToolDefinitions for the given selectors, preserving
+--- input order. A selector is either a tool name or a group sentinel
+--- ("@all" / "@readonly", see `expand_group`). Group selectors expand in
+--- place; the combined result is de-duplicated by tool name with the
+--- first occurrence winning, so mixing a group with explicit names — or
+--- two overlapping groups — never emits a tool twice (providers reject a
+--- duplicated tool name). Raises on the first unknown name or group so
+--- agent-config validation can surface an actionable error to the user.
 --- @param names string[]
 --- @return ToolDefinition[]
 function M.select(names)
     local out = {}
-    for _, name in ipairs(names or {}) do
-        local def = registry[name]
-        if not def then
-            error("parley.tools.select: unknown tool '" .. tostring(name) .. "'")
+    local seen = {}
+    local function add(def)
+        if not seen[def.name] then
+            seen[def.name] = true
+            out[#out + 1] = def
         end
-        table.insert(out, def)
+    end
+    for _, name in ipairs(names or {}) do
+        if type(name) == "string" and name:sub(1, 1) == "@" then
+            for _, def in ipairs(expand_group(name)) do
+                add(def)
+            end
+        else
+            local def = registry[name]
+            if not def then
+                error("parley.tools.select: unknown tool '" .. tostring(name) .. "'")
+            end
+            add(def)
+        end
     end
     return out
 end

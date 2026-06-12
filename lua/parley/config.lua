@@ -154,7 +154,7 @@ local config = {
 			provider = "anthropic",
 			name = "Claude-Opus",
 			-- string with model name or table with model name and parameters
-			model = { model = "claude-opus-4-6", temperature = 0.8 },
+			model = { model = "claude-opus-4-8", temperature = 0.8 },
 			-- system prompt (use this to specify the persona/role of the AI)
 			system_prompt = require("parley.defaults").chat_system_prompt,
 		},
@@ -167,32 +167,46 @@ local config = {
 			system_prompt = require("parley.defaults").chat_system_prompt,
 		},
 		{
-			-- Agentic Claude: enables client-side filesystem tool use so the
-			-- model can read, edit, and write files inside the working
-			-- directory. Headline M1 deliverable of issue #81.
+			-- Agentic Claude: enables read-only client-side filesystem tool
+			-- use (the @readonly tool set) so the model can read and search
+			-- files inside the working directory. Headline M1 deliverable of
+			-- issue #81. Swap @readonly → @all to also allow edit/write.
 			provider = "cliproxyapi",
 			name = "ToolSonnet*",
 			model = { model = "claude-sonnet-4-6", temperature = 0.8, web_search_strategy = "anthropic_tools_route" },
 			system_prompt = require("parley.defaults").chat_system_prompt,
 			synthetic_system_prompt = true,
-			tools = { "read_file", "ls", "find", "grep", "chat_history_search", "edit_file", "write_file" },
+			tools = { "@readonly"},
 		},
 		{
-			-- Agentic Claude: enables client-side filesystem tool use so the
-			-- model can read, edit, and write files inside the working
-			-- directory. Headline M1 deliverable of issue #81.
+			-- Agentic Claude: enables read-only client-side filesystem tool
+			-- use (the @readonly tool set) so the model can read and search
+			-- files inside the working directory. Headline M1 deliverable of
+			-- issue #81. Swap @readonly → @all to also allow edit/write.
+			provider = "cliproxyapi",
+			name = "ToolOpus*",
+			model = { model = "claude-opus-4-8", web_search_strategy = "anthropic_tools_route" },
+			system_prompt = require("parley.defaults").chat_system_prompt,
+			synthetic_system_prompt = true,
+			tools = { "@readonly"},
+		},
+		{
+			-- Agentic Claude: enables read-only client-side filesystem tool
+			-- use (the @readonly tool set) so the model can read and search
+			-- files inside the working directory. Headline M1 deliverable of
+			-- issue #81. Swap @readonly → @all to also allow edit/write.
 			provider = "anthropic",
 			name = "ToolSonnet",
 			model = { model = "claude-sonnet-4-6", temperature = 0.8 },
 			system_prompt = require("parley.defaults").chat_system_prompt,
-			tools = { "read_file", "ls", "find", "grep", "chat_history_search", "edit_file", "write_file" },
+			tools = {"@readonly"},
 		},
 		{
 			provider = "anthropic",
 			name = "ToolOpus",
-			model = { model = "claude-opus-4-7", temperature = 0.8 },
+			model = { model = "claude-opus-4-8", temperature = 0.8 },
 			system_prompt = require("parley.defaults").chat_system_prompt,
-			tools = { "read_file", "ls", "find", "grep", "chat_history_search", "edit_file", "write_file" },
+			tools = {"@readonly"},
 			-- Optional: defaults applied at setup time when absent
 			-- max_tool_iterations = 20,
 			-- tool_result_max_bytes = 102400,
@@ -266,7 +280,7 @@ local config = {
 			provider = "cliproxyapi",
 			name = "Claude-Code-Opus",
 			-- CLIProxy web-search tool access currently requires code_execution model family.
-			model = { model = "claude-opus-4-6", temperature = 0.8, web_search_strategy = "anthropic_tools_route" },
+			model = { model = "claude-opus-4-8", temperature = 0.8, web_search_strategy = "anthropic_tools_route" },
 			system_prompt = require("parley.defaults").chat_system_prompt,
 		},
 	},

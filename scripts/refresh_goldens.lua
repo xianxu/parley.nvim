@@ -15,10 +15,15 @@ local FIXTURES = {
     "dynamic-fence-stress",
 }
 
+-- Keep in sync with READONLY_TOOLS in tests/unit/parley_harness_golden_spec.lua.
+-- Pinned explicitly so goldens stay deterministic and portable (ToolSonnet now
+-- uses the `@readonly` sentinel, which would pull in optional tools like `ack`).
+local READONLY_TOOLS = { "read_file", "ls", "find", "grep", "chat_history_search" }
+
 for _, name in ipairs(FIXTURES) do
     local payload = harness.build_payload(
         "tests/fixtures/transcripts/" .. name .. ".md",
-        { agent_name = "ToolSonnet" }
+        { agent_name = "ToolSonnet", tools = READONLY_TOOLS }
     )
     local path = "tests/fixtures/golden_payloads/" .. name .. ".json"
     local f = assert(io.open(path, "w"))

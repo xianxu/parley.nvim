@@ -37,8 +37,16 @@ describe("NoteFinder logic", function()
         original_create_note_file = M._create_note_file
         original_notify = vim.notify
 
-        notes_dir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-notefinder-" .. string.format("%x", math.random(0, 0xFFFFFF))
+        -- Use a guaranteed-unique temp dir: vim.fn.tempname() is process- and
+        -- call-unique, so parallel/sequential spec processes never collide (the
+        -- old math.random() was unseeded → same dir every process → stale files).
+        notes_dir = vim.fn.tempname() .. "-parley-test-notefinder"
+        vim.fn.delete(notes_dir, "rf")
         vim.fn.mkdir(notes_dir, "p")
+        -- Resolve /tmp -> /private/tmp (macOS symlink) AFTER the dir exists, so the
+        -- spec's expected paths agree with the resolved paths the finder returns
+        -- (note_finder.lua resolves every scanned file via vim.fn.resolve).
+        notes_dir = vim.fn.resolve(notes_dir)
 
         M.config.notes_dir = notes_dir
         M.config.note_finder_mappings = {

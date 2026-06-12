@@ -7,8 +7,9 @@
 -- applies default values for the two numeric fields when absent.
 --
 -- Also verifies that the default `ToolSonnet` agent ships in the
--- default config with all six builtin tools enabled (the headline M1
--- deliverable — users get an agentic Claude out of the box).
+-- default config selecting tools via the `@readonly` group sentinel
+-- (read-only: no edit_file/write_file) — the headline M1 deliverable,
+-- users get an agentic, read-only Claude out of the box.
 
 local tmp_dir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-config-tools-" .. os.time()
 
@@ -133,21 +134,15 @@ end)
 describe("default ToolSonnet", function()
     before_each(function() fresh_setup(nil) end)
 
-    it("ships in the default config with all builtin tools", function()
+    it("ships in the default config with the @readonly tool set", function()
         local agent = parley.agents["ToolSonnet"]
         assert.is_not_nil(agent, "ToolSonnet should ship as a default agent")
         assert.equals("anthropic", agent.provider)
         assert.is_table(agent.tools)
-        assert.equals(7, #agent.tools)
-        local names = {}
-        for _, n in ipairs(agent.tools) do names[n] = true end
-        assert.is_true(names.read_file)
-        assert.is_true(names.ls)
-        assert.is_true(names.find)
-        assert.is_true(names.grep)
-        assert.is_true(names.chat_history_search)
-        assert.is_true(names.edit_file)
-        assert.is_true(names.write_file)
+        -- ToolSonnet selects tools via the @readonly group sentinel (read-only:
+        -- no edit_file/write_file). The sentinel is carried verbatim on the
+        -- config record and resolved to concrete tools at payload-build time.
+        assert.same({ "@readonly" }, agent.tools)
     end)
 
     it("has default loop limits applied", function()
@@ -176,7 +171,7 @@ describe("get_agent forwards client-side tool config (full wiring chain)", funct
         local agent = parley.get_agent("ToolSonnet")
         assert.is_not_nil(agent)
         assert.is_table(agent.tools)
-        assert.equals(7, #agent.tools)
+        assert.same({ "@readonly" }, agent.tools)
     end)
 
     it("get_agent(ToolSonnet) forwards max_tool_iterations and tool_result_max_bytes", function()
@@ -192,21 +187,21 @@ describe("get_agent forwards client-side tool config (full wiring chain)", funct
         assert.is_nil(agent.tool_result_max_bytes)
     end)
 
-    it("get_agent_info(headers, get_agent('ToolSonnet')).tools is the 7-item list", function()
+    it("get_agent_info(headers, get_agent('ToolSonnet')).tools carries the @readonly sentinel", function()
         local agent = parley.get_agent("ToolSonnet")
         local info = parley.get_agent_info({}, agent)
         assert.is_table(info.tools)
-        assert.equals(7, #info.tools)
+        assert.same({ "@readonly" }, info.tools)
     end)
 
     -- THE end-to-end test that regresses the exact 1b8ceb8 bug. Walks all
     -- four hops: M.agents → get_agent → get_agent_info → prepare_payload
-    -- and verifies the final payload.tools actually contains the 6
-    -- client-side tools. A naive bug anywhere in this chain (sanitized
-    -- snapshot in get_agent, dropped field in get_agent_info, missing
-    -- 4th arg in chat_respond, append-not-clobber regression in
-    -- prepare_payload) would be caught here.
-    it("full wiring chain: ToolSonnet request payload contains 7 client-side tools", function()
+    -- and verifies the final payload.tools actually resolves the @readonly
+    -- sentinel into concrete read-only tools. A naive bug anywhere in this
+    -- chain (sanitized snapshot in get_agent, dropped field in
+    -- get_agent_info, missing 4th arg in chat_respond, append-not-clobber
+    -- regression in prepare_payload, broken sentinel expansion) is caught here.
+    it("full wiring chain: ToolSonnet request payload resolves @readonly to read-only tools", function()
         local dispatcher = require("parley.dispatcher")
         local agent = parley.get_agent("ToolSonnet")
         local info = parley.get_agent_info({}, agent)
@@ -218,8 +213,11 @@ describe("get_agent forwards client-side tool config (full wiring chain)", funct
 
         local payload = dispatcher.prepare_payload(msgs, info.model, info.provider, info.tools)
         assert.is_not_nil(payload.tools, "payload.tools must not be nil for a tools-enabled agent")
-        assert.equals(7, #payload.tools, "expected exactly 7 client-side tools in payload")
 
+        -- @readonly expands to the read-only builtins. The 5 core read tools
+        -- are always present; edit_file/write_file must be absent. (ack is also
+        -- a read tool and may be present when installed, so assert membership,
+        -- not an exact count — keeps this deterministic across machines.)
         local names = {}
         for _, t in ipairs(payload.tools) do names[t.name] = true end
         assert.is_true(names.read_file)
@@ -227,15 +225,15 @@ describe("get_agent forwards client-side tool config (full wiring chain)", funct
         assert.is_true(names.find)
         assert.is_true(names.grep)
         assert.is_true(names.chat_history_search)
-        assert.is_true(names.edit_file)
-        assert.is_true(names.write_file)
+        assert.is_nil(names.edit_file, "edit_file must NOT be present (read-only agent)")
+        assert.is_nil(names.write_file, "write_file must NOT be present (read-only agent)")
     end)
 
     -- Same end-to-end chain but with web_search ENABLED, to verify that
     -- the append-not-clobber invariant holds when driven through the
     -- real agent/info objects (not just a hand-crafted agent_tools
     -- argument like dispatcher_spec.lua does).
-    it("full wiring chain + web_search: 7 client tools APPEND to web_search/web_fetch", function()
+    it("full wiring chain + web_search: read-only client tools APPEND to web_search/web_fetch", function()
         local dispatcher = require("parley.dispatcher")
         local agent = parley.get_agent("ToolSonnet")
         local info = parley.get_agent_info({}, agent)
@@ -246,14 +244,14 @@ describe("get_agent forwards client-side tool config (full wiring chain)", funct
 
         local payload = dispatcher.prepare_payload(msgs, info.model, info.provider, info.tools)
         assert.is_not_nil(payload.tools)
-        assert.equals(9, #payload.tools, "expected 7 client-side + 2 server-side tools")
 
         local names = {}
         for _, t in ipairs(payload.tools) do names[t.name] = true end
         assert.is_true(names.web_search, "web_search must be preserved")
         assert.is_true(names.web_fetch, "web_fetch must be preserved")
         assert.is_true(names.read_file, "read_file must be appended")
-        assert.is_true(names.write_file, "write_file must be appended")
+        assert.is_true(names.chat_history_search, "chat_history_search must be appended")
+        assert.is_nil(names.write_file, "write_file must NOT be present (read-only agent)")
 
         parley._state.web_search = false
     end)

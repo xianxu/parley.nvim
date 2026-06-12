@@ -19,6 +19,17 @@ Standard Unix tools exposed to Claude, plus file operations:
 
 Tool descriptions dynamically advertise the locally available command version (e.g., "ripgrep 14.1" vs "GNU grep 3.11").
 
+## Selecting Tools (agent config)
+
+An agent's `tools` field is an explicit allow-list resolved by `tools.select()` (`lua/parley/tools/init.lua`). Empty/absent `tools` → the agent gets NO tools (a vanilla chat agent); there is no implicit "all" default. Each entry is either a tool name or a group sentinel:
+
+| Selector | Expands to |
+|----------|------------|
+| `"@all"` | every registered tool (includes `ack` when installed) |
+| `"@readonly"` | every registered non-write tool (`kind ~= "write"`; absent kind defaults to read) |
+
+Group sentinels expand alphabetically; the combined list is de-duplicated by name (first occurrence wins), so `{ "edit_file", "@readonly" }` is safe. An unknown name or group raises at agent-config validation, naming the offending token.
+
 ## Loop Model
 
 1. User submits → Claude responds (may include `tool_use` content blocks)

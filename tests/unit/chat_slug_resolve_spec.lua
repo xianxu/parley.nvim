@@ -7,6 +7,9 @@ describe("fuzzy chat path resolution", function()
 	before_each(function()
 		base_dir = vim.fn.tempname() .. "-parley-slug-resolve"
 		vim.fn.mkdir(base_dir, "p")
+		-- Resolve /tmp -> /private/tmp (macOS symlink) AFTER the dir exists, so the
+		-- expected paths agree with what production's fuzzy-glob branch returns.
+		base_dir = vim.fn.resolve(base_dir)
 		parley.setup({
 			chat_dir = base_dir,
 			providers = {},

@@ -6,7 +6,9 @@
 --   get(name)        — lookup by name, returns the definition or nil
 --   list_names()     — returns a list of registered names (unsorted)
 --   select(names)    — returns a list of definitions matching the given
---                      names, preserving order, raising on unknown names
+--                      names, preserving order, raising on unknown names;
+--                      a selector may also be a group sentinel ("@all",
+--                      "@readonly") that expands to a deduped set of tools
 --   reset()          — clear the registry (idempotent across setup() calls
 --                      and useful for test isolation)
 --
@@ -15,13 +17,23 @@
 
 local registry = require("parley.tools")
 
-local function make_def(name)
+local function make_def(name, kind)
     return {
         name = name,
         description = "Test tool " .. name,
         input_schema = { type = "object" },
         handler = function() end,
+        kind = kind, -- nil is valid; the contract defaults absent kind to "read"
     }
+end
+
+-- Pull tool names out of a select() result for order-sensitive asserts.
+local function names_of(defs)
+    local names = {}
+    for _, d in ipairs(defs) do
+        names[#names + 1] = d.name
+    end
+    return names
 end
 
 describe("tool registry", function()
@@ -127,6 +139,46 @@ describe("tool registry", function()
             local ok, err = pcall(registry.select, { "alpha", "nonexistent" })
             assert.is_false(ok)
             assert.matches("nonexistent", err)
+        end)
+    end)
+
+    describe("select group sentinels", function()
+        it("@all expands to every registered tool, alphabetically", function()
+            registry.register(make_def("read_file", "read"))
+            registry.register(make_def("edit_file", "write"))
+            registry.register(make_def("grep", "read"))
+            assert.same({ "edit_file", "grep", "read_file" }, names_of(registry.select({ "@all" })))
+        end)
+
+        it("@readonly excludes write tools", function()
+            registry.register(make_def("read_file", "read"))
+            registry.register(make_def("grep", "read"))
+            registry.register(make_def("edit_file", "write"))
+            registry.register(make_def("write_file", "write"))
+            assert.same({ "grep", "read_file" }, names_of(registry.select({ "@readonly" })))
+        end)
+
+        it("@readonly treats absent kind as read (default per contract)", function()
+            registry.register(make_def("legacy")) -- no kind → defaults to read
+            registry.register(make_def("edit_file", "write"))
+            local defs = registry.select({ "@readonly" })
+            assert.equals(1, #defs)
+            assert.equals("legacy", defs[1].name)
+        end)
+
+        it("de-duplicates when a group overlaps an explicit name", function()
+            registry.register(make_def("read_file", "read"))
+            registry.register(make_def("edit_file", "write"))
+            -- read_file is named first, then @all would re-include it; it stays
+            -- in its explicit-first position and is not emitted twice.
+            assert.same({ "read_file", "edit_file" }, names_of(registry.select({ "read_file", "@all" })))
+        end)
+
+        it("raises on an unknown group sentinel, naming it", function()
+            registry.register(make_def("read_file", "read"))
+            local ok, err = pcall(registry.select, { "@bogus" })
+            assert.is_false(ok)
+            assert.matches("@bogus", err)
         end)
     end)
 
