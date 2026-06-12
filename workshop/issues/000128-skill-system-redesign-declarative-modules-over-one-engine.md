@@ -125,6 +125,27 @@ sketched). The original rough shape is folded into the milestones below.
 
 ## Log
 
+### 2026-06-12 — M1 implemented (declarative manifest + provider discovery)
+
+Plan `workshop/plans/000128-skill-system-redesign-plan.md` (fresh-review CLEAN;
+change-code plan-quality: info). Executed M1 Tasks 1–5 TDD-first: `SkillManifest`
+shape+`validate` (pure) · `skill_providers` (disk with closure `source` killing
+the `debug.getinfo` dance + virtual seam) · `skill_registry` (provider union,
+validate-drop, last-wins dedup; `current()` resolves the plugin root via
+runtimepath; exposed as `parley.skills`) · `review`/`voice-apply` re-expressed as
+declarative manifests. **No chat-loop change** (M2). v1 `skill_runner` runtime
+untouched (its spec still 9/9). `resolve_agent` salvage deferred from Task 1 to
+M2 (it reads the parley module → not pure; belongs where it's consumed).
+
+**Done-when reconciliation (change-code advisory):** the last "Done when" bullet
+says "`glob.lua`/`list_dir.lua` are resolved (registered or removed)" — but those
+files **do not exist** (the "present but unregistered" framing was stale; the
+registered structured tools are `ls.lua`/`find.lua`). Per the plan (Design note
+2), M4's task is a **YAGNI decision** — does `repo_discovery` need a new
+structured glob tool, or do `ls`/`find`/`grep` + the registry's `query()`
+suffice (lean: suffice) — **not** a dead-file cleanup. The M4 closer should not
+hunt for files to delete.
+
 ### 2026-06-11
 
 Filed from the brain design conversation. Supersedes the architecture of #106

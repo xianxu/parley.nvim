@@ -443,6 +443,21 @@ atlas:
     tests:
       - tests/unit/keybindings_spec.lua
 
+  skills/skill-system:
+    code:
+      - lua/parley/skill_manifest.lua
+      - lua/parley/skill_providers.lua
+      - lua/parley/skill_registry.lua
+      - lua/parley/skills/review/init.lua
+      - lua/parley/skills/voice_apply/init.lua
+      - lua/parley/skill_runner.lua
+      - lua/parley/init.lua
+    tests:
+      - tests/unit/skill_manifest_spec.lua
+      - tests/integration/skill_providers_spec.lua
+      - tests/integration/skill_registry_spec.lua
+      - tests/unit/skill_runner_spec.lua
+
   discovery/registry:
     code:
       - lua/parley/discovery/matcher.lua
