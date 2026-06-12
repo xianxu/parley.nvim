@@ -21,6 +21,19 @@ end
 return {
     name = "voice-apply",
     description = "Rewrite to match a personal writing voice",
+
+    -- Declarative manifest fields (#128). Inert until skills route through the
+    -- chat loop (M2); voice-apply's runtime is still skill_runner until M4.
+    -- NOTE (M4): the disk-provider source is SKILL.md-only here; voice-apply's
+    -- DYNAMIC body (SKILL.md + the per-slug style guide, see system_prompt
+    -- below) is wired into an explicit source(ctx) when this skill is ported
+    -- through the loop in M4. Until then system_prompt is the live path.
+    scope = "global",
+    activation = { manual = true },
+    tools = { "read_file" },
+    elevated = { "propose_edits" },
+    force_tool = "propose_edits",
+
     args = {
         { name = "slug", description = "Voice style",
           complete = scan_voice_slugs },

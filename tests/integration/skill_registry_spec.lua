@@ -74,3 +74,27 @@ describe("skill_registry.discover", function()
         assert.is_nil(reg.get("broken"))
     end)
 end)
+
+describe("skill_registry.current — real plugin skills as manifests", function()
+    -- The bundled review + voice-apply load (via the disk provider over the
+    -- real plugin root) as VALID declarative manifests. This only proves they
+    -- discover as conformant manifests; routing them through the chat loop is
+    -- M2/M3/M4.
+    local reg = registry.current()
+
+    it("discovers review as a valid global manifest with the expected fields", function()
+        local review = reg.get("review")
+        assert.is_not_nil(review, "review not discovered: " .. vim.inspect(reg.names()))
+        assert.are.equal("global", review.scope)
+        assert.is_true(review.activation.manual)
+        assert.is_function(review.source)
+    end)
+
+    it("discovers voice-apply as a valid global manifest", function()
+        local voice = reg.get("voice-apply")
+        assert.is_not_nil(voice, "voice-apply not discovered: " .. vim.inspect(reg.names()))
+        assert.are.equal("global", voice.scope)
+        assert.is_true(voice.activation.manual)
+        assert.is_function(voice.source)
+    end)
+end)

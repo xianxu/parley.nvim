@@ -452,6 +452,14 @@ M.skill = {
     description = "Edit document based on review markers",
     args = {},
 
+    -- Declarative manifest fields (#128). Inert until skills route through the
+    -- chat loop (M2); review's runtime is still skill_runner until M4.
+    scope = "global",
+    activation = { manual = true, auto = true },
+    tools = { "read_file" },
+    elevated = { "propose_edits" }, -- write tool, granted only on manual invoke (#129)
+    force_tool = "propose_edits", -- compel the batch-edit tool this turn (M3)
+
     system_prompt = function(_args, _file_path, _content, skill_md)
         return skill_md
     end,
