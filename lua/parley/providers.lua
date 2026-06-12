@@ -1102,6 +1102,19 @@ cliproxyapi.parse_usage = function(raw_response)
     return anthropic.parse_usage(raw_response)
 end
 
+-- Managed-proxy hook (issue #131). Reuses the dispatcher's existing pre_query
+-- seam (the one copilot uses to refresh its bearer) — no new dispatcher
+-- branch. When the user opts into managing the proxy, ensure it's running
+-- before the query; on failure drive the abort channel so the chat fails fast
+-- instead of hanging. No-op (immediate on_success) when not opted in.
+cliproxyapi.pre_query = function(on_success, on_error)
+    local ok, cliproxy = pcall(require, "parley.cliproxy")
+    if not ok or not cliproxy.is_managed() then
+        return on_success() -- bring-your-own / feature off
+    end
+    cliproxy.ensure_running(on_success, on_error or function() end)
+end
+
 --------------------------------------------------------------------------------
 -- Azure adapter (extends openai)
 --------------------------------------------------------------------------------
