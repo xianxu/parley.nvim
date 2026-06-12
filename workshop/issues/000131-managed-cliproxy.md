@@ -240,6 +240,10 @@ Platform:
   with zero env setup. Safe: dormant unless a cliproxyapi agent runs, and
   reuses an existing proxy. README + atlas updated to "on by default but dormant".
   make test still exit 0 (94 specs).
+- **Live e2e validated by operator** (the last Done-when, "post-login real
+  completion"): fresh nvim, brew service stopped → parley spawned its own
+  cliproxyapi and a cliproxyapi-provider chat completed end-to-end. The
+  real-subscription path the automated tests couldn't exercise now confirmed.
 - Brainstormed via superpowers-brainstorming. Converged design captured in
   `## Spec`. Five decisions logged inline (audience, ownership, config source,
   auto_download deferral, platform scope). cliproxyapi CLI/release facts
