@@ -64,7 +64,15 @@ silently skips the request (neither the query nor the abort fires). This is the
 same gate all secret-backed providers use; just be aware managed mode doesn't
 remove the secret requirement (the secret is the client↔proxy token).
 
-## Deferred (M2)
+## auto_download (M2)
 
-`auto_download` — fetch a pinned release tarball + checksum-verify + extract,
-falling through `discover_binary`. Not in M1 (bring-your-own binary).
+`cliproxy = { manage = true, auto_download = true }` removes the
+`brew install` step: when `discover_binary` finds nothing, `ensure_running`
+fetches the **pinned** release (`cliproxy.lua` `PINNED_VERSION`, overridable via
+`cliproxy.download_version`) for the host platform — `cliproxy_config.platform`
++ `asset_name` build the asset name, `download()` curls the tarball +
+`checksums.txt`, **sha256-verifies (refuses to install on mismatch)**, and
+extracts `cli-proxy-api` into `stdpath('data')/parley/cliproxy/bin/`. That dir
+sits between `binary_path` and PATH in `discover_binary`'s chain.
+`:ParleyProxy update` re-fetches. The download is synchronous + one-time (cached
+after first fetch). Windows (`.zip`) is not auto-downloaded — install manually.

@@ -244,6 +244,20 @@ Platform:
   completion"): fresh nvim, brew service stopped → parley spawned its own
   cliproxyapi and a cliproxyapi-provider chat completed end-to-end. The
   real-subscription path the automated tests couldn't exercise now confirmed.
+
+### 2026-06-12 (M2 — auto_download)
+- M2 SHIPPED: pure `cliproxy_config.platform/asset_name/parse_checksums` (9 unit
+  tests, injectable uname); `cliproxy.download()` resolves the pinned release
+  (7.1.71) for the host platform, curls tarball + checksums.txt, **sha256-verifies
+  (refuses on mismatch)**, extracts `cli-proxy-api` into stdpath('data')/.../bin;
+  `discover_binary` falls through binary_path → managed dir → PATH;
+  `ensure_running` auto-downloads (one-time, notify) when `auto_download` is set;
+  `:ParleyProxy update` re-fetches. Integration test serves a fixture release over
+  local HTTP (no network) — download/extract + tampered-checksum refusal (3 tests).
+  Grounded on the real release (asset naming `aarch64`, `<sha>  <name>` checksums,
+  tarball roots `cli-proxy-api`). `auto_download` kept **opt-in** (auto-fetching a
+  binary is an explicit choice; brainstorm's "A is opt-in").
+- Full suite: **make test exit 0 — 95 spec files, luacheck 0/0 across 183.**
 - Brainstormed via superpowers-brainstorming. Converged design captured in
   `## Spec`. Five decisions logged inline (audience, ownership, config source,
   auto_download deferral, platform scope). cliproxyapi CLI/release facts

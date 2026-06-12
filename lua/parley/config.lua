@@ -117,6 +117,10 @@ local config = {
 		manage = true,
 		-- auth_dir defaults to cliproxy's own ~/.cli-proxy-api when omitted.
 		-- binary_path = nil,  -- else `cliproxyapi` / `cli-proxy-api` on PATH
+		-- auto_download = true,  -- opt-in: if no binary is found, fetch a pinned,
+		--   checksum-verified release into stdpath('data') (skips `brew install`).
+		--   Left off by default — auto-fetching a binary is an explicit choice.
+		--   `:ParleyProxy update` re-fetches; `download_version` overrides the pin.
 		config = {
 			-- skip the management-panel GitHub download for faster startup
 			["remote-management"] = { ["disable-control-panel"] = true },
