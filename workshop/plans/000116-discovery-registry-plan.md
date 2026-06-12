@@ -226,3 +226,54 @@ Settle #116's long-open descriptor-format question (lean: structured fenced bloc
 - `query`/`spec_to_command` is the "deterministic shell, thin model" surface: the model only ever decides *which noun + which term*; the registry compiles the actual search. Don't let search logic leak into the model layer.
 - Exact `rg` invocation matches `lua/parley/tools/builtin/grep.lua`: load-time `detect_grep()` then `vim.fn.system(cmd)` — don't hand-roll a second rg wrapper or use `vim.system` (`ARCH-DRY`).
 - `render()`'s output is a *contract* with #128 — when its format changes, the `repo_discovery` skill body changes; keep the verbatim-line assertions in Task 5 as the guard.
+
+---
+
+## Revisions
+
+### 2026-06-11 — M1 boundary-review rework (REWORK → FIX-THEN-SHIP)
+
+The first `sdlc milestone-close` boundary review returned **REWORK** (one
+Critical, two Important). All addressed; re-review returned **FIX-THEN-SHIP**
+(no Critical). Deltas to the as-built design vs. the task text above:
+
+- **`base_registry` ships as `base.build(config)`, NOT a static `M.descriptors`
+  (supersedes Task 3 Step 1 + the Core-concepts "Pure data; no IO" line).** It is
+  a *pure function of live config* — still pure (deterministic, no IO) but reads
+  the config passed by the caller, not a load-time snapshot of defaults. This was
+  the **I2** fix: a module-load snapshot ignored user overrides of
+  `chat_dir`/`notes_dir`. RegistryBuilder calls `base.build(_parley.config)`.
+- **C1 (Critical, fixed):** `discovery.current()` read `require("parley.config")`
+  — the immutable *default* table that never gets `repo_root`/`super_repo_members`
+  — so it returned a base-only registry in *every* mode. Now `discovery.setup(parley)`
+  injects the live `M` (same pattern as `super_repo.setup`/`note_dirs.setup`) and
+  `current()` reads `_parley.config`. Wired `discovery.setup(M)` in `init.lua`.
+  Regression test: `discovery_builder_spec.lua` "current — live-config wiring".
+- **I1 (Important, fixed):** `render()`'s find-hint must stay repo-relative even
+  on the *built* registry (whose locate globs are absolute). The builder now
+  precomputes `find_hint` from the RELATIVE descriptor BEFORE glob expansion and
+  stashes it; `render()` prefers it. Regression test: builder spec "render of the
+  built registry".
+- **I-A (Important, fixed):** `spec_to_command` now `shellescape`s every
+  interpolated value (globs, frontmatter pattern, content term) — a term with a
+  quote can't break/inject the command.
+- **I-C (Important, fixed):** the pure merge logic (`expand_locate`,
+  `dedupe_compose`) moved to a new pure module `lua/parley/discovery/merge.lua`,
+  unit-tested directly (no rg) — `discovery_merge_spec.lua`. RegistryBuilder is
+  now thin glue over it.
+- **descriptor.validate** now enforces kind-specific matcher fields (a bare
+  `{kind="frontmatter"}` was silently always-true).
+
+### M2-carried decision — execution model for the built (absolute-glob) registry
+
+**I-B (deferred to M2, by design — execution is M2 scope).** On the *built*
+registry the `locate` globs are absolute (repo-prefixed), so
+`spec_to_command`'s `rg … -g '<abs>' .` anchors the glob under cwd and matches
+nothing. `query()` compiling a correct pipeline holds for the *base* (relative)
+registry; the built registry needs M2 to reconcile glob-vs-search-root.
+`discovery_builder_spec.lua` "spec_to_command on a built registry (I-B / M2
+seam)" **pins the current absolute-glob output** so M2 changes it consciously
+(not a silently-empty search). **M2 decision to make first:** either return a
+structured argv (dir-roots + term + frontmatter) and let the executor render
+safely with `shellescape`, or set the rg search-path to each root and pass only
+the filename glob via `-g`. Decide before M2/#115 consume `query()`.

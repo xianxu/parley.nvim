@@ -428,6 +428,7 @@ atlas:
       - lua/parley/discovery/descriptor.lua
       - lua/parley/discovery/base.lua
       - lua/parley/discovery/registry.lua
+      - lua/parley/discovery/merge.lua
       - lua/parley/discovery/local_types.lua
       - lua/parley/discovery/init.lua
       - lua/parley/init.lua
@@ -436,5 +437,6 @@ atlas:
       - tests/unit/discovery_descriptor_spec.lua
       - tests/unit/discovery_base_spec.lua
       - tests/unit/discovery_registry_spec.lua
+      - tests/unit/discovery_merge_spec.lua
       - tests/integration/discovery_local_types_spec.lua
       - tests/integration/discovery_builder_spec.lua

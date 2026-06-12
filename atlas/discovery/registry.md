@@ -18,10 +18,11 @@ index later — same output shape, swappable producer).
 |--------|------|--------|
 | `matcher.lua` | tagged-union predicate over `(path, fm)` | PURE |
 | `descriptor.lua` | `TypeDescriptor` shape + `validate` | PURE |
-| `base.lua` | the parley-shipped base descriptor list | PURE data |
+| `base.lua` | `build(config)` → base descriptor list (pure fn of live config) | PURE |
 | `registry.lua` | `Registry` — `of/get/names/query/spec_to_command/render` | PURE |
+| `merge.lua` | `expand_locate` + `dedupe_compose` — the pure base∪local merge | PURE |
 | `local_types.lua` | grep novel `type:` minus base → `local` descriptors | INTEGRATION (rg) |
-| `init.lua` | `RegistryBuilder` — `build(ctx)` / `current()` | INTEGRATION |
+| `init.lua` | `RegistryBuilder` — `build(ctx)` / `current()`; live-config via `setup(parley)` | INTEGRATION |
 
 ## Matcher discriminator kinds
 The four highest-value nouns (chat/note/vision/issue) are **not** `type:`-

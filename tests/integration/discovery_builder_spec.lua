@@ -12,6 +12,7 @@
 
 local builder = require("parley.discovery")
 local base = require("parley.discovery.base")
+local registry = require("parley.discovery.registry")
 local config = require("parley.config")
 
 local function names_of(reg)
@@ -172,5 +173,31 @@ describe("discovery.build — render() of the built registry (I1 regression)", f
         assert.is_nil(out:find(root, 1, true), "render leaked an absolute root:\n" .. out)
         -- the local type discovered under the repo is present in the vocabulary
         assert.is_not_nil(out:find("`widget`", 1, true), out)
+    end)
+end)
+
+describe("discovery.build — spec_to_command on a built registry (I-B / M2 seam)", function()
+    -- Documents the CURRENT behavior: on the BUILT registry the roots are
+    -- absolute (repo-prefixed), so spec_to_command emits `rg ... -g '<abs>' .`.
+    -- An absolute `-g` glob against search-path `.` won't match — reconciling
+    -- glob-vs-search-root is the M2 execution model (see plan ## Revisions /
+    -- M2 sketch). This test pins the gap so M2 changes it consciously, rather
+    -- than inheriting a silently-empty search.
+    local root = vim.fn.tempname() .. "-parley-builder-cmd"
+
+    before_each(function()
+        vim.fn.mkdir(root, "p")
+    end)
+    after_each(function()
+        vim.fn.delete(root, "rf")
+    end)
+
+    it("compiles an absolute-glob command from the built issue spec", function()
+        local reg = builder.build({ repo_root = root })
+        local cmd = registry.spec_to_command(reg:query("issue", "todo"))
+        assert.are.equal(
+            "rg -il 'todo' -g '" .. root .. "/" .. config.issues_dir .. "/*.md' .",
+            cmd
+        )
     end)
 end)

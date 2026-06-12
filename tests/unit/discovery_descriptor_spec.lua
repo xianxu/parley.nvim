@@ -85,4 +85,29 @@ describe("descriptor.validate", function()
         assert.is_false(ok)
         assert.matches("matcher", err)
     end)
+
+    it("rejects an under-specified frontmatter matcher (missing field/value)", function()
+        -- A bare {kind="frontmatter"} would do fm[nil] == nil → always true.
+        local d = valid()
+        d.matcher = { kind = "frontmatter" }
+        assert.is_false((descriptor.validate(d)))
+    end)
+
+    it("rejects a frontmatter_present matcher with no field", function()
+        local d = valid()
+        d.matcher = { kind = "frontmatter_present" }
+        assert.is_false((descriptor.validate(d)))
+    end)
+
+    it("rejects a filename matcher with no pattern", function()
+        local d = valid()
+        d.matcher = { kind = "filename" }
+        assert.is_false((descriptor.validate(d)))
+    end)
+
+    it("accepts an `any` matcher with no extra fields", function()
+        local d = valid()
+        d.matcher = { kind = "any" }
+        assert.is_true(descriptor.validate(d))
+    end)
 end)

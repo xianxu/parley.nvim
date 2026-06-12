@@ -23,6 +23,7 @@
 local base = require("parley.discovery.base")
 local local_types = require("parley.discovery.local_types")
 local registry = require("parley.discovery.registry")
+local merge = require("parley.discovery.merge")
 
 local M = {}
 
@@ -38,32 +39,6 @@ end
 -- table (only the no-setup test path lands here, and it wants defaults).
 local function live_config()
     return (_parley and _parley.config) or require("parley.config")
-end
-
--- Expand a descriptor's locate globs across the given repo roots. Repo-relative
--- globs get prefixed with each root; absolute globs (leading "/") pass through
--- once. With no roots (global mode) the globs are returned as-is.
-local function expand_locate(locate, roots)
-    if #roots == 0 then
-        return vim.deepcopy(locate)
-    end
-    local out, seen = {}, {}
-    local function push(g)
-        if not seen[g] then
-            seen[g] = true
-            table.insert(out, g)
-        end
-    end
-    for _, glob in ipairs(locate) do
-        if glob:sub(1, 1) == "/" then
-            push(glob)
-        else
-            for _, root in ipairs(roots) do
-                push(root .. "/" .. glob)
-            end
-        end
-    end
-    return out
 end
 
 --- Build the effective registry for an injected mode context.
@@ -96,34 +71,22 @@ function M.build(ctx)
         table.insert(base_names, d.name)
     end
 
-    -- Compose base ∪ local, deduped by name. Base is added first so it wins
-    -- ties; local_types.discover already subtracts base_names, so a collision
-    -- can only arise across members (same novel type in two repos) → once.
-    local by_name, order = {}, {}
-    local function add(d)
-        if by_name[d.name] then
-            return
-        end
-        by_name[d.name] = d
-        table.insert(order, d.name)
-    end
-    for _, d in ipairs(base_descriptors) do
-        add(d)
-    end
+    -- Compose base ∪ local (base first → base wins ties). The dedupe + the
+    -- glob expansion are pure (merge.lua); this glue only supplies the IO half
+    -- (local_types.discover per root) and the per-descriptor find-hint stash.
+    local lists = { base_descriptors }
     for _, root in ipairs(roots) do
-        for _, d in ipairs(local_types.discover(root, base_names)) do
-            add(d)
-        end
+        table.insert(lists, local_types.discover(root, base_names))
     end
 
     -- Materialize descriptors with merged locate globs. The render() find-hint
     -- is computed from the RELATIVE descriptor and stashed BEFORE expansion, so
     -- the #128 noun-vocabulary never embeds absolute, machine-specific roots.
     local descriptors = {}
-    for _, name in ipairs(order) do
-        local d = vim.deepcopy(by_name[name])
+    for _, composed in ipairs(merge.dedupe_compose(lists)) do
+        local d = vim.deepcopy(composed)
         d.find_hint = registry.find_hint(d)
-        d.locate = expand_locate(d.locate, roots)
+        d.locate = merge.expand_locate(d.locate, roots)
         table.insert(descriptors, d)
     end
     return registry.of(descriptors)

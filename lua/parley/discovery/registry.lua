@@ -115,7 +115,7 @@ end
 local function glob_flags(roots)
     local parts = {}
     for _, g in ipairs(roots) do
-        table.insert(parts, "-g '" .. g .. "'")
+        table.insert(parts, "-g " .. vim.fn.shellescape(g))
     end
     return table.concat(parts, " ")
 end
@@ -123,6 +123,8 @@ end
 --- Compile a DiscoverySpec to an rg pipeline string (PURE — does not run it).
 --- Roots become rg `--glob` filters; a frontmatter filter lists matching files
 --- first, then greps their content. Execution is the consumer's (M2) job.
+--- All interpolated values (globs, frontmatter pattern, content term) are
+--- `shellescape`d so a value containing a quote can't break/inject the command.
 --- @param spec table DiscoverySpec
 --- @return string
 function M.spec_to_command(spec)
@@ -130,14 +132,14 @@ function M.spec_to_command(spec)
     local fm = spec.frontmatter
     local term = spec.content_term
     if fm then
-        local list = "rg -l '^" .. fm.field .. ": " .. fm.value .. "' " .. globs .. " ."
+        local list = "rg -l " .. vim.fn.shellescape("^" .. fm.field .. ": " .. fm.value) .. " " .. globs .. " ."
         if term then
-            return list .. " | xargs -r rg -il '" .. term .. "'"
+            return list .. " | xargs -r rg -il " .. vim.fn.shellescape(term)
         end
         return list
     end
     if term then
-        return "rg -il '" .. term .. "' " .. globs .. " ."
+        return "rg -il " .. vim.fn.shellescape(term) .. " " .. globs .. " ."
     end
     return "rg --files " .. globs .. " ."
 end

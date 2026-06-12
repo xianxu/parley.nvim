@@ -48,8 +48,21 @@ function M.validate(desc)
     if type(desc.matcher) ~= "table" then
         return fail("descriptor.matcher must be a table")
     end
-    if not matcher.KINDS[desc.matcher.kind] then
-        return fail("descriptor.matcher.kind '" .. tostring(desc.matcher.kind) .. "' is not a known matcher kind")
+    local m = desc.matcher
+    if not matcher.KINDS[m.kind] then
+        return fail("descriptor.matcher.kind '" .. tostring(m.kind) .. "' is not a known matcher kind")
+    end
+    -- Kind-specific required fields — without these the matcher silently
+    -- degrades (e.g. a bare `frontmatter` matcher does `fm[nil] == nil` → always
+    -- true). Fail loud at validation instead of mis-discriminating at runtime.
+    if m.kind == "frontmatter" and (type(m.field) ~= "string" or m.value == nil) then
+        return fail("descriptor.matcher (frontmatter) requires string field + value")
+    end
+    if m.kind == "frontmatter_present" and type(m.field) ~= "string" then
+        return fail("descriptor.matcher (frontmatter_present) requires string field")
+    end
+    if m.kind == "filename" and type(m.pattern) ~= "string" then
+        return fail("descriptor.matcher (filename) requires string pattern")
     end
     if type(desc.blurb) ~= "string" or desc.blurb == "" then
         return fail("descriptor.blurb must be a non-empty string")
