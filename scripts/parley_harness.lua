@@ -40,7 +40,11 @@ end
 --- in the transcript. Mirrors the chat_respond → dispatcher path.
 ---
 --- @param transcript_path string
---- @param opts table|nil { agent_name = string }
+--- @param opts table|nil { agent_name = string, tools = string[] }
+---        `tools` pins the client-side tool list, bypassing the agent's
+---        configured `tools`. Golden tests use this so their payload stays
+---        deterministic regardless of config drift or optional tools (e.g.
+---        `ack`) that a sentinel like `@readonly` would otherwise pull in.
 --- @return table payload
 function M.build_payload(transcript_path, opts)
     opts = opts or {}
@@ -75,7 +79,8 @@ function M.build_payload(transcript_path, opts)
     })
 
     local dispatcher = require("parley.dispatcher")
-    local payload = dispatcher.prepare_payload(messages, agent_info.model, agent_info.provider, agent_info.tools)
+    local tools = opts.tools or agent_info.tools
+    local payload = dispatcher.prepare_payload(messages, agent_info.model, agent_info.provider, tools)
     return payload
 end
 

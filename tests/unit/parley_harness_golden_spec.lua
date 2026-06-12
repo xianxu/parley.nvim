@@ -16,6 +16,14 @@ local FIXTURES = {
     "dynamic-fence-stress",
 }
 
+-- Pin the client-side tool list explicitly rather than inheriting it from
+-- the shipped ToolSonnet agent. ToolSonnet now selects tools via the
+-- `@readonly` sentinel, which expands from the live registry and so pulls
+-- in optional tools (e.g. `ack`) when installed — making the payload
+-- machine-dependent. Goldens must be deterministic and portable, so we fix
+-- the set here. This is the read-only builtin set (no edit_file/write_file).
+local READONLY_TOOLS = { "read_file", "ls", "find", "grep", "chat_history_search" }
+
 local function read_json(path)
     local f = assert(io.open(path, "r"))
     local s = f:read("*a")
@@ -28,7 +36,7 @@ describe("parley_harness golden round-trip", function()
         it("payload for " .. name .. " matches golden", function()
             local payload = harness.build_payload(
                 "tests/fixtures/transcripts/" .. name .. ".md",
-                { agent_name = "ToolSonnet" }
+                { agent_name = "ToolSonnet", tools = READONLY_TOOLS }
             )
             local golden = read_json("tests/fixtures/golden_payloads/" .. name .. ".json")
             assert.same(golden, payload)
