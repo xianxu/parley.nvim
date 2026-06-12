@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-06-11
 updated: 2026-06-11
-estimate_hours:
+estimate_hours: 40
 ---
 
 # Skill system redesign: declarative modules over one engine
