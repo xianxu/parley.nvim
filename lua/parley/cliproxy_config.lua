@@ -75,4 +75,54 @@ function M.encode(config_table)
     return vim.json.encode(config_table)
 end
 
+--------------------------------------------------------------------------------
+-- M2: release asset resolution (pure; consumed by cliproxy.download)
+--------------------------------------------------------------------------------
+
+--- Map an os_uname() result to cliproxy's release {os, arch} naming, or nil
+--- if this platform has no published release. `uname` is injectable for tests.
+---@param uname table|nil # defaults to vim.uv.os_uname()
+---@return table|nil # { os = "darwin|linux|freebsd|windows", arch = "aarch64|amd64" }
+function M.platform(uname)
+    uname = uname or (vim.uv or vim.loop).os_uname()
+    local os_map = { Darwin = "darwin", Linux = "linux", FreeBSD = "freebsd", Windows_NT = "windows" }
+    local os_name = os_map[uname.sysname]
+    local arch
+    local m = uname.machine
+    if m == "arm64" or m == "aarch64" then
+        arch = "aarch64"
+    elseif m == "x86_64" or m == "amd64" then
+        arch = "amd64"
+    end
+    if not os_name or not arch then
+        return nil
+    end
+    return { os = os_name, arch = arch }
+end
+
+--- Release asset filename for a version + platform, e.g.
+--- "CLIProxyAPI_7.1.71_darwin_aarch64.tar.gz" (".zip" on Windows).
+---@param version string # e.g. "7.1.71" (no leading v)
+---@param plat table # { os, arch } from platform()
+---@return string
+function M.asset_name(version, plat)
+    local ext = plat.os == "windows" and "zip" or "tar.gz"
+    return ("CLIProxyAPI_%s_%s_%s.%s"):format(version, plat.os, plat.arch, ext)
+end
+
+--- Pull the sha256 for `asset` out of a checksums.txt body
+--- ("<sha256>  <filename>" per line). Returns nil if absent.
+---@param text string
+---@param asset string
+---@return string|nil
+function M.parse_checksums(text, asset)
+    for line in (text or ""):gmatch("[^\n]+") do
+        local sha, name = line:match("^(%x+)%s+%*?(%S+)$")
+        if name == asset then
+            return sha
+        end
+    end
+    return nil
+end
+
 return M

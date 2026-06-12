@@ -108,3 +108,56 @@ describe("encode", function()
         assert.same({ "s" }, back["api-keys"])
     end)
 end)
+
+--------------------------------------------------------------------------------
+-- M2: release asset resolution
+--------------------------------------------------------------------------------
+describe("platform", function()
+    it("maps darwin/arm64 → darwin/aarch64", function()
+        assert.same({ os = "darwin", arch = "aarch64" },
+            cc.platform({ sysname = "Darwin", machine = "arm64" }))
+    end)
+    it("maps linux/x86_64 → linux/amd64", function()
+        assert.same({ os = "linux", arch = "amd64" },
+            cc.platform({ sysname = "Linux", machine = "x86_64" }))
+    end)
+    it("maps linux/aarch64 and freebsd/amd64 and windows/x86_64", function()
+        assert.same({ os = "linux", arch = "aarch64" }, cc.platform({ sysname = "Linux", machine = "aarch64" }))
+        assert.same({ os = "freebsd", arch = "amd64" }, cc.platform({ sysname = "FreeBSD", machine = "amd64" }))
+        assert.same({ os = "windows", arch = "amd64" }, cc.platform({ sysname = "Windows_NT", machine = "x86_64" }))
+    end)
+    it("returns nil for an unsupported os or arch", function()
+        assert.is_nil(cc.platform({ sysname = "Plan9", machine = "x86_64" }))
+        assert.is_nil(cc.platform({ sysname = "Linux", machine = "mips" }))
+    end)
+    it("works on the real host (returns a valid table)", function()
+        local p = cc.platform()
+        assert.is_truthy(p.os)
+        assert.is_truthy(p.arch)
+    end)
+end)
+
+describe("asset_name", function()
+    it("builds the tar.gz asset for unix", function()
+        assert.equals("CLIProxyAPI_7.1.71_darwin_aarch64.tar.gz",
+            cc.asset_name("7.1.71", { os = "darwin", arch = "aarch64" }))
+    end)
+    it("uses .zip on windows", function()
+        assert.equals("CLIProxyAPI_7.1.71_windows_amd64.zip",
+            cc.asset_name("7.1.71", { os = "windows", arch = "amd64" }))
+    end)
+end)
+
+describe("parse_checksums", function()
+    local sample = table.concat({
+        "bce9c508c15b205ceb8c6a26adf8eb3c20fbbdd5cba167debe6fd8d6983a46b3  CLIProxyAPI_7.1.71_darwin_aarch64.tar.gz",
+        "638d1791cced198c24509b4934951462999cab6ea39300c7ea67a8efb4d4b774  CLIProxyAPI_7.1.71_darwin_amd64.tar.gz",
+    }, "\n")
+    it("returns the sha for a known asset", function()
+        assert.equals("bce9c508c15b205ceb8c6a26adf8eb3c20fbbdd5cba167debe6fd8d6983a46b3",
+            cc.parse_checksums(sample, "CLIProxyAPI_7.1.71_darwin_aarch64.tar.gz"))
+    end)
+    it("returns nil for an asset not listed", function()
+        assert.is_nil(cc.parse_checksums(sample, "CLIProxyAPI_7.1.71_linux_amd64.tar.gz"))
+    end)
+end)
