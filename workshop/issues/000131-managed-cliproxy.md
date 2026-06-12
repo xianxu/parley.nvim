@@ -108,8 +108,16 @@ Order: `cliproxy.binary_path` → managed download dir (M2) → `cli-proxy-api` 
 PATH. None found → actionable error naming `brew install …` / `auto_download`.
 
 ### Lifecycle
-- **Lazy:** ensure-running fires on first dispatch to a cliproxy-provider agent,
-  never on nvim launch.
+- **Lazy:** ensure-running fires on dispatch to a cliproxy-provider agent, never
+  on nvim launch.
+- **Ensure-on-every-use (auto-revive):** ensure-running runs on **every** such
+  dispatch, not once-per-session — it's just a cheap health probe. So if the
+  proxy died, crashed, or was explicitly stopped, the next dependent request
+  transparently re-spawns it. There is **no persistent "disabled" state**.
+- **`stop` is transient:** `:ParleyProxy stop` means "kill it now" (free the
+  port / force a fresh config render); it is **not** a suppress flag — the next
+  cliproxy-provider call revives it. (To actually stop using the proxy, switch
+  off `manage` or stop using cliproxy-provider agents.)
 - **Reuse-if-healthy:** probe the endpoint's host:port first; spawn only if
   nothing healthy answers (cooperative with an existing brew service / other
   nvim).
@@ -175,6 +183,9 @@ Parley-verifiable (no manual login needed):
   not a silent mis-dial.
 - Spawn failure / never-healthy each surface an error on the dispatch path
   within the bounded timeout — the chat never hangs.
+- After the proxy dies or is `:ParleyProxy stop`'d, the **next**
+  cliproxy-provider dispatch transparently re-spawns it (no persistent disabled
+  state; no manual `start` required).
 - Rendered `config.yaml` carries the *resolved* `cliproxyapi` secret in
   `api-keys` at perms `0600`; no secret appears in any committed file; the port
   in the rendered config matches the provider endpoint.
@@ -225,3 +236,8 @@ Platform:
   pure `cliproxy_config.lua` vs IO `cliproxy.lua`. (5) JSON-as-YAML made an early
   M1 go/no-go gating task; platform→asset mapping moved to M2 (its consumer);
   Done-when split into parley-verifiable vs post-login.
+- Clarified (user): `:ParleyProxy stop` is **transient**, not a disabled state.
+  Ensure-running runs on *every* cliproxy dispatch (cheap health probe), so a
+  dead/stopped/crashed proxy auto-revives on the next dependent request — no
+  manual restart. Already implied by lazy + reuse-if-healthy; now stated
+  explicitly in Lifecycle + Done-when.
