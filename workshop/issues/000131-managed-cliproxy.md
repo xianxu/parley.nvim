@@ -306,3 +306,17 @@ Platform:
   - Boot downloads a management control-panel asset from GitHub; docs should
     recommend `remote-management: { disable-control-panel: true }` in the user's
     `config` passthrough (avoids the network hit, faster lazy-spawn readiness).
+- Chunk 2 SHIPPED: `cliproxy.lua` IO seam — discover_binary, health_probe
+  (/v1/models classification), spawn (detached/PID-tracked), ensure_running
+  (reuse → spawn → poll, full failure matrix, never hangs), status/stop/restart/
+  login_argv. 22 integration tests vs the process-level fake. Commits 69e8f36,
+  6178867.
+- Chunk 3 SHIPPED: D.query abort channel + cliproxyapi.pre_query (reuses the
+  copilot pre_query seam; additive, backward-compatible) [34b6248]; on_abort
+  teardown at all 4 D.query callers with a shared `collapse_empty_answer` helper,
+  + e2e spec driving the real chain (foreign aborts fast / healthy proceeds /
+  cold-start + transient-stop revive) [86867a4]; `:ParleyProxy` command
+  [#131 M1 commit]; docs + atlas [fd0a252].
+- **Full suite green: `make test` exit 0 — 93 spec files pass, luacheck 0/0
+  across 181 files.** No regressions in chat_respond/skill_runner/memory_prefs/
+  dispatcher/init from the shared-surface changes.
