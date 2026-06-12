@@ -70,9 +70,14 @@ end
 
 -- A stable, machine-independent "how to find instances" hint derived from the
 -- descriptor's matcher/locate — the single source for render()'s search column.
--- Avoids embedding absolute (machine-specific) globs so the rendered contract
--- stays deterministic.
-local function find_hint(d)
+-- For filename/any kinds the hint is the primary `locate` glob; callers that
+-- expand globs to absolute roots (RegistryBuilder) must precompute and stash
+-- `d.find_hint` from the RELATIVE descriptor BEFORE expansion, so render() never
+-- embeds an absolute, machine-specific path (the #128 contract stays
+-- deterministic on the *built* registry, not just the base one).
+--- @param d table TypeDescriptor (relative locate)
+--- @return string
+function M.find_hint(d)
     local m = d.matcher
     if m.kind == "frontmatter" then
         return "type: " .. m.value
@@ -95,9 +100,13 @@ function Registry:render()
     local lines = {}
     for _, name in ipairs(names) do
         local d = self._by_name[name]
+        -- Prefer a precomputed relative hint (set by RegistryBuilder before it
+        -- expands globs to absolute roots); fall back to deriving from this
+        -- descriptor (correct when locate is still relative, e.g. base-only).
+        local hint = d.find_hint or M.find_hint(d)
         table.insert(
             lines,
-            "- " .. d.label .. " (`" .. d.name .. "`) — " .. d.blurb .. "; find by " .. find_hint(d)
+            "- " .. d.label .. " (`" .. d.name .. "`) — " .. d.blurb .. "; find by " .. hint
         )
     end
     return table.concat(lines, "\n")

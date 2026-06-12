@@ -11,8 +11,10 @@ local registry = require("parley.discovery.registry")
 local base = require("parley.discovery.base")
 local config = require("parley.config")
 
+local base_descriptors = base.build(config)
+
 local function reg()
-    return registry.of(base.descriptors)
+    return registry.of(base_descriptors)
 end
 
 describe("registry.of / get / names", function()
@@ -29,7 +31,7 @@ describe("registry.of / get / names", function()
     it("names lists every registered type", function()
         local names = reg():names()
         assert.is_table(names)
-        assert.are.equal(#base.descriptors, #names)
+        assert.are.equal(#base_descriptors, #names)
     end)
 end)
 
@@ -105,7 +107,7 @@ describe("registry.render — the #128 repo_discovery body", function()
     local out = reg():render()
 
     it("lists every type's label and blurb", function()
-        for _, d in ipairs(base.descriptors) do
+        for _, d in ipairs(base_descriptors) do
             assert.is_not_nil(out:find(d.label, 1, true), "missing label: " .. d.label)
             assert.is_not_nil(out:find(d.blurb, 1, true), "missing blurb: " .. d.blurb)
         end
@@ -140,6 +142,6 @@ describe("registry.render — the #128 repo_discovery body", function()
         local sorted = vim.deepcopy(names)
         table.sort(sorted)
         assert.are.same(sorted, names, "render lines are not sorted by name")
-        assert.are.equal(#base.descriptors, #names)
+        assert.are.equal(#base_descriptors, #names)
     end)
 end)

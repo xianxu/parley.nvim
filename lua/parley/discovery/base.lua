@@ -1,4 +1,4 @@
--- parley.discovery.base — the static, parley-shipped base registry.
+-- parley.discovery.base — the parley-shipped base registry.
 --
 -- The universal types any repo has (pensive, prose, continuation) plus the
 -- parley-native ones the #116 source-map audit flagged as NOT datatype docs
@@ -6,21 +6,25 @@
 -- discriminators other than `type:` frontmatter). This is the "parley ships
 -- the base, the repo declares the delta" half made concrete.
 --
--- PURE data. Dir-backed `locate` globs are derived from config keys
--- (ARCH-DRY) rather than hardcoded literals, so the registry tracks parley's
--- own repo-mode conventions (repo_mode.md). Globs are repo-RELATIVE; the
--- RegistryBuilder (init.lua, Task 7) prefixes repo_root + super-repo members.
--- Absolute global globs (chat/note's chat_dir/notes_dir) pass through
--- unchanged there.
+-- `build(config)` is a PURE FUNCTION of config — it reads the LIVE config
+-- passed by the caller, never a load-time snapshot of defaults, so user
+-- overrides of chat_dir/notes_dir reach the descriptors. Dir-backed `locate`
+-- globs are derived from config keys (ARCH-DRY) rather than hardcoded literals,
+-- so the registry tracks parley's own repo-mode conventions (repo_mode.md).
+-- Globs are repo-RELATIVE; the RegistryBuilder (init.lua) prefixes repo_root +
+-- super-repo members. Absolute global globs (chat/note's chat_dir/notes_dir)
+-- pass through unchanged there.
 --
 -- `plan` has no config key (parley does not auto-create workshop/plans/), so
 -- its glob is the literal `workshop/plans/*.md`.
 
-local config = require("parley.config")
-
 local M = {}
 
-M.descriptors = {
+--- The base descriptor list, computed from the given (live) config.
+--- @param config table parley config (must carry the dir keys below)
+--- @return table list of base TypeDescriptors
+function M.build(config)
+    return {
     -- chat — parley-native; header carries `file:`/`topic:`, no `type:`.
     -- Homed in the repo chat dir (primary) and the demoted global chat_dir.
     {
@@ -97,6 +101,7 @@ M.descriptors = {
         matcher = { kind = "frontmatter", field = "type", value = "continuation" },
         blurb = "a session hand-off doc",
     },
-}
+    }
+end
 
 return M

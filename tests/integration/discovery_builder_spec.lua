@@ -22,7 +22,7 @@ end
 
 local function base_names()
     local n = {}
-    for _, d in ipairs(base.descriptors) do
+    for _, d in ipairs(base.build(config)) do
         table.insert(n, d.name)
     end
     table.sort(n)
@@ -123,5 +123,54 @@ describe("discovery.build — super-repo mode", function()
             m1 .. "/" .. config.issues_dir .. "/*.md",
             m2 .. "/" .. config.issues_dir .. "/*.md",
         }, reg:get("issue").locate)
+    end)
+end)
+
+describe("discovery.current — live-config wiring (C1 regression)", function()
+    -- current() must read the LIVE config (repo_root/super_repo_members on the
+    -- deepcopy), NOT the default config table — otherwise it returns global mode
+    -- in every mode. Inject a live config via setup() to pin mode-correctness.
+    local root = vim.fn.tempname() .. "-parley-current-repo"
+
+    before_each(function()
+        write_type(root, "x.md", "widget")
+    end)
+    after_each(function()
+        vim.fn.delete(root, "rf")
+        builder.setup(nil) -- clear injection → live_config() falls back to defaults
+    end)
+
+    it("returns a mode-correct (repo-mode) registry, not base-only", function()
+        local live = vim.tbl_extend("force", config, { repo_root = root, super_repo_members = nil })
+        builder.setup({ config = live })
+        local reg = builder.current()
+        assert.is_not_nil(reg:get("widget"), "current() ignored live repo_root → base-only (the C1 bug)")
+        -- repo-relative globs are expanded under the live repo_root
+        assert.are.same({ root .. "/" .. config.issues_dir .. "/*.md" }, reg:get("issue").locate)
+    end)
+end)
+
+describe("discovery.build — render() of the built registry (I1 regression)", function()
+    -- The #128 consumer renders the BUILT registry. render()'s find-hint must
+    -- stay repo-RELATIVE (no absolute machine-specific roots), even though the
+    -- built locate globs are absolute.
+    local root = vim.fn.tempname() .. "-parley-builder-render"
+
+    before_each(function()
+        write_type(root, "x.md", "widget")
+    end)
+    after_each(function()
+        vim.fn.delete(root, "rf")
+    end)
+
+    it("keeps render hints relative even though built globs are absolute", function()
+        local reg = builder.build({ repo_root = root })
+        local out = reg:render()
+        -- the issue's find-hint stays the relative glob...
+        assert.is_not_nil(out:find("find by " .. config.issues_dir .. "/*.md", 1, true), out)
+        -- ...and never leaks the absolute, machine-specific expanded root.
+        assert.is_nil(out:find(root, 1, true), "render leaked an absolute root:\n" .. out)
+        -- the local type discovered under the repo is present in the vocabulary
+        assert.is_not_nil(out:find("`widget`", 1, true), out)
     end)
 end)

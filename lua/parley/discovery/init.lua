@@ -12,14 +12,33 @@
 -- separate root-scope enum needed.
 --
 -- Mode context is INJECTED into build() so it is pure-ish and testable without
--- real cwd; current() reads it from live config (which super_repo.lua populates
--- via super_repo.compute_members — the reused member-discovery source).
+-- real cwd; current() reads it from LIVE config — the deepcopy `M.config` that
+-- setup() builds and repo-mode detection / super_repo.lua mutate, NOT the
+-- pristine default table from `require("parley.config")` (that table never gets
+-- repo_root / super_repo_members, so reading it returns global mode always).
+-- Live config arrives via setup(parley), the same injection pattern as
+-- super_repo.setup / note_dirs.setup. super_repo.compute_members is the reused
+-- member-discovery source (populates config.super_repo_members).
 
 local base = require("parley.discovery.base")
 local local_types = require("parley.discovery.local_types")
 local registry = require("parley.discovery.registry")
 
 local M = {}
+
+-- Injected parley module reference (for live config). Set by setup().
+local _parley
+
+--- @param parley table the parley module (M from init.lua)
+M.setup = function(parley)
+    _parley = parley
+end
+
+-- The live config: injected parley's deepcopy if available, else the default
+-- table (only the no-setup test path lands here, and it wants defaults).
+local function live_config()
+    return (_parley and _parley.config) or require("parley.config")
+end
 
 -- Expand a descriptor's locate globs across the given repo roots. Repo-relative
 -- globs get prefixed with each root; absolute globs (leading "/") pass through
@@ -48,10 +67,14 @@ local function expand_locate(locate, roots)
 end
 
 --- Build the effective registry for an injected mode context.
---- @param ctx table|nil { repo_root = string|nil, super_repo_members = list|nil }
+--- @param ctx table|nil { config?, repo_root?, super_repo_members? }
+---        config defaults to the live config (so base globs track user
+---        overrides of chat_dir/notes_dir); repo_root/super_repo_members select
+---        the mode.
 --- @return table Registry
 function M.build(ctx)
     ctx = ctx or {}
+    local config = ctx.config or live_config()
     local members = ctx.super_repo_members
     local repo_root = ctx.repo_root
 
@@ -67,8 +90,9 @@ function M.build(ctx)
         table.insert(roots, repo_root)
     end
 
+    local base_descriptors = base.build(config)
     local base_names = {}
-    for _, d in ipairs(base.descriptors) do
+    for _, d in ipairs(base_descriptors) do
         table.insert(base_names, d.name)
     end
 
@@ -83,7 +107,7 @@ function M.build(ctx)
         by_name[d.name] = d
         table.insert(order, d.name)
     end
-    for _, d in ipairs(base.descriptors) do
+    for _, d in ipairs(base_descriptors) do
         add(d)
     end
     for _, root in ipairs(roots) do
@@ -92,22 +116,27 @@ function M.build(ctx)
         end
     end
 
-    -- Materialize descriptors with merged locate globs.
+    -- Materialize descriptors with merged locate globs. The render() find-hint
+    -- is computed from the RELATIVE descriptor and stashed BEFORE expansion, so
+    -- the #128 noun-vocabulary never embeds absolute, machine-specific roots.
     local descriptors = {}
     for _, name in ipairs(order) do
         local d = vim.deepcopy(by_name[name])
+        d.find_hint = registry.find_hint(d)
         d.locate = expand_locate(d.locate, roots)
         table.insert(descriptors, d)
     end
     return registry.of(descriptors)
 end
 
---- Build the registry for the live parley mode (reads config populated by
---- repo-mode detection + super_repo.compute_members).
+--- Build the registry for the live parley mode. Reads the LIVE config
+--- (repo_root + super_repo_members) populated by repo-mode detection and
+--- super_repo.compute_members — NOT the default config table.
 --- @return table Registry
 function M.current()
-    local config = require("parley.config")
+    local config = live_config()
     return M.build({
+        config = config,
         repo_root = config.repo_root,
         super_repo_members = config.super_repo_members,
     })
