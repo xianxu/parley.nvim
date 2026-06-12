@@ -328,6 +328,13 @@ end
 local _in_flight = {}
 local MAX_RESUBMITS = 3
 
+--- Test helper: is a skill run in flight for `buf`? (#131 abort-teardown test)
+---@param buf number
+---@return boolean
+function M.is_in_flight(buf)
+    return _in_flight[buf] == true
+end
+
 --- Run a skill on the current buffer.
 --- @param buf number  buffer handle
 --- @param skill table  skill definition

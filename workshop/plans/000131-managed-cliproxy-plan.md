@@ -537,3 +537,31 @@ ARCH-DRY: reuses the dispatcher's existing `pre_query` path (dispatcher.lua:387)
 - **IO** (`cliproxy`): `tests/integration/cliproxy_lifecycle_spec.lua` + `tests/fixtures/fake_cliproxy.lua` — a real subprocess speaking the identity route, exercising reuse/spawn/foreign/timeout/crash/unauth. No function-call mocks for the proxy.
 - **Wiring**: `tests/unit/dispatcher_query_spec.lua` (abort channel: pre_query `on_error` → `on_abort`, query not run) + `tests/unit/providers_pre_query_spec.lua` (no-op vs delegate) + `tests/integration/cliproxy_dispatch_spec.lua` (the Done-when e2e **including the abort case**: ensure_running failure → spinner stopped + WARN, the no-hang proof).
 - Run: `make test-unit`, `make test-spec SPEC=<key>`, `make test` (full).
+
+---
+
+## Revisions
+
+### 2026-06-12 — implementation deltas (recorded post-build)
+- **Process-level fake is Python, not Lua.** The Core Concepts table + Chunk 2
+  Task 2.2 specified `tests/fixtures/fake_cliproxy.lua` (Lua via `nvim -l`); it
+  shipped as `tests/fixtures/fake_cliproxy` (executable Python) — `http.server`
+  gives correct HTTP/`/v1/models` responses with far less code than a hand-rolled
+  `vim.uv` HTTP responder. Adds a `python3` test-host dependency (present on
+  macOS + the Linux CI target). Reason: simplicity; the process-level-fake intent
+  (real subprocess, not function mocks) is unchanged.
+- **Per-caller `on_abort` tests landed at the M1 boundary (FIX-THEN-SHIP).** The
+  boundary review flagged that Task 3.2's per-caller teardown bodies were covered
+  only e2e via a spy. Added `tests/integration/cliproxy_caller_teardown_spec.lua`:
+  `memory_prefs` via the real abort chain (foreign proxy → `process_next` keeps
+  the batch moving), `chat_respond` + `skill_runner` via a `D.query` mock that
+  invokes the real `on_abort` (arg-position + `collapse_empty_answer` block
+  removal on the default path / `_in_flight` clear). Exposed
+  `skill_runner.is_in_flight` for the assertion.
+- **ARCH-DRY fixes (boundary review):** extracted `cliproxy.render_opts()`
+  (consumed by write/drift/status); exposed `cliproxy.login_providers()` as the
+  single source for `:ParleyProxy login` completion + validation.
+- Minor: `login_argv` now renders the config first (honors a custom `auth_dir`
+  before any dispatch); `:ParleyProxy login` uses `jobstart({term=true})` not the
+  deprecated `termopen`; documented that `api_keys.cliproxyapi` is required even
+  when `manage = true`.

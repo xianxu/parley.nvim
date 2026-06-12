@@ -145,23 +145,26 @@ end
 
 M._config_path = config_path -- exposed for tests
 
--- Render the merged config from Lua + the resolved secret, write it 0600.
--- Returns (path, host, port) or (nil, err).
-local function write_rendered_config()
+-- Single place that gathers the render inputs (host:port from the provider
+-- endpoint, auth_dir, vault-resolved client secret, raw config passthrough).
+-- Consumed by write_rendered_config, config_drift, and status (ARCH-DRY) — add
+-- a render field here and all three pick it up.
+local function render_opts()
     local host, port = cc.parse_endpoint(endpoint())
-    if not host then
-        return nil, "cannot parse host:port from endpoint: " .. tostring(endpoint())
-    end
     local c = cfg() or {}
     local secret = require("parley.vault").get_secret(
         require("parley.providers").get_secret_name("cliproxyapi"))
-    local rendered, overrides = cc.render({
-        host = host,
-        port = port,
-        auth_dir = c.auth_dir,
-        secret = secret,
-        config = c.config,
-    })
+    return { host = host, port = port, auth_dir = c.auth_dir, secret = secret, config = c.config }
+end
+
+-- Render the merged config from Lua + the resolved secret, write it 0600.
+-- Returns (path, host, port, secret) or (nil, err).
+local function write_rendered_config()
+    local opts = render_opts()
+    if not opts.host then
+        return nil, "cannot parse host:port from endpoint: " .. tostring(endpoint())
+    end
+    local rendered, overrides = cc.render(opts)
     if #overrides > 0 then
         logger.warning("cliproxy: managed host/port override raw config key(s): "
             .. table.concat(overrides, ", "))
@@ -175,7 +178,7 @@ local function write_rendered_config()
     f:close()
     local fs_chmod = uv.fs_chmod or vim.loop.fs_chmod
     fs_chmod(path, tonumber("600", 8))
-    return path, host, port, secret
+    return path, opts.host, opts.port, opts.secret
 end
 
 --------------------------------------------------------------------------------
@@ -330,15 +333,11 @@ local function config_drift()
     if not ok then
         return true
     end
-    local host, port = cc.parse_endpoint(endpoint())
-    if not host then
+    local opts = render_opts()
+    if not opts.host then
         return false
     end
-    local c = cfg() or {}
-    local secret = require("parley.vault").get_secret(
-        require("parley.providers").get_secret_name("cliproxyapi"))
-    local fresh = cc.render({ host = host, port = port, auth_dir = c.auth_dir, secret = secret, config = c.config })
-    return not vim.deep_equal(on_disk, fresh)
+    return not vim.deep_equal(on_disk, cc.render(opts))
 end
 
 --- Gather a status snapshot. Async (health is probed); calls cb(info).
@@ -346,7 +345,7 @@ end
 function M.status(cb)
     local bin = M.discover_binary()
     local c = cfg() or {}
-    local host, port = cc.parse_endpoint(endpoint())
+    local opts = render_opts()
     local source = "none"
     if bin then
         source = (c.binary_path == bin) and "binary_path" or "PATH"
@@ -355,20 +354,18 @@ function M.status(cb)
         managed = M.is_managed(),
         binary = bin,
         binary_source = source,
-        host = host,
-        port = port,
+        host = opts.host,
+        port = opts.port,
         auth_dir = c.auth_dir,
         config_path = config_path(),
         spawned_by_parley = #M.spawned_pids() > 0,
         config_drift = config_drift(),
     }
-    if not host then
+    if not opts.host then
         info.health = "unknown"
         return cb(info)
     end
-    local secret = require("parley.vault").get_secret(
-        require("parley.providers").get_secret_name("cliproxyapi"))
-    M.health_probe(host, port, secret, function(state)
+    M.health_probe(opts.host, opts.port, opts.secret, function(state)
         info.health = state
         cb(info)
     end)
@@ -385,8 +382,18 @@ local LOGIN_FLAGS = {
     antigravity = "-antigravity-login",
 }
 
+--- The valid login providers (single source — keys of LOGIN_FLAGS), sorted.
+--- The :ParleyProxy completer uses this so it can't drift from login_argv.
+---@return string[]
+function M.login_providers()
+    local list = vim.tbl_keys(LOGIN_FLAGS)
+    table.sort(list)
+    return list
+end
+
 --- Build the argv for an interactive OAuth login for `provider`.
---- Passes -config so login writes into parley's configured auth-dir.
+--- Renders the config first so login writes into parley's configured auth-dir
+--- (not the cliproxy default), then passes -config.
 ---@param provider string
 ---@return string[]|nil argv, string|nil err
 function M.login_argv(provider)
@@ -396,11 +403,12 @@ function M.login_argv(provider)
     end
     local flag = LOGIN_FLAGS[provider]
     if not flag then
-        local valid = vim.tbl_keys(LOGIN_FLAGS)
-        table.sort(valid)
         return nil, "unknown login provider '" .. tostring(provider)
-            .. "' — valid: " .. table.concat(valid, ", ")
+            .. "' — valid: " .. table.concat(M.login_providers(), ", ")
     end
+    -- Ensure the rendered config exists so a custom auth_dir is honored even
+    -- before any dispatch has run (best-effort; ignore render errors here).
+    pcall(write_rendered_config)
     return { bin, "-config", config_path(), flag }
 end
 

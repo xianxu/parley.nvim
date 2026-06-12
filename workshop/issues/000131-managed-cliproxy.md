@@ -201,7 +201,7 @@ Platform:
 
 ## Plan
 
-- [ ] M1 — orchestrator spine (macOS + Linux). Gating task FIRST: prove
+- [x] M1 — orchestrator spine (macOS + Linux). Gating task FIRST: prove
       JSON-as-YAML boots a real `cli-proxy-api --config` (go/no-go before the
       rest). Then: pure `cliproxy_config.lua` (merge, parse host:port from
       endpoint, vault-resolved secret injection, JSON-as-YAML emit) +
@@ -219,6 +219,20 @@ Platform:
 ## Log
 
 ### 2026-06-12
+- 2026-06-12: closed M1 — make test exit 0: 93 spec files pass, luacheck 0/0 across 181 files. New: cliproxy_config 13 unit (pure, no mocks), cliproxy_lifecycle 22 integration (process-level fake: discover/probe/spawn/ensure_running full failure matrix, never hangs), cliproxy_dispatch 3 e2e (real pre_query→ensure_running→on_abort chain: foreign aborts fast/healthy proceeds/transient-stop revive), cliproxy_command 3, dispatcher Group H abort channel, providers_pre_query 3. Task 2.0 gating validated against real cliproxyapi v7.1.60 (JSON-as-YAML boots; /v1/models identity route; 401 vs 200-empty semantics).; review verdict: FIX-THEN-SHIP
+- **FIX-THEN-SHIP resolved (no Critical; 4 Important + minors fixed).**
+  (1) ARCH-DRY: extracted `cliproxy.render_opts()` (write/drift/status share it);
+  (2) ARCH-DRY: `cliproxy.login_providers()` is the single source for completion
+  + validation. (3) Per-caller on_abort teardowns now tested for real —
+  `cliproxy_caller_teardown_spec`: memory_prefs via the real abort chain
+  (process_next keeps the batch moving), chat_respond + skill_runner via a
+  D.query mock invoking the real on_abort (block-collapse on the default path /
+  `_in_flight` clear), exposed `skill_runner.is_in_flight`. (4) Added a 0600 +
+  secret-in-`api-keys`-on-disk assertion. Minors: `login_argv` renders config
+  first (honors custom auth_dir); `jobstart({term=true})` over deprecated
+  termopen; doc note that `api_keys.cliproxyapi` is required even when managed.
+  Recorded Python-fake + tests-at-close deviations in the plan `## Revisions`.
+  Re-verified: **make test exit 0 — 94 spec files, luacheck 0/0 across 182.**
 - Brainstormed via superpowers-brainstorming. Converged design captured in
   `## Spec`. Five decisions logged inline (audience, ownership, config source,
   auto_download deferral, platform scope). cliproxyapi CLI/release facts

@@ -256,6 +256,24 @@ describe("cliproxy IO lifecycle", function()
             assert.equals(0, #cliproxy.spawned_pids()) -- did NOT spawn
         end)
 
+        it("writes the rendered config 0600 with the resolved secret on disk", function()
+            local port = free_port()
+            set_endpoint(port) -- adds vault secret "testkey"
+            start_fake(port, "healthy")
+            wait_listening(port)
+            parley.config = { cliproxy = { manage = true, binary_path = FAKE } }
+            local done
+            cliproxy.ensure_running(function() done = true end, function() done = true end)
+            vim.wait(9000, function() return done ~= nil end, 20)
+            local path = cliproxy._config_path()
+            local stat = uv.fs_stat(path)
+            assert.is_truthy(stat)
+            assert.equals(tonumber("600", 8), require("bit").band(stat.mode, tonumber("777", 8)))
+            local content = table.concat(vim.fn.readfile(path), "\n")
+            assert.is_truthy(content:find("testkey", 1, true)) -- secret landed on disk
+            assert.is_truthy(content:find('"api%-keys"')) -- as the api-keys array
+        end)
+
         it("proceeds on needs_login (up but not logged in)", function()
             local port = free_port()
             set_endpoint(port)
@@ -392,6 +410,17 @@ describe("cliproxy IO lifecycle", function()
             local bad, err = cliproxy.login_argv("bogus")
             assert.is_nil(bad)
             assert.is_truthy(err:find("unknown login provider"))
+        end)
+
+        it("login_providers is the single source for completion + validation", function()
+            parley.config = { cliproxy = { manage = true, binary_path = FAKE } }
+            local provs = cliproxy.login_providers()
+            assert.is_truthy(#provs >= 7)
+            assert.is_truthy(vim.tbl_contains(provs, "claude"))
+            -- every advertised provider must actually build an argv (no drift)
+            for _, p in ipairs(provs) do
+                assert.is_truthy(cliproxy.login_argv(p), "login_argv failed for " .. p)
+            end
         end)
     end)
 end)

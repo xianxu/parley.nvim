@@ -277,6 +277,7 @@ atlas:
       - tests/integration/cliproxy_lifecycle_spec.lua
       - tests/integration/cliproxy_dispatch_spec.lua
       - tests/integration/cliproxy_command_spec.lua
+      - tests/integration/cliproxy_caller_teardown_spec.lua
 
   providers/anthropic:
     code:

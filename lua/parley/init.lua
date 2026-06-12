@@ -293,7 +293,6 @@ local show_keybindings
 --- into — `status` just reports `managed: false`.
 ---@param prefix string # M.config.cmd_prefix (e.g. "Parley")
 M.register_proxy_command = function(prefix)
-	local LOGIN_PROVIDERS = { "claude", "codex", "codex-device", "google", "kimi", "xai", "antigravity" }
 	local SUBS = { "status", "start", "stop", "restart", "login" }
 
 	vim.api.nvim_create_user_command(prefix .. "Proxy", function(params)
@@ -337,7 +336,7 @@ M.register_proxy_command = function(prefix)
 			end
 			-- Interactive OAuth — run in a terminal split so the URL/flow is visible.
 			vim.cmd("botright new")
-			vim.fn.termopen(argv)
+			vim.fn.jobstart(argv, { term = true })
 			vim.cmd("startinsert")
 		else
 			vim.notify("usage: " .. prefix .. "Proxy {status|start|stop|restart|login <provider>}", vim.log.levels.WARN)
@@ -352,7 +351,7 @@ M.register_proxy_command = function(prefix)
 				end, list)
 			end
 			if line:match("Proxy%s+login%s+%S*$") then
-				return starts(LOGIN_PROVIDERS)
+				return starts(require("parley.cliproxy").login_providers())
 			end
 			return starts(SUBS)
 		end,

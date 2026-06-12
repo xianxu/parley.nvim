@@ -49,6 +49,14 @@ so the request fails fast instead of hanging. **`:ParleyProxy stop` is transient
   (per-provider flags: claude, codex, codex-device, google, kimi, xai,
   antigravity). The one unavoidable manual, per-machine step.
 
+## Required even when managed
+
+`api_keys.cliproxyapi` must be set even with `manage = true` — the dispatcher's
+`vault.run_with_secret` gate runs *before* `pre_query`, so a missing secret
+silently skips the request (neither the query nor the abort fires). This is the
+same gate all secret-backed providers use; just be aware managed mode doesn't
+remove the secret requirement (the secret is the client↔proxy token).
+
 ## Deferred (M2)
 
 `auto_download` — fetch a pinned release tarball + checksum-verify + extract,
