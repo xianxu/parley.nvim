@@ -86,6 +86,14 @@ describe("providers.disk", function()
         assert.are.equal("repo", beta.scope)
     end)
 
+    it("skips a dir whose init.lua throws, still listing the rest", function()
+        vim.fn.mkdir(root .. "/boom", "p")
+        write(root .. "/boom/init.lua", { 'error("kaboom at load")' })
+        local names = vim.tbl_map(function(m) return m.name end, providers.disk(root):list())
+        table.sort(names)
+        assert.are.same({ "alpha", "beta" }, names, "boom should be skipped, alpha+beta survive")
+    end)
+
     it("emits a source-less candidate for a dir with no source/SKILL.md (registry drops it)", function()
         -- A named dir with no resolvable body → candidate with source=nil. There
         -- is NO v1 system_prompt fallback (that 4-arg contract is retired in M4).
@@ -132,5 +140,16 @@ describe("providers.virtual", function()
 
     it("is empty with no generators", function()
         assert.are.same({}, providers.virtual({}):list())
+    end)
+
+    it("skips an erroring generator, keeping the valid ones", function()
+        local list = providers.virtual({
+            gen("a", "A"),
+            function() error("generator boom") end,
+            gen("b", "B"),
+        }):list()
+        local names = vim.tbl_map(function(m) return m.name end, list)
+        table.sort(names)
+        assert.are.same({ "a", "b" }, names)
     end)
 end)

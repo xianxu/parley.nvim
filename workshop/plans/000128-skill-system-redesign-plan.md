@@ -117,9 +117,9 @@ Follow parley conventions: modules `local M = {} … return M`; tests use `plena
 
 - [x] **Step 1: Write failing test** with a temp fixture skill root containing `myskill/init.lua` (returns declarative fields) + `myskill/SKILL.md` (body): `providers.disk(root):list()` → a list of valid `SkillManifest`s (each passes `manifest.validate`), and `manifest.source({})` returns the SKILL.md body **read from the captured absolute path** (no `debug.getinfo`).
   - edge: a dir missing `init.lua` → skipped (not an error).
-  - edge: `init.lua` with no SKILL.md but a `source`/`system_prompt` fn → body from the fn (back-compat with how v1 skills define a prompt fn).
+  - edge: `init.lua` with no SKILL.md but an explicit `source` fn → body from the fn. _(A dir with neither → `source = nil`, validate-dropped by the registry. The v1 `system_prompt` fallback that originally lived here was removed in the boundary-review round — see Revisions.)_
 - [x] **Step 2: Run, verify fail.**
-- [x] **Step 3: Implement** the disk provider: `vim.loop.fs_scandir` the root, for each dir load `init.lua`, build a manifest whose `source` is a closure over the dir's absolute path. Reuse the scan structure from `skill_runner.discover_skills` **but without** the `debug.getinfo` dance — root passed in. `providers.disk(root)` → `{ list = fn }`. _Loads init.lua via `loadfile` (absolute path → generic across plugin/user roots); source priority: explicit fn → SKILL.md → v1 system_prompt._
+- [x] **Step 3: Implement** the disk provider: `vim.loop.fs_scandir` the root, for each dir load `init.lua`, build a manifest whose `source` is a closure over the dir's absolute path. Reuse the scan structure from `skill_runner.discover_skills` **but without** the `debug.getinfo` dance — root passed in. `providers.disk(root)` → `{ list = fn }`. _Loads init.lua via `loadfile` (absolute path → generic across plugin/user roots); source priority: explicit fn → SKILL.md (no v1 system_prompt fallback — removed in the boundary-review round)._
 - [x] **Step 4: Run, verify pass.** _3/3 green._
 - [x] **Step 5: Commit** — `#128 M1: DiskProvider (closure source, kills debug.getinfo dance)`. _dd1c4ff_
 
@@ -217,5 +217,21 @@ plan-doc traceability drift + minors, addressed:
 - **DiskProvider candidate-manifest docstring** softened — `disk():list()` may
   emit a `source = nil` candidate for a dir with a name but no body; the
   registry is the single validate-drop point.
-- **Test gap closed**: added a provider test for the v1 `system_prompt` fallback
-  (branch #3) — a fixture skill with only a `system_prompt` fn, no SKILL.md.
+
+### 2026-06-12 — M1 re-judge (2nd round; FIX-THEN-SHIP → addressed)
+
+- **Removed the v1 `system_prompt` source fallback (branch #3).** The re-judge
+  found it mislabeled: it called `def.system_prompt(ctx)` (1 arg) but v1's
+  contract is 4-arg `(args, file_path, content, skill_md)`. Rather than repair a
+  branch no bundled skill hits (all ship SKILL.md → branch #2) and that M4
+  retires anyway, it was **deleted**. Source priority is now explicit-fn →
+  SKILL.md; a dir with neither → `source = nil` → registry validate-drops it.
+  The test is the **source-less-candidate** (`bodyless`) case, not a
+  `system_prompt` fixture. `voice_apply`'s dynamic body gets an explicit
+  `source(ctx)` when ported in M4 (M4 sketch updated).
+- **Closed the `pcall` error-path coverage gaps**: added a disk test (an
+  `init.lua` that throws at load → that dir skipped, the rest still listed) and
+  a virtual test (an erroring generator → skipped, valid manifests survive) —
+  the robustness contracts the code/Task-3 log claimed but didn't pin.
+- Minor: `fs_stat` existence checks (no double full-read); `atlas/index.md` §8
+  redesign note.
