@@ -102,6 +102,9 @@ end
 
 --- Release asset filename for a version + platform, e.g.
 --- "CLIProxyAPI_7.1.71_darwin_aarch64.tar.gz" (".zip" on Windows).
+--- NB: FreeBSD is best-effort — some releases ship freebsd/aarch64 only as a
+--- `_no-plugin` variant, so this canonical name may 404 there (download() will
+--- surface the curl error). darwin/linux are the supported targets.
 ---@param version string # e.g. "7.1.71" (no leading v)
 ---@param plat table # { os, arch } from platform()
 ---@return string

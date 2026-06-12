@@ -430,6 +430,7 @@ end
 
 local RELEASE_BASE = "https://github.com/router-for-me/CLIProxyAPI/releases/download"
 local PINNED_VERSION = "7.1.71" -- pinned, NOT "latest" — reproducible
+local BIN_NAME = "cli-proxy-api" -- the executable inside the release tarball
 
 local function bin_dir()
     local dir = vim.fn.stdpath("data") .. "/parley/cliproxy/bin"
@@ -440,7 +441,7 @@ end
 --- Path to the auto-downloaded binary, if present + executable.
 ---@return string|nil
 function M.managed_binary()
-    local p = bin_dir() .. "/cli-proxy-api"
+    local p = bin_dir() .. "/" .. BIN_NAME
     if vim.fn.executable(p) == 1 then
         return p
     end
@@ -476,12 +477,17 @@ function M.download(opts)
     local tarball_url = ("%s/v%s/%s"):format(base, version, asset)
     local sums_url = ("%s/v%s/checksums.txt"):format(base, version)
 
+    -- Bounded: download() runs synchronously on the main loop (opt-in, one-time),
+    -- so a stalled fetch must not freeze the editor indefinitely.
     local tmp = vim.fn.tempname() .. ".tar.gz"
-    local dl = vim.system({ "curl", "-fsSL", "-o", tmp, tarball_url }, { text = true }):wait()
+    local dl = vim.system({ "curl", "-fsSL", "--connect-timeout", "10", "--max-time", "300",
+        "-o", tmp, tarball_url }, { text = true }):wait()
     if dl.code ~= 0 then
+        os.remove(tmp) -- curl -o may have left a partial file
         return nil, "download failed (" .. tarball_url .. "): " .. tostring(dl.stderr)
     end
-    local sums = vim.system({ "curl", "-fsSL", sums_url }, { text = true }):wait()
+    local sums = vim.system({ "curl", "-fsSL", "--connect-timeout", "10", "--max-time", "30",
+        sums_url }, { text = true }):wait()
     if sums.code ~= 0 then
         os.remove(tmp)
         return nil, "checksums fetch failed: " .. tostring(sums.stderr)
@@ -498,12 +504,12 @@ function M.download(opts)
             .. expected .. ", got " .. tostring(actual) .. ")"
     end
     local dir = bin_dir()
-    local ex = vim.system({ "tar", "-xzf", tmp, "-C", dir, "cli-proxy-api" }, { text = true }):wait()
+    local ex = vim.system({ "tar", "-xzf", tmp, "-C", dir, BIN_NAME }, { text = true }):wait()
     os.remove(tmp)
     if ex.code ~= 0 then
         return nil, "extract failed: " .. tostring(ex.stderr)
     end
-    local bin = dir .. "/cli-proxy-api"
+    local bin = dir .. "/" .. BIN_NAME
     local fs_chmod = uv.fs_chmod or vim.loop.fs_chmod
     fs_chmod(bin, tonumber("755", 8))
     return bin

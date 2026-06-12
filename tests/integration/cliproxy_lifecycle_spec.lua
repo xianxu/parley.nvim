@@ -348,6 +348,52 @@ describe("cliproxy IO lifecycle", function()
             assert.is_false(outcome.ok)
             assert.is_truthy(outcome.msg:find("no cliproxy binary"))
         end)
+
+        -- The M2 trigger: ensure_running must call download() iff auto_download is
+        -- set and nothing else is found (boundary-review Important #1).
+        local function path_without_cliproxy()
+            -- PATH with curl (health probe) + python3 (the FAKE's interpreter)
+            -- but NOT cliproxyapi/cli-proxy-api, so discover_binary finds nothing.
+            local bindir = vim.fn.tempname()
+            vim.fn.mkdir(bindir, "p")
+            uv.fs_symlink(vim.fn.exepath("curl"), bindir .. "/curl")
+            uv.fs_symlink(vim.fn.exepath("python3"), bindir .. "/python3")
+            vim.env.PATH = bindir
+        end
+
+        it("auto_download=true triggers download when no binary is found, then proceeds", function()
+            local port = free_port()
+            set_endpoint(port)
+            path_without_cliproxy()
+            vim.env.PARLEY_FAKE_MODE = "healthy"
+            parley.config = { cliproxy = { manage = true, auto_download = true, binary_path = "/no/such" } }
+            local saved_dl, dl_called = cliproxy.download, false
+            cliproxy.download = function() -- stand in for the network fetch; hand back a spawnable binary
+                dl_called = true
+                return FAKE
+            end
+            local outcome = run_ensure()
+            cliproxy.download = saved_dl
+            assert.is_true(dl_called) -- the auto_download branch fired
+            assert.is_true(outcome.ok) -- the downloaded binary spawned + became healthy
+        end)
+
+        it("does NOT download when auto_download is unset", function()
+            local port = free_port()
+            set_endpoint(port)
+            path_without_cliproxy()
+            parley.config = { cliproxy = { manage = true, binary_path = "/no/such" } } -- no auto_download
+            local saved_dl, dl_called = cliproxy.download, false
+            cliproxy.download = function()
+                dl_called = true
+                return FAKE
+            end
+            local outcome = run_ensure()
+            cliproxy.download = saved_dl
+            assert.is_false(dl_called) -- gate held — no fetch attempted
+            assert.is_false(outcome.ok)
+            assert.is_truthy(outcome.msg:find("no cliproxy binary"))
+        end)
     end)
 
     --------------------------------------------------------------------------

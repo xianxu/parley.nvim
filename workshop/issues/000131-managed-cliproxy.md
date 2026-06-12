@@ -211,7 +211,7 @@ Platform:
       against a process-level fake proxy binary (per AGENTS.md external-service
       rule). Failure modes (spawn-fail, foreign-port, never-healthy, 401/auth)
       each covered.
-- [ ] M2 — `auto_download`: platform→asset-name mapping (pure, with its
+- [x] M2 — `auto_download`: platform→asset-name mapping (pure, with its
       consumer here — not M1), pinned cross-platform release fetch + checksum
       verify + extract; `:ParleyProxy update`; discovery falls through to managed
       dir.
@@ -219,6 +219,16 @@ Platform:
 ## Log
 
 ### 2026-06-12
+- 2026-06-12: closed M2 — measured increment = total 4.03h - M1 2.74h (sdlc actual cannot scope per-milestone). make test exit 0: 95 spec files, luacheck 0/0 across 183. M2: cliproxy_config platform/asset_name/parse_checksums 9 unit (injectable uname, deterministic); cliproxy_download 3 integration (fixture release over local HTTP, no network: download→sha256-verify→extract + tampered-checksum REFUSAL); discover_binary managed-dir fall-through; ensure_running auto_download trigger (opt-in); :ParleyProxy update. Grounded on real release v7.1.71 (asset naming aarch64, "<sha>  <name>" checksums, tarball roots cli-proxy-api).; review verdict: FIX-THEN-SHIP
+- **M2 FIX-THEN-SHIP resolved (no Critical; 2 Important + minors).** (1) Added the
+  missing test for the `ensure_running` auto_download *trigger* (auto_download=true
+  + nothing found → download() called → spawn proceeds; unset → not called → "no
+  binary"). (2) Bounded the download curls (`--connect-timeout`/`--max-time`) so a
+  stalled synchronous fetch can't freeze the editor. Minors: `BIN_NAME` const;
+  `os.remove(tmp)` on the download-failure path; FreeBSD-best-effort comment.
+  Re-verified after `make test-clean-env`: make test exit 0 — 95 spec files,
+  luacheck 0/0 across 183 (a transient chat_dirs failure was test-env pollution
+  from manual single-file runs, not a regression).
 - 2026-06-12: closed M1 — make test exit 0: 93 spec files pass, luacheck 0/0 across 181 files. New: cliproxy_config 13 unit (pure, no mocks), cliproxy_lifecycle 22 integration (process-level fake: discover/probe/spawn/ensure_running full failure matrix, never hangs), cliproxy_dispatch 3 e2e (real pre_query→ensure_running→on_abort chain: foreign aborts fast/healthy proceeds/transient-stop revive), cliproxy_command 3, dispatcher Group H abort channel, providers_pre_query 3. Task 2.0 gating validated against real cliproxyapi v7.1.60 (JSON-as-YAML boots; /v1/models identity route; 401 vs 200-empty semantics).; review verdict: FIX-THEN-SHIP
 - **FIX-THEN-SHIP resolved (no Critical; 4 Important + minors fixed).**
   (1) ARCH-DRY: extracted `cliproxy.render_opts()` (write/drift/status share it);
