@@ -342,10 +342,10 @@ describe("super_repo.toggle", function()
 		assert.is_not_nil(roots)
 		assert.equal(3, #roots) -- ariadne + brain + parley.nvim
 		local by_name = {}
-		for _, r in ipairs(roots) do by_name[r.repo_name] = r.dir end
-		assert.equal(sibling_a .. "/workshop/issues", by_name["ariadne"])
-		assert.equal(sibling_b .. "/workshop/issues", by_name["brain"])
-		assert.equal(current_repo .. "/workshop/issues", by_name["parley.nvim"])
+		for _, r in ipairs(roots) do by_name[r.repo_name] = resolve(r.dir) end
+		assert.equal(resolve(sibling_a .. "/workshop/issues"), by_name["ariadne"])
+		assert.equal(resolve(sibling_b .. "/workshop/issues"), by_name["brain"])
+		assert.equal(resolve(current_repo .. "/workshop/issues"), by_name["parley.nvim"])
 
 		-- Absolute subdir is left as-is for every member (uncommon, but supported).
 		local abs = parley.super_repo.expand_roots("/abs/path")
