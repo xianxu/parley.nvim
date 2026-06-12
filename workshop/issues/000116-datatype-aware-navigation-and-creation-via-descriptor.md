@@ -1,7 +1,7 @@
 ---
 id: 000116
-status: open
-deps: [000114, 000115]
+status: working
+deps: [000114]
 created: 2026-04-30
 updated: 2026-06-11
 estimate_hours: 20
@@ -144,3 +144,10 @@ whose instances *scatter* across the repo with no fixed home are NOT handled by
 the finder retrofit — parley doesn't handle scatter today anyway. This is purely
 a *finder/UI* limit: M1's frontmatter `Matcher` still discovers scatter types for
 the agent (#128), so the readonly harness isn't bound by the M2 simplification.
+
+Deps fixed (2026-06-11): removed **#115** from `deps` — it was circular after
+#115 was reframed to the faceted finder, which now `deps: [000116]`. #116 keeps
+`deps: [000114]` (super-repo, already landed). Separately, **#128's** hard dep on
+#116 was dropped — only its `repo_discovery` task needs #116 **M1**; the rest of
+#128 is independent (see #128 log). Operator-approved sequencing: **#116 M1 (now)
+→ #128 → bridge `repo_discovery` → #129 → #116 M2/M3**.
