@@ -469,13 +469,13 @@ M.parse_chat = function(lines, header_end, config)
 	end
 
 	-- Helper to extract @@ref@@ file references from a line of text.
-	-- Canonical form: @@<ref>@@ where ref starts with https://, /, ~/, or ./
+	-- Canonical form: @@<ref>@@ where ref starts with https://, /, ~/, ./, or ../
 	local function extract_file_refs(text)
 		local refs = {}
 		local seen = {}
 		for ref in text:gmatch("@@([^@]+)@@") do
 			ref = ref:gsub("^%s*(.-)%s*$", "%1")
-			if ref:match("^https?://") or ref:match("^/") or ref:match("^~/") or ref:match("^%./") then
+			if ref:match("^https?://") or ref:match("^/") or ref:match("^~/") or ref:match("^%./") or ref:match("^%.%./") then
 				if not seen[ref] then
 					seen[ref] = true
 					table.insert(refs, ref)

@@ -2,7 +2,7 @@
 
 ## Syntax
 - `@@<ref>@@` — only canonical form supported
-- Ref types: `@@https://...@@`, `@@/absolute@@`, `@@~/home@@`, `@@./relative@@`
+- Ref types: `@@https://...@@`, `@@/absolute@@`, `@@~/home@@`, `@@./relative@@`, `@@../parent@@`
 - No bare filenames, no colon syntax, no end-at-whitespace
 
 ## Behavior
