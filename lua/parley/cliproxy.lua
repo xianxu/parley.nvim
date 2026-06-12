@@ -64,6 +64,10 @@ function M.discover_binary()
             return c.binary_path
         end
     end
+    local managed = M.managed_binary() -- M2 auto-downloaded binary
+    if managed then
+        return managed
+    end
     for _, name in ipairs({ "cliproxyapi", "cli-proxy-api" }) do
         local p = vim.fn.exepath(name)
         if p ~= nil and p ~= "" then
@@ -283,9 +287,17 @@ function M.ensure_running(callback, on_error)
         end
         -- down → spawn our own
         local bin = M.discover_binary()
+        if not bin and (cfg() or {}).auto_download then
+            vim.notify("cliproxy: downloading binary (one-time)…", vim.log.levels.INFO)
+            local dlbin, derr = M.download()
+            if not dlbin then
+                return on_error("cliproxy: auto_download failed — " .. tostring(derr))
+            end
+            bin = dlbin
+        end
         if not bin then
             return on_error("cliproxy: no cliproxy binary found — `brew install cliproxyapi`, "
-                .. "set cliproxy.binary_path, or enable auto_download (M2)")
+                .. "set cliproxy.binary_path, or enable auto_download")
         end
         local pid, err = M.spawn(bin, path)
         if not pid then
@@ -410,6 +422,97 @@ function M.login_argv(provider)
     -- before any dispatch has run (best-effort; ignore render errors here).
     pcall(write_rendered_config)
     return { bin, "-config", config_path(), flag }
+end
+
+--------------------------------------------------------------------------------
+-- M2: auto_download — fetch a pinned release, checksum-verify, extract
+--------------------------------------------------------------------------------
+
+local RELEASE_BASE = "https://github.com/router-for-me/CLIProxyAPI/releases/download"
+local PINNED_VERSION = "7.1.71" -- pinned, NOT "latest" — reproducible
+
+local function bin_dir()
+    local dir = vim.fn.stdpath("data") .. "/parley/cliproxy/bin"
+    vim.fn.mkdir(dir, "p")
+    return dir
+end
+
+--- Path to the auto-downloaded binary, if present + executable.
+---@return string|nil
+function M.managed_binary()
+    local p = bin_dir() .. "/cli-proxy-api"
+    if vim.fn.executable(p) == 1 then
+        return p
+    end
+    return nil
+end
+
+local function sha256_of(path)
+    local cmd = vim.fn.executable("sha256sum") == 1
+        and { "sha256sum", path }
+        or { "shasum", "-a", "256", path }
+    local res = vim.system(cmd, { text = true }):wait()
+    return (res.stdout or ""):match("^(%x+)")
+end
+
+--- Download + checksum-verify + extract the pinned release into the managed
+--- bin dir. Synchronous (one-time setup; used by auto_download / :ParleyProxy
+--- update). Refuses to install on a checksum mismatch.
+---@param opts table|nil # { version, base_url } — base_url overridable for tests
+---@return string|nil binary_path, string|nil err
+function M.download(opts)
+    opts = opts or {}
+    local c = cfg() or {}
+    local version = opts.version or c.download_version or PINNED_VERSION
+    local base = opts.base_url or RELEASE_BASE
+    local plat = cc.platform()
+    if not plat then
+        return nil, "no published cliproxy release for this platform"
+    end
+    if plat.os == "windows" then
+        return nil, "auto_download does not support Windows (.zip) — install cliproxyapi manually"
+    end
+    local asset = cc.asset_name(version, plat)
+    local tarball_url = ("%s/v%s/%s"):format(base, version, asset)
+    local sums_url = ("%s/v%s/checksums.txt"):format(base, version)
+
+    local tmp = vim.fn.tempname() .. ".tar.gz"
+    local dl = vim.system({ "curl", "-fsSL", "-o", tmp, tarball_url }, { text = true }):wait()
+    if dl.code ~= 0 then
+        return nil, "download failed (" .. tarball_url .. "): " .. tostring(dl.stderr)
+    end
+    local sums = vim.system({ "curl", "-fsSL", sums_url }, { text = true }):wait()
+    if sums.code ~= 0 then
+        os.remove(tmp)
+        return nil, "checksums fetch failed: " .. tostring(sums.stderr)
+    end
+    local expected = cc.parse_checksums(sums.stdout or "", asset)
+    if not expected then
+        os.remove(tmp)
+        return nil, asset .. " not listed in checksums.txt"
+    end
+    local actual = sha256_of(tmp)
+    if not actual or actual ~= expected then
+        os.remove(tmp)
+        return nil, "checksum mismatch for " .. asset .. " — refusing to install (expected "
+            .. expected .. ", got " .. tostring(actual) .. ")"
+    end
+    local dir = bin_dir()
+    local ex = vim.system({ "tar", "-xzf", tmp, "-C", dir, "cli-proxy-api" }, { text = true }):wait()
+    os.remove(tmp)
+    if ex.code ~= 0 then
+        return nil, "extract failed: " .. tostring(ex.stderr)
+    end
+    local bin = dir .. "/cli-proxy-api"
+    local fs_chmod = uv.fs_chmod or vim.loop.fs_chmod
+    fs_chmod(bin, tonumber("755", 8))
+    return bin
+end
+
+--- Re-fetch the pinned binary (for :ParleyProxy update).
+---@return string|nil binary_path, string|nil err
+function M.update()
+    return M.download()
 end
 
 return M

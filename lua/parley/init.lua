@@ -293,7 +293,7 @@ local show_keybindings
 --- into — `status` just reports `managed: false`.
 ---@param prefix string # M.config.cmd_prefix (e.g. "Parley")
 M.register_proxy_command = function(prefix)
-	local SUBS = { "status", "start", "stop", "restart", "login" }
+	local SUBS = { "status", "start", "stop", "restart", "login", "update" }
 
 	vim.api.nvim_create_user_command(prefix .. "Proxy", function(params)
 		local cliproxy = require("parley.cliproxy")
@@ -322,6 +322,14 @@ M.register_proxy_command = function(prefix)
 		elseif sub == "stop" then
 			local n = cliproxy.stop()
 			vim.notify("cliproxy: stopped " .. n .. " parley-spawned proxy(ies)", vim.log.levels.INFO)
+		elseif sub == "update" then
+			vim.notify("cliproxy: downloading pinned release…", vim.log.levels.INFO)
+			local bin, err = cliproxy.update()
+			if bin then
+				vim.notify("cliproxy: updated → " .. bin, vim.log.levels.INFO)
+			else
+				vim.notify("cliproxy: update failed — " .. tostring(err), vim.log.levels.ERROR)
+			end
 		elseif sub == "restart" then
 			cliproxy.restart(function()
 				vim.notify("cliproxy: restarted", vim.log.levels.INFO)
