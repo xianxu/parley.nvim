@@ -47,6 +47,8 @@
 | `Cliproxy.discover_binary` | `lua/parley/cliproxy.lua` | new | PATH / fs |
 | `Cliproxy` commands | `lua/parley/cliproxy.lua` + `init.lua` | new | user commands |
 | `cliproxyapi.pre_query` | `lua/parley/providers.lua` | modified | dispatcher seam |
+| `D.query` abort channel | `lua/parley/dispatcher.lua` | modified | pre_query error → caller teardown |
+| `on_abort` teardown | `lua/parley/chat_respond.lua` | modified | spinner / progress indicator |
 | `fake_cliproxy` | `tests/fixtures/fake_cliproxy.lua` | new | process-level fake |
 
 - **Cliproxy.ensure_running(callback, on_error)** — the heart. Reads `M.config.cliproxy` + the resolved endpoint, resolves the secret via `vault.get_secret("cliproxyapi")`, renders + writes `config.yaml` (`0600`), health-probes host:port; if healthy → `callback()`; if down → `discover_binary` → `spawn` → poll health (bounded ~5s) → `callback()`; on any failure → `on_error(msg)` so the dispatch path fails fast, never hangs.
@@ -62,7 +64,12 @@
 
 - **Cliproxy commands** — `:ParleyProxy status|start|stop|restart|login`, registered in `init.lua` under `M.config.cmd_prefix`. `login` shells out to `cli-proxy-api login [--no-browser]`; `status` reports binary source, health/auth state, host:port, auth-dir, rendered-config path, and config-drift.
 
-- **cliproxyapi.pre_query** — a 6-line adapter hook delegating to `require("parley.cliproxy").ensure_running`. ARCH-DRY: reuses the dispatcher's existing `pre_query` mechanism (dispatcher.lua:387) — copilot already proves the pattern. No-op (immediate callback) when `manage` is off.
+- **cliproxyapi.pre_query** — adapter hook `pre_query(on_success, on_error)` delegating to `require("parley.cliproxy").ensure_running(on_success, on_error)`. ARCH-DRY: reuses the dispatcher's existing `pre_query` mechanism (dispatcher.lua:387) — copilot already proves the pattern. No-op (`on_success()`) when `manage` is off. The `on_error` is the new **abort channel** (below).
+
+- **D.query abort channel** *(dispatcher.lua, modified)* — **why this exists:** the caller (`chat_respond.lua`) starts a spinner *before* `D.query` and only tears it down inside the query's `on_exit` (which is **qid-coupled** — `chat_respond.lua:1488-1493`, `if not qt then return`). If `pre_query` aborts and never runs `query()`, there is no qid, so `on_exit` can't fire and **the spinner spins forever** — the chat visibly hangs, violating the spec's "dispatch must never hang." Fix: `pre_query` gains a second arg `on_error`; `D.query` gains a trailing optional `on_abort` param. On a pre_query error the dispatcher invokes `on_abort(msg)` (qid-free) instead of `query()`. Contract is additive — copilot's one-arg `pre_query` ignores the extra arg (backward compatible).
+  - **Injected into:** `chat_respond.lua` passes `on_abort` into `D.query`.
+
+- **on_abort teardown** *(chat_respond.lua, modified, both `D.query` sites — ~814 topic-gen and ~1483 main)* — a qid-free cleanup the dispatcher calls on abort: `stop_spinner()` + clear the progress-indicator line + `vim.notify(msg, WARN)` carrying the actionable error (e.g. "cliproxy down — run :ParleyProxy status / login"). This is the delivery mechanism for the spec's "clear, specific error."
 
 - **fake_cliproxy** — a real subprocess (Lua via `nvim -l`, or a tiny TCP listener) used by integration tests. Modes: `healthy` (answers identity route 200), `foreign` (200 wrong shape), `unauth` (401), `slow` (never healthy), `crash` (exits immediately). Process-level per AGENTS.md external-service rule — function mocks would miss the reuse-vs-spawn and identity-classification bugs.
 
@@ -87,9 +94,12 @@
       - lua/parley/cliproxy_config.lua
       - lua/parley/cliproxy.lua
       - lua/parley/providers.lua
+      - lua/parley/dispatcher.lua
+      - lua/parley/chat_respond.lua
     tests:
       - tests/unit/cliproxy_config_spec.lua
       - tests/unit/providers_pre_query_spec.lua
+      - tests/unit/dispatcher_query_spec.lua
       - tests/integration/cliproxy_lifecycle_spec.lua
       - tests/integration/cliproxy_dispatch_spec.lua
 ```
@@ -319,6 +329,7 @@ end
 - [ ] **Step 1:** Install a real binary locally (`brew install cliproxyapi` or download a pinned release tarball for this machine). Record the version + identity route in `## Log`.
 - [ ] **Step 2:** In a scratch nvim, build a minimal config via `cliproxy_config.render` + `encode`, write it to a temp `.yaml`, and run `cli-proxy-api --config <tmp>`.
 - [ ] **Step 3:** Confirm it boots and answers an HTTP probe. **Decide the identity route** (`/health` vs `/v1/models`) and record it. Also confirm `auth-dir` `~` handling: the cliproxy docs say `auth-dir` "supports `~` for home directory", so `render` writes it **literally** (no `vim.fn.expand`) — verify the booted proxy resolves `~` itself; record the result.
+- [ ] **Step 4: Confirm what a 401 on the identity route actually means** (plan-quality INFO). The rendered `api-keys` is the *client→proxy* token; a 401 might mean the probe sent a wrong/absent client key, **not** that upstream OAuth is missing. Probe with and without the bearer, with and without a completed `login`, and record which status/body distinguishes "up but client-unauthenticated" from "up but no upstream OAuth". `status`'s auth-state reporting (Task 2.5) is built on this recorded fact, not a guess.
 - [ ] **GO:** proceed. **NO-GO** (parser rejects JSON): add a nested+list YAML emitter as Task 1.4 (its own sub-task — *not* a flat emitter; spec says flat is non-viable), then continue. Log the decision either way.
 
 ### Task 2.1: `discover_binary`
@@ -363,7 +374,7 @@ Also implement `M.is_managed()` → `M.config.cliproxy and M.config.cliproxy.man
 - [ ] **Step 3: Implement** `ensure_running(callback, on_error)`:
   1. read `M.config.cliproxy`; if `manage` is not true → `callback()` immediately (no-op path).
   2. `host, port = cliproxy_config.parse_endpoint(D.providers.cliproxyapi.endpoint)`.
-  3. `secret = vault.get_secret("cliproxyapi")`.
+  3. `secret = vault.get_secret(require("parley.providers").get_secret_name("cliproxyapi"))` — derive the secret name via the codebase's single source (providers.lua:1282), don't hardcode the literal (ARCH-DRY).
   4. `cfg, overrides = cliproxy_config.render{...}`; if `#overrides>0` log a warning naming them; write `encode(cfg)` to `stdpath('data')/parley/cliproxy/config.yaml` at `0600`.
   5. `health_probe` → `healthy`: `callback()`. `foreign`: `on_error`. `unauthenticated`: `on_error` (login). `down`: `discover_binary` (nil → `on_error` naming `brew install`/`auto_download`) → `spawn` → poll `health_probe` every ~250ms up to ~5s → healthy `callback()` / else `on_error("timed out")`. Crash mid-poll → `on_error("exited")`.
 - [ ] **Step 4: Run** → all PASS.
@@ -383,26 +394,51 @@ Also implement `M.is_managed()` → `M.config.cliproxy and M.config.cliproxy.man
 
 `## Chunk 3` — `lua/parley/providers.lua`, `lua/parley/init.lua`, `tests/unit/providers_pre_query_spec.lua`, `tests/integration/cliproxy_dispatch_spec.lua`.
 
+### Task 3.0: `D.query` abort channel (so an aborted pre_query can't hang the chat)
+
+**Files:** Modify `lua/parley/dispatcher.lua` (`D.query`, lines 385-397); Test `tests/unit/dispatcher_query_spec.lua` (exists — add cases).
+
+**Why first:** without this, the `pre_query` error path (Task 3.1) has nowhere to deliver an abort, and the caller's qid-coupled `on_exit` can't tear down the spinner (see the "D.query abort channel" entity above). This task builds the channel; 3.1–3.3 use it.
+
+- [ ] **Step 1: Failing test** — stub an adapter whose `pre_query(on_success, on_error)` calls `on_error("boom")`. Call `D.query(..., on_abort)` with a spy `on_abort`. Assert: `on_abort` was called with `"boom"`, and the real `query()` (curl/tasker) was **not** invoked (spy `tasker.run` / no temp file written). Add a second case: an adapter with `pre_query(on_success)` that calls `on_success()` → query proceeds as before (backward compat); and a no-`pre_query` adapter → unchanged.
+- [ ] **Step 2: Run** `make test-spec SPEC=providers/cliproxy-managed` (after Step 0 maps `dispatcher_query_spec.lua`; or run that file directly) → FAIL.
+- [ ] **Step 3: Implement** — extend the signature to `D.query(buf, provider, payload, handler, on_exit, callback, on_progress, on_abort)` and the `pre_query` branch:
+
+```lua
+if adapter.pre_query then
+    return vault.run_with_secret(provider, function()
+        adapter.pre_query(function()
+            query(buf, provider, payload, handler, on_exit, callback, on_progress)
+        end, function(msg)  -- NEW: abort channel
+            require("parley.logger").error("pre_query abort [" .. provider .. "]: " .. tostring(msg))
+            if type(on_abort) == "function" then on_abort(msg) end
+        end)
+    end)
+end
+```
+
+The second `pre_query` arg is additive: copilot's `pre_query = function(callback)` simply ignores it (backward compatible). Add `dispatcher_query_spec.lua` to the `providers/cliproxy-managed` traceability entry (Step 0).
+
+- [ ] **Step 4: Run** → PASS. **Step 5: Commit** `#131 M1: D.query abort channel (pre_query on_error → on_abort)`
+
 ### Task 3.1: `cliproxyapi.pre_query` adapter hook (the DRY seam)
 
 **Files:** Modify `lua/parley/providers.lua` (cliproxyapi adapter, ~line 993); Test `tests/unit/providers_pre_query_spec.lua`.
 
-- [ ] **Step 1: Failing test** — `cliproxyapi.pre_query` exists; with `manage=false` it calls its callback synchronously (no-op); with `manage=true` it delegates to an injected `ensure_running` (inject a stub via the module to avoid real IO).
+- [ ] **Step 1: Failing test** — `cliproxyapi.pre_query(on_success, on_error)` exists; with `manage=false` it calls `on_success` synchronously (no-op, `on_error` untouched); with `manage=true` it delegates to an injected `ensure_running` passing **both** callbacks (inject a stub via the module to avoid real IO — assert the stub received the same `on_success`/`on_error`).
 - [ ] **Step 2: Run** → FAIL.
 - [ ] **Step 3: Implement**
 
 ```lua
 -- providers.lua, cliproxyapi adapter:
-cliproxyapi.pre_query = function(callback)
+cliproxyapi.pre_query = function(on_success, on_error)
     local ok, cliproxy = pcall(require, "parley.cliproxy")
     if not ok or not cliproxy.is_managed() then
-        return callback()  -- no-op: bring-your-own / not opted in
+        return on_success()  -- no-op: bring-your-own / not opted in
     end
-    cliproxy.ensure_running(callback, function(msg)
-        require("parley.logger").error("cliproxy: " .. msg)
-        -- do NOT call callback → the query is aborted, surfaced via logger;
-        -- the chat does not hang (dispatcher returns).
-    end)
+    -- ensure_running drives on_error → the dispatcher's abort channel (Task 3.0)
+    -- → the caller's on_abort teardown (Task 3.2). The chat never hangs.
+    cliproxy.ensure_running(on_success, on_error or function() end)
 end
 ```
 
@@ -410,7 +446,16 @@ ARCH-DRY: reuses the dispatcher's existing `pre_query` path (dispatcher.lua:387)
 
 - [ ] **Step 4: Run** → PASS. **Step 5: Commit** `#131 M1: cliproxyapi.pre_query delegates to ensure_running`
 
-### Task 3.2: register `:ParleyProxy` command
+### Task 3.2: wire `on_abort` teardown at the `D.query` call sites
+
+**Files:** Modify `lua/parley/chat_respond.lua` (both `D.query` sites: topic-gen ~814, main response ~1483); Test `tests/integration/cliproxy_dispatch_spec.lua` (the spinner-stop assertion the plan-quality judge required).
+
+- [ ] **Step 1: Failing test** — drive a cliproxy dispatch whose `ensure_running` fails (discovered binary = `fake_cliproxy --mode crash`); assert the spinner timer is **stopped** and the progress indicator cleared (e.g. expose `spinner_running`/an indicator flag for the test, or assert the indicator line is gone), and that a WARN notification fired. This is the test that would have caught the hang.
+- [ ] **Step 2: Run** → FAIL (spinner still running).
+- [ ] **Step 3: Implement** — define a qid-free `on_abort(msg)` in the response closure that calls `stop_spinner()`, clears the progress-indicator line, and `vim.notify(msg, vim.log.levels.WARN)`; pass it as the new trailing `on_abort` arg to `_parley.dispatcher.query(...)`. Repeat at the topic-gen site (its own spinner). Non-cliproxy providers never abort (their `pre_query` is absent or calls `on_success`), so `on_abort` is simply never invoked — zero behavior change for them.
+- [ ] **Step 4: Run** → PASS. **Step 5: Commit** `#131 M1: on_abort spinner/indicator teardown (no-hang on ensure_running failure)`
+
+### Task 3.3: register `:ParleyProxy` command
 
 **Files:** Modify `lua/parley/init.lua` (near the command/hook registration, ~line 591).
 
@@ -418,21 +463,21 @@ ARCH-DRY: reuses the dispatcher's existing `pre_query` path (dispatcher.lua:387)
 - [ ] **Step 2–4:** Register `M.config.cmd_prefix .. "Proxy"` → dispatch on the subcommand arg to `cliproxy.status/start/stop/restart/login`. Provide completion for the subcommands.
 - [ ] **Step 5: Commit** `#131 M1: :ParleyProxy command`
 
-### Task 3.3: end-to-end dispatch integration (the Done-when proof)
+### Task 3.4: end-to-end dispatch integration (the Done-when proof)
 
 **Files:** Test `tests/integration/cliproxy_dispatch_spec.lua`.
 
-- [ ] **Step 1: Failing test** — configure a cliproxy agent whose endpoint points at a free port; no proxy running; the discovered "binary" is `fake_cliproxy --mode healthy`. Drive a dispatch (or call `D.query` for the cliproxy provider) and assert: config.yaml was rendered (with the secret in `api-keys`, `0600`), the fake was spawned, became healthy, and the query proceeded. Then a second dispatch **reuses** (no second spawn). Then `:ParleyProxy stop`; the next dispatch **re-spawns** (auto-revive — spec §"stop is transient").
+- [ ] **Step 1: Failing test** — configure a cliproxy agent whose endpoint points at a free port; no proxy running; the discovered "binary" is `fake_cliproxy --mode healthy`. Drive a dispatch (or call `D.query` for the cliproxy provider) and assert: config.yaml was rendered (with the secret in `api-keys`, `0600`), the fake was spawned, became healthy, and the query proceeded. Then a second dispatch **reuses** (no second spawn). Then `:ParleyProxy stop`; the next dispatch **re-spawns** (auto-revive — spec §"stop is transient"). Plus the **abort case** from Task 3.2 (failure → spinner stopped + WARN), proving the no-hang invariant end-to-end.
 - [ ] **Step 2: Run** → FAIL. **Step 3:** fix wiring until green. **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit** `#131 M1: e2e dispatch integration (render→spawn→reuse→revive)`
+- [ ] **Step 5: Commit** `#131 M1: e2e dispatch integration (render→spawn→reuse→revive + abort no-hang)`
 
-### Task 3.4: docs + README + atlas
+### Task 3.5: docs + README + atlas
 
 - [ ] Add a `cliproxy = { manage = true, ... }` example to `README.md` (provider section ~line 141) and the config docstring in `lua/parley/config.lua`. State the one manual step (`:ParleyProxy login`) and that it's opt-in/off-by-default.
 - [ ] Add `atlas/providers/cliproxy-managed.md` (the lifecycle + config-render flow) and link it from `atlas/index.md` (AGENTS.md §8).
 - [ ] **Commit** `#131 M1: docs + atlas for managed cliproxy`
 
-### Task 3.5: close M1
+### Task 3.6: close M1
 
 - [ ] `make test` green (unit + integration) on macOS; run the same on a Linux box/CI (spec platform scope).
 - [ ] `sdlc milestone-close --issue 131 --milestone M1 ...` (boundary review auto-dispatches; fix Critical/Important before crossing). Tick the M1 row.
@@ -455,5 +500,5 @@ ARCH-DRY: reuses the dispatcher's existing `pre_query` path (dispatcher.lua:387)
 
 - **Pure** (`cliproxy_config`): `tests/unit/cliproxy_config_spec.lua`, no mocks (ARCH-PURE boundary visible from outside).
 - **IO** (`cliproxy`): `tests/integration/cliproxy_lifecycle_spec.lua` + `tests/fixtures/fake_cliproxy.lua` — a real subprocess speaking the identity route, exercising reuse/spawn/foreign/timeout/crash/unauth. No function-call mocks for the proxy.
-- **Wiring**: `tests/unit/providers_pre_query_spec.lua` (no-op vs delegate) + `tests/integration/cliproxy_dispatch_spec.lua` (the Done-when e2e).
+- **Wiring**: `tests/unit/dispatcher_query_spec.lua` (abort channel: pre_query `on_error` → `on_abort`, query not run) + `tests/unit/providers_pre_query_spec.lua` (no-op vs delegate) + `tests/integration/cliproxy_dispatch_spec.lua` (the Done-when e2e **including the abort case**: ensure_running failure → spinner stopped + WARN, the no-hang proof).
 - Run: `make test-unit`, `make test-spec SPEC=<key>`, `make test` (full).

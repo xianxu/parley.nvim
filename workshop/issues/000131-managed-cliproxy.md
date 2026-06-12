@@ -253,3 +253,17 @@ Platform:
   `pre_query` fires.
 - Branch hygiene: #131 spec commits were relocated off the in-flight #128 branch
   onto a fresh `000131-managed-cliproxy` branch based on `main`; #128 restored.
+- `change-code` plan-quality gate FAILED (correctly): the planned abort path
+  (pre_query not calling its callback) returns from `D.query` cleanly but leaves
+  the caller's spinner — started in `chat_respond.lua` *before* `D.query`, torn
+  down only in the qid-coupled `on_exit` — running forever, so the chat hangs
+  from the user's view (violates "dispatch must never hang"). Both prior reviews
+  missed it (they stopped at `D.query`, not the caller). Plan revised: add an
+  **abort channel** — `pre_query(on_success, on_error)` + a trailing `on_abort`
+  on `D.query`; on pre_query error the dispatcher calls `on_abort`, and
+  `chat_respond` passes a qid-free `on_abort` that stops the spinner + clears the
+  indicator + `vim.notify`s the actionable error. New Task 3.0 (dispatcher) +
+  3.2 (chat_respond teardown) + a spinner-stopped test (Task 3.2/3.4). Also
+  folded: 401-semantics decision into the Task 2.0 gating check; secret name via
+  `providers.get_secret_name` not a literal (ARCH-DRY). Contract is additive —
+  copilot's one-arg `pre_query` ignores the new arg.
