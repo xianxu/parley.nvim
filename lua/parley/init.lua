@@ -68,6 +68,13 @@ M.super_repo = super_repo
 M.toggle_super_repo = function() return super_repo.toggle() end
 M.is_super_repo_active = function() return super_repo.is_active() end
 
+-- Discovery registry (#116): the repo's noun-vocabulary (what file types exist
+-- and how to find their instances). Pure given mode context; current() reads it
+-- from live config (repo_root + super_repo_members) via the injected M ref.
+local discovery = require("parley.discovery")
+discovery.setup(M)
+M.discovery = discovery
+
 -- Memory preferences module (loaded here; wired up immediately since it only needs M reference)
 local memory_prefs = require("parley.memory_prefs")
 memory_prefs.setup(M)

@@ -58,13 +58,13 @@ Datatypes can reference instances across repos (e.g., `brain/data/project/charon
 
 ## Plan
 
-- [ ] design discussion: pick descriptor format (1/2/3 above)
-- [ ] write the descriptor into one prototype as a pilot — likely `pensive` (small, well-defined)
-- [ ] parley: descriptor parser + type registry
-- [ ] parley: typed picker, wire to `<C-g>m`; preserve `<C-g>M`
-- [ ] parley: "new instance" command using template
-- [ ] roll descriptor into remaining prototypes
-- [ ] update `construct/datatype/type.md` (the meta-prototype) so future prototypes ship with a descriptor by default
+Decomposed into review-boundary milestones (task detail:
+`workshop/plans/000116-discovery-registry-plan.md`). The original design-phase
+checklist is folded into M1/M3 below.
+
+- [x] M1 — discovery registry core: base ∪ local composition, `query()` → DiscoverySpec, `render()` noun-vocabulary (the #128 `repo_discovery` unblock)
+- [ ] M2 — finders source their home root folder from the registry (`<C-g>m` stays the type-blind escape hatch; the faceted picker is #115)
+- [ ] M3 — embedded descriptor format + human-driven new-instance scaffolding; update `construct/datatype/type.md` so future prototypes ship a descriptor
 
 ## Revisions
 
@@ -112,6 +112,7 @@ slice it borrows from a repo's agent substrate. Deltas to this issue:
 Issue filed off the duality pensive. See pensive for the framing context and the open questions that motivated this.
 
 ### 2026-06-11
+- 2026-06-11: closed M1 — discovery registry core (matcher/descriptor/base/registry/merge/local_types/builder); full suite lint 0/0 + 88 spec files pass; 69 discovery assertions green; atlas+traceability added. **Boundary-review arc: REWORK → FIX-THEN-SHIP → SHIP.** First review caught a real Critical (C1: `current()` read the immutable default config → base-only in every mode; my "8-noun" smoke check was the bug's signature) + I1/I2; fixed via live-config injection (`discovery.setup`), `base.build(config)`, relative find-hint precompute. Re-review (FIX-THEN-SHIP) → fixed I-A (shellescape spec_to_command) + I-C (extracted pure `merge.lua`) + tightened `descriptor.validate`. I-B (built-registry absolute-glob execution) consciously **carried to M2** (documented + test-pinned; #128 consumes `render()`, not `query()`, so M1's deliverable is unaffected). Final review verdict: **SHIP (high confidence).**
 
 Brain design conversation settled product behavior for the readonly-harness
 direction — see `## Revisions`. New siblings: **parley.nvim#128** (skill-system
@@ -151,3 +152,19 @@ Deps fixed (2026-06-11): removed **#115** from `deps` — it was circular after
 #116 was dropped — only its `repo_discovery` task needs #116 **M1**; the rest of
 #128 is independent (see #128 log). Operator-approved sequencing: **#116 M1 (now)
 → #128 → bridge `repo_discovery` → #129 → #116 M2/M3**.
+
+### 2026-06-11 — M1 implemented (registry core)
+
+Executed the plan's Tasks 1–8 TDD-first (8 commits 7e4d95f…28baeeb). New
+`lua/parley/discovery/` module: `matcher` (4 discriminator kinds, pure) ·
+`descriptor` (shape + validate) · `base` (8 parley-shipped nouns, config-derived
+globs) · `registry` (`of/get/names/query/spec_to_command/render`, all pure) ·
+`local_types` (grep novel `type:` minus base, hyphen-safe) · `init`
+(RegistryBuilder — base ∪ local, repo/super-repo aware, glob merge). Exposed as
+`parley.discovery`. 39 new discovery assertions; full suite green (lint 0/0, 87
+spec files pass). Atlas: `atlas/discovery/registry.md` (§11) + traceability key.
+
+Restructured `## Plan` from the pre-decomposition design checklist into M1/M2/M3
+review-boundary rows (the milestone the binary ticks). Side-quest 6ab6ad8 fixed
+a pre-existing `highlighter_spec.lua` lint warning that was red at the branch
+base and blocked the green-suite gate. M1 done-when met → **#128 unblocked.**

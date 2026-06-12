@@ -96,17 +96,17 @@ Follow parley conventions: modules `local M = {} … return M`; tests use `plena
 
 `M.match(matcher, path, fm)` is pure over `(path, frontmatter_table)`. **Note:** the `fm` table is produced by the *caller* per candidate, and that producer is not uniform (datatype docs → YAML frontmatter; `chat` → parley's chat-header parse via `chat_parser.parse_header_key_value`). Producing `fm` is an M2 concern; the matcher only consumes the table, so M1 stays agnostic to the parse.
 
-- [ ] **Step 1: Write failing tests** — `M.match(matcher, path, fm)` for each kind:
+- [x] **Step 1: Write failing tests** — `M.match(matcher, path, fm)` for each kind:
   - `frontmatter` `{field="type",value="pensive"}`: matches `fm={type="pensive"}`, rejects `fm={type="prose"}` and `fm={}`.
   - `frontmatter_present` `{field="file"}`: matches `fm={file="x"}`, rejects `fm={}`.
   - `filename` `{pattern="^%d%d%d%d%d%d%-"}`: matches basename of `path="workshop/issues/000128-x.md"`, rejects `path="notes/foo.md"`. **Also assert** it matches `path="workshop/plans/000116-x-plan.md"` — the predicate is basename-only and does NOT distinguish issue from plan; disambiguation is the `locate` glob's job (Task 3/Task 4). This documents the invariant: *a `filename` matcher is only sound within its descriptor's `locate` scope.*
   - `any`: always true.
   - unknown kind → `error` (fail-loud: a malformed matcher is a programming bug, never valid input).
-- [ ] **Step 2: Run, verify fail** (module missing):
+- [x] **Step 2: Run, verify fail** (module missing):
   `nvim --headless -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/discovery_matcher_spec.lua"`
-- [ ] **Step 3: Implement** `M.match` as a dispatch on `matcher.kind` (pure; no IO). Provide `M.KINDS` constant for validation reuse.
-- [ ] **Step 4: Run, verify pass** (same command).
-- [ ] **Step 5: Commit** — `#116 M1: matcher predicate (pure discriminator kinds)`.
+- [x] **Step 3: Implement** `M.match` as a dispatch on `matcher.kind` (pure; no IO). Provide `M.KINDS` constant for validation reuse.
+- [x] **Step 4: Run, verify pass** (same command). _11/11 green._
+- [x] **Step 5: Commit** — `#116 M1: matcher predicate (pure discriminator kinds)`. _7e4d95f_
 
 ### Task 2: TypeDescriptor shape + validation (PURE)
 
@@ -114,13 +114,13 @@ Follow parley conventions: modules `local M = {} … return M`; tests use `plena
 - Create: `lua/parley/discovery/descriptor.lua`
 - Test: `tests/unit/discovery_descriptor_spec.lua`
 
-- [ ] **Step 1: Write failing tests** — `M.validate(desc)` returns `(ok, err)`:
+- [x] **Step 1: Write failing tests** — `M.validate(desc)` returns `(ok, err)`:
   - valid descriptor (all required fields + a valid matcher) → `(true, nil)`.
   - missing `name`/`locate`/`matcher` → `(false, "<specific field>")`.
   - `scope` not in `{base, local}` → false.
   - `matcher` failing `matcher.KINDS` membership → false (delegates to Task 1's `KINDS`).
-- [ ] **Step 2–4:** fail → implement `validate` (mirror `tools/types.lua` style) → pass.
-- [ ] **Step 5: Commit** — `#116 M1: TypeDescriptor shape + validation`.
+- [x] **Step 2–4:** fail → implement `validate` (mirror `tools/types.lua` style) → pass. _9/9 green._
+- [x] **Step 5: Commit** — `#116 M1: TypeDescriptor shape + validation`. _f1a91d0_
 
 ### Task 3: base_registry data (PURE data)
 
@@ -128,13 +128,13 @@ Follow parley conventions: modules `local M = {} … return M`; tests use `plena
 - Create: `lua/parley/discovery/base.lua`
 - Test: `tests/unit/discovery_base_spec.lua`
 
-- [ ] **Step 1: Write failing tests:**
+- [x] **Step 1: Write failing tests:**
   - `M.descriptors` is a list; every entry passes `descriptor.validate`.
   - contains exactly the base nouns: `chat, note, vision, issue, plan, pensive, prose, continuation` (assert names present).
   - `chat` uses `frontmatter_present field=file`; `note`/`plan`/`vision` use `any`; `issue` uses `filename`; `pensive`/`prose`/`continuation` use `frontmatter type=<name>`.
   - locate globs carry correct extension (`vision` → `*.yaml`; rest → `*.md`).
-- [ ] **Step 2–4:** fail → author the static table → pass. Locations from the audit. **Derive dir-backed globs from config, not literals** (`ARCH-DRY`): `issue`→`config.issues_dir .. "/*.md"`, `vision`→`config.vision_dir .. "/*.yaml"`, `chat`→chat roots, `note`→note roots (read the same config keys `repo_mode.md` uses; repo mode demotes the globals). `plan` has **no config key** (parley doesn't auto-create `workshop/plans/`) — use the literal `workshop/plans/*.md` with a comment noting the absent key. `pensive`→`**/*.md` (no fixed home; the matcher discriminates).
-- [ ] **Step 5: Commit** — `#116 M1: base registry (parley-shipped universal + native types)`.
+- [x] **Step 2–4:** fail → author the static table → pass. _6/6 green._ Locations from the audit. **Derive dir-backed globs from config, not literals** (`ARCH-DRY`): `issue`→`config.issues_dir .. "/*.md"`, `vision`→`config.vision_dir .. "/*.yaml"`, `chat`→chat roots, `note`→note roots (read the same config keys `repo_mode.md` uses; repo mode demotes the globals). `plan` has **no config key** (parley doesn't auto-create `workshop/plans/`) — use the literal `workshop/plans/*.md` with a comment noting the absent key. `pensive`→`**/*.md` (no fixed home; the matcher discriminates). _Resolution: chat/note carry BOTH repo-primary (`repo_chat_dir`/`repo_note_dir`) and demoted-global (`chat_dir`/`notes_dir`) globs._
+- [x] **Step 5: Commit** — `#116 M1: base registry (parley-shipped universal + native types)`. _0d7026a_
 
 ### Task 4: Registry — `of` / `get` / `query` → DiscoverySpec (PURE)
 
@@ -142,15 +142,15 @@ Follow parley conventions: modules `local M = {} … return M`; tests use `plena
 - Create: `lua/parley/discovery/registry.lua`
 - Test: `tests/unit/discovery_registry_spec.lua`
 
-- [ ] **Step 1: Write failing tests:**
+- [x] **Step 1: Write failing tests:** _(unknown-type contract settled → `nil`, per plan-quality advisory, mirrors `get`)_
   - `Registry.of(base.descriptors):get("pensive")` returns the descriptor; `get("nope")` → nil.
   - `registry:query("pensive","duality")` → spec `{roots=<pensive locate>, frontmatter={field="type",value="pensive"}, content_term="duality"}`.
   - `registry:query("note","async")` → spec with `frontmatter=nil` (note matcher is `any`), `content_term="async"`.
-  - `query` of unknown type → nil (or error — test the chosen contract).
+  - `query` of unknown type → nil.
   - `query("issue")` and `query("plan")` produce specs whose `roots` differ (`workshop/issues/*` vs `workshop/plans/*`) — proving the `locate` glob (not the basename matcher) separates the two identical `NNNNNN-slug` filename conventions.
   - `spec_to_command(spec)` renders the expected `rg` pipeline string (frontmatter case → `rg -l '^type: pensive' … | xargs rg -il 'duality'`; any case → glob roots → `rg -il 'async'`).
-- [ ] **Step 2–4:** fail → implement `of`/`get`/`names`/`query`/`spec_to_command` (all pure) → pass.
-- [ ] **Step 5: Commit** — `#116 M1: Registry query → DiscoverySpec + command compilation`.
+- [x] **Step 2–4:** fail → implement `of`/`get`/`names`/`query`/`spec_to_command` (all pure) → pass. _12/12 green. Roots rendered as rg `-g` globs + search-path `.`; `--files` for the no-filter/no-term case._
+- [x] **Step 5: Commit** — `#116 M1: Registry query → DiscoverySpec + command compilation`. _cb50829_
 
 ### Task 5: Registry — `render()` for #128 (PURE)
 
@@ -158,9 +158,9 @@ Follow parley conventions: modules `local M = {} … return M`; tests use `plena
 - Modify: `lua/parley/discovery/registry.lua`
 - Test: `tests/unit/discovery_registry_spec.lua` (extend)
 
-- [ ] **Step 1: Write failing test:** `registry:render()` returns a string that (a) lists every type's `label`, (b) includes each `blurb`, (c) includes a search hint per type, (d) is stable/sorted by name. Assert a couple of representative lines verbatim (e.g. the `pensive` and `chat` lines) so the #128 skill body has a contract.
-- [ ] **Step 2–4:** fail → implement `render` (deterministic, sorted; this is the noun-vocabulary the `repo_discovery` skill embeds) → pass.
-- [ ] **Step 5: Commit** — `#116 M1: Registry.render() noun-vocabulary (the #128 consumer surface)`.
+- [x] **Step 1: Write failing test:** `registry:render()` returns a string that (a) lists every type's `label`, (b) includes each `blurb`, (c) includes a search hint per type, (d) is stable/sorted by name. Assert a couple of representative lines verbatim (e.g. the `pensive` and `chat` lines) so the #128 skill body has a contract.
+- [x] **Step 2–4:** fail → implement `render` (deterministic, sorted; this is the noun-vocabulary the `repo_discovery` skill embeds) → pass. _16/16 green. find-hint derived from matcher/locate (DRY, deterministic — no absolute globs); base blurbs simplified to "what it is" so the how-to lives only in the derived hint._
+- [x] **Step 5: Commit** — `#116 M1: Registry.render() noun-vocabulary (the #128 consumer surface)`. _423d02c_
 
 ### Task 6: LocalTypeDiscovery (INTEGRATION — wraps `rg`)
 
@@ -168,13 +168,13 @@ Follow parley conventions: modules `local M = {} … return M`; tests use `plena
 - Create: `lua/parley/discovery/local_types.lua`
 - Test: `tests/integration/discovery_local_types_spec.lua`
 
-- [ ] **Step 1: Write failing test** with a temp fixture dir: write 4 files — `a.md` (`type: pensive`), `b.md` (`type: widget`), `c.md` (`type: gadget`), `d.md` (`type: widget-spec`). `M.discover(root, base_names)` where `base_names` includes `pensive` (not `widget`/`gadget`/`widget-spec`) → returns descriptors for `widget`, `gadget`, **and `widget-spec`** only (novel `type:` minus base), each a valid `local` descriptor with `matcher.frontmatter value=<name>`. The `widget-spec` case guards hyphen handling (Step 3).
+- [x] **Step 1: Write failing test** with a temp fixture dir: write 4 files — `a.md` (`type: pensive`), `b.md` (`type: widget`), `c.md` (`type: gadget`), `d.md` (`type: widget-spec`). `M.discover(root, base_names)` where `base_names` includes `pensive` (not `widget`/`gadget`/`widget-spec`) → returns descriptors for `widget`, `gadget`, **and `widget-spec`** only (novel `type:` minus base), each a valid `local` descriptor with `matcher.frontmatter value=<name>`. The `widget-spec` case guards hyphen handling (Step 3).
   - edge: a repo with no novel types → empty list.
   - edge: file with no `type:` → ignored.
-- [ ] **Step 2: Run, verify fail.**
-- [ ] **Step 3: Implement** — discover novel types over `root`, parse values, subtract base, synthesize descriptors. Invoke rg via `grep.lua`'s pattern — load-time `detect_grep()` then `vim.fn.system(...)` (NOT a hand-rolled `vim.system` wrapper; `ARCH-DRY`). **Regex must allow hyphens:** `^type: [A-Za-z0-9_-]+` — datatype values are hyphenated (`meeting-notes`, `travel-plan`), so `\w+` would silently truncate them. Strip the `type: ` prefix from each match.
-- [ ] **Step 4: Run, verify pass** — `nvim --headless -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/discovery_local_types_spec.lua"`. (Traceability key added in Task 8.)
-- [ ] **Step 5: Commit** — `#116 M1: LocalTypeDiscovery (grep novel type: minus base)`.
+- [x] **Step 2: Run, verify fail.**
+- [x] **Step 3: Implement** — discover novel types over `root`, parse values, subtract base, synthesize descriptors. Invoke rg via `grep.lua`'s pattern — load-time `detect_grep()` then `vim.fn.system(...)` (NOT a hand-rolled `vim.system` wrapper; `ARCH-DRY`). **Regex must allow hyphens:** `^type: [A-Za-z0-9_-]+` — datatype values are hyphenated (`meeting-notes`, `travel-plan`), so `\w+` would silently truncate them. Strip the `type: ` prefix from each match. _Used `rg -o --no-filename` + load-time `vim.fn.executable("rg")`; degrades to empty when rg absent._
+- [x] **Step 4: Run, verify pass** — `nvim --headless -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/discovery_local_types_spec.lua"`. _4/4 green._ (Traceability key added in Task 8.)
+- [x] **Step 5: Commit** — `#116 M1: LocalTypeDiscovery (grep novel type: minus base)`. _2a03ac9_
 
 ### Task 7: RegistryBuilder — base ∪ local, mode-aware (INTEGRATION)
 
@@ -183,24 +183,24 @@ Follow parley conventions: modules `local M = {} … return M`; tests use `plena
 - Modify: `lua/parley/init.lua` (expose `parley.discovery`)
 - Test: `tests/integration/discovery_builder_spec.lua`
 
-- [ ] **Step 1: Write failing tests** (inject mode context — `{repo_root=…, super_repo_members=…}` — don't depend on real cwd):
+- [x] **Step 1: Write failing tests** (inject mode context — `{repo_root=…, super_repo_members=…}` — don't depend on real cwd):
   - global mode (no repo_root) → registry = base only.
   - repo mode → base ∪ local(repo_root) (use the Task 6 fixture).
-  - super-repo mode → base ∪ union(local over members); a `widget` declared in two members appears once (dedup by name, base wins ties).
-- [ ] **Step 2: Run, verify fail.**
-- [ ] **Step 3: Implement** `M.build(ctx)` → `Registry.of(base ∪ deduped local)`. Reuse `super_repo.compute_members` for the member list. Wire `parley.discovery.build`/`current()` in `init.lua` (read `config.repo_root` + super-repo state, like other repo-mode consumers). **Multi-root (the merge):** `locate` globs that are repo-relative (issue/vision/note/plan) get expanded across `[repo_root] + members`; globs already absolute/global (chat/note's `config.chat_dir`/`config.notes_dir`) pass through unchanged. So `query()` spans global ⊕ repo ⊕ siblings by reusing parley's existing root union — no separate root-scope enum needed.
-- [ ] **Step 4: Run, verify pass.**
-- [ ] **Step 5: Commit** — `#116 M1: RegistryBuilder (base ∪ local, repo/super-repo aware)`.
+  - super-repo mode → base ∪ union(local over members); a `widget` declared in two members appears once (dedup by name, base wins ties). _Also: a member's `type: chat` (base-name collision) does not shadow the base chat — proves base wins._
+- [x] **Step 2: Run, verify fail.**
+- [x] **Step 3: Implement** `M.build(ctx)` → `Registry.of(base ∪ deduped local)`. Reuse `super_repo.compute_members` for the member list _(transitively, via `config.super_repo_members` which `super_repo.activate` populates — no recompute)_. Wire `parley.discovery.build`/`current()` in `init.lua`. **Multi-root (the merge):** repo-relative `locate` globs expanded across `[repo_root] + members`; absolute/global globs pass through unchanged. _members already include the current repo, so they supersede the lone repo_root._
+- [x] **Step 4: Run, verify pass.** _7/7 green; smoke-checked `parley.discovery.current()`/`render()` (8 lines)._
+- [x] **Step 5: Commit** — `#116 M1: RegistryBuilder (base ∪ local, repo/super-repo aware)`. _f064eb8_
 
 ### Task 8: Atlas + milestone close
 
-- [ ] **Step 1:** Add `atlas/discovery/registry.md` (new surface: the registry, descriptor/matcher kinds, base∪local composition, the `render()`/`query()` consumers, grep-now/index-later seam). Link it in `atlas/index.md`.
-- [ ] **Step 2:** Update `atlas/traceability.yaml` mapping the new specs.
-- [ ] **Step 3:** `make test` green; `make lint` clean.
-- [ ] **Step 4:** `sdlc milestone-close --issue 116 --milestone M1` (runs the fresh-context `judge`; fix Critical/Important before crossing). Log the verdict in `## Log`.
-- [ ] **Step 5: Commit** — `#116 M1: atlas + traceability for discovery registry`.
+- [x] **Step 1:** Add `atlas/discovery/registry.md` (new surface: the registry, descriptor/matcher kinds, base∪local composition, the `render()`/`query()` consumers, grep-now/index-later seam). Link it in `atlas/index.md`. _§11; Traceability bumped to §12._
+- [x] **Step 2:** Update `atlas/traceability.yaml` mapping the new specs. _`discovery/registry` → 6 modules + 6 specs._
+- [x] **Step 3:** `make test` green; `make lint` clean. _0 warnings/0 errors, 87 spec files PASS, EXIT=0. (Fixed a pre-existing `highlighter_spec.lua` lint warning out of band — side-quest 6ab6ad8 — that was red at the branch base and blocked the gate.)_
+- [x] **Step 4:** `sdlc milestone-close --issue 116 --milestone M1` (runs the fresh-context `judge`; fix Critical/Important before crossing). Log the verdict in `## Log`. _Arc: REWORK (C1/I1/I2) → fixed → FIX-THEN-SHIP (I-A/I-C) → fixed → **SHIP** (high confidence). I-B carried to M2. Logged in `## Log`; trailer `Review-Verdict: SHIP` in commit e3147f4._
+- [x] **Step 5: Commit** — `#116 M1: atlas + traceability for discovery registry`. _28baeeb_
 
-**M1 Done when:** `parley.discovery.current()` returns a mode-correct `Registry`; `registry:render()` yields the noun-vocabulary string (#128's `repo_discovery` body); `registry:query(type, term)` compiles a correct `rg` pipeline; base∪local composition verified across global/repo/super-repo; all specs green; atlas updated. **#128 is unblocked.**
+**M1 Done when:** `parley.discovery.current()` returns a mode-correct `Registry`; `registry:render()` yields the noun-vocabulary string (#128's `repo_discovery` body); `registry:query(type, term)` compiles a correct `rg` pipeline *for the base/relative registry* (reconciling the **built** registry's absolute globs with the search root is M2 — the M2-carried I-B decision in `## Revisions`); base∪local composition verified across global/repo/super-repo; all specs green; atlas updated. **#128 is unblocked** — it consumes `render()`, which is fully correct, not `query()`.
 
 ---
 
@@ -226,3 +226,54 @@ Settle #116's long-open descriptor-format question (lean: structured fenced bloc
 - `query`/`spec_to_command` is the "deterministic shell, thin model" surface: the model only ever decides *which noun + which term*; the registry compiles the actual search. Don't let search logic leak into the model layer.
 - Exact `rg` invocation matches `lua/parley/tools/builtin/grep.lua`: load-time `detect_grep()` then `vim.fn.system(cmd)` — don't hand-roll a second rg wrapper or use `vim.system` (`ARCH-DRY`).
 - `render()`'s output is a *contract* with #128 — when its format changes, the `repo_discovery` skill body changes; keep the verbatim-line assertions in Task 5 as the guard.
+
+---
+
+## Revisions
+
+### 2026-06-11 — M1 boundary-review rework (REWORK → FIX-THEN-SHIP)
+
+The first `sdlc milestone-close` boundary review returned **REWORK** (one
+Critical, two Important). All addressed; re-review returned **FIX-THEN-SHIP**
+(no Critical). Deltas to the as-built design vs. the task text above:
+
+- **`base_registry` ships as `base.build(config)`, NOT a static `M.descriptors`
+  (supersedes Task 3 Step 1 + the Core-concepts "Pure data; no IO" line).** It is
+  a *pure function of live config* — still pure (deterministic, no IO) but reads
+  the config passed by the caller, not a load-time snapshot of defaults. This was
+  the **I2** fix: a module-load snapshot ignored user overrides of
+  `chat_dir`/`notes_dir`. RegistryBuilder calls `base.build(_parley.config)`.
+- **C1 (Critical, fixed):** `discovery.current()` read `require("parley.config")`
+  — the immutable *default* table that never gets `repo_root`/`super_repo_members`
+  — so it returned a base-only registry in *every* mode. Now `discovery.setup(parley)`
+  injects the live `M` (same pattern as `super_repo.setup`/`note_dirs.setup`) and
+  `current()` reads `_parley.config`. Wired `discovery.setup(M)` in `init.lua`.
+  Regression test: `discovery_builder_spec.lua` "current — live-config wiring".
+- **I1 (Important, fixed):** `render()`'s find-hint must stay repo-relative even
+  on the *built* registry (whose locate globs are absolute). The builder now
+  precomputes `find_hint` from the RELATIVE descriptor BEFORE glob expansion and
+  stashes it; `render()` prefers it. Regression test: builder spec "render of the
+  built registry".
+- **I-A (Important, fixed):** `spec_to_command` now `shellescape`s every
+  interpolated value (globs, frontmatter pattern, content term) — a term with a
+  quote can't break/inject the command.
+- **I-C (Important, fixed):** the pure merge logic (`expand_locate`,
+  `dedupe_compose`) moved to a new pure module `lua/parley/discovery/merge.lua`,
+  unit-tested directly (no rg) — `discovery_merge_spec.lua`. RegistryBuilder is
+  now thin glue over it.
+- **descriptor.validate** now enforces kind-specific matcher fields (a bare
+  `{kind="frontmatter"}` was silently always-true).
+
+### M2-carried decision — execution model for the built (absolute-glob) registry
+
+**I-B (deferred to M2, by design — execution is M2 scope).** On the *built*
+registry the `locate` globs are absolute (repo-prefixed), so
+`spec_to_command`'s `rg … -g '<abs>' .` anchors the glob under cwd and matches
+nothing. `query()` compiling a correct pipeline holds for the *base* (relative)
+registry; the built registry needs M2 to reconcile glob-vs-search-root.
+`discovery_builder_spec.lua` "spec_to_command on a built registry (I-B / M2
+seam)" **pins the current absolute-glob output** so M2 changes it consciously
+(not a silently-empty search). **M2 decision to make first:** either return a
+structured argv (dir-roots + term + frontmatter) and let the executor render
+safely with `shellescape`, or set the rg search-path to each root and pass only
+the filename glob via `-g`. Decide before M2/#115 consume `query()`.

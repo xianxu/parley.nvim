@@ -2,13 +2,15 @@
 
 local highlighter = require("parley.highlighter")
 
--- Run M.is_reference_span over the FIRST `[...]` run in `line` (the matcher
--- iterates the same gmatch), mirroring how compute_markdown_highlights calls it.
+-- Run M.is_reference_span over the FIRST `[...]` run in `line`, mirroring how
+-- compute_markdown_highlights calls it. `match` returns the first run's
+-- captures directly (a gmatch loop here is "executed at most once").
 local function first_span_is_reference(line)
-    for s, content, e in line:gmatch("()%[([^%[%]]+)%]()") do
-        return highlighter.is_reference_span(line, s, content, e)
+    local s, content, e = line:match("()%[([^%[%]]+)%]()")
+    if not s then
+        return nil -- no bracket run at all
     end
-    return nil -- no bracket run at all
+    return highlighter.is_reference_span(line, s, content, e)
 end
 
 describe("highlighter.is_reference_span (#127)", function()

@@ -1,7 +1,7 @@
 ---
 id: 000128
 status: open
-deps: [000116]
+deps: []
 github_issue:
 created: 2026-06-11
 updated: 2026-06-11
@@ -130,7 +130,14 @@ Rough shape:_
 
 Filed from the brain design conversation. Supersedes the architecture of #106
 (v1 skill system) — see #106 log. Product behavior settled; this issue records
-the design, implementation pending a plan doc. Depends on #116 for the registry
-that `repo_discovery` consumes (engine can land first with disk skills;
-`repo_discovery` slots in when the registry exists). Permission model split to
-#129.
+the design, implementation pending a plan doc.
+
+**Dependency corrected (2026-06-11):** #128 does **not** depend on #116. Its
+architecture — one engine, declarative manifests, `read_skill`, the provider
+system, porting review/voice — is built against the existing disk skills and the
+chat loop. Only the single `repo_discovery` virtual-skill *task* needs #116
+**M1** (`render()`), and it's bridged in after both exist. `deps` set to `[]`
+accordingly (was `[000116]`, which overstated the coupling). Permission model
+split to **#129** (which does dep #128). **Operator-approved sequencing:** #116
+M1 (ready now) → **#128 (the main event; needs its own plan doc)** → bridge
+`repo_discovery` → #129 → circle back for #116 M2/M3.

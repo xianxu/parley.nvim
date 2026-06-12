@@ -68,5 +68,8 @@ This index provides a central directory for all atlas entries of the `parley.nvi
 - [Vision Format](vision/format.md): YAML schema, multi-file namespacing, and ID resolution rules.
 - [Vision Exports](vision/exports.md): CSV, DOT graph export, and validation.
 
-## 11. Traceability
+## 11. Discovery Registry
+- [Discovery Registry](discovery/registry.md): Data-driven noun-vocabulary (what file types exist + how to find instances); base ∪ local composition, matcher discriminator kinds, the `query()`/`render()` consumers, grep-now/index-later seam. Feeds #128's `repo_discovery` skill.
+
+## 12. Traceability
 - [Traceability Map](traceability.yaml): Mapping from each feature entry to implementation files and related tests.
