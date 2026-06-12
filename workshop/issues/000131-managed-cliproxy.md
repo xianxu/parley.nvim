@@ -279,3 +279,30 @@ Platform:
   by `on_exit` + `on_abort` (ARCH-DRY); test asserts blocks removed on the
   *default* path. Minor folds: port-less-endpoint caveat; read merged config via
   `require("parley").config.cliproxy`, not the module's `M`.
+
+### 2026-06-12 (build)
+- Chunk 1 SHIPPED: `lua/parley/cliproxy_config.lua` (parse_endpoint/render/encode),
+  13 unit tests green, luacheck clean, traceability key `providers/cliproxy-managed`
+  registered. Commit e98a432.
+- **Task 2.0 gating check → GO.** Rendered a config via the real `cliproxy_config`
+  module (JSON written to `.yaml`) and booted the installed `cliproxyapi`
+  (v7.1.60) on a throwaway port 8319: **it boots cleanly from JSON-as-YAML — the
+  bet holds, no fallback YAML emitter needed.** Decisions:
+  - **Identity/health route = `/v1/models`** (no `/health` → 404). Probe WITH the
+    client bearer.
+  - **401 semantics (resolves plan-quality INFO):** with the *correct* bearer,
+    `/v1/models` returns **200 `{"data":[],"object":"list"}`** even with NO
+    upstream login. So: **401 = client-key drift** (wrong/absent `api-keys`);
+    **200 + empty `data` = up but not logged in** (the "run login" signal);
+    refused = down; 200 non-`{object:"list"}` = foreign.
+  - **Binary name is `cliproxyapi`** (brew), NOT `cli-proxy-api`. `discover_binary`
+    tries both.
+  - **Config flag `-config`** (single dash; Go flag also accepts `--config`).
+  - **Login = per-provider flags**, NOT a subcommand: `-claude-login`,
+    `-codex-login`, `-codex-device-login`, `-login` (Google), `-kimi-login`,
+    `-xai-login`, `-antigravity-login`, `-no-browser`. `:ParleyProxy login <provider>`
+    → `-<provider>-login`.
+  - `api-keys` (plural) confirmed; `host`/`port`/`auth-dir` as rendered; `~` ok.
+  - Boot downloads a management control-panel asset from GitHub; docs should
+    recommend `remote-management: { disable-control-panel: true }` in the user's
+    `config` passthrough (avoids the network hit, faster lazy-spawn readiness).

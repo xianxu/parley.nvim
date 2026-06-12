@@ -55,14 +55,19 @@
   - **Injected into:** called from `cliproxyapi.pre_query`. The pure `render`/`encode`/`parse_endpoint` are injected here (this is the only place IO meets the pure core).
   - **Future extensions:** M2 `auto_download` slots into `discover_binary`'s fall-through.
 
-- **Cliproxy.health_probe(host, port, secret, cb)** — `curl` GET to the cliproxy **identity route**, classifies: `healthy` (200, cliproxy-shaped) / `unauthenticated` (401 → login needed) / `foreign` (200 but not cliproxy-shaped) / `down` (connection refused). The identity route is confirmed during the M1 gating task (candidates `/v1/models`, `/health`).
-  - **Injected into:** `ensure_running`, `status`.
+- **Cliproxy.health_probe(host, port, secret, cb)** — `curl` GET to **`/v1/models` WITH the client bearer** (identity route confirmed in Task 2.0; there is no `/health`). Classification (from the gating run):
+  - **200 + body `{"...","object":"list"}`, `data` non-empty** → `healthy` (up, client-authed, upstream logged in).
+  - **200 + `object:"list"` but `data: []`** → `needs_login` (up + client-authed, but no upstream OAuth — the "run `:ParleyProxy login`" signal).
+  - **401** → `client_key_mismatch` (up, but the rendered `api-keys` ≠ the bearer parley sent — a wiring bug, not a login problem).
+  - **200 but body is NOT `object:"list"`-shaped** → `foreign` (something else holds the port).
+  - **connection refused / no answer** → `down`.
+  - **Injected into:** `ensure_running` (treats `healthy`/`needs_login` as "proceed", `foreign`/`client_key_mismatch` as `on_error`, `down` as "spawn"), `status`.
 
 - **Cliproxy.spawn(binary, config_path)** — `vim.uv.spawn` **detached** (`detached=true`, `uv.unref` the handle) so the daemon outlives nvim and is shared; records our PID so `stop` only kills a parley-spawned proxy.
 
-- **Cliproxy.discover_binary()** — `cliproxy.binary_path` → (M2 managed dir) → `cli-proxy-api` on PATH. Returns path or nil.
+- **Cliproxy.discover_binary()** — `cliproxy.binary_path` → (M2 managed dir) → PATH lookup trying **both** `cliproxyapi` (brew name, confirmed installed) **and** `cli-proxy-api` (release-tarball name). Returns path or nil.
 
-- **Cliproxy commands** — `:ParleyProxy status|start|stop|restart|login`, registered in `init.lua` under `M.config.cmd_prefix`. `login` shells out to `cli-proxy-api login [--no-browser]`; `status` reports binary source, health/auth state, host:port, auth-dir, rendered-config path, and config-drift.
+- **Cliproxy commands** — `:ParleyProxy status|start|stop|restart|login`, registered in `init.lua` under `M.config.cmd_prefix`. `login <provider>` shells out to `cliproxyapi -<provider>-login [-no-browser]` (per-provider flags — `claude`, `codex`, `codex-device`, `google`→`-login`, `kimi`, `xai`, `antigravity`; NOT a `login` subcommand — confirmed in Task 2.0); `status` reports binary source, health/auth state (incl. `needs_login`), host:port, auth-dir, rendered-config path, and config-drift.
 
 - **cliproxyapi.pre_query** — adapter hook `pre_query(on_success, on_error)` delegating to `require("parley.cliproxy").ensure_running(on_success, on_error)`. ARCH-DRY: reuses the dispatcher's existing `pre_query` mechanism (dispatcher.lua:387) — copilot already proves the pattern. No-op (`on_success()`) when `manage` is off. The `on_error` is the new **abort channel** (below).
 
@@ -335,15 +340,14 @@ end
 
 `## Chunk 2` — `lua/parley/cliproxy.lua`, `tests/fixtures/fake_cliproxy.lua`, `tests/integration/cliproxy_lifecycle_spec.lua`.
 
-### Task 2.0: Gating task — prove JSON-as-YAML boots a real proxy (GO/NO-GO)
+### Task 2.0: Gating task — prove JSON-as-YAML boots a real proxy (GO/NO-GO) — ✅ DONE 2026-06-12
 
-**Manual, before writing lifecycle code. Spec §Emission makes this a hard gate.**
-
-- [ ] **Step 1:** Install a real binary locally (`brew install cliproxyapi` or download a pinned release tarball for this machine). Record the version + identity route in `## Log`.
-- [ ] **Step 2:** In a scratch nvim, build a minimal config via `cliproxy_config.render` + `encode`, write it to a temp `.yaml`, and run `cli-proxy-api --config <tmp>`.
-- [ ] **Step 3:** Confirm it boots and answers an HTTP probe. **Decide the identity route** (`/health` vs `/v1/models`) and record it. Also confirm `auth-dir` `~` handling: the cliproxy docs say `auth-dir` "supports `~` for home directory", so `render` writes it **literally** (no `vim.fn.expand`) — verify the booted proxy resolves `~` itself; record the result.
-- [ ] **Step 4: Confirm what a 401 on the identity route actually means** (plan-quality INFO). The rendered `api-keys` is the *client→proxy* token; a 401 might mean the probe sent a wrong/absent client key, **not** that upstream OAuth is missing. Probe with and without the bearer, with and without a completed `login`, and record which status/body distinguishes "up but client-unauthenticated" from "up but no upstream OAuth". `status`'s auth-state reporting (Task 2.5) is built on this recorded fact, not a guess.
-- [ ] **GO:** proceed. **NO-GO** (parser rejects JSON): add a nested+list YAML emitter as Task 1.4 (its own sub-task — *not* a flat emitter; spec says flat is non-viable), then continue. Log the decision either way.
+**Completed — recorded in `## Log`. Result: GO.** Booted `cliproxyapi` v7.1.60 on a throwaway port against a parley-rendered JSON-as-`.yaml` config; it boots and serves cleanly — **no fallback YAML emitter needed.** Confirmed facts now baked into the tasks below:
+- Identity route **`/v1/models`** (no `/health`); probe **with** the bearer.
+- 401 = client-key drift; 200+`data:[]` = `needs_login`; 200+models = healthy; refused = down; 200 non-list = foreign.
+- Binary **`cliproxyapi`** (also try `cli-proxy-api`); config flag **`-config`**; login = per-provider flags (`-claude-login`, …), `-no-browser`.
+- `api-keys` plural; `auth-dir` accepts `~` literally.
+- (Doc note) boot fetches a management-panel asset; recommend `remote-management.disable-control-panel: true` in the user's `config` passthrough.
 
 ### Task 2.1: `discover_binary`
 
@@ -351,23 +355,29 @@ end
 
 - [ ] **Step 1: Failing test** — given an explicit `binary_path` that exists, returns it; given a bogus path + nothing on PATH, returns nil. (Use a temp file as a fake binary; set `M.config.cliproxy.binary_path`.)
 - [ ] **Step 2: Run** `make test-spec SPEC=providers/cliproxy-managed` → FAIL.
-- [ ] **Step 3: Implement** `discover_binary()`: check `cfg.binary_path` (fs exists + executable), else `vim.fn.exepath("cli-proxy-api")`, else nil. (M2 inserts the managed dir between the two.)
+- [ ] **Step 3: Implement** `discover_binary()`: check `cfg.binary_path` (fs exists + executable), else `vim.fn.exepath("cliproxyapi")` then `vim.fn.exepath("cli-proxy-api")` (brew name first, then the release-tarball name), else nil. (M2 inserts the managed dir between `binary_path` and PATH.)
 - [ ] **Step 4: Run** → PASS. **Step 5: Commit** `#131 M1: cliproxy.discover_binary`
 
 ### Task 2.2: `health_probe` + identity classification
 
 **Files:** Modify `lua/parley/cliproxy.lua`; new `tests/fixtures/fake_cliproxy.lua`; Test the lifecycle spec.
 
-- [ ] **Step 1: Build the fake** — `tests/fixtures/fake_cliproxy.lua`: a `vim.uv` TCP server (run via `nvim -l`) that, by a `--mode` arg, answers the identity route with 200-cliproxy-shape / 200-foreign / 401 / never / exits immediately. It binds the port from `--port` and the identity route decided in Task 2.0.
-- [ ] **Step 2: Failing test** — start `fake_cliproxy --mode healthy --port <p>`; assert `health_probe` classifies `healthy`. Repeat for `foreign`→`foreign`, `unauth`→`unauthenticated`, nothing-listening→`down`.
+- [ ] **Step 1: Build the fake** — `tests/fixtures/fake_cliproxy.lua`: a `vim.uv` TCP server (run via `nvim -l`) answering **`GET /v1/models`** per a `--mode` arg (and `--port`):
+  - `healthy` → 200 `{"object":"list","data":[{"id":"claude-x"}]}`
+  - `needs_login` → 200 `{"object":"list","data":[]}`
+  - `client_key_mismatch` → 401
+  - `foreign` → 200 `{"hello":"i am not cliproxy"}`
+  - `slow` → accept the connection, never respond (never-healthy)
+  - `crash` → exit immediately on startup (spawn-fail)
+- [ ] **Step 2: Failing test** — start `fake_cliproxy --mode <m> --port <p>`; assert `health_probe(host,port,"testkey")` classifies: `healthy`→`healthy`, `needs_login`→`needs_login`, `client_key_mismatch`→`client_key_mismatch`, `foreign`→`foreign`, nothing-listening→`down`.
 - [ ] **Step 3: Run** → FAIL.
-- [ ] **Step 4: Implement** `health_probe(host, port, secret, cb)`: `curl -s -o - -w "%{http_code}"` (or `vim.uv`) GET to the identity route with the bearer; classify by status + body shape. Async, calls `cb(state)`.
-- [ ] **Step 5: Run** → PASS. **Commit** `#131 M1: cliproxy.health_probe + fake_cliproxy (identity classification)`
+- [ ] **Step 4: Implement** `health_probe(host, port, secret, cb)`: `curl -s -w "\n%{http_code}" -H "Authorization: Bearer <secret>" http://host:port/v1/models` with a short `--max-time`; classify by status + whether the body decodes to an `object=="list"` table and whether `data` is non-empty (per Task 2.0). Async, calls `cb(state)`.
+- [ ] **Step 5: Run** → PASS. **Commit** `#131 M1: cliproxy.health_probe + fake_cliproxy (/v1/models identity classification)`
 
 ### Task 2.3: `spawn` (detached) + PID tracking
 
 - [ ] **Step 1: Failing test** — spawn `fake_cliproxy --mode healthy`; assert the process starts, a PID is recorded, and a subsequent `health_probe` goes `healthy`. Assert the recorded PID is parley-owned (so `stop` is scoped).
-- [ ] **Step 2–4:** Implement `spawn(binary, config_path)` via `vim.uv.spawn` with `detached=true`, `uv.unref(handle)`, capture `pid` into module state. Return the handle/pid.
+- [ ] **Step 2–4:** Implement `spawn(binary, config_path)` via `vim.uv.spawn` with args `{ "-config", config_path }` (single-dash, confirmed Task 2.0), `detached=true`, `uv.unref(handle)`, capture `pid` into module state. Return the handle/pid.
 - [ ] **Step 5: Commit** `#131 M1: cliproxy.spawn (detached, PID-tracked)`
 
 ### Task 2.4: `ensure_running` — reuse / spawn / failure modes
@@ -378,9 +388,10 @@ This wires the pure core to IO. Cover **every** spec failure mode.
   - reuse-if-healthy: a `healthy` fake already listening → `ensure_running` calls `callback`, **does not** spawn (assert PID unchanged / no new process).
   - cold start: nothing listening + a `healthy`-mode fake as the discovered binary → spawns, polls healthy, calls `callback`.
   - foreign port: a `foreign` fake listening → `on_error` with "non-cliproxy process", no spawn.
+  - client_key_mismatch: a `client_key_mismatch` (401) fake → `on_error` naming the api-keys/secret drift (a wiring bug, not login).
+  - needs_login: a `needs_login` fake → **proceeds** (`callback`) — the proxy is up + client-authed; a missing upstream login surfaces as the request's own error, not a dispatch block. (`status` reports `needs_login`.)
   - never-healthy: discovered binary is the `slow` fake → bounded ~5s wait → `on_error("timed out")`, dispatch not blocked past the bound.
   - spawn-fail: discovered binary is the `crash` fake → `on_error("exited")`.
-  - unauthenticated: a `unauth` fake → `on_error` mentioning `:ParleyProxy login` (login not done).
 - [ ] **Step 2: Run** → FAIL.
 Also implement `M.is_managed()` → reads `require("parley").config.cliproxy` and returns `cfg ~= nil and cfg.manage == true` (the gate the `pre_query` seam in Task 3.1 calls). Add a one-line test (inject/stub the parley config).
 
@@ -389,13 +400,13 @@ Also implement `M.is_managed()` → reads `require("parley").config.cliproxy` an
   2. `host, port = cliproxy_config.parse_endpoint(D.providers.cliproxyapi.endpoint)`.
   3. `secret = vault.get_secret(require("parley.providers").get_secret_name("cliproxyapi"))` — derive the secret name via the codebase's single source (providers.lua:1282), don't hardcode the literal (ARCH-DRY).
   4. `cfg, overrides = cliproxy_config.render{...}`; if `#overrides>0` log a warning naming them; write `encode(cfg)` to `stdpath('data')/parley/cliproxy/config.yaml` at `0600`.
-  5. `health_probe` → `healthy`: `callback()`. `foreign`: `on_error`. `unauthenticated`: `on_error` (login). `down`: `discover_binary` (nil → `on_error` naming `brew install`/`auto_download`) → `spawn` → poll `health_probe` every ~250ms up to ~5s → healthy `callback()` / else `on_error("timed out")`. Crash mid-poll → `on_error("exited")`.
+  5. `health_probe` → `healthy`/`needs_login`: `callback()` (proceed). `client_key_mismatch`/`foreign`: `on_error`. `down`: `discover_binary` (nil → `on_error` naming `brew install cliproxyapi`/`auto_download`) → `spawn` → poll `health_probe` every ~250ms up to ~5s → any 200 (`healthy`/`needs_login`) `callback()` / else `on_error("timed out")`. Process exits mid-poll → `on_error("exited")`.
 - [ ] **Step 4: Run** → all PASS.
 - [ ] **Step 5: Commit** `#131 M1: cliproxy.ensure_running (reuse/spawn + all failure modes)`
 
 ### Task 2.5: commands — `status|start|stop|restart|login`
 
-- [ ] **Step 1: Failing tests** — `status()` returns a table with binary source, health/auth state, host:port, auth-dir, config path, and a `config_drift` bool (rendered ≠ running). `stop()` only kills a parley-spawned PID (a reused/foreign daemon is left alone). `restart()` = stop-if-ours + ensure. `login()` builds the `cli-proxy-api login` argv.
+- [ ] **Step 1: Failing tests** — `status()` returns a table with binary source, health/auth state (incl. `needs_login`), host:port, auth-dir, config path, and a `config_drift` bool (rendered ≠ running). `stop()` only kills a parley-spawned PID (a reused/foreign daemon is left alone). `restart()` = stop-if-ours + ensure. `login(provider)` builds the `cliproxyapi -<provider>-login [-no-browser]` argv (map `claude|codex|codex-device|google|kimi|xai|antigravity` → the flag; `google`→`-login`); default/unknown provider → list the valid ones.
 - [ ] **Step 2–4:** Implement. Keep each a thin wrapper; `status` composes `discover_binary` + `health_probe` + a config-drift check. **Drift compare:** decode both the on-disk YAML and a fresh `render`, then `vim.deep_equal` the tables — do NOT string-compare the encoded JSON (Lua table iteration order is unspecified, so `encode` key order isn't stable → string compare false-positives "restart needed").
 - [ ] **Step 5: Commit** `#131 M1: cliproxy commands (status/start/stop/restart/login)`
 
