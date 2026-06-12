@@ -233,6 +233,13 @@ Platform:
   termopen; doc note that `api_keys.cliproxyapi` is required even when managed.
   Recorded Python-fake + tests-at-close deviations in the plan `## Revisions`.
   Re-verified: **make test exit 0 — 94 spec files, luacheck 0/0 across 182.**
+- Side-quest (user request): ship managed cliproxy **on by default** — `config.lua`
+  now has an active `cliproxy = { manage = true, config = {disable-control-panel} }`,
+  and `api_keys.cliproxyapi` defaults to `"parley-local"` (a loopback-only
+  client↔proxy handshake token, not subscription auth) so a fresh machine works
+  with zero env setup. Safe: dormant unless a cliproxyapi agent runs, and
+  reuses an existing proxy. README + atlas updated to "on by default but dormant".
+  make test still exit 0 (94 specs).
 - Brainstormed via superpowers-brainstorming. Converged design captured in
   `## Spec`. Five decisions logged inline (audience, ownership, config source,
   auto_download deferral, platform scope). cliproxyapi CLI/release facts

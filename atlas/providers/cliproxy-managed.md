@@ -3,8 +3,15 @@
 Parley can manage a local [cliproxyapi](https://github.com/router-for-me/CLIProxyAPI)
 instance — render its config, start it on demand, reuse it if it's already up —
 so users stop hand-maintaining `/opt/homebrew/etc/cliproxyapi.conf` and
-`brew services`. **Off by default**; activated by a `cliproxy = { manage = true }`
-block in `setup{}`. Issue #131.
+`brew services`. Issue #131.
+
+**On by default** (`config.lua` ships `cliproxy = { manage = true, … }`), but
+**dormant** — it only acts when a cliproxyapi-provider agent actually runs, and
+it **reuses** an already-running proxy (e.g. `brew services`) when one answers
+healthy. So the default is safe for users who don't use cliproxyapi (it never
+fires) and cooperative for those who run their own (it reuses it). Set
+`cliproxy = { manage = false }` to opt out. A new machine needs only
+`brew install cliproxyapi` + a one-time `:ParleyProxy login <provider>`.
 
 ## Pieces
 

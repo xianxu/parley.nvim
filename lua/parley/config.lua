@@ -36,7 +36,12 @@ local config = {
 		googleai = os.getenv("GOOGLEAI_API_KEY"),
 		ollama = "dummy_secret", -- ollama typically uses a dummy token for local instances
 		copilot = os.getenv("GITHUB_TOKEN"), -- for GitHub Copilot
-		cliproxyapi = os.getenv("CLIPROXYAPI_API_KEY"),
+		-- Local client↔proxy handshake token (NOT your subscription auth — that
+		-- lives in the cliproxy auth-dir via :ParleyProxy login). In managed mode
+		-- parley renders this into the proxy's api-keys AND sends it as the bearer,
+		-- so a fixed local default works out-of-the-box over loopback. Override
+		-- via the env var if you point at a proxy that expects a specific key.
+		cliproxyapi = os.getenv("CLIPROXYAPI_API_KEY") or "parley-local",
 	},
 
 	-- Google Drive OAuth configuration for @@ URL references
@@ -98,23 +103,25 @@ local config = {
 		},
 	},
 
-	-- OPT-IN: let parley manage the cliproxyapi process itself (issue #131).
-	-- Off by default. When enabled, parley renders config.yaml from this block
-	-- on demand, and lazily starts / reuses / health-checks the proxy whenever a
-	-- cliproxyapi-provider agent is used. host:port come from the
-	-- providers.cliproxyapi.endpoint above (single source of truth). The
-	-- generated config is a derived artifact under stdpath('data') — your
-	-- committed Lua is the source of truth; secrets never land in it.
-	-- One manual, per-machine step: `:ParleyProxy login <provider>` (OAuth).
-	-- cliproxy = {
-	--   manage = true,
-	--   auth_dir = "~/.cli-proxy-api",   -- where OAuth tokens are stored (machine-local)
-	--   binary_path = nil,               -- optional; else `cliproxyapi`/`cli-proxy-api` on PATH
-	--   config = {                       -- raw cliproxyapi schema (passed through verbatim)
-	--     -- e.g. avoid the management-panel download for faster startup:
-	--     ["remote-management"] = { ["disable-control-panel"] = true },
-	--   },
-	-- },
+	-- Let parley manage the cliproxyapi process itself (issue #131). parley
+	-- renders config.yaml from this block on demand and lazily starts / reuses /
+	-- health-checks the proxy whenever a cliproxyapi-provider agent is used. It
+	-- is DORMANT unless such an agent runs, and it REUSES an already-running proxy
+	-- (e.g. `brew services`) if one answers healthy — so this default is safe even
+	-- if you don't use cliproxyapi. host:port come from providers.cliproxyapi.endpoint
+	-- (single source of truth); the generated config is a derived 0600 artifact
+	-- under stdpath('data') — your committed Lua is the source of truth, no secret
+	-- in it. A new machine needs only: `brew install cliproxyapi` + one-time
+	-- `:ParleyProxy login <provider>` (OAuth). Set manage=false to opt out.
+	cliproxy = {
+		manage = true,
+		-- auth_dir defaults to cliproxy's own ~/.cli-proxy-api when omitted.
+		-- binary_path = nil,  -- else `cliproxyapi` / `cli-proxy-api` on PATH
+		config = {
+			-- skip the management-panel GitHub download for faster startup
+			["remote-management"] = { ["disable-control-panel"] = true },
+		},
+	},
 
 	-- prefix for all commands
 	cmd_prefix = "Parley",

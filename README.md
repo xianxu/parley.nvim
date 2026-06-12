@@ -139,7 +139,7 @@ Most-used defaults:
 ## What Parley Supports
 
 - Providers: OpenAI, Anthropic, Google AI, Ollama, OpenAI-compatible endpoints, and CLIProxyAPI.
-  - **Optional**: parley can manage a local `cliproxyapi` for you — set `cliproxy = { manage = true }` in `setup{}` and it renders the config from Lua and lazily starts/reuses/health-checks the proxy. `:ParleyProxy status|start|stop|restart|login <provider>`. Off by default; see [atlas/providers/cliproxy-managed.md](atlas/providers/cliproxy-managed.md).
+  - parley can **manage a local `cliproxyapi`** for you — it renders the config from Lua and lazily starts/reuses/health-checks the proxy. `:ParleyProxy status|start|stop|restart|login <provider>`. **On by default but dormant** — only acts when a cliproxyapi-provider agent runs, and reuses an existing proxy if one is up; a fresh machine needs `brew install cliproxyapi` + a one-time `:ParleyProxy login`. Set `cliproxy = { manage = false }` to opt out. See [atlas/providers/cliproxy-managed.md](atlas/providers/cliproxy-managed.md).
 - File context with `@@path/to/file` and directory patterns.
 - Web search toggle for supported providers.
 - Outline navigation, highlighting.
