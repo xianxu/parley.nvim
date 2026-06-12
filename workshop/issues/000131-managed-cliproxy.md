@@ -241,3 +241,15 @@ Platform:
   dead/stopped/crashed proxy auto-revives on the next dependent request — no
   manual restart. Already implied by lazy + reuse-if-healthy; now stated
   explicitly in Lifecycle + Done-when.
+- Claimed (est 16h) → working. `start-plan`: ARCH-DRY + ARCH-PURE delivered;
+  both already shaped the design (reuse `pre_query`/`vault`; pure config core vs
+  IO shell). Implementation plan written to
+  `workshop/plans/000131-managed-cliproxy-plan.md` via superpowers-writing-plans.
+  Fresh-eyes plan review found 2 real issues — a dead line in `parse_endpoint`
+  and `make test-spec SPEC=` being a traceability key (not a filename, would
+  no-op the TDD loop) — both fixed; reviewer confirmed the `pre_query` abort path
+  genuinely can't hang the chat (D.query only runs the query inside the
+  callback) and that `vault.get_secret` is resolved by `run_with_secret` before
+  `pre_query` fires.
+- Branch hygiene: #131 spec commits were relocated off the in-flight #128 branch
+  onto a fresh `000131-managed-cliproxy` branch based on `main`; #128 restored.
