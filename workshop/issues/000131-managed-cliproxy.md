@@ -1,11 +1,11 @@
 ---
 id: 000131
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-06-12
 updated: 2026-06-12
-estimate_hours:
+estimate_hours: 16
 ---
 
 # Manage cliproxyapi lifecycle + config
