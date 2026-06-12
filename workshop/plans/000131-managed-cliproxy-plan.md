@@ -48,7 +48,7 @@
 | `Cliproxy` commands | `lua/parley/cliproxy.lua` + `init.lua` | new | user commands |
 | `cliproxyapi.pre_query` | `lua/parley/providers.lua` | modified | dispatcher seam |
 | `D.query` abort channel | `lua/parley/dispatcher.lua` | modified | pre_query error → caller teardown |
-| `on_abort` teardown | `lua/parley/chat_respond.lua` | modified | spinner / progress indicator |
+| `on_abort` teardown (×4 callers) | `chat_respond.lua` + `skill_runner.lua` + `memory_prefs.lua` | modified | per-caller pre-query state |
 | `fake_cliproxy` | `tests/fixtures/fake_cliproxy.lua` | new | process-level fake |
 
 - **Cliproxy.ensure_running(callback, on_error)** — the heart. Reads `M.config.cliproxy` + the resolved endpoint, resolves the secret via `vault.get_secret("cliproxyapi")`, renders + writes `config.yaml` (`0600`), health-probes host:port; if healthy → `callback()`; if down → `discover_binary` → `spawn` → poll health (bounded ~5s) → `callback()`; on any failure → `on_error(msg)` so the dispatch path fails fast, never hangs.
@@ -69,7 +69,11 @@
 - **D.query abort channel** *(dispatcher.lua, modified)* — **why this exists:** the caller (`chat_respond.lua`) starts a spinner *before* `D.query` and only tears it down inside the query's `on_exit` (which is **qid-coupled** — `chat_respond.lua:1488-1493`, `if not qt then return`). If `pre_query` aborts and never runs `query()`, there is no qid, so `on_exit` can't fire and **the spinner spins forever** — the chat visibly hangs, violating the spec's "dispatch must never hang." Fix: `pre_query` gains a second arg `on_error`; `D.query` gains a trailing optional `on_abort` param. On a pre_query error the dispatcher invokes `on_abort(msg)` (qid-free) instead of `query()`. Contract is additive — copilot's one-arg `pre_query` ignores the extra arg (backward compatible).
   - **Injected into:** `chat_respond.lua` passes `on_abort` into `D.query`.
 
-- **on_abort teardown** *(chat_respond.lua, modified, both `D.query` sites — ~814 topic-gen and ~1483 main)* — a qid-free cleanup the dispatcher calls on abort: `stop_spinner()` + clear the progress-indicator line + `vim.notify(msg, WARN)` carrying the actionable error (e.g. "cliproxy down — run :ParleyProxy status / login"). This is the delivery mechanism for the spec's "clear, specific error."
+- **on_abort teardown** — a qid-free cleanup the dispatcher calls on abort, at **all four** `D.query` callers (a cliproxy-provider agent can route through any of them, so each leaks its own pre-query state on abort). Each undoes exactly what it set up *before* the query, plus a `vim.notify(msg, WARN)` carrying the actionable error:
+  - `chat_respond.lua:1483` (main) — `stop_spinner()` + clear indicator **+ remove the inserted `agent_header`/`stream_placeholder` blocks**. NB the spinner is web-search-gated (`spinner_active = _state.web_search`, `:1236`), so off the default path *nothing spins* — the real leftover is the **inserted answer blocks** (`:1270-1320`). Extract the empty-block collapse `on_exit` already does (`:1498-1511`) into a shared local `collapse_empty_answer(buf, model, target_idx, stream_block_idx)` that both `on_exit` (empty case) and `on_abort` call (ARCH-DRY) — do **not** re-drive the heavy `on_exit` (tool-loop, trailing-blank cleanup) against a query that never ran.
+  - `chat_respond.lua:814` (topic-gen) — stop the spinner timer + delete the temp `topic_buf` (mirrors its qid-free `on_exit`).
+  - `skill_runner.lua:465` — `_in_flight[buf] = nil`. Without this the re-entry guard (`:345`) stays set **forever → that buffer's skill runs are permanently blocked**.
+  - `memory_prefs.lua:251` — call `process_next()` to skip the failed tag and continue the batch (its teardown is in the *callback*, not `on_exit`, which is `nil` here) — else the chain silently stalls.
 
 - **fake_cliproxy** — a real subprocess (Lua via `nvim -l`, or a tiny TCP listener) used by integration tests. Modes: `healthy` (answers identity route 200), `foreign` (200 wrong shape), `unauth` (401), `slow` (never healthy), `crash` (exits immediately). Process-level per AGENTS.md external-service rule — function mocks would miss the reuse-vs-spawn and identity-classification bugs.
 
@@ -96,6 +100,8 @@
       - lua/parley/providers.lua
       - lua/parley/dispatcher.lua
       - lua/parley/chat_respond.lua
+      - lua/parley/skill_runner.lua
+      - lua/parley/memory_prefs.lua
     tests:
       - tests/unit/cliproxy_config_spec.lua
       - tests/unit/providers_pre_query_spec.lua
@@ -172,6 +178,10 @@ function M.parse_endpoint(endpoint)
     end
     return nil, nil
 end
+-- NB: a port-less endpoint resolves to 80/443 — it will NOT silently use
+-- cliproxy's 8317 default. The canonical endpoint carries `:8317`; if a user
+-- strips the port, ensure_running logs a warning (it can't know cliproxy's
+-- intended port). Documented in the config docstring (Task 3.5).
 
 return M
 ```
@@ -369,10 +379,10 @@ This wires the pure core to IO. Cover **every** spec failure mode.
   - spawn-fail: discovered binary is the `crash` fake → `on_error("exited")`.
   - unauthenticated: a `unauth` fake → `on_error` mentioning `:ParleyProxy login` (login not done).
 - [ ] **Step 2: Run** → FAIL.
-Also implement `M.is_managed()` → `M.config.cliproxy and M.config.cliproxy.manage == true` (the gate the `pre_query` seam in Task 3.1 calls). Add a one-line test.
+Also implement `M.is_managed()` → reads `require("parley").config.cliproxy` and returns `cfg ~= nil and cfg.manage == true` (the gate the `pre_query` seam in Task 3.1 calls). Add a one-line test (inject/stub the parley config).
 
 - [ ] **Step 3: Implement** `ensure_running(callback, on_error)`:
-  1. read `M.config.cliproxy`; if `manage` is not true → `callback()` immediately (no-op path).
+  1. read the merged config via `require("parley").config.cliproxy` (NOT the module's own `M` — `cliproxy.lua`'s `M` is the module table; the merged user config lives on the `parley` module, set in init.lua:386-388). Same for `is_managed()`. If `manage` is not true → `callback()` immediately (no-op path).
   2. `host, port = cliproxy_config.parse_endpoint(D.providers.cliproxyapi.endpoint)`.
   3. `secret = vault.get_secret(require("parley.providers").get_secret_name("cliproxyapi"))` — derive the secret name via the codebase's single source (providers.lua:1282), don't hardcode the literal (ARCH-DRY).
   4. `cfg, overrides = cliproxy_config.render{...}`; if `#overrides>0` log a warning naming them; write `encode(cfg)` to `stdpath('data')/parley/cliproxy/config.yaml` at `0600`.
@@ -446,14 +456,25 @@ ARCH-DRY: reuses the dispatcher's existing `pre_query` path (dispatcher.lua:387)
 
 - [ ] **Step 4: Run** → PASS. **Step 5: Commit** `#131 M1: cliproxyapi.pre_query delegates to ensure_running`
 
-### Task 3.2: wire `on_abort` teardown at the `D.query` call sites
+### Task 3.2: wire `on_abort` teardown at all four `D.query` callers
 
-**Files:** Modify `lua/parley/chat_respond.lua` (both `D.query` sites: topic-gen ~814, main response ~1483); Test `tests/integration/cliproxy_dispatch_spec.lua` (the spinner-stop assertion the plan-quality judge required).
+**Files:** Modify `lua/parley/chat_respond.lua` (sites ~814, ~1483), `lua/parley/skill_runner.lua` (~465), `lua/parley/memory_prefs.lua` (~251); Test `tests/integration/cliproxy_dispatch_spec.lua` + per-caller assertions. (`memory_prefs.lua` + `skill_runner.lua` join the `providers/cliproxy-managed` traceability `code:` list in Step 0.)
 
-- [ ] **Step 1: Failing test** — drive a cliproxy dispatch whose `ensure_running` fails (discovered binary = `fake_cliproxy --mode crash`); assert the spinner timer is **stopped** and the progress indicator cleared (e.g. expose `spinner_running`/an indicator flag for the test, or assert the indicator line is gone), and that a WARN notification fired. This is the test that would have caught the hang.
-- [ ] **Step 2: Run** → FAIL (spinner still running).
-- [ ] **Step 3: Implement** — define a qid-free `on_abort(msg)` in the response closure that calls `stop_spinner()`, clears the progress-indicator line, and `vim.notify(msg, vim.log.levels.WARN)`; pass it as the new trailing `on_abort` arg to `_parley.dispatcher.query(...)`. Repeat at the topic-gen site (its own spinner). Non-cliproxy providers never abort (their `pre_query` is absent or calls `on_success`), so `on_abort` is simply never invoked — zero behavior change for them.
-- [ ] **Step 4: Run** → PASS. **Step 5: Commit** `#131 M1: on_abort spinner/indicator teardown (no-hang on ensure_running failure)`
+**Why all four (plan-quality Critical):** any of these can run with a cliproxy-provider agent; each sets up state torn down only in a qid-coupled handler, so an abort (no qid) leaks it. Coverage is the fix.
+
+- [ ] **Step 1: Failing tests** (one per caller; drive `ensure_running` failure with `fake_cliproxy --mode crash`):
+  - **main chat, default (non-web-search) path** — assert the inserted `agent_header`/`stream_placeholder` blocks are **removed** from buffer + model (NOT merely "spinner stopped" — off the web-search path no spinner runs, so a spinner-only assertion passes vacuously; this is the plan-quality Important finding) and a WARN fired.
+  - **main chat, web-search path** — additionally assert the spinner timer is stopped.
+  - **topic-gen** — assert the topic spinner timer stopped + `topic_buf` deleted.
+  - **skill_runner** — assert `_in_flight[buf]` is cleared (a subsequent skill run on that buffer is **not** blocked).
+  - **memory_prefs** — assert the batch advances past the failed tag (`process_next` ran; remaining tags still processed) rather than stalling.
+- [ ] **Step 2: Run** → FAIL.
+- [ ] **Step 3: Implement**
+  - In `chat_respond.lua`, extract a shared local `collapse_empty_answer(buf, model, target_idx, stream_block_idx)` from the existing empty-block collapse in `on_exit` (`:1498-1511`); call it from both `on_exit` (replacing the inline block) and the new `on_abort` (ARCH-DRY). Main `on_abort(msg)` = `collapse_empty_answer(...)` + `stop_spinner()` + clear indicator + `vim.notify(msg, WARN)`. Topic-gen `on_abort` = stop timer + delete `topic_buf` + notify.
+  - In `skill_runner.lua`, `on_abort = function(msg) _in_flight[buf] = nil; vim.notify(msg, WARN) end`.
+  - In `memory_prefs.lua`, `on_abort = function(msg) logger.warning(...); process_next() end` (continue the batch).
+  - Pass each as the new trailing `on_abort` arg to `dispatcher.query(...)`. Non-cliproxy providers never abort (their `pre_query` is absent or calls `on_success`), so `on_abort` is never invoked — zero behavior change for them.
+- [ ] **Step 4: Run** → PASS. **Step 5: Commit** `#131 M1: on_abort teardown at all 4 D.query callers (no-hang/no-leak)`
 
 ### Task 3.3: register `:ParleyProxy` command
 

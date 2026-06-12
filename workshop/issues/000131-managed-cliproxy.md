@@ -267,3 +267,15 @@ Platform:
   folded: 401-semantics decision into the Task 2.0 gating check; secret name via
   `providers.get_secret_name` not a literal (ARCH-DRY). Contract is additive —
   copilot's one-arg `pre_query` ignores the new arg.
+- `change-code` round 2 FAILED (correctly), two more real gaps: (1) the abort
+  channel was wired at only 2 of **4** `D.query` callers — `skill_runner.lua`
+  (leaks `_in_flight[buf]=true` → that buffer's skill runs blocked forever) and
+  `memory_prefs.lua` (batch stalls) also route through cliproxy. (2) The
+  main-path teardown/test was spinner-scoped, but the spinner is
+  web-search-gated — off the default path nothing spins; the real leftover is
+  the inserted `agent_header`/`stream_placeholder` blocks, and the "spinner
+  stopped" test passes vacuously. Fixed: wire `on_abort` at all 4 callers
+  (per-caller teardown); extract a shared `collapse_empty_answer` helper reused
+  by `on_exit` + `on_abort` (ARCH-DRY); test asserts blocks removed on the
+  *default* path. Minor folds: port-less-endpoint caveat; read merged config via
+  `require("parley").config.cliproxy`, not the module's `M`.
