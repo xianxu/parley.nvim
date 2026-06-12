@@ -62,7 +62,7 @@ Decomposed into review-boundary milestones (task detail:
 `workshop/plans/000116-discovery-registry-plan.md`). The original design-phase
 checklist is folded into M1/M3 below.
 
-- [ ] M1 — discovery registry core: base ∪ local composition, `query()` → DiscoverySpec, `render()` noun-vocabulary (the #128 `repo_discovery` unblock)
+- [x] M1 — discovery registry core: base ∪ local composition, `query()` → DiscoverySpec, `render()` noun-vocabulary (the #128 `repo_discovery` unblock)
 - [ ] M2 — finders source their home root folder from the registry (`<C-g>m` stays the type-blind escape hatch; the faceted picker is #115)
 - [ ] M3 — embedded descriptor format + human-driven new-instance scaffolding; update `construct/datatype/type.md` so future prototypes ship a descriptor
 
@@ -112,6 +112,7 @@ slice it borrows from a repo's agent substrate. Deltas to this issue:
 Issue filed off the duality pensive. See pensive for the framing context and the open questions that motivated this.
 
 ### 2026-06-11
+- 2026-06-11: closed M1 — discovery registry core (matcher/descriptor/base/registry/merge/local_types/builder); full suite lint 0/0 + 88 spec files pass; 69 discovery assertions green; atlas+traceability added. **Boundary-review arc: REWORK → FIX-THEN-SHIP → SHIP.** First review caught a real Critical (C1: `current()` read the immutable default config → base-only in every mode; my "8-noun" smoke check was the bug's signature) + I1/I2; fixed via live-config injection (`discovery.setup`), `base.build(config)`, relative find-hint precompute. Re-review (FIX-THEN-SHIP) → fixed I-A (shellescape spec_to_command) + I-C (extracted pure `merge.lua`) + tightened `descriptor.validate`. I-B (built-registry absolute-glob execution) consciously **carried to M2** (documented + test-pinned; #128 consumes `render()`, not `query()`, so M1's deliverable is unaffected). Final review verdict: **SHIP (high confidence).**
 
 Brain design conversation settled product behavior for the readonly-harness
 direction — see `## Revisions`. New siblings: **parley.nvim#128** (skill-system

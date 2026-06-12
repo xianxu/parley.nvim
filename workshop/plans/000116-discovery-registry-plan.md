@@ -200,7 +200,7 @@ Follow parley conventions: modules `local M = {} … return M`; tests use `plena
 - [ ] **Step 4:** `sdlc milestone-close --issue 116 --milestone M1` (runs the fresh-context `judge`; fix Critical/Important before crossing). Log the verdict in `## Log`.
 - [x] **Step 5: Commit** — `#116 M1: atlas + traceability for discovery registry`. _28baeeb_
 
-**M1 Done when:** `parley.discovery.current()` returns a mode-correct `Registry`; `registry:render()` yields the noun-vocabulary string (#128's `repo_discovery` body); `registry:query(type, term)` compiles a correct `rg` pipeline; base∪local composition verified across global/repo/super-repo; all specs green; atlas updated. **#128 is unblocked.**
+**M1 Done when:** `parley.discovery.current()` returns a mode-correct `Registry`; `registry:render()` yields the noun-vocabulary string (#128's `repo_discovery` body); `registry:query(type, term)` compiles a correct `rg` pipeline *for the base/relative registry* (reconciling the **built** registry's absolute globs with the search root is M2 — the M2-carried I-B decision in `## Revisions`); base∪local composition verified across global/repo/super-repo; all specs green; atlas updated. **#128 is unblocked** — it consumes `render()`, which is fully correct, not `query()`.
 
 ---
 
