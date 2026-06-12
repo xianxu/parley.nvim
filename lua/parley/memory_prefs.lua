@@ -259,6 +259,11 @@ M.generate_preferences = function(buckets, callback)
 				_parley.logger.warning("memory_prefs: empty response for tag [" .. tag .. "]")
 			end
 			process_next()
+		end, nil, function(msg)
+			-- Abort teardown (#131): if the managed cliproxy can't start, skip
+			-- this tag and keep the batch moving instead of silently stalling.
+			_parley.logger.warning("memory_prefs: tag [" .. tag .. "] aborted: " .. tostring(msg))
+			process_next()
 		end)
 	end
 

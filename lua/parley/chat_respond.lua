@@ -811,6 +811,17 @@ M.generate_topic = function(messages, provider, model, callback, spinner)
     local topic_buf = vim.api.nvim_create_buf(false, true)
     local topic_handler = _parley.dispatcher.create_handler(topic_buf, nil, 0, false, "", false)
 
+    -- Abort teardown (#131): stop the topic spinner + drop the scratch buffer
+    -- if the managed cliproxy can't start, so topic-gen fails quietly (no hang).
+    local function on_abort(msg)
+        stop_and_close_timer(spinner_timer)
+        spinner_timer = nil
+        if vim.api.nvim_buf_is_valid(topic_buf) then
+            vim.api.nvim_buf_delete(topic_buf, { force = true })
+        end
+        vim.notify(msg or "parley: topic generation aborted", vim.log.levels.WARN)
+    end
+
     _parley.dispatcher.query(
         nil,
         provider,
@@ -826,7 +837,10 @@ M.generate_topic = function(messages, provider, model, callback, spinner)
             if topic ~= "" then
                 callback(topic)
             end
-        end)
+        end),
+        nil,
+        nil,
+        on_abort
     )
 end
 
@@ -1479,6 +1493,39 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             base_handler(qid, chunk)
         end
 
+        -- Shared empty-answer collapse (#131): used by on_exit (tool-use-only /
+        -- empty response) AND on_abort, so a failed managed-cliproxy start tears
+        -- down the same inserted stream placeholder instead of leaving it.
+        local function collapse_empty_answer()
+            if not stream_block_idx then
+                return
+            end
+            local sblk = model.exchanges[target_idx].blocks[stream_block_idx]
+            if sblk and sblk.size == 1 then
+                local spos = model:block_start(target_idx, stream_block_idx)
+                local sline = vim.api.nvim_buf_get_lines(buf, spos, spos + 1, false)[1] or ""
+                if not sline:match("%S") then
+                    -- Just a blank — remove it + its margin, set size 0 (the
+                    -- empty-block rule cancels the margin).
+                    local del_start = math.max(spos - 1, 0)
+                    local del_count = spos - del_start + 1
+                    buffer_edit.delete_lines_after(buf, del_start, del_count)
+                    model:set_block_size(target_idx, stream_block_idx, 0)
+                end
+            end
+        end
+
+        -- Abort teardown (#131): the dispatcher invokes this (qid-free) when the
+        -- managed cliproxy can't be started, so the request fails fast — spinner
+        -- stopped, empty answer block collapsed, error surfaced — never hangs.
+        local function on_abort(msg)
+            vim.schedule(function()
+                clear_progress_indicator(nil)
+                collapse_empty_answer()
+                vim.notify(msg or "parley: request aborted", vim.log.levels.WARN)
+            end)
+        end
+
         -- call the model and write response
         _parley.dispatcher.query(
             buf,
@@ -1492,25 +1539,9 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                 end
                 request_clear_progress_indicator(qt)
 
-                -- If the stream_placeholder has no real content (Claude
-                -- responded with only tool_use, no text), collapse it to
-                -- size 0 so it doesn't produce extra blank lines.
-                if stream_block_idx then
-                    local sblk = model.exchanges[target_idx].blocks[stream_block_idx]
-                    if sblk and sblk.size == 1 then
-                        local spos = model:block_start(target_idx, stream_block_idx)
-                        local sline = vim.api.nvim_buf_get_lines(buf, spos, spos + 1, false)[1] or ""
-                        if not sline:match("%S") then
-                            -- It's just a blank — remove it + its margin
-                            -- from the buffer, then set size 0 in the model
-                            -- (empty-block rule cancels the margin).
-                            local del_start = math.max(spos - 1, 0)  -- margin line
-                            local del_count = spos - del_start + 1   -- margin + blank
-                            buffer_edit.delete_lines_after(buf, del_start, del_count)
-                            model:set_block_size(target_idx, stream_block_idx, 0)
-                        end
-                    end
-                end
+                -- Collapse the empty stream placeholder (tool-use-only or empty
+                -- response). Shared with the #131 abort path.
+                collapse_empty_answer()
 
                 -- Tool loop hook: if the streamed response contained
                 -- tool_use blocks, write 🔧:/📎: into the buffer and
@@ -1722,7 +1753,8 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                     spinner_message = message
                     render_spinner_line()
                 end
-            end)
+            end),
+            on_abort
         )
     end)
 end
