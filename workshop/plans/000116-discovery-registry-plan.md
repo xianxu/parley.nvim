@@ -188,7 +188,7 @@ Follow parley conventions: modules `local M = {} … return M`; tests use `plena
   - repo mode → base ∪ local(repo_root) (use the Task 6 fixture).
   - super-repo mode → base ∪ union(local over members); a `widget` declared in two members appears once (dedup by name, base wins ties).
 - [ ] **Step 2: Run, verify fail.**
-- [ ] **Step 3: Implement** `M.build(ctx)` → `Registry.of(base ∪ deduped local)`. Reuse `super_repo.compute_members` for the member list. Wire `parley.discovery.build`/`current()` in `init.lua` (read `config.repo_root` + super-repo state, like other repo-mode consumers).
+- [ ] **Step 3: Implement** `M.build(ctx)` → `Registry.of(base ∪ deduped local)`. Reuse `super_repo.compute_members` for the member list. Wire `parley.discovery.build`/`current()` in `init.lua` (read `config.repo_root` + super-repo state, like other repo-mode consumers). **Multi-root (the merge):** `locate` globs that are repo-relative (issue/vision/note/plan) get expanded across `[repo_root] + members`; globs already absolute/global (chat/note's `config.chat_dir`/`config.notes_dir`) pass through unchanged. So `query()` spans global ⊕ repo ⊕ siblings by reusing parley's existing root union — no separate root-scope enum needed.
 - [ ] **Step 4: Run, verify pass.**
 - [ ] **Step 5: Commit** — `#116 M1: RegistryBuilder (base ∪ local, repo/super-repo aware)`.
 
@@ -204,9 +204,15 @@ Follow parley conventions: modules `local M = {} … return M`; tests use `plena
 
 ---
 
-## M2 — Typed picker (sketch)
+## M2 — Finder root-sourcing (sketch)
 
-Wire the registry to `<C-g>m`: a type-chooser (from `registry:names()`) → a typed instance picker (run `registry:query(type):spec_to_command` minus content term, list results sorted by mtime, reuse `float_picker`). Preserve `<C-g>M` as the depth-bounded markdown escape hatch. Reuse super-repo `{repo}` sticky-filter plumbing. Entities: a `TypedPicker` integration over `float_picker` + `Registry`. To be expanded to tasks at M2 start.
+**Minimal scope (operator decision):** the existing per-type finders source their *home root folder* from the registry instead of hardcoding it. Nothing else — `<C-g>m` stays the type-blind escape hatch; no typed picker, no generic browser.
+
+For each existing finder (chat `<C-g>f`, note `<C-n>f`, issue `<C-y>f`, vision `<C-j>f`): replace its hardcoded dir constant (e.g. `repo_chat_dir`, `issues_dir`) with the registry descriptor's `locate`. The finder keeps its own type-specific display *and* its existing multi-root expansion (global + repo + super-repo siblings via `chat_roots`/`note_roots`/`compute_members`); only *where the home folder comes from* changes.
+
+**Accepted simplification:** assumes each type is folder-homed (the 4 finders are). Scatter types (instances spread across the repo, no fixed home) are out of scope — parley doesn't handle them today, and the agent (#128) still finds them via M1's frontmatter `Matcher`.
+
+**Deferred to #115:** the generic *faceted* finder (one shared UI parameterized by type; per-type facet bars; per-type finders as instances) is a separate design — the "two filter bars" problem (type-switch + per-type facets) makes an all-types view incoherent, so it warrants its own issue/plan. `#115 deps [000116]`. To be expanded to tasks at M2 start.
 
 ## M3 — Embedded descriptor format + scaffolding (sketch)
 

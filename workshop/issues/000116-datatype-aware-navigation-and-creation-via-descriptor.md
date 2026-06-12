@@ -25,7 +25,7 @@ The proposal is to add a **machine-readable descriptor** to each prototype that 
 
 - Parley can list / pick / open instances of any registered datatype without hardcoding type-specific knowledge.
 - Parley can scaffold a new instance of a datatype from a template (frontmatter + body skeleton), so humans can create issues / pensives / projects without invoking an agent.
-- `<C-g>m` becomes the typed-picker entry point; `<C-g>M` keeps the existing depth-bounded markdown search as escape hatch.
+- `<C-g>m` is **kept as the type-blind escape hatch** (unchanged). M2 does only the minimal retrofit: the existing per-type finders (chat/note/issue/vision) source their *home root folder* from the registry instead of hardcoding it. (The faceted typed finder — generic UI + per-type facets — is split to #115.)
 - The descriptor format is documented in ariadne's `construct/datatype/type.md` so future prototypes ship with a descriptor by default.
 
 ## Spec
@@ -133,3 +133,14 @@ config-derived dir globs (`ARCH-DRY`), and the filename-matcher locate-scoping
 invariant (issue vs plan share the `NNNNNN-slug` pattern). M1 does NOT depend on
 #115 (that's M2's `<C-g>m`). Execution: a fresh parley.nvim session runs
 `sdlc claim --issue 116` → `sdlc change-code` → `superpowers-executing-plans`.
+
+M2 scoped down (operator decision): M2 is **only** "existing finders source
+their home root folder from the registry" — not a typed picker, not a generic
+browser. The generic *faceted* finder (one shared UI parameterized by type;
+per-type facet bars — chat `[tag]`, issue status + super-repo `{repo}`) is its
+own design → **#115** (reframed; `deps: [000116]`). **Accepted simplification:**
+M2 assumes each type is *homed in a folder* (the 4 existing finders are); types
+whose instances *scatter* across the repo with no fixed home are NOT handled by
+the finder retrofit — parley doesn't handle scatter today anyway. This is purely
+a *finder/UI* limit: M1's frontmatter `Matcher` still discovers scatter types for
+the agent (#128), so the readonly harness isn't bound by the M2 simplification.
