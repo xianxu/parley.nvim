@@ -47,6 +47,13 @@ teardown (`chat_respond` collapses the empty answer + stops the spinner;
 so the request fails fast instead of hanging. **`:ParleyProxy stop` is transient**
 — every dispatch re-`ensure_running`s, so a dead/stopped proxy revives on next use.
 
+`stop` reaps **across sessions**: it kills this session's spawned PIDs *and* a
+leftover cliproxy on the managed port spawned by an earlier nvim (parley's
+proxies are detached + survive nvim exit, so `_spawned` alone can't reach them).
+It **identity-probes the port first** (the same `/v1/models` classifier as
+`health_probe`), so a *foreign* process holding the port is never killed — only
+a process that actually answers as cliproxy. `restart` = `stop` + ensure.
+
 ## Auth & secrets
 
 - The **client token** (`api_keys.cliproxyapi`) is resolved through the vault and

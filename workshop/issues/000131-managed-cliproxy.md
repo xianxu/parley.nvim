@@ -268,6 +268,17 @@ Platform:
   tarball roots `cli-proxy-api`). `auto_download` kept **opt-in** (auto-fetching a
   binary is an explicit choice; brainstorm's "A is opt-in").
 - Full suite: **make test exit 0 — 95 spec files, luacheck 0/0 across 183.**
+
+### 2026-06-12 (follow-up — stop reaps by port)
+- Operator hit the detached-proxy rough edge: a leftover cliproxy parley spawned
+  in an earlier session (brew 7.1.60 on :8317) was reused by reuse-if-healthy, so
+  a no-binary auto_download test never fired the download (correct, but the
+  leftover was unreachable — `:ParleyProxy stop` was session-scoped). Fixed:
+  `stop` now reaps a leftover cliproxy on the managed port across sessions
+  (lsof → kill), but **identity-probes the port first** (same `/v1/models`
+  classifier), so a foreign process is never killed. `restart` inherits it.
+  2 integration tests (reap-leftover, don't-kill-foreign). make test exit 0 — 95
+  spec files, luacheck 0/0.
 - Brainstormed via superpowers-brainstorming. Converged design captured in
   `## Spec`. Five decisions logged inline (audience, ownership, config source,
   auto_download deferral, platform scope). cliproxyapi CLI/release facts

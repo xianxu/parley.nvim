@@ -313,16 +313,58 @@ end
 
 M.start = M.ensure_running
 
---- Stop only proxies parley spawned (a reused/foreign daemon is left alone).
+-- PIDs listening on `port` (best-effort via lsof; empty if lsof is absent).
+local function pids_on_port(port)
+    if vim.fn.executable("lsof") ~= 1 then
+        return {}
+    end
+    local res = vim.system({ "lsof", "-nP", "-iTCP:" .. port, "-sTCP:LISTEN", "-t" }, { text = true }):wait()
+    local pids = {}
+    for s in (res.stdout or ""):gmatch("%d+") do
+        pids[#pids + 1] = tonumber(s)
+    end
+    return pids
+end
+
+-- Synchronously decide whether host:port is held by a cliproxy — same
+-- /v1/models identity as health_probe (reusing classify) — so stop() never
+-- reaps a foreign process that merely happens to hold the port. A 401
+-- (client_key_mismatch) still means a cliproxy is there, so it counts.
+local function port_holds_cliproxy(host, port, secret)
+    local args = { "curl", "-s", "-w", "\n%{http_code}", "--max-time", "2" }
+    if type(secret) == "string" and secret ~= "" then
+        table.insert(args, "-H")
+        table.insert(args, "Authorization: Bearer " .. secret)
+    end
+    table.insert(args, ("http://%s:%s/v1/models"):format(host, port))
+    local res = vim.system(args, { text = true }):wait()
+    local state = classify(res.code, res.stdout)
+    return state == "healthy" or state == "needs_login" or state == "client_key_mismatch"
+end
+
+--- Stop the managed proxy. Kills proxies this session spawned AND reaps a
+--- leftover cliproxy on the managed port from ANY session (the detached-proxy
+--- rough edge: a proxy spawned in an earlier nvim that `_spawned` can't reach).
+--- It identity-probes the port first, so a **foreign** process holding the port
+--- is left untouched.
 ---@return number killed
 function M.stop()
-    local killed = 0
+    local killed = {}
     for pid in pairs(_spawned) do
         pcall(uv.kill, pid, "sigterm")
-        killed = killed + 1
+        killed[pid] = true
     end
     _spawned = {}
-    return killed
+    local opts = render_opts()
+    if opts.host and opts.port and port_holds_cliproxy(opts.host, opts.port, opts.secret) then
+        for _, pid in ipairs(pids_on_port(opts.port)) do
+            if not killed[pid] then
+                pcall(uv.kill, pid, "sigterm")
+                killed[pid] = true
+            end
+        end
+    end
+    return vim.tbl_count(killed)
 end
 
 --- Restart: stop our own daemon, then ensure-running (re-renders config).

@@ -424,6 +424,33 @@ describe("cliproxy IO lifecycle", function()
             assert.equals(0, #cliproxy.spawned_pids())
         end)
 
+        it("stop reaps a leftover cliproxy on the port not spawned this session", function()
+            local port = free_port()
+            set_endpoint(port)
+            start_fake(port, "healthy") -- tracked in `started`, NOT in _spawned
+            wait_listening(port)
+            assert.equals(0, #cliproxy.spawned_pids()) -- this session spawned nothing
+            local n = cliproxy.stop()
+            assert.is_truthy(n >= 1) -- reaped the leftover via port identity
+            local state = await(function(done)
+                cliproxy.health_probe("127.0.0.1", port, "testkey", done)
+            end)
+            assert.equals("down", state) -- the leftover is dead
+        end)
+
+        it("stop does NOT kill a foreign process holding the port", function()
+            local port = free_port()
+            set_endpoint(port)
+            start_fake(port, "foreign") -- not a cliproxy
+            wait_listening(port)
+            local n = cliproxy.stop()
+            assert.equals(0, n) -- nothing reaped — identity probe said "foreign"
+            local state = await(function(done)
+                cliproxy.health_probe("127.0.0.1", port, "testkey", done)
+            end)
+            assert.equals("foreign", state) -- still alive
+        end)
+
         it("status() reports health, host:port, binary, and no drift after render", function()
             local port = free_port()
             set_endpoint(port)
