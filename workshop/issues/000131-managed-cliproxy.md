@@ -279,6 +279,22 @@ Platform:
   classifier), so a foreign process is never killed. `restart` inherits it.
   2 integration tests (reap-leftover, don't-kill-foreign). make test exit 0 — 95
   spec files, luacheck 0/0.
+
+### 2026-06-13 (follow-up — oauth-model-alias default)
+- After auto_download spawned a clean 7.1.71, a cliproxy chat failed with
+  "unknown provider for model claude-opus-4-8": the minimal rendered config had
+  no provider/model routing. Root cause (operator-diagnosed): the brew conf's
+  `oauth-model-alias` block maps model NAMES → the Claude OAuth credential
+  (`fork: true`); the auth-dir token alone isn't enough. Per operator direction
+  ("use parley's config to control cliproxyapi as a wrapped dependency"), baked a
+  default `oauth-model-alias` into `config.lua` `cliproxy.config` for the models
+  parley's cliproxyapi agents use (claude-sonnet-4-6 / claude-opus-4-8 /
+  claude-fable-5). **Verified end-to-end**: rendered via the real module, booted
+  the downloaded 7.1.71 against the real auth-dir → `/v1/models` now lists
+  claude-opus-4-8 (+ the family). Added a unit test that the nested map+list
+  passthrough survives JSON-as-YAML round-trip. make test exit 0 — 95 specs,
+  luacheck 0/0. (Confirmed the chat_dirs failures were a parallel-runner load
+  flake — isolated + JOBS=4 runs are green.)
 - Brainstormed via superpowers-brainstorming. Converged design captured in
   `## Spec`. Five decisions logged inline (audience, ownership, config source,
   auto_download deferral, platform scope). cliproxyapi CLI/release facts

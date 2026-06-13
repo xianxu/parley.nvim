@@ -93,6 +93,19 @@ describe("render", function()
         local cfg = cc.render({ host = "h", port = 8317, secret = "", config = {} })
         assert.is_nil(cfg["api-keys"])
     end)
+
+    it("preserves a nested map+list passthrough (oauth-model-alias) through encode", function()
+        -- the structure cliproxyapi needs to route claude-opus-4-8 → Claude OAuth;
+        -- guards the JSON-as-YAML emission of nested maps containing lists of maps.
+        local raw = {
+            ["oauth-model-alias"] = {
+                ["claude-opus"] = { { name = "claude-opus-4-8", alias = "claude-opus-4-8", fork = true } },
+            },
+        }
+        local cfg = cc.render({ host = "127.0.0.1", port = 8317, secret = "s", config = raw })
+        local back = vim.json.decode(cc.encode(cfg))
+        assert.same(raw["oauth-model-alias"], back["oauth-model-alias"])
+    end)
 end)
 
 --------------------------------------------------------------------------------

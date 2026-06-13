@@ -117,13 +117,25 @@ local config = {
 		manage = true,
 		-- auth_dir defaults to cliproxy's own ~/.cli-proxy-api when omitted.
 		-- binary_path = nil,  -- else `cliproxyapi` / `cli-proxy-api` on PATH
-		-- auto_download = true,  -- opt-in: if no binary is found, fetch a pinned,
+		auto_download = true,  -- opt-in: if no binary is found, fetch a pinned,
 		--   checksum-verified release into stdpath('data') (skips `brew install`).
 		--   Left off by default — auto-fetching a binary is an explicit choice.
 		--   `:ParleyProxy update` re-fetches; `download_version` overrides the pin.
+		-- Raw cliproxyapi config, rendered into the proxy's config.yaml. This is
+		-- where parley drives cliproxyapi as a wrapped dependency — tinker here in
+		-- Lua instead of hand-editing /opt/homebrew/etc/cliproxyapi.conf.
 		config = {
 			-- skip the management-panel GitHub download for faster startup
 			["remote-management"] = { ["disable-control-panel"] = true },
+			-- Route these model NAMES to the Claude OAuth credential in auth-dir
+			-- (the cliproxyapi-provider agents below use them). Without this,
+			-- cliproxyapi answers "unknown provider for model claude-…". Extend
+			-- for custom models. Verified against cliproxyapi 7.1.71.
+			["oauth-model-alias"] = {
+				["claude-sonnet"] = { { name = "claude-sonnet-4-6", alias = "claude-sonnet-4-6", fork = true } },
+				["claude-opus"] = { { name = "claude-opus-4-8", alias = "claude-opus-4-8", fork = true } },
+				["claude-fable"] = { { name = "claude-fable-5", alias = "claude-fable-5", fork = true } },
+			},
 		},
 	},
 
@@ -233,7 +245,7 @@ local config = {
 		{
 			provider = "anthropic",
 			name = "ToolOpus",
-			model = { model = "claude-opus-4-8", temperature = 0.8 },
+			model = { model = "claude-opus-4-8" },
 			system_prompt = require("parley.defaults").chat_system_prompt,
 			tools = {"@readonly"},
 			-- Optional: defaults applied at setup time when absent
