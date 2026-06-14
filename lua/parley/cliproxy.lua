@@ -113,6 +113,21 @@ end
 
 M._classify = classify -- exposed for unit testing
 
+-- Build the curl argv for GET /v1/models on host:port with an optional client
+-- bearer. Single source of truth for the request shape (ARCH-DRY): the health
+-- probe, the stop-time identity check, and list_models all go through here.
+-- `-w "\n%{http_code}"` appends the status code on its own line so classify()
+-- can split body from code.
+local function models_argv(host, port, secret)
+    local args = { "curl", "-s", "-w", "\n%{http_code}", "--max-time", "2" }
+    if type(secret) == "string" and secret ~= "" then
+        table.insert(args, "-H")
+        table.insert(args, "Authorization: Bearer " .. secret)
+    end
+    table.insert(args, ("http://%s:%s/v1/models"):format(host, port))
+    return args
+end
+
 --- Probe http://host:port/v1/models with the client bearer and classify.
 --- Async; calls cb(state) on the main loop.
 ---@param host string
@@ -120,14 +135,7 @@ M._classify = classify -- exposed for unit testing
 ---@param secret string|nil
 ---@param cb fun(state: string)
 function M.health_probe(host, port, secret, cb)
-    local url = ("http://%s:%s/v1/models"):format(host, port)
-    local args = { "curl", "-s", "-w", "\n%{http_code}", "--max-time", "2" }
-    if type(secret) == "string" and secret ~= "" then
-        table.insert(args, "-H")
-        table.insert(args, "Authorization: Bearer " .. secret)
-    end
-    table.insert(args, url)
-    vim.system(args, { text = true }, function(obj)
+    vim.system(models_argv(host, port, secret), { text = true }, function(obj)
         local state = classify(obj.code, obj.stdout)
         vim.schedule(function()
             cb(state)
@@ -346,13 +354,7 @@ end
 -- reaps a foreign process that merely happens to hold the port. A 401
 -- (client_key_mismatch) still means a cliproxy is there, so it counts.
 local function port_holds_cliproxy(host, port, secret)
-    local args = { "curl", "-s", "-w", "\n%{http_code}", "--max-time", "2" }
-    if type(secret) == "string" and secret ~= "" then
-        table.insert(args, "-H")
-        table.insert(args, "Authorization: Bearer " .. secret)
-    end
-    table.insert(args, ("http://%s:%s/v1/models"):format(host, port))
-    local res = vim.system(args, { text = true }):wait()
+    local res = vim.system(models_argv(host, port, secret), { text = true }):wait()
     local state = classify(res.code, res.stdout)
     return state == "healthy" or state == "needs_login" or state == "client_key_mismatch"
 end
@@ -527,6 +529,44 @@ function M.check_auth_failure(provider, raw_response)
                 vim.cmd(prefix .. "Proxy login " .. login)
             end
         end)
+    end)
+end
+
+--------------------------------------------------------------------------------
+-- :ParleyProxy models — list a provider's served models
+--------------------------------------------------------------------------------
+
+--- List the models a provider currently serves: ensure_running, GET /v1/models
+--- with the client bearer, then filter by the provider's owned_by. An EMPTY list
+--- means the provider isn't authenticated — its models aren't in the dynamic
+--- registry — which the command layer turns into a `login <provider>` prompt.
+---@param provider string
+---@param cb fun(ids: string[]|nil, err: string|nil)
+function M.list_models(provider, cb)
+    local owned_by = cc.provider_owned_by(provider)
+    if not owned_by then
+        cb(nil, ("unknown provider '%s' — see :ParleyProxy providers"):format(tostring(provider)))
+        return
+    end
+    M.ensure_running(function()
+        local opts = render_opts()
+        if not opts.host or not opts.port then
+            cb(nil, "cannot parse host:port from endpoint")
+            return
+        end
+        vim.system(models_argv(opts.host, opts.port, opts.secret), { text = true }, function(obj)
+            vim.schedule(function()
+                if obj.code ~= 0 then
+                    cb(nil, "cliproxy: /v1/models request failed")
+                    return
+                end
+                -- same body/code split classify() uses (the -w status suffix)
+                local body = (obj.stdout or ""):match("^(.*)\n%d+%s*$") or obj.stdout
+                cb(cc.filter_models_by_owner(body, owned_by), nil)
+            end)
+        end)
+    end, function(err)
+        cb(nil, err)
     end)
 end
 

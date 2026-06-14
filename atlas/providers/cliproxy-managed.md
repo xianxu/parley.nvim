@@ -18,13 +18,17 @@ fires) and cooperative for those who run their own (it reuses it). Set
 - **`cliproxy_config.lua`** (pure): `parse_endpoint` (host:port from the provider
   endpoint — the single source of truth, no separate port knob), `render` (merge
   raw `config` passthrough + wiring fields + the resolved client secret), `encode`
-  (JSON-as-YAML — valid YAML 1.2, no emitter needed). Unit-tested, no mocks.
+  (JSON-as-YAML — valid YAML 1.2, no emitter needed), and the model-discovery
+  trio `providers`/`provider_owned_by`/`filter_models_by_owner` (#132 — see Models
+  & providers). Unit-tested, no mocks.
 - **`cliproxy.lua`** (IO): `discover_binary` (`cliproxy.binary_path` → `cliproxyapi`/
   `cli-proxy-api` on PATH), `health_probe` (`GET /v1/models` with the bearer →
   `healthy`/`needs_login`/`client_key_mismatch`/`foreign`/`down`), `spawn`
   (detached, PID-tracked), `ensure_running` (reuse-if-healthy → else
-  discover/spawn/poll, bounded — never hangs), and `status`/`start`/`stop`/
-  `restart`/`login_argv`. Tested against a process-level fake.
+  discover/spawn/poll, bounded — never hangs), `list_models` (#132), and
+  `status`/`start`/`stop`/`restart`/`login_argv`. The `GET /v1/models` curl argv is
+  built once in `models_argv` and shared by `health_probe`, the stop-time identity
+  check, and `list_models` (ARCH-DRY). Tested against a process-level fake.
 
 ## Flow
 
@@ -87,6 +91,31 @@ consulted). The dispatcher's cliproxy response path calls
    key in the rendered `oauth-model-alias` *is* the provider (the default keys by
    the canonical `claude` channel for exactly this reason).
 3. prompts (`vim.ui.select`) `:ParleyProxy login <provider>`.
+
+## Models & providers (#132)
+
+`:ParleyProxy` is self-documenting and can list what a provider serves:
+
+- **`:ParleyProxy providers`** — the supported model-owning provider names
+  (`cliproxy_config.providers()`: antigravity, claude, codex, google, kimi, xai).
+- **`:ParleyProxy models <provider>`** — `list_models(provider, cb)`:
+  `ensure_running` → `GET /v1/models` with the bearer → `filter_models_by_owner`
+  keeps only ids whose `owned_by` matches the provider (map verified against the
+  CLIProxyAPI catalog: claude→anthropic, codex→openai, google→google, xai→xai,
+  kimi→moonshot, antigravity→antigravity). `/v1/models` reads the **dynamic**
+  registry (loaded auth clients only), so an unauthenticated provider contributes
+  no models → **empty list** → the command prompts `:ParleyProxy login <provider>`.
+  Chosen over the management API precisely because it auth-detects for free and
+  needs no management secret.
+- **Bare `:ParleyProxy`** prints per-subcommand help; `SUBS_HELP` (init.lua) is the
+  single source for both the usage text and the completion list (ARCH-DRY).
+
+**Two provider axes, kept distinct.** `models`/`providers` use the *model-owning*
+set (`cliproxy_config.providers()`, each with an `owned_by`). `login` uses the
+*login-method* set (`cliproxy.login_providers()`, from `LOGIN_FLAGS`) which also
+has `codex-device` — a login flow, not a distinct provider. Completion for
+`models <X>` and `login <X>` draws from the matching axis, so neither leaks the
+other's extras.
 
 ## auto_download (M2)
 

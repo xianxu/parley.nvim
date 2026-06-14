@@ -500,4 +500,84 @@ describe("cliproxy IO lifecycle", function()
             end
         end)
     end)
+
+    --------------------------------------------------------------------------
+    -- list_models — GET /v1/models filtered by owned_by
+    --------------------------------------------------------------------------
+    describe("list_models", function()
+        local saved_providers
+        local function set_endpoint(port)
+            parley.dispatcher = parley.dispatcher or {}
+            parley.dispatcher.providers = parley.dispatcher.providers or {}
+            parley.dispatcher.providers.cliproxyapi = {
+                endpoint = ("http://127.0.0.1:%d/v1/chat/completions"):format(port),
+            }
+            require("parley.vault").add_secret("cliproxyapi", "testkey")
+        end
+        before_each(function()
+            saved_providers = parley.dispatcher and parley.dispatcher.providers
+        end)
+        after_each(function()
+            if parley.dispatcher then
+                parley.dispatcher.providers = saved_providers
+            end
+        end)
+
+        it("rejects an unknown provider before touching the proxy", function()
+            parley.config = { cliproxy = { manage = true, binary_path = FAKE } }
+            local r = await(function(done)
+                cliproxy.list_models("bogus", function(ids, err)
+                    done({ ids = ids, err = err })
+                end)
+            end)
+            assert.is_nil(r.ids)
+            assert.is_truthy(r.err:find("unknown provider"))
+            assert.is_truthy(r.err:find("providers")) -- points at the discovery command
+        end)
+
+        it("lists only the requested provider's models (filters by owned_by)", function()
+            local port = free_port()
+            set_endpoint(port)
+            start_fake(port, "healthy") -- mixed-owner list (anthropic + openai)
+            wait_listening(port)
+            parley.config = { cliproxy = { manage = true, binary_path = FAKE } }
+            local r = await(function(done)
+                cliproxy.list_models("claude", function(ids, err)
+                    done({ ids = ids, err = err })
+                end)
+            end)
+            assert.is_nil(r.err)
+            assert.same({ "claude-opus-4-8", "claude-sonnet-4-6" }, r.ids)
+        end)
+
+        it("discriminates: codex sees only the openai-owned model", function()
+            local port = free_port()
+            set_endpoint(port)
+            start_fake(port, "healthy")
+            wait_listening(port)
+            parley.config = { cliproxy = { manage = true, binary_path = FAKE } }
+            local r = await(function(done)
+                cliproxy.list_models("codex", function(ids, err)
+                    done({ ids = ids, err = err })
+                end)
+            end)
+            assert.is_nil(r.err)
+            assert.same({ "gpt-5-codex" }, r.ids)
+        end)
+
+        it("returns an empty list when the provider isn't authenticated", function()
+            local port = free_port()
+            set_endpoint(port)
+            start_fake(port, "needs_login") -- proxy up, no upstream login → empty registry
+            wait_listening(port)
+            parley.config = { cliproxy = { manage = true, binary_path = FAKE } }
+            local r = await(function(done)
+                cliproxy.list_models("claude", function(ids, err)
+                    done({ ids = ids, err = err })
+                end)
+            end)
+            assert.is_nil(r.err)
+            assert.same({}, r.ids) -- command layer turns this into a login prompt
+        end)
+    end)
 end)

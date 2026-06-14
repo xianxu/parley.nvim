@@ -167,6 +167,62 @@ function M.resolve_login_provider(model, oauth_model_alias)
     return nil
 end
 
+-- Provider → the `owned_by` value its models carry in /v1/models (verified
+-- against the CLIProxyAPI catalog internal/registry/models/models.json). These
+-- are the model-owning providers a user authenticates + queries. NB this is a
+-- DIFFERENT axis from cliproxy.login_providers()/LOGIN_FLAGS (the login-method
+-- set, which also has `codex-device` — a login flow, not a distinct provider).
+local PROVIDER_OWNED_BY = {
+    claude = "anthropic",
+    codex = "openai",
+    google = "google",
+    xai = "xai",
+    kimi = "moonshot",
+    antigravity = "antigravity",
+}
+
+--- Sorted supported provider names (for `:ParleyProxy providers` + the `models`
+--- completion). Model-owning providers — see the note above re: login methods.
+---@return string[]
+function M.providers()
+    local out = {}
+    for p in pairs(PROVIDER_OWNED_BY) do
+        out[#out + 1] = p
+    end
+    table.sort(out)
+    return out
+end
+
+--- The /v1/models `owned_by` value for a provider, or nil if unknown.
+---@param provider string
+---@return string|nil
+function M.provider_owned_by(provider)
+    return PROVIDER_OWNED_BY[provider]
+end
+
+--- Parse a /v1/models response body and return the sorted model ids whose
+--- `owned_by` matches. Pure; empty for malformed input or no match. The
+--- match-or-empty is what gives per-provider auth detection: an unauthenticated
+--- provider contributes no models, so its filtered list is empty even when other
+--- providers are present.
+---@param models_json string
+---@param owned_by string
+---@return string[]
+function M.filter_models_by_owner(models_json, owned_by)
+    local ok, decoded = pcall(vim.json.decode, models_json or "")
+    if not ok or type(decoded) ~= "table" or type(decoded.data) ~= "table" then
+        return {}
+    end
+    local out = {}
+    for _, m in ipairs(decoded.data) do
+        if type(m) == "table" and m.owned_by == owned_by and type(m.id) == "string" then
+            out[#out + 1] = m.id
+        end
+    end
+    table.sort(out)
+    return out
+end
+
 --- Pull the sha256 for `asset` out of a checksums.txt body
 --- ("<sha256>  <filename>" per line). Returns nil if absent.
 ---@param text string

@@ -14,7 +14,7 @@ so the module's spawn path (which only passes `-config <path>`) can still
 select a behavior by setting the env before spawning.
 
 Modes:
-  healthy              200 {"object":"list","data":[{"id":"claude-x"}]}
+  healthy              200 {"object":"list","data":[ …mixed-owner ids… ]}
   needs_login          200 {"object":"list","data":[]}
   client_key_mismatch  401
   foreign              200 {"hello":"i am not cliproxy"}
@@ -81,8 +81,13 @@ def main():
                     self._json(200, {"hello": "i am not cliproxy"})
                 elif mode == "needs_login":
                     self._json(200, {"object": "list", "data": []})
-                else:  # healthy
-                    self._json(200, {"object": "list", "data": [{"id": "claude-x"}]})
+                else:  # healthy — a mixed-owner list so models-filtering is
+                    # proven to discriminate (anthropic vs openai), not pass through
+                    self._json(200, {"object": "list", "data": [
+                        {"id": "claude-sonnet-4-6", "owned_by": "anthropic"},
+                        {"id": "claude-opus-4-8", "owned_by": "anthropic"},
+                        {"id": "gpt-5-codex", "owned_by": "openai"},
+                    ]})
                 return
             self.send_response(404)
             self.end_headers()
