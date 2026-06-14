@@ -117,10 +117,12 @@ local config = {
 		manage = true,
 		-- auth_dir defaults to cliproxy's own ~/.cli-proxy-api when omitted.
 		-- binary_path = nil,  -- else `cliproxyapi` / `cli-proxy-api` on PATH
-		auto_download = true,  -- opt-in: if no binary is found, fetch a pinned,
+		auto_download = true,  -- if no cliproxy binary is found, fetch a pinned,
 		--   checksum-verified release into stdpath('data') (skips `brew install`).
-		--   Left off by default — auto-fetching a binary is an explicit choice.
-		--   `:ParleyProxy update` re-fetches; `download_version` overrides the pin.
+		--   ON in this config. NOTE: auto-fetching an executable is a trust
+		--   decision — a general distribution may prefer to comment this out (the
+		--   original opt-in default; see issue #131 spec). `:ParleyProxy update`
+		--   re-fetches; `download_version` overrides the pin.
 		-- Raw cliproxyapi config, rendered into the proxy's config.yaml. This is
 		-- where parley drives cliproxyapi as a wrapped dependency — tinker here in
 		-- Lua instead of hand-editing /opt/homebrew/etc/cliproxyapi.conf.

@@ -6,6 +6,10 @@ local uv = vim.uv or vim.loop
 
 local FAKE = vim.fn.getcwd() .. "/tests/fixtures/fake_cliproxy"
 
+-- Redirect cliproxy's derived-artifact dir to a temp dir so this spec NEVER
+-- touches the real ~/.local/share/nvim, even run bare (no XDG redirect).
+require("parley.cliproxy")._set_data_dir(vim.fn.tempname())
+
 -- Track fake processes started by a test so after_each can reap them.
 local started = {}
 

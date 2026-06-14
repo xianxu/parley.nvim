@@ -139,10 +139,25 @@ end
 -- Rendered config (derived artifact)
 --------------------------------------------------------------------------------
 
--- A derived, machine-local artifact under stdpath('data') — NOT in the user's
--- dotfiles repo. The committed Lua setup{} is the source of truth.
+-- Root for derived artifacts (rendered config + auto-downloaded binary), under
+-- stdpath('data') — NOT in the user's dotfiles repo. The committed Lua setup{}
+-- is the source of truth. Tests override this so a bare PlenaryBustedFile run
+-- (no XDG_DATA_HOME redirect) can NEVER write to the operator's real dir.
+local _data_dir_override = nil
+
+local function data_root()
+    return _data_dir_override or (vim.fn.stdpath("data") .. "/parley/cliproxy")
+end
+
+--- Test seam: redirect the derived-artifact root (config + bin) to `path`.
+--- Pass nil to restore the real stdpath location.
+---@param path string|nil
+function M._set_data_dir(path)
+    _data_dir_override = path
+end
+
 local function config_path()
-    local dir = vim.fn.stdpath("data") .. "/parley/cliproxy"
+    local dir = data_root()
     vim.fn.mkdir(dir, "p")
     return dir .. "/config.yaml"
 end
@@ -524,7 +539,7 @@ local PINNED_VERSION = "7.1.71" -- pinned, NOT "latest" — reproducible
 local BIN_NAME = "cli-proxy-api" -- the executable inside the release tarball
 
 local function bin_dir()
-    local dir = vim.fn.stdpath("data") .. "/parley/cliproxy/bin"
+    local dir = data_root() .. "/bin"
     vim.fn.mkdir(dir, "p")
     return dir
 end

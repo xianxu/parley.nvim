@@ -3,6 +3,7 @@
 
 local parley = require("parley")
 local cliproxy = require("parley.cliproxy")
+cliproxy._set_data_dir(vim.fn.tempname()) -- never touch the real ~/.local/share/nvim
 
 local MANAGED = {
     cliproxy = {
@@ -64,6 +65,26 @@ describe("cliproxy.check_auth_failure", function()
         cliproxy.check_auth_failure("cliproxyapi", 'data: {"choices":[{"delta":{"content":"hi"}}]}')
         vim.wait(150, function() return false end)
         assert.is_false(prompted)
+    end)
+
+    it("WARNs (no prompt) when the model isn't in any oauth-model-alias channel", function()
+        parley.config = vim.deepcopy(MANAGED) -- alias only has claude-opus-4-8
+        local prompted, notified = false, nil
+        vim.ui.select = function()
+            prompted = true
+        end
+        local saved_notify = vim.notify
+        vim.notify = function(msg, lvl)
+            notified = { msg = msg, lvl = lvl }
+        end
+        cliproxy.check_auth_failure("cliproxyapi",
+            '{"error":{"message":"unknown provider for model some-unknown-model"}}')
+        vim.wait(300, function() return notified ~= nil end, 10)
+        vim.notify = saved_notify
+        assert.is_false(prompted) -- couldn't resolve a login → no prompt
+        assert.is_truthy(notified)
+        assert.equals(vim.log.levels.WARN, notified.lvl)
+        assert.is_truthy(notified.msg:find("some%-unknown%-model"))
     end)
 
     it("is a no-op for a non-cliproxy provider", function()

@@ -215,7 +215,7 @@ Platform:
       consumer here — not M1), pinned cross-platform release fetch + checksum
       verify + extract; `:ParleyProxy update`; discovery falls through to managed
       dir.
-- [ ] M3 — auth-failure → guided login. On a cliproxy response that fails for a
+- [x] M3 — auth-failure → guided login. On a cliproxy response that fails for a
       missing/invalid upstream credential (cliproxyapi collapses this to
       `"unknown provider for model <X>"` — verified against the source:
       `util.GetProviderName` only reads the *dynamic* registry, so an unloaded
@@ -232,6 +232,8 @@ Platform:
 
 ## Log
 
+
+- 2026-06-14: closed M3 — measured increment = total 11.51h - (M1 2.74 + M2 1.29) (sdlc actual cannot scope per-milestone; this window had heavy interactive debugging + reading the CLIProxyAPI Go source). make test exit 0 (JOBS=4): 97 spec files, luacheck 0/0 across 185. M3: cliproxy_config detect_auth_failure + resolve_login_provider 9 unit tests; cliproxy_auth_login 4 integration (prompt-on-failure / no-op-success / no-op-non-cliproxy / canonical-channel resolution). Resolution is CONFIG-DRIVEN (oauth-model-alias channel key == provider), NOT name inference — verified against the CLIProxyAPI source (dynamic registry drops models at auth-error time; static catalog keyed by canonical channels claude/codex/gemini-cli/...). Re-keyed default to canonical `claude` channel, verified it serves the whole family against real 7.1.71. Window also covers post-M2 side-quests: stop-reaps-by-port (2 tests), oauth-model-alias default (verified e2e), and two topic-gen fixes (system-prompt leak into the title, incl the synthetic leading-user-turn form).; review verdict: FIX-THEN-SHIP
 ### 2026-06-12
 - 2026-06-12: closed M2 — measured increment = total 4.03h - M1 2.74h (sdlc actual cannot scope per-milestone). make test exit 0: 95 spec files, luacheck 0/0 across 183. M2: cliproxy_config platform/asset_name/parse_checksums 9 unit (injectable uname, deterministic); cliproxy_download 3 integration (fixture release over local HTTP, no network: download→sha256-verify→extract + tampered-checksum REFUSAL); discover_binary managed-dir fall-through; ensure_running auto_download trigger (opt-in); :ParleyProxy update. Grounded on real release v7.1.71 (asset naming aarch64, "<sha>  <name>" checksums, tarball roots cli-proxy-api).; review verdict: FIX-THEN-SHIP
 - **M2 FIX-THEN-SHIP resolved (no Critical; 2 Important + minors).** (1) Added the
@@ -312,6 +314,21 @@ Platform:
   the dispatcher's cliproxy response path; 4 integration tests. Re-keyed the
   default oauth-model-alias to the canonical `claude` channel. make test exit 0:
   97 spec files, luacheck 0/0 across 185.
+- **M3 FIX-THEN-SHIP resolved (no Critical).** (1) **Test-isolation bug (also hit
+  the operator live):** `config_path()`/`bin_dir()` used `stdpath('data')`
+  unconditionally, so a bare `PlenaryBustedFile` run (no XDG redirect) wrote to
+  the real `~/.local/share/nvim/parley/cliproxy/` — it had clobbered the
+  operator's rendered config with a test `testkey`/ephemeral-port, then a proxy
+  spawned from it rejected the real bearer (`client_key_mismatch`). Fix: a
+  `data_root()` with a `cliproxy._set_data_dir` test seam; every cliproxy spec
+  redirects to a temp dir at load. Verified a BARE lifecycle run is now 28/0 AND
+  leaves the real dir untouched. (2) Added the untested `check_auth_failure`
+  no-login-resolved WARN branch test (model absent from the alias → notify, no
+  prompt). (3) `auto_download = true` is the operator's intentional default —
+  kept on, fixed the now-false "off by default" comment to note it's a trust
+  decision a general distribution may revert. **Revision:** auto_download default
+  off→on is the operator's choice for this config (Spec's stated default is
+  opt-in). make test exit 0: 97 spec files, luacheck 0/0 across 185.
 
 ### 2026-06-13 (follow-up — oauth-model-alias default)
 - After auto_download spawned a clean 7.1.71, a cliproxy chat failed with

@@ -4,6 +4,7 @@
 
 local uv = vim.uv or vim.loop
 local cliproxy = require("parley.cliproxy")
+cliproxy._set_data_dir(vim.fn.tempname()) -- never touch the real ~/.local/share/nvim
 local cc = require("parley.cliproxy_config")
 
 local function free_port()

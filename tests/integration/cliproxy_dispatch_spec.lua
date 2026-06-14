@@ -14,6 +14,7 @@ local FAKE = vim.fn.getcwd() .. "/tests/fixtures/fake_cliproxy"
 
 local dispatcher = require("parley.dispatcher")
 local cliproxy = require("parley.cliproxy")
+cliproxy._set_data_dir(vim.fn.tempname()) -- never touch the real ~/.local/share/nvim
 local vault = require("parley.vault")
 local tasker = require("parley.tasker")
 local parley = require("parley")
