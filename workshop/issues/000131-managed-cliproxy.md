@@ -1,11 +1,12 @@
 ---
 id: 000131
-status: working
+status: done
 deps: []
 github_issue:
 created: 2026-06-12
-updated: 2026-06-12
+updated: 2026-06-14
 estimate_hours: 16
+actual_hours: 11.81
 ---
 
 # Manage cliproxyapi lifecycle + config
@@ -233,6 +234,8 @@ Platform:
 ## Log
 
 
+
+- 2026-06-14: closed — All 3 milestones shipped + boundary-reviewed (M1 orchestrator spine, M2 auto_download, M3 auth-failure→login), each FIX-THEN-SHIP resolved with no Critical. make test exit 0 (JOBS=4): 97 spec files, luacheck 0/0 across 185. Operator validated the full flow end-to-end on real subscription: render→spawn→reuse-if-healthy→transient-stop/reap-by-port→auto_download (7.1.71, checksum-verified)→oauth-model-alias (claude family served)→auth-failure guided login. Test-isolation contamination (tests writing the real ~/.local/share/nvim) root-caused + fixed via data_root + _set_data_dir seam; a bare lifecycle run is now 28/0 and leaves the real dir untouched (verified).
 - 2026-06-14: closed M3 — measured increment = total 11.51h - (M1 2.74 + M2 1.29) (sdlc actual cannot scope per-milestone; this window had heavy interactive debugging + reading the CLIProxyAPI Go source). make test exit 0 (JOBS=4): 97 spec files, luacheck 0/0 across 185. M3: cliproxy_config detect_auth_failure + resolve_login_provider 9 unit tests; cliproxy_auth_login 4 integration (prompt-on-failure / no-op-success / no-op-non-cliproxy / canonical-channel resolution). Resolution is CONFIG-DRIVEN (oauth-model-alias channel key == provider), NOT name inference — verified against the CLIProxyAPI source (dynamic registry drops models at auth-error time; static catalog keyed by canonical channels claude/codex/gemini-cli/...). Re-keyed default to canonical `claude` channel, verified it serves the whole family against real 7.1.71. Window also covers post-M2 side-quests: stop-reaps-by-port (2 tests), oauth-model-alias default (verified e2e), and two topic-gen fixes (system-prompt leak into the title, incl the synthetic leading-user-turn form).; review verdict: FIX-THEN-SHIP
 ### 2026-06-12
 - 2026-06-12: closed M2 — measured increment = total 4.03h - M1 2.74h (sdlc actual cannot scope per-milestone). make test exit 0: 95 spec files, luacheck 0/0 across 183. M2: cliproxy_config platform/asset_name/parse_checksums 9 unit (injectable uname, deterministic); cliproxy_download 3 integration (fixture release over local HTTP, no network: download→sha256-verify→extract + tampered-checksum REFUSAL); discover_binary managed-dir fall-through; ensure_running auto_download trigger (opt-in); :ParleyProxy update. Grounded on real release v7.1.71 (asset naming aarch64, "<sha>  <name>" checksums, tarball roots cli-proxy-api).; review verdict: FIX-THEN-SHIP
