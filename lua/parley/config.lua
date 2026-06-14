@@ -391,7 +391,7 @@ local config = {
 	-- if you want more real estate in your chat files and don't need the helper text
 	-- chat_template = require("parley.defaults").short_chat_template,
 	-- chat topic generation prompt
-	chat_topic_gen_prompt = "Summarize the topic of our conversation above"
+	chat_topic_gen_prompt = "Write a 3-5 word topic for the conversation below"
 		.. " in two or three words. Respond only with those words.",
 	-- chat topic model (string with model name or table with model name and parameters)
 	-- explicitly confirm deletion of a chat file

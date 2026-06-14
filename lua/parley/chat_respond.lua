@@ -762,24 +762,29 @@ M.generate_topic = function(messages, provider, model, callback, spinner)
     -- generation — the topic model doesn't care about tool blocks.
     local msgs = {}
     for _, m in ipairs(messages) do
-        local content = m.content
-        if type(content) == "table" then
-            -- Content-block list: concatenate text-typed block bodies.
-            -- Non-text blocks (tool_use, tool_result) contribute nothing
-            -- useful to a topic string, so we drop them.
-            local parts = {}
-            for _, block in ipairs(content) do
-                if block.type == "text" and type(block.text) == "string" then
-                    table.insert(parts, block.text)
+        -- Drop the persona system prompt for topic generation: it's a utility
+        -- call, and the default system prompt mandates a `🧠:` thinking block —
+        -- which an obedient model emits, and which then becomes the "topic".
+        if m.role ~= "system" then
+            local content = m.content
+            if type(content) == "table" then
+                -- Content-block list: concatenate text-typed block bodies.
+                -- Non-text blocks (tool_use, tool_result) contribute nothing
+                -- useful to a topic string, so we drop them.
+                local parts = {}
+                for _, block in ipairs(content) do
+                    if block.type == "text" and type(block.text) == "string" then
+                        table.insert(parts, block.text)
+                    end
                 end
+                content = table.concat(parts, " ")
+            elseif type(content) ~= "string" then
+                content = ""
             end
-            content = table.concat(parts, " ")
-        elseif type(content) ~= "string" then
-            content = ""
-        end
-        content = content:gsub("^%s*(.-)%s*$", "%1")
-        if content ~= "" then
-            table.insert(msgs, { role = m.role, content = content })
+            content = content:gsub("^%s*(.-)%s*$", "%1")
+            if content ~= "" then
+                table.insert(msgs, { role = m.role, content = content })
+            end
         end
     end
     table.insert(msgs, { role = "user", content = _parley.config.chat_topic_gen_prompt })
