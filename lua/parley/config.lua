@@ -320,14 +320,14 @@ local config = {
 		},
 		{
 			provider = "cliproxyapi",
-			name = "Claude-Code-Sonnet",
+			name = "Claude-Sonnet*",
 			-- CLIProxy web-search tool access currently requires code_execution model family.
 			model = { model = "claude-sonnet-4-6", temperature = 0.8, web_search_strategy = "anthropic_tools_route" },
 			system_prompt = require("parley.defaults").chat_system_prompt,
 		},
 		{
 			provider = "cliproxyapi",
-			name = "Claude-Code-Opus",
+			name = "Claude-Opus*",
 			-- CLIProxy web-search tool access currently requires code_execution model family.
 			model = { model = "claude-opus-4-8", temperature = 0.8, web_search_strategy = "anthropic_tools_route" },
 			system_prompt = require("parley.defaults").chat_system_prompt,
