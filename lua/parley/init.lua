@@ -293,11 +293,35 @@ local show_keybindings
 --- into — `status` just reports `managed: false`.
 ---@param prefix string # M.config.cmd_prefix (e.g. "Parley")
 M.register_proxy_command = function(prefix)
-	local SUBS = { "status", "start", "stop", "restart", "login", "update" }
+	-- Single source of truth for the subcommands: drives the usage text AND the
+	-- completion list (ARCH-DRY). `arg` is the per-subcommand argument shown in
+	-- usage; nil for the no-arg ones.
+	local SUBS_HELP = {
+		{ name = "status", desc = "show managed-proxy health, endpoint, binary, drift" },
+		{ name = "start", desc = "ensure the proxy is running (spawn if needed)" },
+		{ name = "stop", desc = "stop parley-spawned proxies (+ reap a leftover on the port)" },
+		{ name = "restart", desc = "stop, then start with a freshly rendered config" },
+		{ name = "models", arg = "<provider>", desc = "list the models a provider currently serves" },
+		{ name = "providers", desc = "list the supported provider names" },
+		{ name = "login", arg = "<provider>", desc = "run an interactive OAuth login for a provider" },
+		{ name = "update", desc = "download the pinned cliproxyapi release" },
+	}
+	local SUBS = vim.tbl_map(function(e)
+		return e.name
+	end, SUBS_HELP)
+
+	local function usage()
+		local lines = { "usage: " .. prefix .. "Proxy <subcommand>" }
+		for _, e in ipairs(SUBS_HELP) do
+			local name = e.name .. (e.arg and (" " .. e.arg) or "")
+			lines[#lines + 1] = ("  %-20s %s"):format(name, e.desc)
+		end
+		return table.concat(lines, "\n")
+	end
 
 	vim.api.nvim_create_user_command(prefix .. "Proxy", function(params)
 		local cliproxy = require("parley.cliproxy")
-		local sub = params.fargs[1] or "status"
+		local sub = params.fargs[1]
 		local arg = params.fargs[2]
 		if sub == "status" then
 			cliproxy.status(function(info)
@@ -336,6 +360,39 @@ M.register_proxy_command = function(prefix)
 			end, function(msg)
 				vim.notify(msg, vim.log.levels.ERROR)
 			end)
+		elseif sub == "providers" then
+			vim.notify(
+				"cliproxy providers: " .. table.concat(require("parley.cliproxy_config").providers(), ", "),
+				vim.log.levels.INFO
+			)
+		elseif sub == "models" then
+			if not arg then
+				vim.notify(
+					"usage: " .. prefix .. "Proxy models <provider>   (see `" .. prefix .. "Proxy providers`)",
+					vim.log.levels.WARN
+				)
+				return
+			end
+			cliproxy.list_models(arg, function(ids, err)
+				if err then
+					vim.notify("cliproxy: " .. err, vim.log.levels.ERROR)
+					return
+				end
+				if #ids == 0 then
+					-- Empty = the provider isn't authenticated (its models aren't in
+					-- the dynamic registry). Offer the login, matching the dispatch
+					-- auth-failure flow.
+					vim.ui.select({ "Log in (" .. arg .. ")", "Not now" }, {
+						prompt = ("cliproxy: no %s models — not authenticated."):format(arg),
+					}, function(_, idx)
+						if idx == 1 then
+							vim.cmd(prefix .. "Proxy login " .. arg)
+						end
+					end)
+					return
+				end
+				vim.notify(("cliproxy %s models:\n  %s"):format(arg, table.concat(ids, "\n  ")), vim.log.levels.INFO)
+			end)
 		elseif sub == "login" then
 			local argv, err = cliproxy.login_argv(arg)
 			if not argv then
@@ -347,7 +404,10 @@ M.register_proxy_command = function(prefix)
 			vim.fn.jobstart(argv, { term = true })
 			vim.cmd("startinsert")
 		else
-			vim.notify("usage: " .. prefix .. "Proxy {status|start|stop|restart|login <provider>}", vim.log.levels.WARN)
+			-- nil (bare invocation) → help at INFO; an unknown subcommand → WARN.
+			local level = sub == nil and vim.log.levels.INFO or vim.log.levels.WARN
+			local head = sub and ("unknown subcommand '" .. sub .. "'\n") or ""
+			vim.notify(head .. usage(), level)
 		end
 	end, {
 		nargs = "*",
@@ -357,6 +417,12 @@ M.register_proxy_command = function(prefix)
 				return vim.tbl_filter(function(v)
 					return v:find(arglead, 1, true) == 1
 				end, list)
+			end
+			-- `models` and `login` draw from DIFFERENT provider axes: models from the
+			-- model-owning providers, login from the login-method set (which also has
+			-- codex-device). Keep them distinct (see cliproxy_config note).
+			if line:match("Proxy%s+models%s+%S*$") then
+				return starts(require("parley.cliproxy_config").providers())
 			end
 			if line:match("Proxy%s+login%s+%S*$") then
 				return starts(require("parley.cliproxy").login_providers())

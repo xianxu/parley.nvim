@@ -1,11 +1,12 @@
 ---
 id: 000132
-status: working
+status: done
 deps: []
 github_issue:
 created: 2026-06-14
 updated: 2026-06-14
 estimate_hours: 2.5
+actual_hours: 0.18
 ---
 
 # ParleyProxy models + providers commands
@@ -68,16 +69,29 @@ Add three things to `:ParleyProxy` (`init.lua` `register_proxy_command`):
 
 ## Plan
 
-- [ ] Pure `cliproxy_config`: `providers` / `provider_owned_by` /
+- [x] Pure `cliproxy_config`: `providers` / `provider_owned_by` /
       `filter_models_by_owner` + unit tests.
-- [ ] IO `cliproxy.list_models` + extend `fake_cliproxy` to serve `/v1/models`
+- [x] IO `cliproxy.list_models` + extend `fake_cliproxy` to serve `/v1/models`
       with owned_by tags; integration test (authed → list, unauthed → empty).
-- [ ] `init.lua`: `models`/`providers` command branches + `SUBS_HELP`-driven
+- [x] `init.lua`: `models`/`providers` command branches + `SUBS_HELP`-driven
       usage + provider completion; command-spec test. Then milestone-close.
 
 ## Log
 
 ### 2026-06-14
+- 2026-06-14: closed — TDD, all green: 12 unit assertions for providers/provider_owned_by/filter_models_by_owner (cliproxy_config_spec); 4 integration cases for list_models vs the process-level fake (list/discriminate/unauthed-empty/unknown-provider); 4 command-spec cases (bare-help lists all 8 subcommands incl models/providers, providers output, models-no-arg usage, unknown-subcommand WARN). Full `make test` suite green, luacheck 0 warnings/0 errors across 185 files. Atlas updated (Models & providers section + Pieces). Single-pass atomic — no Mx.; review verdict: SHIP
 - Designed with the operator: chose /v1/models (dynamic, auth-detecting) over the
   management API (static, needs a management secret). owned_by map extracted from
   the CLIProxyAPI source catalog. Single-pass (atomic) — no Mx split.
+- Plan-quality gate: INFO. Folded in its three refinements: (1) ARCH-DRY —
+  extracted `models_argv` so the `/v1/models` curl shape has one source (was built
+  in `health_probe` + `port_holds_cliproxy`, would've been a 3rd copy in
+  list_models); (2) kept the `models`-provider axis (owned_by set) and the
+  `login`-provider axis (LOGIN_FLAGS, has codex-device) explicitly distinct in
+  both completion + docs — no silent drop of codex-device; (3) made the fake's
+  `healthy` mode a mixed-owner list (anthropic + openai) so filtering is proven to
+  discriminate, not pass through.
+- Implemented TDD: pure trio (12 unit assertions) → `list_models` + fake extension
+  (4 integration cases incl. discriminate + unauthed-empty) → command branches +
+  SUBS_HELP usage + split completion (command-spec: bare-help, providers, models-
+  no-arg, unknown-subcommand). Full suite green, luacheck 0/0.

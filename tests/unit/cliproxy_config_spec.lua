@@ -208,6 +208,49 @@ describe("resolve_login_provider", function()
     end)
 end)
 
+describe("providers / provider_owned_by", function()
+    it("lists the supported model-owning providers, sorted", function()
+        local ps = cc.providers()
+        assert.same({ "antigravity", "claude", "codex", "google", "kimi", "xai" }, ps)
+    end)
+    it("maps each provider → its /v1/models owned_by", function()
+        assert.equals("anthropic", cc.provider_owned_by("claude"))
+        assert.equals("openai", cc.provider_owned_by("codex"))
+        assert.equals("google", cc.provider_owned_by("google"))
+        assert.equals("xai", cc.provider_owned_by("xai"))
+        assert.equals("moonshot", cc.provider_owned_by("kimi"))
+        assert.equals("antigravity", cc.provider_owned_by("antigravity"))
+    end)
+    it("returns nil for an unknown provider", function()
+        assert.is_nil(cc.provider_owned_by("bogus"))
+    end)
+end)
+
+describe("filter_models_by_owner", function()
+    local mixed = vim.json.encode({ data = {
+        { id = "claude-sonnet-4-6", owned_by = "anthropic" },
+        { id = "claude-opus-4-8", owned_by = "anthropic" },
+        { id = "gpt-5-codex", owned_by = "openai" },
+    } })
+    it("returns only the matching owner's ids, sorted", function()
+        assert.same({ "claude-opus-4-8", "claude-sonnet-4-6" },
+            cc.filter_models_by_owner(mixed, "anthropic"))
+    end)
+    it("returns empty when the owner is absent but others are present", function()
+        -- per-provider auth detection: openai is loaded, anthropic is not
+        local only_openai = vim.json.encode({ data = { { id = "gpt-5-codex", owned_by = "openai" } } })
+        assert.same({}, cc.filter_models_by_owner(only_openai, "anthropic"))
+    end)
+    it("returns empty for an empty data array", function()
+        assert.same({}, cc.filter_models_by_owner(vim.json.encode({ data = {} }), "anthropic"))
+    end)
+    it("returns empty for malformed / non-JSON / nil input", function()
+        assert.same({}, cc.filter_models_by_owner("not json", "anthropic"))
+        assert.same({}, cc.filter_models_by_owner("{}", "anthropic"))
+        assert.same({}, cc.filter_models_by_owner(nil, "anthropic"))
+    end)
+end)
+
 describe("parse_checksums", function()
     local sample = table.concat({
         "bce9c508c15b205ceb8c6a26adf8eb3c20fbbdd5cba167debe6fd8d6983a46b3  CLIProxyAPI_7.1.71_darwin_aarch64.tar.gz",
