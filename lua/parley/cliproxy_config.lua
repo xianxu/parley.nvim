@@ -113,6 +113,60 @@ function M.asset_name(version, plat)
     return ("CLIProxyAPI_%s_%s_%s.%s"):format(version, plat.os, plat.arch, ext)
 end
 
+--------------------------------------------------------------------------------
+-- M3: auth-failure detection + login-provider resolution
+--------------------------------------------------------------------------------
+
+--- Detect cliproxyapi's "missing/invalid upstream credential" failure in a raw
+--- response and return the model name. cliproxyapi collapses a missing-credential
+--- into `"unknown provider for model <X>"` (verified in the source:
+--- util.GetProviderName only reads the dynamic registry, so an unloaded auth
+--- makes the model unresolvable). Returns the model name, or nil.
+---@param raw_response string
+---@return string|nil model
+function M.detect_auth_failure(raw_response)
+    if type(raw_response) ~= "string" then
+        return nil
+    end
+    return raw_response:match("unknown provider for model%s+([%w%-%._]+)")
+end
+
+-- cliproxyapi's fixed channel set → the :ParleyProxy login provider it needs.
+-- The channel keys ARE the providers (cliproxyapi static catalog); vertex uses a
+-- service account (no OAuth login) so it's intentionally absent.
+local CHANNEL_LOGIN = {
+    claude = "claude",
+    codex = "codex",
+    gemini = "google",
+    ["gemini-cli"] = "google",
+    aistudio = "google",
+    kimi = "kimi",
+    antigravity = "antigravity",
+    xai = "xai",
+}
+
+--- Resolve which login a model needs, from parley's own `oauth-model-alias`
+--- config (NOT a name heuristic): find the channel whose entries include the
+--- model (by name or alias), then map channel → login provider.
+---@param model string
+---@param oauth_model_alias table # the rendered config's oauth-model-alias block
+---@return string|nil login_provider
+function M.resolve_login_provider(model, oauth_model_alias)
+    if type(model) ~= "string" or type(oauth_model_alias) ~= "table" then
+        return nil
+    end
+    for channel, entries in pairs(oauth_model_alias) do
+        if type(entries) == "table" then
+            for _, e in ipairs(entries) do
+                if type(e) == "table" and (e.name == model or e.alias == model) then
+                    return CHANNEL_LOGIN[channel]
+                end
+            end
+        end
+    end
+    return nil
+end
+
 --- Pull the sha256 for `asset` out of a checksums.txt body
 --- ("<sha256>  <filename>" per line). Returns nil if absent.
 ---@param text string

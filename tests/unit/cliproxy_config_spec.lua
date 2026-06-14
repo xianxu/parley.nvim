@@ -161,6 +161,53 @@ describe("asset_name", function()
     end)
 end)
 
+--------------------------------------------------------------------------------
+-- M3: auth-failure detection + login-provider resolution
+--------------------------------------------------------------------------------
+describe("detect_auth_failure", function()
+    it("extracts the model from cliproxy's 'unknown provider' error", function()
+        local r = '{"error":{"message":"unknown provider for model claude-opus-4-8","type":"server_error"}}'
+        assert.equals("claude-opus-4-8", cc.detect_auth_failure(r))
+    end)
+    it("returns nil for a normal streamed response", function()
+        assert.is_nil(cc.detect_auth_failure('data: {"choices":[{"delta":{"content":"hi"}}]}'))
+    end)
+    it("returns nil for a non-string", function()
+        assert.is_nil(cc.detect_auth_failure(nil))
+    end)
+end)
+
+describe("resolve_login_provider", function()
+    local alias = {
+        claude = {
+            { name = "claude-opus-4-8", alias = "claude-opus-4-8", fork = true },
+            { name = "claude-sonnet-4-6", alias = "claude-sonnet-4-6", fork = true },
+        },
+        codex = { { name = "gpt-5-codex", alias = "gpt-5-codex", fork = true } },
+    }
+    it("resolves a claude-channel model → claude login", function()
+        assert.equals("claude", cc.resolve_login_provider("claude-opus-4-8", alias))
+    end)
+    it("resolves a codex-channel model → codex login", function()
+        assert.equals("codex", cc.resolve_login_provider("gpt-5-codex", alias))
+    end)
+    it("matches by alias when it differs from the name", function()
+        local a = { claude = { { name = "claude-opus-4-8", alias = "opus", fork = true } } }
+        assert.equals("claude", cc.resolve_login_provider("opus", a))
+    end)
+    it("maps the gemini-cli channel → google login", function()
+        local a = { ["gemini-cli"] = { { name = "gemini-2.5-pro", alias = "g", fork = true } } }
+        assert.equals("google", cc.resolve_login_provider("gemini-2.5-pro", a))
+    end)
+    it("returns nil for a model not in any channel", function()
+        assert.is_nil(cc.resolve_login_provider("mystery-model", alias))
+    end)
+    it("returns nil for a channel with no OAuth login (vertex)", function()
+        local a = { vertex = { { name = "gemini-2.5-pro", alias = "g", fork = true } } }
+        assert.is_nil(cc.resolve_login_provider("gemini-2.5-pro", a))
+    end)
+end)
+
 describe("parse_checksums", function()
     local sample = table.concat({
         "bce9c508c15b205ceb8c6a26adf8eb3c20fbbdd5cba167debe6fd8d6983a46b3  CLIProxyAPI_7.1.71_darwin_aarch64.tar.gz",

@@ -71,6 +71,23 @@ silently skips the request (neither the query nor the abort fires). This is the
 same gate all secret-backed providers use; just be aware managed mode doesn't
 remove the secret requirement (the secret is the client↔proxy token).
 
+## Auth-failure → guided login (M3)
+
+When a cliproxy chat fails because the upstream credential is missing/invalid,
+cliproxyapi returns `"unknown provider for model <X>"` (it resolves models only
+from *loaded* auth clients — `util.GetProviderName` reads the dynamic registry,
+so an unloaded auth makes the model unresolvable; the static catalog isn't
+consulted). The dispatcher's cliproxy response path calls
+`cliproxy.check_auth_failure`, which:
+1. `cliproxy_config.detect_auth_failure` extracts `<X>` from that error.
+2. `cliproxy_config.resolve_login_provider` finds the **channel** whose
+   `oauth-model-alias` list contains `<X>` and maps it → a login provider — over
+   cliproxyapi's fixed channel set (claude/codex/gemini-cli/vertex/aistudio/kimi/
+   antigravity). This is **config-driven, not a name heuristic**: the channel
+   key in the rendered `oauth-model-alias` *is* the provider (the default keys by
+   the canonical `claude` channel for exactly this reason).
+3. prompts (`vim.ui.select`) `:ParleyProxy login <provider>`.
+
 ## auto_download (M2)
 
 `cliproxy = { manage = true, auto_download = true }` removes the

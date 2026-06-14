@@ -127,14 +127,20 @@ local config = {
 		config = {
 			-- skip the management-panel GitHub download for faster startup
 			["remote-management"] = { ["disable-control-panel"] = true },
-			-- Route these model NAMES to the Claude OAuth credential in auth-dir
-			-- (the cliproxyapi-provider agents below use them). Without this,
-			-- cliproxyapi answers "unknown provider for model claude-…". Extend
-			-- for custom models. Verified against cliproxyapi 7.1.71.
+			-- Route model NAMES to the Claude OAuth credential in auth-dir (the
+			-- cliproxyapi-provider agents below use them). Without this,
+			-- cliproxyapi answers "unknown provider for model claude-…". Keyed by
+			-- cliproxyapi's CANONICAL channel name (`claude`) — so the key == the
+			-- provider, which is how parley resolves "which login does this model
+			-- need" on an auth failure. Extend for custom models. Channels:
+			-- claude / codex / gemini-cli / vertex / aistudio / kimi / antigravity.
+			-- Verified against cliproxyapi 7.1.71.
 			["oauth-model-alias"] = {
-				["claude-sonnet"] = { { name = "claude-sonnet-4-6", alias = "claude-sonnet-4-6", fork = true } },
-				["claude-opus"] = { { name = "claude-opus-4-8", alias = "claude-opus-4-8", fork = true } },
-				["claude-fable"] = { { name = "claude-fable-5", alias = "claude-fable-5", fork = true } },
+				["claude"] = {
+					{ name = "claude-sonnet-4-6", alias = "claude-sonnet-4-6", fork = true },
+					{ name = "claude-opus-4-8", alias = "claude-opus-4-8", fork = true },
+					{ name = "claude-fable-5", alias = "claude-fable-5", fork = true },
+				},
 			},
 		},
 	},

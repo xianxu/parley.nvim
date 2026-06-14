@@ -215,6 +215,20 @@ Platform:
       consumer here — not M1), pinned cross-platform release fetch + checksum
       verify + extract; `:ParleyProxy update`; discovery falls through to managed
       dir.
+- [ ] M3 — auth-failure → guided login. On a cliproxy response that fails for a
+      missing/invalid upstream credential (cliproxyapi collapses this to
+      `"unknown provider for model <X>"` — verified against the source:
+      `util.GetProviderName` only reads the *dynamic* registry, so an unloaded
+      auth makes the model unresolvable), detect it and resolve which login the
+      model needs **from parley's own `oauth-model-alias` config** (NOT name
+      inference): find the channel whose model list contains `<X>` → map channel
+      → login flag over cliproxyapi's fixed channel set (claude/codex/gemini-cli/
+      vertex/aistudio/kimi/antigravity). Then prompt-and-confirm
+      `:ParleyProxy login <provider>`. Also: re-key the default oauth-model-alias
+      to the canonical `claude` channel (verified to serve the whole family), so
+      the config key == the provider. Pure resolution functions in
+      `cliproxy_config` (unit-tested); detection wired at the dispatcher's
+      cliproxy response path.
 
 ## Log
 
@@ -279,6 +293,25 @@ Platform:
   classifier), so a foreign process is never killed. `restart` inherits it.
   2 integration tests (reap-leftover, don't-kill-foreign). make test exit 0 — 95
   spec files, luacheck 0/0.
+
+### 2026-06-13 (M3 — auth-failure → guided login)
+- Read the cliproxyapi Go source (../CLIProxyAPI): it keeps the model→provider
+  map in a STATIC catalog (`model_definitions.go` + embedded models.json) keyed
+  by canonical channels (claude/codex/gemini-cli/vertex/aistudio/kimi/antigravity)
+  and exposes it auth-independently via the management API
+  (`/v0/management/model-definitions/:channel`, `/oauth-model-alias`, `/config`).
+  But `/v1/models` + the "unknown provider" error read the DYNAMIC registry
+  (loaded auth only) — so the model vanishes at error time. Conclusion: resolve
+  from parley's OWN `oauth-model-alias` config (the channel key == provider), no
+  name inference. Verified the canonical `claude` channel key serves the whole
+  family.
+- M3 SHIPPED: pure `cliproxy_config.detect_auth_failure` (pulls the model from
+  the error) + `resolve_login_provider` (channel→login over the fixed channel
+  set) with 9 unit tests; IO `cliproxy.check_auth_failure` (detect → resolve →
+  `vim.ui.select` prompt → `:ParleyProxy login <provider>`, throttled) wired at
+  the dispatcher's cliproxy response path; 4 integration tests. Re-keyed the
+  default oauth-model-alias to the canonical `claude` channel. make test exit 0:
+  97 spec files, luacheck 0/0 across 185.
 
 ### 2026-06-13 (follow-up — oauth-model-alias default)
 - After auto_download spawned a clean 7.1.71, a cliproxy chat failed with

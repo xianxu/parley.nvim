@@ -314,6 +314,12 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 					end
 				end
 
+				-- M3 (#131): detect a managed-cliproxy missing/invalid-credential
+				-- failure and offer the right :ParleyProxy login.
+				pcall(function()
+					require("parley.cliproxy").check_auth_failure(qt.provider, qt.raw_response)
+				end)
+
 				-- optional on_exit handler
 				if type(on_exit) == "function" then
 					on_exit(qid)

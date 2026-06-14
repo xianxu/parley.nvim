@@ -467,6 +467,55 @@ function M.login_argv(provider)
 end
 
 --------------------------------------------------------------------------------
+-- M3: auth-failure → guided login
+--------------------------------------------------------------------------------
+
+local _login_prompt_active = false
+
+function M._reset_login_prompt() -- test helper
+    _login_prompt_active = false
+end
+
+--- On a cliproxy response, detect a missing/invalid upstream credential and
+--- prompt-and-confirm the right `:ParleyProxy login`. The provider is resolved
+--- from parley's own `oauth-model-alias` (the channel the model sits under), not
+--- from the model name. No-op for non-cliproxy providers + normal responses.
+---@param provider string
+---@param raw_response string
+function M.check_auth_failure(provider, raw_response)
+    local ok, providers = pcall(require, "parley.providers")
+    if not ok or providers.resolve_name(provider) ~= "cliproxyapi" then
+        return
+    end
+    local failed_model = cc.detect_auth_failure(raw_response)
+    if not failed_model or _login_prompt_active then
+        return
+    end
+    local c = cfg() or {}
+    local alias = type(c.config) == "table" and c.config["oauth-model-alias"] or nil
+    local login = alias and cc.resolve_login_provider(failed_model, alias) or nil
+    _login_prompt_active = true
+    vim.schedule(function()
+        if not login then
+            _login_prompt_active = false
+            vim.notify(("cliproxy: \"%s\" — unknown provider / missing auth. Add it to "
+                .. "cliproxy.config['oauth-model-alias'], or :ParleyProxy login <provider>.")
+                :format(failed_model), vim.log.levels.WARN)
+            return
+        end
+        local prefix = (require("parley").config or {}).cmd_prefix or "Parley"
+        vim.ui.select({ "Log in (" .. login .. ")", "Not now" }, {
+            prompt = ("cliproxy: \"%s\" needs the %s login."):format(failed_model, login),
+        }, function(_, idx)
+            _login_prompt_active = false
+            if idx == 1 then
+                vim.cmd(prefix .. "Proxy login " .. login)
+            end
+        end)
+    end)
+end
+
+--------------------------------------------------------------------------------
 -- M2: auto_download — fetch a pinned release, checksum-verify, extract
 --------------------------------------------------------------------------------
 
