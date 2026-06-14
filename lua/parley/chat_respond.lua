@@ -755,6 +755,22 @@ end
 -- @param callback  function called with (topic_string) on completion
 -- @param spinner   table|nil optional {buf, find_line} — buf is the buffer to animate,
 --                  find_line() returns 0-indexed line number of the topic line (or nil to skip)
+--- Pure: drop the first `lead` messages from a built messages array, returning
+--- just the current-file conversation turns. `lead` = (# system-prompt messages)
+--- + (# ancestor messages). The system prompt is 1 message normally, but 2 for
+--- a synthetic system prompt (leading user turn + assistant ack) — so dropping
+--- by COUNT is robust to both encodings. Exposed for tests.
+---@param messages table[]
+---@param lead integer
+---@return table[]
+function M._conversation_after_lead(messages, lead)
+    local out = {}
+    for i = (lead or 0) + 1, #messages do
+        out[#out + 1] = vim.deepcopy(messages[i])
+    end
+    return out
+end
+
 M.generate_topic = function(messages, provider, model, callback, spinner)
     -- Build a clean copy: strip whitespace, drop empty messages and cache_control.
     -- Messages carrying content-block arrays (Anthropic tool-use shape, M2
@@ -1618,15 +1634,13 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
 
                 -- if topic is ?, then generate it
                 if headers.topic == "?" then
-                    -- For topic generation, use only current file's messages (skip ancestors)
-                    -- messages layout: [system_prompt, ...ancestors, ...current_file_msgs]
-                    local topic_msgs = {}
-                    for i, m in ipairs(messages) do
-                        -- skip ancestor messages (indices 2 through ancestor_msg_count + 1)
-                        if i == 1 or i > ancestor_msg_count + 1 then
-                            table.insert(topic_msgs, vim.deepcopy(m))
-                        end
-                    end
+                    -- Topic gen: drop the leading system-prompt messages (1, or 2
+                    -- for a synthetic system prompt) AND ancestors — keep only the
+                    -- current-file conversation. Carrying the system prompt makes
+                    -- the model obey its 🧠:/persona mandate and open with a
+                    -- thinking block, which would otherwise become the "topic".
+                    local sys_lead = #require("parley.system_prompt_msgs").build(agent_info)
+                    local topic_msgs = M._conversation_after_lead(messages, sys_lead + ancestor_msg_count)
                     table.insert(topic_msgs, { role = "assistant", content = qt.response })
 
                     M.generate_topic(topic_msgs, agent_info.provider, agent_info.model, function(topic)
