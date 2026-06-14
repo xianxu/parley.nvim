@@ -1,11 +1,12 @@
 ---
 id: 000132
-status: working
+status: done
 deps: []
 github_issue:
 created: 2026-06-14
 updated: 2026-06-14
 estimate_hours: 2.5
+actual_hours: 0.18
 ---
 
 # ParleyProxy models + providers commands
@@ -78,6 +79,7 @@ Add three things to `:ParleyProxy` (`init.lua` `register_proxy_command`):
 ## Log
 
 ### 2026-06-14
+- 2026-06-14: closed — TDD, all green: 12 unit assertions for providers/provider_owned_by/filter_models_by_owner (cliproxy_config_spec); 4 integration cases for list_models vs the process-level fake (list/discriminate/unauthed-empty/unknown-provider); 4 command-spec cases (bare-help lists all 8 subcommands incl models/providers, providers output, models-no-arg usage, unknown-subcommand WARN). Full `make test` suite green, luacheck 0 warnings/0 errors across 185 files. Atlas updated (Models & providers section + Pieces). Single-pass atomic — no Mx.; review verdict: SHIP
 - Designed with the operator: chose /v1/models (dynamic, auth-detecting) over the
   management API (static, needs a management secret). owned_by map extracted from
   the CLIProxyAPI source catalog. Single-pass (atomic) — no Mx split.
