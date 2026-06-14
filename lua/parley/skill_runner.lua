@@ -328,6 +328,13 @@ end
 local _in_flight = {}
 local MAX_RESUBMITS = 3
 
+--- Test helper: is a skill run in flight for `buf`? (#131 abort-teardown test)
+---@param buf number
+---@return boolean
+function M.is_in_flight(buf)
+    return _in_flight[buf] == true
+end
+
 --- Run a skill on the current buffer.
 --- @param buf number  buffer handle
 --- @param skill table  skill definition
@@ -461,6 +468,16 @@ function M.run(buf, skill, args, _resubmit_count)
     local chars_received = 0
     local last_progress = 0
 
+    -- Abort teardown (#131): clear the in-flight guard if the managed cliproxy
+    -- can't start, else this buffer's skill runs are blocked forever (the guard
+    -- is otherwise only cleared in the qid-coupled on_exit, which never fires).
+    local function on_abort(msg)
+        _in_flight[buf] = nil
+        vim.schedule(function()
+            vim.notify("Skill " .. skill.name .. ": " .. tostring(msg), vim.log.levels.WARN)
+        end)
+    end
+
     -- Step 7: headless LLM call
     dispatcher.query(
         nil, agent.provider, payload,
@@ -539,7 +556,9 @@ function M.run(buf, skill, args, _resubmit_count)
                 end
             end)
         end,
-        nil
+        nil,
+        nil,
+        on_abort
     )
 end
 

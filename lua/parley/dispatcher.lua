@@ -314,6 +314,12 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 					end
 				end
 
+				-- M3 (#131): detect a managed-cliproxy missing/invalid-credential
+				-- failure and offer the right :ParleyProxy login.
+				pcall(function()
+					require("parley.cliproxy").check_auth_failure(qt.provider, qt.raw_response)
+				end)
+
 				-- optional on_exit handler
 				if type(on_exit) == "function" then
 					on_exit(qid)
@@ -382,12 +388,24 @@ end
 ---@param on_exit function | nil # optional on_exit handler
 ---@param callback function | nil # optional callback handler
 ---@param on_progress function | nil # optional progress/status handler
-D.query = function(buf, provider, payload, handler, on_exit, callback, on_progress)
+--- @param on_abort function | nil # optional abort handler. When an adapter's
+---   pre_query reports an error (e.g. the managed cliproxy can't be started),
+---   the dispatcher invokes on_abort(msg) INSTEAD of running the query — the
+---   caller uses it to tear down qid-free pre-query state (spinner, inserted
+---   blocks, in-flight guards) so the request fails fast instead of hanging.
+---   Additive + backward compatible: a one-arg pre_query (e.g. copilot) simply
+---   ignores the error callback the dispatcher passes it.
+D.query = function(buf, provider, payload, handler, on_exit, callback, on_progress, on_abort)
 	local adapter = providers.get(provider)
 	if adapter.pre_query then
 		return vault.run_with_secret(provider, function()
 			adapter.pre_query(function()
 				query(buf, provider, payload, handler, on_exit, callback, on_progress)
+			end, function(msg)
+				logger.error("pre_query abort [" .. tostring(provider) .. "]: " .. tostring(msg))
+				if type(on_abort) == "function" then
+					on_abort(msg)
+				end
 			end)
 		end)
 	end

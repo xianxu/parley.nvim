@@ -755,6 +755,22 @@ end
 -- @param callback  function called with (topic_string) on completion
 -- @param spinner   table|nil optional {buf, find_line} — buf is the buffer to animate,
 --                  find_line() returns 0-indexed line number of the topic line (or nil to skip)
+--- Pure: drop the first `lead` messages from a built messages array, returning
+--- just the current-file conversation turns. `lead` = (# system-prompt messages)
+--- + (# ancestor messages). The system prompt is 1 message normally, but 2 for
+--- a synthetic system prompt (leading user turn + assistant ack) — so dropping
+--- by COUNT is robust to both encodings. Exposed for tests.
+---@param messages table[]
+---@param lead integer
+---@return table[]
+function M._conversation_after_lead(messages, lead)
+    local out = {}
+    for i = (lead or 0) + 1, #messages do
+        out[#out + 1] = vim.deepcopy(messages[i])
+    end
+    return out
+end
+
 M.generate_topic = function(messages, provider, model, callback, spinner)
     -- Build a clean copy: strip whitespace, drop empty messages and cache_control.
     -- Messages carrying content-block arrays (Anthropic tool-use shape, M2
@@ -762,24 +778,29 @@ M.generate_topic = function(messages, provider, model, callback, spinner)
     -- generation — the topic model doesn't care about tool blocks.
     local msgs = {}
     for _, m in ipairs(messages) do
-        local content = m.content
-        if type(content) == "table" then
-            -- Content-block list: concatenate text-typed block bodies.
-            -- Non-text blocks (tool_use, tool_result) contribute nothing
-            -- useful to a topic string, so we drop them.
-            local parts = {}
-            for _, block in ipairs(content) do
-                if block.type == "text" and type(block.text) == "string" then
-                    table.insert(parts, block.text)
+        -- Drop the persona system prompt for topic generation: it's a utility
+        -- call, and the default system prompt mandates a `🧠:` thinking block —
+        -- which an obedient model emits, and which then becomes the "topic".
+        if m.role ~= "system" then
+            local content = m.content
+            if type(content) == "table" then
+                -- Content-block list: concatenate text-typed block bodies.
+                -- Non-text blocks (tool_use, tool_result) contribute nothing
+                -- useful to a topic string, so we drop them.
+                local parts = {}
+                for _, block in ipairs(content) do
+                    if block.type == "text" and type(block.text) == "string" then
+                        table.insert(parts, block.text)
+                    end
                 end
+                content = table.concat(parts, " ")
+            elseif type(content) ~= "string" then
+                content = ""
             end
-            content = table.concat(parts, " ")
-        elseif type(content) ~= "string" then
-            content = ""
-        end
-        content = content:gsub("^%s*(.-)%s*$", "%1")
-        if content ~= "" then
-            table.insert(msgs, { role = m.role, content = content })
+            content = content:gsub("^%s*(.-)%s*$", "%1")
+            if content ~= "" then
+                table.insert(msgs, { role = m.role, content = content })
+            end
         end
     end
     table.insert(msgs, { role = "user", content = _parley.config.chat_topic_gen_prompt })
@@ -811,6 +832,17 @@ M.generate_topic = function(messages, provider, model, callback, spinner)
     local topic_buf = vim.api.nvim_create_buf(false, true)
     local topic_handler = _parley.dispatcher.create_handler(topic_buf, nil, 0, false, "", false)
 
+    -- Abort teardown (#131): stop the topic spinner + drop the scratch buffer
+    -- if the managed cliproxy can't start, so topic-gen fails quietly (no hang).
+    local function on_abort(msg)
+        stop_and_close_timer(spinner_timer)
+        spinner_timer = nil
+        if vim.api.nvim_buf_is_valid(topic_buf) then
+            vim.api.nvim_buf_delete(topic_buf, { force = true })
+        end
+        vim.notify(msg or "parley: topic generation aborted", vim.log.levels.WARN)
+    end
+
     _parley.dispatcher.query(
         nil,
         provider,
@@ -826,7 +858,10 @@ M.generate_topic = function(messages, provider, model, callback, spinner)
             if topic ~= "" then
                 callback(topic)
             end
-        end)
+        end),
+        nil,
+        nil,
+        on_abort
     )
 end
 
@@ -1479,6 +1514,39 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             base_handler(qid, chunk)
         end
 
+        -- Shared empty-answer collapse (#131): used by on_exit (tool-use-only /
+        -- empty response) AND on_abort, so a failed managed-cliproxy start tears
+        -- down the same inserted stream placeholder instead of leaving it.
+        local function collapse_empty_answer()
+            if not stream_block_idx then
+                return
+            end
+            local sblk = model.exchanges[target_idx].blocks[stream_block_idx]
+            if sblk and sblk.size == 1 then
+                local spos = model:block_start(target_idx, stream_block_idx)
+                local sline = vim.api.nvim_buf_get_lines(buf, spos, spos + 1, false)[1] or ""
+                if not sline:match("%S") then
+                    -- Just a blank — remove it + its margin, set size 0 (the
+                    -- empty-block rule cancels the margin).
+                    local del_start = math.max(spos - 1, 0)
+                    local del_count = spos - del_start + 1
+                    buffer_edit.delete_lines_after(buf, del_start, del_count)
+                    model:set_block_size(target_idx, stream_block_idx, 0)
+                end
+            end
+        end
+
+        -- Abort teardown (#131): the dispatcher invokes this (qid-free) when the
+        -- managed cliproxy can't be started, so the request fails fast — spinner
+        -- stopped, empty answer block collapsed, error surfaced — never hangs.
+        local function on_abort(msg)
+            vim.schedule(function()
+                clear_progress_indicator(nil)
+                collapse_empty_answer()
+                vim.notify(msg or "parley: request aborted", vim.log.levels.WARN)
+            end)
+        end
+
         -- call the model and write response
         _parley.dispatcher.query(
             buf,
@@ -1492,25 +1560,9 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                 end
                 request_clear_progress_indicator(qt)
 
-                -- If the stream_placeholder has no real content (Claude
-                -- responded with only tool_use, no text), collapse it to
-                -- size 0 so it doesn't produce extra blank lines.
-                if stream_block_idx then
-                    local sblk = model.exchanges[target_idx].blocks[stream_block_idx]
-                    if sblk and sblk.size == 1 then
-                        local spos = model:block_start(target_idx, stream_block_idx)
-                        local sline = vim.api.nvim_buf_get_lines(buf, spos, spos + 1, false)[1] or ""
-                        if not sline:match("%S") then
-                            -- It's just a blank — remove it + its margin
-                            -- from the buffer, then set size 0 in the model
-                            -- (empty-block rule cancels the margin).
-                            local del_start = math.max(spos - 1, 0)  -- margin line
-                            local del_count = spos - del_start + 1   -- margin + blank
-                            buffer_edit.delete_lines_after(buf, del_start, del_count)
-                            model:set_block_size(target_idx, stream_block_idx, 0)
-                        end
-                    end
-                end
+                -- Collapse the empty stream placeholder (tool-use-only or empty
+                -- response). Shared with the #131 abort path.
+                collapse_empty_answer()
 
                 -- Tool loop hook: if the streamed response contained
                 -- tool_use blocks, write 🔧:/📎: into the buffer and
@@ -1582,15 +1634,13 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
 
                 -- if topic is ?, then generate it
                 if headers.topic == "?" then
-                    -- For topic generation, use only current file's messages (skip ancestors)
-                    -- messages layout: [system_prompt, ...ancestors, ...current_file_msgs]
-                    local topic_msgs = {}
-                    for i, m in ipairs(messages) do
-                        -- skip ancestor messages (indices 2 through ancestor_msg_count + 1)
-                        if i == 1 or i > ancestor_msg_count + 1 then
-                            table.insert(topic_msgs, vim.deepcopy(m))
-                        end
-                    end
+                    -- Topic gen: drop the leading system-prompt messages (1, or 2
+                    -- for a synthetic system prompt) AND ancestors — keep only the
+                    -- current-file conversation. Carrying the system prompt makes
+                    -- the model obey its 🧠:/persona mandate and open with a
+                    -- thinking block, which would otherwise become the "topic".
+                    local sys_lead = #require("parley.system_prompt_msgs").build(agent_info)
+                    local topic_msgs = M._conversation_after_lead(messages, sys_lead + ancestor_msg_count)
                     table.insert(topic_msgs, { role = "assistant", content = qt.response })
 
                     M.generate_topic(topic_msgs, agent_info.provider, agent_info.model, function(topic)
@@ -1722,7 +1772,8 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                     spinner_message = message
                     render_spinner_line()
                 end
-            end)
+            end),
+            on_abort
         )
     end)
 end

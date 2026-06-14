@@ -36,7 +36,12 @@ local config = {
 		googleai = os.getenv("GOOGLEAI_API_KEY"),
 		ollama = "dummy_secret", -- ollama typically uses a dummy token for local instances
 		copilot = os.getenv("GITHUB_TOKEN"), -- for GitHub Copilot
-		cliproxyapi = os.getenv("CLIPROXYAPI_API_KEY"),
+		-- Local client↔proxy handshake token (NOT your subscription auth — that
+		-- lives in the cliproxy auth-dir via :ParleyProxy login). In managed mode
+		-- parley renders this into the proxy's api-keys AND sends it as the bearer,
+		-- so a fixed local default works out-of-the-box over loopback. Override
+		-- via the env var if you point at a proxy that expects a specific key.
+		cliproxyapi = os.getenv("CLIPROXYAPI_API_KEY") or "parley-local",
 	},
 
 	-- Google Drive OAuth configuration for @@ URL references
@@ -95,6 +100,50 @@ local config = {
 			-- none | openai_search_model | openai_tools_route | anthropic_tools_route
 			web_search_strategy = "openai_tools_route",
 			-- secret will be loaded from api_keys.cliproxyapi
+		},
+	},
+
+	-- Let parley manage the cliproxyapi process itself (issue #131). parley
+	-- renders config.yaml from this block on demand and lazily starts / reuses /
+	-- health-checks the proxy whenever a cliproxyapi-provider agent is used. It
+	-- is DORMANT unless such an agent runs, and it REUSES an already-running proxy
+	-- (e.g. `brew services`) if one answers healthy — so this default is safe even
+	-- if you don't use cliproxyapi. host:port come from providers.cliproxyapi.endpoint
+	-- (single source of truth); the generated config is a derived 0600 artifact
+	-- under stdpath('data') — your committed Lua is the source of truth, no secret
+	-- in it. A new machine needs only: `brew install cliproxyapi` + one-time
+	-- `:ParleyProxy login <provider>` (OAuth). Set manage=false to opt out.
+	cliproxy = {
+		manage = true,
+		-- auth_dir defaults to cliproxy's own ~/.cli-proxy-api when omitted.
+		-- binary_path = nil,  -- else `cliproxyapi` / `cli-proxy-api` on PATH
+		auto_download = true,  -- if no cliproxy binary is found, fetch a pinned,
+		--   checksum-verified release into stdpath('data') (skips `brew install`).
+		--   ON in this config. NOTE: auto-fetching an executable is a trust
+		--   decision — a general distribution may prefer to comment this out (the
+		--   original opt-in default; see issue #131 spec). `:ParleyProxy update`
+		--   re-fetches; `download_version` overrides the pin.
+		-- Raw cliproxyapi config, rendered into the proxy's config.yaml. This is
+		-- where parley drives cliproxyapi as a wrapped dependency — tinker here in
+		-- Lua instead of hand-editing /opt/homebrew/etc/cliproxyapi.conf.
+		config = {
+			-- skip the management-panel GitHub download for faster startup
+			["remote-management"] = { ["disable-control-panel"] = true },
+			-- Route model NAMES to the Claude OAuth credential in auth-dir (the
+			-- cliproxyapi-provider agents below use them). Without this,
+			-- cliproxyapi answers "unknown provider for model claude-…". Keyed by
+			-- cliproxyapi's CANONICAL channel name (`claude`) — so the key == the
+			-- provider, which is how parley resolves "which login does this model
+			-- need" on an auth failure. Extend for custom models. Channels:
+			-- claude / codex / gemini-cli / vertex / aistudio / kimi / antigravity.
+			-- Verified against cliproxyapi 7.1.71.
+			["oauth-model-alias"] = {
+				["claude"] = {
+					{ name = "claude-sonnet-4-6", alias = "claude-sonnet-4-6", fork = true },
+					{ name = "claude-opus-4-8", alias = "claude-opus-4-8", fork = true },
+					{ name = "claude-fable-5", alias = "claude-fable-5", fork = true },
+				},
+			},
 		},
 	},
 
@@ -204,7 +253,7 @@ local config = {
 		{
 			provider = "anthropic",
 			name = "ToolOpus",
-			model = { model = "claude-opus-4-8", temperature = 0.8 },
+			model = { model = "claude-opus-4-8" },
 			system_prompt = require("parley.defaults").chat_system_prompt,
 			tools = {"@readonly"},
 			-- Optional: defaults applied at setup time when absent
@@ -350,7 +399,7 @@ local config = {
 	-- if you want more real estate in your chat files and don't need the helper text
 	-- chat_template = require("parley.defaults").short_chat_template,
 	-- chat topic generation prompt
-	chat_topic_gen_prompt = "Summarize the topic of our conversation above"
+	chat_topic_gen_prompt = "Write a 3-5 word topic for the conversation below"
 		.. " in two or three words. Respond only with those words.",
 	-- chat topic model (string with model name or table with model name and parameters)
 	-- explicitly confirm deletion of a chat file

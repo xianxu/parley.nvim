@@ -524,4 +524,52 @@ describe("dispatcher.query internals", function()
             assert.equals("second query", on_progress_calls[1].text)
         end)
     end)
+
+    describe("Group H: pre_query abort channel", function()
+        local providers = require("parley.providers")
+        local original_get
+
+        before_each(function()
+            original_get = providers.get
+        end)
+        after_each(function()
+            providers.get = original_get
+        end)
+
+        it("H1: pre_query error invokes on_abort and does NOT run the query", function()
+            providers.get = function()
+                return {
+                    pre_query = function(_on_success, on_error)
+                        on_error("boom")
+                    end,
+                }
+            end
+            local abort_msg
+            dispatcher.query(nil, "managedprov", { model = "m", messages = {} },
+                make_handler(), make_on_exit(), make_callback(), nil,
+                function(msg)
+                    abort_msg = msg
+                end)
+            assert.equals("boom", abort_msg)
+            assert.is_nil(captured_out_reader) -- query() never ran → no tasker.run
+            assert.equals(0, #on_exit_calls) -- and the normal teardown path didn't fire either
+        end)
+
+        it("H2: pre_query success runs the query as before (backward compatible)", function()
+            providers.get = function()
+                return {
+                    pre_query = function(on_success)
+                        on_success()
+                    end, -- one-arg adapter ignores the error cb the dispatcher passes
+                    format_headers = function(_secret, _model, _payload, endpoint)
+                        return { "-H", "x: y" }, endpoint
+                    end,
+                }
+            end
+            dispatcher.providers["managedprov"] = { endpoint = "http://fake.test/v1/chat/completions" }
+            dispatcher.query(nil, "managedprov", { model = "m", messages = {} },
+                make_handler(), make_on_exit(), make_callback(), nil, function() end)
+            assert.is_not_nil(captured_out_reader) -- query() ran (tasker.run captured)
+        end)
+    end)
 end)

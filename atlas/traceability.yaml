@@ -260,6 +260,27 @@ atlas:
       - tests/unit/provider_params_spec.lua
       - tests/unit/pure_functions_spec.lua
 
+  providers/cliproxy-managed:
+    code:
+      - lua/parley/cliproxy_config.lua
+      - lua/parley/cliproxy.lua
+      - lua/parley/providers.lua
+      - lua/parley/dispatcher.lua
+      - lua/parley/chat_respond.lua
+      - lua/parley/skill_runner.lua
+      - lua/parley/memory_prefs.lua
+      - lua/parley/init.lua
+    tests:
+      - tests/unit/cliproxy_config_spec.lua
+      - tests/unit/providers_pre_query_spec.lua
+      - tests/unit/dispatcher_query_spec.lua
+      - tests/integration/cliproxy_lifecycle_spec.lua
+      - tests/integration/cliproxy_dispatch_spec.lua
+      - tests/integration/cliproxy_command_spec.lua
+      - tests/integration/cliproxy_caller_teardown_spec.lua
+      - tests/integration/cliproxy_download_spec.lua
+      - tests/integration/cliproxy_auth_login_spec.lua
+
   providers/anthropic:
     code:
       - lua/parley/providers.lua
