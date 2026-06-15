@@ -1,0 +1,39 @@
+# parley.nvim Base Layer Manifest
+#
+# parley.nvim's module declaration for the weave layer compiler. parley is a
+# LEAF derivative: it consumes ariadne as its substrate (declared in
+# construct/deps as `substrate ../ariadne`) and inherits ariadne's EXPORTED base
+# layer through that edge. This manifest declares ONLY parley's OWN internal
+# artifacts; parley exports NOTHING downstream (it has no consumers).
+#
+# Format and verbs are documented in ariadne's construct/base.manifest. The
+# leading `internal` token (ariadne#99 composition algebra) marks an artifact
+# that stays with parley: it is selected ONLY on parley's own self-walk (when
+# parley is the leaf), never leaked into any hypothetical consumer — and,
+# conversely, ariadne's own `internal` artifacts (its AGENTS.local.md) never leak
+# DOWN into parley's composed AGENTS.md. This is the structural fix for the #95
+# bug (the old `symlink AGENTS.md` whose @-import silently resolved to ariadne's
+# local file).
+
+# ── Constitution ──────────────────────────────────────────────────────────────
+# parley's own local extensions. weave concatenates this fragment LAST into
+# parley's composed AGENTS.md (after every layer's exported prose — i.e. after
+# ariadne's exported AGENTS.base.md / Constitution). Declared `internal` so it is
+# parley-only.
+internal  prose AGENTS.local.md
+
+# ── Skills ────────────────────────────────────────────────────────────────────
+# parley declares NO `skill` rows. The adapted (superpowers-*) and shared local
+# (xx-*) skills are inherited from ariadne via the `skill construct/local` /
+# `skill construct/adapted` rows in ARIADNE's manifest (parley's construct/local
+# + construct/adapted are symlinks into ariadne, so weave finds them there).
+# parley's OWN skills (xx-fix, xx-interview-feedback, xx-pensive, xx-skill-gen,
+# xx-voice-apply, xx-voice-gen) are committed REAL directories living directly
+# under .claude/skills/ — NOT in a weave-scannable construct/ source dir — so the
+# `skill <source-dir>` intent does not model them; weave leaves them in place.
+
+# ── Settings ──────────────────────────────────────────────────────────────────
+# parley declares NO settings row. The settings cascade is driven by the `merge
+# .claude/settings.ariadne.json .claude/settings.json` row in ARIADNE's manifest;
+# parley's .claude/settings.ariadne.json (symlink to ariadne's base) and its own
+# .claude/settings.local.json are the operands that merge consumes.

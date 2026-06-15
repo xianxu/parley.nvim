@@ -13,6 +13,10 @@ vision
 
 .ariadne-backup/
 .goto
+
+# weave-composed agentic context (written by `weave compile` on apply in the VM;
+# no longer the tracked symlink to ../ariadne/AGENTS.md — the #95 cutover bug).
+/AGENTS.md
 .openshell/.base-image-digest
 .DS_Store
 /bin/sdlc
