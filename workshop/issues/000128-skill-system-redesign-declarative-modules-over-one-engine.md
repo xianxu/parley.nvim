@@ -10,6 +10,15 @@ estimate_hours: 40
 
 # Skill system redesign: declarative modules over one engine
 
+> **RE-SCOPED 2026-06-15 — read `## Revisions` first.** The original premise
+> (skills "configure a turn of the chat loop") conflated two distinct modes and
+> was partly premature. This issue is now scoped to **unifying the execution
+> loop + context assembly**, with *skill* = the **P2 artifact-workbench**
+> descriptor only. The framing lives in
+> `workshop/pensive/parley-two-modes-chat-vs-artifact.md`. Parts of the Spec /
+> Done-when below (read_skill-in-chat, `auto`/`always` chat activation,
+> `repo_discovery`-as-skill) are **superseded** — see Revisions.
+
 ## Problem
 
 Parley has **two execution engines that duplicate concerns**: the chat tool
@@ -115,13 +124,54 @@ Decomposed into review-boundary milestones — task detail in
 `workshop/plans/000128-skill-system-redesign-plan.md` (M1 task-detailed; M2–M5
 sketched). The original rough shape is folded into the milestones below.
 
-- [x] M1 — declarative manifest + provider-based discovery: `SkillManifest` shape+`validate`; disk/virtual providers (closure `source`, kills the `debug.getinfo` dance); registry union+dedup; `review`/`voice_apply` re-expressed as manifests — **no chat-loop change**
-- [ ] M2 — `read_skill` tool (cwd-exempt, transcript-visible) + per-turn assembly (per-buffer `ActiveSkills` state + pure `assemble_turn`) + route through the chat loop
-- [ ] M3 — `propose_edits` builtin (salvage `compute_edits`/`apply_edits` + highlight/diagnostics) + `force_tool`; port `review` end-to-end through the loop
-- [ ] M4 — port `voice_apply`; delete `skill_runner` forced pipeline; reconcile callers (`skill_picker`/`review.lua`/keybindings); resolve `glob`/`list_dir` (YAGNI decision — they don't exist)
-- [ ] M5 — `repo_discovery` virtual skill (consumes #116 M1 `render()`) — the merge point
+**Re-scoped 2026-06-15** (see `## Revisions`): #128 = *unify the execution loop
++ context assembly so P1 (chat) and P2 (skill/artifact) share one engine; skill
+= the P2 descriptor.* M2–M5 below replace the original chat-turn framing; detailed
+re-planning of the new M2+ happens when we tackle it (the plan doc's M2–M5
+sketches are stale until then).
 
-(**#129** capability permission model layers onto `tools`/`elevated` **after** this issue — a separate issue, not a milestone here.)
+- [x] M1 — declarative manifest + provider-based discovery: `SkillManifest` shape+`validate`; disk/virtual providers (closure `source`, kills the `debug.getinfo` dance); registry union+dedup; `review`/`voice_apply` re-expressed as manifests. **Survives as the P2-skill descriptor** (chat-flavored fields `scope`/`activation.auto/always` to be revisited → "how a skill is surfaced in the P2 UI").
+- [ ] M2 (re-scoped) — extract the shared **context-assembler** (`system_prompt ⊕ tools ⊕ skill-body`) + **recursive tool-loop** core that both `chat_respond` (P1) and the P2 skill driver call. The real DRY win; replaces the original read_skill/per-turn-chat-assembly.
+- [ ] M3 (re-scoped) — `propose_edits` mutation tool (salvage `compute_edits`/`apply_edits` + highlight/diagnostics); port `review` to **drive the shared loop on the artifact** (single-shot → recursive-capable), not a separate pipeline.
+- [ ] M4 (re-scoped) — port `voice_apply` likewise; **delete `skill_runner`** + reconcile callers (`skill_picker`/`review.lua`/keybindings); resolve `glob`/`list_dir` (YAGNI — they don't exist).
+- [ ] ~~M5 — `repo_discovery` virtual skill~~ **DROPPED** — `repo_discovery` is **P1 context/tools**, not a skill (category error). #116 feeds P1 directly; see the P1 project below.
+
+**Dropped from the original scope** (premature P1/P2 conflation): `read_skill`-in-chat, `auto`/`always` chat activation (skills pulled into the chat menu), `repo_discovery`-as-skill.
+
+**P1 — "parley chat as ariadne workbench" (discovery + repo tools in chat context)** is a **distinct project** that #116 feeds; it likely deserves its **own issue** when tackled. Not created yet (deferred).
+
+(**#129** capability permission model = tool permissions for **both** modes; layers on the shared tool infra **after** this issue — a separate issue, not a milestone here.)
+
+## Revisions
+
+### 2026-06-15 — RE-SCOPED: unify at the loop; skill = P2-only descriptor
+
+A design conversation separated two modes the original ticket had prematurely
+fused (operator: "I think I hallucinated a bit"). Full framing:
+`workshop/pensive/parley-two-modes-chat-vs-artifact.md`. Deltas:
+
+- **Two modes, two projects.** **P1** = parley *chat* as an ariadne workbench
+  (repo-aware, read-only, tools-only; the transcript is the value). **P2** = a
+  workbench around *one artifact* (the markdown file is the subject; "chat" is
+  implicit via *skills*; mutation tools; single-shot→recursive; multi-headed
+  marker→thread; document review is canonical).
+- **Skill = P2 only. Tools = both.** "Skill" is the artifact-mode command
+  (prompt-portion + tools + UI registration). Read-only repo tools serve P1.
+- **`repo_discovery`-as-skill was a category error** → it's P1 context/tools, not
+  a skill. **M5 dropped.** #116 feeds P1 directly.
+- **Skills are NOT chat turns** → `read_skill`-in-chat + `auto`/`always` chat
+  activation **dropped**. That was the premature P1/P2 bridge.
+- **The genuine, retained DRY win** (the original Problem) = the **two execution
+  engines** (`chat_respond` loop vs `skill_runner` single-shot) re-implement
+  assemble→call→tool-loop→recurse. Re-scope = **one context-assembler + tool-loop
+  core** that P1 (chat) and P2 (skill driver) both parameterize;
+  `skill_runner` deletes. Unification is at the **loop**, not "skills are chat."
+- **M1 survives** as the P2-skill descriptor (manifest + providers + registry);
+  the chat-flavored fields (`scope`, `activation.auto/always`) trim toward "how a
+  skill is surfaced in the P2 UI" — revisit at re-plan.
+- **Detailed re-plan of M2+ deferred** to when we tackle it (operator pausing for
+  an ariadne change first). The plan-doc M2–M5 sketches are stale until then.
+- **P1 deserves its own issue** when tackled (not created yet).
 
 ## Log
 

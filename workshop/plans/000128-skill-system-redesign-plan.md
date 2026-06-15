@@ -200,6 +200,29 @@ A `VirtualProvider` generator emitting `repo_discovery` (`scope=repo`, `activati
 
 ## Revisions
 
+### 2026-06-15 — RE-SCOPED (M1 stands; M2–M5 below are STALE pending re-plan)
+
+The issue was re-scoped (see `workshop/issues/000128-…` `## Revisions` +
+`workshop/pensive/parley-two-modes-chat-vs-artifact.md`). Parley has **two
+modes**: P1 chat-as-ariadne-workbench (read-only, tools, transcript) and P2
+artifact-workbench (the markdown file is the subject; *skills* construct context
++ mutation tools; single-shot→recursive; multi-headed). **Skill = P2 only; tools
+= both.** The original "skills configure a chat turn" was premature.
+
+Effect on this plan:
+- **M1 stands** (manifest + providers + registry; done, boundary-clean) — now
+  understood as the **P2-skill descriptor + discovery**. Its chat-flavored fields
+  (`scope`, `activation.auto/always`) will trim to "how a skill is surfaced in
+  the P2 UI."
+- **M2–M5 below are STALE.** The new direction: **extract one shared
+  context-assembler + recursive tool-loop** that both `chat_respond` (P1) and the
+  P2 skill driver call (the real DRY win — `skill_runner` deletes); port
+  `review`/`voice_apply` to drive it on the artifact via a `propose_edits`
+  mutation tool. **Dropped:** `read_skill`-in-chat, `auto`/`always` chat
+  activation, `repo_discovery`-as-skill (that's P1 context). The Core-concepts +
+  M2–M5 sections above predate this and need a fresh `superpowers-writing-plans`
+  pass when we resume — do not execute them as written.
+
 ### 2026-06-12 — M1 boundary-review (FIX-THEN-SHIP → addressed)
 
 M1 implemented (Tasks 1–6); boundary review **FIX-THEN-SHIP** (no Critical; "no
