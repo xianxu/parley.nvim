@@ -21,3 +21,12 @@ vision
 .DS_Store
 /bin/sdlc
 bin/
+
+# weave-generated runtime artifacts (lowered by `make weave`, like AGENTS.md
+# above): skill symlinks, the merged settings.json (#100 accept-transience), the
+# .colima symlinks, and the vm-log.sh symlink. Regenerated on every weave, so
+# untracked + ignored keeps `make weave` zero-churn.
+/.claude/skills/
+/.claude/settings.json
+/.colima/
+/construct/scripts/vm-log.sh
