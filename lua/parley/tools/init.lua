@@ -134,6 +134,7 @@ M.BUILTIN_NAMES = {
     "chat_history_search",
     "edit_file",
     "write_file",
+    "propose_edits",
 }
 
 --- Optional tools that are only registered if the underlying command
