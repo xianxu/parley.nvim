@@ -32,51 +32,45 @@ Only **M1** is detailed to task granularity below; M2–M5 are milestone sketche
 
 ## Core concepts
 
+> **Re-scoped (2026-06-15/16).** The entities below reflect the P2 (artifact-mode)
+> direction: **P1's chat loop is untouched** and the "shared kernel" is the
+> *existing* dispatcher/tools layer. Dropped from the original (M1-era) set:
+> `assemble_turn`, `ActiveSkills`, the `read_skill` tool, the chat-loop turn hook
+> — those built skills into the *chat* loop (the premature P1/P2 conflation).
+
 ### Pure entities
 
 | Name | Lives in | Status |
 |------|----------|--------|
-| `SkillManifest` (shape + `validate`) | `lua/parley/skill_manifest.lua` | new |
-| `assemble_turn` (active set + scope → turn config) | `lua/parley/skill_assembly.lua` | new (M2) |
-| `compute_edits` (salvaged, pure) | `lua/parley/skill_edits.lua` | new (M3) — moved from `skill_runner.lua:54` |
-| `resolve_agent` (salvaged cascade) | `lua/parley/skill_assembly.lua` | new (M2) — moved from `skill_runner.lua:284`; pure given injected config |
+| `SkillManifest` (shape + `validate`) | `lua/parley/skill_manifest.lua` | done (M1) |
+| `compute_edits` (salvaged, pure) | `lua/parley/skill_edits.lua` | new (M2) — moved from `skill_runner.lua:54` |
+| `build_invocation` (manifest + body + doc → invocation) | `lua/parley/skill_assembly.lua` | new (M2) |
+| `resolve_agent` (salvaged cascade, pure given injected config) | `lua/parley/skill_assembly.lua` | new (M2) — moved from `skill_runner.lua:284` |
 
-- **SkillManifest** — the declarative description of one skill: `{ name, description, scope, activation, source, tools, elevated, force_tool?, args?, agent? }`. `validate(m)` returns `(true)` or `(false, err)`.
-  - `scope` ∈ `global | repo | super_repo`; `activation` = table of independent boolean flags `{ always?, auto?, manual? }` (any combination — `always`=preloaded by scope, `auto`=offered in the model's menu, `manual`=hotkey-activatable); `source` = `function(ctx) → string` (the body — unified across disk/virtual, see DiskProvider); `tools` = list of tool names granted whenever active; `elevated` = list granted only on **manual** activation (the #129 hook); `force_tool` = optional tool name to compel this turn; `args` = optional completable-arg specs (kept from v1); `agent` = optional model override.
-  - **Relationships:** N:1 held by the SkillRegistry; 1:1 with a `source` closure. **DRY rationale:** one manifest shape across *all* providers (disk/virtual/repo) — `discover` and the assembly read one shape, no per-source branching (replaces v1's `skill.system_prompt` fn + `_dir`/`_module` internals + `pre_submit`/`post_apply` hooks). **Future extensions:** #129 reads `tools`/`elevated`; a `priority` field if menu ordering matters.
-- **assemble_turn** (M2) — pure: `(active_manifests, scope, manual_active) → { system_context = string, tools = {…}, forced_tool = string|nil }`. Unions the bodies/tool-grants of the manifests active for this turn; applies `elevated` only for `manual_active` skills; surfaces a single `force_tool` if exactly one active skill sets it.
-  - **Relationships:** consumes N SkillManifests; produces one turn-config. **DRY rationale:** the single place "what does this turn get" is decided — the chat loop and any future headless caller share it. **Future extensions:** #129 permission filtering slots in here (gate `elevated` on a capability check, not just `manual`).
-- **compute_edits** (M3, salvaged from `skill_runner.lua:54-109`) — pure: `(content, edits) → (ok, msg, new_content, applied)`; validates uniqueness, applies in reverse position order. Becomes the core of the `propose_edits` tool handler.
-  - **DRY rationale:** the one batch-edit transform; the tool handler (IO) wraps it. **Future extensions:** none expected — stable.
-- **resolve_agent** (M2, salvaged from `skill_runner.lua:284-322`) — the agent cascade (per-skill config → skill default → global `skill_agent` → first tool-capable agent), reused by the assembly to pick a model when a skill declares one. v1's copy reads the parley module directly (not pure); **M2 salvages it as a pure function of *injected* config** (`(config, skill) → agent`) so the core stays pure and the IO (config read) lives at the assembly boundary (`ARCH-PURE`). Deferred from M1 Task 1 — it isn't part of the manifest schema and belongs where it's consumed.
+- **SkillManifest** (done, M1) — the declarative description of one **P2 skill**: `{ name, description, scope, activation, source, tools, elevated, force_tool?, args?, agent? }`. `validate(m)` returns `(true)` or `(false, err)`.
+  - `source` = `function(ctx) → string` (the body — unified across disk/virtual); `tools` granted whenever the skill is invoked; `elevated` granted only on **manual** invocation (the #129 hook); `force_tool` compels a tool (e.g. `propose_edits`); `args` = the completable-arg picker. **Re-scope note:** `scope` + `activation.auto/always` were for the dropped chat-menu idea; for P2 they trim toward "how a skill is surfaced in the artifact-workbench UI" (revisit when the P2 UI lands — not M2).
+  - **DRY rationale:** one manifest shape across all providers; `discover` reads one shape. **Future extensions:** #129 reads `tools`/`elevated`.
+- **compute_edits** (M2, salvaged from `skill_runner.lua:54-109`) — pure: `(content, edits) → {ok, msg, content, applied}`; validates uniqueness, applies in reverse position order. The single source of the batch-edit transform; the `propose_edits` tool handler (IO) wraps it; `skill_runner.apply_edits` delegates to it until M4 deletes `skill_runner`.
+  - **DRY rationale:** one batch-edit transform, two callers (the tool + the v1 path) until v1 goes. **Future extensions:** none expected — stable.
+- **build_invocation** (M2) — pure: `(manifest, {body, document, manual?}) → {system_prompt, messages, tools, tool_choice}`. The **P2 context-assembler** — turns a skill + the artifact text into the LLM-call inputs the thin driver (M3) feeds to `prepare_payload`. `tools` = `manifest.tools` ∪ (`elevated` only when `manual`); `tool_choice` from `force_tool`. The `source()` IO stays in the driver — `body` is passed in, so this is pure.
+  - **DRY rationale:** the one place "skill → call inputs" is decided; testable without an LLM. **Future extensions:** when P2 goes recursive, it grows a "messages-so-far" param; #129 filters `tools` here.
+- **resolve_agent** (M2, salvaged from `skill_runner.lua:284-322`) — the agent cascade (per-skill config → `review_agent` legacy → manifest default → global `skill_agent` → first tool-capable). v1's copy reads the parley module (not pure); **M2 salvages it as a pure function of *injected* `config`** (`(config, manifest) → agent`) so the core stays pure and the config read lives at the driver boundary (`ARCH-PURE`).
 
 ### Integration points
 
 | Name | Lives in | Status | Wraps |
 |------|----------|--------|-------|
-| `DiskProvider` | `lua/parley/skill_providers.lua` | new | filesystem scan (`vim.loop.fs_scandir`) |
-| `VirtualProvider` | `lua/parley/skill_providers.lua` | new (seam in M1, used M5) | runtime-generated manifests |
-| `SkillRegistry` (`discover`/`get`/`names`) | `lua/parley/skill_registry.lua` | new | provider union |
-| `ActiveSkills` (per-buffer state) | `lua/parley/skill_active.lua` | new (M2) | per-buffer mutable state |
-| `read_skill` tool | `lua/parley/tools/builtin/read_skill.lua` | new (M2) | registry lookup → transcript block |
-| `propose_edits` tool | `lua/parley/tools/builtin/propose_edits.lua` | new (M3) | file write + buffer diagnostics/highlights |
-| chat-loop turn hook | `lua/parley/chat_respond.lua` (modify) | modified (M2) | the existing turn assembly |
+| `DiskProvider` | `lua/parley/skill_providers.lua` | done (M1) | filesystem scan (`vim.loop.fs_scandir`) |
+| `VirtualProvider` | `lua/parley/skill_providers.lua` | done (M1) | runtime-generated manifests |
+| `SkillRegistry` (`discover`/`get`/`names`) | `lua/parley/skill_registry.lua` | done (M1) | provider union |
+| `propose_edits` tool | `lua/parley/tools/builtin/propose_edits.lua` | new (M2) | file write (via the dispatcher's cwd-scope + backup) |
+| `skill_invoke` (the thin P2 driver) | `lua/parley/skill_invoke.lua` | new (M3) | the existing dispatcher layer (`prepare_payload`/`query`/`execute_call`) |
 
-- **DiskProvider** — scans a skill root (`lua/parley/skills/*` plugin-bundled; `~/.config/parley/skills/` user) and emits a `SkillManifest` per dir. The manifest's `source` is **a closure capturing the absolute path the provider already found** (`function(ctx) return read(captured_path .. "/SKILL.md") end`) — this *deletes* the `debug.getinfo` path-guessing dance (`skill_runner.lua:226,376-392`). The dir's `init.lua` supplies the declarative fields (scope/activation/tools/…).
-  - **Injected into:** the SkillRegistry's provider list. Tested with a temp fixture skill dir (no network).
-  - **Future extensions:** a **RepoProvider** (the inspected repo ships skills via its readonly manifest) is a third disk-shaped provider — same emission shape, different root.
-- **VirtualProvider** — emits manifests generated at runtime (no disk). The M1 deliverable is the *seam* (a provider that returns a list of manifests built from registered generators); the first concrete virtual skill (`repo_discovery`) arrives in M5.
-  - **Injected into:** the SkillRegistry. Tested by registering a fake generator and asserting the manifest appears in `discover`.
-- **SkillRegistry** — `discover()` unions all providers (dedup by name, last-wins precedence); `get(name)` / `names()` / `all()`. The single surface the assembly + `read_skill` read. (No cache built — `discover`/`current` recompute per call; add one only when a consumer needs it, YAGNI.)
-  - **Injected into:** `read_skill`, `assemble_turn`'s caller, the picker. Tested with fake providers (no real fs).
-- **ActiveSkills** (M2) — per-buffer mutable set of currently-active skill names (+ which were manually activated). Mirrors `tool_loop`'s `state_by_buf` pattern (`tool_loop.lua:36`). `read_skill`/hotkey write it; turn-assembly reads it.
-  - **Injected into:** the chat-loop turn hook. The *logic* (assemble_turn) stays pure; this is the thin state seam.
-- **read_skill tool** (M2) — `read_skill(name)`: looks up the manifest, calls `manifest.source(ctx)`, returns the body as a tool result (rendered 🔧/📎 in the transcript), and marks the skill active in ActiveSkills. **cwd-scope-exempt** — passes no `path`/`file_path` to the dispatcher, exactly like `chat_history_search` (`chat_history_search.lua:1-9`); a skill is a parley-namespace concept, not a repo file.
-  - **Injected into:** `BUILTIN_NAMES` (`tools/init.lua:129`). Tested via the dispatcher with a fake registry.
-- **propose_edits tool** (M3) — builtin wrapping the salvaged `compute_edits`/`apply_edits` + `highlight_edits`/`attach_diagnostics` for result rendering. `kind="write"`, `needs_backup` per existing edit-tool convention. Replaces v1's hardcoded `REVIEW_EDIT_TOOL` (`skill_runner.lua:22`).
-  - **Injected into:** `BUILTIN_NAMES`; granted via a skill's `elevated`/`tools` + compelled via `force_tool`.
-- **chat-loop turn hook** (M2, modify `chat_respond.lua`) — at turn assembly (after `agent_info` is resolved, before `prepare_payload` at `chat_respond.lua:1341`), call `assemble_turn(ActiveSkills[buf], scope)` and union its `system_context` into the system prompt + its `tools` into `agent_info.tools` + set `tool_choice` from `forced_tool`. Because the recursive call rebuilds `agent_info`, this hook runs **every turn** and re-reads ActiveSkills (Design note 1).
-  - **Future extensions:** #129 inserts a permission gate between assemble_turn and the grant.
+- **DiskProvider / VirtualProvider / SkillRegistry** (done, M1) — the disk closure-`source` (kills the `debug.getinfo` dance) + virtual seam + the `discover` union (last-wins dedup). Unchanged by the re-scope; they describe the available P2 skills.
+- **propose_edits tool** (M2) — a **real registered builtin** (`BUILTIN_NAMES`), `kind="write"`, `needs_backup=true`, schema `{file_path, edits:[{old_string,new_string,explain}]}` (salvaged from `REVIEW_EDIT_TOOL`). Handler applies the batch via `skill_edits.compute_edits` (read→compute→write). **This is the unification's keystone:** P2's edit-apply now flows through the *same* `dispatcher.execute_call` path (with cwd-scope + backup) as every chat tool, instead of `skill_runner`'s special-cased `apply_edits`. The diagnostics/highlights rendering stays driver-side (M3), not in the handler.
+  - **Injected into:** `BUILTIN_NAMES` (`tools/init.lua`); granted via a skill's `tools`/`elevated`, compelled via `force_tool`. Tested with a temp-file fixture (no LLM).
+- **skill_invoke** (M3, the thin P2 driver) — replaces `skill_runner.run`'s bespoke pipeline by **riding the existing dispatcher layer**: `resolve_agent` → source the body (`manifest.source(ctx)`) → read the artifact buffer → `build_invocation` (pure) → `dispatcher.prepare_payload` + set `tool_choice` → `dispatcher.query` → decode → `dispatcher.execute_call` per tool → reload + render (`highlight_edits`/`attach_diagnostics`, salvaged). **Does NOT touch `chat_respond`** — it's a second driver on the shared primitives, not a refactor of the first.
+  - **Injected into:** `skill_picker` + the `review`/`voice_apply` invocation paths (M3/M4). Tested with parley's existing LLM fake (the `chat_respond` integration-spec pattern — reused, not reinvented).
 
 ---
 
@@ -170,21 +164,98 @@ Follow parley conventions: modules `local M = {} … return M`; tests use `plena
 
 ---
 
-## M2 — read_skill + per-turn assembly + route through the loop (sketch)
+> **The M2–M5 below supersede the original (M1-era) sketches**, per the
+> 2026-06-15 RE-SCOPE (see `## Revisions` + `workshop/pensive/parley-two-modes-chat-vs-artifact.md`).
+> Scope confirmed with operator 2026-06-16: **P1's chat loop stays untouched;
+> the "shared kernel" is the *existing* dispatcher/tools layer**
+> (`prepare_payload`/`query`/`decode`/`execute_call`); **P2 gets a thin driver
+> that rides it** instead of `skill_runner`'s bespoke copies; **`propose_edits`
+> becomes a real registered tool** so P2's edit-apply flows through the same
+> `execute_call` path as every chat tool. No new shared-loop kernel is built.
 
-Build `ActiveSkills` (per-buffer state, mirroring `tool_loop.state_by_buf`); the **pure** `assemble_turn(active, scope, manual_active)` (→ system context + tools + forced tool); the `read_skill` builtin (cwd-exempt like `chat_history_search`, transcript-visible, marks the skill active); and the chat-loop hook at turn assembly (`chat_respond.lua` ~1341, *after* `agent_info` resolves) that unions assembly output into the system prompt + `agent_info.tools` + `tool_choice`. **Critical (Design note 1):** the hook must run on the recursive turn too — since `respond()` rebuilds `agent_info`, re-read `ActiveSkills[buf]` each turn rather than mutating once. Preload `always` skills by scope; append `(name, description)` of `auto` skills to the system context as a menu. To be expanded to tasks at M2 start.
+## M2 — `propose_edits` tool + the pure P2 context-assembler
 
-## M3 — propose_edits builtin + force_tool; port review (sketch)
+The fully **unit-testable** shared pieces, with **no LLM call and no chat-loop
+change**: salvage the pure edit logic, register `propose_edits` as a real tool,
+and build the pure "skill → invocation" assembler. The IO driver that wires
+these to the dispatcher + ports `review` is **M3** (it needs the LLM fake).
 
-Move `compute_edits` (pure) to `skill_edits.lua`; build `propose_edits` builtin (`tools/builtin/propose_edits.lua`) wrapping it + `apply_edits` (IO) with `highlight_edits`/`attach_diagnostics` as result rendering (salvaged from `skill_runner.lua:54-213`). Implement `force_tool` handling in the turn hook (sets `tool_choice`). Port `review` to run through the loop: manual activation grants `elevated = {propose_edits}` + `force_tool = propose_edits`, the loop produces the batch edits, the tool applies + renders them (batch-edit-with-explanations UX preserved). Retire `review`'s `pre_submit`/`post_apply`/resubmit hooks in favor of loop-native behavior. To be expanded at M3 start.
+**Module layout:** new pure modules `lua/parley/skill_edits.lua` (compute_edits)
+and `lua/parley/skill_assembly.lua` (build_invocation + resolve_agent); new tool
+`lua/parley/tools/builtin/propose_edits.lua`. Specs flat in `tests/` per
+convention. Per-task TDD runs use the direct plenary form:
+`nvim --headless -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/<spec>.lua"`.
 
-## M4 — port voice_apply; delete skill_runner; cleanup (sketch)
+### Task 1: `skill_edits.compute_edits` — salvage the pure edit logic (PURE)
 
-Port `voice_apply` similarly — including an explicit `source(ctx)` that composes its SKILL.md (`ctx.skill_md`) + the per-slug style guide, replacing the v1 `system_prompt` (the disk provider has no `system_prompt` fallback — that branch was removed in M1, so `voice_apply` must carry an explicit `source` once `skill_runner` is gone). Delete `skill_runner.run` + `_in_flight`/resubmit/hardcoded `tool_choice`/`max_tokens`/`REVIEW_EDIT_TOOL` + the now-unused `system_prompt` fields. Reconcile callers: `skill_picker.lua` (`:22,28,86` — repoint to activation, keep the arg picker), `review.lua` shim (`:43`), `keybinding_registry.lua` (hotkey → activate a `manual` skill). **Resolve glob/list_dir (Design note 2):** they don't exist; decide whether `repo_discovery` needs a structured glob tool vs. existing `ls`/`find`/`grep` — lean YAGNI (no new tool without a consumer); record the decision. To be expanded at M4 start.
+**Files:**
+- Create: `lua/parley/skill_edits.lua`
+- Modify: `lua/parley/skill_runner.lua` (delegate its `compute_edits`/`apply_edits` to the new module — keep the v1 path working until M4 deletes it; `ARCH-DRY`, one source)
+- Test: `tests/unit/skill_edits_spec.lua`
 
-## M5 — repo_discovery virtual skill (the #116 bridge) (sketch)
+- [ ] **Step 1: Write failing tests** — `M.compute_edits(content, edits)` returns `{ok, msg, content, applied}` (exact behavior salvaged from `skill_runner.lua:54-109`):
+  - happy path: two edits applied in reverse-position order; `content` reflects both; `applied` lists `{pos, old_string, new_string, explain}`.
+  - `old_string` not found → `{ok=false, msg~="not found"}`.
+  - `old_string` not unique → `{ok=false, msg~="not unique"}`.
+  - non-string `old_string`/`new_string` → `{ok=false}`.
+- [ ] **Step 2: Run, verify fail** (module missing).
+- [ ] **Step 3: Implement** — move `compute_edits` verbatim from `skill_runner.lua:54` into `skill_edits.lua` (pure; no IO). In `skill_runner.lua`, replace its body with `return require("parley.skill_edits").compute_edits(...)` and have `apply_edits` call the module (so `skill_runner_spec` + the live v1 path stay green — single source of the edit logic).
+- [ ] **Step 4: Run, verify pass** — the new spec **and** `tests/unit/skill_runner_spec.lua` (regression — v1 delegation intact).
+- [ ] **Step 5: Commit** — `#128 M2: skill_edits.compute_edits (salvage pure edit logic, DRY)`.
 
-A `VirtualProvider` generator emitting `repo_discovery` (`scope=repo`, `activation={always=true}`, `tools=<read set>`, `source = function(ctx) return require("parley").discovery.current():render() end`). Always-loaded in repo mode; its body is the #116 noun-vocabulary. **Requires #116 M1 on the base** (Design note 3 — confirm merge ordering with operator). The conflict-free merge point: situational facts only. To be expanded at M5 start.
+### Task 2: `propose_edits` real builtin tool (INTEGRATION — file write)
+
+**Files:**
+- Create: `lua/parley/tools/builtin/propose_edits.lua`
+- Modify: `lua/parley/tools/init.lua` (add `"propose_edits"` to `BUILTIN_NAMES`)
+- Test: `tests/integration/tools_builtin_propose_edits_spec.lua`
+
+- [ ] **Step 1: Write failing test** (temp-file fixture): a `ToolDefinition` with `name="propose_edits"`, `kind="write"`, `needs_backup=true`, `input_schema` = `{file_path, edits:[{old_string,new_string,explain}]}` (the salvaged `REVIEW_EDIT_TOOL` schema, `skill_runner.lua:22-44`). `handler({file_path=<tmp>, edits={...}})`:
+  - applies the batch edits to the file (read → `skill_edits.compute_edits` → write); the file content reflects the edits; result `is_error=false`, `content` reports the applied count.
+  - a non-unique/missing `old_string` → `is_error=true`, no write.
+  - missing `file_path`/`edits` → `is_error=true`.
+  - assert `tools.validate_definition(def)` passes (mirror `tools_builtin_registered_spec`).
+- [ ] **Step 2: Run, verify fail.**
+- [ ] **Step 3: Implement** the tool, modeled on `tools/builtin/edit_file.lua`/`write_file.lua` (the `needs_backup` + cwd-scope contract is enforced by the dispatcher via the `file_path` field — same as those tools, no special-casing). Handler: read `input.file_path`, `skill_edits.compute_edits`, write on success; return a `ToolResult`. Add `"propose_edits"` to `BUILTIN_NAMES`.
+- [ ] **Step 4: Run, verify pass** — the new spec + `tests/unit/tools_builtin_registered_spec.lua` (it's now a registered builtin).
+- [ ] **Step 5: Commit** — `#128 M2: propose_edits builtin (P2 edit-apply via the shared dispatch path)`.
+
+### Task 3: `skill_assembly` — pure P2 context-assembler + `resolve_agent` (PURE)
+
+**Files:**
+- Create: `lua/parley/skill_assembly.lua`
+- Test: `tests/unit/skill_assembly_spec.lua`
+
+- [ ] **Step 1: Write failing tests:**
+  - `M.build_invocation(manifest, opts)` where `opts = {body, document, manual?}` → `{system_prompt, messages, tools, tool_choice}` (PURE — `body` is the already-sourced skill text; the IO `source()` call stays in the M3 driver):
+    - `system_prompt == body`; `messages == {{role="system",content=body},{role="user",content=document}}`.
+    - `tools` = `manifest.tools` ∪ (`manifest.elevated` **only when** `opts.manual`); a non-manual invocation omits `elevated` (the #129 hook — manual-only elevation).
+    - `tool_choice` = `{type="tool", name=manifest.force_tool}` when `force_tool` set, else nil.
+  - `M.resolve_agent(config, manifest)` → agent (salvaged cascade `skill_runner.lua:284-322`, now a **pure function of injected `config`** — per-skill config → `review_agent` legacy → manifest default → global `skill_agent` → first tool-capable): assert each tier with a fake config; unknown → nil.
+- [ ] **Step 2–4:** fail → implement both (pure; no `require("parley")` — config injected) → pass.
+- [ ] **Step 5: Commit** — `#128 M2: skill_assembly (pure invocation builder + injected-config resolve_agent)`.
+
+### Task 4: Atlas + milestone close
+
+- [ ] **Step 1:** Update `atlas/skills/skill-system.md` — the M2 pieces (`propose_edits` real tool, `skill_edits`, `skill_assembly`) + the "P2 rides the existing dispatcher; chat loop untouched" framing.
+- [ ] **Step 2:** Update `atlas/traceability.yaml` (`skills/skill-system` → add the new modules + specs).
+- [ ] **Step 3:** `make test` green; `make lint` clean.
+- [ ] **Step 4:** `sdlc milestone-close --issue 128 --milestone M2`; log the verdict.
+- [ ] **Step 5: Commit** — `#128 M2: atlas + traceability`.
+
+**M2 Done when:** `propose_edits` is a registered builtin that applies batch edits via the dispatcher path; `skill_edits.compute_edits` is the single source of the edit logic (v1 delegates); `skill_assembly.build_invocation`/`resolve_agent` are pure + tested; suite green; **chat loop + `skill_runner.run` untouched** (v1 still works).
+
+## M3 — the thin P2 driver + port `review` (sketch)
+
+Build `lua/parley/skill_invoke.lua` — the thin P2 driver that **reuses the existing dispatcher layer**: resolve agent (`skill_assembly.resolve_agent`), source the skill body (`manifest.source(ctx)` — IO), read the artifact buffer, `build_invocation` (pure, M2) → `dispatcher.prepare_payload(messages, model, provider, tools)` + set `payload.tool_choice` → `dispatcher.query` → on_exit decode → `dispatcher.execute_call` per tool (so `propose_edits` applies through the shared path) → reload buffer + render via the salvaged `highlight_edits`/`attach_diagnostics`. Single-shot now (the `review` resubmit loop → a bounded recursive option later). **Port `review`** to invoke via this driver (its M1 manifest already declares `tools`/`elevated`/`force_tool=propose_edits`); preserve the marker pre-check + batch-edit-with-explanations UX. **Test with parley's existing LLM fake** (the pattern the `chat_respond` integration specs use — reuse it, don't invent a new one; `ARCH-DRY`). `skill_runner.run` stays alive in parallel until M4. To be expanded at M3 start.
+
+## M4 — port `voice_apply`; delete `skill_runner`; cleanup (sketch)
+
+Port `voice_apply` via the driver — give it an explicit `source(ctx)` composing `ctx.skill_md` + the per-slug style guide (the disk provider has no `system_prompt` fallback — removed in M1). **Delete `skill_runner`** (`run`/`_in_flight`/resubmit/hardcoded `tool_choice`/`max_tokens`/`REVIEW_EDIT_TOOL` + the leftover `compute_edits`/`apply_edits` delegations + `system_prompt` fields). Reconcile callers: `skill_picker.lua` (`:22,28,86` → invoke via the driver, keep the arg picker), `review.lua` shim (`:43`), `keybinding_registry.lua`. **glob/list_dir (Design note 2):** they don't exist; this is a YAGNI *decision* — `ls`/`find`/`grep` suffice for P1; record it, don't hunt for files. To be expanded at M4 start.
+
+## ~~M5 — repo_discovery virtual skill~~ — DROPPED (re-scope)
+
+`repo_discovery` is **P1 context/tools, not a P2 skill** (category error — see Revisions / pensive). #116's registry feeds P1's chat context directly; that work belongs to the future **P1 issue** ("parley chat as ariadne workbench"), not this issue.
 
 ---
 

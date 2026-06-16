@@ -112,11 +112,23 @@ likely finish + register and have `repo_discovery` grant them.
 
 ## Done when
 
-- `review` and `voice_apply` run through the chat loop as declarative manifests, not a separate pipeline; `review` keeps the batch-edit-with-explanations UX via `propose_edits` + `force_tool`.
-- `read_skill(name)` loads disk and virtual skills uniformly (no fork), exempt from cwd-scope, visible as transcript blocks.
-- The model can pull an `auto` skill mid-conversation; an `always` skill is preloaded by scope.
-- A virtual `repo_discovery` skill is always-loaded in repo mode, its body sourced from #116's registry.
-- `skill_runner`'s forced-write pipeline is deleted; the duplicate engine is gone; `glob.lua`/`list_dir.lua` are resolved (registered or removed).
+_(Re-scoped 2026-06-15 — see `## Revisions`. The original chat-skill bullets
+below are **superseded**; the re-scoped done-when follows.)_
+
+**Re-scoped done-when:**
+- `review` and `voice_apply` run via the **thin P2 driver** (`skill_invoke`) that rides the **existing dispatcher layer** (`prepare_payload`/`query`/`execute_call`) — not a separate engine; `review` keeps the batch-edit-with-explanations UX.
+- `propose_edits` is a **real registered builtin tool**, so P2's edit-apply flows through the same `execute_call` path (cwd-scope + backup) as every chat tool.
+- `skill_runner`'s forced-write pipeline is **deleted**; the duplicate engine is gone; the salvaged pure pieces (`compute_edits`, agent cascade) survive as shared modules.
+- **P1's chat loop is untouched**; no new shared-loop kernel was built.
+- `glob.lua`/`list_dir.lua`: a recorded YAGNI **decision** (they don't exist; `ls`/`find`/`grep` suffice) — not a deletion task.
+
+<details><summary>~~Original done-when (superseded — chat-skill conflation)~~</summary>
+
+- ~~`review`/`voice_apply` run through the **chat loop** as declarative manifests~~
+- ~~`read_skill(name)` loads disk and virtual skills uniformly, cwd-exempt, transcript-visible~~ (read_skill-in-chat dropped)
+- ~~the model pulls an `auto` skill mid-conversation; an `always` skill is preloaded by scope~~ (chat-menu activation dropped)
+- ~~a virtual `repo_discovery` skill is always-loaded in repo mode~~ (that's P1 context, not a skill)
+</details>
 
 ## Plan
 
