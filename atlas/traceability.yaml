@@ -448,6 +448,9 @@ atlas:
       - lua/parley/skill_manifest.lua
       - lua/parley/skill_providers.lua
       - lua/parley/skill_registry.lua
+      - lua/parley/skill_edits.lua
+      - lua/parley/skill_assembly.lua
+      - lua/parley/tools/builtin/propose_edits.lua
       - lua/parley/skills/review/init.lua
       - lua/parley/skills/voice_apply/init.lua
       - lua/parley/skill_runner.lua
@@ -456,6 +459,9 @@ atlas:
       - tests/unit/skill_manifest_spec.lua
       - tests/integration/skill_providers_spec.lua
       - tests/integration/skill_registry_spec.lua
+      - tests/unit/skill_edits_spec.lua
+      - tests/unit/skill_assembly_spec.lua
+      - tests/unit/tools_builtin_propose_edits_spec.lua
       - tests/unit/skill_runner_spec.lua
 
   discovery/registry:

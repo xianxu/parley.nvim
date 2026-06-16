@@ -193,15 +193,15 @@ convention. Per-task TDD runs use the direct plenary form:
 - Modify: `lua/parley/skill_runner.lua` (delegate its `compute_edits`/`apply_edits` to the new module — keep the v1 path working until M4 deletes it; `ARCH-DRY`, one source)
 - Test: `tests/unit/skill_edits_spec.lua`
 
-- [ ] **Step 1: Write failing tests** — `M.compute_edits(content, edits)` returns `{ok, msg, content, applied}` (exact behavior salvaged from `skill_runner.lua:54-109`):
+- [x] **Step 1: Write failing tests** — `M.compute_edits(content, edits)` returns `{ok, msg, content, applied}` (exact behavior salvaged from `skill_runner.lua:54-109`):
   - happy path: two edits applied in reverse-position order; `content` reflects both; `applied` lists `{pos, old_string, new_string, explain}`.
   - `old_string` not found → `{ok=false, msg~="not found"}`.
   - `old_string` not unique → `{ok=false, msg~="not unique"}`.
-  - non-string `old_string`/`new_string` → `{ok=false}`.
-- [ ] **Step 2: Run, verify fail** (module missing).
-- [ ] **Step 3: Implement** — move `compute_edits` verbatim from `skill_runner.lua:54` into `skill_edits.lua` (pure; no IO). In `skill_runner.lua`, replace its body with `return require("parley.skill_edits").compute_edits(...)` and have `apply_edits` call the module (so `skill_runner_spec` + the live v1 path stay green — single source of the edit logic).
-- [ ] **Step 4: Run, verify pass** — the new spec **and** `tests/unit/skill_runner_spec.lua` (regression — v1 delegation intact).
-- [ ] **Step 5: Commit** — `#128 M2: skill_edits.compute_edits (salvage pure edit logic, DRY)`.
+  - non-string `old_string`/`new_string` → `{ok=false}`. _(+ atomic: a failing edit rejects the whole batch, content=nil.)_
+- [x] **Step 2: Run, verify fail** (module missing).
+- [x] **Step 3: Implement** — move `compute_edits` verbatim from `skill_runner.lua:54` into `skill_edits.lua` (pure; no IO). In `skill_runner.lua`, replace its body with `return require("parley.skill_edits").compute_edits(...)` and have `apply_edits` call the module (so `skill_runner_spec` + the live v1 path stay green — single source of the edit logic).
+- [x] **Step 4: Run, verify pass** — the new spec **and** `tests/unit/skill_runner_spec.lua` (regression — v1 delegation intact). _5/5 + 9/9._
+- [x] **Step 5: Commit** — `#128 M2: skill_edits.compute_edits (salvage pure edit logic, DRY)`. _92abf4c_
 
 ### Task 2: `propose_edits` real builtin tool (INTEGRATION — file write)
 
@@ -210,15 +210,11 @@ convention. Per-task TDD runs use the direct plenary form:
 - Modify: `lua/parley/tools/init.lua` (add `"propose_edits"` to `BUILTIN_NAMES`)
 - Test: `tests/integration/tools_builtin_propose_edits_spec.lua`
 
-- [ ] **Step 1: Write failing test** (temp-file fixture): a `ToolDefinition` with `name="propose_edits"`, `kind="write"`, `needs_backup=true`, `input_schema` = `{file_path, edits:[{old_string,new_string,explain}]}` (the salvaged `REVIEW_EDIT_TOOL` schema, `skill_runner.lua:22-44`). `handler({file_path=<tmp>, edits={...}})`:
-  - applies the batch edits to the file (read → `skill_edits.compute_edits` → write); the file content reflects the edits; result `is_error=false`, `content` reports the applied count.
-  - a non-unique/missing `old_string` → `is_error=true`, no write.
-  - missing `file_path`/`edits` → `is_error=true`.
-  - assert `tools.validate_definition(def)` passes (mirror `tools_builtin_registered_spec`).
-- [ ] **Step 2: Run, verify fail.**
-- [ ] **Step 3: Implement** the tool, modeled on `tools/builtin/edit_file.lua`/`write_file.lua` (the `needs_backup` + cwd-scope contract is enforced by the dispatcher via the `file_path` field — same as those tools, no special-casing). Handler: read `input.file_path`, `skill_edits.compute_edits`, write on success; return a `ToolResult`. Add `"propose_edits"` to `BUILTIN_NAMES`.
-- [ ] **Step 4: Run, verify pass** — the new spec + `tests/unit/tools_builtin_registered_spec.lua` (it's now a registered builtin).
-- [ ] **Step 5: Commit** — `#128 M2: propose_edits builtin (P2 edit-apply via the shared dispatch path)`.
+- [x] **Step 1: Write failing test** (temp-file fixture): a `ToolDefinition` with `name="propose_edits"`, `kind="write"`, `needs_backup=true`, `input_schema` = `{file_path, edits:[{old_string,new_string,explain}]}` (the salvaged `REVIEW_EDIT_TOOL` schema). handler applies the batch (file reflects edits, `is_error=false`, count reported); non-unique → `is_error=true`, no write; missing `file_path`/`edits` → `is_error=true`; `validate_definition` passes. _Spec in `tests/unit/` to match the `tools_builtin_*_spec` convention (not `tests/integration/`)._
+- [x] **Step 2: Run, verify fail.**
+- [x] **Step 3: Implement** the tool, modeled on `write_file.lua`/`edit_file.lua` (cwd-scope via `file_path` + the M5 backup prelude via `needs_backup` are the dispatcher's job — no special-casing). Handler: read → `skill_edits.compute_edits` → write → checktime. Add `"propose_edits"` to `BUILTIN_NAMES`.
+- [x] **Step 4: Run, verify pass** — new spec (5/5) + `tools_builtin_registered_spec` (10/10, now a registered builtin).
+- [x] **Step 5: Commit** — `#128 M2: propose_edits builtin (P2 edit-apply via the shared dispatch path)`. _6d54d2e_
 
 ### Task 3: `skill_assembly` — pure P2 context-assembler + `resolve_agent` (PURE)
 
@@ -226,20 +222,17 @@ convention. Per-task TDD runs use the direct plenary form:
 - Create: `lua/parley/skill_assembly.lua`
 - Test: `tests/unit/skill_assembly_spec.lua`
 
-- [ ] **Step 1: Write failing tests:**
-  - `M.build_invocation(manifest, opts)` where `opts = {body, document, manual?}` → `{system_prompt, messages, tools, tool_choice}` (PURE — `body` is the already-sourced skill text; the IO `source()` call stays in the M3 driver):
-    - `system_prompt == body`; `messages == {{role="system",content=body},{role="user",content=document}}`.
-    - `tools` = `manifest.tools` ∪ (`manifest.elevated` **only when** `opts.manual`); a non-manual invocation omits `elevated` (the #129 hook — manual-only elevation).
-    - `tool_choice` = `{type="tool", name=manifest.force_tool}` when `force_tool` set, else nil.
-  - `M.resolve_agent(config, manifest)` → agent (salvaged cascade `skill_runner.lua:284-322`, now a **pure function of injected `config`** — per-skill config → `review_agent` legacy → manifest default → global `skill_agent` → first tool-capable): assert each tier with a fake config; unknown → nil.
-- [ ] **Step 2–4:** fail → implement both (pure; no `require("parley")` — config injected) → pass.
-- [ ] **Step 5: Commit** — `#128 M2: skill_assembly (pure invocation builder + injected-config resolve_agent)`.
+- [x] **Step 1: Write failing tests:**
+  - `M.build_invocation(manifest, opts)` where `opts = {body, document, manual?}` → `{system_prompt, messages, tools, tool_choice}` (PURE — `body` already-sourced; `source()` IO stays in the M3 driver): system_prompt==body; messages == system+user; tools = `manifest.tools` ∪ (`elevated` only when `manual`); tool_choice from `force_tool` else nil.
+  - `M.resolve_agent(manifest, deps)` → agent (salvaged cascade, **pure function of injected deps** = config + agent registry): assert each tier (per-skill → legacy review_agent → manifest default → global skill_agent → first tool-capable); unknown → nil.
+- [x] **Step 2–4:** fail → implement both (pure; no `require("parley")` — deps injected) → pass. _9/9 (signature: `resolve_agent(manifest, deps)`; deps = {config, get_agent, agent_names, agents})._
+- [x] **Step 5: Commit** — `#128 M2: skill_assembly (pure invocation builder + injected-config resolve_agent)`. _9d20e8f_
 
 ### Task 4: Atlas + milestone close
 
-- [ ] **Step 1:** Update `atlas/skills/skill-system.md` — the M2 pieces (`propose_edits` real tool, `skill_edits`, `skill_assembly`) + the "P2 rides the existing dispatcher; chat loop untouched" framing.
-- [ ] **Step 2:** Update `atlas/traceability.yaml` (`skills/skill-system` → add the new modules + specs).
-- [ ] **Step 3:** `make test` green; `make lint` clean.
+- [x] **Step 1:** Update `atlas/skills/skill-system.md` — the M2 pieces (`propose_edits` real tool, `skill_edits`, `skill_assembly`) + the "P2 rides the existing dispatcher; chat loop untouched" framing. _(Also rewrote the stale chat-turn Redesign section to the re-scope.)_
+- [x] **Step 2:** Update `atlas/traceability.yaml` (`skills/skill-system` → add the new modules + specs).
+- [x] **Step 3:** `make test` green; `make lint` clean. _lint 0/0 (197 files), 103 spec files pass._
 - [ ] **Step 4:** `sdlc milestone-close --issue 128 --milestone M2`; log the verdict.
 - [ ] **Step 5: Commit** — `#128 M2: atlas + traceability`.
 
