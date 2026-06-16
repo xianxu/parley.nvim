@@ -19,7 +19,10 @@ The "shared kernel" is the **existing dispatcher/tools layer**
 already rides; P2 gets a **thin driver** (`skill_invoke`, M3) that rides the same
 layer instead of `skill_runner`'s bespoke copies. The keystone: **`propose_edits`
 is a real registered tool**, so P2's edit-apply flows through the same
-`execute_call` path (cwd-scope + backup) as every chat tool.
+`execute_call` path as every chat tool — **cwd-scope is active now**; the backup
+prelude is deferred to the dispatcher's write-path milestone (so M3 must secure a
+backup — inline like `write_file`, or via the prelude — before `review` applies
+destructive edits through it).
 
 **Milestones** (plan: `workshop/plans/000128-skill-system-redesign-plan.md`):
 M1 manifest + providers + registry (done) · **M2 `propose_edits` tool + pure P2

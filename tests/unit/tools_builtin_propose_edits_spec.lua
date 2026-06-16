@@ -68,3 +68,53 @@ describe("propose_edits handler", function()
         assert.matches("edits", res.content)
     end)
 end)
+
+describe("propose_edits via dispatcher.execute_call (cwd-scope keystone)", function()
+    -- The reason propose_edits is a real tool: routing edit-apply through
+    -- execute_call inherits the cwd-scope guard via the file_path field. Pin it
+    -- end-to-end (the handler-only tests above bypass the dispatcher).
+    local registry = require("parley.tools")
+    local dispatcher = require("parley.tools.dispatcher")
+    local cwd
+
+    before_each(function()
+        registry.register_builtins() -- propose_edits is in BUILTIN_NAMES
+        cwd = vim.fn.tempname() .. "-pe-cwd"
+        vim.fn.mkdir(cwd, "p")
+    end)
+    after_each(function()
+        vim.fn.delete(cwd, "rf")
+    end)
+
+    it("applies edits when file_path is inside cwd", function()
+        local path = cwd .. "/doc.md"
+        vim.fn.writefile({ "alpha beta" }, path)
+        local res = dispatcher.execute_call(
+            { id = "t1", name = "propose_edits", input = {
+                file_path = path,
+                edits = { { old_string = "alpha", new_string = "ALPHA", explain = "a" } },
+            } },
+            registry,
+            { cwd = cwd }
+        )
+        assert.is_falsy(res.is_error)
+        assert.are.equal("ALPHA beta", table.concat(vim.fn.readfile(path), "\n"))
+    end)
+
+    it("refuses a file_path outside cwd (the cwd-scope guard fires)", function()
+        local outside = vim.fn.tempname() .. "-pe-outside.md"
+        vim.fn.writefile({ "x" }, outside)
+        local res = dispatcher.execute_call(
+            { id = "t2", name = "propose_edits", input = {
+                file_path = outside,
+                edits = { { old_string = "x", new_string = "y", explain = "e" } },
+            } },
+            registry,
+            { cwd = cwd }
+        )
+        assert.is_true(res.is_error)
+        assert.matches("outside working directory", res.content)
+        assert.are.equal("x", table.concat(vim.fn.readfile(outside), "\n")) -- untouched
+        vim.fn.delete(outside)
+    end)
+end)

@@ -233,12 +233,14 @@ convention. Per-task TDD runs use the direct plenary form:
 - [x] **Step 1:** Update `atlas/skills/skill-system.md` — the M2 pieces (`propose_edits` real tool, `skill_edits`, `skill_assembly`) + the "P2 rides the existing dispatcher; chat loop untouched" framing. _(Also rewrote the stale chat-turn Redesign section to the re-scope.)_
 - [x] **Step 2:** Update `atlas/traceability.yaml` (`skills/skill-system` → add the new modules + specs).
 - [x] **Step 3:** `make test` green; `make lint` clean. _lint 0/0 (197 files), 103 spec files pass._
-- [ ] **Step 4:** `sdlc milestone-close --issue 128 --milestone M2`; log the verdict.
-- [ ] **Step 5: Commit** — `#128 M2: atlas + traceability`.
+- [x] **Step 4:** `sdlc milestone-close --issue 128 --milestone M2`. _Boundary review **FIX-THEN-SHIP** (no Critical) → addressed (drop redundant system_prompt; pin cwd-scope keystone; correct backup-pending docs + flag M3). Actual recorded as a labeled ~1h estimate (cf #128 M1's 0.90h) — the auto-measure 9.67h is rebase-contaminated (orphaned base → cross-issue window)._
+- [x] **Step 5: Commit** — `#128 M2: atlas + traceability` (+ the FIX-THEN-SHIP fixes).
 
 **M2 Done when:** `propose_edits` is a registered builtin that applies batch edits via the dispatcher path; `skill_edits.compute_edits` is the single source of the edit logic (v1 delegates); `skill_assembly.build_invocation`/`resolve_agent` are pure + tested; suite green; **chat loop + `skill_runner.run` untouched** (v1 still works).
 
 ## M3 — the thin P2 driver + port `review` (sketch)
+
+**Prerequisite (M2 boundary-review carry):** before `review` applies destructive edits through `propose_edits`, **secure a backup** — either add an inline numbered `.parley-backup` to `propose_edits.handler` (the `write_file.lua:40-63` pattern) or land the dispatcher's write-path prelude. `needs_backup=true` is currently classification-only (the dispatcher doesn't honor it yet).
 
 Build `lua/parley/skill_invoke.lua` — the thin P2 driver that **reuses the existing dispatcher layer**: resolve agent (`skill_assembly.resolve_agent`), source the skill body (`manifest.source(ctx)` — IO), read the artifact buffer, `build_invocation` (pure, M2) → `dispatcher.prepare_payload(messages, model, provider, tools)` + set `payload.tool_choice` → `dispatcher.query` → on_exit decode → `dispatcher.execute_call` per tool (so `propose_edits` applies through the shared path) → reload buffer + render via the salvaged `highlight_edits`/`attach_diagnostics`. Single-shot now (the `review` resubmit loop → a bounded recursive option later). **Port `review`** to invoke via this driver (its M1 manifest already declares `tools`/`elevated`/`force_tool=propose_edits`); preserve the marker pre-check + batch-edit-with-explanations UX. **Test with parley's existing LLM fake** (the pattern the `chat_respond` integration specs use — reuse it, don't invent a new one; `ARCH-DRY`). `skill_runner.run` stays alive in parallel until M4. To be expanded at M3 start.
 
@@ -263,6 +265,24 @@ Port `voice_apply` via the driver — give it an explicit `source(ctx)` composin
 ---
 
 ## Revisions
+
+### 2026-06-16 — M2 boundary review (FIX-THEN-SHIP → addressed)
+
+M2 implemented (`skill_edits` / `propose_edits` / `skill_assembly`) + closed;
+boundary review **FIX-THEN-SHIP** (no Critical). Findings addressed:
+- **`build_invocation` dropped the redundant `system_prompt` field** — the body
+  is conveyed as the `role="system"` message (the adapter extracts it); a
+  separate field would double-apply in the M3 driver.
+- **Pinned the cwd-scope keystone** — added a `dispatcher.execute_call` test
+  (file_path inside cwd → applies; outside → refused), since the handler-only
+  tests bypassed the dispatcher (the whole reason `propose_edits` is a real tool).
+- **Backup claim corrected** — `needs_backup=true` is the right *classification*
+  (propose_edits destroys content) but the dispatcher's backup prelude is
+  deferred, so backup is NOT active yet. Atlas reworded to "cwd-scope now; backup
+  pending." **M3 must secure a backup** (inline like `write_file`, or via the
+  prelude) before `review` applies destructive edits through the tool.
+- Minor (noted, not fixed): empty-`edits` no-op rewrite; `build_invocation` tool
+  dedup (harmless — `tools.select` dedups).
 
 ### 2026-06-15 — RE-SCOPED (M1 stands; M2–M5 below are STALE pending re-plan)
 

@@ -10,9 +10,12 @@
 local M = {}
 
 --- Build the LLM-call inputs for invoking a skill on an artifact.
+--- The skill body is conveyed AS the `role="system"` message (the provider
+--- adapter extracts it into the top-level `system`, per parley convention) — so
+--- there is NO separate `system_prompt` field (that would double-apply).
 --- @param manifest table SkillManifest
 --- @param opts table { body = string, document = string, manual = boolean? }
---- @return table { system_prompt, messages, tools, tool_choice }
+--- @return table { messages, tools, tool_choice }
 function M.build_invocation(manifest, opts)
     opts = opts or {}
     local body = opts.body or ""
@@ -35,7 +38,6 @@ function M.build_invocation(manifest, opts)
     end
 
     return {
-        system_prompt = body,
         messages = {
             { role = "system", content = body },
             { role = "user", content = opts.document or "" },

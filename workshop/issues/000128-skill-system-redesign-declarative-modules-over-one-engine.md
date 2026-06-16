@@ -143,7 +143,7 @@ re-planning of the new M2+ happens when we tackle it (the plan doc's M2–M5
 sketches are stale until then).
 
 - [x] M1 — declarative manifest + provider-based discovery: `SkillManifest` shape+`validate`; disk/virtual providers (closure `source`, kills the `debug.getinfo` dance); registry union+dedup; `review`/`voice_apply` re-expressed as manifests. **Survives as the P2-skill descriptor** (chat-flavored fields `scope`/`activation.auto/always` to be revisited → "how a skill is surfaced in the P2 UI").
-- [ ] M2 (re-scoped) — extract the shared **context-assembler** (`system_prompt ⊕ tools ⊕ skill-body`) + **recursive tool-loop** core that both `chat_respond` (P1) and the P2 skill driver call. The real DRY win; replaces the original read_skill/per-turn-chat-assembly.
+- [x] M2 (re-scoped) — extract the shared **context-assembler** (`system_prompt ⊕ tools ⊕ skill-body`) + **recursive tool-loop** core that both `chat_respond` (P1) and the P2 skill driver call. The real DRY win; replaces the original read_skill/per-turn-chat-assembly.
 - [ ] M3 (re-scoped) — `propose_edits` mutation tool (salvage `compute_edits`/`apply_edits` + highlight/diagnostics); port `review` to **drive the shared loop on the artifact** (single-shot → recursive-capable), not a separate pipeline.
 - [ ] M4 (re-scoped) — port `voice_apply` likewise; **delete `skill_runner`** + reconcile callers (`skill_picker`/`review.lua`/keybindings); resolve `glob`/`list_dir` (YAGNI — they don't exist).
 - [ ] ~~M5 — `repo_discovery` virtual skill~~ **DROPPED** — `repo_discovery` is **P1 context/tools**, not a skill (category error). #116 feeds P1 directly; see the P1 project below.
@@ -187,6 +187,8 @@ fused (operator: "I think I hallucinated a bit"). Full framing:
 
 ## Log
 
+
+- 2026-06-16: closed M2 — M2: propose_edits real tool + pure compute_edits/build_invocation/resolve_agent (19 assertions); full suite lint 0/0 + 103 spec files; chat loop + skill_runner untouched. ACTUAL=labeled estimate ~1h (cf #128 M1 measured 0.90h) — auto-measure 9.67h is rebase-contaminated (orphaned base 96302e08 → window spans #95-#132); review verdict: FIX-THEN-SHIP
 ### 2026-06-12 — M1 implemented (declarative manifest + provider discovery)
 - 2026-06-12: closed M1 — declarative skill system M1: SkillManifest+validate (16 assertions), disk/virtual providers (8), registry union/dedup/current() incl real plugin skills (7); review+voice-apply discoverable as manifests; full suite lint 0/0 + 91 spec files pass; v1 skill_runner runtime untouched (9/9). No chat-loop change (M2); review verdict: FIX-THEN-SHIP.
 - 2026-06-12: **boundary findings addressed** (two re-judge rounds, both FIX-THEN-SHIP, no Critical): R1 — plan Core-concepts `resolve_agent` table drift (→ M2/`skill_assembly`, pure-given-injected-config), dropped unbuilt "cache" claim, softened disk docstring; R2 — removed the broken speculative v1 `system_prompt` source fallback (4-arg contract, no consumer; M4 retires it), fixed the resulting plan-doc self-contradiction, and added the missing `pcall` error-path tests (throwing init.lua + erroring generator). All surfaced M1 findings resolved; suite green throughout. See plan `## Revisions`.

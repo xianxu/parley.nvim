@@ -22,9 +22,10 @@ local function manifest(over)
 end
 
 describe("skill_assembly.build_invocation", function()
-    it("builds system_prompt + system/user messages from body + document", function()
+    it("builds system+user messages from body + document (no redundant system_prompt field)", function()
         local inv = assembly.build_invocation(manifest(), { body = "BODY", document = "DOC", manual = true })
-        assert.are.equal("BODY", inv.system_prompt)
+        -- the body is conveyed AS the role=system message; no separate field
+        assert.is_nil(inv.system_prompt)
         assert.are.same({
             { role = "system", content = "BODY" },
             { role = "user", content = "DOC" },
