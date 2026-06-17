@@ -55,7 +55,7 @@ This index provides a central directory for all atlas entries of the `parley.nvi
 - [AI Workflow](infra/workflow.md): Issue-based development, worktree management, and pre-merge checks.
 
 ## 8. Skill System & Special Modes
-- [Skill System](skills/skill-system.md): AI-powered buffer-editing skills. **Redesign in progress (#128):** moving to declarative manifests over one engine (the chat loop); v1 `skill_runner` pipeline live until the port completes.
+- [Skill System](skills/skill-system.md): AI-powered buffer-editing **skills** (the P2 artifact-workbench mode). **Redesign in progress (#128):** declarative manifests; P2 rides the existing dispatcher/tools layer (the P1 chat loop is untouched — no new engine); v1 `skill_runner` pipeline live until the port completes.
 - [Interview Mode](modes/interview.md): Mechanics, automatic timestamps, and `{thought}` highlighting.
 - [Raw Mode](modes/raw_mode.md): API debugging via raw requests/responses — see [Raw-Mode Logging](infra/raw_logging.md) for the debug workflow.
 - [Document Review](modes/review.md): LLM-powered document review via 🤖 markers (implemented as a skill).
@@ -70,7 +70,7 @@ This index provides a central directory for all atlas entries of the `parley.nvi
 - [Vision Exports](vision/exports.md): CSV, DOT graph export, and validation.
 
 ## 11. Discovery Registry
-- [Discovery Registry](discovery/registry.md): Data-driven noun-vocabulary (what file types exist + how to find instances); base ∪ local composition, matcher discriminator kinds, the `query()`/`render()` consumers, grep-now/index-later seam. Feeds #128's `repo_discovery` skill.
+- [Discovery Registry](discovery/registry.md): Data-driven noun-vocabulary (what file types exist + how to find instances); base ∪ local composition, matcher discriminator kinds, the `query()`/`render()` consumers, grep-now/index-later seam. Feeds parley's repo-aware **chat context** (the P1 "chat as ariadne workbench" mode) — not a #128 skill (see #128 re-scope).
 
 ## 12. Traceability
 - [Traceability Map](traceability.yaml): Mapping from each feature entry to implementation files and related tests.

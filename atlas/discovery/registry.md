@@ -4,8 +4,10 @@
 The discovery registry is parley's data-driven model of a repo's **noun
 vocabulary** — *what file types (nouns) exist and how to find their instances* —
 that a readonly research chat consumes instead of hard-coding type knowledge.
-It is the M1 core of issue #116 and the surface that unblocks #128's virtual
-`repo_discovery` skill.
+It is the M1 core of issue #116. Its `render()` output feeds parley's repo-aware
+**chat context** (the P1 "chat as ariadne workbench" mode). _(Originally framed
+as feeding a #128 `repo_discovery` skill; the #128 re-scope reclassified that as
+P1 chat context, not a P2 skill — see `workshop/pensive/parley-two-modes-chat-vs-artifact.md`.)_
 
 A registry maps `name → TypeDescriptor`. The effective registry is **base ∪
 local**: a parley-shipped *base* (universal + parley-native types) unioned with
@@ -58,9 +60,10 @@ repo roots. `plan` has no config key (parley doesn't auto-create
   glob discriminates. "Decide the search" (pure) is split from "run the search"
   (IO, consumer-side / M2).
 - `render() → string`: the noun-vocabulary text — one sorted bullet per type
-  (label, blurb, a derived find-hint). This **is** the body of #128's virtual
-  `repo_discovery` skill; its format is a contract guarded by verbatim-line
-  assertions in the registry spec.
+  (label, blurb, a derived find-hint). This is the repo-aware vocabulary parley's
+  **chat context** (P1) surfaces; its format is a contract guarded by
+  verbatim-line assertions in the registry spec. _(Pre-#128-re-scope this was
+  framed as a `repo_discovery` skill body — now P1 chat context, not a P2 skill.)_
 
 ## base ∪ local composition (RegistryBuilder)
 `build(ctx)` composes the effective registry for an injected mode context
