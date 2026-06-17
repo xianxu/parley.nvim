@@ -22,12 +22,8 @@ return {
     name = "voice-apply",
     description = "Rewrite to match a personal writing voice",
 
-    -- Declarative manifest fields (#128). Inert until skills route through the
-    -- chat loop (M2); voice-apply's runtime is still skill_runner until M4.
-    -- NOTE (M4): the disk-provider source is SKILL.md-only here; voice-apply's
-    -- DYNAMIC body (SKILL.md + the per-slug style guide, see system_prompt
-    -- below) is wired into an explicit source(ctx) when this skill is ported
-    -- through the loop in M4. Until then system_prompt is the live path.
+    -- Declarative manifest fields (#128). Runs through the skill_invoke driver
+    -- (M4); a `propose_edits` tool exchange on the artifact buffer.
     scope = "global",
     activation = { manual = true },
     tools = { "read_file" },
@@ -38,14 +34,19 @@ return {
         { name = "slug", description = "Voice style",
           complete = scan_voice_slugs },
     },
-    system_prompt = function(args, _file_path, _content, skill_md)
-        local style_path = vim.fn.expand("~/.personal/" .. args.slug .. "-writing-style.md")
+
+    -- DYNAMIC body: SKILL.md (injected by the disk provider as ctx.skill_md) ⊕
+    -- the per-slug style guide. The driver calls source(ctx) with
+    -- ctx = { args = {...}, repo_root, skill_md }.
+    source = function(ctx)
+        local slug = (ctx.args or {}).slug
+        local style_path = vim.fn.expand("~/.personal/" .. tostring(slug) .. "-writing-style.md")
         local f = io.open(style_path, "r")
         if not f then
             error("Voice style file not found: " .. style_path)
         end
         local style = f:read("*a")
         f:close()
-        return skill_md .. "\n\n## Voice Style Guide\n\n" .. style
+        return (ctx.skill_md or "") .. "\n\n## Voice Style Guide\n\n" .. style
     end,
 }
