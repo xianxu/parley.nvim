@@ -12,20 +12,30 @@ M.setup = function(parley)
     _parley = parley
 end
 
+-- Transitional routing (#128 M3): `review` runs through the new skill_invoke
+-- driver (the P2 path); other skills (e.g. voice_apply) still use skill_runner
+-- until M4 ports them + deletes it.
+local function run_skill(buf, skill, args)
+    if skill.name == "review" then
+        require("parley.skills.review").run_via_invoke(buf, args or {})
+    else
+        require("parley.skill_runner").run(buf, skill, args)
+    end
+end
+
 local function open_arg_picker(buf, skill, args, arg_index)
     _parley = _parley or require("parley")
-    local skill_runner = require("parley.skill_runner")
     local float_picker = _parley.float_picker
 
     -- All args collected — run the skill
     if not skill.args or arg_index > #skill.args then
-        skill_runner.run(buf, skill, args)
+        run_skill(buf, skill, args)
         return
     end
 
     local arg_def = skill.args[arg_index]
     if not arg_def or not arg_def.complete then
-        skill_runner.run(buf, skill, args)
+        run_skill(buf, skill, args)
         return
     end
 
@@ -83,7 +93,7 @@ M.open = function()
             local skill = item.value
             vim.schedule(function()
                 if not skill.args or #skill.args == 0 then
-                    skill_runner.run(buf, skill, {})
+                    run_skill(buf, skill, {})
                 else
                     open_arg_picker(buf, skill, {}, 1)
                 end

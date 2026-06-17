@@ -19,16 +19,15 @@ The "shared kernel" is the **existing dispatcher/tools layer**
 already rides; P2 gets a **thin driver** (`skill_invoke`, M3) that rides the same
 layer instead of `skill_runner`'s bespoke copies. The keystone: **`propose_edits`
 is a real registered tool**, so P2's edit-apply flows through the same
-`execute_call` path as every chat tool — **cwd-scope is active now**; the backup
-prelude is deferred to the dispatcher's write-path milestone (so M3 must secure a
-backup — inline like `write_file`, or via the prelude — before `review` applies
-destructive edits through it).
+`execute_call` path as every chat tool — cwd-scope active, and (M3) an **inline
+numbered `.parley-backup`** before each write (the `write_file` pattern; the
+dispatcher's generalized write-path prelude can supersede it later).
 
 **Milestones** (plan: `workshop/plans/000128-skill-system-redesign-plan.md`):
-M1 manifest + providers + registry (done) · **M2 `propose_edits` tool + pure P2
-context-assembler (done)** · M3 thin `skill_invoke` driver + port `review` ·
-M4 port `voice-apply` + delete `skill_runner` · ~~M5 `repo_discovery`~~ **dropped**
-(it's P1 context, not a skill).
+M1 manifest + providers + registry (done) · M2 `propose_edits` tool + pure P2
+context-assembler (done) · **M3 thin `skill_invoke` driver + `review` ported
+(done)** · M4 port `voice-apply` + delete `skill_runner` · ~~M5 `repo_discovery`~~
+**dropped** (it's P1 context, not a skill).
 
 **M1 modules:**
 - `lua/parley/skill_manifest.lua` — `SkillManifest` shape + `validate` (PURE).
@@ -40,6 +39,12 @@ M4 port `voice-apply` + delete `skill_runner` · ~~M5 `repo_discovery`~~ **dropp
 - `lua/parley/tools/builtin/propose_edits.lua` — the real `propose_edits` builtin (`kind=write`); edit-apply via the shared dispatch path.
 - `lua/parley/skill_assembly.lua` — PURE `build_invocation` (manifest + body + document → LLM-call inputs) + `resolve_agent` (the agent cascade, pure given injected config/registry deps).
 
+**M3 modules (the P2 path goes live — chat loop still untouched):**
+- `lua/parley/skill_invoke.lua` — the thin P2 driver: one tool-use exchange on an artifact via the EXISTING dispatchers (`prepare_payload`/`query`/`execute_call`); `on_done` hook; reloads the artifact with `:edit!`; binds edits to the artifact (injects `file_path`).
+- `lua/parley/skill_render.lua` — salvaged `clear_decorations`/`attach_diagnostics`/`highlight_edits` (so the driver is `skill_runner`-free; `skill_runner` delegates).
+- `propose_edits` gains an inline numbered `.parley-backup` before each write (the `write_file` pattern).
+- `review` runs via `skill_invoke` (`review.run_via_invoke`): marker pre-check + resubmit-up-to-3 stay in the skill; the picker routes `review`→`skill_invoke`, `voice_apply`→`skill_runner` until M4.
+
 Key design points: P2's edit-apply is a normal tool (not special-cased);
 `build_invocation`/`compute_edits`/`resolve_agent` are pure (the `source()` IO +
 `query` + `execute_call` stay in the M3 driver); the chat loop is never touched.
@@ -48,7 +53,7 @@ Key design points: P2's edit-apply is a normal tool (not special-cased);
 
 ## v1 pipeline (transitional — live until M4)
 
-Unified pipeline for AI-powered buffer editing. A skill sends the current buffer to an LLM with the `review_edit` tool, applies returned edits, and shows changes via highlights and diagnostics.
+Unified pipeline for AI-powered buffer editing. The v1 path (voice-apply) sends the current buffer to an LLM with the `review_edit` tool, applies returned edits, and shows changes via highlights and diagnostics. (Review moved off this path onto `skill_invoke`/`propose_edits` in M3; voice-apply is the last v1 user until M4 deletes `skill_runner`.)
 
 ## Entry Points
 
@@ -93,6 +98,12 @@ Redesign (#128) — M2 (shared pieces P2 reuses):
 - `lua/parley/tools/builtin/propose_edits.lua` — the real `propose_edits` builtin (P2 edit-apply via the shared dispatch path)
 - `lua/parley/skill_assembly.lua` — PURE `build_invocation` + `resolve_agent` (injected-config cascade)
 - `tests/unit/skill_edits_spec.lua`, `tests/unit/tools_builtin_propose_edits_spec.lua`, `tests/unit/skill_assembly_spec.lua`
+
+Redesign (#128) — M3 (P2 path live; review ported):
+- `lua/parley/skill_invoke.lua` — the thin P2 driver (one exchange on the existing dispatchers)
+- `lua/parley/skill_render.lua` — salvaged diagnostics/highlights (skill_runner delegates)
+- `lua/parley/skills/review/init.lua` — `review.run_via_invoke` (markers + resubmit; runs via skill_invoke)
+- `tests/integration/skill_invoke_spec.lua`, `tests/integration/skill_invoke_review_spec.lua`, `tests/unit/skill_render_spec.lua`
 
 v1 pipeline (live until M4):
 - `lua/parley/skill_runner.lua` — shared pipeline: discovery, agent resolution, run(), edit application, diagnostics

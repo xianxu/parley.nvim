@@ -33,3 +33,6 @@ bin/
 /CLAUDE.md
 /GEMINI.md
 /.agents/skills/
+
+# agent scratch debug files
+.mdbg*

@@ -1,11 +1,15 @@
 -- `propose_edits` — apply a batch of explained string-replacement edits to a
 -- file. The P2 (artifact-workbench) edit tool: a real registered builtin, so
 -- P2's edit-apply flows through the SAME dispatcher `execute_call` path
--- (cwd-scope guard via `file_path`; the M5 backup prelude via `needs_backup`)
--- as every chat tool — replacing skill_runner's special-cased `apply_edits`.
+-- (cwd-scope guard via `file_path`) as every chat tool — replacing
+-- skill_runner's special-cased `apply_edits`.
 --
 -- Edit logic is the single-source `parley.skill_edits.compute_edits` (pure).
--- The handler is the thin IO wrapper: read → compute → write → checktime. The
+-- The handler is the thin IO wrapper: read → compute → back up → write →
+-- checktime. Backup: before a successful write the prior content is saved to the
+-- next free `<path>.parley-backup.<n>` (the `write_file.lua` pattern; #128 M3).
+-- `needs_backup=true` remains the right classification, but backup is performed
+-- inline here today (the dispatcher's write-path prelude is deferred). The
 -- diagnostics/highlights rendering stays driver-side (M3), not here.
 
 local skill_edits = require("parley.skill_edits")
@@ -46,6 +50,12 @@ return {
         if type(edits) ~= "table" then
             return { content = "missing or invalid required field: edits", is_error = true, name = "propose_edits" }
         end
+        if #edits == 0 then
+            -- An empty batch is a no-op write; reject it so callers (review) see a
+            -- failure rather than a "successful" non-edit (which would otherwise
+            -- back up + rewrite unchanged content and look like progress).
+            return { content = "no edits provided", is_error = true, name = "propose_edits" }
+        end
 
         local f, err = io.open(path, "r")
         if not f then
@@ -58,6 +68,11 @@ return {
         if not result.ok then
             return { content = result.msg, is_error = true, name = "propose_edits" }
         end
+
+        -- Back up the prior content before the (now-known-valid) write. Runs only
+        -- once compute_edits succeeds, so an invalid batch leaves no backup (no
+        -- destructive write happened). Shared numbered-backup helper (ARCH-DRY).
+        require("parley.tools.backup").numbered(path, content)
 
         local wf, werr = io.open(path, "w")
         if not wf then
