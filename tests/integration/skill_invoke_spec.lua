@@ -94,12 +94,35 @@ describe("skill_invoke.invoke", function()
         assert.is_true(done_result.ok)
         -- payload: force_tool → tool_choice; the system body is messages[1]
         assert.are.same({ type = "tool", name = "propose_edits" }, captured_payload.tool_choice)
+        -- large-document headroom: max_tokens bumped well past the 4096 default
+        assert.is_true((captured_payload.max_tokens or 0) >= 100000)
         -- propose_edits applied to the artifact FILE via the real execute_call path
         assert.are.equal("ALPHA beta", table.concat(vim.fn.readfile(path), "\n"))
         -- the artifact BUFFER was reloaded to match
         assert.are.equal("ALPHA beta", table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n"))
         -- a numbered backup was made (M3 Task 1)
         assert.are.equal(1, vim.fn.filereadable(path .. ".parley-backup.1"))
+    end)
+
+    it("surfaces a failed edit: on_done ok=false, applied=0, file untouched", function()
+        -- non-unique old_string → compute_edits fails → propose_edits is_error
+        vim.fn.writefile({ "ab ab" }, path)
+        vim.cmd("edit! " .. vim.fn.fnameescape(path))
+        buf = vim.api.nvim_get_current_buf()
+        parley.dispatcher.query = function(_b, _p, _payload, _h, on_exit)
+            tasker.set_query("qid_err", {
+                raw_response = propose_edits_sse({
+                    { old_string = "ab", new_string = "X", explain = "non-unique" },
+                }),
+            })
+            vim.schedule(function() on_exit("qid_err") end)
+        end
+        skill_invoke.invoke(buf, manifest(), {}, { on_done = function(r) done_result = r end })
+        vim.wait(2000, function() return done_result ~= nil end)
+        assert.is_not_nil(done_result)
+        assert.is_false(done_result.ok)
+        assert.are.equal(0, done_result.applied)
+        assert.are.equal("ab ab", table.concat(vim.fn.readfile(path), "\n")) -- untouched
     end)
 
     it("aborts (on_done ok=false) when no agent resolves", function()

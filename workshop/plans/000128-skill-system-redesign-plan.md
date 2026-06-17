@@ -378,6 +378,27 @@ Port `voice_apply` via the driver — give it an explicit `source(ctx)` composin
 
 ## Revisions
 
+### 2026-06-16 — M3 boundary review (FIX-THEN-SHIP → addressed)
+
+M3 implemented (`skill_invoke` driver, inline backup, `skill_render` salvage,
+`review` ported) + closed; boundary review **FIX-THEN-SHIP** (no Critical). It
+caught three behaviors the port dropped vs. `skill_runner` — all fixed in
+`skill_invoke` (shared, so M4's `voice_apply` inherits the fixes):
+- **I1 — error surfacing + resubmit storm.** `on_done` was always `ok=true`; a
+  failed/empty `propose_edits` was silent and `review` resubmitted 3×. Now
+  `skill_invoke` derives `ok` + an `applied` count from the tool ToolResults,
+  logs tool errors / a no-tool-call warning; `review`'s `on_done` STOPs when
+  `applied==0` (no progress → don't loop).
+- **I2 — `max_tokens` regression.** Restored the `max_tokens=100000` bump
+  (review was running at the 4096 default → truncated multi-edit batches).
+- **I3 — stale SKILL.md tool name.** `review/SKILL.md` `review_edit` →
+  `propose_edits` (worked only via forced `tool_choice`).
+- Minors fixed: unnamed-buffer guard + per-buffer in-flight re-entrancy guard.
+- Tests added: the I1 failure path (`skill_invoke_spec`: failed edit → ok=false,
+  applied=0, file untouched) + review no-resubmit-on-no-apply/failure cases +
+  the `max_tokens` assertion. (Minors left as noted: render position recompute;
+  redundant checktime/`:edit!` reload — both harmless.)
+
 ### 2026-06-16 — M2 boundary review (FIX-THEN-SHIP → addressed)
 
 M2 implemented (`skill_edits` / `propose_edits` / `skill_assembly`) + closed;

@@ -18,6 +18,10 @@
 
 local M = {}
 
+-- Per-buffer re-entrancy guard: one skill exchange per artifact buffer at a time
+-- (a rapid double-trigger would otherwise launch concurrent exchanges).
+local _in_flight = {}
+
 local function parley()
     return require("parley")
 end
@@ -69,6 +73,17 @@ function M.invoke(buf, manifest, args, opts)
     local skill_render = require("parley.skill_render")
 
     local artifact_path = vim.api.nvim_buf_get_name(buf)
+    if artifact_path == "" then
+        p.logger.warning("skill " .. tostring(manifest.name) .. ": buffer has no file — open the artifact first")
+        if opts.on_done then
+            opts.on_done({ ok = false, msg = "buffer has no file" })
+        end
+        return
+    end
+    if _in_flight[buf] then
+        p.logger.warning("skill " .. tostring(manifest.name) .. ": already running on this buffer")
+        return
+    end
 
     -- Sync file == buffer so edits compute + apply against the same content.
     if vim.bo[buf].modified then
@@ -99,11 +114,16 @@ function M.invoke(buf, manifest, args, opts)
     if inv.tool_choice then
         payload.tool_choice = inv.tool_choice
     end
+    -- Large-document tool output needs headroom: a multi-edit propose_edits batch
+    -- echoes old/new/explain per edit and easily exceeds the default (4096),
+    -- truncating the tool JSON → empty decode. (Was skill_runner's explicit bump.)
+    payload.max_tokens = math.max(payload.max_tokens or 0, 100000)
 
     skill_render.clear_decorations(buf)
 
     local cwd = vim.fn.fnamemodify(artifact_path, ":h")
 
+    _in_flight[buf] = true
     llm.query(
         nil, -- headless: no streaming buffer insertion
         agent.provider,
@@ -111,15 +131,25 @@ function M.invoke(buf, manifest, args, opts)
         function() end, -- handler (headless)
         function(qid) -- on_exit
             vim.schedule(function()
+                _in_flight[buf] = nil
                 local qt = tasker.get_query(qid) or {}
                 local calls = providers.decode_anthropic_tool_calls_from_stream(qt.raw_response or "")
                 local results = {}
-                for _, call in ipairs(calls) do
+                local applied = 0
+                local errors = {}
+                for i, call in ipairs(calls) do
                     if call.name == "propose_edits" then
                         call.input = call.input or {}
                         call.input.file_path = artifact_path -- artifact-bound
                     end
-                    table.insert(results, tools_dispatcher.execute_call(call, tools_registry, { cwd = cwd }))
+                    results[i] = tools_dispatcher.execute_call(call, tools_registry, { cwd = cwd })
+                    if call.name == "propose_edits" then
+                        if results[i].is_error then
+                            table.insert(errors, results[i].content)
+                        else
+                            applied = applied + 1
+                        end
+                    end
                 end
                 reload_buffer(buf)
                 local new_content = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
@@ -128,14 +158,25 @@ function M.invoke(buf, manifest, args, opts)
                         render_propose_edits(buf, call, original, new_content)
                     end
                 end
+                -- Surface failure rather than swallowing it: a tool error, or no
+                -- tool call at all (a truncated/empty response), is logged so the
+                -- caller (review) can STOP rather than resubmit blindly.
+                if #calls == 0 then
+                    p.logger.warning("skill " .. tostring(manifest.name)
+                        .. ": model returned no tool call (response may be truncated)")
+                end
+                for _, e in ipairs(errors) do
+                    p.logger.error("skill " .. tostring(manifest.name) .. ": " .. tostring(e))
+                end
                 if opts.on_done then
-                    opts.on_done({ ok = true, calls = calls, results = results })
+                    opts.on_done({ ok = (#errors == 0), applied = applied, calls = calls, results = results })
                 end
             end)
         end,
         nil,
         nil,
         function(msg) -- on_abort
+            _in_flight[buf] = nil
             p.logger.error("skill " .. tostring(manifest.name) .. " abort: " .. tostring(msg))
             if opts.on_done then
                 opts.on_done({ ok = false, msg = tostring(msg) })

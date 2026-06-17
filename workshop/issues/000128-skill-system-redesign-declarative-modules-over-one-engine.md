@@ -144,7 +144,7 @@ sketches are stale until then).
 
 - [x] M1 — declarative manifest + provider-based discovery: `SkillManifest` shape+`validate`; disk/virtual providers (closure `source`, kills the `debug.getinfo` dance); registry union+dedup; `review`/`voice_apply` re-expressed as manifests. **Survives as the P2-skill descriptor** (chat-flavored fields `scope`/`activation.auto/always` to be revisited → "how a skill is surfaced in the P2 UI").
 - [x] M2 — `propose_edits` real builtin (P2 edit-apply via the **existing** `execute_call` path) + the pure P2 pieces (`skill_edits.compute_edits`, `skill_assembly.build_invocation`/`resolve_agent`). **No new kernel** — P2 will ride the existing dispatcher via the M3 driver (the chat loop is untouched). _(Earlier wording said "extract a shared context-assembler + tool-loop core"; that kernel-extraction was abandoned for the lighter "P2 reuses the existing dispatcher" approach — see `## Revisions`.)_
-- [ ] M3 (re-scoped) — `propose_edits` mutation tool (salvage `compute_edits`/`apply_edits` + highlight/diagnostics); port `review` to **drive the shared loop on the artifact** (single-shot → recursive-capable), not a separate pipeline.
+- [x] M3 (re-scoped) — `propose_edits` mutation tool (salvage `compute_edits`/`apply_edits` + highlight/diagnostics); port `review` to **drive the shared loop on the artifact** (single-shot → recursive-capable), not a separate pipeline.
 - [ ] M4 (re-scoped) — port `voice_apply` likewise; **delete `skill_runner`** + reconcile callers (`skill_picker`/`review.lua`/keybindings); resolve `glob`/`list_dir` (YAGNI — they don't exist).
 - [ ] ~~M5 — `repo_discovery` virtual skill~~ **DROPPED** — `repo_discovery` is **P1 context/tools**, not a skill (category error). #116 feeds P1 directly; see the P1 project below.
 
@@ -188,6 +188,8 @@ fused (operator: "I think I hallucinated a bit"). Full framing:
 ## Log
 
 
+
+- 2026-06-16: closed M3 — M3: skill_invoke driver (one exchange via existing dispatchers; chat loop untouched) + propose_edits inline backup + skill_render salvage + review ported (markers+resubmit); review-port 5/5, skill_invoke 2/2, arch+full suite green (lint 0/0, 106 spec files), voice on skill_runner 9/9. ACTUAL=labeled ~1.5h estimate — auto-measure 11.91h is rebase-contaminated (orphaned base 96302e08 → window spans 10 issues); review verdict: FIX-THEN-SHIP
 - 2026-06-16: closed M2 — M2: propose_edits real tool + pure compute_edits/build_invocation/resolve_agent (19 assertions); full suite lint 0/0 + 103 spec files; chat loop + skill_runner untouched. ACTUAL=labeled estimate ~1h (cf #128 M1 measured 0.90h) — auto-measure 9.67h is rebase-contaminated (orphaned base 96302e08 → window spans #95-#132); review verdict: FIX-THEN-SHIP
 ### 2026-06-12 — M1 implemented (declarative manifest + provider discovery)
 - 2026-06-12: closed M1 — declarative skill system M1: SkillManifest+validate (16 assertions), disk/virtual providers (8), registry union/dedup/current() incl real plugin skills (7); review+voice-apply discoverable as manifests; full suite lint 0/0 + 91 spec files pass; v1 skill_runner runtime untouched (9/9). No chat-loop change (M2); review verdict: FIX-THEN-SHIP.

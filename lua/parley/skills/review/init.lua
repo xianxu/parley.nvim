@@ -568,6 +568,13 @@ M.run_via_invoke = function(buf, args, resubmit_count)
         manual = true,
         on_done = function(result)
             if not result or not result.ok then
+                return -- skill_invoke already surfaced the error
+            end
+            -- Nothing applied (model made no edit / unaddressable) → STOP, don't
+            -- resubmit. The markers are unchanged, so resubmitting would loop with
+            -- no progress (the v1 engine likewise didn't resubmit on no-apply).
+            if (result.applied or 0) == 0 then
+                parley.logger.info("Review: no edits applied")
                 return
             end
             -- Post-apply (was post_apply): resubmit while ready markers remain.

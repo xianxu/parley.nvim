@@ -49,21 +49,35 @@ describe("review.run_via_invoke", function()
         assert.are.equal(0, #invoke_calls)
     end)
 
-    it("resubmits while ready markers remain after apply (bounded at 3)", function()
+    it("resubmits while ready markers remain after an apply (bounded at 3)", function()
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "prose 🤖[fix]" })
         review.run_via_invoke(buf, {})
         assert.are.equal(1, #invoke_calls)
-        -- on_done fires with the marker still present (fake didn't edit) → re-invoke
-        invoke_calls[1].opts.on_done({ ok = true })
+        -- edits applied (applied>0) + a ready marker still present → re-invoke
+        invoke_calls[1].opts.on_done({ ok = true, applied = 1 })
         assert.are.equal(2, #invoke_calls)
     end)
 
     it("does NOT resubmit when remaining markers are pending questions", function()
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "prose 🤖[fix]" })
         review.run_via_invoke(buf, {})
-        -- simulate the agent having added a pending question after applying
+        -- the agent added a pending question after applying
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "prose 🤖[fix]{now a question}" })
-        invoke_calls[1].opts.on_done({ ok = true })
+        invoke_calls[1].opts.on_done({ ok = true, applied = 1 })
         assert.are.equal(1, #invoke_calls) -- no re-invoke
+    end)
+
+    it("does NOT resubmit when nothing was applied (avoids the storm)", function()
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "prose 🤖[fix]" })
+        review.run_via_invoke(buf, {})
+        invoke_calls[1].opts.on_done({ ok = true, applied = 0 }) -- no edit applied
+        assert.are.equal(1, #invoke_calls)
+    end)
+
+    it("does NOT resubmit on a failed exchange", function()
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "prose 🤖[fix]" })
+        review.run_via_invoke(buf, {})
+        invoke_calls[1].opts.on_done({ ok = false, msg = "tool error" })
+        assert.are.equal(1, #invoke_calls)
     end)
 end)
