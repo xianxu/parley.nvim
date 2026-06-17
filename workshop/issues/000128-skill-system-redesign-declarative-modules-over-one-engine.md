@@ -188,7 +188,21 @@ fused (operator: "I think I hallucinated a bit"). Full framing:
 ## Log
 
 
-
+- 2026-06-16: **M4 implemented** (TDD, 5 tasks) — `voice_apply` ported to an
+  explicit `source(ctx)` (SKILL.md ⊕ per-slug style guide), enabled by the
+  DiskProvider injecting `ctx.skill_md`; `skill_picker` lists `parley.skills`
+  and routes via `M.run_skill` (review→run_via_invoke, else→skill_invoke);
+  **`skill_runner.lua` + its spec DELETED**, all callers reconciled (review/init
+  dead v1 fields, review.lua shim trimmed, abort test ported to `skill_invoke`
+  + `is_in_flight`). Full suite green (107 specs), lint 0/0 (203 files).
+- 2026-06-16: **glob/list_dir YAGNI decision FINALIZED.** Decision: **add no
+  structured `glob`/`list_dir` tool.** `glob.lua`/`list_dir.lua` never existed
+  (the "present but unregistered" premise was stale); `builtin/` ships `ls`+`find`
+  (registered) + `grep`, and P2's artifact mode needs only `read_file`+`propose_edits`.
+  No consumer in P1 or P2 today → no tool. Side-fix: traceability listed phantom
+  `tools_builtin_glob_spec`/`tools_builtin_list_dir_spec` (renamed to `find`/`ls`
+  long ago, covered by `tools_builtin_registered_spec`) — removed. Recorded in
+  `atlas/skills/skill-system.md` ("Tooling decision"). Revisit only on a real consumer.
 - 2026-06-16: closed M3 — M3: skill_invoke driver (one exchange via existing dispatchers; chat loop untouched) + propose_edits inline backup + skill_render salvage + review ported (markers+resubmit); review-port 5/5, skill_invoke 2/2, arch+full suite green (lint 0/0, 106 spec files), voice on skill_runner 9/9. ACTUAL=labeled ~1.5h estimate — auto-measure 11.91h is rebase-contaminated (orphaned base 96302e08 → window spans 10 issues); review verdict: FIX-THEN-SHIP
 - 2026-06-16: **M3 boundary findings addressed (2 review rounds, both FIX-THEN-SHIP, no Critical).** R1: I1 error-surfacing + resubmit-storm (on_done now derives ok/applied + logs; review stops on no-progress) · I2 restored max_tokens=100000 (was truncating multi-edit batches) · I3 review/SKILL.md review_edit→propose_edits · unnamed-buffer + in-flight guards. R2: closed the empty-edits/no-op hole in I1 (propose_edits rejects empty batch; review uses a marker-SHRANK guard) · extracted shared `tools/backup.lua` (ARCH-DRY; write_file+propose_edits delegate) · removed stray committed debug files. All fixes tested; full suite green throughout. See plan `## Revisions`.
 - 2026-06-16: closed M2 — M2: propose_edits real tool + pure compute_edits/build_invocation/resolve_agent (19 assertions); full suite lint 0/0 + 103 spec files; chat loop + skill_runner untouched. ACTUAL=labeled estimate ~1h (cf #128 M1 measured 0.90h) — auto-measure 9.67h is rebase-contaminated (orphaned base 96302e08 → window spans #95-#132); review verdict: FIX-THEN-SHIP

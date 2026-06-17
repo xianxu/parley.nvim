@@ -55,7 +55,7 @@ This index provides a central directory for all atlas entries of the `parley.nvi
 - [AI Workflow](infra/workflow.md): Issue-based development, worktree management, and pre-merge checks.
 
 ## 8. Skill System & Special Modes
-- [Skill System](skills/skill-system.md): AI-powered buffer-editing **skills** (the P2 artifact-workbench mode). **Redesign in progress (#128):** declarative manifests; P2 rides the existing dispatcher/tools layer (the P1 chat loop is untouched — no new engine); v1 `skill_runner` pipeline live until the port completes.
+- [Skill System](skills/skill-system.md): AI-powered buffer-editing **skills** (the P2 artifact-workbench mode). **Redesigned (#128, M1–M4 done):** declarative manifests; P2 rides the existing dispatcher/tools layer (the P1 chat loop is untouched — no new engine); the v1 `skill_runner` engine was deleted (both `review` and `voice-apply` run through `skill_invoke`).
 - [Interview Mode](modes/interview.md): Mechanics, automatic timestamps, and `{thought}` highlighting.
 - [Raw Mode](modes/raw_mode.md): API debugging via raw requests/responses — see [Raw-Mode Logging](infra/raw_logging.md) for the debug workflow.
 - [Document Review](modes/review.md): LLM-powered document review via 🤖 markers (implemented as a skill).
