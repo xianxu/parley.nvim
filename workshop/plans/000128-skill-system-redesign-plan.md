@@ -395,9 +395,20 @@ caught three behaviors the port dropped vs. `skill_runner` — all fixed in
   `propose_edits` (worked only via forced `tool_choice`).
 - Minors fixed: unnamed-buffer guard + per-buffer in-flight re-entrancy guard.
 - Tests added: the I1 failure path (`skill_invoke_spec`: failed edit → ok=false,
-  applied=0, file untouched) + review no-resubmit-on-no-apply/failure cases +
-  the `max_tokens` assertion. (Minors left as noted: render position recompute;
-  redundant checktime/`:edit!` reload — both harmless.)
+  applied=0, file untouched) + review no-resubmit cases + the `max_tokens`
+  assertion.
+
+**2nd-round re-judge (FIX-THEN-SHIP) — also addressed:**
+- **Empty-edits/no-progress storm (I1 hole).** `compute_edits([])` returns ok →
+  `propose_edits` would write unchanged content → `applied=1` → review resubmits.
+  Fixed two ways: `propose_edits` now **rejects an empty edits batch** (no write,
+  no backup), and `review` uses a **marker-shrank guard** — resubmit only if the
+  marker set actually decreased (catches empty/no-op/wrong-place edits, not just
+  no-apply). Tests reworked to simulate the buffer shrinking.
+- **ARCH-DRY: shared backup helper.** Extracted `lua/parley/tools/backup.lua`
+  (`numbered(path, content)`); `propose_edits` + `write_file` both delegate (M4's
+  `voice_apply` won't be a third copy).
+- Removed stray committed debug files (`.mdbg*`), gitignored them.
 
 ### 2026-06-16 — M2 boundary review (FIX-THEN-SHIP → addressed)
 

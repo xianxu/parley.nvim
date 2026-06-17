@@ -556,6 +556,8 @@ M.run_via_invoke = function(buf, args, resubmit_count)
     vim.fn.setqflist({}, "r")
     pcall(vim.cmd, "cclose")
 
+    local marker_count_before = #markers
+
     -- NB: skill_registry's get/names are plain-function fields → call with DOT,
     -- not colon (colon would pass the registry as the `name` arg).
     local manifest = parley.skills.current().get("review")
@@ -570,18 +572,20 @@ M.run_via_invoke = function(buf, args, resubmit_count)
             if not result or not result.ok then
                 return -- skill_invoke already surfaced the error
             end
-            -- Nothing applied (model made no edit / unaddressable) → STOP, don't
-            -- resubmit. The markers are unchanged, so resubmitting would loop with
-            -- no progress (the v1 engine likewise didn't resubmit on no-apply).
-            if (result.applied or 0) == 0 then
-                parley.logger.info("Review: no edits applied")
-                return
-            end
             -- Post-apply (was post_apply): resubmit while ready markers remain.
             local new_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
             local remaining = M.parse_markers(new_lines)
             if #remaining == 0 then
                 parley.logger.info("Review: all comments addressed")
+                return
+            end
+            -- NO-PROGRESS GUARD: only resubmit if the marker set actually SHRANK.
+            -- Catches every stuck case — empty/no-op edits, the model editing the
+            -- wrong place, an unaddressable marker — that would otherwise loop
+            -- (bounded at 3) with no progress. (Stricter than the v1 engine, which
+            -- only guarded the empty-edits + no-apply cases.)
+            if #remaining >= marker_count_before then
+                parley.logger.info("Review: no progress (markers unchanged) — stopping")
                 return
             end
             local has_questions = false

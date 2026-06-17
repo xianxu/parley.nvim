@@ -67,6 +67,15 @@ describe("propose_edits handler", function()
         assert.is_true(res.is_error)
         assert.matches("edits", res.content)
     end)
+
+    it("errors on an empty edits batch (no-op write) and writes nothing", function()
+        local path = tmpfile("unchanged")
+        local res = propose_edits.handler({ file_path = path, edits = {} })
+        assert.is_true(res.is_error)
+        assert.are.equal("unchanged", table.concat(vim.fn.readfile(path), "\n"))
+        assert.are.equal(0, vim.fn.filereadable(path .. ".parley-backup.1")) -- no backup
+        vim.fn.delete(path)
+    end)
 end)
 
 describe("propose_edits inline backup", function()

@@ -49,33 +49,35 @@ describe("review.run_via_invoke", function()
         assert.are.equal(0, #invoke_calls)
     end)
 
-    it("resubmits while ready markers remain after an apply (bounded at 3)", function()
-        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "prose 🤖[fix]" })
+    it("resubmits when the marker set shrank and a ready marker remains (bounded at 3)", function()
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "🤖[a]", "🤖[b]" }) -- 2 ready markers
         review.run_via_invoke(buf, {})
         assert.are.equal(1, #invoke_calls)
-        -- edits applied (applied>0) + a ready marker still present → re-invoke
-        invoke_calls[1].opts.on_done({ ok = true, applied = 1 })
+        -- the apply removed one marker; one ready marker remains → progress → re-invoke
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "🤖[b]" })
+        invoke_calls[1].opts.on_done({ ok = true })
         assert.are.equal(2, #invoke_calls)
     end)
 
-    it("does NOT resubmit when remaining markers are pending questions", function()
-        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "prose 🤖[fix]" })
+    it("does NOT resubmit when the marker set did not shrink (no-progress storm guard)", function()
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "🤖[fix]" })
         review.run_via_invoke(buf, {})
-        -- the agent added a pending question after applying
-        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "prose 🤖[fix]{now a question}" })
-        invoke_calls[1].opts.on_done({ ok = true, applied = 1 })
-        assert.are.equal(1, #invoke_calls) -- no re-invoke
+        -- buffer unchanged (model made no/empty/wrong edit) → no progress → stop
+        invoke_calls[1].opts.on_done({ ok = true })
+        assert.are.equal(1, #invoke_calls)
     end)
 
-    it("does NOT resubmit when nothing was applied (avoids the storm)", function()
-        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "prose 🤖[fix]" })
+    it("does NOT resubmit when the remaining marker is a pending question", function()
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "🤖[a]", "🤖[b]" })
         review.run_via_invoke(buf, {})
-        invoke_calls[1].opts.on_done({ ok = true, applied = 0 }) -- no edit applied
+        -- shrank to one marker, but it's now a pending agent question
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "🤖[b]{a question}" })
+        invoke_calls[1].opts.on_done({ ok = true })
         assert.are.equal(1, #invoke_calls)
     end)
 
     it("does NOT resubmit on a failed exchange", function()
-        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "prose 🤖[fix]" })
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "🤖[fix]" })
         review.run_via_invoke(buf, {})
         invoke_calls[1].opts.on_done({ ok = false, msg = "tool error" })
         assert.are.equal(1, #invoke_calls)

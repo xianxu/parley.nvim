@@ -50,6 +50,12 @@ return {
         if type(edits) ~= "table" then
             return { content = "missing or invalid required field: edits", is_error = true, name = "propose_edits" }
         end
+        if #edits == 0 then
+            -- An empty batch is a no-op write; reject it so callers (review) see a
+            -- failure rather than a "successful" non-edit (which would otherwise
+            -- back up + rewrite unchanged content and look like progress).
+            return { content = "no edits provided", is_error = true, name = "propose_edits" }
+        end
 
         local f, err = io.open(path, "r")
         if not f then
@@ -63,24 +69,10 @@ return {
             return { content = result.msg, is_error = true, name = "propose_edits" }
         end
 
-        -- Back up the prior content before the (now-known-valid) write. Numbered
-        -- backups (.parley-backup.1, .2, …) preserve every prior state — the
-        -- write_file.lua pattern. Only runs once compute_edits succeeds, so an
-        -- invalid batch leaves no backup (no destructive write happened).
-        local n = 1
-        while true do
-            local fc = io.open(path .. ".parley-backup." .. n, "r")
-            if not fc then
-                break
-            end
-            fc:close()
-            n = n + 1
-        end
-        local bf = io.open(path .. ".parley-backup." .. n, "w")
-        if bf then
-            bf:write(content)
-            bf:close()
-        end
+        -- Back up the prior content before the (now-known-valid) write. Runs only
+        -- once compute_edits succeeds, so an invalid batch leaves no backup (no
+        -- destructive write happened). Shared numbered-backup helper (ARCH-DRY).
+        require("parley.tools.backup").numbered(path, content)
 
         local wf, werr = io.open(path, "w")
         if not wf then

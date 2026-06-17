@@ -453,6 +453,7 @@ atlas:
       - lua/parley/skill_invoke.lua
       - lua/parley/skill_render.lua
       - lua/parley/tools/builtin/propose_edits.lua
+      - lua/parley/tools/backup.lua
       - lua/parley/skill_picker.lua
       - lua/parley/review.lua
       - lua/parley/skills/review/init.lua
