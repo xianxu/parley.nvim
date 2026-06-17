@@ -30,15 +30,33 @@ end
 
 -- Build a manifest from a loaded skill-definition table + its absolute dir.
 -- Source resolution (the unified `source(ctx)` contract):
---   1. an explicit `source` function (the new declarative field), else
---   2. `<dir>/SKILL.md` read via a closure over `dir`.
+--   1. an explicit `source(ctx)` function (the new declarative field), wrapped so
+--      the provider injects `ctx.skill_md` from `<dir>/SKILL.md` — the dir is a
+--      discovery-time fact the closure already holds, so a dynamic-body skill
+--      (voice_apply) composes `ctx.skill_md ⊕ <extra>` without re-deriving the
+--      dir (this is v1's 4th `skill_md` arg, minus the debug.getinfo dance).
+--   2. else `<dir>/SKILL.md` read via a closure over `dir`.
 -- (No v1 `system_prompt` fallback: that 4-arg contract is retired in M4, and no
 -- bundled skill needs it — all ship a SKILL.md. A dir with neither yields
 -- source = nil and is validate-dropped by the registry.)
 local function manifest_from_def(def, dir)
     local source
     if type(def.source) == "function" then
-        source = def.source
+        local inner = def.source
+        source = function(ctx)
+            ctx = ctx or {}
+            -- Enrich (without mutating the caller's table) only when the skill
+            -- didn't already supply skill_md and a SKILL.md exists for this dir.
+            if ctx.skill_md == nil and file_exists(dir .. "/SKILL.md") then
+                local enriched = {}
+                for k, v in pairs(ctx) do
+                    enriched[k] = v
+                end
+                enriched.skill_md = read_file(dir .. "/SKILL.md") or ""
+                ctx = enriched
+            end
+            return inner(ctx)
+        end
     elseif file_exists(dir .. "/SKILL.md") then
         source = function()
             return read_file(dir .. "/SKILL.md") or ""
