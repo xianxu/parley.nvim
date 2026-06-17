@@ -1,11 +1,12 @@
 ---
 id: 000128
-status: working
+status: done
 deps: []
 github_issue:
 created: 2026-06-11
-updated: 2026-06-12
+updated: 2026-06-17
 estimate_hours: 40
+actual_hours: 4.9
 ---
 
 # Skill system redesign: declarative modules over one engine
@@ -189,6 +190,8 @@ fused (operator: "I think I hallucinated a bit"). Full framing:
 
 
 
+
+- 2026-06-17: closed — All 4 milestones (M1-M4) shipped to main: skill_runner (duplicate forced-write engine) DELETED; review + voice_apply run via the skill_invoke driver on the existing dispatcher; propose_edits is a real builtin (P2 edit-apply through execute_call). Full suite green (107 specs) + lint 0/0 (203 files); each milestone fresh-context reviewed (all FIX-THEN-SHIP, no Critical, addressed). --no-plan-check: the lone unchecked Plan item is M5, intentionally DROPPED (repo_discovery = P1 category error, not done by design). ACTUAL=labeled ~4.9h (sum of per-milestone labeled actuals) — auto-measure rebase-contaminated (orphaned base → window spans #95-#132).; review verdict: SHIP
 - 2026-06-17: closed M4 — M4: voice_apply ported to source(ctx); skill_runner DELETED + all callers reconciled; picker reads registry; full suite green (107 specs) + lint 0/0 (203 files); glob/list_dir YAGNI recorded. ACTUAL=labeled ~1.5h (cf M3 1.5h) — auto-measure 14.37h is rebase-contaminated (orphaned base 96302e08 → window spans 11 issues #95-#132).; review verdict: FIX-THEN-SHIP
 - 2026-06-17: **M4 boundary finding addressed** (FIX-THEN-SHIP, no Critical). Important: `skill_invoke.source()` was called outside `pcall` → a fallible source (voice_apply, missing style file) threw a raw error instead of routing through `on_done({ok=false})` like the other early-outs. Wrapped + tested (source throws → on_done ok=false, no query). Minors documented (ok-semantics, marker-shrank conservatism, applied-counts-calls). See plan `## Revisions`.
 - 2026-06-16: **M4 implemented** (TDD, 5 tasks) — `voice_apply` ported to an
