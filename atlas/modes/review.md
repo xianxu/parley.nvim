@@ -47,12 +47,13 @@ Review is implemented as a **skill** in the unified skill system (see `atlas/ind
 
 - **Skill module**: `lua/parley/skills/review/init.lua` — marker parsing, pre/post hooks, keybindings
 - **System prompt**: `lua/parley/skills/review/SKILL.md`
-- **Shared pipeline**: `lua/parley/skill_runner.lua` — edit application, diagnostics, highlights, LLM orchestration
+- **Driver**: `lua/parley/skill_invoke.lua` — one tool-use exchange on the existing dispatcher (M3; `skill_runner` no longer used for review — voice-apply stays on it until M4)
+- **Rendering**: `lua/parley/skill_render.lua` — diagnostics + edit highlights
 - **Shim**: `lua/parley/review.lua` — backward-compatible re-exports for existing callers
 - **Headless**: Direct API call, no chat buffer, no exchange model
 - **Stateless**: Each submit sends full document; markers carry conversation history
-- **Tool**: `review_edit` tool with `{old_string, new_string, explain}` triples
-- **Edits**: Applied to file on disk, buffer reloaded via `:checktime`
+- **Tool**: `propose_edits` tool with `{old_string, new_string, explain}` triples (forced via `tool_choice`)
+- **Edits**: Applied to file on disk via the `propose_edits` builtin, buffer reloaded via `:edit!`
 - **Feedback**: Highlights on edits (DiffChange), diagnostics from explain fields (INFO), quickfix for pending agent questions
 - **Provider**: Requires Anthropic or cliproxyapi (tool_use support)
 
@@ -71,7 +72,10 @@ review_shortcut_finder = { modes = { "n", "i" }, shortcut = "<C-g>vf" },
 
 - `lua/parley/skills/review/init.lua` — skill definition, marker parsing, hooks, keybindings
 - `lua/parley/skills/review/SKILL.md` — system prompt (light edit + heavy revision sections)
-- `lua/parley/skill_runner.lua` — shared edit-apply-display pipeline
+- `lua/parley/skill_invoke.lua` — the P2 driver (one tool-use exchange via the existing dispatcher)
+- `lua/parley/skill_render.lua` — diagnostics + edit highlights
+- `lua/parley/tools/builtin/propose_edits.lua` — batch edit-apply (inline `.parley-backup`)
+- `lua/parley/skill_runner.lua` — shared edit-apply-display pipeline (transitional; voice-apply only until M4)
 - `lua/parley/review.lua` — backward-compatible shim
 - `lua/parley/highlighter.lua` — `ParleyReviewUser`/`ParleyReviewAgent` groups
 - `lua/parley/config.lua` — default keybindings and config

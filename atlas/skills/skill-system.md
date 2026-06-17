@@ -53,7 +53,7 @@ Key design points: P2's edit-apply is a normal tool (not special-cased);
 
 ## v1 pipeline (transitional — live until M4)
 
-Unified pipeline for AI-powered buffer editing. A skill sends the current buffer to an LLM with the `review_edit` tool, applies returned edits, and shows changes via highlights and diagnostics.
+Unified pipeline for AI-powered buffer editing. The v1 path (voice-apply) sends the current buffer to an LLM with the `review_edit` tool, applies returned edits, and shows changes via highlights and diagnostics. (Review moved off this path onto `skill_invoke`/`propose_edits` in M3; voice-apply is the last v1 user until M4 deletes `skill_runner`.)
 
 ## Entry Points
 
