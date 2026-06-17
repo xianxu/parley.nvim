@@ -145,7 +145,7 @@ sketches are stale until then).
 - [x] M1 — declarative manifest + provider-based discovery: `SkillManifest` shape+`validate`; disk/virtual providers (closure `source`, kills the `debug.getinfo` dance); registry union+dedup; `review`/`voice_apply` re-expressed as manifests. **Survives as the P2-skill descriptor** (chat-flavored fields `scope`/`activation.auto/always` to be revisited → "how a skill is surfaced in the P2 UI").
 - [x] M2 — `propose_edits` real builtin (P2 edit-apply via the **existing** `execute_call` path) + the pure P2 pieces (`skill_edits.compute_edits`, `skill_assembly.build_invocation`/`resolve_agent`). **No new kernel** — P2 will ride the existing dispatcher via the M3 driver (the chat loop is untouched). _(Earlier wording said "extract a shared context-assembler + tool-loop core"; that kernel-extraction was abandoned for the lighter "P2 reuses the existing dispatcher" approach — see `## Revisions`.)_
 - [x] M3 (re-scoped) — `propose_edits` mutation tool (salvage `compute_edits`/`apply_edits` + highlight/diagnostics); port `review` to **drive the shared loop on the artifact** (single-shot → recursive-capable), not a separate pipeline.
-- [ ] M4 (re-scoped) — port `voice_apply` likewise; **delete `skill_runner`** + reconcile callers (`skill_picker`/`review.lua`/keybindings); resolve `glob`/`list_dir` (YAGNI — they don't exist).
+- [x] M4 (re-scoped) — port `voice_apply` likewise; **delete `skill_runner`** + reconcile callers (`skill_picker`/`review.lua`/keybindings); resolve `glob`/`list_dir` (YAGNI — they don't exist).
 - [ ] ~~M5 — `repo_discovery` virtual skill~~ **DROPPED** — `repo_discovery` is **P1 context/tools**, not a skill (category error). #116 feeds P1 directly; see the P1 project below.
 
 **Dropped from the original scope** (premature P1/P2 conflation): `read_skill`-in-chat, `auto`/`always` chat activation (skills pulled into the chat menu), `repo_discovery`-as-skill.
@@ -188,6 +188,9 @@ fused (operator: "I think I hallucinated a bit"). Full framing:
 ## Log
 
 
+
+- 2026-06-17: closed M4 — M4: voice_apply ported to source(ctx); skill_runner DELETED + all callers reconciled; picker reads registry; full suite green (107 specs) + lint 0/0 (203 files); glob/list_dir YAGNI recorded. ACTUAL=labeled ~1.5h (cf M3 1.5h) — auto-measure 14.37h is rebase-contaminated (orphaned base 96302e08 → window spans 11 issues #95-#132).; review verdict: FIX-THEN-SHIP
+- 2026-06-17: **M4 boundary finding addressed** (FIX-THEN-SHIP, no Critical). Important: `skill_invoke.source()` was called outside `pcall` → a fallible source (voice_apply, missing style file) threw a raw error instead of routing through `on_done({ok=false})` like the other early-outs. Wrapped + tested (source throws → on_done ok=false, no query). Minors documented (ok-semantics, marker-shrank conservatism, applied-counts-calls). See plan `## Revisions`.
 - 2026-06-16: **M4 implemented** (TDD, 5 tasks) — `voice_apply` ported to an
   explicit `source(ctx)` (SKILL.md ⊕ per-slug style guide), enabled by the
   DiskProvider injecting `ctx.skill_md`; `skill_picker` lists `parley.skills`

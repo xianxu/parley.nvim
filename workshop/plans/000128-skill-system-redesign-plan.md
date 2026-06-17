@@ -558,6 +558,27 @@ YAGNI decision is recorded; suite green; atlas reconciled.
 
 ## Revisions
 
+### 2026-06-17 — M4 boundary review (FIX-THEN-SHIP → addressed)
+
+M4 implemented (Tasks 1–5: DiskProvider `ctx.skill_md`, `voice_apply` `source(ctx)`,
+picker→registry+driver, **`skill_runner` deleted** + all callers reconciled,
+glob/list_dir YAGNI record) + closed; boundary review **FIX-THEN-SHIP** (no
+Critical). The judge independently re-ran the suite (107 specs) + lint (0/0) and
+confirmed ARCH-DRY/ARCH-PURE pass + the deletion is complete (no live
+`skill_runner`/`review_edit` refs). One Important finding, addressed:
+- **`skill_invoke.source()` was outside any `pcall`** — a fallible `source()`
+  (voice_apply with a missing style file) threw a raw Lua error instead of
+  routing through the same `on_done({ok=false})` channel as the other early-outs
+  (no file / no agent). Now wrapped: source failure logs + calls `on_done(ok=false)`
+  and returns without querying. Test added (`skill_invoke_spec`: source throws →
+  on_done ok=false, msg names "source", query NOT called).
+- Minors (noted, not blocking): `ok` means "no tool errors" not "edits applied"
+  (fine — review relies on marker state); marker-shrank guard is deliberately
+  conservative on net-equal marker churn (documented); `applied` counts calls not
+  edits (harmless under force_tool). Forward note: when the dispatcher's
+  generalized write-path prelude lands, the inline `backup.numbered` calls retire
+  into it.
+
 ### 2026-06-16 — M3 boundary review (FIX-THEN-SHIP → addressed)
 
 M3 implemented (`skill_invoke` driver, inline backup, `skill_render` salvage,

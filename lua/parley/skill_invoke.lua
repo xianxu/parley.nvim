@@ -101,7 +101,18 @@ function M.invoke(buf, manifest, args, opts)
     end
 
     local original = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
-    local body = manifest.source({ args = args or {}, repo_root = p.config.repo_root })
+    -- source(ctx) does IO (reads SKILL.md / style guides) and can fail — e.g.
+    -- voice_apply with a missing style file. Route the failure through the SAME
+    -- on_done({ok=false}) channel as the other early-outs (no file / no agent)
+    -- rather than throwing a raw Lua error; skill_invoke is the generic P2 driver.
+    local ok_src, body = pcall(manifest.source, { args = args or {}, repo_root = p.config.repo_root })
+    if not ok_src then
+        p.logger.error("skill " .. tostring(manifest.name) .. ": source failed: " .. tostring(body))
+        if opts.on_done then
+            opts.on_done({ ok = false, msg = "source failed: " .. tostring(body) })
+        end
+        return
+    end
     local inv = assembly.build_invocation(manifest, { body = body, document = original, manual = manual })
 
     local agent = assembly.resolve_agent(manifest, {
