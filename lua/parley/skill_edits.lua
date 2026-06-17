@@ -1,9 +1,8 @@
 -- parley.skill_edits — the single source of the batch-edit transform.
 --
 -- PURE: validate + apply a list of {old_string, new_string, explain} edits to a
--- content string. Salvaged from skill_runner.lua so both the new propose_edits
--- tool handler (IO wrapper) and the v1 skill_runner.apply_edits delegate here —
--- one batch-edit transform, no duplication (ARCH-DRY).
+-- content string. The single source of the batch-edit transform; the
+-- propose_edits tool handler (IO wrapper) is its one caller (ARCH-DRY).
 
 local M = {}
 

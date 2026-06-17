@@ -1,10 +1,9 @@
 -- parley.skill_render — buffer decorations for applied skill edits.
 --
--- The diagnostics/highlights rendering salvaged out of skill_runner (#128 M3) so
--- the new skill_invoke driver doesn't depend on the to-be-deleted skill_runner
--- (ARCH-DRY — skill_runner delegates here, like compute_edits). Thin vim-API/UI
--- wrapper (not pure): INFO diagnostics from each edit's `explain`, DiffChange
--- highlights on edited regions.
+-- The diagnostics/highlights rendering salvaged out of skill_runner (#128 M3),
+-- now the single source used by the skill_invoke driver (skill_runner was
+-- deleted in M4). Thin vim-API/UI wrapper (not pure): INFO diagnostics from each
+-- edit's `explain`, DiffChange highlights on edited regions.
 
 local M = {}
 

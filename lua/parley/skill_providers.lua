@@ -9,8 +9,8 @@
 -- path (`loadfile`, so it works for the plugin root AND `~/.config/parley/
 -- skills/` alike — not just package-path requires). The manifest's `source` is
 -- a closure capturing that absolute dir, which DELETES the v1 `debug.getinfo`
--- path-guessing dance (skill_runner.lua:226,376-392): the path is already in
--- hand at discovery time.
+-- path-guessing dance (the deleted skill_runner did this): the path is already
+-- in hand at discovery time.
 
 local M = {}
 

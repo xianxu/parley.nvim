@@ -22,6 +22,14 @@ local M = {}
 -- (a rapid double-trigger would otherwise launch concurrent exchanges).
 local _in_flight = {}
 
+--- Is a skill exchange in flight for `buf`? Cleared on on_exit/on_abort, so an
+--- abort that can't start the query doesn't block the buffer forever (#131).
+--- @param buf number
+--- @return boolean
+function M.is_in_flight(buf)
+    return _in_flight[buf] == true
+end
+
 local function parley()
     return require("parley")
 end

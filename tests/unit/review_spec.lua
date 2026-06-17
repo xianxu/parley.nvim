@@ -1,4 +1,5 @@
--- Unit tests for lua/parley/review.lua — parse_markers and apply_edits
+-- Unit tests for lua/parley/review.lua — parse_markers
+-- (Edit-application coverage lives in skill_edits_spec + tools_builtin_propose_edits_spec.)
 
 local review = require("parley.review")
 
@@ -392,102 +393,5 @@ describe("parse_markers multi-line (#000125)", function()
         assert.is_true(markers[2].ready)
         assert.equals(1, markers[2].line)   -- second marker on line 1
         assert.equals("second", markers[2].sections[1].text)
-    end)
-end)
-
-describe("apply_edits", function()
-    local tmpfile
-
-    before_each(function()
-        tmpfile = vim.fn.tempname() .. ".md"
-    end)
-
-    after_each(function()
-        os.remove(tmpfile)
-    end)
-
-    local function write_file(content)
-        local f = io.open(tmpfile, "w")
-        f:write(content)
-        f:close()
-    end
-
-    local function read_file()
-        local f = io.open(tmpfile, "r")
-        local content = f:read("*a")
-        f:close()
-        return content
-    end
-
-    it("applies a single edit", function()
-        write_file("Hello world.\n🤖[fix greeting]\nGoodbye.\n")
-        local result = review.apply_edits(tmpfile, {
-            { old_string = "Hello world.\n🤖[fix greeting]", new_string = "Hi there.", explain = "simplified" },
-        })
-        assert.is_true(result.ok)
-        assert.equals(1, #result.applied)
-        assert.equals("Hi there.\nGoodbye.\n", read_file())
-    end)
-
-    it("applies multiple edits in correct order", function()
-        write_file("AAA\nBBB\nCCC\n")
-        local result = review.apply_edits(tmpfile, {
-            { old_string = "AAA", new_string = "aaa", explain = "first" },
-            { old_string = "CCC", new_string = "ccc", explain = "third" },
-        })
-        assert.is_true(result.ok)
-        assert.equals(2, #result.applied)
-        assert.equals("aaa\nBBB\nccc\n", read_file())
-    end)
-
-    it("handles edits that change string length", function()
-        write_file("short\nmedium text\nlong long long text\n")
-        local result = review.apply_edits(tmpfile, {
-            { old_string = "short", new_string = "very very long replacement", explain = "expand" },
-            { old_string = "long long long text", new_string = "x", explain = "shrink" },
-        })
-        assert.is_true(result.ok)
-        assert.equals("very very long replacement\nmedium text\nx\n", read_file())
-    end)
-
-    it("errors when old_string not found", function()
-        write_file("Hello world\n")
-        local result = review.apply_edits(tmpfile, {
-            { old_string = "nonexistent", new_string = "replacement", explain = "test" },
-        })
-        assert.is_false(result.ok)
-        assert.is_truthy(result.msg:find("not found"))
-    end)
-
-    it("errors when old_string is not unique", function()
-        write_file("repeat\nrepeat\n")
-        local result = review.apply_edits(tmpfile, {
-            { old_string = "repeat", new_string = "unique", explain = "test" },
-        })
-        assert.is_false(result.ok)
-        assert.is_truthy(result.msg:find("not unique"))
-    end)
-
-    it("errors when file does not exist", function()
-        local result = review.apply_edits("/nonexistent/path/file.md", {
-            { old_string = "x", new_string = "y", explain = "test" },
-        })
-        assert.is_false(result.ok)
-        assert.is_truthy(result.msg:find("cannot open"))
-    end)
-
-    it("returns empty applied list on error", function()
-        write_file("content\n")
-        local result = review.apply_edits(tmpfile, {
-            { old_string = "missing", new_string = "replacement", explain = "test" },
-        })
-        assert.equals(0, #result.applied)
-    end)
-
-    it("preserves file content when no edits given", function()
-        write_file("unchanged\n")
-        local result = review.apply_edits(tmpfile, {})
-        assert.is_true(result.ok)
-        assert.equals("unchanged\n", read_file())
     end)
 end)
