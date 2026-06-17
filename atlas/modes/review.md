@@ -45,7 +45,7 @@ After an optional `<>`, `[]` and `{}` may appear in any order.
 
 Review is implemented as a **skill** in the unified skill system (see `atlas/index.md` §8).
 
-- **Skill module**: `lua/parley/skills/review/init.lua` — marker parsing, pre/post hooks, keybindings
+- **Skill module**: `lua/parley/skills/review/init.lua` — marker parsing, `run_via_invoke` (marker pre-check + resubmit), keybindings
 - **System prompt**: `lua/parley/skills/review/SKILL.md`
 - **Driver**: `lua/parley/skill_invoke.lua` — one tool-use exchange on the existing dispatcher (the `skill_runner` engine was deleted in M4; both review and voice-apply run through this driver)
 - **Rendering**: `lua/parley/skill_render.lua` — diagnostics + edit highlights
@@ -70,7 +70,7 @@ review_shortcut_finder = { modes = { "n", "i" }, shortcut = "<C-g>vf" },
 
 ## Key Files
 
-- `lua/parley/skills/review/init.lua` — skill definition, marker parsing, hooks, keybindings
+- `lua/parley/skills/review/init.lua` — skill definition, marker parsing, `run_via_invoke` (marker pre-check + resubmit), keybindings
 - `lua/parley/skills/review/SKILL.md` — system prompt (light edit + heavy revision sections)
 - `lua/parley/skill_invoke.lua` — the P2 driver (one tool-use exchange via the existing dispatcher)
 - `lua/parley/skill_render.lua` — diagnostics + edit highlights
