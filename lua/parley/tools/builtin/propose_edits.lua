@@ -1,11 +1,15 @@
 -- `propose_edits` — apply a batch of explained string-replacement edits to a
 -- file. The P2 (artifact-workbench) edit tool: a real registered builtin, so
 -- P2's edit-apply flows through the SAME dispatcher `execute_call` path
--- (cwd-scope guard via `file_path`; the M5 backup prelude via `needs_backup`)
--- as every chat tool — replacing skill_runner's special-cased `apply_edits`.
+-- (cwd-scope guard via `file_path`) as every chat tool — replacing
+-- skill_runner's special-cased `apply_edits`.
 --
 -- Edit logic is the single-source `parley.skill_edits.compute_edits` (pure).
--- The handler is the thin IO wrapper: read → compute → write → checktime. The
+-- The handler is the thin IO wrapper: read → compute → back up → write →
+-- checktime. Backup: before a successful write the prior content is saved to the
+-- next free `<path>.parley-backup.<n>` (the `write_file.lua` pattern; #128 M3).
+-- `needs_backup=true` remains the right classification, but backup is performed
+-- inline here today (the dispatcher's write-path prelude is deferred). The
 -- diagnostics/highlights rendering stays driver-side (M3), not here.
 
 local skill_edits = require("parley.skill_edits")
@@ -57,6 +61,25 @@ return {
         local result = skill_edits.compute_edits(content, edits)
         if not result.ok then
             return { content = result.msg, is_error = true, name = "propose_edits" }
+        end
+
+        -- Back up the prior content before the (now-known-valid) write. Numbered
+        -- backups (.parley-backup.1, .2, …) preserve every prior state — the
+        -- write_file.lua pattern. Only runs once compute_edits succeeds, so an
+        -- invalid batch leaves no backup (no destructive write happened).
+        local n = 1
+        while true do
+            local fc = io.open(path .. ".parley-backup." .. n, "r")
+            if not fc then
+                break
+            end
+            fc:close()
+            n = n + 1
+        end
+        local bf = io.open(path .. ".parley-backup." .. n, "w")
+        if bf then
+            bf:write(content)
+            bf:close()
         end
 
         local wf, werr = io.open(path, "w")

@@ -69,6 +69,43 @@ describe("propose_edits handler", function()
     end)
 end)
 
+describe("propose_edits inline backup", function()
+    local function read(path)
+        return table.concat(vim.fn.readfile(path), "\n")
+    end
+
+    it("backs up the prior content to a numbered .parley-backup before writing", function()
+        local path = tmpfile("alpha beta")
+        propose_edits.handler({
+            file_path = path,
+            edits = { { old_string = "alpha", new_string = "ALPHA", explain = "a" } },
+        })
+        assert.are.equal("ALPHA beta", read(path)) -- file edited
+        assert.are.equal("alpha beta", read(path .. ".parley-backup.1")) -- prior content preserved
+        vim.fn.delete(path)
+        vim.fn.delete(path .. ".parley-backup.1")
+    end)
+
+    it("uses the next free backup number on a second apply", function()
+        local path = tmpfile("one")
+        propose_edits.handler({ file_path = path, edits = { { old_string = "one", new_string = "two", explain = "1" } } })
+        propose_edits.handler({ file_path = path, edits = { { old_string = "two", new_string = "three", explain = "2" } } })
+        assert.are.equal("one", read(path .. ".parley-backup.1"))
+        assert.are.equal("two", read(path .. ".parley-backup.2"))
+        vim.fn.delete(path)
+        vim.fn.delete(path .. ".parley-backup.1")
+        vim.fn.delete(path .. ".parley-backup.2")
+    end)
+
+    it("writes NO backup when the edit batch fails (no destructive write)", function()
+        local path = tmpfile("ab ab")
+        propose_edits.handler({ file_path = path, edits = { { old_string = "ab", new_string = "X", explain = "e" } } })
+        assert.are.equal(0, vim.fn.filereadable(path .. ".parley-backup.1"))
+        assert.are.equal("ab ab", read(path)) -- untouched
+        vim.fn.delete(path)
+    end)
+end)
+
 describe("propose_edits via dispatcher.execute_call (cwd-scope keystone)", function()
     -- The reason propose_edits is a real tool: routing edit-apply through
     -- execute_call inherits the cwd-scope guard via the file_path field. Pin it
