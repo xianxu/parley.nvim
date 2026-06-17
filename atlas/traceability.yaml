@@ -450,7 +450,11 @@ atlas:
       - lua/parley/skill_registry.lua
       - lua/parley/skill_edits.lua
       - lua/parley/skill_assembly.lua
+      - lua/parley/skill_invoke.lua
+      - lua/parley/skill_render.lua
       - lua/parley/tools/builtin/propose_edits.lua
+      - lua/parley/skill_picker.lua
+      - lua/parley/review.lua
       - lua/parley/skills/review/init.lua
       - lua/parley/skills/voice_apply/init.lua
       - lua/parley/skill_runner.lua
@@ -462,6 +466,9 @@ atlas:
       - tests/unit/skill_edits_spec.lua
       - tests/unit/skill_assembly_spec.lua
       - tests/unit/tools_builtin_propose_edits_spec.lua
+      - tests/integration/skill_invoke_spec.lua
+      - tests/integration/skill_invoke_review_spec.lua
+      - tests/unit/skill_render_spec.lua
       - tests/unit/skill_runner_spec.lua
 
   discovery/registry:
