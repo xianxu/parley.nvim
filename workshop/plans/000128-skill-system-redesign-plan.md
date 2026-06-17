@@ -65,11 +65,13 @@ Only **M1** is detailed to task granularity below; M2–M5 are milestone sketche
 | `SkillRegistry` (`discover`/`get`/`names`) | `lua/parley/skill_registry.lua` | done (M1) | provider union |
 | `propose_edits` tool | `lua/parley/tools/builtin/propose_edits.lua` | new (M2) | file write (via the dispatcher's cwd-scope + backup) |
 | `skill_invoke` (the thin P2 driver) | `lua/parley/skill_invoke.lua` | new (M3) | the existing dispatcher layer (`prepare_payload`/`query`/`execute_call`) |
+| `skill_render` (salvaged diagnostics/highlights) | `lua/parley/skill_render.lua` | new (M3) | buffer diagnostics + highlights (vim API) |
 
 - **DiskProvider / VirtualProvider / SkillRegistry** (done, M1) — the disk closure-`source` (kills the `debug.getinfo` dance) + virtual seam + the `discover` union (last-wins dedup). Unchanged by the re-scope; they describe the available P2 skills.
 - **propose_edits tool** (M2) — a **real registered builtin** (`BUILTIN_NAMES`), `kind="write"`, `needs_backup=true`, schema `{file_path, edits:[{old_string,new_string,explain}]}` (salvaged from `REVIEW_EDIT_TOOL`). Handler applies the batch via `skill_edits.compute_edits` (read→compute→write). **This is the unification's keystone:** P2's edit-apply now flows through the *same* `dispatcher.execute_call` path (with cwd-scope + backup) as every chat tool, instead of `skill_runner`'s special-cased `apply_edits`. The diagnostics/highlights rendering stays driver-side (M3), not in the handler.
   - **Injected into:** `BUILTIN_NAMES` (`tools/init.lua`); granted via a skill's `tools`/`elevated`, compelled via `force_tool`. Tested with a temp-file fixture (no LLM).
-- **skill_invoke** (M3, the thin P2 driver) — replaces `skill_runner.run`'s bespoke pipeline by **riding the existing dispatcher layer**: `resolve_agent` → source the body (`manifest.source(ctx)`) → read the artifact buffer → `build_invocation` (pure) → `dispatcher.prepare_payload` + set `tool_choice` → `dispatcher.query` → decode → `dispatcher.execute_call` per tool → reload + render (`highlight_edits`/`attach_diagnostics`, salvaged). **Does NOT touch `chat_respond`** — it's a second driver on the shared primitives, not a refactor of the first.
+- **skill_invoke** (M3, the thin P2 driver) — replaces `skill_runner.run`'s bespoke pipeline by **riding the existing dispatcher layer**: `resolve_agent` → source the body (`manifest.source(ctx)`) → read the artifact buffer → `build_invocation` (pure) → `dispatcher.prepare_payload` + set `tool_choice` → `dispatcher.query` → decode → `dispatcher.execute_call` per tool → reload + render (via `skill_render`). Exposes an `on_done(result)` hook so callers (review) run post-apply logic (its resubmit loop). **Does NOT touch `chat_respond`** — it's a second driver on the shared primitives, not a refactor of the first.
+- **skill_render** (M3) — `clear_decorations`/`attach_diagnostics`/`highlight_edits`, salvaged out of `skill_runner.lua:112-163` into their own module so `skill_invoke` doesn't depend on the to-be-deleted `skill_runner` (`ARCH-DRY` — `skill_runner` then delegates to it, like `compute_edits`). Thin vim-API/UI wrapper (not pure).
   - **Injected into:** `skill_picker` + the `review`/`voice_apply` invocation paths (M3/M4). Tested with parley's existing LLM fake (the `chat_respond` integration-spec pattern — reused, not reinvented).
 
 ---
@@ -238,11 +240,113 @@ convention. Per-task TDD runs use the direct plenary form:
 
 **M2 Done when:** `propose_edits` is a registered builtin that applies batch edits via the dispatcher path; `skill_edits.compute_edits` is the single source of the edit logic (v1 delegates); `skill_assembly.build_invocation`/`resolve_agent` are pure + tested; suite green; **chat loop + `skill_runner.run` untouched** (v1 still works).
 
-## M3 — the thin P2 driver + port `review` (sketch)
+## M3 — the thin P2 driver + port `review`
 
-**Prerequisite (M2 boundary-review carry):** before `review` applies destructive edits through `propose_edits`, **secure a backup** — either add an inline numbered `.parley-backup` to `propose_edits.handler` (the `write_file.lua:40-63` pattern) or land the dispatcher's write-path prelude. `needs_backup=true` is currently classification-only (the dispatcher doesn't honor it yet).
+The first time the M2 pieces go *live*: a thin `skill_invoke` driver that drives
+one LLM tool-use exchange on an artifact by **reusing the existing dispatcher**
+(`prepare_payload`/`query`/`execute_call`), and `review` ported onto it. The chat
+loop (`chat_respond`) and `skill_runner.run` are **untouched** — `skill_invoke`
+is a *second* driver on the shared dispatcher; `skill_runner` stays live for
+`voice_apply` until M4.
 
-Build `lua/parley/skill_invoke.lua` — the thin P2 driver that **reuses the existing dispatcher layer**: resolve agent (`skill_assembly.resolve_agent`), source the skill body (`manifest.source(ctx)` — IO), read the artifact buffer, `build_invocation` (pure, M2) → `dispatcher.prepare_payload(messages, model, provider, tools)` + set `payload.tool_choice` → `dispatcher.query` → on_exit decode → `dispatcher.execute_call` per tool (so `propose_edits` applies through the shared path) → reload buffer + render via the salvaged `highlight_edits`/`attach_diagnostics`. Single-shot now (the `review` resubmit loop → a bounded recursive option later). **Port `review`** to invoke via this driver (its M1 manifest already declares `tools`/`elevated`/`force_tool=propose_edits`); preserve the marker pre-check + batch-edit-with-explanations UX. **Test with parley's existing LLM fake** (the pattern the `chat_respond` integration specs use — reuse it, don't invent a new one; `ARCH-DRY`). `skill_runner.run` stays alive in parallel until M4. To be expanded at M3 start.
+**Design decisions (resolved at plan time; cite in Log):**
+- **Backup = inline numbered `.parley-backup` in `propose_edits`** (the
+  `write_file.lua:40-63` pattern). `propose_edits` is destructive but
+  `needs_backup` is a dispatcher no-op today; rather than block on the
+  (deferred) write-path prelude, self-back-up inline now — safe, M3-scoped,
+  matches the established `write_file` tool. (The prelude is a future
+  generalization; YAGNI to wait for it.) **Task 1.**
+- **`review`'s marker logic stays in `review/init.lua`.** `parse_markers` + the
+  pre-submit gate (abort if no ready markers / pending questions) + the
+  resubmit-up-to-3 loop are review-specific; they stay in the skill and *wrap*
+  `skill_invoke` (which runs one generic exchange). Don't bake marker semantics
+  into the driver (`ARCH-PURE`/separation). The resubmit loop = re-call
+  `skill_invoke` (replacing `post_apply`'s `skill_runner.run` recursion).
+- **Test with parley's existing LLM fake** — monkeypatch `parley.dispatcher.query`
+  (save/restore), inject a tool-use `raw_response` into `tasker`, trigger the real
+  `on_exit`/callback, exactly as `tests/integration/chat_respond_spec.lua:78-92`
+  does. Reuse it; don't invent a fake (`ARCH-DRY`).
+- **Picker wiring:** route `review` → `skill_invoke`; `voice_apply` still goes
+  through `skill_runner.run` until M4. A small transitional branch (removed in M4).
+
+**Module layout:** new `lua/parley/skill_invoke.lua` (the driver, INTEGRATION);
+modify `lua/parley/tools/builtin/propose_edits.lua` (inline backup),
+`lua/parley/skills/review/init.lua` (invoke via `skill_invoke`), and the
+picker/entry that runs `review`. Specs: `tests/unit/tools_builtin_propose_edits_spec.lua`
+(extend — backup), `tests/integration/skill_invoke_spec.lua`,
+`tests/integration/skill_invoke_review_spec.lua`.
+
+### Task 1: `propose_edits` inline backup (the destructive-edit safety prereq)
+
+**Files:**
+- Modify: `lua/parley/tools/builtin/propose_edits.lua`
+- Test: `tests/unit/tools_builtin_propose_edits_spec.lua` (extend)
+
+- [ ] **Step 1: Write failing test** — before overwriting, the handler writes the prior content to the next free `<file_path>.parley-backup.<n>` (numbered, like `write_file`): apply an edit to a temp file that has prior content → assert `<path>.parley-backup.1` exists with the *original* content, and a second apply creates `.parley-backup.2`. A failed `compute_edits` (non-unique) writes **no** backup (no destructive write happened).
+- [ ] **Step 2: Run, verify fail.**
+- [ ] **Step 3: Implement** — port the numbered-backup block from `write_file.lua:40-63` into the handler, *before* the write, *after* `compute_edits` succeeds (so an invalid batch leaves no backup). Update the tool header + `atlas` to state backup is now active inline. Keep `needs_backup=true` (still the right classification; the future prelude can supersede the inline copy).
+- [ ] **Step 4: Run, verify pass** (propose_edits spec, incl. the M2 cwd-scope tests — regression).
+- [ ] **Step 5: Commit** — `#128 M3: propose_edits inline backup (write_file pattern)`.
+
+### Task 2: `skill_invoke` — the thin one-exchange P2 driver (INTEGRATION)
+
+**Files:**
+- Create: `lua/parley/skill_invoke.lua`
+- Test: `tests/integration/skill_invoke_spec.lua`
+
+The driver, riding the existing dispatcher (no chat-loop touch):
+```lua
+-- skill_invoke.invoke(buf, manifest, args, opts?)  opts.manual defaults true
+--   ctx        = { args = args, repo_root = config.repo_root, ... }
+--   body       = manifest.source(ctx)                         -- IO (disk/virtual)
+--   document   = table.concat(nvim_buf_get_lines(buf), "\n")  -- IO
+--   inv        = skill_assembly.build_invocation(manifest, { body, document, manual })
+--   agent      = skill_assembly.resolve_agent(manifest, {     -- deps from live parley
+--                  config = P.config, get_agent = P.get_agent,
+--                  agent_names = P._agents, agents = P.agents })
+--   payload    = dispatcher.prepare_payload(inv.messages, agent.model, agent.provider, inv.tools)
+--   payload.tool_choice = inv.tool_choice                     -- force_tool
+--   skill_render.clear_decorations(buf)
+--   dispatcher.query(nil, agent.provider, payload, handler, on_exit, nil, nil, on_abort)
+--     -- buf=nil: headless (no streaming buffer insertion); the artifact buffer
+--     -- is reloaded in on_exit after execute_call writes the file (checktime)
+--     on_exit(qid): qt = tasker.get_query(qid)
+--       calls = providers.decode_anthropic_tool_calls_from_stream(qt.raw_response)
+--       for each call: dispatcher.execute_call(call, tools_registry, { cwd = getcwd() })
+--         -- propose_edits applies through the shared path (cwd-scope + the Task-1 backup)
+--       reload buffer (checktime), then render the applied edits via the salvaged
+--       highlight_edits/attach_diagnostics (move those + clear_decorations into a
+--       small `skill_render` module, OR call skill_runner's until M4 — see note)
+--       invoke opts.on_done(result) so callers (review) can run post-apply logic
+```
+
+- [ ] **Step 1: Write failing test** (reuse the `chat_respond_spec.lua:78-92` monkeypatch of `parley.dispatcher.query`, save/restore in `after_each`). **Two fixtures to reuse (don't hand-roll):** (a) build the tool-use `raw_response` with the SSE-builder helper in `tests/unit/anthropic_tool_decode_spec.lua` (~line 38 — "build a raw SSE response from a list of event objects") so it decodes via `providers.decode_anthropic_tool_calls_from_stream` to **one `propose_edits` call** editing the buffer's file; (b) since `dispatcher.query` fires `on_exit` via `vim.schedule`, **`vim.wait()` for `opts.on_done`** before asserting (per `chat_respond_spec` ~line 100). Assert: file edited (via the real `execute_call` path), a `.parley-backup` made (Task 1), `on_done` ran with the applied result. Second test: a `force_tool` manifest sets `payload.tool_choice`.
+- [ ] **Step 2: Run, verify fail.**
+- [ ] **Step 3: Implement** `skill_invoke.invoke`. Reuse `skill_assembly` (M2), `dispatcher.*`, `providers.decode_anthropic_tool_calls_from_stream`, `tasker.get_query`. **Salvage the rendering**: extract `highlight_edits`/`attach_diagnostics`/`clear_decorations` from `skill_runner.lua:112-163` into a small `lua/parley/skill_render.lua` (so the driver doesn't depend on the to-be-deleted `skill_runner`; `ARCH-DRY` — `skill_runner` then delegates to it, like `compute_edits`).
+- [ ] **Step 4: Run, verify pass.**
+- [ ] **Step 5: Commit** — `#128 M3: skill_invoke driver (one exchange on the shared dispatcher)`.
+
+### Task 3: port `review` onto `skill_invoke` (INTEGRATION)
+
+**Files:**
+- Modify: `lua/parley/skills/review/init.lua` (invoke via `skill_invoke`; keep `parse_markers` + pre-check + resubmit)
+- Modify: `lua/parley/skill_picker.lua` (route `review` → `skill_invoke`; others → `skill_runner.run`) and/or `lua/parley/review.lua` shim
+- Test: `tests/integration/skill_invoke_review_spec.lua`
+
+- [ ] **Step 1: Write failing test** (same LLM fake + SSE-builder + `vim.wait` as Task 2): a buffer with one *ready* `🤖…[…]` marker → invoking `review` calls `skill_invoke` with the `review` manifest, the faked tool response applies a `propose_edits`, the buffer updates, diagnostics attach. Pre-check: a buffer with **no** markers → aborts before any query (assert the faked `dispatcher.query` was **not** called — a call counter on the fake). Resubmit: a *pending-question* marker after apply → stops (no re-invoke); a remaining *ready* marker → re-invokes (bounded at 3 — assert the counter).
+- [ ] **Step 2: Run, verify fail.**
+- [ ] **Step 3: Implement** — repoint `review`'s run path: the pre-submit marker gate runs, then `skill_invoke.invoke(buf, review_manifest, args, { manual = true, on_done = <resubmit-decider> })`; the `on_done` re-implements `post_apply`'s logic (parse markers; pending → quickfix+stop; ready & count<3 → re-invoke). Resolve the `review` manifest from `parley.skills.current():get("review")`. Wire the picker/keybinding for `review` to this path; leave `voice_apply` on `skill_runner.run`.
+- [ ] **Step 4: Run, verify pass** — review spec + `skill_runner_spec` (voice path still intact, 9/9).
+- [ ] **Step 5: Commit** — `#128 M3: port review onto skill_invoke (markers + resubmit preserved)`.
+
+### Task 4: Atlas + milestone close
+
+- [ ] **Step 1:** Update `atlas/skills/skill-system.md` — M3 (the `skill_invoke` driver, `skill_render` salvage, `review` ported; backup now inline). Update `atlas/traceability.yaml`.
+- [ ] **Step 2:** `make test` green; `make lint` clean.
+- [ ] **Step 3:** `sdlc milestone-close --issue 128 --milestone M3`; log the verdict.
+- [ ] **Step 4: Commit** — `#128 M3: atlas + traceability`.
+
+**M3 Done when:** `skill_invoke` drives a one-exchange skill on an artifact via the existing dispatcher (no `chat_respond` change); `review` runs through it end-to-end (marker pre-check + batch-edit-with-explanations + resubmit-up-to-3 preserved) with edits applied through `propose_edits` (cwd-scope + inline backup); `voice_apply` still works via `skill_runner` (9/9); suite green.
 
 ## M4 — port `voice_apply`; delete `skill_runner`; cleanup (sketch)
 
@@ -256,7 +360,7 @@ Port `voice_apply` via the driver — give it an explicit `source(ctx)` composin
 
 ## Notes for the executor
 
-- **The pure core is `skill_manifest.lua` + `skill_assembly.lua` (M2) + `skill_edits.lua` (M3).** Keep them IO-free with colocated specs so the purity boundary is visible (the milestone judge greps the entity table against the diff). Providers/registry/active-state/tools are the thin IO seam.
+- **The pure core is `skill_manifest.lua` (M1) + `skill_edits.lua` + `skill_assembly.lua` (M2).** Keep them IO-free with colocated specs so the purity boundary is visible (the milestone judge greps the entity table against the diff). The M3 thin IO seam is `skill_invoke` (drives the dispatcher) + `skill_render` (vim-API rendering) + the `propose_edits` tool.
 - **Don't re-fork disk vs virtual.** The whole point is one `source(ctx)` contract; `read_skill` calls `manifest.source(ctx)` and never branches on origin (`ARCH-DRY`). The disk/virtual difference lives entirely inside how the *provider* built the closure.
 - **Reuse, don't re-implement** (`ARCH-DRY`): the tool registry/dispatcher (`tools/init.lua`, `tools/dispatcher.lua`), the cwd-bypass pattern (`chat_history_search.lua`), the per-buffer-state pattern (`tool_loop.lua:36`), the agent-resolution cascade + arg picker + scan structure salvaged from `skill_runner`/`skill_picker`. Name the existing thing in each task.
 - **The deletion of `skill_runner` is M4, not earlier** — `review`/`voice_apply` must already run through the loop (M3) before their old engine is removed, or the skills break mid-stream.
