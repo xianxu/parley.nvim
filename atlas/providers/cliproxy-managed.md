@@ -47,7 +47,7 @@ agent, the adapter's **`pre_query`** hook (the same seam copilot uses) calls
 On any failure, `ensure_running` drives **`on_error`** → the dispatcher's
 **abort channel** (`D.query`'s trailing `on_abort`) → each caller's qid-free
 teardown (`chat_respond` collapses the empty answer + stops the spinner;
-`skill_runner` clears its in-flight guard; `memory_prefs` advances its batch),
+`skill_invoke` clears its in-flight guard; `memory_prefs` advances its batch),
 so the request fails fast instead of hanging. **`:ParleyProxy stop` is transient**
 — every dispatch re-`ensure_running`s, so a dead/stopped proxy revives on next use.
 

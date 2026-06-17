@@ -267,7 +267,7 @@ atlas:
       - lua/parley/providers.lua
       - lua/parley/dispatcher.lua
       - lua/parley/chat_respond.lua
-      - lua/parley/skill_runner.lua
+      - lua/parley/skill_invoke.lua
       - lua/parley/memory_prefs.lua
       - lua/parley/init.lua
     tests:
@@ -324,6 +324,7 @@ atlas:
       - lua/parley/tools/builtin/ack.lua
       - lua/parley/tools/builtin/edit_file.lua
       - lua/parley/tools/builtin/write_file.lua
+      - lua/parley/tools/backup.lua
       - lua/parley/chat_respond.lua
     tests:
       - tests/unit/tool_loop_spec.lua
@@ -333,8 +334,6 @@ atlas:
       - tests/unit/tools_types_spec.lua
       - tests/unit/tools_builtin_read_file_spec.lua
       - tests/unit/tools_builtin_registered_spec.lua
-      - tests/unit/tools_builtin_glob_spec.lua
-      - tests/unit/tools_builtin_list_dir_spec.lua
       - tests/unit/tools_builtin_grep_spec.lua
       - tests/unit/tools_builtin_chat_history_search_spec.lua
       - tests/unit/anthropic_tool_decode_spec.lua
@@ -458,7 +457,6 @@ atlas:
       - lua/parley/review.lua
       - lua/parley/skills/review/init.lua
       - lua/parley/skills/voice_apply/init.lua
-      - lua/parley/skill_runner.lua
       - lua/parley/init.lua
     tests:
       - tests/unit/skill_manifest_spec.lua
@@ -469,8 +467,9 @@ atlas:
       - tests/unit/tools_builtin_propose_edits_spec.lua
       - tests/integration/skill_invoke_spec.lua
       - tests/integration/skill_invoke_review_spec.lua
+      - tests/integration/voice_apply_spec.lua
+      - tests/unit/skill_picker_spec.lua
       - tests/unit/skill_render_spec.lua
-      - tests/unit/skill_runner_spec.lua
 
   discovery/registry:
     code:

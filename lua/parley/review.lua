@@ -2,25 +2,23 @@
 --
 -- The review feature has been refactored into the skill system:
 --   - Marker parsing / quickfix: lua/parley/skills/review/init.lua
---   - Edit pipeline / diagnostics: lua/parley/skill_runner.lua
+--   - Edit application: the propose_edits builtin (via the skill_invoke driver)
+--   - Diagnostics / highlights: lua/parley/skill_render.lua
 --   - System prompts: lua/parley/skills/review/SKILL.md
 --
--- This file re-exports the public API so existing callers (tests,
--- highlighter.lua, init.lua) continue to work unchanged.
+-- This file re-exports the live marker/quickfix/submit API so existing callers
+-- (tests, highlighter.lua, init.lua) continue to work unchanged. (The v1
+-- compute_edits/apply_edits/diagnostics re-exports were removed in M4 with
+-- skill_runner — they had no non-test callers; the canonical paths are
+-- skill_edits, the propose_edits builtin, and skill_render.)
 
 local M = {}
 
 local _review_skill
-local _skill_runner
 
 local function get_review()
     if not _review_skill then _review_skill = require("parley.skills.review") end
     return _review_skill
-end
-
-local function get_runner()
-    if not _skill_runner then _skill_runner = require("parley.skill_runner") end
-    return _skill_runner
 end
 
 -- Marker parsing (delegated to review skill)
@@ -29,14 +27,6 @@ M._parse_marker_sections = nil  -- set lazily below
 M.populate_quickfix = function(buf, markers, filter) return get_review().populate_quickfix(buf, markers, filter) end
 M.scan_pending = function(dir) return get_review().scan_pending(dir) end
 M.cmd_review_finder = function() return get_review().cmd_review_finder() end
-
--- Edit computation (delegated to skill_runner)
-M.compute_edits = function(content, edits) return get_runner().compute_edits(content, edits) end
-M.apply_edits = function(file_path, edits) return get_runner().apply_edits(file_path, edits) end
-
--- Diagnostics (delegated to skill_runner)
-M.attach_diagnostics = function(buf, edits, original_content) return get_runner().attach_diagnostics(buf, edits, original_content) end
-M.highlight_edits = function(buf, edits, new_content) return get_runner().highlight_edits(buf, edits, new_content) end
 
 -- Submit review (delegated to the M3 skill_invoke path via review.run_via_invoke)
 M.submit_review = function(buf, level)

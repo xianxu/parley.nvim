@@ -75,7 +75,7 @@ This is a large, integration-heavy redesign ("the main event"). Critical-path-fi
 | `skill_invoke` (the thin P2 driver) | `lua/parley/skill_invoke.lua` | new (M3) | the existing dispatcher layer (`prepare_payload`/`query`/`execute_call`) |
 | `skill_render` (salvaged diagnostics/highlights) | `lua/parley/skill_render.lua` | new (M3) | buffer diagnostics + highlights (vim API) |
 
-- **DiskProvider / VirtualProvider / SkillRegistry** (done, M1) — the disk closure-`source` (kills the `debug.getinfo` dance) + virtual seam + the `discover` union (last-wins dedup). Unchanged by the re-scope; they describe the available P2 skills.
+- **DiskProvider / VirtualProvider / SkillRegistry** (done, M1) — the disk closure-`source` (kills the `debug.getinfo` dance) + virtual seam + the `discover` union (last-wins dedup). Unchanged by the re-scope; they describe the available P2 skills. **(M4 modifies DiskProvider:** for a skill with an explicit `source(ctx)`, it enriches `ctx.skill_md` from the captured `<dir>/SKILL.md` so a dynamic body — `voice_apply` — can compose `SKILL.md ⊕ <extra>` without re-deriving the dir.)
 - **propose_edits tool** (M2) — a **real registered builtin** (`BUILTIN_NAMES`), `kind="write"`, `needs_backup=true`, schema `{file_path, edits:[{old_string,new_string,explain}]}` (salvaged from `REVIEW_EDIT_TOOL`). Handler applies the batch via `skill_edits.compute_edits` (read→compute→write). **This is the unification's keystone:** P2's edit-apply now flows through the *same* `dispatcher.execute_call` path (with cwd-scope + backup) as every chat tool, instead of `skill_runner`'s special-cased `apply_edits`. The diagnostics/highlights rendering stays driver-side (M3), not in the handler.
   - **Injected into:** `BUILTIN_NAMES` (`tools/init.lua`); granted via a skill's `tools`/`elevated`, compelled via `force_tool`. Tested with a temp-file fixture (no LLM).
 - **skill_invoke** (M3, the thin P2 driver) — replaces `skill_runner.run`'s bespoke pipeline by **riding the existing dispatcher layer**: `resolve_agent` → source the body (`manifest.source(ctx)`) → read the artifact buffer → `build_invocation` (pure) → `dispatcher.prepare_payload` + set `tool_choice` → `dispatcher.query` → decode → `dispatcher.execute_call` per tool → reload + render (via `skill_render`). Exposes an `on_done(result)` hook so callers (review) run post-apply logic (its resubmit loop). **Does NOT touch `chat_respond`** — it's a second driver on the shared primitives, not a refactor of the first.
@@ -356,9 +356,189 @@ The driver, riding the existing dispatcher (no chat-loop touch):
 
 **M3 Done when:** `skill_invoke` drives a one-exchange skill on an artifact via the existing dispatcher (no `chat_respond` change); `review` runs through it end-to-end (marker pre-check + batch-edit-with-explanations + resubmit-up-to-3 preserved) with edits applied through `propose_edits` (cwd-scope + inline backup); `voice_apply` still works via `skill_runner` (9/9); suite green.
 
-## M4 — port `voice_apply`; delete `skill_runner`; cleanup (sketch)
+## M4 — port `voice_apply`; delete `skill_runner`; cleanup
 
-Port `voice_apply` via the driver — give it an explicit `source(ctx)` composing `ctx.skill_md` + the per-slug style guide (the disk provider has no `system_prompt` fallback — removed in M1). **Delete `skill_runner`** (`run`/`_in_flight`/resubmit/hardcoded `tool_choice`/`max_tokens`/`REVIEW_EDIT_TOOL` + the leftover `compute_edits`/`apply_edits` delegations + `system_prompt` fields). Reconcile callers: `skill_picker.lua` (`:22,28,86` → invoke via the driver, keep the arg picker), `review.lua` shim (`:43`), `keybinding_registry.lua`. **glob/list_dir (Design note 2):** they don't exist; this is a YAGNI *decision* — `ls`/`find`/`grep` suffice for P1; record it, don't hunt for files. To be expanded at M4 start.
+The last milestone: move `voice_apply` onto the M3 driver, then **delete
+`skill_runner`** — the duplicate execution engine this whole issue exists to
+remove — and reconcile every caller. After M4 both P2 skills (`review`,
+`voice_apply`) run through `skill_invoke` on the existing dispatcher; nothing
+imports `skill_runner`.
+
+**Design decisions (resolved at plan time; cite in Log):**
+- **`voice_apply`'s dynamic body via `ctx.skill_md`.** `voice_apply` needs
+  `SKILL.md ⊕ per-slug style guide`, but the SKILL.md path is a discovery-time
+  fact known only to the *provider* (the closure captures `dir`), not the driver.
+  So the **DiskProvider** enriches the `ctx` passed to an explicit `source(ctx)`
+  with `ctx.skill_md` (read lazily from `<dir>/SKILL.md`). `voice_apply.source`
+  then returns `ctx.skill_md .. style`. This mirrors v1's 4th `skill_md` arg
+  (`skill_runner.lua:289`) without re-introducing the `debug.getinfo` dance — the
+  dir is already in hand (`ARCH-DRY`/`ARCH-PURE`: IO stays in the provider seam).
+- **Picker reads the registry, not `skill_runner`.** `skill_picker` lists from
+  `parley.skills.current().all()` (manifests carry `args` with `complete`) and
+  routes `review` → `review.run_via_invoke` (marker pre-check + resubmit),
+  everything else → `skill_invoke.invoke`. The M3 transitional `skill_name=="review"`
+  branch (`skill_picker.lua:18-24`) becomes the permanent two-way split; the
+  `skill_runner.list_skills`/`run` calls are removed. Extract the routing into a
+  testable `M.run_skill(buf, manifest, args)` seam (the float-picker UI itself
+  stays untested glue).
+- **`review`'s dead v1 fields go.** `review/init.lua`'s `M.skill.system_prompt`/
+  `pre_submit`/`post_apply` + the `get_runner` helper were consumed only by
+  `skill_runner.run`; `run_via_invoke` (M3) re-implements the marker pre-check +
+  resubmit. They're dead the moment `skill_runner` is gone — delete them
+  (`ARCH-DRY`, no duplicate marker logic).
+- **`review.lua` shim trims to what's used.** Its `compute_edits`/`apply_edits`/
+  `attach_diagnostics`/`highlight_edits` re-exports delegate to `skill_runner`
+  and have **no non-test callers** (grep-verified). The IO-apply path is now the
+  `propose_edits` builtin; the compute path is `skill_edits`; rendering is
+  `skill_render`. Drop the four dead exports; keep the live marker/quickfix/submit
+  API. The `review_spec.lua` `apply_edits` block (its only caller) is redundant
+  with `tools_builtin_propose_edits_spec` + `skill_edits_spec` — remove it.
+- **glob/list_dir (Design note 2) = a recorded YAGNI decision, not code.**
+  `glob.lua`/`list_dir.lua` don't exist; `builtin/` has `ls`/`find` (registered)
+  + `grep`. P2's artifact mode reads with `read_file` and edits with
+  `propose_edits`; structured directory listing has **no consumer** in either P1
+  or P2 today. **Decision: do not add a glob/list_dir tool.** Record it in the
+  Log + atlas; revisit only when a concrete consumer appears.
+- **Abort-teardown coverage moves with the code.** The `_in_flight`-clearing
+  on_abort test (`cliproxy_caller_teardown_spec.lua:158-168`, #131) targeted
+  `skill_runner`; `skill_invoke` has the same guard + on_abort. Port the test to
+  `skill_invoke` and expose `M.is_in_flight(buf)` on it (the v1 helper at
+  `skill_runner.lua:203`).
+
+**Module layout:** modify `lua/parley/skill_providers.lua` (skill_md enrichment),
+`lua/parley/skills/voice_apply/init.lua` + `SKILL.md` (source(ctx)),
+`lua/parley/skill_picker.lua` (registry + routing), `lua/parley/skills/review/init.lua`
+(drop dead v1 fields), `lua/parley/review.lua` (trim shim),
+`lua/parley/skill_invoke.lua` (`is_in_flight`). **Delete**
+`lua/parley/skill_runner.lua` + `tests/unit/skill_runner_spec.lua`. Specs:
+`tests/integration/skill_providers_spec.lua` (extend), new
+`tests/integration/voice_apply_spec.lua`, new `tests/unit/skill_picker_spec.lua`,
+`tests/unit/review_spec.lua` (trim), `tests/integration/cliproxy_caller_teardown_spec.lua`
+(port). Per-task TDD: `nvim --headless -u tests/minimal_init.vim -c "PlenaryBustedFile tests/<spec>.lua"`.
+
+### Task 1: DiskProvider enriches `ctx.skill_md` for explicit `source(ctx)` (INTEGRATION)
+
+**Files:**
+- Modify: `lua/parley/skill_providers.lua` (`manifest_from_def`)
+- Test: `tests/integration/skill_providers_spec.lua` (extend)
+
+- [ ] **Step 1: Write failing test** — a fixture dir with `init.lua` returning
+  `{ name=…, source = function(ctx) return "BODY=" .. (ctx.skill_md or "<none>") end }`
+  **and** a `SKILL.md` containing `the-skill-md`: `providers.disk(root):list()`'s
+  manifest `source({})` returns `BODY=the-skill-md` (the provider injected
+  `ctx.skill_md` from the captured dir). A second assert: caller-supplied ctx
+  fields survive (`source({ args = { slug = "x" } })` still sees `ctx.args.slug`).
+  Regression: the SKILL.md-only branch (no `def.source`) is unchanged.
+- [ ] **Step 2: Run, verify fail** (provider passes `def.source` un-enriched today).
+- [ ] **Step 3: Implement** — in `manifest_from_def`, when `def.source` is a
+  function, wrap it: `source = function(ctx) … end` that, if `ctx.skill_md == nil`
+  and `<dir>/SKILL.md` exists, shallow-copies `ctx` and sets `skill_md` from the
+  file (read via the existing `read_file` helper), then calls the inner fn. No
+  mutation of the caller's table; SKILL.md read only when an explicit source needs
+  it. The SKILL.md-only branch (no `def.source`) is untouched.
+- [ ] **Step 4: Run, verify pass** — provider spec (incl. the M1 cases — regression).
+- [ ] **Step 5: Commit** — `#128 M4: DiskProvider injects ctx.skill_md for explicit source(ctx)`.
+
+### Task 2: port `voice_apply` to `source(ctx)` (INTEGRATION)
+
+**Files:**
+- Modify: `lua/parley/skills/voice_apply/init.lua` (`system_prompt` → `source`)
+- Modify: `lua/parley/skills/voice_apply/SKILL.md` (`review_edit` → `propose_edits`)
+- Test: new `tests/integration/voice_apply_spec.lua`
+
+- [ ] **Step 1: Write failing test** — set `vim.env.HOME` to a temp dir
+  (save/restore in `after_each`), write `~/.personal/myvoice-writing-style.md`
+  with `STYLE-BODY`, then `parley.skills.current().get("voice-apply").source({ args = { slug = "myvoice" } })`
+  returns a string containing **both** the SKILL.md body and `STYLE-BODY` under a
+  `## Voice Style Guide` heading. (Exercises Task 1's `ctx.skill_md` injection +
+  voice_apply's composition end-to-end through the real disk provider.) Edge: a
+  missing style file → `source` errors with a clear message (the slug is bad).
+- [ ] **Step 2: Run, verify fail** (voice_apply still has `system_prompt`, no `source`).
+- [ ] **Step 3: Implement** — replace `voice_apply`'s `system_prompt = function(args, _file, _content, skill_md)`
+  with `source = function(ctx)` reading `~/.personal/<ctx.args.slug>-writing-style.md`
+  and returning `(ctx.skill_md or "") .. "\n\n## Voice Style Guide\n\n" .. style`.
+  Drop the in-file M4 NOTE comment. Update `SKILL.md`: `review_edit` →
+  `propose_edits` (the forced tool — same fix as M3's review I3).
+- [ ] **Step 4: Run, verify pass** — voice_apply spec; `skill_registry_spec` (still
+  yields a valid `voice-apply` manifest — `source` fn is the valid shape).
+- [ ] **Step 5: Commit** — `#128 M4: port voice_apply to explicit source(ctx)`.
+
+### Task 3: picker reads the registry + routes through the driver (INTEGRATION)
+
+**Files:**
+- Modify: `lua/parley/skill_picker.lua` (registry discovery + `M.run_skill` routing)
+- Test: new `tests/unit/skill_picker_spec.lua`
+
+- [ ] **Step 1: Write failing test** — stub `parley.skills.review.run_via_invoke`
+  and `skill_invoke.invoke` (record calls). `skill_picker.run_skill(buf, { name = "review" }, {})`
+  → calls `run_via_invoke` (not `skill_invoke.invoke`); `run_skill(buf, { name = "voice-apply" }, { slug = "x" })`
+  → calls `skill_invoke.invoke(buf, <manifest>, { slug = "x" }, …)` (not `run_via_invoke`).
+- [ ] **Step 2: Run, verify fail** (`run_skill` is a file-local fn calling `skill_runner.run`).
+- [ ] **Step 3: Implement** — make `run_skill` a module function `M.run_skill(buf, manifest, args)`:
+  `review` → `require("parley.skills.review").run_via_invoke(buf, args or {})`; else
+  → `require("parley.skill_invoke").invoke(buf, manifest, args or {}, {})`. Change
+  `M.open` to list from `parley.skills.current().all()` (manifests: `name`,
+  `description`, `args`); `open_arg_picker` already drives `arg_def.complete` —
+  manifests carry `args`, so it's unchanged. Remove the `skill_runner` requires.
+- [ ] **Step 4: Run, verify pass** — picker spec.
+- [ ] **Step 5: Commit** — `#128 M4: picker lists the registry + routes via the driver`.
+
+### Task 4: delete `skill_runner` + reconcile every caller (INTEGRATION)
+
+**Files:**
+- Delete: `lua/parley/skill_runner.lua`, `tests/unit/skill_runner_spec.lua`
+- Modify: `lua/parley/skills/review/init.lua` (drop `get_runner` + dead `M.skill` v1 fields)
+- Modify: `lua/parley/review.lua` (drop the 4 dead delegating exports)
+- Modify: `lua/parley/skill_invoke.lua` (add `M.is_in_flight`)
+- Modify: `tests/unit/review_spec.lua` (remove the `apply_edits` describe block)
+- Modify: `tests/integration/cliproxy_caller_teardown_spec.lua` (port the abort test to `skill_invoke`)
+- Modify (comments only): `lua/parley/skill_edits.lua`, `lua/parley/skill_providers.lua` headers
+
+- [ ] **Step 1: Add `skill_invoke.is_in_flight` + port the abort test** — add
+  `function M.is_in_flight(buf) return _in_flight[buf] == true end` to
+  `skill_invoke.lua`. Rewrite `cliproxy_caller_teardown_spec.lua`'s
+  "on_abort clears the _in_flight guard" test to build a minimal real artifact
+  buffer + a `voice-apply`/stub manifest, call `skill_invoke.invoke`, mock
+  `dispatcher.query` to fire `on_abort` (arg 8), and assert
+  `skill_invoke.is_in_flight(buf) == false`. Run → pass.
+- [ ] **Step 2: Delete `skill_runner` + its spec; drop dead callers** — `git rm
+  lua/parley/skill_runner.lua tests/unit/skill_runner_spec.lua`. In
+  `review/init.lua` remove the `get_runner`/`_skill_runner` helper and delete
+  `M.skill.system_prompt`/`pre_submit`/`post_apply` (dead — `run_via_invoke`
+  owns that logic), leaving only the manifest fields. In `review.lua` delete the
+  `compute_edits`/`apply_edits`/`attach_diagnostics`/`highlight_edits` exports.
+  In `review_spec.lua` delete the `review.apply_edits` describe block. Fix the
+  `skill_edits.lua`/`skill_providers.lua` header comments that cite
+  `skill_runner` line numbers.
+- [ ] **Step 3: Run the full suite** — `make test`. Verify nothing imports
+  `skill_runner` (`grep -rn 'require("parley.skill_runner")' lua/ tests/` → empty)
+  and the suite is green (review, voice_apply, picker, abort, providers all pass).
+- [ ] **Step 4: `make lint`** clean.
+- [ ] **Step 5: Commit** — `#128 M4: delete skill_runner; reconcile all callers`.
+
+### Task 5: glob/list_dir YAGNI record + atlas + milestone close
+
+- [ ] **Step 1: Record the glob/list_dir YAGNI decision** — a short note in the
+  issue `## Log` + `atlas/skills/skill-system.md` (and/or `atlas/providers/tool_use.md`):
+  no structured `glob`/`list_dir` tool is added — `ls`/`find`/`grep` cover P1, and
+  P2's artifact mode needs only `read_file`/`propose_edits`; revisit when a
+  concrete consumer appears.
+- [ ] **Step 2: Atlas** — `atlas/skills/skill-system.md`: drop the "v1 pipeline
+  (transitional — live until M4)" section (skill_runner is gone); state both P2
+  skills run via `skill_invoke`. `atlas/modes/review.md`: remove the
+  "voice-apply still on skill_runner until M4" caveats. `atlas/traceability.yaml`:
+  remove the `skill_runner.lua`/`skill_runner_spec.lua` mappings; add
+  `voice_apply_spec`/`skill_picker_spec`; reflect `backup.lua` under
+  `providers/tool_use` too (the M3 merge judge's optional note).
+- [ ] **Step 3:** `make test` green; `make lint` clean.
+- [ ] **Step 4:** `sdlc milestone-close --issue 128 --milestone M4` (fresh-context judge); log the verdict.
+- [ ] **Step 5: Commit** — `#128 M4: atlas + traceability; glob/list_dir YAGNI record`.
+
+**M4 Done when:** `voice_apply` runs through `skill_invoke` with a dynamic
+`source(ctx)` (SKILL.md ⊕ per-slug style); `skill_runner.lua` is **deleted** and
+nothing imports it; the picker lists the registry and routes both skills through
+the driver; the abort-teardown coverage lives on `skill_invoke`; the glob/list_dir
+YAGNI decision is recorded; suite green; atlas reconciled.
 
 ## ~~M5 — repo_discovery virtual skill~~ — DROPPED (re-scope)
 
@@ -377,6 +557,27 @@ Port `voice_apply` via the driver — give it an explicit `source(ctx)` composin
 ---
 
 ## Revisions
+
+### 2026-06-17 — M4 boundary review (FIX-THEN-SHIP → addressed)
+
+M4 implemented (Tasks 1–5: DiskProvider `ctx.skill_md`, `voice_apply` `source(ctx)`,
+picker→registry+driver, **`skill_runner` deleted** + all callers reconciled,
+glob/list_dir YAGNI record) + closed; boundary review **FIX-THEN-SHIP** (no
+Critical). The judge independently re-ran the suite (107 specs) + lint (0/0) and
+confirmed ARCH-DRY/ARCH-PURE pass + the deletion is complete (no live
+`skill_runner`/`review_edit` refs). One Important finding, addressed:
+- **`skill_invoke.source()` was outside any `pcall`** — a fallible `source()`
+  (voice_apply with a missing style file) threw a raw Lua error instead of
+  routing through the same `on_done({ok=false})` channel as the other early-outs
+  (no file / no agent). Now wrapped: source failure logs + calls `on_done(ok=false)`
+  and returns without querying. Test added (`skill_invoke_spec`: source throws →
+  on_done ok=false, msg names "source", query NOT called).
+- Minors (noted, not blocking): `ok` means "no tool errors" not "edits applied"
+  (fine — review relies on marker state); marker-shrank guard is deliberately
+  conservative on net-equal marker churn (documented); `applied` counts calls not
+  edits (harmless under force_tool). Forward note: when the dispatcher's
+  generalized write-path prelude lands, the inline `backup.numbered` calls retire
+  into it.
 
 ### 2026-06-16 — M3 boundary review (FIX-THEN-SHIP → addressed)
 

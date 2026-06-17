@@ -11,16 +11,10 @@
 local M = {}
 
 local _parley
-local _skill_runner
 
 local function get_parley()
     if not _parley then _parley = require("parley") end
     return _parley
-end
-
-local function get_runner()
-    if not _skill_runner then _skill_runner = require("parley.skill_runner") end
-    return _skill_runner
 end
 
 --------------------------------------------------------------------------------
@@ -452,70 +446,14 @@ M.skill = {
     description = "Edit document based on review markers",
     args = {},
 
-    -- Declarative manifest fields (#128). Inert until skills route through the
-    -- chat loop (M2); review's runtime is still skill_runner until M4.
+    -- Declarative manifest fields (#128). Runs through the skill_invoke driver
+    -- (M3/M4); the marker pre-check + resubmit loop live in M.run_via_invoke
+    -- (below), not in dead skill_runner pre_submit/post_apply hooks.
     scope = "global",
     activation = { manual = true, auto = true },
     tools = { "read_file" },
     elevated = { "propose_edits" }, -- write tool, granted only on manual invoke (#129)
     force_tool = "propose_edits", -- compel the batch-edit tool this turn (M3)
-
-    system_prompt = function(_args, _file_path, _content, skill_md)
-        return skill_md
-    end,
-
-    pre_submit = function(buf, _args)
-        local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-        local markers = M.parse_markers(lines)
-
-        if #markers == 0 then
-            get_runner().clear_decorations(buf)
-            vim.fn.setqflist({}, "r")
-            pcall(vim.cmd, "cclose")
-            get_parley().logger.info("Review: complete — no markers found")
-            return false
-        end
-
-        local pending = {}
-        for _, marker in ipairs(markers) do
-            if marker.pending then table.insert(pending, marker) end
-        end
-
-        if #pending > 0 then
-            M.populate_quickfix(buf, pending, "pending")
-            get_parley().logger.warning("Review: " .. #pending .. " marker(s) need your response")
-            return false, #pending .. " marker(s) need your response"
-        end
-
-        vim.fn.setqflist({}, "r")
-        pcall(vim.cmd, "cclose")
-        return true
-    end,
-
-    post_apply = function(buf, args, _result, _new_content, resubmit_count)
-        local new_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-        local remaining = M.parse_markers(new_lines)
-        if #remaining == 0 then
-            get_parley().logger.info("Review: all comments addressed")
-            return
-        end
-
-        local has_questions = false
-        for _, marker in ipairs(remaining) do
-            if marker.pending then
-                has_questions = true
-                break
-            end
-        end
-
-        if has_questions then
-            M.populate_quickfix(buf, remaining, "pending")
-            get_parley().logger.info("Review: agent has follow-up questions")
-        elseif (resubmit_count or 0) < 3 then
-            get_parley().logger.info("Review: " .. #remaining .. " marker(s) remain, resubmitting...")
-            get_runner().run(buf, M.skill, args, (resubmit_count or 0) + 1)
-        end
-    end,
 }
 
 --------------------------------------------------------------------------------

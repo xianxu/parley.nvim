@@ -129,22 +129,23 @@ describe("cliproxy on_abort teardown per caller", function()
         assert.is_truthy(lines_after < lines_at_query) -- collapse removed the empty answer block
     end)
 
-    -- skill_runner: mock D.query to invoke the real on_abort (arg 8); assert the
-    -- _in_flight guard is cleared so the buffer isn't blocked forever.
-    it("skill_runner on_abort clears the _in_flight guard", function()
-        local skill_runner = require("parley.skill_runner")
+    -- skill_invoke: mock D.query to invoke the real on_abort (arg 8); assert the
+    -- _in_flight guard is cleared so the buffer isn't blocked forever (#131).
+    it("skill_invoke on_abort clears the _in_flight guard", function()
+        local skill_invoke = require("parley.skill_invoke")
 
-        -- a minimal real file + buffer to satisfy M.run's file-path/save steps
+        -- a minimal real file + buffer to satisfy invoke's file-path/save steps
         local doc = tmp_dir .. "/doc.md"
         vim.fn.writefile({ "hello world" }, doc)
         vim.cmd("edit " .. doc)
         local buf = vim.api.nvim_get_current_buf()
 
-        -- a minimal skill with a non-empty SKILL.md and an agent
-        local skilldir = tmp_dir .. "/skill"
-        vim.fn.mkdir(skilldir, "p")
-        vim.fn.writefile({ "System prompt for the test skill." }, skilldir .. "/SKILL.md")
-        local skill = { name = "testskill", _dir = skilldir, agent = "agentX" }
+        -- a minimal manifest with a body source + a resolvable agent
+        local manifest = {
+            name = "testskill",
+            source = function() return "System prompt for the test skill." end,
+            agent = "agentX",
+        }
 
         local saved_get_agent = parley.get_agent
         parley.get_agent = function()
@@ -157,13 +158,13 @@ describe("cliproxy on_abort teardown per caller", function()
             if on_abort then on_abort("test abort") end
         end
 
-        pcall(function() skill_runner.run(buf, skill, {}) end)
-        vim.wait(300, function() return not skill_runner.is_in_flight(buf) end, 10)
+        pcall(function() skill_invoke.invoke(buf, manifest, {}, {}) end)
+        vim.wait(300, function() return not skill_invoke.is_in_flight(buf) end, 10)
 
         parley.get_agent = saved_get_agent
         parley.dispatcher.query = saved_query
 
         assert.is_true(saw_fn) -- on_abort wired at arg position 8
-        assert.is_false(skill_runner.is_in_flight(buf)) -- guard cleared, buffer not blocked
+        assert.is_false(skill_invoke.is_in_flight(buf)) -- guard cleared, buffer not blocked
     end)
 end)

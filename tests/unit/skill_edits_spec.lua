@@ -1,9 +1,9 @@
 -- Unit tests for lua/parley/skill_edits.lua
 --
 -- compute_edits is the single source of the batch-edit transform (salvaged
--- from skill_runner.lua). PURE: validate + apply a list of {old_string,
--- new_string, explain} edits to a content string. The propose_edits tool
--- handler (IO) wraps it; the v1 skill_runner.apply_edits delegates to it.
+-- from the deleted skill_runner.lua). PURE: validate + apply a list of
+-- {old_string, new_string, explain} edits to a content string. The propose_edits
+-- tool handler (IO) is its one caller.
 
 local skill_edits = require("parley.skill_edits")
 

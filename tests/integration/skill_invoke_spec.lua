@@ -135,4 +135,18 @@ describe("skill_invoke.invoke", function()
         assert.is_false(done_result.ok)
         assert.is_false(query_called, "must not query without an agent")
     end)
+
+    it("aborts gracefully (on_done ok=false) when source() throws", function()
+        -- a fallible source (e.g. voice_apply with a missing style file) must route
+        -- through on_done, not throw a raw Lua error past the caller.
+        local query_called = false
+        parley.dispatcher.query = function() query_called = true end
+        local m = manifest({ source = function() error("style file not found") end })
+        skill_invoke.invoke(buf, m, {}, { on_done = function(r) done_result = r end })
+        vim.wait(500, function() return done_result ~= nil end)
+        assert.is_not_nil(done_result, "on_done must run even when source throws")
+        assert.is_false(done_result.ok)
+        assert.is_truthy((done_result.msg or ""):find("source", 1, true))
+        assert.is_false(query_called, "must not query when source failed")
+    end)
 end)

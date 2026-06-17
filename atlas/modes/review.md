@@ -45,9 +45,9 @@ After an optional `<>`, `[]` and `{}` may appear in any order.
 
 Review is implemented as a **skill** in the unified skill system (see `atlas/index.md` §8).
 
-- **Skill module**: `lua/parley/skills/review/init.lua` — marker parsing, pre/post hooks, keybindings
+- **Skill module**: `lua/parley/skills/review/init.lua` — marker parsing, `run_via_invoke` (marker pre-check + resubmit), keybindings
 - **System prompt**: `lua/parley/skills/review/SKILL.md`
-- **Driver**: `lua/parley/skill_invoke.lua` — one tool-use exchange on the existing dispatcher (M3; `skill_runner` no longer used for review — voice-apply stays on it until M4)
+- **Driver**: `lua/parley/skill_invoke.lua` — one tool-use exchange on the existing dispatcher (the `skill_runner` engine was deleted in M4; both review and voice-apply run through this driver)
 - **Rendering**: `lua/parley/skill_render.lua` — diagnostics + edit highlights
 - **Shim**: `lua/parley/review.lua` — backward-compatible re-exports for existing callers
 - **Headless**: Direct API call, no chat buffer, no exchange model
@@ -70,14 +70,14 @@ review_shortcut_finder = { modes = { "n", "i" }, shortcut = "<C-g>vf" },
 
 ## Key Files
 
-- `lua/parley/skills/review/init.lua` — skill definition, marker parsing, hooks, keybindings
+- `lua/parley/skills/review/init.lua` — skill definition, marker parsing, `run_via_invoke` (marker pre-check + resubmit), keybindings
 - `lua/parley/skills/review/SKILL.md` — system prompt (light edit + heavy revision sections)
 - `lua/parley/skill_invoke.lua` — the P2 driver (one tool-use exchange via the existing dispatcher)
 - `lua/parley/skill_render.lua` — diagnostics + edit highlights
 - `lua/parley/tools/builtin/propose_edits.lua` — batch edit-apply (inline `.parley-backup`)
-- `lua/parley/skill_runner.lua` — shared edit-apply-display pipeline (transitional; voice-apply only until M4)
 - `lua/parley/review.lua` — backward-compatible shim
 - `lua/parley/highlighter.lua` — `ParleyReviewUser`/`ParleyReviewAgent` groups
 - `lua/parley/config.lua` — default keybindings and config
-- `tests/unit/review_spec.lua` — unit tests for parser and edit application
-- `tests/unit/skill_runner_spec.lua` — unit tests for compute_edits and apply_edits
+- `tests/unit/review_spec.lua` — unit tests for the marker parser
+- `tests/integration/skill_invoke_review_spec.lua` — review's marker pre-check + resubmit
+- `tests/unit/skill_edits_spec.lua` / `tests/unit/tools_builtin_propose_edits_spec.lua` — batch edit-apply

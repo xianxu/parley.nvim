@@ -86,6 +86,36 @@ describe("providers.disk", function()
         assert.are.equal("repo", beta.scope)
     end)
 
+    it("injects ctx.skill_md from the dir's SKILL.md into an explicit source(ctx)", function()
+        -- gamma: an explicit source(ctx) composing SKILL.md ⊕ dynamic content.
+        -- The provider knows the dir (closure), so it enriches ctx.skill_md —
+        -- letting a dynamic-body skill (voice_apply, M4) compose SKILL.md ⊕ <extra>
+        -- without re-deriving the dir (no debug.getinfo).
+        vim.fn.mkdir(root .. "/gamma", "p")
+        write(root .. "/gamma/init.lua", {
+            "return {",
+            '  name = "gamma",',
+            '  description = "Gamma skill",',
+            '  scope = "global",',
+            "  activation = { manual = true },",
+            "  source = function(ctx)",
+            '    return "BODY=" .. (ctx.skill_md or "<none>") .. " SLUG=" .. ((ctx.args or {}).slug or "<none>")',
+            "  end,",
+            "}",
+        })
+        write(root .. "/gamma/SKILL.md", { "the-skill-md" })
+
+        local gamma = by_name(providers.disk(root):list(), "gamma")
+        assert.is_not_nil(gamma)
+        -- provider injected ctx.skill_md from SKILL.md (no caller-supplied skill_md)
+        assert.is_truthy(gamma.source({}):find("BODY=the-skill-md", 1, true),
+            "provider should inject ctx.skill_md from SKILL.md")
+        -- caller-supplied ctx fields survive the enrichment
+        local body = gamma.source({ args = { slug = "x" } })
+        assert.is_truthy(body:find("BODY=the-skill-md", 1, true))
+        assert.is_truthy(body:find("SLUG=x", 1, true), "caller-supplied ctx survives enrichment")
+    end)
+
     it("skips a dir whose init.lua throws, still listing the rest", function()
         vim.fn.mkdir(root .. "/boom", "p")
         write(root .. "/boom/init.lua", { 'error("kaboom at load")' })

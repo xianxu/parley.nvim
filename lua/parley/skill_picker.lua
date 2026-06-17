@@ -3,6 +3,10 @@
 -- Opens a float picker for selecting a skill and its arguments.
 -- Multi-step: select skill → select arg1 → select arg2 → run.
 -- Each step closes and reopens the picker with new items.
+--
+-- Skills come from the unified registry (parley.skills.current()); each chosen
+-- skill runs through the skill_invoke driver — `review` via its marker-aware
+-- run_via_invoke wrapper, every other skill as a single-shot exchange.
 
 local M = {}
 
@@ -12,14 +16,14 @@ M.setup = function(parley)
     _parley = parley
 end
 
--- Transitional routing (#128 M3): `review` runs through the new skill_invoke
--- driver (the P2 path); other skills (e.g. voice_apply) still use skill_runner
--- until M4 ports them + deletes it.
-local function run_skill(buf, skill, args)
-    if skill.name == "review" then
+-- Route a chosen skill (a SkillManifest) to its driver. `review` keeps its
+-- marker pre-check + resubmit loop (run_via_invoke); every other skill is a
+-- single-shot skill_invoke exchange on the artifact buffer.
+function M.run_skill(buf, manifest, args)
+    if manifest.name == "review" then
         require("parley.skills.review").run_via_invoke(buf, args or {})
     else
-        require("parley.skill_runner").run(buf, skill, args)
+        require("parley.skill_invoke").invoke(buf, manifest, args or {}, {})
     end
 end
 
@@ -29,13 +33,13 @@ local function open_arg_picker(buf, skill, args, arg_index)
 
     -- All args collected — run the skill
     if not skill.args or arg_index > #skill.args then
-        run_skill(buf, skill, args)
+        M.run_skill(buf, skill, args)
         return
     end
 
     local arg_def = skill.args[arg_index]
     if not arg_def or not arg_def.complete then
-        run_skill(buf, skill, args)
+        M.run_skill(buf, skill, args)
         return
     end
 
@@ -69,10 +73,10 @@ end
 
 M.open = function()
     _parley = _parley or require("parley")
-    local skill_runner = require("parley.skill_runner")
     local float_picker = _parley.float_picker
 
-    local skills = skill_runner.list_skills()
+    local skills = require("parley.skill_registry").current().all()
+    table.sort(skills, function(a, b) return a.name < b.name end)
     local buf = vim.api.nvim_get_current_buf()
 
     local items = {}
@@ -93,7 +97,7 @@ M.open = function()
             local skill = item.value
             vim.schedule(function()
                 if not skill.args or #skill.args == 0 then
-                    run_skill(buf, skill, {})
+                    M.run_skill(buf, skill, {})
                 else
                     open_arg_picker(buf, skill, {}, 1)
                 end
