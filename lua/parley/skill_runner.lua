@@ -48,64 +48,14 @@ M.REVIEW_EDIT_TOOL = {
 --------------------------------------------------------------------------------
 
 --- Pure: validate and apply edits to a content string.
+--- DELEGATES to parley.skill_edits — the single source of the batch-edit
+--- transform (#128 M2). Kept here as a thin pass-through until skill_runner is
+--- deleted in M4, so the v1 path + its spec stay green.
 --- @param content string  file content
 --- @param edits table[]  list of {old_string, new_string, explain}
 --- @return table  {ok=bool, msg=string, content=string|nil, applied=table[]}
 function M.compute_edits(content, edits)
-    local positioned = {}
-    for idx, edit in ipairs(edits) do
-        if type(edit.old_string) ~= "string" or type(edit.new_string) ~= "string" then
-            return {
-                ok = false,
-                msg = "edit #" .. idx .. " missing old_string or new_string: " .. vim.inspect(edit),
-                applied = {},
-            }
-        end
-        local pos = content:find(edit.old_string, 1, true)
-        if not pos then
-            return {
-                ok = false,
-                msg = "old_string not found: " .. edit.old_string:sub(1, 60),
-                applied = {},
-            }
-        end
-        local second = content:find(edit.old_string, pos + 1, true)
-        if second then
-            return {
-                ok = false,
-                msg = "old_string not unique: " .. edit.old_string:sub(1, 60),
-                applied = {},
-            }
-        end
-        table.insert(positioned, {
-            pos = pos,
-            old_string = edit.old_string,
-            new_string = edit.new_string,
-            explain = edit.explain,
-        })
-    end
-
-    table.sort(positioned, function(a, b) return a.pos > b.pos end)
-
-    local applied = {}
-    for _, edit in ipairs(positioned) do
-        content = content:sub(1, edit.pos - 1)
-            .. edit.new_string
-            .. content:sub(edit.pos + #edit.old_string)
-        table.insert(applied, {
-            pos = edit.pos,
-            old_string = edit.old_string,
-            new_string = edit.new_string,
-            explain = edit.explain,
-        })
-    end
-
-    return {
-        ok = true,
-        msg = "Applied " .. #applied .. " edit(s)",
-        content = content,
-        applied = applied,
-    }
+    return require("parley.skill_edits").compute_edits(content, edits)
 end
 
 --- IO boundary: read file, apply edits, write file.
@@ -281,44 +231,18 @@ end
 -- Agent resolution
 --------------------------------------------------------------------------------
 
+-- DELEGATES to parley.skill_assembly.resolve_agent — the single source of the
+-- agent cascade (#128 M2). Builds the injected deps from the live parley module
+-- (the IO boundary) and calls the pure cascade, mirroring the compute_edits
+-- delegation. Kept until skill_runner is deleted in M4.
 M.resolve_agent = function(skill)
     local parley = get_parley()
-
-    -- Priority 1: user per-skill config
-    for _, cfg in ipairs(parley.config.skills or {}) do
-        if cfg.name == skill.name and cfg.agent then
-            local agent = parley.get_agent(cfg.agent)
-            if agent then return agent end
-        end
-    end
-
-    -- Priority 1b: deprecated review_agent fallback
-    if skill.name == "review" and parley.config.review_agent then
-        local agent = parley.get_agent(parley.config.review_agent)
-        if agent then return agent end
-    end
-
-    -- Priority 2: skill definition default
-    if skill.agent then
-        local agent = parley.get_agent(skill.agent)
-        if agent then return agent end
-    end
-
-    -- Priority 3: global skill_agent config
-    if parley.config.skill_agent then
-        local agent = parley.get_agent(parley.config.skill_agent)
-        if agent then return agent end
-    end
-
-    -- Priority 4: first tool-capable agent
-    for _, name in ipairs(parley._agents or {}) do
-        local agent = parley.agents[name]
-        if agent and (agent.provider == "anthropic" or agent.provider == "cliproxyapi") then
-            return agent
-        end
-    end
-
-    return nil
+    return require("parley.skill_assembly").resolve_agent(skill, {
+        config = parley.config,
+        get_agent = parley.get_agent,
+        agent_names = parley._agents,
+        agents = parley.agents,
+    })
 end
 
 --------------------------------------------------------------------------------
