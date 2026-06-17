@@ -1,1 +1,0 @@
-../ariadne/CLAUDE.md
