@@ -37,25 +37,14 @@ local function render_propose_edits(buf, call, original, new_content)
     skill_render.highlight_edits(buf, edits, new_content)
 end
 
-local function read_file(path)
-    local f = io.open(path, "r")
-    if not f then
-        return nil
-    end
-    local content = f:read("*a")
-    f:close()
-    return content
-end
-
--- Reload the artifact buffer from its (now-edited) file, deterministically
--- (independent of 'autoread'/checktime timing).
-local function reload_buffer(buf, path)
-    local content = read_file(path) or ""
-    local lines = vim.split(content, "\n", { plain = true })
-    if #lines > 0 and lines[#lines] == "" then
-        table.remove(lines) -- drop the trailing empty line from a final newline
-    end
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+-- Reload the artifact buffer from its (now-edited) file. Uses `:edit!` (a
+-- command, run with the buffer current) rather than nvim_buf_set_lines so buffer
+-- mutation stays out of this module — the #90 arch boundary keeps direct
+-- line-setting in buffer_edit.lua. Deterministic (synchronous force-reload).
+local function reload_buffer(buf)
+    vim.api.nvim_buf_call(buf, function()
+        pcall(vim.cmd, "silent edit!")
+    end)
 end
 
 --- Invoke a skill on an artifact buffer (one exchange).
@@ -132,7 +121,7 @@ function M.invoke(buf, manifest, args, opts)
                     end
                     table.insert(results, tools_dispatcher.execute_call(call, tools_registry, { cwd = cwd }))
                 end
-                reload_buffer(buf, artifact_path)
+                reload_buffer(buf)
                 local new_content = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
                 for _, call in ipairs(calls) do
                     if call.name == "propose_edits" then

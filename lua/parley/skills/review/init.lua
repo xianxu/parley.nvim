@@ -519,6 +519,83 @@ M.skill = {
 }
 
 --------------------------------------------------------------------------------
+-- Run via the M3 skill_invoke driver (the P2 path; supersedes skill_runner.run
+-- for review). The marker pre-check (was M.skill.pre_submit) + resubmit loop
+-- (was M.skill.post_apply) stay HERE (review-specific); only the LLM exchange
+-- goes through the generic driver. The skill_invoke driver applies the
+-- propose_edits batch + renders the explanations (batch-edit-with-explanations
+-- UX preserved). resubmit_count bounds re-invocation at 3, like the v1 path.
+--------------------------------------------------------------------------------
+
+M.run_via_invoke = function(buf, args, resubmit_count)
+    args = args or {}
+    resubmit_count = resubmit_count or 0
+    local parley = get_parley()
+    local skill_render = require("parley.skill_render")
+
+    -- Pre-check (was pre_submit): abort if there are no markers, or if the agent
+    -- spoke last (pending question awaiting the human).
+    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    local markers = M.parse_markers(lines)
+    if #markers == 0 then
+        skill_render.clear_decorations(buf)
+        vim.fn.setqflist({}, "r")
+        pcall(vim.cmd, "cclose")
+        parley.logger.info("Review: complete — no markers found")
+        return
+    end
+    local pending = {}
+    for _, marker in ipairs(markers) do
+        if marker.pending then table.insert(pending, marker) end
+    end
+    if #pending > 0 then
+        M.populate_quickfix(buf, pending, "pending")
+        parley.logger.warning("Review: " .. #pending .. " marker(s) need your response")
+        return
+    end
+    vim.fn.setqflist({}, "r")
+    pcall(vim.cmd, "cclose")
+
+    -- NB: skill_registry's get/names are plain-function fields → call with DOT,
+    -- not colon (colon would pass the registry as the `name` arg).
+    local manifest = parley.skills.current().get("review")
+    if not manifest then
+        parley.logger.error("Review: 'review' manifest not found in the skill registry")
+        return
+    end
+
+    require("parley.skill_invoke").invoke(buf, manifest, args, {
+        manual = true,
+        on_done = function(result)
+            if not result or not result.ok then
+                return
+            end
+            -- Post-apply (was post_apply): resubmit while ready markers remain.
+            local new_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+            local remaining = M.parse_markers(new_lines)
+            if #remaining == 0 then
+                parley.logger.info("Review: all comments addressed")
+                return
+            end
+            local has_questions = false
+            for _, marker in ipairs(remaining) do
+                if marker.pending then
+                    has_questions = true
+                    break
+                end
+            end
+            if has_questions then
+                M.populate_quickfix(buf, remaining, "pending")
+                parley.logger.info("Review: agent has follow-up questions")
+            elseif resubmit_count < 3 then
+                parley.logger.info("Review: " .. #remaining .. " marker(s) remain, resubmitting...")
+                M.run_via_invoke(buf, args, resubmit_count + 1)
+            end
+        end,
+    })
+end
+
+--------------------------------------------------------------------------------
 -- On-enter quickfix scan
 --------------------------------------------------------------------------------
 
@@ -577,7 +654,7 @@ M.setup_keymaps = function(buf)
     if edit_cfg then
         for _, mode in ipairs(edit_cfg.modes or {}) do
             set_keymap({ buf }, mode, edit_cfg.shortcut, function()
-                get_runner().run(buf, M.skill, {})
+                M.run_via_invoke(buf, {})
             end, "Parley review: process markers")
         end
     end

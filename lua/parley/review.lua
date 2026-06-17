@@ -38,9 +38,9 @@ M.apply_edits = function(file_path, edits) return get_runner().apply_edits(file_
 M.attach_diagnostics = function(buf, edits, original_content) return get_runner().attach_diagnostics(buf, edits, original_content) end
 M.highlight_edits = function(buf, edits, new_content) return get_runner().highlight_edits(buf, edits, new_content) end
 
--- Submit review (delegated to skill_runner.run with review skill)
+-- Submit review (delegated to the M3 skill_invoke path via review.run_via_invoke)
 M.submit_review = function(buf, level)
-    get_runner().run(buf, get_review().skill, { level = level or "edit" })
+    get_review().run_via_invoke(buf, { level = level or "edit" })
 end
 
 -- Keybindings (delegated to review skill)
