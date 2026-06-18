@@ -21,6 +21,10 @@ local M = {}
 -- Per-buffer re-entrancy guard: one skill exchange per artifact buffer at a time
 -- (a rapid double-trigger would otherwise launch concurrent exchanges).
 local _in_flight = {}
+-- Per-buffer generation counter. Each invoke bumps it; on_exit/on_abort carry
+-- their gen and no-op if a newer exchange superseded them — so a cancelled
+-- (killed) query's late callback can't clobber the new one's state. (#133)
+local _gen = {}
 
 --- Is a skill exchange in flight for `buf`? Cleared on on_exit/on_abort, so an
 --- abort that can't start the query doesn't block the buffer forever (#131).
@@ -28,6 +32,17 @@ local _in_flight = {}
 --- @return boolean
 function M.is_in_flight(buf)
     return _in_flight[buf] == true
+end
+
+--- Cancel an in-flight exchange for `buf`: invalidate it (bump the generation so
+--- its callback no-ops), clear the in-flight flag, and stop the running query.
+--- `tasker.stop` halts in-flight queries (review is headless, so this is the
+--- review job). Lets a new round supersede a stuck/slow one (#133).
+--- @param buf number
+function M.cancel(buf)
+    _gen[buf] = (_gen[buf] or 0) + 1
+    _in_flight[buf] = nil
+    pcall(function() require("parley.tasker").stop() end)
 end
 
 local function parley()
@@ -109,6 +124,10 @@ function M.invoke(buf, manifest, args, opts)
         return
     end
 
+    -- This exchange's generation; on_exit/on_abort no-op if superseded (#133).
+    local gen = (_gen[buf] or 0) + 1
+    _gen[buf] = gen
+
     -- Sync file == buffer so edits compute + apply against the same content.
     if vim.bo[buf].modified then
         vim.api.nvim_buf_call(buf, function()
@@ -166,6 +185,11 @@ function M.invoke(buf, manifest, args, opts)
         function() end, -- handler (headless)
         function(qid) -- on_exit
             vim.schedule(function()
+                -- Superseded by a newer exchange (the old one was cancelled) →
+                -- no-op so we don't reload/re-render or clobber the new state.
+                if _gen[buf] ~= gen then
+                    return
+                end
                 _in_flight[buf] = nil
                 local qt = tasker.get_query(qid) or {}
                 local calls = providers.decode_anthropic_tool_calls_from_stream(qt.raw_response or "")
@@ -234,6 +258,9 @@ function M.invoke(buf, manifest, args, opts)
         nil,
         nil,
         function(msg) -- on_abort
+            if _gen[buf] ~= gen then
+                return -- superseded by a newer exchange (cancelled) → no-op
+            end
             _in_flight[buf] = nil
             p.logger.error("skill " .. tostring(manifest.name) .. " abort: " .. tostring(msg))
             if opts.on_done then

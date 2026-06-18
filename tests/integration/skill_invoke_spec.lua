@@ -155,6 +155,22 @@ describe("skill_invoke.invoke", function()
         assert.are.equal("ab ab", table.concat(vim.fn.readfile(path), "\n")) -- untouched
     end)
 
+    it("is_in_flight true during a query; cancel clears it + supersedes the exchange (#133)", function()
+        local held_exit
+        parley.dispatcher.query = function(_b, _p, _payload, _h, on_exit)
+            held_exit = on_exit -- hold it open; don't complete the query
+        end
+        skill_invoke.invoke(buf, manifest(), {}, { on_done = function(r) done_result = r end })
+        assert.is_true(skill_invoke.is_in_flight(buf))
+        skill_invoke.cancel(buf)
+        assert.is_false(skill_invoke.is_in_flight(buf))
+        -- The now-superseded query completes late → its on_exit must no-op.
+        tasker.set_query("qid_stale", { raw_response = "" })
+        held_exit("qid_stale")
+        vim.wait(200, function() return done_result ~= nil end)
+        assert.is_nil(done_result, "a cancelled query's late on_exit must not run on_done")
+    end)
+
     it("aborts (on_done ok=false) when no agent resolves", function()
         assembly.resolve_agent = function() return nil end
         local query_called = false

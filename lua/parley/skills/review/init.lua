@@ -526,6 +526,23 @@ M.run_via_invoke = function(buf, args, resubmit_count)
     resubmit_count = resubmit_count or 0
     local parley = get_parley()
     local skill_render = require("parley.skill_render")
+    local skill_invoke = require("parley.skill_invoke")
+
+    -- A review already running on this buffer? Warn + offer to kill it and submit
+    -- a new one, rather than erroring out (#133). Only on a fresh user trigger —
+    -- the resubmit loop runs after on_exit cleared the flag, so it won't prompt.
+    if resubmit_count == 0 and skill_invoke.is_in_flight(buf) then
+        local choice = vim.fn.confirm(
+            "Parley review: a review is already running on this buffer.",
+            "&Kill it and submit a new one\n&Cancel",
+            2
+        )
+        if choice ~= 1 then
+            parley.logger.info("Review: kept the running review")
+            return
+        end
+        skill_invoke.cancel(buf)
+    end
 
     -- Count markers the agent should ACT on (last section a non-empty []).
     local function count_ready(ms)
@@ -731,26 +748,30 @@ M.setup_keymaps = function(buf)
         end
     end
 
-    -- <M-o> opens the review-mode menu; <M-CR> (re)opens it pre-selected to the
-    -- sticky mode for fast ping-pong. Both run a round on submit with the chosen
-    -- {mode, instruction}. The menu pre-selects the last-used mode either way, so
-    -- they share one callback. (#133 M4)
-    local function open_menu()
+    -- <M-o> opens the general SKILL PICKER (review is one of the skills); <M-CR>
+    -- is the DIRECT review trigger — it opens the review-mode menu (sticky-
+    -- preselected) and runs a round on submit with the chosen {mode,instruction}.
+    -- (#133 — operator: alt+o = skill selector, alt+return = review.)
+    local skill_cfg = cfg.review_shortcut_menu
+    if skill_cfg then
+        for _, mode in ipairs(skill_cfg.modes or {}) do
+            set_keymap({ buf }, mode, skill_cfg.shortcut, function()
+                require("parley.skill_picker").open()
+            end, "Parley: open skill picker")
+        end
+    end
+
+    local function open_review_menu()
         require("parley.review_menu").open({
             on_submit = function(r)
                 M.run_via_invoke(buf, { mode = r.mode, instruction = r.instruction })
             end,
         })
     end
-    local menu_specs = {
-        { cfg = cfg.review_shortcut_menu, desc = "Parley review: open mode menu" },
-        { cfg = cfg.review_shortcut_next, desc = "Parley review: next round (menu, sticky mode)" },
-    }
-    for _, s in ipairs(menu_specs) do
-        if s.cfg then
-            for _, mode in ipairs(s.cfg.modes or {}) do
-                set_keymap({ buf }, mode, s.cfg.shortcut, open_menu, s.desc)
-            end
+    local next_cfg = cfg.review_shortcut_next
+    if next_cfg then
+        for _, mode in ipairs(next_cfg.modes or {}) do
+            set_keymap({ buf }, mode, next_cfg.shortcut, open_review_menu, "Parley review: open mode menu")
         end
     end
 end

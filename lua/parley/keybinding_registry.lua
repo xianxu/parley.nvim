@@ -696,8 +696,8 @@ M.entries = {
 		default_key = "<M-o>",
 		default_modes = { "n" },
 		scope = "markdown",
-		desc = "Parley review: open mode menu",
-		help_desc = "Open review-mode menu",
+		desc = "Parley: open skill picker",
+		help_desc = "Open skill picker",
 		buffer_local = true,
 		help_only = true, -- registered by review skill (#133)
 	},
@@ -707,8 +707,8 @@ M.entries = {
 		default_key = "<M-CR>",
 		default_modes = { "n", "i" },
 		scope = "markdown",
-		desc = "Parley review: next round (menu, sticky mode)",
-		help_desc = "Review next round",
+		desc = "Parley review: open mode menu (direct trigger)",
+		help_desc = "Open review-mode menu",
 		buffer_local = true,
 		help_only = true, -- registered by review skill (#133)
 	},

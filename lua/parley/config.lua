@@ -449,9 +449,10 @@ local config = {
 	-- binding — see lua/parley/init.lua `drill_in_callbacks` and #124.
 	review_shortcut_edit = { modes = { "n" }, shortcut = "<C-g>ve" },
 	review_shortcut_finder = { modes = { "n", "i" }, shortcut = "<C-g>vf" },
-	-- Review-mode menu (#133): <M-o> opens it; <M-CR> (re)opens pre-selected to
-	-- the sticky mode and runs the next round (free in markdown docs — chat-respond
-	-- <M-CR> is chat-buffer-only).
+	-- Review bindings (#133): <M-o> opens the general skill picker (review is one
+	-- of the skills); <M-CR> is the direct review trigger — it opens the review-mode
+	-- menu (sticky-preselected). (Free in markdown docs — chat-respond <M-CR> is
+	-- chat-buffer-only.) `review_shortcut_menu` is the skill-picker alias here.
 	review_shortcut_menu = { modes = { "n" }, shortcut = "<M-o>" },
 	review_shortcut_next = { modes = { "n", "i" }, shortcut = "<M-CR>" },
 	-- agent to use for document review (defaults to Claude-Sonnet)

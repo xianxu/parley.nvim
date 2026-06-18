@@ -1700,7 +1700,33 @@ local function drill_in_resolve_at_cursor_with_mode(buf, mode)
 		drill_in_flash_clear(buf)
 
 		local new_lines = vim.split(new_text, "\n", { plain = true })
-		vim.api.nvim_buf_set_lines(buf, 0, -1, false, new_lines)
+		-- Replace ONLY the marker's line range (not the whole buffer) so review
+		-- decorations elsewhere RIDE the edit via extmark gravity — exactly like a
+		-- manual edit. A full set_lines(0,-1) would wipe every extmark + diagnostic
+		-- (#133). A content-verification fallback guarantees correctness if the
+		-- range math is ever off.
+		local function row_of_byte(ls, byte) -- 1-based byte → 1-based row
+			local p = 1
+			for i, l in ipairs(ls) do
+				if byte <= p + #l then
+					return i
+				end
+				p = p + #l + 1
+			end
+			return #ls
+		end
+		local sr = row_of_byte(lines, m.byte_start)
+		local er = row_of_byte(lines, m.byte_end)
+		local suffix = #lines - er -- unchanged lines after the marker
+		local region = {}
+		for i = sr, #new_lines - suffix do
+			region[#region + 1] = new_lines[i]
+		end
+		local ok_narrow = pcall(vim.api.nvim_buf_set_lines, buf, sr - 1, er, false, region)
+		if not ok_narrow
+			or table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n") ~= new_text then
+			vim.api.nvim_buf_set_lines(buf, 0, -1, false, new_lines) -- safe fallback
+		end
 
 		local target = m.byte_start
 		local target_row, target_col = 1, 0

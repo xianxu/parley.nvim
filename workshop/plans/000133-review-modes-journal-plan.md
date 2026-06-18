@@ -523,6 +523,44 @@ keeps riding (behavior B) and is itself recorded. Pure decide + thin IO
   → style clears; redo → style returns. Document in `## Log`.
 - [ ] `sdlc milestone-close --issue 133 --milestone M5`.
 
+## Chunk 6: M6 — Review-diagnostic display (wrapped inline why + cursor auto-show)
+
+Added in acceptance test. The edit "why" is attached but only shows as a
+sign/underline (or, with `virtual_text`, truncated single-line). Make it readable:
+hard-wrap the explanation, anchor each diagnostic over its edit's line range, and
+default `virtual_lines { current_line = true }` scoped to parley's namespace so
+the wrapped why **auto-expands below the edit when the cursor is in its region**.
+A `:ParleyShowDiagnostics` command toggles it. Pure wrap + thin display config
+(`ARCH-PURE`); reuses the existing `parley_skill` diagnostic namespace
+(`ARCH-DRY`). Composes with M5 (re-renders on undo/redo).
+
+### Task 6.1: pure `wrap` + region-anchored, wrapped diagnostics
+
+**Files:** Modify `lua/parley/skill_render.lua`; Test `tests/unit/skill_render_spec.lua`.
+
+- [ ] **6.1a** pure `wrap(text, width)` → message hard-wrapped at word boundaries
+  (newlines inserted) so `virtual_lines` renders it as multiple wrapped rows.
+- [ ] **6.1b** `attach_diagnostics` wraps each `explain` and sets `end_lnum` to span
+  the edit's line range (so "cursor in the region" matches), keeping `lnum`.
+- [ ] test + pass + commit.
+
+### Task 6.2: display toggle (`diag_display`) + `:ParleyShowDiagnostics`
+
+**Files:** Create `lua/parley/skills/review/diag_display.lua`; Modify `lua/parley/init.lua` (command + default-on wiring); Test `tests/integration/review_diag_display_spec.lua`.
+
+- [ ] **6.2a** `diag_display`: `set(on)` → `vim.diagnostic.config({virtual_lines =
+  on and {current_line=true} or false, virtual_text=false}, parley_ns)`; `toggle`;
+  `is_enabled`. Default on. (parley_ns = `nvim_create_namespace("parley_skill")`.)
+- [ ] **6.2b** register `:ParleyShowDiagnostics` (toggles) + enable on setup.
+- [ ] test (toggle flips state + config) + pass + commit.
+
+### Task 6.3: manual e2e + M6 boundary
+
+- [ ] Manual: run a round with a long explanation → cursor onto the edit → the
+  wrapped why expands below; move off → it hides; `:ParleyShowDiagnostics` toggles
+  it off/on. Document in `## Log`.
+- [ ] `sdlc milestone-close --issue 133 --milestone M6`.
+
 ## Notes / risks
 
 - **`ARCH-DRY`:** the modes engine adds *no* new driver — it rides `skill_invoke` + the provider's `source(ctx)` composition (mirrors `voice_apply`). Mode bodies must not restate the marker grammar/tool contract the base `SKILL.md` owns.
@@ -550,3 +588,9 @@ keeps riding (behavior B) and is itself recorded. Pure decide + thin IO
 **Reason:** acceptance testing surfaced three issues fixed alongside M5 (not in Chunk 5's projection-only scope); recorded here per AGENTS.md §1.
 
 **Delta:** (a) **Menu navigation reworked to cursor-line selection** — the menu now focuses the *list* window; `j`/`k`/arrows/mouse move the selection natively (the prior C-j/C-k-in-insert scheme was undiscoverable, and C-j is eaten as `<NL>` by terminals). `Tab`/`i` → instruction box; `Enter`/`M-CR`/`C-s` run; `Esc`/`C-c` cancel. (b) **Editorial mode order** — modes gained an optional `order:` frontmatter field (developmental=1 … free-form=6); `mode.parse` reads it and `mode.list` sorts by `order` then name, so the menu lists the document-construction sequence rather than alphabetically (Spec §1 table order). (c) **Stringified-`edits` tolerance** — `skill_invoke` now coerces a `propose_edits.edits` arg that a model emitted as a JSON string (so the batch applies), and `render_propose_edits` guards a non-table `edits` (no crash). (d) M5 review hardening: the projection watcher dropped `TextChangedI` (per-keystroke whole-buffer hashing) for `TextChanged`+`InsertLeave`, and bounded `records` (FIFO cap 200); `reset` now removes the watcher autocmd.
+
+### 2026-06-18 — post-M6 acceptance-test fixes
+
+**Reason:** three issues observed in operator e2e.
+
+**Delta:** (a) **Bindings corrected** — `<M-o>` now opens the general **skill picker** (review is one skill among many); `<M-CR>` is the **direct review trigger** (opens the review-mode menu). Previously both opened the review menu. (b) **Accept/reject (`<M-a>`/`<M-r>`) preserves review decorations** — the resolver replaced the *whole* buffer (`set_lines(0,-1)`), wiping every highlight + diagnostic; it now replaces only the marker's line range so decorations elsewhere ride (extmark gravity), like a manual edit, with a content-verification fallback to the full replace if the range math is ever off. (c) **In-flight review is no longer an error** — `run_via_invoke` warns and offers to kill the running review and submit a new one (`vim.fn.confirm`); `skill_invoke.cancel` stops the query and a per-buffer **generation guard** makes the cancelled query's late `on_exit`/`on_abort` a no-op so it can't clobber the new exchange.
