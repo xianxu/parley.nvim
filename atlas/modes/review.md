@@ -169,6 +169,18 @@ and hides otherwise. `:ParleyShowDiagnostics` toggles it. The built-in `]d`/`[d`
 (jump) and `<C-W>d` (float, wraps) also work on these diagnostics. Composes with
 M5 — re-renders on undo/redo.
 
+## Progress bar (#133 M7)
+
+A review round is headless and takes ~30s, so it shows a **detached progress
+bar** — `lua/parley/progress.lua`, a floating bar pinned just above the
+statusline with an animated spinner + message + elapsed seconds. It's a **general
+reusable mechanism** (`progress.start/update/stop/is_active`, one active at a
+time; pure `frame`/`format` + thin float/timer IO), not review-specific — review
+is just its first user. `skill_invoke` starts it when the LLM query launches and
+stops it on exit/abort/cancel (guarded by the same generation counter as the
+in-flight cancel). Concurrency: triggering a review while one runs gives the
+kill-or-cancel prompt (no two concurrent rounds).
+
 ## Config
 
 ```lua
@@ -189,6 +201,7 @@ review_shortcut_finder = { modes = { "n", "i" }, shortcut = "<C-g>vf" },
 - `lua/parley/review_menu.lua` — composite review-mode menu (selector + instruction editor); `<M-o>`/`<M-CR>` (#133)
 - `lua/parley/skills/review/projection.lua` — decoration projection: re-render style on undo/redo per content-state (#133 M5)
 - `lua/parley/skills/review/diag_display.lua` — inline "why" display toggle (`:ParleyShowDiagnostics`, cursor-region auto-show) (#133 M6)
+- `lua/parley/progress.lua` — detached progress bar (general reusable long-op feedback; review is the first user) (#133 M7)
 - `lua/parley/skills/review/SKILL.md` — system prompt (light edit + heavy revision sections)
 - `lua/parley/skill_invoke.lua` — the P2 driver (one tool-use exchange via the existing dispatcher)
 - `lua/parley/skill_render.lua` — diagnostics + edit highlights
