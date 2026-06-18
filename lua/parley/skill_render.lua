@@ -34,6 +34,14 @@ end
 --- the next round start; this lets the operator clear them on demand.
 M.dismiss = M.clear_decorations
 
+--- The review diagnostic namespace id — the single source other modules
+--- (diag_display) target, so the namespace identity isn't duplicated as a literal
+--- string in two places (#133 M6 review).
+function M.diag_namespace()
+    ensure_namespaces()
+    return diag_ns_id
+end
+
 --- Hard-wrap text to `width` columns at word boundaries (greedy), preserving any
 --- existing newlines. PURE. Lets `virtual_lines` render a long "why" as multiple
 --- wrapped rows (nvim doesn't soft-wrap virtual text). A word longer than width

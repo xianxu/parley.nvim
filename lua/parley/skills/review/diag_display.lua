@@ -10,10 +10,10 @@ local M = {}
 
 M.enabled = true -- default on (cursor-region auto-show)
 
--- Parley's review diagnostic namespace — same name as skill_render's DIAG_NS, so
--- nvim_create_namespace returns that exact namespace id.
+-- Parley's review diagnostic namespace — single-sourced from skill_render (which
+-- owns the namespace) so the identity isn't a duplicated literal (#133 M6 review).
 local function ns()
-    return vim.api.nvim_create_namespace("parley_skill")
+    return require("parley.skill_render").diag_namespace()
 end
 
 --- Apply the inline-display config for parley's review namespace.

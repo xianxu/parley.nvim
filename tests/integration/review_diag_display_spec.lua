@@ -3,7 +3,7 @@
 local dd = require("parley.skills.review.diag_display")
 
 local function ns_cfg()
-    return vim.diagnostic.config(nil, vim.api.nvim_create_namespace("parley_skill"))
+    return vim.diagnostic.config(nil, require("parley.skill_render").diag_namespace())
 end
 
 describe("review.diag_display", function()
