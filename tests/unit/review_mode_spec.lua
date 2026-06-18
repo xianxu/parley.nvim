@@ -50,3 +50,24 @@ describe("review.mode.parse", function()
         assert.is_truthy(err:match("name"))
     end)
 end)
+
+describe("review.mode.directives", function()
+    it("renders whole-doc + apply-with-gutter-why + frontier off", function()
+        local d = mode.directives({ name = "x", scope = "whole-doc", deletions = "apply-with-gutter-why", frontier = "off", body = "" })
+        assert.is_truthy(d:lower():find("whole document", 1, true))
+        assert.is_truthy(d:lower():find("reason", 1, true))      -- apply-with-gutter-why
+        assert.is_falsy(d:lower():find("settled", 1, true))      -- frontier off → no frontier line
+    end)
+
+    it("renders markers-only + propose-strike + frontier on", function()
+        local d = mode.directives({ name = "x", scope = "markers-only", deletions = "propose-strike", frontier = "on", body = "" })
+        assert.is_truthy(d:find("markers", 1, true))             -- markers-only scope
+        assert.is_truthy(d:lower():find("strike", 1, true))      -- propose-strike
+        assert.is_truthy(d:lower():find("settled", 1, true))     -- frontier on
+    end)
+
+    it("renders 'apply' deletions as silent", function()
+        local d = mode.directives({ name = "x", scope = "whole-doc", deletions = "apply", frontier = "on", body = "" })
+        assert.is_truthy(d:lower():find("silently", 1, true))
+    end)
+end)

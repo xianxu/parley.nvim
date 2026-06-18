@@ -67,6 +67,31 @@ function M.parse(content)
     return out
 end
 
+--- Render a Mode's flags into prose directives the model obeys this round. PURE.
+--- The base SKILL.md owns the marker grammar/tool contract; this only states
+--- which *behavior* the selected mode wants — it does not restate the grammar.
+--- @param m table  a parsed Mode
+--- @return string  directive block
+function M.directives(m)
+    local lines = { "## How to apply this round" }
+    if m.scope == "whole-doc" then
+        table.insert(lines, "- Scope: edit the whole document as the mode brief directs; markers are optional.")
+    else
+        table.insert(lines, "- Scope: confine edits to text referenced by 🤖 markers; leave the rest untouched.")
+    end
+    if m.frontier == "on" then
+        table.insert(lines, "- Reading frontier: treat everything above the topmost 🤖[] human marker as settled — confine edits and findings to that marker and below.")
+    end
+    if m.deletions == "apply-with-gutter-why" then
+        table.insert(lines, "- Deletions: apply removals directly, and state the reason so the operator sees why it went.")
+    elseif m.deletions == "apply" then
+        table.insert(lines, "- Deletions: apply mechanical removals directly and silently.")
+    else -- propose-strike
+        table.insert(lines, "- Deletions/replacements: do NOT apply them — propose each as a 🤖~old~{new} strike marker for the operator to accept or reject.")
+    end
+    return table.concat(lines, "\n")
+end
+
 --------------------------------------------------------------------------------
 -- IO seam (thin) over the pure M.parse — reads modes/<name>.md files.
 --------------------------------------------------------------------------------

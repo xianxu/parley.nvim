@@ -441,10 +441,54 @@ end
 -- Skill definition
 --------------------------------------------------------------------------------
 
+-- Resolve the review skill's own modes/ dir via runtimepath (the provider also
+-- injects ctx.skill_dir at invoke time; this is the fallback for the `complete`
+-- arg picker, which runs outside a source(ctx) call).
+local function modes_dir()
+    return (vim.api.nvim_get_runtime_file("lua/parley/skills/review/modes", false) or {})[1]
+end
+
 M.skill = {
     name = "review",
     description = "Edit document based on review markers",
-    args = {},
+
+    -- The `mode` arg selects a review stage; values come from modes/*.md (#133).
+    args = {
+        {
+            name = "mode",
+            description = "review mode",
+            complete = function()
+                local dir = modes_dir()
+                local names = {}
+                for _, m in ipairs(dir and require("parley.skills.review.mode").list(dir) or {}) do
+                    table.insert(names, m.name)
+                end
+                return names
+            end,
+        },
+    },
+
+    -- Compose the system body: base SKILL.md ⊕ the selected mode's brief ⊕ its
+    -- flag directives ⊕ any free-form operator instruction. PURE given ctx
+    -- (the provider injects ctx.skill_md + ctx.skill_dir). With no mode, returns
+    -- the base SKILL.md unchanged — the legacy marker-only review. (#133)
+    source = function(ctx)
+        ctx = ctx or {}
+        local mode = require("parley.skills.review.mode")
+        local args = ctx.args or {}
+        local parts = { ctx.skill_md or "" }
+        if args.mode and args.mode ~= "" and ctx.skill_dir then
+            local m = mode.load(ctx.skill_dir .. "/modes", args.mode)
+            if m then
+                table.insert(parts, "\n\n## Review mode: " .. m.name .. "\n" .. m.body)
+                table.insert(parts, "\n\n" .. mode.directives(m))
+            end
+        end
+        if args.instruction and args.instruction ~= "" then
+            table.insert(parts, "\n\n## Operator instruction\n" .. args.instruction)
+        end
+        return table.concat(parts)
+    end,
 
     -- Declarative manifest fields (#128). Runs through the skill_invoke driver
     -- (M3/M4); the marker pre-check + resubmit loop live in M.run_via_invoke

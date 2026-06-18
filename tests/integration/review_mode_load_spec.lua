@@ -46,6 +46,29 @@ describe("review.mode IO seam", function()
     end)
 end)
 
+describe("review skill source composition", function()
+    it("composes SKILL.md ⊕ mode body ⊕ directives ⊕ instruction", function()
+        local review = require("parley.skills.review")
+        local review_dir = (vim.api.nvim_get_runtime_file("lua/parley/skills/review", false) or {})[1]
+        assert.is_truthy(review_dir)
+        local body = review.skill.source({
+            skill_md = "BASE-SKILL-MD",
+            skill_dir = review_dir,
+            args = { mode = "developmental", instruction = "tighten the intro" },
+        })
+        assert.is_truthy(body:find("BASE-SKILL-MD", 1, true), "includes base SKILL.md")
+        assert.is_truthy(body:find("Review mode: developmental", 1, true), "names the mode")
+        assert.is_truthy(body:lower():find("whole document", 1, true), "includes scope directive")
+        assert.is_truthy(body:find("tighten the intro", 1, true), "includes operator instruction")
+    end)
+
+    it("returns base SKILL.md alone when no mode is given (legacy marker-only review)", function()
+        local review = require("parley.skills.review")
+        local body = review.skill.source({ skill_md = "ONLY-BASE", args = {} })
+        assert.are.equal("ONLY-BASE", body)
+    end)
+end)
+
 describe("shipped review mode files", function()
     it("all six load and parse cleanly", function()
         local modes_dir = (vim.api.nvim_get_runtime_file("lua/parley/skills/review/modes", false) or {})[1]
