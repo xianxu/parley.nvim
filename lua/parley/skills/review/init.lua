@@ -543,8 +543,22 @@ M.run_via_invoke = function(buf, args, resubmit_count)
             return
         end
         if ready_count_before == 0 then
-            M.populate_quickfix(buf, markers, "pending")
-            parley.logger.info("Review: no ready markers — pending agent questions await your reply")
+            -- Nothing actionable. Distinguish pending agent questions (surface
+            -- them) from strike-only / non-pending markers (accept/reject those
+            -- with <M-a>/<M-r> — there's nothing for the agent to do).
+            local has_pending = false
+            for _, m in ipairs(markers) do
+                if m.pending then
+                    has_pending = true
+                    break
+                end
+            end
+            if has_pending then
+                M.populate_quickfix(buf, markers, "pending")
+                parley.logger.info("Review: no ready markers — pending agent turns await your reply")
+            else
+                parley.logger.info("Review: nothing to do — markers present but none ready (e.g. strike proposals; accept/reject with <M-a>/<M-r>)")
+            end
             return
         end
     end

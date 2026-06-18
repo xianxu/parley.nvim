@@ -108,4 +108,12 @@ describe("review.run_via_invoke", function()
         review.run_via_invoke(buf, {})
         assert.are.equal(1, #invoke_calls)
     end)
+
+    it("does NOT invoke a strike-only doc with no mode (no ready markers)", function()
+        -- A bare strike (🤖~del~) is a proposal, not agent-actionable: no mode +
+        -- no ready marker → nothing to do, no LLM call (M2 review-finding pin).
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "prose 🤖~delete this~" })
+        review.run_via_invoke(buf, {})
+        assert.are.equal(0, #invoke_calls)
+    end)
 end)
