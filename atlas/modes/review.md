@@ -57,6 +57,30 @@ Review is implemented as a **skill** in the unified skill system (see `atlas/ind
 - **Feedback**: Highlights on edits (DiffChange), diagnostics from explain fields (INFO), quickfix for pending agent questions
 - **Provider**: Requires Anthropic or cliproxyapi (tool_use support)
 
+## Review Modes (#133)
+
+Review runs in a selectable **mode** (a stage of document construction). A mode is
+a sub-markdown file `lua/parley/skills/review/modes/<name>.md` = YAML frontmatter
+(behavior flags) + a prompt body. One skill owns all modes; there is no parallel
+engine — the review skill's `source(ctx)` composes `SKILL.md ⊕ mode.body ⊕
+mode.directives(flags) ⊕ operator-instruction`. No mode selected → base SKILL.md
+(the legacy marker-only review).
+
+- **`lua/parley/skills/review/mode.lua`** — `parse(content)` (PURE: frontmatter →
+  `{name,scope,deletions,frontier,body}`), `directives(m)` (PURE: flags → prose the
+  model obeys), and the thin IO seam `load(dir,name)`/`list(dir)`. Canonical name ==
+  file basename (kebab), so `load` resolves by the selected name; the M4 menu
+  prettifies for display.
+- **Behavior flags:** `scope` (`whole-doc` | `markers-only`), `deletions`
+  (`apply-with-gutter-why` | `propose-strike` | `apply`), `frontier` (`on` | `off`
+  — when on, treat text above the topmost `🤖[]` as settled).
+- **Six shipped modes:** developmental, line-editing, copy-editing, proofreading,
+  fact-check (inserts `🤖{}` findings only — no edits; resolution handed to the
+  main agent), free-form (operator instruction governs).
+- **`ctx.skill_dir` injection** (`skill_providers.lua`): the disk provider injects
+  the skill's own absolute dir into `source(ctx)` (alongside `ctx.skill_md`) so the
+  review skill reads its `modes/` subdir without re-deriving the path.
+
 ## Config
 
 ```lua
@@ -70,7 +94,9 @@ review_shortcut_finder = { modes = { "n", "i" }, shortcut = "<C-g>vf" },
 
 ## Key Files
 
-- `lua/parley/skills/review/init.lua` — skill definition, marker parsing, `run_via_invoke` (marker pre-check + resubmit), keybindings
+- `lua/parley/skills/review/init.lua` — skill definition (+ `source(ctx)` mode composition, `mode` arg), marker parsing, `run_via_invoke` (marker pre-check + resubmit), keybindings
+- `lua/parley/skills/review/mode.lua` — Mode parse/directives (PURE) + load/list IO seam (#133)
+- `lua/parley/skills/review/modes/*.md` — the six review-mode prompt files (#133)
 - `lua/parley/skills/review/SKILL.md` — system prompt (light edit + heavy revision sections)
 - `lua/parley/skill_invoke.lua` — the P2 driver (one tool-use exchange via the existing dispatcher)
 - `lua/parley/skill_render.lua` — diagnostics + edit highlights
