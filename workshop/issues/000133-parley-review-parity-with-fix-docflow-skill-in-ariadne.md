@@ -227,7 +227,7 @@ Detailed, executable plan: **`workshop/plans/000133-review-modes-journal-plan.md
 (authored via `superpowers-writing-plans`, fresh-eyes reviewed — see the
 2026-06-18 Log entry). Four milestone review boundaries:
 
-- [ ] M1 — Modes engine: `Mode` pure parser + 6 mode sub-files + `skill_dir` injection + review `source(ctx)` composition (reuses `skill_invoke`).
+- [x] M1 — Modes engine: `Mode` pure parser + 6 mode sub-files + `skill_dir` injection + review `source(ctx)` composition (reuses `skill_invoke`).
 - [ ] M2 — Flexible review flow: no-marker general review, submission decoupled from pending `{}` (quickfix on save), deletion gutter-why + decoration ride-until-next-round (B).
 - [ ] M3 — Journal sidecar: pure serialize/parse/diff/drift + thin IO append/read + `on_done` payload widening + wired into the round.
 - [ ] M4 — Composite review menu (mode selector + multi-line instruction editor) + `<M-o>`/`<M-CR>` bindings + sticky mode; manual e2e.
@@ -260,6 +260,7 @@ runtime machinery.
 Next: `sdlc start-plan` → durable plan in `workshop/plans/`.
 
 ### 2026-06-18
+- 2026-06-18: closed M1 — make test EXIT=0 (109 spec files pass; lint 0/0 in 206 files). M1: mode.parse+directives (8 unit), load/list+6 mode files+source composition (6 integration), skill_dir injection (10 provider tests). Legacy marker-only review preserved.; review verdict: FIX-THEN-SHIP
 
 Drafted the durable plan (`workshop/plans/000133-review-modes-journal-plan.md`,
 4 milestones) and ran a fresh-eyes plan review — caught 1 blocking issue (the
