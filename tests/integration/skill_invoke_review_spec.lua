@@ -82,4 +82,30 @@ describe("review.run_via_invoke", function()
         invoke_calls[1].opts.on_done({ ok = false, msg = "tool error" })
         assert.are.equal(1, #invoke_calls)
     end)
+
+    -- M2 (#133): no-marker general review + submission decoupled from pending {}.
+
+    it("invokes a mode run even with NO markers (general review)", function()
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "plain prose, no markers" })
+        review.run_via_invoke(buf, { mode = "developmental" })
+        assert.are.equal(1, #invoke_calls)
+        assert.are.equal("developmental", invoke_calls[1].args.mode)
+    end)
+
+    it("does NOT resubmit when a mode round inserts {} findings (fact-check 0→N)", function()
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "a dubious claim" }) -- 0 markers
+        review.run_via_invoke(buf, { mode = "fact-check" })
+        assert.are.equal(1, #invoke_calls)
+        -- the round inserted a finding marker (0 → 1 pending); one-shot, no resubmit
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "a dubious claim 🤖{is this true?}" })
+        invoke_calls[1].opts.on_done({ ok = true })
+        assert.are.equal(1, #invoke_calls)
+    end)
+
+    it("invokes (processes ready) even when an unaddressed pending {} marker is present", function()
+        -- Was blocked pre-#133 (#pending > 0 → return); now the ready [] is processed.
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "🤖[fix me]", "prose 🤖{agent asked earlier}" })
+        review.run_via_invoke(buf, {})
+        assert.are.equal(1, #invoke_calls)
+    end)
 end)

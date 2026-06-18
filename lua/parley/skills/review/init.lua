@@ -515,30 +515,42 @@ M.run_via_invoke = function(buf, args, resubmit_count)
     local parley = get_parley()
     local skill_render = require("parley.skill_render")
 
-    -- Pre-check (was pre_submit): abort if there are no markers, or if the agent
-    -- spoke last (pending question awaiting the human).
+    -- Count markers the agent should ACT on (last section a non-empty []).
+    local function count_ready(ms)
+        local n = 0
+        for _, m in ipairs(ms) do
+            if m.ready then n = n + 1 end
+        end
+        return n
+    end
+
+    -- Pre-check. A MODE run always proceeds — whole-doc modes work with zero
+    -- markers (the headline no-marker general review, #133). A legacy
+    -- marker-only run (no mode) needs at least one READY `[]` marker: pending
+    -- `{}` markers no longer BLOCK submission (they're skipped and re-surface via
+    -- the on-save quickfix), but if they're the only markers and no mode is set
+    -- there's nothing to process.
     local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
     local markers = M.parse_markers(lines)
-    if #markers == 0 then
-        skill_render.clear_decorations(buf)
-        vim.fn.setqflist({}, "r")
-        pcall(vim.cmd, "cclose")
-        parley.logger.info("Review: complete — no markers found")
-        return
+    local has_mode = args.mode ~= nil and args.mode ~= ""
+    local ready_count_before = count_ready(markers)
+    if not has_mode then
+        if #markers == 0 then
+            skill_render.clear_decorations(buf)
+            vim.fn.setqflist({}, "r")
+            pcall(vim.cmd, "cclose")
+            parley.logger.info("Review: complete — no markers found")
+            return
+        end
+        if ready_count_before == 0 then
+            M.populate_quickfix(buf, markers, "pending")
+            parley.logger.info("Review: no ready markers — pending agent questions await your reply")
+            return
+        end
     end
-    local pending = {}
-    for _, marker in ipairs(markers) do
-        if marker.pending then table.insert(pending, marker) end
-    end
-    if #pending > 0 then
-        M.populate_quickfix(buf, pending, "pending")
-        parley.logger.warning("Review: " .. #pending .. " marker(s) need your response")
-        return
-    end
+    -- Proceeding: clear stale quickfix (pending markers re-surface on save).
     vim.fn.setqflist({}, "r")
     pcall(vim.cmd, "cclose")
-
-    local marker_count_before = #markers
 
     -- NB: skill_registry's get/names are plain-function fields → call with DOT,
     -- not colon (colon would pass the registry as the `name` arg).
@@ -554,35 +566,24 @@ M.run_via_invoke = function(buf, args, resubmit_count)
             if not result or not result.ok then
                 return -- skill_invoke already surfaced the error
             end
-            -- Post-apply (was post_apply): resubmit while ready markers remain.
             local new_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
             local remaining = M.parse_markers(new_lines)
             if #remaining == 0 then
                 parley.logger.info("Review: all comments addressed")
                 return
             end
-            -- NO-PROGRESS GUARD: only resubmit if the marker set actually SHRANK.
-            -- Catches every stuck case — empty/no-op edits, the model editing the
-            -- wrong place, an unaddressable marker — that would otherwise loop
-            -- (bounded at 3) with no progress. (Stricter than the v1 engine, which
-            -- only guarded the empty-edits + no-apply cases.)
-            if #remaining >= marker_count_before then
-                parley.logger.info("Review: no progress (markers unchanged) — stopping")
-                return
-            end
-            local has_questions = false
-            for _, marker in ipairs(remaining) do
-                if marker.pending then
-                    has_questions = true
-                    break
-                end
-            end
-            if has_questions then
-                M.populate_quickfix(buf, remaining, "pending")
-                parley.logger.info("Review: agent has follow-up questions")
-            elseif resubmit_count < 3 then
-                parley.logger.info("Review: " .. #remaining .. " marker(s) remain, resubmitting...")
+            -- Resubmit ONLY when actionable (ready `[]`) work remains AND it
+            -- shrank. A whole-doc mode round is one-shot — it may legitimately
+            -- INSERT `{}` findings (fact-check), which is not "stuck"; a `{}`-only
+            -- or non-shrinking remainder ends the round cleanly. Pending `{}`
+            -- markers surface via the on-save quickfix, not here (#133). Bounded
+            -- at 3 like the v1 path.
+            local ready_remaining = count_ready(remaining)
+            if ready_remaining > 0 and ready_remaining < ready_count_before and resubmit_count < 3 then
+                parley.logger.info("Review: " .. ready_remaining .. " ready marker(s) remain, resubmitting...")
                 M.run_via_invoke(buf, args, resubmit_count + 1)
+            else
+                parley.logger.info("Review: round complete")
             end
         end,
     })
