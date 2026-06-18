@@ -704,13 +704,32 @@ M.setup_keymaps = function(buf)
     -- retired because they duplicated that path with divergent
     -- output shapes.
 
-    -- <C-g>ve: run review
+    -- <C-g>ve: run review (legacy marker-only, no mode)
     local edit_cfg = cfg.review_shortcut_edit
     if edit_cfg then
         for _, mode in ipairs(edit_cfg.modes or {}) do
             set_keymap({ buf }, mode, edit_cfg.shortcut, function()
                 M.run_via_invoke(buf, {})
             end, "Parley review: process markers")
+        end
+    end
+
+    -- <M-o> opens the review-mode menu; <M-CR> (re)opens it pre-selected to the
+    -- sticky mode for fast ping-pong. Both run a round on submit with the chosen
+    -- {mode, instruction}. The menu pre-selects the last-used mode either way, so
+    -- they share one callback. (#133 M4)
+    local function open_menu()
+        require("parley.review_menu").open({
+            on_submit = function(r)
+                M.run_via_invoke(buf, { mode = r.mode, instruction = r.instruction })
+            end,
+        })
+    end
+    for _, spec in ipairs({ cfg.review_shortcut_menu, cfg.review_shortcut_next }) do
+        if spec then
+            for _, mode in ipairs(spec.modes or {}) do
+                set_keymap({ buf }, mode, spec.shortcut, open_menu, "Parley review: open mode menu")
+            end
         end
     end
 end

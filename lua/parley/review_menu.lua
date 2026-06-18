@@ -20,11 +20,12 @@ local function pretty(name)
     return (name:gsub("%-", " "))
 end
 
---- Open the review menu on `buf`.
---- @param buf number  the artifact buffer the review will run on
+--- Open the review menu. The menu manages its own windows; the caller's
+--- `on_submit` carries the action on the artifact buffer, so no buffer arg is
+--- needed here.
 --- @param opts table|nil { on_submit = fun({mode,instruction}), mode?, instruction? }
 --- @return table|nil handle  { submit, move, selected, close } (nil if no modes)
-function M.open(buf, opts)
+function M.open(opts)
     opts = opts or {}
     local on_submit = opts.on_submit or function() end
     local mode = require("parley.skills.review.mode")
