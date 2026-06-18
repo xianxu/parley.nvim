@@ -29,6 +29,11 @@ function M.clear_decorations(buf)
     vim.api.nvim_buf_clear_namespace(buf, hl_ns_id, 0, -1)
 end
 
+--- Dismiss the live round decorations (manual <dismiss> binding). Decorations
+--- otherwise RIDE subsequent edits (behavior B, #133) and are cleared only at
+--- the next round start; this lets the operator clear them on demand.
+M.dismiss = M.clear_decorations
+
 --- Attach INFO diagnostics from edit explanations.
 --- @param buf number
 --- @param edits table[]  applied edits with {pos, explain}
@@ -59,7 +64,13 @@ end
 function M.highlight_edits(buf, edits, new_content)
     ensure_namespaces()
     for _, edit in ipairs(edits) do
-        local new_pos = new_content:find(edit.new_string, 1, true)
+        -- Skip pure deletions: new_string is "" and `find("")` returns 1, which
+        -- would spuriously highlight line 0. Deletions are oriented by their
+        -- INFO gutter diagnostic (the "why") via attach_diagnostics, not a
+        -- highlight (there's no new text to mark). #133.
+        local new_pos = (edit.new_string and edit.new_string ~= "")
+            and new_content:find(edit.new_string, 1, true)
+            or nil
         if new_pos then
             local start_line = 0
             for _ in new_content:sub(1, new_pos):gmatch("\n") do

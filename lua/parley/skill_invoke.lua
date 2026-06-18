@@ -42,11 +42,20 @@ local function render_propose_edits(buf, call, original, new_content)
     for _, e in ipairs((call.input or {}).edits or {}) do
         local pos = original:find(e.old_string, 1, true)
         if pos then
-            table.insert(edits, { pos = pos, explain = e.explain, new_string = e.new_string })
+            table.insert(edits, {
+                pos = pos,
+                explain = e.explain,
+                new_string = e.new_string,
+                -- A pure deletion (empty new_string) is oriented by its gutter
+                -- "why" diagnostic, not a highlight (skill_render skips it). #133
+                kind = (e.new_string == nil or e.new_string == "") and "delete" or "edit",
+            })
         end
     end
     skill_render.attach_diagnostics(buf, edits, original)
     skill_render.highlight_edits(buf, edits, new_content)
+    -- Return the decoration set so the caller can journal it (M3 #133).
+    return edits
 end
 
 -- Reload the artifact buffer from its (now-edited) file. Uses `:edit!` (a
