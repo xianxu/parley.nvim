@@ -44,6 +44,11 @@ describe("review.mode.parse", function()
         assert.is_truthy(err)
     end)
 
+    it("captures an optional editorial-sequence order", function()
+        assert.are.equal(3, mode.parse("---\nname: x\norder: 3\n---\nb").order)
+        assert.is_nil(mode.parse("---\nname: y\n---\nb").order)
+    end)
+
     it("treats a --- in the body as content, not the closing fence", function()
         local m = mode.parse("---\nname: x\nscope: whole-doc\n---\nIntro.\n\n---\n\nMore.")
         assert.are.equal("whole-doc", m.scope)

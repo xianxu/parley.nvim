@@ -57,6 +57,9 @@ function M.parse(content)
     local body = content:sub((nl_after_fence or #content) + 1)
 
     local out = { name = flags.name, body = (body:gsub("%s+$", "")) }
+    -- Optional editorial-sequence position (developmental → … → free-form), used
+    -- to order the menu by the document-construction workflow, not alphabetically.
+    out.order = tonumber(flags.order)
     for key, default in pairs(DEFAULT) do
         local val = flags[key] or default
         if not VALID[key][val] then
@@ -145,7 +148,12 @@ function M.list(dir)
             end
         end
     end
+    -- Editorial sequence (by `order:`), then name as a stable tiebreak.
     table.sort(out, function(a, b)
+        local ao, bo = a.order or math.huge, b.order or math.huge
+        if ao ~= bo then
+            return ao < bo
+        end
         return a.name < b.name
     end)
     return out

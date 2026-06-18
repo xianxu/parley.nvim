@@ -110,6 +110,30 @@ describe("skill_invoke.invoke", function()
         assert.are.equal("uppercase", done_result.decorations[1].explain)
     end)
 
+    it("coerces a stringified edits array and applies it (model quirk, #133)", function()
+        -- Some models emit the propose_edits `edits` arg as a JSON STRING, not an
+        -- array. The driver must coerce it (so it applies) and not crash the renderer.
+        parley.dispatcher.query = function(_b, _p, _payload, _h, on_exit)
+            local edits_str = vim.json.encode({ { old_string = "alpha", new_string = "ALPHA", explain = "up" } })
+            tasker.set_query("qid_str", {
+                raw_response = sse({
+                    { type = "content_block_start", index = 0,
+                      content_block = { type = "tool_use", id = "t1", name = "propose_edits", input = {} } },
+                    { type = "content_block_delta", index = 0,
+                      delta = { type = "input_json_delta", partial_json = vim.json.encode({ edits = edits_str }) } },
+                    { type = "content_block_stop", index = 0 },
+                    { type = "message_stop" },
+                }),
+            })
+            vim.schedule(function() on_exit("qid_str") end)
+        end
+        skill_invoke.invoke(buf, manifest(), {}, { on_done = function(r) done_result = r end })
+        vim.wait(2000, function() return done_result ~= nil end)
+        assert.is_not_nil(done_result, "on_done never ran (renderer likely crashed)")
+        assert.is_true(done_result.ok)
+        assert.are.equal("ALPHA beta", table.concat(vim.fn.readfile(path), "\n"))
+    end)
+
     it("surfaces a failed edit: on_done ok=false, applied=0, file untouched", function()
         -- non-unique old_string → compute_edits fails → propose_edits is_error
         vim.fn.writefile({ "ab ab" }, path)

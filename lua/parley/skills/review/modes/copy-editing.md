@@ -1,5 +1,6 @@
 ---
 name: copy-editing
+order: 3
 scope: whole-doc
 deletions: propose-strike
 frontier: on

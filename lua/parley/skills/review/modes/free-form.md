@@ -1,5 +1,6 @@
 ---
 name: free-form
+order: 6
 scope: whole-doc
 deletions: propose-strike
 frontier: off

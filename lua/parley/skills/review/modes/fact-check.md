@@ -1,5 +1,6 @@
 ---
 name: fact-check
+order: 5
 scope: whole-doc
 deletions: propose-strike
 frontier: on

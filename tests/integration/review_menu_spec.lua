@@ -58,11 +58,12 @@ describe("review_menu", function()
 
     it("selection follows the list-window cursor (so j/k/mouse select natively)", function()
         local h = menu.open({})
-        -- moving the list cursor is exactly what j/k and a mouse click do
-        vim.api.nvim_win_set_cursor(h.list_win, { 2, 0 })
-        assert.are.equal("developmental", h.selected()) -- 2nd in the sorted list
+        -- moving the list cursor is exactly what j/k and a mouse click do.
+        -- Order is editorial: developmental(1), line-editing(2), …
         vim.api.nvim_win_set_cursor(h.list_win, { 1, 0 })
-        assert.are.equal("copy-editing", h.selected())
+        assert.are.equal("developmental", h.selected())
+        vim.api.nvim_win_set_cursor(h.list_win, { 2, 0 })
+        assert.are.equal("line-editing", h.selected())
         h.close()
     end)
 

@@ -1,5 +1,6 @@
 ---
 name: line-editing
+order: 2
 scope: whole-doc
 deletions: propose-strike
 frontier: on

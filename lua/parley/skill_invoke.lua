@@ -39,7 +39,14 @@ end
 local function render_propose_edits(buf, call, original, new_content)
     local skill_render = require("parley.skill_render")
     local edits = {}
-    for _, e in ipairs((call.input or {}).edits or {}) do
+    -- Guard against a malformed call where `edits` isn't an array (e.g. a model
+    -- that stringified it and coercion failed, or a truncated response) — the
+    -- tool already surfaced its own error; the renderer must not crash. #133
+    local edits_in = (call.input or {}).edits
+    if type(edits_in) ~= "table" then
+        edits_in = {}
+    end
+    for _, e in ipairs(edits_in) do
         local pos = original:find(e.old_string, 1, true)
         if pos then
             table.insert(edits, {
@@ -169,6 +176,15 @@ function M.invoke(buf, manifest, args, opts)
                     if call.name == "propose_edits" then
                         call.input = call.input or {}
                         call.input.file_path = artifact_path -- artifact-bound
+                        -- Some models emit `edits` as a JSON STRING rather than an
+                        -- array; coerce it once here so the batch actually applies
+                        -- (and render_propose_edits below gets a table). #133
+                        if type(call.input.edits) == "string" then
+                            local ok, decoded = pcall(vim.json.decode, call.input.edits)
+                            if ok and type(decoded) == "table" then
+                                call.input.edits = decoded
+                            end
+                        end
                     end
                     results[i] = tools_dispatcher.execute_call(call, tools_registry, { cwd = cwd })
                     if call.name == "propose_edits" then

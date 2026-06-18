@@ -1,5 +1,6 @@
 ---
 name: proofreading
+order: 4
 scope: whole-doc
 deletions: apply
 frontier: on

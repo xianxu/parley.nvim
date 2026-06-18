@@ -75,19 +75,18 @@ describe("review skill source composition", function()
 end)
 
 describe("shipped review mode files", function()
-    it("all six load and parse cleanly", function()
+    it("all six load in editorial order (developmental → … → free-form)", function()
         local modes_dir = (vim.api.nvim_get_runtime_file("lua/parley/skills/review/modes", false) or {})[1]
         assert.is_truthy(modes_dir, "review/modes dir must be on the runtimepath")
         local list = mode.list(modes_dir)
         local names = {}
-        for _, m in ipairs(list) do
-            names[m.name] = m
+        for i, m in ipairs(list) do
+            names[i] = m.name -- canonical name == kebab basename; menu prettifies
         end
-        -- Canonical name == file basename (kebab), so mode.load(dir, name) resolves;
-        -- the M4 menu prettifies kebab → spaces for display.
-        for _, want in ipairs({ "developmental", "line-editing", "copy-editing", "proofreading", "fact-check", "free-form" }) do
-            assert.is_truthy(names[want], "missing mode: " .. want)
-        end
-        assert.are.equal(6, #list)
+        -- Sorted by `order:` (the document-construction workflow), NOT alphabetically.
+        assert.are.same(
+            { "developmental", "line-editing", "copy-editing", "proofreading", "fact-check", "free-form" },
+            names
+        )
     end)
 end)
