@@ -34,9 +34,42 @@ end
 --- the next round start; this lets the operator clear them on demand.
 M.dismiss = M.clear_decorations
 
---- Attach INFO diagnostics from edit explanations.
+--- Hard-wrap text to `width` columns at word boundaries (greedy), preserving any
+--- existing newlines. PURE. Lets `virtual_lines` render a long "why" as multiple
+--- wrapped rows (nvim doesn't soft-wrap virtual text). A word longer than width
+--- stays on its own (overflowing) line rather than being split. (#133 M6)
+--- @param text string
+--- @param width number|nil  default 76
+--- @return string
+function M.wrap(text, width)
+    width = width or 76
+    local out = {}
+    for para in (tostring(text) .. "\n"):gmatch("(.-)\n") do
+        if para == "" then
+            table.insert(out, "")
+        else
+            local line = ""
+            for word in para:gmatch("%S+") do
+                if line == "" then
+                    line = word
+                elseif #line + 1 + #word <= width then
+                    line = line .. " " .. word
+                else
+                    table.insert(out, line)
+                    line = word
+                end
+            end
+            table.insert(out, line)
+        end
+    end
+    return table.concat(out, "\n")
+end
+
+--- Attach INFO diagnostics from edit explanations. Each diagnostic spans the
+--- edit's line range (lnum..end_lnum) so "cursor in the region" matches, and its
+--- message is hard-wrapped for `virtual_lines` display. (#133 M6)
 --- @param buf number
---- @param edits table[]  applied edits with {pos, explain}
+--- @param edits table[]  applied edits with {pos, explain, new_string?}
 --- @param original_content string  file content before edits
 function M.attach_diagnostics(buf, edits, original_content)
     ensure_namespaces()
@@ -46,10 +79,17 @@ function M.attach_diagnostics(buf, edits, original_content)
         for _ in original_content:sub(1, edit.pos):gmatch("\n") do
             line_num = line_num + 1
         end
+        -- end_lnum spans the edit's own lines (newlines in the new text); a pure
+        -- deletion (no new_string) stays a single-line anchor.
+        local span = 0
+        for _ in (edit.new_string or ""):gmatch("\n") do
+            span = span + 1
+        end
         table.insert(diagnostics, {
             lnum = line_num,
+            end_lnum = line_num + span,
             col = 0,
-            message = edit.explain or "edit applied",
+            message = M.wrap(edit.explain or "edit applied"),
             severity = vim.diagnostic.severity.INFO,
             source = "parley-skill",
         })
@@ -98,7 +138,7 @@ function M.snapshot(buf)
     end
     local diags = {}
     for _, d in ipairs(vim.diagnostic.get(buf, { namespace = diag_ns_id })) do
-        table.insert(diags, { lnum = d.lnum, message = d.message })
+        table.insert(diags, { lnum = d.lnum, end_lnum = d.end_lnum, message = d.message })
     end
     return { hl_lines = hl_lines, diags = diags }
 end
@@ -118,6 +158,7 @@ function M.apply_snapshot(buf, snap)
         for _, d in ipairs(snap.diags) do
             table.insert(diagnostics, {
                 lnum = d.lnum,
+                end_lnum = d.end_lnum or d.lnum,
                 col = 0,
                 message = d.message,
                 severity = vim.diagnostic.severity.INFO,

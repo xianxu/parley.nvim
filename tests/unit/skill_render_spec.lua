@@ -63,6 +63,27 @@ describe("skill_render", function()
         assert.are.equal(0, #marks)
     end)
 
+    it("wrap hard-wraps at word boundaries to the given width", function()
+        local w = skill_render.wrap("the quick brown fox jumps over the lazy dog", 12)
+        assert.is_truthy(w:find("\n"), "wrapped into multiple lines")
+        for line in (w .. "\n"):gmatch("(.-)\n") do
+            assert.is_true(#line <= 12 or not line:find(" ", 1, true), "within width or single long word: " .. line)
+        end
+    end)
+
+    it("attach_diagnostics wraps the message + spans the edit's lines (end_lnum)", function()
+        local buf = scratch({ "a", "b", "c", "d" })
+        local original = "a\nb\nc\nd"
+        local pos = original:find("b")
+        skill_render.attach_diagnostics(buf, {
+            { pos = pos, explain = string.rep("word ", 30), new_string = "x\ny" },
+        }, original)
+        local d = vim.diagnostic.get(buf)[1]
+        assert.are.equal(1, d.lnum) -- 0-based line of "b"
+        assert.are.equal(2, d.end_lnum) -- spans the 2-line new_string
+        assert.is_truthy(d.message:find("\n"), "long message is wrapped")
+    end)
+
     it("snapshot captures highlights + diagnostics; apply_snapshot restores them", function()
         local buf = scratch({ "line one", "line two", "line three" })
         local content = "line one\nline two\nline three"
