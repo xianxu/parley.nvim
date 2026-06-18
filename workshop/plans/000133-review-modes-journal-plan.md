@@ -471,4 +471,12 @@ end)
 - **`ARCH-PURE`:** `Mode`, `journal` (serialize/parse/diff/drift), and `mode_directives` are pure and unit-tested without mocks; IO is the thin `load`/`list`/`append`/`read` seam and the menu. The journal round is computed pure and handed to one `append`.
 - **Risk — frontmatter parser:** the minimal `k: v` scan (no YAML lib) is deliberate but must not choke on a `---` inside a body; `parse` keys off the *leading* `---\n` only. Covered by a test.
 - **Risk — resubmit loop with whole-doc modes:** a zero-marker mode round must not trip the no-progress guard. Explicit test in Task 2.1.
-- **Deferred (v2, out of scope):** active in-buffer undo-projection of past-round decorations; cross-session sticky mode; "revert/show round N" (the journal stores base+diffs+decoration sets to make these clean future adds).
+- **Deferred (v2, out of scope):** active in-buffer undo-projection of past-round decorations; cross-session sticky mode; "revert/show round N". The journal stores base + per-round diff + rationale (see Revisions — *not* a structured decoration set); v2 reconstructs decorations from the diff + rationale, or restores structured storage when built.
+
+## Revisions
+
+### 2026-06-18 — M3 journal stores diff+rationale, not a structured decoration set
+
+**Reason:** M3 boundary review (FIX-THEN-SHIP) flagged that Task 3.3 Step 3b / Spec §7 / Done-when call for storing the per-round **decoration set** (highlight ranges + diagnostic messages), but the shipped `journal.serialize_entry` stores only the flattened `explains` (rationale) + the unified diff.
+
+**Delta:** Deliberately keep the reduction (ARCH §6 YAGNI): the structured decoration set is needed only by the **deferred v2** in-buffer undo-projection, so persisting it now is speculative. The diff + rationale fully capture the round for the durable record; v2 either reconstructs decorations from diff + rationale (find each edit's text in the round's post-state, re-anchor its explain) or restores structured storage at that point. `skill_invoke`'s `on_done` already surfaces the live decoration set (`result.decorations`) so restoring storage later is a one-line change in review's `on_done`. The atlas note was corrected to match what's actually stored.

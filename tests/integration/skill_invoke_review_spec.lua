@@ -142,6 +142,26 @@ describe("review.run_via_invoke", function()
     end)
 end)
 
+describe("review journal sidecar exclusion (#133 M3)", function()
+    local function named(name)
+        local b = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_name(b, name)
+        return b
+    end
+    it("is_journal_sidecar matches only *.parley-journal.md", function()
+        assert.is_true(require("parley.skills.review").is_journal_sidecar(named("/tmp/doc.md.parley-journal.md")))
+        assert.is_false(require("parley.skills.review").is_journal_sidecar(named("/tmp/doc.md")))
+        assert.is_false(require("parley.skills.review").is_journal_sidecar(named("/tmp/parley-journal.txt")))
+    end)
+    it("setup_keymaps no-ops on a sidecar buffer (no review map bound)", function()
+        local b = named("/tmp/x.parley-journal.md")
+        require("parley.skills.review").setup_keymaps(b)
+        for _, m in ipairs(vim.api.nvim_buf_get_keymap(b, "n")) do
+            assert.is_nil(m.desc and m.desc:find("Parley review", 1, true))
+        end
+    end)
+end)
+
 describe("review.should_resubmit (pure)", function()
     it("resubmits while ready work remains, shrank, and under the bound", function()
         assert.is_true(review.should_resubmit(2, 1, 0)) -- 2→1 ready, round 0

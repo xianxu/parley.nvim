@@ -116,8 +116,10 @@ the journal owns the durable, cross-session record.
 - **Drift**: `is_drift(recorded_hash, current)` detects an external edit (e.g.
   Claude Code resolving markers) since the last recorded round.
 - **Deferred (v2)**: "revert/show round N" (reconstruct via base + replayed
-  diffs) and active in-buffer undo-projection of past-round decorations — the
-  journal already stores everything they need.
+  diffs) and active in-buffer undo-projection of past-round decorations. The
+  journal stores the **diff + rationale** per round (not a structured decoration
+  set — see the plan's Revisions); v2 reconstructs decorations from the diff +
+  rationale, or restores structured storage when that feature is built.
 
 ## Config
 

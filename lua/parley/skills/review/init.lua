@@ -605,7 +605,7 @@ M.run_via_invoke = function(buf, args, resubmit_count)
                         table.insert(explains, d.explain)
                     end
                 end
-                journal.append(doc_path, {
+                local jok, jerr = journal.append(doc_path, {
                     mode = args.mode,
                     side = "agent",
                     ts = os.date("!%Y-%m-%dT%H:%M:%S"),
@@ -613,6 +613,11 @@ M.run_via_invoke = function(buf, args, resubmit_count)
                     explains = explains,
                     diff = journal.diff(result.original, result.new_content),
                 }, result.original)
+                if not jok then
+                    -- Don't swallow a dropped journal write — it loses review
+                    -- history; surface it like skill_invoke surfaces its failures.
+                    parley.logger.warning("Review: journal write failed: " .. tostring(jerr))
+                end
             end
 
             -- Then decide whether to run another round. A whole-doc mode round is
@@ -640,6 +645,13 @@ end
 --------------------------------------------------------------------------------
 
 local _qf_scanned_bufs = {}
+
+-- A doc's journal sidecar (<doc>.parley-journal.md) is itself markdown and its
+-- stored diffs contain 🤖 markers — exclude it from review attachment so opening
+-- it doesn't mis-populate the quickfix or bind review keys. (#133 M3)
+M.is_journal_sidecar = function(buf)
+    return (vim.api.nvim_buf_get_name(buf) or ""):match("%.parley%-journal%.md$") ~= nil
+end
 
 local function rescan_quickfix(buf)
     if not vim.api.nvim_buf_is_valid(buf) then return end
@@ -676,6 +688,9 @@ end
 --------------------------------------------------------------------------------
 
 M.setup_keymaps = function(buf)
+    if M.is_journal_sidecar(buf) then
+        return -- never attach review to a journal sidecar (#133 M3)
+    end
     local parley = get_parley()
     local cfg = parley.config
     local set_keymap = parley.helpers.set_keymap
