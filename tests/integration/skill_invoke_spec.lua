@@ -102,6 +102,12 @@ describe("skill_invoke.invoke", function()
         assert.are.equal("ALPHA beta", table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n"))
         -- a numbered backup was made (M3 Task 1)
         assert.are.equal(1, vim.fn.filereadable(path .. ".parley-backup.1"))
+        -- #133 M3: on_done payload carries the journal-feeding fields
+        assert.are.equal("alpha beta", done_result.original)
+        assert.are.equal("ALPHA beta", done_result.new_content)
+        assert.is_true(#done_result.decorations >= 1)
+        assert.are.equal("edit", done_result.decorations[1].kind)
+        assert.are.equal("uppercase", done_result.decorations[1].explain)
     end)
 
     it("surfaces a failed edit: on_done ok=false, applied=0, file untouched", function()

@@ -181,9 +181,12 @@ function M.invoke(buf, manifest, args, opts)
                 end
                 reload_buffer(buf)
                 local new_content = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+                local decorations = {}
                 for _, call in ipairs(calls) do
                     if call.name == "propose_edits" then
-                        render_propose_edits(buf, call, original, new_content)
+                        for _, d in ipairs(render_propose_edits(buf, call, original, new_content)) do
+                            table.insert(decorations, d)
+                        end
                     end
                 end
                 -- Surface failure rather than swallowing it: a tool error, or no
@@ -197,7 +200,18 @@ function M.invoke(buf, manifest, args, opts)
                     p.logger.error("skill " .. tostring(manifest.name) .. ": " .. tostring(e))
                 end
                 if opts.on_done then
-                    opts.on_done({ ok = (#errors == 0), applied = applied, calls = calls, results = results })
+                    -- Pure-fed payload: original/new_content/decorations let a
+                    -- caller (review) journal the round without re-reading the
+                    -- buffer (#133 M3).
+                    opts.on_done({
+                        ok = (#errors == 0),
+                        applied = applied,
+                        calls = calls,
+                        results = results,
+                        original = original,
+                        new_content = new_content,
+                        decorations = decorations,
+                    })
                 end
             end)
         end,

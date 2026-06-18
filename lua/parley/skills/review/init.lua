@@ -509,6 +509,18 @@ M.skill = {
 -- UX preserved). resubmit_count bounds re-invocation at 3, like the v1 path.
 --------------------------------------------------------------------------------
 
+--- Should the review loop run another round? PURE — extracted from the on_done
+--- IO callback (M2 review note) so the decision has a direct unit test and the
+--- growing callback stays a thin IO seam. Resubmit only while actionable (ready
+--- `[]`) work remains, has shrunk, and we're under the bound (3). (#133)
+--- @param ready_before number  ready-marker count before the round
+--- @param ready_remaining number  ready-marker count after the round
+--- @param resubmit_count number  rounds already auto-resubmitted
+--- @return boolean
+M.should_resubmit = function(ready_before, ready_remaining, resubmit_count)
+    return ready_remaining > 0 and ready_remaining < ready_before and resubmit_count < 3
+end
+
 M.run_via_invoke = function(buf, args, resubmit_count)
     args = args or {}
     resubmit_count = resubmit_count or 0
@@ -580,20 +592,40 @@ M.run_via_invoke = function(buf, args, resubmit_count)
             if not result or not result.ok then
                 return -- skill_invoke already surfaced the error
             end
-            local new_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-            local remaining = M.parse_markers(new_lines)
+            -- Journal this round first — a durable, attributed per-round record
+            -- beside the doc (#133 M3), regardless of what markers remain. Skip a
+            -- no-op round (no content change) and an unsaved/path-less buffer.
+            local doc_path = vim.api.nvim_buf_get_name(buf)
+            if doc_path ~= "" and result.original and result.new_content
+                and result.original ~= result.new_content then
+                local journal = require("parley.skills.review.journal")
+                local explains = {}
+                for _, d in ipairs(result.decorations or {}) do
+                    if d.explain and d.explain ~= "" then
+                        table.insert(explains, d.explain)
+                    end
+                end
+                journal.append(doc_path, {
+                    mode = args.mode,
+                    side = "agent",
+                    ts = os.date("!%Y-%m-%dT%H:%M:%S"),
+                    hash = journal.hash(result.new_content),
+                    explains = explains,
+                    diff = journal.diff(result.original, result.new_content),
+                }, result.original)
+            end
+
+            -- Then decide whether to run another round. A whole-doc mode round is
+            -- one-shot — it may legitimately INSERT `{}` findings (fact-check),
+            -- which is not "stuck"; a `{}`-only / non-shrinking remainder ends the
+            -- round cleanly. Pending `{}` markers surface via the on-save quickfix.
+            local remaining = M.parse_markers(vim.api.nvim_buf_get_lines(buf, 0, -1, false))
             if #remaining == 0 then
                 parley.logger.info("Review: all comments addressed")
                 return
             end
-            -- Resubmit ONLY when actionable (ready `[]`) work remains AND it
-            -- shrank. A whole-doc mode round is one-shot — it may legitimately
-            -- INSERT `{}` findings (fact-check), which is not "stuck"; a `{}`-only
-            -- or non-shrinking remainder ends the round cleanly. Pending `{}`
-            -- markers surface via the on-save quickfix, not here (#133). Bounded
-            -- at 3 like the v1 path.
             local ready_remaining = count_ready(remaining)
-            if ready_remaining > 0 and ready_remaining < ready_count_before and resubmit_count < 3 then
+            if M.should_resubmit(ready_count_before, ready_remaining, resubmit_count) then
                 parley.logger.info("Review: " .. ready_remaining .. " ready marker(s) remain, resubmitting...")
                 M.run_via_invoke(buf, args, resubmit_count + 1)
             else

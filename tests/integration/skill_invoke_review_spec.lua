@@ -116,4 +116,46 @@ describe("review.run_via_invoke", function()
         review.run_via_invoke(buf, {})
         assert.are.equal(0, #invoke_calls)
     end)
+
+    it("journals the round to a sidecar beside the doc (#133 M3)", function()
+        local doc = vim.fn.tempname() .. ".md"
+        vim.fn.writefile({ "original line" }, doc)
+        vim.cmd("edit " .. vim.fn.fnameescape(doc))
+        local b = vim.api.nvim_get_current_buf()
+        review.run_via_invoke(b, { mode = "developmental" }) -- mode run, no markers → invokes
+        assert.are.equal(1, #invoke_calls)
+        invoke_calls[#invoke_calls].opts.on_done({
+            ok = true,
+            original = "original line",
+            new_content = "edited line",
+            decorations = { { kind = "edit", explain = "tightened the wording" } },
+        })
+        local J = require("parley.skills.review.journal")
+        local p = J.read(doc)
+        assert.are.equal("original line", p.base)
+        assert.are.equal(1, #p.entries)
+        assert.are.equal("developmental", p.entries[1].mode)
+        assert.is_truthy(p.entries[1].diff:find("edited", 1, true))
+        vim.fn.delete(doc)
+        vim.fn.delete(J.sidecar_path(doc))
+        vim.api.nvim_buf_delete(b, { force = true })
+    end)
+end)
+
+describe("review.should_resubmit (pure)", function()
+    it("resubmits while ready work remains, shrank, and under the bound", function()
+        assert.is_true(review.should_resubmit(2, 1, 0)) -- 2→1 ready, round 0
+    end)
+    it("stops when no ready markers remain (e.g. mode inserted only {} findings)", function()
+        assert.is_false(review.should_resubmit(0, 0, 0))
+        assert.is_false(review.should_resubmit(2, 0, 0))
+    end)
+    it("stops when the ready count did not shrink (no progress)", function()
+        assert.is_false(review.should_resubmit(1, 1, 0))
+        assert.is_false(review.should_resubmit(1, 2, 0)) -- grew (e.g. inserted ready) → stop
+    end)
+    it("stops at the resubmit bound (3)", function()
+        assert.is_true(review.should_resubmit(3, 2, 2))
+        assert.is_false(review.should_resubmit(3, 2, 3))
+    end)
 end)
