@@ -2,7 +2,19 @@
 
 Headless LLM-powered review workflow for markdown files. Users annotate
 documents with `🤖[comment]` markers, then an agent rewrites the document
-to address the comments.
+to address the comments — or run a **mode** (see Review Modes below) for a
+whole-document pass that needs no markers at all.
+
+**Run flow (#133 M2).** A *mode* run always proceeds, even with zero markers
+(the no-marker general review). A legacy no-mode run still needs ≥1 ready `[]`
+marker. Pending `{}` markers no longer **block** submission — ready markers are
+processed, `{}` ones skipped, and pending markers surface via the **on-save**
+quickfix (`BufWritePost`), not at submission. The resubmit loop re-runs only
+while a *ready* marker remains and the ready count shrank, so a whole-doc mode
+round is effectively one-shot (inserting `{}` findings is not "stuck"). Applied
+edits are oriented by `DiffChange` highlights + INFO gutter diagnostics that
+**ride** subsequent edits until the next round or an explicit dismiss; pure
+deletions show only the gutter "why" (no highlight).
 
 The same marker family is also used inside chat buffers for
 [drill-in discussions](../chat/drill_in.md) (different keybindings + a chat-
