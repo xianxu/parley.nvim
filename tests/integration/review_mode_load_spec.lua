@@ -19,6 +19,8 @@ describe("review.mode IO seam", function()
         write_file(dir .. "/alpha.md", "---\nname: alpha\nscope: whole-doc\n---\nAlpha body.")
         write_file(dir .. "/beta.md", "---\nname: beta\n---\nBeta body.")
         write_file(dir .. "/broken.md", "no frontmatter — should be skipped")
+        -- name (frontmatter) ≠ basename → must be dropped by list (identity = basename)
+        write_file(dir .. "/mismatch.md", "---\nname: not-mismatch\n---\nbody")
     end)
 
     after_each(function()
@@ -38,11 +40,14 @@ describe("review.mode IO seam", function()
         assert.is_truthy(err)
     end)
 
-    it("lists valid modes sorted by name, skipping unparseable files", function()
+    it("lists valid modes sorted by name, skipping unparseable + name≠basename files", function()
         local list = mode.list(dir)
-        assert.are.equal(2, #list)
+        assert.are.equal(2, #list) -- broken.md + mismatch.md both dropped
         assert.are.equal("alpha", list[1].name)
         assert.are.equal("beta", list[2].name)
+        for _, m in ipairs(list) do
+            assert.are_not.equal("not-mismatch", m.name, "name≠basename file must be dropped")
+        end
     end)
 end)
 

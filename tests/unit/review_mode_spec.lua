@@ -44,6 +44,13 @@ describe("review.mode.parse", function()
         assert.is_truthy(err)
     end)
 
+    it("treats a --- in the body as content, not the closing fence", function()
+        local m = mode.parse("---\nname: x\nscope: whole-doc\n---\nIntro.\n\n---\n\nMore.")
+        assert.are.equal("whole-doc", m.scope)
+        assert.is_truthy(m.body:find("---", 1, true), "the horizontal rule survives in the body")
+        assert.is_truthy(m.body:find("More.", 1, true))
+    end)
+
     it("requires a name", function()
         local m, err = mode.parse("---\nscope: whole-doc\n---\nbody")
         assert.is_nil(m)

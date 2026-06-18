@@ -136,7 +136,11 @@ function M.list(dir)
         local base = fname:match("^(.+)%.md$")
         if base and typ ~= "directory" then
             local m = M.parse(read_file(dir .. "/" .. fname) or "")
-            if m then
+            -- The canonical identity is the file basename: M.load resolves by it,
+            -- and the menu/`complete` offer m.name, so the two MUST agree or the
+            -- menu could offer a name load() can't find (silent no-op). Enforce
+            -- it here — drop a misconfigured file whose frontmatter name ≠ basename.
+            if m and m.name == base then
                 table.insert(out, m)
             end
         end
