@@ -157,6 +157,18 @@ round's own reload; the watcher is attached lazily (only after the first round).
 The decide rule (`projection.decide`) is pure. Session-scoped (matches nvim's
 session-scoped undo); per-state snapshots aren't journaled.
 
+## Diagnostic display (#133 M6)
+
+The edit "why" (the per-edit `explain`) is an INFO diagnostic on parley's
+`parley_skill` namespace. `lua/parley/skills/review/diag_display.lua` controls how
+it shows — scoped to that namespace, so the user's LSP/global diagnostics are
+untouched. Default **on**: `virtual_lines { current_line = true }`, so the
+(hard-wrapped, via `skill_render.wrap`) why **auto-expands below an edit when the
+cursor is in that edit's region** (`attach_diagnostics` spans `lnum..end_lnum`)
+and hides otherwise. `:ParleyShowDiagnostics` toggles it. The built-in `]d`/`[d`
+(jump) and `<C-W>d` (float, wraps) also work on these diagnostics. Composes with
+M5 — re-renders on undo/redo.
+
 ## Config
 
 ```lua
@@ -176,6 +188,7 @@ review_shortcut_finder = { modes = { "n", "i" }, shortcut = "<C-g>vf" },
 - `lua/parley/skills/review/journal.lua` — per-round journal: PURE serialize/parse/diff/drift + sidecar IO seam (#133)
 - `lua/parley/review_menu.lua` — composite review-mode menu (selector + instruction editor); `<M-o>`/`<M-CR>` (#133)
 - `lua/parley/skills/review/projection.lua` — decoration projection: re-render style on undo/redo per content-state (#133 M5)
+- `lua/parley/skills/review/diag_display.lua` — inline "why" display toggle (`:ParleyShowDiagnostics`, cursor-region auto-show) (#133 M6)
 - `lua/parley/skills/review/SKILL.md` — system prompt (light edit + heavy revision sections)
 - `lua/parley/skill_invoke.lua` — the P2 driver (one tool-use exchange via the existing dispatcher)
 - `lua/parley/skill_render.lua` — diagnostics + edit highlights
