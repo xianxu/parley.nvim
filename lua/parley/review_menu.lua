@@ -39,12 +39,15 @@ function M.open(opts)
         return nil
     end
 
-    -- Selection: sticky last mode (or an explicit opts.mode), else the first.
-    local sel = 1
+    -- Sticky start line: the last-used mode (or an explicit opts.mode), else 1.
+    -- Selection is the LIST window's cursor line — so j/k, arrows, and mouse all
+    -- move it natively (the old C-j/C-k-in-insert scheme was undiscoverable and
+    -- C-j is eaten as <NL> by most terminals). #133.
+    local start_line = 1
     local want = opts.mode or _last_mode
     for i, m in ipairs(modes) do
         if m.name == want then
-            sel = i
+            start_line = i
             break
         end
     end
@@ -52,22 +55,24 @@ function M.open(opts)
     local ui = vim.api.nvim_list_uis()[1] or { width = 80, height = 24 }
     local win_w, win_h, row, col, _, instr_row = float_picker.compute_layout(70, #modes, ui, false)
 
-    -- Mode list window (top).
+    -- Mode list window (top) — focused; selection = cursor line.
     local list_buf = vim.api.nvim_create_buf(false, true)
     vim.bo[list_buf].buftype = "nofile"
     vim.bo[list_buf].bufhidden = "wipe"
-    local function render_list()
+    do
         local lines = {}
         for i, m in ipairs(modes) do
-            lines[i] = (i == sel and "▶ " or "  ") .. pretty(m.name)
+            lines[i] = pretty(m.name)
         end
         vim.api.nvim_buf_set_lines(list_buf, 0, -1, false, lines)
     end
-    render_list()
-    local list_win = vim.api.nvim_open_win(list_buf, false, {
+    vim.bo[list_buf].modifiable = false
+    local list_win = vim.api.nvim_open_win(list_buf, true, {
         relative = "editor", row = row, col = col, width = win_w, height = win_h,
-        style = "minimal", border = "rounded", title = " Review mode (C-j/C-k or Tab) ",
+        style = "minimal", border = "rounded", title = " Review mode — j/k select · Enter run · Tab→instruction ",
     })
+    vim.wo[list_win].cursorline = true -- visual selection marker
+    vim.api.nvim_win_set_cursor(list_win, { start_line, 0 })
 
     -- Instruction editor window (bottom) — a normal modifiable buffer.
     local instr_buf = vim.api.nvim_create_buf(false, true)
@@ -76,9 +81,9 @@ function M.open(opts)
     if opts.instruction and opts.instruction ~= "" then
         vim.api.nvim_buf_set_lines(instr_buf, 0, -1, false, vim.split(opts.instruction, "\n"))
     end
-    local instr_win = vim.api.nvim_open_win(instr_buf, true, {
+    local instr_win = vim.api.nvim_open_win(instr_buf, false, {
         relative = "editor", row = instr_row, col = col, width = win_w, height = 5,
-        style = "minimal", border = "rounded", title = " Instruction — optional (Enter=newline, M-CR=submit, Esc=cancel) ",
+        style = "minimal", border = "rounded", title = " Instruction — optional (M-CR/C-s submit · Tab/Esc→list) ",
     })
 
     local closed = false
@@ -91,13 +96,27 @@ function M.open(opts)
         pcall(vim.api.nvim_win_close, instr_win, true)
     end
 
+    -- Selection = the list window's cursor line.
+    local function selected_mode()
+        local line = 1
+        if vim.api.nvim_win_is_valid(list_win) then
+            line = vim.api.nvim_win_get_cursor(list_win)[1]
+        end
+        return modes[line] or modes[1]
+    end
+
+    -- Programmatic move (used by tests + the optional C-j/C-k binding) — wraps.
     local function move(delta)
-        sel = ((sel - 1 + delta) % #modes) + 1
-        render_list()
+        if not vim.api.nvim_win_is_valid(list_win) then
+            return
+        end
+        local n = #modes
+        local cur = vim.api.nvim_win_get_cursor(list_win)[1]
+        vim.api.nvim_win_set_cursor(list_win, { ((cur - 1 + delta) % n) + 1, 0 })
     end
 
     local function submit()
-        local m = modes[sel]
+        local m = selected_mode()
         local instruction = table.concat(vim.api.nvim_buf_get_lines(instr_buf, 0, -1, false), "\n")
         instruction = instruction:gsub("^%s+", ""):gsub("%s+$", "")
         if m.name == "free-form" and instruction == "" then
@@ -109,38 +128,58 @@ function M.open(opts)
         on_submit({ mode = m.name, instruction = instruction })
     end
 
-    -- Keymaps live on the instruction buffer (focused, always typeable): C-j/C-k
-    -- and Tab/S-Tab move the mode selection; M-CR / C-s submit; Esc cancels.
-    -- Enter stays a normal newline so the instruction can be multi-line.
-    local function map(modes_, lhs, fn)
+    local function focus_instr()
+        if vim.api.nvim_win_is_valid(instr_win) then
+            vim.api.nvim_set_current_win(instr_win)
+            pcall(vim.cmd, "startinsert")
+        end
+    end
+    local function focus_list()
+        if vim.api.nvim_win_is_valid(list_win) then
+            pcall(vim.cmd, "stopinsert")
+            vim.api.nvim_set_current_win(list_win)
+        end
+    end
+
+    -- LIST window keymaps. Plain j/k/arrows/mouse move the cursor (= selection)
+    -- natively — no mapping needed. Enter/M-CR/C-s run; Tab/i go to the
+    -- instruction box; Esc/C-c cancel. C-j/C-k kept as belt-and-suspenders.
+    local function lmap(lhs, fn)
+        vim.keymap.set("n", lhs, fn, { buffer = list_buf, nowait = true, silent = true })
+    end
+    lmap("<CR>", submit)
+    lmap("<M-CR>", submit)
+    lmap("<C-s>", submit)
+    lmap("<C-j>", function() move(1) end)
+    lmap("<C-k>", function() move(-1) end)
+    lmap("<Tab>", focus_instr)
+    lmap("i", focus_instr)
+    lmap("a", focus_instr)
+    lmap("<Esc>", close)
+    lmap("<C-c>", close)
+
+    -- INSTRUCTION window keymaps: submit from either mode; Tab/normal-Esc return
+    -- to the list (insert-Esc → normal mode so the box keeps full vim editing);
+    -- C-c cancels. Enter stays a literal newline.
+    local function imap(modes_, lhs, fn)
         vim.keymap.set(modes_, lhs, fn, { buffer = instr_buf, nowait = true, silent = true })
     end
-    -- Selection cycling: C-j/C-k in both modes; Tab/S-Tab in normal only (so Tab
-    -- still inserts a literal tab while typing the instruction).
-    map({ "n", "i" }, "<C-j>", function() move(1) end)
-    map({ "n", "i" }, "<C-k>", function() move(-1) end)
-    map("n", "<Tab>", function() move(1) end)
-    map("n", "<S-Tab>", function() move(-1) end)
-    -- Submit: M-CR / C-s in both modes; <CR> in normal only (insert <CR> = newline).
-    map({ "n", "i" }, "<M-CR>", submit)
-    map({ "n", "i" }, "<C-s>", submit)
-    map("n", "<CR>", submit)
-    -- Cancel: <Esc> in NORMAL mode only — insert-mode <Esc> falls through to
-    -- normal mode so the instruction box keeps full vim editing (Spec §3). C-c
-    -- cancels from either mode as an escape hatch.
-    map("n", "<Esc>", close)
-    map({ "n", "i" }, "<C-c>", close)
+    imap({ "n", "i" }, "<M-CR>", submit)
+    imap({ "n", "i" }, "<C-s>", submit)
+    imap({ "n", "i" }, "<C-c>", close)
+    imap("n", "<Tab>", focus_list)
+    imap("n", "<Esc>", focus_list)
 
-    vim.api.nvim_set_current_win(instr_win)
-    pcall(vim.cmd, "startinsert")
+    vim.api.nvim_set_current_win(list_win)
 
     return {
         list_win = list_win,
         instr_win = instr_win,
         submit = submit,
         move = move,
+        focus_instr = focus_instr,
         close = close,
-        selected = function() return modes[sel].name end,
+        selected = function() return selected_mode().name end,
     }
 end
 
