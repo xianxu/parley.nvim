@@ -86,6 +86,10 @@ Likely a small purpose-built component reusing `float_picker`'s layout helpers
 
 ### 4. Bindings
 
+> **Superseded (acceptance test, see plan Revisions 2026-06-18):** `<M-o>` opens
+> the **skill picker** (review is one skill); `<M-CR>` is the direct review
+> trigger (opens the review-mode menu). The original §4 text below predates that.
+
 - `<M-o>` — open the review menu, **in addition to** the existing `<C-g>s`
   skill picker.
 - `<M-CR>` — in a markdown doc: (re)open the menu **pre-selected** to the sticky
@@ -209,8 +213,10 @@ item: lua-neovim       design=0.3 impl=1.0
 item: milestone-review design=0.0 impl=0.3
 item: lua-neovim       design=0.2 impl=0.8
 item: milestone-review design=0.0 impl=0.3
+item: lua-neovim       design=0.3 impl=1.0
+item: milestone-review design=0.0 impl=0.3
 design-buffer: 0.30
-total: 11.5
+total: 13.2
 ```
 
 *Produced via `brain/data/life/42shots/velocity/estimate-logic-v2.md` against `baseline-v2.md`. Method A only.*
@@ -226,7 +232,9 @@ not additive work. **M5** (added in acceptance test): decoration projection for 
 — one more `lua-neovim` (design=0.3, ×0.5 — design partly emerges) + its review
 boundary. **M6** (acceptance test): review-diagnostic display — wrapped inline
 why + cursor auto-show + toggle (small focused `lua-neovim`, design=0.2) + its
-boundary. `recomputed = Σdesign(2.6)×1.30 + Σimpl(8.1)×1.0 ≈ 11.5`. Unit:
+boundary. **M7** (acceptance test): detached progress bar (reusable long-op
+feedback surface) (design=0.3 ×0.5) + its boundary.
+`recomputed = Σdesign(2.9)×1.30 + Σimpl(9.4)×1.0 ≈ 13.2`. Unit:
 build-effort (design + AI-impl); diverges from `sdlc actual` (operator-attention).
 
 ## Plan
@@ -241,6 +249,7 @@ Detailed, executable plan: **`workshop/plans/000133-review-modes-journal-plan.md
 - [x] M4 — Composite review menu (mode selector + multi-line instruction editor) + `<M-o>`/`<M-CR>` bindings + sticky mode; manual e2e.
 - [x] M5 — Decoration projection (undo/redo coherence): snapshot decorations per content-state, re-render on undo/redo, ride forward edits (B). Added during acceptance test.
 - [x] M6 — Review-diagnostic display: hard-wrapped inline why + `:ParleyShowDiagnostics` toggle + auto-show when cursor in the edit's region (virtual_lines current_line, scoped). Added during acceptance test.
+- [x] M7 — Detached progress bar: reusable floating bar (spinner + elapsed) for long-running ops; review shows it during a round. Added during acceptance test.
 
 ## Log
 
@@ -270,6 +279,7 @@ runtime machinery.
 Next: `sdlc start-plan` → durable plan in `workshop/plans/`.
 
 ### 2026-06-18
+- 2026-06-18: closed M7 — make test EXIT=0 (116 spec files; lint 0/0 in 218 files). M7: reusable detached progress bar (pure frame/format 2 unit; float/timer lifecycle 2 integration) wired into skill_invoke start/stop with the generation guard (1 integration). Review shows a spinner+elapsed bar during the round.; review verdict: FIX-THEN-SHIP
 - 2026-06-18: closed M6 — make test EXIT=0 (114 spec files; lint 0/0 in 215 files). M6: skill_render.wrap + region-anchored wrapped diagnostics (9 unit), diag_display toggle scoped to parley ns (2 integration), :ParleyShowDiagnostics + default-on. Cursor-region auto-show via virtual_lines current_line.; review verdict: FIX-THEN-SHIP
 - 2026-06-18: closed M5 — make test EXIT=0 (113 spec files; lint 0/0 in 213 files). M5: skill_render snapshot/apply_snapshot (7 unit), projection module record/decide/project (3 integration), wired into round on_done (19 flow). Undo/redo re-render style coherently; forward edits ride (B).; review verdict: FIX-THEN-SHIP
 - 2026-06-18: closed M4 — make test EXIT=0 (112 spec files; lint 0/0 in 211 files). M4: composite review_menu (mode selector + multi-line instruction editor, sticky mode, 6 tests) + <M-o>/<M-CR> bindings via setup_keymaps; float_picker.compute_layout exported; sidecar excluded from attachment.; review verdict: FIX-THEN-SHIP

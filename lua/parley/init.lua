@@ -1705,24 +1705,8 @@ local function drill_in_resolve_at_cursor_with_mode(buf, mode)
 		-- manual edit. A full set_lines(0,-1) would wipe every extmark + diagnostic
 		-- (#133). A content-verification fallback guarantees correctness if the
 		-- range math is ever off.
-		local function row_of_byte(ls, byte) -- 1-based byte → 1-based row
-			local p = 1
-			for i, l in ipairs(ls) do
-				if byte <= p + #l then
-					return i
-				end
-				p = p + #l + 1
-			end
-			return #ls
-		end
-		local sr = row_of_byte(lines, m.byte_start)
-		local er = row_of_byte(lines, m.byte_end)
-		local suffix = #lines - er -- unchanged lines after the marker
-		local region = {}
-		for i = sr, #new_lines - suffix do
-			region[#region + 1] = new_lines[i]
-		end
-		local ok_narrow = pcall(vim.api.nvim_buf_set_lines, buf, sr - 1, er, false, region)
+		local start0, end0, region = _drill_in_mod.narrow_replace_range(lines, new_text, m.byte_start, m.byte_end)
+		local ok_narrow = pcall(vim.api.nvim_buf_set_lines, buf, start0, end0, false, region)
 		if not ok_narrow
 			or table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n") ~= new_text then
 			vim.api.nvim_buf_set_lines(buf, 0, -1, false, new_lines) -- safe fallback

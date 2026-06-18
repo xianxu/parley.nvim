@@ -10,13 +10,15 @@
 
 local M = {}
 
-local SPINNER = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
+-- The single source of the braille spinner glyphs — other surfaces (the two
+-- chat_respond spinners) reuse this instead of open-coding their own copy (#133).
+M.SPINNER = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
 
 --- PURE: the spinner glyph for an animation tick.
 --- @param tick number
 --- @return string
 function M.frame(tick)
-    return SPINNER[(tick % #SPINNER) + 1]
+    return M.SPINNER[(tick % #M.SPINNER) + 1]
 end
 
 --- PURE: the bar's display line.

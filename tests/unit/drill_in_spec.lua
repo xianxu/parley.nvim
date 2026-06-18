@@ -888,3 +888,30 @@ describe("drill_in.append_blocks", function()
         assert.same({ "🤖", "", "> A", "Qa", "", "> B", "Qb" }, result)
     end)
 end)
+
+describe("drill_in.narrow_replace_range (#133)", function()
+    it("targets only the marker's line range (not the whole buffer)", function()
+        local old = { "keep a", "MARKER here", "keep b" }
+        local new_text = "keep a\nresolved\nkeep b"
+        -- byte_start = the 'M' of MARKER; byte_end = end of that line
+        local bs = #("keep a\n") + 1
+        local be = #("keep a\nMARKER here")
+        local start0, end0, region = drill_in.narrow_replace_range(old, new_text, bs, be)
+        assert.are.equal(1, start0) -- 0-based: only line 2 (index 1)
+        assert.are.equal(2, end0)
+        assert.same({ "resolved" }, region)
+        -- applying region over old[start0..end0] reconstructs new_text (lines
+        -- before/after the marker are untouched → their decorations ride)
+        local rebuilt = { old[1], region[1], old[3] }
+        assert.are.equal(new_text, table.concat(rebuilt, "\n"))
+    end)
+
+    it("handles a line-count change (resolution adds a line)", function()
+        local old = { "x", "M", "y" }
+        local new_text = "x\nA\nB\ny" -- marker line 2 → two lines
+        local start0, end0, region = drill_in.narrow_replace_range(old, new_text, #("x\n") + 1, #("x\nM"))
+        assert.are.equal(1, start0)
+        assert.are.equal(2, end0)
+        assert.same({ "A", "B" }, region)
+    end)
+end)

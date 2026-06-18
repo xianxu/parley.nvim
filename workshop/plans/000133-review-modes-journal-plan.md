@@ -561,6 +561,36 @@ A `:ParleyShowDiagnostics` command toggles it. Pure wrap + thin display config
   it off/on. Document in `## Log`.
 - [ ] `sdlc milestone-close --issue 133 --milestone M6`.
 
+## Chunk 7: M7 — Detached progress bar (long-running review feedback)
+
+Added in acceptance test. Review is parley's first op that takes ~30s; it needs a
+visible "running" cue. Build a **reusable detached progress bar** (a floating bar,
+not lualine/native-winbar — detached so it can grow to multi-line detail for
+future long-ops), with an animated spinner + message + elapsed. Review wires its
+in-flight state into it. Concurrency: the existing kill-prompt (no two concurrent
+reviews) stays. Pure spinner/format + thin float/timer IO (`ARCH-PURE`); reusable
+mechanism, not review-specific (`ARCH-DRY` for future progress needs).
+
+### Task 7.1: `progress` module (pure frame/format + float/timer IO)
+
+**Files:** Create `lua/parley/progress.lua`; Test `tests/unit/progress_spec.lua` (pure) + `tests/integration/progress_spec.lua` (float).
+
+- [ ] **7.1a** pure `frame(tick)` (spinner glyph) + `format(spinner, message, elapsed)` → bar line.
+- [ ] **7.1b** `start(message)` opens a detached float (above the statusline) + a timer animating spinner/elapsed; `update(message)`; `stop()` closes the float + timer; `is_active()`.
+- [ ] test + pass + commit.
+
+### Task 7.2: wire review into the bar
+
+**Files:** Modify `lua/parley/skill_invoke.lua` (start on query, stop on exit/abort); Test `tests/integration/skill_invoke_spec.lua`.
+
+- [ ] start the bar (`⟳ <skill>…`) when the query launches; stop it in on_exit (after the gen guard) + on_abort + cancel. Reuses the generation guard so a superseded round doesn't kill the new one's bar.
+- [ ] test (bar active during a held query; stopped after) + pass + commit.
+
+### Task 7.3: manual e2e + M7 boundary
+
+- [ ] Manual: run a review → the bar appears with a spinner + elapsed, disappears when done; trigger another mid-run → kill-or-cancel prompt (no two concurrent). Document in `## Log`.
+- [ ] `sdlc milestone-close --issue 133 --milestone M7`.
+
 ## Notes / risks
 
 - **`ARCH-DRY`:** the modes engine adds *no* new driver — it rides `skill_invoke` + the provider's `source(ctx)` composition (mirrors `voice_apply`). Mode bodies must not restate the marker grammar/tool contract the base `SKILL.md` owns.
@@ -594,3 +624,9 @@ A `:ParleyShowDiagnostics` command toggles it. Pure wrap + thin display config
 **Reason:** three issues observed in operator e2e.
 
 **Delta:** (a) **Bindings corrected** — `<M-o>` now opens the general **skill picker** (review is one skill among many); `<M-CR>` is the **direct review trigger** (opens the review-mode menu). Previously both opened the review menu. (b) **Accept/reject (`<M-a>`/`<M-r>`) preserves review decorations** — the resolver replaced the *whole* buffer (`set_lines(0,-1)`), wiping every highlight + diagnostic; it now replaces only the marker's line range so decorations elsewhere ride (extmark gravity), like a manual edit, with a content-verification fallback to the full replace if the range math is ever off. (c) **In-flight review is no longer an error** — `run_via_invoke` warns and offers to kill the running review and submit a new one (`vim.fn.confirm`); `skill_invoke.cancel` stops the query and a per-buffer **generation guard** makes the cancelled query's late `on_exit`/`on_abort` a no-op so it can't clobber the new exchange. (d) **Virtual-lines wrap width is dynamic** — the "why" was hard-wrapped at a fixed 76, overflowing the indented `virtual_lines` and truncating the right edge; `attach_diagnostics` now wraps to the window's usable width (`getwininfo.textoff` gutter + an indent margin).
+
+### 2026-06-18 — M7 boundary-review fixes + stale-doc notes
+
+**Reason:** M7 boundary review (FIX-THEN-SHIP).
+
+**Delta:** (a) **Spinner single-sourced** — `progress.SPINNER`/`frame` is now the one definition; `chat_respond`'s two spinners reuse it (was triple-duplicated). (b) **`narrow_replace_range` extracted to `drill_in.lua`** (pure) and unit-tested, so the accept/reject decoration-ride range math is pinned (a revert to whole-buffer `set_lines` is guarded by the helper + its tests; the content-verification fallback still guarantees correctness). (c) **Doc staleness flagged:** the plan's top "Core concepts" table predates M5–M7 and omits the entities added since — `mode`/`mode.wrap`+`directives` (M1/M6), `journal` (M3), `projection` (M5), `progress` (M7); treat this Revisions log as the authoritative entity delta. (d) The **issue Spec §4 / Done-when** still describe `<M-o>` as opening the review menu — superseded: `<M-o>` = skill picker, `<M-CR>` = review menu (see the 2026-06-18 M4-signature Revisions entry); the code + this log are authoritative.
