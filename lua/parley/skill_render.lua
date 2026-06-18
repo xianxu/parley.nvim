@@ -87,4 +87,45 @@ function M.highlight_edits(buf, edits, new_content)
     end
 end
 
+--- Capture the current decoration set as line-anchored data (for the undo/redo
+--- projection record, #133 M5). Returns { hl_lines = {0-based line…}, diags =
+--- {{lnum, message}…} } — enough to redraw at a content-identical state.
+function M.snapshot(buf)
+    ensure_namespaces()
+    local hl_lines = {}
+    for _, m in ipairs(vim.api.nvim_buf_get_extmarks(buf, hl_ns_id, 0, -1, {})) do
+        table.insert(hl_lines, m[2]) -- m = {id, row, col}; row is the 0-based line
+    end
+    local diags = {}
+    for _, d in ipairs(vim.diagnostic.get(buf, { namespace = diag_ns_id })) do
+        table.insert(diags, { lnum = d.lnum, message = d.message })
+    end
+    return { hl_lines = hl_lines, diags = diags }
+end
+
+--- Redraw a snapshot's decorations (clearing first). Only valid when the buffer
+--- content matches the state the snapshot was captured at (the projection caller
+--- guarantees this via a content-hash match). #133 M5.
+function M.apply_snapshot(buf, snap)
+    ensure_namespaces()
+    M.clear_decorations(buf)
+    snap = snap or {}
+    for _, line in ipairs(snap.hl_lines or {}) do
+        vim.api.nvim_buf_add_highlight(buf, hl_ns_id, "DiffChange", line, 0, -1)
+    end
+    if snap.diags and #snap.diags > 0 then
+        local diagnostics = {}
+        for _, d in ipairs(snap.diags) do
+            table.insert(diagnostics, {
+                lnum = d.lnum,
+                col = 0,
+                message = d.message,
+                severity = vim.diagnostic.severity.INFO,
+                source = "parley-skill",
+            })
+        end
+        vim.diagnostic.set(diag_ns_id, buf, diagnostics)
+    end
+end
+
 return M
