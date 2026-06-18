@@ -750,6 +750,14 @@ M.setup = function(opts)
 	-- :ParleyProxy <subcommand> — manage the optional bundled cliproxyapi (#131)
 	M.register_proxy_command(M.config.cmd_prefix)
 
+	-- :ParleyShowDiagnostics — toggle inline display of review "why" diagnostics
+	-- (cursor-region auto-show, scoped to parley's namespace). Default on. (#133 M6)
+	M.helpers.create_user_command(M.config.cmd_prefix .. "ShowDiagnostics", function()
+		local on = require("parley.skills.review.diag_display").toggle()
+		M.logger.info("Parley review diagnostics: inline display " .. (on and "ON" or "OFF"))
+	end)
+	require("parley.skills.review.diag_display").set(true)
+
 	-- Register all global keymaps from the keybinding registry
 	kb_registry.register_global(
 		{ "global", "repo", "note", "issue", "vision", "chat" },
