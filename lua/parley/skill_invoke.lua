@@ -42,6 +42,7 @@ end
 function M.cancel(buf)
     _gen[buf] = (_gen[buf] or 0) + 1
     _in_flight[buf] = nil
+    pcall(function() require("parley.progress").stop() end)
     pcall(function() require("parley.tasker").stop() end)
 end
 
@@ -178,6 +179,9 @@ function M.invoke(buf, manifest, args, opts)
     local cwd = vim.fn.fnamemodify(artifact_path, ":h")
 
     _in_flight[buf] = true
+    -- Detached progress bar: this is a ~30s headless op, so show a running cue
+    -- (the first substantive-progress surface, #133 M7). Stopped on exit/abort.
+    require("parley.progress").start("Parley " .. tostring(manifest.name) .. " running…")
     llm.query(
         nil, -- headless: no streaming buffer insertion
         agent.provider,
@@ -190,6 +194,7 @@ function M.invoke(buf, manifest, args, opts)
                 if _gen[buf] ~= gen then
                     return
                 end
+                require("parley.progress").stop()
                 _in_flight[buf] = nil
                 local qt = tasker.get_query(qid) or {}
                 local calls = providers.decode_anthropic_tool_calls_from_stream(qt.raw_response or "")
@@ -261,6 +266,7 @@ function M.invoke(buf, manifest, args, opts)
             if _gen[buf] ~= gen then
                 return -- superseded by a newer exchange (cancelled) → no-op
             end
+            require("parley.progress").stop()
             _in_flight[buf] = nil
             p.logger.error("skill " .. tostring(manifest.name) .. " abort: " .. tostring(msg))
             if opts.on_done then

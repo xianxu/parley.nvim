@@ -80,6 +80,7 @@ describe("skill_invoke.invoke", function()
     after_each(function()
         parley.dispatcher.query = orig_query
         assembly.resolve_agent = orig_resolve
+        pcall(function() require("parley.progress").stop() end)
         vim.fn.delete(tmpdir, "rf")
     end)
 
@@ -169,6 +170,25 @@ describe("skill_invoke.invoke", function()
         held_exit("qid_stale")
         vim.wait(200, function() return done_result ~= nil end)
         assert.is_nil(done_result, "a cancelled query's late on_exit must not run on_done")
+    end)
+
+    it("shows the progress bar during the query and stops it on completion (#133 M7)", function()
+        local progress = require("parley.progress")
+        local held_exit
+        parley.dispatcher.query = function(_b, _p, _payload, _h, on_exit)
+            held_exit = on_exit
+            tasker.set_query("qid_p", {
+                raw_response = propose_edits_sse({
+                    { old_string = "alpha", new_string = "ALPHA", explain = "up" },
+                }),
+            })
+        end
+        progress.stop()
+        skill_invoke.invoke(buf, manifest(), {}, { on_done = function(r) done_result = r end })
+        assert.is_true(progress.is_active(), "bar shows while the query runs")
+        held_exit("qid_p")
+        vim.wait(2000, function() return done_result ~= nil end)
+        assert.is_false(progress.is_active(), "bar stops when the query completes")
     end)
 
     it("aborts (on_done ok=false) when no agent resolves", function()
