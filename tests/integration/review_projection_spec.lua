@@ -74,18 +74,14 @@ describe("review.projection", function()
         skill_render.attach_diagnostics(buf, { { pos = 1, explain = "edit A" } }, "state A")
         projection.record_empty_for(buf, "base zero")
         projection.record(buf)
-        -- round 2: A → B (decoB)
+        -- round 2: A → B (decoB). record_empty_for(A) must NOT clobber A's
+        -- already-recorded decorations (the #133-close-review bug).
         set(buf, { "state B" })
         skill_render.attach_diagnostics(buf, { { pos = 1, explain = "edit B" } }, "state B")
-        projection.record_empty_for(buf, "state A") -- pre-round-2 base = A (its own decoA still recorded under A)
+        projection.record_empty_for(buf, "state A")
         projection.record(buf)
-        -- NOTE: record_empty_for(A) overwrites A→empty; the realistic flow records
-        -- A's decorations at round 1 and round 2's base is A *with* decoA. So
-        -- re-record A's decoration to model the true state:
+        -- undo B→A → decoA restored (would clear if record_empty_for clobbered A)
         set(buf, { "state A" })
-        skill_render.attach_diagnostics(buf, { { pos = 1, explain = "edit A" } }, "state A")
-        projection.record(buf)
-        -- undo B→A → decoA restored
         projection.project(buf)
         local diags = vim.diagnostic.get(buf)
         assert.is_true(#diags >= 1)

@@ -71,10 +71,17 @@ function M.record(buf)
     put(bufstate(buf), hash(buf), skill_render.snapshot(buf))
 end
 
---- Record an explicit EMPTY decoration set for the given content (the pre-round
---- base) — so undoing back across the round clears the (now-stale) style.
+--- Record an EMPTY decoration set for the given content (the pre-round base) —
+--- so undoing back across the round clears the (now-stale) style. Only the TRUE
+--- base (never-seen content) is empty: a LATER round's pre-content is a prior
+--- round's OUTPUT, already recorded WITH its decorations, so don't clobber it
+--- (else undoing one round back would wrongly clear that round's style). (#133)
 function M.record_empty_for(buf, base_content)
-    put(bufstate(buf), vim.fn.sha256(base_content or ""), { hl_lines = {}, diags = {} })
+    local s = bufstate(buf)
+    local h = vim.fn.sha256(base_content or "")
+    if s.records[h] == nil then
+        put(s, h, { hl_lines = {}, diags = {} })
+    end
 end
 
 --- Project the recorded style onto the current content state (the watcher body;

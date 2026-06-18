@@ -1,10 +1,11 @@
 ---
 id: 000133
-status: working
+status: done
 deps: []
 created: 2026-06-17
-updated: 2026-06-17
+updated: 2026-06-18
 estimate_hours: 8.4
+actual_hours: 9.10
 ---
 
 # parley review parity with fix/docflow skill in ariadne
@@ -279,6 +280,7 @@ runtime machinery.
 Next: `sdlc start-plan` → durable plan in `workshop/plans/`.
 
 ### 2026-06-18
+- 2026-06-18: closed — make test EXIT=0 (116 spec files; lint 0/0 in 218 files). 7 milestones M1-M7 each milestone-closed with Review-Verdict trailers (modes engine, flexible review flow, journal sidecar, composite menu+bindings, undo/redo decoration projection, inline diagnostic display, detached progress bar) + operator e2e acceptance across the session.; review verdict: FIX-THEN-SHIP
 - 2026-06-18: closed M7 — make test EXIT=0 (116 spec files; lint 0/0 in 218 files). M7: reusable detached progress bar (pure frame/format 2 unit; float/timer lifecycle 2 integration) wired into skill_invoke start/stop with the generation guard (1 integration). Review shows a spinner+elapsed bar during the round.; review verdict: FIX-THEN-SHIP
 - 2026-06-18: closed M6 — make test EXIT=0 (114 spec files; lint 0/0 in 215 files). M6: skill_render.wrap + region-anchored wrapped diagnostics (9 unit), diag_display toggle scoped to parley ns (2 integration), :ParleyShowDiagnostics + default-on. Cursor-region auto-show via virtual_lines current_line.; review verdict: FIX-THEN-SHIP
 - 2026-06-18: closed M5 — make test EXIT=0 (113 spec files; lint 0/0 in 213 files). M5: skill_render snapshot/apply_snapshot (7 unit), projection module record/decide/project (3 integration), wired into round on_done (19 flow). Undo/redo re-render style coherently; forward edits ride (B).; review verdict: FIX-THEN-SHIP
