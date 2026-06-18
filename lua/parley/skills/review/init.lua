@@ -586,10 +586,16 @@ M.run_via_invoke = function(buf, args, resubmit_count)
         return
     end
 
+    -- Suppress the projection watcher during the round's own :edit! reload so it
+    -- isn't mistaken for a user edit; cleared in on_done. (#133 M5)
+    local projection = require("parley.skills.review.projection")
+    projection.set_applying(buf, true)
+
     require("parley.skill_invoke").invoke(buf, manifest, args, {
         manual = true,
         on_done = function(result)
             if not result or not result.ok then
+                projection.set_applying(buf, false)
                 return -- skill_invoke already surfaced the error
             end
             -- Journal this round first — a durable, attributed per-round record
@@ -619,6 +625,17 @@ M.run_via_invoke = function(buf, args, resubmit_count)
                     parley.logger.warning("Review: journal write failed: " .. tostring(jerr))
                 end
             end
+
+            -- Record the decoration projection states (#133 M5): the pre-round
+            -- base (empty style) + this round's post state (its decorations), then
+            -- attach the watcher so undo/redo re-render coherently. Records persist
+            -- across rounds (multi-round undo). Clear the applying-guard last.
+            if result.original then
+                projection.record_empty_for(buf, result.original)
+            end
+            projection.record(buf)
+            projection.ensure_watch(buf)
+            projection.set_applying(buf, false)
 
             -- Then decide whether to run another round. A whole-doc mode round is
             -- one-shot — it may legitimately INSERT `{}` findings (fact-check),

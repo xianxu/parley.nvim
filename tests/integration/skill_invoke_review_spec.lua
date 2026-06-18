@@ -117,6 +117,35 @@ describe("review.run_via_invoke", function()
         assert.are.equal(0, #invoke_calls)
     end)
 
+    it("records projection states (base empty + post) so undo/redo re-render style (#133 M5)", function()
+        local projection = require("parley.skills.review.projection")
+        local doc = vim.fn.tempname() .. ".md"
+        vim.fn.writefile({ "original line" }, doc)
+        vim.cmd("edit " .. vim.fn.fnameescape(doc))
+        local b = vim.api.nvim_get_current_buf()
+        projection.reset(b)
+        review.run_via_invoke(b, { mode = "developmental" })
+        -- simulate the round: apply text + draw a decoration, then fire on_done
+        vim.api.nvim_buf_set_lines(b, 0, -1, false, { "edited line" })
+        require("parley.skill_render").attach_diagnostics(b, { { pos = 1, explain = "why" } }, "edited line")
+        invoke_calls[#invoke_calls].opts.on_done({
+            ok = true, original = "original line", new_content = "edited line",
+            decorations = { { kind = "edit", explain = "why" } },
+        })
+        -- undo to base → style cleared (base recorded empty)
+        vim.api.nvim_buf_set_lines(b, 0, -1, false, { "original line" })
+        projection.project(b)
+        assert.are.equal(0, #vim.diagnostic.get(b))
+        -- redo to the round state → style restored
+        vim.api.nvim_buf_set_lines(b, 0, -1, false, { "edited line" })
+        projection.project(b)
+        assert.is_true(#vim.diagnostic.get(b) >= 1)
+        projection.reset(b)
+        vim.fn.delete(doc)
+        vim.fn.delete(require("parley.skills.review.journal").sidecar_path(doc))
+        vim.api.nvim_buf_delete(b, { force = true })
+    end)
+
     it("journals the round to a sidecar beside the doc (#133 M3)", function()
         local doc = vim.fn.tempname() .. ".md"
         vim.fn.writefile({ "original line" }, doc)
