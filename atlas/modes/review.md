@@ -50,8 +50,22 @@ After an optional `<>`, `[]` and `{}` may appear in any order.
 | `<M-q>` / `<C-g>q` | Insert `🤖<sel>[]` (visual) or `🤖[]` (normal/insert). Shared with chat — see `atlas/chat/drill_in.md`. |
 | `<M-a>`         | Accept the marker at cursor per [review-convention §5](../../../ariadne/workshop/targets/review-convention.md) |
 | `<M-r>`         | Reject the marker at cursor per review-convention §5            |
-| `<C-g>ve`       | Run the review skill (agent edits per ready markers)            |
+| `<C-g>ve`       | Run the review skill (agent edits per ready markers, legacy no-mode) |
 | `<C-g>vf`       | Open the review finder (jump to files with pending markers)     |
+| `<M-o>`         | Open the **review-mode menu** (mode selector + instruction editor) (#133) |
+| `<M-CR>`        | (Re)open the menu pre-selected to the sticky mode — fast next round (#133) |
+
+## Review menu (#133 M4)
+
+`lua/parley/review_menu.lua` — a composite two-window float: a mode **selector**
+on top (sticky-preselected to the last-used mode; `C-j`/`C-k`/`Tab` move) + a
+multi-line **instruction editor** below (a real modifiable buffer — `Enter` =
+newline, `M-CR`/`C-s` submit, `Esc` cancel). On submit it calls
+`review.run_via_invoke(buf, { mode, instruction })`. Free-form mode requires a
+non-empty instruction. Reuses `float_picker.compute_layout` for geometry (now
+exported). The sidecar (`*.parley-journal.md`) is excluded from review
+attachment (`is_journal_sidecar`). `<M-CR>` is free here — chat-respond's `<M-CR>`
+is chat-buffer-only. Cross-session sticky mode is v2.
 
 ## Architecture
 
@@ -138,6 +152,7 @@ review_shortcut_finder = { modes = { "n", "i" }, shortcut = "<C-g>vf" },
 - `lua/parley/skills/review/mode.lua` — Mode parse/directives (PURE) + load/list IO seam (#133)
 - `lua/parley/skills/review/modes/*.md` — the six review-mode prompt files (#133)
 - `lua/parley/skills/review/journal.lua` — per-round journal: PURE serialize/parse/diff/drift + sidecar IO seam (#133)
+- `lua/parley/review_menu.lua` — composite review-mode menu (selector + instruction editor); `<M-o>`/`<M-CR>` (#133)
 - `lua/parley/skills/review/SKILL.md` — system prompt (light edit + heavy revision sections)
 - `lua/parley/skill_invoke.lua` — the P2 driver (one tool-use exchange via the existing dispatcher)
 - `lua/parley/skill_render.lua` — diagnostics + edit highlights
