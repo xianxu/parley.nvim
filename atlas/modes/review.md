@@ -93,6 +93,32 @@ mode.directives(flags) ⊕ operator-instruction`. No mode selected → base SKIL
   the skill's own absolute dir into `source(ctx)` (alongside `ctx.skill_md`) so the
   review skill reads its `modes/` subdir without re-deriving the path.
 
+## Journal (#133 M3)
+
+Each review round is recorded to a **self-contained markdown sidecar** beside the
+doc — `<doc>.parley-journal.md` — tracked in git WITH the document. This replaces
+docflow's git-branch journaling: docflow's *value* (attributed per-round diffs +
+rationale) without its branch *mechanism* (no working-tree churn, portable to a
+standalone plugin install). vim's native undo owns in-session text time-travel;
+the journal owns the durable, cross-session record.
+
+- **`lua/parley/skills/review/journal.lua`** — PURE `serialize_entry` /
+  `serialize_base` / `parse` / `diff` (`vim.diff`, unified) / `is_drift`
+  (`vim.fn.sha256` compare), plus the thin IO seam `sidecar_path` / `read` /
+  `append`. 4-backtick fences wrap the journal's own blocks so a 3-backtick code
+  fence inside the doc or diff can't break parsing.
+- **Per round** it stores: round number (derived), mode, side, ISO timestamp,
+  content hash, rationale (the per-edit `explain`s), and the unified diff. Round 0
+  is the base snapshot (written once, on the first round).
+- **Wiring**: `skill_invoke`'s `on_done` payload carries `original` /
+  `new_content` / `decorations` (pure-fed); review's `on_done` builds the entry
+  and calls `journal.append` (skips no-op rounds + path-less buffers).
+- **Drift**: `is_drift(recorded_hash, current)` detects an external edit (e.g.
+  Claude Code resolving markers) since the last recorded round.
+- **Deferred (v2)**: "revert/show round N" (reconstruct via base + replayed
+  diffs) and active in-buffer undo-projection of past-round decorations — the
+  journal already stores everything they need.
+
 ## Config
 
 ```lua
@@ -109,6 +135,7 @@ review_shortcut_finder = { modes = { "n", "i" }, shortcut = "<C-g>vf" },
 - `lua/parley/skills/review/init.lua` — skill definition (+ `source(ctx)` mode composition, `mode` arg), marker parsing, `run_via_invoke` (marker pre-check + resubmit), keybindings
 - `lua/parley/skills/review/mode.lua` — Mode parse/directives (PURE) + load/list IO seam (#133)
 - `lua/parley/skills/review/modes/*.md` — the six review-mode prompt files (#133)
+- `lua/parley/skills/review/journal.lua` — per-round journal: PURE serialize/parse/diff/drift + sidecar IO seam (#133)
 - `lua/parley/skills/review/SKILL.md` — system prompt (light edit + heavy revision sections)
 - `lua/parley/skill_invoke.lua` — the P2 driver (one tool-use exchange via the existing dispatcher)
 - `lua/parley/skill_render.lua` — diagnostics + edit highlights
