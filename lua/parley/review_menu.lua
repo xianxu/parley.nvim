@@ -24,7 +24,7 @@ end
 --- `on_submit` carries the action on the artifact buffer, so no buffer arg is
 --- needed here.
 --- @param opts table|nil { on_submit = fun({mode,instruction}), mode?, instruction? }
---- @return table|nil handle  { submit, move, selected, close } (nil if no modes)
+--- @return table|nil handle  { list_win, instr_win, submit, move, selected, close } (nil if no modes)
 function M.open(opts)
     opts = opts or {}
     local on_submit = opts.on_submit or function() end
@@ -115,14 +115,21 @@ function M.open(opts)
     local function map(modes_, lhs, fn)
         vim.keymap.set(modes_, lhs, fn, { buffer = instr_buf, nowait = true, silent = true })
     end
+    -- Selection cycling: C-j/C-k in both modes; Tab/S-Tab in normal only (so Tab
+    -- still inserts a literal tab while typing the instruction).
     map({ "n", "i" }, "<C-j>", function() move(1) end)
     map({ "n", "i" }, "<C-k>", function() move(-1) end)
-    map({ "n", "i" }, "<Tab>", function() move(1) end)
-    map({ "n", "i" }, "<S-Tab>", function() move(-1) end)
+    map("n", "<Tab>", function() move(1) end)
+    map("n", "<S-Tab>", function() move(-1) end)
+    -- Submit: M-CR / C-s in both modes; <CR> in normal only (insert <CR> = newline).
     map({ "n", "i" }, "<M-CR>", submit)
     map({ "n", "i" }, "<C-s>", submit)
     map("n", "<CR>", submit)
-    map({ "n", "i" }, "<Esc>", close)
+    -- Cancel: <Esc> in NORMAL mode only — insert-mode <Esc> falls through to
+    -- normal mode so the instruction box keeps full vim editing (Spec §3). C-c
+    -- cancels from either mode as an escape hatch.
+    map("n", "<Esc>", close)
+    map({ "n", "i" }, "<C-c>", close)
 
     vim.api.nvim_set_current_win(instr_win)
     pcall(vim.cmd, "startinsert")

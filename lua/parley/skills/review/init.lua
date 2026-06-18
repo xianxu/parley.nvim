@@ -725,10 +725,14 @@ M.setup_keymaps = function(buf)
             end,
         })
     end
-    for _, spec in ipairs({ cfg.review_shortcut_menu, cfg.review_shortcut_next }) do
-        if spec then
-            for _, mode in ipairs(spec.modes or {}) do
-                set_keymap({ buf }, mode, spec.shortcut, open_menu, "Parley review: open mode menu")
+    local menu_specs = {
+        { cfg = cfg.review_shortcut_menu, desc = "Parley review: open mode menu" },
+        { cfg = cfg.review_shortcut_next, desc = "Parley review: next round (menu, sticky mode)" },
+    }
+    for _, s in ipairs(menu_specs) do
+        if s.cfg then
+            for _, mode in ipairs(s.cfg.modes or {}) do
+                set_keymap({ buf }, mode, s.cfg.shortcut, open_menu, s.desc)
             end
         end
     end

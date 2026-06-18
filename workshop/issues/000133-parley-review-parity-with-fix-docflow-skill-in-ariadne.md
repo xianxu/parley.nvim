@@ -230,7 +230,7 @@ Detailed, executable plan: **`workshop/plans/000133-review-modes-journal-plan.md
 - [x] M1 — Modes engine: `Mode` pure parser + 6 mode sub-files + `skill_dir` injection + review `source(ctx)` composition (reuses `skill_invoke`).
 - [x] M2 — Flexible review flow: no-marker general review, submission decoupled from pending `{}` (quickfix on save), deletion gutter-why + decoration ride-until-next-round (B).
 - [x] M3 — Journal sidecar: pure serialize/parse/diff/drift + thin IO append/read + `on_done` payload widening + wired into the round.
-- [ ] M4 — Composite review menu (mode selector + multi-line instruction editor) + `<M-o>`/`<M-CR>` bindings + sticky mode; manual e2e.
+- [x] M4 — Composite review menu (mode selector + multi-line instruction editor) + `<M-o>`/`<M-CR>` bindings + sticky mode; manual e2e.
 
 ## Log
 
@@ -260,6 +260,7 @@ runtime machinery.
 Next: `sdlc start-plan` → durable plan in `workshop/plans/`.
 
 ### 2026-06-18
+- 2026-06-18: closed M4 — make test EXIT=0 (112 spec files; lint 0/0 in 211 files). M4: composite review_menu (mode selector + multi-line instruction editor, sticky mode, 6 tests) + <M-o>/<M-CR> bindings via setup_keymaps; float_picker.compute_layout exported; sidecar excluded from attachment.; review verdict: FIX-THEN-SHIP
 - 2026-06-18: closed M3 — make test EXIT=0 (111 spec files; lint 0/0 in 209 files). M3: pure journal serialize/parse/diff/drift (6 unit), sidecar IO append/read/drift (4 integration), wired into review on_done + widened skill_invoke payload + pure should_resubmit (16 flow + 4 skill_invoke).; review verdict: FIX-THEN-SHIP
 - 2026-06-18: closed M2 — make test EXIT=0 (109 spec files; lint 0/0 in 206 files). M2: no-marker general review + submission decoupled from pending {} (10 flow tests), deletion gutter-why + highlight empty-skip + dismiss + decoration ride (6 render tests).; review verdict: SHIP
 - 2026-06-18: closed M1 — make test EXIT=0 (109 spec files pass; lint 0/0 in 206 files). M1: mode.parse+directives (8 unit), load/list+6 mode files+source composition (6 integration), skill_dir injection (10 provider tests). Legacy marker-only review preserved.; review verdict: FIX-THEN-SHIP

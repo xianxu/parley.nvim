@@ -76,13 +76,17 @@ describe("review_menu", function()
         local b = vim.api.nvim_create_buf(false, true)
         vim.api.nvim_buf_set_name(b, "/tmp/doc-m4.md")
         require("parley.skills.review").setup_keymaps(b)
-        local has_menu = false
-        for _, m in ipairs(vim.api.nvim_buf_get_keymap(b, "n")) do
-            if m.desc and m.desc:find("open mode menu", 1, true) then
-                has_menu = true
+        local function has_desc(m, needle)
+            for _, km in ipairs(vim.api.nvim_buf_get_keymap(b, m)) do
+                if km.desc and km.desc:find(needle, 1, true) then
+                    return true
+                end
             end
+            return false
         end
-        assert.is_true(has_menu, "menu binding should be set on a markdown doc")
+        assert.is_true(has_desc("n", "open mode menu"), "<M-o> menu binding (normal)")
+        assert.is_true(has_desc("n", "next round"), "<M-CR> next binding (normal)")
+        assert.is_true(has_desc("i", "next round"), "<M-CR> next binding (insert)")
         vim.api.nvim_buf_delete(b, { force = true })
     end)
 end)

@@ -480,3 +480,9 @@ end)
 **Reason:** M3 boundary review (FIX-THEN-SHIP) flagged that Task 3.3 Step 3b / Spec §7 / Done-when call for storing the per-round **decoration set** (highlight ranges + diagnostic messages), but the shipped `journal.serialize_entry` stores only the flattened `explains` (rationale) + the unified diff.
 
 **Delta:** Deliberately keep the reduction (ARCH §6 YAGNI): the structured decoration set is needed only by the **deferred v2** in-buffer undo-projection, so persisting it now is speculative. The diff + rationale fully capture the round for the durable record; v2 either reconstructs decorations from diff + rationale (find each edit's text in the round's post-state, re-anchor its explain) or restores structured storage at that point. `skill_invoke`'s `on_done` already surfaces the live decoration set (`result.decorations`) so restoring storage later is a one-line change in review's `on_done`. The atlas note was corrected to match what's actually stored.
+
+### 2026-06-18 — M4 `review_menu.open` signature + `<M-CR>` semantics
+
+**Reason:** M4 boundary review flagged two plan/shipped mismatches.
+
+**Delta:** (1) Task 4.1 specified `review_menu.open(buf, {…})`, but the shipped API is `review_menu.open(opts)` with **no buf arg** — the menu manages its own scratch windows and the caller's `on_submit` carries the buffer action, so `buf` was unused (dropped to satisfy lint/ARCH-DRY). (2) Task 4.2 / Done-when described `<M-CR>` as "(re)opens the menu pre-selected to the sticky mode **and runs the next round**"; shipped behavior makes `<M-o>` and `<M-CR>` both **open the (sticky-preselected) menu**, and the round runs on submit — consistent with seed item 6 ("…or pops the menu with a sticky selection"). Also fixed in M4: the instruction box's `<Esc>` cancels in normal mode only (insert-`<Esc>` → normal mode) so the box keeps full vim editing per Spec §3.
