@@ -121,8 +121,8 @@ function M.load(dir, name)
     return M.parse(content)
 end
 
---- List all valid modes under dir, sorted by name. Files that fail to parse
---- are skipped (a malformed mode file is dropped, not fatal). IO seam.
+--- List all valid modes under dir, sorted by `order:` then name (editorial
+--- sequence). Files that fail to parse are skipped (dropped, not fatal). IO seam.
 --- @param dir string
 --- @return table list of Mode
 function M.list(dir)

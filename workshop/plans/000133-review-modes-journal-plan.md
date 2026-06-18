@@ -465,6 +465,64 @@ end)
 
 ---
 
+## Chunk 5: M5 — Decoration projection (undo/redo coherence)
+
+Added during acceptance test (#133). Problem: nvim undo reverts **text** only;
+review decorations are drawn once per round and then ride/persist, so after an
+undo the "style" is stale/stuck (esp. across the round's `:edit!` reload).
+Snapshot-projection (the operator's model): record the decoration set per
+content-state; on undo/redo re-render the matching record; a novel forward edit
+keeps riding (behavior B) and is itself recorded. Pure decide + thin IO
+(`ARCH-PURE`); reuses `skill_render` to draw (`ARCH-DRY`).
+
+### Task 5.1: `skill_render.snapshot` / `apply_snapshot`
+
+**Files:** Modify `lua/parley/skill_render.lua`; Test `tests/unit/skill_render_spec.lua`.
+
+- [ ] **Step 1: failing test** — draw highlights + diagnostics, `snapshot(buf)` →
+  `{hl_lines, diags}`; `clear_decorations`; `apply_snapshot(buf, snap)` restores
+  the same highlight extmark lines + INFO diagnostics.
+- [ ] **Step 2/3: implement** — `snapshot` reads the hl-namespace extmark rows +
+  `vim.diagnostic.get(buf,{namespace=diag_ns})`; `apply_snapshot` clears then
+  re-adds `DiffChange` per line + `vim.diagnostic.set` from the saved messages.
+- [ ] **Step 4/5: pass + commit.**
+
+### Task 5.2: `projection` record + watcher
+
+**Files:** Create `lua/parley/skills/review/projection.lua`; Test `tests/integration/review_projection_spec.lua`.
+
+- [ ] **Step 1: failing test** — `record_empty_for(buf, base)` + `record(buf)`
+  (snapshots current decorations under the buffer's content-hash); after content
+  reverts to `base` and the watcher fires → decorations cleared; revert to the
+  round state → decorations re-rendered; a novel content → snapshot captured (no
+  clear). Plus a pure `decide(records, hash) → "restore"|"capture"`.
+- [ ] **Step 2/3: implement** — per-buffer `{records = {[hash]=snap}}`; `hash` =
+  `sha256(buffer)`; `on_change` (TextChanged/TextChangedI): skip if `_applying`;
+  known hash → `apply_snapshot`; novel → capture. `ensure_watch` attaches the
+  autocmd once (lazy, after the first round). `set_applying` guards the round's
+  own `:edit!`.
+- [ ] **Step 4/5: pass + commit.**
+
+### Task 5.3: wire into the round
+
+**Files:** Modify `lua/parley/skills/review/init.lua` (`run_via_invoke` + `on_done`); Test `tests/integration/skill_invoke_review_spec.lua`.
+
+- [ ] **Step 1: failing test** — after a successful round (stub apply), the base
+  (pre) and post content-hashes are both recorded (base→empty, post→decorations)
+  and the watcher is attached.
+- [ ] **Step 2/3: implement** — set `projection.set_applying(buf,true)` before
+  invoke; in `on_done` on `result.ok`: `record_empty_for(buf, result.original)`,
+  `record(buf)`, `ensure_watch(buf)`, then `set_applying(buf,false)`. Records
+  persist across rounds (multi-round undo coherence).
+- [ ] **Step 4/5: pass + commit.**
+
+### Task 5.4: manual e2e + M5 boundary
+
+- [ ] Manual: run a round → highlights + gutter why; make 2 manual edits (style
+  rides); undo back through them → style re-renders at each; undo past the round
+  → style clears; redo → style returns. Document in `## Log`.
+- [ ] `sdlc milestone-close --issue 133 --milestone M5`.
+
 ## Notes / risks
 
 - **`ARCH-DRY`:** the modes engine adds *no* new driver — it rides `skill_invoke` + the provider's `source(ctx)` composition (mirrors `voice_apply`). Mode bodies must not restate the marker grammar/tool contract the base `SKILL.md` owns.
@@ -486,3 +544,9 @@ end)
 **Reason:** M4 boundary review flagged two plan/shipped mismatches.
 
 **Delta:** (1) Task 4.1 specified `review_menu.open(buf, {…})`, but the shipped API is `review_menu.open(opts)` with **no buf arg** — the menu manages its own scratch windows and the caller's `on_submit` carries the buffer action, so `buf` was unused (dropped to satisfy lint/ARCH-DRY). (2) Task 4.2 / Done-when described `<M-CR>` as "(re)opens the menu pre-selected to the sticky mode **and runs the next round**"; shipped behavior makes `<M-o>` and `<M-CR>` both **open the (sticky-preselected) menu**, and the round runs on submit — consistent with seed item 6 ("…or pops the menu with a sticky selection"). Also fixed in M4: the instruction box's `<Esc>` cancels in normal mode only (insert-`<Esc>` → normal mode) so the box keeps full vim editing per Spec §3.
+
+### 2026-06-18 — post-M4 e2e fixes folded into the M5 window
+
+**Reason:** acceptance testing surfaced three issues fixed alongside M5 (not in Chunk 5's projection-only scope); recorded here per AGENTS.md §1.
+
+**Delta:** (a) **Menu navigation reworked to cursor-line selection** — the menu now focuses the *list* window; `j`/`k`/arrows/mouse move the selection natively (the prior C-j/C-k-in-insert scheme was undiscoverable, and C-j is eaten as `<NL>` by terminals). `Tab`/`i` → instruction box; `Enter`/`M-CR`/`C-s` run; `Esc`/`C-c` cancel. (b) **Editorial mode order** — modes gained an optional `order:` frontmatter field (developmental=1 … free-form=6); `mode.parse` reads it and `mode.list` sorts by `order` then name, so the menu lists the document-construction sequence rather than alphabetically (Spec §1 table order). (c) **Stringified-`edits` tolerance** — `skill_invoke` now coerces a `propose_edits.edits` arg that a model emitted as a JSON string (so the batch applies), and `render_propose_edits` guards a non-table `edits` (no crash). (d) M5 review hardening: the projection watcher dropped `TextChangedI` (per-keystroke whole-buffer hashing) for `TextChanged`+`InsertLeave`, and bounded `records` (FIFO cap 200); `reset` now removes the watcher autocmd.

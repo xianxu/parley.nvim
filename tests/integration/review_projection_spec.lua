@@ -50,17 +50,61 @@ describe("review.projection", function()
         assert.is_true(#vim.diagnostic.get(buf) >= 1, "style should re-render at the round state")
     end)
 
-    it("captures a novel forward state (manual edit) rather than clearing", function()
+    it("captures a novel forward state (manual edit) without clearing the riding style", function()
         set(buf, { "round output" })
         skill_render.attach_diagnostics(buf, { { pos = 1, explain = "why" } }, "round output")
         projection.record(buf)
-        -- A manual forward edit → novel content; project should CAPTURE (not clear).
+        -- A manual forward edit → novel content; the riding decoration is still
+        -- present and project must CAPTURE it (not clear).
+        set(buf, { "round output edited" })
+        assert.is_true(#vim.diagnostic.get(buf) >= 1, "decoration rides the manual edit")
+        projection.project(buf)
+        assert.is_true(#vim.diagnostic.get(buf) >= 1, "capture must not clear the riding style")
+        -- Move away and back: the captured novel state restores its style.
+        set(buf, { "different content entirely" })
+        projection.project(buf)
         set(buf, { "round output edited" })
         projection.project(buf)
-        -- it recorded the new state, so projecting again restores (no clear)
-        local snap_diags = #vim.diagnostic.get(buf)
-        set(buf, { "round output edited" }) -- same content again (e.g. redo here)
+        assert.is_true(#vim.diagnostic.get(buf) >= 1, "novel state restores its captured style")
+    end)
+
+    it("re-renders coherently across TWO rounds of undo", function()
+        -- round 1: base0 → A (decoA)
+        set(buf, { "state A" })
+        skill_render.attach_diagnostics(buf, { { pos = 1, explain = "edit A" } }, "state A")
+        projection.record_empty_for(buf, "base zero")
+        projection.record(buf)
+        -- round 2: A → B (decoB)
+        set(buf, { "state B" })
+        skill_render.attach_diagnostics(buf, { { pos = 1, explain = "edit B" } }, "state B")
+        projection.record_empty_for(buf, "state A") -- pre-round-2 base = A (its own decoA still recorded under A)
+        projection.record(buf)
+        -- NOTE: record_empty_for(A) overwrites A→empty; the realistic flow records
+        -- A's decorations at round 1 and round 2's base is A *with* decoA. So
+        -- re-record A's decoration to model the true state:
+        set(buf, { "state A" })
+        skill_render.attach_diagnostics(buf, { { pos = 1, explain = "edit A" } }, "state A")
+        projection.record(buf)
+        -- undo B→A → decoA restored
         projection.project(buf)
-        assert.are.equal(snap_diags, #vim.diagnostic.get(buf))
+        local diags = vim.diagnostic.get(buf)
+        assert.is_true(#diags >= 1)
+        assert.matches("edit A", diags[1].message)
+        -- undo A→base0 → cleared
+        set(buf, { "base zero" })
+        projection.project(buf)
+        assert.are.equal(0, #vim.diagnostic.get(buf))
+    end)
+
+    it("set_applying suppresses the watcher (the round's own :edit! is not a user edit)", function()
+        set(buf, { "round output" })
+        skill_render.attach_diagnostics(buf, { { pos = 1, explain = "why" } }, "round output")
+        projection.record(buf)
+        projection.record_empty_for(buf, "base")
+        projection.set_applying(buf, true)
+        set(buf, { "base" }) -- would normally clear via projection
+        projection.project(buf) -- guarded → no-op
+        assert.is_true(#vim.diagnostic.get(buf) >= 1, "project is a no-op while applying")
+        projection.set_applying(buf, false)
     end)
 end)

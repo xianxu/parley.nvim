@@ -205,8 +205,10 @@ item: milestone-review design=0.0 impl=0.3
 item: milestone-review design=0.0 impl=0.3
 item: milestone-review design=0.0 impl=0.3
 item: milestone-review design=0.0 impl=0.3
+item: lua-neovim       design=0.3 impl=1.0
+item: milestone-review design=0.0 impl=0.3
 design-buffer: 0.30
-total: 8.4
+total: 10.1
 ```
 
 *Produced via `brain/data/life/42shots/velocity/estimate-logic-v2.md` against `baseline-v2.md`. Method A only.*
@@ -218,7 +220,9 @@ spec-quality discount** (the durable plan pre-resolves decisions) — except M4 
 implementation. The four `milestone-review` items are the M1–M4 review
 boundaries. M2's impl was lifted 0.8→1.0 (estimate-quality judge, #133): it's
 control-flow rework (resubmit-loop terminal logic) + a new deletion render path,
-not additive work. `recomputed = Σdesign(2.1)×1.30 + Σimpl(5.7)×1.0 ≈ 8.4`. Unit:
+not additive work. **M5** (added in acceptance test): decoration projection for undo/redo coherence
+— one more `lua-neovim` (design=0.3, ×0.5 — design partly emerges) + its review
+boundary. `recomputed = Σdesign(2.4)×1.30 + Σimpl(7.0)×1.0 ≈ 10.1`. Unit:
 build-effort (design + AI-impl); diverges from `sdlc actual` (operator-attention).
 
 ## Plan
@@ -231,6 +235,7 @@ Detailed, executable plan: **`workshop/plans/000133-review-modes-journal-plan.md
 - [x] M2 — Flexible review flow: no-marker general review, submission decoupled from pending `{}` (quickfix on save), deletion gutter-why + decoration ride-until-next-round (B).
 - [x] M3 — Journal sidecar: pure serialize/parse/diff/drift + thin IO append/read + `on_done` payload widening + wired into the round.
 - [x] M4 — Composite review menu (mode selector + multi-line instruction editor) + `<M-o>`/`<M-CR>` bindings + sticky mode; manual e2e.
+- [x] M5 — Decoration projection (undo/redo coherence): snapshot decorations per content-state, re-render on undo/redo, ride forward edits (B). Added during acceptance test.
 
 ## Log
 
@@ -260,6 +265,7 @@ runtime machinery.
 Next: `sdlc start-plan` → durable plan in `workshop/plans/`.
 
 ### 2026-06-18
+- 2026-06-18: closed M5 — make test EXIT=0 (113 spec files; lint 0/0 in 213 files). M5: skill_render snapshot/apply_snapshot (7 unit), projection module record/decide/project (3 integration), wired into round on_done (19 flow). Undo/redo re-render style coherently; forward edits ride (B).; review verdict: FIX-THEN-SHIP
 - 2026-06-18: closed M4 — make test EXIT=0 (112 spec files; lint 0/0 in 211 files). M4: composite review_menu (mode selector + multi-line instruction editor, sticky mode, 6 tests) + <M-o>/<M-CR> bindings via setup_keymaps; float_picker.compute_layout exported; sidecar excluded from attachment.; review verdict: FIX-THEN-SHIP
 - 2026-06-18: closed M3 — make test EXIT=0 (111 spec files; lint 0/0 in 209 files). M3: pure journal serialize/parse/diff/drift (6 unit), sidecar IO append/read/drift (4 integration), wired into review on_done + widened skill_invoke payload + pure should_resubmit (16 flow + 4 skill_invoke).; review verdict: FIX-THEN-SHIP
 - 2026-06-18: closed M2 — make test EXIT=0 (109 spec files; lint 0/0 in 206 files). M2: no-marker general review + submission decoupled from pending {} (10 flow tests), deletion gutter-why + highlight empty-skip + dismiss + decoration ride (6 render tests).; review verdict: SHIP

@@ -58,9 +58,11 @@ After an optional `<>`, `[]` and `{}` may appear in any order.
 ## Review menu (#133 M4)
 
 `lua/parley/review_menu.lua` — a composite two-window float: a mode **selector**
-on top (sticky-preselected to the last-used mode; `C-j`/`C-k`/`Tab` move) + a
-multi-line **instruction editor** below (a real modifiable buffer — `Enter` =
-newline, `M-CR`/`C-s` submit, `Esc` cancel). On submit it calls
+on top (the focused window; selection = its cursor line, so `j`/`k`/arrows/mouse
+move it natively; sticky-preselected to the last-used mode) + a multi-line
+**instruction editor** below. `Tab`/`i` jump to the editor; in it `Enter` =
+newline, `M-CR`/`C-s` submit, `Tab`/`Esc` return to the list; `Esc`/`C-c` cancel.
+On submit it calls
 `review.run_via_invoke(buf, { mode, instruction })`. Free-form mode requires a
 non-empty instruction. Reuses `float_picker.compute_layout` for geometry (now
 exported). The sidecar (`*.parley-journal.md`) is excluded from review
@@ -93,13 +95,14 @@ mode.directives(flags) ⊕ operator-instruction`. No mode selected → base SKIL
 (the legacy marker-only review).
 
 - **`lua/parley/skills/review/mode.lua`** — `parse(content)` (PURE: frontmatter →
-  `{name,scope,deletions,frontier,body}`), `directives(m)` (PURE: flags → prose the
-  model obeys), and the thin IO seam `load(dir,name)`/`list(dir)`. Canonical name ==
-  file basename (kebab), so `load` resolves by the selected name; the M4 menu
-  prettifies for display.
+  `{name,scope,deletions,frontier,order,body}`), `directives(m)` (PURE: flags → prose
+  the model obeys), and the thin IO seam `load(dir,name)`/`list(dir)` (sorted by
+  `order` then name). Canonical name == file basename (kebab), so `load` resolves
+  by the selected name; the menu prettifies for display.
 - **Behavior flags:** `scope` (`whole-doc` | `markers-only`), `deletions`
   (`apply-with-gutter-why` | `propose-strike` | `apply`), `frontier` (`on` | `off`
-  — when on, treat text above the topmost `🤖[]` as settled).
+  — when on, treat text above the topmost `🤖[]` as settled). Plus `order:` — the
+  editorial-sequence position that orders the menu (developmental=1 … free-form=6).
 - **Six shipped modes:** developmental, line-editing, copy-editing, proofreading,
   fact-check (inserts `🤖{}` findings only — no edits; resolution handed to the
   main agent), free-form (operator instruction governs).
