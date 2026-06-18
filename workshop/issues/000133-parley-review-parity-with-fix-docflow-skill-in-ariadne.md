@@ -4,6 +4,7 @@ status: working
 deps: []
 created: 2026-06-17
 updated: 2026-06-17
+estimate_hours: 8.2
 ---
 
 # parley review parity with fix/docflow skill in ariadne
@@ -191,6 +192,33 @@ model). Recording ships first; "revert to round N" (diff application) can follow
   submission-with-pending-`{}`, journal append/read + drift detection, and
   addition/deletion (strike) rendering.
 
+## Estimate
+
+```estimate
+model: estimate-logic-v2
+familiarity: 1.0
+item: lua-neovim       design=0.4 impl=1.0
+item: lua-neovim       design=0.3 impl=0.8
+item: lua-neovim       design=0.4 impl=1.0
+item: lua-neovim       design=1.0 impl=1.5
+item: milestone-review design=0.0 impl=0.3
+item: milestone-review design=0.0 impl=0.3
+item: milestone-review design=0.0 impl=0.3
+item: milestone-review design=0.0 impl=0.3
+design-buffer: 0.30
+total: 8.2
+```
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v2.md` against `baseline-v2.md`. Method A only.*
+
+Mapping: the four `lua-neovim` items are M1 (modes engine), M2 (flexible review
+flow), M3 (journal sidecar), M4 (composite menu UI). Design carries the **×0.2
+spec-quality discount** (the durable plan pre-resolves decisions) — except M4 at
+×0.5, since composite-float interaction design partly emerges in
+implementation. The four `milestone-review` items are the M1–M4 review
+boundaries. `recomputed = Σdesign(2.1)×1.30 + Σimpl(5.5)×1.0 ≈ 8.2`. Unit:
+build-effort (design + AI-impl); diverges from `sdlc actual` (operator-attention).
+
 ## Plan
 
 To be authored at `sdlc start-plan` → durable plan in `workshop/plans/` (via the
@@ -229,3 +257,15 @@ only in chat buffers (free in markdown docs), and parley ships no git-commit
 runtime machinery.
 
 Next: `sdlc start-plan` → durable plan in `workshop/plans/`.
+
+### 2026-06-18
+
+Drafted the durable plan (`workshop/plans/000133-review-modes-journal-plan.md`,
+4 milestones) and ran a fresh-eyes plan review — caught 1 blocking issue (the
+plan falsely claimed `skill_invoke`'s `on_done` exposes `original`; it passes
+only `{ok,applied,calls,results}`) + 4 important under-specs; all folded in.
+
+Corrected `estimate_hours` 14 → **8.2**, derived via `estimate-logic-v2` (was a
+free-floating guess before). Added the `## Estimate` block. Note: parley's
+installed `sdlc` predates #117, so `change-code` won't reconcile the block here
+yet — the derivation is done by hand per the methodology.
