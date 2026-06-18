@@ -73,14 +73,31 @@ function M.wrap(text, width)
     return table.concat(out, "\n")
 end
 
+-- Usable wrap width for the virtual_lines "why": the window's text columns
+-- (total width minus the number/sign/fold gutter, via getwininfo.textoff) minus
+-- a margin for the indent + connector nvim renders under the line. Wrapping to a
+-- fixed 76 overflowed the indented virtual_lines and truncated the right edge
+-- (#133 review). Falls back to 76 with no window.
+local function diag_wrap_width()
+    local ok, info = pcall(function()
+        return vim.fn.getwininfo(vim.api.nvim_get_current_win())[1]
+    end)
+    if not ok or type(info) ~= "table" then
+        return 76
+    end
+    return math.max(30, (info.width or 80) - (info.textoff or 0) - 10)
+end
+
 --- Attach INFO diagnostics from edit explanations. Each diagnostic spans the
 --- edit's line range (lnum..end_lnum) so "cursor in the region" matches, and its
---- message is hard-wrapped for `virtual_lines` display. (#133 M6)
+--- message is hard-wrapped to the window's usable width for `virtual_lines`
+--- display (no right-edge truncation). (#133 M6)
 --- @param buf number
 --- @param edits table[]  applied edits with {pos, explain, new_string?}
 --- @param original_content string  file content before edits
 function M.attach_diagnostics(buf, edits, original_content)
     ensure_namespaces()
+    local width = diag_wrap_width()
     local diagnostics = {}
     for _, edit in ipairs(edits) do
         local line_num = 0
@@ -97,7 +114,7 @@ function M.attach_diagnostics(buf, edits, original_content)
             lnum = line_num,
             end_lnum = line_num + span,
             col = 0,
-            message = M.wrap(edit.explain or "edit applied"),
+            message = M.wrap(edit.explain or "edit applied", width),
             severity = vim.diagnostic.severity.INFO,
             source = "parley-skill",
         })
