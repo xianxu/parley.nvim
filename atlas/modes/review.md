@@ -129,11 +129,30 @@ the journal owns the durable, cross-session record.
   and calls `journal.append` (skips no-op rounds + path-less buffers).
 - **Drift**: `is_drift(recorded_hash, current)` detects an external edit (e.g.
   Claude Code resolving markers) since the last recorded round.
-- **Deferred (v2)**: "revert/show round N" (reconstruct via base + replayed
-  diffs) and active in-buffer undo-projection of past-round decorations. The
-  journal stores the **diff + rationale** per round (not a structured decoration
-  set — see the plan's Revisions); v2 reconstructs decorations from the diff +
-  rationale, or restores structured storage when that feature is built.
+- **Deferred (v2)**: durable "revert/show round N" (reconstruct via base +
+  replayed diffs). The journal stores the **diff + rationale** per round (not a
+  structured decoration set — see the plan's Revisions).
+
+## Decoration projection — undo/redo coherence (#133 M5)
+
+nvim's undo reverts **text only**; review decorations are drawn once per round
+and otherwise ride, so without help they go stale after an undo (esp. across the
+round's `:edit!` reload). `lua/parley/skills/review/projection.lua` keeps style
+coherent: a per-buffer record `{ content-hash → decoration snapshot }`, and on
+each text change it **projects** the right style onto the current state —
+
+- **undo/redo** lands on a recorded content-hash → re-render that snapshot (via
+  `skill_render.snapshot`/`apply_snapshot`);
+- a **novel forward edit** (manual tweak / `<M-a>` accept — behavior B) keeps the
+  live decorations riding, and snapshots them under the new state so a later undo
+  restores them.
+
+A round records its **pre** state (base → empty style, so undoing across the
+round clears it) and its **post** state (its decorations); records persist across
+rounds for multi-round undo. `set_applying` suppresses the watcher during the
+round's own reload; the watcher is attached lazily (only after the first round).
+The decide rule (`projection.decide`) is pure. Session-scoped (matches nvim's
+session-scoped undo); per-state snapshots aren't journaled.
 
 ## Config
 
@@ -153,6 +172,7 @@ review_shortcut_finder = { modes = { "n", "i" }, shortcut = "<C-g>vf" },
 - `lua/parley/skills/review/modes/*.md` — the six review-mode prompt files (#133)
 - `lua/parley/skills/review/journal.lua` — per-round journal: PURE serialize/parse/diff/drift + sidecar IO seam (#133)
 - `lua/parley/review_menu.lua` — composite review-mode menu (selector + instruction editor); `<M-o>`/`<M-CR>` (#133)
+- `lua/parley/skills/review/projection.lua` — decoration projection: re-render style on undo/redo per content-state (#133 M5)
 - `lua/parley/skills/review/SKILL.md` — system prompt (light edit + heavy revision sections)
 - `lua/parley/skill_invoke.lua` — the P2 driver (one tool-use exchange via the existing dispatcher)
 - `lua/parley/skill_render.lua` — diagnostics + edit highlights
