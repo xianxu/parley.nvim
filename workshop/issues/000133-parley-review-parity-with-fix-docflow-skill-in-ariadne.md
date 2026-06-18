@@ -4,7 +4,7 @@ status: working
 deps: []
 created: 2026-06-17
 updated: 2026-06-17
-estimate_hours: 8.2
+estimate_hours: 8.4
 ---
 
 # parley review parity with fix/docflow skill in ariadne
@@ -198,7 +198,7 @@ model). Recording ships first; "revert to round N" (diff application) can follow
 model: estimate-logic-v2
 familiarity: 1.0
 item: lua-neovim       design=0.4 impl=1.0
-item: lua-neovim       design=0.3 impl=0.8
+item: lua-neovim       design=0.3 impl=1.0
 item: lua-neovim       design=0.4 impl=1.0
 item: lua-neovim       design=1.0 impl=1.5
 item: milestone-review design=0.0 impl=0.3
@@ -206,7 +206,7 @@ item: milestone-review design=0.0 impl=0.3
 item: milestone-review design=0.0 impl=0.3
 item: milestone-review design=0.0 impl=0.3
 design-buffer: 0.30
-total: 8.2
+total: 8.4
 ```
 
 *Produced via `brain/data/life/42shots/velocity/estimate-logic-v2.md` against `baseline-v2.md`. Method A only.*
@@ -216,20 +216,21 @@ flow), M3 (journal sidecar), M4 (composite menu UI). Design carries the **×0.2
 spec-quality discount** (the durable plan pre-resolves decisions) — except M4 at
 ×0.5, since composite-float interaction design partly emerges in
 implementation. The four `milestone-review` items are the M1–M4 review
-boundaries. `recomputed = Σdesign(2.1)×1.30 + Σimpl(5.5)×1.0 ≈ 8.2`. Unit:
+boundaries. M2's impl was lifted 0.8→1.0 (estimate-quality judge, #133): it's
+control-flow rework (resubmit-loop terminal logic) + a new deletion render path,
+not additive work. `recomputed = Σdesign(2.1)×1.30 + Σimpl(5.7)×1.0 ≈ 8.4`. Unit:
 build-effort (design + AI-impl); diverges from `sdlc actual` (operator-attention).
 
 ## Plan
 
-To be authored at `sdlc start-plan` → durable plan in `workshop/plans/` (via the
-`superpowers-writing-plans` skill). Provisional milestone sketch (pre-plan, not
-yet review boundaries):
+Detailed, executable plan: **`workshop/plans/000133-review-modes-journal-plan.md`**
+(authored via `superpowers-writing-plans`, fresh-eyes reviewed — see the
+2026-06-18 Log entry). Four milestone review boundaries:
 
-- [ ] Modes engine: `mode` arg + per-mode sub-files (frontmatter flags + body); frontier + scope + deletion-flag handling.
-- [ ] No-marker general review path (whole-doc modes; lift the "no markers → abort" guard for mode runs).
-- [ ] Composite review menu UI (mode selector + multi-line instruction buffer) + `<M-o>` / `<M-CR>` bindings + sticky mode.
-- [ ] Submission decoupling (allow pending `{}`; quickfix on save) + decoration ride-until-next-round (B).
-- [ ] Self-contained journal sidecar (base + per-round diff + rationale + decoration set; drift detection).
+- [ ] M1 — Modes engine: `Mode` pure parser + 6 mode sub-files + `skill_dir` injection + review `source(ctx)` composition (reuses `skill_invoke`).
+- [ ] M2 — Flexible review flow: no-marker general review, submission decoupled from pending `{}` (quickfix on save), deletion gutter-why + decoration ride-until-next-round (B).
+- [ ] M3 — Journal sidecar: pure serialize/parse/diff/drift + thin IO append/read + `on_done` payload widening + wired into the round.
+- [ ] M4 — Composite review menu (mode selector + multi-line instruction editor) + `<M-o>`/`<M-CR>` bindings + sticky mode; manual e2e.
 
 ## Log
 
