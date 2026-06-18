@@ -8,46 +8,224 @@ updated: 2026-06-17
 
 # parley review parity with fix/docflow skill in ariadne
 
-I'm thinking about improving document review tool, to be more on parity of coding agent, such that parley can be used more independently. This continues my search of the equilibrium of where AI can help human. 
+## Problem
 
-Specifically, the following implements:
+Parley's document review is a single marker-processor (`<C-g>ve` →
+`skills/review`): it edits a doc from `🤖` *ready* markers in one batch, and
+refuses entirely when there are no markers. It has no review **modes**, no
+**free-form** instruction, no faster **ping-pong** trigger, and no **durable
+record** of what each round changed or why (the per-edit `explain` lands only in
+ephemeral gutter diagnostics and evaporates on the next run).
 
-1/ bind the alt+o to the skill open, for easier access. 
+The goal is to bring review to **coding-agent parity** so parley can drive a
+document review **independently** — borrowing the editing discipline of
+ariadne's `fix` skill (reading frontier, attributed per-round history) but *not*
+its git-branch machinery.
 
-2/ last used skill should be selected by default. 
-
-3/ review tool support free form instruction, those instruction would be review location neutral, e.g. give me some ideas, or expand based on the sketches and make it a document etc. or, we may add selection of different stages of review. think the overall process of constructing a document,sometimes we lack some good material, only have vague ideas; other times there is stage we have material, need some organization and structuring; sometimes we want to do some tuning of tone; sometimes we want copy edit and spell check across. One possible improvement would be that upon triggering review tool, it is presented with a menu to select which one of the review is requested, each would just respond to some specific prompting. then the "free form" prompt can be an escape: let's chat about what review you want. 
-
-4/ when there's no markers, general review can be performed. 
-
-5/ generally, check the ../ariadne/construct/local/fix skill, there are various aspect that can be borrowed. for example, in terms of editing, when to consider portion of the document as more settled (from top to bottom). Auto commit as part of each back and forth etc. 
-
-6/ the `review` tool is the initial trigger, we should have faster shortcut to faster ping pong. potentially the alt+return, essentially same as `pair` and `parley`'s chat mode. imagine if we are in a "review process" already (initially manually triggered with the `review` tool) alt+return would trigger the next round. or maybe, alt+return would pop up a dialog with some menu for user to confirm what review's submitted. this is the same menu mentioned in point 3/ in terms of "overall process of constructing a document". and the menu item selected would be sticky, so that next alt+return would have that selected. 
-
-7/ now think this through, review modes would roughly the following (aka the menu)
-    7.1/ developmental (we call it brainstorming)
-    7.2/ line editing 
-    7.3/ copy editing
-    7.4/ proof reading
-    7.5/ review of fact (fresh context 2nd agent review)
-    7.6/ free form
-
-8/ and below that menu, we have space to type in anything. so if 7.1/ is selected while user also typed in text, it's fine, both are sent as instruction. this edit box blow the menu should be a normal buffer really with good editing experience.
-
-9/ alt+return would trigger also the quickfix that contains items needing user attention.
-
-## Done when
-
--
+This **deliberately revises** the earlier "parley = marking layer; Claude Code
+(`xx-fix`) resolves" split: review/resolution UX is back in scope for parley.
+The one narrow exception is fact-check mode, which still hands resolution off to
+the main agent.
 
 ## Spec
 
+### 1. Review modes — one skill, modes as sub-markdown files
+
+The existing `review` skill gains a `mode` arg. Each mode is a sub-file
+`lua/parley/skills/review/modes/<name>.md` = **YAML frontmatter (behavior flags)
++ markdown prompt body**. The skill reads the flags to drive behavior and feeds
+the body as the prompt.
+
+Behavior flags: `scope` (`whole-doc` | `markers-only`), `deletions`
+(`apply-with-gutter-why` | `propose-strike`), `frontier` (`on` | `off`).
+
+The six modes and their **default** flags (the deletion column is a *starting
+point* — we calibrate apply-vs-propose by using the tool in practice):
+
+| Mode (menu label) | scope | deletions | frontier | notes |
+|-------------------|-------|-----------|----------|-------|
+| developmental | whole-doc | apply + gutter-why | off | restructure freely |
+| line editing | whole-doc | propose (strike) | on | |
+| copy editing | whole-doc | propose (strike) | on | |
+| proofreading | whole-doc | apply (mechanical) | on | typos/punctuation |
+| fact-check | whole-doc, read-only | — inserts `🤖{}` findings only | on | resolution handed to Claude Code (main agent) |
+| free-form | inferred | inferred | inferred | instruction **required** (non-empty) |
+
+**Reading frontier** (from `fix`): when `frontier: on`, everything *above* the
+topmost `🤖[]` human marker is treated as **settled** — confine edits/findings to
+the frontier and below; the frontier descends across rounds. `frontier: off`
+(developmental) may touch the whole doc.
+
+### 2. No-marker general review
+
+When a doc has **no markers**, modes still run (whole-doc modes operate on the
+full document). This is the headline new capability — today review aborts with
+"no markers found". Edit orientation (we keep parley's existing mechanisms):
+
+- **additions / in-place rewrites** → applied + `DiffChange` highlight + INFO
+  gutter diagnostic carrying the `explain`.
+- **deletions** → per the mode's `deletions` flag: either applied with a gutter
+  "why" diagnostic at the join point, or proposed as a `🤖~old~{new}` strike
+  marker (review-convention) for the human to accept/reject.
+
+### 3. The review menu (UI)
+
+A composite float modeled on `float_picker`'s two-window layout (the
+`chat_finder` pattern — list on top, input below):
+
+- **top** = the six-mode **selector**, sticky-preselected to the last-used mode.
+- **bottom** = a **multi-line, normal editable buffer** (proper vim editing, per
+  the original ask) for free-form instruction — *not* the single-line
+  `buftype=prompt` query the picker uses today, and *not* a list filter.
+- Mode selection **and** typed instruction are both sent (a mode plus extra text
+  is fine). Free-form mode requires non-empty instruction.
+
+Likely a small purpose-built component reusing `float_picker`'s layout helpers
+(`compute_layout`, …) rather than overloading the prompt path.
+
+### 4. Bindings
+
+- `<M-o>` — open the review menu, **in addition to** the existing `<C-g>s`
+  skill picker.
+- `<M-CR>` — in a markdown doc: (re)open the menu **pre-selected** to the sticky
+  mode (Enter/`<M-CR>` fires; free text always available for extra instruction).
+  **Always works** — if not yet in review, it enters review (no session gate).
+  No conflict: `<M-CR>` is chat-respond only in *chat* buffers; it is free in
+  markdown artifact buffers.
+
+### 5. Submission behavior (decoupled from quickfix)
+
+- The pending-`{}`-marker **quickfix surfaces on save** (`BufWritePost`), not on
+  submission.
+- **Submission is allowed even with unaddressed `{}` markers** — the agent
+  simply skips non-ready markers (last section `{}`) and processes only ready
+  ones (last section `[]`). This **reverses** today's behavior, where
+  `run_via_invoke` refuses to submit while `{}` markers are pending.
+
+### 6. Decorations — live cue (behavior B)
+
+After a round, highlights (`DiffChange` extmarks) + INFO diagnostics **ride** via
+extmark gravity and **persist until the next round or explicit dismiss** (parley
+already clears at each round start). Rationale: edits are *local* but decorations
+are *doc-wide* — keep the visual cue for the other changed regions while you edit
+one place. We accept that the edited region's decoration goes soft-stale.
+
+### 7. History — self-contained journal sidecar (replaces git/docflow)
+
+Git/branch journaling (the docflow full-mirror) is **dropped**:
+
+- `scripts/docflow.sh` is a dangling symlink into `../../ariadne/` that also
+  `source`s ariadne's `lib.sh` → **not portable** to a standalone plugin install.
+- A `review/<slug>` branch moves the **whole working tree** — disruptive inside
+  nvim, where a doc is one file in a larger repo.
+- This workflow **expects external edits** (Claude Code resolving / editing the
+  doc), which **invalidate** nvim's persistent `undofile`.
+- vim's **native undo** already covers in-session undo/redo for free.
+
+Instead: a **self-contained, pure-Lua markdown journal sidecar beside the doc**
+(e.g. `<doc>.parley-journal.md`), tracked in git **alongside** the doc (no
+gitignore — the review history travels with the document). Per round it stores:
+base snapshot (round 0) + per-round **unified diff** (`vim.diff()`), mode, side,
+per-edit **explanations** (rationale), the **decoration set** (highlight ranges +
+diagnostic messages), and a timestamp. It can also **detect external drift**
+(compare last-recorded state to disk on open).
+
+This captures docflow's *value* (attributed per-round diffs + rationale) without
+its git-branch *mechanism*. Durable revisit = **open the journal**; in-session
+text time-travel = **vim native undo**.
+
+The journal must reconstruct any round's text (base + replayable diffs — git's
+model). Recording ships first; "revert to round N" (diff application) can follow.
+
+### 8. Deferred / v2
+
+- **Active in-buffer undo-projection**: re-render a past round's decorations when
+  the buffer content **exactly matches** a stored round's snapshot
+  (content-projection — O(rounds) hashes, one check per `TextChanged`, no
+  per-keystroke storage). The journal already stores decoration sets, so this is
+  a clean future add. Not in v1.
+- **Cross-session sticky mode** (persist last-used across nvim restarts; in-session
+  recall already exists via `float_picker`).
+- **"Show round N"** command — reconstruct a round's text + decorations from the
+  journal.
+
+### Seed — original ask (verbatim)
+
+1. bind `alt+o` to skill open, for easier access.
+2. last-used skill selected by default.
+3. review tool supports free-form instruction (location-neutral, e.g. "give me
+   some ideas", "expand the sketches into a document"); plus a menu to select a
+   stage of review, each tied to specific prompting; free-form is the escape.
+4. when there are no markers, general review can be performed.
+5. borrow from `../ariadne/construct/local/fix`: settling top-to-bottom, auto
+   commit per back-and-forth.
+6. faster shortcut for ping-pong (`alt+return`, like `pair`/`parley` chat mode):
+   in an active review, it triggers the next round, or pops the menu with a
+   sticky selection.
+7. review modes (the menu): developmental (brainstorming), line editing, copy
+   editing, proofreading, review-of-fact (fresh-context 2nd-agent), free-form.
+8. an edit box below the menu — a normal buffer with good editing; mode +
+   typed text both sent.
+9. `alt+return` also surfaces the quickfix of items needing attention.
+
+## Done when
+
+- `<M-o>` opens a composite review menu (mode selector + multi-line instruction
+  editor); the last-used mode is pre-selected.
+- The `review` skill takes a `mode` arg backed by per-mode sub-files
+  (frontmatter flags + prompt body); all six modes present and selectable.
+- A doc with **no markers** runs a general review per the selected mode
+  (whole-doc modes edit the full document); a doc with markers still processes
+  ready markers as before.
+- Edits orient the user: additions highlighted + gutter `explain`; deletions per
+  the mode's flag (gutter-why or `🤖~old~{new}` strike marker).
+- `<M-CR>` (re)opens the menu pre-selected to the sticky mode and runs the next
+  round; works even when not yet in review; submission proceeds even with
+  unaddressed `{}` markers.
+- The pending-`{}` quickfix surfaces on **save**, decoupled from submission.
+- Each review round appends to a self-contained markdown journal sidecar beside
+  the doc (base + diff + mode + rationale + decoration set + timestamp); no git
+  or branch machinery; the record survives across nvim sessions.
+- Round decorations persist (ride) until the next round or explicit dismiss.
+- Tests cover: mode loading + flag parsing, no-marker general review,
+  submission-with-pending-`{}`, journal append/read + drift detection, and
+  addition/deletion (strike) rendering.
 
 ## Plan
 
-- [ ]
+To be authored at `sdlc start-plan` → durable plan in `workshop/plans/` (via the
+`superpowers-writing-plans` skill). Provisional milestone sketch (pre-plan, not
+yet review boundaries):
+
+- [ ] Modes engine: `mode` arg + per-mode sub-files (frontmatter flags + body); frontier + scope + deletion-flag handling.
+- [ ] No-marker general review path (whole-doc modes; lift the "no markers → abort" guard for mode runs).
+- [ ] Composite review menu UI (mode selector + multi-line instruction buffer) + `<M-o>` / `<M-CR>` bindings + sticky mode.
+- [ ] Submission decoupling (allow pending `{}`; quickfix on save) + decoration ride-until-next-round (B).
+- [ ] Self-contained journal sidecar (base + per-round diff + rationale + decoration set; drift detection).
 
 ## Log
 
-### 2026-06-17
+### 2026-06-17 — session summary
 
+Brainstormed the full design with the operator and converged the Spec above.
+Key decisions landed: (1) **scope revision** — parley drives review
+independently now (memory + the project split note updated); (2) **one** review
+skill with modes as sub-markdown files (frontmatter flags + prompt body), six
+modes; (3) **no-marker general review** is the headline new capability;
+(4) deletions handled per-mode (apply+gutter-why vs `🤖~old~{new}` strike),
+calibrated in practice; (5) fact-check is mark-only and hands resolution to
+Claude Code; (6) **drop git/docflow** (dangling symlink, whole-tree branch
+churn, external edits invalidate `undofile`) in favour of a **self-contained
+pure-Lua journal sidecar** beside the doc; vim native undo owns in-session
+time-travel; (7) decorations **ride until next round** (behavior B) so doc-wide
+cues survive a local edit; (8) active undo-projection, cross-session sticky
+mode, and "show round N" deferred to v2.
+
+Grounding checked against current code: `skills/review/{init,SKILL}.lua`,
+`skill_invoke.lua`, `skill_picker.lua`, `skill_registry.lua`, `float_picker.lua`
+(two-window layout + session recall), `skill_render.lua` (DiffChange highlight +
+INFO diagnostics, no deletion path today). Confirmed `<M-CR>` is chat-respond
+only in chat buffers (free in markdown docs), and parley ships no git-commit
+runtime machinery.
+
+Next: `sdlc start-plan` → durable plan in `workshop/plans/`.
