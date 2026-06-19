@@ -52,8 +52,8 @@ After an optional `<>`, `[]` and `{}` may appear in any order.
 | `<M-r>`         | Reject the marker at cursor per review-convention §5            |
 | `<C-g>ve`       | Run the review skill (agent edits per ready markers, legacy no-mode) |
 | `<C-g>vf`       | Open the review finder (jump to files with pending markers)     |
-| `<M-o>`         | Open the **review-mode menu** (mode selector + instruction editor) (#133) |
-| `<M-CR>`        | (Re)open the menu pre-selected to the sticky mode — fast next round (#133) |
+| `<M-o>`         | Open the **skill picker** (review is one of the skills) (#133) |
+| `<M-CR>`        | Open the **review-mode menu** (mode selector + instruction editor; sticky-preselected) (#133) |
 
 ## Review menu (#133 M4)
 
@@ -188,6 +188,8 @@ review_agent = "",              -- agent name (deprecated; use skills config)
 review_highlight_duration = 2000, -- highlight fade time in ms
 review_shortcut_edit   = { modes = { "n" }, shortcut = "<C-g>ve" },
 review_shortcut_finder = { modes = { "n", "i" }, shortcut = "<C-g>vf" },
+review_shortcut_menu   = { modes = { "n" }, shortcut = "<M-o>" },   -- skill picker (#133)
+review_shortcut_next   = { modes = { "n", "i" }, shortcut = "<M-CR>" }, -- review-mode menu (#133)
 -- Marker insertion: see drill_in_callbacks in lua/parley/init.lua
 -- (shared <M-q> / <C-g>q binding)
 ```
@@ -198,7 +200,7 @@ review_shortcut_finder = { modes = { "n", "i" }, shortcut = "<C-g>vf" },
 - `lua/parley/skills/review/mode.lua` — Mode parse/directives (PURE) + load/list IO seam (#133)
 - `lua/parley/skills/review/modes/*.md` — the six review-mode prompt files (#133)
 - `lua/parley/skills/review/journal.lua` — per-round journal: PURE serialize/parse/diff/drift + sidecar IO seam (#133)
-- `lua/parley/review_menu.lua` — composite review-mode menu (selector + instruction editor); `<M-o>`/`<M-CR>` (#133)
+- `lua/parley/review_menu.lua` — composite review-mode menu (selector + instruction editor); `<M-CR>` (#133)
 - `lua/parley/skills/review/projection.lua` — decoration projection: re-render style on undo/redo per content-state (#133 M5)
 - `lua/parley/skills/review/diag_display.lua` — inline "why" display toggle (`:ParleyShowDiagnostics`, cursor-region auto-show) (#133 M6)
 - `lua/parley/progress.lua` — detached progress bar (general reusable long-op feedback; review is the first user) (#133 M7)

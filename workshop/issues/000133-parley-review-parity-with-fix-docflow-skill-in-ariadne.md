@@ -238,6 +238,13 @@ feedback surface) (design=0.3 ×0.5) + its boundary.
 `recomputed = Σdesign(2.9)×1.30 + Σimpl(9.4)×1.0 ≈ 13.2`. Unit:
 build-effort (design + AI-impl); diverges from `sdlc actual` (operator-attention).
 
+**Estimate reconciliation:** frontmatter `estimate_hours: 8.4` is the *frozen
+M1–M4 plan-time commitment* (the value committed at `start-plan`, against which
+`actual_hours: 9.10` is a near-miss), and is deliberately left unchanged. The
+block `total: 13.2` is the *full post-hoc build-effort* including the emergent
+M5–M7 milestones added during acceptance testing. The two differ by design — one
+is the velocity-calibration commitment, the other the recomputed as-built total.
+
 ## Plan
 
 Detailed, executable plan: **`workshop/plans/000133-review-modes-journal-plan.md`**
