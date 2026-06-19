@@ -116,6 +116,31 @@ describe("providers.disk", function()
         assert.is_truthy(body:find("SLUG=x", 1, true), "caller-supplied ctx survives enrichment")
     end)
 
+    it("injects ctx.skill_dir (the discovery-time dir) into an explicit source(ctx)", function()
+        -- delta: an explicit source(ctx) that reads ctx.skill_dir, and NO SKILL.md
+        -- — proving skill_dir is injected even without a SKILL.md (the modes/
+        -- composition in review depends on this). #133.
+        vim.fn.mkdir(root .. "/delta", "p")
+        write(root .. "/delta/init.lua", {
+            "return {",
+            '  name = "delta",',
+            '  description = "Delta skill",',
+            '  scope = "global",',
+            "  activation = { manual = true },",
+            "  source = function(ctx)",
+            '    return "DIR=" .. (ctx.skill_dir or "<none>")',
+            "  end,",
+            "}",
+        })
+        local delta = by_name(providers.disk(root):list(), "delta")
+        assert.is_not_nil(delta)
+        assert.are.equal("DIR=" .. root .. "/delta", delta.source({}))
+        -- caller-supplied ctx survives (not mutated)
+        local caller_ctx = { args = { x = 1 } }
+        delta.source(caller_ctx)
+        assert.is_nil(caller_ctx.skill_dir, "must not mutate the caller's ctx")
+    end)
+
     it("skips a dir whose init.lua throws, still listing the rest", function()
         vim.fn.mkdir(root .. "/boom", "p")
         write(root .. "/boom/init.lua", { 'error("kaboom at load")' })

@@ -518,6 +518,10 @@ local function compute_layout(desired_w, desired_h, ui, has_tag_bar)
     return win_w, win_h, row, col, tag_bar_row, prompt_row
 end
 
+-- Exported so sibling composite floats (e.g. review_menu, #133) reuse the same
+-- centered geometry instead of duplicating the math (ARCH-DRY).
+M.compute_layout = compute_layout
+
 -- Truncate a display string to fit within max_w display columns, appending "…".
 local function truncate(text, max_w)
     if vim.fn.strdisplaywidth(text) <= max_w then return text end

@@ -35,6 +35,8 @@ describe("arch: buffer mutation boundary", function()
                 "lua/parley/config.lua",
                 "lua/parley/exchange_clipboard.lua",
                 "lua/parley/float_picker.lua",
+                "lua/parley/review_menu.lua", -- #133: composite review-mode menu (own scratch UI buffers)
+                "lua/parley/progress.lua", -- #133: detached progress bar (own scratch UI buffer)
                 "lua/parley/highlighter.lua",
                 "lua/parley/init.lua",
                 "lua/parley/issues.lua",

@@ -750,6 +750,14 @@ M.setup = function(opts)
 	-- :ParleyProxy <subcommand> — manage the optional bundled cliproxyapi (#131)
 	M.register_proxy_command(M.config.cmd_prefix)
 
+	-- :ParleyShowDiagnostics — toggle inline display of review "why" diagnostics
+	-- (cursor-region auto-show, scoped to parley's namespace). Default on. (#133 M6)
+	M.helpers.create_user_command(M.config.cmd_prefix .. "ShowDiagnostics", function()
+		local on = require("parley.skills.review.diag_display").toggle()
+		M.logger.info("Parley review diagnostics: inline display " .. (on and "ON" or "OFF"))
+	end)
+	require("parley.skills.review.diag_display").set(true)
+
 	-- Register all global keymaps from the keybinding registry
 	kb_registry.register_global(
 		{ "global", "repo", "note", "issue", "vision", "chat" },
@@ -1692,7 +1700,17 @@ local function drill_in_resolve_at_cursor_with_mode(buf, mode)
 		drill_in_flash_clear(buf)
 
 		local new_lines = vim.split(new_text, "\n", { plain = true })
-		vim.api.nvim_buf_set_lines(buf, 0, -1, false, new_lines)
+		-- Replace ONLY the marker's line range (not the whole buffer) so review
+		-- decorations elsewhere RIDE the edit via extmark gravity — exactly like a
+		-- manual edit. A full set_lines(0,-1) would wipe every extmark + diagnostic
+		-- (#133). A content-verification fallback guarantees correctness if the
+		-- range math is ever off.
+		local start0, end0, region = _drill_in_mod.narrow_replace_range(lines, new_text, m.byte_start, m.byte_end)
+		local ok_narrow = pcall(vim.api.nvim_buf_set_lines, buf, start0, end0, false, region)
+		if not ok_narrow
+			or table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n") ~= new_text then
+			vim.api.nvim_buf_set_lines(buf, 0, -1, false, new_lines) -- safe fallback
+		end
 
 		local target = m.byte_start
 		local target_row, target_col = 1, 0

@@ -1,10 +1,11 @@
 ---
 id: 000133
-status: working
+status: done
 deps: []
 created: 2026-06-17
-updated: 2026-06-17
-estimate_hours: 8.2
+updated: 2026-06-18
+estimate_hours: 8.4
+actual_hours: 9.10
 ---
 
 # parley review parity with fix/docflow skill in ariadne
@@ -85,6 +86,10 @@ Likely a small purpose-built component reusing `float_picker`'s layout helpers
 (`compute_layout`, …) rather than overloading the prompt path.
 
 ### 4. Bindings
+
+> **Superseded (acceptance test, see plan Revisions 2026-06-18):** `<M-o>` opens
+> the **skill picker** (review is one skill); `<M-CR>` is the direct review
+> trigger (opens the review-mode menu). The original §4 text below predates that.
 
 - `<M-o>` — open the review menu, **in addition to** the existing `<C-g>s`
   skill picker.
@@ -198,15 +203,21 @@ model). Recording ships first; "revert to round N" (diff application) can follow
 model: estimate-logic-v2
 familiarity: 1.0
 item: lua-neovim       design=0.4 impl=1.0
-item: lua-neovim       design=0.3 impl=0.8
+item: lua-neovim       design=0.3 impl=1.0
 item: lua-neovim       design=0.4 impl=1.0
 item: lua-neovim       design=1.0 impl=1.5
 item: milestone-review design=0.0 impl=0.3
 item: milestone-review design=0.0 impl=0.3
 item: milestone-review design=0.0 impl=0.3
 item: milestone-review design=0.0 impl=0.3
+item: lua-neovim       design=0.3 impl=1.0
+item: milestone-review design=0.0 impl=0.3
+item: lua-neovim       design=0.2 impl=0.8
+item: milestone-review design=0.0 impl=0.3
+item: lua-neovim       design=0.3 impl=1.0
+item: milestone-review design=0.0 impl=0.3
 design-buffer: 0.30
-total: 8.2
+total: 13.2
 ```
 
 *Produced via `brain/data/life/42shots/velocity/estimate-logic-v2.md` against `baseline-v2.md`. Method A only.*
@@ -216,20 +227,37 @@ flow), M3 (journal sidecar), M4 (composite menu UI). Design carries the **×0.2
 spec-quality discount** (the durable plan pre-resolves decisions) — except M4 at
 ×0.5, since composite-float interaction design partly emerges in
 implementation. The four `milestone-review` items are the M1–M4 review
-boundaries. `recomputed = Σdesign(2.1)×1.30 + Σimpl(5.5)×1.0 ≈ 8.2`. Unit:
+boundaries. M2's impl was lifted 0.8→1.0 (estimate-quality judge, #133): it's
+control-flow rework (resubmit-loop terminal logic) + a new deletion render path,
+not additive work. **M5** (added in acceptance test): decoration projection for undo/redo coherence
+— one more `lua-neovim` (design=0.3, ×0.5 — design partly emerges) + its review
+boundary. **M6** (acceptance test): review-diagnostic display — wrapped inline
+why + cursor auto-show + toggle (small focused `lua-neovim`, design=0.2) + its
+boundary. **M7** (acceptance test): detached progress bar (reusable long-op
+feedback surface) (design=0.3 ×0.5) + its boundary.
+`recomputed = Σdesign(2.9)×1.30 + Σimpl(9.4)×1.0 ≈ 13.2`. Unit:
 build-effort (design + AI-impl); diverges from `sdlc actual` (operator-attention).
+
+**Estimate reconciliation:** frontmatter `estimate_hours: 8.4` is the *frozen
+M1–M4 plan-time commitment* (the value committed at `start-plan`, against which
+`actual_hours: 9.10` is a near-miss), and is deliberately left unchanged. The
+block `total: 13.2` is the *full post-hoc build-effort* including the emergent
+M5–M7 milestones added during acceptance testing. The two differ by design — one
+is the velocity-calibration commitment, the other the recomputed as-built total.
 
 ## Plan
 
-To be authored at `sdlc start-plan` → durable plan in `workshop/plans/` (via the
-`superpowers-writing-plans` skill). Provisional milestone sketch (pre-plan, not
-yet review boundaries):
+Detailed, executable plan: **`workshop/plans/000133-review-modes-journal-plan.md`**
+(authored via `superpowers-writing-plans`, fresh-eyes reviewed — see the
+2026-06-18 Log entry). Four milestone review boundaries:
 
-- [ ] Modes engine: `mode` arg + per-mode sub-files (frontmatter flags + body); frontier + scope + deletion-flag handling.
-- [ ] No-marker general review path (whole-doc modes; lift the "no markers → abort" guard for mode runs).
-- [ ] Composite review menu UI (mode selector + multi-line instruction buffer) + `<M-o>` / `<M-CR>` bindings + sticky mode.
-- [ ] Submission decoupling (allow pending `{}`; quickfix on save) + decoration ride-until-next-round (B).
-- [ ] Self-contained journal sidecar (base + per-round diff + rationale + decoration set; drift detection).
+- [x] M1 — Modes engine: `Mode` pure parser + 6 mode sub-files + `skill_dir` injection + review `source(ctx)` composition (reuses `skill_invoke`).
+- [x] M2 — Flexible review flow: no-marker general review, submission decoupled from pending `{}` (quickfix on save), deletion gutter-why + decoration ride-until-next-round (B).
+- [x] M3 — Journal sidecar: pure serialize/parse/diff/drift + thin IO append/read + `on_done` payload widening + wired into the round.
+- [x] M4 — Composite review menu (mode selector + multi-line instruction editor) + `<M-o>`/`<M-CR>` bindings + sticky mode; manual e2e.
+- [x] M5 — Decoration projection (undo/redo coherence): snapshot decorations per content-state, re-render on undo/redo, ride forward edits (B). Added during acceptance test.
+- [x] M6 — Review-diagnostic display: hard-wrapped inline why + `:ParleyShowDiagnostics` toggle + auto-show when cursor in the edit's region (virtual_lines current_line, scoped). Added during acceptance test.
+- [x] M7 — Detached progress bar: reusable floating bar (spinner + elapsed) for long-running ops; review shows it during a round. Added during acceptance test.
 
 ## Log
 
@@ -259,6 +287,14 @@ runtime machinery.
 Next: `sdlc start-plan` → durable plan in `workshop/plans/`.
 
 ### 2026-06-18
+- 2026-06-18: closed — make test EXIT=0 (116 spec files; lint 0/0 in 218 files). 7 milestones M1-M7 each milestone-closed with Review-Verdict trailers (modes engine, flexible review flow, journal sidecar, composite menu+bindings, undo/redo decoration projection, inline diagnostic display, detached progress bar) + operator e2e acceptance across the session.; review verdict: FIX-THEN-SHIP
+- 2026-06-18: closed M7 — make test EXIT=0 (116 spec files; lint 0/0 in 218 files). M7: reusable detached progress bar (pure frame/format 2 unit; float/timer lifecycle 2 integration) wired into skill_invoke start/stop with the generation guard (1 integration). Review shows a spinner+elapsed bar during the round.; review verdict: FIX-THEN-SHIP
+- 2026-06-18: closed M6 — make test EXIT=0 (114 spec files; lint 0/0 in 215 files). M6: skill_render.wrap + region-anchored wrapped diagnostics (9 unit), diag_display toggle scoped to parley ns (2 integration), :ParleyShowDiagnostics + default-on. Cursor-region auto-show via virtual_lines current_line.; review verdict: FIX-THEN-SHIP
+- 2026-06-18: closed M5 — make test EXIT=0 (113 spec files; lint 0/0 in 213 files). M5: skill_render snapshot/apply_snapshot (7 unit), projection module record/decide/project (3 integration), wired into round on_done (19 flow). Undo/redo re-render style coherently; forward edits ride (B).; review verdict: FIX-THEN-SHIP
+- 2026-06-18: closed M4 — make test EXIT=0 (112 spec files; lint 0/0 in 211 files). M4: composite review_menu (mode selector + multi-line instruction editor, sticky mode, 6 tests) + <M-o>/<M-CR> bindings via setup_keymaps; float_picker.compute_layout exported; sidecar excluded from attachment.; review verdict: FIX-THEN-SHIP
+- 2026-06-18: closed M3 — make test EXIT=0 (111 spec files; lint 0/0 in 209 files). M3: pure journal serialize/parse/diff/drift (6 unit), sidecar IO append/read/drift (4 integration), wired into review on_done + widened skill_invoke payload + pure should_resubmit (16 flow + 4 skill_invoke).; review verdict: FIX-THEN-SHIP
+- 2026-06-18: closed M2 — make test EXIT=0 (109 spec files; lint 0/0 in 206 files). M2: no-marker general review + submission decoupled from pending {} (10 flow tests), deletion gutter-why + highlight empty-skip + dismiss + decoration ride (6 render tests).; review verdict: SHIP
+- 2026-06-18: closed M1 — make test EXIT=0 (109 spec files pass; lint 0/0 in 206 files). M1: mode.parse+directives (8 unit), load/list+6 mode files+source composition (6 integration), skill_dir injection (10 provider tests). Legacy marker-only review preserved.; review verdict: FIX-THEN-SHIP
 
 Drafted the durable plan (`workshop/plans/000133-review-modes-journal-plan.md`,
 4 milestones) and ran a fresh-eyes plan review — caught 1 blocking issue (the

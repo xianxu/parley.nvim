@@ -80,6 +80,7 @@ describe("skill_invoke.invoke", function()
     after_each(function()
         parley.dispatcher.query = orig_query
         assembly.resolve_agent = orig_resolve
+        pcall(function() require("parley.progress").stop() end)
         vim.fn.delete(tmpdir, "rf")
     end)
 
@@ -102,6 +103,36 @@ describe("skill_invoke.invoke", function()
         assert.are.equal("ALPHA beta", table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n"))
         -- a numbered backup was made (M3 Task 1)
         assert.are.equal(1, vim.fn.filereadable(path .. ".parley-backup.1"))
+        -- #133 M3: on_done payload carries the journal-feeding fields
+        assert.are.equal("alpha beta", done_result.original)
+        assert.are.equal("ALPHA beta", done_result.new_content)
+        assert.is_true(#done_result.decorations >= 1)
+        assert.are.equal("edit", done_result.decorations[1].kind)
+        assert.are.equal("uppercase", done_result.decorations[1].explain)
+    end)
+
+    it("coerces a stringified edits array and applies it (model quirk, #133)", function()
+        -- Some models emit the propose_edits `edits` arg as a JSON STRING, not an
+        -- array. The driver must coerce it (so it applies) and not crash the renderer.
+        parley.dispatcher.query = function(_b, _p, _payload, _h, on_exit)
+            local edits_str = vim.json.encode({ { old_string = "alpha", new_string = "ALPHA", explain = "up" } })
+            tasker.set_query("qid_str", {
+                raw_response = sse({
+                    { type = "content_block_start", index = 0,
+                      content_block = { type = "tool_use", id = "t1", name = "propose_edits", input = {} } },
+                    { type = "content_block_delta", index = 0,
+                      delta = { type = "input_json_delta", partial_json = vim.json.encode({ edits = edits_str }) } },
+                    { type = "content_block_stop", index = 0 },
+                    { type = "message_stop" },
+                }),
+            })
+            vim.schedule(function() on_exit("qid_str") end)
+        end
+        skill_invoke.invoke(buf, manifest(), {}, { on_done = function(r) done_result = r end })
+        vim.wait(2000, function() return done_result ~= nil end)
+        assert.is_not_nil(done_result, "on_done never ran (renderer likely crashed)")
+        assert.is_true(done_result.ok)
+        assert.are.equal("ALPHA beta", table.concat(vim.fn.readfile(path), "\n"))
     end)
 
     it("surfaces a failed edit: on_done ok=false, applied=0, file untouched", function()
@@ -123,6 +154,41 @@ describe("skill_invoke.invoke", function()
         assert.is_false(done_result.ok)
         assert.are.equal(0, done_result.applied)
         assert.are.equal("ab ab", table.concat(vim.fn.readfile(path), "\n")) -- untouched
+    end)
+
+    it("is_in_flight true during a query; cancel clears it + supersedes the exchange (#133)", function()
+        local held_exit
+        parley.dispatcher.query = function(_b, _p, _payload, _h, on_exit)
+            held_exit = on_exit -- hold it open; don't complete the query
+        end
+        skill_invoke.invoke(buf, manifest(), {}, { on_done = function(r) done_result = r end })
+        assert.is_true(skill_invoke.is_in_flight(buf))
+        skill_invoke.cancel(buf)
+        assert.is_false(skill_invoke.is_in_flight(buf))
+        -- The now-superseded query completes late → its on_exit must no-op.
+        tasker.set_query("qid_stale", { raw_response = "" })
+        held_exit("qid_stale")
+        vim.wait(200, function() return done_result ~= nil end)
+        assert.is_nil(done_result, "a cancelled query's late on_exit must not run on_done")
+    end)
+
+    it("shows the progress bar during the query and stops it on completion (#133 M7)", function()
+        local progress = require("parley.progress")
+        local held_exit
+        parley.dispatcher.query = function(_b, _p, _payload, _h, on_exit)
+            held_exit = on_exit
+            tasker.set_query("qid_p", {
+                raw_response = propose_edits_sse({
+                    { old_string = "alpha", new_string = "ALPHA", explain = "up" },
+                }),
+            })
+        end
+        progress.stop()
+        skill_invoke.invoke(buf, manifest(), {}, { on_done = function(r) done_result = r end })
+        assert.is_true(progress.is_active(), "bar shows while the query runs")
+        held_exit("qid_p")
+        vim.wait(2000, function() return done_result ~= nil end)
+        assert.is_false(progress.is_active(), "bar stops when the query completes")
     end)
 
     it("aborts (on_done ok=false) when no agent resolves", function()

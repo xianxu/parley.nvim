@@ -45,14 +45,24 @@ local function manifest_from_def(def, dir)
         local inner = def.source
         source = function(ctx)
             ctx = ctx or {}
-            -- Enrich (without mutating the caller's table) only when the skill
-            -- didn't already supply skill_md and a SKILL.md exists for this dir.
-            if ctx.skill_md == nil and file_exists(dir .. "/SKILL.md") then
+            -- Enrich (without mutating the caller's table) with two discovery-time
+            -- facts the closure already holds: `skill_md` (the dir's SKILL.md, only
+            -- if a SKILL.md exists and the caller didn't supply one) and `skill_dir`
+            -- (the absolute dir, whenever absent — independent of SKILL.md, since a
+            -- dynamic skill like review reads its modes/ subdir from it). #133.
+            local needs_md = ctx.skill_md == nil and file_exists(dir .. "/SKILL.md")
+            local needs_dir = ctx.skill_dir == nil
+            if needs_md or needs_dir then
                 local enriched = {}
                 for k, v in pairs(ctx) do
                     enriched[k] = v
                 end
-                enriched.skill_md = read_file(dir .. "/SKILL.md") or ""
+                if needs_md then
+                    enriched.skill_md = read_file(dir .. "/SKILL.md") or ""
+                end
+                if needs_dir then
+                    enriched.skill_dir = dir
+                end
                 ctx = enriched
             end
             return inner(ctx)

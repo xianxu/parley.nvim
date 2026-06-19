@@ -496,6 +496,39 @@ function M.reject_at(text, offset)
     return resolve_at_with_mode(text, offset, "reject")
 end
 
+--- Compute the NARROW line range + replacement lines to apply a marker
+--- resolution, so the buffer edit touches only the marker's lines (review
+--- decorations elsewhere then ride via extmark gravity, instead of a
+--- whole-buffer set_lines wiping them — #133). PURE.
+--- @param old_lines string[]  current buffer lines
+--- @param new_text string     the full resolved buffer text
+--- @param byte_start integer  marker's 1-based byte start in the OLD joined text
+--- @param byte_end integer    marker's 1-based byte end in the OLD joined text
+--- @return integer start0  0-based first line to replace (nvim_buf_set_lines)
+--- @return integer end0    0-based exclusive end line
+--- @return string[] region replacement lines
+function M.narrow_replace_range(old_lines, new_text, byte_start, byte_end)
+    local function row_of_byte(ls, byte) -- 1-based byte → 1-based row
+        local p = 1
+        for i, l in ipairs(ls) do
+            if byte <= p + #l then
+                return i
+            end
+            p = p + #l + 1
+        end
+        return #ls
+    end
+    local sr = row_of_byte(old_lines, byte_start)
+    local er = row_of_byte(old_lines, byte_end)
+    local new_lines = vim.split(new_text, "\n", { plain = true })
+    local suffix = #old_lines - er -- unchanged lines after the marker
+    local region = {}
+    for i = sr, #new_lines - suffix do
+        region[#region + 1] = new_lines[i]
+    end
+    return sr - 1, er, region
+end
+
 --- Format one drill-in block for the next user turn.
 ---
 --- Layout:

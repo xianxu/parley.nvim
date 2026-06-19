@@ -441,10 +441,54 @@ end
 -- Skill definition
 --------------------------------------------------------------------------------
 
+-- Resolve the review skill's own modes/ dir via runtimepath (the provider also
+-- injects ctx.skill_dir at invoke time; this is the fallback for the `complete`
+-- arg picker, which runs outside a source(ctx) call).
+local function modes_dir()
+    return (vim.api.nvim_get_runtime_file("lua/parley/skills/review/modes", false) or {})[1]
+end
+
 M.skill = {
     name = "review",
     description = "Edit document based on review markers",
-    args = {},
+
+    -- The `mode` arg selects a review stage; values come from modes/*.md (#133).
+    args = {
+        {
+            name = "mode",
+            description = "review mode",
+            complete = function()
+                local dir = modes_dir()
+                local names = {}
+                for _, m in ipairs(dir and require("parley.skills.review.mode").list(dir) or {}) do
+                    table.insert(names, m.name)
+                end
+                return names
+            end,
+        },
+    },
+
+    -- Compose the system body: base SKILL.md ⊕ the selected mode's brief ⊕ its
+    -- flag directives ⊕ any free-form operator instruction. PURE given ctx
+    -- (the provider injects ctx.skill_md + ctx.skill_dir). With no mode, returns
+    -- the base SKILL.md unchanged — the legacy marker-only review. (#133)
+    source = function(ctx)
+        ctx = ctx or {}
+        local mode = require("parley.skills.review.mode")
+        local args = ctx.args or {}
+        local parts = { ctx.skill_md or "" }
+        if args.mode and args.mode ~= "" and ctx.skill_dir then
+            local m = mode.load(ctx.skill_dir .. "/modes", args.mode)
+            if m then
+                table.insert(parts, "\n\n## Review mode: " .. m.name .. "\n" .. m.body)
+                table.insert(parts, "\n\n" .. mode.directives(m))
+            end
+        end
+        if args.instruction and args.instruction ~= "" then
+            table.insert(parts, "\n\n## Operator instruction\n" .. args.instruction)
+        end
+        return table.concat(parts)
+    end,
 
     -- Declarative manifest fields (#128). Runs through the skill_invoke driver
     -- (M3/M4); the marker pre-check + resubmit loop live in M.run_via_invoke
@@ -465,36 +509,91 @@ M.skill = {
 -- UX preserved). resubmit_count bounds re-invocation at 3, like the v1 path.
 --------------------------------------------------------------------------------
 
+--- Should the review loop run another round? PURE — extracted from the on_done
+--- IO callback (M2 review note) so the decision has a direct unit test and the
+--- growing callback stays a thin IO seam. Resubmit only while actionable (ready
+--- `[]`) work remains, has shrunk, and we're under the bound (3). (#133)
+--- @param ready_before number  ready-marker count before the round
+--- @param ready_remaining number  ready-marker count after the round
+--- @param resubmit_count number  rounds already auto-resubmitted
+--- @return boolean
+M.should_resubmit = function(ready_before, ready_remaining, resubmit_count)
+    return ready_remaining > 0 and ready_remaining < ready_before and resubmit_count < 3
+end
+
 M.run_via_invoke = function(buf, args, resubmit_count)
     args = args or {}
     resubmit_count = resubmit_count or 0
     local parley = get_parley()
     local skill_render = require("parley.skill_render")
+    local skill_invoke = require("parley.skill_invoke")
 
-    -- Pre-check (was pre_submit): abort if there are no markers, or if the agent
-    -- spoke last (pending question awaiting the human).
+    -- A review already running on this buffer? Warn + offer to kill it and submit
+    -- a new one, rather than erroring out (#133). Only on a fresh user trigger —
+    -- the resubmit loop runs after on_exit cleared the flag, so it won't prompt.
+    if resubmit_count == 0 and skill_invoke.is_in_flight(buf) then
+        local choice = vim.fn.confirm(
+            "Parley review: a review is already running on this buffer.",
+            "&Kill it and submit a new one\n&Cancel",
+            2
+        )
+        if choice ~= 1 then
+            parley.logger.info("Review: kept the running review")
+            return
+        end
+        skill_invoke.cancel(buf)
+    end
+
+    -- Count markers the agent should ACT on (last section a non-empty []).
+    local function count_ready(ms)
+        local n = 0
+        for _, m in ipairs(ms) do
+            if m.ready then n = n + 1 end
+        end
+        return n
+    end
+
+    -- Pre-check. A MODE run always proceeds — whole-doc modes work with zero
+    -- markers (the headline no-marker general review, #133). A legacy
+    -- marker-only run (no mode) needs at least one READY `[]` marker: pending
+    -- `{}` markers no longer BLOCK submission (they're skipped and re-surface via
+    -- the on-save quickfix), but if they're the only markers and no mode is set
+    -- there's nothing to process.
     local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
     local markers = M.parse_markers(lines)
-    if #markers == 0 then
-        skill_render.clear_decorations(buf)
-        vim.fn.setqflist({}, "r")
-        pcall(vim.cmd, "cclose")
-        parley.logger.info("Review: complete — no markers found")
-        return
+    local has_mode = args.mode ~= nil and args.mode ~= ""
+    local ready_count_before = count_ready(markers)
+    if not has_mode then
+        if #markers == 0 then
+            skill_render.clear_decorations(buf)
+            vim.fn.setqflist({}, "r")
+            pcall(vim.cmd, "cclose")
+            parley.logger.info("Review: complete — no markers found")
+            return
+        end
+        if ready_count_before == 0 then
+            -- Nothing actionable. Distinguish pending agent questions (surface
+            -- them) from strike-only / non-pending markers (accept/reject those
+            -- with <M-a>/<M-r> — there's nothing for the agent to do).
+            local has_pending = false
+            for _, m in ipairs(markers) do
+                if m.pending then
+                    has_pending = true
+                    break
+                end
+            end
+            if has_pending then
+                M.populate_quickfix(buf, markers, "pending")
+                parley.logger.info("Review: no ready markers — pending agent turns await your reply")
+            else
+                parley.logger.info("Review: nothing to do — markers present but none ready (e.g. strike proposals; accept/reject with <M-a>/<M-r>)")
+            end
+            return
+        end
     end
-    local pending = {}
-    for _, marker in ipairs(markers) do
-        if marker.pending then table.insert(pending, marker) end
-    end
-    if #pending > 0 then
-        M.populate_quickfix(buf, pending, "pending")
-        parley.logger.warning("Review: " .. #pending .. " marker(s) need your response")
-        return
-    end
+    -- Proceeding: clear stale quickfix (pending markers re-surface on save).
     vim.fn.setqflist({}, "r")
     pcall(vim.cmd, "cclose")
-
-    local marker_count_before = #markers
 
     -- NB: skill_registry's get/names are plain-function fields → call with DOT,
     -- not colon (colon would pass the registry as the `name` arg).
@@ -504,41 +603,72 @@ M.run_via_invoke = function(buf, args, resubmit_count)
         return
     end
 
+    -- Suppress the projection watcher during the round's own :edit! reload so it
+    -- isn't mistaken for a user edit; cleared in on_done. (#133 M5)
+    local projection = require("parley.skills.review.projection")
+    projection.set_applying(buf, true)
+
     require("parley.skill_invoke").invoke(buf, manifest, args, {
         manual = true,
         on_done = function(result)
             if not result or not result.ok then
+                projection.set_applying(buf, false)
                 return -- skill_invoke already surfaced the error
             end
-            -- Post-apply (was post_apply): resubmit while ready markers remain.
-            local new_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-            local remaining = M.parse_markers(new_lines)
+            -- Journal this round first — a durable, attributed per-round record
+            -- beside the doc (#133 M3), regardless of what markers remain. Skip a
+            -- no-op round (no content change) and an unsaved/path-less buffer.
+            local doc_path = vim.api.nvim_buf_get_name(buf)
+            if doc_path ~= "" and result.original and result.new_content
+                and result.original ~= result.new_content then
+                local journal = require("parley.skills.review.journal")
+                local explains = {}
+                for _, d in ipairs(result.decorations or {}) do
+                    if d.explain and d.explain ~= "" then
+                        table.insert(explains, d.explain)
+                    end
+                end
+                local jok, jerr = journal.append(doc_path, {
+                    mode = args.mode,
+                    side = "agent",
+                    ts = os.date("!%Y-%m-%dT%H:%M:%S"),
+                    hash = journal.hash(result.new_content),
+                    explains = explains,
+                    diff = journal.diff(result.original, result.new_content),
+                }, result.original)
+                if not jok then
+                    -- Don't swallow a dropped journal write — it loses review
+                    -- history; surface it like skill_invoke surfaces its failures.
+                    parley.logger.warning("Review: journal write failed: " .. tostring(jerr))
+                end
+            end
+
+            -- Record the decoration projection states (#133 M5): the pre-round
+            -- base (empty style) + this round's post state (its decorations), then
+            -- attach the watcher so undo/redo re-render coherently. Records persist
+            -- across rounds (multi-round undo). Clear the applying-guard last.
+            if result.original then
+                projection.record_empty_for(buf, result.original)
+            end
+            projection.record(buf)
+            projection.ensure_watch(buf)
+            projection.set_applying(buf, false)
+
+            -- Then decide whether to run another round. A whole-doc mode round is
+            -- one-shot — it may legitimately INSERT `{}` findings (fact-check),
+            -- which is not "stuck"; a `{}`-only / non-shrinking remainder ends the
+            -- round cleanly. Pending `{}` markers surface via the on-save quickfix.
+            local remaining = M.parse_markers(vim.api.nvim_buf_get_lines(buf, 0, -1, false))
             if #remaining == 0 then
                 parley.logger.info("Review: all comments addressed")
                 return
             end
-            -- NO-PROGRESS GUARD: only resubmit if the marker set actually SHRANK.
-            -- Catches every stuck case — empty/no-op edits, the model editing the
-            -- wrong place, an unaddressable marker — that would otherwise loop
-            -- (bounded at 3) with no progress. (Stricter than the v1 engine, which
-            -- only guarded the empty-edits + no-apply cases.)
-            if #remaining >= marker_count_before then
-                parley.logger.info("Review: no progress (markers unchanged) — stopping")
-                return
-            end
-            local has_questions = false
-            for _, marker in ipairs(remaining) do
-                if marker.pending then
-                    has_questions = true
-                    break
-                end
-            end
-            if has_questions then
-                M.populate_quickfix(buf, remaining, "pending")
-                parley.logger.info("Review: agent has follow-up questions")
-            elseif resubmit_count < 3 then
-                parley.logger.info("Review: " .. #remaining .. " marker(s) remain, resubmitting...")
+            local ready_remaining = count_ready(remaining)
+            if M.should_resubmit(ready_count_before, ready_remaining, resubmit_count) then
+                parley.logger.info("Review: " .. ready_remaining .. " ready marker(s) remain, resubmitting...")
                 M.run_via_invoke(buf, args, resubmit_count + 1)
+            else
+                parley.logger.info("Review: round complete")
             end
         end,
     })
@@ -549,6 +679,13 @@ end
 --------------------------------------------------------------------------------
 
 local _qf_scanned_bufs = {}
+
+-- A doc's journal sidecar (<doc>.parley-journal.md) is itself markdown and its
+-- stored diffs contain 🤖 markers — exclude it from review attachment so opening
+-- it doesn't mis-populate the quickfix or bind review keys. (#133 M3)
+M.is_journal_sidecar = function(buf)
+    return (vim.api.nvim_buf_get_name(buf) or ""):match("%.parley%-journal%.md$") ~= nil
+end
 
 local function rescan_quickfix(buf)
     if not vim.api.nvim_buf_is_valid(buf) then return end
@@ -585,6 +722,9 @@ end
 --------------------------------------------------------------------------------
 
 M.setup_keymaps = function(buf)
+    if M.is_journal_sidecar(buf) then
+        return -- never attach review to a journal sidecar (#133 M3)
+    end
     local parley = get_parley()
     local cfg = parley.config
     local set_keymap = parley.helpers.set_keymap
@@ -598,13 +738,40 @@ M.setup_keymaps = function(buf)
     -- retired because they duplicated that path with divergent
     -- output shapes.
 
-    -- <C-g>ve: run review
+    -- <C-g>ve: run review (legacy marker-only, no mode)
     local edit_cfg = cfg.review_shortcut_edit
     if edit_cfg then
         for _, mode in ipairs(edit_cfg.modes or {}) do
             set_keymap({ buf }, mode, edit_cfg.shortcut, function()
                 M.run_via_invoke(buf, {})
             end, "Parley review: process markers")
+        end
+    end
+
+    -- <M-o> opens the general SKILL PICKER (review is one of the skills); <M-CR>
+    -- is the DIRECT review trigger — it opens the review-mode menu (sticky-
+    -- preselected) and runs a round on submit with the chosen {mode,instruction}.
+    -- (#133 — operator: alt+o = skill selector, alt+return = review.)
+    local skill_cfg = cfg.review_shortcut_menu
+    if skill_cfg then
+        for _, mode in ipairs(skill_cfg.modes or {}) do
+            set_keymap({ buf }, mode, skill_cfg.shortcut, function()
+                require("parley.skill_picker").open()
+            end, "Parley: open skill picker")
+        end
+    end
+
+    local function open_review_menu()
+        require("parley.review_menu").open({
+            on_submit = function(r)
+                M.run_via_invoke(buf, { mode = r.mode, instruction = r.instruction })
+            end,
+        })
+    end
+    local next_cfg = cfg.review_shortcut_next
+    if next_cfg then
+        for _, mode in ipairs(next_cfg.modes or {}) do
+            set_keymap({ buf }, mode, next_cfg.shortcut, open_review_menu, "Parley review: open mode menu")
         end
     end
 end

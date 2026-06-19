@@ -1,0 +1,632 @@
+# Review Modes + Journal Implementation Plan
+
+> **For agentic workers:** Consult AGENTS.md Section 3 (Subagent Strategy) to determine the appropriate execution approach: use superpowers-subagent-driven-development (if subagents are suitable per AGENTS.md) or superpowers-executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Bring parley's document review to coding-agent parity — staged review *modes*, free-form instruction, no-marker general review, a faster ping-pong menu, and a self-contained durable per-round journal — so parley drives review independently.
+
+**Architecture:** Reuse the existing skill stack (`skill_invoke` driver, `skill_assembly`, the disk provider's `source(ctx)` composition, marker parsing, `skill_render`) rather than adding a parallel engine (`ARCH-DRY`). A *mode* is a pure data object (frontmatter flags + prompt body) parsed from a sub-markdown file; the review skill's `source(ctx)` composes `SKILL.md ⊕ mode.body ⊕ flag-directives ⊕ instruction`. Edit history is a pure serialize/parse layer over a markdown sidecar, with a thin IO seam (`ARCH-PURE`). The composite menu is the only genuinely new UI, built on `float_picker`'s layout helpers.
+
+**Tech Stack:** Lua (Neovim plugin runtime), plenary.nvim test harness (`make test`), `vim.diff` (unified diffs), `vim.fn.sha256` (drift hash). Unit tests in `tests/unit/` (pure, no nvim APIs), integration in `tests/integration/` (full runtime).
+
+---
+
+## Scope check
+
+This is one feature (independent document review) with coupled parts that all hang off the `review` skill, so it's **one plan with four milestones**, not separate sub-plans. Each milestone produces working, testable software: M1 is exercisable through the existing `<C-g>s` picker before the M4 menu exists; M2 widens the run flow; M3 adds durable history; M4 adds the dedicated entry UX that ties it together.
+
+## Core concepts
+
+### Pure entities (the conceptual core)
+
+| Name | Lives in | Status |
+|------|----------|--------|
+| `Mode` | `lua/parley/skills/review/mode.lua` | new |
+| mode prompt files (6) | `lua/parley/skills/review/modes/<name>.md` | new |
+| `review.source` composition | `lua/parley/skills/review/init.lua` (`M.skill.source`) | modified |
+| `journal` (serialize / parse / diff / drift-compare) | `lua/parley/skills/review/journal.lua` | new |
+
+- **`Mode`** — a parsed mode definition: `{ name, scope, deletions, frontier, body }`. `mode.parse(content) -> Mode|nil,err` splits YAML frontmatter from the markdown prompt body and validates the three behavior flags.
+  - **Relationships:** 1:1 with a `modes/<name>.md` file; N:1 with the `review` skill (one skill owns all modes).
+  - **DRY rationale:** First occurrence of "skill behavior driven by a sub-file's frontmatter." Centralizes flag parsing/validation so the menu, the `source` composition, and the run-flow all read flags from one parser instead of re-scanning files. (`ARCH-DRY`)
+  - **Future extensions:** New flags (e.g. `commit: on|off`, `agent:` override) add a column + a validator line; new modes are just new files — zero code change.
+
+- **`journal`** — pure functions over journal text and round data. `serialize_entry(entry) -> string` (one markdown round section), `parse(text) -> { base, entries }`, `diff(old, new) -> string` (unified, via `vim.diff`), `is_drift(recorded_hash, current_content) -> bool` (compare `sha256(current)` to the last entry's stored hash).
+  - **Relationships:** 1:1 with a doc (one sidecar per document); the journal *is* the round history.
+  - **DRY rationale:** Single serialization format used by both the writer (append) and any reader ("show round N", drift check). (`ARCH-DRY`)
+  - **Future extensions:** "revert to round N" = replay `base ⊕ diffs[1..N]` (a pure `reconstruct(base, diffs, n)` added here); decoration re-projection reads the stored decoration sets.
+
+**Test surface (unit, no mocks):** `tests/unit/review_mode_spec.lua` (parse valid/invalid frontmatter, each flag default, body split, fenced-`---` safety); `tests/unit/review_journal_spec.lua` (serialize→parse round-trip, multi-round parse, `is_drift` true/false, `diff` shape).
+
+### Integration points (where pure meets the world)
+
+| Name | Lives in | Status | Wraps |
+|------|----------|--------|-------|
+| `mode.load` / `mode.list` | `lua/parley/skills/review/mode.lua` | new | filesystem (reads `modes/`) |
+| `journal.append` / `journal.read` | `lua/parley/skills/review/journal.lua` | new | filesystem (sidecar) |
+| `skill_dir` injection | `lua/parley/skill_providers.lua` (`manifest_from_def`) | modified | discovery-time dir fact |
+| `review.run_via_invoke` flow | `lua/parley/skills/review/init.lua` | modified | orchestration (markers, submit, journal hook) |
+| `skill_render` deletion gutter + dismiss | `lua/parley/skill_render.lua` | modified | nvim diagnostics / extmarks |
+| `review_menu` (composite float) | `lua/parley/review_menu.lua` | new | nvim windows/buffers/keymaps |
+| `<M-o>` / `<M-CR>` bindings | `keybinding_registry.lua`, `config.lua`, `skills/review/init.lua` | modified | nvim keymaps |
+
+- **`mode.load(dir, name)` / `mode.list(dir)`** — read `<dir>/<name>.md` (or all) and hand the content to `mode.parse`. The IO seam; `mode.parse` stays pure.
+  - **Injected into:** `review.source(ctx)` (which receives `ctx.skill_dir`) and `review_menu` (to list modes). Keeps composition + UI testable with literal mode strings.
+- **`skill_dir` injection** — `manifest_from_def`'s `source` wrapper already injects `ctx.skill_md`; add `ctx.skill_dir = dir` (the same discovery-time fact) so a skill's `source` can reach its own `modes/` without re-deriving the path (`ARCH-DRY` — one injection point, mirrors `skill_md`).
+- **`journal.append(path, entry)` / `journal.read(path)`** — read-parse-append-write the sidecar; serialization is pure.
+  - **Injected into:** `review.run_via_invoke`'s `on_done` hook (after a successful apply).
+- **`review_menu`** — the composite float: top = 6-mode selector (sticky-preselected), bottom = multi-line instruction buffer. Reuses `float_picker.compute_layout`. On submit, calls `review.run_via_invoke(buf, { mode, instruction })`.
+  - **Injected into:** the `<M-o>` / `<M-CR>` keymaps.
+
+**Test surface (integration, real runtime / fakes):** `tests/integration/review_mode_load_spec.lua` (load the 6 shipped files; `skill_dir` injection reaches `modes/`); `tests/integration/review_journal_io_spec.lua` (append creates sidecar, second append grows it, drift detection on external edit); `tests/integration/review_menu_spec.lua` (open returns mode list, sticky recall, submit passes `{mode,instruction}`). `run_via_invoke` flow changes are covered by extending `tests/unit/review_spec.lua` where pure (marker pre-check branches) and `tests/integration/skill_invoke_spec.lua` patterns where they touch the driver.
+
+---
+
+## Chunk 1: M1 — Modes engine
+
+### Task 1.1: `Mode` pure parser
+
+**Files:**
+- Create: `lua/parley/skills/review/mode.lua`
+- Test: `tests/unit/review_mode_spec.lua`
+
+- [ ] **Step 1: Write the failing test**
+
+```lua
+-- tests/unit/review_mode_spec.lua
+local mode = require("parley.skills.review.mode")
+
+describe("review.mode.parse", function()
+  it("splits frontmatter flags from body", function()
+    local m = mode.parse(table.concat({
+      "---", "name: developmental", "scope: whole-doc",
+      "deletions: apply-with-gutter-why", "frontier: off", "---",
+      "You are a developmental editor.", "Restructure freely.",
+    }, "\n"))
+    assert.are.equal("developmental", m.name)
+    assert.are.equal("whole-doc", m.scope)
+    assert.are.equal("apply-with-gutter-why", m.deletions)
+    assert.are.equal("off", m.frontier)
+    assert.are.equal("You are a developmental editor.\nRestructure freely.", m.body)
+  end)
+
+  it("defaults missing flags (markers-only / propose-strike / on)", function()
+    local m = mode.parse("---\nname: x\n---\nbody")
+    assert.are.equal("markers-only", m.scope)
+    assert.are.equal("propose-strike", m.deletions)
+    assert.are.equal("on", m.frontier)
+  end)
+
+  it("rejects an unknown flag value", function()
+    local m, err = mode.parse("---\nname: x\nscope: sideways\n---\nb")
+    assert.is_nil(m)
+    assert.is_truthy(err:match("scope"))
+  end)
+
+  it("returns error when frontmatter is missing", function()
+    local m, err = mode.parse("no frontmatter here")
+    assert.is_nil(m)
+    assert.is_truthy(err)
+  end)
+end)
+```
+
+- [ ] **Step 2: Run test, verify it fails**
+
+Run: `make test` (or the unit spec directly). Expected: FAIL — `module 'parley.skills.review.mode' not found`.
+
+- [ ] **Step 3: Implement `mode.parse`**
+
+```lua
+-- lua/parley/skills/review/mode.lua
+-- Mode — a review mode parsed from a modes/<name>.md sub-file:
+-- YAML frontmatter (behavior flags) + markdown prompt body. PURE parser;
+-- the disk reads (load/list) are the thin IO seam below. See issue #133.
+local M = {}
+
+local VALID = {
+  scope = { ["whole-doc"] = true, ["markers-only"] = true },
+  deletions = { ["apply-with-gutter-why"] = true, ["propose-strike"] = true, ["apply"] = true },
+  frontier = { ["on"] = true, ["off"] = true },
+}
+local DEFAULT = { scope = "markers-only", deletions = "propose-strike", frontier = "on" }
+
+--- Parse a mode file's content. PURE. Returns Mode | nil,err.
+--- @param content string
+--- @return table|nil mode, string|nil err
+function M.parse(content)
+  local fm_start, fm_end = content:find("^%-%-%-\n")
+  if not fm_start then return nil, "mode: missing frontmatter (--- … ---)" end
+  local close = content:find("\n%-%-%-\n?", fm_end)
+  if not close then return nil, "mode: unterminated frontmatter" end
+  local fm = content:sub(fm_end + 1, close)
+  local body = content:sub((content:find("\n", close + 1) or #content) + 1)
+  -- A modes file has only flat scalar keys; a minimal k: v scan is enough
+  -- (no nesting, no lists) — we deliberately do NOT pull in a YAML lib.
+  local flags = {}
+  for line in fm:gmatch("[^\n]+") do
+    local k, v = line:match("^(%w[%w_]*):%s*(.-)%s*$")
+    if k then flags[k] = v end
+  end
+  if not flags.name or flags.name == "" then return nil, "mode: frontmatter needs a name" end
+  local out = { name = flags.name, body = (body:gsub("%s+$", "")) }
+  for key, default in pairs(DEFAULT) do
+    local val = flags[key] or default
+    if not VALID[key][val] then
+      return nil, ("mode '%s': invalid %s=%s"):format(flags.name, key, tostring(val))
+    end
+    out[key] = val
+  end
+  return out
+end
+
+return M
+```
+
+- [ ] **Step 4: Run test, verify it passes**
+
+Run: `make test`. Expected: PASS (4 examples).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add lua/parley/skills/review/mode.lua tests/unit/review_mode_spec.lua
+git commit -m "#133 M1: Mode pure parser (frontmatter flags + body)"
+```
+
+### Task 1.2: `mode.load` / `mode.list` IO seam
+
+**Files:**
+- Modify: `lua/parley/skills/review/mode.lua`
+- Test: `tests/integration/review_mode_load_spec.lua`
+
+- [ ] **Step 1: Write the failing integration test** — write two temp `modes/*.md` files to a temp dir, assert `mode.list(dir)` returns both parsed, sorted by name, and `mode.load(dir, "a")` returns the `Mode` for `a`. (Use `vim.fn.tempname()` + `vim.fn.mkdir`.)
+- [ ] **Step 2: Run, verify fail** (`mode.list`/`mode.load` nil).
+- [ ] **Step 3: Implement** the IO seam:
+
+```lua
+local function read(path)
+  local f = io.open(path, "r"); if not f then return nil end
+  local c = f:read("*a"); f:close(); return c
+end
+
+--- Load one mode by name from <dir>/<name>.md. IO seam over M.parse.
+function M.load(dir, name)
+  local c = read(dir .. "/" .. name .. ".md")
+  if not c then return nil, "mode: no file for '" .. tostring(name) .. "'" end
+  return M.parse(c)
+end
+
+--- List all valid modes under dir (skips files that fail to parse). IO seam.
+function M.list(dir)
+  local out = {}
+  local h = vim.loop.fs_scandir(dir)
+  if not h then return out end
+  while true do
+    local fname, typ = vim.loop.fs_scandir_next(h)
+    if not fname then break end
+    local base = fname:match("^(.+)%.md$")
+    if base and typ ~= "directory" then
+      local m = M.parse(read(dir .. "/" .. fname) or "")
+      if m then table.insert(out, m) end
+    end
+  end
+  table.sort(out, function(a, b) return a.name < b.name end)
+  return out
+end
+```
+
+- [ ] **Step 4: Run, verify pass.**
+- [ ] **Step 5: Commit** (`#133 M1: mode load/list IO seam`).
+
+### Task 1.3: Ship the six mode files
+
+**Files:**
+- Create: `lua/parley/skills/review/modes/developmental.md`, `line-editing.md`, `copy-editing.md`, `proofreading.md`, `fact-check.md`, `free-form.md`
+
+- [ ] **Step 1:** Write each file = frontmatter (per the Spec table) + a prompt body. Flag values:
+
+| file | scope | deletions | frontier |
+|------|-------|-----------|----------|
+| developmental | whole-doc | apply-with-gutter-why | off |
+| line-editing | whole-doc | propose-strike | on |
+| copy-editing | whole-doc | propose-strike | on |
+| proofreading | whole-doc | apply | on |
+| fact-check | whole-doc | propose-strike | on |
+| free-form | whole-doc | propose-strike | off |
+
+Each body states the editing brief for that stage and instructs use of the `propose_edits` tool (the base `SKILL.md` already covers marker grammar + the tool contract — bodies should *not* duplicate it; they add only the stage-specific brief, per `ARCH-DRY`). `fact-check.md` says: insert `🤖{finding}` markers only, make **no** edits — resolution is handed to the main agent.
+
+- [ ] **Step 2: Test** — extend `tests/integration/review_mode_load_spec.lua`: `mode.list(<plugin>/lua/parley/skills/review/modes)` returns exactly 6, names match the table, no parse errors. (Resolve the plugin path via `nvim_get_runtime_file`.)
+- [ ] **Step 3: Run, verify pass.**
+- [ ] **Step 4: Commit** (`#133 M1: six review mode prompt files`).
+
+### Task 1.4: `skill_dir` injection in the provider
+
+**Files:**
+- Modify: `lua/parley/skill_providers.lua:42-64` (`manifest_from_def` source wrapper)
+- Test: `tests/integration/skill_providers_spec.lua` (extend)
+
+- [ ] **Step 1: Write failing test** — a disk skill whose `source(ctx)` returns `ctx.skill_dir` yields the absolute dir.
+- [ ] **Step 2: Run, verify fail** (`skill_dir` nil).
+- [ ] **Step 3: Implement** — inject `ctx.skill_dir = dir` in `manifest_from_def`'s source wrapper (`skill_providers.lua:46-59`), alongside `skill_md`. **Two cares:** (1) the dir must be available even when no `SKILL.md` exists, so the injection can't be gated on `file_exists(dir.."/SKILL.md")` the way `skill_md` is — restructure so `skill_dir` is set whenever absent. (2) **Never mutate the caller's `ctx`** — the existing code is careful to clone into `enriched` before writing; preserve that (clone in *all* branches where you set `skill_dir`, including the no-SKILL.md case). Also confirm review's `source` is the **function** form (M1.5) so it takes the function branch where enrichment happens — the `elseif` SKILL.md-only branch (line 60) does no enrichment, so a skill relying on `skill_dir` must define `source` as a function.
+- [ ] **Step 4: Run, verify pass.**
+- [ ] **Step 5: Commit** (`#133 M1: inject ctx.skill_dir at skill discovery`).
+
+### Task 1.5: Compose mode into `review` skill `source`
+
+**Files:**
+- Modify: `lua/parley/skills/review/init.lua` (`M.skill` — add `source` + `args`)
+- Test: `tests/unit/review_spec.lua` (extend) / `tests/integration/skill_invoke_spec.lua`
+
+- [ ] **Step 1: Write failing test** — call `M.skill.source({ skill_md = "BASE", skill_dir = <tmp with modes/>, args = { mode = "developmental", instruction = "tighten intro" } })`; assert the result contains `BASE`, the developmental body, a rendered flag directive (e.g. "Scope: whole document"), and `tighten intro`.
+- [ ] **Step 2: Run, verify fail** (`M.skill.source` nil — today review has no `source`, falling back to SKILL.md).
+- [ ] **Step 3: Implement** `M.skill.source` (pure given ctx) + `args`:
+
+```lua
+M.skill.args = { {
+  name = "mode", description = "review mode",
+  complete = function()
+    local dir = (vim.api.nvim_get_runtime_file("lua/parley/skills/review/modes", false) or {})[1]
+    local names = {}
+    for _, m in ipairs(dir and require("parley.skills.review.mode").list(dir) or {}) do
+      table.insert(names, m.name)
+    end
+    return names
+  end,
+} }
+
+M.skill.source = function(ctx)
+  ctx = ctx or {}
+  local base = ctx.skill_md or ""
+  local args = ctx.args or {}
+  local parts = { base }
+  if args.mode and ctx.skill_dir then
+    local m = require("parley.skills.review.mode").load(ctx.skill_dir .. "/modes", args.mode)
+    if m then
+      table.insert(parts, "\n\n## Review mode: " .. m.name .. "\n" .. m.body)
+      table.insert(parts, "\n\n" .. require("parley.skills.review.mode_directives")(m))
+    end
+  end
+  if args.instruction and args.instruction ~= "" then
+    table.insert(parts, "\n\n## Operator instruction\n" .. args.instruction)
+  end
+  return table.concat(parts)
+end
+```
+
+  `mode_directives(m)` is a tiny pure helper (add to `mode.lua` as `M.directives` or a sibling) translating flags → prose the model obeys: `scope` → "Edit the whole document" vs "Confine edits to text referenced by markers"; `frontier=on` → the settled-region rule; `deletions` → apply-with-gutter-why vs propose-as-`🤖~old~{new}`. Unit-test `directives` separately (pure, table-driven).
+
+- [ ] **Step 4: Run, verify pass.**
+- [ ] **Step 5: Commit** (`#133 M1: review skill composes mode body + flags + instruction`).
+
+### M1 review boundary
+
+- [ ] **DRY check (do this before milestone-close):** open each of the 6 mode files and confirm none restates the marker grammar / `propose_edits` tool contract that `skills/review/SKILL.md` already owns — this is the plan's single biggest DRY risk (`ARCH-DRY`). Bodies hold only the stage-specific editing brief.
+- [ ] `sdlc milestone-close --issue 133 --milestone M1` — fix Critical/Important, log the `Review-Verdict:` outcome in `## Log`.
+
+---
+
+## Chunk 2: M2 — Flexible review flow
+
+### Task 2.1: No-marker general review
+
+**Files:**
+- Modify: `lua/parley/skills/review/init.lua:476-484` (`run_via_invoke` pre-check)
+- Test: `tests/integration/skill_invoke_spec.lua` (extend) / `tests/unit/review_spec.lua`
+
+- [ ] **Step 1: Write failing tests** — (a) `run_via_invoke(buf, { mode = "developmental" })` on a buffer with **no markers** must NOT early-return "no markers"; it proceeds to invoke (assert via a stubbed `skill_invoke.invoke` capturing the call). (b) **The fact-check 0→N case** — a mode run that *inserts* markers (start with 0 markers, the stubbed apply adds `🤖{finding}`) must run exactly once and **stop** (NOT resubmit), and must not log "no progress — stopping" as if it were an error.
+- [ ] **Step 2: Run, verify fail** (current code returns early at `#markers == 0`).
+- [ ] **Step 3: Implement** — gate the no-marker abort on the *absence* of a selected mode: if `args.mode` is set, skip the `#markers == 0` early-return and proceed. Keep the legacy abort only for a bare marker-only run with no mode (preserves today's `<C-g>ve` behavior). **Resubmit-guard fix (the real case is 0→N, not 0→0):** today `marker_count_before` is captured at line 497 and the `on_done` follow-up resubmits while markers shrink, stopping via `#remaining >= marker_count_before` (line 525). A whole-doc mode round is **inherently one-shot**: with no starting markers, a round that *inserts* N markers (e.g. fact-check) would trip `#remaining(N) >= marker_count_before(0)` → "no progress — stopping", which is the *desired* stop but logged as a stuck-state. **Make resubmit gated on *ready-marker* progress only**: a mode run resubmits iff a ready `[]` marker remains *and* the ready-marker count shrank; a `{}`-only or zero-ready remainder ends the round cleanly (info log "round complete", not "no progress"). See Task 2.2 for the unified terminal logic.
+- [ ] **Step 4: Run, verify pass.**
+- [ ] **Step 5: Commit** (`#133 M2: no-marker general review for mode runs`).
+
+### Task 2.2: Submission decoupled from pending `{}`
+
+**Files:**
+- Modify: `lua/parley/skills/review/init.lua:485-493` (pending block) and the `on_done` follow-up (`529-542`)
+- Test: `tests/integration/skill_invoke_spec.lua` / `tests/unit/review_spec.lua`
+
+- [ ] **Step 1: Write failing test** — `run_via_invoke` on a buffer with a pending `🤖{agent asked}` marker (and at least one ready `[]`) must proceed to invoke, NOT early-return after populating quickfix.
+- [ ] **Step 2: Run, verify fail** (current code returns at `#pending > 0`).
+- [ ] **Step 3: Implement** — remove the submission-time pending-`{}` abort (the `if #pending > 0 then populate_quickfix; return` block at `init.lua:485-493`). The agent already skips non-ready markers (SKILL.md contract), so submission processes ready markers and leaves `{}` ones. Leave `scan_on_enter` / `BufWritePost` quickfix untouched — pending markers still surface **on save**. **Unified terminal logic for the `on_done` resubmit loop (`init.lua:529-542`)** — replace the current `has_questions` early-stop branch entirely. New rule, stated explicitly so the loop isn't left subtly wrong:
+  - `#remaining == 0` → "round complete" (unchanged, line 516).
+  - else compute `ready_remaining` (markers whose last section is `[]`). **Resubmit iff `ready_remaining > 0` AND the ready count shrank** (progress on actionable work), bounded by `resubmit_count < 3`.
+  - else (only `{}` / unanswerable / non-shrinking ready remain) → **stop cleanly** with an info log; the pending `{}` surface via quickfix-on-save, NOT via a submission-time block. The old no-progress guard (`#remaining >= marker_count_before`) folds into "ready count shrank".
+- [ ] **Step 4: Run, verify pass.**
+- [ ] **Step 5: Commit** (`#133 M2: allow submission with unaddressed {} markers (quickfix on save only)`).
+
+### Task 2.3: Deletion gutter-why + decoration ride/dismiss
+
+**Files:**
+- Modify: `lua/parley/skill_render.lua` (`attach_diagnostics`, add a deletion path; add `dismiss`)
+- Modify: `lua/parley/skill_invoke.lua:39-50` (`render_propose_edits` — pass deletions through)
+- Test: `tests/unit/skill_render_spec.lua` (extend)
+
+- [ ] **Step 1: Write failing test** — for an edit whose `new_string` is empty (a deletion), `skill_render` attaches an INFO diagnostic at the deletion's join line carrying the `explain` ("deleting … because …"), even though there's no new text to highlight.
+- [ ] **Step 2: Run, verify fail.**
+- [ ] **Step 3: Implement** — in `render_propose_edits` (`skill_invoke.lua:39-50`), classify each edit: if `new_string == ""`, route to a new `skill_render.attach_deletion_diagnostic(buf, edit.pos, explain)` anchoring an INFO diagnostic at the deletion's join line. **Guard `highlight_edits` against empty `new_string`:** today it does `new_content:find(edit.new_string, 1, true)` (`skill_render.lua:59-77`); `find("")` returns 1, which would spuriously highlight line 0 — so `highlight_edits` must **skip** empty-`new_string` edits (they're handled by the deletion path). Additions/rewrites keep the existing highlight+diagnostic path. Confirm highlights use edit-tracking extmarks so they **ride** subsequent edits (behavior B); they are cleared only at the next round start (`clear_decorations`, already called at `invoke` start) — add an explicit `skill_render.dismiss(buf)` (alias of `clear_decorations`) for the manual dismiss binding.
+- [ ] **Step 3b (cross-milestone coupling with M3.3): `render_propose_edits` must now RETURN the decoration set it built** (the `edits` list of `{pos, explain, new_string, kind=add|delete}`) instead of returning nothing. M3.3's journal entry needs this set, and M3.3 also requires `skill_invoke.invoke` to surface it (+ `original`/`new_content`) through `on_done` — see the M3.3 blocker note. Adding the return value here keeps that change localized.
+- [ ] **Step 4: Run, verify pass.**
+- [ ] **Step 5: Commit** (`#133 M2: deletion gutter-why diagnostic + dismiss; decorations ride until next round`).
+
+### M2 review boundary
+
+- [ ] `sdlc milestone-close --issue 133 --milestone M2`.
+
+---
+
+## Chunk 3: M3 — Self-contained journal sidecar
+
+### Task 3.1: `journal` pure serialize / parse / diff / drift
+
+**Files:**
+- Create: `lua/parley/skills/review/journal.lua`
+- Test: `tests/unit/review_journal_spec.lua`
+
+- [ ] **Step 1: Write failing tests**
+
+```lua
+local J = require("parley.skills.review.journal")
+describe("review.journal", function()
+  it("serialize→parse round-trips an entry", function()
+    local e = { round = 1, ts = "2026-06-17T10:00:00", mode = "copy editing",
+                side = "agent", diff = "@@ -1 +1 @@\n-a\n+b", hash = "deadbeef",
+                explains = { "fixed typo" }, decorations = {} }
+    local parsed = J.parse(J.serialize_entry(e))
+    assert.are.equal(1, parsed.entries[1].round)
+    assert.are.equal("copy editing", parsed.entries[1].mode)
+    assert.are.equal("deadbeef", parsed.entries[1].hash)
+  end)
+  it("parses multiple rounds in order", function() ... end)
+  it("is_drift true when current content's hash differs from last entry", function()
+    assert.is_true(J.is_drift("aaa", "content-hashing-to-bbb"))   -- via injected hasher in test
+    assert.is_false(J.is_drift(vim.fn.sha256("x"), "x"))
+  end)
+end)
+```
+
+- [ ] **Step 2: Run, verify fail.**
+- [ ] **Step 3: Implement** — markdown sections per round (`## Round N — <mode> (<side>) <ts>`, a `### Rationale` list, a fenced ```diff block, an HTML-comment metadata line `<!-- parley-journal: hash=… -->` for machine fields incl. the serialized decoration set). `parse` reads sections back. `diff(old,new) = vim.diff(old,new,{result_type="unified"})`. `is_drift(recorded_hash, current) = recorded_hash ~= vim.fn.sha256(current)`. Keep `serialize_entry`/`parse`/`is_drift`/`diff` pure (no file IO).
+- [ ] **Step 4: Run, verify pass.**
+- [ ] **Step 5: Commit** (`#133 M3: pure journal serialize/parse/diff/drift`).
+
+### Task 3.2: `journal.append` / `journal.read` IO + base snapshot
+
+**Files:**
+- Modify: `lua/parley/skills/review/journal.lua`
+- Test: `tests/integration/review_journal_io_spec.lua`
+
+- [ ] **Step 1: Write failing test** — `append(sidecar_path, base_content, entry)` creates `<doc>.parley-journal.md` with a base snapshot (round 0) + round 1; a second `append` grows it to round 2 without rewriting base; `read(path)` returns `{ base, entries }`; `is_drift` against an externally-mutated doc returns true.
+- [ ] **Step 2: Run, verify fail.**
+- [ ] **Step 3: Implement** — `sidecar_path(doc_path)` = `doc_path .. ".parley-journal.md"`. `append` reads existing (if any), writes base on first call, appends the serialized entry. `read` loads + `parse`. Thin IO over the pure layer.
+- [ ] **Step 4: Run, verify pass.**
+- [ ] **Step 5: Commit** (`#133 M3: journal sidecar IO (append/read, base snapshot)`).
+
+### Task 3.3: Wire journal into the review round
+
+**Files:**
+- Modify: `lua/parley/skills/review/init.lua` (`run_via_invoke` `on_done`)
+- Test: `tests/integration/review_journal_io_spec.lua` (extend) — drive a fake round
+
+> **⚠ Contract fix (caught in plan review):** `skill_invoke.invoke`'s `on_done` today passes **only** `{ ok, applied, calls, results }` (`skill_invoke.lua:190-192`). It does **NOT** expose `original`, `new_content`, or the decoration set — those are locals (`skill_invoke.lua:103,174`) that never escape, and `render_propose_edits` returns nothing. So Step 3a below is **required prep**: widen the driver's `on_done` payload. Do NOT assume the data is already there.
+
+- [ ] **Step 1: Write failing tests** — (a) `tests/integration/skill_invoke_spec.lua`: after a run, the `on_done` payload carries `original`, `new_content`, and `decorations`. (b) `tests/integration/review_journal_io_spec.lua`: after a successful `on_done` (stub the driver to apply a known edit + return the widened payload), a sidecar exists beside the doc with a round whose `mode`, `diff` (original→new), and `explains` (from the `propose_edits` calls) match.
+- [ ] **Step 2: Run, verify fail.**
+- [ ] **Step 3a (driver prep): widen `skill_invoke.invoke`'s `on_done` payload** — add `original = original`, `new_content = new_content`, and `decorations = <set returned by render_propose_edits>` (M2.3 Step 3b makes it return the set) to the `opts.on_done({...})` call at `skill_invoke.lua:190-192`. Pure-fed: the hook never re-reads the buffer.
+- [ ] **Step 3b: build + append the entry** — in review's `on_done`, on `result.ok`, build: `mode = args.mode`, `side = "agent"`, `diff = journal.diff(result.original, result.new_content)`, `explains` from `result.calls` propose_edits inputs, `hash = vim.fn.sha256(result.new_content)`, `ts = os.date("!%Y-%m-%dT%H:%M:%S")`, `decorations = result.decorations`. Call `journal.append`. Skip journaling gracefully when the doc has no path. (No git, no branch — `ARCH-PURE`: the round's data is computed pure and handed to one thin `append`.)
+- [ ] **Step 4: Run, verify pass.**
+- [ ] **Step 5: Commit** (`#133 M3: append a journal round after each review apply`).
+
+### M3 review boundary
+
+- [ ] `sdlc milestone-close --issue 133 --milestone M3`.
+
+---
+
+## Chunk 4: M4 — Composite review menu + bindings
+
+### Task 4.1: `review_menu` composite float
+
+**Files:**
+- Create: `lua/parley/review_menu.lua`
+- Test: `tests/integration/review_menu_spec.lua`
+
+- [ ] **Step 1: Write failing test** — `review_menu.open(buf, { on_submit = cb })` opens two windows (a mode-list results buffer + a multi-line `buftype=""` instruction buffer); the mode list contains the 6 mode names; the last-used mode is pre-selected (set via a prior submit / injected recall); invoking submit calls `cb({ mode = <selected>, instruction = <typed> })`.
+- [ ] **Step 2: Run, verify fail.**
+- [ ] **Step 3a: export the layout helper** — `float_picker.compute_layout` is currently **module-local** (`local function compute_layout`, `float_picker.lua:504`), not on `M`. Add `M.compute_layout = compute_layout` so `review_menu` reuses the geometry instead of duplicating it (`ARCH-DRY`). Cover with a one-line assertion that `float_picker.compute_layout` is callable.
+- [ ] **Step 3b: implement** — reuse `float_picker.compute_layout` for geometry. Top = results window listing `mode.list(<modes dir>)` names, current selection highlighted, `j/k` to move; bottom = a normal modifiable buffer (`buftype=""`, several rows) for free-form instruction (full vim editing). Sticky mode via a module-level `_last_mode` (session recall; cross-session persistence is v2). Submit (`<CR>`/`<M-CR>`) closes and calls `on_submit({mode, instruction})`; free-form mode requires non-empty instruction (refuse + warn otherwise). Esc cancels. Keep this the *only* new UI; do not fold logic the pure layers own.
+- [ ] **Step 4: Run, verify pass.**
+- [ ] **Step 5: Commit** (`#133 M4: composite review menu (mode selector + instruction editor)`).
+
+### Task 4.2: `<M-o>` / `<M-CR>` bindings + wiring
+
+**Files:**
+- Modify: `lua/parley/keybinding_registry.lua` (add `review_menu` + `review_next` entries), `lua/parley/config.lua` (shortcut defaults), `lua/parley/skills/review/init.lua` (`setup_keymaps`)
+- Test: `tests/integration/review_menu_spec.lua` (extend) — assert keymaps set on a markdown buffer
+
+- [ ] **Step 1: Write failing test** — opening a markdown review doc sets buffer-local `<M-o>` (open menu) and `<M-CR>` (open menu pre-selected to sticky mode, then run). Assert via `nvim_buf_get_keymap`.
+- [ ] **Step 2: Run, verify fail.**
+- [ ] **Step 3: Implement** — add `config.review_shortcut_menu = { modes = {"n"}, shortcut = "<M-o>" }` and `config.review_shortcut_next = { modes = {"n","i"}, shortcut = "<M-CR>" }`. **Follow the existing `review_edit` pattern** (`keybinding_registry.lua:691` is `help_only=true`, registered "by review skill"; the actual `vim.keymap.set` lives in `setup_keymaps`, `init.lua:2089`): add `help_only=true` registry entries for help output, and do the real buffer-local binding in `setup_keymaps` — do NOT route through the generic `register_buffer` path. Bind `<M-o>` → `review_menu.open(buf, { on_submit = run })` and `<M-CR>` → open menu pre-selected to sticky mode (same callback). Both call `review.run_via_invoke(buf, { mode, instruction })`. `<M-CR>` "always works" — opens the menu even on a doc not yet in review (no session gate). Verified free: `<M-CR>` chat-respond is `chat`-scope (markdown buffers register only `{parley_buffer, markdown}`), and `<M-o>` is unbound today.
+- [ ] **Step 4: Run, verify pass.**
+- [ ] **Step 5: Commit** (`#133 M4: <M-o>/<M-CR> review menu bindings + sticky mode`).
+
+### Task 4.3: Manual end-to-end verification
+
+- [ ] **Step 1:** In a real nvim on a scratch markdown doc with no markers: `<M-o>` → pick **developmental** + type "expand these bullets into prose" → confirm whole-doc edits land, highlighted, with gutter explanations; confirm a `<doc>.parley-journal.md` sidecar appears with round 1 (mode, diff, rationale).
+- [ ] **Step 2:** Add a `🤖[tighten this]` marker + a pending `🤖{question}`; `<M-CR>` → confirm menu pre-selected to last mode, run proceeds despite the pending `{}`; save → confirm the pending `{}` surfaces in quickfix.
+- [ ] **Step 3:** Pick **proofreading** on a doc with a typo → confirm the deletion/replacement applies with a gutter "why"; pick **copy editing** → confirm a deletion shows as a `🤖~old~{new}` strike for accept/reject.
+- [ ] **Step 4:** Pick **fact-check** → confirm only `🤖{finding}` markers are inserted, no edits.
+- [ ] **Step 5:** Edit one region after a round → confirm decorations elsewhere persist (ride). Document the outcomes in `## Log`.
+
+### M4 review boundary + close
+
+- [ ] `sdlc milestone-close --issue 133 --milestone M4`.
+- [ ] `sdlc close --issue 133 --verified '<evidence: make test green + manual e2e per Task 4.3>'` (let close compute `--actual`; update `atlas/` for the review-modes + journal surface and **link the new entries from `atlas/index.md`** per the constitution — note `atlas/modes/` already exists for an unrelated concept, so name the new surface to avoid conceptual collision, e.g. `atlas/.../review-modes.md`).
+
+---
+
+## Chunk 5: M5 — Decoration projection (undo/redo coherence)
+
+Added during acceptance test (#133). Problem: nvim undo reverts **text** only;
+review decorations are drawn once per round and then ride/persist, so after an
+undo the "style" is stale/stuck (esp. across the round's `:edit!` reload).
+Snapshot-projection (the operator's model): record the decoration set per
+content-state; on undo/redo re-render the matching record; a novel forward edit
+keeps riding (behavior B) and is itself recorded. Pure decide + thin IO
+(`ARCH-PURE`); reuses `skill_render` to draw (`ARCH-DRY`).
+
+### Task 5.1: `skill_render.snapshot` / `apply_snapshot`
+
+**Files:** Modify `lua/parley/skill_render.lua`; Test `tests/unit/skill_render_spec.lua`.
+
+- [ ] **Step 1: failing test** — draw highlights + diagnostics, `snapshot(buf)` →
+  `{hl_lines, diags}`; `clear_decorations`; `apply_snapshot(buf, snap)` restores
+  the same highlight extmark lines + INFO diagnostics.
+- [ ] **Step 2/3: implement** — `snapshot` reads the hl-namespace extmark rows +
+  `vim.diagnostic.get(buf,{namespace=diag_ns})`; `apply_snapshot` clears then
+  re-adds `DiffChange` per line + `vim.diagnostic.set` from the saved messages.
+- [ ] **Step 4/5: pass + commit.**
+
+### Task 5.2: `projection` record + watcher
+
+**Files:** Create `lua/parley/skills/review/projection.lua`; Test `tests/integration/review_projection_spec.lua`.
+
+- [ ] **Step 1: failing test** — `record_empty_for(buf, base)` + `record(buf)`
+  (snapshots current decorations under the buffer's content-hash); after content
+  reverts to `base` and the watcher fires → decorations cleared; revert to the
+  round state → decorations re-rendered; a novel content → snapshot captured (no
+  clear). Plus a pure `decide(records, hash) → "restore"|"capture"`.
+- [ ] **Step 2/3: implement** — per-buffer `{records = {[hash]=snap}}`; `hash` =
+  `sha256(buffer)`; `on_change` (TextChanged/TextChangedI): skip if `_applying`;
+  known hash → `apply_snapshot`; novel → capture. `ensure_watch` attaches the
+  autocmd once (lazy, after the first round). `set_applying` guards the round's
+  own `:edit!`.
+- [ ] **Step 4/5: pass + commit.**
+
+### Task 5.3: wire into the round
+
+**Files:** Modify `lua/parley/skills/review/init.lua` (`run_via_invoke` + `on_done`); Test `tests/integration/skill_invoke_review_spec.lua`.
+
+- [ ] **Step 1: failing test** — after a successful round (stub apply), the base
+  (pre) and post content-hashes are both recorded (base→empty, post→decorations)
+  and the watcher is attached.
+- [ ] **Step 2/3: implement** — set `projection.set_applying(buf,true)` before
+  invoke; in `on_done` on `result.ok`: `record_empty_for(buf, result.original)`,
+  `record(buf)`, `ensure_watch(buf)`, then `set_applying(buf,false)`. Records
+  persist across rounds (multi-round undo coherence).
+- [ ] **Step 4/5: pass + commit.**
+
+### Task 5.4: manual e2e + M5 boundary
+
+- [ ] Manual: run a round → highlights + gutter why; make 2 manual edits (style
+  rides); undo back through them → style re-renders at each; undo past the round
+  → style clears; redo → style returns. Document in `## Log`.
+- [ ] `sdlc milestone-close --issue 133 --milestone M5`.
+
+## Chunk 6: M6 — Review-diagnostic display (wrapped inline why + cursor auto-show)
+
+Added in acceptance test. The edit "why" is attached but only shows as a
+sign/underline (or, with `virtual_text`, truncated single-line). Make it readable:
+hard-wrap the explanation, anchor each diagnostic over its edit's line range, and
+default `virtual_lines { current_line = true }` scoped to parley's namespace so
+the wrapped why **auto-expands below the edit when the cursor is in its region**.
+A `:ParleyShowDiagnostics` command toggles it. Pure wrap + thin display config
+(`ARCH-PURE`); reuses the existing `parley_skill` diagnostic namespace
+(`ARCH-DRY`). Composes with M5 (re-renders on undo/redo).
+
+### Task 6.1: pure `wrap` + region-anchored, wrapped diagnostics
+
+**Files:** Modify `lua/parley/skill_render.lua`; Test `tests/unit/skill_render_spec.lua`.
+
+- [ ] **6.1a** pure `wrap(text, width)` → message hard-wrapped at word boundaries
+  (newlines inserted) so `virtual_lines` renders it as multiple wrapped rows.
+- [ ] **6.1b** `attach_diagnostics` wraps each `explain` and sets `end_lnum` to span
+  the edit's line range (so "cursor in the region" matches), keeping `lnum`.
+- [ ] test + pass + commit.
+
+### Task 6.2: display toggle (`diag_display`) + `:ParleyShowDiagnostics`
+
+**Files:** Create `lua/parley/skills/review/diag_display.lua`; Modify `lua/parley/init.lua` (command + default-on wiring); Test `tests/integration/review_diag_display_spec.lua`.
+
+- [ ] **6.2a** `diag_display`: `set(on)` → `vim.diagnostic.config({virtual_lines =
+  on and {current_line=true} or false, virtual_text=false}, parley_ns)`; `toggle`;
+  `is_enabled`. Default on. (parley_ns = `nvim_create_namespace("parley_skill")`.)
+- [ ] **6.2b** register `:ParleyShowDiagnostics` (toggles) + enable on setup.
+- [ ] test (toggle flips state + config) + pass + commit.
+
+### Task 6.3: manual e2e + M6 boundary
+
+- [ ] Manual: run a round with a long explanation → cursor onto the edit → the
+  wrapped why expands below; move off → it hides; `:ParleyShowDiagnostics` toggles
+  it off/on. Document in `## Log`.
+- [ ] `sdlc milestone-close --issue 133 --milestone M6`.
+
+## Chunk 7: M7 — Detached progress bar (long-running review feedback)
+
+Added in acceptance test. Review is parley's first op that takes ~30s; it needs a
+visible "running" cue. Build a **reusable detached progress bar** (a floating bar,
+not lualine/native-winbar — detached so it can grow to multi-line detail for
+future long-ops), with an animated spinner + message + elapsed. Review wires its
+in-flight state into it. Concurrency: the existing kill-prompt (no two concurrent
+reviews) stays. Pure spinner/format + thin float/timer IO (`ARCH-PURE`); reusable
+mechanism, not review-specific (`ARCH-DRY` for future progress needs).
+
+### Task 7.1: `progress` module (pure frame/format + float/timer IO)
+
+**Files:** Create `lua/parley/progress.lua`; Test `tests/unit/progress_spec.lua` (pure) + `tests/integration/progress_spec.lua` (float).
+
+- [ ] **7.1a** pure `frame(tick)` (spinner glyph) + `format(spinner, message, elapsed)` → bar line.
+- [ ] **7.1b** `start(message)` opens a detached float (above the statusline) + a timer animating spinner/elapsed; `update(message)`; `stop()` closes the float + timer; `is_active()`.
+- [ ] test + pass + commit.
+
+### Task 7.2: wire review into the bar
+
+**Files:** Modify `lua/parley/skill_invoke.lua` (start on query, stop on exit/abort); Test `tests/integration/skill_invoke_spec.lua`.
+
+- [ ] start the bar (`⟳ <skill>…`) when the query launches; stop it in on_exit (after the gen guard) + on_abort + cancel. Reuses the generation guard so a superseded round doesn't kill the new one's bar.
+- [ ] test (bar active during a held query; stopped after) + pass + commit.
+
+### Task 7.3: manual e2e + M7 boundary
+
+- [ ] Manual: run a review → the bar appears with a spinner + elapsed, disappears when done; trigger another mid-run → kill-or-cancel prompt (no two concurrent). Document in `## Log`.
+- [ ] `sdlc milestone-close --issue 133 --milestone M7`.
+
+## Notes / risks
+
+- **`ARCH-DRY`:** the modes engine adds *no* new driver — it rides `skill_invoke` + the provider's `source(ctx)` composition (mirrors `voice_apply`). Mode bodies must not restate the marker grammar/tool contract the base `SKILL.md` owns.
+- **`ARCH-PURE`:** `Mode`, `journal` (serialize/parse/diff/drift), and `mode_directives` are pure and unit-tested without mocks; IO is the thin `load`/`list`/`append`/`read` seam and the menu. The journal round is computed pure and handed to one `append`.
+- **Risk — frontmatter parser:** the minimal `k: v` scan (no YAML lib) is deliberate but must not choke on a `---` inside a body; `parse` keys off the *leading* `---\n` only. Covered by a test.
+- **Risk — resubmit loop with whole-doc modes:** a zero-marker mode round must not trip the no-progress guard. Explicit test in Task 2.1.
+- **Deferred (v2, out of scope):** active in-buffer undo-projection of past-round decorations; cross-session sticky mode; "revert/show round N". The journal stores base + per-round diff + rationale (see Revisions — *not* a structured decoration set); v2 reconstructs decorations from the diff + rationale, or restores structured storage when built.
+
+## Revisions
+
+### 2026-06-18 — M3 journal stores diff+rationale, not a structured decoration set
+
+**Reason:** M3 boundary review (FIX-THEN-SHIP) flagged that Task 3.3 Step 3b / Spec §7 / Done-when call for storing the per-round **decoration set** (highlight ranges + diagnostic messages), but the shipped `journal.serialize_entry` stores only the flattened `explains` (rationale) + the unified diff.
+
+**Delta:** Deliberately keep the reduction (ARCH §6 YAGNI): the structured decoration set is needed only by the **deferred v2** in-buffer undo-projection, so persisting it now is speculative. The diff + rationale fully capture the round for the durable record; v2 either reconstructs decorations from diff + rationale (find each edit's text in the round's post-state, re-anchor its explain) or restores structured storage at that point. `skill_invoke`'s `on_done` already surfaces the live decoration set (`result.decorations`) so restoring storage later is a one-line change in review's `on_done`. The atlas note was corrected to match what's actually stored.
+
+### 2026-06-18 — M4 `review_menu.open` signature + `<M-CR>` semantics
+
+**Reason:** M4 boundary review flagged two plan/shipped mismatches.
+
+**Delta:** (1) Task 4.1 specified `review_menu.open(buf, {…})`, but the shipped API is `review_menu.open(opts)` with **no buf arg** — the menu manages its own scratch windows and the caller's `on_submit` carries the buffer action, so `buf` was unused (dropped to satisfy lint/ARCH-DRY). (2) Task 4.2 / Done-when described `<M-CR>` as "(re)opens the menu pre-selected to the sticky mode **and runs the next round**"; shipped behavior makes `<M-o>` and `<M-CR>` both **open the (sticky-preselected) menu**, and the round runs on submit — consistent with seed item 6 ("…or pops the menu with a sticky selection"). Also fixed in M4: the instruction box's `<Esc>` cancels in normal mode only (insert-`<Esc>` → normal mode) so the box keeps full vim editing per Spec §3.
+
+### 2026-06-18 — post-M4 e2e fixes folded into the M5 window
+
+**Reason:** acceptance testing surfaced three issues fixed alongside M5 (not in Chunk 5's projection-only scope); recorded here per AGENTS.md §1.
+
+**Delta:** (a) **Menu navigation reworked to cursor-line selection** — the menu now focuses the *list* window; `j`/`k`/arrows/mouse move the selection natively (the prior C-j/C-k-in-insert scheme was undiscoverable, and C-j is eaten as `<NL>` by terminals). `Tab`/`i` → instruction box; `Enter`/`M-CR`/`C-s` run; `Esc`/`C-c` cancel. (b) **Editorial mode order** — modes gained an optional `order:` frontmatter field (developmental=1 … free-form=6); `mode.parse` reads it and `mode.list` sorts by `order` then name, so the menu lists the document-construction sequence rather than alphabetically (Spec §1 table order). (c) **Stringified-`edits` tolerance** — `skill_invoke` now coerces a `propose_edits.edits` arg that a model emitted as a JSON string (so the batch applies), and `render_propose_edits` guards a non-table `edits` (no crash). (d) M5 review hardening: the projection watcher dropped `TextChangedI` (per-keystroke whole-buffer hashing) for `TextChanged`+`InsertLeave`, and bounded `records` (FIFO cap 200); `reset` now removes the watcher autocmd.
+
+### 2026-06-18 — post-M6 acceptance-test fixes
+
+**Reason:** three issues observed in operator e2e.
+
+**Delta:** (a) **Bindings corrected** — `<M-o>` now opens the general **skill picker** (review is one skill among many); `<M-CR>` is the **direct review trigger** (opens the review-mode menu). Previously both opened the review menu. (b) **Accept/reject (`<M-a>`/`<M-r>`) preserves review decorations** — the resolver replaced the *whole* buffer (`set_lines(0,-1)`), wiping every highlight + diagnostic; it now replaces only the marker's line range so decorations elsewhere ride (extmark gravity), like a manual edit, with a content-verification fallback to the full replace if the range math is ever off. (c) **In-flight review is no longer an error** — `run_via_invoke` warns and offers to kill the running review and submit a new one (`vim.fn.confirm`); `skill_invoke.cancel` stops the query and a per-buffer **generation guard** makes the cancelled query's late `on_exit`/`on_abort` a no-op so it can't clobber the new exchange. (d) **Virtual-lines wrap width is dynamic** — the "why" was hard-wrapped at a fixed 76, overflowing the indented `virtual_lines` and truncating the right edge; `attach_diagnostics` now wraps to the window's usable width (`getwininfo.textoff` gutter + an indent margin).
+
+### 2026-06-18 — M7 boundary-review fixes + stale-doc notes
+
+**Reason:** M7 boundary review (FIX-THEN-SHIP).
+
+**Delta:** (a) **Spinner single-sourced** — `progress.SPINNER`/`frame` is now the one definition; `chat_respond`'s two spinners reuse it (was triple-duplicated). (b) **`narrow_replace_range` extracted to `drill_in.lua`** (pure) and unit-tested, so the accept/reject decoration-ride range math is pinned (a revert to whole-buffer `set_lines` is guarded by the helper + its tests; the content-verification fallback still guarantees correctness). (c) **Doc staleness flagged:** the plan's top "Core concepts" table predates M5–M7 and omits the entities added since — `mode`/`mode.wrap`+`directives` (M1/M6), `journal` (M3), `projection` (M5), `progress` (M7); treat this Revisions log as the authoritative entity delta. (d) The **issue Spec §4 / Done-when** still describe `<M-o>` as opening the review menu — superseded: `<M-o>` = skill picker, `<M-CR>` = review menu (see the 2026-06-18 M4-signature Revisions entry); the code + this log are authoritative.

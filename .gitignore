@@ -36,3 +36,4 @@ bin/
 
 # agent scratch debug files
 .mdbg*
+/construct/generated/

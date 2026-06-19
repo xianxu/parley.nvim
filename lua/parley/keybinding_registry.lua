@@ -690,6 +690,28 @@ M.entries = {
 		buffer_local = true,
 		help_only = true, -- registered by review skill
 	},
+	{
+		id = "review_menu",
+		config_key = "review_shortcut_menu",
+		default_key = "<M-o>",
+		default_modes = { "n" },
+		scope = "markdown",
+		desc = "Parley: open skill picker",
+		help_desc = "Open skill picker",
+		buffer_local = true,
+		help_only = true, -- registered by review skill (#133)
+	},
+	{
+		id = "review_next",
+		config_key = "review_shortcut_next",
+		default_key = "<M-CR>",
+		default_modes = { "n", "i" },
+		scope = "markdown",
+		desc = "Parley review: open mode menu (direct trigger)",
+		help_desc = "Open review-mode menu",
+		buffer_local = true,
+		help_only = true, -- registered by review skill (#133)
+	},
 
 	-- ── Finder: Chat ────────────────────────────────────────────────────
 	{

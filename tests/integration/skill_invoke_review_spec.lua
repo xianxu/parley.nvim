@@ -82,4 +82,129 @@ describe("review.run_via_invoke", function()
         invoke_calls[1].opts.on_done({ ok = false, msg = "tool error" })
         assert.are.equal(1, #invoke_calls)
     end)
+
+    -- M2 (#133): no-marker general review + submission decoupled from pending {}.
+
+    it("invokes a mode run even with NO markers (general review)", function()
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "plain prose, no markers" })
+        review.run_via_invoke(buf, { mode = "developmental" })
+        assert.are.equal(1, #invoke_calls)
+        assert.are.equal("developmental", invoke_calls[1].args.mode)
+    end)
+
+    it("does NOT resubmit when a mode round inserts {} findings (fact-check 0→N)", function()
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "a dubious claim" }) -- 0 markers
+        review.run_via_invoke(buf, { mode = "fact-check" })
+        assert.are.equal(1, #invoke_calls)
+        -- the round inserted a finding marker (0 → 1 pending); one-shot, no resubmit
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "a dubious claim 🤖{is this true?}" })
+        invoke_calls[1].opts.on_done({ ok = true })
+        assert.are.equal(1, #invoke_calls)
+    end)
+
+    it("invokes (processes ready) even when an unaddressed pending {} marker is present", function()
+        -- Was blocked pre-#133 (#pending > 0 → return); now the ready [] is processed.
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "🤖[fix me]", "prose 🤖{agent asked earlier}" })
+        review.run_via_invoke(buf, {})
+        assert.are.equal(1, #invoke_calls)
+    end)
+
+    it("does NOT invoke a strike-only doc with no mode (no ready markers)", function()
+        -- A bare strike (🤖~del~) is a proposal, not agent-actionable: no mode +
+        -- no ready marker → nothing to do, no LLM call (M2 review-finding pin).
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "prose 🤖~delete this~" })
+        review.run_via_invoke(buf, {})
+        assert.are.equal(0, #invoke_calls)
+    end)
+
+    it("records projection states (base empty + post) so undo/redo re-render style (#133 M5)", function()
+        local projection = require("parley.skills.review.projection")
+        local doc = vim.fn.tempname() .. ".md"
+        vim.fn.writefile({ "original line" }, doc)
+        vim.cmd("edit " .. vim.fn.fnameescape(doc))
+        local b = vim.api.nvim_get_current_buf()
+        projection.reset(b)
+        review.run_via_invoke(b, { mode = "developmental" })
+        -- simulate the round: apply text + draw a decoration, then fire on_done
+        vim.api.nvim_buf_set_lines(b, 0, -1, false, { "edited line" })
+        require("parley.skill_render").attach_diagnostics(b, { { pos = 1, explain = "why" } }, "edited line")
+        invoke_calls[#invoke_calls].opts.on_done({
+            ok = true, original = "original line", new_content = "edited line",
+            decorations = { { kind = "edit", explain = "why" } },
+        })
+        -- undo to base → style cleared (base recorded empty)
+        vim.api.nvim_buf_set_lines(b, 0, -1, false, { "original line" })
+        projection.project(b)
+        assert.are.equal(0, #vim.diagnostic.get(b))
+        -- redo to the round state → style restored
+        vim.api.nvim_buf_set_lines(b, 0, -1, false, { "edited line" })
+        projection.project(b)
+        assert.is_true(#vim.diagnostic.get(b) >= 1)
+        projection.reset(b)
+        vim.fn.delete(doc)
+        vim.fn.delete(require("parley.skills.review.journal").sidecar_path(doc))
+        vim.api.nvim_buf_delete(b, { force = true })
+    end)
+
+    it("journals the round to a sidecar beside the doc (#133 M3)", function()
+        local doc = vim.fn.tempname() .. ".md"
+        vim.fn.writefile({ "original line" }, doc)
+        vim.cmd("edit " .. vim.fn.fnameescape(doc))
+        local b = vim.api.nvim_get_current_buf()
+        review.run_via_invoke(b, { mode = "developmental" }) -- mode run, no markers → invokes
+        assert.are.equal(1, #invoke_calls)
+        invoke_calls[#invoke_calls].opts.on_done({
+            ok = true,
+            original = "original line",
+            new_content = "edited line",
+            decorations = { { kind = "edit", explain = "tightened the wording" } },
+        })
+        local J = require("parley.skills.review.journal")
+        local p = J.read(doc)
+        assert.are.equal("original line", p.base)
+        assert.are.equal(1, #p.entries)
+        assert.are.equal("developmental", p.entries[1].mode)
+        assert.is_truthy(p.entries[1].diff:find("edited", 1, true))
+        vim.fn.delete(doc)
+        vim.fn.delete(J.sidecar_path(doc))
+        vim.api.nvim_buf_delete(b, { force = true })
+    end)
+end)
+
+describe("review journal sidecar exclusion (#133 M3)", function()
+    local function named(name)
+        local b = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_name(b, name)
+        return b
+    end
+    it("is_journal_sidecar matches only *.parley-journal.md", function()
+        assert.is_true(require("parley.skills.review").is_journal_sidecar(named("/tmp/doc.md.parley-journal.md")))
+        assert.is_false(require("parley.skills.review").is_journal_sidecar(named("/tmp/doc.md")))
+        assert.is_false(require("parley.skills.review").is_journal_sidecar(named("/tmp/parley-journal.txt")))
+    end)
+    it("setup_keymaps no-ops on a sidecar buffer (no review map bound)", function()
+        local b = named("/tmp/x.parley-journal.md")
+        require("parley.skills.review").setup_keymaps(b)
+        for _, m in ipairs(vim.api.nvim_buf_get_keymap(b, "n")) do
+            assert.is_nil(m.desc and m.desc:find("Parley review", 1, true))
+        end
+    end)
+end)
+
+describe("review.should_resubmit (pure)", function()
+    it("resubmits while ready work remains, shrank, and under the bound", function()
+        assert.is_true(review.should_resubmit(2, 1, 0)) -- 2→1 ready, round 0
+    end)
+    it("stops when no ready markers remain (e.g. mode inserted only {} findings)", function()
+        assert.is_false(review.should_resubmit(0, 0, 0))
+        assert.is_false(review.should_resubmit(2, 0, 0))
+    end)
+    it("stops when the ready count did not shrink (no progress)", function()
+        assert.is_false(review.should_resubmit(1, 1, 0))
+        assert.is_false(review.should_resubmit(1, 2, 0)) -- grew (e.g. inserted ready) → stop
+    end)
+    it("stops at the resubmit bound (3)", function()
+        assert.is_true(review.should_resubmit(3, 2, 2))
+        assert.is_false(review.should_resubmit(3, 2, 3))
+    end)
 end)

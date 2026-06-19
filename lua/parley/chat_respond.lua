@@ -806,7 +806,7 @@ M.generate_topic = function(messages, provider, model, callback, spinner)
     table.insert(msgs, { role = "user", content = _parley.config.chat_topic_gen_prompt })
 
     -- Start spinner animation on the topic line if requested
-    local spinner_frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
+    local spinner_frames = require("parley.progress").SPINNER -- single source (#133)
     local spinner_idx = 1
     local spinner_timer = nil
     if spinner and spinner.buf and spinner.find_line then
@@ -1261,7 +1261,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             target_idx = exchange_idx or #model.exchanges
         end
 
-        local spinner_frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
+        local spinner_frames = require("parley.progress").SPINNER -- single source (#133)
         local spinner_message = "Submitting..."
         local progress_detail_text = ""
         local progress_detail_key = nil

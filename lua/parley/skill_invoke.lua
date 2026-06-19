@@ -21,6 +21,10 @@ local M = {}
 -- Per-buffer re-entrancy guard: one skill exchange per artifact buffer at a time
 -- (a rapid double-trigger would otherwise launch concurrent exchanges).
 local _in_flight = {}
+-- Per-buffer generation counter. Each invoke bumps it; on_exit/on_abort carry
+-- their gen and no-op if a newer exchange superseded them — so a cancelled
+-- (killed) query's late callback can't clobber the new one's state. (#133)
+local _gen = {}
 
 --- Is a skill exchange in flight for `buf`? Cleared on on_exit/on_abort, so an
 --- abort that can't start the query doesn't block the buffer forever (#131).
@@ -28,6 +32,18 @@ local _in_flight = {}
 --- @return boolean
 function M.is_in_flight(buf)
     return _in_flight[buf] == true
+end
+
+--- Cancel an in-flight exchange for `buf`: invalidate it (bump the generation so
+--- its callback no-ops), clear the in-flight flag, and stop the running query.
+--- `tasker.stop` halts in-flight queries (review is headless, so this is the
+--- review job). Lets a new round supersede a stuck/slow one (#133).
+--- @param buf number
+function M.cancel(buf)
+    _gen[buf] = (_gen[buf] or 0) + 1
+    _in_flight[buf] = nil
+    pcall(function() require("parley.progress").stop() end)
+    pcall(function() require("parley.tasker").stop() end)
 end
 
 local function parley()
@@ -39,14 +55,30 @@ end
 local function render_propose_edits(buf, call, original, new_content)
     local skill_render = require("parley.skill_render")
     local edits = {}
-    for _, e in ipairs((call.input or {}).edits or {}) do
+    -- Guard against a malformed call where `edits` isn't an array (e.g. a model
+    -- that stringified it and coercion failed, or a truncated response) — the
+    -- tool already surfaced its own error; the renderer must not crash. #133
+    local edits_in = (call.input or {}).edits
+    if type(edits_in) ~= "table" then
+        edits_in = {}
+    end
+    for _, e in ipairs(edits_in) do
         local pos = original:find(e.old_string, 1, true)
         if pos then
-            table.insert(edits, { pos = pos, explain = e.explain, new_string = e.new_string })
+            table.insert(edits, {
+                pos = pos,
+                explain = e.explain,
+                new_string = e.new_string,
+                -- A pure deletion (empty new_string) is oriented by its gutter
+                -- "why" diagnostic, not a highlight (skill_render skips it). #133
+                kind = (e.new_string == nil or e.new_string == "") and "delete" or "edit",
+            })
         end
     end
     skill_render.attach_diagnostics(buf, edits, original)
     skill_render.highlight_edits(buf, edits, new_content)
+    -- Return the decoration set so the caller can journal it (M3 #133).
+    return edits
 end
 
 -- Reload the artifact buffer from its (now-edited) file. Uses `:edit!` (a
@@ -92,6 +124,10 @@ function M.invoke(buf, manifest, args, opts)
         p.logger.warning("skill " .. tostring(manifest.name) .. ": already running on this buffer")
         return
     end
+
+    -- This exchange's generation; on_exit/on_abort no-op if superseded (#133).
+    local gen = (_gen[buf] or 0) + 1
+    _gen[buf] = gen
 
     -- Sync file == buffer so edits compute + apply against the same content.
     if vim.bo[buf].modified then
@@ -143,6 +179,9 @@ function M.invoke(buf, manifest, args, opts)
     local cwd = vim.fn.fnamemodify(artifact_path, ":h")
 
     _in_flight[buf] = true
+    -- Detached progress bar: this is a ~30s headless op, so show a running cue
+    -- (the first substantive-progress surface, #133 M7). Stopped on exit/abort.
+    require("parley.progress").start("Parley " .. tostring(manifest.name) .. " running…")
     llm.query(
         nil, -- headless: no streaming buffer insertion
         agent.provider,
@@ -150,6 +189,12 @@ function M.invoke(buf, manifest, args, opts)
         function() end, -- handler (headless)
         function(qid) -- on_exit
             vim.schedule(function()
+                -- Superseded by a newer exchange (the old one was cancelled) →
+                -- no-op so we don't reload/re-render or clobber the new state.
+                if _gen[buf] ~= gen then
+                    return
+                end
+                require("parley.progress").stop()
                 _in_flight[buf] = nil
                 local qt = tasker.get_query(qid) or {}
                 local calls = providers.decode_anthropic_tool_calls_from_stream(qt.raw_response or "")
@@ -160,6 +205,15 @@ function M.invoke(buf, manifest, args, opts)
                     if call.name == "propose_edits" then
                         call.input = call.input or {}
                         call.input.file_path = artifact_path -- artifact-bound
+                        -- Some models emit `edits` as a JSON STRING rather than an
+                        -- array; coerce it once here so the batch actually applies
+                        -- (and render_propose_edits below gets a table). #133
+                        if type(call.input.edits) == "string" then
+                            local ok, decoded = pcall(vim.json.decode, call.input.edits)
+                            if ok and type(decoded) == "table" then
+                                call.input.edits = decoded
+                            end
+                        end
                     end
                     results[i] = tools_dispatcher.execute_call(call, tools_registry, { cwd = cwd })
                     if call.name == "propose_edits" then
@@ -172,9 +226,12 @@ function M.invoke(buf, manifest, args, opts)
                 end
                 reload_buffer(buf)
                 local new_content = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+                local decorations = {}
                 for _, call in ipairs(calls) do
                     if call.name == "propose_edits" then
-                        render_propose_edits(buf, call, original, new_content)
+                        for _, d in ipairs(render_propose_edits(buf, call, original, new_content)) do
+                            table.insert(decorations, d)
+                        end
                     end
                 end
                 -- Surface failure rather than swallowing it: a tool error, or no
@@ -188,13 +245,28 @@ function M.invoke(buf, manifest, args, opts)
                     p.logger.error("skill " .. tostring(manifest.name) .. ": " .. tostring(e))
                 end
                 if opts.on_done then
-                    opts.on_done({ ok = (#errors == 0), applied = applied, calls = calls, results = results })
+                    -- Pure-fed payload: original/new_content/decorations let a
+                    -- caller (review) journal the round without re-reading the
+                    -- buffer (#133 M3).
+                    opts.on_done({
+                        ok = (#errors == 0),
+                        applied = applied,
+                        calls = calls,
+                        results = results,
+                        original = original,
+                        new_content = new_content,
+                        decorations = decorations,
+                    })
                 end
             end)
         end,
         nil,
         nil,
         function(msg) -- on_abort
+            if _gen[buf] ~= gen then
+                return -- superseded by a newer exchange (cancelled) → no-op
+            end
+            require("parley.progress").stop()
             _in_flight[buf] = nil
             p.logger.error("skill " .. tostring(manifest.name) .. " abort: " .. tostring(msg))
             if opts.on_done then
