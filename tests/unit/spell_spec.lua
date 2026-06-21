@@ -59,5 +59,17 @@ describe("parley.spell", function()
 		it("dismisses the menu then inserts a newline when nothing selected", function()
 			assert.equals("<C-e><CR>", spell.cr_keys(true, false))
 		end)
+
+		it("feeds the injected base when no popup (interview timestamp case)", function()
+			assert.equals("<CR><CR>:05min ", spell.cr_keys(false, false, "<CR><CR>:05min "))
+		end)
+
+		it("dismisses the menu then feeds the injected base when nothing selected", function()
+			assert.equals("<C-e><CR><CR>:05min ", spell.cr_keys(true, false, "<CR><CR>:05min "))
+		end)
+
+		it("accepts the selection regardless of base", function()
+			assert.equals("<C-y>", spell.cr_keys(true, true, "<CR><CR>:05min "))
+		end)
 	end)
 end)

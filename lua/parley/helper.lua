@@ -17,7 +17,9 @@ local LAST_CONTENT_LINE_CHUNK_SIZE = 256
 _H.complete_noselect = function(start, items)
 	local saved = vim.o.completeopt
 	vim.o.completeopt = "menuone,noinsert,noselect"
-	vim.fn.complete(start, items)
+	-- pcall-guard the restore: complete() errors (e.g. called outside Insert mode)
+	-- must not leave the user's global completeopt clobbered.
+	pcall(vim.fn.complete, start, items)
 	vim.o.completeopt = saved
 end
 

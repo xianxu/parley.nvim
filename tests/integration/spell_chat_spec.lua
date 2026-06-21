@@ -68,6 +68,25 @@ describe("parley.spell integration", function()
 			assert.is_false(has_cr_map(buf))
 		end)
 
+		-- The buffer-local <CR> map shadows interview's global <CR> map; it must
+		-- still produce the injected base_cr (interview timestamp) when no popup
+		-- is up, else interview-mode timestamps silently break in chat buffers (#134).
+		it("CR map feeds the injected base_cr when no popup is up", function()
+			local buf = make_buf()
+			vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "" })
+			spell.attach(buf, { enable = true, typeahead = true, base_cr = function() return "TS" end })
+			vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("i<CR>", true, false, true), "x", true)
+			assert.equals("TS", table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n"))
+		end)
+
+		it("CR map inserts a plain newline with no base_cr and no popup", function()
+			local buf = make_buf()
+			vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "ab" })
+			spell.attach(buf, { enable = true, typeahead = true })
+			vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("A<CR>", true, false, true), "x", true)
+			assert.equals(2, #vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+		end)
+
 		it("does not wire typeahead when typeahead=false (squiggles only)", function()
 			local buf = make_buf()
 			spell.attach(buf, { enable = true, typeahead = false })

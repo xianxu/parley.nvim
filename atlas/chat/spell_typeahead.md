@@ -34,6 +34,14 @@ buffer-local insert `<CR>` map routes through the pure `spell.cr_keys`:
 The `<CR>` map is skipped when `chat_prompt_buf_type` is set (there `<CR>`
 already triggers respond via `prompt_setcallback`).
 
+**Interview-mode interaction.** This buffer-local `<CR>` map *shadows* interview
+mode's **global** `<CR>` map (which inserts `:NNmin` timestamps), since
+buffer-local beats global in Neovim. So `cr_keys` takes a `base` (the no-popup
+keys) and `attach` threads in `base_cr` — `init.lua` injects
+`interview.cr_keys`, the shared helper that returns the timestamped newline when
+interview mode is active. Result: in chat buffers, the spell map subsumes
+interview's `<CR>` behavior instead of clobbering it.
+
 ## Config
 
 `config.chat_spell` (defaults on):
@@ -55,7 +63,9 @@ gateable (e.g. `typeahead`-only with no underlines).
 - `lua/parley/spell.lua` — pure core (`word_at_cursor`, `cr_keys`) + IO seam
   (`suggest`, `attach`).
 - `lua/parley/helper.lua` — `complete_noselect(start, items)`, the shared
-  non-blocking typeahead idiom (spell + vision).
+  non-blocking typeahead idiom (spell + vision); pcall-guarded completeopt restore.
+- `lua/parley/interview.lua` — `cr_keys()`, the interview-aware `<CR>` base shared
+  by the global interview map and this feature's buffer-local map.
 - `lua/parley/init.lua` — `M.prep_chat` calls `spell.attach(buf, …)` after
   `prep_md`, gated on `config.chat_spell` and threading `prompt_buf_type`.
 - `lua/parley/config.lua` — `chat_spell` defaults.

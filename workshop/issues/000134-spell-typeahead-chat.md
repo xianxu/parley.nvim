@@ -1,12 +1,13 @@
 ---
 id: 000134
-status: working
+status: done
 deps: []
 github_issue:
 created: 2026-06-20
 updated: 2026-06-20
 estimate_hours: 1.5
 started: 2026-06-20T20:58:55-07:00
+actual_hours: 0.36
 ---
 
 # spell-suggestion typeahead in chat buffers
@@ -120,6 +121,7 @@ total: 1.53
 ## Log
 
 ### 2026-06-20
+- 2026-06-20: closed — make test GREEN: 0 lint warn/err across 221 files; new spell_spec.lua (10) + spell_chat_spec.lua (8) pass, incl. a live spellsuggest popup driven in insert mode; vision_spec.lua still green after the helper.complete_noselect refactor. Headless-verified spellbadword/spellsuggest work with spell=off.; review verdict: FIX-THEN-SHIP
 
 - Investigated `pair/nvim/init.lua`: relevant piece is `spell_complete` (1817)
   + the `cr_keys` (#65) fix; `path_complete`/`word_complete` are pair-specific
@@ -142,3 +144,28 @@ total: 1.53
   `feedkeys`' `"x"` flag appends an `<Esc>` that tears the menu down on return.
 - `make test` GREEN: 0 lint warnings/errors across 221 files, all specs pass
   (incl. `vision_spec.lua` after the refactor).
+
+## Revisions
+
+### 2026-06-20 — FIX-THEN-SHIP boundary-review fix (Important + minors)
+
+The close-time fresh-context review returned **FIX-THEN-SHIP** on one Important
+cross-feature finding, fixed before ship:
+
+- **Important — spell `<CR>` map shadowed interview-mode timestamps.** `spell.attach`
+  installs a *buffer-local* insert `<CR>` map on every chat buffer; interview mode
+  uses a *global* insert `<CR>` map to insert `:NNmin` timestamps. Buffer-local
+  beats global, so the spell map silently broke interview timestamps in chat
+  buffers (both default-on). **Fix:** extracted `interview.cr_keys()` (the shared
+  interview-aware `<CR>` base), gave `spell.cr_keys` a `base` arg, and threaded an
+  injected `base_cr` through `attach` (init wires it to `interview.cr_keys`) so the
+  buffer-local map *subsumes* interview's behavior instead of clobbering it. Decoupled
+  (DI at the init boundary; spell.lua never requires interview). Regression tests
+  added (unit `cr_keys` base cases; integration "base_cr honored when no popup").
+- **Minor — `complete_noselect` completeopt restore** now pcall-guarded (two callers depend on it).
+- **Minor — asymmetric `enable`/`typeahead` gating** documented with a comment.
+- Side-quest: removed two stray `print("DEBUG: …")` calls in `interview.setup_keymap`
+  that fired on every insert-mode `<CR>` (touched while extracting `cr_keys`).
+- Deferred (noted, not blocking): `word_at_cursor` `[%a']` is ASCII-only (fine for
+  en_us default; flagged for future i18n).
+- `make test` GREEN after fix; spell specs now 13 unit + 10 integration.

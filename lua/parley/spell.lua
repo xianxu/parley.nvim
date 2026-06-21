@@ -53,25 +53,30 @@ function M.word_at_cursor(line, col)
 end
 
 -- What <CR> should feed in insert mode given the completion-popup state. Pure
--- (two booleans → a key string) so it's unit-testable without a live popup.
--- Under `completeopt=noselect` nothing is ever auto-highlighted, so the common
--- case is "menu up, nothing picked" — and there a bare <CR> only closes the
--- menu, swallowing the newline. <C-e> cancels completion (keeping exactly what
--- was typed) so the following <CR> is processed as an ordinary newline.
---   no popup            → <CR>        plain newline
---   popup + selection   → <C-y>       accept the highlighted item
---   popup, no selection → <C-e><CR>   dismiss the menu, THEN newline
+-- (two booleans + a base string → a key string) so it's unit-testable without a
+-- live popup. Under `completeopt=noselect` nothing is ever auto-highlighted, so
+-- the common case is "menu up, nothing picked" — and there a bare <CR> only
+-- closes the menu, swallowing the newline. <C-e> cancels completion (keeping
+-- exactly what was typed) so the `base` that follows is processed normally.
+--   no popup            → base         the normal newline (see `base`)
+--   popup + selection   → <C-y>        accept the highlighted item
+--   popup, no selection → <C-e>base    dismiss the menu, THEN the normal newline
+-- `base` is what <CR> would do absent any popup — `<CR>` by default, but the
+-- buffer-local map injects an interview-aware base (a timestamped newline) so
+-- that shadowing the global interview <CR> map doesn't drop timestamps (#134).
 ---@param visible boolean # is the completion popup showing
 ---@param has_selection boolean # is an item highlighted
+---@param base string|nil # no-popup keys (default "<CR>")
 ---@return string # keys to feed
-function M.cr_keys(visible, has_selection)
+function M.cr_keys(visible, has_selection, base)
+	base = base or "<CR>"
 	if not visible then
-		return "<CR>"
+		return base
 	end
 	if has_selection then
 		return "<C-y>"
 	end
-	return "<C-e><CR>"
+	return "<C-e>" .. base
 end
 
 --------------------------------------------------------------------------------
@@ -117,6 +122,10 @@ end
 --   max_suggest     → max suggestions in the menu
 --   prompt_buf_type → buffer uses 'prompt' type (<CR> is owned by respond); when
 --                     set, skip the <CR> map so we don't shadow the prompt.
+--   base_cr         → function returning the no-popup <CR> keys (injected by the
+--                     caller so this module stays decoupled from interview mode).
+-- `enable` is opt-in, `typeahead` is opt-out (nil ⇒ on) — matching the defaults-on
+-- config; a partial `chat_spell = { enable = true }` still gets typeahead.
 -- spelllang is set unconditionally because spellsuggest()/spellbadword() read it
 -- even when `spell` is off (typeahead-only mode still needs a language).
 ---@param buf number # buffer handle
@@ -147,13 +156,17 @@ function M.attach(buf, opts)
 	})
 
 	-- A bare <CR> over a no-selection menu swallows the newline (completeopt
-	-- noselect). Route it through cr_keys. Skipped for prompt buffers where <CR>
-	-- already triggers respond.
+	-- noselect). Route it through cr_keys. The no-popup base defers to the
+	-- injected base_cr (interview-aware) so this buffer-local map — which shadows
+	-- interview's global <CR> map — preserves timestamp insertion (#134). Skipped
+	-- for prompt buffers where <CR> already triggers respond.
+	local base_cr = opts.base_cr
 	if not opts.prompt_buf_type then
 		vim.keymap.set("i", "<CR>", function()
 			local visible = vim.fn.pumvisible() == 1
 			local has_selection = vim.fn.complete_info({ "selected" }).selected ~= -1
-			return M.cr_keys(visible, has_selection)
+			local base = base_cr and base_cr() or "<CR>"
+			return M.cr_keys(visible, has_selection, base)
 		end, { buffer = buf, expr = true, silent = true, desc = "parley: accept spell suggestion / newline" })
 	end
 end

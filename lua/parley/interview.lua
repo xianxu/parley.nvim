@@ -66,26 +66,28 @@ M.format_timestamp = function()
 	end
 end
 
+--- Keys that <CR> should feed given interview state: a timestamped
+--- double-newline when interview mode is active, else a plain newline. Shared by
+--- the global interview <CR> map and parley's chat-buffer spell <CR> map — the
+--- latter shadows the global map buffer-locally (buffer-local beats global), so
+--- it threads this in as its no-popup base to preserve timestamp insertion (#134).
+---@return string  expr-map keys
+M.cr_keys = function()
+	if _parley and _parley._state and _parley._state.interview_mode then
+		return "<CR><CR>" .. M.format_timestamp() .. " "
+	end
+	return "<CR>"
+end
+
 --- Install a global insert-mode <CR> mapping that inserts timestamps in interview mode.
 M.setup_keymap = function()
 	_logger.info("Setting up interview keymap")
 	vim.keymap.set("i", "<CR>", function()
-		print("DEBUG: interview_mode=" .. tostring(_parley._state.interview_mode)) -- Debug print
-		-- Apply timestamp when interview mode is active (no folder restriction)
-		if _parley._state.interview_mode then
-			local timestamp = M.format_timestamp()
-			_logger.debug("Inserting timestamp: " .. timestamp)
-			-- Insert extra newline, then timestamp
-			return "<CR><CR>" .. timestamp .. " "
-		else
-			-- Regular Enter behavior
-			return "<CR>"
-		end
+		return M.cr_keys()
 	end, {
 		expr = true,
 		desc = "Insert timestamp on new line in interview mode",
 	})
-	print("DEBUG: Keymap set up complete") -- Debug print
 end
 
 --- Remove the global insert-mode <CR> mapping installed by setup_keymap().
