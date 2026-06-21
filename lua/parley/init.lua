@@ -1827,6 +1827,14 @@ M.prep_chat = function(buf, file_name)
 
 	M.prep_md(buf)
 
+	-- Spellcheck + as-you-type spell-suggestion typeahead (config.chat_spell)
+	local cs = M.config.chat_spell
+	if cs and (cs.enable or cs.typeahead) then
+		require("parley.spell").attach(buf, vim.tbl_extend("force", cs, {
+			prompt_buf_type = M.config.chat_prompt_buf_type,
+		}))
+	end
+
 	-- Set up tool block folding (clickable foldcolumn icons)
 	require("parley.tool_folds").setup(buf)
 
