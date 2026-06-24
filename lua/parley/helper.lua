@@ -7,6 +7,22 @@ local logger = require("parley.logger")
 local _H = {}
 local LAST_CONTENT_LINE_CHUNK_SIZE = 256
 
+-- Pop a non-blocking as-you-type completion menu (no auto-insert, no auto-select),
+-- restoring the user's `completeopt` afterward. The shared idiom behind parley's
+-- typeahead completers (spell suggestions, vision YAML). `start` is the 1-indexed
+-- byte column where the replaced span begins; `items` is anything |complete()|
+-- accepts (a list of strings or `{word=...}` dicts).
+---@param start number # 1-indexed start column of the replaced span
+---@param items table # completion items (strings or dicts)
+_H.complete_noselect = function(start, items)
+	local saved = vim.o.completeopt
+	vim.o.completeopt = "menuone,noinsert,noselect"
+	-- pcall-guard the restore: complete() errors (e.g. called outside Insert mode)
+	-- must not leave the user's global completeopt clobbered.
+	pcall(vim.fn.complete, start, items)
+	vim.o.completeopt = saved
+end
+
 ---@param keys string # string of keystrokes
 ---@param mode string # string of vim mode ('n', 'i', 'c', etc.), default is 'n'
 _H.feedkeys = function(keys, mode)

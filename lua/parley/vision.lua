@@ -2039,11 +2039,8 @@ M.on_text_changed_i = function(buf)
 
     if #filtered == 0 then return end
 
-    -- Set completeopt for non-blocking typeahead
-    local saved_completeopt = vim.o.completeopt
-    vim.o.completeopt = "menuone,noinsert,noselect"
-    vim.fn.complete(ctx.col, filtered)
-    vim.o.completeopt = saved_completeopt
+    -- Non-blocking typeahead (shared idiom; see parley.helper.complete_noselect)
+    require("parley.helper").complete_noselect(ctx.col, filtered)
 end
 
 return M

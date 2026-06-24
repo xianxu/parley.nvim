@@ -406,6 +406,18 @@ local config = {
 	chat_confirm_delete = true,
 	-- conceal model parameters in chat
 	chat_conceal_model_params = true,
+	-- spellcheck + as-you-type spell-suggestion typeahead in chat buffers.
+	-- `enable` turns on visible spell underlines (vim `spell`); `typeahead` pops a
+	-- completion menu of `spellsuggest()` results when a misspelled word ≥ `min_word`
+	-- chars is typed (built-in `spellsuggest`/`spellbadword`, no plugin). The two are
+	-- independent — `spellsuggest()` works even with `spell` off.
+	chat_spell = {
+		enable = true, -- visible spell underlines on chat buffers
+		typeahead = true, -- as-you-type spell-suggestion popup + <CR> handling
+		spelllang = "en_us",
+		min_word = 4, -- min misspelled-word length before suggesting
+		max_suggest = 9, -- max suggestions shown in the menu
+	},
 	-- local shortcuts bound to the chat buffer
 	-- (be careful to choose something which will work across specified modes)
 	chat_shortcut_respond = { modes = { "n", "i", "v", "x" }, shortcut = { "<C-g><C-g>", "<M-CR>" } },
