@@ -39,6 +39,8 @@ Group sentinels expand alphabetically; the combined list is de-duplicated by nam
 5. `build_messages_from_model` reads content from the buffer at model positions — no re-parsing
 6. Repeats until Claude responds with text only (no tool_use) → `"done"`
 
+The chat response lease guards this loop. After tool blocks are appended, the lease commits the new `changedtick`; before the scheduled recursive `M.respond`, the same lease is validated again. If the user undoes or edits the transcript in that gap, recursive resubmit is cancelled rather than inserting a new placeholder from stale live-model positions.
+
 ## Buffer Representation
 
 Tool blocks in the transcript:
@@ -65,6 +67,7 @@ Tool blocks in the transcript:
 - **Unknown tools**: return friendly error "Tool 'X' is not available on this client"
 - **Malformed blocks**: `build_messages_from_model` degrades to text (no Anthropic rejection)
 - **Buffer diagnostic**: `:lua require('parley').check_buffer()` validates invariants
+- **Transcript drift**: pending chat leases cancel stale stream/tool/progress/topic callbacks after undo/redo or out-of-band edits
 
 ## Visual Treatment
 

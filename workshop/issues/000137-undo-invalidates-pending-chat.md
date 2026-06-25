@@ -115,7 +115,6 @@ Detailed design: [000137-undo-invalidates-pending-chat-plan.md](../plans/000137-
 ## Log
 
 ### 2026-06-25
-
 - Filed from design discussion while exploring #136. Current code has
   extmark-backed positions and a live `exchange_model`, but no undo/redo lease
   invalidation. Decision: use the safe invariant first — undo/redo or structural
@@ -135,7 +134,15 @@ Detailed design: [000137-undo-invalidates-pending-chat-plan.md](../plans/000137-
   ripgrep revision suffix.
 - Verification:
   - `nvim --headless -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/chat_lease_spec.lua"`: 5 passed.
-  - `nvim --headless -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/chat_respond_spec.lua"`: 25 passed.
+  - `nvim --headless -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/chat_respond_spec.lua"`: 27 passed.
   - `nvim --headless -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/parley_harness_golden_spec.lua"`: 7 passed.
+  - `make test`: passed.
+  - `make lint`: passed, 0 warnings / 0 errors in 223 files.
+- Boundary review returned `REWORK`: recursive tool resubmit was validated
+  before scheduling but not revalidated inside the queued recursive callback;
+  atlas also needed the new lease lifecycle. Added the recursive resubmit guard,
+  recursive drift/success coverage, and atlas lifecycle/tool-use traceability.
+- Re-ran verification after the REWORK fix:
+  - `nvim --headless -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/chat_respond_spec.lua"`: 27 passed.
   - `make test`: passed.
   - `make lint`: passed, 0 warnings / 0 errors in 223 files.

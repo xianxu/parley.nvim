@@ -1661,6 +1661,10 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                         -- the same callback so user-provided
                         -- callbacks still fire on the final iteration.
                         vim.schedule(function()
+                            if not lease_valid() then
+                                chat_lease.clear(buf, lease_generation)
+                                return
+                            end
                             M.respond({}, callback, override_free_cursor, true, model, target_idx)
                         end)
                         return

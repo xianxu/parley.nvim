@@ -36,6 +36,8 @@ The model is built once per `M.respond` call and lives through the entire respon
 - **Prompt append**: uses `exchange_total_size` to compute insertion point.
 - **Folding**: `apply_folds` reads block positions from the model.
 
+Because the model is live state, `chat_respond` protects every pending async write with a chat lease keyed by buffer `changedtick`. The lease distinguishes Parley-owned writes from user edits: guarded writes commit their new tick, while undo/redo or other drift invalidates the pending response instead of reconciling the model against a changed serialized transcript.
+
 ## Loading from Parser
 
 `from_parsed_chat(parsed_chat)` builds a model from parser output. The parser trims leading/trailing blank lines from all components (questions, answers, sections) so the model's margins are the single source of truth for gaps.

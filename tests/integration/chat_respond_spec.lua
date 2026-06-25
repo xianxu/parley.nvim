@@ -878,6 +878,7 @@ describe("chat_respond: pending request transcript drift", function()
     local original_query
     local original_agent
     local original_web_search
+    local original_schedule
     local scratch_file
 
     before_each(function()
@@ -887,11 +888,15 @@ describe("chat_respond: pending request transcript drift", function()
         original_query = parley.dispatcher.query
         original_agent = parley._state.agent
         original_web_search = parley._state.web_search
+        original_schedule = vim.schedule
     end)
 
     after_each(function()
         if original_query then
             parley.dispatcher.query = original_query
+        end
+        if original_schedule then
+            vim.schedule = original_schedule
         end
         parley._state.agent = original_agent
         parley._state.web_search = original_web_search
@@ -922,6 +927,18 @@ describe("chat_respond: pending request transcript drift", function()
         local buf = vim.api.nvim_get_current_buf()
         vim.api.nvim_win_set_cursor(0, { 6, 0 })
         return buf
+    end
+
+    local function run_scheduled_until(scheduled, cursor, predicate)
+        cursor = cursor or 1
+        while cursor <= #scheduled do
+            scheduled[cursor]()
+            cursor = cursor + 1
+            if predicate and predicate() then
+                break
+            end
+        end
+        return cursor
     end
 
     it("does not insert a late stream chunk after undo invalidates the pending response", function()
@@ -999,6 +1016,82 @@ describe("chat_respond: pending request transcript drift", function()
 
         assert.is_false(buffer_contains(buf, "🔧: read_file id=toolu_AFTER_UNDO"))
         assert.is_false(buffer_contains(buf, "📎: read_file id=toolu_AFTER_UNDO"))
+    end)
+
+    it("does not recursively resubmit from a stale live model after undo", function()
+        local buf = open_simple_chat()
+        parley._state.agent = "ToolSonnet"
+        local scheduled = {}
+        vim.schedule = function(fn)
+            table.insert(scheduled, fn)
+        end
+        local call_count = 0
+        local captured_completion
+        local qid = "qid_recursive_after_undo"
+
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, _handler, completion_callback)
+            call_count = call_count + 1
+            captured_completion = completion_callback
+            parley.tasker.set_query(qid, {
+                response = "",
+                raw_response = mk_read_file_sse_response("toolu_RECURSE_UNDO", scratch_file),
+                buf = buf_arg,
+            })
+        end
+
+        parley.chat_respond({ range = 0 })
+        assert.is_not_nil(captured_completion, "expected completion callback to be captured")
+
+        captured_completion(qid)
+        local cursor = run_scheduled_until(scheduled, 1, function()
+            return buffer_contains(buf, "🔧: read_file id=toolu_RECURSE_UNDO")
+        end)
+        assert.is_true(buffer_contains(buf, "🔧: read_file id=toolu_RECURSE_UNDO"))
+        assert.is_true(buffer_contains(buf, "📎: read_file id=toolu_RECURSE_UNDO"))
+        assert.is_true(cursor <= #scheduled, "tool-loop recurse should be queued")
+
+        vim.cmd("silent! undo")
+        run_scheduled_until(scheduled, cursor)
+
+        assert.equals(1, call_count, "stale recursive respond should not call dispatcher again")
+    end)
+
+    it("allows recursive tool resubmit when the transcript does not drift", function()
+        local buf = open_simple_chat()
+        parley._state.agent = "ToolSonnet"
+        local scheduled = {}
+        vim.schedule = function(fn)
+            table.insert(scheduled, fn)
+        end
+        local call_count = 0
+        local captured_completion
+        local qid = "qid_recursive_ok"
+
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, _handler, completion_callback)
+            call_count = call_count + 1
+            captured_completion = completion_callback
+            if call_count == 1 then
+                parley.tasker.set_query(qid, {
+                    response = "",
+                    raw_response = mk_read_file_sse_response("toolu_RECURSE_OK", scratch_file),
+                    buf = buf_arg,
+                })
+            else
+                parley.tasker.set_query("qid_recursive_second", {
+                    response = "final recursive answer",
+                    raw_response = "",
+                    buf = buf_arg,
+                })
+            end
+        end
+
+        parley.chat_respond({ range = 0 })
+        captured_completion(qid)
+        run_scheduled_until(scheduled, 1)
+
+        assert.equals(2, call_count, "valid recursive respond should call dispatcher again")
+        assert.is_true(buffer_contains(buf, "🔧: read_file id=toolu_RECURSE_OK"))
+        assert.is_true(buffer_contains(buf, "📎: read_file id=toolu_RECURSE_OK"))
     end)
 
     it("does not write stale progress after undo invalidates the pending response", function()
