@@ -66,7 +66,7 @@
 - Create: `lua/parley/issue_vocabulary.lua`
 - Test: `tests/unit/issue_vocabulary_spec.lua`
 
-- [ ] **Step 1: Write failing tests for normalization**
+- [x] **Step 1: Write failing tests for normalization**
 
 Add tests that build a fake decoded vocabulary table:
 
@@ -92,13 +92,13 @@ it("derives status values from categories", function()
 end)
 ```
 
-- [ ] **Step 2: Run the new spec and verify it fails**
+- [x] **Step 2: Run the new spec and verify it fails**
 
-Run: `make test-spec SPEC=issue_vocabulary`
+Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/issue_vocabulary_spec.lua" -c "qa!"`
 
 Expected: FAIL because `parley.issue_vocabulary` does not exist.
 
-- [ ] **Step 3: Implement `issue_vocabulary.lua`**
+- [x] **Step 3: Implement `issue_vocabulary.lua`**
 
 Implement:
 
@@ -127,9 +127,9 @@ Resolution order:
 2. First runtimepath hit for `construct/generated/vocabulary/issue.json`.
 3. Current repo root fallback: `<git-root-or-cwd>/construct/generated/vocabulary/issue.json`.
 
-- [ ] **Step 4: Run vocabulary unit tests**
+- [x] **Step 4: Run vocabulary unit tests**
 
-Run: `make test-spec SPEC=issue_vocabulary`
+Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/issue_vocabulary_spec.lua" -c "qa!"`
 
 Expected: PASS.
 
@@ -141,7 +141,7 @@ Expected: PASS.
 - Modify: `lua/parley/init.lua`
 - Test: `tests/unit/issues_spec.lua`
 
-- [ ] **Step 1: Write failing issue tests for vocabulary-driven behavior**
+- [x] **Step 1: Write failing issue tests for vocabulary-driven behavior**
 
 Add tests in `tests/unit/issues_spec.lua` that:
 - assert `issues.status_values()` matches `issue_vocabulary.default():status_values()`;
@@ -149,13 +149,13 @@ Add tests in `tests/unit/issues_spec.lua` that:
 - assert `issues.complete_frontmatter_values("status", "wo")` returns `{ "working", "wontfix" }` based on the model;
 - assert a temporary fake vocabulary containing an extra status appears in completion without editing `issues.lua`.
 
-- [ ] **Step 2: Run issue tests and verify failure**
+- [x] **Step 2: Run issue tests and verify failure**
 
-Run: `make test-spec SPEC=issues`
+Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/issues_spec.lua" -c "qa!"`
 
 Expected: FAIL because `issues.status_values()` / fake-vocabulary injection do not exist yet or still use the hardcoded table.
 
-- [ ] **Step 3: Replace hardcoded issue status helpers**
+- [x] **Step 3: Replace hardcoded issue status helpers**
 
 In `lua/parley/issues.lua`:
 - require `parley.issue_vocabulary`;
@@ -165,7 +165,7 @@ In `lua/parley/issues.lua`:
 - add pure helpers `M.status_values()`, `M.is_active_status(status)`, `M.is_terminal_status(status)`, and `M.complete_frontmatter_values(field, partial)`;
 - keep `next_runnable` intentionally tied to `open`/`done` semantics unless vocabulary later models runnable-ness explicitly.
 
-- [ ] **Step 4: Rewire UI consumers**
+- [x] **Step 4: Rewire UI consumers**
 
 In `lua/parley/issue_finder.lua`:
 - replace `issue.status ~= "done" ...` active filtering with `issues_mod.is_active_status(issue.status)` or status is in `categories.open`;
@@ -178,9 +178,9 @@ In `lua/parley/init.lua`:
 In `lua/parley/issues.lua` omnifunc:
 - return `M.complete_frontmatter_values("status", base)`.
 
-- [ ] **Step 5: Run targeted issue tests**
+- [x] **Step 5: Run targeted issue tests**
 
-Run: `make test-spec SPEC=issues`
+Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/issues_spec.lua" -c "qa!"`
 
 Expected: PASS.
 
@@ -192,7 +192,7 @@ Expected: PASS.
 - Modify: `atlas/traceability.yaml`
 - Modify: `workshop/issues/000135-consume-issue-vocabulary.md`
 
-- [ ] **Step 1: Add fail-closed conformance test**
+- [x] **Step 1: Add fail-closed conformance test**
 
 Add a test that decodes the repo's real `construct/generated/vocabulary/issue.json` and checks every status in every category is:
 - present in `issues.status_values()`;
@@ -200,25 +200,24 @@ Add a test that decodes the repo's real `construct/generated/vocabulary/issue.js
 - assigned a stable sort rank;
 - either has a lifecycle successor or is terminal.
 
-- [ ] **Step 2: Update atlas**
+- [x] **Step 2: Update atlas**
 
 In `atlas/issues/issue-management.md`, replace the stale hardcoded lifecycle sentence with a note that statuses and transitions derive from `construct/generated/vocabulary/issue.json`.
 
 In `atlas/traceability.yaml`, add `lua/parley/issue_vocabulary.lua` and `tests/unit/issue_vocabulary_spec.lua` under `issues/issue-management`.
 
-- [ ] **Step 3: Run targeted verification**
+- [x] **Step 3: Run targeted verification**
 
 Run:
 
 ```bash
-make test-spec SPEC=issue_vocabulary
-make test-spec SPEC=issues
+make test-spec SPEC=issues/issue-management
 make lint
 ```
 
 Expected: all pass. If `luacheck` is unavailable, record the exact failure and run the two test specs as the minimum proof.
 
-- [ ] **Step 4: Final shadow sweep**
+- [x] **Step 4: Final shadow sweep**
 
 Run:
 
@@ -228,7 +227,6 @@ rg -n "status_values|open.*working.*blocked|wontfix.*punt|status_priority|cycle_
 
 Expected: no remaining hardcoded status-domain shadow except tests that construct fake vocabulary data or docs describing example statuses.
 
-- [ ] **Step 5: Update issue checklist and log**
+- [x] **Step 5: Update issue checklist and log**
 
 Check off completed plan items in `workshop/issues/000135-consume-issue-vocabulary.md` and add verification evidence to `## Log`.
-

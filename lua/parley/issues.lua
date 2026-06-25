@@ -10,6 +10,7 @@
 -- scan_issues, write_frontmatter, cmd_*
 
 local chat_parser = require("parley.chat_parser")
+local issue_vocabulary = require("parley.issue_vocabulary")
 
 local M = {}
 
@@ -21,6 +22,7 @@ local _file_cache = {}
 
 M.setup = function(parley)
     _parley = parley
+    issue_vocabulary.default()
 end
 
 M.clear_cache = function()
@@ -41,6 +43,10 @@ end
 
 local function trim(str)
     return (str:gsub("^%s*(.-)%s*$", "%1"))
+end
+
+local function vocab()
+    return issue_vocabulary.default()
 end
 
 -- Slugify a title into a filename-safe string
@@ -86,7 +92,7 @@ M.parse_frontmatter = function(lines)
 
     local result = {
         id = nil,
-        status = "open",
+        status = vocab():category("open")[1] or "open",
         deps = {},
         created = "",
         updated = "",
@@ -134,21 +140,42 @@ M.extract_title = function(lines, header_end)
     return ""
 end
 
--- Cycle status: open → working → blocked → done → wontfix → punt → open
+-- Cycle status by the first lifecycle transition in generated vocabulary order.
 M.cycle_status_value = function(current)
-    local next_status = {
-        open = "working",
-        working = "blocked",
-        blocked = "done",
-        done = "wontfix",
-        wontfix = "punt",
-        punt = "open",
-    }
-    return next_status[current] or "open"
+    return vocab():next_status(current)
 end
 
 -- All valid status values (used for completion/typeahead)
-M.status_values = { "open", "working", "blocked", "done", "wontfix", "punt" }
+M.status_values = function()
+    return vocab():status_values()
+end
+
+M.is_active_status = function(status)
+    return vocab():is_active(status)
+end
+
+M.is_open_status = function(status)
+    return vocab():is_open(status)
+end
+
+M.is_open_or_active_status = function(status)
+    return M.is_open_status(status) or M.is_active_status(status)
+end
+
+M.is_terminal_status = function(status)
+    return vocab():is_terminal(status)
+end
+
+M.complete_frontmatter_values = function(field, partial)
+    partial = partial or ""
+    local matches = {}
+    for _, value in ipairs(vocab():enumerable_values(field)) do
+        if value:sub(1, #partial) == partial then
+            table.insert(matches, value)
+        end
+    end
+    return matches
+end
 
 -- Find the next runnable issue: oldest open issue whose deps are all done.
 -- issues: list of {id, status, deps, ...}
@@ -204,16 +231,15 @@ M.next_runnable = function(issues, current_id)
     return runnable[1]
 end
 
--- Sort issues for display: open, working, blocked, done, wontfix (by ID within each group)
+-- Sort issues for display by vocabulary category order (by ID within each group).
 M.topo_sort = function(issues)
     local sorted = {}
     for _, issue in ipairs(issues) do
         table.insert(sorted, issue)
     end
-    local status_priority = { open = 1, working = 2, blocked = 3, done = 4, wontfix = 5, punt = 6 }
     table.sort(sorted, function(a, b)
-        local pa = status_priority[a.status] or 4
-        local pb = status_priority[b.status] or 4
+        local pa = vocab():sort_rank(a.status)
+        local pb = vocab():sort_rank(b.status)
         if pa ~= pb then
             return pa < pb
         end
@@ -451,7 +477,7 @@ end
 -- Issue template
 local ISSUE_TEMPLATE = [[---
 id: {{id}}
-status: open
+status: {{status}}
 deps: []
 created: {{date}}
 updated: {{date}}
@@ -490,7 +516,12 @@ M.create_issue = function(title)
     local filepath = issues_dir .. "/" .. filename
 
     local date = os.date("%Y-%m-%d")
-    local content = ISSUE_TEMPLATE:gsub("{{id}}", id):gsub("{{title}}", title):gsub("{{date}}", date)
+    local default_status = vocab():category("open")[1] or "open"
+    local content = ISSUE_TEMPLATE
+        :gsub("{{id}}", id)
+        :gsub("{{status}}", default_status)
+        :gsub("{{title}}", title)
+        :gsub("{{date}}", date)
     local lines = vim.split(content, "\n", { plain = true })
 
     vim.fn.writefile(lines, filepath)
@@ -741,14 +772,7 @@ M.omnifunc = function(findstart, base)
         return -3
     end
 
-    -- Return matching status values
-    local matches = {}
-    for _, s in ipairs(M.status_values) do
-        if s:sub(1, #base) == base then
-            table.insert(matches, s)
-        end
-    end
-    return matches
+    return M.complete_frontmatter_values("status", base)
 end
 
 -- Attach omnifunc to an issue buffer for status field typeahead

@@ -50,9 +50,9 @@ Lua enum (the shadow):
 ## Plan
 
 - [x] Design at start-plan: how `issue.json` reaches parley (path resolution); the vocab-loader shape; which UI surfaces rewire
-- [ ] vocab loader: read + decode `issue.json` at startup into a table
-- [ ] Rewire create-flow + frontmatter typeahead + status-cycle to the loader; delete the hardcoded enum
-- [ ] Lua conformance test (covers the model's domain); verify a model change propagates with no Lua edit
+- [x] vocab loader: read + decode `issue.json` at startup into a table
+- [x] Rewire create-flow + frontmatter typeahead + status-cycle to the loader; delete the hardcoded enum
+- [x] Lua conformance test (covers the model's domain); verify a model change propagates with no Lua edit
 
 ## Estimate
 
@@ -80,3 +80,14 @@ total: 4.0
   `issues.lua`, `issue_finder.lua`, and the issue-buffer typeahead autocmd to consume that
   module. This explicitly addresses `ARCH-DRY`, `ARCH-PURE`, and `ARCH-PURPOSE`.
 - Durable implementation plan: `workshop/plans/000135-consume-issue-vocabulary-plan.md`.
+- `sdlc change-code --issue 135 --sandbox --agent codex` passed plan/estimate gates with
+  INFO notes. Plan-quality requested explicit multi-successor cycle semantics; implementation
+  now follows the first lifecycle transition in generated JSON order and pins that in tests.
+- TDD red checks: `tests/unit/issue_vocabulary_spec.lua` first failed on missing
+  `parley.issue_vocabulary`; `tests/unit/issues_spec.lua` then failed on the old hardcoded
+  `status_values` table and missing `complete_frontmatter_values`.
+- Implemented `lua/parley/issue_vocabulary.lua`; rewired `issues.lua`, `issue_finder.lua`,
+  `init.lua`, atlas docs, and traceability so issue status creation/completion/cycling/filtering
+  derive from `construct/generated/vocabulary/issue.json`.
+- Verification: `make test-spec SPEC=issues/issue-management` passed; `make lint` passed;
+  `make test` passed; shadow sweep leaves only test-local fake/generated status fixtures.

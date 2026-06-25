@@ -884,17 +884,9 @@ M.setup = function(opts)
 						if not prefix_end then return end
 						local col = prefix_end + (line:sub(prefix_end + 1, prefix_end + 1) == " " and 1 or 0)
 						local partial = line:sub(col + 1)
-						local matches = {}
-						for _, s in ipairs(issues_mod.status_values) do
-							if s:sub(1, #partial) == partial then
-								table.insert(matches, s)
-							end
-						end
+						local matches = issues_mod.complete_frontmatter_values("status", partial)
 						if #matches == 0 then return end
-						local saved = vim.o.completeopt
-						vim.o.completeopt = "menuone,noinsert,noselect"
-						vim.fn.complete(col + 1, matches)
-						vim.defer_fn(function() vim.o.completeopt = saved end, 100)
+						require("parley.helper").complete_noselect(col + 1, matches)
 					end,
 				})
 			end

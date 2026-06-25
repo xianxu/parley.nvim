@@ -125,7 +125,7 @@ M.open = function(_options)
         return
     end
 
-    -- View mode: 0=active (open+working+blocked), 1=all (incl done+wontfix), 2=all+history
+    -- View mode: 0=vocabulary open+active, 1=all, 2=all+history
     local view_mode = _parley._issue_finder.view_mode or 0
     local include_history = view_mode == 2
     local all_issues = {}
@@ -144,8 +144,8 @@ M.open = function(_options)
     local filtered = {}
     for _, issue in ipairs(all_issues) do
         if view_mode == 0 then
-            -- Active issues only: open, working, blocked (exclude done, wontfix, punt, archived)
-            if issue.status ~= "done" and issue.status ~= "wontfix" and issue.status ~= "punt" and not issue.archived then
+            -- Active view shows open + active vocabulary categories, excluding archived files.
+            if issues_mod.is_open_or_active_status(issue.status) and not issue.archived then
                 table.insert(filtered, issue)
             end
         else

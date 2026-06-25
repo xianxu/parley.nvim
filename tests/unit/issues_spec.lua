@@ -15,6 +15,22 @@ parley.setup({
 })
 
 local issues = require("parley.issues")
+local issue_vocabulary = require("parley.issue_vocabulary")
+
+local function fake_issue_vocab(statuses)
+    return issue_vocabulary.from_table({
+        categories = {
+            open = { statuses[1] },
+            active = { statuses[2], statuses[3] },
+            terminal = vim.list_slice(statuses, 4),
+        },
+        lifecycle = {
+            { from = statuses[1], to = statuses[2], event = "claim", guards = {} },
+            { from = statuses[2], to = statuses[3], event = "block", guards = {} },
+            { from = statuses[3], to = statuses[4], event = "close", guards = {} },
+        },
+    })
+end
 
 --------------------------------------------------------------------------------
 -- slugify
@@ -183,6 +199,33 @@ end)
 --------------------------------------------------------------------------------
 
 describe("cycle_status_value", function()
+    after_each(function()
+        issue_vocabulary.reset_for_tests()
+    end)
+
+    it("exposes status values from the generated vocabulary", function()
+        assert.are.same(issue_vocabulary.default():status_values(), issues.status_values())
+    end)
+
+    it("completes status frontmatter values from the vocabulary", function()
+        assert.are.same({ "working", "wontfix" }, issues.complete_frontmatter_values("status", "wo"))
+    end)
+
+    it("surfaces newly generated statuses without Lua enum edits", function()
+        issue_vocabulary.set_default_for_tests(fake_issue_vocab({
+            "open",
+            "working",
+            "blocked",
+            "done",
+            "wontfix",
+            "punt",
+            "archived",
+        }))
+
+        assert.are.same({ "archived" }, issues.complete_frontmatter_values("status", "ar"))
+        assert.equals("archived", issues.status_values()[7])
+    end)
+
     it("cycles open to working", function()
         assert.equals("working", issues.cycle_status_value("open"))
     end)
@@ -191,20 +234,20 @@ describe("cycle_status_value", function()
         assert.equals("blocked", issues.cycle_status_value("working"))
     end)
 
-    it("cycles blocked to done", function()
-        assert.equals("done", issues.cycle_status_value("blocked"))
+    it("cycles blocked by first lifecycle successor", function()
+        assert.equals("working", issues.cycle_status_value("blocked"))
     end)
 
-    it("cycles done to wontfix", function()
-        assert.equals("wontfix", issues.cycle_status_value("done"))
+    it("cycles done by lifecycle successor", function()
+        assert.equals("working", issues.cycle_status_value("done"))
     end)
 
-    it("cycles wontfix to punt", function()
-        assert.equals("punt", issues.cycle_status_value("wontfix"))
+    it("cycles wontfix by lifecycle successor", function()
+        assert.equals("working", issues.cycle_status_value("wontfix"))
     end)
 
-    it("cycles punt to open", function()
-        assert.equals("open", issues.cycle_status_value("punt"))
+    it("cycles punt by lifecycle successor", function()
+        assert.equals("working", issues.cycle_status_value("punt"))
     end)
 
     it("defaults unknown to open", function()

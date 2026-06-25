@@ -7,13 +7,16 @@ Each issue is `{issues_dir}/NNNNNN-slug.md` with YAML frontmatter (`id`, `status
 
 IDs are sequential integers (e.g., `000066`, `000067`). Sub-ticket IDs must NOT use letter suffixes (e.g., `000065a` is wrong). Always allocate the next available integer ID.
 
-Status lifecycle: `open` -> `working` -> `blocked` -> `done` | `wontfix`.
+Status values, categories, and lifecycle transitions are loaded at runtime from
+`construct/generated/vocabulary/issue.json`, which is generated from ariadne's
+`construct/vocabulary/issue.cue`. Parley uses that model for issue creation,
+status completion, picker active filtering, status sorting, and status cycling.
 
 ## Commands
 - `:ParleyIssueNew` (`<C-y>c`): create issue with auto-incremented ID
 - `:ParleyIssueFinder` (`<C-y>f`): float picker with status badges and view mode cycling (active/all/all+history)
 - `:ParleyIssueNext` (`<C-y>x`): open next runnable issue (oldest open with all deps done)
-- `:ParleyIssueStatus` (`<C-y>s`): cycle frontmatter status
+- `:ParleyIssueStatus` (`<C-y>s`): cycle frontmatter status using the first lifecycle transition for the current status in generated vocabulary order
 - `:ParleyIssueDecompose` (`<C-y>i`): create child issue from plan line, add to parent deps, and write a markdown link `[issue NNNNNN](./NNNNNN-slug.md)` into the parent's plan line; the new child file gets a `Parent: [issue PPPPPP](./PPPPPP-...md)` backlink under its title
 - `:ParleyIssueGoto` (`<C-y>g`): follow a markdown link `[...](./NNNNNN-*.md)` under the cursor to the linked issue; if there is no link under the cursor, jump to the current issue's parent (derived from `deps`). Use `<C-o>` to return.
 

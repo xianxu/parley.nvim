@@ -387,9 +387,12 @@ atlas:
 
   issues/issue-management:
     code:
+      - lua/parley/issue_vocabulary.lua
       - lua/parley/issues.lua
       - lua/parley/issue_finder.lua
+      - lua/parley/init.lua
     tests:
+      - tests/unit/issue_vocabulary_spec.lua
       - tests/unit/issues_spec.lua
 
   ui/highlights:
