@@ -1,12 +1,13 @@
 ---
 id: 000135
-status: working
+status: done
 deps: [ariadne#122]
 github_issue:
 created: 2026-06-25
 updated: 2026-06-25
 estimate_hours: 4.0
 started: 2026-06-25T12:27:54-07:00
+actual_hours: 0.31
 ---
 
 # Consume the generated issue vocabulary (issue.json) — drive issue-creation status + frontmatter typeahead from the model, not a hardcoded Lua enum
@@ -69,6 +70,8 @@ total: 4.0
 ## Log
 
 ### 2026-06-25
+- 2026-06-25: closed — make test-spec SPEC=issues/issue-management, make lint, make test, status-shadow sweep, and decomposed-template regression pass; issue statuses now derive from construct/generated/vocabulary/issue.json; review verdict: FIX-THEN-SHIP
+- 2026-06-25: closed — make test-spec SPEC=issues/issue-management, make lint, make test, and status-shadow sweep pass; issue statuses now derive from construct/generated/vocabulary/issue.json; review verdict: REWORK
 
 - Filed (in parley.nvim, where the work lands) as ariadne#122's deferred cross-repo
   consumer — the Lua half of "compiled to consumers" / the per-language binding model's
@@ -91,3 +94,7 @@ total: 4.0
   derive from `construct/generated/vocabulary/issue.json`.
 - Verification: `make test-spec SPEC=issues/issue-management` passed; `make lint` passed;
   `make test` passed; shadow sweep leaves only test-local fake/generated status fixtures.
+- Addressed FIX-THEN-SHIP notes: removed stale `open | done` atlas shadow and made the
+  real generated-vocabulary test derive expected statuses from `issue.json`; reran
+  `make test-spec SPEC=issues/issue-management`, `make lint`, status-shadow sweep,
+  `git diff --check`, and `make test`.

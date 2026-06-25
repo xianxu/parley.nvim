@@ -1,5 +1,15 @@
 local vocab = require("parley.issue_vocabulary")
 
+local function generated_status_values()
+    local lines = vim.fn.readfile("construct/generated/vocabulary/issue.json")
+    local raw = vim.json.decode(table.concat(lines, "\n"))
+    local out = {}
+    for _, category in ipairs({ "open", "active", "terminal" }) do
+        vim.list_extend(out, raw.categories[category])
+    end
+    return out
+end
+
 local function sample_vocab()
     return {
         categories = {
@@ -53,7 +63,7 @@ describe("issue_vocabulary", function()
         vocab.reset_for_tests()
         local model = vocab.default()
 
-        assert.are.same({ "open", "working", "blocked", "done", "wontfix", "punt" }, model:status_values())
+        assert.are.same(generated_status_values(), model:status_values())
         assert.equals("working", model:next_status("open"))
     end)
 

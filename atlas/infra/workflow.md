@@ -9,7 +9,7 @@ Each issue is a markdown file at `workshop/issues/NNNNNN-slug.md` with YAML fron
 ```yaml
 ---
 id: "000042"
-status: open        # open | done
+status: open        # values derive from construct/generated/vocabulary/issue.json
 deps: []
 github_issue: 42    # optional, links to GitHub issue
 created: 2026-03-01

@@ -432,7 +432,7 @@ describe("topo_sort", function()
         assert.equals("0001", sorted[3].id) -- done
     end)
 
-    it("sorts all five statuses in priority order", function()
+    it("sorts modeled statuses in priority order", function()
         local sorted = issues.topo_sort({
             { id = "0001", status = "wontfix", deps = {} },
             { id = "0002", status = "done", deps = {} },
