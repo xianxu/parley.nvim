@@ -1,11 +1,12 @@
 ---
 id: 000135
-status: open
+status: working
 deps: [ariadne#122]
 github_issue:
 created: 2026-06-25
 updated: 2026-06-25
 estimate_hours:
+started: 2026-06-25T12:27:54-07:00
 ---
 
 # Consume the generated issue vocabulary (issue.json) — drive issue-creation status + frontmatter typeahead from the model, not a hardcoded Lua enum
