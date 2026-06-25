@@ -39,7 +39,7 @@ Group sentinels expand alphabetically; the combined list is de-duplicated by nam
 5. `build_messages_from_model` reads content from the buffer at model positions — no re-parsing
 6. Repeats until Claude responds with text only (no tool_use) → `"done"`
 
-The chat response lease guards this loop. After tool blocks are appended, the lease commits the new `changedtick`; before the scheduled recursive `M.respond`, the same lease is validated again. If the user undoes or edits the transcript in that gap, recursive resubmit is cancelled rather than inserting a new placeholder from stale live-model positions.
+The chat response lease guards this loop via an extmark anchored on the response's agent-header line (#138): before the scheduled recursive `M.respond`, the lease is validated again. If the user undoes/redoes or deletes the response in that gap, the anchor invalidates and recursive resubmit is cancelled rather than inserting a new placeholder from stale live-model positions. (Pre-#138 the lease committed a new `changedtick` after appending tool blocks; the extmark anchor needs no such commit.)
 
 ## Buffer Representation
 

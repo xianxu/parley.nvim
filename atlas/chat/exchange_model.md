@@ -36,7 +36,7 @@ The model is built once per `M.respond` call and lives through the entire respon
 - **Prompt append**: uses `exchange_total_size` to compute insertion point.
 - **Folding**: `apply_folds` reads block positions from the model.
 
-Because the model is live state, `chat_respond` protects every pending async write with a chat lease keyed by buffer `changedtick`. The lease distinguishes Parley-owned writes from user edits: guarded writes commit their new tick, while undo/redo or other drift invalidates the pending response instead of reconciling the model against a changed serialized transcript.
+Because the model is live state, `chat_respond` protects every pending async write with a chat lease anchored on an `invalidate=true` extmark on the response's agent-header line (#138). The anchor distinguishes Parley-owned writes from structural edits: streaming and ordinary edits move the anchor (valid), while deleting the header — undo/redo or other structural drift — invalidates the pending response instead of reconciling the model against a changed serialized transcript. (Pre-#138 the lease keyed on `changedtick` and committed each Parley write's new tick; the extmark anchor makes that commit unnecessary.)
 
 ## Loading from Parser
 
