@@ -134,7 +134,7 @@ Detailed design: [000137-undo-invalidates-pending-chat-plan.md](../plans/000137-
   ripgrep revision suffix.
 - Verification:
   - `nvim --headless -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/chat_lease_spec.lua"`: 5 passed.
-  - `nvim --headless -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/chat_respond_spec.lua"`: 27 passed.
+  - `nvim --headless -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/chat_respond_spec.lua"`: 28 passed.
   - `nvim --headless -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/parley_harness_golden_spec.lua"`: 7 passed.
   - `make test`: passed.
   - `make lint`: passed, 0 warnings / 0 errors in 223 files.
@@ -146,3 +146,14 @@ Detailed design: [000137-undo-invalidates-pending-chat-plan.md](../plans/000137-
   - `nvim --headless -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/chat_respond_spec.lua"`: 27 passed.
   - `make test`: passed.
   - `make lint`: passed, 0 warnings / 0 errors in 223 files.
+- Boundary review returned `REWORK` again: stream validation was still one
+  scheduler hop before the actual dispatcher buffer write, and `lease_commit`
+  was separately scheduled. Moved lease validation/commit into dispatcher stream
+  write hooks, added the queued-write drift regression, and extracted the
+  duplicated grep backend version normalizer.
+- Re-ran verification after the stream-write hook fix:
+  - `nvim --headless -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/chat_respond_spec.lua"`: 28 passed.
+  - `nvim --headless -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/create_handler_spec.lua"`: 12 passed.
+  - `nvim --headless -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/parley_harness_golden_spec.lua"`: 7 passed.
+  - `make test`: passed.
+  - `make lint`: passed, 0 warnings / 0 errors in 224 files.

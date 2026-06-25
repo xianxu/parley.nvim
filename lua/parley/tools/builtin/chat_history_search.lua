@@ -11,17 +11,15 @@
 -- system grep. Argument surface is structured rather than a raw
 -- command string, so we control all flags.
 
-local function stable_version(line, fallback)
-    return (line or ""):match("^(%S+%s+%S+)") or fallback
-end
+local version = require("parley.tools.version")
 
 local function detect_backend()
     if vim.fn.executable("rg") == 1 then
-        local version = stable_version(vim.fn.system("rg --version"):match("[^\n]+"), "ripgrep")
-        return "rg", version
+        local stable = version.stable_command_version(vim.fn.system("rg --version"):match("[^\n]+"), "ripgrep")
+        return "rg", stable
     elseif vim.fn.executable("grep") == 1 then
-        local version = stable_version(vim.fn.system("grep --version 2>&1"):match("[^\n]+"), "grep")
-        return "grep", version
+        local stable = version.stable_command_version(vim.fn.system("grep --version 2>&1"):match("[^\n]+"), "grep")
+        return "grep", stable
     end
     return nil, nil
 end

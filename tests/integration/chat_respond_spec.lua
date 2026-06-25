@@ -967,6 +967,35 @@ describe("chat_respond: pending request transcript drift", function()
         assert.is_false(buffer_contains(buf, "late chunk"))
     end)
 
+    it("does not insert a queued stream chunk after undo before the dispatcher write runs", function()
+        local buf = open_simple_chat()
+        local scheduled = {}
+        vim.schedule = function(fn)
+            table.insert(scheduled, fn)
+        end
+        local captured_handler
+        local qid = "qid_queued_stream_after_undo"
+
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, handler)
+            captured_handler = handler
+            parley.tasker.set_query(qid, {
+                response = "",
+                raw_response = "",
+                buf = buf_arg,
+            })
+        end
+
+        parley.chat_respond({ range = 0 })
+        assert.is_not_nil(captured_handler, "expected dispatcher handler to be captured")
+
+        captured_handler(qid, "queued chunk")
+        assert.is_true(#scheduled > 0, "expected dispatcher write to be queued")
+        vim.cmd("silent! undo")
+        run_scheduled_until(scheduled, 1)
+
+        assert.is_false(buffer_contains(buf, "queued chunk"))
+    end)
+
     it("allows multi-chunk streaming when the transcript does not drift", function()
         local buf = open_simple_chat()
         local captured_handler

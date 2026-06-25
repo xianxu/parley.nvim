@@ -1556,7 +1556,17 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
         end
         local base_handler = _parley.dispatcher.create_handler(buf, win, response_start_line, true, "", function()
             return is_follow_cursor_enabled(override_free_cursor)
-        end, on_stream_lines_changed)
+        end, on_stream_lines_changed, {
+            before_write = function(_qid, chunk)
+                if type(chunk) == "string" and chunk ~= "" then
+                    stop_spinner()
+                end
+                return lease_valid()
+            end,
+            after_write = function()
+                lease_commit()
+            end,
+        })
         local function request_clear_progress_indicator(qt)
             if vim.in_fast_event() then
                 vim.schedule(function()
@@ -1567,16 +1577,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             clear_progress_indicator(qt)
         end
         local response_handler = function(qid, chunk)
-            vim.schedule(function()
-                if not lease_valid() then
-                    return
-                end
-                if type(chunk) == "string" and chunk ~= "" then
-                    stop_spinner()
-                end
-                base_handler(qid, chunk)
-                vim.schedule(lease_commit)
-            end)
+            base_handler(qid, chunk)
         end
 
         -- Shared empty-answer collapse (#131): used by on_exit (tool-use-only /

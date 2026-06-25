@@ -161,3 +161,16 @@ Commit message:
 ```text
 #137: invalidate pending chat writes on transcript drift
 ```
+
+## Revisions
+
+### 2026-06-25 — Boundary Review: Stream Guard Placement
+
+Reason: the boundary review found that validating in `chat_respond` before
+calling the scheduled dispatcher handler still left a scheduler-hop race before
+the actual stream buffer mutation.
+
+Delta: stream lease validation/commit must be colocated with the actual
+`dispatcher.create_handler` write. `chat_respond` supplies before/after stream
+write hooks to the dispatcher; the before hook validates at the mutation point
+and the after hook commits immediately after the accepted write.
