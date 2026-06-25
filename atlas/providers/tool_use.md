@@ -67,7 +67,7 @@ Tool blocks in the transcript:
 - **Unknown tools**: return friendly error "Tool 'X' is not available on this client"
 - **Malformed blocks**: `build_messages_from_model` degrades to text (no Anthropic rejection)
 - **Buffer diagnostic**: `:lua require('parley').check_buffer()` validates invariants
-- **Transcript drift**: pending chat leases cancel stale stream/tool/progress/topic callbacks after undo/redo or out-of-band edits
+- **Transcript drift**: pending chat leases cancel stale stream/tool/progress/topic callbacks when the response's agent-header line is deleted (e.g. undo/redo of the inserted response) — ordinary edits/streaming no longer invalidate (#138)
 
 ## Visual Treatment
 
