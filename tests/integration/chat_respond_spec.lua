@@ -22,6 +22,31 @@ local function make_chat_filename()
     return tmp_dir .. "/2026-03-01-test-" .. os.time() .. "-" .. math.random(100000) .. ".md"
 end
 
+local function mk_read_file_sse_response(toolu_id, path)
+    local events = {
+        { type = "message_start", message = { id = "msg_test", model = "claude-sonnet-4-6" } },
+        { type = "content_block_start", index = 0,
+          content_block = { type = "tool_use", id = toolu_id, name = "read_file", input = {} } },
+        { type = "content_block_delta", index = 0,
+          delta = { type = "input_json_delta", partial_json = '{"path":"' .. path .. '"}' } },
+        { type = "content_block_stop", index = 0 },
+        { type = "message_delta", delta = { stop_reason = "tool_use" } },
+        { type = "message_stop" },
+    }
+    local lines = {}
+    for _, ev in ipairs(events) do
+        table.insert(lines, "event: " .. (ev.type or "unknown"))
+        table.insert(lines, "data: " .. vim.json.encode(ev))
+        table.insert(lines, "")
+    end
+    return table.concat(lines, "\n")
+end
+
+local function buffer_contains(buf, needle)
+    local text = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+    return text:find(needle, 1, true) ~= nil
+end
+
 describe("chat_respond: completion callback", function()
     local test_file
     local original_query
@@ -845,6 +870,217 @@ Not a chat file.
         parley.chat_respond({range = 0})
 
         assert.is_false(dispatcher_called, "Dispatcher should not be called when no --- header found")
+    end)
+end)
+
+describe("chat_respond: pending request transcript drift", function()
+    local test_file
+    local original_query
+    local original_agent
+    local original_web_search
+    local scratch_file
+
+    before_each(function()
+        test_file = make_chat_filename()
+        scratch_file = tmp_dir .. "/lease-tool-" .. math.random(100000) .. ".txt"
+        vim.fn.writefile({ "tool result body" }, scratch_file)
+        original_query = parley.dispatcher.query
+        original_agent = parley._state.agent
+        original_web_search = parley._state.web_search
+    end)
+
+    after_each(function()
+        if original_query then
+            parley.dispatcher.query = original_query
+        end
+        parley._state.agent = original_agent
+        parley._state.web_search = original_web_search
+        if test_file and vim.fn.filereadable(test_file) == 1 then
+            vim.fn.delete(test_file)
+        end
+        if scratch_file and vim.fn.filereadable(scratch_file) == 1 then
+            vim.fn.delete(scratch_file)
+        end
+        for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+            if vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_buf_get_option(buf, "buftype") == "" then
+                pcall(vim.api.nvim_buf_delete, buf, { force = true })
+            end
+        end
+    end)
+
+    local function open_simple_chat(topic)
+        local chat_content = string.format([[
+# topic: %s
+- file: test.md
+---
+
+💬: What is Lua?
+]], topic or "Test Topic")
+
+        vim.fn.writefile(vim.split(chat_content, "\n"), test_file)
+        vim.cmd("edit " .. test_file)
+        local buf = vim.api.nvim_get_current_buf()
+        vim.api.nvim_win_set_cursor(0, { 6, 0 })
+        return buf
+    end
+
+    it("does not insert a late stream chunk after undo invalidates the pending response", function()
+        local buf = open_simple_chat()
+        local captured_handler
+        local qid = "qid_late_stream_after_undo"
+
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, handler)
+            captured_handler = handler
+            parley.tasker.set_query(qid, {
+                response = "",
+                raw_response = "",
+                buf = buf_arg,
+            })
+        end
+
+        parley.chat_respond({ range = 0 })
+        assert.is_not_nil(captured_handler, "expected dispatcher handler to be captured")
+
+        vim.cmd("silent! undo")
+        captured_handler(qid, "late chunk")
+        vim.wait(100, function()
+            return buffer_contains(buf, "late chunk")
+        end, 10)
+
+        assert.is_false(buffer_contains(buf, "late chunk"))
+    end)
+
+    it("allows multi-chunk streaming when the transcript does not drift", function()
+        local buf = open_simple_chat()
+        local captured_handler
+        local qid = "qid_multichunk_ok"
+
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, handler)
+            captured_handler = handler
+            parley.tasker.set_query(qid, {
+                response = "first second",
+                raw_response = "",
+                buf = buf_arg,
+            })
+        end
+
+        parley.chat_respond({ range = 0 })
+        captured_handler(qid, "first ")
+        captured_handler(qid, "second")
+
+        vim.wait(100, function()
+            return buffer_contains(buf, "first second")
+        end, 10)
+
+        assert.is_true(buffer_contains(buf, "first second"))
+    end)
+
+    it("does not append tool blocks when undo invalidates before tool-loop processing", function()
+        local buf = open_simple_chat()
+        parley._state.agent = "ToolSonnet"
+        local captured_completion
+        local qid = "qid_tool_after_undo"
+
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, _handler, completion_callback)
+            captured_completion = completion_callback
+            parley.tasker.set_query(qid, {
+                response = "",
+                raw_response = mk_read_file_sse_response("toolu_AFTER_UNDO", scratch_file),
+                buf = buf_arg,
+            })
+        end
+
+        parley.chat_respond({ range = 0 })
+        assert.is_not_nil(captured_completion, "expected completion callback to be captured")
+
+        vim.cmd("silent! undo")
+        captured_completion(qid)
+        vim.wait(100, function() return false end, 10)
+
+        assert.is_false(buffer_contains(buf, "🔧: read_file id=toolu_AFTER_UNDO"))
+        assert.is_false(buffer_contains(buf, "📎: read_file id=toolu_AFTER_UNDO"))
+    end)
+
+    it("does not write stale progress after undo invalidates the pending response", function()
+        local buf = open_simple_chat()
+        parley._state.web_search = true
+        local captured_progress
+        local qid = "qid_progress_after_undo"
+
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, _handler, _completion_callback, _callback, progress_callback)
+            captured_progress = progress_callback
+            parley.tasker.set_query(qid, {
+                response = "",
+                raw_response = "",
+                buf = buf_arg,
+            })
+        end
+
+        parley.chat_respond({ range = 0 })
+        assert.is_not_nil(captured_progress, "expected progress callback to be captured")
+
+        vim.cmd("silent! undo")
+        captured_progress(qid, {
+            message = "Searching web...",
+            text = "stale progress",
+        })
+
+        vim.wait(100, function()
+            return buffer_contains(buf, "stale progress")
+        end, 10)
+
+        assert.is_false(buffer_contains(buf, "stale progress"))
+    end)
+
+    it("does not update the topic header from a stale topic callback after undo", function()
+        local buf = open_simple_chat("?")
+        local call_count = 0
+        local topic_completion
+        local topic_handler
+        local topic_qid = "qid_topic_after_undo"
+
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, handler, completion_callback)
+            call_count = call_count + 1
+            if call_count == 1 then
+                local qid = "qid_primary_topic_drift"
+                parley.tasker.set_query(qid, {
+                    response = "Lua answer",
+                    raw_response = "",
+                    buf = buf_arg,
+                })
+                if handler then
+                    handler(qid, "Lua answer")
+                end
+                vim.schedule(function()
+                    completion_callback(qid)
+                end)
+            else
+                topic_handler = handler
+                topic_completion = completion_callback
+                parley.tasker.set_query(topic_qid, {
+                    response = "Intro to Lua",
+                    raw_response = "",
+                    buf = buf_arg,
+                })
+            end
+        end
+
+        parley.chat_respond({ range = 0 })
+        vim.wait(300, function()
+            return topic_completion ~= nil
+        end, 10)
+        assert.is_not_nil(topic_completion, "expected topic query callback to be captured")
+
+        vim.cmd("silent! undo")
+        topic_handler(topic_qid, "Intro to Lua")
+        topic_completion(topic_qid)
+        vim.wait(100, function()
+            local first = vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1] or ""
+            return first:find("Intro to Lua", 1, true) ~= nil
+        end, 10)
+
+        local first_line = vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1]
+        assert.equals("# topic: ?", first_line)
     end)
 end)
 
