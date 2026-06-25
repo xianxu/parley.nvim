@@ -1,12 +1,13 @@
 ---
 id: 000137
-status: working
+status: done
 deps: []
 github_issue:
 created: 2026-06-25
 updated: 2026-06-25
 estimate_hours: 4.2
 started: 2026-06-25T11:18:14-07:00
+actual_hours: 0.8
 ---
 
 # undo invalidates pending chat requests
@@ -115,6 +116,7 @@ Detailed design: [000137-undo-invalidates-pending-chat-plan.md](../plans/000137-
 ## Log
 
 ### 2026-06-25
+- 2026-06-25: closed — make test passed; make lint passed; focused coverage passed for stream, queued stream write, tool-loop, recursive resubmit, progress, topic spinner, and topic callback invalidation; actual is judgment-estimated because sdlc actual found no measurable activity; review verdict: FIX-THEN-SHIP
 - Filed from design discussion while exploring #136. Current code has
   extmark-backed positions and a live `exchange_model`, but no undo/redo lease
   invalidation. Decision: use the safe invariant first — undo/redo or structural
@@ -165,3 +167,6 @@ Detailed design: [000137-undo-invalidates-pending-chat-plan.md](../plans/000137-
   - `nvim --headless -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/chat_respond_spec.lua"`: 28 passed.
   - `make test`: passed.
   - `make lint`: passed, 0 warnings / 0 errors in 224 files.
+- Boundary review returned `FIX-THEN-SHIP`: no blockers, but requested explicit
+  redo coverage. Added a redo-drift late-stream regression; focused
+  `chat_respond_spec.lua` now passes 29 tests.

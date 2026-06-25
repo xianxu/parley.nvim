@@ -972,6 +972,33 @@ describe("chat_respond: pending request transcript drift", function()
         assert.is_false(buffer_contains(buf, "late chunk"))
     end)
 
+    it("does not insert a late stream chunk after redo drift", function()
+        local buf = open_simple_chat()
+        local captured_handler
+        local qid = "qid_late_stream_after_redo"
+
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, handler)
+            captured_handler = handler
+            parley.tasker.set_query(qid, {
+                response = "",
+                raw_response = "",
+                buf = buf_arg,
+            })
+        end
+
+        parley.chat_respond({ range = 0 })
+        assert.is_not_nil(captured_handler, "expected dispatcher handler to be captured")
+
+        vim.cmd("silent! undo")
+        vim.cmd("silent! redo")
+        captured_handler(qid, "redo chunk")
+        vim.wait(100, function()
+            return buffer_contains(buf, "redo chunk")
+        end, 10)
+
+        assert.is_false(buffer_contains(buf, "redo chunk"))
+    end)
+
     it("does not insert a queued stream chunk after undo before the dispatcher write runs", function()
         local buf = open_simple_chat()
         local scheduled = {}
