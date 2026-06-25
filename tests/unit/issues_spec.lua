@@ -256,6 +256,34 @@ describe("cycle_status_value", function()
 end)
 
 --------------------------------------------------------------------------------
+-- render_issue_template
+--------------------------------------------------------------------------------
+
+describe("render_issue_template", function()
+    after_each(function()
+        issue_vocabulary.reset_for_tests()
+    end)
+
+    it("uses the vocabulary default status for every issue template render", function()
+        issue_vocabulary.set_default_for_tests(fake_issue_vocab({
+            "triage",
+            "working",
+            "blocked",
+            "done",
+        }))
+
+        local content = issues.render_issue_template({
+            id = "000123",
+            title = "Split the task",
+            date = "2026-06-25",
+        })
+
+        assert.matches("status: triage", content, 1, true)
+        assert.is_nil(content:match("{{status}}"))
+    end)
+end)
+
+--------------------------------------------------------------------------------
 -- next_runnable
 --------------------------------------------------------------------------------
 

@@ -501,6 +501,16 @@ updated: {{date}}
 ### {{date}}
 ]]
 
+M.render_issue_template = function(values)
+    values = values or {}
+    local default_status = vocab():category("open")[1] or "open"
+    return ISSUE_TEMPLATE
+        :gsub("{{id}}", values.id or "")
+        :gsub("{{status}}", values.status or default_status)
+        :gsub("{{title}}", function() return values.title or "" end)
+        :gsub("{{date}}", values.date or "")
+end
+
 -- Create a new issue file and open it
 M.create_issue = function(title)
     local issues_dir = M.get_issues_dir()
@@ -516,12 +526,11 @@ M.create_issue = function(title)
     local filepath = issues_dir .. "/" .. filename
 
     local date = os.date("%Y-%m-%d")
-    local default_status = vocab():category("open")[1] or "open"
-    local content = ISSUE_TEMPLATE
-        :gsub("{{id}}", id)
-        :gsub("{{status}}", default_status)
-        :gsub("{{title}}", title)
-        :gsub("{{date}}", date)
+    local content = M.render_issue_template({
+        id = id,
+        title = title,
+        date = date,
+    })
     local lines = vim.split(content, "\n", { plain = true })
 
     vim.fn.writefile(lines, filepath)
@@ -698,10 +707,11 @@ M.cmd_issue_decompose = function()
     -- Create the child issue
     local date = os.date("%Y-%m-%d")
     local title_replacement = task_text .. parent_link_line
-    local content = ISSUE_TEMPLATE
-        :gsub("{{id}}", child_id)
-        :gsub("{{title}}", function() return title_replacement end)
-        :gsub("{{date}}", date)
+    local content = M.render_issue_template({
+        id = child_id,
+        title = title_replacement,
+        date = date,
+    })
     local lines = vim.split(content, "\n", { plain = true })
     vim.fn.writefile(lines, child_filepath)
 
