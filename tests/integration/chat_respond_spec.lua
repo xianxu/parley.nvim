@@ -22,6 +22,31 @@ local function make_chat_filename()
     return tmp_dir .. "/2026-03-01-test-" .. os.time() .. "-" .. math.random(100000) .. ".md"
 end
 
+local function mk_read_file_sse_response(toolu_id, path)
+    local events = {
+        { type = "message_start", message = { id = "msg_test", model = "claude-sonnet-4-6" } },
+        { type = "content_block_start", index = 0,
+          content_block = { type = "tool_use", id = toolu_id, name = "read_file", input = {} } },
+        { type = "content_block_delta", index = 0,
+          delta = { type = "input_json_delta", partial_json = '{"path":"' .. path .. '"}' } },
+        { type = "content_block_stop", index = 0 },
+        { type = "message_delta", delta = { stop_reason = "tool_use" } },
+        { type = "message_stop" },
+    }
+    local lines = {}
+    for _, ev in ipairs(events) do
+        table.insert(lines, "event: " .. (ev.type or "unknown"))
+        table.insert(lines, "data: " .. vim.json.encode(ev))
+        table.insert(lines, "")
+    end
+    return table.concat(lines, "\n")
+end
+
+local function buffer_contains(buf, needle)
+    local text = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+    return text:find(needle, 1, true) ~= nil
+end
+
 describe("chat_respond: completion callback", function()
     local test_file
     local original_query
@@ -845,6 +870,386 @@ Not a chat file.
         parley.chat_respond({range = 0})
 
         assert.is_false(dispatcher_called, "Dispatcher should not be called when no --- header found")
+    end)
+end)
+
+describe("chat_respond: pending request transcript drift", function()
+    local test_file
+    local original_query
+    local original_agent
+    local original_web_search
+    local original_schedule
+    local original_new_timer
+    local scratch_file
+
+    before_each(function()
+        test_file = make_chat_filename()
+        scratch_file = tmp_dir .. "/lease-tool-" .. math.random(100000) .. ".txt"
+        vim.fn.writefile({ "tool result body" }, scratch_file)
+        original_query = parley.dispatcher.query
+        original_agent = parley._state.agent
+        original_web_search = parley._state.web_search
+        original_schedule = vim.schedule
+        original_new_timer = vim.uv.new_timer
+    end)
+
+    after_each(function()
+        if original_query then
+            parley.dispatcher.query = original_query
+        end
+        if original_schedule then
+            vim.schedule = original_schedule
+        end
+        if original_new_timer then
+            vim.uv.new_timer = original_new_timer
+        end
+        parley._state.agent = original_agent
+        parley._state.web_search = original_web_search
+        if test_file and vim.fn.filereadable(test_file) == 1 then
+            vim.fn.delete(test_file)
+        end
+        if scratch_file and vim.fn.filereadable(scratch_file) == 1 then
+            vim.fn.delete(scratch_file)
+        end
+        for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+            if vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_buf_get_option(buf, "buftype") == "" then
+                pcall(vim.api.nvim_buf_delete, buf, { force = true })
+            end
+        end
+    end)
+
+    local function open_simple_chat(topic)
+        local chat_content = string.format([[
+# topic: %s
+- file: test.md
+---
+
+💬: What is Lua?
+]], topic or "Test Topic")
+
+        vim.fn.writefile(vim.split(chat_content, "\n"), test_file)
+        vim.cmd("edit " .. test_file)
+        local buf = vim.api.nvim_get_current_buf()
+        vim.api.nvim_win_set_cursor(0, { 6, 0 })
+        return buf
+    end
+
+    local function run_scheduled_until(scheduled, cursor, predicate)
+        cursor = cursor or 1
+        while cursor <= #scheduled do
+            scheduled[cursor]()
+            cursor = cursor + 1
+            if predicate and predicate() then
+                break
+            end
+        end
+        return cursor
+    end
+
+    it("does not insert a late stream chunk after undo invalidates the pending response", function()
+        local buf = open_simple_chat()
+        local captured_handler
+        local qid = "qid_late_stream_after_undo"
+
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, handler)
+            captured_handler = handler
+            parley.tasker.set_query(qid, {
+                response = "",
+                raw_response = "",
+                buf = buf_arg,
+            })
+        end
+
+        parley.chat_respond({ range = 0 })
+        assert.is_not_nil(captured_handler, "expected dispatcher handler to be captured")
+
+        vim.cmd("silent! undo")
+        captured_handler(qid, "late chunk")
+        vim.wait(100, function()
+            return buffer_contains(buf, "late chunk")
+        end, 10)
+
+        assert.is_false(buffer_contains(buf, "late chunk"))
+    end)
+
+    it("does not insert a late stream chunk after redo drift", function()
+        local buf = open_simple_chat()
+        local captured_handler
+        local qid = "qid_late_stream_after_redo"
+
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, handler)
+            captured_handler = handler
+            parley.tasker.set_query(qid, {
+                response = "",
+                raw_response = "",
+                buf = buf_arg,
+            })
+        end
+
+        parley.chat_respond({ range = 0 })
+        assert.is_not_nil(captured_handler, "expected dispatcher handler to be captured")
+
+        vim.cmd("silent! undo")
+        vim.cmd("silent! redo")
+        captured_handler(qid, "redo chunk")
+        vim.wait(100, function()
+            return buffer_contains(buf, "redo chunk")
+        end, 10)
+
+        assert.is_false(buffer_contains(buf, "redo chunk"))
+    end)
+
+    it("does not insert a queued stream chunk after undo before the dispatcher write runs", function()
+        local buf = open_simple_chat()
+        local scheduled = {}
+        vim.schedule = function(fn)
+            table.insert(scheduled, fn)
+        end
+        local captured_handler
+        local qid = "qid_queued_stream_after_undo"
+
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, handler)
+            captured_handler = handler
+            parley.tasker.set_query(qid, {
+                response = "",
+                raw_response = "",
+                buf = buf_arg,
+            })
+        end
+
+        parley.chat_respond({ range = 0 })
+        assert.is_not_nil(captured_handler, "expected dispatcher handler to be captured")
+
+        captured_handler(qid, "queued chunk")
+        assert.is_true(#scheduled > 0, "expected dispatcher write to be queued")
+        vim.cmd("silent! undo")
+        run_scheduled_until(scheduled, 1)
+
+        assert.is_false(buffer_contains(buf, "queued chunk"))
+    end)
+
+    it("allows multi-chunk streaming when the transcript does not drift", function()
+        local buf = open_simple_chat()
+        local captured_handler
+        local qid = "qid_multichunk_ok"
+
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, handler)
+            captured_handler = handler
+            parley.tasker.set_query(qid, {
+                response = "first second",
+                raw_response = "",
+                buf = buf_arg,
+            })
+        end
+
+        parley.chat_respond({ range = 0 })
+        captured_handler(qid, "first ")
+        captured_handler(qid, "second")
+
+        vim.wait(100, function()
+            return buffer_contains(buf, "first second")
+        end, 10)
+
+        assert.is_true(buffer_contains(buf, "first second"))
+    end)
+
+    it("does not append tool blocks when undo invalidates before tool-loop processing", function()
+        local buf = open_simple_chat()
+        parley._state.agent = "ToolSonnet"
+        local captured_completion
+        local qid = "qid_tool_after_undo"
+
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, _handler, completion_callback)
+            captured_completion = completion_callback
+            parley.tasker.set_query(qid, {
+                response = "",
+                raw_response = mk_read_file_sse_response("toolu_AFTER_UNDO", scratch_file),
+                buf = buf_arg,
+            })
+        end
+
+        parley.chat_respond({ range = 0 })
+        assert.is_not_nil(captured_completion, "expected completion callback to be captured")
+
+        vim.cmd("silent! undo")
+        captured_completion(qid)
+        vim.wait(100, function() return false end, 10)
+
+        assert.is_false(buffer_contains(buf, "🔧: read_file id=toolu_AFTER_UNDO"))
+        assert.is_false(buffer_contains(buf, "📎: read_file id=toolu_AFTER_UNDO"))
+    end)
+
+    it("does not recursively resubmit from a stale live model after undo", function()
+        local buf = open_simple_chat()
+        parley._state.agent = "ToolSonnet"
+        local scheduled = {}
+        vim.schedule = function(fn)
+            table.insert(scheduled, fn)
+        end
+        local call_count = 0
+        local captured_completion
+        local qid = "qid_recursive_after_undo"
+
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, _handler, completion_callback)
+            call_count = call_count + 1
+            captured_completion = completion_callback
+            parley.tasker.set_query(qid, {
+                response = "",
+                raw_response = mk_read_file_sse_response("toolu_RECURSE_UNDO", scratch_file),
+                buf = buf_arg,
+            })
+        end
+
+        parley.chat_respond({ range = 0 })
+        assert.is_not_nil(captured_completion, "expected completion callback to be captured")
+
+        captured_completion(qid)
+        local cursor = run_scheduled_until(scheduled, 1, function()
+            return buffer_contains(buf, "🔧: read_file id=toolu_RECURSE_UNDO")
+        end)
+        assert.is_true(buffer_contains(buf, "🔧: read_file id=toolu_RECURSE_UNDO"))
+        assert.is_true(buffer_contains(buf, "📎: read_file id=toolu_RECURSE_UNDO"))
+        assert.is_true(cursor <= #scheduled, "tool-loop recurse should be queued")
+
+        vim.cmd("silent! undo")
+        run_scheduled_until(scheduled, cursor)
+
+        assert.equals(1, call_count, "stale recursive respond should not call dispatcher again")
+    end)
+
+    it("allows recursive tool resubmit when the transcript does not drift", function()
+        local buf = open_simple_chat()
+        parley._state.agent = "ToolSonnet"
+        local scheduled = {}
+        vim.schedule = function(fn)
+            table.insert(scheduled, fn)
+        end
+        local call_count = 0
+        local captured_completion
+        local qid = "qid_recursive_ok"
+
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, _handler, completion_callback)
+            call_count = call_count + 1
+            captured_completion = completion_callback
+            if call_count == 1 then
+                parley.tasker.set_query(qid, {
+                    response = "",
+                    raw_response = mk_read_file_sse_response("toolu_RECURSE_OK", scratch_file),
+                    buf = buf_arg,
+                })
+            else
+                parley.tasker.set_query("qid_recursive_second", {
+                    response = "final recursive answer",
+                    raw_response = "",
+                    buf = buf_arg,
+                })
+            end
+        end
+
+        parley.chat_respond({ range = 0 })
+        captured_completion(qid)
+        run_scheduled_until(scheduled, 1)
+
+        assert.equals(2, call_count, "valid recursive respond should call dispatcher again")
+        assert.is_true(buffer_contains(buf, "🔧: read_file id=toolu_RECURSE_OK"))
+        assert.is_true(buffer_contains(buf, "📎: read_file id=toolu_RECURSE_OK"))
+    end)
+
+    it("does not write stale progress after undo invalidates the pending response", function()
+        local buf = open_simple_chat()
+        parley._state.web_search = true
+        local captured_progress
+        local qid = "qid_progress_after_undo"
+
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, _handler, _completion_callback, _callback, progress_callback)
+            captured_progress = progress_callback
+            parley.tasker.set_query(qid, {
+                response = "",
+                raw_response = "",
+                buf = buf_arg,
+            })
+        end
+
+        parley.chat_respond({ range = 0 })
+        assert.is_not_nil(captured_progress, "expected progress callback to be captured")
+
+        vim.cmd("silent! undo")
+        captured_progress(qid, {
+            message = "Searching web...",
+            text = "stale progress",
+        })
+
+        vim.wait(100, function()
+            return buffer_contains(buf, "stale progress")
+        end, 10)
+
+        assert.is_false(buffer_contains(buf, "stale progress"))
+    end)
+
+    it("does not update the topic header from a stale topic callback after undo", function()
+        local buf = open_simple_chat("?")
+        local call_count = 0
+        local topic_completion
+        local topic_handler
+        local topic_qid = "qid_topic_after_undo"
+        local topic_spinner_tick
+        vim.uv.new_timer = function()
+            return {
+                start = function(_, _timeout, _repeat, callback)
+                    topic_spinner_tick = callback
+                end,
+                stop = function() end,
+                close = function() end,
+                is_closing = function()
+                    return false
+                end,
+            }
+        end
+
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, handler, completion_callback)
+            call_count = call_count + 1
+            if call_count == 1 then
+                local qid = "qid_primary_topic_drift"
+                parley.tasker.set_query(qid, {
+                    response = "Lua answer",
+                    raw_response = "",
+                    buf = buf_arg,
+                })
+                if handler then
+                    handler(qid, "Lua answer")
+                end
+                vim.schedule(function()
+                    completion_callback(qid)
+                end)
+            else
+                topic_handler = handler
+                topic_completion = completion_callback
+                parley.tasker.set_query(topic_qid, {
+                    response = "Intro to Lua",
+                    raw_response = "",
+                    buf = buf_arg,
+                })
+            end
+        end
+
+        parley.chat_respond({ range = 0 })
+        vim.wait(300, function()
+            return topic_completion ~= nil
+        end, 10)
+        assert.is_not_nil(topic_completion, "expected topic query callback to be captured")
+        assert.is_not_nil(topic_spinner_tick, "expected topic spinner timer to be captured")
+
+        vim.cmd("silent! undo")
+        topic_spinner_tick()
+        topic_handler(topic_qid, "Intro to Lua")
+        topic_completion(topic_qid)
+        vim.wait(100, function()
+            local first = vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1] or ""
+            return first:find("Intro to Lua", 1, true) ~= nil
+        end, 10)
+
+        local first_line = vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1]
+        assert.equals("# topic: ?", first_line)
     end)
 end)
 

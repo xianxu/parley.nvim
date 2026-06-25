@@ -199,6 +199,16 @@ local function query_cursor_line(qt)
     return nil
 end
 
+local function buf_changedtick(buf)
+    local ok, tick = pcall(function()
+        return vim.b[buf].changedtick
+    end)
+    if ok and type(tick) == "number" then
+        return tick
+    end
+    return 0
+end
+
 --------------------------------------------------------------------------------
 -- Remote reference cache
 --------------------------------------------------------------------------------
@@ -819,11 +829,19 @@ M.generate_topic = function(messages, provider, model, callback, spinner)
             end
             local line_nr = spinner.find_line()
             if line_nr then
+                if spinner.before_write and not spinner.before_write() then
+                    stop_and_close_timer(spinner_timer)
+                    spinner_timer = nil
+                    return
+                end
                 local text = "topic: " .. spinner_frames[spinner_idx] .. " generating..."
                 -- Issue #80: same undo-pollution fix as the agent-response
                 -- spinner. Each frame joins the previous undo block.
                 require("parley.helper").undojoin(spinner.buf)
                 require("parley.buffer_edit").replace_line_at(spinner.buf, line_nr, text)
+                if spinner.after_write then
+                    spinner.after_write()
+                end
             end
             spinner_idx = spinner_idx % #spinner_frames + 1
         end))
@@ -1248,6 +1266,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
         local exchange_model = require("parley.exchange_model")
         local buffer_edit = require("parley.buffer_edit")
         local tool_loop_mod = require("parley.tool_loop")
+        local chat_lease = require("parley.chat_lease")
         local is_recursion = tool_loop_mod.get_iter(buf) > 0
 
         -- Reuse the live model if passed from a recursive tool-loop call.
@@ -1267,6 +1286,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
         local progress_detail_key = nil
         local spinner_frame_index = 1
         local spinner_timer = nil
+        local stop_spinner
         -- Spinner shows on every API call to Claude (initial and recursive).
         local spinner_active = _parley._state.web_search and true or false
         local spinner_running = false
@@ -1355,6 +1375,45 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             buffer_edit.insert_lines_at(buf, insert_start, insert_lines)
         end
 
+        local lease_generation = chat_lease.begin(buf, buf_changedtick(buf), {
+            target_idx = target_idx,
+            stream_block_idx = stream_block_idx,
+            recursion = is_recursion,
+        })
+        local lease_notice_sent = false
+        local function invalidate_pending_request(lease_reason)
+            if not lease_notice_sent then
+                lease_notice_sent = true
+                _parley.logger.warning(lease_reason or "Parley request cancelled because the chat transcript changed")
+                vim.notify(lease_reason or "Parley request cancelled because the chat transcript changed", vim.log.levels.WARN)
+            end
+            if stop_spinner then
+                stop_spinner()
+            end
+            pcall(function()
+                _parley.tasker.stop()
+            end)
+        end
+        local function lease_valid()
+            local ok, lease_reason = chat_lease.validate(buf, lease_generation, buf_changedtick(buf))
+            if not ok then
+                invalidate_pending_request(lease_reason)
+                return false
+            end
+            return true
+        end
+        local function lease_commit()
+            chat_lease.commit(buf, lease_generation, buf_changedtick(buf))
+        end
+        local function guarded_write(fn)
+            if not lease_valid() then
+                return false
+            end
+            fn()
+            lease_commit()
+            return true
+        end
+
         _parley.logger.debug("messages to send: " .. vim.inspect(messages))
 
         -- Check if we're in raw request mode and have a raw payload to use
@@ -1392,6 +1451,9 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             if not vim.api.nvim_buf_is_valid(buf) then
                 return
             end
+            if not lease_valid() then
+                return
+            end
             -- Recompute position from the model (streaming may have
             -- shifted it via grow_block).
             local pos = model:block_start(target_idx, spinner_block_idx)
@@ -1405,6 +1467,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             -- streaming chunks. helpers.undojoin swallows E790.
             require("parley.helper").undojoin(buf)
             require("parley.buffer_edit").replace_line_at(buf, pos, text)
+            lease_commit()
         end
 
         local function render_spinner_line()
@@ -1419,7 +1482,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             set_progress_indicator_line(text)
         end
 
-        local function stop_spinner()
+        stop_spinner = function()
             if not spinner_running then
                 return
             end
@@ -1441,6 +1504,9 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             stop_spinner()
             spinner_active = false
             if vim.api.nvim_buf_is_valid(buf) and spinner_block_idx then
+                if not lease_valid() then
+                    return
+                end
                 -- Delete the spinner block + its margin from the buffer.
                 local spin_start = model:block_start(target_idx, spinner_block_idx)
                 local spin_size = model.exchanges[target_idx].blocks[spinner_block_idx].size
@@ -1465,6 +1531,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                     end
                 end
             end
+            lease_commit()
         end
 
         local function start_spinner()
@@ -1497,7 +1564,17 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
         end
         local base_handler = _parley.dispatcher.create_handler(buf, win, response_start_line, true, "", function()
             return is_follow_cursor_enabled(override_free_cursor)
-        end, on_stream_lines_changed)
+        end, on_stream_lines_changed, {
+            before_write = function(_qid, chunk)
+                if type(chunk) == "string" and chunk ~= "" then
+                    stop_spinner()
+                end
+                return lease_valid()
+            end,
+            after_write = function()
+                lease_commit()
+            end,
+        })
         local function request_clear_progress_indicator(qt)
             if vim.in_fast_event() then
                 vim.schedule(function()
@@ -1508,9 +1585,6 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             clear_progress_indicator(qt)
         end
         local response_handler = function(qid, chunk)
-            if type(chunk) == "string" and chunk ~= "" then
-                stop_spinner()
-            end
             base_handler(qid, chunk)
         end
 
@@ -1530,7 +1604,11 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                     -- empty-block rule cancels the margin).
                     local del_start = math.max(spos - 1, 0)
                     local del_count = spos - del_start + 1
-                    buffer_edit.delete_lines_after(buf, del_start, del_count)
+                    if not guarded_write(function()
+                        buffer_edit.delete_lines_after(buf, del_start, del_count)
+                    end) then
+                        return
+                    end
                     model:set_block_size(target_idx, stream_block_idx, 0)
                 end
             end
@@ -1543,6 +1621,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             vim.schedule(function()
                 clear_progress_indicator(nil)
                 collapse_empty_answer()
+                chat_lease.clear(buf, lease_generation)
                 vim.notify(msg or "parley: request aborted", vim.log.levels.WARN)
             end)
         end
@@ -1558,6 +1637,10 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                 if not qt then
                     return
                 end
+                if not lease_valid() then
+                    chat_lease.clear(buf, lease_generation)
+                    return
+                end
                 request_clear_progress_indicator(qt)
 
                 -- Collapse the empty stream placeholder (tool-use-only or empty
@@ -1569,11 +1652,16 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                 -- re-submit. Finalization only runs on "done".
                 if agent_info and agent_info.tools and #agent_info.tools > 0 then
                     local tool_loop = require("parley.tool_loop")
+                    if not lease_valid() then
+                        chat_lease.clear(buf, lease_generation)
+                        return
+                    end
                     local outcome = tool_loop.process_response(buf, qt.raw_response or "", {
                         max_tool_iterations = agent_info.max_tool_iterations or 10,
                         tool_result_max_bytes = agent_info.tool_result_max_bytes or 102400,
                         cwd = vim.fn.getcwd(),
                     }, model, target_idx)
+                    lease_commit()
                     if outcome == "recurse" then
                         -- Re-parse the (now updated) buffer and submit
                         -- again. force=true bypasses the is_busy check
@@ -1582,6 +1670,10 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                         -- the same callback so user-provided
                         -- callbacks still fire on the final iteration.
                         vim.schedule(function()
+                            if not lease_valid() then
+                                chat_lease.clear(buf, lease_generation)
+                                return
+                            end
                             M.respond({}, callback, override_free_cursor, true, model, target_idx)
                         end)
                         return
@@ -1614,8 +1706,13 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                 -- current exchange end and next content.
                 local excess = next_content_start - exchange_end - 1  -- -1 for the 1 margin we keep
                 if excess > 0 then
-                    _parley.helpers.undojoin(buf)
-                    buffer_edit.delete_lines_after(buf, exchange_end + 1, excess)
+                    if not guarded_write(function()
+                        _parley.helpers.undojoin(buf)
+                        buffer_edit.delete_lines_after(buf, exchange_end + 1, excess)
+                    end) then
+                        chat_lease.clear(buf, lease_generation)
+                        return
+                    end
                 end
 
                 -- Only add a new user prompt at the end if we're not in the middle of the document
@@ -1625,15 +1722,26 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                     -- Insert position is right after the cleaned-up exchange.
                     local insert_at = exchange_end
 
-                    _parley.helpers.undojoin(buf)
-                    -- Insert: margin + user_prefix + trailing blank
-                    buffer_edit.insert_lines_at(buf, insert_at, { "", _parley.config.chat_user_prefix, "" })
-                    _parley.helpers.undojoin(buf)
-                    buffer_edit.append_blank_at_end(buf)
+                    if not guarded_write(function()
+                        _parley.helpers.undojoin(buf)
+                        -- Insert: margin + user_prefix + trailing blank
+                        buffer_edit.insert_lines_at(buf, insert_at, { "", _parley.config.chat_user_prefix, "" })
+                        _parley.helpers.undojoin(buf)
+                        buffer_edit.append_blank_at_end(buf)
+                    end) then
+                        chat_lease.clear(buf, lease_generation)
+                        return
+                    end
                 end
 
                 -- if topic is ?, then generate it
+                local topic_generation_started = false
                 if headers.topic == "?" then
+                    if not lease_valid() then
+                        chat_lease.clear(buf, lease_generation)
+                        return
+                    end
+                    topic_generation_started = true
                     -- Topic gen: drop the leading system-prompt messages (1, or 2
                     -- for a synthetic system prompt) AND ancestors — keep only the
                     -- current-file conversation. Carrying the system prompt makes
@@ -1644,11 +1752,21 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                     table.insert(topic_msgs, { role = "assistant", content = qt.response })
 
                     M.generate_topic(topic_msgs, agent_info.provider, agent_info.model, function(topic)
+                        if not lease_valid() then
+                            chat_lease.clear(buf, lease_generation)
+                            return
+                        end
                         _parley.helpers.undojoin(buf)
                         local all_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
                         set_chat_topic_line(buf, all_lines, topic)
+                        lease_commit()
+                        chat_lease.clear(buf, lease_generation)
                     end, { buf = buf, find_line = function()
                         return M.find_topic_line(buf)
+                    end, before_write = function()
+                        return lease_valid()
+                    end, after_write = function()
+                        lease_commit()
                     end })
                 end
 
@@ -1728,6 +1846,9 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                 -- Call the callback if provided
                 if callback then
                     callback()
+                end
+                if not topic_generation_started then
+                    chat_lease.clear(buf, lease_generation)
                 end
             end),
             nil,

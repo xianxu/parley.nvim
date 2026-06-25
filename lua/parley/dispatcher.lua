@@ -421,8 +421,9 @@ end
 ---@param first_undojoin boolean | nil # whether to skip first undojoin
 ---@param prefix string | nil # prefix to insert before each response line
 ---@param cursor boolean | function # whether to move cursor to the end of the response
-D.create_handler = function(buf, win, line, first_undojoin, prefix, cursor, on_lines_changed)
+D.create_handler = function(buf, win, line, first_undojoin, prefix, cursor, on_lines_changed, opts)
 	buf = buf or vim.api.nvim_get_current_buf()
+	opts = opts or {}
 	prefix = prefix or ""
 	local first_line = line or vim.api.nvim_win_get_cursor(win or 0)[1] - 1
 	local finished_lines = 0
@@ -471,13 +472,6 @@ D.create_handler = function(buf, win, line, first_undojoin, prefix, cursor, on_l
 		if not vim.api.nvim_buf_is_valid(buf) then
 			return
 		end
-		-- undojoin takes previous change into account, so skip it for the first chunk
-		if skip_first_undojoin then
-			skip_first_undojoin = false
-		else
-			helpers.undojoin(buf)
-		end
-
 		if not qt.ns_id then
 			qt.ns_id = ns_id
 		end
@@ -488,6 +482,15 @@ D.create_handler = function(buf, win, line, first_undojoin, prefix, cursor, on_l
 
 		if type(chunk) ~= "string" then
 			return
+		end
+		if opts.before_write and not opts.before_write(qid, chunk) then
+			return
+		end
+		-- undojoin takes previous change into account, so skip it for the first chunk
+		if skip_first_undojoin then
+			skip_first_undojoin = false
+		else
+			helpers.undojoin(buf)
 		end
 
 		first_line = vim.api.nvim_buf_get_extmark_by_id(buf, ns_id, ex_id, {})[1]
@@ -517,6 +520,9 @@ D.create_handler = function(buf, win, line, first_undojoin, prefix, cursor, on_l
 		end
 		if on_lines_changed and delta > 0 then
 			on_lines_changed(delta)
+		end
+		if opts.after_write then
+			opts.after_write(qid, chunk, delta)
 		end
 		pending_line = new_pending
 		helpers.undojoin(buf)

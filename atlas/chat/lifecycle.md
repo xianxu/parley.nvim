@@ -15,6 +15,8 @@ Splits current exchange + following into a new child chat with `🌿:` links. As
 ## Response (`:ParleyChatRespond` / `<C-g><C-g>`)
 Assembles context (with memory summarization), streams LLM response into buffer. The [exchange model](exchange_model.md) is the single source of truth for all buffer mutations during the response lifecycle — streaming text growth, tool block insertion, spinner management, and prompt append all go through the model. Concurrent guard prevents duplicate calls.
 
+Pending responses also hold a per-buffer chat lease (`lua/parley/chat_lease.lua`) over the buffer's `changedtick`. Each async callback validates the lease before mutating the transcript and commits the new tick after Parley-owned writes. Undo/redo or any out-of-band transcript edit invalidates the lease, stops/suppresses late stream/tool/progress/topic writes, and prevents recursive tool resubmit from using a stale live model.
+
 ## Follow Cursor (`:ParleyToggleFollowCursor` / `<C-g>l`)
 Toggles auto-follow of streaming insertion point.
 
