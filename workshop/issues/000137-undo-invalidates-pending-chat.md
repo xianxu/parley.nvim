@@ -1,11 +1,12 @@
 ---
 id: 000137
-status: open
+status: working
 deps: [000136]
 github_issue:
 created: 2026-06-25
 updated: 2026-06-25
 estimate_hours:
+started: 2026-06-25T11:18:14-07:00
 ---
 
 # undo invalidates pending chat requests
