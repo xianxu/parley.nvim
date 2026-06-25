@@ -879,6 +879,7 @@ describe("chat_respond: pending request transcript drift", function()
     local original_agent
     local original_web_search
     local original_schedule
+    local original_new_timer
     local scratch_file
 
     before_each(function()
@@ -889,6 +890,7 @@ describe("chat_respond: pending request transcript drift", function()
         original_agent = parley._state.agent
         original_web_search = parley._state.web_search
         original_schedule = vim.schedule
+        original_new_timer = vim.uv.new_timer
     end)
 
     after_each(function()
@@ -897,6 +899,9 @@ describe("chat_respond: pending request transcript drift", function()
         end
         if original_schedule then
             vim.schedule = original_schedule
+        end
+        if original_new_timer then
+            vim.uv.new_timer = original_new_timer
         end
         parley._state.agent = original_agent
         parley._state.web_search = original_web_search
@@ -1160,6 +1165,19 @@ describe("chat_respond: pending request transcript drift", function()
         local topic_completion
         local topic_handler
         local topic_qid = "qid_topic_after_undo"
+        local topic_spinner_tick
+        vim.uv.new_timer = function()
+            return {
+                start = function(_, _timeout, _repeat, callback)
+                    topic_spinner_tick = callback
+                end,
+                stop = function() end,
+                close = function() end,
+                is_closing = function()
+                    return false
+                end,
+            }
+        end
 
         parley.dispatcher.query = function(buf_arg, _provider, _payload, handler, completion_callback)
             call_count = call_count + 1
@@ -1192,8 +1210,10 @@ describe("chat_respond: pending request transcript drift", function()
             return topic_completion ~= nil
         end, 10)
         assert.is_not_nil(topic_completion, "expected topic query callback to be captured")
+        assert.is_not_nil(topic_spinner_tick, "expected topic spinner timer to be captured")
 
         vim.cmd("silent! undo")
+        topic_spinner_tick()
         topic_handler(topic_qid, "Intro to Lua")
         topic_completion(topic_qid)
         vim.wait(100, function()

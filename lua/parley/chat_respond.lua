@@ -829,11 +829,19 @@ M.generate_topic = function(messages, provider, model, callback, spinner)
             end
             local line_nr = spinner.find_line()
             if line_nr then
+                if spinner.before_write and not spinner.before_write() then
+                    stop_and_close_timer(spinner_timer)
+                    spinner_timer = nil
+                    return
+                end
                 local text = "topic: " .. spinner_frames[spinner_idx] .. " generating..."
                 -- Issue #80: same undo-pollution fix as the agent-response
                 -- spinner. Each frame joins the previous undo block.
                 require("parley.helper").undojoin(spinner.buf)
                 require("parley.buffer_edit").replace_line_at(spinner.buf, line_nr, text)
+                if spinner.after_write then
+                    spinner.after_write()
+                end
             end
             spinner_idx = spinner_idx % #spinner_frames + 1
         end))
@@ -1755,6 +1763,10 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                         chat_lease.clear(buf, lease_generation)
                     end, { buf = buf, find_line = function()
                         return M.find_topic_line(buf)
+                    end, before_write = function()
+                        return lease_valid()
+                    end, after_write = function()
+                        lease_commit()
                     end })
                 end
 

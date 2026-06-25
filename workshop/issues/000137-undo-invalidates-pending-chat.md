@@ -157,3 +157,11 @@ Detailed design: [000137-undo-invalidates-pending-chat-plan.md](../plans/000137-
   - `nvim --headless -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/parley_harness_golden_spec.lua"`: 7 passed.
   - `make test`: passed.
   - `make lint`: passed, 0 warnings / 0 errors in 224 files.
+- Boundary review returned `REWORK` a third time: topic-generation spinner
+  frames were still direct async header writes outside the lease. Added
+  lease-aware topic spinner write hooks and extended the stale-topic test to
+  advance the spinner after undo.
+- Re-ran verification after the topic-spinner hook fix:
+  - `nvim --headless -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/chat_respond_spec.lua"`: 28 passed.
+  - `make test`: passed.
+  - `make lint`: passed, 0 warnings / 0 errors in 224 files.

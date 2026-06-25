@@ -174,3 +174,13 @@ Delta: stream lease validation/commit must be colocated with the actual
 `dispatcher.create_handler` write. `chat_respond` supplies before/after stream
 write hooks to the dispatcher; the before hook validates at the mutation point
 and the after hook commits immediately after the accepted write.
+
+### 2026-06-25 — Boundary Review: Topic Spinner Lease Coverage
+
+Reason: the boundary review found topic-generation spinner frames mutate the
+chat topic header from a timer outside the active chat lease.
+
+Delta: `M.generate_topic` spinner writes accept before/after write hooks.
+`chat_respond` passes the active lease validation/commit hooks so spinner frames
+stop on drift and only accepted topic-header spinner writes advance the lease
+baseline.
