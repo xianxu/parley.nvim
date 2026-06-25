@@ -1,9 +1,9 @@
 ---
 id: 000106
-status: open
+status: done
 deps: []
 created: 2026-04-14
-updated: 2026-04-14
+updated: 2026-06-25
 ---
 
 # Unified skill system for AI-powered buffer editing
@@ -76,5 +76,7 @@ _Implementation plan will be written in `workshop/plans/000106-skill-system-plan
 
 ## Log
 
+
+- 2026-06-25: closed — Superseded by completed #128: redesigned skill system shipped with skill_invoke, review/voice_apply manifests, propose_edits, and deleted skill_runner.; review verdict: not-run
 - 2026-04-14: Brainstormed design. Key decisions: SKILL.md IS the prompt, rigid completable args only, `<C-g>s` picker with cascading typeahead, skills as folders under `lua/parley/skills/`, shared pipeline in `skill_runner.lua`. Spec reviewed by subagent — addressed keybinding collision (`<C-g>s` vs system prompt → system prompt moves to `<C-g>p`), float_picker extension needed for dynamic items, Anthropic-only constraint documented.
 - 2026-06-11: **Architecture superseded by parley.nvim#128.** v1 (this issue) shipped — `review` + `voice_apply` on `skill_runner` with a forced `review_edit` single-shot pipeline. A brain design conversation reframed parley as a readonly research harness whose skills must be *declarative context modules over the single chat tool loop* (one engine, not a parallel forced-write pipeline), with virtual/repo-provided sources, `read_skill`, activation flags, and a capability-based permission model (#129). The pure helpers here (`compute_edits`/`apply_edits`, highlight/diagnostics) are salvaged into the new `propose_edits` tool. Leaving status as-is; close/wontfix disposition is the operator's call once #128 lands.
