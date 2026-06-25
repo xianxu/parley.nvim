@@ -23,7 +23,7 @@ atlas:
       - lua/parley/render.lua
       - lua/parley/chat_lease.lua
     tests:
-      - tests/unit/chat_lease_spec.lua
+      - tests/integration/chat_lease_spec.lua
       - tests/integration/chat_move_spec.lua
       - tests/integration/create_handler_spec.lua
       - tests/integration/new_chat_spec.lua
@@ -330,7 +330,7 @@ atlas:
       - lua/parley/chat_respond.lua
       - lua/parley/chat_lease.lua
     tests:
-      - tests/unit/chat_lease_spec.lua
+      - tests/integration/chat_lease_spec.lua
       - tests/unit/tool_loop_spec.lua
       - tests/unit/tools_registry_spec.lua
       - tests/unit/tools_dispatcher_spec.lua

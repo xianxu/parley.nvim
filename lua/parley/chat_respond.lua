@@ -1375,7 +1375,15 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             buffer_edit.insert_lines_at(buf, insert_start, insert_lines)
         end
 
-        local lease_generation = chat_lease.begin(buf, buf_changedtick(buf), {
+        -- #138: anchor the lease on the agent-header (`🤖:`) line — block 2 of the
+        -- exchange (block 1 is the question; same index in fresh + recursion paths). It's the
+        -- structural marker for the response: streaming, the spinner, and
+        -- progress-clear all operate on the blocks *below* it, so ordinary writes
+        -- leave it untouched, while undo/redo of the inserted response (or the
+        -- user deleting the `🤖:` line) removes it and invalidates the lease.
+        -- Anchoring on the stream line itself fails: stream_replace_at_line
+        -- set_lines-replaces that line every chunk, which trips `invalidate`.
+        local lease_generation = chat_lease.begin(buf, model:block_start(target_idx, 2), {
             target_idx = target_idx,
             stream_block_idx = stream_block_idx,
             recursion = is_recursion,
