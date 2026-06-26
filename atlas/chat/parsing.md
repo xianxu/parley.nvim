@@ -11,7 +11,7 @@
 
 The parser decides termination mode per-block at open time by looking ahead from the `🧠:` line:
 
-- **Explicit-end mode** — if a `🧠:[END]` line appears before the next structural marker, blank lines inside the block are part of the reasoning content and only `🧠:[END]` (or a structural marker) terminates. This is the canonical mode for chats authored under the current prompt — Claude is reluctant to suppress blank lines in reasoning, so an explicit closer is more reliable than a blank-line terminator.
+- **Explicit-end mode** — if a `🧠:[END]` line appears before the next structural marker, blank lines inside the block are part of the reasoning content and only `🧠:[END]` (or a structural marker) terminates. This is the mode for chats whose system prompt requests `🧠:[END]` — custom prompts, or back-compat (the shipped default dropped the `🧠:` thinking-block protocol in #143, so default-prompt chats no longer emit `🧠:` at all). Where a prompt does request it, an explicit closer is more reliable than a blank-line terminator, since Claude is reluctant to suppress blank lines in reasoning.
 - **Legacy mode** — otherwise, the first blank line terminates the block (back-compat with chats authored under the previous single-line `🧠:` convention).
 
 Structural markers (`📝/🔧/📎/💬/🤖/🌿/🔒`) always terminate either mode.
