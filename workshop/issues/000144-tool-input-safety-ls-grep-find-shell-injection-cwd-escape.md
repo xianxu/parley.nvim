@@ -1,13 +1,13 @@
 ---
 id: 000144
-status: working
+status: done
 deps: []
 github_issue:
 created: 2026-06-26
 updated: 2026-06-26
 estimate_hours: 4.0
 started: 2026-06-26T09:28:30-07:00
-actual_hours: 3.2
+actual_hours: 3.5
 ---
 
 # tool input safety: ls/grep/find shell injection + cwd escape
@@ -124,6 +124,7 @@ total: 4.0
 ## Log
 
 ### 2026-06-26
+- 2026-06-26: closed — judgment actual 3.5h because sdlc actual found no measurable activity; verified ack close-gate fix with direct Plenary ack spec, make test-spec SPEC=providers/tool_use, make test, and make lint all passed; review verdict: FIX-THEN-SHIP
 - 2026-06-26: reopened — boundary review found installed optional `ack` was still
   registered with a raw `command` string despite sharing the same provider/tool
   safety surface.
