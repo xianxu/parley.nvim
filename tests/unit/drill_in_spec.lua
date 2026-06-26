@@ -755,12 +755,12 @@ describe("drill_in.accept_at and reject_at", function()
 end)
 
 describe("drill_in.format_block", function()
-    it("formats <Q>[U] as `> Q` then U", function()
+    it("formats <Q>[U] as `> [Q]`, blank, then U (#141)", function()
         local lines = drill_in.format_block({
             quoted = "RedShift",
             sections = { { type = "user", text = "what is this?" } },
         })
-        assert.same({ "> RedShift", "what is this?" }, lines)
+        assert.same({ "> [RedShift]", "", "what is this?" }, lines)
     end)
 
     it("formats [U] (no quote) as just U", function()
@@ -771,15 +771,15 @@ describe("drill_in.format_block", function()
         assert.same({ "just ask" }, lines)
     end)
 
-    it("formats multi-line Q as multiple > lines, multi-line U verbatim", function()
+    it("brackets the whole multi-line Q: [ on first line, ] on last (#141)", function()
         local lines = drill_in.format_block({
             quoted = "foo\nbar",
             sections = { { type = "user", text = "Q1\nQ2" } },
         })
-        assert.same({ "> foo", "> bar", "Q1", "Q2" }, lines)
+        assert.same({ "> [foo", "> bar]", "", "Q1", "Q2" }, lines)
     end)
 
-    it("formats <Q>[U1]{A1}[U2] chain", function()
+    it("formats <Q>[U1]{A1}[U2] chain with a blank before the prompt (#141)", function()
         local lines = drill_in.format_block({
             quoted = "term",
             sections = {
@@ -789,14 +789,15 @@ describe("drill_in.format_block", function()
             },
         })
         assert.same({
-            "> term",
+            "> [term]",
             "> User: U1",
             "> Agent: A1",
+            "",
             "U2",
         }, lines)
     end)
 
-    it("formats no-quote [U1]{A1}[U2] chain (no leading > line)", function()
+    it("formats no-quote [U1]{A1}[U2] chain (no leading > line, blank before prompt)", function()
         local lines = drill_in.format_block({
             quoted = nil,
             sections = {
@@ -808,6 +809,7 @@ describe("drill_in.format_block", function()
         assert.same({
             "> User: U1",
             "> Agent: A1",
+            "",
             "U2",
         }, lines)
     end)
@@ -822,10 +824,11 @@ describe("drill_in.format_block", function()
             },
         })
         assert.same({
-            "> Q",
+            "> [Q]",
             "> User: u1 line a",
             "> u1 line b",
             "> Agent: a1",
+            "",
             "final",
         }, lines)
     end)
@@ -837,11 +840,39 @@ describe("drill_in.format_blocks", function()
             { quoted = "A", sections = { { type = "user", text = "Qa" } } },
             { quoted = "B", sections = { { type = "user", text = "Qb" } } },
         })
-        assert.same({ "> A", "Qa", "", "> B", "Qb" }, lines)
+        assert.same({ "> [A]", "", "Qa", "", "> [B]", "", "Qb" }, lines)
     end)
 
     it("returns empty table for empty block list", function()
         assert.same({}, drill_in.format_blocks({}))
+    end)
+end)
+
+describe("drill_in.bracket_at (#141)", function()
+    it("returns the [..] span covering the cursor column", function()
+        assert.equals("[quoted text]", drill_in.bracket_at("a [quoted text] b", 5))
+    end)
+
+    it("includes the brackets when the cursor is on `[` or `]`", function()
+        local line = "x [foo] y"
+        assert.equals("[foo]", drill_in.bracket_at(line, 3)) -- on [
+        assert.equals("[foo]", drill_in.bracket_at(line, 7)) -- on ]
+    end)
+
+    it("returns nil when the cursor is outside any bracket", function()
+        assert.is_nil(drill_in.bracket_at("a [foo] b", 1))
+        assert.is_nil(drill_in.bracket_at("no brackets here", 4))
+    end)
+
+    it("returns nil for unbalanced or missing brackets / nil input", function()
+        assert.is_nil(drill_in.bracket_at("a [foo", 4))
+        assert.is_nil(drill_in.bracket_at(nil, 1))
+    end)
+
+    it("picks the pair covering the cursor among multiple", function()
+        local line = "[a] [b] [c]"
+        assert.equals("[b]", drill_in.bracket_at(line, 6))
+        assert.equals("[c]", drill_in.bracket_at(line, 10))
     end)
 end)
 
@@ -860,20 +891,20 @@ describe("drill_in.append_blocks", function()
         local lines = { "💬: my question" }
         local blocks = { { quoted = "Term", sections = { { type = "user", text = "What?" } } } }
         local result = drill_in.append_blocks(lines, blocks)
-        assert.same({ "💬: my question", "", "> Term", "What?" }, result)
+        assert.same({ "💬: my question", "", "> [Term]", "", "What?" }, result)
     end)
 
     it("trims trailing empties before adding separator", function()
         local lines = { "💬: question", "", "" }
         local blocks = { { quoted = "T", sections = { { type = "user", text = "Q" } } } }
         local result = drill_in.append_blocks(lines, blocks)
-        assert.same({ "💬: question", "", "> T", "Q" }, result)
+        assert.same({ "💬: question", "", "> [T]", "", "Q" }, result)
     end)
 
     it("no separator when input lines are empty", function()
         local blocks = { { quoted = "T", sections = { { type = "user", text = "Q" } } } }
         local result = drill_in.append_blocks({}, blocks)
-        assert.same({ "> T", "Q" }, result)
+        assert.same({ "> [T]", "", "Q" }, result)
     end)
 
     it("returns input unchanged when blocks is empty", function()
@@ -885,7 +916,7 @@ describe("drill_in.append_blocks", function()
             { quoted = "A", sections = { { type = "user", text = "Qa" } } },
             { quoted = "B", sections = { { type = "user", text = "Qb" } } },
         })
-        assert.same({ "🤖", "", "> A", "Qa", "", "> B", "Qb" }, result)
+        assert.same({ "🤖", "", "> [A]", "", "Qa", "", "> [B]", "", "Qb" }, result)
     end)
 end)
 

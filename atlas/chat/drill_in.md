@@ -58,11 +58,17 @@ If `params.range == 2` (explicit range), drill-in handling is skipped entirely; 
 
 ## Quote block format
 
+The quoted body is wrapped in `[…]` (opening `[` on the first quoted line,
+closing `]` on the last) and separated from the question by a blank line (#141).
+The brackets mirror the `[T]` reference bracket #127 leaves at the source
+location, so `*`/`#` on either jumps to the other (see Keybindings).
+
 For a marker `🤖<T>[Q]`:
 
 ```
-> T-line-1
-> T-line-2
+> [T-line-1
+> T-line-2]
+
 Q-line-1
 Q-line-2
 ```
@@ -70,19 +76,20 @@ Q-line-2
 For a chain `🤖<T>[U1]{A1}[U2]`:
 
 ```
-> T-line-1
+> [T-line-1]
 > User: U1
 > Agent: A1
+
 U2
 ```
 
 Continuation lines inside chain sections (multi-line `U1`/`A1`) stay inside the blockquote with `> ` (no per-line `User:`/`Agent:` prefix).
 
 For a no-quote marker `🤖[Q]`, an anchor `Q̂` is inferred from surrounding prose
-(#127) and emitted as the `> Q̂` line above `Q`. When no anchor can be recovered
-(degradation cases below), only `Q` is emitted (the pre-#127 behavior). Same for
-a no-quote chain `🤖[U1]{A1}[U2]` — an inferred `> Q̂` line, else none. Between
-adjacent gathered blocks, one blank line.
+(#127) and emitted as the bracketed `> [Q̂]` line above `Q`. When no anchor can be
+recovered (degradation cases below), only `Q` is emitted (the pre-#127 behavior).
+Same for a no-quote chain `🤖[U1]{A1}[U2]` — an inferred `> [Q̂]` line, else none.
+Between adjacent gathered blocks, one blank line.
 
 ## Anchor inference (#127)
 
@@ -142,9 +149,9 @@ Both parley and ariadne (`/fix` skill) parse this marker family identically. The
 
 ## Key files
 
-- `lua/parley/drill_in.lua` — pure-function module (`parse`, `gather_and_strip`, `generate_snippet`, `resolve`, `accept_at`, `reject_at`, `format_block`, `format_blocks`, `wrap`, `append_blocks`).
+- `lua/parley/drill_in.lua` — pure-function module (`parse`, `gather_and_strip`, `generate_snippet`, `resolve`, `accept_at`, `reject_at`, `format_block`, `format_blocks`, `wrap`, `append_blocks`, `bracket_at`).
 - `lua/parley/chat_respond.lua` — pre-processing hook before message build (gates on resubmit detection); assembles the turn-prefix `boundaries` from config and threads them into `gather_and_strip` (#127).
-- `lua/parley/init.lua` — `<M-q>` (insert), `<M-a>` (accept), `<M-r>` (reject) wiring inside `prep_chat` / `setup_markdown_keymaps`.
+- `lua/parley/init.lua` — `<M-q>` (insert), `<M-a>` (accept), `<M-r>` (reject) wiring inside `prep_chat` / `setup_markdown_keymaps`; and the chat-only `*`/`#`/`g*`/`g#` anchor-jump maps (`bracket_jump`, #141) set in `prep_chat`.
 - `lua/parley/skills/review/init.lua` — shared section parser (`_parse_marker_sections`).
 - `lua/parley/buffer_edit.lua` — `replace_all_lines` helper used to write the rewritten buffer in one shot.
 - `tests/unit/drill_in_spec.lua` — unit specs for the pure module.
@@ -164,6 +171,21 @@ same `drill_in_callbacks(buf)` table to `register_buffer`.
 | `<C-g>q` / `<M-q>`   | i, n | Insert bare `🤖[]` at cursor, cursor inside `[]` |
 | `<M-a>`              | n    | Accept the marker at cursor per review-convention §5 |
 | `<M-r>`              | n    | Reject the marker at cursor per review-convention §5 |
+
+**Anchor jump (chat buffers only, #141).** `*`/`#`/`g*`/`g#` with the cursor
+inside any `[…]` search the whole bracketed string (literal `\V[…]`) instead of
+the word under the cursor — so a `[quoted text]` anchor jumps to its twin (the
+`[T]` reference #127 leaves at the source). Outside any bracket they fall through
+to the builtin motion via `normal!`. Wired directly in `prep_chat`
+(chat-buffer-local), not through the registry, so they don't apply in plain
+markdown buffers.
+
+Known boundaries (single-line by design): `bracket_at` reads only the cursor
+line, so a `[…]` spanning multiple lines (a multi-line quote rendered `> [line1`
+… `> lineN]`) is not recognized and falls through to the builtin motion. A
+truncated inferred anchor (`generate_snippet` ellipsis) won't string-match its
+source span, so `*` finds no twin there. Both are acceptable for the common
+single-line `[quoted text]` ↔ `[T]` twin case this targets.
 
 Accept/reject semantics (the full table) live in the canonical [review-convention target](../../../ariadne/workshop/targets/review-convention.md) §5. In summary:
 

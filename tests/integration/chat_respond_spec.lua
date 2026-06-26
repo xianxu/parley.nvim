@@ -1473,8 +1473,8 @@ describe("chat_respond: drill-in pre-processing", function()
         assert.truthy(joined:find("tell me about [RedShift]", 1, true),
             "stripped term should remain inline, bracketed; got:\n" .. joined)
         -- Quote block appended at the end
-        assert.truthy(joined:find("> RedShift\nwhat is this?", 1, true),
-            "quote block should be appended; got:\n" .. joined)
+        assert.truthy(joined:find("> [RedShift]\n\nwhat is this?", 1, true),
+            "quote block should be appended (bracketed + blank line, #141); got:\n" .. joined)
     end)
 
     it("does not add a quote block when there are no drill-in markers", function()
@@ -1550,7 +1550,7 @@ describe("chat_respond: drill-in pre-processing", function()
             "original answer should be preserved; got:\n" .. after)
         -- A new user turn with the quote+question block was inserted between
         -- the original answer and the later unrelated question.
-        local quote_pos = after:find("> Term\nwhat is this?", 1, true)
+        local quote_pos = after:find("> [Term]\n\nwhat is this?", 1, true)
         local later_q_pos = after:find("a later unrelated question", 1, true)
         assert.truthy(quote_pos, "quote block should be present; got:\n" .. after)
         assert.truthy(later_q_pos, "later question should be preserved")

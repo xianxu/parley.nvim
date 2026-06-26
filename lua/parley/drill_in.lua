@@ -548,7 +548,17 @@ end
 function M.format_block(block)
     local out = {}
     if block.quoted then
-        for _, line in ipairs(split_lines(block.quoted)) do
+        -- #141: wrap the whole quoted block in [...] so it reads as an anchor
+        -- matching the `[quoted text]` decoration left at the source location
+        -- (and so `*`/`#` on it jumps between the two — see bracket_at).
+        local q_lines = split_lines(block.quoted)
+        for idx, line in ipairs(q_lines) do
+            if idx == 1 then
+                line = "[" .. line
+            end
+            if idx == #q_lines then
+                line = line .. "]"
+            end
             table.insert(out, "> " .. line)
         end
     end
@@ -566,6 +576,10 @@ function M.format_block(block)
         end
     end
     if n >= 1 then
+        -- #141: blank line between the quoted context and the actual prompt.
+        if #out > 0 then
+            table.insert(out, "")
+        end
         local last = block.sections[n]
         for _, line in ipairs(split_lines(last.text)) do
             table.insert(out, line)
@@ -586,6 +600,35 @@ function M.format_blocks(blocks)
         end
     end
     return out
+end
+
+--- Find the `[...]` bracket pair (inclusive) covering 1-based column `col` on
+--- `line`, or nil. #141: powers the chat-buffer `*`/`#` jump so a cursor inside
+--- an anchor searches the whole bracketed string (so `[quoted text]` jumps to
+--- its twin). Pure (no vim deps). Returns the first `[`…`]` pair spanning the
+--- column; does not handle nested brackets (the `[quoted text]` anchor has none).
+--- @param line string|nil
+--- @param col integer|nil  1-based column
+--- @return string|nil  the bracketed substring including `[` and `]`
+function M.bracket_at(line, col)
+    if not line or not col then
+        return nil
+    end
+    local i = 1
+    while true do
+        local s = line:find("%[", i)
+        if not s then
+            return nil
+        end
+        local e = line:find("%]", s + 1)
+        if not e then
+            return nil
+        end
+        if col >= s and col <= e then
+            return line:sub(s, e)
+        end
+        i = e + 1
+    end
 end
 
 --- Wrap text as a drill-in marker awaiting a question.
