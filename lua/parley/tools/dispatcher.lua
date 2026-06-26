@@ -26,26 +26,6 @@ local M = {}
 -- Path resolution
 --------------------------------------------------------------------------------
 
---- Resolve a possibly-relative path against cwd, normalize, resolve
---- symlinks via fs_realpath, and reject anything whose real path
---- escapes cwd.
----
---- Handles the three cases the tool loop needs:
----
----   1. Existing file inside cwd → returns canonical realpath
----   2. Existing file outside cwd (or symlink resolving outside) → rejected
----   3. NEW file (doesn't exist yet) inside cwd → returns
----      `realpath(parent) .. "/" .. basename`. This is what
----      write_file needs when creating a fresh file: the file
----      itself doesn't exist, but its parent dir does, and that
----      parent must be inside cwd.
----
---- Returns `abs_path` on success, or `(nil, err_msg)` on rejection.
----
---- @param path string
---- @param cwd string
---- @return string|nil abs_path
---- @return string|nil err_msg
 -- Resolve a configured read root to a canonical absolute path. Roots may be
 -- absolute (`/x`), home-relative (`~/x`, `~` expanded), or relative to cwd
 -- (`../`, `sub/dir`). Returns the realpath, the normalized path if it does not
@@ -62,9 +42,31 @@ local function resolve_root(root, cwd)
     return vim.loop.fs_realpath(abs) or abs
 end
 
+--- Resolve a possibly-relative path against cwd, normalize, resolve
+--- symlinks via fs_realpath, and reject anything whose real path
+--- escapes cwd (and every configured read root).
+---
+--- Handles the three cases the tool loop needs:
+---
+---   1. Existing file inside cwd → returns canonical realpath
+---   2. Existing file outside cwd (or symlink resolving outside) → rejected
+---   3. NEW file (doesn't exist yet) inside cwd → returns
+---      `realpath(parent) .. "/" .. basename`. This is what
+---      write_file needs when creating a fresh file: the file
+---      itself doesn't exist, but its parent dir does, and that
+---      parent must be inside cwd.
+---
 --- `allowed_roots` (read tools only, #140): extra roots a path may resolve
 --- under, in addition to cwd. Each is resolved + symlink-canonicalized, so a
 --- symlink escaping every root is still rejected. nil/empty → cwd-only.
+---
+--- Returns `abs_path` on success, or `(nil, err_msg)` on rejection.
+---
+--- @param path string
+--- @param cwd string
+--- @param allowed_roots string[]|nil  extra read roots (absolute/~/relative-to-cwd)
+--- @return string|nil abs_path
+--- @return string|nil err_msg
 function M.resolve_path_in_cwd(path, cwd, allowed_roots)
     if type(path) ~= "string" or path == "" then
         return nil, "path must be a non-empty string"
@@ -194,9 +196,11 @@ function M.execute_call(call, tools_registry, opts)
     local path_fields = { "path", "file_path" }
     for _, field in ipairs(path_fields) do
         if opts.cwd and call.input and type(call.input[field]) == "string" then
-            -- #140: read tools (def.kind == "read") may also reach any
-            -- configured `tool_read_roots`; write tools get nil → cwd-only.
-            local roots = (def.kind == "read") and (opts.read_roots or {}) or nil
+            -- #140: read tools may also reach any configured `tool_read_roots`;
+            -- write tools get nil → cwd-only. Gate on `~= "write"` (the canonical
+            -- read-tool predicate `@readonly` uses): `kind` defaults to read when
+            -- absent, so `== "read"` would wrongly confine an absent-kind tool.
+            local roots = (def.kind ~= "write") and (opts.read_roots or {}) or nil
             local abs, scope_err = M.resolve_path_in_cwd(call.input[field], opts.cwd, roots)
             if not abs then
                 return {

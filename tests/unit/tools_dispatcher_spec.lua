@@ -356,5 +356,32 @@ describe("execute_call", function()
             { id = "g2", name = "wr", input = { file_path = target } }, registry, opts)
         assert.is_true(wr.is_error)
         assert.matches("outside working directory", wr.content)
+        -- Prove the write path took the nil-roots branch (not the read message).
+        assert.is_nil(wr.content:match("configured read roots"))
+    end)
+
+    it("a tool with ABSENT kind is treated as read (kind defaults to read) (#140)", function()
+        local n = math.random(0, 0xFFFFFF)
+        local cwd = tmp_base .. "/nokind-cwd-" .. n
+        local root = tmp_base .. "/nokind-root-" .. n
+        vim.fn.mkdir(cwd, "p")
+        vim.fn.mkdir(root, "p")
+        local target = root .. "/doc.md"
+        vim.fn.writefile({ "x" }, target)
+        -- No `kind` field → defaults to read → must honor configured roots
+        -- (gate is `~= "write"`, matching @readonly's contract).
+        registry.register({
+            name = "nokind",
+            description = "n",
+            input_schema = { type = "object" },
+            handler = function(input)
+                return { content = "ran: " .. (input.file_path or ""), is_error = false }
+            end,
+        })
+        local res = dispatcher.execute_call(
+            { id = "g3", name = "nokind", input = { file_path = target } },
+            registry, { cwd = cwd, read_roots = { root } })
+        assert.matches("ran: ", res.content)
+        assert.equals(false, res.is_error)
     end)
 end)
