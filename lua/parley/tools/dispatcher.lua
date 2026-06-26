@@ -22,6 +22,8 @@
 
 local M = {}
 
+local types = require("parley.tools.types")
+
 --------------------------------------------------------------------------------
 -- Path resolution
 --------------------------------------------------------------------------------
@@ -258,7 +260,7 @@ function M.execute_call(call, tools_registry, opts)
     -- offset/limit out of the input (the handler never sees them) and apply them
     -- to the handler's OUTPUT below. read_file self_paginates → it pages natively.
     local page = nil
-    if not def.self_paginates then
+    if types.is_pageable(def) then -- #139: non-write, non-self-paginating only
         local default_limit = opts.page_limit or M.PAGE_DEFAULT_LIMIT
         local in_limit = tonumber((call.input or {}).limit) or default_limit
         page = {

@@ -501,4 +501,15 @@ describe("execute_call", function()
         assert.is_nil(registry.get("wr").input_schema.properties.offset)
         assert.is_nil(registry.get("sp").input_schema.properties.offset)
     end)
+
+    it("does NOT window a write tool's multi-line output (#139)", function()
+        -- The dispatcher pager gate must exclude writes (like the registry's
+        -- injection gate): paging a write would advertise a destructive re-run.
+        registry.register({ name = "wbig", kind = "write", description = "x",
+            input_schema = { type = "object" },
+            handler = function() return { content = rows(1000, "w"), is_error = false } end })
+        local res = dispatcher.execute_call(
+            { id = "w1", name = "wbig", input = {} }, registry, { page_limit = 200 })
+        assert.is_nil(res.content:match("lines %d+%-%d+ of")) -- not windowed
+    end)
 end)

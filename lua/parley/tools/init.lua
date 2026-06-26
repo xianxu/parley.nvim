@@ -33,7 +33,7 @@ end
 -- pages a file. Skipped for write tools and for self-paginating tools (read_file,
 -- which declares its own). Idempotent — won't clobber an existing param.
 local function inject_pager_params(def)
-    if def.kind == "write" or def.self_paginates then
+    if not types.is_pageable(def) then
         return
     end
     local schema = def.input_schema

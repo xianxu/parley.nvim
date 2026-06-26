@@ -83,6 +83,17 @@ function M.validate_definition(def)
     return true
 end
 
+--- #139: is a tool's output paged by the dispatcher? True iff it's a read tool
+--- (kind ~= "write") that does not self-paginate. The SINGLE predicate shared by
+--- the registry (which injects offset/limit) and the dispatcher (which windows
+--- output + strips the params) so the two can't drift — windowing a write tool
+--- would advertise a destructive "re-run to page" remedy.
+--- @param def ToolDefinition
+--- @return boolean
+function M.is_pageable(def)
+    return def.kind ~= "write" and not def.self_paginates
+end
+
 --- Validate a ToolCall.
 --- @param call any
 --- @return boolean ok
