@@ -7,7 +7,7 @@ created: 2026-06-26
 updated: 2026-06-26
 estimate_hours: 4.0
 started: 2026-06-26T09:28:30-07:00
-actual_hours: 3.0
+actual_hours: 3.2
 ---
 
 # tool input safety: ls/grep/find shell injection + cwd escape
@@ -40,9 +40,10 @@ security-critical half.
 Keep the familiar tool names and common shell-shaped affordances, but move the
 trust boundary away from a raw shell string:
 
-- `ls`, `grep`, and `find` stay as builtin read tools. Their descriptions should
-  continue to teach common command-like usage, because agents already know these
-  tools from training data.
+- `ls`, `grep`, and `find` stay as builtin read tools; optional `ack` follows the
+  same safety contract when installed. Their descriptions should continue to
+  teach common command-like usage, because agents already know these tools from
+  training data.
 - Replace each raw `command` string with structured argv-like fields: a primary
   `path`/`paths` field, tool-specific fields (`pattern`, `glob`, `type`,
   `maxdepth`, context counts), and a conservative `flags` array for common safe
@@ -84,11 +85,16 @@ Tool-specific contract:
   lister. Explicitly test that action/write predicates such as `-exec`,
   `-execdir`, `-delete`, `-ok`, `-okdir`, `-fprint`, `-fprintf`, and `-fls`
   remain unavailable.
+- `ack`: when installed, accept `pattern`, `path`/`paths`, optional `type`,
+  `ignore_case`, and context counts. Do not expose the legacy raw `command`
+  string or a generic `flags` array. Insert `--` before pattern/path positionals
+  so dash-leading patterns are searched literally.
 
 ## Done when
 
-- `ls`/`grep`/`find` cannot execute anything beyond their named binary — no shell
-  metacharacter injection (`;`, `|` to non-allowlisted, `$()`, backticks, `>`).
+- `ls`/`grep`/`find` and installed optional `ack` cannot execute anything beyond
+  their named binary — no shell metacharacter injection (`;`, `|` to
+  non-allowlisted, `$()`, backticks, `>`).
 - Path args are confined to cwd (+ configured `tool_read_roots`, #140); the
   descriptions' "confined to cwd" claim becomes true (or is corrected).
 - Safe pipe composition is either implemented (allowlist) or explicitly deferred.
@@ -113,10 +119,15 @@ total: 4.0
 - [x] Route every path-like input through the existing cwd/read-root guard.
 - [x] Add regression tests for metacharacter injection, command substitution, pipeline rejection, and cwd escape.
 - [x] Update tool descriptions and atlas safety docs to match the new contract.
+- [x] Fold installed optional `ack` into the same structured argv safety contract.
 
 ## Log
 
 ### 2026-06-26
+- 2026-06-26: reopened — boundary review found installed optional `ack` was still
+  registered with a raw `command` string despite sharing the same provider/tool
+  safety surface.
+- 2026-06-26: closed — judgment actual 3.2h because sdlc actual found no measurable activity; verified after REWORK fix with make test-spec SPEC=providers/tool_use, make test, and make lint all passed; review verdict: FIX-THEN-SHIP
 - 2026-06-26: closed — judgment actual 3.0h because sdlc actual found no measurable activity; verified make test-spec SPEC=providers/tool_use, make test, and make lint all passed; review verdict: REWORK
 - 2026-06-26: reopened — boundary review found `grep.pattern` could be parsed as an option without an argv `--` separator.
 
@@ -146,6 +157,14 @@ total: 4.0
 - Added dispatcher `default_path` support so `grep`'s omitted `path` defaults to
   `"."` before cwd/read-root canonicalization, not inside the handler after the
   path prelude.
+- Fixed boundary-review FIX-THEN-SHIP gap: installed optional `ack` now uses the
+  same structured argv pattern, declares `default_path = "."`, rejects legacy
+  raw `command`/`flags`, and tests command-substitution text plus dash-leading
+  patterns as data.
+- Verification after the `ack` fix: direct
+  `nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/tools_builtin_ack_spec.lua" -c "qa!"`
+  passed; `make test-spec SPEC=providers/tool_use` passed and includes the ack
+  spec; `make test` passed; `make lint` passed.
 
 ## Revisions
 
@@ -163,3 +182,12 @@ total: 4.0
 - Delta: converted the spec from "conservative flags" to concrete positive
   allowlists, removed generic `find.flags`, and added required tests for
   argv-surviving RCE/write options.
+
+### 2026-06-26T12:08:00-0700
+
+- Reason: boundary review found optional `ack` is registered on hosts where it is
+  installed and still used a raw shell command string.
+- Delta: fold `ack` into the #144 safety boundary with structured fields,
+  argv-list execution, dispatcher-confined default path handling, and regression
+  tests for legacy raw commands, shell substitution text, dash-leading patterns,
+  and raw flag rejection.

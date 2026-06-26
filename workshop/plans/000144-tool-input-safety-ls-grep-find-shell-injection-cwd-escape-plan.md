@@ -2,7 +2,7 @@
 
 > **For agentic workers:** Consult AGENTS.md Section 3 (Subagent Strategy) to determine the appropriate execution approach: use superpowers-subagent-driven-development (if subagents are suitable per AGENTS.md) or superpowers-executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make `ls`, `grep`, and `find` familiar to agents while eliminating shell injection and cwd/read-root escapes.
+**Goal:** Make `ls`, `grep`, `find`, and installed optional `ack` familiar to agents while eliminating shell injection and cwd/read-root escapes.
 
 **Architecture:** Add one shared pure argv-validation module for builtin read commands, then keep each tool handler as a thin IO wrapper that calls the real binary with an argv list. Reuse dispatcher path confinement by exposing structured `path`/`paths` fields instead of hiding path text inside a shell fragment (`ARCH-DRY`, `ARCH-PURE`, `ARCH-PURPOSE`).
 
@@ -20,6 +20,7 @@
 | `LsInput` | `lua/parley/tools/builtin/ls.lua` | modified |
 | `GrepInput` | `lua/parley/tools/builtin/grep.lua` | modified |
 | `FindInput` | `lua/parley/tools/builtin/find.lua` | modified |
+| `AckInput` | `lua/parley/tools/builtin/ack.lua` | modified |
 
 - **BuiltinArgv** — shared pure helpers for validating positive flag allowlists, compact `ls` flags, bounded integers, and argv assembly errors.
   - **Relationships:** 1:N with builtin command handlers; each handler owns a local tool-specific allowlist constant and calls the shared helper.
@@ -41,11 +42,16 @@
   - **DRY rationale:** Reuses shared flag/depth validation while preventing duplicated rejection logic for dangerous actions.
   - **Future extensions:** Add more predicates one at a time when they are read-only and testable.
 
+- **AckInput** — structured input contract for optional `ack` search using pattern/path/type/context fields. It deliberately removes the raw `command` string and has no generic `flags` array.
+  - **Relationships:** 1:1 with `ack` handler when `ack` is installed; dispatcher owns path canonicalization before the handler runs.
+  - **DRY rationale:** Reuses shared argv/path helpers so optional search tools do not become a second safety policy.
+  - **Future extensions:** Add explicit read-only ack options one at a time with regression tests.
+
 ### Integration Points
 
 | Name | Lives in | Status | Wraps |
 |------|----------|--------|-------|
-| `BuiltinCommandHandlers` | `lua/parley/tools/builtin/{ls,grep,find}.lua` | modified | system `ls`/`rg`/`grep`/`find` binaries |
+| `BuiltinCommandHandlers` | `lua/parley/tools/builtin/{ls,grep,find,ack}.lua` | modified | system `ls`/`rg`/`grep`/`find`/`ack` binaries |
 | `DispatcherPathPrelude` | `lua/parley/tools/dispatcher.lua` | modified | cwd/read-root path resolution |
 
 - **BuiltinCommandHandlers** — thin handlers that validate input, build argv, run the detected binary, and format results.
@@ -237,3 +243,11 @@ Use `--no-atlas` only if no atlas surface changed; this plan expects an atlas up
 - Delta: add `--` before grep pattern/path positionals, add regression tests for
   `pattern = "--files"` and `pattern = "--pre=/bin/echo"`, and route omitted
   grep paths through dispatcher `default_path = "."` confinement.
+
+### 2026-06-26T12:08:00-0700
+
+- Reason: boundary review found installed optional `ack` was still a registered
+  raw-shell builtin with the same false confinement claim.
+- Delta: extend the plan scope to `ack`: structured pattern/path/type/context
+  fields, argv-list execution, `default_path = "."`, no raw `command`/`flags`
+  escape hatch, and focused ack regression tests mapped into `providers/tool_use`.
