@@ -75,7 +75,23 @@ function M.validate_definition(def)
     if def.needs_backup ~= nil and type(def.needs_backup) ~= "boolean" then
         return fail("definition.needs_backup must be boolean when present")
     end
+    -- #139: a self-paginating tool (read_file) implements the offset/limit output
+    -- pager natively, so the dispatcher neither injects those params nor slices.
+    if def.self_paginates ~= nil and type(def.self_paginates) ~= "boolean" then
+        return fail("definition.self_paginates must be boolean when present")
+    end
     return true
+end
+
+--- #139: is a tool's output paged by the dispatcher? True iff it's a read tool
+--- (kind ~= "write") that does not self-paginate. The SINGLE predicate shared by
+--- the registry (which injects offset/limit) and the dispatcher (which windows
+--- output + strips the params) so the two can't drift — windowing a write tool
+--- would advertise a destructive "re-run to page" remedy.
+--- @param def ToolDefinition
+--- @return boolean
+function M.is_pageable(def)
+    return def.kind ~= "write" and not def.self_paginates
 end
 
 --- Validate a ToolCall.

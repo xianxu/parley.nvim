@@ -10,6 +10,7 @@
 return {
     name = "read_file",
     kind = "read",
+    self_paginates = true, -- #139: native offset/limit IS the output pager
     description = "Read a file and return its contents with line numbers. Use offset to start from a specific line, limit to cap the number of lines returned (default: all lines).",
     input_schema = {
         type = "object",

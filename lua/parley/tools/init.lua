@@ -28,11 +28,40 @@ end
 --- Registering a name that already exists overwrites silently — the
 --- caller is responsible for ensuring uniqueness when that matters.
 --- @param def ToolDefinition
+-- #139: inject the horizontal output-pager params (offset/limit) into a tool's
+-- input_schema so the agent can page ANY tool's output the same way read_file
+-- pages a file. Skipped for write tools and for self-paginating tools (read_file,
+-- which declares its own). Idempotent — won't clobber an existing param.
+local function inject_pager_params(def)
+    if not types.is_pageable(def) then
+        return
+    end
+    local schema = def.input_schema
+    if type(schema) ~= "table" then
+        return
+    end
+    schema.properties = schema.properties or {}
+    if schema.properties.offset == nil then
+        schema.properties.offset = {
+            type = "integer",
+            description = "Output pager: 1-indexed line to start the returned window at (default 1).",
+        }
+    end
+    if schema.properties.limit == nil then
+        schema.properties.limit = {
+            type = "integer",
+            description = "Output pager: max lines to return (default 200, max 2000). "
+                .. "Re-call with a higher offset to page through, or narrow your query.",
+        }
+    end
+end
+
 function M.register(def)
     local ok, err = types.validate_definition(def)
     if not ok then
         error("parley.tools.register: " .. err)
     end
+    inject_pager_params(def)
     registry[def.name] = def
 end
 

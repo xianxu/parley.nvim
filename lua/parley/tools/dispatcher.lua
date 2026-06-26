@@ -22,6 +22,8 @@
 
 local M = {}
 
+local types = require("parley.tools.types")
+
 --------------------------------------------------------------------------------
 -- Path resolution
 --------------------------------------------------------------------------------
@@ -145,6 +147,46 @@ function M.truncate(content, max_bytes)
     return content:sub(1, max_bytes) .. string.format("\n... [truncated: %d bytes omitted]", omitted)
 end
 
+-- #139: horizontal output pager. Window `content` to lines [offset, offset+limit)
+-- (offset 1-indexed) and, when the window doesn't cover the whole output, append a
+-- footer naming the true total + how to page/narrow. Pure. Returns the windowed
+-- string (with footer) and the total line count.
+M.PAGE_DEFAULT_LIMIT = 200
+M.PAGE_MAX_LIMIT = 2000
+
+function M.page_lines(content, offset, limit)
+    content = content or ""
+    local lines = vim.split(content, "\n", { plain = true })
+    -- A trailing newline yields a spurious empty final element; drop it so the
+    -- count matches the visible lines.
+    if #lines > 1 and lines[#lines] == "" then
+        table.remove(lines)
+    end
+    local total = #lines
+    offset = math.max(1, math.floor(offset or 1))
+    limit = math.max(1, math.floor(limit or M.PAGE_DEFAULT_LIMIT))
+
+    if offset > total then
+        return "... [no lines at offset " .. offset .. "; output has " .. total .. " line(s)]", total
+    end
+
+    local last = math.min(offset + limit - 1, total)
+    local window = {}
+    for i = offset, last do
+        window[#window + 1] = lines[i]
+    end
+    local text = table.concat(window, "\n")
+
+    local windowed = (offset > 1) or (last < total)
+    if windowed then
+        local note = (last < total)
+            and (" — pass offset=" .. (last + 1) .. " for the next page, or narrow your query")
+            or " — end of output"
+        text = text .. "\n... [lines " .. offset .. "-" .. last .. " of " .. total .. note .. "]"
+    end
+    return text, total
+end
+
 --------------------------------------------------------------------------------
 -- Handler invocation
 --------------------------------------------------------------------------------
@@ -214,6 +256,23 @@ function M.execute_call(call, tools_registry, opts)
         end
     end
 
+    -- #139: horizontal output pager. For tools that don't self-paginate, take
+    -- offset/limit out of the input (the handler never sees them) and apply them
+    -- to the handler's OUTPUT below. read_file self_paginates → it pages natively.
+    local page = nil
+    if types.is_pageable(def) then -- #139: non-write, non-self-paginating only
+        local default_limit = opts.page_limit or M.PAGE_DEFAULT_LIMIT
+        local in_limit = tonumber((call.input or {}).limit) or default_limit
+        page = {
+            offset = tonumber((call.input or {}).offset) or 1,
+            limit = math.min(in_limit, M.PAGE_MAX_LIMIT),
+        }
+        if call.input then
+            call.input.offset = nil
+            call.input.limit = nil
+        end
+    end
+
     -- HANDLER invocation, pcall-guarded. A raising handler becomes an
     -- error ToolResult rather than propagating the error up to the
     -- tool loop (which would leave an orphan 🔧: block and break the
@@ -242,9 +301,12 @@ function M.execute_call(call, tools_registry, opts)
     result.id = call.id
     result.name = call.name
 
-    -- Truncate result content to the configured cap. M5 will branch
-    -- here on def.kind == "write" to use truncate_preserving_footer
-    -- for the write_file pre-image metadata line.
+    -- #139: window the output (pager) for non-self-paginating tools, then byte-cap
+    -- as the backstop for pathological single lines. M5 will branch here on
+    -- def.kind == "write" to use truncate_preserving_footer for write_file.
+    if page and not result.is_error then
+        result.content = (M.page_lines(result.content or "", page.offset, page.limit))
+    end
     if opts.max_bytes then
         result.content = M.truncate(result.content or "", opts.max_bytes)
     end
