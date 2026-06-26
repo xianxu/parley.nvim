@@ -314,6 +314,17 @@ M.format_deps = function(deps)
     return "[" .. table.concat(deps, ", ") .. "]"
 end
 
+-- Short repo label (basename) from a git-root path, for the issue-create prompt
+-- (#142). Pure: trailing slashes stripped, last path segment returned; nil/empty
+-- → "?" so the prompt always renders.
+M.repo_label = function(git_root)
+    if not git_root or git_root == "" then
+        return "?"
+    end
+    local stripped = git_root:gsub("/+$", "")
+    return stripped:match("([^/]+)$") or stripped
+end
+
 --------------------------------------------------------------------------------
 -- IO functions (require vim/parley runtime)
 --------------------------------------------------------------------------------
@@ -338,6 +349,22 @@ M.get_issues_dir = function()
     end
 
     return git_root .. "/" .. issues_dir
+end
+
+-- Resolve the git repo root issues are created in — the same root get_issues_dir
+-- resolves against — so the caller can label the destination (#142). Relative
+-- issues_dir → cwd's git root; absolute → the git root above the configured path.
+M.get_issues_repo_root = function()
+    local issues_dir = _parley.config.issues_dir
+    if not issues_dir or issues_dir == "" then
+        return nil
+    end
+    local base = (issues_dir:sub(1, 1) == "/") and issues_dir or vim.fn.getcwd()
+    local root = _parley.helpers.find_git_root(base)
+    if root == "" then
+        root = base
+    end
+    return root
 end
 
 -- Resolve the history directory (repo-local, relative to git root)
@@ -597,7 +624,10 @@ end
 --------------------------------------------------------------------------------
 
 M.cmd_issue_new = function()
-    vim.ui.input({ prompt = "Issue title: " }, function(title)
+    -- #142: show the destination repo so issues don't land in the wrong one
+    -- (issues_dir resolves against the editor's cwd git root).
+    local label = M.repo_label(M.get_issues_repo_root())
+    vim.ui.input({ prompt = "[" .. label .. "] Issue title: " }, function(title)
         if not title or trim(title) == "" then
             return
         end
