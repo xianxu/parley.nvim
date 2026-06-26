@@ -13,7 +13,7 @@ Status values, categories, and lifecycle transitions are loaded at runtime from
 status completion, picker active filtering, status sorting, and status cycling.
 
 ## Commands
-- `:ParleyIssueNew` (`<C-y>c`): create issue with auto-incremented ID
+- `:ParleyIssueNew` (`<C-y>c`): create issue with auto-incremented ID. The title prompt is prefixed with the destination repo — `[<repo>] Issue title: ` — where `<repo>` is the basename of the git root `issues_dir` resolves against (the editor's cwd root), so issues aren't created in the wrong repo (#142)
 - `:ParleyIssueFinder` (`<C-y>f`): float picker with status badges and view mode cycling (active/all/all+history)
 - `:ParleyIssueNext` (`<C-y>x`): open next runnable issue (oldest open with all deps done)
 - `:ParleyIssueStatus` (`<C-y>s`): cycle frontmatter status using the first lifecycle transition for the current status in generated vocabulary order

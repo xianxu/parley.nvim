@@ -626,3 +626,28 @@ describe("find_parent", function()
         assert.equals("000011", parent.id)
     end)
 end)
+
+--------------------------------------------------------------------------------
+-- repo_label (#142)
+--------------------------------------------------------------------------------
+
+describe("repo_label", function()
+    it("returns the basename of a git root", function()
+        assert.equals("parley.nvim", issues.repo_label("/Users/x/workspace/parley.nvim"))
+        assert.equals("brain", issues.repo_label("/Users/x/workspace/brain"))
+    end)
+
+    it("strips trailing slashes", function()
+        assert.equals("pair", issues.repo_label("/Users/x/workspace/pair/"))
+        assert.equals("pair", issues.repo_label("/Users/x/workspace/pair///"))
+    end)
+
+    it("falls back to '?' for nil or empty", function()
+        assert.equals("?", issues.repo_label(nil))
+        assert.equals("?", issues.repo_label(""))
+    end)
+
+    it("handles a bare segment with no slashes", function()
+        assert.equals("repo", issues.repo_label("repo"))
+    end)
+end)
