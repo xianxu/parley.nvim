@@ -244,6 +244,8 @@ function M.process_response(bufnr, raw_response, agent_info, live_model, exchang
     local exec_opts = {
         cwd = agent_info.cwd or vim.fn.getcwd(),
         max_bytes = agent_info.tool_result_max_bytes or 102400,
+        -- #140: extra read-tool roots (global config); write tools ignore it.
+        read_roots = require("parley.config").tool_read_roots,
     }
 
     for _, call in ipairs(tool_calls) do

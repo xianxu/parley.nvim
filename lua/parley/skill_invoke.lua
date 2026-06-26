@@ -215,7 +215,8 @@ function M.invoke(buf, manifest, args, opts)
                             end
                         end
                     end
-                    results[i] = tools_dispatcher.execute_call(call, tools_registry, { cwd = cwd })
+                    results[i] = tools_dispatcher.execute_call(call, tools_registry,
+                        { cwd = cwd, read_roots = require("parley.config").tool_read_roots }) -- #140
                     if call.name == "propose_edits" then
                         if results[i].is_error then
                             table.insert(errors, results[i].content)
