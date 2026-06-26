@@ -74,6 +74,7 @@ Orthogonal to #144 (pure output-side, slices *after* the handler).
   `(text, start, end, total)` — start/end are encoded in the footer; callers/tests
   use two values. Spec line is illustrative; code is the contract.
 
+## Log
 
 - 2026-06-26: closed — tools_dispatcher_spec 44/44 (12 new #139: page_lines windowing/footer/edge cases, execute_call offset/limit strip + window, default + max(2000) clamp, self_paginates opt-out, registry injection skips write/self-paginating); full make test green (exit 0); golden 7/7 re-captured — structural diff confirmed the ONLY payload change is offset/limit added to ls/find/grep/chat_history_search schemas (read_file unchanged via self_paginates); luacheck clean. Horizontal pager: registry injects offset/limit, dispatcher windows non-self_paginates output + footer, byte-cap backstop. Orthogonal to #144. Atlas: tool_use.md Output pager bullet. Actual labeled — active-time found no window.; review verdict: FIX-THEN-SHIP
 ### 2026-06-25
