@@ -1910,6 +1910,35 @@ M.prep_chat = function(buf, file_name)
 	-- the top of this file.
 	local drill_in_cbs = drill_in_callbacks(buf)
 
+	-- #141: in chat buffers, `*`/`#` (and `g*`/`g#`) over a `[...]` anchor search
+	-- the whole bracketed string, so a cursor inside a `[quoted text]` jumps to
+	-- its twin (the decoration left at the source). Outside any bracket, fall
+	-- through to the builtin motion. Buffer-local; not a configurable shortcut,
+	-- so wired directly rather than through the keybinding registry.
+	local function bracket_jump(builtin, back)
+		local line = vim.api.nvim_get_current_line()
+		local b = require("parley.drill_in").bracket_at(line, vim.fn.col("."))
+		if not b then
+			vim.cmd("normal! " .. builtin)
+			return
+		end
+		local pat = "\\V" .. vim.fn.escape(b, "\\")
+		vim.fn.setreg("/", pat)
+		vim.v.searchforward = back and 0 or 1
+		vim.opt.hlsearch = true
+		vim.fn.search(pat, (back and "b" or "") .. "sw")
+	end
+	for _, m in ipairs({
+		{ key = "*", back = false },
+		{ key = "#", back = true },
+		{ key = "g*", back = false },
+		{ key = "g#", back = true },
+	}) do
+		vim.keymap.set("n", m.key, function()
+			bracket_jump(m.key, m.back)
+		end, { buffer = buf, silent = true, desc = "Parley: search whole [...] anchor (#141)" })
+	end
+
 	kb_registry.register_buffer(
 		{ "parley_buffer", "chat" },
 		buf,
