@@ -75,6 +75,11 @@ function M.validate_definition(def)
     if def.needs_backup ~= nil and type(def.needs_backup) ~= "boolean" then
         return fail("definition.needs_backup must be boolean when present")
     end
+    -- #139: a self-paginating tool (read_file) implements the offset/limit output
+    -- pager natively, so the dispatcher neither injects those params nor slices.
+    if def.self_paginates ~= nil and type(def.self_paginates) ~= "boolean" then
+        return fail("definition.self_paginates must be boolean when present")
+    end
     return true
 end
 

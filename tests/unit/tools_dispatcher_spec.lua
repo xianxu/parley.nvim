@@ -219,6 +219,60 @@ describe("truncate", function()
     end)
 end)
 
+describe("page_lines (#139)", function()
+    local function make(n)
+        local t = {}
+        for i = 1, n do t[i] = "L" .. i end
+        return table.concat(t, "\n")
+    end
+
+    it("returns content unchanged with no footer when it fits", function()
+        local text, total = dispatcher.page_lines(make(50), 1, 200)
+        assert.equals(50, total)
+        assert.equals(make(50), text)
+        assert.is_nil(text:match("lines %d"))
+    end)
+
+    it("windows to [offset, offset+limit) and appends a next-page footer", function()
+        local text, total = dispatcher.page_lines(make(1000), 1, 200)
+        assert.equals(1000, total)
+        assert.matches("L200\n", text)
+        assert.is_nil(text:match("L201\n"))
+        assert.matches("lines 1%-200 of 1000", text)
+        assert.matches("offset=201", text)
+    end)
+
+    it("pages a middle window and points at the next page", function()
+        local text = dispatcher.page_lines(make(1000), 201, 200)
+        assert.matches("^L201\n", text)
+        assert.matches("lines 201%-400 of 1000", text)
+        assert.matches("offset=401", text)
+    end)
+
+    it("marks end-of-output on the final window (no next page)", function()
+        local text = dispatcher.page_lines(make(250), 201, 200)
+        assert.matches("lines 201%-250 of 250", text)
+        assert.matches("end of output", text)
+        assert.is_nil(text:match("offset="))
+    end)
+
+    it("reports an empty window when offset is past the end", function()
+        local text, total = dispatcher.page_lines(make(10), 50, 200)
+        assert.equals(10, total)
+        assert.matches("no lines at offset 50", text)
+    end)
+
+    it("drops a spurious trailing-newline line from the count", function()
+        local _, total = dispatcher.page_lines("a\nb\n", 1, 200)
+        assert.equals(2, total)
+    end)
+
+    it("clamps offset/limit to sane minimums", function()
+        local text = dispatcher.page_lines(make(10), 0, 0)
+        assert.matches("^L1", text)
+    end)
+end)
+
 describe("execute_call", function()
     before_each(function()
         registry.reset()
@@ -383,5 +437,68 @@ describe("execute_call", function()
             registry, { cwd = cwd, read_roots = { root } })
         assert.matches("ran: ", res.content)
         assert.equals(false, res.is_error)
+    end)
+
+    local function rows(n, prefix)
+        local t = {}
+        for i = 1, n do t[i] = (prefix or "row") .. i end
+        return table.concat(t, "\n")
+    end
+
+    it("pages output + strips offset/limit from the handler input (#139)", function()
+        local seen
+        registry.register({ name = "lines", kind = "read", description = "x",
+            input_schema = { type = "object" },
+            handler = function(input) seen = input; return { content = rows(1000), is_error = false } end })
+        local res = dispatcher.execute_call(
+            { id = "p1", name = "lines", input = { offset = 1, limit = 5 } }, registry, { page_limit = 200 })
+        assert.is_nil(seen.offset) -- handler never sees pager params
+        assert.is_nil(seen.limit)
+        assert.matches("row5\n", res.content)
+        assert.is_nil(res.content:match("row6\n"))
+        assert.matches("lines 1%-5 of 1000", res.content)
+    end)
+
+    it("applies the configured default page_limit when limit is omitted (#139)", function()
+        registry.register({ name = "big", kind = "read", description = "x",
+            input_schema = { type = "object" },
+            handler = function() return { content = rows(300), is_error = false } end })
+        local res = dispatcher.execute_call(
+            { id = "p2", name = "big", input = {} }, registry, { page_limit = 200 })
+        assert.matches("lines 1%-200 of 300", res.content)
+    end)
+
+    it("clamps a requested limit above the max (#139)", function()
+        registry.register({ name = "huge", kind = "read", description = "x",
+            input_schema = { type = "object" },
+            handler = function() return { content = rows(5000), is_error = false } end })
+        local res = dispatcher.execute_call(
+            { id = "p3", name = "huge", input = { limit = 999999 } }, registry, { page_limit = 200 })
+        assert.matches("lines 1%-2000 of 5000", res.content)
+    end)
+
+    it("does NOT window a self_paginates tool (read_file-style) (#139)", function()
+        registry.register({ name = "selfpage", kind = "read", self_paginates = true, description = "x",
+            input_schema = { type = "object" },
+            handler = function(input)
+                return { content = "off=" .. tostring(input.offset) .. "\n" .. rows(1000), is_error = false }
+            end })
+        local res = dispatcher.execute_call(
+            { id = "p4", name = "selfpage", input = { offset = 7, limit = 3 } }, registry, { page_limit = 200 })
+        assert.matches("off=7", res.content) -- handler saw offset (not stripped)
+        assert.is_nil(res.content:match("lines %d+%-%d+ of")) -- no dispatcher pager footer
+    end)
+
+    it("registry injects offset/limit into read tools, not write/self-paginating (#139)", function()
+        registry.register({ name = "rd", kind = "read", description = "x",
+            input_schema = { type = "object", properties = {} }, handler = function() return { content = "" } end })
+        registry.register({ name = "wr", kind = "write", description = "x",
+            input_schema = { type = "object", properties = {} }, handler = function() return { content = "" } end })
+        registry.register({ name = "sp", kind = "read", self_paginates = true, description = "x",
+            input_schema = { type = "object", properties = {} }, handler = function() return { content = "" } end })
+        assert.is_not_nil(registry.get("rd").input_schema.properties.offset)
+        assert.is_not_nil(registry.get("rd").input_schema.properties.limit)
+        assert.is_nil(registry.get("wr").input_schema.properties.offset)
+        assert.is_nil(registry.get("sp").input_schema.properties.offset)
     end)
 end)

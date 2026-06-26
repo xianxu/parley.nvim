@@ -246,6 +246,8 @@ function M.process_response(bufnr, raw_response, agent_info, live_model, exchang
         max_bytes = agent_info.tool_result_max_bytes or 102400,
         -- #140: extra read-tool roots (global config); write tools ignore it.
         read_roots = require("parley.config").tool_read_roots,
+        -- #139: default output-pager page size; the dispatcher windows results.
+        page_limit = require("parley.config").tool_result_page_lines,
     }
 
     for _, call in ipairs(tool_calls) do
