@@ -132,6 +132,69 @@ describe("resolve_path_in_cwd", function()
     end)
 end)
 
+describe("resolve_path_in_cwd allowed_roots (#140)", function()
+    local cwd, root
+    before_each(function()
+        local n = math.random(0, 0xFFFFFF)
+        cwd = tmp_base .. "/cwd140-" .. n
+        root = tmp_base .. "/root140-" .. n -- a sibling dir to allow
+        vim.fn.mkdir(cwd, "p")
+        vim.fn.mkdir(root, "p")
+    end)
+
+    it("accepts a file inside an absolute allowed root", function()
+        local target = root .. "/readme.md"
+        vim.fn.writefile({ "hi" }, target)
+        local abs, err = dispatcher.resolve_path_in_cwd(target, cwd, { root })
+        assert.is_nil(err)
+        assert.equals(canonical(target), abs)
+    end)
+
+    it("accepts a path reached via a relative-to-cwd root (../sibling)", function()
+        local target = root .. "/readme.md"
+        vim.fn.writefile({ "hi" }, target)
+        local rel_root = "../" .. vim.fs.basename(root)
+        local abs, err = dispatcher.resolve_path_in_cwd(target, cwd, { rel_root })
+        assert.is_nil(err)
+        assert.equals(canonical(target), abs)
+    end)
+
+    it("rejects a path outside cwd and all configured roots, naming the knob", function()
+        local outside = tmp_base .. "/elsewhere140-" .. math.random(0, 0xFFFFFF) .. ".txt"
+        vim.fn.writefile({ "no" }, outside)
+        local abs, err = dispatcher.resolve_path_in_cwd(outside, cwd, { root })
+        assert.is_nil(abs)
+        assert.matches("configured read roots", err)
+        assert.matches("tool_read_roots", err)
+    end)
+
+    it("accepts a symlink in cwd whose real path is inside an allowed root", function()
+        local target = root .. "/real.md"
+        vim.fn.writefile({ "x" }, target)
+        vim.loop.fs_symlink(target, cwd .. "/link.md")
+        local abs, err = dispatcher.resolve_path_in_cwd("link.md", cwd, { root })
+        assert.is_nil(err)
+        assert.equals(canonical(target), abs)
+    end)
+
+    it("rejects a symlink whose real path escapes cwd and all roots", function()
+        local outside = tmp_base .. "/secret140-" .. math.random(0, 0xFFFFFF) .. ".txt"
+        vim.fn.writefile({ "secret" }, outside)
+        vim.loop.fs_symlink(outside, cwd .. "/escape.md")
+        local abs, err = dispatcher.resolve_path_in_cwd("escape.md", cwd, { root })
+        assert.is_nil(abs)
+        assert.matches("configured read roots", err)
+    end)
+
+    it("empty roots list scopes to cwd but still reports the read-roots hint", function()
+        local outside = tmp_base .. "/x140-" .. math.random(0, 0xFFFFFF) .. ".txt"
+        vim.fn.writefile({ "no" }, outside)
+        local abs, err = dispatcher.resolve_path_in_cwd(outside, cwd, {})
+        assert.is_nil(abs)
+        assert.matches("tool_read_roots", err)
+    end)
+end)
+
 describe("truncate", function()
     it("returns content unchanged when under the byte cap", function()
         assert.equals("hello", dispatcher.truncate("hello", 100))
@@ -263,5 +326,35 @@ describe("execute_call", function()
         )
         assert.equals("toolu_07", result.id)
         assert.is_true(result.is_error)
+    end)
+
+    it("read tools reach configured read_roots; write tools stay cwd-confined (#140)", function()
+        local n = math.random(0, 0xFFFFFF)
+        local cwd = tmp_base .. "/gate-cwd-" .. n
+        local root = tmp_base .. "/gate-root-" .. n
+        vim.fn.mkdir(cwd, "p")
+        vim.fn.mkdir(root, "p")
+        local target = root .. "/doc.md"
+        vim.fn.writefile({ "x" }, target)
+
+        local echo_path = function(input)
+            return { content = "ran: " .. (input.file_path or ""), is_error = false }
+        end
+        registry.register({ name = "rd", kind = "read", description = "r",
+            input_schema = { type = "object" }, handler = echo_path })
+        registry.register({ name = "wr", kind = "write", description = "w",
+            input_schema = { type = "object" }, handler = echo_path })
+
+        local opts = { cwd = cwd, read_roots = { root } }
+        -- READ tool: the configured root is honored → handler runs on the file.
+        local rd = dispatcher.execute_call(
+            { id = "g1", name = "rd", input = { file_path = target } }, registry, opts)
+        assert.matches("ran: ", rd.content)
+        assert.equals(false, rd.is_error)
+        -- WRITE tool: same path + same roots, but writes ignore read_roots → rejected.
+        local wr = dispatcher.execute_call(
+            { id = "g2", name = "wr", input = { file_path = target } }, registry, opts)
+        assert.is_true(wr.is_error)
+        assert.matches("outside working directory", wr.content)
     end)
 end)

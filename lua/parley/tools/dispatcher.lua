@@ -46,7 +46,26 @@ local M = {}
 --- @param cwd string
 --- @return string|nil abs_path
 --- @return string|nil err_msg
-function M.resolve_path_in_cwd(path, cwd)
+-- Resolve a configured read root to a canonical absolute path. Roots may be
+-- absolute (`/x`), home-relative (`~/x`, `~` expanded), or relative to cwd
+-- (`../`, `sub/dir`). Returns the realpath, the normalized path if it does not
+-- resolve, or nil for an invalid root. (#140)
+local function resolve_root(root, cwd)
+    if type(root) ~= "string" or root == "" then
+        return nil
+    end
+    if root:sub(1, 1) == "~" then
+        root = vim.fn.expand(root)
+    end
+    local abs = root:sub(1, 1) == "/" and vim.fs.normalize(root)
+        or vim.fs.normalize(cwd .. "/" .. root)
+    return vim.loop.fs_realpath(abs) or abs
+end
+
+--- `allowed_roots` (read tools only, #140): extra roots a path may resolve
+--- under, in addition to cwd. Each is resolved + symlink-canonicalized, so a
+--- symlink escaping every root is still rejected. nil/empty → cwd-only.
+function M.resolve_path_in_cwd(path, cwd, allowed_roots)
     if type(path) ~= "string" or path == "" then
         return nil, "path must be a non-empty string"
     end
@@ -77,14 +96,28 @@ function M.resolve_path_in_cwd(path, cwd)
     -- absolute paths (handles symlinked /tmp → /private/tmp on macOS).
     local real_cwd = vim.loop.fs_realpath(cwd) or vim.fs.normalize(cwd)
 
-    -- A path is inside cwd iff it equals cwd OR starts with cwd + "/".
-    -- String comparison is safe because both sides are canonical
-    -- absolute paths produced by fs_realpath.
-    if real_path ~= real_cwd and real_path:sub(1, #real_cwd + 1) ~= real_cwd .. "/" then
-        return nil, "path outside working directory: " .. path
+    -- Allowed base dirs: cwd, plus any configured read roots (#140). A path is
+    -- inside a base iff it equals the base OR starts with base + "/". String
+    -- comparison is safe because both sides are canonical fs_realpath outputs.
+    local bases = { real_cwd }
+    for _, root in ipairs(allowed_roots or {}) do
+        local r = resolve_root(root, cwd)
+        if r then
+            table.insert(bases, r)
+        end
     end
 
-    return real_path
+    for _, base in ipairs(bases) do
+        if real_path == base or real_path:sub(1, #base + 1) == base .. "/" then
+            return real_path
+        end
+    end
+
+    if allowed_roots then
+        return nil, "path outside working directory and configured read roots: "
+            .. path .. " (add a root to parley `tool_read_roots` to allow it)"
+    end
+    return nil, "path outside working directory: " .. path
 end
 
 --------------------------------------------------------------------------------
@@ -148,8 +181,9 @@ function M.execute_call(call, tools_registry, opts)
     end
 
     -- SHARED PRELUDE: cwd-scope check for any tool whose input has a
-    -- `path` string field. Applies uniformly to read and write tools
-    -- (M5 adds write-specific additional guards on top of this).
+    -- `path` string field. Read tools additionally honor configured
+    -- `tool_read_roots` (#140); write tools stay cwd-confined.
+    -- (M5 adds write-specific additional guards on top of this.)
     --
     -- `opts.cwd` is optional — the tool_loop passes it explicitly so
     -- the dispatcher does not need to know about vim.fn.getcwd() from
@@ -160,7 +194,10 @@ function M.execute_call(call, tools_registry, opts)
     local path_fields = { "path", "file_path" }
     for _, field in ipairs(path_fields) do
         if opts.cwd and call.input and type(call.input[field]) == "string" then
-            local abs, scope_err = M.resolve_path_in_cwd(call.input[field], opts.cwd)
+            -- #140: read tools (def.kind == "read") may also reach any
+            -- configured `tool_read_roots`; write tools get nil → cwd-only.
+            local roots = (def.kind == "read") and (opts.read_roots or {}) or nil
+            local abs, scope_err = M.resolve_path_in_cwd(call.input[field], opts.cwd, roots)
             if not abs then
                 return {
                     id = call.id,

@@ -394,6 +394,11 @@ local config = {
 	chat_tool_use_prefix = "🔧:",
 	-- tool result prefix (parley's response to a tool_use, or synthetic cancel/cap marker)
 	chat_tool_result_prefix = "📎:",
+	-- #140: extra roots READ tools (read_file/ls/find/grep/ack) may reach beyond
+	-- cwd. Each entry: absolute (`/x`), home (`~/workspace`, ~ expanded), or
+	-- relative to cwd (`../`). Empty = cwd-only (the default sandbox). Write tools
+	-- (edit_file/write_file) stay cwd-confined regardless of this setting.
+	tool_read_roots = {},
 	-- The banner shown at the top of each chat file.
 	chat_template = require("parley.defaults").short_chat_template,
 	-- if you want more real estate in your chat files and don't need the helper text
