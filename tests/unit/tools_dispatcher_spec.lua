@@ -439,6 +439,63 @@ describe("execute_call", function()
         assert.equals(false, res.is_error)
     end)
 
+    it("canonicalizes every element of a read tool's paths array (#144)", function()
+        local n = math.random(0, 0xFFFFFF)
+        local cwd = tmp_base .. "/paths-cwd-" .. n
+        vim.fn.mkdir(cwd, "p")
+        vim.fn.mkdir(cwd .. "/sub", "p")
+        local one = cwd .. "/one.txt"
+        local two = cwd .. "/sub/two.txt"
+        vim.fn.writefile({ "one" }, one)
+        vim.fn.writefile({ "two" }, two)
+
+        registry.register({
+            name = "paths_read",
+            kind = "read",
+            description = "reads paths",
+            input_schema = { type = "object" },
+            handler = function(input)
+                return { content = table.concat(input.paths, "\n"), is_error = false }
+            end,
+        })
+
+        local res = dispatcher.execute_call(
+            { id = "pa1", name = "paths_read", input = { paths = { "one.txt", "sub/../sub/two.txt" } } },
+            registry,
+            { cwd = cwd }
+        )
+        assert.is_false(res.is_error)
+        assert.truthy(res.content:find(canonical(one), 1, true))
+        assert.truthy(res.content:find(canonical(two), 1, true))
+    end)
+
+    it("rejects a read tool's paths array when any element escapes (#144)", function()
+        local n = math.random(0, 0xFFFFFF)
+        local cwd = tmp_base .. "/paths-escape-cwd-" .. n
+        vim.fn.mkdir(cwd, "p")
+        local outside = tmp_base .. "/paths-outside-" .. n .. ".txt"
+        vim.fn.writefile({ "outside" }, outside)
+
+        registry.register({
+            name = "paths_read_escape",
+            kind = "read",
+            description = "reads paths",
+            input_schema = { type = "object" },
+            handler = function()
+                return { content = "should not run", is_error = false }
+            end,
+        })
+
+        local res = dispatcher.execute_call(
+            { id = "pa2", name = "paths_read_escape", input = { paths = { "missing.txt", outside } } },
+            registry,
+            { cwd = cwd, read_roots = {} }
+        )
+        assert.is_true(res.is_error)
+        assert.matches("tool_read_roots", res.content)
+        assert.not_matches("should not run", res.content)
+    end)
+
     local function rows(n, prefix)
         local t = {}
         for i = 1, n do t[i] = (prefix or "row") .. i end
