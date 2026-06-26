@@ -1922,10 +1922,15 @@ M.prep_chat = function(buf, file_name)
 			vim.cmd("normal! " .. builtin)
 			return
 		end
+		-- Set the search register (like builtin `*`) and jump; let the user's own
+		-- `hlsearch` setting govern highlight — don't force the global flag on
+		-- (the fall-through path doesn't either, so this keeps both consistent).
+		-- Backward (`#`/`g#`) from mid-bracket first lands on the current span's
+		-- `[`, so reaching the twin can take a second press — acceptable for the
+		-- two-occurrence anchor/twin case this targets.
 		local pat = "\\V" .. vim.fn.escape(b, "\\")
 		vim.fn.setreg("/", pat)
 		vim.v.searchforward = back and 0 or 1
-		vim.opt.hlsearch = true
 		vim.fn.search(pat, (back and "b" or "") .. "sw")
 	end
 	for _, m in ipairs({

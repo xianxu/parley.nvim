@@ -180,6 +180,13 @@ to the builtin motion via `normal!`. Wired directly in `prep_chat`
 (chat-buffer-local), not through the registry, so they don't apply in plain
 markdown buffers.
 
+Known boundaries (single-line by design): `bracket_at` reads only the cursor
+line, so a `[…]` spanning multiple lines (a multi-line quote rendered `> [line1`
+… `> lineN]`) is not recognized and falls through to the builtin motion. A
+truncated inferred anchor (`generate_snippet` ellipsis) won't string-match its
+source span, so `*` finds no twin there. Both are acceptable for the common
+single-line `[quoted text]` ↔ `[T]` twin case this targets.
+
 Accept/reject semantics (the full table) live in the canonical [review-convention target](../../../ariadne/workshop/targets/review-convention.md) §5. In summary:
 
 - `<X>` anchor → X preserved (both modes)
