@@ -226,3 +226,14 @@ Run:
 ```
 
 Use `--no-atlas` only if no atlas surface changed; this plan expects an atlas update, so the normal close should apply.
+
+## Revisions
+
+### 2026-06-26T11:45:00-0700
+
+- Reason: boundary review found the `flags` allowlist was bypassable through
+  `grep.pattern`: ripgrep/grep parse dash-leading pattern positionals as options
+  unless argv includes an end-of-options separator.
+- Delta: add `--` before grep pattern/path positionals, add regression tests for
+  `pattern = "--files"` and `pattern = "--pre=/bin/echo"`, and route omitted
+  grep paths through dispatcher `default_path = "."` confinement.

@@ -244,6 +244,10 @@ function M.execute_call(call, tools_registry, opts)
     end
 
     local path_fields = { "path", "file_path" }
+    if opts.cwd and call.input and def.default_path and call.input.path == nil
+        and call.input.file_path == nil and call.input.paths == nil then
+        call.input.path = def.default_path
+    end
     for _, field in ipairs(path_fields) do
         if opts.cwd and call.input and type(call.input[field]) == "string" then
             local roots = roots_for_def()

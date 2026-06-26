@@ -7,6 +7,7 @@ created: 2026-06-26
 updated: 2026-06-26
 estimate_hours: 4.0
 started: 2026-06-26T09:28:30-07:00
+actual_hours: 3.0
 ---
 
 # tool input safety: ls/grep/find shell injection + cwd escape
@@ -116,6 +117,8 @@ total: 4.0
 ## Log
 
 ### 2026-06-26
+- 2026-06-26: closed — judgment actual 3.0h because sdlc actual found no measurable activity; verified make test-spec SPEC=providers/tool_use, make test, and make lint all passed; review verdict: REWORK
+- 2026-06-26: reopened — boundary review found `grep.pattern` could be parsed as an option without an argv `--` separator.
 
 - Ran `/Users/xianxu/workspace/ariadne/bin/sdlc start-plan --issue 144`; design must satisfy `ARCH-DRY`, `ARCH-PURE`, and `ARCH-PURPOSE`.
 - Design decision: keep familiar `ls`/`grep`/`find` tool names and command-like flags, but replace raw shell fragments with structured argv fields plus conservative validation. Defer pipe composition rather than shipping a brittle shell parser.
@@ -136,6 +139,13 @@ total: 4.0
   golden payload fixtures for the changed tool schemas.
 - Verification: `make test-spec SPEC=providers/tool_use` passed; `make test`
   passed; `make lint` passed.
+- Fixed boundary-review REWORK: `grep` now inserts `--` before pattern/path
+  positionals, so dash-leading patterns like `--files` and `--pre=/bin/echo`
+  are searched literally rather than parsed as options. Added regression tests
+  for that vector.
+- Added dispatcher `default_path` support so `grep`'s omitted `path` defaults to
+  `"."` before cwd/read-root canonicalization, not inside the handler after the
+  path prelude.
 
 ## Revisions
 

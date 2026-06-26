@@ -496,6 +496,31 @@ describe("execute_call", function()
         assert.not_matches("should not run", res.content)
     end)
 
+    it("canonicalizes a read tool's default_path before handler execution (#144)", function()
+        local n = math.random(0, 0xFFFFFF)
+        local cwd = tmp_base .. "/default-path-cwd-" .. n
+        vim.fn.mkdir(cwd, "p")
+
+        registry.register({
+            name = "default_path_read",
+            kind = "read",
+            default_path = ".",
+            description = "reads default path",
+            input_schema = { type = "object" },
+            handler = function(input)
+                return { content = input.path, is_error = false }
+            end,
+        })
+
+        local res = dispatcher.execute_call(
+            { id = "dp1", name = "default_path_read", input = {} },
+            registry,
+            { cwd = cwd }
+        )
+        assert.is_false(res.is_error)
+        assert.equals(canonical(cwd), res.content)
+    end)
+
     local function rows(n, prefix)
         local t = {}
         for i = 1, n do t[i] = (prefix or "row") .. i end

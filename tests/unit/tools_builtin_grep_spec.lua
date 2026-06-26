@@ -57,6 +57,18 @@ describe("grep tool", function()
         assert.not_matches("PARLEY_SENTINEL_144", r.content)
     end)
 
+    it("treats dash-leading patterns as data, not options", function()
+        local r = handler({ pattern = "--files", path = "lua/parley/config.lua" })
+        assert.is_false(r.is_error)
+        assert.truthy(r.content:match("no matches"))
+    end)
+
+    it("does not allow command-execution flags through the pattern positional", function()
+        local r = handler({ pattern = "--pre=/bin/echo", path = "lua/parley/config.lua" })
+        assert.is_false(r.is_error)
+        assert.not_matches("config%.lua", r.content)
+    end)
+
     it("rejects ripgrep command execution flags", function()
         for _, flag in ipairs({ "--pre", "--pre-glob", "--hostname-bin" }) do
             local r = handler({ pattern = "x", path = ".", flags = { flag, "echo PARLEY_SENTINEL_144" } })

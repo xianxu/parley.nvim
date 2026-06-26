@@ -62,6 +62,7 @@ end
 return {
     name = "grep",
     kind = "read",
+    default_path = ".",
     description = build_description(),
     input_schema = {
         type = "object",
@@ -195,6 +196,7 @@ return {
         if grep_cmd == "grep" then
             cmd[#cmd + 1] = "-r"
         end
+        cmd[#cmd + 1] = "--"
         cmd[#cmd + 1] = pattern
         local ok, path_err = argv.append_path_args(cmd, input.paths or input.path or ".")
         if not ok then
