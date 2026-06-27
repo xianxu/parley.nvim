@@ -1,12 +1,13 @@
 ---
 id: 000150
-status: working
+status: done
 deps: []
 github_issue:
 created: 2026-06-27
 updated: 2026-06-27
 started: 2026-06-27T12:17:27-07:00
 estimate_hours: 0.85
+actual_hours: 0.08
 ---
 
 # tighten repo-mode luabar display
@@ -69,6 +70,7 @@ Produced via `brain/data/life/42shots/velocity/estimate-logic-v2.md` against
 ## Log
 
 ### 2026-06-27
+- 2026-06-27: closed — make test passed (lint 0 warnings/0 errors; unit, integration, and arch tests passed); make test-spec SPEC=ui/lualine passed; review verdict: FIX-THEN-SHIP
 
 - Follow-up to #148 from live luabar use: keep the visible branch separator and
   reclaim statusline space in repo mode by hiding cwd and filename components.

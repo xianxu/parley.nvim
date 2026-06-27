@@ -477,6 +477,49 @@ describe("super_repo.toggle", function()
 		assert.equal(1, table_component.path)
 	end)
 
+	it("lualine.setup hides configured filename components in repo mode", function()
+		local lualine = require("parley.lualine")
+		local old_lualine = package.loaded["lualine"]
+		local captured_config
+
+		package.loaded["lualine"] = {
+			get_config = function()
+				return {
+					sections = {
+						lualine_c = {
+							"filename",
+							{ "filename", path = 1 },
+							"branch",
+						},
+					},
+				}
+			end,
+			setup = function(config)
+				captured_config = config
+			end,
+			refresh = function() end,
+		}
+
+		lualine.setup({
+			config = {
+				repo_root = "/tmp/some/repo",
+				lualine = { enable = false },
+			},
+			_state = {},
+		})
+
+		assert.is_true(vim.wait(1000, function() return captured_config ~= nil end, 20))
+		local components = captured_config.sections.lualine_c
+		assert.is_function(components[1][1])
+		assert.equal("", components[1][1]())
+		assert.is_function(components[2][1])
+		assert.equal("", components[2][1]())
+		assert.equal(1, components[2].path)
+		assert.equal("branch", components[3][1])
+
+		package.loaded["lualine"] = old_lualine
+	end)
+
 	it("fires User ParleySuperRepoChanged on toggle on and off", function()
 		local fired = 0
 		local augroup = vim.api.nvim_create_augroup("ParleySuperRepoSpec", { clear = true })
