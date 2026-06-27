@@ -471,10 +471,16 @@ describe("super_repo.toggle", function()
 		local table_component = lualine.create_filename_component(repo_parley, {
 			"filename",
 			path = 1,
+			fmt = function() return "VISIBLE" end,
+			icon = "file",
+			draw_empty = true,
 		})
 		assert.is_function(table_component[1])
 		assert.equal("", table_component[1]())
-		assert.equal(1, table_component.path)
+		assert.is_nil(table_component.path)
+		assert.is_nil(table_component.fmt)
+		assert.is_nil(table_component.icon)
+		assert.is_nil(table_component.draw_empty)
 	end)
 
 	it("lualine.setup hides configured filename components in repo mode", function()
@@ -488,7 +494,13 @@ describe("super_repo.toggle", function()
 					sections = {
 						lualine_c = {
 							"filename",
-							{ "filename", path = 1 },
+							{
+								"filename",
+								path = 1,
+								fmt = function() return "VISIBLE" end,
+								icon = "file",
+								draw_empty = true,
+							},
 							"branch",
 						},
 					},
@@ -514,7 +526,10 @@ describe("super_repo.toggle", function()
 		assert.equal("", components[1][1]())
 		assert.is_function(components[2][1])
 		assert.equal("", components[2][1]())
-		assert.equal(1, components[2].path)
+		assert.is_nil(components[2].path)
+		assert.is_nil(components[2].fmt)
+		assert.is_nil(components[2].icon)
+		assert.is_nil(components[2].draw_empty)
 		assert.equal("branch", components[3][1])
 
 		package.loaded["lualine"] = old_lualine

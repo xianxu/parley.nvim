@@ -112,15 +112,7 @@ M.create_filename_component = function(parley_instance, component)
     return component
   end
 
-  local hidden = { function() return "" end }
-  if type(component) == "table" then
-    for k, v in pairs(component) do
-      if k ~= 1 then
-        hidden[k] = v
-      end
-    end
-  end
-  return hidden
+  return { function() return "" end }
 end
 
 -- Lualine component returning the mode glyph. Designed as a drop-in replacement
