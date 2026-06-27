@@ -64,7 +64,7 @@ Produced via `brain/data/life/42shots/velocity/estimate-logic-v2.md` against
 - [x] Implement the pure predicate/formatting changes and lualine filename
   wrapper.
 - [x] Run focused lualine tests and the broader verification gate.
-- [ ] Close through `sdlc close` with verification evidence.
+- [x] Close through `sdlc close` with verification evidence.
 
 ## Log
 
