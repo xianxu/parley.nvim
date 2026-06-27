@@ -11,7 +11,12 @@
 - `05min`: interview elapsed timer
 - Optional cache/token metrics
 - Mode glyph (`○` / `⊚` / `⦿`) when filetype auto-replace is on; refreshes on `User ParleySuperRepoChanged`
+- Existing lualine `branch` components are kept as lualine branch components,
+  but Parley wraps their `fmt` callback to shorten long display labels: first
+  word before space/`-`/`_`, capped at 10 characters, plus `...` when shortened.
+  The underlying git branch name is not changed.
 
 ## Manual Integration
 - `require('parley.lualine').create_component()` for custom positioning
 - `require('parley.lualine').create_mode_component()` for the mode glyph (use with `replace_filetype = false`)
+- `require('parley.lualine').format_branch_label()` for the branch display rule

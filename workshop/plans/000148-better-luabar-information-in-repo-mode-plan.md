@@ -42,7 +42,7 @@ The lualine setup should render the compact label while leaving git, issue files
 - Modify: `tests/unit/super_repo_spec.lua`
 - Modify: `lua/parley/lualine.lua`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add assertions that `require("parley.lualine").format_branch_label` returns:
 
@@ -51,15 +51,22 @@ assert.equal("000149...", lualine.format_branch_label("000149-harden-chat-histor
 assert.equal("main", lualine.format_branch_label("main"))
 assert.equal("abcdefghij...", lualine.format_branch_label("abcdefghijklmno"))
 assert.equal("release...", lualine.format_branch_label("release_candidate"))
+assert.equal("", lualine.format_branch_label(nil))
+assert.equal("", lualine.format_branch_label(""))
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
-Run: `make test-spec SPEC=super_repo`
+Run:
 
-Expected: FAIL because `format_branch_label` does not exist yet.
+```bash
+mkdir -p .test-home .test-xdg/data .test-xdg/state .test-xdg/cache .test-tmp
+HOME="$PWD/.test-home" XDG_DATA_HOME="$PWD/.test-xdg/data" XDG_STATE_HOME="$PWD/.test-xdg/state" XDG_CACHE_HOME="$PWD/.test-xdg/cache" TMPDIR="$PWD/.test-tmp" NVIM_TEST_PLENARY="/Users/xianxu/.local/share/nvim/lazy/plenary.nvim" nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/super_repo_spec.lua" -c "qa!"
+```
 
-- [ ] **Step 3: Implement the formatter**
+Expected: FAIL because `format_branch_label` and `create_branch_component` do not exist yet.
+
+- [x] **Step 3: Implement the formatter**
 
 In `lua/parley/lualine.lua`, add `M.format_branch_label(branch)`:
 
@@ -68,18 +75,18 @@ In `lua/parley/lualine.lua`, add `M.format_branch_label(branch)`:
 - Cap the selected token at 10 characters.
 - Append `...` only when the label is shorter than the original input.
 
-- [ ] **Step 4: Wire branch display**
+- [x] **Step 4: Wire branch display**
 
-Find the existing luabar branch display code and call `M.format_branch_label` at the display boundary only.
+Wrap existing lualine `branch` components in `M.create_branch_component`, composing any existing `fmt` callback and applying `M.format_branch_label` at the display boundary only.
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
-Run: `make test-spec SPEC=super_repo`
+Run the direct Plenary file command from Step 2 again.
 
 Expected: PASS.
 
-- [ ] **Step 6: Broader verification**
+- [x] **Step 6: Broader verification**
 
 Run: `make test` and `make lint`.
 
-Expected: PASS.
+Expected: PASS. `make test` includes lint in this repo; it passed with 0 warnings / 0 errors and all unit, integration, and arch tests green. `make test-spec SPEC=ui/lualine` also passed after the traceability mapping was updated.
