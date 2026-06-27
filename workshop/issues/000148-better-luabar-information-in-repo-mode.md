@@ -58,9 +58,9 @@ Produced via `brain/data/life/42shots/velocity/estimate-logic-v2.md` against
 
 ## Plan
 
-- [ ] Add failing unit coverage for the luabar branch-label formatter.
-- [ ] Implement the pure formatter and wire repo-mode branch display through it.
-- [ ] Run focused tests, then the relevant broader suite/lint gate.
+- [x] Add failing unit coverage for the luabar branch-label formatter.
+- [x] Implement the pure formatter and wire repo-mode branch display through it.
+- [x] Run focused tests, then the relevant broader suite/lint gate.
 - [ ] Close through `sdlc close` with verification evidence.
 
 ## Log
@@ -69,3 +69,12 @@ Produced via `brain/data/life/42shots/velocity/estimate-logic-v2.md` against
 
 - Claimed #148 after #149 branch display made the long SDLC branch slug look like
   an issue filename. Design keeps shortening strictly at the luabar display layer.
+- TDD red: direct Plenary run of `tests/unit/super_repo_spec.lua` failed on
+  missing `format_branch_label` / `create_branch_component`. The planned
+  `make test-spec SPEC=super_repo` key is not mapped in `atlas/traceability.yaml`.
+- TDD green: direct Plenary run of `tests/unit/super_repo_spec.lua` passed after
+  adding the pure formatter and lualine branch-component wrapper.
+- Verification: `make test` passed, including lint with 0 warnings / 0 errors,
+  unit tests, integration tests, and arch tests. `make test-spec SPEC=ui/lualine`
+  also passed after adding the traceability mapping for the lualine formatter
+  coverage.

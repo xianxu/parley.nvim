@@ -412,6 +412,7 @@ atlas:
     code:
       - lua/parley/lualine.lua
     tests:
+      - tests/unit/super_repo_spec.lua
       - tests/unit/render_spec.lua
       - tests/unit/pure_functions_spec.lua
 

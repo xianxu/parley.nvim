@@ -409,6 +409,36 @@ describe("super_repo.toggle", function()
 		assert.equal("⦿", lualine.format_mode(super_parley))
 	end)
 
+	it("lualine.format_branch_label shortens long SDLC branch names for display", function()
+		local lualine = require("parley.lualine")
+
+		assert.equal("000149...", lualine.format_branch_label("000149-harden-chat-history-search-shell-out-inputs"))
+		assert.equal("main", lualine.format_branch_label("main"))
+		assert.equal("abcdefghij...", lualine.format_branch_label("abcdefghijklmno"))
+		assert.equal("release...", lualine.format_branch_label("release_candidate"))
+		assert.equal("", lualine.format_branch_label(nil))
+		assert.equal("", lualine.format_branch_label(""))
+	end)
+
+	it("lualine.create_branch_component preserves lualine branch detection and shortens display text", function()
+		local lualine = require("parley.lualine")
+
+		local string_component = lualine.create_branch_component("branch")
+		assert.equal("branch", string_component[1])
+		assert.equal("000149...", string_component.fmt("000149-harden-chat-history-search-shell-out-inputs"))
+
+		local table_component = lualine.create_branch_component({
+			"branch",
+			icon = "git",
+			fmt = function(branch)
+				return branch .. "_dirty"
+			end,
+		})
+		assert.equal("branch", table_component[1])
+		assert.equal("git", table_component.icon)
+		assert.equal("000149...", table_component.fmt("000149-harden-chat-history-search-shell-out-inputs"))
+	end)
+
 	it("fires User ParleySuperRepoChanged on toggle on and off", function()
 		local fired = 0
 		local augroup = vim.api.nvim_create_augroup("ParleySuperRepoSpec", { clear = true })

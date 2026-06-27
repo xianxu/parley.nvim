@@ -62,6 +62,44 @@ M.format_mode = function(parley_instance)
   return "○"
 end
 
+M.format_branch_label = function(branch)
+  if not branch or branch == "" then return "" end
+
+  local label = branch
+  local separator = branch:find("[%s%-%_]")
+  if separator and separator > 1 then
+    label = branch:sub(1, separator - 1)
+  end
+  if #label > 10 then
+    label = label:sub(1, 10)
+  end
+  if #label < #branch then
+    return label .. "..."
+  end
+  return label
+end
+
+M.create_branch_component = function(component)
+  local next_component
+  if component == "branch" then
+    next_component = { "branch" }
+  else
+    next_component = {}
+    for k, v in pairs(component) do
+      next_component[k] = v
+    end
+  end
+
+  local existing_fmt = next_component.fmt
+  next_component.fmt = function(branch, ...)
+    if type(existing_fmt) == "function" then
+      branch = existing_fmt(branch, ...)
+    end
+    return M.format_branch_label(branch)
+  end
+  return next_component
+end
+
 -- Lualine component returning the mode glyph. Designed as a drop-in replacement
 -- for the user's `filetype` component.
 M.create_mode_component = function(parley_instance)
@@ -342,11 +380,15 @@ function M.setup(parley)
             -- "filetype" as a string component → swap directly
             if replace_filetype and component == "filetype" then
               existing_config.sections[section_name][i] = M.create_mode_component(parley)
+            elseif component == "branch" then
+              existing_config.sections[section_name][i] = M.create_branch_component(component)
             elseif type(component) == "table" then
               local first = component[1]
               -- {"filetype", ...opts}
               if replace_filetype and first == "filetype" then
                 existing_config.sections[section_name][i] = M.create_mode_component(parley)
+              elseif first == "branch" then
+                existing_config.sections[section_name][i] = M.create_branch_component(component)
               elseif type(first) == "function" then
                 local func_str = string.dump(first)
                 -- Directory display function (existing behaviour)
