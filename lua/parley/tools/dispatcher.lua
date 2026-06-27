@@ -235,14 +235,22 @@ function M.execute_call(call, tools_registry, opts)
     -- accepts responsibility).
     -- Resolve path fields: tools may use `path` or `file_path`.
     -- Check both so the cwd-scope guard applies uniformly.
+    local function roots_for_def()
+        -- #140: read tools may also reach any configured `tool_read_roots`;
+        -- write tools get nil → cwd-only. Gate on `~= "write"` (the canonical
+        -- read-tool predicate `@readonly` uses): `kind` defaults to read when
+        -- absent, so `== "read"` would wrongly confine an absent-kind tool.
+        return (def.kind ~= "write") and (opts.read_roots or {}) or nil
+    end
+
     local path_fields = { "path", "file_path" }
+    if opts.cwd and call.input and def.default_path and call.input.path == nil
+        and call.input.file_path == nil and call.input.paths == nil then
+        call.input.path = def.default_path
+    end
     for _, field in ipairs(path_fields) do
         if opts.cwd and call.input and type(call.input[field]) == "string" then
-            -- #140: read tools may also reach any configured `tool_read_roots`;
-            -- write tools get nil → cwd-only. Gate on `~= "write"` (the canonical
-            -- read-tool predicate `@readonly` uses): `kind` defaults to read when
-            -- absent, so `== "read"` would wrongly confine an absent-kind tool.
-            local roots = (def.kind ~= "write") and (opts.read_roots or {}) or nil
+            local roots = roots_for_def()
             local abs, scope_err = M.resolve_path_in_cwd(call.input[field], opts.cwd, roots)
             if not abs then
                 return {
@@ -254,6 +262,31 @@ function M.execute_call(call, tools_registry, opts)
             end
             call.input[field] = abs
         end
+    end
+    if opts.cwd and call.input and type(call.input.paths) == "table" then
+        local roots = roots_for_def()
+        local resolved = {}
+        for i, path in ipairs(call.input.paths) do
+            if type(path) ~= "string" then
+                return {
+                    id = call.id,
+                    name = call.name,
+                    content = "paths must be an array of strings",
+                    is_error = true,
+                }
+            end
+            local abs, scope_err = M.resolve_path_in_cwd(path, opts.cwd, roots)
+            if not abs then
+                return {
+                    id = call.id,
+                    name = call.name,
+                    content = scope_err,
+                    is_error = true,
+                }
+            end
+            resolved[i] = abs
+        end
+        call.input.paths = resolved
     end
 
     -- #139: horizontal output pager. For tools that don't self-paginate, take

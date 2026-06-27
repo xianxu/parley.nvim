@@ -318,6 +318,7 @@ atlas:
       - lua/parley/tools/dispatcher.lua
       - lua/parley/tools/serialize.lua
       - lua/parley/tools/types.lua
+      - lua/parley/tools/builtin/argv.lua
       - lua/parley/tools/builtin/read_file.lua
       - lua/parley/tools/builtin/ls.lua
       - lua/parley/tools/builtin/find.lua
@@ -338,7 +339,10 @@ atlas:
       - tests/unit/tools_types_spec.lua
       - tests/unit/tools_builtin_read_file_spec.lua
       - tests/unit/tools_builtin_registered_spec.lua
+      - tests/unit/tools_builtin_ls_spec.lua
+      - tests/unit/tools_builtin_find_spec.lua
       - tests/unit/tools_builtin_grep_spec.lua
+      - tests/unit/tools_builtin_ack_spec.lua
       - tests/unit/tools_builtin_chat_history_search_spec.lua
       - tests/unit/anthropic_tool_decode_spec.lua
       - tests/unit/anthropic_tool_encode_spec.lua

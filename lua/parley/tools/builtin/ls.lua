@@ -17,13 +17,24 @@ local function detect_ls()
 end
 
 local ls_cmd, ls_version = detect_ls()
+local argv = require("parley.tools.builtin.argv")
+
+local LS_FLAG_CHARS = {
+    a = true, A = true, l = true, h = true, R = true, t = true, r = true,
+    S = true, ["1"] = true, d = true, F = true,
+}
+
+local ALLOWED_FIELDS = {
+    path = true,
+    flags = true,
+}
 
 local function build_description()
     if ls_cmd then
         return "List directory contents using the system ls command (" .. ls_version .. "). "
-            .. "Pass arguments as a single command string (everything after 'ls'). "
-            .. "Example: '.', '-la', '-R lua/parley'. "
-            .. "Confined to the working directory."
+            .. "Use structured fields: path plus safe short flags such as '-la', '-R', '-t'. "
+            .. "Example: { path = '.', flags = { '-la' } }. "
+            .. "Paths are confined to the working directory and configured read roots."
     else
         return "List directory contents. No ls command available on this system."
     end
@@ -36,19 +47,33 @@ return {
     input_schema = {
         type = "object",
         properties = {
-            command = {
+            path = {
                 type = "string",
-                description = "Arguments to pass to ls, e.g. '.', '-la', '-R lua/parley'. Do NOT include the 'ls' command itself.",
+                description = "Directory or file path to list. Relative to the working directory or absolute.",
+            },
+            flags = {
+                type = "array",
+                items = { type = "string" },
+                description = "Safe ls display flags, e.g. { '-la' }, { '-R' }. Allowed compact characters: a A l h R t r S 1 d F. Long flags are not accepted.",
             },
         },
-        required = { "command" },
+        required = { "path" },
     },
     handler = function(input)
         input = input or {}
-        local cmd_args = input.command
-        if type(cmd_args) ~= "string" or cmd_args == "" then
+        local ok_fields, fields_err = argv.reject_unknown_fields(input, ALLOWED_FIELDS)
+        if not ok_fields then
             return {
-                content = "missing or invalid required field: command",
+                content = fields_err,
+                is_error = true,
+                name = "ls",
+            }
+        end
+
+        local path = input.path
+        if type(path) ~= "string" or path == "" then
+            return {
+                content = "missing or invalid required field: path",
                 is_error = true,
                 name = "ls",
             }
@@ -62,8 +87,21 @@ return {
             }
         end
 
-        local full_cmd = ls_cmd .. " " .. cmd_args
-        local result = vim.fn.system(full_cmd)
+        local flags, flag_err = argv.validate_ls_flags(input.flags, LS_FLAG_CHARS)
+        if not flags then
+            return {
+                content = flag_err,
+                is_error = true,
+                name = "ls",
+            }
+        end
+
+        local cmd = { ls_cmd }
+        for _, flag in ipairs(flags) do
+            cmd[#cmd + 1] = flag
+        end
+        cmd[#cmd + 1] = path
+        local result = vim.fn.system(cmd)
         local exit_code = vim.v.shell_error
 
         if exit_code ~= 0 then

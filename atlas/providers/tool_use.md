@@ -9,13 +9,13 @@ Standard Unix tools exposed to Claude, plus file operations:
 | Tool | Kind | Description |
 |------|------|-------------|
 | `read_file` | read | Read file with line numbers. Params: `file_path`, `offset`, `limit` |
-| `ls` | read | Shell out to system `ls`. Param: `command` |
-| `find` | read | Shell out to system `find`. Param: `command` |
-| `grep` | read | Shell out to `rg` or system `grep`. Param: `command` |
+| `ls` | read | Shell out to system `ls` with structured `path`/`flags` fields |
+| `find` | read | Shell out to system `find` with structured path/name/type/depth fields |
+| `grep` | read | Shell out to `rg` or system `grep` with structured pattern/path/filter fields |
 | `chat_history_search` | read | Search past chats across ALL chat roots (global + repo + super-repo siblings). Output is `{<repo>}/...`-prefixed. Default context `-B1 -A2`, `*.md` glob, case-insensitive. Params: `pattern`, `before`, `after`, `glob`, `case_insensitive`, `max_count` |
 | `edit_file` | write | String replacement (`old_string`/`new_string`) or line insertion (`insert_line`/`insert_text`) |
 | `write_file` | write | Create/overwrite file. Numbered `.parley-backup.N` on each write |
-| `ack` | read | Optional, registered only if `ack` is installed |
+| `ack` | read | Optional, registered only if `ack` is installed; structured pattern/path/filter fields |
 
 Tool descriptions dynamically advertise the locally available command version (e.g., "ripgrep 14.1" vs "GNU grep 3.11").
 
@@ -60,7 +60,8 @@ Tool blocks in the transcript:
 
 ## Safety
 
-- **cwd-scope**: dispatcher (`resolve_path_in_cwd`) checks both `path` and `file_path` fields against the working directory, symlink-resolved (`fs_realpath`), so a symlink whose real path escapes is rejected. Read tools (`kind ~= "write"`, so an absent `kind` counts as read — same predicate as `@readonly`) may additionally reach any root in the global `tool_read_roots` config — entries are absolute (`/x`), home (`~/workspace`, `~` expanded), or relative-to-cwd (`../`); write tools (`edit_file`/`write_file`) stay cwd-confined regardless (#140). Default `tool_read_roots = {}` → cwd-only; a rejection names the knob. `chat_history_search` deliberately accepts neither path field, so it can search chat roots that live outside cwd (global iCloud dir, super-repo siblings).
+- **cwd-scope**: dispatcher (`resolve_path_in_cwd`) checks `path`, `file_path`, and every element of `paths` against the working directory, symlink-resolved (`fs_realpath`), so a symlink whose real path escapes is rejected. Read tools (`kind ~= "write"`, so an absent `kind` counts as read — same predicate as `@readonly`) may additionally reach any root in the global `tool_read_roots` config — entries are absolute (`/x`), home (`~/workspace`, `~` expanded), or relative-to-cwd (`../`); write tools (`edit_file`/`write_file`) stay cwd-confined regardless (#140). Default `tool_read_roots = {}` → cwd-only; a rejection names the knob. `chat_history_search` deliberately accepts no path fields, so it can search chat roots that live outside cwd (global iCloud dir, super-repo siblings).
+- **Tool argv safety** (#144): `ls`, `grep`, `find`, and optional `ack` no longer accept raw shell fragments. Each exposes structured fields and builds argv lists for the named binary, so shell metacharacters (`;`, `|`, `$()`, backticks, `>`) are data, not syntax. The shared pure helper (`lua/parley/tools/builtin/argv.lua`) validates local positive allowlists: `ls` allows compact display flags only; `grep` allows a small read-only flag set and rejects `rg` execution/arbitrary-read flags such as `--pre`, `--hostname-bin`, and `-f`; `find` has no free `flags` field and only exposes path/name/type/depth predicates; `ack` exposes pattern/path/type/context fields with no raw `command` or `flags` escape hatch. `grep` and `ack` insert `--` before pattern/path positionals so dash-leading patterns cannot be parsed as options; their omitted-path defaults are declared as `default_path = "."` so the dispatcher canonicalizes them through the cwd/read-root guard before execution.
 - **Output pager** (#139): a horizontal substrate cap — *every tool's output is a paged stream.* The registry (`register`) injects `offset`/`limit` params into every non-write, non-`self_paginates` tool's schema, and the dispatcher windows each result to lines `[offset, offset+limit)` (offset 1-indexed; `limit` defaults to `tool_result_page_lines` = 200, clamped ≤ 2000), stripping the params so the handler never sees them. When the window is partial it appends a footer naming the **true total** + the next page: `[lines 1-200 of 1,240,118 — pass offset=201 for the next page, or narrow your query]`. `read_file` sets `self_paginates = true` — its native `offset`/`limit` (line-window of the file) *is* the contract, so the dispatcher neither injects nor slices it (a no-limit read falls back to the byte-cap). Deep paging on shell tools re-runs the tool (run+slice, no cache — v1). The 100KB byte-cap (`truncate`) stays as the backstop for pathological single lines. Orthogonal to input safety (#144) — slices *after* the handler.
 - **Iteration cap**: `max_tool_iterations` (default 10) — writes synthetic `📎: (iteration limit reached)` when hit
 - **Cancellation**: `cmd_stop` triggers `repair_unmatched_tool_blocks` — writes `📎: (cancelled by user)` for any 🔧: without matching 📎:

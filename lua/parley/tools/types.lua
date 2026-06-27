@@ -19,6 +19,8 @@
 --- @field needs_backup boolean|nil True if the tool destroys information
 ---        on disk and the dispatcher must capture a `.parley-backup`
 ---        pre-image before execution. Defaults to false when absent.
+--- @field default_path string|nil Relative path injected by the dispatcher
+---        before cwd/read-root confinement when a read tool omits path inputs.
 
 --- @class ToolCall
 --- @field id string Correlation id assigned by the LLM (e.g. "toolu_01ABC").
@@ -79,6 +81,9 @@ function M.validate_definition(def)
     -- pager natively, so the dispatcher neither injects those params nor slices.
     if def.self_paginates ~= nil and type(def.self_paginates) ~= "boolean" then
         return fail("definition.self_paginates must be boolean when present")
+    end
+    if def.default_path ~= nil and type(def.default_path) ~= "string" then
+        return fail("definition.default_path must be a string when present")
     end
     return true
 end

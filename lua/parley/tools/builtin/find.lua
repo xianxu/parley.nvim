@@ -18,13 +18,23 @@ local function detect_find()
 end
 
 local find_cmd, find_version = detect_find()
+local argv = require("parley.tools.builtin.argv")
+
+local ALLOWED_FIELDS = {
+    path = true,
+    name = true,
+    iname = true,
+    type = true,
+    maxdepth = true,
+    mindepth = true,
+}
 
 local function build_description()
     if find_cmd then
         return "Search for files and directories using the system find command (" .. find_version .. "). "
-            .. "Pass arguments as a single command string (everything after 'find'). "
-            .. "Example: '. -name \"*.lua\" -type f', '. -maxdepth 2 -name \"*.md\"'. "
-            .. "Confined to the working directory."
+            .. "Use structured fields: path, name/iname, type, maxdepth, and mindepth. "
+            .. "Example: { path = '.', name = '*.lua', type = 'f' }. "
+            .. "Paths are confined to the working directory and configured read roots."
     else
         return "Search for files and directories. No find command available on this system."
     end
@@ -37,19 +47,48 @@ return {
     input_schema = {
         type = "object",
         properties = {
-            command = {
+            path = {
                 type = "string",
-                description = "Arguments to pass to find, e.g. '. -name \"*.lua\" -type f'. Do NOT include the 'find' command itself.",
+                description = "Directory path to search. Relative to the working directory or absolute.",
+            },
+            name = {
+                type = "string",
+                description = "Find entries whose basename matches this pattern, e.g. '*.lua'.",
+            },
+            iname = {
+                type = "string",
+                description = "Case-insensitive basename pattern.",
+            },
+            type = {
+                type = "string",
+                description = "Entry type: f (file), d (directory), or l (symlink).",
+            },
+            maxdepth = {
+                type = "integer",
+                description = "Maximum directory depth.",
+            },
+            mindepth = {
+                type = "integer",
+                description = "Minimum directory depth.",
             },
         },
-        required = { "command" },
+        required = { "path" },
     },
     handler = function(input)
         input = input or {}
-        local cmd_args = input.command
-        if type(cmd_args) ~= "string" or cmd_args == "" then
+        local ok_fields, fields_err = argv.reject_unknown_fields(input, ALLOWED_FIELDS)
+        if not ok_fields then
             return {
-                content = "missing or invalid required field: command",
+                content = fields_err,
+                is_error = true,
+                name = "find",
+            }
+        end
+
+        local path = input.path
+        if type(path) ~= "string" or path == "" then
+            return {
+                content = "missing or invalid required field: path",
                 is_error = true,
                 name = "find",
             }
@@ -63,8 +102,46 @@ return {
             }
         end
 
-        local full_cmd = find_cmd .. " " .. cmd_args
-        local result = vim.fn.system(full_cmd)
+        local cmd = { find_cmd, path }
+        local maxdepth = argv.nonnegative_int(input.maxdepth, "maxdepth")
+        if input.maxdepth ~= nil and maxdepth == nil then
+            return { content = "maxdepth must be a non-negative integer", is_error = true, name = "find" }
+        end
+        local mindepth = argv.nonnegative_int(input.mindepth, "mindepth")
+        if input.mindepth ~= nil and mindepth == nil then
+            return { content = "mindepth must be a non-negative integer", is_error = true, name = "find" }
+        end
+        if maxdepth then
+            cmd[#cmd + 1] = "-maxdepth"
+            cmd[#cmd + 1] = tostring(maxdepth)
+        end
+        if mindepth then
+            cmd[#cmd + 1] = "-mindepth"
+            cmd[#cmd + 1] = tostring(mindepth)
+        end
+        if input.name then
+            if type(input.name) ~= "string" or input.name == "" then
+                return { content = "name must be a non-empty string", is_error = true, name = "find" }
+            end
+            cmd[#cmd + 1] = "-name"
+            cmd[#cmd + 1] = input.name
+        end
+        if input.iname then
+            if type(input.iname) ~= "string" or input.iname == "" then
+                return { content = "iname must be a non-empty string", is_error = true, name = "find" }
+            end
+            cmd[#cmd + 1] = "-iname"
+            cmd[#cmd + 1] = input.iname
+        end
+        if input.type then
+            if input.type ~= "f" and input.type ~= "d" and input.type ~= "l" then
+                return { content = "type must be one of: f, d, l", is_error = true, name = "find" }
+            end
+            cmd[#cmd + 1] = "-type"
+            cmd[#cmd + 1] = input.type
+        end
+
+        local result = vim.fn.system(cmd)
         local exit_code = vim.v.shell_error
 
         if exit_code ~= 0 then
