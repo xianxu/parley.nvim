@@ -394,52 +394,56 @@ function M.setup(parley)
       -- Enhance existing directory components with notes detection,
       -- and (when enabled) replace filetype components with the parley mode glyph.
       local replace_filetype = config.lualine and config.lualine.replace_filetype ~= false
-      for section_name, section_components in pairs(existing_config.sections) do
-        if type(section_components) == "table" then
-          for i, component in ipairs(section_components) do
-            -- "filetype" as a string component → swap directly
-            if replace_filetype and component == "filetype" then
-              existing_config.sections[section_name][i] = M.create_mode_component(parley)
-            elseif component == "branch" then
-              existing_config.sections[section_name][i] = M.create_branch_component(component)
-            elseif component == "filename" then
-              existing_config.sections[section_name][i] = M.create_filename_component(parley, component)
-            elseif type(component) == "table" then
-              local first = component[1]
-              -- {"filetype", ...opts}
-              if replace_filetype and first == "filetype" then
-                existing_config.sections[section_name][i] = M.create_mode_component(parley)
-              elseif first == "branch" then
-                existing_config.sections[section_name][i] = M.create_branch_component(component)
-              elseif first == "filename" then
-                existing_config.sections[section_name][i] = M.create_filename_component(parley, component)
-              elseif type(first) == "function" then
-                local func_str = string.dump(first)
-                -- Directory display function (existing behaviour)
-                if func_str:find("getcwd") and func_str:find("HOME") then
-                  existing_config.sections[section_name][i] = {
-                    function()
-                      return M.format_directory(parley)
-                    end,
-                    color = function()
-                      return M.get_directory_color(parley)
-                    end
-                  }
-                -- Filetype-display function: must explicitly read bo.filetype.
-                -- A bare "filetype" substring match would false-positive on any
-                -- function that branches on filetype for unrelated reasons.
-                elseif replace_filetype and (
-                  func_str:find("bo%.filetype")
-                  or func_str:find("bo%[\"filetype\"%]")
-                  or func_str:find("bo%['filetype'%]")
-                ) then
-                  existing_config.sections[section_name][i] = M.create_mode_component(parley)
+      local function enhance_sections(sections)
+        for section_name, section_components in pairs(sections or {}) do
+          if type(section_components) == "table" then
+            for i, component in ipairs(section_components) do
+              -- "filetype" as a string component → swap directly
+              if replace_filetype and component == "filetype" then
+                sections[section_name][i] = M.create_mode_component(parley)
+              elseif component == "branch" then
+                sections[section_name][i] = M.create_branch_component(component)
+              elseif component == "filename" then
+                sections[section_name][i] = M.create_filename_component(parley, component)
+              elseif type(component) == "table" then
+                local first = component[1]
+                -- {"filetype", ...opts}
+                if replace_filetype and first == "filetype" then
+                  sections[section_name][i] = M.create_mode_component(parley)
+                elseif first == "branch" then
+                  sections[section_name][i] = M.create_branch_component(component)
+                elseif first == "filename" then
+                  sections[section_name][i] = M.create_filename_component(parley, component)
+                elseif type(first) == "function" then
+                  local func_str = string.dump(first)
+                  -- Directory display function (existing behaviour)
+                  if func_str:find("getcwd") and func_str:find("HOME") then
+                    sections[section_name][i] = {
+                      function()
+                        return M.format_directory(parley)
+                      end,
+                      color = function()
+                        return M.get_directory_color(parley)
+                      end
+                    }
+                  -- Filetype-display function: must explicitly read bo.filetype.
+                  -- A bare "filetype" substring match would false-positive on any
+                  -- function that branches on filetype for unrelated reasons.
+                  elseif replace_filetype and (
+                    func_str:find("bo%.filetype")
+                    or func_str:find("bo%[\"filetype\"%]")
+                    or func_str:find("bo%['filetype'%]")
+                  ) then
+                    sections[section_name][i] = M.create_mode_component(parley)
+                  end
                 end
               end
             end
           end
         end
       end
+      enhance_sections(existing_config.sections)
+      enhance_sections(existing_config.inactive_sections)
 
       -- Add parley component if enabled
       if parley_component then

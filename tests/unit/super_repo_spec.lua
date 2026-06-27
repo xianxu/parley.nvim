@@ -504,6 +504,11 @@ describe("super_repo.toggle", function()
 							"branch",
 						},
 					},
+					inactive_sections = {
+						lualine_c = {
+							"filename",
+						},
+					},
 				}
 			end,
 			setup = function(config)
@@ -531,6 +536,9 @@ describe("super_repo.toggle", function()
 		assert.is_nil(components[2].icon)
 		assert.is_nil(components[2].draw_empty)
 		assert.equal("branch", components[3][1])
+		local inactive_components = captured_config.inactive_sections.lualine_c
+		assert.is_function(inactive_components[1][1])
+		assert.equal("", inactive_components[1][1]())
 
 		package.loaded["lualine"] = old_lualine
 	end)

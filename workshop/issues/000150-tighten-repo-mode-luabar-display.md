@@ -71,6 +71,7 @@ Produced via `brain/data/life/42shots/velocity/estimate-logic-v2.md` against
 
 ### 2026-06-27
 - 2026-06-27: closed — make test passed (lint 0 warnings/0 errors; unit, integration, and arch tests passed); make test-spec SPEC=ui/lualine passed; review verdict: REWORK
+- 2026-06-27: closed — make test passed (lint 0 warnings/0 errors; unit, integration, and arch tests passed); make test-spec SPEC=ui/lualine passed; review verdict: REWORK
 - 2026-06-27: closed — make test passed (lint 0 warnings/0 errors; unit, integration, and arch tests passed); make test-spec SPEC=ui/lualine passed; review verdict: FIX-THEN-SHIP
 - 2026-06-27: closed — make test passed (lint 0 warnings/0 errors; unit, integration, and arch tests passed); make test-spec SPEC=ui/lualine passed; review verdict: FIX-THEN-SHIP
 
@@ -78,6 +79,9 @@ Produced via `brain/data/life/42shots/velocity/estimate-logic-v2.md` against
   `fmt`, `icon`, and `draw_empty` could re-materialize hidden output; fixed by
   replacing repo-mode filename components with a fully inert empty component and
   adding focused regressions.
+- Boundary review REWORK found `inactive_sections` were not rewritten; fixed by
+  applying the same component rewrite helper to both active and inactive lualine
+  section maps.
 - Follow-up to #148 from live luabar use: keep the visible branch separator and
   reclaim statusline space in repo mode by hiding cwd and filename components.
 - Plan-quality noted the existing interview display branch; implementation keeps
