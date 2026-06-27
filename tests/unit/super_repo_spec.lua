@@ -412,10 +412,11 @@ describe("super_repo.toggle", function()
 	it("lualine.format_branch_label shortens long SDLC branch names for display", function()
 		local lualine = require("parley.lualine")
 
-		assert.equal("000149...", lualine.format_branch_label("000149-harden-chat-history-search-shell-out-inputs"))
+		assert.equal("000149-...", lualine.format_branch_label("000149-harden-chat-history-search-shell-out-inputs"))
+		assert.equal("000132-...", lualine.format_branch_label("000132-sdlc-repo-lock"))
 		assert.equal("main", lualine.format_branch_label("main"))
 		assert.equal("abcdefghij...", lualine.format_branch_label("abcdefghijklmno"))
-		assert.equal("release...", lualine.format_branch_label("release_candidate"))
+		assert.equal("release_...", lualine.format_branch_label("release_candidate"))
 		assert.equal("", lualine.format_branch_label(nil))
 		assert.equal("", lualine.format_branch_label(""))
 	end)
@@ -425,7 +426,7 @@ describe("super_repo.toggle", function()
 
 		local string_component = lualine.create_branch_component("branch")
 		assert.equal("branch", string_component[1])
-		assert.equal("000149...", string_component.fmt("000149-harden-chat-history-search-shell-out-inputs"))
+		assert.equal("000149-...", string_component.fmt("000149-harden-chat-history-search-shell-out-inputs"))
 
 		local table_component = lualine.create_branch_component({
 			"branch",
@@ -436,7 +437,44 @@ describe("super_repo.toggle", function()
 		})
 		assert.equal("branch", table_component[1])
 		assert.equal("git", table_component.icon)
-		assert.equal("000149...", table_component.fmt("000149-harden-chat-history-search-shell-out-inputs"))
+		assert.equal("000149-...", table_component.fmt("000149-harden-chat-history-search-shell-out-inputs"))
+	end)
+
+	it("lualine.format_directory hides cwd labels in repo mode but keeps interview visible", function()
+		local lualine = require("parley.lualine")
+
+		local repo_parley = {
+			config = { repo_root = "/tmp/some/repo" },
+			_state = {},
+		}
+		assert.equal("", lualine.format_directory(repo_parley))
+
+		local interview_parley = {
+			config = { repo_root = "/tmp/some/repo" },
+			_state = { interview_mode = true, interview_start_time = os.time() },
+		}
+		assert.is_truthy(lualine.format_directory(interview_parley):find("INTERVIEW", 1, true))
+	end)
+
+	it("lualine.create_filename_component hides filename only in repo mode", function()
+		local lualine = require("parley.lualine")
+		local repo_parley = { config = { repo_root = "/tmp/some/repo" } }
+		local global_parley = { config = { repo_root = nil } }
+
+		local hidden = lualine.create_filename_component(repo_parley, "filename")
+		assert.is_function(hidden[1])
+		assert.equal("", hidden[1]())
+
+		local preserved = lualine.create_filename_component(global_parley, "filename")
+		assert.equal("filename", preserved)
+
+		local table_component = lualine.create_filename_component(repo_parley, {
+			"filename",
+			path = 1,
+		})
+		assert.is_function(table_component[1])
+		assert.equal("", table_component[1]())
+		assert.equal(1, table_component.path)
 	end)
 
 	it("fires User ParleySuperRepoChanged on toggle on and off", function()

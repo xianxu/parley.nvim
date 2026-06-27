@@ -68,7 +68,7 @@ M.format_branch_label = function(branch)
   local label = branch
   local separator = branch:find("[%s%-%_]")
   if separator and separator > 1 then
-    label = branch:sub(1, separator - 1)
+    label = branch:sub(1, separator)
   end
   if #label > 10 then
     label = label:sub(1, 10)
@@ -98,6 +98,29 @@ M.create_branch_component = function(component)
     return M.format_branch_label(branch)
   end
   return next_component
+end
+
+M.is_repo_mode = function(parley_instance)
+  return parley_instance
+    and parley_instance.config
+    and parley_instance.config.repo_root
+    and parley_instance.config.repo_root ~= ""
+end
+
+M.create_filename_component = function(parley_instance, component)
+  if not M.is_repo_mode(parley_instance) then
+    return component
+  end
+
+  local hidden = { function() return "" end }
+  if type(component) == "table" then
+    for k, v in pairs(component) do
+      if k ~= 1 then
+        hidden[k] = v
+      end
+    end
+  end
+  return hidden
 end
 
 -- Lualine component returning the mode glyph. Designed as a drop-in replacement
@@ -140,12 +163,17 @@ M.format_directory = function(parley_instance)
     end
   end
 
-  -- Priority 2: If in notes folder, show NOTE
+  -- Priority 2: Repo mode already has repo/branch orientation in lualine.
+  if M.is_repo_mode(parley) then
+    return ""
+  end
+
+  -- Priority 3: If in notes folder, show NOTE
   if cwd:sub(1, #notes_path) == notes_path then
     return " NOTE"
   end
 
-  -- Priority 3: Default behavior - show current directory
+  -- Priority 4: Default behavior - show current directory
   if cwd:sub(1, #home) == home then
     cwd = "~" .. cwd:sub(#home + 1)
   end
@@ -382,6 +410,8 @@ function M.setup(parley)
               existing_config.sections[section_name][i] = M.create_mode_component(parley)
             elseif component == "branch" then
               existing_config.sections[section_name][i] = M.create_branch_component(component)
+            elseif component == "filename" then
+              existing_config.sections[section_name][i] = M.create_filename_component(parley, component)
             elseif type(component) == "table" then
               local first = component[1]
               -- {"filetype", ...opts}
@@ -389,6 +419,8 @@ function M.setup(parley)
                 existing_config.sections[section_name][i] = M.create_mode_component(parley)
               elseif first == "branch" then
                 existing_config.sections[section_name][i] = M.create_branch_component(component)
+              elseif first == "filename" then
+                existing_config.sections[section_name][i] = M.create_filename_component(parley, component)
               elseif type(first) == "function" then
                 local func_str = string.dump(first)
                 -- Directory display function (existing behaviour)

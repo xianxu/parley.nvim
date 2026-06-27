@@ -13,8 +13,11 @@
 - Mode glyph (`○` / `⊚` / `⦿`) when filetype auto-replace is on; refreshes on `User ParleySuperRepoChanged`
 - Existing lualine `branch` components are kept as lualine branch components,
   but Parley wraps their `fmt` callback to shorten long display labels: first
-  word before space/`-`/`_`, capped at 10 characters, plus `...` when shortened.
-  The underlying git branch name is not changed.
+  word plus its space/`-`/`_` separator when present, capped at 10 characters,
+  plus `...` when shortened. The underlying git branch name is not changed.
+- In repo mode, Parley suppresses cwd/directory display and lualine `filename`
+  components to save statusline width; interview mode remains visible because it
+  carries active timer state rather than location context.
 
 ## Manual Integration
 - `require('parley.lualine').create_component()` for custom positioning

@@ -58,12 +58,12 @@ Produced via `brain/data/life/42shots/velocity/estimate-logic-v2.md` against
 
 ## Plan
 
-- [ ] Add failing unit coverage for separator-preserving branch shortening.
-- [ ] Add failing unit coverage for repo-mode cwd/filename suppression and
+- [x] Add failing unit coverage for separator-preserving branch shortening.
+- [x] Add failing unit coverage for repo-mode cwd/filename suppression and
   non-repo-mode preservation.
-- [ ] Implement the pure predicate/formatting changes and lualine filename
+- [x] Implement the pure predicate/formatting changes and lualine filename
   wrapper.
-- [ ] Run focused lualine tests and the broader verification gate.
+- [x] Run focused lualine tests and the broader verification gate.
 - [ ] Close through `sdlc close` with verification evidence.
 
 ## Log
@@ -72,3 +72,12 @@ Produced via `brain/data/life/42shots/velocity/estimate-logic-v2.md` against
 
 - Follow-up to #148 from live luabar use: keep the visible branch separator and
   reclaim statusline space in repo mode by hiding cwd and filename components.
+- Plan-quality noted the existing interview display branch; implementation keeps
+  interview mode visible while suppressing repo-mode cwd/default directory labels.
+- TDD red: `make test-spec SPEC=ui/lualine` failed on the missing separator,
+  repo-mode directory suppression, and missing filename wrapper.
+- TDD green: `make test-spec SPEC=ui/lualine` passed after updating the branch
+  formatter, repo-mode predicate/directory behavior, and filename component
+  wrapper.
+- Verification: `make test` passed, including lint with 0 warnings / 0 errors,
+  unit tests, integration tests, and arch tests.
