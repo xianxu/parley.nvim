@@ -1,12 +1,13 @@
 ---
 id: 000149
-status: working
+status: done
 deps: []
 github_issue:
 created: 2026-06-26
 updated: 2026-06-27
 estimate_hours: 1.5
 started: 2026-06-27T11:19:29-07:00
+actual_hours: 0.13
 ---
 
 # Harden chat_history_search shell-out inputs
@@ -71,6 +72,7 @@ total: 1.5
   identified this adjacent pre-existing shell-string vector as a follow-up.
 
 ### 2026-06-27
+- 2026-06-27: closed — TDD red/green verified: focused chat_history_search spec failed before the fix and passed after argv conversion. make test-spec SPEC=providers/tool_use, make test, make lint, sdlc issue validate, and git diff --check all passed. Atlas documents #149 argv safety for chat_history_search. Prior Claude boundary-review attempts hung twice with no verdict, so this rerun uses --agent codex.; review verdict: SHIP
 - Renumbered from duplicate `000147` to `000149` before starting work. The older
   neighborhood-path issue already owned `000147`, and `sdlc claim --issue 147`
   refused because both files matched.
