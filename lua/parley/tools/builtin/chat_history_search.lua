@@ -12,6 +12,7 @@
 -- command string, so we control all flags.
 
 local version = require("parley.tools.version")
+local argv = require("parley.tools.builtin.argv")
 
 local function detect_backend()
     if vim.fn.executable("rg") == 1 then
@@ -25,10 +26,6 @@ local function detect_backend()
 end
 
 local backend, backend_version = detect_backend()
-
-local function shell_quote(s)
-    return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
-end
 
 local function describe()
     local trigger = "Use this whenever the user refers to past chats — phrases like "
@@ -89,36 +86,56 @@ local function rewrite_paths(output, anchor, label)
 end
 
 local function build_cmd(input, root_dir)
-    local pattern = input.pattern
-    local before = input.before or 1
-    local after = input.after or 2
-    local case_insensitive = input.case_insensitive
-    if case_insensitive == nil then case_insensitive = true end
-    local glob = input.glob or "*.md"
-    local max_count = input.max_count
-
     if backend == "rg" then
         local parts = { "rg", "--line-number", "--with-filename", "--no-heading",
-                        "-B", tostring(before), "-A", tostring(after),
-                        "--glob", shell_quote(glob) }
-        if case_insensitive then table.insert(parts, "-i") end
-        if max_count then table.insert(parts, "-m"); table.insert(parts, tostring(max_count)) end
+                        "-B", tostring(input.before), "-A", tostring(input.after),
+                        "--glob", input.glob }
+        if input.case_insensitive then table.insert(parts, "-i") end
+        if input.max_count then table.insert(parts, "-m"); table.insert(parts, tostring(input.max_count)) end
         table.insert(parts, "--")
-        table.insert(parts, shell_quote(pattern))
-        table.insert(parts, shell_quote(root_dir))
-        return table.concat(parts, " ")
+        table.insert(parts, input.pattern)
+        table.insert(parts, root_dir)
+        return parts
     else
         -- system grep
-        local parts = { "grep", "-rn", "-B", tostring(before), "-A", tostring(after),
-                        "--include=" .. shell_quote(glob) }
-        if case_insensitive then table.insert(parts, "-i") end
-        if max_count then table.insert(parts, "-m"); table.insert(parts, tostring(max_count)) end
+        local parts = { "grep", "-rn", "-B", tostring(input.before), "-A", tostring(input.after),
+                        "--include=" .. input.glob }
+        if input.case_insensitive then table.insert(parts, "-i") end
+        if input.max_count then table.insert(parts, "-m"); table.insert(parts, tostring(input.max_count)) end
         table.insert(parts, "-E")
         table.insert(parts, "--")
-        table.insert(parts, shell_quote(pattern))
-        table.insert(parts, shell_quote(root_dir))
-        return table.concat(parts, " ")
+        table.insert(parts, input.pattern)
+        table.insert(parts, root_dir)
+        return parts
     end
+end
+
+local function nonnegative_int_or_default(input, field, default)
+    if input[field] == nil then
+        return default
+    end
+    return argv.nonnegative_int(input[field], field)
+end
+
+local function normalize_input(input)
+    local before, before_err = nonnegative_int_or_default(input, "before", 1)
+    if before_err then return nil, before_err end
+    local after, after_err = nonnegative_int_or_default(input, "after", 2)
+    if after_err then return nil, after_err end
+    local max_count, max_count_err = nonnegative_int_or_default(input, "max_count", nil)
+    if max_count_err then return nil, max_count_err end
+
+    local case_insensitive = input.case_insensitive
+    if case_insensitive == nil then case_insensitive = true end
+
+    return {
+        pattern = input.pattern,
+        before = before,
+        after = after,
+        case_insensitive = case_insensitive,
+        glob = input.glob or "*.md",
+        max_count = max_count,
+    }
 end
 
 local function search_root(input, root)
@@ -194,6 +211,15 @@ return {
             }
         end
 
+        local normalized, normalize_err = normalize_input(input)
+        if not normalized then
+            return {
+                content = normalize_err,
+                is_error = true,
+                name = "chat_history_search",
+            }
+        end
+
         local ok, parley = pcall(require, "parley")
         if not ok or type(parley.get_chat_roots) ~= "function" then
             return {
@@ -215,7 +241,7 @@ return {
         local sections = {}
         local any_hits = false
         for _, root in ipairs(roots) do
-            local r = search_root(input, root)
+            local r = search_root(normalized, root)
             if r then
                 if r.error then
                     table.insert(sections, "── {" .. r.label .. "} ──\n" .. r.error)

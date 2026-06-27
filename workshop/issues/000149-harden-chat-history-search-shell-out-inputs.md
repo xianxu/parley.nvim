@@ -58,10 +58,10 @@ total: 1.5
 
 ## Plan
 
-- [ ] Add failing tests for numeric field injection/rejection.
-- [ ] Convert `chat_history_search` command construction to argv-list execution.
-- [ ] Update atlas/tool-use docs and traceability if new tests are added.
-- [ ] Run `make test-spec SPEC=providers/tool_use`, `make test`, and `make lint`.
+- [x] Add failing tests for numeric field injection/rejection.
+- [x] Convert `chat_history_search` command construction to argv-list execution.
+- [x] Update atlas/tool-use docs and traceability if new tests are added.
+- [x] Run `make test-spec SPEC=providers/tool_use`, `make test`, and `make lint`.
 
 ## Log
 
@@ -74,3 +74,15 @@ total: 1.5
 - Renumbered from duplicate `000147` to `000149` before starting work. The older
   neighborhood-path issue already owned `000147`, and `sdlc claim --issue 147`
   refused because both files matched.
+- `sdlc start-plan --issue 149` delivered `ARCH-DRY`, `ARCH-PURE`, and
+  `ARCH-PURPOSE`; the design reuses the #144 argv helper, validates numeric
+  fields before the IO boundary, and converts both `rg` and `grep` branches.
+- TDD red: the focused chat-history spec failed as expected because
+  injection-shaped and non-integer `before`/`after`/`max_count` values were not
+  rejected.
+- Implemented argv-list execution for `chat_history_search` and numeric
+  validation through `argv.nonnegative_int`, preserving chat-root cwd bypass and
+  output path rewriting.
+- Verification passed: focused Plenary
+  `tools_builtin_chat_history_search_spec.lua`, `make test-spec
+  SPEC=providers/tool_use`, `make test`, and `make lint`.

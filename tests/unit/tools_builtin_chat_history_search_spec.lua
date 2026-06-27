@@ -102,4 +102,46 @@ describe("chat_history_search tool", function()
         assert.is_false(r.is_error)
         assert.truthy(r.content:match("{global}") or r.content:match("{parley%.nvim}") or r.content:match("{brain}"))
     end)
+
+    it("rejects injection-shaped numeric fields before process launch", function()
+        for _, case in ipairs({
+            { field = "before", value = "0; echo PARLEY_SENTINEL_149" },
+            { field = "after", value = "$(echo PARLEY_SENTINEL_149)" },
+            { field = "max_count", value = "1 | echo PARLEY_SENTINEL_149" },
+        }) do
+            local input = { pattern = "aws" }
+            input[case.field] = case.value
+
+            local r = handler(input)
+
+            assert.is_true(r.is_error, case.field .. " should be rejected")
+            assert.truthy(r.content:match(case.field), "error should name " .. case.field .. ": " .. r.content)
+            assert.not_matches("PARLEY_SENTINEL_149", r.content)
+        end
+    end)
+
+    it("rejects non-integer numeric context and count fields", function()
+        for _, case in ipairs({
+            { field = "before", value = -1 },
+            { field = "before", value = 1.5 },
+            { field = "after", value = -1 },
+            { field = "after", value = 1.5 },
+            { field = "max_count", value = -1 },
+            { field = "max_count", value = 1.5 },
+        }) do
+            local input = { pattern = "aws" }
+            input[case.field] = case.value
+
+            local r = handler(input)
+
+            assert.is_true(r.is_error, case.field .. " should be rejected")
+            assert.truthy(r.content:match(case.field), "error should name " .. case.field .. ": " .. r.content)
+        end
+    end)
+
+    it("accepts zero context and positive max_count", function()
+        local r = handler({ pattern = "aws", before = 0, after = 0, max_count = 1 })
+        assert.is_false(r.is_error)
+        assert.truthy(r.content:match("{global}") or r.content:match("{parley%.nvim}") or r.content:match("{brain}"))
+    end)
 end)
