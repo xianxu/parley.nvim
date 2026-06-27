@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-06-26
 updated: 2026-06-27
-estimate_hours:
+estimate_hours: 1.5
 started: 2026-06-27T11:19:29-07:00
 ---
 
@@ -43,6 +43,18 @@ types are advisory at the LLM boundary, a crafted string such as
 - Existing `tools_builtin_chat_history_search_spec.lua` behavior still passes.
 - `atlas/providers/tool_use.md` documents that `chat_history_search` uses argv
   execution while retaining its explicit chat-root cwd-bypass.
+
+## Estimate
+
+```estimate
+model: estimate-logic-v2
+familiarity: 1.0
+item: lua-neovim design=0.2 impl=0.8
+item: atlas-docs design=0.05 impl=0.1
+item: milestone-review design=0.0 impl=0.3
+design-buffer: 0.30
+total: 1.5
+```
 
 ## Plan
 
