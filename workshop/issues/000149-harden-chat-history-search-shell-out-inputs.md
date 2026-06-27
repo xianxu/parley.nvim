@@ -1,11 +1,12 @@
 ---
-id: 000147
-status: open
+id: 000149
+status: working
 deps: []
 github_issue:
 created: 2026-06-26
-updated: 2026-06-26
+updated: 2026-06-27
 estimate_hours:
+started: 2026-06-27T11:19:29-07:00
 ---
 
 # Harden chat_history_search shell-out inputs
@@ -56,3 +57,8 @@ types are advisory at the LLM boundary, a crafted string such as
 - Created from #144 close boundary review. That review returned
   `FIX-THEN-SHIP` for #144 with no critical findings in declared scope, but
   identified this adjacent pre-existing shell-string vector as a follow-up.
+
+### 2026-06-27
+- Renumbered from duplicate `000147` to `000149` before starting work. The older
+  neighborhood-path issue already owned `000147`, and `sdlc claim --issue 147`
+  refused because both files matched.
