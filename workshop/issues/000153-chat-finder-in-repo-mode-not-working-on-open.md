@@ -1,11 +1,12 @@
 ---
 id: 000153
-status: working
+status: done
 deps: []
 created: 2026-06-29
 updated: 2026-06-29
 estimate_hours: 0.5
 started: 2026-06-29T14:05:38-07:00
+actual_hours: 0.56
 ---
 
 # chat finder in repo mode not working on open
@@ -50,6 +51,7 @@ total: 0.5
 ## Log
 
 ### 2026-06-29
+- 2026-06-29: closed — focused ChatFinder spec red/green passed; make lint passed; full make test passed; no atlas change because this only aligns a default query token with existing primary-root indexing; review verdict: SHIP
 - Claimed the issue and ran `sdlc start-plan`. Root cause: repo-mode default
   seeded `{repo}`, but primary-root ChatFinder entries are indexed with `{}`,
   so the first-open query filtered out the repo chats it meant to show. Chose the

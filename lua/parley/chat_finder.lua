@@ -529,7 +529,7 @@ M.open = function(options)
 	_parley._chat_finder.opened = true
 
 	-- One-shot: on the first open of a parley session, in plain repo mode,
-	-- pre-seed sticky_query to "{repo}" so the finder defaults to repo chats.
+	-- pre-seed sticky_query to "{}" so the finder defaults to repo chats.
 	-- After the user clears or modifies the filter, sticky_query takes over and
 	-- the default is never re-applied.
 	if not _parley._chat_finder.sticky_query_initialized then
