@@ -158,6 +158,59 @@ function M.completefunc(findstart, base)
     return items
 end
 
+local function cmp_path_sources(cmp, root)
+    local sources = {
+        {
+            name = "path",
+            option = {
+                get_cwd = function()
+                    return root
+                end,
+            },
+        },
+        { name = "buffer" },
+    }
+
+    if cmp.config and type(cmp.config.sources) == "function" then
+        return cmp.config.sources(sources)
+    end
+    return sources
+end
+
+function M.attach_cmp_completion(buf)
+    if not vim.api.nvim_buf_is_valid(buf) then
+        return nil
+    end
+
+    local root = vim.b[buf].parley_neighborhood_root
+    if type(root) ~= "string" or root == "" then
+        root = M.for_buf(buf)
+    end
+    if type(root) ~= "string" or root == "" then
+        return nil
+    end
+
+    local ok, cmp = pcall(require, "cmp")
+    if not ok or type(cmp) ~= "table" or type(cmp.setup) ~= "table" or type(cmp.setup.buffer) ~= "function" then
+        return nil
+    end
+
+    cmp.setup.buffer({
+        completion = {
+            keyword_pattern = [[\~\?\(\k\|[\/\.\-]\)\+]],
+            keyword_length = 1,
+        },
+        sources = cmp_path_sources(cmp, root),
+    })
+    return root
+end
+
+local function schedule_cmp_attach(buf)
+    vim.schedule(function()
+        M.attach_cmp_completion(buf)
+    end)
+end
+
 function M.attach_completion(buf)
     local root = M.for_buf(buf)
     if type(root) ~= "string" or root == "" then
@@ -165,6 +218,14 @@ function M.attach_completion(buf)
     end
     vim.b[buf].parley_neighborhood_root = root
     vim.api.nvim_set_option_value("completefunc", "v:lua.require'parley.neighborhood'.completefunc", { buf = buf })
+    schedule_cmp_attach(buf)
+    vim.api.nvim_create_autocmd("InsertEnter", {
+        buffer = buf,
+        once = true,
+        callback = function()
+            schedule_cmp_attach(buf)
+        end,
+    })
     return root
 end
 

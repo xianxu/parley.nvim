@@ -36,8 +36,11 @@ neighborhood root, not the editor process cwd. `lua/parley/neighborhood.lua`
 derives the root from the artifact path: repo-backed Parley artifacts under the
 repo-local chat/note/issue/vision/history dirs resolve to `config.repo_root`;
 global chats and ordinary content files resolve to their own folder. `prep_chat`
-attaches a buffer-local `completefunc` for chat buffers, so root-relative file
-candidates come from the same neighborhood that tool calls use.
+attaches a buffer-local `completefunc` for chat buffers, and when `nvim-cmp` is
+available it also installs a buffer-local `cmp-path` source whose `get_cwd()`
+returns the same neighborhood. Root-relative file candidates therefore come from
+the same neighborhood that tool calls use, including setups where markdown
+completion is driven by `cmp-path` instead of Vim's built-in completion.
 
 ### Note roots
 Notes still use the multi-root manager with freeform add/remove/rename via `:ParleyNoteDirs` / `<C-n>h` and persist `note_roots` / `note_dirs` to state.json. The shared `root_dirs.lua` generic manager and `root_dir_picker.lua` UI exist primarily to serve the note system now; the chat side only uses the read paths (get/find/normalize/apply) and `super_repo.set_chat_roots`.

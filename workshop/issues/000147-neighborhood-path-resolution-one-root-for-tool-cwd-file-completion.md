@@ -122,3 +122,7 @@ total: 2.2
 - Boundary review fixes: consumed `chat_roots` for super-repo sibling chat roots,
   switched `skill_invoke` to `neighborhood.for_buf(buf)`, added sibling
   derivation/invocation regressions, and reused `root_dirs` normalization helpers.
+- Follow-up from local nvim config: markdown completion was driven by
+  `nvim-cmp`/`cmp-path`, whose default cwd is the chat file's directory and does
+  not consult `completefunc`. Added buffer-local `cmp-path` cwd wiring for Parley
+  chats so `./` completes from the same neighborhood root as tool calls.

@@ -38,7 +38,14 @@ local function make_chat()
 end
 
 describe("neighborhood completion", function()
+    local saved_cmp
+
+    before_each(function()
+        saved_cmp = package.loaded.cmp
+    end)
+
     after_each(function()
+        package.loaded.cmp = saved_cmp
         pcall(vim.cmd, "bwipeout!")
     end)
 
@@ -54,5 +61,32 @@ describe("neighborhood completion", function()
 
         local lua_items = neighborhood.completefunc(0, "lua/parley/in")
         assert.same({ "lua/parley/init.lua" }, lua_items)
+    end)
+
+    it("configures cmp-path completion from the neighborhood root", function()
+        local captured
+        package.loaded.cmp = {
+            config = {
+                sources = function(sources)
+                    return sources
+                end,
+            },
+            setup = {
+                buffer = function(config)
+                    captured = config
+                end,
+            },
+        }
+
+        local buf, path = make_chat()
+
+        parley.prep_chat(buf, path)
+        vim.wait(100, function()
+            return captured ~= nil
+        end)
+
+        assert.is_not_nil(captured)
+        assert.same({ "path", "buffer" }, { captured.sources[1].name, captured.sources[2].name })
+        assert.equals(repo, captured.sources[1].option.get_cwd({ context = { bufnr = buf } }))
     end)
 end)
