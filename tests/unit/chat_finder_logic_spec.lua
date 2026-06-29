@@ -876,11 +876,11 @@ describe("ChatFinder logic", function()
     describe("default_sticky_query_for_repo_mode", function()
         local chat_finder = require("parley.chat_finder")
 
-        it("returns {repo} in plain repo mode", function()
+        it("returns {} in plain repo mode", function()
             local got = chat_finder.default_sticky_query_for_repo_mode({
                 repo_root = "/some/repo",
             })
-            assert.equals("{repo}", got)
+            assert.equals("{}", got)
         end)
 
         it("returns nil when not in repo mode", function()
