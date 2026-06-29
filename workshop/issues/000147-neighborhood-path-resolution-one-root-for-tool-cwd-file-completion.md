@@ -1,12 +1,13 @@
 ---
 id: 000147
-status: working
+status: done
 deps: []
 github_issue:
 created: 2026-06-26
 updated: 2026-06-29
 estimate_hours: 2.2
 started: 2026-06-29T10:22:13-07:00
+actual_hours: 1.20
 ---
 
 # neighborhood path resolution: one root for tool cwd + file completion
@@ -103,6 +104,9 @@ total: 2.2
 ### 2026-06-26
 
 ### 2026-06-29
+- 2026-06-29: closed — make test-spec SPEC=providers/tool_use && make test && make lint after skill sibling and root_dirs fixes; review verdict: SHIP
+- 2026-06-29: closed — make test-spec SPEC=providers/tool_use && make test && make lint after sibling-root fix; review verdict: FIX-THEN-SHIP
+- 2026-06-29: closed — make test-spec SPEC=providers/tool_use; make test; make lint; review verdict: FIX-THEN-SHIP
 - Claimed issue and passed `sdlc change-code`; plan-quality and estimate-quality
   both returned INFO. Addressed plan-quality refinements by using root-only
   `neighborhood`, committing completion to buffer-local `completefunc`, and
@@ -115,3 +119,6 @@ total: 2.2
   `tests/integration/skill_invoke_spec.lua`,
   `tests/integration/neighborhood_completion_spec.lua`, and
   `tests/unit/build_messages_spec.lua`.
+- Boundary review fixes: consumed `chat_roots` for super-repo sibling chat roots,
+  switched `skill_invoke` to `neighborhood.for_buf(buf)`, added sibling
+  derivation/invocation regressions, and reused `root_dirs` normalization helpers.
