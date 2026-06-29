@@ -1,11 +1,12 @@
 ---
 id: 000147
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-06-26
-updated: 2026-06-26
+updated: 2026-06-29
 estimate_hours:
+started: 2026-06-29T10:22:13-07:00
 ---
 
 # neighborhood path resolution: one root for tool cwd + file completion
