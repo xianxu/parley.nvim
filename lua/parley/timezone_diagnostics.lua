@@ -10,6 +10,7 @@ local diag_ns_id
 local function ensure_namespace()
     if not diag_ns_id then
         diag_ns_id = vim.api.nvim_create_namespace(DIAG_NS)
+        vim.diagnostic.config({ virtual_text = true }, diag_ns_id)
     end
 end
 
@@ -106,7 +107,7 @@ function M.build_diagnostics(lines, opts)
                     utc = token,
                     epoch = epoch,
                     local_time = local_time,
-                    message = string.format("%s local time: %s", token, local_time),
+                    message = string.format("local time: %s", local_time),
                 })
             end
 

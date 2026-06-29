@@ -34,8 +34,8 @@ invalid calendar values.
 The feature must not mutate buffer contents. It should publish diagnostics under
 a Parley-specific namespace so users can use normal Neovim diagnostic UI and
 navigation while keeping Parley separate from LSP diagnostics. Diagnostic ranges
-should cover the timestamp token and messages should name both the original UTC
-string and the converted local time.
+should cover the timestamp token. The diagnostic message should stay concise for
+virtual text: `local time: <converted local time>`.
 
 Keep the timestamp parsing and conversion logic pure and independently tested
 (`ARCH-PURE`). UTC-to-local conversion must not read ambient timezone state in
@@ -96,3 +96,6 @@ Implemented timezone diagnostics. Verification passed:
 `tests/unit/timezone_diagnostics_spec.lua`, `tests/integration/highlighting_spec.lua`,
 `make test-spec SPEC=ui/highlights`, `sdlc issue validate`, `make test`, and
 `make lint`.
+
+Follow-up display tweak: enabled virtual text for the timezone diagnostic
+namespace and simplified the message to `local time: <converted local time>`.
