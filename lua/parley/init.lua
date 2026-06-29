@@ -2985,7 +2985,7 @@ M._note_finder = {
 M._issue_finder = {
 	opened = false,
 	source_win = nil,
-	view_mode = 0, -- 0=open+blocked, 1=all, 2=all+history
+	view_mode = 0, -- 0=all (default, done visible), 1=active, 2=all+history
 	initial_index = nil,
 	initial_value = nil,
 	sticky_query = nil, -- Preserved {repo} filter across invocations
