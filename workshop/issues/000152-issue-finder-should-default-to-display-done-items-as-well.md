@@ -1,11 +1,12 @@
 ---
 id: 000152
-status: working
+status: done
 deps: []
 created: 2026-06-29
 updated: 2026-06-29
 started: 2026-06-29T15:55:34-07:00
 estimate_hours: 1.0
+actual_hours: 0.43
 ---
 
 # issue finder should default to display done items as well
@@ -16,8 +17,8 @@ currently we hide done items in workshop/issues, and user can use <C-a> to toggl
 
 ## Done when
 
-- [ ] Issue finder shows done items by default.
-- [ ] The existing toggle still lets the user hide done items.
+- [x] Issue finder shows done items by default.
+- [x] The existing toggle still lets the user hide done items.
 
 ## Spec
 
@@ -72,6 +73,7 @@ the pickers atlas note; `milestone-review` the single close-boundary review.
 ## Log
 
 ### 2026-06-29
+- 2026-06-29: closed — TDD red→green: tests/unit/issue_finder_spec.lua 6 new tests (filter_for_view modes 0/1/2, includes_history, no-mutation, VIEW_LABELS order) red with nil functions then green. make test-spec SPEC=issues/issue-management green (6 new + existing issue specs). make test full suite exit 0, 0 failures/errors. make lint 0/0 across 237 files. Behavior: default view_mode 0 now means all (done items in workshop/issues visible), cycle all→active→all+history so first <C-a> hides done; pure filter_for_view/includes_history extracted per ARCH-PURE leaving M.open a thin UI seam.; review verdict: SHIP
 
 Created from user feedback while landing #108. Scoped the desired behavior:
 show done issues by default in the issue finder while preserving the existing
