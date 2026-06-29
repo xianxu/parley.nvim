@@ -1,9 +1,9 @@
 ---
 id: 000085
-status: open
+status: wontfix
 deps: [000081]
 created: 2026-04-09
-updated: 2026-04-09
+updated: 2026-06-29
 ---
 
 # file reference freshness: staleness indicator + reload command
@@ -17,7 +17,7 @@ Parley's chat transcript holds *snapshots* of file content in two places, both o
 
 When the underlying file changes on disk after the snapshot, the transcript becomes stale without any visual signal. This ticket adds freshness visibility and a reload story that treats both reference types uniformly.
 
-## Scope
+## Spec
 
 - **Visual staleness indicator.** A highlight group / sigil on any `@@` embed or `📎: read_file` block whose recorded content differs from the current disk content. Stale = mismatched hash.
 - **Reload command — single reference.** Re-freshen the cached content of the reference under the cursor, rewriting the transcript in place.
@@ -38,6 +38,11 @@ It applies equally to `@@` (predates #81) and to `📎: read_file` (introduced b
 - [ ] Brainstorm after #81 lands
 
 ## Log
+
+### 2026-06-29
+
+- Marked wontfix after revisiting the premise. Treating prior local and remote references as stale UI objects creates high UX cost without a clear payoff: historical tool results are observations, and explicit references should produce fresh snapshots when resubmitted rather than mutate old transcript meaning.
+- The useful gap is not a staleness indicator/reload system. It is a local web-fetch capability for URLs reachable from Parley chat, especially authenticated pages that provider-side web search/fetch cannot access. Follow-up tracked in #151.
 
 ### 2026-04-09
 
