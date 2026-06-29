@@ -32,3 +32,7 @@ switches them off instead of on.
 ## Log
 
 ### 2026-06-29
+
+Created from user feedback while landing #108. Scoped the desired behavior:
+show done issues by default in the issue finder while preserving the existing
+toggle as a way to hide them.
