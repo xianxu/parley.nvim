@@ -1,9 +1,10 @@
 ---
 id: 000108
-status: open
+status: working
 deps: []
 created: 2026-04-18
-updated: 2026-04-18
+updated: 2026-06-29
+started: 2026-06-29T12:35:51-07:00
 ---
 
 # create diagosis display for timezone string in local timezone
