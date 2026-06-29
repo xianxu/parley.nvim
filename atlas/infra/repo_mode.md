@@ -68,6 +68,7 @@ All directory names are relative to git root unless they start with `/`.
 - `repo_chat_dir` and `repo_note_dir` are excluded from the generic `_dir$` prepare loop in setup
 - `repo_artifacts.dir_keys` is the shared source for repo-local artifact dirs that repo setup creates and `neighborhood` classifies as repo-backed
 - `apply_repo_local()` builds `config.chat_roots = [{dir=repo_chat, label="repo"}, {dir=config.chat_dir, label="global"}, ...]` directly, bypassing the basename-derived label heuristic in `default_root_label`
+- Parley chat buffers with `nvim-cmp` replace the buffer's cmp sources with `cmp-path` and `buffer` so path completion is anchored to the artifact neighborhood
 - `refresh_state()` re-asserts the repo *note* dir as primary after restoring persisted state (chat side does not need this — chat state is never persisted), and strips note_roots entries marked transient (plain repo's `label = "repo"` and super-repo's pushed sibling dirs) from `state.json`
 - `detect_buffer_context` checks all note roots (not just primary) for scope detection
 - `neighborhood.derive_for_path()` canonicalizes `/var`/`/private/var` style path aliases before testing repo-local artifact directories

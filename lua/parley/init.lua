@@ -640,7 +640,10 @@ M.setup = function(opts)
 
 	-- repo-local dirs (issues, history, vision, notes) are resolved in apply_repo_local
 	-- against git root; skip them here to avoid creating in CWD
-	local skip_prepare = { chat_dir = true, repo_chat_dir = true, repo_note_dir = true, issues_dir = true, history_dir = true, vision_dir = true }
+	local skip_prepare = { chat_dir = true }
+	for _, key in ipairs(repo_artifacts.dir_keys) do
+		skip_prepare[key] = true
+	end
 	for k, v in pairs(M.config) do
 		if not skip_prepare[k] and k:match("_dir$") and type(v) == "string" then
 			M.config[k] = M.helpers.prepare_dir(v, k)

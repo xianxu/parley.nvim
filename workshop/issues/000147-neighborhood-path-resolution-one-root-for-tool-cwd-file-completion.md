@@ -7,7 +7,7 @@ created: 2026-06-26
 updated: 2026-06-29
 estimate_hours: 2.2
 started: 2026-06-29T10:22:13-07:00
-actual_hours: 1.68
+actual_hours: 1.90
 ---
 
 # neighborhood path resolution: one root for tool cwd + file completion
@@ -104,6 +104,7 @@ total: 2.2
 ### 2026-06-26
 
 ### 2026-06-29
+- 2026-06-29: closed — make test-spec SPEC=providers/tool_use; make test; make lint after cmp-path, findstart, and repo-artifact DRY fixes; review verdict: FIX-THEN-SHIP
 - 2026-06-29: closed — make test-spec SPEC=providers/tool_use; make test; make lint after cmp-path and findstart coverage fixes; review verdict: FIX-THEN-SHIP
 - 2026-06-29: closed — make test-spec SPEC=providers/tool_use; make test; make lint after cmp-path neighborhood fix; review verdict: FIX-THEN-SHIP
 - 2026-06-29: closed — make test-spec SPEC=providers/tool_use && make test && make lint after skill sibling and root_dirs fixes; review verdict: SHIP
