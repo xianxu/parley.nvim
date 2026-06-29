@@ -1,12 +1,13 @@
 ---
 id: 000149
-status: working
+status: done
 deps: []
 github_issue:
 created: 2026-06-26
 updated: 2026-06-27
 estimate_hours: 1.5
 started: 2026-06-27T11:19:29-07:00
+actual_hours: 0.13
 ---
 
 # Harden chat_history_search shell-out inputs
@@ -58,10 +59,10 @@ total: 1.5
 
 ## Plan
 
-- [ ] Add failing tests for numeric field injection/rejection.
-- [ ] Convert `chat_history_search` command construction to argv-list execution.
-- [ ] Update atlas/tool-use docs and traceability if new tests are added.
-- [ ] Run `make test-spec SPEC=providers/tool_use`, `make test`, and `make lint`.
+- [x] Add failing tests for numeric field injection/rejection.
+- [x] Convert `chat_history_search` command construction to argv-list execution.
+- [x] Update atlas/tool-use docs and traceability if new tests are added.
+- [x] Run `make test-spec SPEC=providers/tool_use`, `make test`, and `make lint`.
 
 ## Log
 
@@ -71,6 +72,19 @@ total: 1.5
   identified this adjacent pre-existing shell-string vector as a follow-up.
 
 ### 2026-06-27
+- 2026-06-27: closed — TDD red/green verified: focused chat_history_search spec failed before the fix and passed after argv conversion. make test-spec SPEC=providers/tool_use, make test, make lint, sdlc issue validate, and git diff --check all passed. Atlas documents #149 argv safety for chat_history_search. Prior Claude boundary-review attempts hung twice with no verdict, so this rerun uses --agent codex.; review verdict: SHIP
 - Renumbered from duplicate `000147` to `000149` before starting work. The older
   neighborhood-path issue already owned `000147`, and `sdlc claim --issue 147`
   refused because both files matched.
+- `sdlc start-plan --issue 149` delivered `ARCH-DRY`, `ARCH-PURE`, and
+  `ARCH-PURPOSE`; the design reuses the #144 argv helper, validates numeric
+  fields before the IO boundary, and converts both `rg` and `grep` branches.
+- TDD red: the focused chat-history spec failed as expected because
+  injection-shaped and non-integer `before`/`after`/`max_count` values were not
+  rejected.
+- Implemented argv-list execution for `chat_history_search` and numeric
+  validation through `argv.nonnegative_int`, preserving chat-root cwd bypass and
+  output path rewriting.
+- Verification passed: focused Plenary
+  `tools_builtin_chat_history_search_spec.lua`, `make test-spec
+  SPEC=providers/tool_use`, `make test`, and `make lint`.
