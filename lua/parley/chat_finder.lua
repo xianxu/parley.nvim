@@ -34,9 +34,10 @@ M.invalidate_path = function(path)
 	_file_cache[vim.fn.resolve(path)] = nil
 end
 
--- In plain repo mode, default the chat finder's sticky filter to `{repo}` so
--- chats from the global chat root (and other roots) are filtered out — the
--- user is almost always looking for chats from the repo they're working in.
+-- In plain repo mode, default the chat finder's sticky filter to `{}` so chats
+-- from the global chat root (and other roots) are filtered out. ChatFinder
+-- indexes the primary chat root with `{}`; repo mode makes the repo chat root
+-- primary, so this narrows to repo chats without changing root-label semantics.
 -- Skipped in super-repo mode: that mode's whole point is aggregating siblings,
 -- and narrowing to the local repo would defeat it. Returns the value to set,
 -- or nil to leave sticky_query alone.
@@ -49,7 +50,7 @@ function M.default_sticky_query_for_repo_mode(config)
 	if type(super_repo_root) == "string" and super_repo_root ~= "" then
 		return nil
 	end
-	return "{repo}"
+	return "{}"
 end
 
 --------------------------------------------------------------------------------
@@ -528,7 +529,7 @@ M.open = function(options)
 	_parley._chat_finder.opened = true
 
 	-- One-shot: on the first open of a parley session, in plain repo mode,
-	-- pre-seed sticky_query to "{repo}" so the finder defaults to repo chats.
+	-- pre-seed sticky_query to "{}" so the finder defaults to repo chats.
 	-- After the user clears or modifies the filter, sticky_query takes over and
 	-- the default is never re-applied.
 	if not _parley._chat_finder.sticky_query_initialized then
