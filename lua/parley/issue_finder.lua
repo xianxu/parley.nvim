@@ -12,6 +12,36 @@ M.setup = function(parley)
 end
 
 --------------------------------------------------------------------------------
+-- View-mode logic (pure)
+--
+-- `<C-a>` cycles a tri-state `view_mode` via (view_mode + 1) % 3. The labels
+-- order the cycle `all → active → all+history → all`, so the default (0) shows
+-- done items in `workshop/issues/` and the FIRST press hides them (#152).
+--------------------------------------------------------------------------------
+
+M.VIEW_LABELS = { [0] = "all", [1] = "active", [2] = "all+history" }
+
+-- Does this view mode scan archived files from the history dir? Only all+history.
+M.includes_history = function(view_mode)
+    return view_mode == 2
+end
+
+-- Which scanned issues survive the given view_mode. Mode 1 (active) keeps only
+-- open/active statuses and drops archived history files; modes 0 (all) and
+-- 2 (all+history) keep everything scanned. Returns a fresh list (no mutation).
+M.filter_for_view = function(view_mode, all_issues)
+    local active_only = view_mode == 1
+    local filtered = {}
+    for _, issue in ipairs(all_issues) do
+        if not active_only
+            or (issues_mod.is_open_or_active_status(issue.status) and not issue.archived) then
+            table.insert(filtered, issue)
+        end
+    end
+    return filtered
+end
+
+--------------------------------------------------------------------------------
 -- Reopen helper
 --------------------------------------------------------------------------------
 
@@ -125,9 +155,9 @@ M.open = function(_options)
         return
     end
 
-    -- View mode: 0=vocabulary open+active, 1=all, 2=all+history
+    -- View mode: 0=all (default), 1=active (open+active only), 2=all+history
     local view_mode = _parley._issue_finder.view_mode or 0
-    local include_history = view_mode == 2
+    local include_history = M.includes_history(view_mode)
     local all_issues = {}
     for _, root in ipairs(roots) do
         if root.issues_dir then
@@ -140,20 +170,7 @@ M.open = function(_options)
         end
     end
 
-    -- Filter based on view mode
-    local filtered = {}
-    for _, issue in ipairs(all_issues) do
-        if view_mode == 0 then
-            -- Active view shows open + active vocabulary categories, excluding archived files.
-            if issues_mod.is_open_or_active_status(issue.status) and not issue.archived then
-                table.insert(filtered, issue)
-            end
-        else
-            -- view_mode 1 or 2: show all
-            table.insert(filtered, issue)
-        end
-    end
-    local sorted = issues_mod.topo_sort(filtered)
+    local sorted = issues_mod.topo_sort(M.filter_for_view(view_mode, all_issues))
 
     -- Build picker items
     local items = {}
@@ -184,10 +201,9 @@ M.open = function(_options)
 
     local chat_finder_mod = require("parley.chat_finder")
 
-    local view_labels = { [0] = "active", [1] = "all", [2] = "all+history" }
     local prompt_title = string.format(
         "Issues (%s  %s: cycle view)",
-        view_labels[view_mode] or "open+blocked",
+        M.VIEW_LABELS[view_mode] or M.VIEW_LABELS[0],
         toggle_done_shortcut.shortcut
     )
 

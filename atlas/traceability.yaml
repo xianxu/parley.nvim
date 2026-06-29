@@ -402,6 +402,7 @@ atlas:
     tests:
       - tests/unit/issue_vocabulary_spec.lua
       - tests/unit/issues_spec.lua
+      - tests/unit/issue_finder_spec.lua
 
   ui/highlights:
     code:
