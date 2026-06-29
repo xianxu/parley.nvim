@@ -33,6 +33,17 @@ local function propose_edits_sse(edits)
     })
 end
 
+local function read_file_sse(path)
+    return sse({
+        { type = "content_block_start", index = 0,
+          content_block = { type = "tool_use", id = "t_read", name = "read_file", input = {} } },
+        { type = "content_block_delta", index = 0,
+          delta = { type = "input_json_delta", partial_json = vim.json.encode({ file_path = path }) } },
+        { type = "content_block_stop", index = 0 },
+        { type = "message_stop" },
+    })
+end
+
 local function manifest(over)
     return vim.tbl_extend("force", {
         name = "t", description = "d", scope = "global", activation = { manual = true },
@@ -214,5 +225,76 @@ describe("skill_invoke.invoke", function()
         assert.is_false(done_result.ok)
         assert.is_truthy((done_result.msg or ""):find("source", 1, true))
         assert.is_false(query_called, "must not query when source failed")
+    end)
+
+    it("executes relative tool paths from a repo-backed artifact neighborhood", function()
+        local repo = tmpdir .. "/repo"
+        local repo_chat = repo .. "/workshop/parley"
+        vim.fn.mkdir(repo_chat, "p")
+        vim.fn.writefile({ "repo root file" }, repo .. "/README.md")
+        path = repo_chat .. "/2026-06-29.topic.md"
+        vim.fn.writefile({ "alpha beta" }, path)
+        vim.cmd("edit! " .. vim.fn.fnameescape(path))
+        buf = vim.api.nvim_get_current_buf()
+
+        parley.config.repo_root = repo
+        parley.config.repo_chat_dir = "workshop/parley"
+
+        parley.dispatcher.query = function(_b, _p, _payload, _h, on_exit)
+            tasker.set_query("qid_read", {
+                raw_response = read_file_sse("README.md"),
+            })
+            vim.schedule(function() on_exit("qid_read") end)
+        end
+
+        skill_invoke.invoke(buf, manifest({
+            tools = { "read_file" },
+            elevated = {},
+            force_tool = "read_file",
+        }), {}, { on_done = function(r) done_result = r end })
+        vim.wait(2000, function() return done_result ~= nil end)
+
+        assert.is_not_nil(done_result)
+        assert.is_true(done_result.ok)
+        assert.equals("repo root file", done_result.results[1].content:match("repo root file"))
+    end)
+
+    it("executes relative tool paths from a super-repo sibling chat neighborhood", function()
+        local current_repo = tmpdir .. "/current"
+        local sibling_repo = tmpdir .. "/sibling"
+        local current_chat = current_repo .. "/workshop/parley"
+        local sibling_chat = sibling_repo .. "/workshop/parley"
+        vim.fn.mkdir(current_chat, "p")
+        vim.fn.mkdir(sibling_chat, "p")
+        vim.fn.writefile({ "sibling repo root file" }, sibling_repo .. "/README.md")
+        path = sibling_chat .. "/2026-06-29.topic.md"
+        vim.fn.writefile({ "alpha beta" }, path)
+        vim.cmd("edit! " .. vim.fn.fnameescape(path))
+        buf = vim.api.nvim_get_current_buf()
+
+        parley.config.repo_root = current_repo
+        parley.config.repo_chat_dir = "workshop/parley"
+        parley.config.chat_roots = {
+            { dir = current_chat, label = "repo" },
+            { dir = sibling_chat, label = "sibling" },
+        }
+
+        parley.dispatcher.query = function(_b, _p, _payload, _h, on_exit)
+            tasker.set_query("qid_sibling_read", {
+                raw_response = read_file_sse("README.md"),
+            })
+            vim.schedule(function() on_exit("qid_sibling_read") end)
+        end
+
+        skill_invoke.invoke(buf, manifest({
+            tools = { "read_file" },
+            elevated = {},
+            force_tool = "read_file",
+        }), {}, { on_done = function(r) done_result = r end })
+        vim.wait(2000, function() return done_result ~= nil end)
+
+        assert.is_not_nil(done_result)
+        assert.is_true(done_result.ok)
+        assert.equals("sibling repo root file", done_result.results[1].content:match("sibling repo root file"))
     end)
 end)

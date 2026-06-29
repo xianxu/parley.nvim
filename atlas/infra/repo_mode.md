@@ -30,6 +30,15 @@ chat_roots = [config.chat_dir]
 
 `apply_repo_local()` materializes this list at setup; super-repo toggling pushes/pops sibling entries at runtime. There are no `:ParleyChatDirs` / `:ParleyChatDirAdd` / `:ParleyChatDirRemove` commands and no `<C-g>h` keybinding — they were removed in issue #117 because the original use case (drop a folder in for deliberation) is fully covered by repo + super-repo modes. State.json no longer carries `chat_dirs` / `chat_roots`; old state files with these fields are silently ignored on load.
 
+### Reference neighborhood (#147)
+Relative tool paths and chat-buffer file completion use a per-artifact
+neighborhood root, not the editor process cwd. `lua/parley/neighborhood.lua`
+derives the root from the artifact path: repo-backed Parley artifacts under the
+repo-local chat/note/issue/vision/history dirs resolve to `config.repo_root`;
+global chats and ordinary content files resolve to their own folder. `prep_chat`
+attaches a buffer-local `completefunc` for chat buffers, so root-relative file
+candidates come from the same neighborhood that tool calls use.
+
 ### Note roots
 Notes still use the multi-root manager with freeform add/remove/rename via `:ParleyNoteDirs` / `<C-n>h` and persist `note_roots` / `note_dirs` to state.json. The shared `root_dirs.lua` generic manager and `root_dir_picker.lua` UI exist primarily to serve the note system now; the chat side only uses the read paths (get/find/normalize/apply) and `super_repo.set_chat_roots`.
 
@@ -57,6 +66,7 @@ All directory names are relative to git root unless they start with `/`.
 - `apply_repo_local()` builds `config.chat_roots = [{dir=repo_chat, label="repo"}, {dir=config.chat_dir, label="global"}, ...]` directly, bypassing the basename-derived label heuristic in `default_root_label`
 - `refresh_state()` re-asserts the repo *note* dir as primary after restoring persisted state (chat side does not need this — chat state is never persisted), and strips note_roots entries marked transient (plain repo's `label = "repo"` and super-repo's pushed sibling dirs) from `state.json`
 - `detect_buffer_context` checks all note roots (not just primary) for scope detection
+- `neighborhood.derive_for_path()` canonicalizes `/var`/`/private/var` style path aliases before testing repo-local artifact directories
 - Finders scan all roots, tagging non-primary entries with `{label}` prefix
 
 ## Related

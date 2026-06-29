@@ -1,0 +1,58 @@
+local parley = require("parley")
+local neighborhood = require("parley.neighborhood")
+
+local tmpdir = vim.fn.tempname() .. "-neighborhood-completion"
+local repo = tmpdir .. "/repo"
+local repo_chat = repo .. "/workshop/parley"
+vim.fn.mkdir(repo_chat, "p")
+vim.fn.mkdir(repo .. "/lua/parley", "p")
+vim.fn.writefile({ "readme" }, repo .. "/README.md")
+vim.fn.writefile({ "-- init" }, repo .. "/lua/parley/init.lua")
+
+parley.setup({
+    chat_dir = repo_chat,
+    state_dir = tmpdir .. "/state",
+    providers = {},
+    api_keys = {},
+})
+parley.config.repo_root = repo
+parley.config.repo_chat_dir = "workshop/parley"
+
+local function make_chat()
+    local path = repo_chat .. "/2026-06-29.topic.md"
+    local lines = {
+        "---",
+        "topic: Test",
+        "file: 2026-06-29.topic.md",
+        "model: test-model",
+        "provider: openai",
+        "---",
+        "",
+        "💬: open REA",
+    }
+    vim.fn.writefile(lines, path)
+    vim.cmd("edit! " .. vim.fn.fnameescape(path))
+    local buf = vim.api.nvim_get_current_buf()
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+    return buf, path
+end
+
+describe("neighborhood completion", function()
+    after_each(function()
+        pcall(vim.cmd, "bwipeout!")
+    end)
+
+    it("attaches a chat-local completefunc rooted at the neighborhood", function()
+        local buf, path = make_chat()
+
+        parley.prep_chat(buf, path)
+
+        assert.equals("v:lua.require'parley.neighborhood'.completefunc", vim.bo[buf].completefunc)
+
+        local readme_items = neighborhood.completefunc(0, "REA")
+        assert.same({ "README.md" }, readme_items)
+
+        local lua_items = neighborhood.completefunc(0, "lua/parley/in")
+        assert.same({ "lua/parley/init.lua" }, lua_items)
+    end)
+end)

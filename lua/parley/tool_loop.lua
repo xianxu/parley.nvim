@@ -31,6 +31,7 @@
 -- State is module-level and keyed by bufnr. NO globals.
 
 local M = {}
+local neighborhood = require("parley.neighborhood")
 
 -- Per-buffer state: { iter = number }
 local state_by_buf = {}
@@ -240,9 +241,13 @@ function M.process_response(bufnr, raw_response, agent_info, live_model, exchang
     -- Execute each tool call and write 🔧:/📎: blocks in streaming order.
     local dispatcher = require("parley.tools.dispatcher")
     local registry = require("parley.tools")
+    local neighborhood_root = agent_info.cwd
+    if not neighborhood_root then
+        neighborhood_root = neighborhood.for_buf(bufnr)
+    end
 
     local exec_opts = {
-        cwd = agent_info.cwd or vim.fn.getcwd(),
+        cwd = neighborhood_root or vim.fn.getcwd(),
         max_bytes = agent_info.tool_result_max_bytes or 102400,
         -- #140: extra read-tool roots (global config); write tools ignore it.
         read_roots = require("parley.config").tool_read_roots,

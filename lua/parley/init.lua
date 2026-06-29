@@ -1833,6 +1833,8 @@ M.prep_chat = function(buf, file_name)
 	-- Set up tool block folding (clickable foldcolumn icons)
 	require("parley.tool_folds").setup(buf)
 
+	require("parley.neighborhood").attach_completion(buf)
+
 	if M.config.chat_prompt_buf_type then
 		vim.api.nvim_set_option_value("buftype", "prompt", { buf = buf })
 		vim.fn.prompt_setprompt(buf, "")

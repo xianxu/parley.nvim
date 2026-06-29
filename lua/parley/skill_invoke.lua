@@ -176,7 +176,8 @@ function M.invoke(buf, manifest, args, opts)
 
     skill_render.clear_decorations(buf)
 
-    local cwd = vim.fn.fnamemodify(artifact_path, ":h")
+    local cwd = require("parley.neighborhood").for_buf(buf)
+        or vim.fn.fnamemodify(artifact_path, ":h")
 
     _in_flight[buf] = true
     -- Detached progress bar: this is a ~30s headless op, so show a running cue
