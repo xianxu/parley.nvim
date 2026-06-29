@@ -1,6 +1,6 @@
 ---
 id: 000145
-status: open
+status: punt
 deps: []
 created: 2026-06-26
 updated: 2026-06-26
@@ -18,16 +18,21 @@ needs some discussion.
 
 ## Done when
 
--
+- Parley has a documented decision for whether progressive chat-history trimming
+  should preserve, summarize, or drop tool call request/result blocks.
+- If pursued, the plan accounts for provider cache semantics and the effect on
+  prefix-cache reuse.
 
 ## Spec
 
 
 ## Plan
 
-- [ ]
+- [ ] Compare current `chat_memory.max_full_exchanges` behavior with provider
+  cache semantics for OpenAI and Anthropic.
+- [ ] Decide whether progressive trimming is worth implementing, and document
+  the chosen policy.
 
 ## Log
 
 ### 2026-06-26
-
