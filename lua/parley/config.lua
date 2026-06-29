@@ -396,7 +396,7 @@ local config = {
 	chat_tool_result_prefix = "📎:",
 	-- #140: extra roots READ tools (read_file/ls/find/grep/ack) may reach beyond
 	-- cwd. Each entry: absolute (`/x`), home (`~/workspace`, ~ expanded), or
-	-- relative to cwd (`../`). Empty = cwd-only (the default sandbox). Write tools
+	-- relative to cwd (`../`). Empty = cwd-only. Write tools
 	-- (edit_file/write_file) stay cwd-confined regardless of this setting.
 	tool_read_roots = {'../'},
 	-- #139: default output-pager page size (lines) for tool results. Every read
