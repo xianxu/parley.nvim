@@ -97,7 +97,10 @@ function M.for_buf(buf)
     local ok, chat_dirs = pcall(require, "parley.chat_dirs")
     local roots = {}
     if ok and type(chat_dirs.get_chat_roots) == "function" then
-        roots = chat_dirs.get_chat_roots()
+        local roots_ok, derived_roots = pcall(chat_dirs.get_chat_roots)
+        if roots_ok then
+            roots = derived_roots
+        end
     end
     return M.derive_for_path(path, config, roots)
 end
@@ -117,6 +120,17 @@ local function relative_to_root(path, root)
     return nil
 end
 
+local function root_for_buf(buf)
+    local root = vim.b[buf].parley_neighborhood_root
+    if type(root) ~= "string" or root == "" then
+        root = M.for_buf(buf)
+    end
+    if type(root) ~= "string" or root == "" then
+        return nil
+    end
+    return root
+end
+
 function M.completefunc(findstart, base)
     if tonumber(findstart) == 1 then
         local line = vim.api.nvim_get_current_line()
@@ -133,11 +147,8 @@ function M.completefunc(findstart, base)
     end
 
     local buf = vim.api.nvim_get_current_buf()
-    local root = vim.b[buf].parley_neighborhood_root
-    if type(root) ~= "string" or root == "" then
-        root = M.for_buf(buf)
-    end
-    if type(root) ~= "string" or root == "" then
+    local root = root_for_buf(buf)
+    if not root then
         return {}
     end
 
@@ -182,11 +193,8 @@ function M.attach_cmp_completion(buf)
         return nil
     end
 
-    local root = vim.b[buf].parley_neighborhood_root
-    if type(root) ~= "string" or root == "" then
-        root = M.for_buf(buf)
-    end
-    if type(root) ~= "string" or root == "" then
+    local root = root_for_buf(buf)
+    if not root then
         return nil
     end
 

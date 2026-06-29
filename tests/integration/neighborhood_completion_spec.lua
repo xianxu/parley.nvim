@@ -63,6 +63,16 @@ describe("neighborhood completion", function()
         assert.same({ "lua/parley/init.lua" }, lua_items)
     end)
 
+    it("finds the start column for the current path token", function()
+        local buf, path = make_chat()
+
+        parley.prep_chat(buf, path)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "open lua/parley/in" })
+        vim.api.nvim_win_set_cursor(0, { 1, #"open lua/parley/in" })
+
+        assert.equals(#"open ", neighborhood.completefunc(1, ""))
+    end)
+
     it("configures cmp-path completion from the neighborhood root", function()
         local captured
         package.loaded.cmp = {
