@@ -1,12 +1,13 @@
 ---
 id: 000147
-status: working
+status: done
 deps: []
 github_issue:
 created: 2026-06-26
 updated: 2026-06-29
-estimate_hours:
+estimate_hours: 2.2
 started: 2026-06-29T10:22:13-07:00
+actual_hours: 2.01
 ---
 
 # neighborhood path resolution: one root for tool cwd + file completion
@@ -77,15 +78,55 @@ realized `./` was keyed to incidental editor state.)
 - Shell-tool (`ls`/`grep`/`find`) consistency tracked with #144 (they honor cwd
   once #144 lands).
 
+## Estimate
+
+```estimate
+model: estimate-logic-v2
+familiarity: 1.0
+item: lua-neovim design=0.45 impl=1.2
+item: atlas-docs design=0.05 impl=0.1
+item: milestone-review design=0.0 impl=0.25
+design-buffer: 0.30
+total: 2.2
+```
+
 ## Plan
 
-- [ ] Pure `neighborhood(artifact/buf) → root` (repo-moded chat → repo root; else → own folder); reuse parley's repo-mode detection.
-- [ ] Wire tool-call cwd to `neighborhood()` (`tool_loop` / `skill_invoke`).
-- [ ] Buffer-local neighborhood-rooted file completion for chat buffers.
-- [ ] Surface the neighborhood root in the agent's tool-use context.
-- [ ] Tests: neighborhood derivation (repo-moded / global / content), cwd wiring.
-- [ ] Atlas + docs.
+- [x] Pure `neighborhood(artifact/buf) → root` (repo-moded chat → repo root; else → own folder); reuse parley's repo-mode detection.
+- [x] Wire tool-call cwd to `neighborhood()` (`tool_loop` / `skill_invoke`).
+- [x] Buffer-local neighborhood-rooted file completion for chat buffers.
+- [x] Surface the neighborhood root in the agent's tool-use context.
+- [x] Tests: neighborhood derivation (repo-moded / global / content), cwd wiring.
+- [x] Atlas + docs.
 
 ## Log
 
 ### 2026-06-26
+
+### 2026-06-29
+- 2026-06-29: closed — make test-spec SPEC=providers/tool_use; make test; make lint after final repo-artifact key consolidation; review verdict: SHIP
+- 2026-06-29: closed — make test-spec SPEC=providers/tool_use; make test; make lint after cmp-path, findstart, and repo-artifact DRY fixes; review verdict: FIX-THEN-SHIP
+- 2026-06-29: closed — make test-spec SPEC=providers/tool_use; make test; make lint after cmp-path and findstart coverage fixes; review verdict: FIX-THEN-SHIP
+- 2026-06-29: closed — make test-spec SPEC=providers/tool_use; make test; make lint after cmp-path neighborhood fix; review verdict: FIX-THEN-SHIP
+- 2026-06-29: closed — make test-spec SPEC=providers/tool_use && make test && make lint after skill sibling and root_dirs fixes; review verdict: SHIP
+- 2026-06-29: closed — make test-spec SPEC=providers/tool_use && make test && make lint after sibling-root fix; review verdict: FIX-THEN-SHIP
+- 2026-06-29: closed — make test-spec SPEC=providers/tool_use; make test; make lint; review verdict: FIX-THEN-SHIP
+- Claimed issue and passed `sdlc change-code`; plan-quality and estimate-quality
+  both returned INFO. Addressed plan-quality refinements by using root-only
+  `neighborhood`, committing completion to buffer-local `completefunc`, and
+  locating agent context in `chat_respond` / `system_prompt_msgs`.
+- Implemented `lua/parley/neighborhood.lua` as the single root derivation source.
+  `tool_loop`, `skill_invoke`, chat completion, and tool-enabled system context
+  now consume the derived root.
+- Focused verification passed:
+  `tests/unit/neighborhood_spec.lua`, `tests/unit/tool_loop_spec.lua`,
+  `tests/integration/skill_invoke_spec.lua`,
+  `tests/integration/neighborhood_completion_spec.lua`, and
+  `tests/unit/build_messages_spec.lua`.
+- Boundary review fixes: consumed `chat_roots` for super-repo sibling chat roots,
+  switched `skill_invoke` to `neighborhood.for_buf(buf)`, added sibling
+  derivation/invocation regressions, and reused `root_dirs` normalization helpers.
+- Follow-up from local nvim config: markdown completion was driven by
+  `nvim-cmp`/`cmp-path`, whose default cwd is the chat file's directory and does
+  not consult `completefunc`. Added buffer-local `cmp-path` cwd wiring for Parley
+  chats so `./` completes from the same neighborhood root as tool calls.

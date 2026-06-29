@@ -330,9 +330,13 @@ atlas:
       - lua/parley/tools/backup.lua
       - lua/parley/chat_respond.lua
       - lua/parley/chat_lease.lua
+      - lua/parley/neighborhood.lua
+      - lua/parley/repo_artifacts.lua
     tests:
       - tests/integration/chat_lease_spec.lua
+      - tests/integration/neighborhood_completion_spec.lua
       - tests/unit/tool_loop_spec.lua
+      - tests/unit/neighborhood_spec.lua
       - tests/unit/tools_registry_spec.lua
       - tests/unit/tools_dispatcher_spec.lua
       - tests/unit/tools_serialize_spec.lua
@@ -463,6 +467,7 @@ atlas:
       - lua/parley/skill_assembly.lua
       - lua/parley/skill_invoke.lua
       - lua/parley/skill_render.lua
+      - lua/parley/neighborhood.lua
       - lua/parley/tools/builtin/propose_edits.lua
       - lua/parley/tools/backup.lua
       - lua/parley/skill_picker.lua

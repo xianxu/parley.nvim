@@ -6,6 +6,7 @@
 -- This is the main module
 --------------------------------------------------------------------------------
 local config = require("parley.config")
+local repo_artifacts = require("parley.repo_artifacts")
 
 local M = {
 	_Name = "Parley", -- plugin name
@@ -554,8 +555,7 @@ M.setup = function(opts)
 		M.config.repo_root = git_root
 
 		-- Ensure repo-local directories exist
-		local repo_dirs = { M.config.repo_chat_dir, M.config.repo_note_dir, M.config.issues_dir, M.config.vision_dir, M.config.history_dir }
-		for _, dir in ipairs(repo_dirs) do
+		for _, dir in ipairs(repo_artifacts.relative_dirs(M.config)) do
 			if dir and dir ~= "" and not dir:match("^/") then
 				M.helpers.prepare_dir(git_root .. "/" .. dir, "repo")
 			end
@@ -640,7 +640,10 @@ M.setup = function(opts)
 
 	-- repo-local dirs (issues, history, vision, notes) are resolved in apply_repo_local
 	-- against git root; skip them here to avoid creating in CWD
-	local skip_prepare = { chat_dir = true, repo_chat_dir = true, repo_note_dir = true, issues_dir = true, history_dir = true, vision_dir = true }
+	local skip_prepare = { chat_dir = true }
+	for _, key in ipairs(repo_artifacts.dir_keys) do
+		skip_prepare[key] = true
+	end
 	for k, v in pairs(M.config) do
 		if not skip_prepare[k] and k:match("_dir$") and type(v) == "string" then
 			M.config[k] = M.helpers.prepare_dir(v, k)
@@ -1832,6 +1835,8 @@ M.prep_chat = function(buf, file_name)
 
 	-- Set up tool block folding (clickable foldcolumn icons)
 	require("parley.tool_folds").setup(buf)
+
+	require("parley.neighborhood").attach_completion(buf)
 
 	if M.config.chat_prompt_buf_type then
 		vim.api.nvim_set_option_value("buftype", "prompt", { buf = buf })

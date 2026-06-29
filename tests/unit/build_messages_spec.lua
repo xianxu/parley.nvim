@@ -114,6 +114,25 @@ describe("_build_messages: basic structure", function()
         assert.equals("What is Lua?", messages[2].content)
     end)
 
+    it("adds neighborhood root context for tool-enabled agents", function()
+        local a = agent()
+        a.tools = { "read_file" }
+        local pc = parsed_chat({ exchange("Read README") })
+        local messages = parley._build_messages({
+            parsed_chat = pc,
+            start_index = 1,
+            end_index = 100,
+            exchange_idx = 1,
+            agent = a,
+            config = parley.config,
+            helpers = stub_helpers,
+            logger = stub_logger,
+            neighborhood_root = "/workspace/repo",
+        })
+
+        assert.matches("Relative tool paths resolve from: /workspace/repo", messages[1].content)
+    end)
+
     it("single exchange with answer produces system + user + assistant", function()
         local pc = parsed_chat({ exchange("What is Lua?", "Lua is a scripting language.") })
         pc.exchanges[1].answer.line_start = 12

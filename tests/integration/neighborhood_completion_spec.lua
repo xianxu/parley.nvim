@@ -1,0 +1,102 @@
+local parley = require("parley")
+local neighborhood = require("parley.neighborhood")
+
+local tmpdir = vim.fn.tempname() .. "-neighborhood-completion"
+local repo = tmpdir .. "/repo"
+local repo_chat = repo .. "/workshop/parley"
+vim.fn.mkdir(repo_chat, "p")
+vim.fn.mkdir(repo .. "/lua/parley", "p")
+vim.fn.writefile({ "readme" }, repo .. "/README.md")
+vim.fn.writefile({ "-- init" }, repo .. "/lua/parley/init.lua")
+
+parley.setup({
+    chat_dir = repo_chat,
+    state_dir = tmpdir .. "/state",
+    providers = {},
+    api_keys = {},
+})
+parley.config.repo_root = repo
+parley.config.repo_chat_dir = "workshop/parley"
+
+local function make_chat()
+    local path = repo_chat .. "/2026-06-29.topic.md"
+    local lines = {
+        "---",
+        "topic: Test",
+        "file: 2026-06-29.topic.md",
+        "model: test-model",
+        "provider: openai",
+        "---",
+        "",
+        "💬: open REA",
+    }
+    vim.fn.writefile(lines, path)
+    vim.cmd("edit! " .. vim.fn.fnameescape(path))
+    local buf = vim.api.nvim_get_current_buf()
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+    return buf, path
+end
+
+describe("neighborhood completion", function()
+    local saved_cmp
+
+    before_each(function()
+        saved_cmp = package.loaded.cmp
+    end)
+
+    after_each(function()
+        package.loaded.cmp = saved_cmp
+        pcall(vim.cmd, "bwipeout!")
+    end)
+
+    it("attaches a chat-local completefunc rooted at the neighborhood", function()
+        local buf, path = make_chat()
+
+        parley.prep_chat(buf, path)
+
+        assert.equals("v:lua.require'parley.neighborhood'.completefunc", vim.bo[buf].completefunc)
+
+        local readme_items = neighborhood.completefunc(0, "REA")
+        assert.same({ "README.md" }, readme_items)
+
+        local lua_items = neighborhood.completefunc(0, "lua/parley/in")
+        assert.same({ "lua/parley/init.lua" }, lua_items)
+    end)
+
+    it("finds the start column for the current path token", function()
+        local buf, path = make_chat()
+
+        parley.prep_chat(buf, path)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "open lua/parley/in" })
+        vim.api.nvim_win_set_cursor(0, { 1, #"open lua/parley/in" })
+
+        assert.equals(#"open ", neighborhood.completefunc(1, ""))
+    end)
+
+    it("configures cmp-path completion from the neighborhood root", function()
+        local captured
+        package.loaded.cmp = {
+            config = {
+                sources = function(sources)
+                    return sources
+                end,
+            },
+            setup = {
+                buffer = function(config)
+                    captured = config
+                end,
+            },
+        }
+
+        local buf, path = make_chat()
+
+        parley.prep_chat(buf, path)
+        vim.wait(100, function()
+            return captured ~= nil
+        end)
+
+        assert.is_not_nil(captured)
+        assert.same({ "path", "buffer" }, { captured.sources[1].name, captured.sources[2].name })
+        assert.equals(repo, captured.sources[1].option.get_cwd({ context = { bufnr = buf } }))
+    end)
+end)

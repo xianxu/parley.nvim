@@ -147,10 +147,16 @@ end)
 
 describe("tool_loop.process_response: with tool_use", function()
     local scratch_file
+    local saved_tool_read_roots
     before_each(function()
+        saved_tool_read_roots = require("parley.config").tool_read_roots
         registry.register_builtins()
         scratch_file = tmp_base .. "/sample-" .. math.random(0, 0xFFFFFF) .. ".txt"
         vim.fn.writefile({ "line 1", "line 2" }, scratch_file)
+    end)
+
+    after_each(function()
+        require("parley.config").tool_read_roots = saved_tool_read_roots
     end)
 
     it("writes 🔧: and 📎: blocks to the buffer and returns 'recurse'", function()
@@ -201,6 +207,7 @@ describe("tool_loop.process_response: with tool_use", function()
         -- A path OUTSIDE cwd should trigger dispatcher.execute_call's
         -- safety prelude which returns an error ToolResult. tool_loop
         -- still writes the 📎: error block and continues.
+        require("parley.config").tool_read_roots = {}
         local bufnr = mk_buffer({ "💬: q", "🤖: [Claude]" })
         -- Path that's not inside cwd — construct a sibling tmp file
         local outside = tmp_base .. "/outside-" .. math.random(0, 0xFFFFFF) .. ".txt"
@@ -221,6 +228,35 @@ describe("tool_loop.process_response: with tool_use", function()
         assert.matches("📎: read_file id=toolu_ERR", text)
         assert.matches("error=true", text)
         assert.matches("outside working directory", text)
+    end)
+
+    it("uses the chat buffer neighborhood as cwd when agent cwd is absent", function()
+        local parley = require("parley")
+        local repo = tmp_base .. "/repo-" .. math.random(0, 0xFFFFFF)
+        local repo_chat = repo .. "/workshop/parley"
+        local other_cwd = tmp_base .. "/other-cwd-" .. math.random(0, 0xFFFFFF)
+        vim.fn.mkdir(repo_chat, "p")
+        vim.fn.mkdir(other_cwd, "p")
+        vim.fn.writefile({ "from repo root" }, repo .. "/README.md")
+
+        parley.config.repo_root = repo
+        parley.config.repo_chat_dir = "workshop/parley"
+
+        local bufnr = mk_buffer({ "💬: q", "🤖: [Claude]" })
+        vim.api.nvim_buf_set_name(bufnr, repo_chat .. "/2026-06-29.topic.md")
+
+        local old_cwd = vim.fn.getcwd()
+        vim.cmd("cd " .. vim.fn.fnameescape(other_cwd))
+        local raw = mk_read_file_sse_response("toolu_NEIGHBORHOOD", "README.md")
+        local outcome = tool_loop.process_response(bufnr, raw, {
+            max_tool_iterations = 20,
+        })
+        vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+
+        assert.equals("recurse", outcome)
+        local text = buf_text(bufnr)
+        assert.matches("📎: read_file id=toolu_NEIGHBORHOOD", text)
+        assert.matches("from repo root", text)
     end)
 
     it("emits 📎: result in dynamic-fence form that survives backticks in file content", function()
