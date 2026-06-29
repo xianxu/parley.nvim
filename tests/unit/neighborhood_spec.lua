@@ -4,6 +4,10 @@ local function cfg(overrides)
     return vim.tbl_extend("force", {
         repo_root = "/workspace/repo",
         repo_chat_dir = "workshop/parley",
+        repo_note_dir = "workshop/notes",
+        issues_dir = "workshop/issues",
+        vision_dir = "workshop/vision",
+        history_dir = "workshop/history",
     }, overrides or {})
 end
 
@@ -22,6 +26,20 @@ describe("neighborhood.derive_for_path", function()
         )
 
         assert.equals("/workspace/repo", root)
+    end)
+
+    it("returns repo root for every repo-local artifact directory", function()
+        for _, rel in ipairs({
+            "workshop/parley/2026-06-29.topic.md",
+            "workshop/notes/design.md",
+            "workshop/issues/000147-topic.md",
+            "workshop/vision/roadmap.yaml",
+            "workshop/history/000001-done.md",
+        }) do
+            local root = neighborhood.derive_for_path("/workspace/repo/" .. rel, cfg(), roots)
+
+            assert.equals("/workspace/repo", root)
+        end
     end)
 
     it("returns sibling repo root for super-repo chat roots", function()

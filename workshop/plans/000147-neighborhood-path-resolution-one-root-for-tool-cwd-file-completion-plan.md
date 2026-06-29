@@ -143,3 +143,12 @@ Delta:
   sibling chat artifacts share the same root derivation path as chat tool use.
 - `neighborhood` delegates path normalization and containment checks to
   `root_dirs.resolve_dir_key` / `root_dirs.path_within_dir`, as Task 1 intended.
+
+### 2026-06-29 — repo-local artifact dir source extracted
+
+Reason: the close boundary review found the repo-local artifact dir set duplicated
+between repo setup and neighborhood derivation.
+
+Delta:
+- Added `repo_artifacts.dir_keys` as the shared source for repo-local artifact
+  config keys; `apply_repo_local` and `neighborhood` now consume that list.

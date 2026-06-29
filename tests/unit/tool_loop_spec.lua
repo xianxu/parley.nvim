@@ -147,10 +147,16 @@ end)
 
 describe("tool_loop.process_response: with tool_use", function()
     local scratch_file
+    local saved_tool_read_roots
     before_each(function()
+        saved_tool_read_roots = require("parley.config").tool_read_roots
         registry.register_builtins()
         scratch_file = tmp_base .. "/sample-" .. math.random(0, 0xFFFFFF) .. ".txt"
         vim.fn.writefile({ "line 1", "line 2" }, scratch_file)
+    end)
+
+    after_each(function()
+        require("parley.config").tool_read_roots = saved_tool_read_roots
     end)
 
     it("writes 🔧: and 📎: blocks to the buffer and returns 'recurse'", function()
@@ -201,6 +207,7 @@ describe("tool_loop.process_response: with tool_use", function()
         -- A path OUTSIDE cwd should trigger dispatcher.execute_call's
         -- safety prelude which returns an error ToolResult. tool_loop
         -- still writes the 📎: error block and continues.
+        require("parley.config").tool_read_roots = {}
         local bufnr = mk_buffer({ "💬: q", "🤖: [Claude]" })
         -- Path that's not inside cwd — construct a sibling tmp file
         local outside = tmp_base .. "/outside-" .. math.random(0, 0xFFFFFF) .. ".txt"

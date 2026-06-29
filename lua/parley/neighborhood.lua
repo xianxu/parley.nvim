@@ -1,5 +1,6 @@
 local M = {}
 local root_dirs = require("parley.root_dirs")
+local repo_artifacts = require("parley.repo_artifacts")
 
 local root_dir_helpers = {
     starts_with = function(text, prefix)
@@ -41,13 +42,14 @@ local function repo_artifact_dirs(config)
     if not repo_root then
         return {}
     end
-    return {
-        join(repo_root, config.repo_chat_dir or "workshop/parley"),
-        join(repo_root, config.repo_note_dir or "workshop/notes"),
-        join(repo_root, config.issues_dir or "workshop/issues"),
-        join(repo_root, config.vision_dir or "workshop/vision"),
-        join(repo_root, config.history_dir or "workshop/history"),
-    }
+    local dirs = {}
+    for _, rel in ipairs(repo_artifacts.relative_dirs(config)) do
+        local dir = join(repo_root, rel)
+        if dir then
+            table.insert(dirs, dir)
+        end
+    end
+    return dirs
 end
 
 local function repo_root_from_chat_root(root_dir, config)

@@ -6,6 +6,7 @@
 -- This is the main module
 --------------------------------------------------------------------------------
 local config = require("parley.config")
+local repo_artifacts = require("parley.repo_artifacts")
 
 local M = {
 	_Name = "Parley", -- plugin name
@@ -554,8 +555,7 @@ M.setup = function(opts)
 		M.config.repo_root = git_root
 
 		-- Ensure repo-local directories exist
-		local repo_dirs = { M.config.repo_chat_dir, M.config.repo_note_dir, M.config.issues_dir, M.config.vision_dir, M.config.history_dir }
-		for _, dir in ipairs(repo_dirs) do
+		for _, dir in ipairs(repo_artifacts.relative_dirs(M.config)) do
 			if dir and dir ~= "" and not dir:match("^/") then
 				M.helpers.prepare_dir(git_root .. "/" .. dir, "repo")
 			end

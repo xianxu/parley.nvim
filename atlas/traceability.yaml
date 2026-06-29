@@ -331,6 +331,7 @@ atlas:
       - lua/parley/chat_respond.lua
       - lua/parley/chat_lease.lua
       - lua/parley/neighborhood.lua
+      - lua/parley/repo_artifacts.lua
     tests:
       - tests/integration/chat_lease_spec.lua
       - tests/integration/neighborhood_completion_spec.lua
