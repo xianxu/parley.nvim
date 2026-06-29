@@ -8,3 +8,8 @@ Custom groups (`ParleyQuestion`, `ParleyFileReference`, `ParleyChatReference`, `
 - Multi-window safe: independent redraw cache per window
 - `🌿:` lines auto-rendered with debounced topic lookup from referenced files
 - `chat_conceal_model_params`: optional header param concealment
+- UTC timestamps shaped like `YYYY-MM-DDTHH:MM:SSZ` get local-time INFO
+  diagnostics in Parley chat and markdown buffers. The pure parser/formatter
+  lives in `lua/parley/timezone_diagnostics.lua`; `highlighter.setup_buf_handler`
+  refreshes its separate diagnostic namespace on buffer enter/window enter and
+  text changes. The buffer text is never rewritten.

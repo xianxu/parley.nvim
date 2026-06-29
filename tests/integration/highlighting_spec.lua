@@ -401,6 +401,87 @@ describe("decoration provider cache", function()
     end)
 end)
 
+describe("timezone diagnostics", function()
+    after_each(function()
+        local ok, tz = pcall(require, "parley.timezone_diagnostics")
+        if ok and tz.diag_namespace then
+            for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+                if vim.api.nvim_buf_is_valid(buf) then
+                    pcall(vim.diagnostic.reset, tz.diag_namespace(), buf)
+                end
+            end
+        end
+        cleanup_bufs()
+    end)
+
+    it("publishes local-time diagnostics in its own namespace and clears stale diagnostics", function()
+        local tz = require("parley.timezone_diagnostics")
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+            "User: meet at 2026-04-18T00:00:00Z",
+        })
+
+        tz.refresh_buffer(buf, {
+            to_local = function()
+                return {
+                    year = 2026,
+                    month = 4,
+                    day = 17,
+                    hour = 17,
+                    min = 0,
+                    sec = 0,
+                }
+            end,
+        })
+
+        local diagnostics = vim.diagnostic.get(buf, { namespace = tz.diag_namespace() })
+        assert.equals(1, #diagnostics)
+        assert.equals(0, diagnostics[1].lnum)
+        assert.equals(14, diagnostics[1].col)
+        assert.equals(34, diagnostics[1].end_col)
+        assert.equals("parley-timezone", diagnostics[1].source)
+        assert.is_true(diagnostics[1].message:find("2026-04-17 17:00:00", 1, true) ~= nil)
+
+        local skill_ns = require("parley.skill_render").diag_namespace()
+        assert.are_not.equal(skill_ns, tz.diag_namespace())
+
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "💬: meet later" })
+        tz.refresh_buffer(buf, {
+            to_local = function()
+                error("no timestamps remain")
+            end,
+        })
+
+        assert.equals(0, #vim.diagnostic.get(buf, { namespace = tz.diag_namespace() }))
+    end)
+
+    it("refreshes diagnostics for registered buffers on text changes", function()
+        local tz = require("parley.timezone_diagnostics")
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_win_set_buf(vim.api.nvim_get_current_win(), buf)
+        parley._parley_bufs[buf] = "markdown"
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "no timestamp yet" })
+
+        vim.cmd("doautocmd TextChanged")
+        vim.wait(100, function()
+            return #vim.diagnostic.get(buf, { namespace = tz.diag_namespace() }) == 0
+        end)
+        assert.equals(0, #vim.diagnostic.get(buf, { namespace = tz.diag_namespace() }))
+
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+            "Now 2026-04-18T00:00:00Z",
+        })
+        vim.cmd("doautocmd TextChanged")
+        vim.wait(100, function()
+            return #vim.diagnostic.get(buf, { namespace = tz.diag_namespace() }) == 1
+        end)
+
+        local diagnostics = vim.diagnostic.get(buf, { namespace = tz.diag_namespace() })
+        assert.equals(1, #diagnostics)
+        assert.equals(4, diagnostics[1].col)
+    end)
+end)
+
 describe("markdown chat reference rendering", function()
     after_each(function()
         cleanup_extra_windows()
