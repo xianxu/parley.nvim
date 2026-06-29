@@ -1,9 +1,10 @@
 ---
 id: 000152
-status: open
+status: working
 deps: []
 created: 2026-06-29
 updated: 2026-06-29
+started: 2026-06-29T15:55:34-07:00
 ---
 
 # issue finder should default to display done items as well
