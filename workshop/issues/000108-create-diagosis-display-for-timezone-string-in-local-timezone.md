@@ -1,11 +1,12 @@
 ---
 id: 000108
-status: working
+status: done
 deps: []
 created: 2026-04-18
 updated: 2026-06-29
 started: 2026-06-29T12:35:51-07:00
 estimate_hours: 1.5
+actual_hours: 0.28
 ---
 
 # create diagosis display for timezone string in local timezone
@@ -81,6 +82,7 @@ total: 1.5
 ### 2026-04-18
 
 ### 2026-06-29
+- 2026-06-29: closed — UTC ISO timestamps render local-time diagnostics in chat/markdown buffers; unit/integration/full tests and lint pass; review verdict: SHIP
 
 Claimed and designed the issue. The implementation will use a pure timestamp
 detector plus a thin Neovim diagnostic publisher in the existing highlighter
