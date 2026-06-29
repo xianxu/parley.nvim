@@ -407,9 +407,11 @@ atlas:
     code:
       - lua/parley/render.lua
       - lua/parley/highlighter.lua
+      - lua/parley/timezone_diagnostics.lua
       - lua/parley/init.lua
     tests:
       - tests/integration/highlighting_spec.lua
+      - tests/unit/timezone_diagnostics_spec.lua
       - tests/unit/render_spec.lua
 
   ui/lualine:
