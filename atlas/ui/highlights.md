@@ -12,6 +12,6 @@ Custom groups (`ParleyQuestion`, `ParleyFileReference`, `ParleyChatReference`, `
   diagnostics in Parley chat and markdown buffers. The pure parser/formatter
   lives in `lua/parley/timezone_diagnostics.lua`; `highlighter.setup_buf_handler`
   refreshes its separate diagnostic namespace on buffer enter/window enter and
-  text changes. Its namespace explicitly enables virtual text and uses the
-  concise message `local time: <converted local time>`. The buffer text is never
-  rewritten.
+  text changes. Its namespace renders review-style virtual lines for the current
+  line and uses the concise message `local time: <converted local time>`. The
+  buffer text is never rewritten.

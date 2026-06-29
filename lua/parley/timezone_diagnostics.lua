@@ -10,7 +10,10 @@ local diag_ns_id
 local function ensure_namespace()
     if not diag_ns_id then
         diag_ns_id = vim.api.nvim_create_namespace(DIAG_NS)
-        vim.diagnostic.config({ virtual_text = true }, diag_ns_id)
+        vim.diagnostic.config({
+            virtual_lines = { current_line = true },
+            virtual_text = false,
+        }, diag_ns_id)
     end
 end
 
