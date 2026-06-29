@@ -1,6 +1,6 @@
 ---
 id: 000079
-status: open
+status: punt
 deps: []
 created: 2026-04-07
 updated: 2026-04-07
@@ -30,5 +30,7 @@ a background project is a project that we know we won't get to, but we want to k
 
 ## Log
 
-### 2026-04-07
+### 2026-06-29
+
+Decide to keep things simple, and punt
 
