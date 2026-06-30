@@ -21,7 +21,7 @@ index later — same output shape, swappable producer).
 | `matcher.lua` | tagged-union predicate over `(path, fm)` | PURE |
 | `descriptor.lua` | `TypeDescriptor` shape + `validate` | PURE |
 | `base.lua` | `build(config)` → base descriptor list (pure fn of live config) | PURE |
-| `registry.lua` | `Registry` — `of/get/names/query/spec_to_command/render` | PURE |
+| `registry.lua` | `Registry` — `of/get/names/query/spec_to_command/render_command/render` | PURE |
 | `merge.lua` | `expand_locate` + `dedupe_compose` — the pure base∪local merge | PURE |
 | `local_types.lua` | grep novel `type:` minus base → `local` descriptors | INTEGRATION (rg) |
 | `init.lua` | `RegistryBuilder` — `build(ctx)` / `current()`; live-config via `setup(parley)` | INTEGRATION |
@@ -53,12 +53,19 @@ repo roots. `plan` has no config key (parley doesn't auto-create
 `workshop/plans/`) — literal `workshop/plans/*.md`.
 
 ## The two consumers
-- `query(type, term) → DiscoverySpec` then `spec_to_command(spec) → string`:
-  the **deterministic-shell, thin-model** seam. The model only ever picks a
-  noun + a term; the registry compiles the actual `rg` pipeline. Only a
+- `query(type, term) → DiscoverySpec` → `spec_to_command(spec) → structured
+  command` → `render_command(cmd) → string`: the **deterministic-shell,
+  thin-model** seam. The model only ever picks a noun + a term; the registry
+  compiles the search. `spec_to_command` is a **pure structured compiler** —
+  `split_glob` turns each `locate` glob into a positional search DIR + a RELATIVE
+  `-g` name pattern, yielding `{search_dirs, name_globs, frontmatter,
+  content_term}`; `render_command` renders the shellescaped `rg` pipeline.
+  This split is the **I-B root-cause fix** (#116 M2): on the *built* registry the
+  locate globs are absolute (repo-prefixed), so the old `rg … -g '<abs>' .`
+  matched nothing — a positional absolute dir + a relative `-g` matches. Only a
   `frontmatter`-kind matcher adds a frontmatter filter; otherwise the `locate`
-  glob discriminates. "Decide the search" (pure) is split from "run the search"
-  (IO, consumer-side / M2).
+  glob discriminates. "Decide/compile the search" (pure) is split from "run it"
+  (IO, consumer-side / #115).
 - `render() → string`: the noun-vocabulary text — one sorted bullet per type
   (label, blurb, a derived find-hint). This is the repo-aware vocabulary parley's
   **chat context** (P1) surfaces; its format is a contract guarded by
@@ -89,11 +96,32 @@ types" when rg is absent. This module is the single swap point for a future
 `datatype`-binary-maintained index: same descriptor-list output, different
 producer.
 
-## Scope (M1 only)
-M1 is the registry **core** (this doc). Deferred:
-- **M2** — finders source their home root folder from the registry (the
-  existing per-type finders; `<C-g>m` stays the type-blind escape hatch).
-- **M3** — embedded descriptor format + human-driven new-instance scaffolding.
+## Issue home from cue (M2)
+The `issue` noun is **ariadne-owned**, so parley sources its home folder from
+ariadne's model rather than hardcoding it (the heart of #116 — parley defers to
+ariadne for ariadne's nouns). `ariadne/construct/vocabulary/issue.cue` carries a
+concrete `discovery: {home, glob}` block; `weave compile` exports it (via
+`vocabulary export`, a passthrough of `cue export`) into the gitignored
+`construct/generated/vocabulary/issue.json`. `issue_vocabulary.home()` reads the
+relative `discovery.home` (nil pre-weave / fresh clone — pcall-guarded). At
+`setup`, `issues.resolve_issues_dir(opts.issues_dir, home(), default)` seeds
+`config.issues_dir` — **precedence: explicit user override > cue home > built-in
+default** — so all five `config.issues_dir` readers (`get_issues_dir`,
+`get_issues_repo_root`, the super-repo finder `issue_finder.lua:133`, the status
+autocmd, and base.lua's issue descriptor) derive from the one cue source with no
+per-reader rerouting. `issues_dir` stays relative (it is in setup's
+`skip_prepare`). chat/note/vision stay parley-native — their config keys are
+parley's own concept, not ariadne's, so routing them through the registry would
+be a circular no-op.
+
+## Scope
+- **M1** — the registry **core** (this doc).
+- **M2 (done)** — `issue` home sourced from cue (above) + the I-B structured-argv
+  fix (built-registry `query()` now compiles a *matching* command). chat/note/
+  vision stay parley-native; the faceted picker UI is split to #115.
+- **M3** — issue creation via `sdlc issue new` **delegation** (retire parley's
+  hand-rolled `render_issue_template`); ariadne#145 unifies the creation template
+  onto the cue model.
 
 ## Related
 - [Repo Mode](../infra/repo_mode.md) — the root-union the merge reuses.
