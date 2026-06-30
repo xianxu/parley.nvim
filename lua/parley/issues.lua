@@ -358,10 +358,11 @@ end
 
 -- #116 M3: create a new issue by delegating to `sdlc issue new` — the canonical
 -- creator (allocates the id, writes the canonical template, broadcasts to
--- origin/main per ariadne#82). Returns (path, nil) | (nil, err). `runner` is
--- injectable for tests (default = vim.fn.system list-form + v:shell_error); REAL
--- sdlc creates+pushes an issue, so tests MUST inject a fake runner. Thin IO over
--- the pure parse_issue_new_output. runner(argv) -> (output, exit_code).
+-- origin/main per ariadne#82). ASYNC: calls `on_done(path|nil, err|nil)` when sdlc
+-- finishes (so callers can show an animated spinner — sdlc is slow: build + push).
+-- `runner(spawn_argv, on_complete)` is injectable for tests (default uses jobstart;
+-- REAL sdlc creates+pushes, so tests MUST inject a fake). Thin IO over the pure
+-- parse_issue_new_output. on_complete(output, exit_code).
 
 -- #116 M3: choose how to spawn `sdlc`. If it's a resolvable executable, spawn the
 -- argv directly (no shell, no quoting). Otherwise `sdlc` is a shell function/alias
@@ -380,7 +381,7 @@ M.build_spawn_argv = function(argv, is_exec, shell)
     return { shell or "sh", "-i", "-c", table.concat(escaped, " ") }
 end
 
-M.run_sdlc_issue_new = function(title, opts, runner)
+M.run_sdlc_issue_new = function(title, opts, on_done, runner)
     opts = opts or {}
     local argv = { "sdlc", "issue", "new" }
     -- #116 M3 (I1 fix): anchor creation at the git root, not nvim's cwd. sdlc's
@@ -407,23 +408,48 @@ M.run_sdlc_issue_new = function(title, opts, runner)
     -- positional arg, not mistaken for a flag by cobra/pflag.
     table.insert(argv, "--")
     table.insert(argv, title)
-    runner = runner or function(a)
-        -- sdlc may be a PATH binary OR a shell function/alias; pick the spawn form
-        -- accordingly (build_spawn_argv). The parser tolerates any rc prompt/precmd
-        -- noise an interactive shell emits — it extracts the .md path, ignores rest.
+    -- ASYNC (so a progress spinner can animate — a blocking vim.fn.system freezes
+    -- the UI). runner(spawn_argv, on_complete) invokes on_complete(output, code);
+    -- the default uses jobstart (build_spawn_argv handles binary-vs-function). The
+    -- parser tolerates any rc prompt/precmd noise an interactive shell emits.
+    runner = runner or function(a, on_complete)
         local is_exec = vim.fn.executable(a[1]) == 1
         local spawn = M.build_spawn_argv(a, is_exec, vim.env.SHELL or vim.o.shell or "sh")
-        return vim.fn.system(spawn), vim.v.shell_error
+        local out = {}
+        local function collect(_, data)
+            if data then
+                vim.list_extend(out, data)
+            end
+        end
+        local jid = vim.fn.jobstart(spawn, {
+            stdout_buffered = true,
+            stderr_buffered = true,
+            on_stdout = collect,
+            on_stderr = collect,
+            on_exit = function(_, code)
+                vim.schedule(function()
+                    on_complete(table.concat(out, "\n"), code)
+                end)
+            end,
+        })
+        if jid <= 0 then
+            vim.schedule(function()
+                on_complete("could not start sdlc (jobstart=" .. tostring(jid) .. ")", 127)
+            end)
+        end
     end
-    local output, code = runner(argv)
-    if code ~= 0 then
-        return nil, "sdlc issue new failed (exit " .. tostring(code) .. "): " .. trim(output or "")
-    end
-    local path = M.parse_issue_new_output(output)
-    if not path then
-        return nil, "sdlc issue new succeeded but no created path in output: " .. trim(output or "")
-    end
-    return path, nil
+    runner(argv, function(output, code)
+        if code ~= 0 then
+            on_done(nil, "sdlc issue new failed (exit " .. tostring(code) .. "): " .. trim(output or ""))
+            return
+        end
+        local path = M.parse_issue_new_output(output)
+        if not path then
+            on_done(nil, "sdlc issue new succeeded but no created path in output: " .. trim(output or ""))
+            return
+        end
+        on_done(path, nil)
+    end)
 end
 
 --------------------------------------------------------------------------------
@@ -711,6 +737,34 @@ end
 -- Commands
 --------------------------------------------------------------------------------
 
+-- An animated command-bar (echo-area) spinner for a pending async op. Reuses the
+-- single-source braille frames (`progress.SPINNER`/`frame`); the timer + echo are
+-- the IO. Returns `{ stop = fn }`. The create path is async (jobstart), so this
+-- animates while sdlc builds + creates + pushes — a blocking call could not.
+M.start_cmdline_spinner = function(message)
+    local progress = require("parley.progress")
+    local tick = 0
+    local timer = vim.uv.new_timer()
+    local function paint()
+        vim.api.nvim_echo({ { " " .. progress.frame(tick) .. " " .. message, "ModeMsg" } }, false, {})
+        tick = tick + 1
+    end
+    paint()
+    timer:start(120, 120, vim.schedule_wrap(paint))
+    return {
+        stop = function()
+            if timer then
+                pcall(function()
+                    timer:stop()
+                    timer:close()
+                end)
+                timer = nil
+            end
+            vim.api.nvim_echo({ { "" } }, false, {}) -- clear the spinner line
+        end,
+    }
+end
+
 M.cmd_issue_new = function()
     -- #142: show the destination repo so issues don't land in the wrong one
     -- (issues_dir resolves against the editor's cwd git root).
@@ -722,18 +776,21 @@ M.cmd_issue_new = function()
         -- #116 M3: delegate to `sdlc issue new` — the canonical creator (id
         -- allocation, the cue/sdlc-owned template, broadcast to origin/main) —
         -- instead of parley's own hand-rolled template. Forward the git-root-
-        -- anchored dirs so creation lands where #142's prompt label promises
-        -- (not relative to nvim's cwd). Then open the created file.
-        local path, err = M.run_sdlc_issue_new(title, {
+        -- anchored dirs so creation lands where #142's prompt label promises.
+        -- Async + a command-bar spinner: sdlc is slow (build + create + push).
+        local spinner = M.start_cmdline_spinner("Creating issue via sdlc…")
+        M.run_sdlc_issue_new(title, {
             issues_dir = M.get_issues_dir(),
             history_dir = M.get_history_dir(),
-        })
-        if not path then
-            _parley.logger.error("Issue creation failed: " .. tostring(err))
-            return
-        end
-        vim.cmd("edit " .. vim.fn.fnameescape(vim.fn.fnamemodify(path, ":p")))
-        _parley.logger.info("Created issue: " .. vim.fn.fnamemodify(path, ":t"))
+        }, function(path, err)
+            spinner.stop()
+            if not path then
+                _parley.logger.error("Issue creation failed: " .. tostring(err))
+                return
+            end
+            vim.cmd("edit " .. vim.fn.fnameescape(vim.fn.fnamemodify(path, ":p")))
+            _parley.logger.info("Created issue: " .. vim.fn.fnamemodify(path, ":t"))
+        end)
     end)
 end
 

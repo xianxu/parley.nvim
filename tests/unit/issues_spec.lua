@@ -91,25 +91,33 @@ end)
 --------------------------------------------------------------------------------
 
 describe("run_sdlc_issue_new", function()
+    -- async runner: receives (argv, on_complete) and calls on_complete(output, code)
     local function fake(output, code, cap)
-        return function(argv)
+        return function(argv, on_complete)
             if cap then cap.argv = argv end
-            return output, code
+            on_complete(output, code)
         end
     end
+    -- drive the async call (the fake calls back inline → stays synchronous) + capture
+    local function run(title, opts, runner)
+        local r = {}
+        issues.run_sdlc_issue_new(title, opts, function(path, err)
+            r.path, r.err = path, err
+        end, runner)
+        return r
+    end
 
-    it("returns the created path on success; argv = sdlc issue new <title>", function()
+    it("calls back with the created path on success; argv = sdlc issue new <title>", function()
         local cap = {}
-        local path, err = issues.run_sdlc_issue_new("My Title", {}, fake("workshop/issues/000160-my-title.md\n", 0, cap))
-        assert.is_nil(err)
-        assert.equals("workshop/issues/000160-my-title.md", path)
+        local r = run("My Title", {}, fake("workshop/issues/000160-my-title.md\n", 0, cap))
+        assert.is_nil(r.err)
+        assert.equals("workshop/issues/000160-my-title.md", r.path)
         assert.are.same({ "sdlc", "issue", "new", "--", "My Title" }, cap.argv)
     end)
 
     it("forwards absolute --issues-dir/--history-dir (git-root-anchored, #116 M3 I1)", function()
         local cap = {}
-        issues.run_sdlc_issue_new("t",
-            { issues_dir = "/r/workshop/issues", history_dir = "/r/workshop/history" },
+        run("t", { issues_dir = "/r/workshop/issues", history_dir = "/r/workshop/history" },
             fake("/r/workshop/issues/000001-t.md\n", 0, cap))
         assert.are.same(
             { "sdlc", "issue", "new", "--issues-dir", "/r/workshop/issues",
@@ -119,20 +127,20 @@ describe("run_sdlc_issue_new", function()
 
     it("appends -- so a title starting with '-' is positional, not a flag", function()
         local cap = {}
-        issues.run_sdlc_issue_new("-n weird title", {}, fake("workshop/issues/000001-n-weird-title.md\n", 0, cap))
+        run("-n weird title", {}, fake("workshop/issues/000001-n-weird-title.md\n", 0, cap))
         assert.are.same({ "sdlc", "issue", "new", "--", "-n weird title" }, cap.argv)
     end)
 
-    it("surfaces a non-zero exit as an error", function()
-        local path, err = issues.run_sdlc_issue_new("t", {}, fake("title is required\n", 1))
-        assert.is_nil(path)
-        assert.is_truthy(err and err:find("exit 1", 1, true))
+    it("calls back with an error on a non-zero exit", function()
+        local r = run("t", {}, fake("title is required\n", 1))
+        assert.is_nil(r.path)
+        assert.is_truthy(r.err and r.err:find("exit 1", 1, true))
     end)
 
     it("errors when sdlc succeeds but prints no parseable path", function()
-        local path, err = issues.run_sdlc_issue_new("t", {}, fake("nothing useful\n", 0))
-        assert.is_nil(path)
-        assert.is_truthy(err and err:find("no created path", 1, true))
+        local r = run("t", {}, fake("nothing useful\n", 0))
+        assert.is_nil(r.path)
+        assert.is_truthy(r.err and r.err:find("no created path", 1, true))
     end)
 
     -- NB: opts.deps is a forward API for an eventual child-flow migration; the
@@ -140,7 +148,7 @@ describe("run_sdlc_issue_new", function()
     -- is the opposite of --deps — parent.deps += child). Don't wire decompose here.
     it("passes --deps (comma-joined) when opts.deps is set", function()
         local cap = {}
-        issues.run_sdlc_issue_new("child task", { deps = { "000116" } }, fake("workshop/issues/000161-child.md\n", 0, cap))
+        run("child task", { deps = { "000116" } }, fake("workshop/issues/000161-child.md\n", 0, cap))
         assert.are.same({ "sdlc", "issue", "new", "--deps", "000116", "--", "child task" }, cap.argv)
     end)
 end)
