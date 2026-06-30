@@ -1,8 +1,10 @@
 ---
 id: 000094
-status: open
+status: working
 deps: []
 created: 2026-04-10
+updated: 2026-06-29
+started: 2026-06-29T17:30:16-07:00
 ---
 
 # Debug tracing infrastructure
