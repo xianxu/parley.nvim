@@ -64,7 +64,7 @@ checklist is folded into M1/M3 below.
 
 - [x] M1 — discovery registry core: base ∪ local composition, `query()` → DiscoverySpec, `render()` noun-vocabulary (the #128 `repo_discovery` unblock)
 - [ ] M2 — finders source their home root folder from the registry (`<C-g>m` stays the type-blind escape hatch; the faceted picker is #115)
-- [ ] M3 — embedded descriptor format + human-driven new-instance scaffolding; update `construct/datatype/type.md` so future prototypes ship a descriptor
+- [ ] M3 — issue creation: delegate to `sdlc issue new` (retire parley's hand-rolled `render_issue_template`/`cmd_issue_new`); open the created file. (Descriptor-driven multi-type scaffolding DROPPED — see the 2026-06-30 revision. The deeper "issue structure sourced from cue" unification is ariadne#145, which #116 does NOT block on.)
 
 ## Revisions
 
@@ -104,6 +104,41 @@ slice it borrows from a repo's agent substrate. Deltas to this issue:
 - **Write-side stays valid.** #116's scaffolding (template new-instance creation)
   is *human-driven manual* creation — consistent with the readonly-*agent*
   direction (the LLM is readonly; the human may scaffold via a template).
+
+### 2026-06-30 — transport settled (weave-emitted JSON); M3 → sdlc delegation; M2 → seam-now
+
+Reason: a design conversation settled *how* parley consumes ariadne's datatype
+model and *what* M2/M3 actually do, after auditing the cue→Go→weave pipeline.
+
+- **Transport = weave-emitted gitignored JSON — already in production.** Parley
+  is a proper weave derivative (`construct/deps` → `substrate ../ariadne`;
+  `make weave` runs ariadne's `weave compile`). `lua/parley/issue_vocabulary.lua`
+  already reads `construct/generated/vocabulary/issue.json` (weave-compiled,
+  gitignored, never committed) for issue status/lifecycle. So the descriptor
+  channel exists; we extend it, not build it. **No commit / vendor / runtime
+  shell-out** (resolves the descriptor-format open question — it's none of the
+  three 2026-04-30 candidates; cue authors, weave emits JSON, lua reads).
+- **Source of truth = cue**, for concepts parley unifies with ariadne (this is
+  parley's ariadne-support subsystem). **Issue-first** — the only well-modeled
+  cue noun. pensive/project deferred (pensive's cue is definitions-only →
+  exports `{}`; the rest have no cue).
+- **Finding:** `sdlc issue new` creation template is **hardcoded Go**
+  (`cmd/sdlc/internal/issue/scaffold.go:Render`), NOT cue-sourced; cue drives
+  only *validation* (`#Issue`) and *lifecycle/status* (`pkg/vocab`). Filed
+  **ariadne#145** to unify creation onto the cue model (independent; #116 does
+  not block on it).
+- **M3 → delegation.** Parley delegates issue creation to `sdlc issue new`
+  (retire the duplicate `render_issue_template`/`cmd_issue_new`), then opens the
+  created file. Collapses parley's copy into sdlc's single Go renderer;
+  id-allocation stays in sdlc (the dependency on ariadne is not new — it's the
+  same `weave`/substrate edge). NOT a generic descriptor-driven scaffolder.
+- **M2 → seam now, repo-source later.** M2 inserts the finder→registry seam
+  (the finder stops hardcoding its dir; reads the registry's `locate`) + the
+  I-B absolute-glob fix. Sourcing the issue `home` from the emitted `issue.json`
+  (a `discovery`/location field added on the ariadne side — ariadne#145's
+  optional scope) is then a **producer swap behind the M1 abstraction, no finder
+  change**. chat/note/vision stay parley-native (genuinely parley's own
+  concepts, not ariadne's).
 
 ## Log
 
