@@ -314,7 +314,54 @@ not cue-sourced — ariadne#145 will unify that. So parley **delegates** issue
 creation to `sdlc issue new` (retire the duplicate `render_issue_template`/
 `cmd_issue_new` in `lua/parley/issues.lua`), then opens the created file (the
 command prints its path). id-allocation stays in sdlc. Issue-first; other
-datatypes deferred. To be expanded at M3 start.
+datatypes deferred.
+
+### M3 tasks (expanded 2026-06-30)
+
+**Scope:** delegate the **top-level** new-issue command (`cmd_issue_new` →
+`create_issue`, the `<C-y>c` flow) to `sdlc issue new "<title>"` — full delegation
+(it scaffolds + broadcasts to origin/main; operator-confirmed UX). `render_issue_template`
+has a **second caller**: the child-decomposition flow (`issues.lua:749` — adds a
+`Parent:` backlink, uses parley's `next_issue_id`). Aim to route that through
+`sdlc issue new --deps <parent>` too and **fully retire** `render_issue_template`
++ `ISSUE_TEMPLATE` (+ `next_issue_id`/`create_issue` if grep shows no other
+callers) so sdlc is the single issue-creation source incl. id allocation
+(`ARCH-DRY`). If the child flow's parent-link / parent-buffer-write semantics make
+delegation gnarly, keep `render_issue_template` for that one flow and note the
+partial retirement.
+
+#### Task M3.1 — pure: parse `sdlc issue new` stdout → created path
+- `sdlc issue new "<title>"` writes the dest path to **stdout** (last line,
+  `cmd/sdlc/issue.go:319`) + `Created <dest>` to stderr, exit 0 on success. Add a
+  PURE `M.parse_issue_new_output(stdout) → path|nil` (last non-empty line).
+  Test: normal output → path; empty/garbage → nil. (`ARCH-PURE` core)
+
+#### Task M3.2 — IO seam: run sdlc issue new (injected runner)
+- `M.run_sdlc_issue_new(title, opts, runner?) → (path|nil, err)`: build argv
+  `{"sdlc","issue","new",title}` (+ `--deps`/`--slug`), run via an **injectable
+  runner** (default = `vim.fn.system`); check shell error / non-zero exit /
+  unparseable output → err; else `parse_issue_new_output`. Thin IO over the pure
+  parser. **Tests fake the runner** — real sdlc would create+push an issue; never
+  call it in tests.
+
+#### Task M3.3 — rewrite `cmd_issue_new` to delegate
+- Keep the title prompt (repo label, `#142`); call `run_sdlc_issue_new(title)`;
+  `:edit` the returned path (or log the err). Drop `create_issue`'s template path.
+
+#### Task M3.4 — child-decomposition flow + retire `render_issue_template`
+- Route the child flow through `run_sdlc_issue_new(task_text, {deps={parent_id}})`,
+  add the `Parent:` backlink to the created file, open it. sdlc's id allocation
+  replaces parley's `next_issue_id` here. THEN delete `render_issue_template` +
+  `ISSUE_TEMPLATE` (+ `next_issue_id`/`create_issue` if grep shows no other
+  callers — `slugify` likely stays, used elsewhere). Fallback: keep
+  `render_issue_template` for the child flow + note, if delegation isn't clean.
+
+#### Task M3.5 — atlas + milestone-close
+- Atlas: issue creation delegates to `sdlc issue new` (cue/sdlc single source;
+  ariadne#145 unifies the template onto cue). `make test` + lint. `sdlc
+  milestone-close --issue 116 --milestone M3` (fresh-eyes subagent review if the
+  auto-dispatch E2BIGs, as in M2); `--no-actual` likewise if the window
+  mis-resolves.
 
 _Original sketch (kept for history):_ Settle #116's long-open descriptor-format question (lean: structured fenced block embedded in each datatype doc — single source, diffable — parsed into a TypeDescriptor with added `template`/`new_location`/`slug_rule` fields). Add a descriptor parser (extends RegistryBuilder as a third source: base ∪ grep-local ∪ embedded-descriptors), a template scaffolder, and a "new instance of type X" command (human-driven creation — consistent with the readonly-*agent* posture). Update `construct/datatype/type.md` so future prototypes ship a descriptor.
 
