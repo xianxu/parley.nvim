@@ -1,12 +1,13 @@
 ---
 id: 000154
-status: working
+status: done
 deps: []
 github_issue:
 created: 2026-06-29
 updated: 2026-06-29
 estimate_hours: 0.5
 started: 2026-06-29T18:30:05-07:00
+actual_hours: 0.27
 ---
 
 # raise max_tool_iterations default to 42
@@ -87,6 +88,7 @@ close boundary review.
 ## Log
 
 ### 2026-06-29
+- 2026-06-29: closed — TDD red→green: config_tools_spec.lua — new test pins require("parley.defaults").max_tool_iterations==42, and the two default-resolution tests (DefaultIterAgent, ToolSonnet incl. get_agent chain) updated 20→42; explicit-override tests still pass. make test-spec SPEC=providers/tool_use green; make test full suite exit 0, 0 failures/errors; make lint 0/0 (237 files). Single-sourced the default in defaults.lua (ARCH-DRY) referenced by init.lua/tool_loop.lua/chat_respond.lua (added requires to the latter two); swept config.lua comment + atlas agents.md/tool_use.md (corrected stale 10). No stray 20/10 default literal remains.; review verdict: SHIP
 
 - Filed from a live request to raise the default. Mapped every default site
   (`init.lua:689`, `tool_loop.lua:233`, `chat_respond.lua:1693`, `config.lua:260`,
