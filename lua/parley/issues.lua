@@ -6,7 +6,7 @@
 --
 -- Pure functions (no vim deps): parse_frontmatter, next_runnable,
 -- cycle_status_value, topo_sort, parse_deps_value, slugify
--- IO functions (require vim): setup, get_issues_dir, create_issue,
+-- IO functions (require vim): setup, get_issues_dir, run_sdlc_issue_new,
 -- scan_issues, write_frontmatter, cmd_*
 
 local chat_parser = require("parley.chat_parser")
@@ -586,6 +586,14 @@ updated: {{date}}
 ### {{date}}
 ]]
 
+-- #116 M3: retained ONLY for the child-decomposition flow (cmd_issue_decompose).
+-- The primary `cmd_issue_new` path delegates to `sdlc issue new` (the canonical,
+-- cue/sdlc-owned template). The child flow can't cleanly delegate: it sets the
+-- decomposition dep direction (parent.deps += child — the opposite of
+-- `sdlc issue new --deps`), mutates the parent buffer (deps + plan-line link),
+-- and adds a child→parent backlink — semantics `sdlc issue new` doesn't model.
+-- Fully retiring this template means folding those into a sdlc-delegated child
+-- flow (a separate refactor); ariadne#145 unifies the template onto cue.
 M.render_issue_template = function(values)
     values = values or {}
     local default_status = vocab():category("open")[1] or "open"
@@ -594,35 +602,6 @@ M.render_issue_template = function(values)
         :gsub("{{status}}", values.status or default_status)
         :gsub("{{title}}", function() return values.title or "" end)
         :gsub("{{date}}", values.date or "")
-end
-
--- Create a new issue file and open it
-M.create_issue = function(title)
-    local issues_dir = M.get_issues_dir()
-    if not issues_dir then
-        _parley.logger.warning("issues_dir is not configured")
-        return nil
-    end
-
-    vim.fn.mkdir(issues_dir, "p")
-    local id = M.next_issue_id(issues_dir)
-    local slug = M.slugify(title)
-    local filename = id .. "-" .. slug .. ".md"
-    local filepath = issues_dir .. "/" .. filename
-
-    local date = os.date("%Y-%m-%d")
-    local content = M.render_issue_template({
-        id = id,
-        title = title,
-        date = date,
-    })
-    local lines = vim.split(content, "\n", { plain = true })
-
-    vim.fn.writefile(lines, filepath)
-
-    -- Open in current window
-    vim.cmd("edit " .. vim.fn.fnameescape(filepath))
-    return filepath
 end
 
 -- Update frontmatter status in the current buffer
@@ -689,10 +668,16 @@ M.cmd_issue_new = function()
         if not title or trim(title) == "" then
             return
         end
-        local filepath = M.create_issue(title)
-        if filepath then
-            _parley.logger.info("Created issue: " .. vim.fn.fnamemodify(filepath, ":t"))
+        -- #116 M3: delegate to `sdlc issue new` — the canonical creator (id
+        -- allocation, the cue/sdlc-owned template, broadcast to origin/main) —
+        -- instead of parley's own hand-rolled template. Then open the created file.
+        local path, err = M.run_sdlc_issue_new(title)
+        if not path then
+            _parley.logger.error("Issue creation failed: " .. tostring(err))
+            return
         end
+        vim.cmd("edit " .. vim.fn.fnameescape(vim.fn.fnamemodify(path, ":p")))
+        _parley.logger.info("Created issue: " .. vim.fn.fnamemodify(path, ":t"))
     end)
 end
 
