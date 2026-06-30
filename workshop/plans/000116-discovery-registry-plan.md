@@ -242,35 +242,46 @@ registry's issue descriptor consume it (`ARCH-DRY`).
 
 #### Task M2.2 — parley: `issue_vocabulary.home()` (cue-sourced, graceful fallback)
 - `lua/parley/issue_vocabulary.lua`: add `M.home()` → the **relative**
-  `discovery.home` from the loaded JSON (NOT repo-root-joined). Relative is the
-  consistent form: `config.issues_dir` is relative (`"workshop/issues"`,
-  `config.lua:520`), `get_issues_dir()` already does the git-root join itself
-  (`issues.lua:333-352`) and expects a relative input, and `base.lua` globs are
-  repo-relative by contract (RegistryBuilder prefixes the root). Joining anywhere
-  but `get_issues_dir()` would double-join or skip per-root expansion.
-- Fallback `config.issues_dir` (also relative) when `discovery.home` is absent.
-  The loader **raises** on a missing/unreadable file (`M.load()` → `error()`,
-  `issue_vocabulary.lua:147`), so wrap it in `pcall` — the fresh-clone/pre-weave
-  fallback must catch the raise, not just a `discovery == nil` field check.
-- Test: pin the **exact relative form** returned (`"workshop/issues"`, not merely
-  non-nil — so TDD forces the relative contract); missing field → fallback;
-  missing/unreadable file → fallback (the pcall path). (`ARCH-PURE`)
+  `discovery.home` from the loaded JSON (NOT joined), or **nil** when absent.
+  Relative is the consistent form: `config.issues_dir` is relative
+  (`"workshop/issues"`, `config.lua:520`), `get_issues_dir()` does its own git-root
+  join (`issues.lua:333-352`), and `base.lua` globs are repo-relative by contract.
+- The loader **raises** on a missing/unreadable file (`M.load()` → `error()`,
+  `issue_vocabulary.lua:147`), so wrap it in `pcall` and return **nil** (not raise)
+  in a fresh clone / pre-weave. Keep the module **config-decoupled** — no `config`
+  access here; the default fallback lives at the seed site (M2.3).
+- Test: cue JSON with `discovery.home` → returns the **exact relative string**
+  (`"workshop/issues"`, not merely non-nil — TDD forces the relative contract);
+  missing `discovery` field → nil; missing/unreadable file → nil (the pcall path).
+  (`ARCH-PURE`)
 
-#### Task M2.3 — parley: route the issue dir through the cue source
-- `lua/parley/issues.lua` `get_issues_dir()` (the single issue-dir accessor) →
-  source from `issue_vocabulary.home()`. The finder (`issue_finder.lua`) +
-  super-repo `expand_roots` already go through it; reroute that one accessor so they
-  pick up the repo-sourced dir. Keep `expand_roots` + `scan_issues`.
-- `base.lua`'s issue descriptor sources its `locate` home from the same cue home
-  in **relative** form, **injected via RegistryBuilder at the IO boundary**
-  (base.lua stays a pure function — receives the home as data). RegistryBuilder
-  then expands it across `[repo_root] + members` exactly like every other base
-  glob, so in **super-repo mode** the registry's issue view and the finder's
-  `expand_roots` (`issue_finder.lua:133`) view **converge** — both see siblings.
-  (`ARCH-PURPOSE`: one cue home, derived in *every* mode; `ARCH-DRY`, `ARCH-PURE`.)
-- **Test (registry side):** in super-repo mode the issue `locate` is expanded
-  across roots (relative-glob behavior preserved) — guards against an absolute
-  home silently collapsing the registry to the current repo only.
+#### Task M2.3 — seed `config.issues_dir` from the cue home at setup (root-cause, one source)
+
+**Plan-quality finding (high-confidence) corrected the original per-reader reroute.**
+`config.issues_dir` has **five** direct readers, not one:
+`get_issues_dir()` (`issues.lua:334`), `get_issues_repo_root()` (`issues.lua:358`),
+the **super-repo finder** `super_repo.expand_roots(config.issues_dir)`
+(`issue_finder.lua:133` — the motivating #114 consumer), the status-typeahead
+autocmd (`init.lua:872`), and `base.lua`'s issue descriptor (`base.lua:63`).
+Rerouting only `get_issues_dir()` leaves the super-repo finder + others on raw
+config → divergence (`ARCH-PURPOSE` failure), invisible today only because the
+default and the cue home are the same string.
+
+- **Fix (root cause, `ARCH-DRY`):** at setup, right after the opts→config merge
+  (`init.lua:537-538`), seed:
+  `if opts.issues_dir == nil then local h = require("parley.issue_vocabulary").home(); if h then M.config.issues_dir = h end end`.
+  Precedence **explicit user override > cue `discovery.home` > built-in default**.
+  All five readers then derive from the one seeded value — **no per-reader
+  rerouting, no base.lua injection** (base.lua reads the seeded `config.issues_dir`).
+- **Relative preserved:** `issues_dir` ∈ `repo_artifacts.dir_keys` → `skip_prepare`
+  (`init.lua:644-646`), so dir-prep never absolutizes it; the cue home is relative
+  and stays relative (base.lua's locate contract + `get_issues_dir`'s join rely on
+  this).
+- Tests: setup with cue home + no user override → `config.issues_dir == "<cue home>"`;
+  `opts.issues_dir` set → override wins; fresh clone (`home()` nil) → built-in
+  default. Plus a **registry super-repo** test: the issue `locate` expands across
+  `[repo_root] + members` (relative-glob behavior), guarding against a collapse to
+  the current repo.
 
 #### Task M2.4 — I-B root-cause fix (built-registry query correctness)
 - `spec_to_command` → return a **structured form** (search_dirs + filename_globs +
@@ -282,11 +293,11 @@ registry's issue descriptor consume it (`ARCH-DRY`).
   seam)" from pinning the broken absolute-glob output to asserting the corrected,
   *matching* command; add an integration test (built registry over a temp fixture →
   the executed command actually lists the fixture's files).
-- **Contract change — update the four string-output assertions** in
-  `tests/unit/discovery_registry_spec.lua:73,83,92,98` (they assert the current
-  `rg … -g <glob> .` string). Changing `spec_to_command` to a structured form
-  breaks them; `make test` surfaces them, but they're listed here so the contract
-  change is deliberate, not accidental.
+- **Contract change — update the four `assert.are.equal` string assertions** at
+  `tests/unit/discovery_registry_spec.lua:74-77, 84-87, 93, 99` (they assert the
+  current `rg … -g <glob> .` string). Changing `spec_to_command` to a structured
+  form breaks them; `make test` surfaces them, but they're listed here so the
+  contract change is deliberate, not accidental.
 
 #### Task M2.5 — atlas + milestone-close
 - Update `atlas/discovery/registry.md` (issue home cue-sourced; `spec_to_command`
