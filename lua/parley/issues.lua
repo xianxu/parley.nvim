@@ -325,6 +325,15 @@ M.repo_label = function(git_root)
     return stripped:match("([^/]+)$") or stripped
 end
 
+-- #116 M2: resolve the effective issues_dir at setup time. Precedence:
+-- explicit user override > cue `discovery.home` > built-in default. PURE — the
+-- setup site supplies the three inputs and seeds config.issues_dir with the
+-- result, so every reader (get_issues_dir, get_issues_repo_root, the super-repo
+-- finder, the status autocmd, base.lua's issue descriptor) derives from one value.
+M.resolve_issues_dir = function(user_override, cue_home, builtin_default)
+    return user_override or cue_home or builtin_default
+end
+
 --------------------------------------------------------------------------------
 -- IO functions (require vim/parley runtime)
 --------------------------------------------------------------------------------

@@ -33,6 +33,24 @@ local function fake_issue_vocab(statuses)
 end
 
 --------------------------------------------------------------------------------
+-- resolve_issues_dir (#116 M2 — seed precedence: user override > cue > default)
+--------------------------------------------------------------------------------
+
+describe("resolve_issues_dir", function()
+    it("uses the explicit user override when present (wins over cue)", function()
+        assert.equals("my/issues", issues.resolve_issues_dir("my/issues", "workshop/issues", "workshop/issues"))
+    end)
+
+    it("uses the cue home when the user did not override", function()
+        assert.equals("workshop/issues", issues.resolve_issues_dir(nil, "workshop/issues", "fallback/dir"))
+    end)
+
+    it("falls back to the built-in default when neither override nor cue", function()
+        assert.equals("fallback/dir", issues.resolve_issues_dir(nil, nil, "fallback/dir"))
+    end)
+end)
+
+--------------------------------------------------------------------------------
 -- slugify
 --------------------------------------------------------------------------------
 

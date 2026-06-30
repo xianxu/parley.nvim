@@ -538,6 +538,20 @@ M.setup = function(opts)
 		M.config[k] = v
 	end
 
+	-- #116 M2: seed issues_dir from the cue `discovery.home` (ariadne's issue.cue,
+	-- exported to construct/generated/vocabulary/issue.json) when the user did NOT
+	-- override it, so every config.issues_dir reader (get_issues_dir,
+	-- get_issues_repo_root, the super-repo finder, the status autocmd, base.lua's
+	-- issue descriptor) derives from the one cue source. Precedence: explicit user
+	-- override > cue home > built-in default. home() returns nil in a fresh clone /
+	-- pre-weave, so this is a no-op there (stays on the built-in default). Relative
+	-- stays relative — issues_dir is in skip_prepare, never absolutized here.
+	M.config.issues_dir = require("parley.issues").resolve_issues_dir(
+		opts.issues_dir,
+		require("parley.issue_vocabulary").home(),
+		M.config.issues_dir
+	)
+
 	-- Detect parley-enabled repo via marker file and set up repo-local directories
 	-- Skip if user explicitly set chat_dir in opts (e.g. tests)
 	local function apply_repo_local()
