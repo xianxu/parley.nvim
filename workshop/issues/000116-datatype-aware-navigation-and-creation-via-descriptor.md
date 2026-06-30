@@ -4,7 +4,7 @@ status: working
 deps: [000114]
 created: 2026-04-30
 updated: 2026-06-11
-estimate_hours: 20
+estimate_hours: 2.8
 ---
 
 # datatype-aware navigation and creation via descriptor
@@ -55,6 +55,34 @@ Lean: (1) for static cases, with an escape to (3) when a type genuinely needs co
 ### Cross-repo
 
 Datatypes can reference instances across repos (e.g., `brain/data/project/charon-launch-push.md` references `charon#13`). Super-repo mode (#114) is the surface that makes this navigable from a single parley session. This issue assumes #114 lands or progresses in parallel; cross-repo navigation is not solved here.
+
+## Estimate
+
+Re-derived 2026-06-30 after the M2/M3 re-scope (typed picker → issue cue-sourcing;
+descriptor-scaffolder → `sdlc issue new` delegation). The original 20h was
+pre-v3.1 and inflated — M1's actual was 0.59h against an 8h guess. Design ×0.2
+(the plan doc pre-resolves decisions); impl at v3.1's 40% of the v2 ranges;
++15% design buffer (thorough plan).
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+design-buffer: 0.15
+item: lua-neovim                design=0.8  impl=0.9
+item: cross-cutting-refactor    design=0.1  impl=0.15
+item: cross-repo-refactor-small design=0.05 impl=0.08
+item: scope-pivot               design=0.15 impl=0.1
+item: milestone-review          design=0.0  impl=0.3
+total: 2.8
+```
+
+> *Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against
+> `baseline-v3.1.md`. Method A only.* `lua-neovim` = the parley Lua across M1
+> (discovery registry, done) + M2 (issue cue-sourcing) + M3 (`sdlc issue new`
+> delegation); `cross-cutting-refactor` = the M2 I-B `spec_to_command`
+> structured-argv fix; `cross-repo-refactor-small` = the M2 ariadne `issue.cue`
+> `discovery` block; `scope-pivot` = this mid-flight re-scope; `milestone-review`
+> = the M2 + M3 boundary reviews.
 
 ## Plan
 
