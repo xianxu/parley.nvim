@@ -171,4 +171,26 @@ M.reset_for_tests = function()
     default_model = nil
 end
 
+-- #116 M2: the repo-RELATIVE home folder for issue instances, sourced from the
+-- cue `discovery` block (construct/vocabulary/issue.cue → exported issue.json).
+-- PURE over `model` when given; with no arg it pcall-loads the default and
+-- returns nil when the generated vocabulary is missing/unreadable (fresh clone /
+-- pre-weave) — callers fall back to their own config default. Config-decoupled by
+-- design (the default fallback lives at the seed site, init.lua). Never absolute:
+-- consumers join to their repo root.
+M.home = function(model)
+    if model == nil then
+        local ok, m = pcall(M.default)
+        if not ok then
+            return nil
+        end
+        model = m
+    end
+    local discovery = type(model) == "table" and model.raw and model.raw.discovery
+    if type(discovery) == "table" and type(discovery.home) == "string" and discovery.home ~= "" then
+        return discovery.home
+    end
+    return nil
+end
+
 return M

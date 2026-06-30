@@ -87,4 +87,32 @@ describe("issue_vocabulary", function()
             assert.is_true(completed[status] or model:is_terminal(status))
         end
     end)
+
+    -- #116 M2: issue home sourced from the cue `discovery` block (relative).
+    local function vocab_with_discovery(home)
+        local v = sample_vocab()
+        v.discovery = { home = home, glob = "*.md" }
+        return v
+    end
+
+    it("home() returns the exact relative discovery.home from the cue model", function()
+        assert.equals("workshop/issues", vocab.home(vocab.from_table(vocab_with_discovery("workshop/issues"))))
+    end)
+
+    it("home() returns nil when discovery is absent", function()
+        assert.is_nil(vocab.home(vocab.from_table(sample_vocab())))
+    end)
+
+    it("home() returns nil for an empty discovery.home", function()
+        assert.is_nil(vocab.home(vocab.from_table(vocab_with_discovery(""))))
+    end)
+
+    it("home() returns nil (not raise) when the generated vocab can't load", function()
+        local orig = vocab.default
+        vocab.default = function() error("no generated vocab (fresh clone / pre-weave)") end
+        local ok, result = pcall(vocab.home)
+        vocab.default = orig
+        assert.is_true(ok) -- the raising loader was caught, not propagated
+        assert.is_nil(result)
+    end)
 end)
