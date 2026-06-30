@@ -92,7 +92,7 @@ checklist is folded into M1/M3 below.
 
 - [x] M1 — discovery registry core: base ∪ local composition, `query()` → DiscoverySpec, `render()` noun-vocabulary (the #128 `repo_discovery` unblock)
 - [x] M2 — finders source their home root folder from the registry (`<C-g>m` stays the type-blind escape hatch; the faceted picker is #115)
-- [ ] M3 — issue creation: delegate to `sdlc issue new` (retire parley's hand-rolled `render_issue_template`/`cmd_issue_new`); open the created file. (Descriptor-driven multi-type scaffolding DROPPED — see the 2026-06-30 revision. The deeper "issue structure sourced from cue" unification is ariadne#145, which #116 does NOT block on.)
+- [x] M3 — issue creation: `cmd_issue_new` (`<C-y>c`) delegates to `sdlc issue new` (git-root-anchored via `--issues-dir`/`--history-dir`); dead `create_issue` removed. `render_issue_template` is **retained** for the child-decompose flow — its `parent.deps += child` / parent-buffer-mutation semantics are incompatible with sdlc's `--deps` (which sets `child.deps = [parent]`), so that flow isn't delegated (see the 2026-06-30 M3.4 revision). Descriptor-driven multi-type scaffolding DROPPED; the cue-template unification is ariadne#145, which #116 does NOT block on.
 
 ## Revisions
 
@@ -156,10 +156,17 @@ model and *what* M2/M3 actually do, after auditing the cue→Go→weave pipeline
   **ariadne#145** to unify creation onto the cue model (independent; #116 does
   not block on it).
 - **M3 → delegation.** Parley delegates issue creation to `sdlc issue new`
-  (retire the duplicate `render_issue_template`/`cmd_issue_new`), then opens the
+  (the primary `cmd_issue_new` path; `create_issue` removed), then opens the
   created file. Collapses parley's copy into sdlc's single Go renderer;
   id-allocation stays in sdlc (the dependency on ariadne is not new — it's the
   same `weave`/substrate edge). NOT a generic descriptor-driven scaffolder.
+  - **M3.4 fallback (as-built):** `render_issue_template`/`ISSUE_TEMPLATE`/
+    `next_issue_id` are **RETAINED** for the child-decompose flow — its
+    `parent.deps += child` direction + parent-buffer mutation (plan-line link)
+    can't cleanly use `sdlc issue new --deps` (which sets `child.deps=[parent]`).
+    So retirement is partial: only the top-level path is delegated; full
+    retirement folds into a future sdlc-delegated decompose. ariadne#145 unifies
+    the template onto cue regardless.
 - **M2 → seam now, repo-source later.** M2 inserts the finder→registry seam
   (the finder stops hardcoding its dir; reads the registry's `locate`) + the
   I-B absolute-glob fix. Sourcing the issue `home` from the emitted `issue.json`
@@ -171,6 +178,8 @@ model and *what* M2/M3 actually do, after auditing the cue→Go→weave pipeline
 ## Log
 
 
+
+- 2026-06-30: closed M3 — M3.1-M3.4 TDD; issues_spec 95/0/0 (parse_issue_new_output + run_sdlc_issue_new), full suite green (make test exit 0), lint 0/0 (237 files). cmd_issue_new (<C-y>c) delegates to `sdlc issue new` (injectable runner; list-form vim.fn.system = no shell injection; robust path parse); dead create_issue removed; render_issue_template retained for the child-decomposition flow (incompatible with sdlc --deps direction + parent-buffer mutation — documented, ariadne#145 unifies). --no-actual: same cross-branch active-time window mis-resolution as M2; cumulative measured at final issue close. **Review-Verdict: FIX-THEN-SHIP → fixed.** The sdlc auto-dispatch ran this time AND an independent fresh-eyes subagent both flagged the same Important (I1): `cmd_issue_new` anchored creation at nvim's cwd, not the git root (regressing #142 — stray dir + colliding ID when run from a subdir). Root-cause fix: forward absolute `--issues-dir`/`--history-dir` (one git-root resolver `resolve_against_git_root`, ARCH-DRY) + a `--` flag-terminator (leading-dash titles) + hardened `parse_issue_new_output` for spaced absolute paths (a consequence of the now-absolute dest). Minors handled: deps/slug forward-API test de-trapped; blocking-push UX noted. issues_spec 98/0/0; full suite green (make test exit 0); lint 0/0.
 - 2026-06-30: closed M2 — M2.1-M2.4 TDD; full suite green (make test exit 0), lint 0/0 (237 files). E2E live: vocabulary export -> issue.json carries discovery.home=workshop/issues -> issue_vocabulary.home() returns it -> setup seeds config.issues_dir from cue (all 5 readers derive). I-B fixed: built-registry spec_to_command compiles a MATCHING command (real-rg integration test). --no-actual: active-time window base mis-resolved to M1-start (cross-branch M1 close via PR #95) => measured 5.38h is cumulative, not the M2 increment; issue-level actual measured correctly at final close. **Review-Verdict: SHIP** — fresh-eyes subagent review (sdlc auto-dispatch hit E2BIG "argument list too long" from a bloated PATH → recorded not-run; a manual fresh-context review of the #116-only diff substituted). No Critical/Important. 2 Minor: (1) `spec_to_command` flatten would cross-product a *heterogeneous-extension* spec — not reachable today, now documented as an invariant in the code; (2) `config.lua` keeps the `issues_dir` literal as the pre-weave bootstrap fallback — by design.
 ### 2026-04-30
 

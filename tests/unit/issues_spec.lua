@@ -67,6 +67,15 @@ describe("parse_issue_new_output", function()
         assert.equals("workshop/issues/000160-foo.md", issues.parse_issue_new_output(merged))
     end)
 
+    it("extracts an absolute path under a directory containing spaces (#116 M3 I1 consequence)", function()
+        -- M3 forwards an absolute --issues-dir, so dest can be an absolute path
+        -- whose dir contains spaces; the colored '[ok] Created <path>' line is
+        -- excluded by containing "Created", the bare stdout path is kept.
+        local merged = "  [ok] Created /Users/John Doe/r/workshop/issues/000001-foo.md\n"
+            .. "/Users/John Doe/r/workshop/issues/000001-foo.md\n"
+        assert.equals("/Users/John Doe/r/workshop/issues/000001-foo.md", issues.parse_issue_new_output(merged))
+    end)
+
     it("returns nil when only the spaced 'Created <path>' line is present", function()
         assert.is_nil(issues.parse_issue_new_output("Created workshop/issues/000160-foo.md\n"))
     end)
@@ -94,7 +103,24 @@ describe("run_sdlc_issue_new", function()
         local path, err = issues.run_sdlc_issue_new("My Title", {}, fake("workshop/issues/000160-my-title.md\n", 0, cap))
         assert.is_nil(err)
         assert.equals("workshop/issues/000160-my-title.md", path)
-        assert.are.same({ "sdlc", "issue", "new", "My Title" }, cap.argv)
+        assert.are.same({ "sdlc", "issue", "new", "--", "My Title" }, cap.argv)
+    end)
+
+    it("forwards absolute --issues-dir/--history-dir (git-root-anchored, #116 M3 I1)", function()
+        local cap = {}
+        issues.run_sdlc_issue_new("t",
+            { issues_dir = "/r/workshop/issues", history_dir = "/r/workshop/history" },
+            fake("/r/workshop/issues/000001-t.md\n", 0, cap))
+        assert.are.same(
+            { "sdlc", "issue", "new", "--issues-dir", "/r/workshop/issues",
+              "--history-dir", "/r/workshop/history", "--", "t" },
+            cap.argv)
+    end)
+
+    it("appends -- so a title starting with '-' is positional, not a flag", function()
+        local cap = {}
+        issues.run_sdlc_issue_new("-n weird title", {}, fake("workshop/issues/000001-n-weird-title.md\n", 0, cap))
+        assert.are.same({ "sdlc", "issue", "new", "--", "-n weird title" }, cap.argv)
     end)
 
     it("surfaces a non-zero exit as an error", function()
@@ -109,10 +135,13 @@ describe("run_sdlc_issue_new", function()
         assert.is_truthy(err and err:find("no created path", 1, true))
     end)
 
-    it("passes --deps (comma-joined) for the child-decomposition flow", function()
+    -- NB: opts.deps is a forward API for an eventual child-flow migration; the
+    -- current cmd_issue_decompose does NOT use this function (and its dep direction
+    -- is the opposite of --deps — parent.deps += child). Don't wire decompose here.
+    it("passes --deps (comma-joined) when opts.deps is set", function()
         local cap = {}
         issues.run_sdlc_issue_new("child task", { deps = { "000116" } }, fake("workshop/issues/000161-child.md\n", 0, cap))
-        assert.are.same({ "sdlc", "issue", "new", "child task", "--deps", "000116" }, cap.argv)
+        assert.are.same({ "sdlc", "issue", "new", "--deps", "000116", "--", "child task" }, cap.argv)
     end)
 end)
 

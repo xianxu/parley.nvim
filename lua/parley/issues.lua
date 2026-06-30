@@ -341,9 +341,15 @@ end
 -- interleaving (we match the token, not a position). PURE. nil if no such line.
 M.parse_issue_new_output = function(output)
     local found = nil
-    for line in (output or ""):gmatch("[^\n]+") do
+    for line in (output or ""):gmatch("[^\r\n]+") do
         local trimmed = trim(line)
-        if trimmed:match("^%S+%.md$") then
+        -- The bare dest path (stdout) is a line ending in `.md` that is NOT sdlc's
+        -- "Created <path>" stderr decoration (cok prints "[ok] Created <path>",
+        -- possibly colored). Excluding any line CONTAINING "Created" — rather than
+        -- requiring a whitespace-free token — so an ABSOLUTE path under a directory
+        -- with spaces is still extracted (now reachable: M3 forwards an absolute
+        -- --issues-dir). Plain stdout path carries no color/decoration. (#116 M3 review)
+        if trimmed:match("%.md$") and not trimmed:find("Created", 1, true) then
             found = trimmed
         end
     end
@@ -358,7 +364,19 @@ end
 -- the pure parse_issue_new_output. runner(argv) -> (output, exit_code).
 M.run_sdlc_issue_new = function(title, opts, runner)
     opts = opts or {}
-    local argv = { "sdlc", "issue", "new", title }
+    local argv = { "sdlc", "issue", "new" }
+    -- #116 M3 (I1 fix): anchor creation at the git root, not nvim's cwd. sdlc's
+    -- --issues-dir/--history-dir default RELATIVE ("workshop/...") to its process
+    -- cwd; forwarding the resolved absolute dirs makes both the create location
+    -- AND NextID's scan cwd-independent (preserves the #142 location contract).
+    if opts.issues_dir and opts.issues_dir ~= "" then
+        table.insert(argv, "--issues-dir")
+        table.insert(argv, opts.issues_dir)
+    end
+    if opts.history_dir and opts.history_dir ~= "" then
+        table.insert(argv, "--history-dir")
+        table.insert(argv, opts.history_dir)
+    end
     if opts.deps and #opts.deps > 0 then
         table.insert(argv, "--deps")
         table.insert(argv, table.concat(opts.deps, ",")) -- StringSlice: comma-separated
@@ -367,6 +385,10 @@ M.run_sdlc_issue_new = function(title, opts, runner)
         table.insert(argv, "--slug")
         table.insert(argv, opts.slug)
     end
+    -- `--` terminates flag parsing so a title beginning with `-` is taken as the
+    -- positional arg, not mistaken for a flag by cobra/pflag.
+    table.insert(argv, "--")
+    table.insert(argv, title)
     runner = runner or function(a)
         -- list-form: no shell, so the title can't inject or need quoting
         local out = vim.fn.system(a)
@@ -387,26 +409,34 @@ end
 -- IO functions (require vim/parley runtime)
 --------------------------------------------------------------------------------
 
--- Resolve issues_dir: relative path against git repo root
-M.get_issues_dir = function()
-    local issues_dir = _parley.config.issues_dir
-    if not issues_dir or issues_dir == "" then
+-- Resolve a repo-local dir (issues / history) against the git repo root:
+-- absolute as-is; relative → git_root .. "/" .. dir (cwd's git root, cwd fallback
+-- when not in a repo). ONE resolver so issues + history anchor identically
+-- (ARCH-DRY) and creation is cwd-independent (#116 M3 — see get_history_dir).
+local function resolve_against_git_root(dir)
+    if not dir or dir == "" then
         return nil
     end
-
-    -- If already absolute, use as-is
-    if issues_dir:sub(1, 1) == "/" then
-        return issues_dir
+    if dir:sub(1, 1) == "/" then
+        return dir -- already absolute
     end
-
-    -- Resolve relative to git root
     local git_root = _parley.helpers.find_git_root(vim.fn.getcwd())
     if git_root == "" then
-        -- Fallback to cwd if not in a git repo
-        git_root = vim.fn.getcwd()
+        git_root = vim.fn.getcwd() -- fallback if not in a git repo
     end
+    return git_root .. "/" .. dir
+end
 
-    return git_root .. "/" .. issues_dir
+-- Resolve issues_dir against the git repo root.
+M.get_issues_dir = function()
+    return resolve_against_git_root(_parley.config.issues_dir)
+end
+
+-- Resolve history_dir against the git repo root. #116 M3: forwarded to
+-- `sdlc issue new --history-dir` so its NextID scan covers the right archive and
+-- creation stays git-root-anchored regardless of nvim's cwd (#142 contract).
+M.get_history_dir = function()
+    return resolve_against_git_root(_parley.config.history_dir)
 end
 
 -- Resolve the git repo root issues are created in — the same root get_issues_dir
@@ -670,8 +700,13 @@ M.cmd_issue_new = function()
         end
         -- #116 M3: delegate to `sdlc issue new` — the canonical creator (id
         -- allocation, the cue/sdlc-owned template, broadcast to origin/main) —
-        -- instead of parley's own hand-rolled template. Then open the created file.
-        local path, err = M.run_sdlc_issue_new(title)
+        -- instead of parley's own hand-rolled template. Forward the git-root-
+        -- anchored dirs so creation lands where #142's prompt label promises
+        -- (not relative to nvim's cwd). Then open the created file.
+        local path, err = M.run_sdlc_issue_new(title, {
+            issues_dir = M.get_issues_dir(),
+            history_dir = M.get_history_dir(),
+        })
         if not path then
             _parley.logger.error("Issue creation failed: " .. tostring(err))
             return
