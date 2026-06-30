@@ -1,10 +1,11 @@
 ---
 id: 000116
-status: working
+status: done
 deps: [000114]
 created: 2026-04-30
-updated: 2026-06-11
+updated: 2026-06-30
 estimate_hours: 2.8
+actual_hours: 7.83
 ---
 
 # datatype-aware navigation and creation via descriptor
@@ -179,6 +180,8 @@ model and *what* M2/M3 actually do, after auditing the cue→Go→weave pipeline
 
 
 
+
+- 2026-06-30: closed — M1 discovery registry; M2 issue home from ariadne cue (discovery.home -> weave-emitted issue.json -> config.issues_dir seeded at setup, all 5 readers derive) + I-B spec_to_command structured-argv fix; M3 issue creation delegated to `sdlc issue new` (git-root-anchored via --issues-dir/--history-dir, async jobstart + command-bar spinner, shell-function resolved via interactive shell). Full suite green, lint 0/0/237; M2 SHIP, M3 FIX-THEN-SHIP->fixed; live-tested by operator. Re-scoped deferrals (operator-accepted, land it): generic faceted/any-datatype picker -> #115; embedded-descriptor format + multi-type scaffolding resolved as cue, ariadne#145 unifies the creation template onto cue; descriptor-in-type.md superseded by the cue approach. **Review-Verdict: FIX-THEN-SHIP → fixed.** The end-of-issue integration review flagged one Important (I1, ARCH-DRY): my M3 I1 fix added a `get_history_dir` via the shared `resolve_against_git_root`, but a pre-existing inline `get_history_dir` shadowed it (Lua last-assignment-wins) → dead dup + a divergence on empty config. Fixed: deleted the inline duplicate so `get_issues_dir` + `get_history_dir` both route through the one resolver (the ARCH-DRY claim now true); default-config behavior unchanged, nil guarded at every consumer. issues_spec 100/0/0, lint 0/0.
 - 2026-06-30: closed M3 — M3.1-M3.4 TDD; issues_spec 95/0/0 (parse_issue_new_output + run_sdlc_issue_new), full suite green (make test exit 0), lint 0/0 (237 files). cmd_issue_new (<C-y>c) delegates to `sdlc issue new` (injectable runner; list-form vim.fn.system = no shell injection; robust path parse); dead create_issue removed; render_issue_template retained for the child-decomposition flow (incompatible with sdlc --deps direction + parent-buffer mutation — documented, ariadne#145 unifies). --no-actual: same cross-branch active-time window mis-resolution as M2; cumulative measured at final issue close. **Review-Verdict: FIX-THEN-SHIP → fixed.** The sdlc auto-dispatch ran this time AND an independent fresh-eyes subagent both flagged the same Important (I1): `cmd_issue_new` anchored creation at nvim's cwd, not the git root (regressing #142 — stray dir + colliding ID when run from a subdir). Root-cause fix: forward absolute `--issues-dir`/`--history-dir` (one git-root resolver `resolve_against_git_root`, ARCH-DRY) + a `--` flag-terminator (leading-dash titles) + hardened `parse_issue_new_output` for spaced absolute paths (a consequence of the now-absolute dest). Minors handled: deps/slug forward-API test de-trapped; blocking-push UX noted. issues_spec 98/0/0; full suite green (make test exit 0); lint 0/0.
 - 2026-06-30: closed M2 — M2.1-M2.4 TDD; full suite green (make test exit 0), lint 0/0 (237 files). E2E live: vocabulary export -> issue.json carries discovery.home=workshop/issues -> issue_vocabulary.home() returns it -> setup seeds config.issues_dir from cue (all 5 readers derive). I-B fixed: built-registry spec_to_command compiles a MATCHING command (real-rg integration test). --no-actual: active-time window base mis-resolved to M1-start (cross-branch M1 close via PR #95) => measured 5.38h is cumulative, not the M2 increment; issue-level actual measured correctly at final close. **Review-Verdict: SHIP** — fresh-eyes subagent review (sdlc auto-dispatch hit E2BIG "argument list too long" from a bloated PATH → recorded not-run; a manual fresh-context review of the #116-only diff substituted). No Critical/Important. 2 Minor: (1) `spec_to_command` flatten would cross-product a *heterogeneous-extension* spec — not reachable today, now documented as an invariant in the code; (2) `config.lua` keeps the `issues_dir` literal as the pre-weave bootstrap fallback — by design.
 ### 2026-04-30
