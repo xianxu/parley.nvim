@@ -6,7 +6,7 @@
 --
 -- Pure functions (no vim deps): parse_frontmatter, next_runnable,
 -- cycle_status_value, topo_sort, parse_deps_value, slugify
--- IO functions (require vim): setup, get_issues_dir, create_issue,
+-- IO functions (require vim): setup, get_issues_dir, run_sdlc_issue_new,
 -- scan_issues, write_frontmatter, cmd_*
 
 local chat_parser = require("parley.chat_parser")
@@ -325,30 +325,165 @@ M.repo_label = function(git_root)
     return stripped:match("([^/]+)$") or stripped
 end
 
+-- #116 M2: resolve the effective issues_dir at setup time. Precedence:
+-- explicit user override > cue `discovery.home` > built-in default. PURE — the
+-- setup site supplies the three inputs and seeds config.issues_dir with the
+-- result, so every reader (get_issues_dir, get_issues_repo_root, the super-repo
+-- finder, the status autocmd, base.lua's issue descriptor) derives from one value.
+M.resolve_issues_dir = function(user_override, cue_home, builtin_default)
+    return user_override or cue_home or builtin_default
+end
+
+-- #116 M3: extract the created issue path from `sdlc issue new` output. sdlc
+-- writes the bare dest path to stdout (cmd/sdlc/issue.go:319); "Created <path>"
+-- + sync warnings go to stderr — those all carry spaces, so the path is the one
+-- line that is ENTIRELY a non-whitespace `*.md` token. Robust to stdout/stderr
+-- interleaving (we match the token, not a position). PURE. nil if no such line.
+M.parse_issue_new_output = function(output)
+    local found = nil
+    for line in (output or ""):gmatch("[^\r\n]+") do
+        local trimmed = trim(line)
+        -- The bare dest path (stdout) is a line ending in `.md` that is NOT sdlc's
+        -- "Created <path>" stderr decoration (cok prints "[ok] Created <path>",
+        -- possibly colored). Excluding any line CONTAINING "Created" — rather than
+        -- requiring a whitespace-free token — so an ABSOLUTE path under a directory
+        -- with spaces is still extracted (now reachable: M3 forwards an absolute
+        -- --issues-dir). Plain stdout path carries no color/decoration. (#116 M3 review)
+        if trimmed:match("%.md$") and not trimmed:find("Created", 1, true) then
+            found = trimmed
+        end
+    end
+    return found
+end
+
+-- #116 M3: create a new issue by delegating to `sdlc issue new` — the canonical
+-- creator (allocates the id, writes the canonical template, broadcasts to
+-- origin/main per ariadne#82). ASYNC: calls `on_done(path|nil, err|nil)` when sdlc
+-- finishes (so callers can show an animated spinner — sdlc is slow: build + push).
+-- `runner(spawn_argv, on_complete)` is injectable for tests (default uses jobstart;
+-- REAL sdlc creates+pushes, so tests MUST inject a fake). Thin IO over the pure
+-- parse_issue_new_output. on_complete(output, exit_code).
+
+-- #116 M3: choose how to spawn `sdlc`. If it's a resolvable executable, spawn the
+-- argv directly (no shell, no quoting). Otherwise `sdlc` is a shell function/alias
+-- (commonly the build-in-owner wrapper) that nvim's non-interactive child shells
+-- can't see — wrap it in the user's INTERACTIVE shell so the rc-defined function
+-- loads. PURE given `is_exec` + `shell`; the spawn itself stays in the runner.
+-- (Fixes the live "E475: 'sdlc' is not executable" — list-form against a function.)
+M.build_spawn_argv = function(argv, is_exec, shell)
+    if is_exec then
+        return argv -- real binary: spawn directly, no shell, no quoting
+    end
+    local escaped = {}
+    for _, word in ipairs(argv) do
+        escaped[#escaped + 1] = vim.fn.shellescape(word)
+    end
+    return { shell or "sh", "-i", "-c", table.concat(escaped, " ") }
+end
+
+M.run_sdlc_issue_new = function(title, opts, on_done, runner)
+    opts = opts or {}
+    local argv = { "sdlc", "issue", "new" }
+    -- #116 M3 (I1 fix): anchor creation at the git root, not nvim's cwd. sdlc's
+    -- --issues-dir/--history-dir default RELATIVE ("workshop/...") to its process
+    -- cwd; forwarding the resolved absolute dirs makes both the create location
+    -- AND NextID's scan cwd-independent (preserves the #142 location contract).
+    if opts.issues_dir and opts.issues_dir ~= "" then
+        table.insert(argv, "--issues-dir")
+        table.insert(argv, opts.issues_dir)
+    end
+    if opts.history_dir and opts.history_dir ~= "" then
+        table.insert(argv, "--history-dir")
+        table.insert(argv, opts.history_dir)
+    end
+    if opts.deps and #opts.deps > 0 then
+        table.insert(argv, "--deps")
+        table.insert(argv, table.concat(opts.deps, ",")) -- StringSlice: comma-separated
+    end
+    if opts.slug and opts.slug ~= "" then
+        table.insert(argv, "--slug")
+        table.insert(argv, opts.slug)
+    end
+    -- `--` terminates flag parsing so a title beginning with `-` is taken as the
+    -- positional arg, not mistaken for a flag by cobra/pflag.
+    table.insert(argv, "--")
+    table.insert(argv, title)
+    -- ASYNC (so a progress spinner can animate — a blocking vim.fn.system freezes
+    -- the UI). runner(spawn_argv, on_complete) invokes on_complete(output, code);
+    -- the default uses jobstart (build_spawn_argv handles binary-vs-function). The
+    -- parser tolerates any rc prompt/precmd noise an interactive shell emits.
+    runner = runner or function(a, on_complete)
+        local is_exec = vim.fn.executable(a[1]) == 1
+        local spawn = M.build_spawn_argv(a, is_exec, vim.env.SHELL or vim.o.shell or "sh")
+        local out = {}
+        local function collect(_, data)
+            if data then
+                vim.list_extend(out, data)
+            end
+        end
+        local jid = vim.fn.jobstart(spawn, {
+            stdout_buffered = true,
+            stderr_buffered = true,
+            on_stdout = collect,
+            on_stderr = collect,
+            on_exit = function(_, code)
+                vim.schedule(function()
+                    on_complete(table.concat(out, "\n"), code)
+                end)
+            end,
+        })
+        if jid <= 0 then
+            vim.schedule(function()
+                on_complete("could not start sdlc (jobstart=" .. tostring(jid) .. ")", 127)
+            end)
+        end
+    end
+    runner(argv, function(output, code)
+        if code ~= 0 then
+            on_done(nil, "sdlc issue new failed (exit " .. tostring(code) .. "): " .. trim(output or ""))
+            return
+        end
+        local path = M.parse_issue_new_output(output)
+        if not path then
+            on_done(nil, "sdlc issue new succeeded but no created path in output: " .. trim(output or ""))
+            return
+        end
+        on_done(path, nil)
+    end)
+end
+
 --------------------------------------------------------------------------------
 -- IO functions (require vim/parley runtime)
 --------------------------------------------------------------------------------
 
--- Resolve issues_dir: relative path against git repo root
-M.get_issues_dir = function()
-    local issues_dir = _parley.config.issues_dir
-    if not issues_dir or issues_dir == "" then
+-- Resolve a repo-local dir (issues / history) against the git repo root:
+-- absolute as-is; relative → git_root .. "/" .. dir (cwd's git root, cwd fallback
+-- when not in a repo). ONE resolver so issues + history anchor identically
+-- (ARCH-DRY) and creation is cwd-independent (#116 M3 — see get_history_dir).
+local function resolve_against_git_root(dir)
+    if not dir or dir == "" then
         return nil
     end
-
-    -- If already absolute, use as-is
-    if issues_dir:sub(1, 1) == "/" then
-        return issues_dir
+    if dir:sub(1, 1) == "/" then
+        return dir -- already absolute
     end
-
-    -- Resolve relative to git root
     local git_root = _parley.helpers.find_git_root(vim.fn.getcwd())
     if git_root == "" then
-        -- Fallback to cwd if not in a git repo
-        git_root = vim.fn.getcwd()
+        git_root = vim.fn.getcwd() -- fallback if not in a git repo
     end
+    return git_root .. "/" .. dir
+end
 
-    return git_root .. "/" .. issues_dir
+-- Resolve issues_dir against the git repo root.
+M.get_issues_dir = function()
+    return resolve_against_git_root(_parley.config.issues_dir)
+end
+
+-- Resolve history_dir against the git repo root. #116 M3: forwarded to
+-- `sdlc issue new --history-dir` so its NextID scan covers the right archive and
+-- creation stays git-root-anchored regardless of nvim's cwd (#142 contract).
+M.get_history_dir = function()
+    return resolve_against_git_root(_parley.config.history_dir)
 end
 
 -- Resolve the git repo root issues are created in — the same root get_issues_dir
@@ -365,20 +500,6 @@ M.get_issues_repo_root = function()
         root = base
     end
     return root
-end
-
--- Resolve the history directory (repo-local, relative to git root)
-M.get_history_dir = function()
-    local history_dir = _parley.config.history_dir or "history"
-    if history_dir:sub(1, 1) == "/" then
-        return history_dir
-    end
-
-    local git_root = _parley.helpers.find_git_root(vim.fn.getcwd())
-    if git_root == "" then
-        git_root = vim.fn.getcwd()
-    end
-    return git_root .. "/" .. history_dir
 end
 
 -- Scan a directory for max issue ID (4-digit prefix pattern)
@@ -528,6 +649,14 @@ updated: {{date}}
 ### {{date}}
 ]]
 
+-- #116 M3: retained ONLY for the child-decomposition flow (cmd_issue_decompose).
+-- The primary `cmd_issue_new` path delegates to `sdlc issue new` (the canonical,
+-- cue/sdlc-owned template). The child flow can't cleanly delegate: it sets the
+-- decomposition dep direction (parent.deps += child — the opposite of
+-- `sdlc issue new --deps`), mutates the parent buffer (deps + plan-line link),
+-- and adds a child→parent backlink — semantics `sdlc issue new` doesn't model.
+-- Fully retiring this template means folding those into a sdlc-delegated child
+-- flow (a separate refactor); ariadne#145 unifies the template onto cue.
 M.render_issue_template = function(values)
     values = values or {}
     local default_status = vocab():category("open")[1] or "open"
@@ -536,35 +665,6 @@ M.render_issue_template = function(values)
         :gsub("{{status}}", values.status or default_status)
         :gsub("{{title}}", function() return values.title or "" end)
         :gsub("{{date}}", values.date or "")
-end
-
--- Create a new issue file and open it
-M.create_issue = function(title)
-    local issues_dir = M.get_issues_dir()
-    if not issues_dir then
-        _parley.logger.warning("issues_dir is not configured")
-        return nil
-    end
-
-    vim.fn.mkdir(issues_dir, "p")
-    local id = M.next_issue_id(issues_dir)
-    local slug = M.slugify(title)
-    local filename = id .. "-" .. slug .. ".md"
-    local filepath = issues_dir .. "/" .. filename
-
-    local date = os.date("%Y-%m-%d")
-    local content = M.render_issue_template({
-        id = id,
-        title = title,
-        date = date,
-    })
-    local lines = vim.split(content, "\n", { plain = true })
-
-    vim.fn.writefile(lines, filepath)
-
-    -- Open in current window
-    vim.cmd("edit " .. vim.fn.fnameescape(filepath))
-    return filepath
 end
 
 -- Update frontmatter status in the current buffer
@@ -623,6 +723,34 @@ end
 -- Commands
 --------------------------------------------------------------------------------
 
+-- An animated command-bar (echo-area) spinner for a pending async op. Reuses the
+-- single-source braille frames (`progress.SPINNER`/`frame`); the timer + echo are
+-- the IO. Returns `{ stop = fn }`. The create path is async (jobstart), so this
+-- animates while sdlc builds + creates + pushes — a blocking call could not.
+M.start_cmdline_spinner = function(message)
+    local progress = require("parley.progress")
+    local tick = 0
+    local timer = vim.uv.new_timer()
+    local function paint()
+        vim.api.nvim_echo({ { " " .. progress.frame(tick) .. " " .. message, "ModeMsg" } }, false, {})
+        tick = tick + 1
+    end
+    paint()
+    timer:start(120, 120, vim.schedule_wrap(paint))
+    return {
+        stop = function()
+            if timer then
+                pcall(function()
+                    timer:stop()
+                    timer:close()
+                end)
+                timer = nil
+            end
+            vim.api.nvim_echo({ { "" } }, false, {}) -- clear the spinner line
+        end,
+    }
+end
+
 M.cmd_issue_new = function()
     -- #142: show the destination repo so issues don't land in the wrong one
     -- (issues_dir resolves against the editor's cwd git root).
@@ -631,10 +759,24 @@ M.cmd_issue_new = function()
         if not title or trim(title) == "" then
             return
         end
-        local filepath = M.create_issue(title)
-        if filepath then
-            _parley.logger.info("Created issue: " .. vim.fn.fnamemodify(filepath, ":t"))
-        end
+        -- #116 M3: delegate to `sdlc issue new` — the canonical creator (id
+        -- allocation, the cue/sdlc-owned template, broadcast to origin/main) —
+        -- instead of parley's own hand-rolled template. Forward the git-root-
+        -- anchored dirs so creation lands where #142's prompt label promises.
+        -- Async + a command-bar spinner: sdlc is slow (build + create + push).
+        local spinner = M.start_cmdline_spinner("Creating issue via sdlc…")
+        M.run_sdlc_issue_new(title, {
+            issues_dir = M.get_issues_dir(),
+            history_dir = M.get_history_dir(),
+        }, function(path, err)
+            spinner.stop()
+            if not path then
+                _parley.logger.error("Issue creation failed: " .. tostring(err))
+                return
+            end
+            vim.cmd("edit " .. vim.fn.fnameescape(vim.fn.fnamemodify(path, ":p")))
+            _parley.logger.info("Created issue: " .. vim.fn.fnamemodify(path, ":t"))
+        end)
     end)
 end
 

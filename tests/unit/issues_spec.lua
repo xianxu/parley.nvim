@@ -33,6 +33,143 @@ local function fake_issue_vocab(statuses)
 end
 
 --------------------------------------------------------------------------------
+-- resolve_issues_dir (#116 M2 — seed precedence: user override > cue > default)
+--------------------------------------------------------------------------------
+
+describe("resolve_issues_dir", function()
+    it("uses the explicit user override when present (wins over cue)", function()
+        assert.equals("my/issues", issues.resolve_issues_dir("my/issues", "workshop/issues", "workshop/issues"))
+    end)
+
+    it("uses the cue home when the user did not override", function()
+        assert.equals("workshop/issues", issues.resolve_issues_dir(nil, "workshop/issues", "fallback/dir"))
+    end)
+
+    it("falls back to the built-in default when neither override nor cue", function()
+        assert.equals("fallback/dir", issues.resolve_issues_dir(nil, nil, "fallback/dir"))
+    end)
+end)
+
+--------------------------------------------------------------------------------
+-- parse_issue_new_output (#116 M3 — extract the created path from sdlc output)
+--------------------------------------------------------------------------------
+
+describe("parse_issue_new_output", function()
+    it("returns the bare created path (sdlc writes it to stdout, last line)", function()
+        assert.equals("workshop/issues/000160-foo.md",
+            issues.parse_issue_new_output("workshop/issues/000160-foo.md\n"))
+    end)
+
+    it("extracts the bare path from merged stdout+stderr (Created line + sync warning)", function()
+        local merged = "Created workshop/issues/000160-foo.md\n"
+            .. "issue created but auto-sync to main did not complete: offline\n"
+            .. "workshop/issues/000160-foo.md\n"
+        assert.equals("workshop/issues/000160-foo.md", issues.parse_issue_new_output(merged))
+    end)
+
+    it("extracts an absolute path under a directory containing spaces (#116 M3 I1 consequence)", function()
+        -- M3 forwards an absolute --issues-dir, so dest can be an absolute path
+        -- whose dir contains spaces; the colored '[ok] Created <path>' line is
+        -- excluded by containing "Created", the bare stdout path is kept.
+        local merged = "  [ok] Created /Users/John Doe/r/workshop/issues/000001-foo.md\n"
+            .. "/Users/John Doe/r/workshop/issues/000001-foo.md\n"
+        assert.equals("/Users/John Doe/r/workshop/issues/000001-foo.md", issues.parse_issue_new_output(merged))
+    end)
+
+    it("returns nil when only the spaced 'Created <path>' line is present", function()
+        assert.is_nil(issues.parse_issue_new_output("Created workshop/issues/000160-foo.md\n"))
+    end)
+
+    it("returns nil for empty or pathless output", function()
+        assert.is_nil(issues.parse_issue_new_output(""))
+        assert.is_nil(issues.parse_issue_new_output("some error\nno path here\n"))
+    end)
+end)
+
+--------------------------------------------------------------------------------
+-- run_sdlc_issue_new (#116 M3 — delegate creation to `sdlc issue new`)
+--------------------------------------------------------------------------------
+
+describe("run_sdlc_issue_new", function()
+    -- async runner: receives (argv, on_complete) and calls on_complete(output, code)
+    local function fake(output, code, cap)
+        return function(argv, on_complete)
+            if cap then cap.argv = argv end
+            on_complete(output, code)
+        end
+    end
+    -- drive the async call (the fake calls back inline → stays synchronous) + capture
+    local function run(title, opts, runner)
+        local r = {}
+        issues.run_sdlc_issue_new(title, opts, function(path, err)
+            r.path, r.err = path, err
+        end, runner)
+        return r
+    end
+
+    it("calls back with the created path on success; argv = sdlc issue new <title>", function()
+        local cap = {}
+        local r = run("My Title", {}, fake("workshop/issues/000160-my-title.md\n", 0, cap))
+        assert.is_nil(r.err)
+        assert.equals("workshop/issues/000160-my-title.md", r.path)
+        assert.are.same({ "sdlc", "issue", "new", "--", "My Title" }, cap.argv)
+    end)
+
+    it("forwards absolute --issues-dir/--history-dir (git-root-anchored, #116 M3 I1)", function()
+        local cap = {}
+        run("t", { issues_dir = "/r/workshop/issues", history_dir = "/r/workshop/history" },
+            fake("/r/workshop/issues/000001-t.md\n", 0, cap))
+        assert.are.same(
+            { "sdlc", "issue", "new", "--issues-dir", "/r/workshop/issues",
+              "--history-dir", "/r/workshop/history", "--", "t" },
+            cap.argv)
+    end)
+
+    it("appends -- so a title starting with '-' is positional, not a flag", function()
+        local cap = {}
+        run("-n weird title", {}, fake("workshop/issues/000001-n-weird-title.md\n", 0, cap))
+        assert.are.same({ "sdlc", "issue", "new", "--", "-n weird title" }, cap.argv)
+    end)
+
+    it("calls back with an error on a non-zero exit", function()
+        local r = run("t", {}, fake("title is required\n", 1))
+        assert.is_nil(r.path)
+        assert.is_truthy(r.err and r.err:find("exit 1", 1, true))
+    end)
+
+    it("errors when sdlc succeeds but prints no parseable path", function()
+        local r = run("t", {}, fake("nothing useful\n", 0))
+        assert.is_nil(r.path)
+        assert.is_truthy(r.err and r.err:find("no created path", 1, true))
+    end)
+
+    -- NB: opts.deps is a forward API for an eventual child-flow migration; the
+    -- current cmd_issue_decompose does NOT use this function (and its dep direction
+    -- is the opposite of --deps — parent.deps += child). Don't wire decompose here.
+    it("passes --deps (comma-joined) when opts.deps is set", function()
+        local cap = {}
+        run("child task", { deps = { "000116" } }, fake("workshop/issues/000161-child.md\n", 0, cap))
+        assert.are.same({ "sdlc", "issue", "new", "--deps", "000116", "--", "child task" }, cap.argv)
+    end)
+end)
+
+describe("build_spawn_argv (#116 M3 — sdlc as PATH binary vs shell function)", function()
+    it("spawns the argv directly when sdlc is a resolvable executable", function()
+        local argv = { "sdlc", "issue", "new", "--", "t" }
+        assert.are.same(argv, issues.build_spawn_argv(argv, true, "/bin/zsh"))
+    end)
+
+    it("wraps in an interactive shell when sdlc is a function/alias (the live E475 fix)", function()
+        local out = issues.build_spawn_argv({ "sdlc", "issue", "new", "--", "my title" }, false, "/bin/zsh")
+        assert.are.same("/bin/zsh", out[1])
+        assert.are.same("-i", out[2])
+        assert.are.same("-c", out[3])
+        assert.is_truthy(out[4]:find("'sdlc' 'issue' 'new'", 1, true)) -- each word shellescaped
+        assert.is_truthy(out[4]:find("'my title'", 1, true)) -- title quoted intact (space preserved)
+    end)
+end)
+
+--------------------------------------------------------------------------------
 -- slugify
 --------------------------------------------------------------------------------
 

@@ -67,36 +67,47 @@ describe("registry.query → DiscoverySpec", function()
     end)
 end)
 
-describe("registry.spec_to_command", function()
-    it("compiles a frontmatter spec to an rg-filter-then-content pipeline", function()
-        local spec = reg():query("pensive", "duality")
-        local cmd = registry.spec_to_command(spec)
+describe("registry.spec_to_command + render_command", function()
+    -- spec_to_command compiles to a STRUCTURED command (search_dirs as rg
+    -- positional paths, RELATIVE name_globs); render_command renders the
+    -- shellescaped rg pipeline. The split is the I-B root-cause fix (#116 M2):
+    -- an absolute home works as a positional path while the -g pattern stays
+    -- relative — see the built-registry integration test in discovery_builder_spec.
+    it("splits a locate glob into a positional dir + relative name glob", function()
+        local cmd = registry.spec_to_command(reg():query("issue", "async"))
+        assert.are.same({ config.issues_dir }, cmd.search_dirs)
+        assert.are.same({ "*.md" }, cmd.name_globs)
+        assert.equals("async", cmd.content_term)
+        assert.is_nil(cmd.frontmatter)
+    end)
+
+    it("renders a frontmatter spec to an rg-filter-then-content pipeline", function()
+        local cmd = registry.spec_to_command(reg():query("pensive", "duality"))
         assert.are.equal(
-            "rg -l '^type: pensive' -g '**/*.md' . | xargs -r rg -il 'duality'",
-            cmd
+            "rg -l '^type: pensive' -g '**/*.md' '.' | xargs -r rg -il 'duality'",
+            registry.render_command(cmd)
         )
     end)
 
-    it("compiles a no-frontmatter spec to a plain content search", function()
-        -- issue: `any` matcher, single repo-relative glob → deterministic command.
-        local spec = reg():query("issue", "async")
-        local cmd = registry.spec_to_command(spec)
+    it("renders a no-frontmatter spec to a plain content search (dir as path)", function()
+        local cmd = registry.spec_to_command(reg():query("issue", "async"))
         assert.are.equal(
-            "rg -il 'async' -g '" .. config.issues_dir .. "/*.md' .",
-            cmd
+            "rg -il 'async' -g '*.md' " .. vim.fn.shellescape(config.issues_dir),
+            registry.render_command(cmd)
         )
     end)
 
-    it("compiles a frontmatter spec with no term to a file-list command", function()
-        local spec = reg():query("pensive")
-        local cmd = registry.spec_to_command(spec)
-        assert.are.equal("rg -l '^type: pensive' -g '**/*.md' .", cmd)
+    it("renders a frontmatter spec with no term to a file-list command", function()
+        local cmd = registry.spec_to_command(reg():query("pensive"))
+        assert.are.equal("rg -l '^type: pensive' -g '**/*.md' '.'", registry.render_command(cmd))
     end)
 
-    it("compiles a no-frontmatter spec with no term to --files", function()
-        local spec = reg():query("issue")
-        local cmd = registry.spec_to_command(spec)
-        assert.are.equal("rg --files -g '" .. config.issues_dir .. "/*.md' .", cmd)
+    it("renders a no-frontmatter spec with no term to --files", function()
+        local cmd = registry.spec_to_command(reg():query("issue"))
+        assert.are.equal(
+            "rg --files -g '*.md' " .. vim.fn.shellescape(config.issues_dir),
+            registry.render_command(cmd)
+        )
     end)
 end)
 

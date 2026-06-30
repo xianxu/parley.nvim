@@ -176,28 +176,36 @@ describe("discovery.build — render() of the built registry (I1 regression)", f
     end)
 end)
 
-describe("discovery.build — spec_to_command on a built registry (I-B / M2 seam)", function()
-    -- Documents the CURRENT behavior: on the BUILT registry the roots are
-    -- absolute (repo-prefixed), so spec_to_command emits `rg ... -g '<abs>' .`.
-    -- An absolute `-g` glob against search-path `.` won't match — reconciling
-    -- glob-vs-search-root is the M2 execution model (see plan ## Revisions /
-    -- M2 sketch). This test pins the gap so M2 changes it consciously, rather
-    -- than inheriting a silently-empty search.
+describe("discovery.build — spec_to_command on a built registry (I-B FIXED, M2.4)", function()
+    -- On the BUILT registry the locate globs are absolute (repo-prefixed). The
+    -- I-B root-cause fix (#116 M2): spec_to_command splits each glob into a
+    -- positional search DIR (absolute, here `<root>/workshop/issues`) + a RELATIVE
+    -- `-g` name pattern (`*.md`). So the rendered command actually matches files
+    -- under the absolute home — where the old `rg … -g '<abs>' .` returned empty.
     local root = vim.fn.tempname() .. "-parley-builder-cmd"
+    local issues_dir = root .. "/" .. config.issues_dir
 
     before_each(function()
-        vim.fn.mkdir(root, "p")
+        vim.fn.mkdir(issues_dir, "p")
+        vim.fn.writefile({ "# 000001 a todo item", "status: open" }, issues_dir .. "/000001-todo.md")
+        vim.fn.writefile({ "# 000002 something else" }, issues_dir .. "/000002-other.md")
     end)
     after_each(function()
         vim.fn.delete(root, "rf")
     end)
 
-    it("compiles an absolute-glob command from the built issue spec", function()
+    it("splits the built issue spec into a positional abs dir + relative glob", function()
         local reg = builder.build({ repo_root = root })
         local cmd = registry.spec_to_command(reg:query("issue", "todo"))
-        assert.are.equal(
-            "rg -il 'todo' -g '" .. root .. "/" .. config.issues_dir .. "/*.md' .",
-            cmd
-        )
+        assert.are.same({ issues_dir }, cmd.search_dirs)
+        assert.are.same({ "*.md" }, cmd.name_globs)
+    end)
+
+    it("the rendered command actually matches files under the absolute home", function()
+        local reg = builder.build({ repo_root = root })
+        local cmd_str = registry.render_command(registry.spec_to_command(reg:query("issue", "todo")))
+        local out = vim.fn.system(cmd_str)
+        -- was a silently-empty search pre-fix; now lists the matching issue file.
+        assert.is_truthy(out:find("000001%-todo%.md"), "rg should list the matching issue; got:\n" .. out)
     end)
 end)

@@ -9,15 +9,18 @@ IDs are sequential integers (e.g., `000066`, `000067`). Sub-ticket IDs must NOT 
 
 Status values, categories, and lifecycle transitions are loaded at runtime from
 `construct/generated/vocabulary/issue.json`, which is generated from ariadne's
-`construct/vocabulary/issue.cue`. Parley uses that model for issue creation,
-status completion, picker active filtering, status sorting, and status cycling.
+`construct/vocabulary/issue.cue`. Parley uses that model for status completion,
+picker active filtering, status sorting, and status cycling — and (M2 #116) for
+the issue **home**: `config.issues_dir` is seeded at setup from the cue
+`discovery.home` (precedence: explicit user override > cue home > built-in
+default), so every reader derives from the one cue source.
 
 ## Commands
-- `:ParleyIssueNew` (`<C-y>c`): create issue with auto-incremented ID. The title prompt is prefixed with the destination repo — `[<repo>] Issue title: ` — where `<repo>` is the basename of the git root `issues_dir` resolves against (the editor's cwd root), so issues aren't created in the wrong repo (#142)
+- `:ParleyIssueNew` (`<C-y>c`): **delegates to `sdlc issue new`** (M3 #116) — the canonical creator (id allocation + the cue/sdlc-owned template + broadcast to origin/main per ariadne#82) — then opens the created file. The title prompt is prefixed with the destination repo — `[<repo>] Issue title: ` — where `<repo>` is the basename of the git root `issues_dir` resolves against (the editor's cwd root), so issues aren't created in the wrong repo (#142)
 - `:ParleyIssueFinder` (`<C-y>f`): float picker with status badges and view mode cycling — default `all` (done items in `workshop/issues/` visible), `<C-a>` cycles `all → active → all+history` so the first press hides done items (#152)
 - `:ParleyIssueNext` (`<C-y>x`): open next runnable issue (oldest open with all deps done)
 - `:ParleyIssueStatus` (`<C-y>s`): cycle frontmatter status using the first lifecycle transition for the current status in generated vocabulary order
-- `:ParleyIssueDecompose` (`<C-y>i`): create child issue from plan line, add to parent deps, and write a markdown link `[issue NNNNNN](./NNNNNN-slug.md)` into the parent's plan line; the new child file gets a `Parent: [issue PPPPPP](./PPPPPP-...md)` backlink under its title
+- `:ParleyIssueDecompose` (`<C-y>i`): create child issue from plan line, add to parent deps, and write a markdown link `[issue NNNNNN](./NNNNNN-slug.md)` into the parent's plan line; the new child file gets a `Parent: [issue PPPPPP](./PPPPPP-...md)` backlink under its title. (M3 #116: decompose **retains** parley's `render_issue_template` — its semantics, parent.deps += child + the parent plan-line link + the backlink, are incompatible with `sdlc issue new`'s shape, so unlike `:ParleyIssueNew` it is not delegated.)
 - `:ParleyIssueGoto` (`<C-y>g`): follow a markdown link `[...](./NNNNNN-*.md)` under the cursor to the linked issue; if there is no link under the cursor, jump to the current issue's parent (derived from `deps`). Use `<C-o>` to return.
 
 ## Parent/Child Links
