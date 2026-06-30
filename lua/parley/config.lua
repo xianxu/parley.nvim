@@ -257,7 +257,7 @@ local config = {
 			system_prompt = require("parley.defaults").chat_system_prompt,
 			tools = {"@readonly"},
 			-- Optional: defaults applied at setup time when absent
-			-- max_tool_iterations = 20,
+			-- max_tool_iterations = 42,
 			-- tool_result_max_bytes = 102400,
 		},
 		-- {

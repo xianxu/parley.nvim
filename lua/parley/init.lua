@@ -686,7 +686,7 @@ M.setup = function(opts)
 				if not ok then
 					error(string.format("agent %q: %s", name, tostring(err)))
 				end
-				agent.max_tool_iterations = agent.max_tool_iterations or 20
+				agent.max_tool_iterations = agent.max_tool_iterations or M.defaults.max_tool_iterations
 				agent.tool_result_max_bytes = agent.tool_result_max_bytes or 102400
 			end
 

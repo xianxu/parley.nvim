@@ -1690,7 +1690,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                         return
                     end
                     local outcome = tool_loop.process_response(buf, qt.raw_response or "", {
-                        max_tool_iterations = agent_info.max_tool_iterations or 10,
+                        max_tool_iterations = agent_info.max_tool_iterations or require("parley.defaults").max_tool_iterations,
                         tool_result_max_bytes = agent_info.tool_result_max_bytes or 102400,
                         cwd = agent_info.neighborhood_root,
                     }, model, target_idx)
