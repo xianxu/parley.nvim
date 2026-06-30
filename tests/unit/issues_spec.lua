@@ -145,6 +145,22 @@ describe("run_sdlc_issue_new", function()
     end)
 end)
 
+describe("build_spawn_argv (#116 M3 — sdlc as PATH binary vs shell function)", function()
+    it("spawns the argv directly when sdlc is a resolvable executable", function()
+        local argv = { "sdlc", "issue", "new", "--", "t" }
+        assert.are.same(argv, issues.build_spawn_argv(argv, true, "/bin/zsh"))
+    end)
+
+    it("wraps in an interactive shell when sdlc is a function/alias (the live E475 fix)", function()
+        local out = issues.build_spawn_argv({ "sdlc", "issue", "new", "--", "my title" }, false, "/bin/zsh")
+        assert.are.same("/bin/zsh", out[1])
+        assert.are.same("-i", out[2])
+        assert.are.same("-c", out[3])
+        assert.is_truthy(out[4]:find("'sdlc' 'issue' 'new'", 1, true)) -- each word shellescaped
+        assert.is_truthy(out[4]:find("'my title'", 1, true)) -- title quoted intact (space preserved)
+    end)
+end)
+
 --------------------------------------------------------------------------------
 -- slugify
 --------------------------------------------------------------------------------

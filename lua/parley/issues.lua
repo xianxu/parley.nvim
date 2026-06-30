@@ -362,6 +362,24 @@ end
 -- injectable for tests (default = vim.fn.system list-form + v:shell_error); REAL
 -- sdlc creates+pushes an issue, so tests MUST inject a fake runner. Thin IO over
 -- the pure parse_issue_new_output. runner(argv) -> (output, exit_code).
+
+-- #116 M3: choose how to spawn `sdlc`. If it's a resolvable executable, spawn the
+-- argv directly (no shell, no quoting). Otherwise `sdlc` is a shell function/alias
+-- (commonly the build-in-owner wrapper) that nvim's non-interactive child shells
+-- can't see — wrap it in the user's INTERACTIVE shell so the rc-defined function
+-- loads. PURE given `is_exec` + `shell`; the spawn itself stays in the runner.
+-- (Fixes the live "E475: 'sdlc' is not executable" — list-form against a function.)
+M.build_spawn_argv = function(argv, is_exec, shell)
+    if is_exec then
+        return argv -- real binary: spawn directly, no shell, no quoting
+    end
+    local escaped = {}
+    for _, word in ipairs(argv) do
+        escaped[#escaped + 1] = vim.fn.shellescape(word)
+    end
+    return { shell or "sh", "-i", "-c", table.concat(escaped, " ") }
+end
+
 M.run_sdlc_issue_new = function(title, opts, runner)
     opts = opts or {}
     local argv = { "sdlc", "issue", "new" }
@@ -390,9 +408,12 @@ M.run_sdlc_issue_new = function(title, opts, runner)
     table.insert(argv, "--")
     table.insert(argv, title)
     runner = runner or function(a)
-        -- list-form: no shell, so the title can't inject or need quoting
-        local out = vim.fn.system(a)
-        return out, vim.v.shell_error
+        -- sdlc may be a PATH binary OR a shell function/alias; pick the spawn form
+        -- accordingly (build_spawn_argv). The parser tolerates any rc prompt/precmd
+        -- noise an interactive shell emits — it extracts the .md path, ignores rest.
+        local is_exec = vim.fn.executable(a[1]) == 1
+        local spawn = M.build_spawn_argv(a, is_exec, vim.env.SHELL or vim.o.shell or "sh")
+        return vim.fn.system(spawn), vim.v.shell_error
     end
     local output, code = runner(argv)
     if code ~= 0 then
