@@ -112,36 +112,87 @@ function Registry:render()
     return table.concat(lines, "\n")
 end
 
-local function glob_flags(roots)
-    local parts = {}
-    for _, g in ipairs(roots) do
-        table.insert(parts, "-g " .. vim.fn.shellescape(g))
+-- Split a locate glob into (search_dir, name_glob): the leading wildcard-free
+-- directory prefix becomes an rg positional search PATH; the remainder is the
+-- RELATIVE `-g` filename pattern. This is the I-B root-cause fix (#116 M2): on the
+-- BUILT registry the locate globs are absolute (repo-prefixed), so the old
+-- `rg … -g '<abs>' .` matched nothing (an absolute `-g` glob never matches the
+-- relative paths rg walks under `.`). Passing the dir as a positional path makes
+-- rg search there, and a relative `-g` matches names at/under it. Pure.
+--   "/abs/workshop/issues/*.md" → ("/abs/workshop/issues", "*.md")
+--   "**/*.md"                   → (".", "**/*.md")
+--   "workshop/issues/*.md"      → ("workshop/issues", "*.md")
+--- @param glob string
+--- @return string search_dir
+--- @return string|nil name_glob  nil when the glob has no wildcard (a literal path)
+local function split_glob(glob)
+    local wc = glob:find("[%*%?%[]") -- first wildcard byte, or nil
+    if not wc then
+        return glob, nil -- literal path: search it directly, no -g filter
     end
-    return table.concat(parts, " ")
+    -- last '/' at or before the first wildcard → the dir/pattern boundary
+    local boundary = glob:sub(1, wc - 1):find("/[^/]*$")
+    if not boundary then
+        return ".", glob -- wildcard in the first segment → search cwd
+    end
+    return glob:sub(1, boundary - 1), glob:sub(boundary + 1)
 end
 
---- Compile a DiscoverySpec to an rg pipeline string (PURE — does not run it).
---- Roots become rg `--glob` filters; a frontmatter filter lists matching files
---- first, then greps their content. Execution is the consumer's (M2) job.
---- All interpolated values (globs, frontmatter pattern, content term) are
---- `shellescape`d so a value containing a quote can't break/inject the command.
+--- Compile a DiscoverySpec into a STRUCTURED command (PURE — does not run it):
+--- `{ search_dirs = {dir…}, name_globs = {relative glob…}, frontmatter, content_term }`.
+--- `search_dirs` are rg positional paths (absolute-safe); `name_globs` are RELATIVE
+--- `-g` filters (deduped). render_command turns this into the rg string; execution
+--- (vim.fn.system) is the consumer's job. Keeping the compiler structured is the
+--- ARCH-PURE seam — pure compiler, thin shellescape renderer.
 --- @param spec table DiscoverySpec
---- @return string
+--- @return table command
 function M.spec_to_command(spec)
-    local globs = glob_flags(spec.roots)
-    local fm = spec.frontmatter
-    local term = spec.content_term
+    local dirs, globs, seen = {}, {}, {}
+    for _, root in ipairs(spec.roots) do
+        local dir, name = split_glob(root)
+        table.insert(dirs, dir)
+        if name and not seen[name] then
+            seen[name] = true
+            table.insert(globs, name)
+        end
+    end
+    return {
+        search_dirs = dirs,
+        name_globs = globs,
+        frontmatter = spec.frontmatter,
+        content_term = spec.content_term,
+    }
+end
+
+--- Render a structured command (from spec_to_command) into an rg pipeline string,
+--- `shellescape`ing every interpolated value (so a value with a quote can't
+--- break/inject the command). `name_globs` become `-g` filters; `search_dirs`
+--- are positional paths; a frontmatter filter lists matching files first, then
+--- greps their content. PURE — vim.fn.system runs the result (consumer side).
+--- @param cmd table structured command from spec_to_command
+--- @return string
+function M.render_command(cmd)
+    local parts = {}
+    for _, g in ipairs(cmd.name_globs) do
+        table.insert(parts, "-g " .. vim.fn.shellescape(g))
+    end
+    for _, d in ipairs(cmd.search_dirs) do
+        table.insert(parts, vim.fn.shellescape(d))
+    end
+    local scope = table.concat(parts, " ")
+    local fm = cmd.frontmatter
+    local term = cmd.content_term
     if fm then
-        local list = "rg -l " .. vim.fn.shellescape("^" .. fm.field .. ": " .. fm.value) .. " " .. globs .. " ."
+        local list = "rg -l " .. vim.fn.shellescape("^" .. fm.field .. ": " .. fm.value) .. " " .. scope
         if term then
             return list .. " | xargs -r rg -il " .. vim.fn.shellescape(term)
         end
         return list
     end
     if term then
-        return "rg -il " .. vim.fn.shellescape(term) .. " " .. globs .. " ."
+        return "rg -il " .. vim.fn.shellescape(term) .. " " .. scope
     end
-    return "rg --files " .. globs .. " ."
+    return "rg --files " .. scope
 end
 
 return M
