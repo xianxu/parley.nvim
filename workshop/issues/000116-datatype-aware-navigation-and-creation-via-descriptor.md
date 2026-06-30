@@ -91,7 +91,7 @@ Decomposed into review-boundary milestones (task detail:
 checklist is folded into M1/M3 below.
 
 - [x] M1 — discovery registry core: base ∪ local composition, `query()` → DiscoverySpec, `render()` noun-vocabulary (the #128 `repo_discovery` unblock)
-- [ ] M2 — finders source their home root folder from the registry (`<C-g>m` stays the type-blind escape hatch; the faceted picker is #115)
+- [x] M2 — finders source their home root folder from the registry (`<C-g>m` stays the type-blind escape hatch; the faceted picker is #115)
 - [ ] M3 — issue creation: delegate to `sdlc issue new` (retire parley's hand-rolled `render_issue_template`/`cmd_issue_new`); open the created file. (Descriptor-driven multi-type scaffolding DROPPED — see the 2026-06-30 revision. The deeper "issue structure sourced from cue" unification is ariadne#145, which #116 does NOT block on.)
 
 ## Revisions
@@ -170,6 +170,8 @@ model and *what* M2/M3 actually do, after auditing the cue→Go→weave pipeline
 
 ## Log
 
+
+- 2026-06-30: closed M2 — M2.1-M2.4 TDD; full suite green (make test exit 0), lint 0/0 (237 files). E2E live: vocabulary export -> issue.json carries discovery.home=workshop/issues -> issue_vocabulary.home() returns it -> setup seeds config.issues_dir from cue (all 5 readers derive). I-B fixed: built-registry spec_to_command compiles a MATCHING command (real-rg integration test). --no-actual: active-time window base mis-resolved to M1-start (cross-branch M1 close via PR #95) => measured 5.38h is cumulative, not the M2 increment; issue-level actual measured correctly at final close. **Review-Verdict: SHIP** — fresh-eyes subagent review (sdlc auto-dispatch hit E2BIG "argument list too long" from a bloated PATH → recorded not-run; a manual fresh-context review of the #116-only diff substituted). No Critical/Important. 2 Minor: (1) `spec_to_command` flatten would cross-product a *heterogeneous-extension* spec — not reachable today, now documented as an invariant in the code; (2) `config.lua` keeps the `issues_dir` literal as the pre-weave bootstrap fallback — by design.
 ### 2026-04-30
 
 Issue filed off the duality pensive. See pensive for the framing context and the open questions that motivated this.

@@ -144,6 +144,11 @@ end
 --- `-g` filters (deduped). render_command turns this into the rg string; execution
 --- (vim.fn.system) is the consumer's job. Keeping the compiler structured is the
 --- ARCH-PURE seam — pure compiler, thin shellescape renderer.
+--- INVARIANT: all roots in a spec share one trailing glob (per-type uniform
+--- extension — `*.md`, or vision's `*.yaml`). name_globs/search_dirs are flattened
+--- into two independent lists, which rg unions (every `-g` across every path); a
+--- *heterogeneous-extension* spec would therefore over-match. If a future
+--- descriptor mixes extensions, pair each (dir, glob) per root instead (#116 M2 review).
 --- @param spec table DiscoverySpec
 --- @return table command
 function M.spec_to_command(spec)
