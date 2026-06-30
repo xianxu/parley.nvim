@@ -212,11 +212,79 @@ For each existing finder (chat `<C-g>f`, note `<C-n>f`, issue `<C-y>f`, vision `
 
 **Accepted simplification:** assumes each type is folder-homed (the 4 finders are). Scatter types (instances spread across the repo, no fixed home) are out of scope — parley doesn't handle them today, and the agent (#128) still finds them via M1's frontmatter `Matcher`.
 
-**Deferred to #115:** the generic *faceted* finder (one shared UI parameterized by type; per-type facet bars; per-type finders as instances) is a separate design — the "two filter bars" problem (type-switch + per-type facets) makes an all-types view incoherent, so it warrants its own issue/plan. `#115 deps [000116]`. To be expanded to tasks at M2 start.
+**Deferred to #115:** the generic *faceted* finder (one shared UI parameterized by type; per-type facet bars; per-type finders as instances) is a separate design — the "two filter bars" problem (type-switch + per-type facets) makes an all-types view incoherent, so it warrants its own issue/plan. `#115 deps [000116]`.
 
-## M3 — Embedded descriptor format + scaffolding (sketch)
+### M2 tasks (expanded 2026-06-30)
 
-Settle #116's long-open descriptor-format question (lean: structured fenced block embedded in each datatype doc — single source, diffable — parsed into a TypeDescriptor with added `template`/`new_location`/`slug_rule` fields). Add a descriptor parser (extends RegistryBuilder as a third source: base ∪ grep-local ∪ embedded-descriptors), a template scaffolder, and a "new instance of type X" command (human-driven creation — consistent with the readonly-*agent* posture). Update `construct/datatype/type.md` so future prototypes ship a descriptor. To be expanded at M3 start.
+**Scope (supersedes the M1-era "M2 — Typed picker" line in Scope & milestones):**
+M2 is the **data-correctness layer** — get `issue`'s home **sourced from
+`issue.cue`** (repo-as-source-of-truth) AND make the registry's query surface
+correct on the **built** registry (the I-B fix). #115 is the UI layer on top of
+that sound data. **Only `issue` is repo-sourced** (ariadne-owned); chat/note/vision
+keep their existing parley-native root-managers — routing them through the registry
+would be a circular no-op and would drop the root-managers' labels/persistence
+(anti–Simplicity-First). Issue *creation* is M3 (delegate to `sdlc issue new`).
+
+**Single source for the issue home:** `issue_vocabulary.home()` reads
+`discovery.home` from `construct/generated/vocabulary/issue.json` (cue →
+weave-emitted), fallback `config.issues_dir`. BOTH the issue finder AND the
+registry's issue descriptor consume it (`ARCH-DRY`).
+
+#### Task M2.1 — ariadne: model issue location in cue (cross-repo)
+- Add a concrete block to `../ariadne/construct/vocabulary/issue.cue`:
+  `discovery: { home: "workshop/issues", glob: "*.md" }`.
+- Verify `cue export …/issue.cue --out json` includes `discovery`, and `make weave`
+  materializes it into parley's `construct/generated/vocabulary/issue.json` (the
+  emit is automatic — `construct/local/vocabulary/.dynamic-skill` runs `vocabulary
+  export` at `weave compile`).
+- Note in ariadne#145 that the location half landed here; #145 stays for the
+  creation-template unification.
+
+#### Task M2.2 — parley: `issue_vocabulary.home()` (cue-sourced, graceful fallback)
+- `lua/parley/issue_vocabulary.lua`: add `M.home()` → repo-root-joined
+  `discovery.home` from the loaded JSON; fallback `config.issues_dir` when the
+  field/file is absent (fresh clone, pre-weave). Pure parse over the existing IO read.
+- Test: JSON with `discovery.home` → returns it; without → fallback. (`ARCH-PURE`)
+
+#### Task M2.3 — parley: route the issue dir through the cue source
+- `lua/parley/issues.lua` `get_issues_dir()` (the single issue-dir accessor) →
+  source from `issue_vocabulary.home()`. The finder (`issue_finder.lua`) +
+  super-repo `expand_roots` already go through it; reroute that one accessor so they
+  pick up the repo-sourced dir. Keep `expand_roots` + `scan_issues`.
+- `base.lua`'s issue descriptor sources its `locate` home from the same cue home,
+  **injected via RegistryBuilder at the IO boundary** (base.lua stays a pure
+  function — receives the home as data), so `query("issue")`/`render()` reflect the
+  repo-sourced home. (`ARCH-PURE`, `ARCH-DRY`)
+
+#### Task M2.4 — I-B root-cause fix (built-registry query correctness)
+- `spec_to_command` → return a **structured form** (search_dirs + filename_globs +
+  term + frontmatter); a thin executor renders the rg argv with `shellescape`,
+  using **directories as positional search paths** and **relative filename globs in
+  `-g`** so absolute (repo-prefixed) roots match. (`ARCH-PURE` pure-compiler/thin-shell;
+  Root-Cause, not a patch.)
+- Flip `discovery_builder_spec.lua` "spec_to_command on a built registry (I-B / M2
+  seam)" from pinning the broken absolute-glob output to asserting the corrected,
+  *matching* command; add an integration test (built registry over a temp fixture →
+  the executed command actually lists the fixture's files).
+
+#### Task M2.5 — atlas + milestone-close
+- Update `atlas/discovery/registry.md` (issue home cue-sourced; `spec_to_command`
+  structured argv) + traceability for changed specs.
+- `make test` green, `make lint` clean.
+- `sdlc milestone-close --issue 116 --milestone M2`; log the verdict in `## Log`.
+
+## M3 — issue creation via sdlc delegation (sketch)
+
+**Superseded 2026-06-30** (see the issue #116 revision + the 2026-06-30 entry in
+`## Revisions` below). M3 is no longer an embedded-descriptor scaffolder.
+`sdlc issue new`'s template is **hardcoded Go** (`cmd/sdlc/internal/issue/scaffold.go`),
+not cue-sourced — ariadne#145 will unify that. So parley **delegates** issue
+creation to `sdlc issue new` (retire the duplicate `render_issue_template`/
+`cmd_issue_new` in `lua/parley/issues.lua`), then opens the created file (the
+command prints its path). id-allocation stays in sdlc. Issue-first; other
+datatypes deferred. To be expanded at M3 start.
+
+_Original sketch (kept for history):_ Settle #116's long-open descriptor-format question (lean: structured fenced block embedded in each datatype doc — single source, diffable — parsed into a TypeDescriptor with added `template`/`new_location`/`slug_rule` fields). Add a descriptor parser (extends RegistryBuilder as a third source: base ∪ grep-local ∪ embedded-descriptors), a template scaffolder, and a "new instance of type X" command (human-driven creation — consistent with the readonly-*agent* posture). Update `construct/datatype/type.md` so future prototypes ship a descriptor.
 
 ---
 
@@ -277,3 +345,27 @@ seam)" **pins the current absolute-glob output** so M2 changes it consciously
 structured argv (dir-roots + term + frontmatter) and let the executor render
 safely with `shellescape`, or set the rg search-path to each root and pass only
 the filename glob via `-g`. Decide before M2/#115 consume `query()`.
+
+### 2026-06-30 — M2 = data-correctness layer; I-B FOLDED INTO M2 (not deferred); cue-sourced issue home
+
+Settles the M2-carried open decision above, and reframes M2/M3 after auditing
+the cue→weave→parley pipeline.
+
+- **M2 owns "correct data sourced from `issue.cue`"; #115 owns common UI
+  treatment** (operator framing). Under that split **I-B is a data-correctness
+  bug → fixed in M2**, not deferred. Rationale `ARCH-PURPOSE`: the data layer is
+  the point; shipping a half-broken `query()` because no current finder calls it
+  is under-delivery. Fix = structured-argv **root cause** (search-dirs as rg
+  positional paths, relative filename globs), not a patch.
+- **Transport confirmed (already in production):** parley reads weave-emitted,
+  gitignored `construct/generated/vocabulary/issue.json` via
+  `lua/parley/issue_vocabulary.lua` (status today; we add `discovery.home`). No
+  commit/vendor/runtime-shell-out. parley is a weave derivative
+  (`construct/deps` → `substrate ../ariadne`).
+- **Repo-sourcing realized via cue:** add `discovery:{home,glob}` to ariadne
+  `issue.cue` (Task M2.1); the emit is automatic. ariadne#145 carries the deeper
+  *creation-from-cue* unification (`sdlc issue new`'s template is hardcoded Go
+  today). chat/note/vision stay parley-native.
+- **M3 = `sdlc issue new` delegation** (retire `render_issue_template`), not a
+  descriptor scaffolder. See the M3 section + the #116 issue revision.
+- Tasks: the "M2 tasks (expanded 2026-06-30)" subsection in the M2 section.
