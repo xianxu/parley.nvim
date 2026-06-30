@@ -51,6 +51,72 @@ describe("resolve_issues_dir", function()
 end)
 
 --------------------------------------------------------------------------------
+-- parse_issue_new_output (#116 M3 — extract the created path from sdlc output)
+--------------------------------------------------------------------------------
+
+describe("parse_issue_new_output", function()
+    it("returns the bare created path (sdlc writes it to stdout, last line)", function()
+        assert.equals("workshop/issues/000160-foo.md",
+            issues.parse_issue_new_output("workshop/issues/000160-foo.md\n"))
+    end)
+
+    it("extracts the bare path from merged stdout+stderr (Created line + sync warning)", function()
+        local merged = "Created workshop/issues/000160-foo.md\n"
+            .. "issue created but auto-sync to main did not complete: offline\n"
+            .. "workshop/issues/000160-foo.md\n"
+        assert.equals("workshop/issues/000160-foo.md", issues.parse_issue_new_output(merged))
+    end)
+
+    it("returns nil when only the spaced 'Created <path>' line is present", function()
+        assert.is_nil(issues.parse_issue_new_output("Created workshop/issues/000160-foo.md\n"))
+    end)
+
+    it("returns nil for empty or pathless output", function()
+        assert.is_nil(issues.parse_issue_new_output(""))
+        assert.is_nil(issues.parse_issue_new_output("some error\nno path here\n"))
+    end)
+end)
+
+--------------------------------------------------------------------------------
+-- run_sdlc_issue_new (#116 M3 — delegate creation to `sdlc issue new`)
+--------------------------------------------------------------------------------
+
+describe("run_sdlc_issue_new", function()
+    local function fake(output, code, cap)
+        return function(argv)
+            if cap then cap.argv = argv end
+            return output, code
+        end
+    end
+
+    it("returns the created path on success; argv = sdlc issue new <title>", function()
+        local cap = {}
+        local path, err = issues.run_sdlc_issue_new("My Title", {}, fake("workshop/issues/000160-my-title.md\n", 0, cap))
+        assert.is_nil(err)
+        assert.equals("workshop/issues/000160-my-title.md", path)
+        assert.are.same({ "sdlc", "issue", "new", "My Title" }, cap.argv)
+    end)
+
+    it("surfaces a non-zero exit as an error", function()
+        local path, err = issues.run_sdlc_issue_new("t", {}, fake("title is required\n", 1))
+        assert.is_nil(path)
+        assert.is_truthy(err and err:find("exit 1", 1, true))
+    end)
+
+    it("errors when sdlc succeeds but prints no parseable path", function()
+        local path, err = issues.run_sdlc_issue_new("t", {}, fake("nothing useful\n", 0))
+        assert.is_nil(path)
+        assert.is_truthy(err and err:find("no created path", 1, true))
+    end)
+
+    it("passes --deps (comma-joined) for the child-decomposition flow", function()
+        local cap = {}
+        issues.run_sdlc_issue_new("child task", { deps = { "000116" } }, fake("workshop/issues/000161-child.md\n", 0, cap))
+        assert.are.same({ "sdlc", "issue", "new", "child task", "--deps", "000116" }, cap.argv)
+    end)
+end)
+
+--------------------------------------------------------------------------------
 -- slugify
 --------------------------------------------------------------------------------
 

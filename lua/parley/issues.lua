@@ -334,6 +334,55 @@ M.resolve_issues_dir = function(user_override, cue_home, builtin_default)
     return user_override or cue_home or builtin_default
 end
 
+-- #116 M3: extract the created issue path from `sdlc issue new` output. sdlc
+-- writes the bare dest path to stdout (cmd/sdlc/issue.go:319); "Created <path>"
+-- + sync warnings go to stderr — those all carry spaces, so the path is the one
+-- line that is ENTIRELY a non-whitespace `*.md` token. Robust to stdout/stderr
+-- interleaving (we match the token, not a position). PURE. nil if no such line.
+M.parse_issue_new_output = function(output)
+    local found = nil
+    for line in (output or ""):gmatch("[^\n]+") do
+        local trimmed = trim(line)
+        if trimmed:match("^%S+%.md$") then
+            found = trimmed
+        end
+    end
+    return found
+end
+
+-- #116 M3: create a new issue by delegating to `sdlc issue new` — the canonical
+-- creator (allocates the id, writes the canonical template, broadcasts to
+-- origin/main per ariadne#82). Returns (path, nil) | (nil, err). `runner` is
+-- injectable for tests (default = vim.fn.system list-form + v:shell_error); REAL
+-- sdlc creates+pushes an issue, so tests MUST inject a fake runner. Thin IO over
+-- the pure parse_issue_new_output. runner(argv) -> (output, exit_code).
+M.run_sdlc_issue_new = function(title, opts, runner)
+    opts = opts or {}
+    local argv = { "sdlc", "issue", "new", title }
+    if opts.deps and #opts.deps > 0 then
+        table.insert(argv, "--deps")
+        table.insert(argv, table.concat(opts.deps, ",")) -- StringSlice: comma-separated
+    end
+    if opts.slug and opts.slug ~= "" then
+        table.insert(argv, "--slug")
+        table.insert(argv, opts.slug)
+    end
+    runner = runner or function(a)
+        -- list-form: no shell, so the title can't inject or need quoting
+        local out = vim.fn.system(a)
+        return out, vim.v.shell_error
+    end
+    local output, code = runner(argv)
+    if code ~= 0 then
+        return nil, "sdlc issue new failed (exit " .. tostring(code) .. "): " .. trim(output or "")
+    end
+    local path = M.parse_issue_new_output(output)
+    if not path then
+        return nil, "sdlc issue new succeeded but no created path in output: " .. trim(output or "")
+    end
+    return path, nil
+end
+
 --------------------------------------------------------------------------------
 -- IO functions (require vim/parley runtime)
 --------------------------------------------------------------------------------
