@@ -32,6 +32,7 @@
 
 local M = {}
 local neighborhood = require("parley.neighborhood")
+local defaults = require("parley.defaults")
 
 -- Per-buffer state: { iter = number }
 local state_by_buf = {}
@@ -230,7 +231,7 @@ function M.process_response(bufnr, raw_response, agent_info, live_model, exchang
     end
 
     -- Iteration cap check (after model setup so we can write synthetic results).
-    local max_iter = agent_info.max_tool_iterations or 20
+    local max_iter = agent_info.max_tool_iterations or defaults.max_tool_iterations
     if M.get_iter(bufnr) >= max_iter then
         M._write_synthetic_results(bufnr, tool_calls, model, active_exchange_idx,
             "(iteration limit reached — max " .. max_iter .. " rounds)")

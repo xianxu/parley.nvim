@@ -76,7 +76,11 @@ describe("per-agent tools config", function()
         assert.is_nil(parley.agents["VanillaAgent"].tool_result_max_bytes)
     end)
 
-    it("defaults max_tool_iterations to 20 when tools set but override absent", function()
+    it("single-sources the max_tool_iterations default in parley.defaults (= 42)", function()
+        assert.equals(42, require("parley.defaults").max_tool_iterations)
+    end)
+
+    it("defaults max_tool_iterations to 42 when tools set but override absent", function()
         fresh_setup({
             {
                 provider = "anthropic",
@@ -86,7 +90,7 @@ describe("per-agent tools config", function()
                 tools = { "read_file" },
             },
         })
-        assert.equals(20, parley.agents["DefaultIterAgent"].max_tool_iterations)
+        assert.equals(42, parley.agents["DefaultIterAgent"].max_tool_iterations)
     end)
 
     it("defaults tool_result_max_bytes to 102400 when tools set but override absent", function()
@@ -147,7 +151,7 @@ describe("default ToolSonnet", function()
 
     it("has default loop limits applied", function()
         local agent = parley.agents["ToolSonnet"]
-        assert.equals(20, agent.max_tool_iterations)
+        assert.equals(42, agent.max_tool_iterations)
         assert.equals(102400, agent.tool_result_max_bytes)
     end)
 end)
@@ -176,7 +180,7 @@ describe("get_agent forwards client-side tool config (full wiring chain)", funct
 
     it("get_agent(ToolSonnet) forwards max_tool_iterations and tool_result_max_bytes", function()
         local agent = parley.get_agent("ToolSonnet")
-        assert.equals(20, agent.max_tool_iterations)
+        assert.equals(42, agent.max_tool_iterations)
         assert.equals(102400, agent.tool_result_max_bytes)
     end)
 
