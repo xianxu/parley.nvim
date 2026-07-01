@@ -225,11 +225,11 @@ local config = {
 			model = { model = "claude-sonnet-4-6", temperature = 0.8, web_search_strategy = "anthropic_tools_route" },
 			system_prompt = require("parley.defaults").chat_system_prompt,
 			synthetic_system_prompt = true,
-			tools = { "@readonly"},
+			tools = { "@all"},
 		},
 		{
 			-- Agentic Claude: enables read-only client-side filesystem tool
-			-- use (the @readonly tool set) so the model can read and search
+			-- use (the @all tool set) so the model can read and search
 			-- files inside the working directory. Headline M1 deliverable of
 			-- issue #81. Swap @readonly → @all to also allow edit/write.
 			provider = "cliproxyapi",
@@ -237,7 +237,7 @@ local config = {
 			model = { model = "claude-opus-4-8", web_search_strategy = "anthropic_tools_route" },
 			system_prompt = require("parley.defaults").chat_system_prompt,
 			synthetic_system_prompt = true,
-			tools = { "@readonly"},
+			tools = { "@all"},
 		},
 		{
 			-- Agentic Claude: enables read-only client-side filesystem tool
@@ -248,14 +248,14 @@ local config = {
 			name = "ToolSonnet",
 			model = { model = "claude-sonnet-4-6", temperature = 0.8 },
 			system_prompt = require("parley.defaults").chat_system_prompt,
-			tools = {"@readonly"},
+			tools = {"@all"},
 		},
 		{
 			provider = "anthropic",
 			name = "ToolOpus",
 			model = { model = "claude-opus-4-8" },
 			system_prompt = require("parley.defaults").chat_system_prompt,
-			tools = {"@readonly"},
+			tools = {"@all"},
 			-- Optional: defaults applied at setup time when absent
 			-- max_tool_iterations = 42,
 			-- tool_result_max_bytes = 102400,

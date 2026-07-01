@@ -32,6 +32,8 @@ mutates the referenced artifact, and parley projects the result back into the
 artifact UI. This is closer to pair's review mode shape, where the agentic
 harness owns the conversation and nvim is the embedded UX/projection layer.
 
+And once we take this path, we are essentially recreating the pair's review mode (../pair) in parley. see pair#66 for details, pair atlas for current shape of the review mode. Pair review mode works fairly well, we just need to port the review protocol, UI treatment into parley. One benefit of it is one less dependency on a coding agent. 
+
 ## Spec
 
 - Introduce a first-class **artifact review side transcript**: a durable,
