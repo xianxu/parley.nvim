@@ -1289,3 +1289,150 @@ describe("_build_messages: synthetic_system_prompt", function()
         assert.equals("Be helpful.", messages[1].content)
     end)
 end)
+
+--------------------------------------------------------------------------------
+-- #155: tool_use→tool_result invariant at message-emission.
+--
+-- _emit_content_blocks_as_messages is the single pure emitter (shared by both
+-- the parse path via build_messages and the live path via
+-- build_messages_from_model). A dangling tool_use (no real tool_result) must
+-- receive a synthetic is_error result in the immediately-following user
+-- message, so the payload never carries an assistant tool_use without a
+-- matching user tool_result (the HTTP-400 this guards against). Tested
+-- directly (pure fn, no buffer) — ARCH-PURE.
+--------------------------------------------------------------------------------
+local chat_respond = require("parley.chat_respond")
+local emit = chat_respond._emit_content_blocks_as_messages
+
+describe("_emit_content_blocks_as_messages: dangling tool_use invariant (#155)", function()
+    it("synthesizes an error result for a single dangling tool_use", function()
+        local msgs = emit({
+            { type = "text", text = "I'll read it" },
+            { type = "tool_use", id = "toolu_1", name = "read_file", input = { path = "x" } },
+        })
+        -- assistant[text, tool_use] followed by user[synthetic error tool_result]
+        assert.equals(2, #msgs)
+        assert.equals("assistant", msgs[1].role)
+        assert.equals(2, #msgs[1].content)
+        assert.equals("tool_use", msgs[1].content[2].type)
+        assert.equals("user", msgs[2].role)
+        assert.equals(1, #msgs[2].content)
+        assert.equals("tool_result", msgs[2].content[1].type)
+        assert.equals("toolu_1", msgs[2].content[1].tool_use_id)
+        assert.is_true(msgs[2].content[1].is_error)
+        assert.equals(chat_respond.DANGLING_TOOL_RESULT_TEXT, msgs[2].content[1].content)
+    end)
+
+    it("keeps trailing text in the assistant run and still synthesizes (dangling-then-text)", function()
+        -- [tool_use, text] with no result: text stays inside the assistant
+        -- message; the end-flush opens the user message for the synthetic.
+        -- (plan-quality note #2 — resolved solely by the end-flush.)
+        local msgs = emit({
+            { type = "tool_use", id = "toolu_1", name = "run", input = {} },
+            { type = "text", text = "done thinking" },
+        })
+        assert.equals(2, #msgs)
+        assert.equals("assistant", msgs[1].role)
+        assert.equals(2, #msgs[1].content)
+        assert.equals("tool_use", msgs[1].content[1].type)
+        assert.equals("text", msgs[1].content[2].type)
+        assert.equals("done thinking", msgs[1].content[2].text)
+        assert.equals("user", msgs[2].role)
+        assert.equals("toolu_1", msgs[2].content[1].tool_use_id)
+        assert.is_true(msgs[2].content[1].is_error)
+    end)
+
+    it("synthesizes only for the dangling call in a partial parallel resolution", function()
+        -- [tool_use(1), tool_use(2), tool_result(1)]: the synthetic tr(2) must
+        -- land in the SAME user message as the real tr(1), not a new one
+        -- (plan-quality note #1 — else tr(2) is not in the immediately-
+        -- following user message → the exact HTTP-400 we prevent).
+        local msgs = emit({
+            { type = "tool_use", id = "toolu_1", name = "a", input = {} },
+            { type = "tool_use", id = "toolu_2", name = "b", input = {} },
+            { type = "tool_result", id = "toolu_1", content = "ok", is_error = false },
+        })
+        assert.equals(2, #msgs)
+        assert.equals("assistant", msgs[1].role)
+        assert.equals(2, #msgs[1].content) -- both tool_uses in one assistant turn
+        assert.equals("user", msgs[2].role)
+        assert.equals(2, #msgs[2].content) -- real tr(1) + synthetic tr(2), same message
+        assert.equals("toolu_1", msgs[2].content[1].tool_use_id)
+        assert.equals("ok", msgs[2].content[1].content)
+        assert.is_false(msgs[2].content[1].is_error)
+        assert.equals("toolu_2", msgs[2].content[2].tool_use_id)
+        assert.is_true(msgs[2].content[2].is_error)
+    end)
+
+    it("leaves a matched single round unchanged (no synthetic added)", function()
+        local msgs = emit({
+            { type = "text", text = "reading" },
+            { type = "tool_use", id = "toolu_1", name = "read", input = { p = "x" } },
+            { type = "tool_result", id = "toolu_1", content = "hi", is_error = false },
+            { type = "text", text = "the file says hi" },
+        })
+        -- assistant[text, tool_use], user[tool_result], assistant[text]
+        assert.equals(3, #msgs)
+        assert.equals("assistant", msgs[1].role)
+        assert.equals("user", msgs[2].role)
+        assert.equals(1, #msgs[2].content)
+        assert.is_false(msgs[2].content[1].is_error)
+        assert.equals("assistant", msgs[3].role)
+        assert.equals("the file says hi", msgs[3].content[1].text)
+    end)
+
+    it("emits a single assistant message for text-only blocks", function()
+        local msgs = emit({ { type = "text", text = "just text" } })
+        assert.equals(1, #msgs)
+        assert.equals("assistant", msgs[1].role)
+        assert.equals(1, #msgs[1].content)
+        assert.equals("just text", msgs[1].content[1].text)
+    end)
+
+    it("coerces empty tool input to a JSON object, not an array", function()
+        -- Previously the parse path emitted [] for empty input; the coercion now
+        -- lives in the single emitter so BOTH paths send {}.
+        local msgs = emit({
+            { type = "tool_use", id = "toolu_1", name = "noargs", input = {} },
+            { type = "tool_result", id = "toolu_1", content = "ok" },
+        })
+        local tu = msgs[1].content[1]
+        assert.equals("tool_use", tu.type)
+        assert.equals("{}", vim.json.encode(tu.input))
+    end)
+end)
+
+describe("_build_messages: dangling tool_use synthesized on the parse path (#155)", function()
+    it("emits a synthetic error tool_result for an unmatched tool_use in a past exchange", function()
+        local blocks = {
+            { type = "text", text = "I'll read it" },
+            { type = "tool_use", id = "toolu_x", name = "read_file", input = { path = "foo" } },
+            -- NO tool_result — dangling (loop was interrupted / result deleted).
+        }
+        local ex = ex_with_blocks("Read foo", blocks, "I'll read it\n🔧: read_file id=toolu_x")
+        local pc = parsed_chat({ ex, exchange("follow-up") })
+        pc.exchanges[2].question.line_start = 50
+
+        local messages = parley._build_messages({
+            parsed_chat = pc,
+            start_index = 1,
+            end_index = 100,
+            exchange_idx = 2,
+            agent = agent(),
+            config = parley.config,
+            helpers = stub_helpers,
+            logger = stub_logger,
+        })
+
+        -- system, user(Q1), assistant[text, tool_use], user[synth tool_result], user(Q2)
+        assert.equals(5, #messages)
+        assert.equals("assistant", messages[3].role)
+        assert.equals("user", messages[4].role)
+        assert.equals("table", type(messages[4].content))
+        assert.equals("tool_result", messages[4].content[1].type)
+        assert.equals("toolu_x", messages[4].content[1].tool_use_id)
+        assert.is_true(messages[4].content[1].is_error)
+        assert.equals("user", messages[5].role)
+        assert.equals("follow-up", messages[5].content)
+    end)
+end)
