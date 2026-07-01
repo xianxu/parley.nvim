@@ -1436,3 +1436,65 @@ describe("_build_messages: dangling tool_use synthesized on the parse path (#155
         assert.equals("follow-up", messages[5].content)
     end)
 end)
+
+--------------------------------------------------------------------------------
+-- #155 (close-review Important finding): the LIVE path
+-- build_messages_from_model has its own normalization seam (buffer read +
+-- serialize.parse_* + degrade) feeding the shared emitter. The "crash / kill
+-- mid-loop" scenario that motivated the issue surfaces here, so pin it
+-- end-to-end: a dangling 🔧: read from a real buffer must still yield a
+-- synthetic is_error tool_result.
+--------------------------------------------------------------------------------
+describe("build_messages_from_model: dangling tool_use synthesized on the live path (#155)", function()
+    local exchange_model = require("parley.exchange_model")
+    local serialize = require("parley.tools.serialize")
+
+    it("emits a synthetic error tool_result for a dangling tool_use read from the buffer", function()
+        -- Build a buffer + model that agree on positions: the model's own
+        -- block_start drives where each block's text is written, so read_block_text
+        -- reads exactly the 🔧: lines (serialize.parse_call succeeds).
+        local header = { "topic: t", "---" }
+        local header_lines = #header
+        local model = exchange_model.new(header_lines)
+        model:add_exchange(1)                 -- block 1: question
+        model:add_block(1, "agent_header", 1) -- block 2
+        local call_text = serialize.render_call({
+            name = "read_file", id = "toolu_z", input = { path = "foo" },
+        })
+        local call_lines = vim.split(call_text, "\n", { plain = true })
+        model:add_block(1, "tool_use", #call_lines) -- block 3: dangling (no 📎:)
+
+        local q0 = model:block_start(1, 1)
+        local ah0 = model:block_start(1, 2)
+        local tu0 = model:block_start(1, 3)
+        local total = tu0 + #call_lines
+        local lines = {}
+        for i = 1, total do lines[i] = "" end           -- blanks (margins)
+        for i = 1, header_lines do lines[i] = header[i] end
+        lines[q0 + 1] = "💬: Read foo"                   -- +1: 0-indexed → 1-indexed
+        lines[ah0 + 1] = "🤖: [assistant]"
+        for i, cl in ipairs(call_lines) do lines[tu0 + i] = cl end
+
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+
+        local agent_info = { system_prompt = "You are helpful.", model = "gpt-4o", provider = "openai" }
+        local msgs = require("parley.chat_respond").build_messages_from_model(buf, model, 1, agent_info)
+
+        -- The tail must be assistant[..tool_use..] then user[synthetic tool_result].
+        local last = msgs[#msgs]
+        local prev = msgs[#msgs - 1]
+        assert.equals("assistant", prev.role)
+        local found_tu = false
+        for _, c in ipairs(prev.content) do
+            if c.type == "tool_use" and c.id == "toolu_z" then found_tu = true end
+        end
+        assert.is_true(found_tu, "assistant message must carry the tool_use")
+        assert.equals("user", last.role)
+        assert.equals("tool_result", last.content[1].type)
+        assert.equals("toolu_z", last.content[1].tool_use_id)
+        assert.is_true(last.content[1].is_error)
+
+        vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+end)

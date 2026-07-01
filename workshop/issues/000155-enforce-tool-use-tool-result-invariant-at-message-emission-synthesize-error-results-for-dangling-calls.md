@@ -1,12 +1,13 @@
 ---
 id: 000155
-status: working
+status: done
 deps: []
 github_issue:
 created: 2026-07-01
 updated: 2026-07-01
 estimate_hours: 1.0
 started: 2026-07-01T00:17:43-07:00
+actual_hours: 0.39
 ---
 
 # enforce tool_use→tool_result invariant at message-emission (synthesize error results for dangling calls)
@@ -148,6 +149,7 @@ Range ≈ 0.5–1.5 hr, midpoint ≈ **1.0 hr** → `estimate_hours: 1.0`.
 ## Log
 
 ### 2026-07-01
+- 2026-07-01: closed — 7 new unit tests (6 pure-emitter: single-dangling, dangling-then-text, partial-parallel, matched-unchanged, text-only, empty-input-dict; +1 parse-path _build_messages integration) pass; full build_messages_spec 44/44; make lint clean (0/0, 237 files). Existing tool round-trip + vanilla-chat flat-string tests unchanged (no regression). Pre-existing config_tools_spec.lua 5-fail verified unrelated via git stash (@readonly→@all default-config drift, needs its own issue).; review verdict: FIX-THEN-SHIP
 
 Filed + claimed from the tool-transcript design discussion (this session). Root
 cause: payload validity depended on the narrow stop-time
@@ -180,3 +182,18 @@ the default `ToolSonnet`/`ToolSonnet*` from `@readonly` → `@all` ("to also all
 edit/write") but never refit `config_tools_spec.lua` (still asserts `@readonly` +
 that `edit_file`/`write_file` are absent). Needs its own issue + a product
 decision on whether the default tool agent should ship `@all`; out of scope here.
+
+**Close review: FIX-THEN-SHIP (confidence high) — zero Critical, one Important,
+resolved.** The Important finding: the live path (`build_messages_from_model`)
+had no end-to-end coverage for a dangling call (its freshly-rewritten
+normalization seam — buffer read + `parse_call`/`parse_result` + malformed
+degrade — was untested). Added an 8th test
+(`build_messages_from_model: dangling tool_use synthesized on the live path`)
+that builds a real buffer + `exchange_model` (positions driven by the model's own
+`block_start`) with a dangling 🔧: and asserts the synthetic `is_error`
+`tool_result` follows the assistant `tool_use`. Full spec now **45/45**, lint
+clean. Minor findings noted as non-blocking: (a) `pending` stores id-only (only
+`tool_use_id` is needed for the synthetic) — a deliberate simplification, so the
+Spec §algorithm text saying `{id, name}` is now slightly stale; (b) the symmetric
+**orphan `tool_result`** gap (a `📎:` with no preceding `🔧:` → 400) is
+pre-existing and out of scope — the natural next hardening, worth a future issue.
