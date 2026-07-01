@@ -139,7 +139,7 @@ local config = {
 			-- Verified against cliproxyapi 7.1.71.
 			["oauth-model-alias"] = {
 				["claude"] = {
-					{ name = "claude-sonnet-4-6", alias = "claude-sonnet-4-6", fork = true },
+					{ name = "claude-sonnet-5", alias = "claude-sonnet-5", fork = true },
 					{ name = "claude-opus-4-8", alias = "claude-opus-4-8", fork = true },
 					{ name = "claude-fable-5", alias = "claude-fable-5", fork = true },
 				},
@@ -211,7 +211,7 @@ local config = {
 			provider = "anthropic",
 			name = "Claude-Sonnet",
 			-- string with model name or table with model name and parameters
-			model = { model = "claude-sonnet-4-6", temperature = 0.8 },
+			model = { model = "claude-sonnet-5"},
 			-- system prompt (use this to specify the persona/role of the AI)
 			system_prompt = require("parley.defaults").chat_system_prompt,
 		},
@@ -222,7 +222,7 @@ local config = {
 			-- issue #81. Swap @readonly → @all to also allow edit/write.
 			provider = "cliproxyapi",
 			name = "ToolSonnet*",
-			model = { model = "claude-sonnet-4-6", temperature = 0.8, web_search_strategy = "anthropic_tools_route" },
+			model = { model = "claude-sonnet-5", web_search_strategy = "anthropic_tools_route" },
 			system_prompt = require("parley.defaults").chat_system_prompt,
 			synthetic_system_prompt = true,
 			tools = { "@all"},
@@ -246,7 +246,7 @@ local config = {
 			-- issue #81. Swap @readonly → @all to also allow edit/write.
 			provider = "anthropic",
 			name = "ToolSonnet",
-			model = { model = "claude-sonnet-4-6", temperature = 0.8 },
+			model = { model = "claude-sonnet-5" },
 			system_prompt = require("parley.defaults").chat_system_prompt,
 			tools = {"@all"},
 		},
@@ -322,7 +322,7 @@ local config = {
 			provider = "cliproxyapi",
 			name = "Claude-Sonnet*",
 			-- CLIProxy web-search tool access currently requires code_execution model family.
-			model = { model = "claude-sonnet-4-6", temperature = 0.8, web_search_strategy = "anthropic_tools_route" },
+			model = { model = "claude-sonnet-5", web_search_strategy = "anthropic_tools_route" },
 			system_prompt = require("parley.defaults").chat_system_prompt,
 		},
 		{
