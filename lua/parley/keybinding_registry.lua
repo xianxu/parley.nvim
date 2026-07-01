@@ -800,12 +800,21 @@ M.entries = {
 		help_only = true,
 	},
 	{
+		id = "if_cycle_view",
+		config_key = "issue_finder_mappings.cycle_view",
+		default_key = "<Tab>",
+		default_modes = { "n", "i", "v", "x" },
+		scope = "issue_finder",
+		desc = "Cycle view (issues/history)",
+		help_only = true,
+	},
+	{
 		id = "if_toggle_done",
 		config_key = "issue_finder_mappings.toggle_done",
 		default_key = "<C-a>",
 		default_modes = { "n", "i", "v", "x" },
 		scope = "issue_finder",
-		desc = "Toggle show done/history",
+		desc = "Cycle view (issues/history)",
 		help_only = true,
 	},
 	{

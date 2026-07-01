@@ -547,6 +547,9 @@ local config = {
 	issue_finder_mappings = {
 		delete = { modes = { "n", "i", "v", "x" }, shortcut = "<C-d>" },
 		cycle_status = { modes = { "n", "i", "v", "x" }, shortcut = "<C-s>" },
+		-- cycle the 2-state view (issues ↔ history); <Tab> is the natural key,
+		-- <C-a> kept for back-compat — both trigger the same cycle (#158).
+		cycle_view = { modes = { "n", "i", "v", "x" }, shortcut = "<Tab>" },
 		toggle_done = { modes = { "n", "i", "v", "x" }, shortcut = "<C-a>" },
 	},
 
