@@ -535,12 +535,12 @@ M._emit_content_blocks_as_messages = function(content_blocks)
 
     for _, block in ipairs(content_blocks or {}) do
         if block.type == "tool_result" then
-            -- Flush any open assistant batch so the tool_result
-            -- lands in its own user message directly after.
-            flush_assistant()
             if resolve_pending(block.id) then
                 -- Matched: a still-pending tool_use with this id was emitted in
-                -- the preceding assistant batch — this is its result.
+                -- the preceding assistant batch — this is its result. Flush the
+                -- open assistant batch so the tool_result lands in its own user
+                -- message directly after.
+                flush_assistant()
                 current_user = current_user or {}
                 table.insert(current_user, {
                     type = "tool_result",
@@ -549,9 +549,12 @@ M._emit_content_blocks_as_messages = function(content_blocks)
                     is_error = block.is_error == true,
                 })
             end
-            -- else: ORPHAN or DUPLICATE tool_result — dropped. Emitting an
-            -- unmatched user tool_result is an Anthropic 400; the 📎: block stays
-            -- visible in the buffer, only the wire excludes it. #156.
+            -- else: ORPHAN or DUPLICATE tool_result — dropped, and we do NOT
+            -- flush the assistant batch here, so text surrounding the orphan
+            -- (e.g. [text, orphan, text]) stays in ONE assistant message rather
+            -- than splitting into two consecutive assistant turns. Emitting an
+            -- unmatched user tool_result would be an Anthropic 400; the 📎: block
+            -- stays visible in the buffer, only the wire excludes it. #156.
         else
             -- text or tool_use — these belong to an assistant message.
             -- Flush any open user batch first (draining its pending).

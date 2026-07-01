@@ -1579,4 +1579,20 @@ describe("_emit_content_blocks_as_messages: orphan tool_result dropped (#156)", 
         assert.equals("toolu_1", msgs[2].content[1].tool_use_id)
         assert.is_true(msgs[2].content[1].is_error)
     end)
+
+    it("does not split surrounding text into consecutive assistant turns [text, orphan, text]", function()
+        -- Dropping the orphan must NOT flush the assistant batch, else the two
+        -- text blocks become two consecutive assistant messages (a possible
+        -- Anthropic 400). They stay in ONE assistant message. #156 close-review.
+        local msgs = emit({
+            { type = "text", text = "before" },
+            { type = "tool_result", id = "toolu_x", content = "orphan", is_error = false }, -- orphan
+            { type = "text", text = "after" },
+        })
+        assert.equals(1, #msgs)
+        assert.equals("assistant", msgs[1].role)
+        assert.equals(2, #msgs[1].content)
+        assert.equals("before", msgs[1].content[1].text)
+        assert.equals("after", msgs[1].content[2].text)
+    end)
 end)

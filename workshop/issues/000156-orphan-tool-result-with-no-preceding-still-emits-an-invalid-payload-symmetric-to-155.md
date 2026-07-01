@@ -1,12 +1,13 @@
 ---
 id: 000156
-status: working
+status: done
 deps: []
 github_issue:
 created: 2026-07-01
 updated: 2026-07-01
 estimate_hours: 0.58
 started: 2026-07-01T11:28:08-07:00
+actual_hours: 0.26
 ---
 
 # orphan tool_result (📎: with no preceding 🔧:) still emits an invalid payload — symmetric to #155
@@ -132,6 +133,7 @@ buffer on ~0.2.
 ## Log
 
 ### 2026-07-01
+- 2026-07-01: closed — build_messages_spec 51/51 (6 new #156 orphan/duplicate-drop pure-emitter tests: orphan-only, orphan-after-matched, orphan-interleaved, [tu,text,tr] result-survives, duplicate, dangling+orphan — plus all 45 pre-existing #155 emitter/build tests still green); full `make test` suite green; lint clean. resolve_pending now returns matched? → the tool_result branch drops orphan/duplicate (an unmatched user tool_result is an Anthropic 400). Reuses pending (no parallel batch_ids) per plan-quality FAILURE→revise. Atlas providers/tool_use.md extended to the symmetric invariant.; review verdict: SHIP
 
 Filed from #155's close review (minor finding: the symmetric residual). #155
 handled dangling tool_use; this is the orphan tool_result direction. Fix lives in
@@ -151,3 +153,13 @@ true when it removed a still-pending id (matched), false otherwise (orphan or
 duplicate); the tool_result branch emits only on true, drops on false. 6 new
 pure-emitter tests + all 45 pre-existing #155 emitter/build tests still green
 (build_messages_spec 51/51); full suite green; lint clean. Atlas extended.
+
+**Close review: SHIP (zero Critical/Important) + one Minor fixed.** The Minor:
+`flush_assistant()` was unconditional at the top of the tool_result branch, so
+dropping an orphan in `[text, orphan, text]` still flushed → two consecutive
+assistant messages (the exact consecutive-same-role residual the Decision cited
+*against* degrade). Fixed by moving `flush_assistant()` **inside the matched
+branch** — a dropped orphan no longer flushes, so surrounding text stays in one
+assistant message. Added a `[text, orphan, text]` test pinning the single merged
+assistant message (build_messages_spec now 52/52). So drop now *fully* avoids the
+consecutive-role issue, not just partially.
