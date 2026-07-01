@@ -1,12 +1,13 @@
 ---
 id: 000157
-status: working
+status: done
 deps: []
 github_issue:
 created: 2026-07-01
 updated: 2026-07-01
 estimate_hours: 0.3
 started: 2026-07-01T08:34:35-07:00
+actual_hours: 0.31
 ---
 
 # config_tools_spec drift: default ToolSonnet ships @all but spec asserts @readonly (5 failing tests)
@@ -101,6 +102,7 @@ impl 0.2–1.0 (v2) × 0.4 (v3.1) → ~0.2; single-pass `milestone-review` ~0.1.
 ## Log
 
 ### 2026-07-01
+- 2026-07-01: closed — config_tools_spec 22/22 (was 5 failing on @readonly-drift assertions); full `make test` suite green; lint clean. Added EXPECTED_DEFAULT_TOOLS single-source + a dynamic canary pinning every tool-enabled default agent so a future swap fails in one place. --no-atlas: atlas already documents the @all default (agents.md:5 "all 7 builtin tools"); this is a test+comment drift-reconciliation with no new surface.; review verdict: SHIP
 
 Filed from #155's landing (close + plan judges both flagged it as a pre-existing,
 out-of-scope failure worth its own issue). Root cause is config↔test drift, not a

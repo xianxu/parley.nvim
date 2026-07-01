@@ -216,10 +216,10 @@ local config = {
 			system_prompt = require("parley.defaults").chat_system_prompt,
 		},
 		{
-			-- Agentic Claude: client-side filesystem tools via the @all tool
-			-- set — read/search AND edit/write inside the working directory
-			-- (was @readonly through #81 M1; swapped to @all in 8381829).
-			-- For a read-only agent instead, set tools = { "@readonly" }.
+			-- Agentic Claude: the default is a full coding assistant, so it
+			-- gets the @all tool set — read/search AND edit/write inside the
+			-- working directory (was @readonly through #81 M1; swapped in
+			-- 8381829). For a read-only agent instead, set tools = {"@readonly"}.
 			provider = "cliproxyapi",
 			name = "ToolSonnet*",
 			model = { model = "claude-sonnet-5", web_search_strategy = "anthropic_tools_route" },
@@ -228,10 +228,10 @@ local config = {
 			tools = { "@all"},
 		},
 		{
-			-- Agentic Claude: client-side filesystem tools via the @all tool
-			-- set — read/search AND edit/write inside the working directory
-			-- (was @readonly through #81 M1; swapped to @all in 8381829).
-			-- For a read-only agent instead, set tools = { "@readonly" }.
+			-- Agentic Claude: the default is a full coding assistant, so it
+			-- gets the @all tool set — read/search AND edit/write inside the
+			-- working directory (was @readonly through #81 M1; swapped in
+			-- 8381829). For a read-only agent instead, set tools = {"@readonly"}.
 			provider = "cliproxyapi",
 			name = "ToolOpus*",
 			model = { model = "claude-opus-4-8", web_search_strategy = "anthropic_tools_route" },
@@ -240,10 +240,10 @@ local config = {
 			tools = { "@all"},
 		},
 		{
-			-- Agentic Claude: client-side filesystem tools via the @all tool
-			-- set — read/search AND edit/write inside the working directory
-			-- (was @readonly through #81 M1; swapped to @all in 8381829).
-			-- For a read-only agent instead, set tools = { "@readonly" }.
+			-- Agentic Claude: the default is a full coding assistant, so it
+			-- gets the @all tool set — read/search AND edit/write inside the
+			-- working directory (was @readonly through #81 M1; swapped in
+			-- 8381829). For a read-only agent instead, set tools = {"@readonly"}.
 			provider = "anthropic",
 			name = "ToolSonnet",
 			model = { model = "claude-sonnet-5" },

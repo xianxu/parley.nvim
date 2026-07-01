@@ -17,11 +17,11 @@ local FIXTURES = {
 }
 
 -- Pin the client-side tool list explicitly rather than inheriting it from
--- the shipped ToolSonnet agent. ToolSonnet now selects tools via the
--- `@readonly` sentinel, which expands from the live registry and so pulls
--- in optional tools (e.g. `ack`) when installed — making the payload
--- machine-dependent. Goldens must be deterministic and portable, so we fix
--- the set here. This is the read-only builtin set (no edit_file/write_file).
+-- the shipped ToolSonnet agent. ToolSonnet ships the `@all` sentinel, which
+-- expands from the live registry (pulling in write tools plus optional ones
+-- like `ack` when installed) — making the payload machine-dependent. Goldens
+-- must be deterministic and portable, so we fix a small read-only subset here
+-- (edit_file/write_file deliberately excluded to keep golden output stable).
 local READONLY_TOOLS = { "read_file", "ls", "find", "grep", "chat_history_search" }
 
 local function read_json(path)
