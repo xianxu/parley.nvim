@@ -139,6 +139,7 @@ local config = {
 			-- Verified against cliproxyapi 7.1.71.
 			["oauth-model-alias"] = {
 				["claude"] = {
+					{ name = "claude-fable-5", alias = "claude-fable-5", fork = true },
 					{ name = "claude-sonnet-5", alias = "claude-sonnet-5", fork = true },
 					{ name = "claude-opus-4-8", alias = "claude-opus-4-8", fork = true },
 					{ name = "claude-fable-5", alias = "claude-fable-5", fork = true },
@@ -216,13 +217,25 @@ local config = {
 			system_prompt = require("parley.defaults").chat_system_prompt,
 		},
 		{
-			-- Agentic Claude: the default is a full coding assistant, so it
-			-- gets the @all tool set — read/search AND edit/write inside the
-			-- working directory (was @readonly through #81 M1; swapped in
-			-- 8381829). For a read-only agent instead, set tools = {"@readonly"}.
+			provider = "anthropic",
+			name = "Claude-Fable",
+			-- string with model name or table with model name and parameters
+			model = { model = "claude-fable-5"},
+			-- system prompt (use this to specify the persona/role of the AI)
+			system_prompt = require("parley.defaults").chat_system_prompt,
+		},
+		{
 			provider = "cliproxyapi",
 			name = "ToolSonnet*",
 			model = { model = "claude-sonnet-5", web_search_strategy = "anthropic_tools_route" },
+			system_prompt = require("parley.defaults").chat_system_prompt,
+			synthetic_system_prompt = true,
+			tools = { "@all"},
+		},
+		{
+			provider = "cliproxyapi",
+			name = "ToolFable*",
+			model = { model = "claude-fable-5", web_search_strategy = "anthropic_tools_route" },
 			system_prompt = require("parley.defaults").chat_system_prompt,
 			synthetic_system_prompt = true,
 			tools = { "@all"},
@@ -240,13 +253,16 @@ local config = {
 			tools = { "@all"},
 		},
 		{
-			-- Agentic Claude: the default is a full coding assistant, so it
-			-- gets the @all tool set — read/search AND edit/write inside the
-			-- working directory (was @readonly through #81 M1; swapped in
-			-- 8381829). For a read-only agent instead, set tools = {"@readonly"}.
 			provider = "anthropic",
 			name = "ToolSonnet",
 			model = { model = "claude-sonnet-5" },
+			system_prompt = require("parley.defaults").chat_system_prompt,
+			tools = {"@all"},
+		},
+		{
+			provider = "anthropic",
+			name = "ToolFable",
+			model = { model = "claude-fable-5" },
 			system_prompt = require("parley.defaults").chat_system_prompt,
 			tools = {"@all"},
 		},
