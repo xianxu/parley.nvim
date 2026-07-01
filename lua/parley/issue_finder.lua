@@ -14,27 +14,29 @@ end
 --------------------------------------------------------------------------------
 -- View-mode logic (pure)
 --
--- `<C-a>` cycles a tri-state `view_mode` via (view_mode + 1) % 3. The labels
--- order the cycle `all → active → all+history → all`, so the default (0) shows
--- done items in `workshop/issues/` and the FIRST press hides them (#152).
+-- The IssueFinder cycles a TWO-state `view_mode` via (view_mode + 1) % 2, on
+-- both `<Tab>` (cycle_view — the natural key) and `<C-a>` (toggle_done, kept
+-- for back-compat). View 0 = `issues` (everything in `workshop/issues/`);
+-- view 1 = `history` (the archived items in `workshop/history/`). #158
+-- (superseding the tri-state all/active/all+history from #152).
 --------------------------------------------------------------------------------
 
-M.VIEW_LABELS = { [0] = "all", [1] = "active", [2] = "all+history" }
+M.VIEW_LABELS = { [0] = "issues", [1] = "history" }
 
--- Does this view mode scan archived files from the history dir? Only all+history.
+-- Does this view mode scan archived files from the history dir? Only `history`.
 M.includes_history = function(view_mode)
-    return view_mode == 2
+    return view_mode == 1
 end
 
--- Which scanned issues survive the given view_mode. Mode 1 (active) keeps only
--- open/active statuses and drops archived history files; modes 0 (all) and
--- 2 (all+history) keep everything scanned. Returns a fresh list (no mutation).
+-- Which scanned issues survive the given view_mode, partitioned by the
+-- `archived` flag: view 0 (`issues`) keeps non-archived items, view 1
+-- (`history`) keeps archived items. A nil `archived` counts as non-archived.
+-- Returns a fresh list (no mutation).
 M.filter_for_view = function(view_mode, all_issues)
-    local active_only = view_mode == 1
+    local want_archived = view_mode == 1
     local filtered = {}
     for _, issue in ipairs(all_issues) do
-        if not active_only
-            or (issues_mod.is_open_or_active_status(issue.status) and not issue.archived) then
+        if (issue.archived == true) == want_archived then
             table.insert(filtered, issue)
         end
     end
@@ -128,6 +130,7 @@ M.open = function(_options)
     local delete_shortcut = issue_finder_mappings.delete or { shortcut = "<C-d>" }
     local cycle_status_shortcut = issue_finder_mappings.cycle_status or { shortcut = "<C-s>" }
     local toggle_done_shortcut = issue_finder_mappings.toggle_done or { shortcut = "<C-a>" }
+    local cycle_view_shortcut = issue_finder_mappings.cycle_view or { shortcut = "<Tab>" }
 
     -- Compute issue roots: in super-repo mode, one per member; otherwise just the single repo.
     local sr_issues = _parley.super_repo and _parley.super_repo.expand_roots(_parley.config.issues_dir) or nil
@@ -155,8 +158,9 @@ M.open = function(_options)
         return
     end
 
-    -- View mode: 0=all (default), 1=active (open+active only), 2=all+history
-    local view_mode = _parley._issue_finder.view_mode or 0
+    -- View mode: 0=issues (default), 1=history. Clamp with % 2 so any stale
+    -- in-memory value (e.g. a `2` left by the pre-#158 tri-state) self-heals.
+    local view_mode = (_parley._issue_finder.view_mode or 0) % 2
     local include_history = M.includes_history(view_mode)
     local all_issues = {}
     for _, root in ipairs(roots) do
@@ -199,12 +203,25 @@ M.open = function(_options)
         _parley._issue_finder.source_win = source_win
     end
 
+    -- Cycle the 2-state view (issues ↔ history) and reopen. Shared by both the
+    -- `<Tab>` (cycle_view) and `<C-a>` (toggle_done) mappings — one handler,
+    -- two keys (#158, ARCH-DRY).
+    local function cycle_view_fn(_, close_fn)
+        _parley._issue_finder.view_mode = (view_mode + 1) % 2
+        close_fn()
+        vim.defer_fn(function()
+            _parley._issue_finder.opened = false
+            _parley._issue_finder.source_win = source_win
+            _parley.cmd.IssueFinder()
+        end, 100)
+    end
+
     local chat_finder_mod = require("parley.chat_finder")
 
     local prompt_title = string.format(
         "Issues (%s  %s: cycle view)",
         M.VIEW_LABELS[view_mode] or M.VIEW_LABELS[0],
-        toggle_done_shortcut.shortcut
+        cycle_view_shortcut.shortcut
     )
 
     _parley.float_picker.open({
@@ -286,16 +303,12 @@ M.open = function(_options)
                 end,
             },
             {
+                key = cycle_view_shortcut.shortcut,
+                fn = cycle_view_fn,
+            },
+            {
                 key = toggle_done_shortcut.shortcut,
-                fn = function(_, close_fn)
-                    _parley._issue_finder.view_mode = (view_mode + 1) % 3
-                    close_fn()
-                    vim.defer_fn(function()
-                        _parley._issue_finder.opened = false
-                        _parley._issue_finder.source_win = source_win
-                        _parley.cmd.IssueFinder()
-                    end, 100)
-                end,
+                fn = cycle_view_fn,
             },
             -- Show key bindings help
             {

@@ -1,12 +1,12 @@
--- Unit tests for IssueFinder pure view-mode logic (#152).
+-- Unit tests for IssueFinder pure view-mode logic (#158, was #152).
 --
 -- IssueFinder is a float-picker UI feature; these specs cover the pure pieces
 -- extracted from `M.open` so the view-mode behaviour is verifiable headlessly:
 --   * includes_history  — which mode scans archived history
 --   * filter_for_view   — which scanned issues survive each mode
 --   * VIEW_LABELS       — the cycle labels / order
--- The cycle order is `all → active → all+history` so the FIRST <C-a> press
--- hides done items (Option B, #152).
+-- The cycle is 2-state (`issues → history`, `% 2`), partitioned by the
+-- `archived` flag: view 0 shows workshop/issues/, view 1 shows the archive.
 
 local parley = require("parley")
 parley.setup({
@@ -16,27 +16,8 @@ parley.setup({
 })
 
 local issue_finder = require("parley.issue_finder")
-local issue_vocabulary = require("parley.issue_vocabulary")
 
 describe("IssueFinder view-mode logic", function()
-    before_each(function()
-        -- Deterministic vocab: open=open, active={working,blocked}, terminal={done,...}
-        issue_vocabulary.set_default_for_tests(issue_vocabulary.from_table({
-            categories = {
-                open = { "open" },
-                active = { "working", "blocked" },
-                terminal = { "done", "wontfix" },
-            },
-            lifecycle = {
-                { from = "open", to = "working", event = "claim", guards = {} },
-            },
-        }))
-    end)
-
-    after_each(function()
-        issue_vocabulary.reset_for_tests()
-    end)
-
     local function sample_issues()
         return {
             { id = "1", status = "open", archived = false },
@@ -44,6 +25,7 @@ describe("IssueFinder view-mode logic", function()
             { id = "3", status = "done", archived = false },
             { id = "4", status = "wontfix", archived = false },
             { id = "5", status = "done", archived = true }, -- archived history file
+            { id = "6", status = "open" }, -- no archived flag → counts as non-archived
         }
     end
 
@@ -56,41 +38,41 @@ describe("IssueFinder view-mode logic", function()
     end
 
     describe("includes_history", function()
-        it("only mode 2 (all+history) scans archived history", function()
+        it("only view 1 (history) scans archived history", function()
             assert.is_false(issue_finder.includes_history(0))
-            assert.is_false(issue_finder.includes_history(1))
-            assert.is_true(issue_finder.includes_history(2))
+            assert.is_true(issue_finder.includes_history(1))
         end)
     end)
 
     describe("filter_for_view", function()
-        it("mode 0 (all, default) shows done items", function()
+        it("view 0 (issues) keeps non-archived items (incl. done-not-archived)", function()
             local got = ids(issue_finder.filter_for_view(0, sample_issues()))
-            assert.same({ "1", "2", "3", "4", "5" }, got)
+            assert.same({ "1", "2", "3", "4", "6" }, got)
         end)
 
-        it("mode 1 (active) hides done/terminal and archived items", function()
+        it("view 1 (history) keeps only archived items", function()
             local got = ids(issue_finder.filter_for_view(1, sample_issues()))
-            assert.same({ "1", "2" }, got)
+            assert.same({ "5" }, got)
         end)
 
-        it("mode 2 (all+history) shows everything scanned", function()
-            local got = ids(issue_finder.filter_for_view(2, sample_issues()))
-            assert.same({ "1", "2", "3", "4", "5" }, got)
+        it("treats a nil archived flag as non-archived (shows in issues, not history)", function()
+            local only_nil = { { id = "x", status = "open" } }
+            assert.same({ "x" }, ids(issue_finder.filter_for_view(0, only_nil)))
+            assert.same({}, ids(issue_finder.filter_for_view(1, only_nil)))
         end)
 
         it("does not mutate the input list", function()
             local input = sample_issues()
             issue_finder.filter_for_view(1, input)
-            assert.equals(5, #input)
+            assert.equals(6, #input)
         end)
     end)
 
     describe("VIEW_LABELS", function()
-        it("labels the cycle all → active → all+history", function()
-            assert.equals("all", issue_finder.VIEW_LABELS[0])
-            assert.equals("active", issue_finder.VIEW_LABELS[1])
-            assert.equals("all+history", issue_finder.VIEW_LABELS[2])
+        it("labels the 2-state cycle issues → history", function()
+            assert.equals("issues", issue_finder.VIEW_LABELS[0])
+            assert.equals("history", issue_finder.VIEW_LABELS[1])
+            assert.is_nil(issue_finder.VIEW_LABELS[2])
         end)
     end)
 end)
