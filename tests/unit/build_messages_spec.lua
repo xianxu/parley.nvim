@@ -1498,3 +1498,101 @@ describe("build_messages_from_model: dangling tool_use synthesized on the live p
         vim.api.nvim_buf_delete(buf, { force = true })
     end)
 end)
+
+--------------------------------------------------------------------------------
+-- #156: orphan / duplicate tool_result is dropped at message-emission — the
+-- symmetric half of #155. A tool_result whose id has no matching (still-pending)
+-- tool_use in the preceding assistant batch would be an unmatched user
+-- tool_result → Anthropic 400. resolve_pending now returns whether it matched;
+-- the emitter drops the block on false. Matched pairs / dangling tool_use / text
+-- are unaffected. Tested directly on the pure emitter (ARCH-PURE).
+--------------------------------------------------------------------------------
+describe("_emit_content_blocks_as_messages: orphan tool_result dropped (#156)", function()
+    it("drops an orphan-only tool_result (no preceding tool_use)", function()
+        local msgs = emit({
+            { type = "tool_result", id = "toolu_x", content = "orphan output", is_error = false },
+        })
+        assert.equals(0, #msgs) -- no unmatched user tool_result reaches the payload
+    end)
+
+    it("drops an orphan tool_result after an unrelated matched round", function()
+        local msgs = emit({
+            { type = "tool_use", id = "toolu_1", name = "read", input = {} },
+            { type = "tool_result", id = "toolu_1", content = "ok", is_error = false },
+            { type = "tool_result", id = "toolu_x", content = "orphan", is_error = false }, -- orphan
+        })
+        assert.equals(2, #msgs) -- assistant[tool_use], user[tool_result toolu_1]
+        assert.equals("assistant", msgs[1].role)
+        assert.equals("user", msgs[2].role)
+        assert.equals(1, #msgs[2].content)
+        assert.equals("toolu_1", msgs[2].content[1].tool_use_id)
+    end)
+
+    it("drops an orphan interleaved before a real result, keeps the real one", function()
+        local msgs = emit({
+            { type = "tool_use", id = "toolu_1", name = "read", input = {} },
+            { type = "tool_result", id = "toolu_x", content = "orphan", is_error = false }, -- orphan first
+            { type = "tool_result", id = "toolu_1", content = "ok", is_error = false },
+        })
+        assert.equals(2, #msgs)
+        assert.equals("user", msgs[2].role)
+        assert.equals(1, #msgs[2].content)
+        assert.equals("toolu_1", msgs[2].content[1].tool_use_id)
+    end)
+
+    it("keeps a matched result when text sits between the call and the result", function()
+        -- [tool_use, text, tool_result]: the result must NOT be misclassified as
+        -- orphan — the reset-timing trap the pending-membership design avoids.
+        local msgs = emit({
+            { type = "tool_use", id = "toolu_1", name = "run", input = {} },
+            { type = "text", text = "thinking" },
+            { type = "tool_result", id = "toolu_1", content = "done", is_error = false },
+        })
+        assert.equals(2, #msgs) -- assistant[tool_use, text], user[tool_result]
+        assert.equals("assistant", msgs[1].role)
+        assert.equals("user", msgs[2].role)
+        assert.equals("toolu_1", msgs[2].content[1].tool_use_id)
+        assert.equals("done", msgs[2].content[1].content)
+    end)
+
+    it("drops a duplicate tool_result (second result for the same id)", function()
+        local msgs = emit({
+            { type = "tool_use", id = "toolu_1", name = "run", input = {} },
+            { type = "tool_result", id = "toolu_1", content = "first", is_error = false },
+            { type = "tool_result", id = "toolu_1", content = "second", is_error = false }, -- duplicate
+        })
+        assert.equals(2, #msgs)
+        assert.equals("user", msgs[2].role)
+        assert.equals(1, #msgs[2].content) -- only one result reaches the payload
+        assert.equals("first", msgs[2].content[1].content)
+    end)
+
+    it("dangling tool_use + orphan result: synthetic for the dangling, drop the orphan", function()
+        local msgs = emit({
+            { type = "tool_use", id = "toolu_1", name = "run", input = {} }, -- dangling (no result)
+            { type = "tool_result", id = "toolu_x", content = "orphan", is_error = false }, -- orphan
+        })
+        assert.equals(2, #msgs) -- assistant[tool_use], user[synthetic is_error for toolu_1]
+        assert.equals("assistant", msgs[1].role)
+        assert.equals("user", msgs[2].role)
+        assert.equals(1, #msgs[2].content)
+        assert.equals("toolu_1", msgs[2].content[1].tool_use_id)
+        assert.is_true(msgs[2].content[1].is_error)
+    end)
+
+    it("does not split surrounding text into consecutive assistant turns [text, orphan, text]", function()
+        -- Dropping the orphan must NOT flush the assistant batch, else the two
+        -- text blocks become two consecutive assistant messages (a possible
+        -- Anthropic 400). They stay in ONE assistant message. #156 close-review.
+        local msgs = emit({
+            { type = "text", text = "before" },
+            { type = "tool_result", id = "toolu_x", content = "orphan", is_error = false }, -- orphan
+            { type = "text", text = "after" },
+        })
+        assert.equals(1, #msgs)
+        assert.equals("assistant", msgs[1].role)
+        assert.equals(2, #msgs[1].content)
+        assert.equals("before", msgs[1].content[1].text)
+        assert.equals("after", msgs[1].content[2].text)
+    end)
+end)
