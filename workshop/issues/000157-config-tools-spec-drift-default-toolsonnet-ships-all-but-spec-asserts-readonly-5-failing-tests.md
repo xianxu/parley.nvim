@@ -1,11 +1,12 @@
 ---
 id: 000157
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-07-01
 updated: 2026-07-01
 estimate_hours:
+started: 2026-07-01T08:34:35-07:00
 ---
 
 # config_tools_spec drift: default ToolSonnet ships @all but spec asserts @readonly (5 failing tests)
