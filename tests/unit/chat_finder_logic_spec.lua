@@ -488,7 +488,7 @@ describe("ChatFinder logic", function()
     end)
 
     describe("Group F: Chat finder picker mappings", function()
-        it("opens with the active recency label and both cycle mappings", function()
+        it("opens with the active recency label and all four cycle mappings", function()
             local captured = nil
             M.float_picker.open = function(opts)
                 captured = opts
@@ -503,10 +503,48 @@ describe("ChatFinder logic", function()
             M.cmd.ChatFinder()
 
             assert.is_truthy(captured)
-            assert.equals("Chat Files (Recent: 12 months  <C-a>/<C-s>: cycle)", captured.title)
+            assert.equals("Chat Files (Recent: 12 months  <Tab>/<S-Tab>: cycle)", captured.title)
             assert.equals("<C-x>", captured.mappings[3].key)
             assert.equals("<C-a>", captured.mappings[4].key)
-            assert.equals("<C-s>", captured.mappings[5].key)
+            assert.equals("<Tab>", captured.mappings[5].key)
+            assert.equals("<C-s>", captured.mappings[6].key)
+            assert.equals("<S-Tab>", captured.mappings[7].key)
+        end)
+
+        it("<Tab> cycles left (aliases <C-a>), <S-Tab> right (aliases <C-s>) (#159)", function()
+            local captured = nil
+            M.float_picker.open = function(opts)
+                captured = opts
+            end
+
+            local filepath = tmpdir .. "/2026-02-01-10-00-00-recent.md"
+            local f = io.open(filepath, "w")
+            f:write("# topic: Recent\n")
+            f:close()
+
+            M.cmd.ChatFinder()
+            assert.is_truthy(captured)
+
+            -- The direction-critical mutation (recency_index) happens
+            -- synchronously, before the async defer-reopen — so invoke each
+            -- mapping fn and read where the index landed. A left/right swap in
+            -- make_recency_cycle would flip these (#159 close-review Important).
+            local cfg = M.config.chat_finder_recency
+            local START = 2
+            local exp_prev = M._cycle_chat_finder_recency(cfg, START, "previous")
+            local exp_next = M._cycle_chat_finder_recency(cfg, START, "next")
+            assert.is_true(exp_prev ~= exp_next, "fixture must discriminate directions")
+
+            local function invoke(map_idx)
+                M._chat_finder.recency_index = START
+                captured.mappings[map_idx].fn(nil, function() end)
+                return M._chat_finder.recency_index
+            end
+
+            assert.equals(exp_prev, invoke(4)) -- <C-a>  = left
+            assert.equals(exp_prev, invoke(5)) -- <Tab>  = left (aliases <C-a>)
+            assert.equals(exp_next, invoke(6)) -- <C-s>  = right
+            assert.equals(exp_next, invoke(7)) -- <S-Tab> = right (aliases <C-s>)
         end)
 
         it("prefers restoring selection by item value when reopening after delete", function()
@@ -592,7 +630,7 @@ describe("ChatFinder logic", function()
             M.cmd.ChatFinder()
 
             assert.is_truthy(picker_calls[1])
-            assert.equals("Chat Files (Recent: 12 months  <C-a>/<C-s>: cycle)", picker_calls[1].title)
+            assert.equals("Chat Files (Recent: 12 months  <Tab>/<S-Tab>: cycle)", picker_calls[1].title)
             assert.equals(old_path, picker_calls[1].items[1].value)
 
             picker_calls[1].mappings[3].fn(picker_calls[1].items[1], function() end)
@@ -600,7 +638,7 @@ describe("ChatFinder logic", function()
             assert.equals(0, vim.fn.filereadable(old_path))
             assert.equals(1, vim.fn.filereadable(new_path))
             assert.equals("Move Chat To", picker_calls[2].title)
-            assert.equals("Chat Files (Recent: 12 months  <C-a>/<C-s>: cycle)", picker_calls[3].title)
+            assert.equals("Chat Files (Recent: 12 months  <Tab>/<S-Tab>: cycle)", picker_calls[3].title)
             assert.equals(new_path, picker_calls[3].items[1].value)
         end)
 
@@ -641,7 +679,7 @@ describe("ChatFinder logic", function()
 
             assert.equals(0, vim.fn.filereadable(old_path))
             assert.equals(1, vim.fn.filereadable(new_path))
-            assert.equals("Chat Files (Recent: 12 months  <C-a>/<C-s>: cycle)", picker_calls[3].title)
+            assert.equals("Chat Files (Recent: 12 months  <Tab>/<S-Tab>: cycle)", picker_calls[3].title)
             assert.equals(new_path, picker_calls[3].items[1].value)
         end)
 

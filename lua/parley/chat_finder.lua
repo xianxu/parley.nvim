@@ -548,6 +548,8 @@ M.open = function(options)
 	local move_shortcut = _parley.config.chat_finder_mappings.move or { shortcut = "<C-x>" }
 	local next_recency_shortcut = _parley.config.chat_finder_mappings.next_recency or { shortcut = "<C-a>" }
 	local previous_recency_shortcut = _parley.config.chat_finder_mappings.previous_recency or { shortcut = "<C-s>" }
+	local cycle_filter_shortcut = _parley.config.chat_finder_mappings.cycle_filter or { shortcut = "<Tab>" }
+	local cycle_filter_prev_shortcut = _parley.config.chat_finder_mappings.cycle_filter_prev or { shortcut = "<S-Tab>" }
 	local keybindings_shortcut = _parley.config.global_shortcut_keybindings or { shortcut = "<C-g>?" }
 
 	-- If a prewarm is in flight, wait for it instead of scanning again
@@ -679,8 +681,8 @@ M.open = function(options)
 		local prompt_title = string.format(
 			"Chat Files (%s  %s/%s: cycle)",
 			resolved_recency.current.label,
-			next_recency_shortcut.shortcut,
-			previous_recency_shortcut.shortcut
+			cycle_filter_shortcut.shortcut,
+			cycle_filter_prev_shortcut.shortcut
 		)
 
 		_parley.logger.debug("ChatFinder using active_window: " .. (_parley._chat_finder.active_window or "nil"))
@@ -691,6 +693,28 @@ M.open = function(options)
 			_parley._chat_finder.source_win = source_win
 			_parley.logger.debug("ChatFinder captured fallback source_win: " .. source_win)
 		end
+
+		-- The two recency-cycle handlers differ only by direction; one factory,
+		-- four keys: <C-a>/<Tab> (left) and <C-s>/<S-Tab> (right). #159 (ARCH-DRY).
+		local function make_recency_cycle(direction)
+			return function(_, close_fn)
+				local next_index, next_state = _parley._cycle_chat_finder_recency(
+					recency_config,
+					_parley._chat_finder.recency_index,
+					direction
+				)
+				_parley._chat_finder.recency_index = next_index
+				_parley._chat_finder.show_all = next_state.is_all
+				close_fn()
+				vim.defer_fn(function()
+					_parley._chat_finder.opened = false
+					_parley._chat_finder.source_win = source_win
+					_parley.cmd.ChatFinder()
+				end, 100)
+			end
+		end
+		local recency_left_fn = make_recency_cycle("previous")  -- <C-a> / <Tab>
+		local recency_right_fn = make_recency_cycle("next")     -- <C-s> / <S-Tab>
 
 		_parley.logger.debug(string.format(
 			"ChatFinder trace: opening picker item_count=%s initial_index=%s initial_value=%s first_item=%s",
@@ -915,43 +939,23 @@ M.open = function(options)
 						end)
 					end,
 				},
-				-- Move left through recency presets
+				-- Move left through recency presets (<C-a> and <Tab>)
 				{
 					key = next_recency_shortcut.shortcut,
-					fn = function(_, close_fn)
-						local next_index, next_state = _parley._cycle_chat_finder_recency(
-							recency_config,
-							_parley._chat_finder.recency_index,
-							"previous"
-						)
-						_parley._chat_finder.recency_index = next_index
-						_parley._chat_finder.show_all = next_state.is_all
-						close_fn()
-						vim.defer_fn(function()
-							_parley._chat_finder.opened = false
-							_parley._chat_finder.source_win = source_win
-							_parley.cmd.ChatFinder()
-						end, 100)
-					end,
+					fn = recency_left_fn,
 				},
-				-- Move right through recency presets and "All"
+				{
+					key = cycle_filter_shortcut.shortcut,
+					fn = recency_left_fn,
+				},
+				-- Move right through recency presets and "All" (<C-s> and <S-Tab>)
 				{
 					key = previous_recency_shortcut.shortcut,
-					fn = function(_, close_fn)
-						local next_index, next_state = _parley._cycle_chat_finder_recency(
-							recency_config,
-							_parley._chat_finder.recency_index,
-							"next"
-						)
-						_parley._chat_finder.recency_index = next_index
-						_parley._chat_finder.show_all = next_state.is_all
-						close_fn()
-						vim.defer_fn(function()
-							_parley._chat_finder.opened = false
-							_parley._chat_finder.source_win = source_win
-							_parley.cmd.ChatFinder()
-						end, 100)
-					end,
+					fn = recency_right_fn,
+				},
+				{
+					key = cycle_filter_prev_shortcut.shortcut,
+					fn = recency_right_fn,
 				},
 				-- Show key bindings help
 				{
