@@ -492,6 +492,10 @@ local config = {
 		move = { modes = { "n", "i", "v", "x" }, shortcut = "<C-x>" },
 		next_recency = { modes = { "n", "i", "v", "x" }, shortcut = "<C-a>" },
 		previous_recency = { modes = { "n", "i", "v", "x" }, shortcut = "<C-s>" },
+		-- <Tab>/<S-Tab> cycle the recency filter (natural keys); alias
+		-- next_recency/previous_recency, which stay for back-compat (#159).
+		cycle_filter = { modes = { "n", "i", "v", "x" }, shortcut = "<Tab>" },
+		cycle_filter_prev = { modes = { "n", "i", "v", "x" }, shortcut = "<S-Tab>" },
 	},
 	-- chat finder recency filtering configuration
 	chat_finder_recency = {

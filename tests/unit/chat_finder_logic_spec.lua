@@ -488,7 +488,7 @@ describe("ChatFinder logic", function()
     end)
 
     describe("Group F: Chat finder picker mappings", function()
-        it("opens with the active recency label and both cycle mappings", function()
+        it("opens with the active recency label and all four cycle mappings", function()
             local captured = nil
             M.float_picker.open = function(opts)
                 captured = opts
@@ -503,10 +503,12 @@ describe("ChatFinder logic", function()
             M.cmd.ChatFinder()
 
             assert.is_truthy(captured)
-            assert.equals("Chat Files (Recent: 12 months  <C-a>/<C-s>: cycle)", captured.title)
+            assert.equals("Chat Files (Recent: 12 months  <Tab>/<S-Tab>: cycle)", captured.title)
             assert.equals("<C-x>", captured.mappings[3].key)
             assert.equals("<C-a>", captured.mappings[4].key)
-            assert.equals("<C-s>", captured.mappings[5].key)
+            assert.equals("<Tab>", captured.mappings[5].key)
+            assert.equals("<C-s>", captured.mappings[6].key)
+            assert.equals("<S-Tab>", captured.mappings[7].key)
         end)
 
         it("prefers restoring selection by item value when reopening after delete", function()
@@ -592,7 +594,7 @@ describe("ChatFinder logic", function()
             M.cmd.ChatFinder()
 
             assert.is_truthy(picker_calls[1])
-            assert.equals("Chat Files (Recent: 12 months  <C-a>/<C-s>: cycle)", picker_calls[1].title)
+            assert.equals("Chat Files (Recent: 12 months  <Tab>/<S-Tab>: cycle)", picker_calls[1].title)
             assert.equals(old_path, picker_calls[1].items[1].value)
 
             picker_calls[1].mappings[3].fn(picker_calls[1].items[1], function() end)
@@ -600,7 +602,7 @@ describe("ChatFinder logic", function()
             assert.equals(0, vim.fn.filereadable(old_path))
             assert.equals(1, vim.fn.filereadable(new_path))
             assert.equals("Move Chat To", picker_calls[2].title)
-            assert.equals("Chat Files (Recent: 12 months  <C-a>/<C-s>: cycle)", picker_calls[3].title)
+            assert.equals("Chat Files (Recent: 12 months  <Tab>/<S-Tab>: cycle)", picker_calls[3].title)
             assert.equals(new_path, picker_calls[3].items[1].value)
         end)
 
@@ -641,7 +643,7 @@ describe("ChatFinder logic", function()
 
             assert.equals(0, vim.fn.filereadable(old_path))
             assert.equals(1, vim.fn.filereadable(new_path))
-            assert.equals("Chat Files (Recent: 12 months  <C-a>/<C-s>: cycle)", picker_calls[3].title)
+            assert.equals("Chat Files (Recent: 12 months  <Tab>/<S-Tab>: cycle)", picker_calls[3].title)
             assert.equals(new_path, picker_calls[3].items[1].value)
         end)
 

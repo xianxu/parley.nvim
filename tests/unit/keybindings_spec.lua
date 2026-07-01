@@ -53,7 +53,9 @@ describe("key bindings help", function()
 
         local lines = parley._keybinding_help_lines("chat_finder")
         assert.is_true(has_line(lines, "<C-a>", "Cycle recency window left"))
+        assert.is_true(has_line(lines, "<Tab>", "Cycle recency window left"))
         assert.is_true(has_line(lines, "<C-s>", "Cycle recency window right"))
+        assert.is_true(has_line(lines, "<S-Tab>", "Cycle recency window right"))
         assert.is_true(has_line(lines, "<C-d>", "Delete selected chat"))
         assert.is_true(has_line(lines, "<C-x>", "Move selected chat"))
         -- Should NOT include global or chat buffer keys
