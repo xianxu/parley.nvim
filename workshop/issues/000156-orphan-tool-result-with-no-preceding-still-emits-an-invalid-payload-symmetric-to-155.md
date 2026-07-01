@@ -1,11 +1,12 @@
 ---
 id: 000156
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-07-01
 updated: 2026-07-01
 estimate_hours:
+started: 2026-07-01T11:28:08-07:00
 ---
 
 # orphan tool_result (📎: with no preceding 🔧:) still emits an invalid payload — symmetric to #155
