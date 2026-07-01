@@ -349,12 +349,20 @@ M.build_messages_from_model = function(buf, model, target_idx, agent_info)
 
     for k = 1, target_idx do
         local blocks = model.exchanges[k].blocks
-        local assistant_content = {}
-
-        local function flush_assistant()
-            if #assistant_content > 0 then
-                table.insert(messages, { role = "assistant", content = assistant_content })
-                assistant_content = {}
+        -- Normalize this exchange's answer blocks into the content_blocks shape
+        -- consumed by _emit_content_blocks_as_messages — the single emitter that
+        -- also enforces the tool_use→tool_result invariant (#155). This replaces
+        -- an inline copy of the interleaving that had diverged from the parse
+        -- path (it lacked the dangling-call synthesis; input coercion now lives
+        -- in the emitter, one source). IO (buffer reads + serialize.parse_*)
+        -- stays here in the thin normalization seam; the emitter stays pure.
+        local answer_blocks = {}
+        local function flush_answer()
+            if #answer_blocks > 0 then
+                for _, m in ipairs(M._emit_content_blocks_as_messages(answer_blocks)) do
+                    table.insert(messages, m)
+                end
+                answer_blocks = {}
             end
         end
 
@@ -367,6 +375,9 @@ M.build_messages_from_model = function(buf, model, target_idx, agent_info)
                 -- Strip 💬: prefix and trim
                 text = text:gsub("^💬:%s*", ""):gsub("^%s*(.-)%s*$", "%1")
                 if text ~= "" then
+                    -- Defensive: an answer never precedes its question, but
+                    -- flush any accumulated answer blocks to keep ordering stable.
+                    flush_answer()
                     table.insert(messages, { role = "user", content = text })
                 end
 
@@ -376,51 +387,41 @@ M.build_messages_from_model = function(buf, model, target_idx, agent_info)
             elseif blk.kind == "text" or blk.kind == "stream_placeholder" then
                 local text = read_block_text(k, b)
                 if text:match("%S") then
-                    table.insert(assistant_content, { type = "text", text = text })
+                    table.insert(answer_blocks, { type = "text", text = text })
                 end
 
             elseif blk.kind == "tool_use" then
                 local text = read_block_text(k, b)
                 local parsed = serialize.parse_call(text)
                 if parsed then
-                    -- Ensure input is a dict (not array). Empty Lua table
-                    -- {} encodes as JSON []; Anthropic requires {}.
-                    local input = parsed.input
-                    if not input or not next(input) then
-                        input = vim.empty_dict()
-                    end
-                    table.insert(assistant_content, {
+                    -- Empty-input dict coercion happens in the emitter now.
+                    table.insert(answer_blocks, {
                         type = "tool_use",
                         id = parsed.id,
                         name = parsed.name,
-                        input = input,
+                        input = parsed.input,
                     })
                 else
                     -- Malformed tool_use — degrade to text so it's not
                     -- silently dropped. Claude sees the raw block text.
-                    table.insert(assistant_content, { type = "text", text = text })
+                    table.insert(answer_blocks, { type = "text", text = text })
                 end
 
             elseif blk.kind == "tool_result" then
                 local text = read_block_text(k, b)
                 local parsed = serialize.parse_result(text)
                 if parsed then
-                    -- Anthropic requires tool_result in a user message
-                    -- immediately after the assistant's tool_use.
-                    flush_assistant()
-                    table.insert(messages, {
-                        role = "user",
-                        content = { {
-                            type = "tool_result",
-                            tool_use_id = parsed.id,
-                            content = parsed.content or "",
-                            is_error = parsed.is_error == true,
-                        } },
+                    table.insert(answer_blocks, {
+                        type = "tool_result",
+                        id = parsed.id,
+                        content = parsed.content or "",
+                        is_error = parsed.is_error == true,
                     })
                 else
-                    -- Malformed tool_result — degrade to user text message
-                    -- to preserve user/assistant alternation.
-                    flush_assistant()
+                    -- Malformed tool_result — degrade to a user text message,
+                    -- preserving user/assistant alternation. Flush accumulated
+                    -- answer blocks first so ordering is stable.
+                    flush_answer()
                     table.insert(messages, { role = "user", content = text })
                 end
             end
@@ -428,7 +429,7 @@ M.build_messages_from_model = function(buf, model, target_idx, agent_info)
             ::continue::
         end
 
-        flush_assistant()
+        flush_answer()
     end
 
     return messages
@@ -462,10 +463,46 @@ end
 ---
 --- @param content_blocks table[] list from chat_parser
 --- @return table[] messages suitable for dispatcher.prepare_payload
+-- Reason-agnostic synthetic result for a tool_use that never got a real
+-- result. A build-time fallback does NOT know WHY (crash / timeout / manual
+-- edit), so the text is neutral — unlike the stop-time buffer repair
+-- (tool_loop.repair_unmatched_tool_blocks), which knows the reason and says
+-- "(cancelled by user)". #155.
+M.DANGLING_TOOL_RESULT_TEXT = "(tool call did not complete — no result recorded)"
+
 M._emit_content_blocks_as_messages = function(content_blocks)
     local messages = {}
     local current_assistant = nil -- accumulating [text, tool_use] for an assistant message
     local current_user = nil      -- accumulating [tool_result] for a user message
+    -- Ordered ids of tool_uses in the CURRENT assistant batch that a real
+    -- tool_result has not yet resolved. Drained (as synthetic error results)
+    -- into the user batch that immediately follows the assistant batch, so the
+    -- payload never carries an assistant tool_use without a matching user
+    -- tool_result (the HTTP-400 this enforces against). #155.
+    local pending = {}
+
+    local function synth_error(id)
+        return {
+            type = "tool_result",
+            tool_use_id = id,
+            content = M.DANGLING_TOOL_RESULT_TEXT,
+            is_error = true,
+        }
+    end
+    local function drain_pending_into(user)
+        for _, id in ipairs(pending) do
+            table.insert(user, synth_error(id))
+        end
+        pending = {}
+    end
+    local function resolve_pending(id)
+        for i, pid in ipairs(pending) do
+            if pid == id then
+                table.remove(pending, i)
+                return
+            end
+        end
+    end
 
     local function flush_assistant()
         if current_assistant and #current_assistant > 0 then
@@ -473,9 +510,19 @@ M._emit_content_blocks_as_messages = function(content_blocks)
             current_assistant = nil
         end
     end
+    -- Only fires when a real tool_result batch is being closed (current_user
+    -- non-nil). Any tool_use still pending from the preceding assistant batch
+    -- gets a synthetic error result appended to THIS user message before it is
+    -- emitted — so partial parallel resolution (some calls answered, some not)
+    -- keeps every synthetic in the same immediately-following user message.
+    -- Called mid-stream on a text/tool_use block (transition out of a
+    -- tool_result run) — a no-op there while still inside an assistant run.
     local function flush_user()
-        if current_user and #current_user > 0 then
-            table.insert(messages, { role = "user", content = current_user })
+        if current_user then
+            drain_pending_into(current_user)
+            if #current_user > 0 then
+                table.insert(messages, { role = "user", content = current_user })
+            end
             current_user = nil
         end
     end
@@ -485,6 +532,7 @@ M._emit_content_blocks_as_messages = function(content_blocks)
             -- Flush any open assistant batch so the tool_result
             -- lands in its own user message directly after.
             flush_assistant()
+            resolve_pending(block.id)
             current_user = current_user or {}
             table.insert(current_user, {
                 type = "tool_result",
@@ -494,25 +542,41 @@ M._emit_content_blocks_as_messages = function(content_blocks)
             })
         else
             -- text or tool_use — these belong to an assistant message.
-            -- Flush any open user batch first.
+            -- Flush any open user batch first (draining its pending).
             flush_user()
             current_assistant = current_assistant or {}
             if block.type == "text" then
                 table.insert(current_assistant, { type = "text", text = block.text or "" })
             elseif block.type == "tool_use" then
+                -- Empty Lua table {} encodes as JSON []; Anthropic requires {}.
+                -- Coerced here (single source) so BOTH build paths are correct
+                -- — the parse path previously skipped this. #155.
+                local input = block.input
+                if not input or not next(input) then
+                    input = vim.empty_dict()
+                end
                 table.insert(current_assistant, {
                     type = "tool_use",
                     id = block.id,
                     name = block.name,
-                    input = block.input or {},
+                    input = input,
                 })
+                table.insert(pending, block.id)
             end
         end
     end
 
-    -- Flush whichever role was last accumulating.
+    -- Flush whichever role was last accumulating. flush_user() drains pending
+    -- into a trailing real tool_result batch if one is open; if not (a dangling
+    -- tool_use with NO result batch at all, e.g. [tool_use] or [tool_use,text]),
+    -- open a fresh user message for the synthetics.
     flush_assistant()
     flush_user()
+    if #pending > 0 then
+        local user = {}
+        drain_pending_into(user)
+        table.insert(messages, { role = "user", content = user })
+    end
 
     return messages
 end
