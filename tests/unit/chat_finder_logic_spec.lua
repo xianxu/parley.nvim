@@ -511,6 +511,42 @@ describe("ChatFinder logic", function()
             assert.equals("<S-Tab>", captured.mappings[7].key)
         end)
 
+        it("<Tab> cycles left (aliases <C-a>), <S-Tab> right (aliases <C-s>) (#159)", function()
+            local captured = nil
+            M.float_picker.open = function(opts)
+                captured = opts
+            end
+
+            local filepath = tmpdir .. "/2026-02-01-10-00-00-recent.md"
+            local f = io.open(filepath, "w")
+            f:write("# topic: Recent\n")
+            f:close()
+
+            M.cmd.ChatFinder()
+            assert.is_truthy(captured)
+
+            -- The direction-critical mutation (recency_index) happens
+            -- synchronously, before the async defer-reopen — so invoke each
+            -- mapping fn and read where the index landed. A left/right swap in
+            -- make_recency_cycle would flip these (#159 close-review Important).
+            local cfg = M.config.chat_finder_recency
+            local START = 2
+            local exp_prev = M._cycle_chat_finder_recency(cfg, START, "previous")
+            local exp_next = M._cycle_chat_finder_recency(cfg, START, "next")
+            assert.is_true(exp_prev ~= exp_next, "fixture must discriminate directions")
+
+            local function invoke(map_idx)
+                M._chat_finder.recency_index = START
+                captured.mappings[map_idx].fn(nil, function() end)
+                return M._chat_finder.recency_index
+            end
+
+            assert.equals(exp_prev, invoke(4)) -- <C-a>  = left
+            assert.equals(exp_prev, invoke(5)) -- <Tab>  = left (aliases <C-a>)
+            assert.equals(exp_next, invoke(6)) -- <C-s>  = right
+            assert.equals(exp_next, invoke(7)) -- <S-Tab> = right (aliases <C-s>)
+        end)
+
         it("prefers restoring selection by item value when reopening after delete", function()
             local captured = nil
             M.float_picker.open = function(opts)

@@ -1,12 +1,13 @@
 ---
 id: 000159
-status: working
+status: done
 deps: []
 github_issue:
 created: 2026-07-01
 updated: 2026-07-01
 estimate_hours: 0.63
 started: 2026-07-01T10:07:50-07:00
+actual_hours: 0.23
 ---
 
 # use TAB for switching filter for chat finder
@@ -102,6 +103,7 @@ just a DRY-refactor + 2 key bindings + config/registry/test/atlas): design 1–3
 ## Log
 
 ### 2026-07-01
+- 2026-07-01: closed — keybindings_spec 20/20 (chat_finder help shows <Tab>/<S-Tab> = "Cycle recency window left/right"); chat_finder_logic_spec 34/34 (header title + mapping-index assertions updated for the 4-key structure); full `make test` suite green; lint clean. DRY: two near-identical recency handlers → one make_recency_cycle factory. Manual: <Tab>/<S-Tab> cycle recency fwd/back in :ParleyChatFinder (same imap_p path as working <C-a>/<C-s>). --no-atlas: ui/pickers.md documents the chat finder at feature-level with no per-key line; keys live in the keybinding registry (updated).; review verdict: FIX-THEN-SHIP
 
 Filed by the user (stub, sibling to #158). Investigated: chat-finder filter is
 the **recency** cycle — `<C-a>`=`next_recency`/`<C-s>`=`previous_recency`
@@ -123,3 +125,14 @@ suite; updated the 4 title assertions + the index-key assertions. `keybindings_s
 same as #158):** open `:ParleyChatFinder` (`<C-g>f`) → `<Tab>` cycles the recency
 filter forward (like `<C-a>`), `<S-Tab>` backward (like `<C-s>`); `<C-a>`/`<C-s>`
 still work; title reads `Chat Files (<label>  <Tab>/<S-Tab>: cycle)`.
+
+**Close review: FIX-THEN-SHIP (zero Critical, one Important) → resolved.** The
+Important: the new mapping fns were asserted by key/position but never *invoked*
+to confirm direction — a left/right swap in `make_recency_cycle` would have
+shipped green. Added `chat_finder_logic_spec` test "<Tab> cycles left (aliases
+<C-a>), <S-Tab> right (aliases <C-s>)": it invokes `mappings[4..7].fn` from a
+fixed START and asserts each landed where the pure `_cycle_chat_finder_recency`
+"previous"/"next" says (the synchronous `recency_index` mutation happens before
+the async defer-reopen, so no defer-pumping needed). `chat_finder_logic_spec`
+35/35, lint clean. Minor findings (atlas per-key asymmetry vs #158; index-based
+mapping assertions) left as-is — both explicitly non-blocking.
