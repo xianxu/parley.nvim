@@ -158,10 +158,6 @@ M.is_open_status = function(status)
     return vocab():is_open(status)
 end
 
-M.is_open_or_active_status = function(status)
-    return M.is_open_status(status) or M.is_active_status(status)
-end
-
 M.is_terminal_status = function(status)
     return vocab():is_terminal(status)
 end

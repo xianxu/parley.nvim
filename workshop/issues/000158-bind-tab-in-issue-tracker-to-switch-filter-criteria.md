@@ -1,12 +1,13 @@
 ---
 id: 000158
-status: working
+status: done
 deps: []
 github_issue:
 created: 2026-07-01
 updated: 2026-07-01
 estimate_hours: 0.8
 started: 2026-07-01T09:45:31-07:00
+actual_hours: 0.20
 ---
 
 # bind TAB in issue tracker to switch filter criteria
@@ -108,6 +109,7 @@ total: 0.8
 ## Log
 
 ### 2026-07-01
+- 2026-07-01: closed — issue_finder_spec 6/6 (2-state filter_for_view/includes_history/VIEW_LABELS incl. nil-archived case); keybindings_spec 20/20 (help shows both <Tab> and <C-a> = "Cycle view (issues/history)"); full `make test` suite green; lint clean. Manual: <Tab> and <C-a> both cycle issues↔history in :ParleyIssueFinder — rides the identical imap_p path as the working <C-*> mappings, <Tab> not in reserved_keys. Atlas issue-management.md updated to the 2-state model.; review verdict: FIX-THEN-SHIP
 
 Filed by the user (stub, preserved from the #157 branch cleanup). Investigated
 all touchpoints before speccing: cycle lives in `issue_finder.lua:291`
@@ -128,4 +130,16 @@ float-picker UI, but rides the identical `imap_p` path as the working
 `<C-a>`/`<C-d>`/`<C-s>` mappings):** open `:ParleyIssueFinder` (`<C-y>f`) →
 press `<Tab>` → view cycles `issues` ↔ `history` (badge in the title flips,
 archived items appear only in `history`); `<C-a>` does the same; the title reads
-`Issues (<view>  <Tab>: cycle view)`.
+`Issues (<view>  <Tab>: cycle view)`. **User confirmed: tested, works.**
+
+**Close review: FIX-THEN-SHIP (zero Critical/Important) → resolved.** Fixed the
+one Minor blocker my scrub missed — the stale tri-state comment on the field
+initializer (`init.lua:3002`, `view_mode` = `0=all/1=active/2=all+history` →
+`0=issues/1=history`). Also completed the #158 ripple: removed the now-orphaned
+`issues.is_open_or_active_status` (my new `filter_for_view` was its last caller;
+zero references confirmed across `lua/`+`tests/`). Non-blocking nits left as-is
+(cycle/clamp arithmetic stays inline glue; `cycle_view_fn` vs `M.reopen` overlap
+is a pre-existing nicety). **Flake note (not a #158 defect):** a full-suite run
+can show `tools_builtin_find_spec.lua` red — it's an untracked, out-of-window,
+known ordering/shared-state flake that passes in isolation (4/4); #158's own
+specs + isolated runs are green.
