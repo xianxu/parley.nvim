@@ -1,11 +1,12 @@
 ---
 id: 000160
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-07-03
 updated: 2026-07-03
 estimate_hours:
+started: 2026-07-03T23:39:29-07:00
 ---
 
 # navigate ariadne artifact references
