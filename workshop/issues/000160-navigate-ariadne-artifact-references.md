@@ -1,7 +1,7 @@
 ---
 id: 000160
 status: working
-deps: []
+deps: [ariadne#144]
 github_issue:
 created: 2026-07-03
 updated: 2026-07-03
@@ -19,14 +19,16 @@ but there's no fast way for a human in the editor to *jump* from a ref to the fi
 it names, especially across sibling repos. Navigation is manual (grep, guess the
 path, `:e`).
 
-Supersedes **ariadne#144** (*"issue, plan, and review files should interlink"*),
-which framed the fix as files carrying **stored cross-links** (e.g.
-`[ariadne#11](../ariadne/workshop/issues/000011-…md)`). We rejected that premise:
-the issue *number* is immutable but the *path* is not — slugs get renamed, and
-files move `issues/ → history/` on close/merge (ariadne#160 made that move happen
-on every merge). Stored links rot on archive and would need rewriting across every
-repo. ariadne#144 → wontfix; the navigation feature lands here (parley), resolved
-**at read time**.
+This grew from **ariadne#144**, which originally framed the fix as files carrying
+**stored cross-links** (e.g. `[ariadne#11](../ariadne/workshop/issues/000011-…md)`).
+We rejected that premise: the issue *number* is immutable but the *path* is not —
+slugs get renamed, and files move `issues/ → history/` on close/merge (ariadne#160
+made that move happen on every merge). Stored links rot on archive. The fix is
+**read-time resolution**.
+
+The feature splits across two repos: **ariadne#144** is the resolver (`sdlc
+resolve`, base-layer Go — reframed off the stored-link premise); **this issue** is
+the parley editor UX that consumes it. `deps: [ariadne#144]`.
 
 ## Spec
 
@@ -83,10 +85,10 @@ is the only cost.
 
 ## Plan
 
-- [ ] **ariadne dependency:** spec + build `sdlc resolve <ref>` (read-only; grammar +
-      discovery from the vocab model). Spin an ariadne issue for this when work starts
-      (it's ariadne base-layer code, goes through ariadne's SDLC). Until then, parley
-      can prototype against a temporary Lua resolver to nail the UX.
+- [ ] **ariadne dependency — ariadne#144:** `sdlc resolve <ref>` (read-only; grammar +
+      discovery from the vocab model). Tracked as its own ariadne issue (base-layer Go,
+      goes through ariadne's SDLC). parley can prototype against a temporary Lua
+      resolver to nail the UX before ariadne#144 lands.
 - [ ] parley: ref highlighting (conceal/treesitter/regex).
 - [ ] parley: resolve-under-cursor keymap → `sdlc resolve` → open; family picker.
 - [ ] Cross-repo: derive the sibling-parent-dir + repo→path mapping (parley is the
@@ -101,5 +103,7 @@ is the only cost.
   resolved on demand) — rejecting ariadne#144's stored-cross-link premise, which
   rots when files archive. Resolver logic goes in a read-only `sdlc resolve` (single
   source, lock-free, so not subject to the mutating-verb slowness) that parley shells
-  to; parley owns highlight + keymap + family picker. ariadne#144 → wontfix (superseded).
-  The `sdlc resolve` slice is an ariadne dependency, tracked in the Plan above.
+  to; parley owns highlight + keymap + family picker.
+- Operator correction (2026-07-04): since the resolver (`sdlc resolve`) is ariadne
+  base-layer work, **ariadne#144 is NOT wontfix** — it was reopened + reframed as the
+  ariadne slice, and this issue now `deps: [ariadne#144]`.
