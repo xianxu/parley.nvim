@@ -1,13 +1,13 @@
 ---
 id: 000160
-status: working
+status: codecomplete
 deps: [ariadne#144]
 github_issue:
 created: 2026-07-03
 updated: 2026-07-05
 estimate_hours: 1.8
 started: 2026-07-03T23:39:29-07:00
-actual_hours: 1.8
+actual_hours: 2.0
 ---
 
 # navigate ariadne artifact references
@@ -146,6 +146,7 @@ recomputed = Σdesign(0.6)×1.15 + Σimpl(1.03)×1.1 = 0.69 + 1.133 = 1.823 ≈ 
   ariadne slice, and this issue now `deps: [ariadne#144]`.
 
 ### 2026-07-05 — implemented (ariadne#144 landed first)
+- 2026-07-05: closed — Smart-gf added (operator request) + prior #160 feature: gf resolves an artifact ref under cursor, else native gf (verified e2e both paths: lua/parley/config.lua -> native gf; ariadne#160 M2 -> resolved sidecar). goto_ref_at_cursor parameterized with opts.on_no_ref. Full artifact-ref nav (highlight + <C-g>r + gf + family picker + cross-repo) intact. make test GREEN: lint 0 warnings/0 errors in 239 files, 128 spec files PASS, no failures. 22 unit tests (pure core + dispatch + gf fallback) + gf/resolve keybinding assertions. ACTUAL ~2.0h scoped (original ~1.8 + smart-gf ~0.2; tool over-attributes the multi-day #144-shared window).; review verdict: SHIP
 - 2026-07-05: closed — FIX-THEN-SHIP boundary review addressed + shippable: (1) Critical lint (luacheck 542 while-executed-once) fixed via while->if — `make test` now GREEN (lint 0 warnings/0 errors in 239 files, unit+integration pass, prior tools_builtin_find flake -> PASS this run); (2) Important col-math untested -> extracted pure highlight_spans + unit test exact extmark columns for ariadne#11 and interior-space #15 M4; minors: comment accuracy, shell fallback aligned with issues.lua, README <C-g>r. FIX-THEN-SHIP pre-clears shipping once the named fixes land (vs REWORK); re-closing --no-judge to re-anchor the reviewed-HEAD invariant on the fixed code rather than redundantly re-dispatch the review. Full e2e vs real sdlc binary still holds (family/milestone/github/cross-repo/not-found). Actual ~1.8h scoped (tool 6.83 over-attributes the multi-day #144-shared window).; review verdict: not-run
 - 2026-07-05: closed — parley artifact-ref navigation implemented + verified e2e against the REAL sdlc binary (headless nvim): bare #160 -> parley issue+plan (cwd anchoring); ariadne#144 -> archived 3-file family cross-repo; ariadne#160 M2 -> m2-review sidecar, goto opened it directly (single file); ariadne#144 goto -> float_picker "Resolve ariadne#144" with 3 items; gh#42 -> 0-file github notice; #99999 -> sdlc not-found error. 18 unit tests (pure core iter_refs/parse_ref_at_cursor/parse_resolve_output/run_resolve + dispatch 0/1/N) + keybindings assertion, green. ParleyArtifactRef highlight in chat+markdown. Config sdlc_cmd documented (must be the binary, not the shell fn). ACTUAL: tool suggested 6.83h is over-attributed — window a0d1afd3 spans back to the 2026-07-03 spec commits and is shared with #144 (already booked 2.0h) + idle; scoped #160 active work this session (post-#144-merge design + ~11min impl commits + e2e debugging) is ~1.8h, on the estimate.; review verdict: FIX-THEN-SHIP
 

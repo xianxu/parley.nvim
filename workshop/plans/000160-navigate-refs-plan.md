@@ -539,3 +539,24 @@ Expected: passes actual/verified/atlas gates; lands a `Review-Verdict:` trailer;
 - TDD throughout (plenary busted): pure entities in `tests/unit/`, the spawn behind the injected runner, the flow/keymap in `tests/integration/`.
 - ARCH-DRY: the ref-shape lives once (`iter_refs`), consumed by cursor-extraction AND highlighting; the authoritative grammar is NOT reimplemented — parley shells to `sdlc resolve` (the ariadne#144 single source). ARCH-PURE: `artifact_ref.lua`'s parse/detect functions are pure (unit-tested, no Neovim/spawn); the spawn + editor wiring are the thin IO shell.
 - STYLE.md: 4-space indent, `local M = {}` / `return M`, snake_case, `pcall` around API calls, pure separated from IO.
+
+## Revisions
+
+### 2026-07-05 — as-shipped surface (reconcile the Core-concepts table with the code)
+
+The delivery matches the plan's design; a few surface names drifted. Per the
+"revise mid-stream via `## Revisions`, don't overwrite" convention:
+
+- **`M.grammar_pattern` was NOT exported** — the ref-shape lives as module-local
+  `REPO_PAT` / `BARE_PAT` / `MS_PAT` consumed inside `iter_refs`. The public
+  surface is `iter_refs` (+ `parse_ref_at_cursor`), which is what callers use.
+- **Added pure entities not in the original table:** `highlight_spans(line)` (the
+  0-indexed extmark col math, extracted per the first close-review's Important
+  finding and unit-tested), `dispatch_resolve_result` (0/1/N → notice/open/picker),
+  and `family_picker_items`. The editor entry is `goto_ref_at_cursor(opts)`.
+- **Two close boundaries, not one** (the plan said "single close boundary"): the
+  first close returned FIX-THEN-SHIP (a luacheck-542 `while` that failed the lint
+  gate + untested col math); both were fixed and re-closed. Then a **smart-`gf`**
+  follow-up (`resolve_ref_gf` → `M.cmd.ResolveRefOrGotoFile`: resolve a ref, else
+  native `gf`) was added at operator request and re-closed (SHIP). So `<C-g>r`
+  (dedicated) + `gf` (smart, native-fallback) both ship.
