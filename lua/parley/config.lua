@@ -457,6 +457,10 @@ local config = {
 	chat_shortcut_follow_cursor = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>l" },
 	chat_shortcut_search = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>n" },
 	chat_shortcut_open_file = { modes = { "n", "i" }, shortcut = "<C-g>o" },
+	-- #160: smart `gf` — resolve an ariadne artifact ref under the cursor (via
+	-- `sdlc resolve`), else native go-to-file. Transparent (native gf preserved on
+	-- plain paths); remap here to disable.
+	chat_shortcut_resolve_ref_gf = { modes = { "n" }, shortcut = "gf" },
 	chat_shortcut_prune = { modes = { "n" }, shortcut = "<C-g>p" },
 	chat_shortcut_export_markdown = { modes = { "n" }, shortcut = "<C-g>em" },
 	chat_shortcut_export_html = { modes = { "n" }, shortcut = "<C-g>eh" },
@@ -540,6 +544,12 @@ local config = {
 	issues_dir = "workshop/issues",
 	-- root for src: URL scheme (parent of sibling repos). nil = auto-detect via git rev-parse.
 	src_root = nil,
+	-- #160: the ariadne `sdlc` command used to resolve artifact refs (ariadne#11,
+	-- #15 M4, pair#84) under the cursor. Point this at the sdlc BINARY — a shell
+	-- *function* named `sdlc` is not reachable from vim.system. If a real `sdlc`
+	-- binary is on $PATH, "sdlc" works as-is; otherwise set an absolute path
+	-- (e.g. "~/workspace/ariadne/bin/sdlc"). Read-only, so it's lock-free + fast.
+	sdlc_cmd = "sdlc",
 	-- issue history (repo-local, relative to git root)
 	history_dir = "workshop/history",
 	-- vision tracker (repo-local, relative to git root)

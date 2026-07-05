@@ -27,6 +27,7 @@ This index provides a central directory for all atlas entries of the `parley.nvi
 
 ## 3. Context & References
 - [File References (@@)](context/file_references.md): Syntax for local file and directory inclusion.
+- [Artifact-Ref Navigation](context/artifact_refs.md): Jump from `ariadne#11` / `#15 M4` / `pair#84` under the cursor to its current file (shells to `sdlc resolve`; loose local detector, sdlc owns the grammar); smart `gf` + `ParleyArtifactRef` highlight.
 - [Google Drive Context](context/google_drive.md): Google Docs integration and OAuth flow.
 - [Web Search](context/web_search.md): Provider-specific web search tools.
 

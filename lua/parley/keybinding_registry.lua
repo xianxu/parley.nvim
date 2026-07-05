@@ -424,6 +424,20 @@ M.entries = {
 		buffer_local = true,
 	},
 	{
+		-- #160: smart `gf` — resolve an artifact ref (ariadne#11, #15 M4, pair#84)
+		-- under the cursor via `sdlc resolve` and open it; else fall back to Vim's
+		-- native gf. Transparent (native go-to-file preserved), so shadowing gf is
+		-- safe. Set config.chat_shortcut_resolve_ref_gf = false-y (or remap) to disable.
+		id = "resolve_ref_gf",
+		config_key = "chat_shortcut_resolve_ref_gf",
+		default_key = "gf",
+		default_modes = { "n" },
+		scope = "parley_buffer",
+		desc = "Parley resolve artifact ref, else native gf",
+		help_desc = "Resolve ariadne#11 / #15 M4 under cursor; on a plain path, fall back to Vim's gf",
+		buffer_local = true,
+	},
+	{
 		id = "copy_fence",
 		config_key = "chat_shortcut_copy_fence",
 		default_key = "<leader>cf",

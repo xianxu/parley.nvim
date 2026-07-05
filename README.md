@@ -123,6 +123,7 @@ Most-used defaults:
 - `<C-g>s` skill picker (review, voice-apply, etc.)
 - `<C-g>l` toggle follow cursor
 - `<C-g>i` to insert a fork in the chat tree, can be inline or standalone
+- `gf` smart go-to-file: on an ariadne artifact ref (`ariadne#11`, `#15 M4`, `pair#84`) resolves it and jumps (family picker when it resolves to many); on a plain path, Vim's native `gf`
 
 **Corresponding commands**
 - `:ParleyChatNew` create a new chat
