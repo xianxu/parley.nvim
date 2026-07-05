@@ -114,4 +114,81 @@ function M.run_resolve(ref, opts, on_done, runner)
     end)
 end
 
+-- dispatch_resolve_result decides what to do with a resolve outcome, calling the
+-- injected deps so it's unit-testable without Neovim: err -> notify(warn); 0 files
+-- (a github/external ref) -> notify(info); 1 -> open; N (a family) -> picker.
+-- deps = { notify(msg, level), open(path), picker(ref, files) }. Returns the
+-- action taken ("error"|"external"|"open"|"picker") for assertions.
+function M.dispatch_resolve_result(ref, files, err, deps)
+    if err or not files then
+        deps.notify("parley resolve: " .. (err or "no result"), "warn")
+        return "error"
+    end
+    if #files == 0 then
+        deps.notify("parley: " .. ref .. " is a github/external ref (no local file)", "info")
+        return "external"
+    end
+    if #files == 1 then
+        deps.open(files[1].path)
+        return "open"
+    end
+    deps.picker(ref, files)
+    return "picker"
+end
+
+-- family_picker_items maps resolved files to float_picker item shape. Pure.
+function M.family_picker_items(files)
+    local items = {}
+    for _, f in ipairs(files) do
+        items[#items + 1] = {
+            display = (f.kind or "file")
+                .. (f.milestone and (" " .. f.milestone) or "")
+                .. "  "
+                .. vim.fn.fnamemodify(f.path, ":t"),
+            search_text = f.path,
+            value = f.path,
+        }
+    end
+    return items
+end
+
+-- goto_ref_at_cursor: the editor entry (thin IO shell). Reads the ref under the
+-- cursor, resolves it against the buffer's repo, and opens/pickers the result.
+-- Delegated to by parley init's M.cmd.ResolveRefUnderCursor.
+function M.goto_ref_at_cursor()
+    local line = vim.api.nvim_get_current_line()
+    local col = vim.api.nvim_win_get_cursor(0)[2] + 1 -- 1-indexed byte col
+    local hit = M.parse_ref_at_cursor(line, col)
+    if not hit then
+        vim.notify("parley: no artifact ref under cursor", vim.log.levels.INFO)
+        return
+    end
+    local _parley = require("parley")
+    local neighborhood = require("parley.neighborhood")
+    local float_picker = require("parley.float_picker")
+    local cwd = neighborhood.for_buf(vim.api.nvim_get_current_buf())
+    local sdlc_cmd = (_parley.config and _parley.config.sdlc_cmd) or "sdlc"
+    M.run_resolve(hit.ref, { cwd = cwd, sdlc_cmd = sdlc_cmd }, function(files, err)
+        vim.schedule(function()
+            M.dispatch_resolve_result(hit.ref, files, err, {
+                notify = function(msg, level)
+                    vim.notify(msg, level == "warn" and vim.log.levels.WARN or vim.log.levels.INFO)
+                end,
+                open = function(path)
+                    _parley.open_buf(path, true)
+                end,
+                picker = function(ref, family)
+                    float_picker.open({
+                        title = "Resolve " .. ref,
+                        items = M.family_picker_items(family),
+                        on_select = function(item)
+                            _parley.open_buf(item.value, true)
+                        end,
+                    })
+                end,
+            })
+        end)
+    end)
+end
+
 return M

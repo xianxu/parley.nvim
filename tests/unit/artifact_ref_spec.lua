@@ -127,3 +127,52 @@ describe("run_resolve", function()
         assert.are.equal("no artifact resolves for #999", got.err)
     end)
 end)
+
+describe("dispatch_resolve_result", function()
+    local function deps()
+        local calls = { notify = {}, open = {}, picker = {} }
+        return calls, {
+            notify = function(msg, level) table.insert(calls.notify, { msg = msg, level = level }) end,
+            open = function(path) table.insert(calls.open, path) end,
+            picker = function(ref, files) table.insert(calls.picker, { ref = ref, files = files }) end,
+        }
+    end
+
+    it("err -> notify(warn)", function()
+        local calls, d = deps()
+        assert.are.equal("error", ar.dispatch_resolve_result("#9", nil, "boom", d))
+        assert.are.equal("warn", calls.notify[1].level)
+    end)
+
+    it("0 files -> notify external (github ref)", function()
+        local calls, d = deps()
+        assert.are.equal("external", ar.dispatch_resolve_result("gh#42", {}, nil, d))
+        assert.are.equal("info", calls.notify[1].level)
+    end)
+
+    it("1 file -> open", function()
+        local calls, d = deps()
+        assert.are.equal("open", ar.dispatch_resolve_result("#1", { { path = "/a/i.md" } }, nil, d))
+        assert.are.equal("/a/i.md", calls.open[1])
+    end)
+
+    it("N files -> picker", function()
+        local calls, d = deps()
+        local files = { { path = "/a/i.md" }, { path = "/a/p.md" } }
+        assert.are.equal("picker", ar.dispatch_resolve_result("#1", files, nil, d))
+        assert.are.equal(2, #calls.picker[1].files)
+    end)
+end)
+
+describe("family_picker_items", function()
+    it("builds display/value with kind + milestone", function()
+        local items = ar.family_picker_items({
+            { path = "/a/000144-foo.md", kind = "issue" },
+            { path = "/a/000144-foo-m2-review.md", kind = "review", milestone = "M2" },
+        })
+        assert.are.equal("/a/000144-foo.md", items[1].value)
+        assert.is_truthy(items[1].display:match("issue"))
+        assert.is_truthy(items[2].display:match("M2"))
+        assert.is_truthy(items[2].display:match("000144%-foo%-m2%-review%.md"))
+    end)
+end)

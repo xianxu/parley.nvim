@@ -4014,6 +4014,10 @@ M.cmd.IssueStatus = function() issues_mod.cmd_issue_status() end
 M.cmd.IssueDecompose = function() issues_mod.cmd_issue_decompose() end
 M.cmd.IssueGoto = function() issues_mod.cmd_issue_goto() end
 
+-- #160: resolve the ariadne artifact ref under the cursor (via `sdlc resolve`)
+-- and open it (family picker when it resolves to many).
+M.cmd.ResolveRefUnderCursor = function() require("parley.artifact_ref").goto_ref_at_cursor() end
+
 -- Vision tracker commands
 M.cmd.VisionValidate = function() vision_mod.cmd_validate() end
 M.cmd.VisionExportCsv = function(params) vision_mod.cmd_export_csv(params) end
