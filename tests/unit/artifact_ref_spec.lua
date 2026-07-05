@@ -1,0 +1,129 @@
+-- Unit tests for lua/parley/artifact_ref.lua pure functions (#160).
+--
+-- Pure: iter_refs / parse_ref_at_cursor / parse_resolve_output need no spawn;
+-- run_resolve uses an injected fake runner (never spawns real sdlc). The
+-- authoritative grammar lives in `sdlc resolve` (ariadne#144) — these only pin
+-- the loose detector + output parse + the shell-out plumbing.
+
+local tmp_dir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-artifact-ref-" .. os.time()
+
+-- Bootstrap parley so require("parley.issues") (build_spawn_argv) loads.
+local parley = require("parley")
+parley.setup({
+    chat_dir = tmp_dir,
+    state_dir = tmp_dir .. "/state",
+    providers = {},
+    api_keys = {},
+})
+
+local ar = require("parley.artifact_ref")
+
+describe("iter_refs", function()
+    local function collect(line)
+        local out = {}
+        for s, ref, e in ar.iter_refs(line) do
+            out[#out + 1] = { s = s, ref = ref, e = e }
+        end
+        return out
+    end
+
+    it("finds repo#id, bare #id, gh#id, and #id Mx in order", function()
+        local got = collect("see ariadne#11 and #15 M4 plus gh#42 end")
+        assert.are.equal("ariadne#11", got[1].ref)
+        assert.are.equal("#15 M4", got[2].ref) -- absorbs the interior space
+        assert.are.equal("gh#42", got[3].ref)
+        assert.are.equal(3, #got)
+    end)
+
+    it("gives byte spans that bracket the ref (end exclusive)", function()
+        local line = "x ariadne#11 y"
+        local got = collect(line)
+        assert.are.equal("ariadne#11", string.sub(line, got[1].s, got[1].e - 1))
+    end)
+
+    it("does not match a lone # heading or a bare number", function()
+        assert.are.equal(0, #collect("# heading and 1234 alone"))
+    end)
+
+    it("keeps a bare #id that precedes a repo ref", function()
+        local got = collect("#15 then ariadne#11")
+        assert.are.equal("#15", got[1].ref)
+        assert.are.equal("ariadne#11", got[2].ref)
+    end)
+end)
+
+describe("parse_ref_at_cursor", function()
+    it("returns the ref span under the cursor (1-indexed col)", function()
+        local line = "see ariadne#11 here"
+        local r = ar.parse_ref_at_cursor(line, 8) -- within 'ariadne#11'
+        assert.are.equal("ariadne#11", r.ref)
+    end)
+
+    it("absorbs an interior-space milestone when cursor is on the id", function()
+        local line = "see #15 M4 here"
+        local r = ar.parse_ref_at_cursor(line, 6) -- on '15'
+        assert.are.equal("#15 M4", r.ref)
+    end)
+
+    it("returns nil when the cursor is not on a ref", function()
+        assert.is_nil(ar.parse_ref_at_cursor("nothing here", 3))
+    end)
+end)
+
+describe("parse_resolve_output", function()
+    it("plain: one path per non-empty line", function()
+        local files = ar.parse_resolve_output("/a/000144-foo.md\n/a/000144-foo-plan.md\n", false)
+        assert.are.equal(2, #files)
+        assert.are.equal("/a/000144-foo.md", files[1].path)
+    end)
+
+    it("json: reads .files[] with kind + milestone", function()
+        local json =
+            '{"ref":"#144","id":144,"files":[{"kind":"issue","path":"/a/i.md"},{"kind":"review","path":"/a/m2.md","milestone":"M2"}]}'
+        local files = ar.parse_resolve_output(json, true)
+        assert.are.equal("issue", files[1].kind)
+        assert.are.equal("M2", files[2].milestone)
+    end)
+
+    it("json github label: empty files", function()
+        local files = ar.parse_resolve_output('{"ref":"gh#42","id":42,"github":true,"files":[]}', true)
+        assert.are.equal(0, #files)
+    end)
+
+    it("json garbage: empty (guarded decode)", function()
+        assert.are.equal(0, #ar.parse_resolve_output("not json", true))
+    end)
+end)
+
+describe("run_resolve", function()
+    it("passes a resolve --json argv and returns parsed files on exit 0", function()
+        local seen
+        local fake = function(argv, on_complete)
+            seen = argv
+            on_complete('{"id":144,"files":[{"kind":"issue","path":"/a/i.md"}]}', 0, "")
+        end
+        local got
+        ar.run_resolve("#144", { cwd = "/repo", sdlc_cmd = "sdlc" }, function(files, err)
+            got = { files = files, err = err }
+        end, fake)
+        assert.is_nil(got.err)
+        assert.are.equal("/a/i.md", got.files[1].path)
+        -- argv may be shell-wrapped (sdlc-as-function); assert on the joined form.
+        local joined = table.concat(seen, " ")
+        assert.is_truthy(joined:match("resolve"))
+        assert.is_truthy(joined:match("%-%-json"))
+        assert.is_truthy(joined:match("#144"))
+    end)
+
+    it("returns trimmed stderr as err on non-zero exit", function()
+        local fake = function(_, on_complete)
+            on_complete("", 1, "no artifact resolves for #999\n")
+        end
+        local got
+        ar.run_resolve("#999", {}, function(files, err)
+            got = { files = files, err = err }
+        end, fake)
+        assert.is_nil(got.files)
+        assert.are.equal("no artifact resolves for #999", got.err)
+    end)
+end)
