@@ -12,6 +12,21 @@ end
 -- Local helpers
 --------------------------------------------------------------------------------
 
+-- push_artifact_refs marks ariadne artifact refs (ariadne#11, #15 M4, pair#84,
+-- gh#42) in a line so they read as navigable (#160). Shared by the chat and
+-- markdown compute paths so the two can't diverge. Uses artifact_ref.iter_refs —
+-- the SAME loose detector the resolve keymap uses; sdlc resolve owns acceptance,
+-- so this highlights ref-*shaped* tokens (a jump on an unresolvable one just
+-- surfaces sdlc's error). Entry shape matches the module: col_start 0-indexed,
+-- col_end exclusive (iter_refs' byte_end is one-past, so col_end = e - 1).
+local function push_artifact_refs(result, row, line)
+    local artifact_ref = require("parley.artifact_ref")
+    for s, _, e in artifact_ref.iter_refs(line) do
+        result[row] = result[row] or {}
+        table.insert(result[row], { hl_group = "ParleyArtifactRef", col_start = s - 1, col_end = e - 1 })
+    end
+end
+
 local function stop_and_close_timer(timer)
     if not timer then
         return
@@ -275,6 +290,8 @@ local function compute_chat_highlights(buf, start_line, end_line)
 
         result[row] = result[row] or {}
 
+        push_artifact_refs(result, row, line) -- #160: navigable artifact refs
+
         local pos = 1
         while true do
             local tag_start, content_start = line:find("@@", pos)
@@ -440,6 +457,7 @@ local function compute_markdown_highlights(buf, start_line, end_line)
     local lines = vim.api.nvim_buf_get_lines(buf, start_line - 1, end_line, false)
     for offset, line in ipairs(lines) do
         local row = start_line + offset - 2
+        push_artifact_refs(result, row, line) -- #160: navigable artifact refs
         if line:sub(1, #branch_prefix) == branch_prefix then
             result[row] = result[row] or {}
             table.insert(result[row], { hl_group = "ParleyChatReference", col_start = 0, col_end = -1 })
@@ -706,6 +724,15 @@ M.setup_highlights = function()
         vim.api.nvim_set_hl(0, "ParleyReference", user_highlights.reference)
     else
         vim.api.nvim_set_hl(0, "ParleyReference", { underline = true })
+    end
+
+    -- Artifact refs (ariadne#11, #15 M4, pair#84) left navigable by #160.
+    -- Underline reads as "this is a jumpable ref" without a heavy background.
+    -- Override via config.highlight.artifact_ref.
+    if user_highlights.artifact_ref then
+        vim.api.nvim_set_hl(0, "ParleyArtifactRef", user_highlights.artifact_ref)
+    else
+        vim.api.nvim_set_hl(0, "ParleyArtifactRef", { underline = true })
     end
 
     -- Tags - Highlighted tags in @@tag@@ format
