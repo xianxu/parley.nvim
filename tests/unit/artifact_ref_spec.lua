@@ -201,6 +201,16 @@ describe("goto_ref_at_cursor on_no_ref fallback", function()
         assert.is_true(fell_back)
     end)
 
+    it("notifies (default) when no on_no_ref is given and no ref under cursor", function()
+        buf_with("just some plain text", 5)
+        local notified
+        local prev = vim.notify
+        vim.notify = function(msg) notified = msg end
+        ar.goto_ref_at_cursor() -- no opts → default notify path
+        vim.notify = prev
+        assert.is_truthy(notified and notified:match("no artifact ref"))
+    end)
+
     it("does NOT call on_no_ref when a ref is present (resolves instead)", function()
         buf_with("see ariadne#144 here", 10)
         local fell_back = false

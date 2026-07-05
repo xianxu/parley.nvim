@@ -33,14 +33,14 @@ open/pick the result, highlight refs.
   markdown compute paths). Override via `config.highlight.artifact_ref`. Marks
   ref-*shaped* tokens (confirming resolvability per-token per-redraw would spawn
   `sdlc` far too often); an unresolvable one just surfaces sdlc's error on jump.
-- **Keymap:** `<C-g>r` (`resolve_ref`) → `M.cmd.ResolveRefUnderCursor` (dedicated;
-  notifies if the cursor isn't on a ref). Plus **`gf`** (`resolve_ref_gf` →
-  `M.cmd.ResolveRefOrGotoFile`): a *smart* go-to-file that resolves an artifact ref
-  under the cursor, else falls back to Vim's native `gf` (`normal! gf`) — so `gf`
-  keeps working on plain paths. The fallback makes shadowing `gf` transparent; the
-  shared handler `goto_ref_at_cursor(opts)` takes `opts.on_no_ref` (the smart-gf
-  passes native `gf`; the dedicated key omits it). Both bound in chat + markdown
-  `parley_buffer` scope; disable/remap via `config.chat_shortcut_resolve_ref{,_gf}`.
+- **Keymap:** **`gf`** (`resolve_ref_gf` → `M.cmd.ResolveRefOrGotoFile`): a *smart*
+  go-to-file that resolves an artifact ref under the cursor, else falls back to Vim's
+  native `gf` (`normal! gf`) — so `gf` keeps working on plain paths. The fallback
+  makes shadowing `gf` transparent. The shared handler `goto_ref_at_cursor(opts)`
+  takes an optional `opts.on_no_ref` (the smart-gf passes native `gf`; without it the
+  handler notifies). Bound in chat + markdown `parley_buffer` scope; disable/remap
+  via `config.chat_shortcut_resolve_ref_gf`. (The dedicated `<C-g>r` binding was
+  removed once smart-`gf` proved sufficient — operator call.)
 - **Picker:** a family ref (issue + plan + reviews) opens the house `float_picker`;
   a single result opens directly.
 - **Cross-repo:** `sdlc resolve` resolves `pair#84` etc. itself; parley only sets
@@ -53,7 +53,7 @@ open/pick the result, highlight refs.
   sdlc BINARY**: a shell *function* named `sdlc` is not reachable from `vim.system`.
   If a real `sdlc` binary is on `$PATH`, the default works; otherwise set an
   absolute path (e.g. `~/workspace/ariadne/bin/sdlc`). Read-only ⟹ lock-free + fast.
-- `config.chat_shortcut_resolve_ref` — override the `<C-g>r` binding.
+- `config.chat_shortcut_resolve_ref_gf` — override/disable the smart-`gf` binding.
 
 ## Related
 

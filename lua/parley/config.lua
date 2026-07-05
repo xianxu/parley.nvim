@@ -457,10 +457,9 @@ local config = {
 	chat_shortcut_follow_cursor = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>l" },
 	chat_shortcut_search = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>n" },
 	chat_shortcut_open_file = { modes = { "n", "i" }, shortcut = "<C-g>o" },
-	-- #160: resolve the ariadne artifact ref under the cursor (via `sdlc resolve`)
-	chat_shortcut_resolve_ref = { modes = { "n", "i" }, shortcut = "<C-g>r" },
-	-- #160: smart `gf` — resolve a ref under the cursor, else native go-to-file.
-	-- Transparent (native gf preserved on plain paths); remap here to disable.
+	-- #160: smart `gf` — resolve an ariadne artifact ref under the cursor (via
+	-- `sdlc resolve`), else native go-to-file. Transparent (native gf preserved on
+	-- plain paths); remap here to disable.
 	chat_shortcut_resolve_ref_gf = { modes = { "n" }, shortcut = "gf" },
 	chat_shortcut_prune = { modes = { "n" }, shortcut = "<C-g>p" },
 	chat_shortcut_export_markdown = { modes = { "n" }, shortcut = "<C-g>em" },
