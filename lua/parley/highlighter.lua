@@ -21,9 +21,13 @@ end
 -- col_end exclusive (iter_refs' byte_end is one-past, so col_end = e - 1).
 local function push_artifact_refs(result, row, line)
     local artifact_ref = require("parley.artifact_ref")
-    for s, _, e in artifact_ref.iter_refs(line) do
+    for _, span in ipairs(artifact_ref.highlight_spans(line)) do
         result[row] = result[row] or {}
-        table.insert(result[row], { hl_group = "ParleyArtifactRef", col_start = s - 1, col_end = e - 1 })
+        table.insert(result[row], {
+            hl_group = "ParleyArtifactRef",
+            col_start = span.col_start,
+            col_end = span.col_end,
+        })
     end
 end
 

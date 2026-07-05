@@ -52,6 +52,27 @@ describe("iter_refs", function()
     end)
 end)
 
+describe("highlight_spans", function()
+    -- 0-indexed col_start (inclusive) / col_end (exclusive) — the extmark cols the
+    -- highlighter paints. Off-by-one here would mis-underline; pin it exactly.
+    it("spans exactly the ref (repo#id)", function()
+        local line = "x ariadne#11 y" -- 'ariadne#11' is bytes 3..12 (1-indexed)
+        local spans = ar.highlight_spans(line)
+        assert.are.equal(1, #spans)
+        assert.are.equal(2, spans[1].col_start) -- 0-indexed start of 'a'
+        assert.are.equal(12, spans[1].col_end) -- exclusive: through '1', before ' '
+        -- and it exactly covers the ref text
+        assert.are.equal("ariadne#11", line:sub(spans[1].col_start + 1, spans[1].col_end))
+    end)
+
+    it("includes the interior space of #15 M4", function()
+        local line = "see #15 M4 end" -- '#15 M4' is bytes 5..10
+        local spans = ar.highlight_spans(line)
+        assert.are.equal(1, #spans)
+        assert.are.equal("#15 M4", line:sub(spans[1].col_start + 1, spans[1].col_end))
+    end)
+end)
+
 describe("parse_ref_at_cursor", function()
     it("returns the ref span under the cursor (1-indexed col)", function()
         local line = "see ariadne#11 here"

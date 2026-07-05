@@ -6,9 +6,10 @@
 -- live in `sdlc resolve` (single source — parley shells to it, never re-encodes
 -- the grammar). An over-match here is simply rejected by sdlc at resolve time.
 --
--- Pure core (no Neovim/spawn): iter_refs, parse_ref_at_cursor,
--- parse_resolve_output. IO seam: run_resolve (subprocess behind an injected
--- runner). The editor wiring (highlight/keymap/picker) lives in
+-- Pure core (no IO/spawn — some use vim.json/vim.fn utils but no side effects):
+-- iter_refs, parse_ref_at_cursor, parse_resolve_output, highlight_spans,
+-- dispatch_resolve_result, family_picker_items. IO seam: run_resolve (subprocess
+-- behind an injected runner). The editor wiring (highlight/keymap/picker) lives in
 -- highlighter.lua / keybinding_registry.lua / init.lua.
 
 local M = {}
@@ -27,28 +28,43 @@ local MS_PAT = "^ M%d+%a?" -- optional trailing " Mx" milestone, anchored at be+
 function M.iter_refs(line)
     local pos = 1
     return function()
-        while pos <= #line do
-            local sr, er = line:find(REPO_PAT, pos)
-            local sb, eb = line:find(BARE_PAT, pos)
-            local s, e
-            if sr and (not sb or sr <= sb) then
-                s, e = sr, er -- repo wins ties (it starts before its own '#')
-            elseif sb then
-                s, e = sb, eb
-            else
-                pos = #line + 1
-                return nil
-            end
-            -- absorb an optional trailing " Mx" milestone
-            local _, me = line:find(MS_PAT, e + 1)
-            if me then
-                e = me
-            end
-            pos = e + 1
-            return s, line:sub(s, e), e + 1
+        -- Not a loop: iteration is driven by repeated closure calls, with `pos`
+        -- persisting as an upvalue. Each call advances past one ref (or ends).
+        if pos > #line then
+            return nil
         end
-        return nil
+        local sr, er = line:find(REPO_PAT, pos)
+        local sb, eb = line:find(BARE_PAT, pos)
+        local s, e
+        if sr and (not sb or sr <= sb) then
+            s, e = sr, er -- repo wins ties (it starts before its own '#')
+        elseif sb then
+            s, e = sb, eb
+        else
+            pos = #line + 1
+            return nil
+        end
+        -- absorb an optional trailing " Mx" milestone
+        local _, me = line:find(MS_PAT, e + 1)
+        if me then
+            e = me
+        end
+        pos = e + 1
+        return s, line:sub(s, e), e + 1
     end
+end
+
+-- highlight_spans(line) -> { { col_start, col_end }, ... }: the 0-indexed extmark
+-- columns for each ref-shaped span (col_start inclusive, col_end exclusive — the
+-- nvim_buf_add_highlight/decoration convention). iter_refs' byte_end is one-past
+-- (1-indexed), so col_start = s-1 and col_end = e-1. Pure; the single source of
+-- the col math the highlighter's push_artifact_refs consumes (so it's tested).
+function M.highlight_spans(line)
+    local spans = {}
+    for s, _, e in M.iter_refs(line) do
+        spans[#spans + 1] = { col_start = s - 1, col_end = e - 1 }
+    end
+    return spans
 end
 
 -- parse_ref_at_cursor(line, col) -> { ref, byte_start, byte_end } | nil.
@@ -96,7 +112,9 @@ function M.run_resolve(ref, opts, on_done, runner)
     local issues = require("parley.issues")
     local sdlc_cmd = opts.sdlc_cmd or "sdlc"
     local is_exec = vim.fn.executable(sdlc_cmd) == 1
-    local shell = opts.shell or vim.o.shell
+    -- Match issues.lua's shell resolution so an rc-defined `sdlc` function loads
+    -- from the user's login shell, not just vim.o.shell.
+    local shell = opts.shell or vim.env.SHELL or vim.o.shell or "sh"
     local argv = issues.build_spawn_argv({ sdlc_cmd, "resolve", "--json", ref }, is_exec, shell)
     local run = runner
         or function(a, on_complete)
