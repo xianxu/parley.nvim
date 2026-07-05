@@ -1971,6 +1971,7 @@ M.prep_chat = function(buf, file_name)
 			-- parley_buffer scope (shared with markdown)
 			open_file = M.cmd.OpenFileUnderCursor,
 			resolve_ref = M.cmd.ResolveRefUnderCursor,
+			resolve_ref_gf = M.cmd.ResolveRefOrGotoFile,
 			copy_fence = M.cmd.CopyCodeFence,
 			outline = M.cmd.Outline,
 			branch_ref = {
@@ -2219,6 +2220,7 @@ M.setup_markdown_keymaps = function(buf)
 			-- parley_buffer scope (shared with chat)
 			open_file = M.cmd.OpenFileUnderCursor,
 			resolve_ref = M.cmd.ResolveRefUnderCursor,
+			resolve_ref_gf = M.cmd.ResolveRefOrGotoFile,
 			copy_fence = M.cmd.CopyCodeFence,
 			outline = M.cmd.Outline,
 			branch_ref = {
@@ -4019,6 +4021,15 @@ M.cmd.IssueGoto = function() issues_mod.cmd_issue_goto() end
 -- #160: resolve the ariadne artifact ref under the cursor (via `sdlc resolve`)
 -- and open it (family picker when it resolves to many).
 M.cmd.ResolveRefUnderCursor = function() require("parley.artifact_ref").goto_ref_at_cursor() end
+
+-- #160: smart `gf` — resolve an artifact ref under the cursor, else fall back to
+-- Vim's native go-to-file (`normal! gf` bypasses this mapping), so `gf` keeps
+-- working on plain paths.
+M.cmd.ResolveRefOrGotoFile = function()
+	require("parley.artifact_ref").goto_ref_at_cursor({
+		on_no_ref = function() vim.cmd("normal! gf") end,
+	})
+end
 
 -- Vision tracker commands
 M.cmd.VisionValidate = function() vision_mod.cmd_validate() end

@@ -45,6 +45,8 @@ describe("key bindings help", function()
         assert.is_true(has_line(lines, "<C-g>o", "Open file reference"))
         -- #160: resolve-ref binding is a parley_buffer key, present in chat context
         assert.is_true(has_line(lines, "<C-g>r", "Jump from ariadne"))
+        -- #160: smart-gf binding (resolve ref, else native gf)
+        assert.is_true(has_line(lines, "gf", "fall back to Vim"))
         -- Should NOT include markdown or finder keys
         assert.is_false(has_line(lines, "<C-a>", "Cycle recency window left"))
         assert.is_false(has_line(lines, "<C-g>ve", "Apply review marker"))

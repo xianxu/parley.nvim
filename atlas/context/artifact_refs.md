@@ -33,9 +33,14 @@ open/pick the result, highlight refs.
   markdown compute paths). Override via `config.highlight.artifact_ref`. Marks
   ref-*shaped* tokens (confirming resolvability per-token per-redraw would spawn
   `sdlc` far too often); an unresolvable one just surfaces sdlc's error on jump.
-- **Keymap:** `<C-g>r` (`resolve_ref` in the keybinding registry; the `<C-g>`
-  chord family, avoids shadowing Vim's native `gf`) → `M.cmd.ResolveRefUnderCursor`,
-  bound in both chat and markdown `parley_buffer` scope.
+- **Keymap:** `<C-g>r` (`resolve_ref`) → `M.cmd.ResolveRefUnderCursor` (dedicated;
+  notifies if the cursor isn't on a ref). Plus **`gf`** (`resolve_ref_gf` →
+  `M.cmd.ResolveRefOrGotoFile`): a *smart* go-to-file that resolves an artifact ref
+  under the cursor, else falls back to Vim's native `gf` (`normal! gf`) — so `gf`
+  keeps working on plain paths. The fallback makes shadowing `gf` transparent; the
+  shared handler `goto_ref_at_cursor(opts)` takes `opts.on_no_ref` (the smart-gf
+  passes native `gf`; the dedicated key omits it). Both bound in chat + markdown
+  `parley_buffer` scope; disable/remap via `config.chat_shortcut_resolve_ref{,_gf}`.
 - **Picker:** a family ref (issue + plan + reviews) opens the house `float_picker`;
   a single result opens directly.
 - **Cross-repo:** `sdlc resolve` resolves `pair#84` etc. itself; parley only sets

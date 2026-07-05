@@ -172,13 +172,21 @@ end
 
 -- goto_ref_at_cursor: the editor entry (thin IO shell). Reads the ref under the
 -- cursor, resolves it against the buffer's repo, and opens/pickers the result.
--- Delegated to by parley init's M.cmd.ResolveRefUnderCursor.
-function M.goto_ref_at_cursor()
+-- opts.on_no_ref (optional): called when the cursor is NOT on an artifact ref —
+-- the smart-gf binding passes native `gf` here so `gf` resolves refs but still
+-- goes-to-file on plain paths; the dedicated key omits it (notifies instead).
+-- Delegated to by parley init's M.cmd.ResolveRef* commands.
+function M.goto_ref_at_cursor(opts)
+    opts = opts or {}
     local line = vim.api.nvim_get_current_line()
     local col = vim.api.nvim_win_get_cursor(0)[2] + 1 -- 1-indexed byte col
     local hit = M.parse_ref_at_cursor(line, col)
     if not hit then
-        vim.notify("parley: no artifact ref under cursor", vim.log.levels.INFO)
+        if opts.on_no_ref then
+            opts.on_no_ref()
+        else
+            vim.notify("parley: no artifact ref under cursor", vim.log.levels.INFO)
+        end
         return
     end
     local _parley = require("parley")

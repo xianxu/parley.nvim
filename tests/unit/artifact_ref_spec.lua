@@ -185,6 +185,33 @@ describe("dispatch_resolve_result", function()
     end)
 end)
 
+describe("goto_ref_at_cursor on_no_ref fallback", function()
+    local function buf_with(line, col)
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { line })
+        vim.api.nvim_set_current_buf(buf)
+        vim.api.nvim_win_set_cursor(0, { 1, col })
+        return buf
+    end
+
+    it("calls on_no_ref when the cursor is not on a ref (smart-gf fallback)", function()
+        buf_with("just some plain text", 5)
+        local fell_back = false
+        ar.goto_ref_at_cursor({ on_no_ref = function() fell_back = true end })
+        assert.is_true(fell_back)
+    end)
+
+    it("does NOT call on_no_ref when a ref is present (resolves instead)", function()
+        buf_with("see ariadne#144 here", 10)
+        local fell_back = false
+        local prev = ar.run_resolve
+        ar.run_resolve = function() end -- stub: don't spawn
+        ar.goto_ref_at_cursor({ on_no_ref = function() fell_back = true end })
+        ar.run_resolve = prev
+        assert.is_false(fell_back)
+    end)
+end)
+
 describe("family_picker_items", function()
     it("builds display/value with kind + milestone", function()
         local items = ar.family_picker_items({

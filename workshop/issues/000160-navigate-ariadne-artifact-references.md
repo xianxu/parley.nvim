@@ -179,3 +179,11 @@ taking the earliest of the repo/bare match each step).
 - `gh#42` → 0 files (github/external notice); `#99999` → sdlc's not-found error. ✓
 - 18 unit tests (pure core + dispatch) + a keybindings assertion; unrelated
   `tools_builtin_find_spec` flake (shells a real `find .`, passes in isolation).
+
+**Follow-up (operator request): smart `gf` fallback.** Added `gf` (`resolve_ref_gf`
+→ `M.cmd.ResolveRefOrGotoFile`) alongside the dedicated `<C-g>r`: it resolves an
+artifact ref under the cursor, else falls back to Vim's native `gf` (`normal! gf`),
+so `gf` keeps opening plain paths — the fallback makes shadowing `gf` transparent.
+Handler parameterized with `opts.on_no_ref`. e2e: `gf` on `lua/parley/config.lua`
+→ native gf opened it; `gf` on `ariadne#160 M2` → resolved the sidecar. 22 unit
+tests + the gf keybinding assertion; `make test` green (lint 0/0).
