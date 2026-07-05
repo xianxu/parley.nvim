@@ -424,6 +424,19 @@ M.entries = {
 		buffer_local = true,
 	},
 	{
+		-- #160: resolve an ariadne artifact ref (ariadne#11, #15 M4, pair#84) under
+		-- the cursor via `sdlc resolve` and open it. <C-g>r keeps the <C-g> chord
+		-- family (open_file is <C-g>o) and avoids shadowing Vim's native `gf`.
+		id = "resolve_ref",
+		config_key = "chat_shortcut_resolve_ref",
+		default_key = "<C-g>r",
+		default_modes = { "n", "i" },
+		scope = "parley_buffer",
+		desc = "Parley resolve artifact ref under cursor",
+		help_desc = "Jump from ariadne#11 / #15 M4 / pair#84 to its current file (family picker if many)",
+		buffer_local = true,
+	},
+	{
 		id = "copy_fence",
 		config_key = "chat_shortcut_copy_fence",
 		default_key = "<leader>cf",

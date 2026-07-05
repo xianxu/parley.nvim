@@ -1970,6 +1970,7 @@ M.prep_chat = function(buf, file_name)
 		{
 			-- parley_buffer scope (shared with markdown)
 			open_file = M.cmd.OpenFileUnderCursor,
+			resolve_ref = M.cmd.ResolveRefUnderCursor,
 			copy_fence = M.cmd.CopyCodeFence,
 			outline = M.cmd.Outline,
 			branch_ref = {
@@ -2217,6 +2218,7 @@ M.setup_markdown_keymaps = function(buf)
 		{
 			-- parley_buffer scope (shared with chat)
 			open_file = M.cmd.OpenFileUnderCursor,
+			resolve_ref = M.cmd.ResolveRefUnderCursor,
 			copy_fence = M.cmd.CopyCodeFence,
 			outline = M.cmd.Outline,
 			branch_ref = {
