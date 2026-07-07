@@ -81,3 +81,24 @@ describe("define.format_definition", function()
         assert.equals("X — (no definition)", define.format_definition("X", nil, 80))
     end)
 end)
+
+describe("define.bracket_edit", function()
+    it("wraps a single-line span, returning set_text coords + [term]", function()
+        -- "here is ASIN in context": ASIN at 0-based cols 8..11 inclusive
+        local e = define.bracket_edit({ "here is ASIN in context" }, 1, 8, 1, 11)
+        assert.are.same({ srow = 0, scol = 8, erow = 0, ecol = 12, text = "[ASIN]" }, e)
+    end)
+
+    it("clamps end col past line length", function()
+        local e = define.bracket_edit({ "the lazy dog" }, 1, 9, 1, 999)
+        assert.are.equal("[dog]", e.text)
+        assert.are.equal(12, e.ecol) -- clamped to line length
+    end)
+
+    it("wraps a multi-line span", function()
+        local e = define.bracket_edit({ "brown", "fox" }, 1, 0, 2, 2)
+        assert.are.equal("[brown\nfox]", e.text)
+        assert.are.equal(0, e.srow)
+        assert.are.equal(1, e.erow)
+    end)
+end)

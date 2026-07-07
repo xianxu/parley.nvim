@@ -79,4 +79,26 @@ function M.format_definition(term, definition, width)
     return require("parley.skill_render").wrap(head, width or 80)
 end
 
+--- Plan the reference-bracket edit that wraps the selection in [term] (#161 R1).
+--- Same arg convention as slice_selection (l1/l2 1-based, c1/c2 0-based byte,
+--- c2 inclusive). Returns 0-based nvim_buf_set_text coords + the replacement
+--- text — a single edit (one undo entry) the caller applies. Pure.
+--- @param lines string[]
+--- @param l1 integer
+--- @param c1 integer
+--- @param l2 integer
+--- @param c2 integer
+--- @return table  { srow, scol, erow, ecol, text }
+function M.bracket_edit(lines, l1, c1, l2, c2)
+    local selected = M.slice_selection(lines, l1, c1, l2, c2)
+    local end_line = lines[l2] or ""
+    return {
+        srow = l1 - 1,
+        scol = c1,
+        erow = l2 - 1,
+        ecol = math.min(c2 + 1, #end_line),
+        text = "[" .. selected .. "]",
+    }
+end
+
 return M
