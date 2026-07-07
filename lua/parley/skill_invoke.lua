@@ -130,7 +130,9 @@ function M.invoke(buf, manifest, args, opts)
     _gen[buf] = gen
 
     -- Sync file == buffer so edits compute + apply against the same content.
-    if vim.bo[buf].modified then
+    -- A read-only skill (opts.no_reload — e.g. define, #161) makes no edits, so
+    -- it must NOT persist the user's in-progress buffer to disk.
+    if vim.bo[buf].modified and not opts.no_reload then
         vim.api.nvim_buf_call(buf, function()
             pcall(vim.cmd, "silent write")
         end)
@@ -149,7 +151,9 @@ function M.invoke(buf, manifest, args, opts)
         end
         return
     end
-    local inv = assembly.build_invocation(manifest, { body = body, document = original, manual = manual })
+    -- opts.document lets a caller send a bounded context (e.g. define's enclosing
+    -- exchange) instead of the whole buffer; defaults to the buffer content.
+    local inv = assembly.build_invocation(manifest, { body = body, document = opts.document or original, manual = manual })
 
     local agent = assembly.resolve_agent(manifest, {
         config = p.config,
@@ -227,7 +231,9 @@ function M.invoke(buf, manifest, args, opts)
                         end
                     end
                 end
-                reload_buffer(buf)
+                if not opts.no_reload then
+                    reload_buffer(buf)
+                end
                 local new_content = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
                 local decorations = {}
                 for _, call in ipairs(calls) do
