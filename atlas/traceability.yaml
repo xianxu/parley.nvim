@@ -85,6 +85,21 @@ atlas:
       - tests/unit/highlighter_spec.lua
       - tests/integration/chat_respond_spec.lua
 
+  chat/inline_define:
+    code:
+      - lua/parley/define.lua
+      - lua/parley/init.lua
+      - lua/parley/skills/define/init.lua
+      - lua/parley/tools/builtin/emit_definition.lua
+      - lua/parley/tools/init.lua
+      - lua/parley/skill_invoke.lua
+      - lua/parley/skill_render.lua
+      - lua/parley/config.lua
+      - lua/parley/keybinding_registry.lua
+    tests:
+      - tests/unit/define_spec.lua
+      - tests/integration/define_spec.lua
+
   context/file_references:
     code:
       - lua/parley/init.lua

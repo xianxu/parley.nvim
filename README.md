@@ -115,6 +115,7 @@ Most-used defaults:
 **In Chat Buffer**
 - `<C-g>?` show key bindings
 - `<C-g><C-g>` respond
+- `<M-CR>` respond (normal/insert); **visual-select a phrase + `<M-CR>`** → inline term definition — a concise grey pop-under at the phrase (nothing written to the transcript), honoring `:ToggleWebSearch` for unfamiliar terms
 - `<C-g>G` respond all
 - `<C-g>x` stop
 - `<C-g>t` chat outline

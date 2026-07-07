@@ -1551,17 +1551,11 @@ local function drill_in_visual(buf)
 	local prefix = lines_in_range[1]:sub(1, sc - 1)
 	local suffix = end_line_text:sub(ec + 1)
 
-	local selected
-	if sr == er then
-		selected = lines_in_range[1]:sub(sc, ec)
-	else
-		local parts = { lines_in_range[1]:sub(sc) }
-		for i = 2, #lines_in_range - 1 do
-			table.insert(parts, lines_in_range[i])
-		end
-		table.insert(parts, end_line_text:sub(1, ec))
-		selected = table.concat(parts, "\n")
-	end
+	-- #161 ARCH-DRY: one shared visual-selection slice (define.slice_selection).
+	-- lines_in_range is the [sr..er] slice, so line sr → index 1, er → er-sr+1;
+	-- getpos cols are 1-based, slice_selection takes 0-based (sub(sc, ec)).
+	local selected = require("parley.define").slice_selection(
+		lines_in_range, 1, sc - 1, er - sr + 1, ec - 1)
 
 	if selected == "" then
 		M.logger.warning("Drill-in: empty selection")
@@ -1596,6 +1590,120 @@ local function drill_in_visual(buf)
 	end
 	vim.api.nvim_win_set_cursor(0, { target_row, target_col })
 	vim.schedule(function() vim.cmd("startinsert") end)
+end
+
+-- Inline term definition (#161 + R1). render_definition is the on_done IO seam.
+-- On a successful lookup it wraps the term in a [term] reference bracket (ONE
+-- undo entry — the anchor), highlights the line (whole-line DiffChange, review's
+-- scheme), and shows the definition as an ephemeral INFO diagnostic. The
+-- definition text is never written to the file; only the brackets are. Undo/redo
+-- coherence reuses review's projection watcher: undoing the bracket lands on the
+-- pre-bracket content-hash → the empty snapshot renders → both decorations clear.
+-- `span` = the visual selection {sr, sc, er, ec} (1-based getpos values).
+local function render_definition(buf, span, phrase, result)
+	-- Pick the emit_definition call (unforced → the model may answer in text or
+	-- only call web_search; both mean "no definition"). Notify rather than
+	-- silently doing nothing, and leave no bracket.
+	local call
+	if result and result.calls then
+		for _, c in ipairs(result.calls) do
+			if c.name == "emit_definition" then
+				call = c
+				break
+			end
+		end
+	end
+	if not call then
+		M.logger.warning("Define: no definition returned")
+		return
+	end
+
+	local sr, sc, er, ec = span[1], span[2], span[3], span[4]
+	local define = require("parley.define")
+	local skill_render = require("parley.skill_render")
+	local projection = require("parley.skills.review.projection")
+
+	-- The buffer may have changed under the in-flight call; skip bracketing (and
+	-- the whole render) rather than mis-place a bracket on shifted text.
+	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+	if define.slice_selection(lines, sr, sc - 1, er, ec - 1) ~= phrase then
+		M.logger.warning("Define: selection changed during lookup — re-select to define")
+		return
+	end
+	local original = table.concat(lines, "\n") -- pre-bracket content (undo base)
+
+	-- Wrap the term in [term] as ONE set_lines edit (single undo entry = the
+	-- anchor; nvim_buf_set_text is arch-confined to buffer_edit, and set_lines is
+	-- how drill_in_visual wraps a selection too). set_applying suppresses any
+	-- prior define's projection watcher during our own edit (mirrors review).
+	projection.set_applying(buf, true)
+	local e = define.bracket_edit(lines, sr, sc - 1, er, ec - 1)
+	vim.api.nvim_buf_set_lines(buf, e.first0, e.last, false, e.lines)
+
+	-- Highlight the term's line(s) + the ephemeral definition diagnostic.
+	local last0 = e.first0 + #e.lines - 1
+	for line0 = e.first0, last0 do
+		skill_render.highlight_line(buf, line0)
+	end
+	local input = call.input or {}
+	local width = math.max(40, vim.api.nvim_win_get_width(0) - 8)
+	local msg = define.format_definition(input.term, input.definition, width)
+	vim.diagnostic.set(skill_render.diag_namespace(), buf, { {
+		lnum = e.first0,
+		col = 0,
+		end_lnum = e.first0,
+		end_col = 0,
+		message = msg,
+		severity = vim.diagnostic.severity.INFO,
+		source = "parley-define",
+	} })
+
+	-- Record projection states so undo/redo of the bracket clears/restores the
+	-- decorations (#133 M5 machinery, reused): pre-bracket hash → empty snapshot,
+	-- bracketed hash → highlight+diagnostic; attach the watcher for future undos.
+	projection.record_empty_for(buf, original)
+	projection.record(buf)
+	projection.ensure_watch(buf)
+	projection.set_applying(buf, false)
+
+	-- Park the cursor on the term's line so diag_display's current-line
+	-- virtual_lines reveals the definition immediately.
+	pcall(vim.api.nvim_win_set_cursor, 0, { sr, math.max(0, sc - 1) })
+	vim.cmd("redraw")
+end
+
+-- define_visual: the thin IO shell for visual-mode <M-CR>. Reads the selection,
+-- computes the enclosing-exchange context, and fires a headless define skill
+-- turn whose on_done brackets + renders the definition inline. Pure logic lives
+-- in lua/parley/define.lua. Exposed as M.define_visual for the keybinding.
+function M.define_visual(buf)
+	buf = buf or vim.api.nvim_get_current_buf()
+	local sp = vim.fn.getpos("'<")
+	local ep = vim.fn.getpos("'>")
+	local sr, sc = sp[2], sp[3]
+	local er, ec = ep[2], ep[3]
+	if sr == 0 or er == 0 then return end
+
+	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+	local define = require("parley.define")
+	-- getpos cols are 1-based; slice_selection takes 0-based (sub(sc, ec)).
+	local phrase = define.slice_selection(lines, sr, sc - 1, er, ec - 1)
+	if phrase:gsub("%s", "") == "" then
+		M.logger.warning("Define: empty selection")
+		return
+	end
+
+	local header_end = M.chat_parser.find_header_end(lines) or 0
+	local parsed = M.parse_chat(lines, header_end)
+	local context = define.context_for_selection(parsed, sr, lines, M.find_exchange_at_line)
+
+	local span = { sr, sc, er, ec }
+	local manifest = require("parley.skills.define")
+	require("parley.skill_invoke").invoke(buf, manifest, { phrase = phrase }, {
+		document = context,
+		no_reload = true,
+		on_done = function(result) render_definition(buf, span, phrase, result) end,
+	})
 end
 
 -- Accept/reject flash animation (#124). The resolver flashes the removed
@@ -1963,6 +2071,13 @@ M.prep_chat = function(buf, file_name)
 		end, { buffer = buf, silent = true, desc = "Parley: search whole [...] anchor (#141)" })
 	end
 
+	-- #161: one respond-callback set, shared by chat_respond and chat_define.
+	local respond_cb = make_respond_cb("ChatRespond")
+	local function chat_define_v()
+		vim.cmd("normal! " .. vim.api.nvim_replace_termcodes("<Esc>", true, false, true))
+		M.define_visual()
+	end
+
 	kb_registry.register_buffer(
 		{ "parley_buffer", "chat" },
 		buf,
@@ -1985,7 +2100,10 @@ M.prep_chat = function(buf, file_name)
 				end,
 			},
 			-- chat scope
-			chat_respond = make_respond_cb("ChatRespond"),
+			chat_respond = respond_cb,
+			-- #161: <M-CR> — n/i reuse the respond closures; v/x <Esc>-commit the
+			-- '<,'> marks then run define_visual (visual <C-g><C-g> keeps respond).
+			chat_define = { n = respond_cb.n, i = respond_cb.i, v = chat_define_v, x = chat_define_v },
 			chat_respond_all = make_respond_cb("ChatRespondAll"),
 			chat_stop = M.cmd.Stop,
 			chat_delete = M.cmd.ChatDelete,
