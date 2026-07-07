@@ -1,11 +1,11 @@
 ---
 id: 000161
-status: codecomplete
+status: working
 deps: []
 github_issue:
 created: 2026-07-06
-updated: 2026-07-06
-estimate_hours: 2.25
+updated: 2026-07-07
+estimate_hours: 2.85
 started: 2026-07-06T17:53:46-07:00
 actual_hours: 3.95
 ---
@@ -219,9 +219,13 @@ item: lua-neovim            design=1.0 impl=0.36
 item: skill-or-dispatcher   design=0.3 impl=0.12
 item: atlas-docs            design=0.1 impl=0.04
 item: milestone-review      design=0.0 impl=0.12
+item: lua-neovim            design=0.3 impl=0.25
 design-buffer: 0.15
-total: 2.25
+total: 2.85
 ```
+
+(The second `lua-neovim` item is the R1 delta — highlight + bracket-anchored
+undo; see `## Revisions`.)
 
 *Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only.*
 
@@ -292,3 +296,66 @@ skill + `emit_definition` tool are one **`skill-or-dispatcher`**; plus
   smoke test is deferred (no API key in CI; drive it post-merge: select a term
   → `<M-CR>`). Deferred v2 (noted by review): a dedicated `parley_define`
   namespace to allow stacking multiple definitions + isolate from review.
+
+## Revisions
+
+### R1 — 2026-07-07 — highlight + undoable via bracket anchor
+
+**Reason.** Operator smoke-test feedback: (1) the selected term should be
+**highlighted** with review's scheme when `<M-CR>` fires; (2) the highlight +
+diagnostic should be **undoable** (`u`).
+
+**Delta — refines the "ephemeral / nothing written" decision.** Native `u`
+reverts *text*, not decorations (`projection.lua` header). Review's decorations
+are undoable only because a review round edits text and a `TextChanged`
+projection watcher re-renders them per content-hash. Define changed no text, so
+`u` had nothing to grab. Resolution (operator chose the minimal-footprint
+option): on a successful lookup, `<M-CR>` wraps the selected phrase in a
+reference bracket `[term]` — one small text change that (a) anchors the
+highlight and (b) gives `u` a real edit to revert. The **definition text stays
+ephemeral** (diagnostic only, never saved).
+
+**Mechanism (reuses review machinery, ARCH-DRY):**
+- **Bracket in `on_done`, not up front.** `skill_invoke.invoke` clears the
+  decoration namespaces at exchange start (`skill_invoke.lua:181`), so the
+  highlight must be set *after* the turn. Also, bracketing only on success means
+  no orphan bracket when the model returns no `emit_definition`. Flow: fire the
+  read-only turn (progress bar = feedback) → in `on_done`, if a definition came
+  back, capture `original` (pre-bracket content), apply the bracket as **one**
+  `nvim_buf_set_text` (single undo entry), set the highlight + diagnostic, then
+  record the projection states.
+- **Highlight = whole-line `DiffChange`** on `skill_render`'s `parley_skill_hl`
+  namespace (a new `skill_render.highlight_line(buf, lnum0)` helper). It must be
+  whole-line: `skill_render.snapshot` captures highlights **line-granular**
+  (`hl_lines` = line numbers) and `apply_snapshot` redraws whole-line — a
+  column-precise span would not round-trip through undo/redo. Whole-line
+  `DiffChange` is exactly review's scheme.
+- **Undo coherence via `projection`** (`skills/review/projection.lua`): in
+  `on_done`, `record_empty_for(buf, original)` (pre-bracket hash → empty),
+  `record(buf)` (bracketed hash → highlight+diagnostic), `ensure_watch(buf)`.
+  `u` reverts the bracket → watcher `project()` lands on `hash(original)` →
+  `apply_snapshot(empty)` → highlight + diagnostic clear. `<C-r>` re-renders.
+  Define already uses the same `parley_skill` / `parley_skill_hl` namespaces, so
+  `snapshot` captures both decorations.
+- **Guards:** if the buffer changed under the in-flight call (the stored span no
+  longer holds the phrase), skip bracketing + notify (no mis-placed bracket).
+  Bracket edit uses `no_reload` still (buffer edit, not a file write) so it
+  stays a dirty, undoable change the operator can save or `u` away.
+
+**New pure helper (ARCH-PURE):** `define.bracket_edit(lines, l1, c1, l2, c2) →
+{srow, scol, erow, ecol, text}` — the `nvim_buf_set_text` coords (0-based) +
+replacement text `"[" .. selected .. "]"`. Unit-tested; the IO (`set_text`,
+highlight, projection) stays in the `on_done` shell.
+
+**Tests (delta):** unit for `bracket_edit`; integration — after a faked
+`emit_definition`, the line shows `[term]` + an hl-namespace highlight on that
+line + the diagnostic; `u` restores `term` and clears both; `<C-r>` restores
+them; a no-definition response leaves no bracket.
+
+**Note:** the Spec's "never written into the chat file" / "nothing written"
+lines above are superseded by R1 for the **bracket** (the definition text itself
+is still never written). The atlas note is updated to match.
+
+**Estimate delta:** +0.6h (one `lua-neovim` extension: pure `bracket_edit` +
+`on_done` rework + projection wiring + `highlight_line` helper + tests). New
+total 2.85h; see the updated `## Estimate` block.
