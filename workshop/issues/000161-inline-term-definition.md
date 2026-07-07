@@ -109,8 +109,10 @@ tools (`dispatcher.lua:118`).
    if unsure; always call `emit_definition`).
 3. **`emit_definition` tool** — `lua/parley/tools/builtin/emit_definition.lua`
    + an entry in `BUILTIN_NAMES` (`tools/init.lua`). Schema `{term: string,
-   definition: string}`; **`kind = "write"`** so the pager `offset`/`limit`
-   params are *not* injected (`is_pageable`, `tools/init.lua:35-66`); no-op
+   definition: string}`; **`self_paginates = true`** (honest for an output-only
+   tool) so the pager `offset`/`limit` params are *not* injected (`is_pageable`,
+   `tools/init.lua:35-66`; `kind="write"` also suppresses them but mislabels it
+   a writer); no-op
    `execute` (the value is carried in the tool-call args for `on_done`). This is
    the one central-list edit; registration is **mandatory** — `tools_registry.
    select` *raises* on an unknown name (`tools/init.lua:147`), so a forgotten
@@ -129,15 +131,19 @@ tools (`dispatcher.lua:118`).
    helper or an inline `vim.diagnostic.set`). Since `diag_display` only shows
    the entry when the cursor is on the phrase's line(s)
    (`virtual_lines{current_line=true}`), `define_visual` **places the cursor on
-   the selection's first line** after render so it shows immediately.
+   the selection's first line** after render so it shows immediately. Watch-item:
+   `on_done` runs async (`vim.schedule`) and sets the diagnostic *after* the
+   cursor is parked, so no `CursorMoved` fires — the render may need to nudge
+   `diag_display`/redraw to reveal it; exercise this in the integration test.
 5. **`skill_invoke` generalizations (two small seams):**
-   - **`opts.no_reload` (net-new, the important one):** `invoke` currently does
-     a `silent write` of an unsaved buffer (`skill_invoke.lua:133-137`) and an
-     unconditional `:edit!` reload on exit (`skill_invoke.lua:230`). For a
-     read-only lookup that would persist the user's in-progress prompt and force
-     a reload. Gate write+reload on an actual edit having occurred (skip when
-     no `propose_edits` in `calls`), exposed as `opts.no_reload` (or
-     `opts.readonly`). Default behavior unchanged.
+   - **`opts.no_reload` (net-new, the important one):** `invoke` writes a
+     *modified* buffer before the query (`skill_invoke.lua:133-137`, gated only
+     on `vim.bo.modified`) and does an **unconditional** `:edit!` reload on exit
+     (`skill_invoke.lua:230`). For a read-only lookup that would persist the
+     user's in-progress prompt and force a reload. Since the pre-query write
+     runs *before* any tool call exists, gate **both** halves purely on the
+     caller's `opts.no_reload` flag (not on inspecting `calls`), which
+     `define_visual` passes. Default behavior unchanged when the flag is absent.
    - **`opts.document` (already supported):** `build_invocation` already uses
      `opts.document` for the user message (`skill_assembly.lua:43`); the only
      thread needed is `document = opts.document or original` at the invoke call
