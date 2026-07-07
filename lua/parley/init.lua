@@ -1551,17 +1551,11 @@ local function drill_in_visual(buf)
 	local prefix = lines_in_range[1]:sub(1, sc - 1)
 	local suffix = end_line_text:sub(ec + 1)
 
-	local selected
-	if sr == er then
-		selected = lines_in_range[1]:sub(sc, ec)
-	else
-		local parts = { lines_in_range[1]:sub(sc) }
-		for i = 2, #lines_in_range - 1 do
-			table.insert(parts, lines_in_range[i])
-		end
-		table.insert(parts, end_line_text:sub(1, ec))
-		selected = table.concat(parts, "\n")
-	end
+	-- #161 ARCH-DRY: one shared visual-selection slice (define.slice_selection).
+	-- lines_in_range is the [sr..er] slice, so line sr → index 1, er → er-sr+1;
+	-- getpos cols are 1-based, slice_selection takes 0-based (sub(sc, ec)).
+	local selected = require("parley.define").slice_selection(
+		lines_in_range, 1, sc - 1, er - sr + 1, ec - 1)
 
 	if selected == "" then
 		M.logger.warning("Drill-in: empty selection")
