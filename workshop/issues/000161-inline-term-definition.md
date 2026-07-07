@@ -1,13 +1,13 @@
 ---
 id: 000161
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-06
 updated: 2026-07-07
 estimate_hours: 2.85
 started: 2026-07-06T17:53:46-07:00
-actual_hours: 3.95
+actual_hours: 6.42
 ---
 
 # Inline term definition on visual selection
@@ -245,6 +245,8 @@ skill + `emit_definition` tool are one **`skill-or-dispatcher`**; plus
 
 ## Log
 
+
+- 2026-07-07: closed — R1 (highlight + bracket-anchored undo): make test green — lint 0/0 (244 files), all unit+integration+ARCH pass. define_spec unit: bracket_edit (single/multi-line/clamp). define_spec integration: brackets the term ([ASIN]) + whole-line DiffChange highlight + diagnostic on the line; u reverts the bracket and clears both decorations (projection), C-r restores them; a no-emit_definition response leaves no bracket; plus the prior 12 (registration, discovery, no_reload, document, web-toggle, keybinding real prep_chat wiring). ARCH buffer_mutation green (bracket via nvim_buf_set_lines, not set_text). Undo/redo reuses review projection (record_empty_for + record + ensure_watch). Live-LLM/web manual check still deferred (no API key); wiring covered by faked-exchange + payload tests.; review verdict: FIX-THEN-SHIP
 ### 2026-07-06
 - 2026-07-06: closed — make test green: lint 0/0 (244 files), all unit+integration pass. tests/unit/define_spec.lua (slice/context/format pure). tests/integration/define_spec.lua: emit_definition registration+no-pager; define skill discovery+source; skill_invoke no_reload + document override; web_search in payload iff :ToggleWebSearch; define_visual end-to-end via faked emit_definition SSE -> INFO diagnostic at selection line; no-tool + whitespace no-ops; keybinding split (visual <M-CR>->define, <C-g><C-g>->respond, n/i->respond, no double-bind). drill_in_spec(108)+chat_respond_spec(29) green after ARCH-DRY slice refactor. Anthropic via process-level SSE fake; live-LLM/web manual check deferred (needs API key), wiring covered by payload+faked-exchange tests.; review verdict: FIX-THEN-SHIP
 
@@ -358,4 +360,18 @@ is still never written). The atlas note is updated to match.
 
 **Estimate delta:** +0.6h (one `lua-neovim` extension: pure `bracket_edit` +
 `on_done` rework + projection wiring + `highlight_line` helper + tests). New
-total 2.85h; see the updated `## Estimate` block.
+total 2.85h; see the updated `## Estimate` block. **Actual came in at 6.42h**
+(ratio 0.4×) — the projection integration + an arch-guard detour (`nvim_buf_set_text`
+is confined to `buffer_edit`, so the bracket routes through `nvim_buf_set_lines`
+like `drill_in_visual`) cost more than the +0.6h estimate. Calibration data point.
+
+**R1 boundary review: `FIX-THEN-SHIP`** (high confidence; no Critical, ARCH all
+pass; sidecar updated). Addressed: **(Important)** added a real-`parse_chat`
+regression guard for `context_for_selection`'s field access (was only tested
+against a synthetic `parsed_chat` → a parser field rename would have silently
+degraded define to whole-buffer context); **(Minor)** `render_definition` now
+warns "no definition returned" instead of a silent no-op when the model omits
+`emit_definition`; **(Minor)** `tools/init.lua` added to the traceability code
+list. Deferred (cosmetic): `apply_snapshot` re-emits the diagnostic `source` as
+`parley-skill` after a redo. Live LLM/web smoke test still pending the operator
+(no API key in CI).

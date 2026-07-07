@@ -91,6 +91,7 @@ atlas:
       - lua/parley/init.lua
       - lua/parley/skills/define/init.lua
       - lua/parley/tools/builtin/emit_definition.lua
+      - lua/parley/tools/init.lua
       - lua/parley/skill_invoke.lua
       - lua/parley/skill_render.lua
       - lua/parley/config.lua

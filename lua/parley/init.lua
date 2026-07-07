@@ -1601,17 +1601,22 @@ end
 -- pre-bracket content-hash → the empty snapshot renders → both decorations clear.
 -- `span` = the visual selection {sr, sc, er, ec} (1-based getpos values).
 local function render_definition(buf, span, phrase, result)
-	if not result or not result.calls or #result.calls == 0 then
-		return -- unforced tool → the model may return no tool call; no-op
-	end
-	local call -- defensive: pick the emit_definition call (ignore any server tools)
-	for _, c in ipairs(result.calls) do
-		if c.name == "emit_definition" then
-			call = c
-			break
+	-- Pick the emit_definition call (unforced → the model may answer in text or
+	-- only call web_search; both mean "no definition"). Notify rather than
+	-- silently doing nothing, and leave no bracket.
+	local call
+	if result and result.calls then
+		for _, c in ipairs(result.calls) do
+			if c.name == "emit_definition" then
+				call = c
+				break
+			end
 		end
 	end
-	if not call then return end
+	if not call then
+		M.logger.warning("Define: no definition returned")
+		return
+	end
 
 	local sr, sc, er, ec = span[1], span[2], span[3], span[4]
 	local define = require("parley.define")

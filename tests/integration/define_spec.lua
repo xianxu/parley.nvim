@@ -398,3 +398,31 @@ describe("define keybinding split (#161)", function()
         vim.fn.delete(path)
     end)
 end)
+
+describe("define: context_for_selection vs real parse_chat (#161)", function()
+    it("slices the enclosing exchange from real parse_chat output (field contract)", function()
+        local parley = require("parley")
+        local define = require("parley.define")
+        -- A real 2-exchange chat; selecting inside exchange 2 must yield ONLY
+        -- exchange 2's lines (guards context_for_selection's field access against
+        -- the real parse_chat output shape, not just a synthetic table).
+        local lines = {
+            "# topic: ctx",
+            "- file: ctx.md",
+            "---",
+            "",
+            "💬: what is FIRSTONLY",
+            "🤖: first answer about FIRSTONLY",
+            "",
+            "💬: define ASIN",
+            "🤖: ASIN is a product id",
+        }
+        local header_end = parley.chat_parser.find_header_end(lines) or 0
+        local parsed = parley.parse_chat(lines, header_end)
+        assert.is_true(#parsed.exchanges >= 2, "fixture must parse into >=2 exchanges")
+        -- the "define ASIN" question is line 8 (1-based)
+        local ctx = define.context_for_selection(parsed, 8, lines, parley.find_exchange_at_line)
+        assert.is_true(ctx:find("ASIN", 1, true) ~= nil, "enclosing exchange must be present")
+        assert.is_nil(ctx:find("FIRSTONLY", 1, true), "other exchange must not be in context")
+    end)
+end)
