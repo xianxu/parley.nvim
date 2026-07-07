@@ -152,6 +152,16 @@ function M.highlight_edits(buf, edits, new_content)
     end
 end
 
+--- Highlight a whole line with DiffChange on the hl namespace (#161 R1). Same
+--- shape `apply_snapshot` restores (whole-line, col 0..-1), so it round-trips
+--- through projection's line-granular undo/redo snapshotting.
+--- @param buf number
+--- @param lnum0 number  0-based line
+function M.highlight_line(buf, lnum0)
+    ensure_namespaces()
+    vim.api.nvim_buf_add_highlight(buf, hl_ns_id, "DiffChange", lnum0, 0, -1)
+end
+
 --- Capture the current decoration set as line-anchored data (for the undo/redo
 --- projection record, #133 M5). Returns { hl_lines = {0-based line…}, diags =
 --- {{lnum, message}…} } — enough to redraw at a content-identical state.
