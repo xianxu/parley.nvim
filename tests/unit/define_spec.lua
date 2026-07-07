@@ -63,3 +63,21 @@ describe("define.context_for_selection", function()
         assert.equals(table.concat(all_lines, "\n"), ctx)
     end)
 end)
+
+describe("define.format_definition", function()
+    it("composes 'TERM — definition'", function()
+        local msg = define.format_definition("ASIN", "Amazon Standard Identification Number.", 200)
+        assert.equals("ASIN — Amazon Standard Identification Number.", msg)
+    end)
+
+    it("hard-wraps to width", function()
+        local msg = define.format_definition("X", string.rep("word ", 30), 40)
+        for _, l in ipairs(vim.split(msg, "\n", { plain = true })) do
+            assert.is_true(#l <= 40)
+        end
+    end)
+
+    it("trims a nil/blank definition to a safe string", function()
+        assert.equals("X — (no definition)", define.format_definition("X", nil, 80))
+    end)
+end)
