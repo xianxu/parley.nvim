@@ -235,7 +235,7 @@ skill + `emit_definition` tool are one **`skill-or-dispatcher`**; plus
 
 ## Plan
 
-- [ ] Implement per `workshop/plans/000161-inline-term-definition-plan.md`
+- [x] Implement per `workshop/plans/000161-inline-term-definition-plan.md`
       (Tasks 1–10; single-pass, plain checkboxes — one review boundary at close).
 
 ## Log
