@@ -258,3 +258,21 @@ skill + `emit_definition` tool are one **`skill-or-dispatcher`**; plus
   #3 (drill_in DRY refactor) = already guarded as a droppable side-quest.
   Re-entered via `--no-judge` (judge already ran; structural + estimate gates
   still enforced).
+- **Implemented** Tasks 1–10 (TDD, per-task commits). `make test` green (lint
+  0/0 in 244 files; all unit + integration incl. `tests/{unit,integration}/
+  define_spec.lua`). ARCH-PURE: pure `define.lua` trio unit-tested with plain
+  tables; thin `define_visual`/`render_definition` IO shell; Anthropic exercised
+  via the process-level SSE fake. ARCH-DRY: `slice_selection` shared with
+  `drill_in_visual`. ARCH-PURPOSE: web path delivered (asserted at payload level).
+- Discoveries (plan sketches were starting pointers): `skill_registry.current()`
+  returns a **registry object** `{get,names,all}`, not a list; `parse_chat` reads
+  live `M.config` so the integration spec calls `parley.setup()` (like
+  `chat_respond_spec`); Vim **normalizes `'<`/`'>` ordering**, so the empty-
+  selection test uses a real whitespace selection, not reversed marks;
+  `prepare_payload` short-circuits on a **string** model, so the web-toggle test
+  passes a model **table** `{model=…}`; tool contract is `input_schema`/`handler`
+  with `self_paginates=true`.
+- Pre-existing flakiness (NOT this change): `chat_respond_spec`'s "redo drift"
+  test flakes under parallel load (passes 3/3 in isolation); an `E739` mkdir
+  race on the shared `.test-xdg` under `JOBS=8` was triggered by a leftover test
+  dir — cleaned (the dirs are gitignored). A fresh `make test` is green.
