@@ -373,7 +373,7 @@ git add lua/parley/tools/builtin/emit_definition.lua lua/parley/tools/init.lua t
 git commit -m "#161: emit_definition — output-only structured tool for define"
 ```
 
-### Task 5: `define` skill (manifest + SKILL.md)
+### Task 5: `define` skill (manifest)
 
 **Files:**
 - Create: `lua/parley/skills/define/init.lua`
@@ -498,20 +498,24 @@ it("includes the web_search server tool in the payload iff the toggle is on", fu
     for _, t in ipairs(payload.tools or {}) do n[t.name] = true end
     return n
   end
+  -- NOTE: model MUST be a table {model=id}. prepare_payload short-circuits on a
+  -- STRING model and returns a bare payload with no .tools (dispatcher.lua:86-92),
+  -- never reaching anthropic.format_payload where web_search is injected.
+  local MODEL = { model = "<real-anthropic-id-from-config>" }
   parley._state.web_search = true
   local on = dispatcher.prepare_payload({ { role = "user", content = "x" } },
-    "<an-anthropic-model>", "anthropic", { "emit_definition" })
+    MODEL, "anthropic", { "emit_definition" })
   assert.is_true(tool_names(on).web_search == true)
   parley._state.web_search = false
   local off = dispatcher.prepare_payload({ { role = "user", content = "x" } },
-    "<an-anthropic-model>", "anthropic", { "emit_definition" })
+    MODEL, "anthropic", { "emit_definition" })
   assert.is_nil(tool_names(off).web_search)
 end)
 ```
 
 Run: `make test-integration` → PASS.
 
-> **Implementer note:** copy the fake-exchange harness verbatim from `tests/integration/skill_invoke_review_spec.lua` (process-level fake, ARCH-PURE integration seam). If asserting "no `:edit!`" is awkward, assert on-disk file bytes unchanged + `&modified` still true after invoke. For Step 6, use a real anthropic model id from config; confirm `prepare_payload`'s arg order (`dispatcher.lua:~100`) and that `emit_definition` (registered in Task 4) doesn't get clobbered by the appended server tools (`dispatcher.lua:118`).
+> **Implementer note:** copy the fake-exchange harness verbatim from `tests/integration/skill_invoke_review_spec.lua` (process-level fake, ARCH-PURE integration seam). If asserting "no `:edit!`" is awkward, assert on-disk file bytes unchanged + `&modified` still true after invoke. For Step 6, the model arg MUST be a **table** `{model=<real-anthropic-id>}` — a bare string id short-circuits `prepare_payload` (`dispatcher.lua:86-92`) before `format_payload` injects web tools, so the assertion would spuriously fail. Confirm `emit_definition` (Task 4) isn't clobbered by the appended server tools (`dispatcher.lua:118`).
 
 - [ ] **Step 7: Commit**
 
@@ -616,13 +620,13 @@ git commit -m "#161: define_visual + render_definition — inline definition IO 
 - [ ] **Step 2: Restructure**
 
 - In `config.lua`: change `chat_shortcut_respond.shortcut` to `{ "<C-g><C-g>" }` (drop `<M-CR>`); add `chat_shortcut_define = { modes = { "n", "i", "v", "x" }, shortcut = "<M-CR>" }`.
-- In `keybinding_registry.lua`: add a `chat_define` entry mirroring `chat_respond` — it **must** carry `scope = "chat"` and `buffer_local = true` (the register filter is `scope_set[entry.scope] and entry.buffer_local`, `keybinding_registry.lua:1066`), plus `id = "chat_define"`, `config_key = "chat_shortcut_define"`, `default_key = { "<M-CR>" }`, `default_modes = { "n", "i", "v", "x" }`.
+- In `keybinding_registry.lua`: (i) drop `"<M-CR>"` from the existing `chat_respond` entry's `default_key` (`~473`, leaving `{ "<C-g><C-g>" }`) so no registry-level default double-binds `<M-CR>`; (ii) add a `chat_define` entry mirroring `chat_respond` — it **must** carry `scope = "chat"` and `buffer_local = true` (the register filter is `scope_set[entry.scope] and entry.buffer_local`, `keybinding_registry.lua:1066`), plus `id = "chat_define"`, `config_key = "chat_shortcut_define"`, `default_key = { "<M-CR>" }`, `default_modes = { "n", "i", "v", "x" }`.
 - In `init.lua` (where the respond callback table is registered, `~1988`): the callbacks table is keyed by `entry.id`, and `make_respond_cb` returns `{ n=fn, i=fn, v=<string rhs>, x=<string rhs> }` (v/x are the `:'<,'>ChatRespond<cr>` range STRINGS). Build the `chat_define` callback by **reusing** the respond closures for n/i and routing v/x to `define_visual` — and **v/x MUST `<Esc>` first** to commit the `'<`/`'>` marks (a visual-mode function callback otherwise sees the *previous* selection; both `drill_in_callbacks` `init.lua:1792,1796` and `branch_ref.v` `:1983` do this):
 
 ```lua
 local r = make_respond_cb("ChatRespond")   -- reuse the exact n/i respond closures
 local esc = vim.api.nvim_replace_termcodes("<Esc>", true, false, true)
-local function define_v() vim.cmd("normal! " .. esc); M.define_visual(0) end
+local function define_v() vim.cmd("normal! " .. esc); M.define_visual() end
 callbacks["chat_define"] = { n = r.n, i = r.i, v = define_v, x = define_v }
 ```
 
