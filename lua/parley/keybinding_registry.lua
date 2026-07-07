@@ -470,11 +470,24 @@ M.entries = {
 	{
 		id = "chat_respond",
 		config_key = "chat_shortcut_respond",
-		default_key = { "<C-g><C-g>", "<M-CR>" },
+		default_key = { "<C-g><C-g>" },
 		default_modes = { "n", "i", "v", "x" },
 		scope = "chat",
 		desc = "Parley prompt Chat Respond",
 		help_desc = "Respond",
+		buffer_local = true,
+	},
+	{
+		-- #161: <M-CR> owns its own entry so visual mode can route to define
+		-- while n/i keep respond (a single entry maps every key×mode to one
+		-- per-mode callback, so the split can't live inside chat_respond).
+		id = "chat_define",
+		config_key = "chat_shortcut_define",
+		default_key = { "<M-CR>" },
+		default_modes = { "n", "i", "v", "x" },
+		scope = "chat",
+		desc = "Parley inline term definition (visual) / respond (n/i)",
+		help_desc = "Define selection (visual) / Respond (n/i)",
 		buffer_local = true,
 	},
 	{

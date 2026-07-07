@@ -445,7 +445,11 @@ local config = {
 	},
 	-- local shortcuts bound to the chat buffer
 	-- (be careful to choose something which will work across specified modes)
-	chat_shortcut_respond = { modes = { "n", "i", "v", "x" }, shortcut = { "<C-g><C-g>", "<M-CR>" } },
+	chat_shortcut_respond = { modes = { "n", "i", "v", "x" }, shortcut = { "<C-g><C-g>" } },
+	-- #161: <M-CR> owns its own binding so visual mode routes to inline term
+	-- definition while n/i keep respond (one entry can't split key×mode). Visual
+	-- <C-g><C-g> stays respond, preserving the line-scoped resubmit.
+	chat_shortcut_define = { modes = { "n", "i", "v", "x" }, shortcut = "<M-CR>" },
 	chat_shortcut_respond_all = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>G" },
 	chat_shortcut_delete = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>d" },
 	chat_shortcut_delete_tree = { modes = { "n" }, shortcut = "<C-g>D" },

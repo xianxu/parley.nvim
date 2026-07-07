@@ -271,3 +271,60 @@ describe("define_visual + render_definition (#161)", function()
             "a no-tool response must not set a diagnostic")
     end)
 end)
+
+describe("define keybinding split (#161)", function()
+    local kb = require("parley.keybinding_registry")
+    local parley = require("parley")
+
+    it("routes visual <M-CR> to define, keeps visual <C-g><C-g> as respond, n/i respond", function()
+        local buf = vim.api.nvim_create_buf(false, true)
+        local who
+        -- Mirror the production chat_define callback: n/i = respond, v/x = define.
+        local callbacks = {
+            chat_respond = {
+                n = function() who = "respond" end,
+                i = function() who = "respond" end,
+                v = function() who = "respond" end,
+                x = function() who = "respond" end,
+            },
+            chat_define = {
+                n = function() who = "respond" end,
+                i = function() who = "respond" end,
+                v = function() who = "define" end,
+                x = function() who = "define" end,
+            },
+        }
+
+        local records = {}
+        local function set_keymap(_scopes, mode, key, cb, _desc)
+            records[#records + 1] = { mode = mode, key = key, cb = cb }
+        end
+        kb.register_buffer({ "chat" }, buf, parley.config, callbacks, set_keymap)
+
+        local function invoke(mode, key)
+            for _, r in ipairs(records) do
+                if r.mode == mode and r.key == key then
+                    who = nil
+                    r.cb()
+                    return who
+                end
+            end
+            return "<unbound>"
+        end
+
+        -- visual <M-CR> → define; visual <C-g><C-g> → respond (resubmit preserved)
+        assert.are.equal("define", invoke("x", "<M-CR>"))
+        assert.are.equal("respond", invoke("x", "<C-g><C-g>"))
+        -- normal/insert <M-CR> → respond (unchanged)
+        assert.are.equal("respond", invoke("n", "<M-CR>"))
+        assert.are.equal("respond", invoke("i", "<M-CR>"))
+        -- chat_respond no longer binds <M-CR> (no double-bind): exactly one per mode
+        local mcr_x_count = 0
+        for _, r in ipairs(records) do
+            if r.mode == "x" and r.key == "<M-CR>" then
+                mcr_x_count = mcr_x_count + 1
+            end
+        end
+        assert.are.equal(1, mcr_x_count, "<M-CR> must be bound exactly once in visual mode")
+    end)
+end)

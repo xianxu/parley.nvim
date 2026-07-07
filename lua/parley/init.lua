@@ -2056,6 +2056,16 @@ M.prep_chat = function(buf, file_name)
 			},
 			-- chat scope
 			chat_respond = make_respond_cb("ChatRespond"),
+			-- #161: <M-CR> — n/i reuse the respond closures; v/x <Esc>-commit the
+			-- '<,'> marks (so getpos sees this selection) then run define_visual.
+			chat_define = (function()
+				local r = make_respond_cb("ChatRespond")
+				local function define_v()
+					vim.cmd("normal! " .. vim.api.nvim_replace_termcodes("<Esc>", true, false, true))
+					M.define_visual()
+				end
+				return { n = r.n, i = r.i, v = define_v, x = define_v }
+			end)(),
 			chat_respond_all = make_respond_cb("ChatRespondAll"),
 			chat_stop = M.cmd.Stop,
 			chat_delete = M.cmd.ChatDelete,
