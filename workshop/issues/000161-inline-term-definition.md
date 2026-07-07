@@ -102,9 +102,10 @@ tools (`dispatcher.lua:118`).
      selection isn't inside a parsed exchange (e.g. the chat header). The pure
      helper is `(parsed_chat, sel_line) → context_lines` (unit-tested); it
      reuses tested parsing rather than a new fuzzy paragraph rule.
-2. **`define` skill** — `lua/parley/skills/define/init.lua` (+ `SKILL.md`).
-   Auto-discovered by the disk provider (`skill_providers.lua:95`); no registry
-   edit. Manifest: `name/description/scope/activation`, `tools =
+2. **`define` skill** — `lua/parley/skills/define/init.lua` (no `SKILL.md` —
+   `source(ctx)` owns the whole prompt so it can fold the phrase in; see
+   Components note below). Auto-discovered by the disk provider
+   (`skill_providers.lua:95`); no registry edit. Manifest: `name/description/scope/activation`, `tools =
    {"emit_definition"}`, **no `force_tool`**, `source(ctx)` folds
    `ctx.args.phrase` into the system prompt (concise definition; use web_search
    if unsure; always call `emit_definition`).
@@ -246,6 +247,8 @@ skill + `emit_definition` tool are one **`skill-or-dispatcher`**; plus
 ## Log
 
 
+
+- 2026-07-07: closed — Delta since prior close is docs-only: workshop/lessons.md (#161 lessons — real-parser test contract, arch buffer-mutation rule, undo-via-projection). No code change; make test remains green (lint 0/0, all unit+integration+arch). Prior R1 boundary review was FIX-THEN-SHIP with all findings addressed.; review verdict: FIX-THEN-SHIP
 - 2026-07-07: closed — R1 (highlight + bracket-anchored undo): make test green — lint 0/0 (244 files), all unit+integration+ARCH pass. define_spec unit: bracket_edit (single/multi-line/clamp). define_spec integration: brackets the term ([ASIN]) + whole-line DiffChange highlight + diagnostic on the line; u reverts the bracket and clears both decorations (projection), C-r restores them; a no-emit_definition response leaves no bracket; plus the prior 12 (registration, discovery, no_reload, document, web-toggle, keybinding real prep_chat wiring). ARCH buffer_mutation green (bracket via nvim_buf_set_lines, not set_text). Undo/redo reuses review projection (record_empty_for + record + ensure_watch). Live-LLM/web manual check still deferred (no API key); wiring covered by faked-exchange + payload tests.; review verdict: FIX-THEN-SHIP
 ### 2026-07-06
 - 2026-07-06: closed — make test green: lint 0/0 (244 files), all unit+integration pass. tests/unit/define_spec.lua (slice/context/format pure). tests/integration/define_spec.lua: emit_definition registration+no-pager; define skill discovery+source; skill_invoke no_reload + document override; web_search in payload iff :ToggleWebSearch; define_visual end-to-end via faked emit_definition SSE -> INFO diagnostic at selection line; no-tool + whitespace no-ops; keybinding split (visual <M-CR>->define, <C-g><C-g>->respond, n/i->respond, no double-bind). drill_in_spec(108)+chat_respond_spec(29) green after ARCH-DRY slice refactor. Anthropic via process-level SSE fake; live-LLM/web manual check deferred (needs API key), wiring covered by payload+faked-exchange tests.; review verdict: FIX-THEN-SHIP

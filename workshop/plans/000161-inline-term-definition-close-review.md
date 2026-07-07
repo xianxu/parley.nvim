@@ -129,3 +129,70 @@ None.
 ### 7. Plan revision recommendations
 
 None required — the plan (and its Core-concepts component list, seams, and R1 Revision) still match the code as written. Optional bookkeeping when the test gap is closed: tick that the Docs gate is satisfied (README now updated) and record the Task 10 Step 4 manual-acceptance / live-web outcome in `## Log` so the visibility gate has a durable record rather than only the deferred note.
+
+---
+
+## Re-review — 2026-07-07T00:50:58-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 161 — Inline term definition on visual selection |
+| repo | parley.nvim |
+| issue file | workshop/issues/000161-inline-term-definition.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | ca6aac8cb09132a0a121dc1259af19311ff6e06d..HEAD |
+| command | sdlc close --issue 161 |
+| reviewer | claude |
+| timestamp | 2026-07-07T00:50:58-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+I have completed a thorough independent verification. Let me compose the review.
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+The #161 inline-term-definition boundary (base + R1 bracket/highlight/undo) is correct, cleanly factored, and independently test-verified — I traced the DRY refactor branch-by-branch, verified every Core-concepts row against the code, confirmed `self_paginates` genuinely suppresses pager injection (`types.lua:99`), confirmed the projection undo/redo round-trip is sound, and ran the full `make test` myself. The pure core (`define.lua`) is genuinely separated from the `define_visual`/`render_definition` IO shell, and both findings the two prior review passes raised (hand-mirrored keybinding test → now a real `prep_chat`/`maparg` test; bounded-context path untested against the real parser → now the `context_for_selection vs real parse_chat` test) are actually closed at HEAD, along with the README gate. Nothing blocks the close. The one thing worth a touch-up before shipping is a README accuracy drift introduced by R1 (see Important below); everything else is Minor or a knowingly-deferred live smoke test.
+
+### 1. Strengths (confirmed-good ground)
+
+- **ARCH-DRY refactor is byte-faithful, verified independently.** I traced `drill_in_visual`'s new call `define.slice_selection(lines_in_range, 1, sc-1, er-sr+1, ec-1)` (`init.lua:1557`) against the deleted inline logic for both single- and multi-line branches, including the retained `ec` clamp (`init.lua:1549`). Lua's `sub` auto-clamps, so `math.min(c2+1,#line)` is behavior-preserving. One slice implementation, two callers; `drill_in_spec` (108) stays green in the full run.
+- **ARCH-PURE textbook.** `slice_selection` / `context_for_selection` / `format_definition` / `bracket_edit` (`define.lua`) are deterministic table/string functions, unit-tested with plain tables — no buffer, no exec. I re-traced the `bracket_edit` single- and multi-line arithmetic against the unit-test literals: correct. The Anthropic seam is exercised via the process-level SSE fake, not function mocks.
+- **`emit_definition` uses `self_paginates = true`, the honest choice.** `is_pageable = kind~="write" and not self_paginates` (`types.lua:99`) → not pageable → no `offset`/`limit` injection, *without* mislabeling an output tool as a writer. Pinned by the "does not advertise pager params" test.
+- **skill_invoke seams are minimal, backward-safe, and single-turn.** `opts.no_reload` gates both the pre-query `silent write` (`skill_invoke.lua:135`) and the on-exit reload (`:234`); `opts.document or original` (`:156`) defaults to prior behavior. Confirmed the flow is single-turn (no agentic loop), so the no-op `emit_definition` handler causes no extra round-trip, and the `_gen[buf] ~= gen` guard (`:199`) prevents a superseded re-invoke from double-bracketing.
+- **R1 undo/redo reuse of review's projection is sound.** `set_applying`-bracketed edit → `record_empty_for(original)` + `record(bracketed)` + `ensure_watch` (`init.lua:1639-1667`); the whole-line `DiffChange` (`skill_render.highlight_line`, `:160`) round-trips through the line-granular snapshot (`snapshot`/`apply_snapshot` capture both the `parley_skill_hl` extmarks and `parley_skill` diagnostics). `define_spec` drives `u`/`<C-r>` and asserts both bracket text and decoration state.
+- **Both prior-review Importants are genuinely closed** — the real-wiring `maparg` test and the real-`parse_chat` field-contract test both exist at HEAD and pass.
+
+### 2. Critical findings
+
+None.
+
+### 3. Important findings
+
+- **README R1 drift — `README.md:118` claims "nothing written to the transcript," which R1 falsified.** Post-R1, visual `<M-CR>` wraps the phrase in a `[term]` reference bracket — text *is* written to the buffer (undoable, and persisted if the user saves). The atlas note is precise about this ("the definition text is never written to the file, only the brackets"), but the README's parenthetical now actively misinforms. *Fix (cheap):* reconcile to match the atlas, e.g. "…brackets the phrase as `[term]` and shows a concise grey pop-under with the definition (the definition text is never written to the transcript), honoring `:ToggleWebSearch`."
+
+### 4. Minor findings
+
+- The live web-search *round-trip* is unverified (no API key — acknowledged in `## Log`). The Done-when ("payload carries `web_search`") is met at the payload level (tested via real `prepare_payload`), but whether an Anthropic `server_tool_use`/`web_search_tool_result` block in the stream could reach `tools_dispatcher.execute_call` (`skill_invoke.lua:223`) as an unregistered call is untested. Low risk (server tools resolve within one response), but worth the deferred smoke test.
+- `apply_snapshot` hardcodes `source = "parley-skill"` (`skill_render.lua:200`), so after a redo the define diagnostic's `source` flips from `"parley-define"` (`init.lua:1658`) to `"parley-skill"`. Cosmetic.
+- `render_definition` anchors the diagnostic to the selection's first line only (`end_lnum = e.first0`, `init.lua:1654`) even for multi-line selections — consistent with the documented "line-granular anchor" v1 limitation, not a bug.
+- Spec Component 2 says "`define` skill (+ `SKILL.md`)" but the skill deliberately ships without a `SKILL.md` (`source(ctx)` owns the prompt). The plan's Core-concepts table already supersedes the Spec here, so this is a stale Spec line, not a code defect.
+
+### 5. Test coverage notes
+
+- Strong on the risk surface: pure core (no IO), no-reload/no-write (asserts real file bytes + `&modified`), document-override, no-tool-call no-op, whitespace no-op, registration, web-toggle payload (hits real `prepare_payload`), the real `prep_chat`/`maparg` wiring, the real-`parse_chat` field contract, and the R1 bracket/highlight/undo/redo round-trip. I independently ran the full `make test`: lint OK on all changed files (`define.lua`, `init.lua` both OK); define unit + integration, `drill_in`, `buffer_mutation` (arch), and `review_projection` specs all PASS.
+- **Observed flake (not #161):** one of three full `make test` runs failed `tools_builtin_find_spec.lua` ("command substitution text in name as data"); it passes 3/3 in isolation. `find.lua` and its spec are untouched in this window (last changed in #144), so this is the pre-existing parallel-load flakiness the issue Log already documents — not a regression here, but the `--verified "make test green"` claim is subject to it.
+- Genuine gap remaining: the `chat_define_v` `<Esc>`-commit path itself (visual mapping → commit `'<`/`'>` → `getpos`) isn't driven end-to-end — tests set the marks directly. Standard pattern, low risk.
+
+### 6. Architectural notes for upcoming work
+
+- **ARCH-DRY / ARCH-PURE / ARCH-PURPOSE all pass.** For v2 (stacking multiple definitions), the shared `parley_skill` namespace + `clear_decorations` reset on every `invoke` (`skill_invoke.lua:181`) is the constraint to lift first — a dedicated `parley_define` namespace also resolves the documented review/define coexistence risk in one move.
+- Two `find_exchange_at_line` implementations coexist (`chat_parser.lua:144` → `idx`; `init.lua:3200` → `idx, component`). `context_for_selection` reads only the first return, so it's safe with either — pre-existing latent DRY item, not introduced here.
+
+### 7. Plan revision recommendations
+
+None required — the plan's Core-concepts table, integration-points list, seams, and R1 Revision all match the code as written; I verified each row exists at its stated path with the stated status. Optional bookkeeping: (a) drop or annotate the stale Spec "(+ `SKILL.md`)" line (the plan already supersedes it); (b) once the README parenthetical is corrected, record in `## Log` that the Docs gate is satisfied and the live web/LLM smoke test outcome when it's run.
