@@ -92,6 +92,7 @@ atlas:
       - lua/parley/skills/define/init.lua
       - lua/parley/tools/builtin/emit_definition.lua
       - lua/parley/skill_invoke.lua
+      - lua/parley/skill_render.lua
       - lua/parley/config.lua
       - lua/parley/keybinding_registry.lua
     tests:

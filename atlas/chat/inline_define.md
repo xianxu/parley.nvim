@@ -2,9 +2,13 @@
 
 Select a phrase in a chat transcript, press **`<M-CR>`** (visual mode), and a
 concise, context-aware definition appears as an **ephemeral inline diagnostic**
-(grey `virtual_lines`) under the phrase — nothing is written to the chat file.
-For jargon you don't know (e.g. `ASIN`), it's a one-keystroke lookup that keeps
-the transcript clean. Added in [#161](../../workshop/issues/000161-inline-term-definition.md).
+(grey `virtual_lines`) under the phrase. The term is wrapped in a `[term]`
+reference bracket + highlighted (review's `DiffChange`); the **definition text
+is never written to the file**, only the brackets. The whole annotation is
+**undoable** — `u` reverts the bracket and clears both decorations (see Undo
+below). For jargon you don't know (e.g. `ASIN`), it's a one-keystroke lookup.
+Added in [#161](../../workshop/issues/000161-inline-term-definition.md) (R1
+added the bracket/highlight/undo).
 
 ## Flow
 
@@ -19,16 +23,36 @@ the transcript clean. Added in [#161](../../workshop/issues/000161-inline-term-d
    `force_tool`) so the server-side `web_search` tool can run when the global
    `:ToggleWebSearch` is on; its `source(ctx)` folds the phrase into the system
    prompt and asks the model to call `emit_definition({term, definition})`.
-4. **`render_definition`** (`on_done`) reads `result.calls[1].input`, formats
-   it (`define.format_definition` → `skill_render.wrap`), and sets one INFO
-   `vim.diagnostic` on the shared `parley_skill` namespace at the selection's
-   line(s). `diag_display`'s `virtual_lines{current_line=true}` reveals it (the
-   cursor is parked on the selection's first line).
+4. **`render_definition`** (`on_done`), on a successful lookup: re-verifies the
+   selection still holds the phrase (else skips — the buffer changed under the
+   in-flight call), then **(a)** wraps the term in `[term]` via one
+   `nvim_buf_set_lines` (`define.bracket_edit` plans it) — a single undo entry
+   that anchors everything; **(b)** highlights the line(s) whole-line
+   `DiffChange` (`skill_render.highlight_line`); **(c)** sets one INFO
+   `vim.diagnostic` (`define.format_definition` → `skill_render.wrap`) on the
+   `parley_skill` namespace; **(d)** records the undo/redo projection states.
+   `diag_display`'s `virtual_lines{current_line=true}` reveals the diagnostic
+   (cursor parked on the term's line). A no-`emit_definition` response leaves no
+   bracket.
+
+## Undo (`u`) — reuses review's projection
+
+Native `u` reverts *text*, not decorations. The `[term]` bracket is the one
+text change, so `u` reverts it; the decorations are cleared/restored by review's
+**projection watcher** (`skills/review/projection.lua`, #133 M5), which define
+reuses: `render_definition` calls `projection.record_empty_for(buf, original)`
+(pre-bracket hash → empty snapshot), `record(buf)` (bracketed hash → the
+highlight + diagnostic), `ensure_watch(buf)`. Undoing the bracket lands on the
+pre-bracket content-hash → the empty snapshot renders → both decorations clear;
+`<C-r>` re-renders. The highlight must be **whole-line** because
+`skill_render.snapshot`/`apply_snapshot` are line-granular. `set_applying`
+brackets the edit so a prior define's watcher doesn't mistake it for a user edit.
 
 ## Pure core vs IO shell (ARCH-PURE)
 
 - **Pure** (`lua/parley/define.lua`, unit-tested with plain tables): `slice_selection`,
-  `context_for_selection`, `format_definition`.
+  `context_for_selection`, `format_definition`, `bracket_edit` (plans the `[term]`
+  wrap as a set_lines edit).
 - **IO shell** (`lua/parley/init.lua`): `define_visual`, `render_definition`.
 - **External service** (Anthropic) exercised via the process-level fake reused
   from `skill_invoke_spec` (SSE tool-call injection).
@@ -61,8 +85,12 @@ tool-call args (`result.calls[1].input`), read in `on_done`.
 ## v1 limitations
 
 - One definition visible at a time (`invoke` resets the `parley_skill` namespace
-  each turn); line-granular anchor (not a word-exact underline); implicit
-  dismissal (cursor-region auto-hide + next-lookup clear).
+  each turn); line-granular highlight (whole-line, required for the projection
+  round-trip). Dismissal is via `u` (R1) — reverting the bracket clears it; the
+  diagnostic also auto-hides when the cursor leaves the line. The `[term]`
+  brackets persist in the file if saved (the minimal-footprint tradeoff; the
+  definition text never is). Shared `parley_skill` namespace/projection with
+  review still applies (rare on chat buffers).
 
 ## Key files
 
