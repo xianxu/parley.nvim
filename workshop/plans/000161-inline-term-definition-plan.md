@@ -50,7 +50,7 @@
 | `render_definition` (on_done) | `lua/parley/init.lua` | new | `vim.diagnostic` |
 | `emit_definition` tool | `lua/parley/tools/builtin/emit_definition.lua` | new | LLM tool_use |
 | `BUILTIN_NAMES` registration | `lua/parley/tools/init.lua` | modified | tool registry |
-| `define` skill dir | `lua/parley/skills/define/{init.lua,SKILL.md}` | new | skill registry / `skill_invoke` |
+| `define` skill dir | `lua/parley/skills/define/init.lua` | new | skill registry / `skill_invoke` |
 | `skill_invoke` opts (`no_reload`, `document`) | `lua/parley/skill_invoke.lua` | modified | buffer write/reload + user message |
 | `chat_shortcut_define` keybinding | `lua/parley/config.lua`, `lua/parley/keybinding_registry.lua`, `lua/parley/init.lua` | new/modified | vim keymaps |
 
@@ -64,7 +64,7 @@
 - **`emit_definition` tool** — output-only structured tool `{term, definition}`, `self_paginates = true`, no-op `execute`. Registered in `BUILTIN_NAMES`.
   - **Future extensions:** an optional `confidence`/`source` field.
 
-- **`define` skill** — manifest `{name, description, scope, activation={manual=true}, tools={"emit_definition"}, source}` — **no `force_tool`**. Auto-discovered by the disk provider (`skill_providers.lua:95`).
+- **`define` skill** — manifest `{name, description, scope, activation={manual=true}, tools={"emit_definition"}, source}` — **no `force_tool`**, no `SKILL.md` (source owns the prompt). Auto-discovered by the disk provider (`skill_providers.lua:95`).
 
 - **`skill_invoke` opts** — `opts.no_reload` gates the pre-query `silent write` (`skill_invoke.lua:133-137`) and the on-exit `:edit!` reload (`:230`); `document = opts.document or original` at the invoke call-site (`:~152`). `build_invocation` already consumes `document` (`skill_assembly.lua:43`) — no change there.
 
@@ -318,7 +318,7 @@ describe("emit_definition tool", function()
 
   it("does not advertise pager offset/limit params", function()
     local def = require("parley.tools.builtin.emit_definition")
-    local props = (def.schema or def.input_schema).properties
+    local props = def.input_schema.properties   -- assert input_schema specifically
     assert.is_nil(props.offset)
     assert.is_nil(props.limit)
     assert.is_not_nil(props.term)
@@ -336,12 +336,16 @@ end)
 -- Output-only structured tool: the model calls it to return a concise
 -- definition. No side effects; the value is read from the tool-call args in
 -- define's on_done. self_paginates=true suppresses pager param injection.
+-- NOTE the contract (tools/types.lua:66,69): the fields are `input_schema`
+-- (not `schema`) and `handler` (not `execute`), and `handler` must return a
+-- ToolResult (`{ content = "…" }`). `M.register` RAISES on a bad shape
+-- (tools/init.lua:59-63), which would hard-error every define invoke.
 return {
   name = "emit_definition",
   description = "Return a concise definition of the selected term as used in "
     .. "the provided context. Call this exactly once with your answer.",
   self_paginates = true,
-  schema = {
+  input_schema = {
     type = "object",
     properties = {
       term = { type = "string", description = "The term being defined." },
@@ -352,15 +356,15 @@ return {
     },
     required = { "term", "definition" },
   },
-  execute = function(_args) return { ok = true } end, -- no-op
+  handler = function(_args) return { content = "" } end, -- no-op ToolResult
 }
 ```
 
-Add `"emit_definition"` to `BUILTIN_NAMES` in `lua/parley/tools/init.lua` (~158-167).
+Add `"emit_definition"` to `BUILTIN_NAMES` in `lua/parley/tools/init.lua` (~158-167). The builtin is `require`d by name → the filename must equal the tool name exactly (`tools/init.lua:181`).
 
 - [ ] **Step 5: Run to pass** — `make test-integration` → PASS.
 
-> **Implementer note:** match the exact builtin field names the loader expects (`schema` vs `input_schema`; `execute` signature). If `BUILTIN_NAMES` drives a `require` of `tools.builtin.<name>`, the filename must match the name exactly.
+> **Implementer note:** the contract is `input_schema` + `handler`→ToolResult (verified `tools/types.lua:66,69`, `dispatcher.lua:313`); a `schema`/`execute` shape fails `types.validate_definition` and `M.register` raises. Filename must equal the tool name (require-by-name, `tools/init.lua:181`).
 
 - [ ] **Step 6: Commit**
 
@@ -373,8 +377,14 @@ git commit -m "#161: emit_definition — output-only structured tool for define"
 
 **Files:**
 - Create: `lua/parley/skills/define/init.lua`
-- Create: `lua/parley/skills/define/SKILL.md`
 - Test: `tests/integration/define_spec.lua`
+
+> **No `SKILL.md`.** `define_visual` passes the manifest table directly to
+> `skill_invoke.invoke`, bypassing the disk provider's `ctx.skill_md` wrapping
+> (`skill_providers.lua:44-69`), so a `SKILL.md` would be dead content. The
+> `source(ctx)` function below owns the entire system prompt (it must, to fold
+> the phrase in). Auto-discovery still works — the disk provider only needs
+> `init.lua` returning a table with a `source`.
 
 - [ ] **Step 1: Read `review` skill for the manifest shape**
 
@@ -431,16 +441,9 @@ end
 return M
 ```
 
-```markdown
-<!-- lua/parley/skills/define/SKILL.md -->
-Define the user-selected term concisely, in the context of the surrounding
-chat. Prefer a plain, jargon-free 1–3 sentence explanation. Always answer by
-calling emit_definition({term, definition}).
-```
-
 - [ ] **Step 5: Run to pass** — `make test-integration` → PASS.
 
-> **Implementer note:** if the disk provider synthesizes `source` from `SKILL.md`, defining `source` in `init.lua` takes precedence (`skill_providers.lua:70-74`). Keep both — `source` folds the phrase (SKILL.md can't); the test asserts phrase-folding. Verify `activation` flag names (`always|auto|manual`) against `skill_manifest.lua`.
+> **Implementer note:** verify `activation` flag names (`always|auto|manual`) against `skill_manifest.lua` (required fields: name, description, scope, activation, source — all present). A flat table is accepted by the disk provider (`def.skill or def`, `skill_providers.lua:117`). Optional (Spec's "fast" goal): `resolve_agent` picks the *first* tool-capable agent (`skill_assembly.lua:91-96`) — no config needed, but if that model is heavy, add a `define_agent` config pointing at a fast model and set `M.agent` from it.
 
 - [ ] **Step 6: Commit**
 
@@ -482,13 +485,39 @@ end)
 
 - [ ] **Step 5: Run to pass** — `make test-integration` → PASS.
 
-> **Implementer note:** copy the fake-exchange harness verbatim from `tests/integration/skill_invoke_review_spec.lua` (process-level fake, ARCH-PURE integration seam). If asserting "no `:edit!`" is awkward, assert on-disk file bytes unchanged + `&modified` still true after invoke.
+- [ ] **Step 6: Web-toggle payload assertion** (Spec Done-when — deterministic, no model call)
 
-- [ ] **Step 6: Commit**
+```lua
+it("includes the web_search server tool in the payload iff the toggle is on", function()
+  local parley = require("parley")
+  local dispatcher = require("parley.dispatcher")
+  -- Build a payload the way skill_invoke does (prepare_payload → anthropic
+  -- format_payload injects web tools gated on parley._state.web_search).
+  local function tool_names(payload)
+    local n = {}
+    for _, t in ipairs(payload.tools or {}) do n[t.name] = true end
+    return n
+  end
+  parley._state.web_search = true
+  local on = dispatcher.prepare_payload({ { role = "user", content = "x" } },
+    "<an-anthropic-model>", "anthropic", { "emit_definition" })
+  assert.is_true(tool_names(on).web_search == true)
+  parley._state.web_search = false
+  local off = dispatcher.prepare_payload({ { role = "user", content = "x" } },
+    "<an-anthropic-model>", "anthropic", { "emit_definition" })
+  assert.is_nil(tool_names(off).web_search)
+end)
+```
+
+Run: `make test-integration` → PASS.
+
+> **Implementer note:** copy the fake-exchange harness verbatim from `tests/integration/skill_invoke_review_spec.lua` (process-level fake, ARCH-PURE integration seam). If asserting "no `:edit!`" is awkward, assert on-disk file bytes unchanged + `&modified` still true after invoke. For Step 6, use a real anthropic model id from config; confirm `prepare_payload`'s arg order (`dispatcher.lua:~100`) and that `emit_definition` (registered in Task 4) doesn't get clobbered by the appended server tools (`dispatcher.lua:118`).
+
+- [ ] **Step 7: Commit**
 
 ```bash
 git add lua/parley/skill_invoke.lua tests/integration/define_spec.lua
-git commit -m "#161: skill_invoke — opts.no_reload + opts.document for read-only skills"
+git commit -m "#161: skill_invoke — opts.no_reload + opts.document; web-toggle payload test"
 ```
 
 ### Task 7: `define_visual` + `render_definition` (IO shell)
@@ -525,7 +554,12 @@ end)
 -- render_definition(buf, sel_line0, result): on_done callback (IO seam)
 local function render_definition(buf, sel_line0, result)
   if not result or not result.calls or #result.calls == 0 then return end
-  local input = result.calls[1].input or {}
+  local call                                    -- defensive: pick the define call
+  for _, c in ipairs(result.calls) do
+    if c.name == "emit_definition" then call = c break end
+  end
+  if not call then return end
+  local input = call.input or {}
   local define = require("parley.define")
   local ns = require("parley.skill_render").diag_namespace()
   local width = math.max(40, vim.api.nvim_win_get_width(0) - 8)
@@ -545,7 +579,7 @@ function M.define_visual(buf)
   local define = require("parley.define")
   local phrase = define.slice_selection(lines, l1, c1, l2, c2)
   if phrase:gsub("%s", "") == "" then return end          -- empty-selection guard
-  local header_end = M.find_chat_header_end and M.find_chat_header_end(lines) or 0
+  local header_end = M.chat_parser.find_header_end(lines) or 0  -- M.find_chat_header_end does NOT exist
   local parsed = M.parse_chat(lines, header_end)
   local context = define.context_for_selection(parsed, l1, lines, M.find_exchange_at_line)
   local manifest = require("parley.skills.define")
@@ -560,7 +594,7 @@ end
 
 - [ ] **Step 4: Run to pass** — `make test-integration` → PASS.
 
-> **Implementer notes:** (a) `skill_invoke.invoke` resolves the agent itself (`skill_assembly.resolve_agent`); confirm a default agent is picked without a `review_agent`-style config, else add a `define_agent` config defaulting to a fast model. (b) `on_done` runs async (`vim.schedule`) — the `redraw` nudge is why "shows immediately" works; keep it. (c) confirm `find_chat_header_end` is exposed (`chat_respond.lua` uses it) or pass `0`.
+> **Implementer notes:** (a) `skill_invoke.invoke` resolves the agent itself (`skill_assembly.resolve_agent` picks the first tool-capable agent); no config needed, optionally add `define_agent` for a faster model. (b) `on_done` runs async (`vim.schedule`) — `diag_display.set(true)` is already applied at setup (`init.lua:776`) so the parked cursor + set is enough; the `redraw` nudge is belt-and-suspenders. (c) `M.chat_parser.find_header_end(lines)` is the public accessor (`M.find_chat_header_end` does not exist — the header-end helper is a file-local at `init.lua:180`, exposed only via `M.chat_parser`). (d) `<Esc>` to commit the visual marks is handled at the Task 8 wiring, not here — but if you unit-drive `define_visual` directly, `setpos("'<"/"'>")` first.
 
 - [ ] **Step 5: Commit**
 
@@ -582,8 +616,15 @@ git commit -m "#161: define_visual + render_definition — inline definition IO 
 - [ ] **Step 2: Restructure**
 
 - In `config.lua`: change `chat_shortcut_respond.shortcut` to `{ "<C-g><C-g>" }` (drop `<M-CR>`); add `chat_shortcut_define = { modes = { "n", "i", "v", "x" }, shortcut = "<M-CR>" }`.
-- In `keybinding_registry.lua`: add a `chat_define` entry (`id = "chat_define"`, `config_key = "chat_shortcut_define"`, `default_key = { "<M-CR>" }`, `default_modes = {n,i,v,x}`), mirroring the `chat_respond` entry.
-- In `init.lua`: register a callback table for `chat_define`'s `id` = `{ n = <respond cb>, i = <respond cb>, v = M.define_visual-wrapper, x = M.define_visual-wrapper }`. Reuse `make_respond_cb`'s `n`/`i` closures for n/i so normal/insert `<M-CR>` is byte-identical to before; v/x call `M.define_visual(buf)`.
+- In `keybinding_registry.lua`: add a `chat_define` entry mirroring `chat_respond` — it **must** carry `scope = "chat"` and `buffer_local = true` (the register filter is `scope_set[entry.scope] and entry.buffer_local`, `keybinding_registry.lua:1066`), plus `id = "chat_define"`, `config_key = "chat_shortcut_define"`, `default_key = { "<M-CR>" }`, `default_modes = { "n", "i", "v", "x" }`.
+- In `init.lua` (where the respond callback table is registered, `~1988`): the callbacks table is keyed by `entry.id`, and `make_respond_cb` returns `{ n=fn, i=fn, v=<string rhs>, x=<string rhs> }` (v/x are the `:'<,'>ChatRespond<cr>` range STRINGS). Build the `chat_define` callback by **reusing** the respond closures for n/i and routing v/x to `define_visual` — and **v/x MUST `<Esc>` first** to commit the `'<`/`'>` marks (a visual-mode function callback otherwise sees the *previous* selection; both `drill_in_callbacks` `init.lua:1792,1796` and `branch_ref.v` `:1983` do this):
+
+```lua
+local r = make_respond_cb("ChatRespond")   -- reuse the exact n/i respond closures
+local esc = vim.api.nvim_replace_termcodes("<Esc>", true, false, true)
+local function define_v() vim.cmd("normal! " .. esc); M.define_visual(0) end
+callbacks["chat_define"] = { n = r.n, i = r.i, v = define_v, x = define_v }
+```
 
 - [ ] **Step 3: Verify**
 
