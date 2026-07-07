@@ -164,6 +164,7 @@ M.BUILTIN_NAMES = {
     "edit_file",
     "write_file",
     "propose_edits",
+    "emit_definition",
 }
 
 --- Optional tools that are only registered if the underlying command
