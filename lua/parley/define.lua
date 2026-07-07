@@ -38,4 +38,29 @@ function M.slice_selection(lines, l1, c1, l2, c2)
     return table.concat(out, "\n")
 end
 
+--- The bounded context sent to the model: the line range of the enclosing
+--- exchange of `sel_line`, else the whole buffer. `find_exchange` is injected
+--- (default = require("parley").find_exchange_at_line) so this stays pure and
+--- unit-testable with a synthetic parsed_chat + finder.
+--- @param parsed_chat table  -- { exchanges = { { question={line_start,line_end}, answer={...}|nil }, ... } }
+--- @param sel_line integer   -- 1-based line of the selection
+--- @param all_lines string[]
+--- @param find_exchange fun(pc:table, line:integer):integer|nil
+--- @return string
+function M.context_for_selection(parsed_chat, sel_line, all_lines, find_exchange)
+    find_exchange = find_exchange or require("parley").find_exchange_at_line
+    local idx = find_exchange(parsed_chat, sel_line)
+    local ex = idx and parsed_chat.exchanges and parsed_chat.exchanges[idx]
+    if not ex then
+        return table.concat(all_lines, "\n") -- whole-buffer fallback
+    end
+    local lo = ex.question.line_start
+    local hi = (ex.answer and ex.answer.line_end) or ex.question.line_end
+    local slice = {}
+    for l = lo, hi do
+        slice[#slice + 1] = all_lines[l]
+    end
+    return table.concat(slice, "\n")
+end
+
 return M
