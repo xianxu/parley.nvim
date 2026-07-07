@@ -1,12 +1,13 @@
 ---
 id: 000161
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-06
 updated: 2026-07-06
 estimate_hours: 2.25
 started: 2026-07-06T17:53:46-07:00
+actual_hours: 3.95
 ---
 
 # Inline term definition on visual selection
@@ -241,6 +242,7 @@ skill + `emit_definition` tool are one **`skill-or-dispatcher`**; plus
 ## Log
 
 ### 2026-07-06
+- 2026-07-06: closed — make test green: lint 0/0 (244 files), all unit+integration pass. tests/unit/define_spec.lua (slice/context/format pure). tests/integration/define_spec.lua: emit_definition registration+no-pager; define skill discovery+source; skill_invoke no_reload + document override; web_search in payload iff :ToggleWebSearch; define_visual end-to-end via faked emit_definition SSE -> INFO diagnostic at selection line; no-tool + whitespace no-ops; keybinding split (visual <M-CR>->define, <C-g><C-g>->respond, n/i->respond, no double-bind). drill_in_spec(108)+chat_respond_spec(29) green after ARCH-DRY slice refactor. Anthropic via process-level SSE fake; live-LLM/web manual check deferred (needs API key), wiring covered by payload+faked-exchange tests.; review verdict: FIX-THEN-SHIP
 
 - Brainstorm → spec (2 fresh-eyes review passes, Approved) → durable plan
   `workshop/plans/000161-inline-term-definition-plan.md` (2 fresh-eyes review
@@ -276,3 +278,17 @@ skill + `emit_definition` tool are one **`skill-or-dispatcher`**; plus
   test flakes under parallel load (passes 3/3 in isolation); an `E739` mkdir
   race on the shared `.test-xdg` under `JOBS=8` was triggered by a leftover test
   dir — cleaned (the dirs are gitignored). A fresh `make test` is green.
+- **Boundary review: `FIX-THEN-SHIP`** (high confidence; no Critical, no
+  correctness bugs; ARCH all pass; sidecar
+  `workshop/plans/000161-inline-term-definition-close-review.md`). Addressed
+  before ship: **(Important)** README updated with the visual `<M-CR>` define
+  gesture; **(Important)** added a **real `prep_chat` wiring** test
+  (`nvim_buf_get_keymap`/`maparg` on a real chat buffer) so a `chat_define`
+  id/key mismatch can't silently no-op — the hand-mirrored test alone didn't
+  guard it; **(Minor)** `make_respond_cb("ChatRespond")` now built once and
+  shared by `chat_respond` + `chat_define`. Visibility gate: `virtual_lines`
+  reveal relies on `diag_display.set(true)` at `setup()` (`init.lua:776`); the
+  real-wiring + faked-exchange tests cover the path — a **live** LLM/web-search
+  smoke test is deferred (no API key in CI; drive it post-merge: select a term
+  → `<M-CR>`). Deferred v2 (noted by review): a dedicated `parley_define`
+  namespace to allow stacking multiple definitions + isolate from review.

@@ -2027,6 +2027,13 @@ M.prep_chat = function(buf, file_name)
 		end, { buffer = buf, silent = true, desc = "Parley: search whole [...] anchor (#141)" })
 	end
 
+	-- #161: one respond-callback set, shared by chat_respond and chat_define.
+	local respond_cb = make_respond_cb("ChatRespond")
+	local function chat_define_v()
+		vim.cmd("normal! " .. vim.api.nvim_replace_termcodes("<Esc>", true, false, true))
+		M.define_visual()
+	end
+
 	kb_registry.register_buffer(
 		{ "parley_buffer", "chat" },
 		buf,
@@ -2049,17 +2056,10 @@ M.prep_chat = function(buf, file_name)
 				end,
 			},
 			-- chat scope
-			chat_respond = make_respond_cb("ChatRespond"),
+			chat_respond = respond_cb,
 			-- #161: <M-CR> — n/i reuse the respond closures; v/x <Esc>-commit the
-			-- '<,'> marks (so getpos sees this selection) then run define_visual.
-			chat_define = (function()
-				local r = make_respond_cb("ChatRespond")
-				local function define_v()
-					vim.cmd("normal! " .. vim.api.nvim_replace_termcodes("<Esc>", true, false, true))
-					M.define_visual()
-				end
-				return { n = r.n, i = r.i, v = define_v, x = define_v }
-			end)(),
+			-- '<,'> marks then run define_visual (visual <C-g><C-g> keeps respond).
+			chat_define = { n = respond_cb.n, i = respond_cb.i, v = chat_define_v, x = chat_define_v },
 			chat_respond_all = make_respond_cb("ChatRespondAll"),
 			chat_stop = M.cmd.Stop,
 			chat_delete = M.cmd.ChatDelete,

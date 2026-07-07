@@ -327,4 +327,26 @@ describe("define keybinding split (#161)", function()
         end
         assert.are.equal(1, mcr_x_count, "<M-CR> must be bound exactly once in visual mode")
     end)
+
+    it("real prep_chat wiring: <M-CR>/<C-g><C-g> buffer-mapped in visual mode", function()
+        -- Exercises the production callback table + registry (not a hand-mirror):
+        -- catches a chat_define id/key mismatch that would silently no-op.
+        local dir = parley.config.chat_dir
+        vim.fn.mkdir(dir, "p")
+        local path = dir .. "/2026-03-01-kbwire.md"
+        -- must pass not_chat: >=5 lines + topic/file headers + separator
+        vim.fn.writefile({ "# topic: kbwire", "- file: kbwire.md", "---", "", "💬: hi" }, path)
+        vim.cmd("edit " .. vim.fn.fnameescape(path))
+        local buf = vim.api.nvim_get_current_buf()
+        parley.prep_chat(buf, path)
+
+        local mcr = vim.fn.maparg("<M-CR>", "x", false, true)
+        assert.is_true(mcr and mcr.buffer == 1 and next(mcr) ~= nil,
+            "<M-CR> not buffer-mapped in visual mode after prep_chat")
+        local cgg = vim.fn.maparg("<C-g><C-g>", "x", false, true)
+        assert.is_true(cgg and cgg.buffer == 1 and next(cgg) ~= nil,
+            "<C-g><C-g> not buffer-mapped in visual mode after prep_chat")
+
+        vim.fn.delete(path)
+    end)
 end)
