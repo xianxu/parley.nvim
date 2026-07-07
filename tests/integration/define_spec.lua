@@ -1,6 +1,13 @@
 -- Integration tests for the inline term-definition feature (#161).
 -- See workshop/issues/000161-inline-term-definition.md and its plan.
 
+-- Bootstrap parley so M.config is populated (parse_chat reads it).
+require("parley").setup({
+    chat_dir = vim.fn.tempname() .. "-define-chat",
+    providers = {},
+    api_keys = {},
+})
+
 -- SSE builder + an emit_definition tool-call response (mirrors skill_invoke_spec).
 local function sse(events)
     local out = {}
@@ -180,5 +187,87 @@ describe("define: web-toggle payload (#161)", function()
         assert.is_nil(tool_names(off).web_search)
 
         parley._state.web_search = saved
+    end)
+end)
+
+describe("define_visual + render_definition (#161)", function()
+    local parley = require("parley")
+    local tasker = require("parley.tasker")
+    local assembly = require("parley.skill_assembly")
+    local ns = require("parley.skill_render").diag_namespace()
+
+    local tmpdir, path, buf, orig_query, orig_resolve, query_called
+
+    before_each(function()
+        require("parley.tools").register_builtins()
+        tmpdir = vim.fn.tempname() .. "-dv"
+        vim.fn.mkdir(tmpdir, "p")
+        path = tmpdir .. "/chat.md"
+        vim.fn.writefile({ "line one", "line two", "here is ASIN in context", "line four", "       " }, path)
+        vim.cmd("edit " .. vim.fn.fnameescape(path))
+        buf = vim.api.nvim_get_current_buf()
+        query_called = false
+
+        orig_resolve = assembly.resolve_agent
+        assembly.resolve_agent = function()
+            return { model = "m", provider = "anthropic" }
+        end
+        orig_query = parley.dispatcher.query
+        parley.dispatcher.query = function(_b, _p, _payload, _h, on_exit)
+            query_called = true
+            tasker.set_query("qid_dv", {
+                raw_response = emit_definition_sse("ASIN", "Amazon Standard Identification Number."),
+            })
+            vim.schedule(function() on_exit("qid_dv") end)
+        end
+        vim.diagnostic.reset(ns, buf)
+    end)
+
+    after_each(function()
+        parley.dispatcher.query = orig_query
+        assembly.resolve_agent = orig_resolve
+        pcall(function() require("parley.progress").stop() end)
+        vim.fn.delete(tmpdir, "rf")
+    end)
+
+    it("renders a definition diagnostic on the selection line", function()
+        -- select "ASIN" on line 3 (cols 9..12, 1-based)
+        vim.fn.setpos("'<", { buf, 3, 9, 0 })
+        vim.fn.setpos("'>", { buf, 3, 12, 0 })
+        require("parley").define_visual(buf)
+        vim.wait(2000, function()
+            return #vim.diagnostic.get(buf, { namespace = ns }) > 0
+        end)
+        local diags = vim.diagnostic.get(buf, { namespace = ns })
+        assert.is_true(#diags >= 1, "no definition diagnostic was set")
+        assert.are.equal(2, diags[1].lnum) -- 0-based line 3
+        assert.is_true(diags[1].message:find("ASIN", 1, true) ~= nil)
+    end)
+
+    it("no-ops on a whitespace-only selection (no query, no diagnostic)", function()
+        -- line 5 is all spaces; selecting it yields a whitespace-only phrase.
+        vim.fn.setpos("'<", { buf, 5, 1, 0 })
+        vim.fn.setpos("'>", { buf, 5, 5, 0 })
+        require("parley").define_visual(buf)
+        vim.wait(200)
+        assert.is_false(query_called, "empty selection must not query")
+        assert.are.equal(0, #vim.diagnostic.get(buf, { namespace = ns }))
+    end)
+
+    it("no-ops on a no-tool-call response", function()
+        parley.dispatcher.query = function(_b, _p, _payload, _h, on_exit)
+            query_called = true
+            tasker.set_query("qid_none", {
+                raw_response = "event: message_stop\ndata: {\"type\":\"message_stop\"}\n",
+            })
+            vim.schedule(function() on_exit("qid_none") end)
+        end
+        vim.fn.setpos("'<", { buf, 3, 9, 0 })
+        vim.fn.setpos("'>", { buf, 3, 12, 0 })
+        require("parley").define_visual(buf)
+        vim.wait(1000, function() return false end) -- let on_done run
+        assert.is_true(query_called)
+        assert.are.equal(0, #vim.diagnostic.get(buf, { namespace = ns }),
+            "a no-tool response must not set a diagnostic")
     end)
 end)

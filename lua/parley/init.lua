@@ -1598,6 +1598,76 @@ local function drill_in_visual(buf)
 	vim.schedule(function() vim.cmd("startinsert") end)
 end
 
+-- Inline term definition (#161). render_definition is the on_done IO seam: it
+-- reads the emit_definition tool-call args and places an ephemeral INFO
+-- diagnostic (grey virtual_lines via diag_display) at the selection's line(s).
+-- Nothing is written to the chat file.
+local function render_definition(buf, sel_line0, result)
+	if not result or not result.calls or #result.calls == 0 then
+		return -- unforced tool → the model may return no tool call; no-op
+	end
+	local call -- defensive: pick the emit_definition call (ignore any server tools)
+	for _, c in ipairs(result.calls) do
+		if c.name == "emit_definition" then
+			call = c
+			break
+		end
+	end
+	if not call then return end
+	local input = call.input or {}
+	local define = require("parley.define")
+	local skill_render = require("parley.skill_render")
+	local width = math.max(40, vim.api.nvim_win_get_width(0) - 8)
+	local msg = define.format_definition(input.term, input.definition, width)
+	vim.diagnostic.set(skill_render.diag_namespace(), buf, { {
+		lnum = sel_line0,
+		col = 0,
+		end_lnum = sel_line0,
+		end_col = 0,
+		message = msg,
+		severity = vim.diagnostic.severity.INFO,
+		source = "parley-define",
+	} })
+	vim.cmd("redraw") -- reveal via diag_display (no CursorMoved fires; see #161 plan)
+end
+
+-- define_visual: the thin IO shell for visual-mode <M-CR>. Reads the selection,
+-- computes the enclosing-exchange context, and fires a headless define skill
+-- turn whose on_done renders the definition inline. Pure logic lives in
+-- lua/parley/define.lua. Exposed as M.define_visual for the keybinding.
+function M.define_visual(buf)
+	buf = buf or vim.api.nvim_get_current_buf()
+	local sp = vim.fn.getpos("'<")
+	local ep = vim.fn.getpos("'>")
+	local sr, sc = sp[2], sp[3]
+	local er, ec = ep[2], ep[3]
+	if sr == 0 or er == 0 then return end
+
+	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+	local define = require("parley.define")
+	-- getpos cols are 1-based; slice_selection takes 0-based (sub(sc, ec)).
+	local phrase = define.slice_selection(lines, sr, sc - 1, er, ec - 1)
+	if phrase:gsub("%s", "") == "" then
+		M.logger.warning("Define: empty selection")
+		return
+	end
+
+	local header_end = M.chat_parser.find_header_end(lines) or 0
+	local parsed = M.parse_chat(lines, header_end)
+	local context = define.context_for_selection(parsed, sr, lines, M.find_exchange_at_line)
+
+	local manifest = require("parley.skills.define")
+	require("parley.skill_invoke").invoke(buf, manifest, { phrase = phrase }, {
+		document = context,
+		no_reload = true,
+		on_done = function(result) render_definition(buf, sr - 1, result) end,
+	})
+
+	-- Park the cursor on the selection's first line so diag_display's
+	-- current-line virtual_lines reveals the definition once on_done sets it.
+	pcall(vim.api.nvim_win_set_cursor, 0, { sr, math.max(0, sc - 1) })
+end
+
 -- Accept/reject flash animation (#124). The resolver flashes the removed
 -- marker red, then the inserted replacement green, so the user sees what left
 -- and what landed. Persistent extmarks in their own namespace (not the
