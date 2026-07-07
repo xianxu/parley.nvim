@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-07-06
 updated: 2026-07-06
-estimate_hours:
+estimate_hours: 2.25
 started: 2026-07-06T17:53:46-07:00
 ---
 
@@ -209,9 +209,34 @@ tools (`dispatcher.lua:118`).
   is registered in `BUILTIN_NAMES`.
 - Unit + integration tests per the Testing section pass; `make test` green.
 
+## Estimate
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim            design=1.0 impl=0.36
+item: skill-or-dispatcher   design=0.3 impl=0.12
+item: atlas-docs            design=0.1 impl=0.04
+item: milestone-review      design=0.0 impl=0.12
+design-buffer: 0.15
+total: 2.25
+```
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only.*
+
+Decomposition: the core is a single focused **`lua-neovim`** feature (pure
+`define.lua` trio + `define_visual`/render IO shell + the keybinding-registry
+restructure + the `skill_invoke` `no_reload`/`document` seams); the `define`
+skill + `emit_definition` tool are one **`skill-or-dispatcher`**; plus
+**`atlas-docs`** and one close-boundary **`milestone-review`**. Impl written at
+40% of the v2 ranges (v3.1) and picked lower-end — recent parley Lua closes
+(#144, #147) landed ~0.6× their v3.1 estimate. Design carries a +15% buffer
+(thorough plan doc exists).
+
 ## Plan
 
-- [ ]
+- [ ] Implement per `workshop/plans/000161-inline-term-definition-plan.md`
+      (Tasks 1–10; single-pass, plain checkboxes — one review boundary at close).
 
 ## Log
 
