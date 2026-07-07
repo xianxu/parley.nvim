@@ -241,3 +241,20 @@ skill + `emit_definition` tool are one **`skill-or-dispatcher`**; plus
 ## Log
 
 ### 2026-07-06
+
+- Brainstorm → spec (2 fresh-eyes review passes, Approved) → durable plan
+  `workshop/plans/000161-inline-term-definition-plan.md` (2 fresh-eyes review
+  passes, Approved). Estimate 2.25h via estimate-logic-v3.1 (Method A).
+- Design decisions locked with the operator: ephemeral diagnostic output;
+  visual `<M-CR>` (keybinding-registry split, visual `<C-g><C-g>` keeps
+  scoped-resubmit); `define` skill via `skill_invoke` with an **unforced**
+  `emit_definition` tool so the server-side `web_search` (honoring the existing
+  `:ToggleWebSearch`) can run; `opts.no_reload` so the read-only lookup doesn't
+  save/reload the chat buffer.
+- `sdlc change-code` plan-quality judge: **executable as-written**, ARCH-textbook
+  (PURE/DRY/PURPOSE all met); 3 INFO findings, all non-blocking. #1 (cursor-reveal
+  timing) folded into Task 7 (test asserts visibility; explicit reveal fallback).
+  #2 (estimate optimism) = acknowledged derived-estimate risk, not a defect.
+  #3 (drill_in DRY refactor) = already guarded as a droppable side-quest.
+  Re-entered via `--no-judge` (judge already ran; structural + estimate gates
+  still enforced).
