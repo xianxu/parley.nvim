@@ -10,7 +10,8 @@ decorations (see Undo below). For jargon you don't know (e.g. `ASIN`), it's a
 one-keystroke lookup. Added in
 [#161](../../workshop/issues/000161-inline-term-definition.md) (R1 added the
 highlight/undo); [#166](../../workshop/issues/000166-visual-selection-definition-system-manages-footnote.md)
-made the definition durable as a managed footnote.
+made the definition durable as a managed footnote; [#167](../../workshop/issues/000167-define-diagnostic-highlight-span.md)
+narrowed the visible decoration to the selected term plus footnote reference.
 
 ## Flow
 
@@ -30,9 +31,9 @@ made the definition durable as a managed footnote.
    in-flight call), then **(a)** adds a `[^id]` reference after the selected term
    and inserts/updates a final managed footnote footer via one buffer rewrite
    (`define.apply_definition_footnote`) — a single undo entry that anchors
-   everything; **(b)** highlights the line(s) whole-line `DiffChange`
-   (`skill_render.highlight_line`); **(c)** sets one INFO `vim.diagnostic` on
-   the selected term/reference span (`define.format_definition` →
+   everything; **(b)** highlights the selected term/reference span with
+   `DiffChange` (`skill_render.highlight_span`); **(c)** sets one INFO
+   `vim.diagnostic` on that same span (`define.format_definition` →
    `skill_render.wrap`) on the `parley_skill` namespace; **(d)** records the
    undo/redo projection states.
    `diag_display`'s `virtual_lines{current_line=true}` reveals the diagnostic
@@ -48,9 +49,10 @@ reuses: `render_definition` calls `projection.record_empty_for(buf, original)`
 (pre-footnote hash → empty snapshot), `record(buf)` (footnoted hash → the
 highlight + diagnostic), `ensure_watch(buf)`. Undoing the footnote edit lands on
 the pre-footnote content-hash → the empty snapshot renders → both decorations clear;
-`<C-r>` re-renders. The highlight must be **whole-line** because
-`skill_render.snapshot`/`apply_snapshot` are line-granular. `set_applying`
-guards the edit so a prior define's watcher doesn't mistake it for a user edit.
+`<C-r>` re-renders. `skill_render.snapshot`/`apply_snapshot` preserve span
+highlights (`hl_spans`) and diagnostic `col`/`end_col`, while still accepting
+legacy whole-line `hl_lines`. `set_applying` guards the edit so a prior define's
+watcher doesn't mistake it for a user edit.
 
 ## Pure core vs IO shell (ARCH-PURE)
 
@@ -110,11 +112,12 @@ tool-call args (`result.calls[1].input`), read in `on_done`.
 ## v1 limitations
 
 - One diagnostic visible at a time (`invoke` resets the `parley_skill` namespace
-  each turn); line-granular highlight (whole-line, required for the projection
-  round-trip). Dismissal is via `u` — reverting the footnote reference/footer
-  clears it; the diagnostic also auto-hides when the cursor leaves the line.
-  The footnote persists in the file if saved. Shared `parley_skill`
-  namespace/projection with review still applies (rare on chat buffers).
+  each turn). The highlight and diagnostic span the selected text plus immediate
+  `[^id]` reference; dismissal is via `u` — reverting the footnote
+  reference/footer clears it; the diagnostic also auto-hides when the cursor
+  leaves the line. The footnote persists in the file if saved. Shared
+  `parley_skill` namespace/projection with review still applies (rare on chat
+  buffers).
 
 ## Key files
 

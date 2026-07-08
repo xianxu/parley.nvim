@@ -1,12 +1,13 @@
 ---
 id: 000167
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-08
 updated: 2026-07-08
 started: 2026-07-08T10:12:09-07:00
 estimate_hours: 0.91
+actual_hours: 0.16
 ---
 
 # define diagnostic highlight should target footnote span
@@ -67,6 +68,7 @@ total: 0.91
 ## Log
 
 ### 2026-07-08
+- 2026-07-08: closed — Implemented span-scoped define highlighting from e.diagnostic_span and snapshot/apply preservation for highlight plus diagnostic columns; verified focused red/green with nvim --headless PlenaryBustedFile tests/unit/skill_render_spec.lua and tests/integration/define_spec.lua, then git diff --check on touched files and full make test. No atlas update: bugfix only, no new architecture or workflow surface.; review verdict: FIX-THEN-SHIP
 - Created after user reported that #166 definitions visibly annotate the whole
   paragraph instead of the selected term/reference span. Root cause: define still
   used `skill_render.highlight_line`, and projection snapshots only restored
@@ -87,3 +89,11 @@ total: 0.91
   workshop/issues/000167-define-diagnostic-highlight-span.md
   workshop/plans/000167-define-diagnostic-highlight-span-plan.md` and
   `make test`.
+- Boundary review returned FIX-THEN-SHIP because
+  `atlas/chat/inline_define.md` still described whole-line highlights and
+  line-granular projection snapshots. Updated the atlas to describe
+  `skill_render.highlight_span`, `hl_spans`, and diagnostic `col`/`end_col`
+  preservation.
+- Post-review verification passed: `git diff --check` on the docs/log files,
+  `nvim --headless -c "PlenaryBustedFile tests/unit/skill_render_spec.lua"`,
+  and `nvim --headless -c "PlenaryBustedFile tests/integration/define_spec.lua"`.
