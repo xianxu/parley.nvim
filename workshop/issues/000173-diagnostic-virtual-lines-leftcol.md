@@ -1,12 +1,13 @@
 ---
 id: 000173
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-08
 updated: 2026-07-08
 estimate_hours: 0.38
 started: 2026-07-08T13:21:02-07:00
+actual_hours: 0.14
 ---
 
 # diagnostic virtual lines blank on long wrapped markdown
@@ -72,6 +73,7 @@ total: 0.38
 ## Log
 
 ### 2026-07-08
+- 2026-07-08: closed — Implemented Parley-owned left-column diagnostic virtual lines while preserving multi-line review diagnostic spans; verified focused display/find/define specs, git diff --check on touched files, and full make test.; review verdict: FIX-THEN-SHIP
 - Root cause: a headless reproduction of Neovim's stock diagnostic virtual-lines
   handler showed `virt_lines = { { { string.rep(" ", diagnostic.col), "" }, ... } }`
   with `virt_lines_overflow = "scroll"`, so long wrapped markdown can display a
@@ -103,3 +105,6 @@ total: 0.38
   atlas/chat/inline_define.md
   workshop/issues/000173-diagnostic-virtual-lines-leftcol.md
   workshop/plans/000173-diagnostic-virtual-lines-leftcol-plan.md`; `make test`.
+- Close re-review returned FIX-THEN-SHIP for generated review-sidecar hygiene
+  only. Normalized the sidecar's terminal/control output and trailing whitespace,
+  then re-ran the full branch whitespace check.
