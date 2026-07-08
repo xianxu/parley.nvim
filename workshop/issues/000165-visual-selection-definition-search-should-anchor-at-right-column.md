@@ -1,12 +1,13 @@
 ---
 id: 000165
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-08
 updated: 2026-07-08
 estimate_hours: 1.00
 started: 2026-07-08T08:23:50-07:00
+actual_hours: 0.11
 ---
 
 # visual selection definition search should anchor at right column
@@ -71,6 +72,7 @@ total: 1.00
 ## Log
 
 ### 2026-07-08
+- 2026-07-08: closed — TDD red confirmed with nvim --headless -c 'PlenaryBustedFile tests/integration/define_spec.lua' failing on diagnostic col 0 vs expected 9. Green verification: nvim --headless -c 'PlenaryBustedFile tests/unit/define_spec.lua'; nvim --headless -c 'PlenaryBustedFile tests/integration/define_spec.lua'; git diff --check on touched files; make test passed on rerun after an unrelated tools_builtin_find_spec transient passed in isolation.; review verdict: SHIP
 - Claimed the issue and entered planning. Root cause: `render_definition` writes
   `col = 0/end_col = 0` even though it already receives the visual span.
 - TDD red: `tests/integration/define_spec.lua` failed with diagnostic `col = 0`
