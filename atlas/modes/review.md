@@ -163,9 +163,9 @@ The edit "why" (the per-edit `explain`) is an INFO diagnostic on parley's
 `parley_skill` namespace. `lua/parley/skills/review/diag_display.lua` controls how
 it shows — scoped to that namespace, so the user's LSP/global diagnostics are
 untouched. Default **on**: Parley's custom `parley/virtual_lines` diagnostic
-handler renders a left-column virtual-line block headed `Diagnostics:` for the
-current line. It avoids Neovim's stock virtual-lines indentation-by-diagnostic
-column, which can hide messages on long wrapped prose. The hard-wrapped why
+handler renders a text-column virtual-line block headed `Diagnostics:` for the
+current line. It avoids both gutter anchoring and Neovim's stock virtual-lines
+indentation-by-diagnostic column, which can hide messages on long wrapped prose. The hard-wrapped why
 (`skill_render.format_diagnostic_message`) **auto-expands below an edit when the
 cursor is in that edit's region** (`attach_diagnostics` spans
 `lnum..end_lnum`) and hides otherwise. `:ParleyShowDiagnostics` toggles it. The
