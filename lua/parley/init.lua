@@ -1594,8 +1594,8 @@ end
 
 -- Inline term definition (#161 + R1, #166). render_definition is the on_done IO
 -- seam. On a successful lookup it stores the definition as a durable markdown
--- footnote (ONE undo entry — the anchor), highlights the line (whole-line
--- DiffChange, review's scheme), and shows the definition as an ephemeral INFO
+-- footnote (ONE undo entry — the anchor), highlights the selected term/reference
+-- span (DiffChange), and shows the definition as an ephemeral INFO
 -- diagnostic. Undo/redo coherence reuses review's projection watcher: undoing
 -- the footnote edit lands on the pre-edit content-hash → the empty snapshot
 -- renders → both decorations clear.
@@ -1640,13 +1640,10 @@ local function render_definition(buf, span, phrase, result)
 	local e = define.apply_definition_footnote(lines, sr, sc - 1, er, ec - 1, input.term or phrase, input.definition)
 	require("parley.buffer_edit").replace_all_lines_for_definition(buf, e.lines)
 
-	-- Highlight the term's line(s) + the ephemeral definition diagnostic.
-	for line0 = sr - 1, er - 1 do
-		skill_render.highlight_line(buf, line0)
-	end
 	local width = math.max(40, vim.api.nvim_win_get_width(0) - 8)
 	local msg = define.format_definition(input.term or phrase, e.definition, width)
 	local diag_span = e.diagnostic_span
+	skill_render.highlight_span(buf, diag_span.lnum, diag_span.col, diag_span.end_lnum, diag_span.end_col)
 	vim.diagnostic.set(skill_render.diag_namespace(), buf, { {
 		lnum = diag_span.lnum,
 		col = diag_span.col,

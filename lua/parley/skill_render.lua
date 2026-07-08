@@ -162,20 +162,62 @@ function M.highlight_line(buf, lnum0)
     vim.api.nvim_buf_add_highlight(buf, hl_ns_id, "DiffChange", lnum0, 0, -1)
 end
 
---- Capture the current decoration set as line-anchored data (for the undo/redo
---- projection record, #133 M5). Returns { hl_lines = {0-based line…}, diags =
---- {{lnum, message}…} } — enough to redraw at a content-identical state.
+--- Highlight a column span with DiffChange on the hl namespace. The four-arg
+--- form is same-line: (buf, lnum0, col_start, col_end). The five-arg form spans
+--- rows: (buf, lnum0, col_start, end_lnum0, col_end).
+--- @param buf number
+--- @param lnum0 number 0-based start line
+--- @param col_start number 0-based start column
+--- @param end_lnum0_or_col_end number 0-based end line, or end column
+--- @param col_end number|nil 0-based exclusive end column
+function M.highlight_span(buf, lnum0, col_start, end_lnum0_or_col_end, col_end)
+    ensure_namespaces()
+    local end_lnum0 = lnum0
+    if col_end == nil then
+        col_end = end_lnum0_or_col_end
+    else
+        end_lnum0 = end_lnum0_or_col_end
+    end
+    vim.api.nvim_buf_set_extmark(buf, hl_ns_id, lnum0, col_start, {
+        end_row = end_lnum0,
+        end_col = col_end,
+        hl_group = "DiffChange",
+        strict = false,
+    })
+end
+
+--- Capture the current decoration set as redrawable data (for the undo/redo
+--- projection record, #133 M5). Whole-line highlights stay in `hl_lines`; span
+--- highlights and diagnostics preserve columns so exact anchors can be restored.
 function M.snapshot(buf)
     ensure_namespaces()
     local hl_lines = {}
-    for _, m in ipairs(vim.api.nvim_buf_get_extmarks(buf, hl_ns_id, 0, -1, {})) do
-        table.insert(hl_lines, m[2]) -- m = {id, row, col}; row is the 0-based line
+    local hl_spans = {}
+    for _, m in ipairs(vim.api.nvim_buf_get_extmarks(buf, hl_ns_id, 0, -1, { details = true })) do
+        local details = m[4] or {}
+        local is_legacy_line = m[3] == 0 and details.end_row == m[2] + 1 and details.end_col == 0
+        if is_legacy_line or details.end_row == nil or details.end_col == nil then
+            table.insert(hl_lines, m[2]) -- m = {id, row, col}; row is the 0-based line
+        else
+            table.insert(hl_spans, {
+                lnum = m[2],
+                col = m[3],
+                end_lnum = details.end_row,
+                end_col = details.end_col,
+            })
+        end
     end
     local diags = {}
     for _, d in ipairs(vim.diagnostic.get(buf, { namespace = diag_ns_id })) do
-        table.insert(diags, { lnum = d.lnum, end_lnum = d.end_lnum, message = d.message })
+        table.insert(diags, {
+            lnum = d.lnum,
+            col = d.col or 0,
+            end_lnum = d.end_lnum,
+            end_col = d.end_col,
+            message = d.message,
+        })
     end
-    return { hl_lines = hl_lines, diags = diags }
+    return { hl_lines = hl_lines, hl_spans = hl_spans, diags = diags }
 end
 
 --- Redraw a snapshot's decorations (clearing first). Only valid when the buffer
@@ -188,13 +230,17 @@ function M.apply_snapshot(buf, snap)
     for _, line in ipairs(snap.hl_lines or {}) do
         vim.api.nvim_buf_add_highlight(buf, hl_ns_id, "DiffChange", line, 0, -1)
     end
+    for _, span in ipairs(snap.hl_spans or {}) do
+        M.highlight_span(buf, span.lnum, span.col or 0, span.end_lnum or span.lnum, span.end_col)
+    end
     if snap.diags and #snap.diags > 0 then
         local diagnostics = {}
         for _, d in ipairs(snap.diags) do
             table.insert(diagnostics, {
                 lnum = d.lnum,
                 end_lnum = d.end_lnum or d.lnum,
-                col = 0,
+                col = d.col or 0,
+                end_col = d.end_col,
                 message = d.message,
                 severity = vim.diagnostic.severity.INFO,
                 source = "parley-skill",

@@ -104,6 +104,39 @@ describe("skill_render", function()
         assert.is_true(#vim.api.nvim_buf_get_extmarks(buf, hl_ns, 0, -1, {}) >= 1)
     end)
 
+    it("snapshot captures and restores highlight and diagnostic column spans", function()
+        local buf = scratch({ "here is ASIN[^asin] in context" })
+        local hl_ns = vim.api.nvim_create_namespace("parley_skill_hl")
+        local diag_ns = skill_render.diag_namespace()
+
+        skill_render.highlight_span(buf, 0, 8, 19)
+        vim.diagnostic.set(diag_ns, buf, { {
+            lnum = 0,
+            col = 8,
+            end_lnum = 0,
+            end_col = 19,
+            message = "why",
+            severity = vim.diagnostic.severity.INFO,
+            source = "test",
+        } })
+
+        local snap = skill_render.snapshot(buf)
+        skill_render.clear_decorations(buf)
+        skill_render.apply_snapshot(buf, snap)
+
+        local marks = vim.api.nvim_buf_get_extmarks(buf, hl_ns, 0, -1, { details = true })
+        assert.are.equal(1, #marks)
+        assert.are.equal(0, marks[1][2])
+        assert.are.equal(8, marks[1][3])
+        assert.are.equal(0, marks[1][4].end_row)
+        assert.are.equal(19, marks[1][4].end_col)
+
+        local diags = vim.diagnostic.get(buf, { namespace = diag_ns })
+        assert.are.equal(1, #diags)
+        assert.are.equal(8, diags[1].col)
+        assert.are.equal(19, diags[1].end_col)
+    end)
+
     it("dismiss clears decorations (alias of clear_decorations)", function()
         local buf = scratch({ "x" })
         skill_render.attach_diagnostics(buf, { { pos = 1, explain = "e" } }, "x")
