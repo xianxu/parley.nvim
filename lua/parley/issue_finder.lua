@@ -43,6 +43,26 @@ M.filter_for_view = function(view_mode, all_issues)
     return filtered
 end
 
+M.sort_for_view = function(view_mode, issues)
+    if view_mode ~= 1 then
+        return issues_mod.topo_sort(issues)
+    end
+
+    local sorted = {}
+    for _, issue in ipairs(issues) do
+        table.insert(sorted, issue)
+    end
+    table.sort(sorted, function(a, b)
+        local ma = a.mtime or 0
+        local mb = b.mtime or 0
+        if ma ~= mb then
+            return ma < mb
+        end
+        return a.id < b.id
+    end)
+    return sorted
+end
+
 --------------------------------------------------------------------------------
 -- Reopen helper
 --------------------------------------------------------------------------------
@@ -174,7 +194,7 @@ M.open = function(_options)
         end
     end
 
-    local sorted = issues_mod.topo_sort(M.filter_for_view(view_mode, all_issues))
+    local sorted = M.sort_for_view(view_mode, M.filter_for_view(view_mode, all_issues))
 
     -- Build picker items
     local items = {}

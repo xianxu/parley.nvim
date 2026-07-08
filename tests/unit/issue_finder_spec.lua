@@ -68,6 +68,38 @@ describe("IssueFinder view-mode logic", function()
         end)
     end)
 
+    describe("sort_for_view", function()
+        it("keeps issues view on status/ID ordering", function()
+            local sorted = issue_finder.sort_for_view(0, {
+                { id = "0003", status = "done", mtime = 300 },
+                { id = "0002", status = "blocked", mtime = 200 },
+                { id = "0001", status = "open", mtime = 100 },
+            })
+
+            assert.same({ "0001", "0002", "0003" }, ids(sorted))
+        end)
+
+        it("sorts history view by mtime ascending so newest is last", function()
+            local sorted = issue_finder.sort_for_view(1, {
+                { id = "0003", status = "done", mtime = 300 },
+                { id = "0001", status = "done", mtime = 100 },
+                { id = "0002", status = "done", mtime = 200 },
+            })
+
+            assert.same({ "0001", "0002", "0003" }, ids(sorted))
+        end)
+
+        it("uses ID as the deterministic history tie-breaker", function()
+            local sorted = issue_finder.sort_for_view(1, {
+                { id = "0003", status = "done", mtime = 100 },
+                { id = "0001", status = "done", mtime = 100 },
+                { id = "0002", status = "done", mtime = 100 },
+            })
+
+            assert.same({ "0001", "0002", "0003" }, ids(sorted))
+        end)
+    end)
+
     describe("VIEW_LABELS", function()
         it("labels the 2-state cycle issues → history", function()
             assert.equals("issues", issue_finder.VIEW_LABELS[0])

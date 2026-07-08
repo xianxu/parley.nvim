@@ -558,6 +558,7 @@ local function scan_dir_issues(dir, issues, is_archived)
                 if cached and cached.mtime == stat.mtime.sec then
                     -- Use cached data, just update archived flag
                     local issue = vim.deepcopy(cached.issue_data)
+                    issue.mtime = stat.mtime.sec
                     issue.archived = is_archived or false
                     table.insert(issues, issue)
                 else
@@ -575,6 +576,7 @@ local function scan_dir_issues(dir, issues, is_archived)
                         updated = fm and fm.updated or "",
                         github_issue = fm and fm.github_issue or nil,
                         path = path,
+                        mtime = stat.mtime.sec,
                     }
                     _file_cache[path] = { mtime = stat.mtime.sec, issue_data = issue_data }
                     local issue = vim.deepcopy(issue_data)

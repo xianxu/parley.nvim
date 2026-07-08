@@ -601,6 +601,67 @@ describe("topo_sort", function()
 end)
 
 --------------------------------------------------------------------------------
+-- scan_issues mtime
+--------------------------------------------------------------------------------
+
+describe("scan_issues mtime", function()
+    local base_dir
+    local issues_dir
+    local history_dir
+
+    local function write_issue(dir, id, title)
+        local path = string.format("%s/%s-%s.md", dir, id, issues.slugify(title))
+        vim.fn.writefile({
+            "---",
+            "id: " .. id,
+            "status: done",
+            "deps: []",
+            "created: 2026-07-08",
+            "updated: 2026-07-08",
+            "---",
+            "",
+            "# " .. title,
+        }, path)
+        return path
+    end
+
+    before_each(function()
+        base_dir = vim.fn.tempname() .. "-issue-scan-mtime"
+        issues_dir = base_dir .. "/issues"
+        history_dir = base_dir .. "/history"
+        vim.fn.mkdir(issues_dir, "p")
+        vim.fn.mkdir(history_dir, "p")
+        issues.clear_cache()
+    end)
+
+    after_each(function()
+        if base_dir then
+            vim.fn.delete(base_dir, "rf")
+        end
+        issues.clear_cache()
+    end)
+
+    it("includes filesystem mtime for archived history rows", function()
+        local old_path = write_issue(history_dir, "000001", "Old archived")
+        local new_path = write_issue(history_dir, "000002", "New archived")
+        vim.loop.fs_utime(old_path, 100, 100)
+        vim.loop.fs_utime(new_path, 200, 200)
+
+        local scanned = issues.scan_issues(issues_dir, {
+            include_history = true,
+            history_dir_override = history_dir,
+        })
+
+        local by_id = {}
+        for _, issue in ipairs(scanned) do
+            by_id[issue.id] = issue
+        end
+        assert.equals(100, by_id["000001"].mtime)
+        assert.equals(200, by_id["000002"].mtime)
+    end)
+end)
+
+--------------------------------------------------------------------------------
 -- format_deps
 --------------------------------------------------------------------------------
 
