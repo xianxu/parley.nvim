@@ -1,12 +1,13 @@
 ---
 id: 000176
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-08
 updated: 2026-07-08
 estimate_hours: 0.36
 started: 2026-07-08T14:02:53-07:00
+actual_hours: 0.10
 ---
 
 # footnote diagnosis should display in centered float
@@ -72,6 +73,7 @@ total: 0.36
 ## Log
 
 ### 2026-07-08
+- 2026-07-08: closed — Changed parley-footnote diagnostics from virtual lines to an auto-managed centered non-focusable float at 80% of active window width while preserving review virtual lines; verified red/green review_diag_display_spec, define_spec, arch buffer mutation spec, scoped git diff --check, and full make test.; review verdict: FIX-THEN-SHIP
 - Design: footnotes move from virtual lines to an auto-managed float because
   virtual lines attach to logical buffer lines, not soft-wrapped screen rows.
   Review diagnostics remain virtual lines because their edit-region display is
@@ -93,3 +95,6 @@ total: 0.36
   tests/integration/review_diag_display_spec.lua atlas/chat/inline_define.md
   atlas/modes/review.md workshop/issues/000176-footnote-diagnosis-centered-float.md`;
   `make test`.
+- Boundary review returned FIX-THEN-SHIP for stale README wording only. Updated
+  README's visual `<M-CR>` description from grey pop-under to centered diagnostic
+  float.
