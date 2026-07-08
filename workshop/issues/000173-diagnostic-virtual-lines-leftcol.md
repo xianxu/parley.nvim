@@ -90,3 +90,16 @@ total: 0.38
   atlas/chat/inline_define.md
   workshop/issues/000173-diagnostic-virtual-lines-leftcol.md
   workshop/plans/000173-diagnostic-virtual-lines-leftcol-plan.md`; `make test`.
+- Boundary review returned REWORK: the custom renderer used `diagnostic.lnum ==
+  cursor_line`, which regressed review diagnostics spanning `lnum..end_lnum`.
+- Added a regression test for a multi-line review diagnostic, changed the
+  current-line predicate to include `end_lnum`, and updated the stale module
+  header comment.
+- Re-verified: `nvim --headless -c "PlenaryBustedFile tests/integration/review_diag_display_spec.lua"`;
+  `nvim --headless -c "PlenaryBustedFile tests/unit/tools_builtin_find_spec.lua"`;
+  `nvim --headless -c "PlenaryBustedFile tests/integration/define_spec.lua"`;
+  `git diff --check -- lua/parley/skills/review/diag_display.lua
+  tests/integration/review_diag_display_spec.lua atlas/modes/review.md
+  atlas/chat/inline_define.md
+  workshop/issues/000173-diagnostic-virtual-lines-leftcol.md
+  workshop/plans/000173-diagnostic-virtual-lines-leftcol-plan.md`; `make test`.

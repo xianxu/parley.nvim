@@ -92,3 +92,14 @@ make test
 ```
 
 Expected: all pass.
+
+## Revisions
+
+### 2026-07-08 — Boundary review REWORK
+
+- **Reason:** The first custom renderer filtered current-line diagnostics only by
+  `diagnostic.lnum`, which hid review diagnostics when the cursor was inside a
+  multi-line diagnostic span but not on the start line.
+- **Delta:** Preserve current-line behavior over the full diagnostic range
+  `lnum..end_lnum`; add integration coverage that moves the cursor to the middle
+  and final lines of a multi-line review diagnostic.

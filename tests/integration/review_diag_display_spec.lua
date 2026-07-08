@@ -83,4 +83,36 @@ describe("review.diag_display", function()
         assert.are.equal(0, #display_marks(buf))
         assert.are.equal(1, #vim.diagnostic.get(buf, { namespace = diag_ns }))
     end)
+
+    it("keeps a multi-line diagnostic visible anywhere inside its span", function()
+        local skill_render = require("parley.skill_render")
+        local diag_ns = skill_render.diag_namespace()
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_set_current_buf(buf)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+            "edited line one",
+            "edited line two",
+            "edited line three",
+        })
+
+        dd.set(true)
+        vim.diagnostic.set(diag_ns, buf, { {
+            lnum = 0,
+            col = 0,
+            end_lnum = 2,
+            end_col = 17,
+            message = "review explanation",
+            severity = vim.diagnostic.severity.INFO,
+            source = "parley-skill",
+        } })
+        assert.are.equal(1, #display_marks(buf))
+
+        vim.api.nvim_win_set_cursor(0, { 2, 0 })
+        vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
+        assert.are.equal(1, #display_marks(buf), "span diagnostic should show on middle line")
+
+        vim.api.nvim_win_set_cursor(0, { 3, 0 })
+        vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
+        assert.are.equal(1, #display_marks(buf), "span diagnostic should show on final line")
+    end)
 end)

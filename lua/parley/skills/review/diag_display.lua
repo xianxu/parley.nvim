@@ -1,10 +1,11 @@
--- diag_display.lua — inline display of review "why" diagnostics (#133 M6).
+-- diag_display.lua — inline display of Parley diagnostics (#133 M6, #173).
 --
 -- Controls how parley's review explanations render, scoped to parley's OWN
 -- diagnostic namespace (never touches the user's LSP / global diagnostics).
--- Default ON: `virtual_lines { current_line = true }`, so the (hard-wrapped) why
--- auto-expands below an edit when the cursor is in that edit's region, and hides
--- otherwise. `:ParleyShowDiagnostics` toggles it.
+-- Default ON: a custom diagnostic handler renders left-column virtual lines for
+-- the cursor's current diagnostic region, so long wrapped prose doesn't hide
+-- messages behind stock virtual-lines column indentation. `:ParleyShowDiagnostics`
+-- toggles it.
 
 local M = {}
 
@@ -62,6 +63,12 @@ local function diagnostic_message_lines(diagnostic)
     return lines
 end
 
+local function diagnostic_contains_line(diagnostic, line)
+    local start_line = diagnostic.lnum or 0
+    local end_line = diagnostic.end_lnum or start_line
+    return line >= start_line and line <= end_line
+end
+
 local function render(buf, diagnostics, current_line_only)
     ensure_display()
     if not vim.api.nvim_buf_is_valid(buf) then
@@ -76,7 +83,7 @@ local function render(buf, diagnostics, current_line_only)
 
     local by_line = {}
     for _, diagnostic in ipairs(diagnostics or {}) do
-        if not current_line_only or diagnostic.lnum == line then
+        if not current_line_only or diagnostic_contains_line(diagnostic, line) then
             by_line[diagnostic.lnum] = by_line[diagnostic.lnum] or {}
             table.insert(by_line[diagnostic.lnum], diagnostic)
         end
