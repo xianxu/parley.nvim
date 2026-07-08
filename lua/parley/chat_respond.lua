@@ -334,6 +334,7 @@ M.build_messages_from_model = function(buf, model, target_idx, agent_info)
     local serialize = require("parley.tools.serialize")
     local system_prompt_msgs = require("parley.system_prompt_msgs")
     local prov = require("parley.providers")
+    local define = require("parley.define")
     append_neighborhood_context(agent_info, agent_info and agent_info.neighborhood_root)
     local messages = system_prompt_msgs.build(agent_info, function(provider)
         return prov.has_feature(provider, "cache_control")
@@ -374,6 +375,7 @@ M.build_messages_from_model = function(buf, model, target_idx, agent_info)
                 local text = read_block_text(k, b)
                 -- Strip 💬: prefix and trim
                 text = text:gsub("^💬:%s*", ""):gsub("^%s*(.-)%s*$", "%1")
+                text = define.strip_definition_footnote_footer(text)
                 if text ~= "" then
                     -- Defensive: an answer never precedes its question, but
                     -- flush any accumulated answer blocks to keep ordering stable.
@@ -385,7 +387,7 @@ M.build_messages_from_model = function(buf, model, target_idx, agent_info)
                 goto continue  -- not part of messages
 
             elseif blk.kind == "text" or blk.kind == "stream_placeholder" then
-                local text = read_block_text(k, b)
+                local text = define.strip_definition_footnote_footer(read_block_text(k, b))
                 if text:match("%S") then
                     table.insert(answer_blocks, { type = "text", text = text })
                 end
@@ -404,7 +406,7 @@ M.build_messages_from_model = function(buf, model, target_idx, agent_info)
                 else
                     -- Malformed tool_use — degrade to text so it's not
                     -- silently dropped. Claude sees the raw block text.
-                    table.insert(answer_blocks, { type = "text", text = text })
+                    table.insert(answer_blocks, { type = "text", text = define.strip_definition_footnote_footer(text) })
                 end
 
             elseif blk.kind == "tool_result" then
@@ -422,7 +424,7 @@ M.build_messages_from_model = function(buf, model, target_idx, agent_info)
                     -- preserving user/assistant alternation. Flush accumulated
                     -- answer blocks first so ordering is stable.
                     flush_answer()
-                    table.insert(messages, { role = "user", content = text })
+                    table.insert(messages, { role = "user", content = define.strip_definition_footnote_footer(text) })
                 end
             end
 
@@ -605,6 +607,18 @@ M.build_messages = function(opts)
     local opts_config = opts.config
     local helpers = opts.helpers
     local logger = opts.logger or { debug = function() end, warning = function() end }
+    local define = require("parley.define")
+    local function scrub_content_blocks(blocks)
+        local out = {}
+        for _, block in ipairs(blocks or {}) do
+            local copy = vim.deepcopy(block)
+            if copy.type == "text" and type(copy.text) == "string" then
+                copy.text = define.strip_definition_footnote_footer(copy.text)
+            end
+            out[#out + 1] = copy
+        end
+        return out
+    end
 
     -- Process headers for agent information
     local headers = parsed_chat.headers
@@ -685,7 +699,7 @@ M.build_messages = function(opts)
                 -- Process the question
                 if should_preserve then
                     -- Get the question content and process any file loading directives
-                    local question_content = exchange.question.content
+                    local question_content = define.strip_definition_footnote_footer(exchange.question.content)
                     local file_content_parts = {}
 
                     -- Raw request input feature: detect a `yaml {"type":"request"}`
@@ -786,24 +800,24 @@ M.build_messages = function(opts)
                     --   B. No tool blocks → single flat-string assistant
                     --      message (byte-identical to pre-#81).
                     if answer_has_tool_blocks then
-                        for _, m in ipairs(M._emit_content_blocks_as_messages(exchange.answer.content_blocks)) do
+                        for _, m in ipairs(M._emit_content_blocks_as_messages(scrub_content_blocks(exchange.answer.content_blocks))) do
                             table.insert(messages, m)
                         end
                     else
-                        table.insert(messages, { role = "assistant", content = exchange.answer.content })
+                        table.insert(messages, { role = "assistant", content = define.strip_definition_footnote_footer(exchange.answer.content) })
                     end
                 else
                     -- Use the summary if available
                     if exchange.summary then
-                        table.insert(messages, { role = "assistant", content = exchange.summary.content })
+                        table.insert(messages, { role = "assistant", content = define.strip_definition_footnote_footer(exchange.summary.content) })
                     else
                         -- If no summary is available, use the full content (fallback)
                         if answer_has_tool_blocks then
-                            for _, m in ipairs(M._emit_content_blocks_as_messages(exchange.answer.content_blocks)) do
+                            for _, m in ipairs(M._emit_content_blocks_as_messages(scrub_content_blocks(exchange.answer.content_blocks))) do
                                 table.insert(messages, m)
                             end
                         else
-                            table.insert(messages, { role = "assistant", content = exchange.answer.content })
+                            table.insert(messages, { role = "assistant", content = define.strip_definition_footnote_footer(exchange.answer.content) })
                         end
                     end
                 end

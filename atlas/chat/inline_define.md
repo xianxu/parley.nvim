@@ -2,13 +2,15 @@
 
 Select a phrase in a chat transcript, press **`<M-CR>`** (visual mode), and a
 concise, context-aware definition appears as an **ephemeral inline diagnostic**
-(grey `virtual_lines`) under the phrase. The term is wrapped in a `[term]`
-reference bracket + highlighted (review's `DiffChange`); the **definition text
-is never written to the file**, only the brackets. The whole annotation is
-**undoable** — `u` reverts the bracket and clears both decorations (see Undo
-below). For jargon you don't know (e.g. `ASIN`), it's a one-keystroke lookup.
-Added in [#161](../../workshop/issues/000161-inline-term-definition.md) (R1
-added the bracket/highlight/undo).
+(grey `virtual_lines`) under the phrase. The selected text stays in place and
+gets a markdown footnote reference (`ASIN[^asin]`), while the definition is
+stored in a managed footnote footer at the end of the chat transcript. The
+whole annotation is **undoable** — `u` reverts the footnote edit and clears both
+decorations (see Undo below). For jargon you don't know (e.g. `ASIN`), it's a
+one-keystroke lookup. Added in
+[#161](../../workshop/issues/000161-inline-term-definition.md) (R1 added the
+highlight/undo); [#166](../../workshop/issues/000166-visual-selection-definition-system-manages-footnote.md)
+made the definition durable as a managed footnote.
 
 ## Flow
 
@@ -25,40 +27,60 @@ added the bracket/highlight/undo).
    prompt and asks the model to call `emit_definition({term, definition})`.
 4. **`render_definition`** (`on_done`), on a successful lookup: re-verifies the
    selection still holds the phrase (else skips — the buffer changed under the
-   in-flight call), then **(a)** wraps the term in `[term]` via one
-   `nvim_buf_set_lines` (`define.bracket_edit` plans it) — a single undo entry
-   that anchors everything; **(b)** highlights the line(s) whole-line
-   `DiffChange` (`skill_render.highlight_line`); **(c)** sets one INFO
-   `vim.diagnostic` on the selected term span after bracket insertion
-   (`define.diagnostic_span_after_bracket`, `define.format_definition` →
+   in-flight call), then **(a)** adds a `[^id]` reference after the selected term
+   and inserts/updates a final managed footnote footer via one buffer rewrite
+   (`define.apply_definition_footnote`) — a single undo entry that anchors
+   everything; **(b)** highlights the line(s) whole-line `DiffChange`
+   (`skill_render.highlight_line`); **(c)** sets one INFO `vim.diagnostic` on
+   the selected term/reference span (`define.format_definition` →
    `skill_render.wrap`) on the `parley_skill` namespace; **(d)** records the
    undo/redo projection states.
    `diag_display`'s `virtual_lines{current_line=true}` reveals the diagnostic
    (cursor parked on the term's line). A no-`emit_definition` response leaves no
-   bracket.
+   footnote reference/footer.
 
 ## Undo (`u`) — reuses review's projection
 
-Native `u` reverts *text*, not decorations. The `[term]` bracket is the one
-text change, so `u` reverts it; the decorations are cleared/restored by review's
+Native `u` reverts *text*, not decorations. The footnote reference/footer rewrite
+is the one text change, so `u` reverts it; the decorations are cleared/restored by review's
 **projection watcher** (`skills/review/projection.lua`, #133 M5), which define
 reuses: `render_definition` calls `projection.record_empty_for(buf, original)`
-(pre-bracket hash → empty snapshot), `record(buf)` (bracketed hash → the
-highlight + diagnostic), `ensure_watch(buf)`. Undoing the bracket lands on the
-pre-bracket content-hash → the empty snapshot renders → both decorations clear;
+(pre-footnote hash → empty snapshot), `record(buf)` (footnoted hash → the
+highlight + diagnostic), `ensure_watch(buf)`. Undoing the footnote edit lands on
+the pre-footnote content-hash → the empty snapshot renders → both decorations clear;
 `<C-r>` re-renders. The highlight must be **whole-line** because
 `skill_render.snapshot`/`apply_snapshot` are line-granular. `set_applying`
-brackets the edit so a prior define's watcher doesn't mistake it for a user edit.
+guards the edit so a prior define's watcher doesn't mistake it for a user edit.
 
 ## Pure core vs IO shell (ARCH-PURE)
 
 - **Pure** (`lua/parley/define.lua`, unit-tested with plain tables): `slice_selection`,
   `context_for_selection`, `format_definition`, `bracket_edit` (plans the `[term]`
-  wrap as a set_lines edit), `diagnostic_span_after_bracket` (maps the visual span
-  to the post-bracket diagnostic range).
-- **IO shell** (`lua/parley/init.lua`): `define_visual`, `render_definition`.
+  wrap as a legacy set_lines edit), `diagnostic_span_after_bracket` (legacy range
+  mapping), `apply_definition_footnote` (durable footer transform), and
+  `strip_definition_footnote_footer` (removes only a final `---` block followed
+  solely by footnotes).
+- **IO shell** (`lua/parley/init.lua`): `define_visual`, `render_definition`;
+  `lua/parley/buffer_edit.lua` owns the full-buffer footnote rewrite.
 - **External service** (Anthropic) exercised via the process-level fake reused
   from `skill_invoke_spec` (SSE tool-call injection).
+
+## Managed Footnote Footer
+
+The footer is a final markdown block:
+
+```markdown
+---
+
+[^asin]: Amazon Standard Identification Number.
+```
+
+The footer detector is deliberately conservative: only the last standalone
+`---` line followed by blank lines and footnote definitions counts as the
+managed footer. Ordinary horizontal rules and mixed prose after `---` remain
+chat content. `chat_respond.build_messages` strips this managed footer from
+message strings before LLM submission, so durable definitions do not become
+prompt context.
 
 ## Keybinding
 
@@ -87,18 +109,18 @@ tool-call args (`result.calls[1].input`), read in `on_done`.
 
 ## v1 limitations
 
-- One definition visible at a time (`invoke` resets the `parley_skill` namespace
+- One diagnostic visible at a time (`invoke` resets the `parley_skill` namespace
   each turn); line-granular highlight (whole-line, required for the projection
-  round-trip). Dismissal is via `u` (R1) — reverting the bracket clears it; the
-  diagnostic also auto-hides when the cursor leaves the line. The `[term]`
-  brackets persist in the file if saved (the minimal-footprint tradeoff; the
-  definition text never is). Shared `parley_skill` namespace/projection with
-  review still applies (rare on chat buffers).
+  round-trip). Dismissal is via `u` — reverting the footnote reference/footer
+  clears it; the diagnostic also auto-hides when the cursor leaves the line.
+  The footnote persists in the file if saved. Shared `parley_skill`
+  namespace/projection with review still applies (rare on chat buffers).
 
 ## Key files
 
-- `lua/parley/define.lua` — pure core (slice / context / format).
+- `lua/parley/define.lua` — pure core (slice / context / format / footnote footer).
 - `lua/parley/init.lua` — `define_visual`, `render_definition`, `chat_define` wiring.
+- `lua/parley/chat_respond.lua` — strips managed footnote footer from LLM messages.
 - `lua/parley/skills/define/init.lua` — the unforced `define` skill.
 - `lua/parley/tools/builtin/emit_definition.lua` — output-only structured tool.
 - `lua/parley/skill_invoke.lua` — `opts.no_reload` / `opts.document` seams.
