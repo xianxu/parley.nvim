@@ -17,13 +17,16 @@ Writes are unchanged: still go to the current repo.
 ## Mode glyphs (lualine)
 
 `lualine.replace_filetype = true` (default) swaps the user's filetype
-component with a single-character mode indicator:
+component with a compact mode indicator:
 
-| Glyph | Mode       | Meaning                                     |
-|-------|------------|---------------------------------------------|
-| `○`   | global     | No parley repo context                      |
-| `⊚`   | repo       | cwd is inside a `.parley` repo              |
-| `⦿`   | super-repo | super-repo toggle is on                     |
+| Glyph          | Mode       | Meaning                                     |
+|----------------|------------|---------------------------------------------|
+| `○`            | global     | No parley repo context                      |
+| `⊚-<repo>`     | repo       | cwd is inside a `.parley` repo              |
+| `⦿-<repo>`     | super-repo | super-repo toggle is on                     |
+
+`<repo>` is the basename of `config.repo_root`, so a brain repo cwd displays
+`⊚-brain` in plain repo mode and `⦿-brain` when super-repo is active.
 
 Refresh fires on `User ParleySuperRepoChanged`.
 
