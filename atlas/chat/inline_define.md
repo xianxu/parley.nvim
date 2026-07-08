@@ -1,17 +1,20 @@
 # Inline Term Definition
 
 Select a phrase in a chat transcript, press **`<M-CR>`** (visual mode), and a
-concise, context-aware definition appears as an **ephemeral inline diagnostic**
-(grey `virtual_lines`) under the phrase. The selected text stays in place and
-gets a markdown footnote reference (`ASIN[^asin]`), while the definition is
-stored in a managed footnote footer at the end of the chat transcript. The
-whole annotation is **undoable** — `u` reverts the footnote edit and clears both
-decorations (see Undo below). For jargon you don't know (e.g. `ASIN`), it's a
-one-keystroke lookup. Added in
+concise, context-aware definition appears as an inline diagnostic (grey
+`virtual_lines`) under the phrase. The selected text stays in place and gets a
+markdown footnote reference (`ASIN[^asin]`), while the definition is stored in a
+managed footnote footer at the end of the chat transcript. Persisted managed
+footnotes are rehydrated into diagnostics when any markdown buffer is entered or
+refreshed. The whole new annotation is **undoable** — `u` reverts the footnote
+edit and clears both decorations (see Undo below). For jargon you don't know
+(e.g. `ASIN`), it's a one-keystroke lookup. Added in
 [#161](../../workshop/issues/000161-inline-term-definition.md) (R1 added the
 highlight/undo); [#166](../../workshop/issues/000166-visual-selection-definition-system-manages-footnote.md)
 made the definition durable as a managed footnote; [#167](../../workshop/issues/000167-define-diagnostic-highlight-span.md)
-narrowed the visible decoration to the selected term plus footnote reference.
+narrowed the visible decoration to the selected term plus footnote reference;
+[#172](../../workshop/issues/000172-markdown-footnote-diagnostics.md)
+rehydrates persisted managed footnotes in all markdown buffers.
 
 ## Flow
 
@@ -32,8 +35,10 @@ narrowed the visible decoration to the selected term plus footnote reference.
    and inserts/updates a final managed footnote footer via one buffer rewrite
    (`define.apply_definition_footnote`) — a single undo entry that anchors
    everything; **(b)** highlights the selected term/reference span with
-   `DiffChange` (`skill_render.highlight_span`); **(c)** sets one INFO
-   `vim.diagnostic` on that same span (`define.format_definition` →
+   `DiffChange` (`skill_render.highlight_span`); **(c)** refreshes persisted
+   footnote diagnostics (`skill_render.refresh_footnote_diagnostics`), which
+   parses the managed footer and sets INFO `vim.diagnostic` entries on matching
+   inline `term[^id]` spans (`define.format_definition` →
    `skill_render.format_diagnostic_message`) on the `parley_skill` namespace;
    **(d)** records the undo/redo projection states.
    `diag_display`'s `virtual_lines{current_line=true}` reveals the diagnostic
@@ -60,10 +65,13 @@ watcher doesn't mistake it for a user edit.
   `context_for_selection`, `format_definition`, `bracket_edit` (plans the `[term]`
   wrap as a legacy set_lines edit), `diagnostic_span_after_bracket` (legacy range
   mapping), `apply_definition_footnote` (durable footer transform), and
-  `strip_definition_footnote_footer` (removes only a final `---` block followed
-  solely by footnotes).
+  `strip_definition_footnote_footer` / `footnote_diagnostics` (read only a final
+  `---` block followed solely by footnotes).
 - **IO shell** (`lua/parley/init.lua`): `define_visual`, `render_definition`;
-  `lua/parley/buffer_edit.lua` owns the full-buffer footnote rewrite.
+  `lua/parley/buffer_edit.lua` owns the full-buffer footnote rewrite;
+  `lua/parley/skill_render.lua` publishes footnote diagnostics; and
+  `lua/parley/highlighter.lua` refreshes them from chat and markdown lifecycle
+  hooks.
 - **External service** (Anthropic) exercised via the process-level fake reused
   from `skill_invoke_spec` (SSE tool-call injection).
 
@@ -82,7 +90,9 @@ The footer detector is deliberately conservative: only the last standalone
 managed footer. Ordinary horizontal rules and mixed prose after `---` remain
 chat content. `chat_respond.build_messages` strips this managed footer from
 message strings before LLM submission, so durable definitions do not become
-prompt context.
+prompt context. `define.footnote_diagnostics` uses the same footer detector to
+scan inline references before the footer and produce diagnostics for each
+matching `[^id]`.
 
 ## Keybinding
 
@@ -109,20 +119,22 @@ whole buffer. Both default to prior behavior when absent.
 `self_paginates = true` (no pager params), no-op `handler`. The value rides the
 tool-call args (`result.calls[1].input`), read in `on_done`.
 
-## v1 limitations
+## Notes
 
-- One diagnostic visible at a time (`invoke` resets the `parley_skill` namespace
-  each turn). The highlight and diagnostic span the selected text plus immediate
-  `[^id]` reference; dismissal is via `u` — reverting the footnote
-  reference/footer clears it; the diagnostic also auto-hides when the cursor
-  leaves the line. The footnote persists in the file if saved. Shared
-  `parley_skill` namespace/projection with review still applies (rare on chat
-  buffers).
+- The fresh define highlight spans the selected text plus immediate `[^id]`
+  reference; rehydrated diagnostics do not recreate the DiffChange highlight.
+- `skill_render.refresh_footnote_diagnostics` owns only diagnostics tagged
+  `parley-footnote` and preserves other `parley_skill` diagnostics, so review
+  diagnostics are not cleared by markdown footnote refresh.
+- A diagnostic's `virtual_lines` auto-hide when the cursor leaves its line. The
+  footnote persists in the file if saved.
 
 ## Key files
 
-- `lua/parley/define.lua` — pure core (slice / context / format / footnote footer).
+- `lua/parley/define.lua` — pure core (slice / context / format / footnote footer / diagnostics).
 - `lua/parley/init.lua` — `define_visual`, `render_definition`, `chat_define` wiring.
+- `lua/parley/highlighter.lua` — chat/markdown buffer lifecycle refresh hooks.
+- `lua/parley/skill_render.lua` — footnote diagnostic refresh in the shared namespace.
 - `lua/parley/chat_respond.lua` — strips managed footnote footer from LLM messages.
 - `lua/parley/skills/define/init.lua` — the unforced `define` skill.
 - `lua/parley/tools/builtin/emit_definition.lua` — output-only structured tool.

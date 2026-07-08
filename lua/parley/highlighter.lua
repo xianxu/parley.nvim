@@ -979,6 +979,7 @@ end
 
 M.setup_buf_handler = function()
     local interview = require("parley.interview")
+    local skill_render = require("parley.skill_render")
     local timezone_diagnostics = require("parley.timezone_diagnostics")
     local gid = _parley.helpers.create_augroup("ParleyBufHandler", { clear = true })
 
@@ -1072,6 +1073,7 @@ M.setup_buf_handler = function()
             _parley.display_agent(buf, file_name)
             interview.highlight_timestamps(buf)
             timezone_diagnostics.refresh_buffer(buf)
+            skill_render.refresh_footnote_diagnostics(buf)
             _parley.highlight_chat_branch_refs(buf)
             -- Disable markdown strikethrough in chat buffers — tilde (~) in file
             -- paths like ~/workspace/file.md triggers false strikethrough rendering.
@@ -1084,6 +1086,7 @@ M.setup_buf_handler = function()
             _parley.highlight_chat_branch_refs(buf)
             interview.highlight_timestamps(buf)
             timezone_diagnostics.refresh_buffer(buf)
+            skill_render.refresh_footnote_diagnostics(buf)
             -- Disable native markdown strikethrough so only the 🤖-gated
             -- review-deletion strike (🤖~X~, rendered in compute_markdown_highlights)
             -- shows — a bare ~X~ or a `~/path` tilde must not cross out text.
@@ -1105,10 +1108,12 @@ M.setup_buf_handler = function()
             _parley.display_agent(buf, file_name)
             interview.highlight_timestamps(buf)
             timezone_diagnostics.refresh_buffer(buf)
+            skill_render.refresh_footnote_diagnostics(buf)
         -- Handle non-chat markdown files
         elseif _parley.is_markdown(buf, file_name) then
             interview.highlight_timestamps(buf)
             timezone_diagnostics.refresh_buffer(buf)
+            skill_render.refresh_footnote_diagnostics(buf)
         end
     end, gid)
 
@@ -1119,6 +1124,7 @@ M.setup_buf_handler = function()
         end
         if _parley._parley_bufs[buf] then
             timezone_diagnostics.refresh_buffer(buf)
+            skill_render.refresh_footnote_diagnostics(buf)
         end
     end, gid)
 

@@ -1640,19 +1640,9 @@ local function render_definition(buf, span, phrase, result)
 	local e = define.apply_definition_footnote(lines, sr, sc - 1, er, ec - 1, input.term or phrase, input.definition)
 	require("parley.buffer_edit").replace_all_lines_for_definition(buf, e.lines)
 
-	local width = skill_render.diagnostic_wrap_width()
-	local msg = define.format_definition(input.term or phrase, e.definition, width)
 	local diag_span = e.diagnostic_span
 	skill_render.highlight_span(buf, diag_span.lnum, diag_span.col, diag_span.end_lnum, diag_span.end_col)
-	vim.diagnostic.set(skill_render.diag_namespace(), buf, { {
-		lnum = diag_span.lnum,
-		col = diag_span.col,
-		end_lnum = diag_span.end_lnum,
-		end_col = diag_span.end_col,
-		message = msg,
-		severity = vim.diagnostic.severity.INFO,
-		source = "parley-define",
-	} })
+	skill_render.refresh_footnote_diagnostics(buf)
 
 	-- Record projection states so undo/redo of the footnote edit clears/restores
 	-- the decorations (#133 M5 machinery, reused): pre-edit hash → empty

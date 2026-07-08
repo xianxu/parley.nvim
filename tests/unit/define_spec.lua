@@ -261,4 +261,68 @@ describe("define durable footnotes", function()
             "ordinary body after a rule",
         }, "\n"), define.strip_definition_footnote_footer(text))
     end)
+
+    it("extracts persisted footnote diagnostics from the managed footer", function()
+        local diagnostics = define.footnote_diagnostics({
+            "here is ASIN[^asin] in context",
+            "",
+            "---",
+            "",
+            "[^asin]: Amazon Standard Identification Number.",
+        })
+
+        assert.are.same({ {
+            id = "asin",
+            term = "ASIN",
+            definition = "Amazon Standard Identification Number.",
+            lnum = 0,
+            col = 8,
+            end_lnum = 0,
+            end_col = 19,
+        } }, diagnostics)
+    end)
+
+    it("extracts every inline reference to a managed footnote", function()
+        local diagnostics = define.footnote_diagnostics({
+            "ASIN[^asin] first, then SKU[^asin] second",
+            "",
+            "---",
+            "",
+            "[^asin]: Amazon Standard Identification Number.",
+        })
+
+        assert.are.equal(2, #diagnostics)
+        assert.are.same({
+            id = "asin",
+            term = "ASIN",
+            definition = "Amazon Standard Identification Number.",
+            lnum = 0,
+            col = 0,
+            end_lnum = 0,
+            end_col = 11,
+        }, diagnostics[1])
+        assert.are.same({
+            id = "asin",
+            term = "SKU",
+            definition = "Amazon Standard Identification Number.",
+            lnum = 0,
+            col = 24,
+            end_lnum = 0,
+            end_col = 34,
+        }, diagnostics[2])
+    end)
+
+    it("ignores footnotes that are not in a final managed footer", function()
+        local diagnostics = define.footnote_diagnostics({
+            "ASIN[^asin] in body",
+            "",
+            "---",
+            "",
+            "[^asin]: Amazon Standard Identification Number.",
+            "",
+            "trailing body text",
+        })
+
+        assert.are.same({}, diagnostics)
+    end)
 end)

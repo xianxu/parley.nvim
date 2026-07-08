@@ -9,6 +9,7 @@ local M = {}
 
 local DIAG_NS = "parley_skill"
 local HL_NS = "parley_skill_hl"
+local FOOTNOTE_SOURCE = "parley-footnote"
 
 local diag_ns_id
 local hl_ns_id
@@ -100,6 +101,48 @@ end
 --- @return string
 function M.format_diagnostic_message(text, width)
     return M.wrap(text, width or M.diagnostic_wrap_width())
+end
+
+local function is_footnote_diagnostic(diagnostic)
+    local user_data = diagnostic.user_data or {}
+    return diagnostic.source == FOOTNOTE_SOURCE or user_data.parley_kind == "footnote"
+end
+
+--- Rehydrate persisted managed markdown footnotes into Parley diagnostics.
+--- Existing non-footnote diagnostics in the shared namespace are preserved.
+--- @param buf number|nil
+function M.refresh_footnote_diagnostics(buf)
+    ensure_namespaces()
+    buf = buf or vim.api.nvim_get_current_buf()
+    if not vim.api.nvim_buf_is_valid(buf) then
+        return
+    end
+
+    local define = require("parley.define")
+    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    local width = M.diagnostic_wrap_width()
+    local diagnostics = {}
+
+    for _, existing in ipairs(vim.diagnostic.get(buf, { namespace = diag_ns_id })) do
+        if not is_footnote_diagnostic(existing) then
+            table.insert(diagnostics, existing)
+        end
+    end
+
+    for _, footnote in ipairs(define.footnote_diagnostics(lines)) do
+        table.insert(diagnostics, {
+            lnum = footnote.lnum,
+            col = footnote.col,
+            end_lnum = footnote.end_lnum or footnote.lnum,
+            end_col = footnote.end_col,
+            message = define.format_definition(footnote.term or footnote.id, footnote.definition, width),
+            severity = vim.diagnostic.severity.INFO,
+            source = FOOTNOTE_SOURCE,
+            user_data = { parley_kind = "footnote" },
+        })
+    end
+
+    vim.diagnostic.set(diag_ns_id, buf, diagnostics)
 end
 
 --- Attach INFO diagnostics from edit explanations. Each diagnostic spans the
@@ -229,6 +272,8 @@ function M.snapshot(buf)
             end_lnum = d.end_lnum,
             end_col = d.end_col,
             message = d.message,
+            source = d.source,
+            user_data = d.user_data,
         })
     end
     return { hl_lines = hl_lines, hl_spans = hl_spans, diags = diags }
@@ -257,7 +302,8 @@ function M.apply_snapshot(buf, snap)
                 end_col = d.end_col,
                 message = d.message,
                 severity = vim.diagnostic.severity.INFO,
-                source = "parley-skill",
+                source = d.source or "parley-skill",
+                user_data = d.user_data,
             })
         end
         vim.diagnostic.set(diag_ns_id, buf, diagnostics)
