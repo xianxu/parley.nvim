@@ -265,6 +265,38 @@ describe("define_visual + render_definition (#161)", function()
         assert.is_true(hl_on_line(buf, 2), "term line not highlighted")
     end)
 
+    it("re-defining a footnoted term updates the footer without duplicating the inline reference", function()
+        vim.fn.setpos("'<", { buf, 3, 9, 0 })
+        vim.fn.setpos("'>", { buf, 3, 12, 0 })
+        require("parley").define_visual(buf)
+        vim.wait(2000, function()
+            return vim.api.nvim_buf_get_lines(buf, 2, 3, false)[1] == "here is ASIN[^asin] in context"
+        end)
+
+        parley.dispatcher.query = function(_b, _p, _payload, _h, on_exit)
+            tasker.set_query("qid_dv_updated", {
+                raw_response = emit_definition_sse("ASIN", "Updated definition."),
+            })
+            vim.schedule(function() on_exit("qid_dv_updated") end)
+        end
+
+        vim.fn.setpos("'<", { buf, 3, 9, 0 })
+        vim.fn.setpos("'>", { buf, 3, 12, 0 })
+        require("parley").define_visual(buf)
+        vim.wait(2000, function()
+            local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+            return table.concat(lines, "\n"):find("%[%^asin%]: Updated definition%.") ~= nil
+        end)
+
+        assert.are.equal("here is ASIN[^asin] in context",
+            vim.api.nvim_buf_get_lines(buf, 2, 3, false)[1])
+        assert.are.same({
+            "---",
+            "",
+            "[^asin]: Updated definition.",
+        }, vim.api.nvim_buf_get_lines(buf, 5, 8, false))
+    end)
+
     it("u undoes the footnote edit + clears decorations; C-r restores them (R1)", function()
         vim.fn.setpos("'<", { buf, 3, 9, 0 })
         vim.fn.setpos("'>", { buf, 3, 12, 0 })

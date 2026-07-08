@@ -14,11 +14,11 @@
 
 ### Pure Entities
 
-| Name | Lives in | Status |
-|------|----------|--------|
-| `DefinitionFootnote` | `lua/parley/define.lua` | new |
-| `DefinitionFootnoteFooter` | `lua/parley/define.lua` | new |
-| `DefinitionSubmissionScrubber` | `lua/parley/define.lua` | new |
+| Name | Kind | Lives in | Status |
+|------|------|----------|--------|
+| `DefinitionFootnote` | PURE | `lua/parley/define.lua` | new |
+| `DefinitionFootnoteFooter` | PURE | `lua/parley/define.lua` | new |
+| `DefinitionSubmissionScrubber` | PURE | `lua/parley/define.lua` | new |
 
 - **DefinitionFootnote** — a durable markdown footnote pair: inline reference `[^definition]` plus footer line `[^definition]: ...`.
   - **Relationships:** N:1 with a chat file; many selected terms may create footnotes in one managed footer.
@@ -37,11 +37,11 @@
 
 ### Integration Points
 
-| Name | Lives in | Status | Wraps |
-|------|----------|--------|-------|
-| `render_definition` | `lua/parley/init.lua` | modified | Neovim diagnostics/projection |
-| `DefinitionBufferEdit` | `lua/parley/buffer_edit.lua` | modified | `nvim_buf_set_lines` |
-| `chat_respond.build_messages` | `lua/parley/chat_respond.lua` | modified | LLM payload construction |
+| Name | Kind | Lives in | Status | Wraps |
+|------|------|----------|--------|-------|
+| `render_definition` | INTEGRATION | `lua/parley/init.lua` | modified | Neovim diagnostics/projection |
+| `DefinitionBufferEdit` | INTEGRATION | `lua/parley/buffer_edit.lua` | modified | `nvim_buf_set_lines` |
+| `chat_respond.build_messages` | INTEGRATION | `lua/parley/chat_respond.lua` | modified | LLM payload construction |
 
 - **render_definition** — after `emit_definition`, verifies the selection, rewrites the selected text to include a footnote reference, stores/updates the managed footer, and attaches the current-line diagnostic from the durable footnote text.
   - **Injected into:** Existing `skill_invoke.invoke` `on_done` callback.
@@ -222,3 +222,17 @@ Actual: focused define, integration define, and build-message specs passed;
 warnings/errors and all unit, integration, and arch tests green. The repeated
 rerun was needed because `tests/unit/tools_builtin_find_spec.lua` flaked in the
 parallel full-suite run but passed each time it was run in isolation.
+
+## Revisions
+
+### 2026-07-08 — close-review redefinition edge
+
+Reason: Boundary review found that re-defining an already-footnoted term would
+append a duplicate inline `[^id]` reference even though the spec requires
+re-definitions to update the corresponding footnote.
+
+Delta: `apply_definition_footnote` must detect an immediate existing reference
+after the selected span and skip reinserting it while still updating the managed
+footer; unit and integration regressions cover the duplicate-reference case.
+The Core Concepts tables now include explicit `Kind` columns for the SDLC review
+contract.

@@ -176,6 +176,30 @@ describe("define durable footnotes", function()
         }, result.lines)
     end)
 
+    it("updates an existing inline reference without duplicating it", function()
+        local result = define.apply_definition_footnote(
+            {
+                "ASIN[^asin] is here",
+                "",
+                "---",
+                "",
+                "[^asin]: old definition",
+            },
+            1, 0, 1, 3,
+            "ASIN",
+            "Updated definition."
+        )
+
+        assert.are.same({
+            "ASIN[^asin] is here",
+            "",
+            "---",
+            "",
+            "[^asin]: Updated definition.",
+        }, result.lines)
+        assert.are.same({ lnum = 0, col = 0, end_lnum = 0, end_col = 11 }, result.diagnostic_span)
+    end)
+
     it("strips only a final managed footnote footer", function()
         local text = table.concat({
             "answer text",

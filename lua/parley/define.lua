@@ -280,11 +280,15 @@ function M.apply_definition_footnote(lines, l1, c1, l2, c2, term, definition)
     if l1 == l2 then
         local line = out[l1] or ""
         local ec = math.min(c2 + 1, #line)
-        out[l1] = line:sub(1, ec) .. ref .. line:sub(ec + 1)
+        if line:sub(ec + 1, ec + #ref) ~= ref then
+            out[l1] = line:sub(1, ec) .. ref .. line:sub(ec + 1)
+        end
     else
         local line = out[l2] or ""
         local ec = math.min(c2 + 1, #line)
-        out[l2] = line:sub(1, ec) .. ref .. line:sub(ec + 1)
+        if line:sub(ec + 1, ec + #ref) ~= ref then
+            out[l2] = line:sub(1, ec) .. ref .. line:sub(ec + 1)
+        end
     end
     out = replace_or_append_footnote(out, id, definition)
     local normalized_definition = trim(definition)

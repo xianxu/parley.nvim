@@ -121,3 +121,7 @@ total: 2.29
   `make test` hit the same transient `tools_builtin_find_spec.lua` flake once,
   passed in isolation again, then the final `make test` passed with 0 lint
   warnings/errors and all unit, integration, and arch tests green.
+- Close review returned REWORK: re-defining an already-footnoted term could
+  duplicate the inline `[^id]` reference, and README still described the old
+  non-durable behavior. Fixed both, added pure and integration regressions, and
+  revised the durable plan with the redefinition edge.
