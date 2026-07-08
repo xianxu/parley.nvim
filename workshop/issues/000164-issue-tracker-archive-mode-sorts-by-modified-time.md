@@ -1,11 +1,12 @@
 ---
 id: 000164
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-07-08
 updated: 2026-07-08
 estimate_hours:
+started: 2026-07-08T08:04:06-07:00
 ---
 
 # issue tracker archive mode sorts by modified time
