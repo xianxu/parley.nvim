@@ -1,12 +1,13 @@
 ---
 id: 000164
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-08
 updated: 2026-07-08
 estimate_hours: 0.56
 started: 2026-07-08T08:04:06-07:00
+actual_hours: 0.15
 ---
 
 # issue tracker archive mode sorts by modified time
@@ -64,6 +65,7 @@ total: 0.56
 ## Log
 
 ### 2026-07-08
+- 2026-07-08: closed — History issue finder view sorts archived rows by filesystem mtime ascending while issues view keeps status/ID order; red/green focused specs passed; make test passed with lint 0 warnings/0 errors.; review verdict: SHIP
 
 - Planning: keep active issue ordering on the existing `issues.topo_sort`
   pathway (`ARCH-DRY`), isolate the view-specific ordering in a pure helper
