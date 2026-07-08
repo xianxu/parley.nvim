@@ -273,6 +273,40 @@ describe("define_visual + render_definition (#161)", function()
         assert.are.equal(19, mark[4].end_col)
     end)
 
+    it("word-wraps long define diagnostics to the diagnostic display width", function()
+        local prior_win = vim.api.nvim_get_current_win()
+        vim.cmd("vsplit")
+        local narrow_win = vim.api.nvim_get_current_win()
+        vim.cmd("vertical resize 45")
+        local expected_width = require("parley.skill_render").diagnostic_wrap_width()
+        parley.dispatcher.query = function(_b, _p, _payload, _h, on_exit)
+            query_called = true
+            tasker.set_query("qid_dv_long", {
+                raw_response = emit_definition_sse("ASIN", table.concat({
+                    "alpha", "beta", "gamma", "delta", "epsilon", "zeta",
+                    "eta", "theta", "iota", "kappa", "lambda", "mu",
+                }, " ")),
+            })
+            vim.schedule(function() on_exit("qid_dv_long") end)
+        end
+
+        vim.fn.setpos("'<", { buf, 3, 9, 0 })
+        vim.fn.setpos("'>", { buf, 3, 12, 0 })
+        require("parley").define_visual(buf)
+        vim.wait(2000, function()
+            return #vim.diagnostic.get(buf, { namespace = ns }) > 0
+        end)
+        vim.api.nvim_set_current_win(prior_win)
+        pcall(vim.api.nvim_win_close, narrow_win, true)
+
+        local msg = vim.diagnostic.get(buf, { namespace = ns })[1].message
+        assert.is_truthy(msg:find("\n", 1, true), "long define diagnostic did not wrap")
+        for _, line in ipairs(vim.split(msg, "\n", { plain = true })) do
+            assert.is_true(#line <= expected_width or not line:find(" ", 1, true),
+                "wrapped define diagnostic exceeds display width: " .. line)
+        end
+    end)
+
     it("re-defining a footnoted term updates the footer without duplicating the inline reference", function()
         vim.fn.setpos("'<", { buf, 3, 9, 0 })
         vim.fn.setpos("'>", { buf, 3, 12, 0 })

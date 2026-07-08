@@ -163,8 +163,8 @@ The edit "why" (the per-edit `explain`) is an INFO diagnostic on parley's
 `parley_skill` namespace. `lua/parley/skills/review/diag_display.lua` controls how
 it shows — scoped to that namespace, so the user's LSP/global diagnostics are
 untouched. Default **on**: `virtual_lines { current_line = true }`, so the
-(hard-wrapped, via `skill_render.wrap`) why **auto-expands below an edit when the
-cursor is in that edit's region** (`attach_diagnostics` spans `lnum..end_lnum`)
+(hard-wrapped, via `skill_render.format_diagnostic_message`) why **auto-expands
+below an edit when the cursor is in that edit's region** (`attach_diagnostics` spans `lnum..end_lnum`)
 and hides otherwise. `:ParleyShowDiagnostics` toggles it. The built-in `]d`/`[d`
 (jump) and `<C-W>d` (float, wraps) also work on these diagnostics. Composes with
 M5 — re-renders on undo/redo.

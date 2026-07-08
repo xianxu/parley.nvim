@@ -34,8 +34,8 @@ narrowed the visible decoration to the selected term plus footnote reference.
    everything; **(b)** highlights the selected term/reference span with
    `DiffChange` (`skill_render.highlight_span`); **(c)** sets one INFO
    `vim.diagnostic` on that same span (`define.format_definition` →
-   `skill_render.wrap`) on the `parley_skill` namespace; **(d)** records the
-   undo/redo projection states.
+   `skill_render.format_diagnostic_message`) on the `parley_skill` namespace;
+   **(d)** records the undo/redo projection states.
    `diag_display`'s `virtual_lines{current_line=true}` reveals the diagnostic
    (cursor parked on the term's line). A no-`emit_definition` response leaves no
    footnote reference/footer.

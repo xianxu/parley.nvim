@@ -71,6 +71,15 @@ describe("skill_render", function()
         end
     end)
 
+    it("format_diagnostic_message word-wraps display text at the requested width", function()
+        local msg = skill_render.format_diagnostic_message("alpha beta gamma delta epsilon zeta", 16)
+        assert.is_truthy(msg:find("\n", 1, true), "diagnostic message did not wrap")
+        for _, line in ipairs(vim.split(msg, "\n", { plain = true })) do
+            assert.is_true(#line <= 16 or not line:find(" ", 1, true),
+                "wrapped line exceeds width: " .. line)
+        end
+    end)
+
     it("attach_diagnostics wraps the message + spans the edit's lines (end_lnum)", function()
         local buf = scratch({ "a", "b", "c", "d" })
         local original = "a\nb\nc\nd"
