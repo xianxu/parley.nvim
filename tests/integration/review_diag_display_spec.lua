@@ -11,6 +11,17 @@ local function display_marks(buf)
     return vim.api.nvim_buf_get_extmarks(buf, display_ns, 0, -1, { details = true })
 end
 
+local function diagnostic_floats()
+    local floats = {}
+    for _, win in ipairs(vim.api.nvim_list_wins()) do
+        local cfg = vim.api.nvim_win_get_config(win)
+        if cfg.relative ~= "" and cfg.focusable == false and cfg.title and cfg.title[1][1] == "Diagnostics" then
+            table.insert(floats, { win = win, config = cfg, buf = vim.api.nvim_win_get_buf(win) })
+        end
+    end
+    return floats
+end
+
 describe("review.diag_display", function()
     after_each(function()
         dd.set(true) -- restore default for other specs
@@ -40,11 +51,13 @@ describe("review.diag_display", function()
         assert.is_false(ns_cfg()["parley/virtual_lines"])
     end)
 
-    it("renders current-line diagnostics inset from the buffer text column without moving the diagnostic span", function()
+    it("renders footnote diagnostics in a centered non-focusable float without moving the diagnostic span", function()
         local skill_render = require("parley.skill_render")
         local diag_ns = skill_render.diag_namespace()
         local buf = vim.api.nvim_create_buf(false, true)
         vim.api.nvim_set_current_buf(buf)
+        vim.api.nvim_win_set_width(0, 100)
+        local parent_width = vim.api.nvim_win_get_width(0)
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
             string.rep("x", 120) .. " ACOS[^acos]",
         })
@@ -62,17 +75,19 @@ describe("review.diag_display", function()
         } })
 
         vim.wait(100, function()
-            return #display_marks(buf) == 1
+            return #diagnostic_floats() == 1
         end)
 
-        local marks = display_marks(buf)
-        assert.are.equal(1, #marks)
-        assert.are.equal(2, marks[1][3])
-        local details = marks[1][4]
-        assert.is_not_true(details.virt_lines_leftcol)
-        assert.are.equal("Diagnostics:", details.virt_lines[1][1][1])
-        assert.are_not.equal(string.rep(" ", 121), details.virt_lines[1][1][1])
-        assert.are.equal("ACOS — Advertising Cost of Sales.", details.virt_lines[2][1][1])
+        assert.are.equal(0, #display_marks(buf))
+        local floats = diagnostic_floats()
+        assert.are.equal(1, #floats)
+        local expected_width = math.max(1, math.floor(parent_width * 0.8))
+        assert.are.equal(expected_width, floats[1].config.width)
+        assert.are.equal(math.floor((parent_width - expected_width) / 2), floats[1].config.col)
+        assert.is_false(floats[1].config.focusable)
+        local lines = vim.api.nvim_buf_get_lines(floats[1].buf, 0, -1, false)
+        assert.are.equal("Diagnostics:", lines[1])
+        assert.are.equal("ACOS — Advertising Cost of Sales.", lines[2])
 
         local diagnostics = vim.diagnostic.get(buf, { namespace = diag_ns })
         assert.are.equal(1, #diagnostics)
@@ -83,6 +98,7 @@ describe("review.diag_display", function()
 
         dd.set(false)
         assert.are.equal(0, #display_marks(buf))
+        assert.are.equal(0, #diagnostic_floats())
         assert.are.equal(1, #vim.diagnostic.get(buf, { namespace = diag_ns }))
     end)
 
@@ -109,13 +125,11 @@ describe("review.diag_display", function()
 
         vim.api.nvim_win_set_cursor(0, { 1, 8 })
         vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
-        local marks = display_marks(buf)
-        assert.are.equal(1, #marks, "cursor inside the footnote anchor should show diagnosis")
-        assert.are.equal(2, marks[1][3])
+        assert.are.equal(1, #diagnostic_floats(), "cursor inside the footnote anchor should show diagnosis")
 
         vim.api.nvim_win_set_cursor(0, { 1, 25 })
         vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
-        assert.are.equal(0, #display_marks(buf), "same line outside the anchor should hide diagnosis")
+        assert.are.equal(0, #diagnostic_floats(), "same line outside the anchor should hide diagnosis")
     end)
 
     it("keeps a multi-line diagnostic visible anywhere inside its span", function()
