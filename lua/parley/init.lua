@@ -1648,11 +1648,12 @@ local function render_definition(buf, span, phrase, result)
 	local input = call.input or {}
 	local width = math.max(40, vim.api.nvim_win_get_width(0) - 8)
 	local msg = define.format_definition(input.term, input.definition, width)
+	local diag_span = define.diagnostic_span_after_bracket(sr, sc, er, ec)
 	vim.diagnostic.set(skill_render.diag_namespace(), buf, { {
-		lnum = e.first0,
-		col = 0,
-		end_lnum = e.first0,
-		end_col = 0,
+		lnum = diag_span.lnum,
+		col = diag_span.col,
+		end_lnum = diag_span.end_lnum,
+		end_col = diag_span.end_col,
 		message = msg,
 		severity = vim.diagnostic.severity.INFO,
 		source = "parley-define",

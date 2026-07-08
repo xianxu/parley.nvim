@@ -252,6 +252,9 @@ describe("define_visual + render_definition (#161)", function()
         -- diagnostic on the term's line
         local diags = vim.diagnostic.get(buf, { namespace = ns })
         assert.are.equal(2, diags[1].lnum) -- 0-based line 3
+        assert.are.equal(9, diags[1].col) -- selected ASIN after inserted "["
+        assert.are.equal(2, diags[1].end_lnum)
+        assert.are.equal(13, diags[1].end_col) -- exclusive, before inserted "]"
         assert.is_true(diags[1].message:find("ASIN", 1, true) ~= nil)
         -- whole-line DiffChange highlight on the hl namespace, on line 3
         assert.is_true(hl_on_line(buf, 2), "term line not highlighted")

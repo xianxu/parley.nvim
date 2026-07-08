@@ -103,3 +103,25 @@ describe("define.bracket_edit", function()
         assert.are.same({ "brown [fox", "jumps over", "the] dog" }, e.lines)
     end)
 end)
+
+describe("define.diagnostic_span_after_bracket", function()
+    it("anchors a single-line selection on the selected text after brackets", function()
+        local span = define.diagnostic_span_after_bracket(3, 9, 3, 12)
+        assert.are.same({
+            lnum = 2,
+            col = 9,
+            end_lnum = 2,
+            end_col = 13,
+        }, span)
+    end)
+
+    it("anchors a multi-line selection without shifting the final line", function()
+        local span = define.diagnostic_span_after_bracket(1, 7, 3, 3)
+        assert.are.same({
+            lnum = 0,
+            col = 7,
+            end_lnum = 2,
+            end_col = 3,
+        }, span)
+    end)
+end)
