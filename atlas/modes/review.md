@@ -173,6 +173,10 @@ built-in `]d`/`[d` (jump) and `<C-W>d` (float, wraps) still work on these
 diagnostics because the underlying diagnostic spans remain unchanged. Composes
 with M5 — re-renders on undo/redo.
 
+The same controller also renders managed footnote diagnostics; those are tighter
+than review diagnostics and show only while the cursor is inside the
+term/`[^footnote]` diagnostic span.
+
 ## Progress bar (#133 M7)
 
 A review round is headless and takes ~30s, so it shows a **detached progress

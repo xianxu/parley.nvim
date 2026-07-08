@@ -16,6 +16,7 @@ local DISPLAY_NS = "parley_diagnostic_virtual_lines"
 local DISPLAY_AUGROUP = "parley_diagnostic_virtual_lines"
 local HEADER_HL = "ParleyDiagnosticVirtualLineHeader"
 local MESSAGE_HL = "ParleyDiagnosticVirtualLine"
+local DISPLAY_COL = 2
 
 local display_ns_id
 local display_augroup
@@ -45,11 +46,12 @@ local function clear(buf)
     end
 end
 
-local function current_line_for(buf)
+local function current_pos_for(buf)
     if vim.api.nvim_get_current_buf() ~= buf then
         return nil
     end
-    return vim.api.nvim_win_get_cursor(0)[1] - 1
+    local pos = vim.api.nvim_win_get_cursor(0)
+    return pos[1] - 1, pos[2]
 end
 
 local function diagnostic_message_lines(diagnostic)
@@ -69,6 +71,28 @@ local function diagnostic_contains_line(diagnostic, line)
     return line >= start_line and line <= end_line
 end
 
+local function diagnostic_contains_position(diagnostic, line, col)
+    if not diagnostic_contains_line(diagnostic, line) then
+        return false
+    end
+    local start_line = diagnostic.lnum or 0
+    local end_line = diagnostic.end_lnum or start_line
+    if line == start_line and col < (diagnostic.col or 0) then
+        return false
+    end
+    if line == end_line and col >= (diagnostic.end_col or diagnostic.col or 0) then
+        return false
+    end
+    return true
+end
+
+local function diagnostic_visible_at(diagnostic, line, col)
+    if diagnostic.source == "parley-footnote" then
+        return diagnostic_contains_position(diagnostic, line, col)
+    end
+    return diagnostic_contains_line(diagnostic, line)
+end
+
 local function render(buf, diagnostics, current_line_only)
     ensure_display()
     if not vim.api.nvim_buf_is_valid(buf) then
@@ -76,14 +100,17 @@ local function render(buf, diagnostics, current_line_only)
     end
     vim.api.nvim_buf_clear_namespace(buf, display_ns_id, 0, -1)
 
-    local line = current_line_only and current_line_for(buf) or nil
+    local line, col
+    if current_line_only then
+        line, col = current_pos_for(buf)
+    end
     if current_line_only and not line then
         return
     end
 
     local by_line = {}
     for _, diagnostic in ipairs(diagnostics or {}) do
-        if not current_line_only or diagnostic_contains_line(diagnostic, line) then
+        if not current_line_only or diagnostic_visible_at(diagnostic, line, col) then
             by_line[diagnostic.lnum] = by_line[diagnostic.lnum] or {}
             table.insert(by_line[diagnostic.lnum], diagnostic)
         end
@@ -97,7 +124,7 @@ local function render(buf, diagnostics, current_line_only)
         for _, diagnostic in ipairs(line_diagnostics) do
             vim.list_extend(virt_lines, diagnostic_message_lines(diagnostic))
         end
-        vim.api.nvim_buf_set_extmark(buf, display_ns_id, lnum, 0, {
+        vim.api.nvim_buf_set_extmark(buf, display_ns_id, lnum, DISPLAY_COL, {
             virt_lines = virt_lines,
             virt_lines_above = false,
         })
