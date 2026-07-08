@@ -3,6 +3,7 @@
 -- Lualine integration
 
 local M = {}
+local issues = require("parley.issues")
 
 -- State for flashing timer
 local timer_visible = true
@@ -41,10 +42,10 @@ local function stop_flash_timer()
 end
 
 -- Parley mode glyph for lualine. Replaces the much-wider "markdown" filetype
--- string with a single-character mode indicator.
+-- string with a compact mode indicator.
 --   ○  global     — no parley repo context (global writes)
---   ⊚  repo       — cwd is inside a .parley repo
---   ⦿  super-repo — super-repo toggle is on (read-aggregation across siblings)
+--   ⊚-name  repo       — cwd is inside a .parley repo
+--   ⦿-name  super-repo — super-repo toggle is on (read-aggregation across siblings)
 M.format_mode = function(parley_instance)
   local parley = parley_instance or _parley
   if not parley then
@@ -53,11 +54,15 @@ M.format_mode = function(parley_instance)
   end
   if not parley then return "○" end
 
+  if parley.config and parley.config.repo_root and parley.config.repo_root ~= "" then
+    local repo_label = issues.repo_label(parley.config.repo_root)
+    if parley.is_super_repo_active and parley.is_super_repo_active() then
+      return "⦿-" .. repo_label
+    end
+    return "⊚-" .. repo_label
+  end
   if parley.is_super_repo_active and parley.is_super_repo_active() then
     return "⦿"
-  end
-  if parley.config and parley.config.repo_root and parley.config.repo_root ~= "" then
-    return "⊚"
   end
   return "○"
 end

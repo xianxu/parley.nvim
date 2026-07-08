@@ -385,7 +385,7 @@ describe("super_repo.toggle", function()
 		assert.is_nil(persisted_note_set[resolve(sibling_b .. "/workshop/notes")])
 	end)
 
-	it("lualine.format_mode returns ○ / ⊚ / ⦿ for global / repo / super-repo", function()
+	it("lualine.format_mode returns glyph plus repo label for repo-backed modes", function()
 		local lualine = require("parley.lualine")
 
 		-- Synthesize a fake parley instance for each state to keep the
@@ -397,16 +397,28 @@ describe("super_repo.toggle", function()
 		assert.equal("○", lualine.format_mode(global_parley))
 
 		local repo_parley = {
-			config = { repo_root = "/tmp/some/repo" },
+			config = { repo_root = "/tmp/some/parley.nvim" },
 			is_super_repo_active = function() return false end,
 		}
-		assert.equal("⊚", lualine.format_mode(repo_parley))
+		assert.equal("⊚-parley.nvim", lualine.format_mode(repo_parley))
+
+		local brain_parley = {
+			config = { repo_root = "/tmp/some/brain" },
+			is_super_repo_active = function() return false end,
+		}
+		assert.equal("⊚-brain", lualine.format_mode(brain_parley))
 
 		local super_parley = {
-			config = { repo_root = "/tmp/some/repo" },
+			config = { repo_root = "/tmp/some/parley.nvim" },
 			is_super_repo_active = function() return true end,
 		}
-		assert.equal("⦿", lualine.format_mode(super_parley))
+		assert.equal("⦿-parley.nvim", lualine.format_mode(super_parley))
+
+		local super_brain_parley = {
+			config = { repo_root = "/tmp/some/brain" },
+			is_super_repo_active = function() return true end,
+		}
+		assert.equal("⦿-brain", lualine.format_mode(super_brain_parley))
 	end)
 
 	it("lualine.format_branch_label shortens long SDLC branch names for display", function()
