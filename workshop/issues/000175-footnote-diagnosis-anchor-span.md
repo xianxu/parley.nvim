@@ -1,12 +1,13 @@
 ---
 id: 000175
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-08
 updated: 2026-07-08
 estimate_hours: 0.24
 started: 2026-07-08T13:46:25-07:00
+actual_hours: 0.05
 ---
 
 # footnote diagnosis should open only on anchor span
@@ -65,6 +66,7 @@ total: 0.24
 ## Log
 
 ### 2026-07-08
+- 2026-07-08: closed — Scoped parley-footnote diagnostic display to cursor-inside-anchor span, preserved review region display, and inset virtual diagnosis text by two columns; verified red/green review_diag_display_spec, define_spec, scoped git diff --check, and full make test.; review verdict: SHIP
 - Root cause: the current display predicate uses only line containment for all
   diagnostics, which is correct for review edit regions but too broad for
   footnote anchors on long wrapped markdown lines.
