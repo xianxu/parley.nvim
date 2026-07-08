@@ -1,12 +1,13 @@
 ---
 id: 000174
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-08
 updated: 2026-07-08
 estimate_hours: 0.20
 started: 2026-07-08T13:37:10-07:00
+actual_hours: 0.04
 ---
 
 # diagnostic virtual lines should align with buffer text
@@ -62,6 +63,7 @@ total: 0.20
 ## Log
 
 ### 2026-07-08
+- 2026-07-08: closed — Removed gutter anchoring from Parley diagnostic virtual lines so the block aligns to buffer text column while preserving high-column diagnostic spans; verified red/green review diagnostic spec, define integration spec, scoped git diff --check, and full make test.; review verdict: SHIP
 - Root cause: #173 set `virt_lines_leftcol = true`, which solved off-screen
   diagnostic-column indentation but anchors the block at the absolute window left
   edge, including the gutter. The desired anchor is buffer column 0 with normal
