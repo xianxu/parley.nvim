@@ -77,7 +77,7 @@ function M.format_definition(term, definition, width)
         definition = "(no definition)"
     end
     local head = tostring(term or "") .. " — " .. definition
-    return require("parley.skill_render").format_diagnostic_message(head, width or 80)
+    return require("parley.skill_render").format_diagnostic_message(head, width)
 end
 
 --- Plan the reference-bracket wrap of the selection ([term]) as a set_lines edit

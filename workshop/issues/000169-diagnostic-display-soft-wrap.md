@@ -1,12 +1,13 @@
 ---
 id: 000169
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-08
 updated: 2026-07-08
 estimate_hours: 0.76
 started: 2026-07-08T10:31:04-07:00
+actual_hours: 0.37
 ---
 
 # diagnostic display should soft-wrap words
@@ -70,6 +71,7 @@ total: 0.76
 ## Log
 
 ### 2026-07-08
+- 2026-07-08: closed — Implemented shared Parley diagnostic message wrapping via skill_render.format_diagnostic_message and diagnostic_wrap_width; routed review and define diagnostics through it; verified red/green focused specs, git diff --check on touched files, isolated rerun of tests/unit/tools_builtin_find_spec.lua after one transient full-suite failure, and final make test pass.; review verdict: FIX-THEN-SHIP
 - Created after the operator clarified that diagnostic display should word
   soft-wrap. Design: keep Neovim `virtual_lines` configuration separate from
   message formatting; normalize messages before `vim.diagnostic.set`.
@@ -88,3 +90,13 @@ total: 0.76
   First `make test` run failed in unrelated
   `tests/unit/tools_builtin_find_spec.lua`; isolated rerun of that spec passed.
   A second full `make test` run passed.
+- Boundary review returned FIX-THEN-SHIP for a small ARCH-DRY/API leak:
+  `define.format_definition` still had an `80` fallback when width was omitted.
+  Added a red unit test, removed the fallback so nil passes through to
+  `skill_render.format_diagnostic_message`, and verified
+  `tests/unit/define_spec.lua`, `tests/unit/skill_render_spec.lua`, and
+  `tests/integration/define_spec.lua`.
+- Model-Revision: close reported the last five trusted estimates were all more
+  than 2x over actual. For similarly small Lua/Neovim display fixes, reduce the
+  default implementation/review padding unless the test setup has unknown
+  integration risk.

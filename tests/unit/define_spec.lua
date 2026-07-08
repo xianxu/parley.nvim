@@ -77,6 +77,22 @@ describe("define.format_definition", function()
         end
     end)
 
+    it("passes nil width through to the shared diagnostic formatter", function()
+        local skill_render = require("parley.skill_render")
+        local orig = skill_render.format_diagnostic_message
+        local captured_width
+        skill_render.format_diagnostic_message = function(text, width)
+            captured_width = width
+            return text
+        end
+        local ok, err = pcall(function()
+            assert.equals("X — word", define.format_definition("X", "word"))
+        end)
+        skill_render.format_diagnostic_message = orig
+        if not ok then error(err) end
+        assert.is_nil(captured_width)
+    end)
+
     it("trims a nil/blank definition to a safe string", function()
         assert.equals("X — (no definition)", define.format_definition("X", nil, 80))
     end)
