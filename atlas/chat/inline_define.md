@@ -29,8 +29,10 @@ added the bracket/highlight/undo).
    `nvim_buf_set_lines` (`define.bracket_edit` plans it) — a single undo entry
    that anchors everything; **(b)** highlights the line(s) whole-line
    `DiffChange` (`skill_render.highlight_line`); **(c)** sets one INFO
-   `vim.diagnostic` (`define.format_definition` → `skill_render.wrap`) on the
-   `parley_skill` namespace; **(d)** records the undo/redo projection states.
+   `vim.diagnostic` on the selected term span after bracket insertion
+   (`define.diagnostic_span_after_bracket`, `define.format_definition` →
+   `skill_render.wrap`) on the `parley_skill` namespace; **(d)** records the
+   undo/redo projection states.
    `diag_display`'s `virtual_lines{current_line=true}` reveals the diagnostic
    (cursor parked on the term's line). A no-`emit_definition` response leaves no
    bracket.
@@ -52,7 +54,8 @@ brackets the edit so a prior define's watcher doesn't mistake it for a user edit
 
 - **Pure** (`lua/parley/define.lua`, unit-tested with plain tables): `slice_selection`,
   `context_for_selection`, `format_definition`, `bracket_edit` (plans the `[term]`
-  wrap as a set_lines edit).
+  wrap as a set_lines edit), `diagnostic_span_after_bracket` (maps the visual span
+  to the post-bracket diagnostic range).
 - **IO shell** (`lua/parley/init.lua`): `define_visual`, `render_definition`.
 - **External service** (Anthropic) exercised via the process-level fake reused
   from `skill_invoke_spec` (SSE tool-call injection).

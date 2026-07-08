@@ -111,4 +111,20 @@ function M.bracket_edit(lines, l1, c1, l2, c2)
     return { first0 = l1 - 1, last = l2, lines = new_lines }
 end
 
+--- Convert a visual span from getpos columns to the diagnostic range after
+--- bracket_edit inserts "[" before the selection and "]" after it.
+--- @param l1 integer 1-based start line
+--- @param c1 integer 1-based start column from getpos("'<")
+--- @param l2 integer 1-based end line
+--- @param c2 integer 1-based inclusive end column from getpos("'>")
+--- @return table { lnum: integer, col: integer, end_lnum: integer, end_col: integer }
+function M.diagnostic_span_after_bracket(l1, c1, l2, c2)
+    return {
+        lnum = l1 - 1,
+        col = c1,
+        end_lnum = l2 - 1,
+        end_col = (l1 == l2) and (c2 + 1) or c2,
+    }
+end
+
 return M
