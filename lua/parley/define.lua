@@ -127,4 +127,181 @@ function M.diagnostic_span_after_bracket(l1, c1, l2, c2)
     }
 end
 
+--- @param s string
+--- @return string
+local function trim(s)
+    local out = (s or ""):gsub("^%s*(.-)%s*$", "%1")
+    return out
+end
+
+--- Convert a term into a stable markdown footnote id.
+--- @param term string|nil
+--- @return string
+function M.footnote_id(term)
+    local id = tostring(term or ""):lower()
+    id = id:gsub("[^%w]+", "-")
+    id = id:gsub("^%-+", ""):gsub("%-+$", "")
+    if id == "" then
+        id = "definition"
+    end
+    return id
+end
+
+--- @param id string
+--- @param definition string|nil
+--- @return string
+function M.format_footnote_line(id, definition)
+    definition = trim(definition)
+    if definition == "" then
+        definition = "(no definition)"
+    end
+    return string.format("[^%s]: %s", id, definition)
+end
+
+local function is_divider(line)
+    return trim(line) == "---"
+end
+
+local function is_footnote_line(line)
+    return trim(line):match("^%[%^[^%]]+%]:") ~= nil
+end
+
+local function managed_footer_start(lines)
+    for i = #lines, 1, -1 do
+        if is_divider(lines[i]) then
+            local has_footnote = false
+            for j = i + 1, #lines do
+                local line = lines[j] or ""
+                if trim(line) ~= "" then
+                    if not is_footnote_line(line) then
+                        return nil
+                    end
+                    has_footnote = true
+                end
+            end
+            if has_footnote then
+                return i
+            end
+            return nil
+        end
+    end
+    return nil
+end
+
+local function split_text_lines(text)
+    text = text or ""
+    local lines = {}
+    local start = 1
+    while true do
+        local nl = text:find("\n", start, true)
+        if not nl then
+            lines[#lines + 1] = text:sub(start)
+            break
+        end
+        lines[#lines + 1] = text:sub(start, nl - 1)
+        start = nl + 1
+    end
+    if #lines > 1 and lines[#lines] == "" then
+        table.remove(lines)
+    end
+    return lines
+end
+
+local function copy_lines(lines)
+    local out = {}
+    for i, line in ipairs(lines or {}) do
+        out[i] = line
+    end
+    return out
+end
+
+--- Strip a final managed definition-footnote footer from text.
+--- @param text string|nil
+--- @return string
+function M.strip_definition_footnote_footer(text)
+    local lines = split_text_lines(text or "")
+    local start = managed_footer_start(lines)
+    if not start then
+        return text or ""
+    end
+    while start > 1 and trim(lines[start - 1]) == "" do
+        start = start - 1
+    end
+    local kept = {}
+    for i = 1, start - 1 do
+        kept[#kept + 1] = lines[i]
+    end
+    while #kept > 0 and trim(kept[#kept]) == "" do
+        table.remove(kept)
+    end
+    return table.concat(kept, "\n")
+end
+
+local function replace_or_append_footnote(lines, id, definition)
+    local out = copy_lines(lines)
+    local footer = managed_footer_start(out)
+    local footnote_line = M.format_footnote_line(id, definition)
+    if footer then
+        for i = footer + 1, #out do
+            local escaped_id = id:gsub("([^%w])", "%%%1")
+            if trim(out[i]):match("^%[%^" .. escaped_id .. "%]:") then
+                out[i] = footnote_line
+                return out
+            end
+        end
+        out[#out + 1] = footnote_line
+        return out
+    end
+
+    while #out > 0 and trim(out[#out]) == "" do
+        table.remove(out)
+    end
+    out[#out + 1] = ""
+    out[#out + 1] = "---"
+    out[#out + 1] = ""
+    out[#out + 1] = footnote_line
+    return out
+end
+
+--- Insert a markdown footnote reference after the selected text and store the
+--- definition in a managed footer.
+--- @param lines string[]
+--- @param l1 integer
+--- @param c1 integer 0-based byte column
+--- @param l2 integer
+--- @param c2 integer 0-based inclusive byte column
+--- @param term string
+--- @param definition string|nil
+--- @return table { lines: string[], id: string, definition: string, diagnostic_span: table }
+function M.apply_definition_footnote(lines, l1, c1, l2, c2, term, definition)
+    local id = M.footnote_id(term)
+    local ref = "[^" .. id .. "]"
+    local out = copy_lines(lines)
+    if l1 == l2 then
+        local line = out[l1] or ""
+        local ec = math.min(c2 + 1, #line)
+        out[l1] = line:sub(1, ec) .. ref .. line:sub(ec + 1)
+    else
+        local line = out[l2] or ""
+        local ec = math.min(c2 + 1, #line)
+        out[l2] = line:sub(1, ec) .. ref .. line:sub(ec + 1)
+    end
+    out = replace_or_append_footnote(out, id, definition)
+    local normalized_definition = trim(definition)
+    if normalized_definition == "" then
+        normalized_definition = "(no definition)"
+    end
+    return {
+        lines = out,
+        id = id,
+        definition = normalized_definition,
+        diagnostic_span = {
+            lnum = l1 - 1,
+            col = c1,
+            end_lnum = l2 - 1,
+            end_col = c2 + 1 + #ref,
+        },
+    }
+end
+
 return M

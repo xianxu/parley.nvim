@@ -125,3 +125,100 @@ describe("define.diagnostic_span_after_bracket", function()
         }, span)
     end)
 end)
+
+describe("define durable footnotes", function()
+    it("slugifies a definition term into a markdown footnote id", function()
+        assert.equals("amazon-standard-identification-number",
+            define.footnote_id("Amazon Standard Identification Number"))
+        assert.equals("asin", define.footnote_id("ASIN"))
+    end)
+
+    it("adds an inline footnote reference and appends a managed footer", function()
+        local result = define.apply_definition_footnote(
+            { "here is ASIN in context" },
+            1, 8, 1, 11,
+            "ASIN",
+            "Amazon Standard Identification Number."
+        )
+
+        assert.are.same({
+            "here is ASIN[^asin] in context",
+            "",
+            "---",
+            "",
+            "[^asin]: Amazon Standard Identification Number.",
+        }, result.lines)
+        assert.are.same({ lnum = 0, col = 8, end_lnum = 0, end_col = 19 }, result.diagnostic_span)
+        assert.equals("asin", result.id)
+        assert.equals("Amazon Standard Identification Number.", result.definition)
+    end)
+
+    it("updates an existing managed footnote instead of duplicating it", function()
+        local result = define.apply_definition_footnote(
+            {
+                "ASIN is here",
+                "",
+                "---",
+                "",
+                "[^asin]: old definition",
+            },
+            1, 0, 1, 3,
+            "ASIN",
+            "Amazon Standard Identification Number."
+        )
+
+        assert.are.same({
+            "ASIN[^asin] is here",
+            "",
+            "---",
+            "",
+            "[^asin]: Amazon Standard Identification Number.",
+        }, result.lines)
+    end)
+
+    it("strips only a final managed footnote footer", function()
+        local text = table.concat({
+            "answer text",
+            "",
+            "---",
+            "",
+            "[^asin]: Amazon Standard Identification Number.",
+        }, "\n")
+
+        assert.equals("answer text", define.strip_definition_footnote_footer(text))
+    end)
+
+    it("preserves ordinary horizontal rules that are not managed footnote footers", function()
+        local text = table.concat({
+            "answer text",
+            "",
+            "---",
+            "",
+            "not a footnote",
+        }, "\n")
+
+        assert.equals(text, define.strip_definition_footnote_footer(text))
+    end)
+
+    it("keeps earlier horizontal-rule content and strips only the final managed footer", function()
+        local text = table.concat({
+            "answer text",
+            "",
+            "---",
+            "",
+            "ordinary body after a rule",
+            "",
+            "---",
+            "",
+            "[^asin]: Amazon Standard Identification Number.",
+        }, "\n")
+
+        assert.equals(table.concat({
+            "answer text",
+            "",
+            "---",
+            "",
+            "ordinary body after a rule",
+        }, "\n"), define.strip_definition_footnote_footer(text))
+    end)
+end)

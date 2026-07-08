@@ -1592,18 +1592,18 @@ local function drill_in_visual(buf)
 	vim.schedule(function() vim.cmd("startinsert") end)
 end
 
--- Inline term definition (#161 + R1). render_definition is the on_done IO seam.
--- On a successful lookup it wraps the term in a [term] reference bracket (ONE
--- undo entry — the anchor), highlights the line (whole-line DiffChange, review's
--- scheme), and shows the definition as an ephemeral INFO diagnostic. The
--- definition text is never written to the file; only the brackets are. Undo/redo
--- coherence reuses review's projection watcher: undoing the bracket lands on the
--- pre-bracket content-hash → the empty snapshot renders → both decorations clear.
+-- Inline term definition (#161 + R1, #166). render_definition is the on_done IO
+-- seam. On a successful lookup it stores the definition as a durable markdown
+-- footnote (ONE undo entry — the anchor), highlights the line (whole-line
+-- DiffChange, review's scheme), and shows the definition as an ephemeral INFO
+-- diagnostic. Undo/redo coherence reuses review's projection watcher: undoing
+-- the footnote edit lands on the pre-edit content-hash → the empty snapshot
+-- renders → both decorations clear.
 -- `span` = the visual selection {sr, sc, er, ec} (1-based getpos values).
 local function render_definition(buf, span, phrase, result)
 	-- Pick the emit_definition call (unforced → the model may answer in text or
 	-- only call web_search; both mean "no definition"). Notify rather than
-	-- silently doing nothing, and leave no bracket.
+	-- silently doing nothing, and leave no footnote edit.
 	local call
 	if result and result.calls then
 		for _, c in ipairs(result.calls) do
@@ -1623,32 +1623,30 @@ local function render_definition(buf, span, phrase, result)
 	local skill_render = require("parley.skill_render")
 	local projection = require("parley.skills.review.projection")
 
-	-- The buffer may have changed under the in-flight call; skip bracketing (and
-	-- the whole render) rather than mis-place a bracket on shifted text.
+	-- The buffer may have changed under the in-flight call; skip the whole render
+	-- rather than attach a footnote reference to shifted text.
 	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 	if define.slice_selection(lines, sr, sc - 1, er, ec - 1) ~= phrase then
 		M.logger.warning("Define: selection changed during lookup — re-select to define")
 		return
 	end
-	local original = table.concat(lines, "\n") -- pre-bracket content (undo base)
+	local original = table.concat(lines, "\n") -- pre-edit content (undo base)
 
-	-- Wrap the term in [term] as ONE set_lines edit (single undo entry = the
-	-- anchor; nvim_buf_set_text is arch-confined to buffer_edit, and set_lines is
-	-- how drill_in_visual wraps a selection too). set_applying suppresses any
-	-- prior define's projection watcher during our own edit (mirrors review).
+	-- Store the definition as a markdown footnote in ONE full-buffer set_lines
+	-- edit (single undo entry = the anchor). set_applying suppresses any prior
+	-- define's projection watcher during our own edit (mirrors review).
 	projection.set_applying(buf, true)
-	local e = define.bracket_edit(lines, sr, sc - 1, er, ec - 1)
-	vim.api.nvim_buf_set_lines(buf, e.first0, e.last, false, e.lines)
+	local input = call.input or {}
+	local e = define.apply_definition_footnote(lines, sr, sc - 1, er, ec - 1, input.term or phrase, input.definition)
+	require("parley.buffer_edit").replace_all_lines_for_definition(buf, e.lines)
 
 	-- Highlight the term's line(s) + the ephemeral definition diagnostic.
-	local last0 = e.first0 + #e.lines - 1
-	for line0 = e.first0, last0 do
+	for line0 = sr - 1, er - 1 do
 		skill_render.highlight_line(buf, line0)
 	end
-	local input = call.input or {}
 	local width = math.max(40, vim.api.nvim_win_get_width(0) - 8)
-	local msg = define.format_definition(input.term, input.definition, width)
-	local diag_span = define.diagnostic_span_after_bracket(sr, sc, er, ec)
+	local msg = define.format_definition(input.term or phrase, e.definition, width)
+	local diag_span = e.diagnostic_span
 	vim.diagnostic.set(skill_render.diag_namespace(), buf, { {
 		lnum = diag_span.lnum,
 		col = diag_span.col,
@@ -1659,9 +1657,9 @@ local function render_definition(buf, span, phrase, result)
 		source = "parley-define",
 	} })
 
-	-- Record projection states so undo/redo of the bracket clears/restores the
-	-- decorations (#133 M5 machinery, reused): pre-bracket hash → empty snapshot,
-	-- bracketed hash → highlight+diagnostic; attach the watcher for future undos.
+	-- Record projection states so undo/redo of the footnote edit clears/restores
+	-- the decorations (#133 M5 machinery, reused): pre-edit hash → empty
+	-- snapshot, footnoted hash → highlight+diagnostic; attach the watcher.
 	projection.record_empty_for(buf, original)
 	projection.record(buf)
 	projection.ensure_watch(buf)
@@ -1675,7 +1673,7 @@ end
 
 -- define_visual: the thin IO shell for visual-mode <M-CR>. Reads the selection,
 -- computes the enclosing-exchange context, and fires a headless define skill
--- turn whose on_done brackets + renders the definition inline. Pure logic lives
+-- turn whose on_done stores + renders the definition inline. Pure logic lives
 -- in lua/parley/define.lua. Exposed as M.define_visual for the keybinding.
 function M.define_visual(buf)
 	buf = buf or vim.api.nvim_get_current_buf()

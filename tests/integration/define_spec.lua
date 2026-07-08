@@ -238,7 +238,7 @@ describe("define_visual + render_definition (#161)", function()
         return false
     end
 
-    it("brackets the term, highlights the line, and shows the diagnostic (R1)", function()
+    it("stores the definition as a durable footnote, highlights the line, and shows the diagnostic", function()
         -- select "ASIN" on line 3 (cols 9..12, 1-based)
         vim.fn.setpos("'<", { buf, 3, 9, 0 })
         vim.fn.setpos("'>", { buf, 3, 12, 0 })
@@ -246,31 +246,36 @@ describe("define_visual + render_definition (#161)", function()
         vim.wait(2000, function()
             return #vim.diagnostic.get(buf, { namespace = ns }) > 0
         end)
-        -- [term] bracket written into the line (the undo anchor)
-        assert.are.equal("here is [ASIN] in context",
+        -- Footnote reference written into the line (the undo anchor)
+        assert.are.equal("here is ASIN[^asin] in context",
             vim.api.nvim_buf_get_lines(buf, 2, 3, false)[1])
+        assert.are.same({
+            "---",
+            "",
+            "[^asin]: Amazon Standard Identification Number.",
+        }, vim.api.nvim_buf_get_lines(buf, 5, 8, false))
         -- diagnostic on the term's line
         local diags = vim.diagnostic.get(buf, { namespace = ns })
         assert.are.equal(2, diags[1].lnum) -- 0-based line 3
-        assert.are.equal(9, diags[1].col) -- selected ASIN after inserted "["
+        assert.are.equal(8, diags[1].col)
         assert.are.equal(2, diags[1].end_lnum)
-        assert.are.equal(13, diags[1].end_col) -- exclusive, before inserted "]"
+        assert.are.equal(19, diags[1].end_col) -- ASIN plus [^asin]
         assert.is_true(diags[1].message:find("ASIN", 1, true) ~= nil)
         -- whole-line DiffChange highlight on the hl namespace, on line 3
         assert.is_true(hl_on_line(buf, 2), "term line not highlighted")
     end)
 
-    it("u undoes the bracket + clears decorations; C-r restores them (R1)", function()
+    it("u undoes the footnote edit + clears decorations; C-r restores them (R1)", function()
         vim.fn.setpos("'<", { buf, 3, 9, 0 })
         vim.fn.setpos("'>", { buf, 3, 12, 0 })
         require("parley").define_visual(buf)
         vim.wait(2000, function()
             return #vim.diagnostic.get(buf, { namespace = ns }) > 0
         end)
-        assert.are.equal("here is [ASIN] in context",
+        assert.are.equal("here is ASIN[^asin] in context",
             vim.api.nvim_buf_get_lines(buf, 2, 3, false)[1])
 
-        -- undo: the bracket reverts; the projection watcher (TextChanged) clears
+        -- undo: the footnote edit reverts; the projection watcher (TextChanged) clears
         -- both decorations. Fire the autocmd Vim fires interactively — headless
         -- :undo doesn't trigger TextChanged on its own (the watcher itself is
         -- covered by projection's own specs; here we verify define's records).
@@ -278,14 +283,16 @@ describe("define_visual + render_definition (#161)", function()
         vim.api.nvim_exec_autocmds("TextChanged", { buffer = buf })
         assert.are.equal("here is ASIN in context",
             vim.api.nvim_buf_get_lines(buf, 2, 3, false)[1])
+        assert.is_nil(table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+            :find("%[%^asin%]:", 1, false), "footnote not removed on undo")
         assert.are.equal(0, #vim.diagnostic.get(buf, { namespace = ns }),
             "diagnostic not cleared on undo")
         assert.is_false(hl_on_line(buf, 2), "highlight not cleared on undo")
 
-        -- redo: bracket + decorations return
+        -- redo: footnote edit + decorations return
         vim.cmd("silent redo")
         vim.api.nvim_exec_autocmds("TextChanged", { buffer = buf })
-        assert.are.equal("here is [ASIN] in context",
+        assert.are.equal("here is ASIN[^asin] in context",
             vim.api.nvim_buf_get_lines(buf, 2, 3, false)[1])
         assert.is_true(#vim.diagnostic.get(buf, { namespace = ns }) >= 1,
             "diagnostic not restored on redo")
@@ -319,7 +326,7 @@ describe("define_visual + render_definition (#161)", function()
             "a no-tool response must not set a diagnostic")
         assert.are.equal("here is ASIN in context",
             vim.api.nvim_buf_get_lines(buf, 2, 3, false)[1],
-            "a no-tool response must not bracket the term")
+            "a no-tool response must not footnote the term")
     end)
 end)
 

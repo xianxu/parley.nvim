@@ -704,6 +704,109 @@ describe("_build_messages: range filtering", function()
     end)
 end)
 
+describe("_build_messages: durable definition footnotes", function()
+    it("strips managed definition footnote footers from user and assistant content", function()
+        local question = table.concat({
+            "What is ASIN?",
+            "",
+            "---",
+            "",
+            "[^asin]: Amazon Standard Identification Number.",
+        }, "\n")
+        local answer = table.concat({
+            "ASIN is an identifier.",
+            "",
+            "---",
+            "",
+            "[^asin]: Amazon Standard Identification Number.",
+        }, "\n")
+        local pc = parsed_chat({ exchange(question, answer), exchange("Next") })
+        pc.exchanges[1].question.line_start = 10
+        pc.exchanges[1].answer.line_start = 12
+        pc.exchanges[2].question.line_start = 20
+
+        local messages = parley._build_messages({
+            parsed_chat = pc,
+            start_index = 1,
+            end_index = 100,
+            exchange_idx = 2,
+            agent = agent(),
+            config = parley.config,
+            helpers = stub_helpers,
+            logger = stub_logger
+        })
+
+        assert.equals("What is ASIN?", messages[2].content)
+        assert.equals("ASIN is an identifier.", messages[3].content)
+        assert.is_nil(messages[2].content:find("%[%^asin%]:"))
+        assert.is_nil(messages[3].content:find("%[%^asin%]:"))
+    end)
+
+    it("preserves ordinary horizontal-rule content that is not a managed footer", function()
+        local answer = table.concat({
+            "first half",
+            "",
+            "---",
+            "",
+            "second half, not a footnote",
+        }, "\n")
+        local pc = parsed_chat({ exchange("Q", answer), exchange("Next") })
+        pc.exchanges[1].question.line_start = 10
+        pc.exchanges[1].answer.line_start = 12
+        pc.exchanges[2].question.line_start = 20
+
+        local messages = parley._build_messages({
+            parsed_chat = pc,
+            start_index = 1,
+            end_index = 100,
+            exchange_idx = 2,
+            agent = agent(),
+            config = parley.config,
+            helpers = stub_helpers,
+            logger = stub_logger
+        })
+
+        assert.equals(answer, messages[3].content)
+    end)
+
+    it("keeps earlier horizontal-rule content and strips only the final managed footer", function()
+        local answer = table.concat({
+            "first half",
+            "",
+            "---",
+            "",
+            "second half",
+            "",
+            "---",
+            "",
+            "[^asin]: Amazon Standard Identification Number.",
+        }, "\n")
+        local pc = parsed_chat({ exchange("Q", answer), exchange("Next") })
+        pc.exchanges[1].question.line_start = 10
+        pc.exchanges[1].answer.line_start = 12
+        pc.exchanges[2].question.line_start = 20
+
+        local messages = parley._build_messages({
+            parsed_chat = pc,
+            start_index = 1,
+            end_index = 100,
+            exchange_idx = 2,
+            agent = agent(),
+            config = parley.config,
+            helpers = stub_helpers,
+            logger = stub_logger
+        })
+
+        assert.equals(table.concat({
+            "first half",
+            "",
+            "---",
+            "",
+            "second half",
+        }, "\n"), messages[3].content)
+    end)
+end)
+
 describe("_build_messages: whitespace trimming", function()
     it("trims leading and trailing whitespace from all message content", function()
         local ex = exchange("  Question with spaces  ", "  Answer with spaces  ")
@@ -1494,6 +1597,58 @@ describe("build_messages_from_model: dangling tool_use synthesized on the live p
         assert.equals("tool_result", last.content[1].type)
         assert.equals("toolu_z", last.content[1].tool_use_id)
         assert.is_true(last.content[1].is_error)
+
+        vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+end)
+
+describe("build_messages_from_model: durable definition footnotes", function()
+    local exchange_model = require("parley.exchange_model")
+
+    it("strips managed footnote footers from live question and answer blocks", function()
+        local question_lines = {
+            "💬: What is ASIN?",
+            "",
+            "---",
+            "",
+            "[^asin]: Amazon Standard Identification Number.",
+        }
+        local answer_lines = {
+            "ASIN is an identifier.",
+            "",
+            "---",
+            "",
+            "[^asin]: Amazon Standard Identification Number.",
+        }
+        local header = { "topic: t", "---" }
+        local header_lines = #header
+        local model = exchange_model.new(header_lines)
+        model:add_exchange(#question_lines)
+        model:add_block(1, "agent_header", 1)
+        model:add_block(1, "text", #answer_lines)
+
+        local q0 = model:block_start(1, 1)
+        local ah0 = model:block_start(1, 2)
+        local text0 = model:block_start(1, 3)
+        local total = text0 + #answer_lines
+        local lines = {}
+        for i = 1, total do lines[i] = "" end
+        for i = 1, header_lines do lines[i] = header[i] end
+        for i, line in ipairs(question_lines) do lines[q0 + i] = line end
+        lines[ah0 + 1] = "🤖: [assistant]"
+        for i, line in ipairs(answer_lines) do lines[text0 + i] = line end
+
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+
+        local agent_info = { system_prompt = "You are helpful.", model = "gpt-4o", provider = "openai" }
+        local msgs = require("parley.chat_respond").build_messages_from_model(buf, model, 1, agent_info)
+
+        assert.equals("What is ASIN?", msgs[2].content)
+        assert.equals("assistant", msgs[3].role)
+        assert.equals("ASIN is an identifier.", msgs[3].content[1].text)
+        assert.is_nil(msgs[2].content:find("%[%^asin%]:"))
+        assert.is_nil(msgs[3].content[1].text:find("%[%^asin%]:"))
 
         vim.api.nvim_buf_delete(buf, { force = true })
     end)

@@ -114,6 +114,11 @@ function M.replace_all_lines(buf, lines)
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 end
 
+--- Replace the entire chat buffer after a pure definition-footnote transform.
+function M.replace_all_lines_for_definition(buf, lines)
+    M.replace_all_lines(buf, lines)
+end
+
 --- Append a section to an answer. The section is rendered via
 --- render_buffer.render_section. If the line at `after_line_0_indexed`
 --- is non-empty, a blank separator is inserted first so blocks don't
