@@ -237,8 +237,11 @@ describe("define_visual + render_definition (#161)", function()
         end
         return false
     end
+    local function first_hl_mark(b)
+        return vim.api.nvim_buf_get_extmarks(b, hl_ns, 0, -1, { details = true })[1]
+    end
 
-    it("stores the definition as a durable footnote, highlights the line, and shows the diagnostic", function()
+    it("stores the definition as a durable footnote, highlights the term/reference span, and shows the diagnostic", function()
         -- select "ASIN" on line 3 (cols 9..12, 1-based)
         vim.fn.setpos("'<", { buf, 3, 9, 0 })
         vim.fn.setpos("'>", { buf, 3, 12, 0 })
@@ -261,8 +264,13 @@ describe("define_visual + render_definition (#161)", function()
         assert.are.equal(2, diags[1].end_lnum)
         assert.are.equal(19, diags[1].end_col) -- ASIN plus [^asin]
         assert.is_true(diags[1].message:find("ASIN", 1, true) ~= nil)
-        -- whole-line DiffChange highlight on the hl namespace, on line 3
-        assert.is_true(hl_on_line(buf, 2), "term line not highlighted")
+        -- DiffChange highlight covers only ASIN[^asin], not the whole paragraph.
+        local mark = first_hl_mark(buf)
+        assert.is_not_nil(mark, "term/reference span not highlighted")
+        assert.are.equal(2, mark[2])
+        assert.are.equal(8, mark[3])
+        assert.are.equal(2, mark[4].end_row)
+        assert.are.equal(19, mark[4].end_col)
     end)
 
     it("re-defining a footnoted term updates the footer without duplicating the inline reference", function()
@@ -326,6 +334,15 @@ describe("define_visual + render_definition (#161)", function()
         vim.api.nvim_exec_autocmds("TextChanged", { buffer = buf })
         assert.are.equal("here is ASIN[^asin] in context",
             vim.api.nvim_buf_get_lines(buf, 2, 3, false)[1])
+        local redone_mark = first_hl_mark(buf)
+        assert.is_not_nil(redone_mark, "highlight not restored on redo")
+        assert.are.equal(2, redone_mark[2])
+        assert.are.equal(8, redone_mark[3])
+        assert.are.equal(2, redone_mark[4].end_row)
+        assert.are.equal(19, redone_mark[4].end_col)
+        local redone_diags = vim.diagnostic.get(buf, { namespace = ns })
+        assert.are.equal(8, redone_diags[1].col)
+        assert.are.equal(19, redone_diags[1].end_col)
         assert.is_true(#vim.diagnostic.get(buf, { namespace = ns }) >= 1,
             "diagnostic not restored on redo")
         assert.is_true(hl_on_line(buf, 2), "highlight not restored on redo")
