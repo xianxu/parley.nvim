@@ -1,12 +1,13 @@
 ---
 id: 000163
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-07
 updated: 2026-07-07
 estimate_hours: 0.45
 started: 2026-07-07T23:39:02-07:00
+actual_hours: 0.23
 ---
 
 # repo mode status bar improvements
@@ -68,6 +69,7 @@ total: 0.45
 ## Log
 
 ### 2026-07-07
+- 2026-07-07: closed — Repo-mode lualine glyphs show repo labels for normal and brain cwd; direct super_repo spec red/green verified; full make test passed after known find-spec parallel flake passed in isolation and retry.; review verdict: SHIP
 
 - Moved from `pair#102` to `parley.nvim#163`; this belongs with the parley repo
   mode/status bar implementation.
