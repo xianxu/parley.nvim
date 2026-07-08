@@ -20,11 +20,24 @@ local DISPLAY_COL = 2
 
 local display_ns_id
 local display_augroup
+local float_win
+local float_buf
 
 -- Parley's review diagnostic namespace — single-sourced from skill_render (which
 -- owns the namespace) so the identity isn't a duplicated literal (#133 M6 review).
 local function ns()
     return require("parley.skill_render").diag_namespace()
+end
+
+local function close_float()
+    if float_win and vim.api.nvim_win_is_valid(float_win) then
+        pcall(vim.api.nvim_win_close, float_win, true)
+    end
+    if float_buf and vim.api.nvim_buf_is_valid(float_buf) then
+        pcall(vim.api.nvim_buf_delete, float_buf, { force = true })
+    end
+    float_win = nil
+    float_buf = nil
 end
 
 local function ensure_display()
@@ -40,6 +53,7 @@ end
 
 local function clear(buf)
     ensure_display()
+    close_float()
     if vim.api.nvim_buf_is_valid(buf) then
         vim.api.nvim_buf_clear_namespace(buf, display_ns_id, 0, -1)
         pcall(vim.api.nvim_clear_autocmds, { group = display_augroup, buffer = buf })
@@ -61,6 +75,16 @@ local function diagnostic_message_lines(diagnostic)
     end
     if #lines == 0 then
         table.insert(lines, { { " ", MESSAGE_HL } })
+    end
+    return lines
+end
+
+local function diagnostic_float_lines(diagnostics)
+    local lines = { "Diagnostics:" }
+    for _, diagnostic in ipairs(diagnostics or {}) do
+        for _, line in ipairs(vim.split(tostring(diagnostic.message or ""), "\n", { plain = true })) do
+            table.insert(lines, line ~= "" and line or " ")
+        end
     end
     return lines
 end
@@ -93,12 +117,51 @@ local function diagnostic_visible_at(diagnostic, line, col)
     return diagnostic_contains_line(diagnostic, line)
 end
 
+local function float_config(win, line_count)
+    local win_width = vim.api.nvim_win_get_width(win)
+    local win_height = vim.api.nvim_win_get_height(win)
+    local width = math.max(1, math.floor(win_width * 0.8))
+    local height = math.max(1, math.min(line_count, math.max(1, win_height - 2)))
+    return {
+        relative = "win",
+        win = win,
+        width = width,
+        height = height,
+        row = math.min(vim.fn.winline(), math.max(0, win_height - height)),
+        col = math.floor((win_width - width) / 2),
+        style = "minimal",
+        border = "rounded",
+        focusable = false,
+        title = { { "Diagnostics", HEADER_HL } },
+        title_pos = "left",
+    }
+end
+
+local function show_float(diagnostics)
+    close_float()
+    if #diagnostics == 0 then
+        return
+    end
+    local win = vim.api.nvim_get_current_win()
+    local lines = diagnostic_float_lines(diagnostics)
+    float_buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_option(float_buf, "buftype", "nofile")
+    vim.api.nvim_buf_set_option(float_buf, "bufhidden", "wipe")
+    vim.api.nvim_buf_set_option(float_buf, "modifiable", true)
+    require("parley.buffer_edit").replace_all_lines(float_buf, lines)
+    vim.api.nvim_buf_set_option(float_buf, "modifiable", false)
+    float_win = vim.api.nvim_open_win(float_buf, false, float_config(win, #lines))
+    vim.api.nvim_win_set_option(float_win, "wrap", true)
+    vim.api.nvim_win_set_option(float_win, "winhl", "NormalFloat:NormalFloat,FloatBorder:FloatBorder")
+end
+
 local function render(buf, diagnostics, current_line_only)
     ensure_display()
     if not vim.api.nvim_buf_is_valid(buf) then
         return
     end
     vim.api.nvim_buf_clear_namespace(buf, display_ns_id, 0, -1)
+    close_float()
 
     local line, col
     if current_line_only then
@@ -109,12 +172,21 @@ local function render(buf, diagnostics, current_line_only)
     end
 
     local by_line = {}
+    local footnote_diagnostics = {}
     for _, diagnostic in ipairs(diagnostics or {}) do
         if not current_line_only or diagnostic_visible_at(diagnostic, line, col) then
-            by_line[diagnostic.lnum] = by_line[diagnostic.lnum] or {}
-            table.insert(by_line[diagnostic.lnum], diagnostic)
+            if diagnostic.source == "parley-footnote" then
+                table.insert(footnote_diagnostics, diagnostic)
+            else
+                by_line[diagnostic.lnum] = by_line[diagnostic.lnum] or {}
+                table.insert(by_line[diagnostic.lnum], diagnostic)
+            end
         end
     end
+    table.sort(footnote_diagnostics, function(a, b)
+        return (a.col or 0) < (b.col or 0)
+    end)
+    show_float(footnote_diagnostics)
 
     for lnum, line_diagnostics in pairs(by_line) do
         table.sort(line_diagnostics, function(a, b)
