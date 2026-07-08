@@ -40,7 +40,7 @@ describe("review.diag_display", function()
         assert.is_false(ns_cfg()["parley/virtual_lines"])
     end)
 
-    it("renders current-line diagnostics at the buffer text column without moving the diagnostic span", function()
+    it("renders current-line diagnostics inset from the buffer text column without moving the diagnostic span", function()
         local skill_render = require("parley.skill_render")
         local diag_ns = skill_render.diag_namespace()
         local buf = vim.api.nvim_create_buf(false, true)
@@ -48,6 +48,7 @@ describe("review.diag_display", function()
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
             string.rep("x", 120) .. " ACOS[^acos]",
         })
+        vim.api.nvim_win_set_cursor(0, { 1, 122 })
 
         dd.set(true)
         vim.diagnostic.set(diag_ns, buf, { {
@@ -66,6 +67,7 @@ describe("review.diag_display", function()
 
         local marks = display_marks(buf)
         assert.are.equal(1, #marks)
+        assert.are.equal(2, marks[1][3])
         local details = marks[1][4]
         assert.is_not_true(details.virt_lines_leftcol)
         assert.are.equal("Diagnostics:", details.virt_lines[1][1][1])
@@ -82,6 +84,38 @@ describe("review.diag_display", function()
         dd.set(false)
         assert.are.equal(0, #display_marks(buf))
         assert.are.equal(1, #vim.diagnostic.get(buf, { namespace = diag_ns }))
+    end)
+
+    it("shows footnote diagnostics only while the cursor is inside the anchor span", function()
+        local skill_render = require("parley.skill_render")
+        local diag_ns = skill_render.diag_namespace()
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_set_current_buf(buf)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+            'before ACOS[^acos] after the anchor on the same line',
+        })
+
+        dd.set(true)
+        vim.diagnostic.set(diag_ns, buf, { {
+            lnum = 0,
+            col = 7,
+            end_lnum = 0,
+            end_col = 18,
+            message = "ACOS — Advertising Cost of Sales.",
+            severity = vim.diagnostic.severity.INFO,
+            source = "parley-footnote",
+        } })
+        assert.are.equal(0, #display_marks(buf), "cursor starts before the footnote anchor")
+
+        vim.api.nvim_win_set_cursor(0, { 1, 8 })
+        vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
+        local marks = display_marks(buf)
+        assert.are.equal(1, #marks, "cursor inside the footnote anchor should show diagnosis")
+        assert.are.equal(2, marks[1][3])
+
+        vim.api.nvim_win_set_cursor(0, { 1, 25 })
+        vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
+        assert.are.equal(0, #display_marks(buf), "same line outside the anchor should hide diagnosis")
     end)
 
     it("keeps a multi-line diagnostic visible anywhere inside its span", function()

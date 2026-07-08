@@ -42,8 +42,8 @@ rehydrates persisted managed footnotes in all markdown buffers.
    `skill_render.format_diagnostic_message`) on the `parley_skill` namespace;
    **(d)** records the undo/redo projection states.
    `diag_display`'s Parley-owned text-column virtual-line display reveals the
-   diagnostic (cursor parked on the term's line). A no-`emit_definition` response
-   leaves no footnote reference/footer.
+   diagnostic when the cursor is on the term/footnote anchor span. A
+   no-`emit_definition` response leaves no footnote reference/footer.
 
 ## Undo (`u`) — reuses review's projection
 
@@ -126,8 +126,9 @@ tool-call args (`result.calls[1].input`), read in `on_done`.
 - `skill_render.refresh_footnote_diagnostics` owns only diagnostics tagged
   `parley-footnote` and preserves other `parley_skill` diagnostics, so review
   diagnostics are not cleared by markdown footnote refresh.
-- A diagnostic's Parley virtual-line block auto-hides when the cursor leaves its
-  line. The footnote persists in the file if saved.
+- A footnote diagnostic's Parley virtual-line block auto-hides when the cursor
+  leaves its term/footnote anchor span. The footnote persists in the file if
+  saved.
 
 ## Key files
 
