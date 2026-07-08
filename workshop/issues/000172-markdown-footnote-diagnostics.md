@@ -1,12 +1,13 @@
 ---
 id: 000172
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-08
 updated: 2026-07-08
 estimate_hours: 0.94
 started: 2026-07-08T11:38:22-07:00
+actual_hours: 0.35
 ---
 
 # display markdown footnotes as diagnostics
@@ -77,6 +78,7 @@ total: 0.94
 ## Log
 
 ### 2026-07-08
+- 2026-07-08: closed — Implemented persisted managed-footnote diagnostics for chat and markdown buffers; verified red/green focused specs, git diff --check on touched files, and full make test.; review verdict: SHIP
 - Created after the operator reported that persisted define footnotes are not
   shown as diagnostics after reentering a chat buffer, and clarified that all
   markdown buffers should display footnotes as diagnostics.
@@ -97,3 +99,6 @@ total: 0.94
   tests/integration/define_spec.lua atlas/index.md atlas/chat/inline_define.md
   workshop/issues/000172-markdown-footnote-diagnostics.md
   workshop/plans/000172-markdown-footnote-diagnostics-plan.md`; `make test`.
+- Model-Revision: close reported the last five trusted estimates were all more
+  than 2x over actual; future small Lua/Neovim tasks should bias estimates lower
+  when parser, glue, and focused test surfaces are already well constrained.
