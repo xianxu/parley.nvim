@@ -1,12 +1,13 @@
 ---
 id: 000166
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-08
 updated: 2026-07-08
 estimate_hours: 2.29
 started: 2026-07-08T08:45:50-07:00
+actual_hours: 0.39
 ---
 
 # move visual selection definition system to be based on durable footnote
@@ -90,6 +91,7 @@ total: 2.29
 ## Log
 
 ### 2026-07-08
+- 2026-07-08: closed — Implemented durable visual-definition footnotes, LLM footer stripping, and close-review fixes. Verified with PlenaryBustedFile tests/unit/define_spec.lua (22 pass), tests/integration/define_spec.lua (15 pass), tests/unit/build_messages_spec.lua (56 pass), git diff --check on #166 files, isolated tests/unit/tools_builtin_find_spec.lua after transient full-suite flake, and final make test passing with 0 lint warnings/errors plus all unit, integration, and arch tests green.; review verdict: SHIP
 - Claimed issue, wrote durable plan, and passed `sdlc change-code` after refining
   the managed-footer predicate to avoid naive `---` stripping.
 - TDD red/green:
