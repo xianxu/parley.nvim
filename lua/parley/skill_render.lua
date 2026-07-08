@@ -88,6 +88,20 @@ local function diag_wrap_width()
     return math.max(30, (info.width or 80) - (info.textoff or 0) - 10)
 end
 
+--- Current usable wrap width for Parley diagnostic virtual lines.
+--- @return integer
+function M.diagnostic_wrap_width()
+    return diag_wrap_width()
+end
+
+--- Format a diagnostic message for Neovim virtual_lines display.
+--- @param text string
+--- @param width number|nil default current diagnostic display width
+--- @return string
+function M.format_diagnostic_message(text, width)
+    return M.wrap(text, width or M.diagnostic_wrap_width())
+end
+
 --- Attach INFO diagnostics from edit explanations. Each diagnostic spans the
 --- edit's line range (lnum..end_lnum) so "cursor in the region" matches, and its
 --- message is hard-wrapped to the window's usable width for `virtual_lines`
@@ -97,7 +111,7 @@ end
 --- @param original_content string  file content before edits
 function M.attach_diagnostics(buf, edits, original_content)
     ensure_namespaces()
-    local width = diag_wrap_width()
+    local width = M.diagnostic_wrap_width()
     local diagnostics = {}
     for _, edit in ipairs(edits) do
         local line_num = 0
@@ -114,7 +128,7 @@ function M.attach_diagnostics(buf, edits, original_content)
             lnum = line_num,
             end_lnum = line_num + span,
             col = 0,
-            message = M.wrap(edit.explain or "edit applied", width),
+            message = M.format_diagnostic_message(edit.explain or "edit applied", width),
             severity = vim.diagnostic.severity.INFO,
             source = "parley-skill",
         })

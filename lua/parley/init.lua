@@ -1640,7 +1640,7 @@ local function render_definition(buf, span, phrase, result)
 	local e = define.apply_definition_footnote(lines, sr, sc - 1, er, ec - 1, input.term or phrase, input.definition)
 	require("parley.buffer_edit").replace_all_lines_for_definition(buf, e.lines)
 
-	local width = math.max(40, vim.api.nvim_win_get_width(0) - 8)
+	local width = skill_render.diagnostic_wrap_width()
 	local msg = define.format_definition(input.term or phrase, e.definition, width)
 	local diag_span = e.diagnostic_span
 	skill_render.highlight_span(buf, diag_span.lnum, diag_span.col, diag_span.end_lnum, diag_span.end_col)

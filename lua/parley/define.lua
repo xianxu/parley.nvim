@@ -64,7 +64,8 @@ function M.context_for_selection(parsed_chat, sel_line, all_lines, find_exchange
 end
 
 --- Compose the diagnostic message ("TERM — definition"), hard-wrapped to width.
---- Delegates wrapping to skill_render.wrap (the same wrap the review path uses).
+--- Delegates wrapping to skill_render's diagnostic formatter (the same wrap the
+--- review path uses).
 --- @param term string|nil
 --- @param definition string|nil
 --- @param width integer|nil
@@ -76,7 +77,7 @@ function M.format_definition(term, definition, width)
         definition = "(no definition)"
     end
     local head = tostring(term or "") .. " — " .. definition
-    return require("parley.skill_render").wrap(head, width or 80)
+    return require("parley.skill_render").format_diagnostic_message(head, width)
 end
 
 --- Plan the reference-bracket wrap of the selection ([term]) as a set_lines edit
