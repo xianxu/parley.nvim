@@ -1,11 +1,12 @@
 ---
 id: 000163
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-07-07
 updated: 2026-07-07
 estimate_hours:
+started: 2026-07-07T23:39:02-07:00
 ---
 
 # repo mode status bar improvements
