@@ -162,12 +162,16 @@ session-scoped undo); per-state snapshots aren't journaled.
 The edit "why" (the per-edit `explain`) is an INFO diagnostic on parley's
 `parley_skill` namespace. `lua/parley/skills/review/diag_display.lua` controls how
 it shows — scoped to that namespace, so the user's LSP/global diagnostics are
-untouched. Default **on**: `virtual_lines { current_line = true }`, so the
-(hard-wrapped, via `skill_render.format_diagnostic_message`) why **auto-expands
-below an edit when the cursor is in that edit's region** (`attach_diagnostics` spans `lnum..end_lnum`)
-and hides otherwise. `:ParleyShowDiagnostics` toggles it. The built-in `]d`/`[d`
-(jump) and `<C-W>d` (float, wraps) also work on these diagnostics. Composes with
-M5 — re-renders on undo/redo.
+untouched. Default **on**: Parley's custom `parley/virtual_lines` diagnostic
+handler renders a left-column virtual-line block headed `Diagnostics:` for the
+current line. It avoids Neovim's stock virtual-lines indentation-by-diagnostic
+column, which can hide messages on long wrapped prose. The hard-wrapped why
+(`skill_render.format_diagnostic_message`) **auto-expands below an edit when the
+cursor is in that edit's region** (`attach_diagnostics` spans
+`lnum..end_lnum`) and hides otherwise. `:ParleyShowDiagnostics` toggles it. The
+built-in `]d`/`[d` (jump) and `<C-W>d` (float, wraps) still work on these
+diagnostics because the underlying diagnostic spans remain unchanged. Composes
+with M5 — re-renders on undo/redo.
 
 ## Progress bar (#133 M7)
 

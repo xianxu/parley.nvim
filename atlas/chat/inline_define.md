@@ -1,14 +1,14 @@
 # Inline Term Definition
 
 Select a phrase in a chat transcript, press **`<M-CR>`** (visual mode), and a
-concise, context-aware definition appears as an inline diagnostic (grey
-`virtual_lines`) under the phrase. The selected text stays in place and gets a
-markdown footnote reference (`ASIN[^asin]`), while the definition is stored in a
-managed footnote footer at the end of the chat transcript. Persisted managed
-footnotes are rehydrated into diagnostics when any markdown buffer is entered or
-refreshed. The whole new annotation is **undoable** — `u` reverts the footnote
-edit and clears both decorations (see Undo below). For jargon you don't know
-(e.g. `ASIN`), it's a one-keystroke lookup. Added in
+concise, context-aware definition appears as an inline diagnostic under the
+phrase. The selected text stays in place and gets a markdown footnote reference
+(`ASIN[^asin]`), while the definition is stored in a managed footnote footer at
+the end of the chat transcript. Persisted managed footnotes are rehydrated into
+diagnostics when any markdown buffer is entered or refreshed. The whole new
+annotation is **undoable** — `u` reverts the footnote edit and clears both
+decorations (see Undo below). For jargon you don't know (e.g. `ASIN`), it's a
+one-keystroke lookup. Added in
 [#161](../../workshop/issues/000161-inline-term-definition.md) (R1 added the
 highlight/undo); [#166](../../workshop/issues/000166-visual-selection-definition-system-manages-footnote.md)
 made the definition durable as a managed footnote; [#167](../../workshop/issues/000167-define-diagnostic-highlight-span.md)
@@ -41,9 +41,9 @@ rehydrates persisted managed footnotes in all markdown buffers.
    inline `term[^id]` spans (`define.format_definition` →
    `skill_render.format_diagnostic_message`) on the `parley_skill` namespace;
    **(d)** records the undo/redo projection states.
-   `diag_display`'s `virtual_lines{current_line=true}` reveals the diagnostic
-   (cursor parked on the term's line). A no-`emit_definition` response leaves no
-   footnote reference/footer.
+   `diag_display`'s Parley-owned left-column virtual-line display reveals the
+   diagnostic (cursor parked on the term's line). A no-`emit_definition` response
+   leaves no footnote reference/footer.
 
 ## Undo (`u`) — reuses review's projection
 
@@ -126,8 +126,8 @@ tool-call args (`result.calls[1].input`), read in `on_done`.
 - `skill_render.refresh_footnote_diagnostics` owns only diagnostics tagged
   `parley-footnote` and preserves other `parley_skill` diagnostics, so review
   diagnostics are not cleared by markdown footnote refresh.
-- A diagnostic's `virtual_lines` auto-hide when the cursor leaves its line. The
-  footnote persists in the file if saved.
+- A diagnostic's Parley virtual-line block auto-hides when the cursor leaves its
+  line. The footnote persists in the file if saved.
 
 ## Key files
 
