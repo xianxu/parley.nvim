@@ -2,7 +2,7 @@
 --
 -- Controls how parley's review explanations render, scoped to parley's OWN
 -- diagnostic namespace (never touches the user's LSP / global diagnostics).
--- Default ON: a custom diagnostic handler renders left-column virtual lines for
+-- Default ON: a custom diagnostic handler renders text-column virtual lines for
 -- the cursor's current diagnostic region, so long wrapped prose doesn't hide
 -- messages behind stock virtual-lines column indentation. `:ParleyShowDiagnostics`
 -- toggles it.
@@ -99,7 +99,6 @@ local function render(buf, diagnostics, current_line_only)
         end
         vim.api.nvim_buf_set_extmark(buf, display_ns_id, lnum, 0, {
             virt_lines = virt_lines,
-            virt_lines_leftcol = true,
             virt_lines_above = false,
         })
     end

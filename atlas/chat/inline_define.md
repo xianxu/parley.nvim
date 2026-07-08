@@ -41,7 +41,7 @@ rehydrates persisted managed footnotes in all markdown buffers.
    inline `term[^id]` spans (`define.format_definition` →
    `skill_render.format_diagnostic_message`) on the `parley_skill` namespace;
    **(d)** records the undo/redo projection states.
-   `diag_display`'s Parley-owned left-column virtual-line display reveals the
+   `diag_display`'s Parley-owned text-column virtual-line display reveals the
    diagnostic (cursor parked on the term's line). A no-`emit_definition` response
    leaves no footnote reference/footer.
 
