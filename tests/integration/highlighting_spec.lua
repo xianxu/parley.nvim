@@ -485,6 +485,95 @@ describe("timezone diagnostics", function()
     end)
 end)
 
+describe("markdown footnote diagnostics", function()
+    after_each(function()
+        local ok, skill_render = pcall(require, "parley.skill_render")
+        if ok and skill_render.diag_namespace then
+            for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+                if vim.api.nvim_buf_is_valid(buf) then
+                    pcall(vim.diagnostic.reset, skill_render.diag_namespace(), buf)
+                end
+            end
+        end
+        cleanup_bufs()
+    end)
+
+    it("publishes persisted managed footnotes as Parley diagnostics", function()
+        local skill_render = require("parley.skill_render")
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+            "here is ASIN[^asin] in context",
+            "",
+            "---",
+            "",
+            "[^asin]: Amazon Standard Identification Number.",
+        })
+
+        skill_render.refresh_footnote_diagnostics(buf)
+
+        local diagnostics = vim.diagnostic.get(buf, { namespace = skill_render.diag_namespace() })
+        assert.equals(1, #diagnostics)
+        assert.equals(0, diagnostics[1].lnum)
+        assert.equals(8, diagnostics[1].col)
+        assert.equals(19, diagnostics[1].end_col)
+        assert.equals("parley-footnote", diagnostics[1].source)
+        assert.is_true(diagnostics[1].message:find("ASIN", 1, true) ~= nil)
+        assert.is_true(diagnostics[1].message:find("Amazon Standard Identification Number.", 1, true) ~= nil)
+    end)
+
+    it("refreshes footnote diagnostics on markdown text changes without clearing other Parley diagnostics", function()
+        local skill_render = require("parley.skill_render")
+        local ns = skill_render.diag_namespace()
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_win_set_buf(vim.api.nvim_get_current_win(), buf)
+        parley._parley_bufs[buf] = "markdown"
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+            "no footnote yet",
+        })
+        vim.diagnostic.set(ns, buf, { {
+            lnum = 0,
+            col = 0,
+            message = "review diagnostic",
+            severity = vim.diagnostic.severity.INFO,
+            source = "parley-skill",
+        } })
+
+        vim.cmd("doautocmd TextChanged")
+        vim.wait(100, function()
+            local diagnostics = vim.diagnostic.get(buf, { namespace = ns })
+            return #diagnostics == 1 and diagnostics[1].source == "parley-skill"
+        end)
+
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+            "here is ASIN[^asin] in context",
+            "",
+            "---",
+            "",
+            "[^asin]: Amazon Standard Identification Number.",
+        })
+        vim.cmd("doautocmd TextChanged")
+        vim.wait(100, function()
+            local diagnostics = vim.diagnostic.get(buf, { namespace = ns })
+            return #diagnostics == 2
+        end)
+
+        local by_source = {}
+        for _, diagnostic in ipairs(vim.diagnostic.get(buf, { namespace = ns })) do
+            by_source[diagnostic.source] = diagnostic
+        end
+        assert.is_not_nil(by_source["parley-skill"])
+        assert.is_not_nil(by_source["parley-footnote"])
+        assert.equals(8, by_source["parley-footnote"].col)
+
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "footnote removed" })
+        vim.cmd("doautocmd TextChanged")
+        vim.wait(100, function()
+            local diagnostics = vim.diagnostic.get(buf, { namespace = ns })
+            return #diagnostics == 1 and diagnostics[1].source == "parley-skill"
+        end)
+    end)
+end)
+
 describe("markdown chat reference rendering", function()
     after_each(function()
         cleanup_extra_windows()

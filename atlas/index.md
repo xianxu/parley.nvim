@@ -12,7 +12,7 @@ This index provides a central directory for all atlas entries of the `parley.nvi
 - [Exchange Model](chat/exchange_model.md): Size-based positional model — single source of truth for buffer layout. Everything is a block.
 - [Inline Branch Links](chat/inline_branch_links.md): Footnote-style `[🌿:text](file)` links within chat text.
 - [Drill-In Markers](chat/drill_in.md): Inline `🤖<T>[Q]` discussion markers — gather/strip into the next user turn on respond; reuses the review-skill marker syntax.
-- [Inline Term Definition](chat/inline_define.md): Visual-select a phrase + `<M-CR>` → concise context-aware definition as an ephemeral inline diagnostic (the `define` skill + `emit_definition` tool; honors `:ToggleWebSearch`).
+- [Inline Term Definition](chat/inline_define.md): Visual-select a phrase + `<M-CR>` → concise context-aware definition as a managed footnote diagnostic rehydrated for markdown buffers (the `define` skill + `emit_definition` tool; honors `:ToggleWebSearch`).
 - [Spell Typeahead](chat/spell_typeahead.md): As-you-type spell-suggestion completion + squiggles on chat buffers (`config.chat_spell`); plugin-free on `spellsuggest()`.
 
 ## 2. LLM Providers & Agents

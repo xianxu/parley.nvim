@@ -189,6 +189,78 @@ local function managed_footer_start(lines)
     return nil
 end
 
+local function parse_footnote_line(line)
+    local id, definition = trim(line):match("^%[%^([^%]]+)%]:%s*(.-)%s*$")
+    if not id then
+        return nil
+    end
+    definition = trim(definition)
+    if definition == "" then
+        definition = "(no definition)"
+    end
+    return id, definition
+end
+
+local function is_term_byte(ch)
+    return ch:match("[%w_-]") ~= nil
+end
+
+local function expand_term_start(line, ref_start)
+    local start = ref_start
+    while start > 1 and is_term_byte(line:sub(start - 1, start - 1)) do
+        start = start - 1
+    end
+    return start
+end
+
+--- Derive persisted definition diagnostics from inline footnote references and
+--- the final managed definition footer.
+--- @param lines string[]
+--- @return table[] diagnostics with 0-based columns
+function M.footnote_diagnostics(lines)
+    lines = lines or {}
+    local footer = managed_footer_start(lines)
+    if not footer then
+        return {}
+    end
+
+    local definitions = {}
+    for i = footer + 1, #lines do
+        local id, definition = parse_footnote_line(lines[i] or "")
+        if id then
+            definitions[id] = definition
+        end
+    end
+
+    local diagnostics = {}
+    for lnum = 1, footer - 1 do
+        local line = lines[lnum] or ""
+        local search = 1
+        while true do
+            local ref_start, ref_end, id = line:find("%[%^([^%]]+)%]", search)
+            if not ref_start then
+                break
+            end
+            local definition = definitions[id]
+            if definition then
+                local term_start = expand_term_start(line, ref_start)
+                local term = line:sub(term_start, ref_start - 1)
+                table.insert(diagnostics, {
+                    id = id,
+                    term = term ~= "" and term or nil,
+                    definition = definition,
+                    lnum = lnum - 1,
+                    col = term_start - 1,
+                    end_lnum = lnum - 1,
+                    end_col = ref_end,
+                })
+            end
+            search = ref_end + 1
+        end
+    end
+    return diagnostics
+end
+
 local function split_text_lines(text)
     text = text or ""
     local lines = {}
