@@ -646,6 +646,7 @@ local config = {
 		approximate_match = nil, -- highlight for typo-tolerance edit positions in picker matches (default: links to IncSearch)
 		chat_reference = nil, -- highlight for 🌿: chat branch/parent links (default: links to Special)
 		reference = nil, -- highlight for [referenced span] markers left by drill-in (#127) (default: underline)
+		footnote = nil, -- highlight for managed definition-footnote footer lines (default: links to DiagnosticHint)
 	},
 
 	-- lualine integration options

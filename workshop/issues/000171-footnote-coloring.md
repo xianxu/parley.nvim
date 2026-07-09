@@ -1,12 +1,13 @@
 ---
 id: 000171
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-08
 updated: 2026-07-08
 estimate_hours: 0.43
 started: 2026-07-08T17:14:54-07:00
+actual_hours: 0.16
 ---
 
 # footnote coloring
@@ -67,6 +68,7 @@ total: 0.43
 ## Log
 
 ### 2026-07-08
+- 2026-07-08: closed — Focused verification passed: nvim --headless -c "PlenaryBustedFile tests/unit/define_spec.lua"; nvim --headless -c "PlenaryBustedFile tests/integration/highlighting_spec.lua"; scoped git diff --check over the #171 files. make test linted lua/tests successfully but fails in unrelated tests/unit/tools_builtin_find_spec.lua only under the parallel full-suite runner; that spec passes when run directly.; review verdict: FIX-THEN-SHIP
 
 - Claimed the issue and inspected the chat/markdown highlighter paths. Root
   cause: open-question chat highlighting continues to EOF, so the final managed
@@ -85,3 +87,6 @@ total: 0.43
   `tests/unit/tools_builtin_find_spec.lua` under the parallel unit runner; that
   same spec passed when run directly with
   `nvim --headless -c "PlenaryBustedFile tests/unit/tools_builtin_find_spec.lua"`.
+- Close review returned `FIX-THEN-SHIP` for one docs/config-surface gap:
+  `config.highlight.footnote` was supported by highlighter code but missing from
+  the default config reference. Added the default key and captured a lesson.
