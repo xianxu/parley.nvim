@@ -1,12 +1,13 @@
 ---
 id: 000178
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-08
 updated: 2026-07-08
 estimate_hours: 0.27
 started: 2026-07-08T23:33:32-07:00
+actual_hours: 0.31
 ---
 
 # recognize footnote footer without divider
@@ -65,6 +66,7 @@ total: 0.27
 ## Log
 
 ### 2026-07-08
+- 2026-07-08: closed — Focused specs passed: parse_chat, define, highlighting, build_messages; make lint passed; scoped git diff --check passed. Full make test still fails only at the known parallel-run tests/unit/tools_builtin_find_spec.lua case, which passes directly.; review verdict: SHIP
 
 - User clarified the #171 footer check should be based on the first `[^id]:`
   footnote definition line instead of a `---` + footnote block. Design keeps the
