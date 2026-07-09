@@ -223,6 +223,21 @@ local function parse_footnote_line(line)
     return id, definition
 end
 
+local function parse_structured_definition(definition)
+    local term, body = definition:match('^"([^"]+)"%s*%.?%s*(.*)$')
+    if not term then
+        term, body = definition:match("^`([^`]+)`%s*%.?%s*(.*)$")
+    end
+    if not term then
+        return nil, definition
+    end
+    body = trim(body)
+    if body == "" then
+        body = "(no definition)"
+    end
+    return term, body
+end
+
 local function is_term_byte(ch)
     return ch:match("[%w_-]") ~= nil
 end
@@ -233,6 +248,36 @@ local function expand_term_start(line, ref_start)
         start = start - 1
     end
     return start
+end
+
+local function is_structured_anchor_suffix(text)
+    return trim(text):match("^[\"'”’%]%)%}]*$") ~= nil
+end
+
+local function structured_term_start(line, ref_start, term)
+    if not term or term == "" then
+        return nil
+    end
+    local best_start, best_end
+    local search = 1
+    while search < ref_start do
+        local start_pos, end_pos = line:find(term, search, true)
+        if not start_pos or start_pos >= ref_start then
+            break
+        end
+        if end_pos < ref_start then
+            local suffix = line:sub(end_pos + 1, ref_start - 1)
+            if is_structured_anchor_suffix(suffix) then
+                best_start = start_pos
+                best_end = end_pos
+            end
+        end
+        search = start_pos + 1
+    end
+    if not best_start then
+        return nil
+    end
+    return best_start, best_end
 end
 
 --- Derive persisted definition diagnostics from inline footnote references and
@@ -250,7 +295,11 @@ function M.footnote_diagnostics(lines)
     for i = footer, #lines do
         local id, definition = parse_footnote_line(lines[i] or "")
         if id then
-            definitions[id] = definition
+            local term, body = parse_structured_definition(definition)
+            definitions[id] = {
+                definition = body,
+                structured_term = term,
+            }
         end
     end
 
@@ -263,14 +312,15 @@ function M.footnote_diagnostics(lines)
             if not ref_start then
                 break
             end
-            local definition = definitions[id]
-            if definition then
-                local term_start = expand_term_start(line, ref_start)
-                local term = line:sub(term_start, ref_start - 1)
+            local footnote = definitions[id]
+            if footnote then
+                local structured_start = structured_term_start(line, ref_start, footnote.structured_term)
+                local term_start = structured_start or expand_term_start(line, ref_start)
+                local term = footnote.structured_term or line:sub(term_start, ref_start - 1)
                 table.insert(diagnostics, {
                     id = id,
                     term = term ~= "" and term or nil,
-                    definition = definition,
+                    definition = footnote.definition,
                     lnum = lnum - 1,
                     col = term_start - 1,
                     end_lnum = lnum - 1,

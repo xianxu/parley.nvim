@@ -346,6 +346,78 @@ describe("define durable footnotes", function()
         } }, diagnostics)
     end)
 
+    it("uses a leading quoted footnote term to span a multi-word persisted anchor", function()
+        local diagnostics = define.footnote_diagnostics({
+            "We optimize against Advertising Cost of Sales[^acos] in the policy.",
+            "",
+            [=[[^acos]: "Advertising Cost of Sales". Ratio of ad spend to sales revenue.]=],
+        })
+
+        assert.are.same({ {
+            id = "acos",
+            term = "Advertising Cost of Sales",
+            definition = "Ratio of ad spend to sales revenue.",
+            lnum = 0,
+            col = 20,
+            end_lnum = 0,
+            end_col = 52,
+        } }, diagnostics)
+    end)
+
+    it("uses a leading backquoted footnote term to span a multi-word persisted anchor", function()
+        local diagnostics = define.footnote_diagnostics({
+            "We optimize against Advertising Cost of Sales[^acos] in the policy.",
+            "",
+            "[^acos]: `Advertising Cost of Sales`. Ratio of ad spend to sales revenue.",
+        })
+
+        assert.are.same({ {
+            id = "acos",
+            term = "Advertising Cost of Sales",
+            definition = "Ratio of ad spend to sales revenue.",
+            lnum = 0,
+            col = 20,
+            end_lnum = 0,
+            end_col = 52,
+        } }, diagnostics)
+    end)
+
+    it("matches a structured term already enclosed in body quotes", function()
+        local diagnostics = define.footnote_diagnostics({
+            [=[He called it "Advertising Cost of Sales"[^acos] in the transcript.]=],
+            "",
+            [=[[^acos]: "Advertising Cost of Sales". Ratio of ad spend to sales revenue.]=],
+        })
+
+        assert.are.same({ {
+            id = "acos",
+            term = "Advertising Cost of Sales",
+            definition = "Ratio of ad spend to sales revenue.",
+            lnum = 0,
+            col = 14,
+            end_lnum = 0,
+            end_col = 47,
+        } }, diagnostics)
+    end)
+
+    it("falls back to contiguous-token anchors when the structured term is not before the reference", function()
+        local diagnostics = define.footnote_diagnostics({
+            "We optimize against ACOS[^acos] in the policy.",
+            "",
+            [=[[^acos]: "Advertising Cost of Sales". Ratio of ad spend to sales revenue.]=],
+        })
+
+        assert.are.same({ {
+            id = "acos",
+            term = "Advertising Cost of Sales",
+            definition = "Ratio of ad spend to sales revenue.",
+            lnum = 0,
+            col = 20,
+            end_lnum = 0,
+            end_col = 31,
+        } }, diagnostics)
+    end)
+
     it("extracts every inline reference to a managed footnote", function()
         local diagnostics = define.footnote_diagnostics({
             "ASIN[^asin] first, then SKU[^asin] second",
