@@ -68,6 +68,7 @@ total: 0.43
 ## Log
 
 ### 2026-07-08
+- 2026-07-08: closed — Focused verification passed after review fix: make lint; nvim --headless -c "PlenaryBustedFile tests/unit/define_spec.lua"; nvim --headless -c "PlenaryBustedFile tests/integration/highlighting_spec.lua"; scoped git diff --check over #171 files. Full make test still fails in unrelated tests/unit/tools_builtin_find_spec.lua only under the parallel full-suite runner; that spec passes when run directly.; review verdict: FIX-THEN-SHIP
 - 2026-07-08: closed — Focused verification passed: nvim --headless -c "PlenaryBustedFile tests/unit/define_spec.lua"; nvim --headless -c "PlenaryBustedFile tests/integration/highlighting_spec.lua"; scoped git diff --check over the #171 files. make test linted lua/tests successfully but fails in unrelated tests/unit/tools_builtin_find_spec.lua only under the parallel full-suite runner; that spec passes when run directly.; review verdict: FIX-THEN-SHIP
 
 - Claimed the issue and inspected the chat/markdown highlighter paths. Root
@@ -90,3 +91,6 @@ total: 0.43
 - Close review returned `FIX-THEN-SHIP` for one docs/config-surface gap:
   `config.highlight.footnote` was supported by highlighter code but missing from
   the default config reference. Added the default key and captured a lesson.
+- Second close review returned `FIX-THEN-SHIP` for trailing whitespace in the
+  generated review sidecar. Stripped the sidecar whitespace and captured a
+  lesson.
