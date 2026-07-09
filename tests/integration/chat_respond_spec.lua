@@ -323,6 +323,74 @@ describe("chat_respond: buffer state after completion", function()
         )
     end)
 
+    it("preserves trailing footnotes when completing an answer inserted above them", function()
+        local chat_content = [[
+# topic: Test Topic
+- file: test.md
+---
+
+💬: Tell me about ACOS.
+
+---
+
+[^acos]: Advertising Cost of Sales.
+]]
+
+        vim.fn.writefile(vim.split(chat_content, "\n"), test_file)
+        vim.cmd("edit " .. test_file)
+        local buf = vim.api.nvim_get_current_buf()
+        vim.api.nvim_win_set_cursor(0, {6, 0})
+
+        local completion_called = false
+        parley.dispatcher.query = function(buf_arg, provider, payload, handler, completion_callback)
+            local mock_qid = "qid_footnote_preserve"
+            parley.tasker.set_query(mock_qid, {
+                response = "ACOS measures ad spend efficiency.",
+                buf = buf_arg,
+            })
+
+            if handler then
+                handler(mock_qid, "ACOS measures ad spend efficiency.")
+            end
+
+            vim.schedule(function()
+                completion_callback(mock_qid)
+                completion_called = true
+            end)
+        end
+
+        parley.chat_respond({ range = 0 })
+        vim.wait(300, function()
+            return completion_called
+        end, 10)
+
+        local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+        local text = table.concat(lines, "\n")
+        assert.is_not_nil(text:find("[^acos]: Advertising Cost of Sales.", 1, true))
+        local last_nonblank
+        for i = #lines, 1, -1 do
+            if lines[i]:match("%S") then
+                last_nonblank = lines[i]
+                break
+            end
+        end
+        assert.equals("[^acos]: Advertising Cost of Sales.", last_nonblank)
+
+        local answer_index
+        local footer_divider_index
+        for i, line in ipairs(lines) do
+            if line == "ACOS measures ad spend efficiency." then
+                answer_index = i
+            elseif line == "---" and i > 4 then
+                footer_divider_index = i
+            end
+        end
+
+        assert.is_not_nil(answer_index, "Expected streamed answer text in buffer")
+        assert.is_not_nil(footer_divider_index, "Expected trailing footnote divider in buffer")
+        assert.is_true(answer_index < footer_divider_index, "Expected answer above footnote footer")
+    end)
+
     it("keeps follow cursor on the last streamed answer line after completion", function()
         local chat_content = [[
 # topic: Test Topic

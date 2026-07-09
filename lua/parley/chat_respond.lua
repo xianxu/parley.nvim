@@ -72,6 +72,45 @@ local function stop_and_close_timer(timer)
     end)
 end
 
+local function trim(str)
+    return (str or ""):gsub("^%s*(.-)%s*$", "%1")
+end
+
+local function is_footnote_definition_line(line)
+    return (line or ""):match("^%[%^[^%]]+%]:") ~= nil
+end
+
+local function trailing_footnote_boundary(lines, search_start_0)
+    local search_start = (search_start_0 or 0) + 1
+    local footnote_start = nil
+    for i = search_start, #lines do
+        if is_footnote_definition_line(lines[i]) then
+            footnote_start = i
+            break
+        end
+    end
+    if not footnote_start then
+        return nil
+    end
+
+    for i = footnote_start, #lines do
+        local line = lines[i] or ""
+        if line:match("%S") and not is_footnote_definition_line(line) then
+            return nil
+        end
+    end
+
+    local boundary = footnote_start
+    local before = boundary - 1
+    while before >= search_start and trim(lines[before]) == "" do
+        before = before - 1
+    end
+    if before >= search_start and trim(lines[before]) == "---" then
+        boundary = before
+    end
+    return boundary - 1
+end
+
 local function find_chat_header_end(lines)
     return _parley.chat_parser.find_header_end(lines)
 end
@@ -1817,7 +1856,11 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                 local line_count = vim.api.nvim_buf_line_count(buf)
                 -- Find where the next content starts (next 💬: or end of buffer).
                 local next_content_start = line_count  -- default: end of buffer
-                if exchange_idx and exchange_idx < #parsed_chat.exchanges then
+                local all_current_lines = vim.api.nvim_buf_get_lines(buf, 0, line_count, false)
+                local footnote_boundary = trailing_footnote_boundary(all_current_lines, exchange_end)
+                if footnote_boundary then
+                    next_content_start = footnote_boundary
+                elseif exchange_idx and exchange_idx < #parsed_chat.exchanges then
                     -- There's a next exchange — find where it starts in the
                     -- current buffer. Re-read to account for streaming mutations.
                     local cur_lines = vim.api.nvim_buf_get_lines(buf, exchange_end, line_count, false)
