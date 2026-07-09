@@ -189,6 +189,18 @@ local function managed_footer_start(lines)
     return nil
 end
 
+--- Locate the final managed definition-footnote footer.
+--- @param lines string[]|nil
+--- @return table|nil { start_line: integer, end_line: integer } 1-based inclusive
+function M.managed_footnote_footer_range(lines)
+    lines = lines or {}
+    local start = managed_footer_start(lines)
+    if not start then
+        return nil
+    end
+    return { start_line = start, end_line = #lines }
+end
+
 local function parse_footnote_line(line)
     local id, definition = trim(line):match("^%[%^([^%]]+)%]:%s*(.-)%s*$")
     if not id then

@@ -266,6 +266,8 @@ local function compute_chat_highlights(buf, start_line, end_line)
     local result = {}
     local patterns = get_chat_highlight_prefix_patterns()
     local lines = vim.api.nvim_buf_get_lines(buf, start_line - 1, end_line, false)
+    local all_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    local footer_range = require("parley.define").managed_footnote_footer_range(all_lines)
     -- While a stream is in flight for this buffer, the model has not
     -- yet emitted 🧠:[END]. Assume explicit-end mode so blank-line
     -- paragraph breaks inside the in-progress thinking region keep
@@ -296,106 +298,112 @@ local function compute_chat_highlights(buf, start_line, end_line)
 
         push_artifact_refs(result, row, line) -- #160: navigable artifact refs
 
-        local pos = 1
-        while true do
-            local tag_start, content_start = line:find("@@", pos)
-            if not tag_start then break end
-            local content_end, tag_end = line:find("@@", content_start + 1)
-            if not content_end then break end
-            table.insert(highlighted_regions, { start = tag_start, finish = tag_end })
-            table.insert(result[row], { hl_group = "ParleyTag", col_start = tag_start - 1, col_end = tag_end })
-            pos = tag_end + 1
-        end
-
-        -- Any structural marker terminates an in-progress reasoning
-        -- block. This mirrors chat_parser's lenient termination so the
-        -- highlight tracks parse boundaries even when the model omits
-        -- the canonical blank-line terminator (or in pre-existing
-        -- chats authored under the old single-line 🧠: convention).
-        local is_user = line:match(patterns.user_pattern)
-        local is_assistant = line:match(patterns.assistant_pattern)
-        local is_branch = line:match(patterns.branch_pattern)
-        local is_local = line:match(patterns.local_pattern)
-        local is_summary = line:match(patterns.summary_pattern)
-        local is_tool_use = line:match("^🔧:")
-        local is_tool_result = line:match("^📎:")
-        if is_user or is_assistant or is_branch or is_local
-            or is_summary or is_tool_use or is_tool_result then
-            in_reasoning_block = false
-        end
-
-        if line:match(patterns.reasoning_end_pattern) then
-            -- 🧠:[END] explicit terminator. Highlight the marker line
-            -- itself as ParleyThinking (it's the closing delimiter of
-            -- the thinking region), then close the block. Must be
-            -- checked before reasoning_pattern since the END marker
-            -- also starts with the reasoning prefix.
-            table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
-            in_reasoning_block = false
-        elseif line:match(patterns.reasoning_pattern) then
-            table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
-            in_reasoning_block = true
-            -- Buffer-aware lookahead: line_nr is the current 1-indexed
-            -- buffer line. Scanning the live buffer (rather than the
-            -- visible `lines` slice) catches [END] markers that fall
-            -- below the viewport bottom, which is the common case
-            -- after the cursor has moved up into the thinking region.
-            -- While streaming, force explicit-end mode (see comment at
-            -- the top of compute_chat_highlights).
-            if streaming then
-                in_reasoning_explicit_end = true
-            else
-                in_reasoning_explicit_end = reasoning_block_has_end_marker(buf, line_nr, patterns)
+        local is_footer = footer_range and line_nr >= footer_range.start_line and line_nr <= footer_range.end_line
+        if is_footer then
+            table.insert(result[row], { hl_group = "ParleyFootnote", col_start = 0, col_end = -1 })
+            in_block = false
+        else
+            local pos = 1
+            while true do
+                local tag_start, content_start = line:find("@@", pos)
+                if not tag_start then break end
+                local content_end, tag_end = line:find("@@", content_start + 1)
+                if not content_end then break end
+                table.insert(highlighted_regions, { start = tag_start, finish = tag_end })
+                table.insert(result[row], { hl_group = "ParleyTag", col_start = tag_start - 1, col_end = tag_end })
+                pos = tag_end + 1
             end
-        elseif is_summary or line:match("^👂:") then
-            table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
-        elseif is_tool_use or is_tool_result then
-            -- Tool block headers — dim (plumbing, not prose)
-            if line:match("error=true") then
-                table.insert(result[row], { hl_group = "ParleyToolError", col_start = 0, col_end = -1 })
-            else
-                table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
-            end
-            in_tool_block = true
-        elseif in_tool_block and not in_block then
-            -- Inside tool block fenced content — dim
-            table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
-        elseif in_reasoning_block then
-            -- Multi-line thinking continuation. In legacy mode (no
-            -- 🧠:[END] marker downstream) blank line terminates; in
-            -- explicit-end mode blank lines are preserved as part of
-            -- the reasoning region and stay dimmed. Non-blank lines
-            -- always stay dimmed as ParleyThinking.
-            if line:match("^%s*$") and not in_reasoning_explicit_end then
+
+            -- Any structural marker terminates an in-progress reasoning
+            -- block. This mirrors chat_parser's lenient termination so the
+            -- highlight tracks parse boundaries even when the model omits
+            -- the canonical blank-line terminator (or in pre-existing
+            -- chats authored under the old single-line 🧠: convention).
+            local is_user = line:match(patterns.user_pattern)
+            local is_assistant = line:match(patterns.assistant_pattern)
+            local is_branch = line:match(patterns.branch_pattern)
+            local is_local = line:match(patterns.local_pattern)
+            local is_summary = line:match(patterns.summary_pattern)
+            local is_tool_use = line:match("^🔧:")
+            local is_tool_result = line:match("^📎:")
+            if is_user or is_assistant or is_branch or is_local
+                or is_summary or is_tool_use or is_tool_result then
                 in_reasoning_block = false
-            else
-                table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
             end
-        elseif is_user then
-            table.insert(result[row], { hl_group = "ParleyQuestion", col_start = 0, col_end = -1 })
-            in_block = true
-        elseif is_assistant then
-            in_block = false
-        elseif is_branch then
-            table.insert(result[row], { hl_group = "ParleyChatReference", col_start = 0, col_end = -1 })
-            in_block = false
-        elseif is_local then
-            in_block = false
-        elseif in_block and not in_code_block then
-            table.insert(result[row], { hl_group = "ParleyQuestion", col_start = 0, col_end = -1 })
-            if line:match("^@@") then
-                local is_tag_at_start = false
-                if #highlighted_regions > 0 and highlighted_regions[1].start == 1 then
-                    is_tag_at_start = true
-                end
-                if not is_tag_at_start then
-                    table.insert(result[row], { hl_group = "ParleyFileReference", col_start = 0, col_end = -1 })
-                end
-            end
-        end
 
-        for start_idx, _, end_idx in line:gmatch("()@(.-)@()") do
-            table.insert(result[row], { hl_group = "ParleyAnnotation", col_start = start_idx - 1, col_end = end_idx - 1 })
+            if line:match(patterns.reasoning_end_pattern) then
+                -- 🧠:[END] explicit terminator. Highlight the marker line
+                -- itself as ParleyThinking (it's the closing delimiter of
+                -- the thinking region), then close the block. Must be
+                -- checked before reasoning_pattern since the END marker
+                -- also starts with the reasoning prefix.
+                table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
+                in_reasoning_block = false
+            elseif line:match(patterns.reasoning_pattern) then
+                table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
+                in_reasoning_block = true
+                -- Buffer-aware lookahead: line_nr is the current 1-indexed
+                -- buffer line. Scanning the live buffer (rather than the
+                -- visible `lines` slice) catches [END] markers that fall
+                -- below the viewport bottom, which is the common case
+                -- after the cursor has moved up into the thinking region.
+                -- While streaming, force explicit-end mode (see comment at
+                -- the top of compute_chat_highlights).
+                if streaming then
+                    in_reasoning_explicit_end = true
+                else
+                    in_reasoning_explicit_end = reasoning_block_has_end_marker(buf, line_nr, patterns)
+                end
+            elseif is_summary or line:match("^👂:") then
+                table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
+            elseif is_tool_use or is_tool_result then
+                -- Tool block headers — dim (plumbing, not prose)
+                if line:match("error=true") then
+                    table.insert(result[row], { hl_group = "ParleyToolError", col_start = 0, col_end = -1 })
+                else
+                    table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
+                end
+                in_tool_block = true
+            elseif in_tool_block and not in_block then
+                -- Inside tool block fenced content — dim
+                table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
+            elseif in_reasoning_block then
+                -- Multi-line thinking continuation. In legacy mode (no
+                -- 🧠:[END] marker downstream) blank line terminates; in
+                -- explicit-end mode blank lines are preserved as part of
+                -- the reasoning region and stay dimmed. Non-blank lines
+                -- always stay dimmed as ParleyThinking.
+                if line:match("^%s*$") and not in_reasoning_explicit_end then
+                    in_reasoning_block = false
+                else
+                    table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
+                end
+            elseif is_user then
+                table.insert(result[row], { hl_group = "ParleyQuestion", col_start = 0, col_end = -1 })
+                in_block = true
+            elseif is_assistant then
+                in_block = false
+            elseif is_branch then
+                table.insert(result[row], { hl_group = "ParleyChatReference", col_start = 0, col_end = -1 })
+                in_block = false
+            elseif is_local then
+                in_block = false
+            elseif in_block and not in_code_block then
+                table.insert(result[row], { hl_group = "ParleyQuestion", col_start = 0, col_end = -1 })
+                if line:match("^@@") then
+                    local is_tag_at_start = false
+                    if #highlighted_regions > 0 and highlighted_regions[1].start == 1 then
+                        is_tag_at_start = true
+                    end
+                    if not is_tag_at_start then
+                        table.insert(result[row], { hl_group = "ParleyFileReference", col_start = 0, col_end = -1 })
+                    end
+                end
+            end
+
+            for start_idx, _, end_idx in line:gmatch("()@(.-)@()") do
+                table.insert(result[row], { hl_group = "ParleyAnnotation", col_start = start_idx - 1, col_end = end_idx - 1 })
+            end
         end
     end
 
@@ -459,9 +467,16 @@ local function compute_markdown_highlights(buf, start_line, end_line)
     local result = {}
     local branch_prefix = _parley.config.chat_branch_prefix or "🌿:"
     local lines = vim.api.nvim_buf_get_lines(buf, start_line - 1, end_line, false)
+    local all_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    local footer_range = require("parley.define").managed_footnote_footer_range(all_lines)
     for offset, line in ipairs(lines) do
         local row = start_line + offset - 2
+        local line_nr = row + 1
         push_artifact_refs(result, row, line) -- #160: navigable artifact refs
+        if footer_range and line_nr >= footer_range.start_line and line_nr <= footer_range.end_line then
+            result[row] = result[row] or {}
+            table.insert(result[row], { hl_group = "ParleyFootnote", col_start = 0, col_end = -1 })
+        end
         if line:sub(1, #branch_prefix) == branch_prefix then
             result[row] = result[row] or {}
             table.insert(result[row], { hl_group = "ParleyChatReference", col_start = 0, col_end = -1 })
@@ -525,7 +540,6 @@ local function compute_markdown_highlights(buf, start_line, end_line)
     -- Draft-block backgrounds (=== label === / === end ===). Full-buffer
     -- scan so a block opened far above the viewport still paints visible
     -- body lines. Bg-only highlight; markdown fg shows through.
-    local all_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
     local blocks = scan_draft_blocks(all_lines)
     local view_from = start_line - 1
     local view_to = end_line - 1
@@ -728,6 +742,14 @@ M.setup_highlights = function()
         vim.api.nvim_set_hl(0, "ParleyReference", user_highlights.reference)
     else
         vim.api.nvim_set_hl(0, "ParleyReference", { underline = true })
+    end
+
+    -- Managed definition-footnote footer (`---` + `[^id]: ...`). It must be
+    -- independent of the surrounding chat exchange color.
+    if user_highlights.footnote then
+        vim.api.nvim_set_hl(0, "ParleyFootnote", user_highlights.footnote)
+    else
+        vim.api.nvim_set_hl(0, "ParleyFootnote", { link = "DiagnosticHint" })
     end
 
     -- Artifact refs (ariadne#11, #15 M4, pair#84) left navigable by #160.
