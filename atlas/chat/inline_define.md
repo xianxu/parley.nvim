@@ -102,9 +102,10 @@ Advertising Cost of Sales[^acos]
 
 On reload, `define.footnote_diagnostics` uses that leading display term to find
 the nearest matching phrase before `[^acos]`; the resulting span drives both the
-floating definition trigger and the rehydrated inline highlight. If the phrase is
-not present before the reference, the diagnostic falls back to the historical
-single-token span immediately before `[^id]`.
+floating definition trigger and the rehydrated inline highlight. If the footer
+does not provide a display term, diagnostics try the slug-derived phrase from the
+footnote id (`serverless-functions` → `serverless functions`) before falling
+back to the historical single-token span immediately before `[^id]`.
 
 ## Keybinding
 

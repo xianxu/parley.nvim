@@ -579,6 +579,27 @@ describe("markdown footnote diagnostics", function()
         assert.equals("DiffChange", marks[1][4].hl_group)
     end)
 
+    it("rehydrates an unstructured slug-derived multi-word footnote anchor highlight", function()
+        local skill_render = require("parley.skill_render")
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+            "Lambda runs serverless functions[^serverless-functions] without servers.",
+            "",
+            "[^serverless-functions]: Function-as-a-service compute without server management.",
+        })
+
+        skill_render.refresh_footnote_diagnostics(buf)
+
+        local hl_ns = vim.api.nvim_get_namespaces().parley_footnote_hl
+        local marks = vim.api.nvim_buf_get_extmarks(buf, hl_ns, 0, -1, { details = true })
+        assert.equals(1, #marks)
+        assert.equals(0, marks[1][2])
+        assert.equals(12, marks[1][3])
+        assert.equals(0, marks[1][4].end_row)
+        assert.equals(55, marks[1][4].end_col)
+        assert.equals("DiffChange", marks[1][4].hl_group)
+    end)
+
     it("refreshes footnote diagnostics on markdown text changes without clearing other Parley diagnostics", function()
         local skill_render = require("parley.skill_render")
         local ns = skill_render.diag_namespace()
