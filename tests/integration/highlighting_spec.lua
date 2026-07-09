@@ -537,6 +537,27 @@ describe("markdown footnote diagnostics", function()
         assert.is_true(diagnostics[1].message:find("Amazon Standard Identification Number.", 1, true) ~= nil)
     end)
 
+    it("rehydrates the inline term/reference highlight for persisted footnotes", function()
+        local skill_render = require("parley.skill_render")
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+            "Use EC2[^ec2] for virtual machines.",
+            "",
+            "[^ec2]: EC2 is Elastic Compute Cloud.",
+        })
+
+        skill_render.refresh_footnote_diagnostics(buf)
+
+        local hl_ns = vim.api.nvim_get_namespaces().parley_footnote_hl
+        local marks = vim.api.nvim_buf_get_extmarks(buf, hl_ns, 0, -1, { details = true })
+        assert.equals(1, #marks)
+        assert.equals(0, marks[1][2])
+        assert.equals(4, marks[1][3])
+        assert.equals(0, marks[1][4].end_row)
+        assert.equals(13, marks[1][4].end_col)
+        assert.equals("DiffChange", marks[1][4].hl_group)
+    end)
+
     it("refreshes footnote diagnostics on markdown text changes without clearing other Parley diagnostics", function()
         local skill_render = require("parley.skill_render")
         local ns = skill_render.diag_namespace()

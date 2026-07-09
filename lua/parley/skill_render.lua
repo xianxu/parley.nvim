@@ -9,10 +9,12 @@ local M = {}
 
 local DIAG_NS = "parley_skill"
 local HL_NS = "parley_skill_hl"
+local FOOTNOTE_HL_NS = "parley_footnote_hl"
 local FOOTNOTE_SOURCE = "parley-footnote"
 
 local diag_ns_id
 local hl_ns_id
+local footnote_hl_ns_id
 
 local function ensure_namespaces()
     if not diag_ns_id then
@@ -21,6 +23,9 @@ local function ensure_namespaces()
     if not hl_ns_id then
         hl_ns_id = vim.api.nvim_create_namespace(HL_NS)
     end
+    if not footnote_hl_ns_id then
+        footnote_hl_ns_id = vim.api.nvim_create_namespace(FOOTNOTE_HL_NS)
+    end
 end
 
 --- Clear previous skill diagnostics and highlights from a buffer.
@@ -28,6 +33,7 @@ function M.clear_decorations(buf)
     ensure_namespaces()
     vim.diagnostic.reset(diag_ns_id, buf)
     vim.api.nvim_buf_clear_namespace(buf, hl_ns_id, 0, -1)
+    vim.api.nvim_buf_clear_namespace(buf, footnote_hl_ns_id, 0, -1)
 end
 
 --- Dismiss the live round decorations (manual <dismiss> binding). Decorations
@@ -108,6 +114,16 @@ local function is_footnote_diagnostic(diagnostic)
     return diagnostic.source == FOOTNOTE_SOURCE or user_data.parley_kind == "footnote"
 end
 
+local function highlight_footnote_span(buf, lnum0, col_start, end_lnum0, col_end)
+    ensure_namespaces()
+    vim.api.nvim_buf_set_extmark(buf, footnote_hl_ns_id, lnum0, col_start, {
+        end_row = end_lnum0,
+        end_col = col_end,
+        hl_group = "DiffChange",
+        strict = false,
+    })
+end
+
 --- Rehydrate persisted managed markdown footnotes into Parley diagnostics.
 --- Existing non-footnote diagnostics in the shared namespace are preserved.
 --- @param buf number|nil
@@ -122,6 +138,7 @@ function M.refresh_footnote_diagnostics(buf)
     local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
     local width = M.diagnostic_wrap_width()
     local diagnostics = {}
+    vim.api.nvim_buf_clear_namespace(buf, footnote_hl_ns_id, 0, -1)
 
     for _, existing in ipairs(vim.diagnostic.get(buf, { namespace = diag_ns_id })) do
         if not is_footnote_diagnostic(existing) then
@@ -130,6 +147,7 @@ function M.refresh_footnote_diagnostics(buf)
     end
 
     for _, footnote in ipairs(define.footnote_diagnostics(lines)) do
+        highlight_footnote_span(buf, footnote.lnum, footnote.col, footnote.end_lnum or footnote.lnum, footnote.end_col)
         table.insert(diagnostics, {
             lnum = footnote.lnum,
             col = footnote.col,
