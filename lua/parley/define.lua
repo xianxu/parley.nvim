@@ -254,14 +254,16 @@ local function is_structured_anchor_suffix(text)
     return trim(text):match("^[\"'”’%]%)%}]*$") ~= nil
 end
 
-local function structured_term_start(line, ref_start, term)
+local function anchor_term_span(line, ref_start, term, ignore_case)
     if not term or term == "" then
-        return nil
+        return nil, nil, nil
     end
+    local haystack = ignore_case and line:lower() or line
+    local needle = ignore_case and term:lower() or term
     local best_start, best_end
     local search = 1
     while search < ref_start do
-        local start_pos, end_pos = line:find(term, search, true)
+        local start_pos, end_pos = haystack:find(needle, search, true)
         if not start_pos or start_pos >= ref_start then
             break
         end
@@ -275,9 +277,21 @@ local function structured_term_start(line, ref_start, term)
         search = start_pos + 1
     end
     if not best_start then
+        return nil, nil, nil
+    end
+    return best_start, best_end, line:sub(best_start, best_end)
+end
+
+local function slug_anchor_term(id)
+    if not id or not id:find("-", 1, true) then
         return nil
     end
-    return best_start, best_end
+    local term = id:gsub("%-+", " ")
+    term = trim(term)
+    if term == "" then
+        return nil
+    end
+    return term
 end
 
 --- Derive persisted definition diagnostics from inline footnote references and
@@ -314,9 +328,13 @@ function M.footnote_diagnostics(lines)
             end
             local footnote = definitions[id]
             if footnote then
-                local structured_start = structured_term_start(line, ref_start, footnote.structured_term)
-                local term_start = structured_start or expand_term_start(line, ref_start)
-                local term = footnote.structured_term or line:sub(term_start, ref_start - 1)
+                local structured_start = anchor_term_span(line, ref_start, footnote.structured_term, false)
+                local slug_start, _, slug_term = nil, nil, nil
+                if not structured_start then
+                    slug_start, _, slug_term = anchor_term_span(line, ref_start, slug_anchor_term(id), true)
+                end
+                local term_start = structured_start or slug_start or expand_term_start(line, ref_start)
+                local term = footnote.structured_term or slug_term or line:sub(term_start, ref_start - 1)
                 table.insert(diagnostics, {
                     id = id,
                     term = term ~= "" and term or nil,

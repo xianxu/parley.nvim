@@ -418,6 +418,60 @@ describe("define durable footnotes", function()
         } }, diagnostics)
     end)
 
+    it("uses the footnote id slug to recover an unstructured multi-word anchor", function()
+        local diagnostics = define.footnote_diagnostics({
+            "Lambda runs serverless functions[^serverless-functions] without servers.",
+            "",
+            "[^serverless-functions]: Function-as-a-service compute without server management.",
+        })
+
+        assert.are.same({ {
+            id = "serverless-functions",
+            term = "serverless functions",
+            definition = "Function-as-a-service compute without server management.",
+            lnum = 0,
+            col = 12,
+            end_lnum = 0,
+            end_col = 55,
+        } }, diagnostics)
+    end)
+
+    it("matches slug-derived anchors case-insensitively while preserving typed body text", function()
+        local diagnostics = define.footnote_diagnostics({
+            "Lambda runs Serverless Functions[^serverless-functions] without servers.",
+            "",
+            "[^serverless-functions]: Function-as-a-service compute without server management.",
+        })
+
+        assert.are.same({ {
+            id = "serverless-functions",
+            term = "Serverless Functions",
+            definition = "Function-as-a-service compute without server management.",
+            lnum = 0,
+            col = 12,
+            end_lnum = 0,
+            end_col = 55,
+        } }, diagnostics)
+    end)
+
+    it("falls back to contiguous-token anchors when a hyphenated slug phrase is absent", function()
+        local diagnostics = define.footnote_diagnostics({
+            "Lambda runs FaaS[^serverless-functions] without servers.",
+            "",
+            "[^serverless-functions]: Function-as-a-service compute without server management.",
+        })
+
+        assert.are.same({ {
+            id = "serverless-functions",
+            term = "FaaS",
+            definition = "Function-as-a-service compute without server management.",
+            lnum = 0,
+            col = 12,
+            end_lnum = 0,
+            end_col = 39,
+        } }, diagnostics)
+    end)
+
     it("extracts every inline reference to a managed footnote", function()
         local diagnostics = define.footnote_diagnostics({
             "ASIN[^asin] first, then SKU[^asin] second",
