@@ -1,12 +1,13 @@
 ---
 id: 000180
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-09
 updated: 2026-07-09
 estimate_hours: 0.20
 started: 2026-07-09T11:16:32-07:00
+actual_hours: 0.06
 ---
 
 # recover footnote spans from slug ids
@@ -75,6 +76,7 @@ total: 0.20
 ## Log
 
 ### 2026-07-09
+- 2026-07-09: closed — TDD red reproduced functions-only reload highlight for serverless-functions slug; make lint, define_spec, highlighting_spec, scoped git diff --check, and full make test all passed.; review verdict: FIX-THEN-SHIP
 
 - User showed reload highlight recovering only `functions[^serverless-functions]`
   for `serverless functions[^serverless-functions]`. Root cause: #179 only
@@ -84,6 +86,8 @@ total: 0.20
   at column 23, and `highlighting_spec` reproduced the same reload highlight
   start. Implemented slug-derived phrase matching between structured footer terms
   and the final token fallback.
+- Close review returned FIX-THEN-SHIP for missing README slug fallback wording
+  and missing hyphenated-slug-absent fallback coverage; added both.
 - Verification: `make lint` passed; `nvim --headless -c "PlenaryBustedFile
   tests/unit/define_spec.lua"` passed; `nvim --headless -c "PlenaryBustedFile
   tests/integration/highlighting_spec.lua"` passed; scoped `git diff --check`
