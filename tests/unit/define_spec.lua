@@ -240,7 +240,17 @@ describe("define durable footnotes", function()
         assert.equals(text, define.strip_definition_footnote_footer(text))
     end)
 
-    it("reports the final managed footnote footer range", function()
+    it("reports a dividerless managed footnote footer range from the first definition", function()
+        local range = define.managed_footnote_footer_range({
+            "answer text",
+            "",
+            "[^asin]: Amazon Standard Identification Number.",
+        })
+
+        assert.are.same({ start_line = 3, end_line = 3 }, range)
+    end)
+
+    it("reports a divider-based managed footnote footer range from the first definition", function()
         local range = define.managed_footnote_footer_range({
             "answer text",
             "",
@@ -249,7 +259,7 @@ describe("define durable footnotes", function()
             "[^asin]: Amazon Standard Identification Number.",
         })
 
-        assert.are.same({ start_line = 3, end_line = 5 }, range)
+        assert.are.same({ start_line = 5, end_line = 5 }, range)
     end)
 
     it("does not report ordinary horizontal rules as managed footnote footers", function()
@@ -286,11 +296,19 @@ describe("define durable footnotes", function()
         }, "\n"), define.strip_definition_footnote_footer(text))
     end)
 
+    it("strips a final dividerless managed footnote footer", function()
+        local text = table.concat({
+            "answer text",
+            "",
+            "[^asin]: Amazon Standard Identification Number.",
+        }, "\n")
+
+        assert.equals("answer text", define.strip_definition_footnote_footer(text))
+    end)
+
     it("extracts persisted footnote diagnostics from the managed footer", function()
         local diagnostics = define.footnote_diagnostics({
             "here is ASIN[^asin] in context",
-            "",
-            "---",
             "",
             "[^asin]: Amazon Standard Identification Number.",
         })
@@ -336,17 +354,23 @@ describe("define durable footnotes", function()
         }, diagnostics[2])
     end)
 
-    it("ignores footnotes that are not in a final managed footer", function()
+    it("treats the first footnote definition as the footer even with trailing text", function()
         local diagnostics = define.footnote_diagnostics({
             "ASIN[^asin] in body",
-            "",
-            "---",
             "",
             "[^asin]: Amazon Standard Identification Number.",
             "",
             "trailing body text",
         })
 
-        assert.are.same({}, diagnostics)
+        assert.are.same({ {
+            id = "asin",
+            term = "ASIN",
+            definition = "Amazon Standard Identification Number.",
+            lnum = 0,
+            col = 0,
+            end_lnum = 0,
+            end_col = 11,
+        } }, diagnostics)
     end)
 end)

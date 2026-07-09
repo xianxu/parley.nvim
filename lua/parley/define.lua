@@ -168,22 +168,9 @@ local function is_footnote_line(line)
 end
 
 local function managed_footer_start(lines)
-    for i = #lines, 1, -1 do
-        if is_divider(lines[i]) then
-            local has_footnote = false
-            for j = i + 1, #lines do
-                local line = lines[j] or ""
-                if trim(line) ~= "" then
-                    if not is_footnote_line(line) then
-                        return nil
-                    end
-                    has_footnote = true
-                end
-            end
-            if has_footnote then
-                return i
-            end
-            return nil
+    for i, line in ipairs(lines or {}) do
+        if is_footnote_line(line) then
+            return i
         end
     end
     return nil
@@ -237,7 +224,7 @@ function M.footnote_diagnostics(lines)
     end
 
     local definitions = {}
-    for i = footer + 1, #lines do
+    for i = footer, #lines do
         local id, definition = parse_footnote_line(lines[i] or "")
         if id then
             definitions[id] = definition
@@ -312,6 +299,12 @@ function M.strip_definition_footnote_footer(text)
     while start > 1 and trim(lines[start - 1]) == "" do
         start = start - 1
     end
+    if start > 1 and is_divider(lines[start - 1]) then
+        start = start - 1
+        while start > 1 and trim(lines[start - 1]) == "" do
+            start = start - 1
+        end
+    end
     local kept = {}
     for i = 1, start - 1 do
         kept[#kept + 1] = lines[i]
@@ -327,7 +320,7 @@ local function replace_or_append_footnote(lines, id, definition)
     local footer = managed_footer_start(out)
     local footnote_line = M.format_footnote_line(id, definition)
     if footer then
-        for i = footer + 1, #out do
+        for i = footer, #out do
             local escaped_id = id:gsub("([^%w])", "%%%1")
             if trim(out[i]):match("^%[%^" .. escaped_id .. "%]:") then
                 out[i] = footnote_line

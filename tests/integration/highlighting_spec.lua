@@ -170,18 +170,12 @@ describe("highlight_question_block: managed footnote footer", function()
             "💬: Define ASIN",
             "This question is still open.",
             "",
-            "---",
-            "",
             "[^asin]: Amazon Standard Identification Number.",
         })
 
         assert.is_true(has_highlight(buf, 3, "ParleyFootnote"),
-            "Expected the managed footer divider to use ParleyFootnote")
-        assert.is_true(has_highlight(buf, 5, "ParleyFootnote"),
             "Expected the managed footnote definition to use ParleyFootnote")
         assert.is_false(has_highlight(buf, 3, "ParleyQuestion"),
-            "Managed footer divider should not inherit open-question color")
-        assert.is_false(has_highlight(buf, 5, "ParleyQuestion"),
             "Managed footnote definition should not inherit open-question color")
     end)
 end)
@@ -528,8 +522,6 @@ describe("markdown footnote diagnostics", function()
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
             "here is ASIN[^asin] in context",
             "",
-            "---",
-            "",
             "[^asin]: Amazon Standard Identification Number.",
         })
 
@@ -571,8 +563,6 @@ describe("markdown footnote diagnostics", function()
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
             "here is ASIN[^asin] in context",
             "",
-            "---",
-            "",
             "[^asin]: Amazon Standard Identification Number.",
         })
         vim.cmd("doautocmd TextChanged")
@@ -603,15 +593,13 @@ describe("markdown footnote diagnostics", function()
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
             "here is ASIN[^asin] in context",
             "",
-            "---",
-            "",
             "[^asin]: Amazon Standard Identification Number.",
         })
         parley._parley_bufs[buf] = "markdown"
 
         local win = vim.api.nvim_get_current_win()
         vim.api.nvim_win_set_buf(win, buf)
-        provider.on_win(nil, win, buf, 0, 4)
+        provider.on_win(nil, win, buf, 0, 2)
 
         local original_set_extmark = vim.api.nvim_buf_set_extmark
         local extmarks = {}
@@ -621,7 +609,6 @@ describe("markdown footnote diagnostics", function()
         end
 
         provider.on_line(nil, win, buf, 2)
-        provider.on_line(nil, win, buf, 4)
 
         vim.api.nvim_buf_set_extmark = original_set_extmark
 
@@ -631,8 +618,7 @@ describe("markdown footnote diagnostics", function()
                 highlighted[mark.row] = true
             end
         end
-        assert.is_true(highlighted[2], "Expected markdown footer divider to use ParleyFootnote")
-        assert.is_true(highlighted[4], "Expected markdown footnote definition to use ParleyFootnote")
+        assert.is_true(highlighted[2], "Expected markdown footnote definition to use ParleyFootnote")
     end)
 end)
 

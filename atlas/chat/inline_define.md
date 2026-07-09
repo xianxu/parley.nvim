@@ -65,8 +65,8 @@ watcher doesn't mistake it for a user edit.
   `context_for_selection`, `format_definition`, `bracket_edit` (plans the `[term]`
   wrap as a legacy set_lines edit), `diagnostic_span_after_bracket` (legacy range
   mapping), `apply_definition_footnote` (durable footer transform), and
-  `strip_definition_footnote_footer` / `footnote_diagnostics` (read only a final
-  `---` block followed solely by footnotes).
+  `strip_definition_footnote_footer` / `footnote_diagnostics` (treat the first
+  markdown footnote definition line as the managed footer boundary).
 - **IO shell** (`lua/parley/init.lua`): `define_visual`, `render_definition`;
   `lua/parley/buffer_edit.lua` owns the full-buffer footnote rewrite;
   `lua/parley/skill_render.lua` publishes footnote diagnostics; and
@@ -77,22 +77,19 @@ watcher doesn't mistake it for a user edit.
 
 ## Managed Footnote Footer
 
-The footer is a final markdown block:
+The footer begins at the first markdown footnote definition line:
 
 ```markdown
----
-
 [^asin]: Amazon Standard Identification Number.
 ```
 
-The footer detector is deliberately conservative: only the last standalone
-`---` line followed by blank lines and footnote definitions counts as the
-managed footer. Ordinary horizontal rules and mixed prose after `---` remain
-chat content. `chat_respond.build_messages` strips this managed footer from
-message strings before LLM submission, so durable definitions do not become
-prompt context. `define.footnote_diagnostics` uses the same footer detector to
-scan inline references before the footer and produce diagnostics for each
-matching `[^id]`.
+Older define edits may include a standalone `---` separator immediately before
+that first footnote definition; the stripper removes that optional separator
+along with the footer, but the canonical boundary is the `[^id]: ...` line.
+`chat_respond.build_messages` strips this managed footer from message strings
+before LLM submission, so durable definitions do not become prompt context.
+`define.footnote_diagnostics` uses the same footer detector to scan inline
+references before the footer and produce diagnostics for each matching `[^id]`.
 
 ## Keybinding
 
