@@ -91,6 +91,21 @@ before LLM submission, so durable definitions do not become prompt context.
 `define.footnote_diagnostics` uses the same footer detector to scan inline
 references before the footer and produce diagnostics for each matching `[^id]`.
 
+For persisted multi-word anchors, a footnote definition may start with a quoted
+or backquoted display term:
+
+```markdown
+Advertising Cost of Sales[^acos]
+
+[^acos]: "Advertising Cost of Sales". Ratio of ad spend to sales revenue.
+```
+
+On reload, `define.footnote_diagnostics` uses that leading display term to find
+the nearest matching phrase before `[^acos]`; the resulting span drives both the
+floating definition trigger and the rehydrated inline highlight. If the phrase is
+not present before the reference, the diagnostic falls back to the historical
+single-token span immediately before `[^id]`.
+
 ## Keybinding
 
 `<M-CR>` was split out of `chat_shortcut_respond` into its own `chat_define`
