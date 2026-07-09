@@ -668,6 +668,19 @@ describe("parse_chat: edge cases", function()
         local lines, header_end = make_chat(std_header, {
             "💬: tell me about the EVAL framework",
             "",
+            "[^acos]: ACOS (Advertising Cost of Sales).",
+        })
+        local result = parse_chat(lines, header_end)
+
+        assert.equals("tell me about the EVAL framework", result.exchanges[1].question.content)
+        assert.equals(7, result.exchanges[1].question.line_start)
+        assert.equals(7, result.exchanges[1].question.line_end)
+    end)
+
+    it("stops a final open question before an optional legacy footnote divider", function()
+        local lines, header_end = make_chat(std_header, {
+            "💬: tell me about the EVAL framework",
+            "",
             "---",
             "",
             "[^acos]: ACOS (Advertising Cost of Sales).",
@@ -684,8 +697,6 @@ describe("parse_chat: edge cases", function()
         local lines, header_end = make_chat(std_header, {
             "💬: tell me about the EVAL framework",
             "",
-            "---",
-            "",
             "[^acos]: ACOS (Advertising Cost of Sales).",
         })
         local parsed = parse_chat(lines, header_end)
@@ -695,7 +706,22 @@ describe("parse_chat: edge cases", function()
         local agent_header_start = model:block_start(1, 2)
 
         assert.equals(8, agent_header_start)
-        assert.equals("---", lines[agent_header_start + 1])
+        assert.equals("[^acos]: ACOS (Advertising Cost of Sales).", lines[agent_header_start + 1])
+    end)
+
+    it("stops a final open question before the first footnote definition even with trailing text", function()
+        local lines, header_end = make_chat(std_header, {
+            "💬: tell me about the EVAL framework",
+            "",
+            "[^acos]: ACOS (Advertising Cost of Sales).",
+            "",
+            "trailing footer text",
+        })
+        local result = parse_chat(lines, header_end)
+
+        assert.equals("tell me about the EVAL framework", result.exchanges[1].question.content)
+        assert.equals(7, result.exchanges[1].question.line_start)
+        assert.equals(7, result.exchanges[1].question.line_end)
     end)
 
     it("handles assistant message with no preceding user message", function()

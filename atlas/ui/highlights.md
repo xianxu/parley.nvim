@@ -6,7 +6,7 @@ Custom groups (`ParleyQuestion`, `ParleyFileReference`, `ParleyChatReference`, `
 ## Key Behaviors
 - Applied via decoration providers with ephemeral extmarks per window viewport
 - Multi-window safe: independent redraw cache per window
-- Managed definition-footnote footers (`---` + `[^id]: ...`) use
+- Managed definition-footnote footers (from the first `[^id]: ...` line) use
   `ParleyFootnote` in chat and markdown buffers instead of inheriting the active
   chat exchange color.
 - `🌿:` lines auto-rendered with debounced topic lookup from referenced files

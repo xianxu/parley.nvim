@@ -168,22 +168,9 @@ local function is_footnote_line(line)
 end
 
 local function managed_footer_start(lines)
-    for i = #lines, 1, -1 do
-        if is_divider(lines[i]) then
-            local has_footnote = false
-            for j = i + 1, #lines do
-                local line = lines[j] or ""
-                if trim(line) ~= "" then
-                    if not is_footnote_line(line) then
-                        return nil
-                    end
-                    has_footnote = true
-                end
-            end
-            if has_footnote then
-                return i
-            end
-            return nil
+    for i, line in ipairs(lines or {}) do
+        if is_footnote_line(line) then
+            return i
         end
     end
     return nil
@@ -199,6 +186,29 @@ function M.managed_footnote_footer_range(lines)
         return nil
     end
     return { start_line = start, end_line = #lines }
+end
+
+--- Locate the line where user-authored content should stop before a managed
+--- definition-footnote footer. The public footer range starts at the first
+--- `[^id]:` line, but old buffers may still have a preceding `---` separator
+--- that should be stripped from prompts/messages too.
+--- @param lines string[]|nil
+--- @return integer|nil 1-based inclusive start line to trim from content
+function M.managed_footnote_content_start(lines)
+    lines = lines or {}
+    local range = M.managed_footnote_footer_range(lines)
+    if not range then
+        return nil
+    end
+    local start = range.start_line
+    local before = start - 1
+    while before > 0 and trim(lines[before]) == "" do
+        before = before - 1
+    end
+    if before > 0 and is_divider(lines[before]) then
+        start = before
+    end
+    return start
 end
 
 local function parse_footnote_line(line)
@@ -237,7 +247,7 @@ function M.footnote_diagnostics(lines)
     end
 
     local definitions = {}
-    for i = footer + 1, #lines do
+    for i = footer, #lines do
         local id, definition = parse_footnote_line(lines[i] or "")
         if id then
             definitions[id] = definition
@@ -305,12 +315,9 @@ end
 --- @return string
 function M.strip_definition_footnote_footer(text)
     local lines = split_text_lines(text or "")
-    local start = managed_footer_start(lines)
+    local start = M.managed_footnote_content_start(lines)
     if not start then
         return text or ""
-    end
-    while start > 1 and trim(lines[start - 1]) == "" do
-        start = start - 1
     end
     local kept = {}
     for i = 1, start - 1 do
@@ -327,7 +334,7 @@ local function replace_or_append_footnote(lines, id, definition)
     local footer = managed_footer_start(out)
     local footnote_line = M.format_footnote_line(id, definition)
     if footer then
-        for i = footer + 1, #out do
+        for i = footer, #out do
             local escaped_id = id:gsub("([^%w])", "%%%1")
             if trim(out[i]):match("^%[%^" .. escaped_id .. "%]:") then
                 out[i] = footnote_line
