@@ -25,6 +25,14 @@ local function trim(str)
 	return (str:gsub("^%s*(.-)%s*$", "%1"))
 end
 
+local function is_divider(line)
+	return trim(line or "") == "---"
+end
+
+local function is_footnote_definition(line)
+	return (line or ""):match("^%[%^[^%]]+%]:") ~= nil
+end
+
 ---Find the header/trancript separator index.
 ---Supports:
 ---1) Legacy format: metadata lines followed by a single `---`.
@@ -299,9 +307,51 @@ M.parse_chat = function(lines, header_end, config)
 	-- Use table accumulation instead of string concat for content (avoids O(n²))
 	local content_parts = {}
 
+	local function final_footnote_boundary(end_line)
+		local i = end_line
+		while i > 0 and trim(lines[i] or "") == "" do
+			i = i - 1
+		end
+		if i <= 0 or not is_footnote_definition(lines[i]) then
+			return nil
+		end
+
+		local footnote_start = i
+		i = i - 1
+		while i > 0 do
+			local line = lines[i] or ""
+			if is_footnote_definition(line) then
+				footnote_start = i
+			elseif trim(line) ~= "" then
+				break
+			end
+			i = i - 1
+		end
+
+		local boundary = footnote_start
+		local before = boundary - 1
+		while before > 0 and trim(lines[before] or "") == "" do
+			before = before - 1
+		end
+		if before > 0 and is_divider(lines[before]) then
+			boundary = before
+		end
+		return boundary
+	end
+
 	-- Helper to finalize the current component's content from accumulated parts
 	local function finalize_component(end_line)
 		if current_exchange and current_component then
+			if current_component == "question" then
+				local boundary = final_footnote_boundary(end_line)
+				if boundary and boundary > current_exchange[current_component].line_start then
+					local keep_count = boundary - current_exchange[current_component].line_start
+					while #content_parts > keep_count do
+						table.remove(content_parts)
+					end
+					end_line = boundary - 1
+				end
+			end
 			-- Trim trailing blank lines from all components so the
 			-- model's margins are the single source of truth for gaps
 			-- between blocks/exchanges. Without this, trailing blanks

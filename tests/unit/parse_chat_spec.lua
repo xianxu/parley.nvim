@@ -664,6 +664,40 @@ end)
 
 
 describe("parse_chat: edge cases", function()
+    it("stops a final open question before a managed footnote footer", function()
+        local lines, header_end = make_chat(std_header, {
+            "💬: tell me about the EVAL framework",
+            "",
+            "---",
+            "",
+            "[^acos]: ACOS (Advertising Cost of Sales).",
+        })
+        local result = parse_chat(lines, header_end)
+
+        assert.equals("tell me about the EVAL framework", result.exchanges[1].question.content)
+        assert.equals(7, result.exchanges[1].question.line_start)
+        assert.equals(7, result.exchanges[1].question.line_end)
+    end)
+
+    it("positions a final open-question answer above managed footnotes", function()
+        local exchange_model = require("parley.exchange_model")
+        local lines, header_end = make_chat(std_header, {
+            "💬: tell me about the EVAL framework",
+            "",
+            "---",
+            "",
+            "[^acos]: ACOS (Advertising Cost of Sales).",
+        })
+        local parsed = parse_chat(lines, header_end)
+        local model = exchange_model.from_parsed_chat(parsed)
+
+        model:add_block(1, "agent_header", 1)
+        local agent_header_start = model:block_start(1, 2)
+
+        assert.equals(8, agent_header_start)
+        assert.equals("---", lines[agent_header_start + 1])
+    end)
+
     it("handles assistant message with no preceding user message", function()
         local lines, header_end = make_chat(std_header, {
             "🤖:[Claude] Unprompted response",
