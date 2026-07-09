@@ -262,6 +262,28 @@ describe("define durable footnotes", function()
         assert.are.same({ start_line = 5, end_line = 5 }, range)
     end)
 
+    it("reports the content trim start at an optional legacy divider", function()
+        local start = define.managed_footnote_content_start({
+            "answer text",
+            "",
+            "---",
+            "",
+            "[^asin]: Amazon Standard Identification Number.",
+        })
+
+        assert.equals(3, start)
+    end)
+
+    it("reports the content trim start at the first definition without a divider", function()
+        local start = define.managed_footnote_content_start({
+            "answer text",
+            "",
+            "[^asin]: Amazon Standard Identification Number.",
+        })
+
+        assert.equals(3, start)
+    end)
+
     it("does not report ordinary horizontal rules as managed footnote footers", function()
         local range = define.managed_footnote_footer_range({
             "answer text",

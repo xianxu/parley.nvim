@@ -44,6 +44,8 @@ adopt the new boundary without duplicating parser logic.
   dividerless footer.
 - [x] Change the pure footer helper to scan for the first footnote definition
   line and let consumers derive from it.
+- [x] Route chat parser footer trimming through the shared helper and cover
+  dividerless/trailing-text parser behavior.
 - [x] Run focused unit/integration verification plus lint/diff checks.
 
 ## Estimate
@@ -79,3 +81,25 @@ total: 0.27
   passed. Full `make test` still fails in unrelated
   `tests/unit/tools_builtin_find_spec.lua` only under the parallel full-suite
   runner; that spec passes directly.
+- Close review returned REWORK because `lua/parley/chat_parser.lua` still had a
+  shadow footnote-footer scanner. Routed chat parsing through
+  `define.managed_footnote_content_start`, which derives from the first-footnote
+  footer range while preserving the optional legacy divider as content trim.
+- Rework verification: `nvim --headless -c "PlenaryBustedFile
+  tests/unit/parse_chat_spec.lua"` passed; `nvim --headless -c "PlenaryBustedFile
+  tests/unit/define_spec.lua"` passed; `nvim --headless -c "PlenaryBustedFile
+  tests/integration/highlighting_spec.lua"` passed; `nvim --headless -c
+  "PlenaryBustedFile tests/unit/build_messages_spec.lua"` passed; `make lint`
+  passed; scoped `git diff --check` passed. Full `make test` still fails only at
+  the known parallel-run `tests/unit/tools_builtin_find_spec.lua`; the same spec
+  passes directly.
+
+## Revisions
+
+### 2026-07-08 — close review parser consumer
+
+The close review found `lua/parley/chat_parser.lua` still had a local managed
+footer scanner. Scope expands to route parser trimming through
+`define.managed_footnote_content_start` (derived from the footer range) and add
+parser regression coverage for dividerless, trailing-text, and legacy-divider
+footers, preserving the single-source boundary (ARCH-DRY, ARCH-PURPOSE).

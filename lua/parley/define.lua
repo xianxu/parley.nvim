@@ -188,6 +188,29 @@ function M.managed_footnote_footer_range(lines)
     return { start_line = start, end_line = #lines }
 end
 
+--- Locate the line where user-authored content should stop before a managed
+--- definition-footnote footer. The public footer range starts at the first
+--- `[^id]:` line, but old buffers may still have a preceding `---` separator
+--- that should be stripped from prompts/messages too.
+--- @param lines string[]|nil
+--- @return integer|nil 1-based inclusive start line to trim from content
+function M.managed_footnote_content_start(lines)
+    lines = lines or {}
+    local range = M.managed_footnote_footer_range(lines)
+    if not range then
+        return nil
+    end
+    local start = range.start_line
+    local before = start - 1
+    while before > 0 and trim(lines[before]) == "" do
+        before = before - 1
+    end
+    if before > 0 and is_divider(lines[before]) then
+        start = before
+    end
+    return start
+end
+
 local function parse_footnote_line(line)
     local id, definition = trim(line):match("^%[%^([^%]]+)%]:%s*(.-)%s*$")
     if not id then
@@ -292,18 +315,9 @@ end
 --- @return string
 function M.strip_definition_footnote_footer(text)
     local lines = split_text_lines(text or "")
-    local start = managed_footer_start(lines)
+    local start = M.managed_footnote_content_start(lines)
     if not start then
         return text or ""
-    end
-    while start > 1 and trim(lines[start - 1]) == "" do
-        start = start - 1
-    end
-    if start > 1 and is_divider(lines[start - 1]) then
-        start = start - 1
-        while start > 1 and trim(lines[start - 1]) == "" do
-            start = start - 1
-        end
     end
     local kept = {}
     for i = 1, start - 1 do

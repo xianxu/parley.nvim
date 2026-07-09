@@ -744,7 +744,7 @@ M.setup_highlights = function()
         vim.api.nvim_set_hl(0, "ParleyReference", { underline = true })
     end
 
-    -- Managed definition-footnote footer (`---` + `[^id]: ...`). It must be
+    -- Managed definition-footnote footer (from the first `[^id]: ...`). It must be
     -- independent of the surrounding chat exchange color.
     if user_highlights.footnote then
         vim.api.nvim_set_hl(0, "ParleyFootnote", user_highlights.footnote)
