@@ -116,6 +116,7 @@ Most-used defaults:
 - `<C-g>?` show key bindings
 - `<C-g><C-g>` respond
 - `<M-CR>` respond (normal/insert); **visual-select a phrase + `<M-CR>`** → inline term definition — adds a markdown footnote reference/footer and shows a centered diagnostic float, honoring `:ToggleWebSearch` for unfamiliar terms
+  - To preserve a multi-word definition highlight after reopening a chat, start the footnote with the display term, e.g. `[^acos]: "Advertising Cost of Sales". Ratio of ad spend to sales revenue.`
 - `<C-g>G` respond all
 - `<C-g>x` stop
 - `<C-g>t` chat outline

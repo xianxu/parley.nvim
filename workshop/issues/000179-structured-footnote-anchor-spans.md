@@ -1,12 +1,13 @@
 ---
 id: 000179
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-09
 updated: 2026-07-09
 estimate_hours: 0.31
 started: 2026-07-09T10:52:37-07:00
+actual_hours: 0.09
 ---
 
 # structured footnote anchor spans
@@ -91,6 +92,7 @@ total: 0.31
 ## Log
 
 ### 2026-07-09
+- 2026-07-09: closed — TDD red confirmed structured footnote spans failed before implementation. make lint passed; define_spec and highlighting_spec passed; scoped git diff --check passed. Full make test still fails only at the known parallel-run tools_builtin_find_spec case, which passes directly.; review verdict: FIX-THEN-SHIP
 
 - User clarified that multi-word definition anchors should be persisted without
   adding extra body markup. Scope uses a leading quoted/backquoted phrase in the
@@ -108,3 +110,6 @@ total: 0.31
   tests/integration/highlighting_spec.lua"` passed; scoped `git diff --check`
   passed. Full `make test` still fails only at the known parallel-run
   `tests/unit/tools_builtin_find_spec.lua` case; that spec passes directly.
+- Close review returned FIX-THEN-SHIP for missing README coverage of the
+  user-facing structured footer convention; added a short README example for
+  `[^id]: "Display Term". Definition...`.
