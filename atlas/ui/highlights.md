@@ -1,11 +1,14 @@
 # Spec: Syntax Highlighting
 
 ## Highlight Groups
-Custom groups (`ParleyQuestion`, `ParleyFileReference`, `ParleyChatReference`, `ParleyThinking`, `ParleyAnnotation`, `ParleyReference`, `ParleyPickerApproximateMatch`, `InterviewTimestamp`, `InterviewThought`) linked to standard Neovim groups. `ParleyReference` (default underline) marks drill-in `[referenced span]` brackets — see [chat/drill_in](../chat/drill_in.md).
+Custom groups (`ParleyQuestion`, `ParleyFileReference`, `ParleyChatReference`, `ParleyThinking`, `ParleyAnnotation`, `ParleyReference`, `ParleyFootnote`, `ParleyPickerApproximateMatch`, `InterviewTimestamp`, `InterviewThought`) linked to standard Neovim groups. `ParleyReference` (default underline) marks drill-in `[referenced span]` brackets — see [chat/drill_in](../chat/drill_in.md). `ParleyFootnote` (default `DiagnosticHint`) marks managed definition-footnote footer lines.
 
 ## Key Behaviors
 - Applied via decoration providers with ephemeral extmarks per window viewport
 - Multi-window safe: independent redraw cache per window
+- Managed definition-footnote footers (`---` + `[^id]: ...`) use
+  `ParleyFootnote` in chat and markdown buffers instead of inheriting the active
+  chat exchange color.
 - `🌿:` lines auto-rendered with debounced topic lookup from referenced files
 - `chat_conceal_model_params`: optional header param concealment
 - UTC timestamps shaped like `YYYY-MM-DDTHH:MM:SSZ` get local-time INFO

@@ -240,6 +240,30 @@ describe("define durable footnotes", function()
         assert.equals(text, define.strip_definition_footnote_footer(text))
     end)
 
+    it("reports the final managed footnote footer range", function()
+        local range = define.managed_footnote_footer_range({
+            "answer text",
+            "",
+            "---",
+            "",
+            "[^asin]: Amazon Standard Identification Number.",
+        })
+
+        assert.are.same({ start_line = 3, end_line = 5 }, range)
+    end)
+
+    it("does not report ordinary horizontal rules as managed footnote footers", function()
+        local range = define.managed_footnote_footer_range({
+            "answer text",
+            "",
+            "---",
+            "",
+            "not a footnote",
+        })
+
+        assert.is_nil(range)
+    end)
+
     it("keeps earlier horizontal-rule content and strips only the final managed footer", function()
         local text = table.concat({
             "answer text",
