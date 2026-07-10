@@ -64,7 +64,7 @@ total: 0.98
 - [ ] Run focused and full verification, reconcile documentation, and close #177.
 
 Durable implementation plan:
-`workshop/plans/000177-sticky-issue-finder-query-plan.md`.
+`workshop/plans/000177-issue-finder-filter-should-be-sticky-across-sort-order-change-plan.md`.
 
 ## Log
 
