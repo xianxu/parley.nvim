@@ -1,11 +1,12 @@
 ---
 id: 000181
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-07-10
 updated: 2026-07-10
 estimate_hours:
+started: 2026-07-10T08:38:14-07:00
 ---
 
 # repo-root read-wide completion for all markdown
