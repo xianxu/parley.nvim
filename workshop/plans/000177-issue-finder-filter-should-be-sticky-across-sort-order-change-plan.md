@@ -33,7 +33,7 @@ No pure entity changes. The feature preserves an opaque user-input string withou
 **Files:**
 - Modify: `tests/unit/issue_finder_spec.lua`
 
-- [ ] **Step 1: Add an isolated real-`open` test harness**
+- [x] **Step 1: Add an isolated real-`open` test harness**
 
   In a new `describe`, require `parley.issues` as `issues`, save/restore `vim.defer_fn`, and call `issue_finder.setup(fake_parley)` in each `before_each`. Give the fake a fresh `_issue_finder` table, one scanned issue, the current valid source window, an ordered `picker_calls` list, and a `deferred` queue:
 
@@ -68,7 +68,7 @@ No pure entity changes. The feature preserves an opaque user-input string withou
 
   Restore `issues.scan_issues` and `vim.defer_fn` in `after_each`. This runs the real Issue Finder orchestration while faking only scanning, picker IO, and time.
 
-- [ ] **Step 2: Write the raw-query and cancel/reinvoke failing test**
+- [x] **Step 2: Write the raw-query and cancel/reinvoke failing test**
 
   Open once, feed the exact mixed query through the first picker call, cancel, then open again through the real entry point:
 
@@ -82,21 +82,21 @@ No pure entity changes. The feature preserves an opaque user-input string withou
 
   Assert the saved raw query remains on `fake._issue_finder.query`. Expected RED: the current structured extractor stores only `{repo}` and the formatter appends a space.
 
-- [ ] **Step 3: Run the focused spec and verify the raw-query case is RED**
+- [x] **Step 3: Run the focused spec and verify the raw-query case is RED**
 
   Run: `make test-spec SPEC=issues/issue-management`
 
   Expected: FAIL in `preserves the raw query after cancel and later invocation`, with actual `{repo} ` instead of the exact mixed string.
 
-- [ ] **Step 4: Write the clearing and selection/reinvoke failing cases**
+- [x] **Step 4: Write the clearing and selection/reinvoke failing cases**
 
   In separate tests with fresh state, feed `"needle"`, call `on_select` with the first item, invoke again, and assert the second `initial_query == "needle"`. Then feed `""`, cancel, invoke again, and assert the second `initial_query == ""` and state contains the empty string. These cases pin both picker-close paths and prevent an old value from being resurrected.
 
-- [ ] **Step 5: Write the controlled view-cycle failing case**
+- [x] **Step 5: Write the controlled view-cycle failing case**
 
   Feed `"needle {repo}"`, locate the cycle mapping by its configured/default key `<Tab>`, and call its `fn(item, close_fn)` with a close spy. Assert it queued one deferred callback; execute `deferred[1]()` so the real `fake.cmd.IssueFinder → issue_finder.open` path collects `picker_calls[2]`. Assert the close spy ran, the second title contains `history`, its item is the archived fixture, and `picker_calls[2].initial_query == "needle {repo}"`.
 
-- [ ] **Step 6: Run the focused spec and verify all new cases are RED for query restoration**
+- [x] **Step 6: Run the focused spec and verify all new cases are RED for query restoration**
 
   Run: `make test-spec SPEC=issues/issue-management`
 
@@ -112,7 +112,7 @@ No pure entity changes. The feature preserves an opaque user-input string withou
 - Modify: `atlas/modes/super_repo.md`
 - Modify: `atlas/issues/issue-management.md`
 
-- [ ] **Step 1: Implement the minimal state wiring**
+- [x] **Step 1: Implement the minimal state wiring**
 
   Rename the initialized Issue Finder state field from structured-only `sticky_query` to opaque `query`, update its comment, and replace Issue Finder's use of `finder_sticky` with direct state:
 
@@ -125,13 +125,13 @@ No pure entity changes. The feature preserves an opaque user-input string withou
 
   Remove the now-unused `finder_sticky` import. Do not trim, parse, append whitespace, or clear the state from selection/cancel/view-cycle handlers (`ARCH-PURE`).
 
-- [ ] **Step 2: Run the focused spec and verify GREEN**
+- [x] **Step 2: Run the focused spec and verify GREEN**
 
   Run: `make test-spec SPEC=issues/issue-management`
 
   Expected: all issue-management specs pass, including the named raw whitespace, mixed query, clearing, selection/cancel reinvocation, and view-cycle repaint cases. Existing `finder_sticky` specs remain unchanged, proving other finders retain their structured-only policy.
 
-- [ ] **Step 3: Run lint and the full suite**
+- [x] **Step 3: Run lint and the full suite**
 
   Run: `make lint`
 
@@ -141,7 +141,7 @@ No pure entity changes. The feature preserves an opaque user-input string withou
 
   Expected: exit 0 for lint, unit, integration, and architecture checks.
 
-- [ ] **Step 4: Reconcile the documented finder-persistence policy**
+- [x] **Step 4: Reconcile the documented finder-persistence policy**
 
   Update `atlas/ui/pickers.md` and `atlas/modes/super_repo.md`, whose current statements say plain text is never preserved and every finder uses `finder_sticky`, to document Issue Finder as the intentional full-query exception. Update `atlas/issues/issue-management.md` to describe the complete query surviving view repaint and later invocation. Search `README.md` and the rest of `atlas/` for additional Issue Finder persistence claims, then run `git diff --check` on #177 paths and inspect `git status --short` so unrelated issue edits remain unstaged (`ARCH-PURPOSE`).
 

@@ -3108,7 +3108,7 @@ M._issue_finder = {
 	view_mode = 0, -- 0=issues (default, done visible), 1=history (#158)
 	initial_index = nil,
 	initial_value = nil,
-	sticky_query = nil, -- Preserved {repo} filter across invocations
+	query = nil, -- Complete prompt query preserved across invocations
 }
 
 M._vision_finder = {

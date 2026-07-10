@@ -57,11 +57,11 @@ total: 0.98
 
 ## Plan
 
-- [ ] Add failing coverage for raw full-query capture/restoration, clearing,
+- [x] Add failing coverage for raw full-query capture/restoration, clearing,
   later invocation, and view-cycle repaint.
-- [ ] Replace Issue Finder's structured-only query extraction with direct opaque
+- [x] Replace Issue Finder's structured-only query extraction with direct opaque
   query state; keep other finders unchanged.
-- [ ] Run focused and full verification, reconcile documentation, and close #177.
+- [x] Run focused and full verification, reconcile documentation, and close #177.
 
 Durable implementation plan:
 `workshop/plans/000177-issue-finder-filter-should-be-sticky-across-sort-order-change-plan.md`.
@@ -69,3 +69,11 @@ Durable implementation plan:
 ## Log
 
 ### 2026-07-08
+
+### 2026-07-10 — complete query persistence implemented
+
+Issue Finder now owns one opaque full-query state value and passes it unchanged
+through `float_picker`'s existing capture/restore seam. TDD covered cancel,
+selection, clearing, and view-cycle repaint; the mapped issue suite and full
+`make test` passed. Updated all known atlas persistence-policy consumers
+(`ARCH-DRY`, `ARCH-PURE`, `ARCH-PURPOSE`).
