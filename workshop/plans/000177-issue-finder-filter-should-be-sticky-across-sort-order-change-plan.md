@@ -145,6 +145,6 @@ No pure entity changes. The feature preserves an opaque user-input string withou
 
   Update `atlas/ui/pickers.md` and `atlas/modes/super_repo.md`, whose current statements say plain text is never preserved and every finder uses `finder_sticky`, to document Issue Finder as the intentional full-query exception. Update `atlas/issues/issue-management.md` to describe the complete query surviving view repaint and later invocation. Search `README.md` and the rest of `atlas/` for additional Issue Finder persistence claims, then run `git diff --check` on #177 paths and inspect `git status --short` so unrelated issue edits remain unstaged (`ARCH-PURPOSE`).
 
-- [ ] **Step 5: Commit the implementation**
+- [x] **Step 5: Commit the implementation**
 
   Stage only `lua/parley/init.lua`, `lua/parley/issue_finder.lua`, `tests/unit/issue_finder_spec.lua`, `atlas/ui/pickers.md`, `atlas/modes/super_repo.md`, `atlas/issues/issue-management.md`, and the #177 issue/plan. Commit using the repository convention and a `Co-Authored-By:` trailer.
