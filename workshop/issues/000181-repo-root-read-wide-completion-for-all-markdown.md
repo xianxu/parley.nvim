@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-07-10
 updated: 2026-07-10
-estimate_hours:
+estimate_hours: 1.58
 started: 2026-07-10T08:38:14-07:00
 ---
 
@@ -79,17 +79,19 @@ completion to all markdown buffers in repo mode.
   fields, such as `chat_history_search`, are unaffected.
 
 - **Completion attaches to all markdown, not just chats.** Wire the neighborhood
-  completion (`attach_completion`, and the `cmp-path` `get_cwd` source) into
+  completion (`attach_completion` and a Parley-owned nvim-cmp source) into
   `prep_md`, so every markdown buffer in a repo-mode repo gets neighborhood +
   repo-root completion candidates. Chat buffers keep today's behavior (they
   already call it via `prep_chat`; avoid double-attach).
 
   Completion enumerates the same ordered read roots and presents root-relative
   candidates in that order. Duplicate display paths are collapsed first-wins,
-  matching dispatcher collision precedence. Both Vim `completefunc` and
-  buffer-local `cmp-path` consume this shared root list; attachment is
+  matching dispatcher collision precedence. Both Vim `completefunc` and one
+  Parley-owned nvim-cmp source consume the same candidate merger; attachment is
   idempotent so `prep_chat -> prep_md` cannot register duplicate sources or
-  autocmds.
+  autocmds. The existing single-root cmp-path adapter is replaced because
+  nvim-cmp keys source options by source name: repeating `path` sources would
+  silently reuse the first root's options and could not implement this contract.
 
 - **Self-consistency invariant preserved.** #147's property — "what the model is
   told" == "what the dispatcher enforces" — must still hold *per side*: the read
@@ -135,19 +137,22 @@ Non-goals:
 ## Estimate
 
 ```estimate
-model: estimate-logic-v2
-familiarity: 0.9
-item: neighborhood-read-set design=0.3 impl=0.6
-item: prep_md-completion-attach design=0.1 impl=0.4
-item: dispatcher-read-root-wiring design=0.2 impl=0.5
-item: unit-tests design=0.1 impl=0.6
-item: atlas-docs design=0.05 impl=0.15
-item: milestone-review design=0.0 impl=0.3
-design-buffer: 0.30
-total: 3.5
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim-feature design=0.35 impl=0.55
+item: cross-cutting-refactor design=0.10 impl=0.25
+item: atlas-docs design=0.03 impl=0.05
+item: boundary-review design=0.02 impl=0.15
+design-buffer: 0.08
+total: 1.58
 ```
 
-(Provisional — reconcile at `start-plan` / `change-code`.)
+Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md`
+against `baseline-v3.1.md`. Method A only. The spec and durable plan resolve the
+lookup-order decisions, so the ×0.2 spec-quality discount and +15% design buffer
+apply; implementation values use v3.1's 40% scaling. Calibration is currently
+marked stale by `sdlc estimate-source`, so treat this as provisional evidence for
+the next recalibration rather than a timeless constant.
 
 ## Plan
 
@@ -200,3 +205,23 @@ Delta: defined neighborhood-first ordered lookup, collision and missing-path
 behavior, symlink enforcement, completion ordering/de-duplication, exact path
 shapes and dispatcher entry points in scope, and shared model-guidance derivation
 (`ARCH-PURPOSE`, `ARCH-PURE`, `ARCH-DRY`).
+
+### 2026-07-10 — reconcile the implementation plan and estimate
+
+Reason: the approved spec is now decomposed into a durable TDD plan, and
+`start-plan` requires the estimate to use the current calibrated method before
+`change-code`.
+
+Delta: added `workshop/plans/000181-repo-root-read-wide-completion-for-all-markdown-plan.md`
+and replaced the provisional v2 estimate with the itemized v3.1 derivation.
+
+### 2026-07-10 — replace cmp-path with one policy-backed cmp source
+
+Reason: plan review verified that nvim-cmp retrieves source configuration by
+source name, so multiple `path` entries cannot carry different `get_cwd` roots;
+cmp-path also does not enforce the required first-root-wins de-duplication.
+
+Delta: completion still derives entirely from the ordered read roots, but both
+Vim and nvim-cmp now consume one shared Parley candidate merger. This preserves
+the approved behavior while making the adapter feasible (`ARCH-DRY`,
+`ARCH-PURPOSE`).
