@@ -47,12 +47,14 @@ were extended explicitly during M3-M5.
 
 ## Sticky `{repo}` filter
 
-Every super-repo-aware finder (chat, note, issue, vision, markdown) preserves
-`{repo}` filter fragments across reopens via `lua/parley/finder_sticky.lua`.
-Both completed (`{charon}`) and in-progress (`{char`) prompt fragments are
-extracted on every keystroke, normalised to the completed form, and re-seeded
-as `initial_query` next time. Chat finder additionally preserves `[tag]`
-fragments.
+Chat, note, vision, and markdown finders preserve `{repo}` filter fragments
+across reopens via `lua/parley/finder_sticky.lua`. Both completed (`{charon}`)
+and in-progress (`{char`) prompt fragments are extracted on every keystroke,
+normalised to the completed form, and re-seeded as `initial_query` next time.
+Chat finder additionally preserves `[tag]` fragments. Issue Finder is the
+intentional exception: it preserves the complete opaque query, including plain
+text, so the same filter survives view-cycle repaint and later invocations
+(#177).
 
 Matching is also forgiving of in-progress brackets: `{char` matches the same
 items as `{charon}` would (prefix match against the haystack `{repo}` token),
@@ -90,7 +92,8 @@ filter for plain repo mode's primary note root.
 - `lua/parley/issue_finder.lua`, `vision_finder.lua`, `markdown_finder.lua`
   — multi-root aggregation when `super_repo_members` is non-empty.
 - `lua/parley/finder_sticky.lua` — shared `{root}` / `[tag]` extraction and
-  initial-query formatter used by every finder for sticky filters.
+  initial-query formatter used by chat, note, vision, and markdown finders;
+  Issue Finder owns its distinct full-query persistence policy.
 - `lua/parley/lualine.lua` — `format_mode`, `create_mode_component`, and
   the filetype-component auto-replace at setup time.
 - `lua/parley/keybinding_registry.lua` — `super_repo_toggle` entry.

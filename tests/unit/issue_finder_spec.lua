@@ -16,6 +16,7 @@ parley.setup({
 })
 
 local issue_finder = require("parley.issue_finder")
+local issues = require("parley.issues")
 
 describe("IssueFinder view-mode logic", function()
     local function sample_issues()
@@ -106,5 +107,135 @@ describe("IssueFinder view-mode logic", function()
             assert.equals("history", issue_finder.VIEW_LABELS[1])
             assert.is_nil(issue_finder.VIEW_LABELS[2])
         end)
+    end)
+end)
+
+describe("IssueFinder query persistence", function()
+    local original_defer_fn
+    local original_scan_issues
+    local deferred
+    local fake
+    local picker_calls
+
+    local function cycle_view_mapping(opts)
+        for _, mapping in ipairs(opts.mappings) do
+            if mapping.key == "<Tab>" then
+                return mapping
+            end
+        end
+        error("missing <Tab> cycle-view mapping")
+    end
+
+    before_each(function()
+        deferred = {}
+        picker_calls = {}
+        fake = {
+            _issue_finder = { opened = false, view_mode = 0 },
+            config = {
+                issues_dir = "/unused/issues",
+                history_dir = "/unused/history",
+                issue_finder_mappings = {},
+            },
+            float_picker = {
+                open = function(opts)
+                    table.insert(picker_calls, opts)
+                end,
+            },
+            helpers = {},
+            logger = { warning = function() end },
+            cmd = {},
+            open_buf = function() end,
+        }
+
+        original_scan_issues = issues.scan_issues
+        issues.scan_issues = function(_, opts)
+            if opts.include_history then
+                return { {
+                    id = "000002",
+                    status = "done",
+                    title = "Archived",
+                    slug = "archived",
+                    path = "/tmp/archived.md",
+                    archived = true,
+                    mtime = 2,
+                    created = "",
+                } }
+            end
+            return { {
+                id = "000001",
+                status = "open",
+                title = "Active",
+                slug = "active",
+                path = "/tmp/active.md",
+                archived = false,
+                created = "",
+            } }
+        end
+
+        original_defer_fn = vim.defer_fn
+        vim.defer_fn = function(fn)
+            table.insert(deferred, fn)
+        end
+        fake.cmd.IssueFinder = function()
+            issue_finder.open()
+        end
+        issue_finder.setup(fake)
+    end)
+
+    after_each(function()
+        issues.scan_issues = original_scan_issues
+        vim.defer_fn = original_defer_fn
+        issue_finder.setup(parley)
+    end)
+
+    it("preserves the raw query after cancel and later invocation", function()
+        issue_finder.open()
+        picker_calls[1].on_query_change("  sticky {repo} query  ")
+        picker_calls[1].on_cancel()
+
+        issue_finder.open()
+
+        assert.equals("  sticky {repo} query  ", fake._issue_finder.query)
+        assert.equals("  sticky {repo} query  ", picker_calls[2].initial_query)
+    end)
+
+    it("preserves the query after selection and later invocation", function()
+        issue_finder.open()
+        picker_calls[1].on_query_change("needle")
+        picker_calls[1].on_select(picker_calls[1].items[1])
+
+        issue_finder.open()
+
+        assert.equals("needle", picker_calls[2].initial_query)
+    end)
+
+    it("persists a cleared query", function()
+        fake._issue_finder.query = "old query"
+        issue_finder.open()
+        picker_calls[1].on_query_change("")
+        picker_calls[1].on_cancel()
+
+        issue_finder.open()
+
+        assert.equals("", fake._issue_finder.query)
+        assert.equals("", picker_calls[2].initial_query)
+    end)
+
+    it("preserves the query through the view-cycle repaint", function()
+        issue_finder.open()
+        picker_calls[1].on_query_change("needle {repo}")
+        local closed = false
+
+        cycle_view_mapping(picker_calls[1]).fn(nil, function()
+            closed = true
+        end)
+
+        assert.is_true(closed)
+        assert.equals(1, #deferred)
+        deferred[1]()
+        assert.equals(2, #picker_calls)
+        assert.matches("history", picker_calls[2].title)
+        assert.equals("/tmp/archived.md", picker_calls[2].items[1].value)
+        assert.equals("needle {repo}", picker_calls[2].initial_query)
     end)
 end)
