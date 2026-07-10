@@ -1,12 +1,13 @@
 ---
 id: 000177
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-08
 updated: 2026-07-10
 estimate_hours: 0.98
 started: 2026-07-10T01:19:44-07:00
+actual_hours: 1.04
 ---
 
 # issue finder filter should be sticky across sort order change
@@ -71,6 +72,7 @@ Durable implementation plan:
 ### 2026-07-08
 
 ### 2026-07-10 — complete query persistence implemented
+- 2026-07-10: closed — Full make test passes; regression coverage proves exact plain/mixed query restoration after cancel, selection, view cycling, and clearing.; review verdict: SHIP
 
 Issue Finder now owns one opaque full-query state value and passes it unchanged
 through `float_picker`'s existing capture/restore seam. TDD covered cancel,
