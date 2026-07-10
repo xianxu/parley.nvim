@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-07-08
 updated: 2026-07-10
-estimate_hours:
+estimate_hours: 0.98
 started: 2026-07-10T01:19:44-07:00
 ---
 
@@ -40,9 +40,31 @@ so the visible result set unexpectedly becomes unfiltered after a sort/view chan
 - Automated tests cover capture and restoration without changing other finders'
   persistence policy.
 
+## Estimate
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: issue-spec design=0.10 impl=0.04
+item: lua-neovim design=0.30 impl=0.30
+item: milestone-review design=0.05 impl=0.12
+design-buffer: 0.15
+total: 0.98
+```
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against
+`baseline-v3.1.md`. Method A only.*
+
 ## Plan
 
-- [ ]
+- [ ] Add failing coverage for raw full-query capture/restoration, clearing,
+  later invocation, and view-cycle repaint.
+- [ ] Replace Issue Finder's structured-only query extraction with direct opaque
+  query state; keep other finders unchanged.
+- [ ] Run focused and full verification, reconcile documentation, and close #177.
+
+Durable implementation plan:
+`workshop/plans/000177-sticky-issue-finder-query-plan.md`.
 
 ## Log
 
