@@ -108,6 +108,9 @@ No pure entity changes. The feature preserves an opaque user-input string withou
 - Modify: `lua/parley/init.lua`
 - Modify: `lua/parley/issue_finder.lua`
 - Modify: `tests/unit/issue_finder_spec.lua`
+- Modify: `atlas/ui/pickers.md`
+- Modify: `atlas/modes/super_repo.md`
+- Modify: `atlas/issues/issue-management.md`
 
 - [ ] **Step 1: Implement the minimal state wiring**
 
@@ -138,10 +141,10 @@ No pure entity changes. The feature preserves an opaque user-input string withou
 
   Expected: exit 0 for lint, unit, integration, and architecture checks.
 
-- [ ] **Step 4: Sweep user-facing documentation and diff quality**
+- [ ] **Step 4: Reconcile the documented finder-persistence policy**
 
-  Search `README.md` and `atlas/` for Issue Finder query-persistence descriptions. Update `atlas/issues/issue-management.md` only if it currently documents the old structured-only behavior; otherwise record that no atlas surface changed. Run `git diff --check` and inspect `git status --short` so unrelated issue edits remain unstaged.
+  Update `atlas/ui/pickers.md` and `atlas/modes/super_repo.md`, whose current statements say plain text is never preserved and every finder uses `finder_sticky`, to document Issue Finder as the intentional full-query exception. Update `atlas/issues/issue-management.md` to describe the complete query surviving view repaint and later invocation. Search `README.md` and the rest of `atlas/` for additional Issue Finder persistence claims, then run `git diff --check` on #177 paths and inspect `git status --short` so unrelated issue edits remain unstaged (`ARCH-PURPOSE`).
 
 - [ ] **Step 5: Commit the implementation**
 
-  Stage only `lua/parley/init.lua`, `lua/parley/issue_finder.lua`, `tests/unit/issue_finder_spec.lua`, the #177 issue/plan, and any required atlas path. Commit using the repository convention and a `Co-Authored-By:` trailer.
+  Stage only `lua/parley/init.lua`, `lua/parley/issue_finder.lua`, `tests/unit/issue_finder_spec.lua`, `atlas/ui/pickers.md`, `atlas/modes/super_repo.md`, `atlas/issues/issue-management.md`, and the #177 issue/plan. Commit using the repository convention and a `Co-Authored-By:` trailer.
