@@ -139,11 +139,11 @@ Non-goals:
 ```estimate
 model: estimate-logic-v3.1
 familiarity: 1.0
-item: lua-neovim-feature design=0.35 impl=0.55
+item: lua-neovim design=0.35 impl=0.55
 item: cross-cutting-refactor design=0.10 impl=0.25
 item: atlas-docs design=0.03 impl=0.05
-item: boundary-review design=0.02 impl=0.15
-design-buffer: 0.08
+item: milestone-review design=0.02 impl=0.15
+design-buffer: 0.15
 total: 1.58
 ```
 
@@ -225,3 +225,12 @@ Delta: completion still derives entirely from the ordered read roots, but both
 Vim and nvim-cmp now consume one shared Parley candidate merger. This preserves
 the approved behavior while making the adapter feasible (`ARCH-DRY`,
 `ARCH-PURPOSE`).
+
+### 2026-07-11 — repair estimate vocabulary and buffer unit
+
+Reason: `sdlc change-code` correctly rejected two non-canonical primitive slugs;
+review also found `design-buffer` had been written as hours rather than the
+fraction required by the reconciliation grammar.
+
+Delta: renamed the items to canonical `lua-neovim` / `milestone-review` and set
+the planned 15% buffer as `0.15`; the itemized total remains 1.58 hours.
