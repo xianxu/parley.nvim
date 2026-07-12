@@ -195,6 +195,31 @@ describe("resolve_path_in_cwd allowed_roots (#140)", function()
     end)
 end)
 
+describe("resolve_read_path ordered roots (#181)", function()
+    it("falls through to repo root and prefers neighborhood collisions", function()
+        local n = math.random(0, 0xFFFFFF)
+        local repo = tmp_base .. "/policy-repo-" .. n
+        local neighborhood = repo .. "/data"
+        vim.fn.mkdir(neighborhood .. "/atlas", "p")
+        vim.fn.mkdir(repo .. "/atlas", "p")
+        vim.fn.writefile({ "local" }, neighborhood .. "/atlas/index.md")
+        vim.fn.writefile({ "repo" }, repo .. "/atlas/index.md")
+        assert.equals(canonical(neighborhood .. "/atlas/index.md"),
+            dispatcher.resolve_read_path("atlas/index.md", { neighborhood, repo }))
+        vim.fn.delete(neighborhood .. "/atlas/index.md")
+        assert.equals(canonical(repo .. "/atlas/index.md"),
+            dispatcher.resolve_read_path("atlas/index.md", { neighborhood, repo }))
+    end)
+
+    it("rejects missing reads instead of synthesizing a leaf", function()
+        local root = tmp_base .. "/missing-read-" .. math.random(0, 0xFFFFFF)
+        vim.fn.mkdir(root, "p")
+        local path, err = dispatcher.resolve_read_path("missing.md", { root })
+        assert.is_nil(path)
+        assert.matches("read path not found", err)
+    end)
+end)
+
 describe("truncate", function()
     it("returns content unchanged when under the byte cap", function()
         assert.equals("hello", dispatcher.truncate("hello", 100))
@@ -492,7 +517,7 @@ describe("execute_call", function()
             { cwd = cwd, read_roots = {} }
         )
         assert.is_true(res.is_error)
-        assert.matches("tool_read_roots", res.content)
+        assert.matches("read path not found in configured roots", res.content)
         assert.not_matches("should not run", res.content)
     end)
 

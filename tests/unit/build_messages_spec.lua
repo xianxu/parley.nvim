@@ -127,10 +127,14 @@ describe("_build_messages: basic structure", function()
             config = parley.config,
             helpers = stub_helpers,
             logger = stub_logger,
-            neighborhood_root = "/workspace/repo",
+            root_policy = {
+                write_root = "/workspace/repo",
+                read_roots = { "/workspace/repo" },
+            },
         })
 
-        assert.matches("Relative tool paths resolve from: /workspace/repo", messages[1].content)
+        assert.matches("Relative reads search these roots in order", messages[1].content)
+        assert.matches("Relative writes resolve only from: /workspace/repo", messages[1].content)
     end)
 
     it("single exchange with answer produces system + user + assistant", function()

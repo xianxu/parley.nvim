@@ -160,23 +160,34 @@ the next recalibration rather than a timeless constant.
 
 ## Plan
 
-- [ ] Read-set: teach `neighborhood` to return the widened read/completion root
+- [x] Read-set: teach `neighborhood` to return the widened read/completion root
       set (per-artifact ∪ `repo_root`-in-repo-mode ∪ `tool_read_roots`), leaving
       `derive_for_path` (the write/primary root) intact.
-- [ ] Dispatcher: ordered read-tool lookup consumes the widened read set for
+- [x] Dispatcher: ordered read-tool lookup consumes the widened read set for
       every supported path shape and read-kind tool;
       write tools keep the narrow root. Update the payload guidance line
       through a shared policy formatter to reflect lookup precedence and the
       read/write split.
-- [ ] Completion: attach the policy-backed Parley completion source in
+- [x] Completion: attach the policy-backed Parley completion source in
       `prep_md` for repo-mode markdown; preserve the existing `prep_chat`
       attachment for global chats; guard against double-attach.
-- [ ] Tests: read-set includes/excludes repo_root correctly; write-narrow
+- [x] Tests: read-set includes/excludes repo_root correctly; write-narrow
       rejection holds; `prep_md` attaches; non-repo-mode unchanged.
-- [ ] Atlas: update `infra/repo_mode.md` #147 section + `providers/tool_use.md`
+- [x] Atlas: update `infra/repo_mode.md` #147 section + `providers/tool_use.md`
       cwd-scope note for the read-wide/write-narrow split.
 
 ## Log
+
+### 2026-07-11 — implementation
+
+Implemented one ordered root policy consumed by dispatcher enforcement, model
+guidance, chat recursion, skill invocation, Vim completion, and a dedicated
+nvim-cmp source (`ARCH-DRY`, `ARCH-PURPOSE`). Pure ordering/merging/formatting
+stays in `neighborhood`, with filesystem and Neovim work at thin adapters
+(`ARCH-PURE`). Verification: `make -f Makefile.parley test-spec
+SPEC=providers/tool_use`, `SPEC=skills/skill-system`, `git diff --check`, and
+full `make -f Makefile.parley test` passed after the final message-context seam
+update.
 
 ### 2026-07-10
 

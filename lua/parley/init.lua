@@ -1439,6 +1439,9 @@ M.prep_md = function(buf)
 	vim.api.nvim_command("setlocal noswapfile")
 	-- better text wrapping
 	vim.api.nvim_command("setlocal wrap linebreak")
+	if type(M.config.repo_root) == "string" and M.config.repo_root ~= "" then
+		require("parley.neighborhood").attach_completion(buf)
+	end
 	-- auto save on TextChanged, InsertLeave (debounced to avoid disk thrashing on large files)
 	local save_timer = nil
 	local SAVE_DEBOUNCE_MS = 1000

@@ -33,14 +33,12 @@ chat_roots = [config.chat_dir]
 ### Reference neighborhood (#147)
 Relative tool paths and chat-buffer file completion use a per-artifact
 neighborhood root, not the editor process cwd. `lua/parley/neighborhood.lua`
-derives the root from the artifact path: repo-backed Parley artifacts under the
-repo-local chat/note/issue/vision/history dirs resolve to `config.repo_root`;
-global chats and ordinary content files resolve to their own folder. `prep_chat`
-attaches a buffer-local `completefunc` for chat buffers, and when `nvim-cmp` is
-available it also installs a buffer-local `cmp-path` source whose `get_cwd()`
-returns the same neighborhood. Root-relative file candidates therefore come from
-the same neighborhood that tool calls use, including setups where markdown
-completion is driven by `cmp-path` instead of Vim's built-in completion.
+derives a root policy from the artifact path: writes use the artifact
+neighborhood, while reads search neighborhood first, then `config.repo_root` in
+repo mode, then configured read roots. The first existing match wins. Repo-mode
+`prep_md` attaches built-in and nvim-cmp completion backed by the same ordered
+candidate merger; global chats retain own-folder completion, and ordinary
+non-repo Markdown is unchanged. (#181)
 
 ### Note roots
 Notes still use the multi-root manager with freeform add/remove/rename via `:ParleyNoteDirs` / `<C-n>h` and persist `note_roots` / `note_dirs` to state.json. The shared `root_dirs.lua` generic manager and `root_dir_picker.lua` UI exist primarily to serve the note system now; the chat side only uses the read paths (get/find/normalize/apply) and `super_repo.set_chat_roots`.
@@ -68,7 +66,8 @@ All directory names are relative to git root unless they start with `/`.
 - `repo_chat_dir` and `repo_note_dir` are excluded from the generic `_dir$` prepare loop in setup
 - `repo_artifacts.dir_keys` is the shared source for repo-local artifact dirs that repo setup creates and `neighborhood` classifies as repo-backed
 - `apply_repo_local()` builds `config.chat_roots = [{dir=repo_chat, label="repo"}, {dir=config.chat_dir, label="global"}, ...]` directly, bypassing the basename-derived label heuristic in `default_root_label`
-- Parley chat buffers with `nvim-cmp` replace the buffer's cmp sources with `cmp-path` and `buffer` so path completion is anchored to the artifact neighborhood
+- Repo-mode Markdown and Parley chat buffers use the policy-backed `parley_path`
+  nvim-cmp source plus `buffer`; attachment is buffer-idempotent
 - `refresh_state()` re-asserts the repo *note* dir as primary after restoring persisted state (chat side does not need this — chat state is never persisted), and strips note_roots entries marked transient (plain repo's `label = "repo"` and super-repo's pushed sibling dirs) from `state.json`
 - `detect_buffer_context` checks all note roots (not just primary) for scope detection
 - `neighborhood.derive_for_path()` canonicalizes `/var`/`/private/var` style path aliases before testing repo-local artifact directories

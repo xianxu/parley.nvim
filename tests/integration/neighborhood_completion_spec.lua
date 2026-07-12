@@ -73,7 +73,7 @@ describe("neighborhood completion", function()
         assert.equals(#"open ", neighborhood.completefunc(1, ""))
     end)
 
-    it("configures cmp-path completion from the neighborhood root", function()
+    it("configures the policy-backed Parley completion source", function()
         local captured
         package.loaded.cmp = {
             config = {
@@ -96,7 +96,6 @@ describe("neighborhood completion", function()
         end)
 
         assert.is_not_nil(captured)
-        assert.same({ "path", "buffer" }, { captured.sources[1].name, captured.sources[2].name })
-        assert.equals(repo, captured.sources[1].option.get_cwd({ context = { bufnr = buf } }))
+        assert.same({ "parley_path", "buffer" }, { captured.sources[1].name, captured.sources[2].name })
     end)
 end)

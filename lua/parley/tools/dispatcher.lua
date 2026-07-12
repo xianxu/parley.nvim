@@ -124,6 +124,32 @@ function M.resolve_path_in_cwd(path, cwd, allowed_roots)
     return nil, "path outside working directory: " .. path
 end
 
+function M.resolve_read_path(path, read_roots)
+    if type(path) ~= "string" or path == "" then
+        return nil, "path must be a non-empty string"
+    end
+    local roots = {}
+    for _, root in ipairs(read_roots or {}) do
+        local resolved = resolve_root(root, root)
+        if resolved then roots[#roots + 1] = resolved end
+    end
+    local candidates = {}
+    if path:sub(1, 1) == "/" then
+        candidates[1] = path
+    else
+        for _, root in ipairs(roots) do candidates[#candidates + 1] = root .. "/" .. path end
+    end
+    for _, candidate in ipairs(candidates) do
+        local real = vim.loop.fs_realpath(vim.fs.normalize(candidate))
+        if real then
+            for _, root in ipairs(roots) do
+                if real == root or real:sub(1, #root + 1) == root .. "/" then return real end
+            end
+        end
+    end
+    return nil, "read path not found in configured roots: " .. path
+end
+
 --------------------------------------------------------------------------------
 -- Result truncation
 --------------------------------------------------------------------------------
@@ -213,6 +239,10 @@ end
 --- @return ToolResult
 function M.execute_call(call, tools_registry, opts)
     opts = opts or {}
+    local policy = opts.root_policy
+    if not policy and opts.cwd then
+        policy = require("parley.neighborhood").policy_from_roots(opts.cwd, nil, opts.read_roots)
+    end
 
     local def = tools_registry.get(call.name)
     if not def then
@@ -240,7 +270,7 @@ function M.execute_call(call, tools_registry, opts)
         -- write tools get nil → cwd-only. Gate on `~= "write"` (the canonical
         -- read-tool predicate `@readonly` uses): `kind` defaults to read when
         -- absent, so `== "read"` would wrongly confine an absent-kind tool.
-        return (def.kind ~= "write") and (opts.read_roots or {}) or nil
+        return (def.kind ~= "write") and (policy and policy.read_roots or {}) or nil
     end
 
     local path_fields = { "path", "file_path" }
@@ -251,7 +281,12 @@ function M.execute_call(call, tools_registry, opts)
     for _, field in ipairs(path_fields) do
         if opts.cwd and call.input and type(call.input[field]) == "string" then
             local roots = roots_for_def()
-            local abs, scope_err = M.resolve_path_in_cwd(call.input[field], opts.cwd, roots)
+            local abs, scope_err
+            if def.kind ~= "write" then
+                abs, scope_err = M.resolve_read_path(call.input[field], roots)
+            else
+                abs, scope_err = M.resolve_path_in_cwd(call.input[field], policy.write_root)
+            end
             if not abs then
                 return {
                     id = call.id,
@@ -275,7 +310,12 @@ function M.execute_call(call, tools_registry, opts)
                     is_error = true,
                 }
             end
-            local abs, scope_err = M.resolve_path_in_cwd(path, opts.cwd, roots)
+            local abs, scope_err
+            if def.kind ~= "write" then
+                abs, scope_err = M.resolve_read_path(path, roots)
+            else
+                abs, scope_err = M.resolve_path_in_cwd(path, policy.write_root)
+            end
             if not abs then
                 return {
                     id = call.id,

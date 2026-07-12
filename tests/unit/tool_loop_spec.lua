@@ -227,7 +227,7 @@ describe("tool_loop.process_response: with tool_use", function()
         assert.matches("🔧: read_file id=toolu_ERR", text)
         assert.matches("📎: read_file id=toolu_ERR", text)
         assert.matches("error=true", text)
-        assert.matches("outside working directory", text)
+        assert.matches("read path not found in configured roots", text)
     end)
 
     it("uses the chat buffer neighborhood as cwd when agent cwd is absent", function()
