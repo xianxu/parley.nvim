@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-07-08
 updated: 2026-07-11
-estimate_hours:
+estimate_hours: 4.13
 started: 2026-07-11T21:57:07-07:00
 ---
 
@@ -235,6 +235,31 @@ threshold in this issue.
       the baseline environment.
 - [ ] Update tooling and atlas documentation with the benchmark and landed
       performance architecture.
+
+## Estimate
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: issue-spec             design=0.30 impl=0.10
+item: lua-neovim             design=0.30 impl=0.50
+item: lua-neovim             design=0.30 impl=0.50
+item: lua-neovim             design=0.30 impl=0.50
+item: lua-neovim             design=0.30 impl=0.50
+item: atlas-docs             design=0.03 impl=0.06
+item: milestone-review       design=0.04 impl=0.16
+design-buffer: 0.15
+total: 4.13
+```
+
+Four focused Lua/Neovim primitives cover the benchmark harness, instrumented
+line-reader seam, diagnostic event routing, and bounded highlight cache. Design
+values apply the thorough-spec discount; implementation values are already
+scaled to 40% per v3.1. No library can replace these repo-specific Neovim seams.
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against
+`baseline-v3.1.md`. Method A only. The calibration source was stale at
+derivation time, so this value is provisional until recalibration.*
 
 ## Log
 
