@@ -110,11 +110,11 @@ local REASONING_LOOKAHEAD_MAX = 500
 -- prefix_lines / visible window, causing continuation lines to lose
 -- their dim highlight whenever the viewport top fell between 🧠: and
 -- 🧠:[END]. Mirrors the parser's lookahead in chat_parser.lua.
-local function reasoning_block_has_end_marker(buf, from_line, patterns)
+local function reasoning_block_has_end_marker(buf, from_line, patterns, reader)
     local line_count = vim.api.nvim_buf_line_count(buf)
     local stop = math.min(from_line + REASONING_LOOKAHEAD_MAX, line_count)
     if from_line + 1 > stop then return false end
-    local ahead_lines = vim.api.nvim_buf_get_lines(buf, from_line, stop, false)
+    local ahead_lines = reader:lines(from_line, stop, false)
     for _, ahead in ipairs(ahead_lines) do
         if ahead:match(patterns.reasoning_end_pattern) then
             return true
@@ -132,7 +132,7 @@ local function reasoning_block_has_end_marker(buf, from_line, patterns)
     return false
 end
 
-local function bootstrap_chat_highlight_state(buf, start_line, patterns, streaming)
+local function bootstrap_chat_highlight_state(buf, start_line, patterns, streaming, reader)
     if start_line <= 1 then
         return false, false, false, false
     end
@@ -142,7 +142,7 @@ local function bootstrap_chat_highlight_state(buf, start_line, patterns, streami
     local bootstrap_in_block = false
 
     while bootstrap_start > 1 do
-        local previous_lines = vim.api.nvim_buf_get_lines(buf, bootstrap_start - 2, bootstrap_start - 1, false)
+        local previous_lines = reader:lines(bootstrap_start - 2, bootstrap_start - 1, false)
         local previous_line = previous_lines[1] or ""
         if previous_line:match(patterns.user_pattern) then
             bootstrap_in_block = true
@@ -162,7 +162,7 @@ local function bootstrap_chat_highlight_state(buf, start_line, patterns, streami
         return in_block, in_code_block, in_reasoning_block, false
     end
 
-    local prefix_lines = vim.api.nvim_buf_get_lines(buf, bootstrap_start - 1, start_line - 1, false)
+    local prefix_lines = reader:lines(bootstrap_start - 1, start_line - 1, false)
     local in_reasoning_explicit_end = false
     for idx, line in ipairs(prefix_lines) do
         if line:match("^%s*```") then
@@ -200,7 +200,7 @@ local function bootstrap_chat_highlight_state(buf, start_line, patterns, streami
                 in_reasoning_explicit_end = true
             else
                 local opener_line_nr = bootstrap_start + idx - 1
-                in_reasoning_explicit_end = reasoning_block_has_end_marker(buf, opener_line_nr, patterns)
+                in_reasoning_explicit_end = reasoning_block_has_end_marker(buf, opener_line_nr, patterns, reader)
             end
         elseif in_reasoning_block and line:match("^%s*$") and not in_reasoning_explicit_end then
             in_reasoning_block = false
@@ -262,11 +262,12 @@ end
 -- Compute desired chat highlights for a 1-indexed line range.
 -- Returns a table keyed by 0-indexed row: { [row] = { {hl_group, col_start, col_end}, ... } }
 -- Scans HIGHLIGHT_CONTEXT_LINES above start_line for block state context.
-local function compute_chat_highlights(buf, start_line, end_line)
+local function compute_chat_highlights(buf, start_line, end_line, reader)
+    reader = reader or require("parley.line_reader").for_buffer(buf)
     local result = {}
     local patterns = get_chat_highlight_prefix_patterns()
-    local lines = vim.api.nvim_buf_get_lines(buf, start_line - 1, end_line, false)
-    local all_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    local lines = reader:lines(start_line - 1, end_line, false)
+    local all_lines = reader:lines(0, -1, false)
     local footer_range = require("parley.define").managed_footnote_footer_range(all_lines)
     -- While a stream is in flight for this buffer, the model has not
     -- yet emitted 🧠:[END]. Assume explicit-end mode so blank-line
@@ -277,7 +278,7 @@ local function compute_chat_highlights(buf, start_line, end_line)
     -- marker controls termination.
     local streaming = require("parley.tasker").is_busy(buf, true)
     local in_block, in_code_block, in_reasoning_block, in_reasoning_explicit_end =
-        bootstrap_chat_highlight_state(buf, start_line, patterns, streaming)
+        bootstrap_chat_highlight_state(buf, start_line, patterns, streaming, reader)
 
     local in_tool_block = false  -- inside 🔧:/📎: fenced content
 
@@ -463,11 +464,12 @@ end
 
 -- Compute desired markdown highlights for a 1-indexed line range.
 -- Returns a table keyed by 0-indexed row: { [row] = { {hl_group, col_start, col_end}, ... } }
-local function compute_markdown_highlights(buf, start_line, end_line)
+local function compute_markdown_highlights(buf, start_line, end_line, reader)
+    reader = reader or require("parley.line_reader").for_buffer(buf)
     local result = {}
     local branch_prefix = _parley.config.chat_branch_prefix or "🌿:"
-    local lines = vim.api.nvim_buf_get_lines(buf, start_line - 1, end_line, false)
-    local all_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    local lines = reader:lines(start_line - 1, end_line, false)
+    local all_lines = reader:lines(0, -1, false)
     local footer_range = require("parley.define").managed_footnote_footer_range(all_lines)
     for offset, line in ipairs(lines) do
         local row = start_line + offset - 2
@@ -872,7 +874,7 @@ local function highlight_inline_branch_links(buf, ranges)
         -- Clear existing extmarks in this range
         vim.api.nvim_buf_clear_namespace(buf, ns, range.start_line - 1, range.end_line)
 
-        local lines = vim.api.nvim_buf_get_lines(buf, range.start_line - 1, range.end_line, false)
+        local lines = require("parley.line_reader").for_buffer(buf):lines(range.start_line - 1, range.end_line, false)
         for offset, line in ipairs(lines) do
             local links = chat_parser.extract_inline_branch_links(line, branch_prefix)
             local line_idx = range.start_line + offset - 2 -- 0-indexed
@@ -914,7 +916,7 @@ M.highlight_chat_branch_refs = function(buf)
     local has_inline_branches = false
 
     for _, range in ipairs(ranges) do
-        local lines = vim.api.nvim_buf_get_lines(buf, range.start_line - 1, range.end_line, false)
+        local lines = require("parley.line_reader").for_buffer(buf):lines(range.start_line - 1, range.end_line, false)
         for _, line in ipairs(lines) do
             if line:sub(1, #branch_prefix) == branch_prefix then
                 has_branch_refs = true
@@ -962,7 +964,7 @@ M.highlight_chat_branch_refs = function(buf)
             local base_dir = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ":h")
             local refresh_ranges = get_visible_line_ranges(buf)
             for _, range in ipairs(refresh_ranges) do
-                local latest_lines = vim.api.nvim_buf_get_lines(buf, range.start_line - 1, range.end_line, false)
+                local latest_lines = require("parley.line_reader").for_buffer(buf):lines(range.start_line - 1, range.end_line, false)
                 for offset, line in ipairs(latest_lines) do
                     local updated_line = M.render_chat_branch_line(line, base_dir)
                     if updated_line ~= line then
@@ -990,7 +992,8 @@ M.highlight_question_block = function(buf)
     end
 
     for _, range in ipairs(ranges) do
-        local row_map = compute_chat_highlights(buf, range.start_line, range.end_line)
+        local reader = require("parley.line_reader").for_buffer(buf)
+        local row_map = compute_chat_highlights(buf, range.start_line, range.end_line, reader)
         for row, hls in pairs(row_map) do
             for _, hl in ipairs(hls) do
                 vim.api.nvim_buf_add_highlight(buf, ns, hl.hl_group, row, hl.col_start, hl.col_end)
@@ -998,6 +1001,24 @@ M.highlight_question_block = function(buf)
         end
     end
 end
+
+-- Production compute seam shared by the decoration provider and isolated
+-- performance runners. Scan breadth intentionally remains unchanged.
+local function compute_window_decorations(_winid, buf, toprow, botrow, reader)
+    reader = reader or require("parley.line_reader").for_buffer(buf)
+    local buf_type = _parley._parley_bufs[buf]
+    local start_line = toprow + 1
+    local line_count = vim.api.nvim_buf_line_count(buf)
+    local end_line = math.min(botrow + 1 + HIGHLIGHT_VIEWPORT_MARGIN, line_count)
+    if buf_type == "chat" then
+        return compute_chat_highlights(buf, start_line, end_line, reader)
+    elseif buf_type == "markdown" then
+        return compute_markdown_highlights(buf, start_line, end_line, reader)
+    end
+    return {}
+end
+
+M._compute_window_decorations = compute_window_decorations
 
 M.setup_buf_handler = function()
     local interview = require("parley.interview")
@@ -1021,17 +1042,11 @@ M.setup_buf_handler = function()
             if not _parley._parley_bufs[bufnr] then
                 return false
             end
-            local buf_type = _parley._parley_bufs[bufnr]
-            local start_line = toprow + 1
-            local line_count = vim.api.nvim_buf_line_count(bufnr)
-            local end_line = math.min(botrow + 1 + HIGHLIGHT_VIEWPORT_MARGIN, line_count)
-            local row_map = nil
-
-            if buf_type == "chat" then
-                row_map = compute_chat_highlights(bufnr, start_line, end_line)
-            elseif buf_type == "markdown" then
-                row_map = compute_markdown_highlights(bufnr, start_line, end_line)
-            end
+            local line_reader = require("parley.line_reader")
+            local reader = line_reader.for_buffer(bufnr)
+            local row_map = line_reader.with_phase(bufnr, "decoration_redraw", function()
+                return compute_window_decorations(winid, bufnr, toprow, botrow, reader)
+            end)
 
             _decor_cache[winid] = {
                 bufnr = bufnr,
@@ -1042,8 +1057,8 @@ M.setup_buf_handler = function()
             local cache = _decor_cache[winid]
             if not cache or cache.bufnr ~= bufnr then return end
             local highlights = cache.rows[row]
-            local lines = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)
-            local line = lines[1] or ""
+            local reader = require("parley.line_reader").for_buffer(bufnr)
+            local line = reader:line(row) or ""
 
             if highlights then
                 for _, hl in ipairs(highlights) do
