@@ -1,12 +1,13 @@
 ---
 id: 000181
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-10
-updated: 2026-07-10
+updated: 2026-07-11
 estimate_hours: 3.58
 started: 2026-07-10T08:38:14-07:00
+actual_hours: N/A
 ---
 
 # repo-root read-wide completion for all markdown
@@ -179,6 +180,8 @@ the next recalibration rather than a timeless constant.
 ## Log
 
 ### 2026-07-11 — implementation
+- 2026-07-11: addressed final FIX-THEN-SHIP review — chat/tool-loop and skill invocation now prove repo-root-only reads from ordinary nested Markdown; the chat regression proves an identical relative write remains in the nested neighborhood and does not overwrite the repo-root candidate (`ARCH-PURPOSE`). Focused provider/tool-use and skill-system suites passed; stale dispatcher annotations now describe the root-policy API.
+- 2026-07-11: closed — Telemetry unavailable for the SDLC-created worktree, so no actual was guessed; focused provider/tool-use and skill-system suites passed; git diff --check passed; make -f Makefile.parley test JOBS=1 passed with lint 0 warnings/errors across 244 files and all unit/integration/architecture specs green; completion now filters through authoritative read enforcement with escaping/dangling collision parity tests and complete traceability; review verdict: FIX-THEN-SHIP
 
 Implemented one ordered root policy consumed by dispatcher enforcement, model
 guidance, chat recursion, skill invocation, Vim completion, and a dedicated

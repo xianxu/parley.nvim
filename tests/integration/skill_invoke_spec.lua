@@ -227,18 +227,17 @@ describe("skill_invoke.invoke", function()
         assert.is_false(query_called, "must not query when source failed")
     end)
 
-    it("executes relative tool paths from a repo-backed artifact neighborhood", function()
+    it("widens relative reads from ordinary nested repo Markdown", function()
         local repo = tmpdir .. "/repo"
-        local repo_chat = repo .. "/workshop/parley"
-        vim.fn.mkdir(repo_chat, "p")
+        local nested = repo .. "/data/nested"
+        vim.fn.mkdir(nested, "p")
         vim.fn.writefile({ "repo root file" }, repo .. "/README.md")
-        path = repo_chat .. "/2026-06-29.topic.md"
+        path = nested .. "/doc.md"
         vim.fn.writefile({ "alpha beta" }, path)
         vim.cmd("edit! " .. vim.fn.fnameescape(path))
         buf = vim.api.nvim_get_current_buf()
 
         parley.config.repo_root = repo
-        parley.config.repo_chat_dir = "workshop/parley"
 
         parley.dispatcher.query = function(_b, _p, _payload, _h, on_exit)
             tasker.set_query("qid_read", {

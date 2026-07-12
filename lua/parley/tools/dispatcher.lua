@@ -6,14 +6,9 @@
 -- error wrapping. Every safety concern lives HERE so there's
 -- exactly one place to audit and one place to fix.
 --
--- At M2 this module exposes read-path helpers (resolve_path_in_cwd,
--- truncate, execute_call). Write-path concerns (dirty-buffer guard,
--- .parley-backup, gitignore auto-append, checktime-reload,
--- metadata-preserving truncation for write_file's pre-image footer)
--- land in M5 Task 5.1 / 5.2 / 5.3 / 5.6 and extend this same file.
---
 -- SINGLE source for each invariant:
---   - cwd-scope + symlink safety: resolve_path_in_cwd
+--   - ordered read roots:         resolve_read_path
+--   - write-root confinement:     resolve_path_in_cwd
 --   - result size cap:            truncate / truncate_preserving_footer (M5)
 --   - pcall-guarded handler call: execute_call
 --   - dirty-buffer guard:         check_dirty_buffer (M5)
@@ -233,14 +228,9 @@ end
 --- go wrong — the tool loop driver can serialize it directly without
 --- further checks.
 ---
---- M5 will add a write-path prelude to this function (cwd-scope,
---- dirty-buffer, backup, gitignore, checktime) branched on
---- `def.kind == "write"`. At M2 the shared prelude only handles
---- the cwd-scope check when `call.input.path` is present.
----
 --- @param call ToolCall { id, name, input }
 --- @param tools_registry table module exposing `get(name)` (parley.tools)
---- @param opts table|nil { max_bytes?: number, cwd?: string }
+--- @param opts table|nil { max_bytes?: number, root_policy?: RootPolicy, cwd?: string, read_roots?: string[] }
 --- @return ToolResult
 function M.execute_call(call, tools_registry, opts)
     opts = opts or {}

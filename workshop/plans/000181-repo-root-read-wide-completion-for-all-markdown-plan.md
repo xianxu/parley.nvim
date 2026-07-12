@@ -718,3 +718,15 @@ dispatcher containment contract.
 Delta: both completion adapters filter the shared labels through the canonical
 read resolver; escaping and dangling authoritative candidates are omitted
 without lower-root fallback. Added the missing build-message traceability entry.
+
+### 2026-07-11 — exercise widening at the chat and skill seams
+
+Reason: the final close review found that the existing chat and skill wiring
+tests used repo-backed chat artifacts whose legacy neighborhood was already the
+repo root, so they did not distinguish the new policy from the old behavior.
+
+Delta: both seams now execute a repo-root-only relative read from ordinary
+`data/nested/doc.md`. The chat regression also proves the same relative write
+lands in the nested write neighborhood and leaves the repo-root file unchanged
+(`ARCH-PURPOSE`). Dispatcher annotations were refreshed to describe the landed
+root-policy API.
