@@ -1169,6 +1169,16 @@ M.setup_buf_handler = function()
         end
     end, gid)
 
+    -- LineReader state must be invalidated synchronously: the generic helper
+    -- schedules callbacks, leaving a window where Neovim could reuse the
+    -- numeric buffer handle and expose the prior buffer's observer.
+    vim.api.nvim_create_autocmd({ "BufDelete", "BufUnload" }, {
+        group = gid,
+        callback = function(event)
+            require("parley.line_reader").clear_buffer(event.buf)
+        end,
+    })
+
     -- Clean up when buffers are deleted
     _parley.helpers.autocmd({ "BufDelete", "BufUnload" }, nil, function(event)
         local buf = event.buf

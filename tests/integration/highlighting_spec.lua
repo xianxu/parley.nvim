@@ -186,6 +186,25 @@ describe("decoration provider cache", function()
         cleanup_bufs()
     end)
 
+    for _, event_name in ipairs({ "BufUnload", "BufDelete" }) do
+        it(event_name .. " invalidates LineReader observer state before handle reuse", function()
+            capture_decoration_provider()
+            local buf = vim.api.nvim_create_buf(false, true)
+            local line_reader = require("parley.line_reader")
+            local observed = 0
+            local token = line_reader.set_observer(buf, function() observed = observed + 1 end)
+            line_reader.record_work(buf, { operation = "before_teardown" })
+            assert.equals(1, observed)
+
+            vim.api.nvim_exec_autocmds(event_name, { buffer = buf })
+            -- The same numeric key models a future Neovim handle reuse. Neither
+            -- new work nor a stale token may reconnect to the old observer.
+            line_reader.record_work(buf, { operation = "after_handle_reuse" })
+            assert.equals(1, observed)
+            assert.is_false(line_reader.clear_observer(buf, token))
+        end)
+    end
+
     it("keeps highlight caches isolated per window for the same buffer", function()
         local provider = capture_decoration_provider()
         assert.is_table(provider)
