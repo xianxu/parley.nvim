@@ -6,14 +6,9 @@
 -- error wrapping. Every safety concern lives HERE so there's
 -- exactly one place to audit and one place to fix.
 --
--- At M2 this module exposes read-path helpers (resolve_path_in_cwd,
--- truncate, execute_call). Write-path concerns (dirty-buffer guard,
--- .parley-backup, gitignore auto-append, checktime-reload,
--- metadata-preserving truncation for write_file's pre-image footer)
--- land in M5 Task 5.1 / 5.2 / 5.3 / 5.6 and extend this same file.
---
 -- SINGLE source for each invariant:
---   - cwd-scope + symlink safety: resolve_path_in_cwd
+--   - ordered read roots:         resolve_read_path
+--   - write-root confinement:     resolve_path_in_cwd
 --   - result size cap:            truncate / truncate_preserving_footer (M5)
 --   - pcall-guarded handler call: execute_call
 --   - dirty-buffer guard:         check_dirty_buffer (M5)
@@ -124,6 +119,37 @@ function M.resolve_path_in_cwd(path, cwd, allowed_roots)
     return nil, "path outside working directory: " .. path
 end
 
+function M.resolve_read_path(path, read_roots)
+    if type(path) ~= "string" or path == "" then
+        return nil, "path must be a non-empty string"
+    end
+    local roots = {}
+    for _, root in ipairs(read_roots or {}) do
+        local resolved = resolve_root(root, root)
+        if resolved then roots[#roots + 1] = resolved end
+    end
+    local candidates = {}
+    if path:sub(1, 1) == "/" then
+        candidates[1] = path
+    else
+        for _, root in ipairs(roots) do candidates[#candidates + 1] = root .. "/" .. path end
+    end
+    for _, candidate in ipairs(candidates) do
+        candidate = vim.fs.normalize(candidate)
+        if vim.loop.fs_lstat(candidate) then
+            local real = vim.loop.fs_realpath(candidate)
+            if not real then
+                return nil, "cannot resolve read path: " .. path
+            end
+            for _, root in ipairs(roots) do
+                if real == root or real:sub(1, #root + 1) == root .. "/" then return real end
+            end
+            return nil, "read path resolves outside configured roots: " .. path
+        end
+    end
+    return nil, "read path not found in configured roots: " .. path
+end
+
 --------------------------------------------------------------------------------
 -- Result truncation
 --------------------------------------------------------------------------------
@@ -202,17 +228,16 @@ end
 --- go wrong — the tool loop driver can serialize it directly without
 --- further checks.
 ---
---- M5 will add a write-path prelude to this function (cwd-scope,
---- dirty-buffer, backup, gitignore, checktime) branched on
---- `def.kind == "write"`. At M2 the shared prelude only handles
---- the cwd-scope check when `call.input.path` is present.
----
 --- @param call ToolCall { id, name, input }
 --- @param tools_registry table module exposing `get(name)` (parley.tools)
---- @param opts table|nil { max_bytes?: number, cwd?: string }
+--- @param opts table|nil { max_bytes?: number, root_policy?: RootPolicy, cwd?: string, read_roots?: string[] }
 --- @return ToolResult
 function M.execute_call(call, tools_registry, opts)
     opts = opts or {}
+    local policy = opts.root_policy
+    if not policy and opts.cwd then
+        policy = require("parley.neighborhood").policy_from_roots(opts.cwd, nil, opts.read_roots)
+    end
 
     local def = tools_registry.get(call.name)
     if not def then
@@ -240,18 +265,23 @@ function M.execute_call(call, tools_registry, opts)
         -- write tools get nil → cwd-only. Gate on `~= "write"` (the canonical
         -- read-tool predicate `@readonly` uses): `kind` defaults to read when
         -- absent, so `== "read"` would wrongly confine an absent-kind tool.
-        return (def.kind ~= "write") and (opts.read_roots or {}) or nil
+        return (def.kind ~= "write") and (policy and policy.read_roots or {}) or nil
     end
 
     local path_fields = { "path", "file_path" }
-    if opts.cwd and call.input and def.default_path and call.input.path == nil
+    if policy and call.input and def.default_path and call.input.path == nil
         and call.input.file_path == nil and call.input.paths == nil then
         call.input.path = def.default_path
     end
     for _, field in ipairs(path_fields) do
-        if opts.cwd and call.input and type(call.input[field]) == "string" then
+        if policy and call.input and type(call.input[field]) == "string" then
             local roots = roots_for_def()
-            local abs, scope_err = M.resolve_path_in_cwd(call.input[field], opts.cwd, roots)
+            local abs, scope_err
+            if def.kind ~= "write" then
+                abs, scope_err = M.resolve_read_path(call.input[field], roots)
+            else
+                abs, scope_err = M.resolve_path_in_cwd(call.input[field], policy.write_root)
+            end
             if not abs then
                 return {
                     id = call.id,
@@ -263,7 +293,7 @@ function M.execute_call(call, tools_registry, opts)
             call.input[field] = abs
         end
     end
-    if opts.cwd and call.input and type(call.input.paths) == "table" then
+    if policy and call.input and type(call.input.paths) == "table" then
         local roots = roots_for_def()
         local resolved = {}
         for i, path in ipairs(call.input.paths) do
@@ -275,7 +305,12 @@ function M.execute_call(call, tools_registry, opts)
                     is_error = true,
                 }
             end
-            local abs, scope_err = M.resolve_path_in_cwd(path, opts.cwd, roots)
+            local abs, scope_err
+            if def.kind ~= "write" then
+                abs, scope_err = M.resolve_read_path(path, roots)
+            else
+                abs, scope_err = M.resolve_path_in_cwd(path, policy.write_root)
+            end
             if not abs then
                 return {
                     id = call.id,

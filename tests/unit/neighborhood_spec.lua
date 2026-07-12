@@ -79,3 +79,61 @@ describe("neighborhood.derive_for_path", function()
         assert.equals("buffer has no file", err)
     end)
 end)
+
+describe("neighborhood root policy (#181)", function()
+    it("builds a stable first-wins policy without mutating input", function()
+        local roots = { "/a", "", "/b", "/a" }
+        assert.same({ write_root = "/a", read_roots = { "/a", "/b" } },
+            neighborhood.build_policy("/a", roots))
+        assert.same({ "/a", "", "/b", "/a" }, roots)
+    end)
+    it("orders neighborhood, repo, and configured roots first-wins", function()
+        local policy = neighborhood.policy_for_path(
+            "/repo/data/career/note.md",
+            cfg({ repo_root = "/repo", tool_read_roots = { "/repo", "../../../sibling" } }),
+            {})
+        assert.equals("/repo/data/career", policy.write_root)
+        assert.same({ "/repo/data/career", "/repo", "/sibling" }, policy.read_roots)
+    end)
+
+    it("does not add a repo root outside repo mode", function()
+        local config = cfg({ tool_read_roots = {} })
+        config.repo_root = nil
+        local policy = neighborhood.policy_for_path("/notes/note.md", config, {})
+        assert.same({ "/notes" }, policy.read_roots)
+    end)
+
+    it("keeps a global chat narrow while repo mode is active", function()
+        local policy = neighborhood.policy_for_path("/global/chats/chat.md", cfg({
+            tool_read_roots = {},
+        }), { "/global/chats" })
+        assert.same({ "/global/chats" }, policy.read_roots)
+    end)
+
+    it("canonicalizes symlink aliases before de-duplicating roots", function()
+        local base = (os.getenv("TMPDIR") or "/tmp") .. "/parley-policy-" .. math.random(1, 999999)
+        vim.fn.mkdir(base .. "/real", "p")
+        vim.loop.fs_symlink(base .. "/real", base .. "/alias")
+        local policy = neighborhood.policy_from_roots(base .. "/real", nil, { base .. "/alias" })
+        assert.same({ vim.loop.fs_realpath(base .. "/real") }, policy.read_roots)
+        vim.fn.delete(base, "rf")
+    end)
+
+    it("formats guidance from the policy", function()
+        assert.equals(table.concat({
+            "Relative reads search these roots in order (first existing match wins):",
+            "- /repo/data",
+            "- /repo",
+            "Relative writes resolve only from: /repo/data",
+        }, "\n"), neighborhood.format_tool_context({
+            write_root = "/repo/data",
+            read_roots = { "/repo/data", "/repo" },
+        }))
+    end)
+
+    it("merges string candidates first-root-first without mutating inputs", function()
+        local groups = { { "z", "same" }, { "a", "same" } }
+        assert.same({ "same", "z", "a" }, neighborhood.merge_completion_candidates(groups))
+        assert.same({ { "z", "same" }, { "a", "same" } }, groups)
+    end)
+end)

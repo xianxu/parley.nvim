@@ -180,8 +180,10 @@ function M.invoke(buf, manifest, args, opts)
 
     skill_render.clear_decorations(buf)
 
-    local cwd = require("parley.neighborhood").for_buf(buf)
-        or vim.fn.fnamemodify(artifact_path, ":h")
+    local neighborhood = require("parley.neighborhood")
+    local root_policy = neighborhood.policy_for_buf(buf)
+        or neighborhood.policy_from_roots(vim.fn.fnamemodify(artifact_path, ":h"), nil, {})
+    local cwd = root_policy.write_root
 
     _in_flight[buf] = true
     -- Detached progress bar: this is a ~30s headless op, so show a running cue
@@ -221,7 +223,7 @@ function M.invoke(buf, manifest, args, opts)
                         end
                     end
                     results[i] = tools_dispatcher.execute_call(call, tools_registry,
-                        { cwd = cwd, read_roots = require("parley.config").tool_read_roots,
+                        { cwd = cwd, root_policy = root_policy,
                           page_limit = require("parley.config").tool_result_page_lines }) -- #140 #139
                     if call.name == "propose_edits" then
                         if results[i].is_error then

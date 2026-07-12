@@ -8,14 +8,14 @@ local M = {}
 -- (M.config, M._state, M._remote_reference_cache) are visible here by reference.
 local _parley = nil
 
-local function append_neighborhood_context(agent_info, root)
+local function append_neighborhood_context(agent_info, policy)
     if not agent_info or type(agent_info.tools) ~= "table" or #agent_info.tools == 0 then
         return
     end
-    if type(root) ~= "string" or root == "" then
+    local line = require("parley.neighborhood").format_tool_context(policy)
+    if not line then
         return
     end
-    local line = "Relative tool paths resolve from: " .. root
     if type(agent_info.system_prompt) ~= "string" or agent_info.system_prompt == "" then
         agent_info.system_prompt = line
         return
@@ -374,7 +374,7 @@ M.build_messages_from_model = function(buf, model, target_idx, agent_info)
     local system_prompt_msgs = require("parley.system_prompt_msgs")
     local prov = require("parley.providers")
     local define = require("parley.define")
-    append_neighborhood_context(agent_info, agent_info and agent_info.neighborhood_root)
+    append_neighborhood_context(agent_info, agent_info and agent_info.root_policy)
     local messages = system_prompt_msgs.build(agent_info, function(provider)
         return prov.has_feature(provider, "cache_control")
     end)
@@ -702,7 +702,7 @@ M.build_messages = function(opts)
     then
         agent_info.system_prompt = agent_info.system_prompt .. "\n"
     end
-    append_neighborhood_context(agent_info, opts.neighborhood_root)
+    append_neighborhood_context(agent_info, opts.root_policy)
 
     -- Convert parsed_chat to messages for the model using a single-pass approach.
     -- Leading messages (system prompt or synthetic pair) are prepended after the
@@ -1337,7 +1337,8 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
     }, function(resolved_remote_content)
         -- Get agent info early — needed by build_messages_from_model
         local agent_info = _parley.get_agent_info(headers, agent)
-        agent_info.neighborhood_root = require("parley.neighborhood").for_buf(buf)
+        agent_info.root_policy = params.root_policy
+            or require("parley.neighborhood").policy_for_buf(buf)
 
         -- Handle resubmit BEFORE building messages: if cursor is on a
         -- question/answer with an existing answer (and not mid-tool-loop),
@@ -1382,7 +1383,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                 helpers = _parley.helpers,
                 logger = _parley.logger,
                 resolved_remote_content = resolved_remote_content,
-                neighborhood_root = agent_info.neighborhood_root,
+                root_policy = agent_info.root_policy,
             })
         end
 
@@ -1824,7 +1825,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                     local outcome = tool_loop.process_response(buf, qt.raw_response or "", {
                         max_tool_iterations = agent_info.max_tool_iterations or require("parley.defaults").max_tool_iterations,
                         tool_result_max_bytes = agent_info.tool_result_max_bytes or 102400,
-                        cwd = agent_info.neighborhood_root,
+                        root_policy = agent_info.root_policy,
                     }, model, target_idx)
                     lease_commit()
                     if outcome == "recurse" then
@@ -1839,7 +1840,8 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                                 chat_lease.clear(buf, lease_generation)
                                 return
                             end
-                            M.respond({}, callback, override_free_cursor, true, model, target_idx)
+                            M.respond({ root_policy = agent_info.root_policy }, callback,
+                                override_free_cursor, true, model, target_idx)
                         end)
                         return
                     end

@@ -45,8 +45,32 @@ describe("neighborhood completion", function()
     end)
 
     after_each(function()
+        parley.config.repo_root = repo
         package.loaded.cmp = saved_cmp
         pcall(vim.cmd, "bwipeout!")
+    end)
+
+    it("attaches once to repo markdown and leaves non-repo markdown untouched", function()
+        vim.fn.mkdir(repo .. "/docs", "p")
+        local path = repo .. "/docs/note.md"
+        vim.fn.writefile({ "note" }, path)
+        vim.cmd("edit! " .. vim.fn.fnameescape(path))
+        local buf = vim.api.nvim_get_current_buf()
+        parley.prep_md(buf)
+        assert.is_true(vim.b[buf].parley_completion_attached)
+        local policy = vim.b[buf].parley_root_policy
+        parley.prep_md(buf)
+        assert.same(policy, vim.b[buf].parley_root_policy)
+
+        pcall(vim.cmd, "bwipeout!")
+        parley.config.repo_root = nil
+        local outside = tmpdir .. "/outside.md"
+        vim.fn.writefile({ "outside" }, outside)
+        vim.cmd("edit! " .. vim.fn.fnameescape(outside))
+        buf = vim.api.nvim_get_current_buf()
+        parley.prep_md(buf)
+        assert.is_nil(vim.b[buf].parley_completion_attached)
+        assert.equals("", vim.bo[buf].completefunc)
     end)
 
     it("attaches a chat-local completefunc rooted at the neighborhood", function()
@@ -73,8 +97,25 @@ describe("neighborhood completion", function()
         assert.equals(#"open ", neighborhood.completefunc(1, ""))
     end)
 
-    it("configures cmp-path completion from the neighborhood root", function()
+    it("omits escaping and dangling authoritative candidates without fallback", function()
+        local first, second, outside = repo .. "/first", repo .. "/second", tmpdir .. "/outside"
+        vim.fn.mkdir(first, "p")
+        vim.fn.mkdir(second, "p")
+        vim.fn.mkdir(outside, "p")
+        vim.fn.writefile({ "outside" }, outside .. "/same.md")
+        vim.fn.writefile({ "second" }, second .. "/same.md")
+        vim.loop.fs_symlink(outside .. "/same.md", first .. "/same.md")
+        vim.loop.fs_symlink(outside .. "/missing.md", first .. "/dangling.md")
+        local policy = { write_root = first, read_roots = { first, second } }
+        assert.same({}, neighborhood.completion_candidates(policy, "same"))
+        assert.same({}, neighborhood.completion_candidates(policy, "dangling"))
+    end)
+
+    it("configures the policy-backed Parley completion source", function()
         local captured
+        local registered
+        local setup_count = 0
+        local register_count = 0
         package.loaded.cmp = {
             config = {
                 sources = function(sources)
@@ -84,8 +125,13 @@ describe("neighborhood completion", function()
             setup = {
                 buffer = function(config)
                     captured = config
+                    setup_count = setup_count + 1
                 end,
             },
+            register_source = function(name, source)
+                registered = { name = name, source = source }
+                register_count = register_count + 1
+            end,
         }
 
         local buf, path = make_chat()
@@ -96,7 +142,16 @@ describe("neighborhood completion", function()
         end)
 
         assert.is_not_nil(captured)
-        assert.same({ "path", "buffer" }, { captured.sources[1].name, captured.sources[2].name })
-        assert.equals(repo, captured.sources[1].option.get_cwd({ context = { bufnr = buf } }))
+        assert.same({ "parley_path", "buffer" }, { captured.sources[1].name, captured.sources[2].name })
+        assert.equals("parley_path", registered.name)
+        local before_repeat = setup_count
+        neighborhood.attach_completion(buf)
+        vim.wait(20)
+        assert.equals(before_repeat, setup_count)
+        assert.equals(1, register_count)
+        local items
+        registered.source:complete({ context = { bufnr = buf, cursor_before_line = "REA" } },
+            function(result) items = result end)
+        assert.equals("README.md", items[1].word)
     end)
 end)

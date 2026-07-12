@@ -242,16 +242,16 @@ function M.process_response(bufnr, raw_response, agent_info, live_model, exchang
     -- Execute each tool call and write 🔧:/📎: blocks in streaming order.
     local dispatcher = require("parley.tools.dispatcher")
     local registry = require("parley.tools")
-    local neighborhood_root = agent_info.cwd
-    if not neighborhood_root then
-        neighborhood_root = neighborhood.for_buf(bufnr)
-    end
+    local root_policy = agent_info.root_policy
+        or (agent_info.cwd and neighborhood.policy_from_roots(agent_info.cwd, nil,
+            require("parley.config").tool_read_roots))
+        or neighborhood.policy_for_buf(bufnr)
 
     local exec_opts = {
-        cwd = neighborhood_root or vim.fn.getcwd(),
+        cwd = root_policy and root_policy.write_root or vim.fn.getcwd(),
+        root_policy = root_policy,
         max_bytes = agent_info.tool_result_max_bytes or 102400,
         -- #140: extra read-tool roots (global config); write tools ignore it.
-        read_roots = require("parley.config").tool_read_roots,
         -- #139: default output-pager page size; the dispatcher windows results.
         page_limit = require("parley.config").tool_result_page_lines,
     }

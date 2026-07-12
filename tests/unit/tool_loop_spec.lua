@@ -51,6 +51,26 @@ local function mk_read_file_sse_response(toolu_id, path)
     return table.concat(lines, "\n")
 end
 
+local function mk_write_file_sse_response(toolu_id, path, content)
+    local events = {
+        { type = "message_start", message = { id = "msg_test", model = "claude-sonnet-4-6" } },
+        { type = "content_block_start", index = 0,
+          content_block = { type = "tool_use", id = toolu_id, name = "write_file", input = {} } },
+        { type = "content_block_delta", index = 0,
+          delta = { type = "input_json_delta", partial_json = vim.json.encode({ path = path, content = content }) } },
+        { type = "content_block_stop", index = 0 },
+        { type = "message_delta", delta = { stop_reason = "tool_use" } },
+        { type = "message_stop" },
+    }
+    local lines = {}
+    for _, ev in ipairs(events) do
+        table.insert(lines, "event: " .. (ev.type or "unknown"))
+        table.insert(lines, "data: " .. vim.json.encode(ev))
+        table.insert(lines, "")
+    end
+    return table.concat(lines, "\n")
+end
+
 -- Build an SSE response that returns plain text (no tool_use) —
 -- the "final answer" phase of a tool loop.
 local function mk_plain_text_sse_response(text)
@@ -227,23 +247,22 @@ describe("tool_loop.process_response: with tool_use", function()
         assert.matches("🔧: read_file id=toolu_ERR", text)
         assert.matches("📎: read_file id=toolu_ERR", text)
         assert.matches("error=true", text)
-        assert.matches("outside working directory", text)
+        assert.matches("read path .* configured roots", text)
     end)
 
-    it("uses the chat buffer neighborhood as cwd when agent cwd is absent", function()
+    it("widens reads but not writes from ordinary nested repo Markdown", function()
         local parley = require("parley")
         local repo = tmp_base .. "/repo-" .. math.random(0, 0xFFFFFF)
-        local repo_chat = repo .. "/workshop/parley"
+        local nested = repo .. "/data/nested"
         local other_cwd = tmp_base .. "/other-cwd-" .. math.random(0, 0xFFFFFF)
-        vim.fn.mkdir(repo_chat, "p")
+        vim.fn.mkdir(nested, "p")
         vim.fn.mkdir(other_cwd, "p")
         vim.fn.writefile({ "from repo root" }, repo .. "/README.md")
 
         parley.config.repo_root = repo
-        parley.config.repo_chat_dir = "workshop/parley"
 
         local bufnr = mk_buffer({ "💬: q", "🤖: [Claude]" })
-        vim.api.nvim_buf_set_name(bufnr, repo_chat .. "/2026-06-29.topic.md")
+        vim.api.nvim_buf_set_name(bufnr, nested .. "/doc.md")
 
         local old_cwd = vim.fn.getcwd()
         vim.cmd("cd " .. vim.fn.fnameescape(other_cwd))
@@ -257,6 +276,16 @@ describe("tool_loop.process_response: with tool_use", function()
         local text = buf_text(bufnr)
         assert.matches("📎: read_file id=toolu_NEIGHBORHOOD", text)
         assert.matches("from repo root", text)
+
+        local write_raw = mk_write_file_sse_response("toolu_NARROW_WRITE", "README.md", "replaced")
+        local write_outcome = tool_loop.process_response(bufnr, write_raw, {
+            max_tool_iterations = 20,
+        })
+        assert.equals("recurse", write_outcome)
+        text = buf_text(bufnr)
+        assert.matches("📎: write_file id=toolu_NARROW_WRITE", text)
+        assert.are.same({ "replaced" }, vim.fn.readfile(nested .. "/README.md"))
+        assert.are.same({ "from repo root" }, vim.fn.readfile(repo .. "/README.md"))
     end)
 
     it("emits 📎: result in dynamic-fence form that survives backticks in file content", function()

@@ -93,6 +93,55 @@ function M.derive_for_path(path, config, chat_roots)
     return dirname(artifact_path)
 end
 
+function M.build_policy(write_root, ordered_roots)
+    local seen, read_roots = {}, {}
+    for _, root in ipairs(ordered_roots or {}) do
+        if type(root) == "string" and root ~= "" and not seen[root] then
+            seen[root] = true
+            read_roots[#read_roots + 1] = root
+        end
+    end
+    return { write_root = write_root, read_roots = read_roots }
+end
+
+function M.policy_from_roots(write_root, repo_root, configured_roots)
+    local function canonical(path)
+        path = clean(path)
+        return path and (vim.loop.fs_realpath(path) or path) or nil
+    end
+    write_root = canonical(write_root)
+    if not write_root then return nil, "buffer has no file" end
+    local roots = { write_root }
+    repo_root = canonical(repo_root)
+    if repo_root then roots[#roots + 1] = repo_root end
+    for _, root in ipairs(configured_roots or {}) do
+        if type(root) == "string" and root ~= "" then
+            if root:sub(1, 1) == "~" then root = vim.fn.expand(root) end
+            local resolved = root:sub(1, 1) == "/" and root or join(write_root, root)
+            roots[#roots + 1] = canonical(resolved)
+        end
+    end
+    return M.build_policy(write_root, roots)
+end
+
+function M.policy_for_path(path, config, chat_roots)
+    local write_root, err = M.derive_for_path(path, config, chat_roots)
+    if not write_root then return nil, err end
+    local configured_repo = clean(config and config.repo_root)
+    local repo_root = configured_repo and path_within(path, configured_repo)
+        and configured_repo or nil
+    return M.policy_from_roots(write_root, repo_root,
+        config and config.tool_read_roots)
+end
+
+function M.format_tool_context(policy)
+    if not policy or not policy.write_root then return nil end
+    local lines = { "Relative reads search these roots in order (first existing match wins):" }
+    for _, root in ipairs(policy.read_roots or {}) do lines[#lines + 1] = "- " .. root end
+    lines[#lines + 1] = "Relative writes resolve only from: " .. policy.write_root
+    return table.concat(lines, "\n")
+end
+
 function M.for_buf(buf)
     local path = vim.api.nvim_buf_get_name(buf)
     local config = require("parley").config
@@ -105,6 +154,18 @@ function M.for_buf(buf)
         end
     end
     return M.derive_for_path(path, config, roots)
+end
+
+function M.policy_for_buf(buf)
+    local path = vim.api.nvim_buf_get_name(buf)
+    local config = require("parley").config
+    local ok, chat_dirs = pcall(require, "parley.chat_dirs")
+    local roots = {}
+    if ok and type(chat_dirs.get_chat_roots) == "function" then
+        local roots_ok, derived_roots = pcall(chat_dirs.get_chat_roots)
+        if roots_ok then roots = derived_roots end
+    end
+    return M.policy_for_path(path, config, roots)
 end
 
 local function relative_to_root(path, root)
@@ -122,15 +183,43 @@ local function relative_to_root(path, root)
     return nil
 end
 
-local function root_for_buf(buf)
-    local root = vim.b[buf].parley_neighborhood_root
-    if type(root) ~= "string" or root == "" then
-        root = M.for_buf(buf)
+local function policy_for_completion(buf)
+    return vim.b[buf].parley_root_policy or M.policy_for_buf(buf)
+end
+
+function M.merge_completion_candidates(per_root)
+    local seen, out = {}, {}
+    for _, items in ipairs(per_root or {}) do
+        local sorted = vim.deepcopy(items)
+        table.sort(sorted)
+        for _, item in ipairs(sorted) do
+            if not seen[item] then seen[item] = true; out[#out + 1] = item end
+        end
     end
-    if type(root) ~= "string" or root == "" then
-        return nil
+    return out
+end
+
+function M.completion_candidates(policy, base)
+    local groups = {}
+    for _, root in ipairs(policy and policy.read_roots or {}) do
+        local items = {}
+        for _, match in ipairs(vim.fn.glob(root .. "/" .. (base or "") .. "*", false, true)) do
+            local rel = relative_to_root(match, root)
+            if rel and rel ~= "" then
+                if vim.fn.isdirectory(match) == 1 then rel = rel .. "/" end
+                items[#items + 1] = rel
+            end
+        end
+        groups[#groups + 1] = items
     end
-    return root
+    local accepted = {}
+    local resolver = require("parley.tools.dispatcher").resolve_read_path
+    for _, label in ipairs(M.merge_completion_candidates(groups)) do
+        if resolver(label:gsub("/$", ""), policy.read_roots) then
+            accepted[#accepted + 1] = label
+        end
+    end
+    return accepted
 end
 
 function M.completefunc(findstart, base)
@@ -149,37 +238,18 @@ function M.completefunc(findstart, base)
     end
 
     local buf = vim.api.nvim_get_current_buf()
-    local root = root_for_buf(buf)
-    if not root then
+    local policy = policy_for_completion(buf)
+    if not policy then
         return {}
     end
-
-    base = base or ""
-    local pattern = root .. "/" .. base .. "*"
-    local matches = vim.fn.glob(pattern, false, true)
-    local items = {}
-    for _, match in ipairs(matches) do
-        local rel = relative_to_root(match, root)
-        if rel and rel ~= "" then
-            if vim.fn.isdirectory(match) == 1 then
-                rel = rel .. "/"
-            end
-            table.insert(items, rel)
-        end
-    end
-    table.sort(items)
-    return items
+    return M.completion_candidates(policy, base)
 end
 
-local function cmp_path_sources(cmp, root)
+local cmp_registered = false
+local function cmp_path_sources(cmp)
     local sources = {
         {
-            name = "path",
-            option = {
-                get_cwd = function()
-                    return root
-                end,
-            },
+            name = "parley_path",
         },
         { name = "buffer" },
     }
@@ -195,8 +265,8 @@ function M.attach_cmp_completion(buf)
         return nil
     end
 
-    local root = root_for_buf(buf)
-    if not root then
+    local policy = policy_for_completion(buf)
+    if not policy then
         return nil
     end
 
@@ -204,15 +274,29 @@ function M.attach_cmp_completion(buf)
     if not ok or type(cmp) ~= "table" or type(cmp.setup) ~= "table" or type(cmp.setup.buffer) ~= "function" then
         return nil
     end
+    if not cmp_registered and type(cmp.register_source) == "function" then
+        cmp.register_source("parley_path", {
+            complete = function(_, params, callback)
+                local target = params.context and params.context.bufnr or vim.api.nvim_get_current_buf()
+                local before = params.context and params.context.cursor_before_line or ""
+                local base = before:match("([^%s%(%[%{]+)$") or ""
+                local words = M.completion_candidates(policy_for_completion(target), base)
+                local items = {}
+                for _, word in ipairs(words) do items[#items + 1] = { label = word, word = word } end
+                callback(items)
+            end,
+        })
+        cmp_registered = true
+    end
 
     cmp.setup.buffer({
         completion = {
             keyword_pattern = [[\~\?\(\k\|[\/\.\-]\)\+]],
             keyword_length = 1,
         },
-        sources = cmp_path_sources(cmp, root),
+        sources = cmp_path_sources(cmp),
     })
-    return root
+    return policy.write_root
 end
 
 local function schedule_cmp_attach(buf)
@@ -222,11 +306,13 @@ local function schedule_cmp_attach(buf)
 end
 
 function M.attach_completion(buf)
-    local root = M.for_buf(buf)
-    if type(root) ~= "string" or root == "" then
+    local policy = M.policy_for_buf(buf)
+    if not policy then
         return nil
     end
-    vim.b[buf].parley_neighborhood_root = root
+    if vim.b[buf].parley_completion_attached then return policy.write_root end
+    vim.b[buf].parley_completion_attached = true
+    vim.b[buf].parley_root_policy = policy
     vim.api.nvim_set_option_value("completefunc", "v:lua.require'parley.neighborhood'.completefunc", { buf = buf })
     schedule_cmp_attach(buf)
     vim.api.nvim_create_autocmd("InsertEnter", {
@@ -236,7 +322,7 @@ function M.attach_completion(buf)
             schedule_cmp_attach(buf)
         end,
     })
-    return root
+    return policy.write_root
 end
 
 return M

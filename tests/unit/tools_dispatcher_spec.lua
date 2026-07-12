@@ -195,6 +195,84 @@ describe("resolve_path_in_cwd allowed_roots (#140)", function()
     end)
 end)
 
+describe("resolve_read_path ordered roots (#181)", function()
+    it("falls through to repo root and prefers neighborhood collisions", function()
+        local n = math.random(0, 0xFFFFFF)
+        local repo = tmp_base .. "/policy-repo-" .. n
+        local neighborhood = repo .. "/data"
+        vim.fn.mkdir(neighborhood .. "/atlas", "p")
+        vim.fn.mkdir(repo .. "/atlas", "p")
+        vim.fn.writefile({ "local" }, neighborhood .. "/atlas/index.md")
+        vim.fn.writefile({ "repo" }, repo .. "/atlas/index.md")
+        assert.equals(canonical(neighborhood .. "/atlas/index.md"),
+            dispatcher.resolve_read_path("atlas/index.md", { neighborhood, repo }))
+        vim.fn.delete(neighborhood .. "/atlas/index.md")
+        assert.equals(canonical(repo .. "/atlas/index.md"),
+            dispatcher.resolve_read_path("atlas/index.md", { neighborhood, repo }))
+    end)
+
+    it("rejects missing reads instead of synthesizing a leaf", function()
+        local root = tmp_base .. "/missing-read-" .. math.random(0, 0xFFFFFF)
+        vim.fn.mkdir(root, "p")
+        local path, err = dispatcher.resolve_read_path("missing.md", { root })
+        assert.is_nil(path)
+        assert.matches("read path .* configured roots", err)
+    end)
+
+    it("accepts absolute paths inside roots and rejects symlink escapes", function()
+        local root = tmp_base .. "/abs-read-" .. math.random(0, 0xFFFFFF)
+        local outside = tmp_base .. "/abs-outside-" .. math.random(0, 0xFFFFFF)
+        vim.fn.mkdir(root, "p")
+        vim.fn.mkdir(outside, "p")
+        vim.fn.writefile({ "inside" }, root .. "/inside.md")
+        vim.fn.writefile({ "outside" }, outside .. "/outside.md")
+        assert.equals(canonical(root .. "/inside.md"),
+            dispatcher.resolve_read_path(root .. "/inside.md", { root }))
+        vim.loop.fs_symlink(outside .. "/outside.md", root .. "/escape.md")
+        local escaped, err = dispatcher.resolve_read_path("escape.md", { root })
+        assert.is_nil(escaped)
+        assert.matches("read path resolves outside configured roots", err)
+    end)
+
+    it("rejects an escaping first candidate instead of falling through", function()
+        local base = tmp_base .. "/precedence-" .. math.random(0, 0xFFFFFF)
+        local first, second, outside = base .. "/first", base .. "/second", base .. "/outside"
+        vim.fn.mkdir(first .. "/docs", "p")
+        vim.fn.mkdir(second .. "/docs", "p")
+        vim.fn.mkdir(outside, "p")
+        vim.fn.writefile({ "outside" }, outside .. "/note.md")
+        vim.fn.writefile({ "second" }, second .. "/docs/note.md")
+        vim.loop.fs_symlink(outside .. "/note.md", first .. "/docs/note.md")
+        local path, err = dispatcher.resolve_read_path("docs/note.md", { first, second })
+        assert.is_nil(path)
+        assert.matches("resolves outside configured roots", err)
+    end)
+
+    it("rejects a dangling symlink without crashing", function()
+        local root = tmp_base .. "/dangling-" .. math.random(0, 0xFFFFFF)
+        vim.fn.mkdir(root, "p")
+        vim.loop.fs_symlink(root .. "/missing-target", root .. "/dangling.md")
+        local ok, path, err = pcall(dispatcher.resolve_read_path, "dangling.md", { root })
+        assert.is_true(ok)
+        assert.is_nil(path)
+        assert.matches("cannot resolve read path", err)
+    end)
+
+    it("enforces an injected root_policy without legacy cwd", function()
+        local root = tmp_base .. "/policy-only-" .. math.random(0, 0xFFFFFF)
+        vim.fn.mkdir(root, "p")
+        vim.fn.writefile({ "ok" }, root .. "/doc.md")
+        registry.register({ name = "policy_read", kind = "read", description = "r",
+            input_schema = { type = "object" }, handler = function(input)
+                return { content = input.path, is_error = false }
+            end })
+        local res = dispatcher.execute_call({ id = "rp", name = "policy_read",
+            input = { path = "doc.md" } }, registry,
+            { root_policy = { write_root = root, read_roots = { root } } })
+        assert.equals(canonical(root .. "/doc.md"), res.content)
+    end)
+end)
+
 describe("truncate", function()
     it("returns content unchanged when under the byte cap", function()
         assert.equals("hello", dispatcher.truncate("hello", 100))
@@ -492,7 +570,7 @@ describe("execute_call", function()
             { cwd = cwd, read_roots = {} }
         )
         assert.is_true(res.is_error)
-        assert.matches("tool_read_roots", res.content)
+        assert.matches("read path not found in configured roots", res.content)
         assert.not_matches("should not run", res.content)
     end)
 
