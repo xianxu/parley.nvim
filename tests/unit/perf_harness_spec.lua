@@ -92,7 +92,66 @@ describe("performance harness", function()
         invalid.work.lines_requested = nil
         assert.has_error(function()
             harness.add_scenario(report, invalid)
-        end, "scenario.work.lines_requested must be a number")
+        end, "scenario.work.lines_requested must be an integer >= 0")
+    end)
+
+    it("rejects invalid counts and work counters", function()
+        local report = harness.new_report({})
+        for _, mutate in ipairs({
+            function(value) value.line_count = 0 end,
+            function(value) value.line_count = 1.5 end,
+            function(value) value.iteration_count = -1 end,
+            function(value) value.iteration_count = 1.5 end,
+            function(value) value.work.line_read_calls = -1 end,
+            function(value) value.work.lines_requested = 2.5 end,
+        }) do
+            local invalid = scenario(100, "render", "isolated", 1, 2)
+            mutate(invalid)
+            assert.has_error(function()
+                harness.add_scenario(report, invalid)
+            end)
+        end
+    end)
+
+    it("rejects invalid elapsed samples and inconsistent statistics", function()
+        local report = harness.new_report({})
+        local invalid_elapsed = {
+            {},
+            { 1, 2 },
+            { 1, -1, 1 },
+            { 1, math.huge, 1 },
+            { 1, 0 / 0, 1 },
+            { 1, "slow", 1 },
+        }
+        for _, samples in ipairs(invalid_elapsed) do
+            local invalid = scenario(100, "render", "isolated", 1, 2)
+            invalid.elapsed_ms.samples = samples
+            assert.has_error(function()
+                harness.add_scenario(report, invalid)
+            end)
+        end
+
+        local sparse = scenario(100, "render", "isolated", 1, 2)
+        sparse.elapsed_ms.samples = { [1] = 1, [3] = 1 }
+        assert.has_error(function()
+            harness.add_scenario(report, sparse)
+        end)
+
+        local bad_median = scenario(100, "render", "isolated", 1, 2)
+        bad_median.elapsed_ms.median = 9
+        assert.has_error(function()
+            harness.add_scenario(report, bad_median)
+        end)
+        local bad_p95 = scenario(100, "render", "isolated", 1, 2)
+        bad_p95.elapsed_ms.p95 = -1
+        assert.has_error(function()
+            harness.add_scenario(report, bad_p95)
+        end)
+        local infinite_median = scenario(100, "render", "isolated", 1, 2)
+        infinite_median.elapsed_ms.median = math.huge
+        assert.has_error(function()
+            harness.add_scenario(report, infinite_median)
+        end)
     end)
 
     it("renders grouped ratios in deterministic size order and two-decimal precision", function()

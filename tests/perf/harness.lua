@@ -32,6 +32,35 @@ local function require_type(value, expected, path)
     end
 end
 
+local function is_finite(value)
+    return type(value) == "number" and value == value and value ~= math.huge and value ~= -math.huge
+end
+
+local function require_nonnegative_number(value, path)
+    if not is_finite(value) or value < 0 then
+        error(path .. " must be a finite nonnegative number", 3)
+    end
+end
+
+local function require_integer(value, minimum, path)
+    if not is_finite(value) or value % 1 ~= 0 or value < minimum then
+        error(path .. " must be an integer >= " .. minimum, 3)
+    end
+end
+
+local function require_dense_array(value, path)
+    local count = 0
+    for key in pairs(value) do
+        if type(key) ~= "number" or key % 1 ~= 0 or key < 1 then
+            error(path .. " must be a dense array", 3)
+        end
+        count = count + 1
+    end
+    if count ~= #value then
+        error(path .. " must be a dense array", 3)
+    end
+end
+
 function M.summarize(samples)
     require_type(samples, "table", "samples")
     if #samples == 0 then
@@ -83,14 +112,25 @@ function M.add_scenario(report, scenario)
     if scenario.attribution ~= "inclusive" and scenario.attribution ~= "isolated" then
         error("scenario.attribution must be inclusive or isolated", 2)
     end
-    require_type(scenario.line_count, "number", "scenario.line_count")
-    require_type(scenario.iteration_count, "number", "scenario.iteration_count")
+    require_integer(scenario.line_count, 1, "scenario.line_count")
+    require_integer(scenario.iteration_count, 1, "scenario.iteration_count")
     require_exact_fields(scenario.elapsed_ms, "scenario.elapsed_ms", { "samples", "median", "p95" })
     require_type(scenario.elapsed_ms.samples, "table", "scenario.elapsed_ms.samples")
-    require_type(scenario.elapsed_ms.median, "number", "scenario.elapsed_ms.median")
-    require_type(scenario.elapsed_ms.p95, "number", "scenario.elapsed_ms.p95")
+    require_dense_array(scenario.elapsed_ms.samples, "scenario.elapsed_ms.samples")
+    if #scenario.elapsed_ms.samples ~= scenario.iteration_count then
+        error("scenario.elapsed_ms.samples length must equal scenario.iteration_count", 2)
+    end
     for index, sample in ipairs(scenario.elapsed_ms.samples) do
-        require_type(sample, "number", "scenario.elapsed_ms.samples[" .. index .. "]")
+        require_nonnegative_number(sample, "scenario.elapsed_ms.samples[" .. index .. "]")
+    end
+    require_nonnegative_number(scenario.elapsed_ms.median, "scenario.elapsed_ms.median")
+    require_nonnegative_number(scenario.elapsed_ms.p95, "scenario.elapsed_ms.p95")
+    local summary = M.summarize(scenario.elapsed_ms.samples)
+    if scenario.elapsed_ms.median ~= summary.median then
+        error("scenario.elapsed_ms.median must match the sample median", 2)
+    end
+    if scenario.elapsed_ms.p95 ~= summary.p95 then
+        error("scenario.elapsed_ms.p95 must match the sample p95", 2)
     end
     require_exact_fields(scenario.work, "scenario.work", {
         "line_read_calls", "lines_requested", "full_buffer_reads", "structure_rows_processed",
@@ -98,7 +138,7 @@ function M.add_scenario(report, scenario)
     for _, field in ipairs({
         "line_read_calls", "lines_requested", "full_buffer_reads", "structure_rows_processed",
     }) do
-        require_type(scenario.work[field], "number", "scenario.work." .. field)
+        require_integer(scenario.work[field], 0, "scenario.work." .. field)
     end
     table.insert(report.scenarios, copy(scenario))
 end
