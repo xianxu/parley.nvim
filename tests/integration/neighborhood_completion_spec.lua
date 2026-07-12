@@ -100,6 +100,8 @@ describe("neighborhood completion", function()
     it("configures the policy-backed Parley completion source", function()
         local captured
         local registered
+        local setup_count = 0
+        local register_count = 0
         package.loaded.cmp = {
             config = {
                 sources = function(sources)
@@ -109,10 +111,12 @@ describe("neighborhood completion", function()
             setup = {
                 buffer = function(config)
                     captured = config
+                    setup_count = setup_count + 1
                 end,
             },
             register_source = function(name, source)
                 registered = { name = name, source = source }
+                register_count = register_count + 1
             end,
         }
 
@@ -126,6 +130,11 @@ describe("neighborhood completion", function()
         assert.is_not_nil(captured)
         assert.same({ "parley_path", "buffer" }, { captured.sources[1].name, captured.sources[2].name })
         assert.equals("parley_path", registered.name)
+        local before_repeat = setup_count
+        neighborhood.attach_completion(buf)
+        vim.wait(20)
+        assert.equals(before_repeat, setup_count)
+        assert.equals(1, register_count)
         local items
         registered.source:complete({ context = { bufnr = buf, cursor_before_line = "REA" } },
             function(result) items = result end)

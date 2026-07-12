@@ -81,6 +81,12 @@ describe("neighborhood.derive_for_path", function()
 end)
 
 describe("neighborhood root policy (#181)", function()
+    it("builds a stable first-wins policy without mutating input", function()
+        local roots = { "/a", "", "/b", "/a" }
+        assert.same({ write_root = "/a", read_roots = { "/a", "/b" } },
+            neighborhood.build_policy("/a", roots))
+        assert.same({ "/a", "", "/b", "/a" }, roots)
+    end)
     it("orders neighborhood, repo, and configured roots first-wins", function()
         local policy = neighborhood.policy_for_path(
             "/repo/data/career/note.md",

@@ -284,3 +284,14 @@ Delta: the first existing candidate is authoritative: it either passes
 containment or the read is rejected. Added the collision regression, direct
 pure merger coverage, real cmp-source callback coverage, and root-policy-only
 dispatcher enforcement (`ARCH-PURPOSE`, `ARCH-DRY`).
+
+### 2026-07-11 — dangling-symlink and lifecycle hardening
+
+Reason: the third close review found `fs_lstat` can succeed while `fs_realpath`
+fails for a dangling symlink, and requested direct lifecycle evidence.
+
+Delta: unresolved existing candidates now return a tool error instead of
+crashing. Added dangling-symlink and direct `build_policy` tests plus real cmp
+registration/callback and repeated-attachment counts. Dispatcher shape/kind
+tests remain the enforcement proof; existing chat and skill integration tests
+prove their policy entry points (`ARCH-PURE`, `ARCH-PURPOSE`).

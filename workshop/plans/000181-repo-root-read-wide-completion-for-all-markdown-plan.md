@@ -697,3 +697,15 @@ Delta: the first existing candidate is now authoritative and rejected on
 containment failure; it never falls through. The Core Concepts contract now
 matches the string-label pure entity, with cmp item wrapping confined to the UI
 adapter. Root-policy enforcement no longer depends on legacy `cwd`.
+
+### 2026-07-11 — reject unresolved existing candidates
+
+Reason: close review identified the `fs_lstat`/`fs_realpath` disagreement for
+dangling symlinks and gaps between the aspirational test checklist and landed
+evidence.
+
+Delta: dangling symlinks return a deterministic read error; direct policy,
+real cmp callback/registration, and repeated attachment are tested. Scalar,
+array, default, kind, and write-narrow semantics are pinned at the shared
+dispatcher boundary consumed by chat and skills; their existing integration
+tests pin policy wiring rather than duplicating every dispatcher case.

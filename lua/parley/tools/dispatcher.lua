@@ -143,6 +143,9 @@ function M.resolve_read_path(path, read_roots)
         candidate = vim.fs.normalize(candidate)
         if vim.loop.fs_lstat(candidate) then
             local real = vim.loop.fs_realpath(candidate)
+            if not real then
+                return nil, "cannot resolve read path: " .. path
+            end
             for _, root in ipairs(roots) do
                 if real == root or real:sub(1, #root + 1) == root .. "/" then return real end
             end
