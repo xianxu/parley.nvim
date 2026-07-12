@@ -353,7 +353,7 @@ local function compute_chat_highlights(buf, start_line, end_line, reader)
                 if streaming then
                     in_reasoning_explicit_end = true
                 else
-                    in_reasoning_explicit_end = reasoning_block_has_end_marker(buf, line_nr, patterns)
+                    in_reasoning_explicit_end = reasoning_block_has_end_marker(buf, line_nr, patterns, reader)
                 end
             elseif is_summary or line:match("^👂:") then
                 table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
