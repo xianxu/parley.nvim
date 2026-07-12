@@ -51,6 +51,23 @@ describe("parley.line_reader", function()
         assert.equals(1, events[2].returned_lines)
         assert.is_true(events[3].full_buffer)
         assert.equals(-1, events[3].requested.end_row)
+        assert.equals(3, events[3].lines_requested)
+    end)
+
+    it("forwards nil text options unchanged to the production API", function()
+        local original = vim.api.nvim_buf_get_text
+        local seen_opts = "not-called"
+        vim.api.nvim_buf_get_text = function(_, _, _, _, _, opts)
+            seen_opts = opts
+            error("native opts error")
+        end
+        local ok, err = pcall(function()
+            LineReader.for_buffer(11):text(0, 0, 0, 0, nil)
+        end)
+        vim.api.nvim_buf_get_text = original
+        assert.is_false(ok)
+        assert.matches("native opts error", err)
+        assert.is_nil(seen_opts)
     end)
 
     it("reports precise rows touched by text reads", function()

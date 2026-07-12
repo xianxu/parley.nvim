@@ -242,6 +242,29 @@ describe("decoration provider cache", function()
         assert.is_true(saw_bottom, "expected second split to keep its own viewport highlight cache")
     end)
 
+    it("attributes every provider read to decoration_redraw and performs no on_line read", function()
+        local provider = capture_decoration_provider()
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "💬: question" })
+        local win = vim.api.nvim_get_current_win()
+        vim.api.nvim_win_set_buf(win, buf)
+        parley._parley_bufs[buf] = "chat"
+
+        local events = {}
+        local line_reader = require("parley.line_reader")
+        line_reader.set_observer(buf, function(event) events[#events + 1] = event end)
+        provider.on_win(nil, win, buf, 0, 0)
+        local reads_after_compute = #events
+        provider.on_line(nil, win, buf, 0)
+
+        assert.is_true(reads_after_compute > 0)
+        assert.equals(reads_after_compute, #events)
+        for _, event in ipairs(events) do
+            assert.equals("decoration_redraw", event.phase)
+        end
+        line_reader.clear_buffer(buf)
+    end)
+
     it("dims thinking-block continuation lines when viewport top falls between 🧠: and 🧠:[END]", function()
         -- Regression: prior to the buffer-aware lookahead in
         -- reasoning_block_has_end_marker, this case rendered

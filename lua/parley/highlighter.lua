@@ -406,6 +406,7 @@ local function compute_chat_highlights(buf, start_line, end_line, reader)
                 table.insert(result[row], { hl_group = "ParleyAnnotation", col_start = start_idx - 1, col_end = end_idx - 1 })
             end
         end
+        result[row].line_length = #line
     end
 
     return result
@@ -559,6 +560,11 @@ local function compute_markdown_highlights(buf, start_line, end_line, reader)
                 draft_block = true,
             })
         end
+    end
+
+    for row, highlights in pairs(result) do
+        local line = lines[row - (start_line - 1) + 1] or ""
+        highlights.line_length = #line
     end
 
     return result
@@ -1057,8 +1063,6 @@ M.setup_buf_handler = function()
             local cache = _decor_cache[winid]
             if not cache or cache.bufnr ~= bufnr then return end
             local highlights = cache.rows[row]
-            local reader = require("parley.line_reader").for_buffer(bufnr)
-            local line = reader:line(row) or ""
 
             if highlights then
                 for _, hl in ipairs(highlights) do
@@ -1075,7 +1079,7 @@ M.setup_buf_handler = function()
                     else
                         local end_col = hl.col_end
                         if end_col == -1 then
-                            end_col = #line
+                            end_col = highlights.line_length
                         end
                         pcall(vim.api.nvim_buf_set_extmark, bufnr, decor_ns, row, hl.col_start, {
                             end_row = row,

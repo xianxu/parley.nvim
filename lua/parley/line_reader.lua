@@ -71,7 +71,7 @@ local function production_delegate()
             return vim.api.nvim_buf_get_lines(buf, start0, end0, strict)
         end,
         text = function(buf, sr, sc, er, ec, opts)
-            return vim.api.nvim_buf_get_text(buf, sr, sc, er, ec, opts or {})
+            return vim.api.nvim_buf_get_text(buf, sr, sc, er, ec, opts)
         end,
         line = function(buf, row0)
             return vim.api.nvim_buf_get_lines(buf, row0, row0 + 1, false)[1]
@@ -84,6 +84,9 @@ local function invoke(buf, event, fn)
     if result[1] then
         local value = result[2]
         event.returned_lines = type(value) == "table" and #value or (value ~= nil and 1 or 0)
+        if event.operation == "lines" and event.requested.end_row == -1 then
+            event.lines_requested = event.returned_lines
+        end
         observe(buf, event)
         return unpack(result, 2, result.n)
     end
