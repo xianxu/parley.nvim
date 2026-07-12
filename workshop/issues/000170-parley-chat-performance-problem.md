@@ -80,20 +80,29 @@ Isolated phase scenarios may call their named seam directly and are labeled as
 such.
 
 In addition to wall-clock samples, the harness records structural work counters:
-buffer line-read calls and total lines requested by each observed phase. The
-adapter used to gather counters must preserve production behavior and be tested
-against a known sequence. These counters are correctness evidence and may fail
-tests when a documented work bound is violated; only elapsed time remains
-report-only. Output emphasizes scaling ratios as well as median/p95 latency.
+buffer line-read calls, total lines requested, and full-buffer-read attempts by
+each observed phase. All production paths in scope—diagnostic refresh,
+managed-footer/highlight structural lookup, and decoration computation—must read
+buffer text through one injected `LineReader` adapter. It accounts for
+`nvim_buf_get_lines`, `nvim_buf_get_text`, `vim.fn.getline`, and any future
+equivalent; cached snapshots record the source reads when populated. Direct
+buffer reads outside the adapter in those paths are rejected by an architecture
+test. The adapter must preserve production behavior and be tested against known
+read sequences. These counters are correctness evidence and may fail tests when
+a documented work bound is violated; only elapsed time remains report-only.
+Output emphasizes scaling ratios as well as median/p95 latency.
 
-The JSON report has a versioned stable envelope:
-`schema_version`, `generated_at`, `environment` (OS, Neovim version, commit),
-and `scenarios[]` containing name, line count, iteration count, raw elapsed
-samples, median, p95, and work counters. By default `make perf` overwrites
+The JSON report has a versioned stable envelope: `schema_version`,
+`generated_at`, `timing_unit: "milliseconds"`, `environment` (OS, Neovim
+version, commit), and `scenarios[]`. Each scenario contains `name`, `phase`,
+`attribution` (`inclusive` or `isolated`), `line_count`, `iteration_count`,
+`elapsed_ms` (`samples`, `median`, `p95`), and `work` (`line_read_calls`,
+`lines_requested`, `full_buffer_reads`). By default `make perf` overwrites
 `.test-tmp/perf/parley-chat-typing.json`; `PERF_OUTPUT=<path>` overrides it.
-Generated reports are not committed. Baseline and optimized summaries—command,
-environment, medians/p95s, scaling ratios, and work counters—are appended to
-this issue's `## Log`, which is the durable comparison record.
+Generated JSON reports are never committed. Only baseline and optimized
+summaries—command, environment, medians/p95s, scaling ratios, and work
+counters—are appended to this issue's `## Log`, which is the durable comparison
+record.
 
 The existing `tests/perf_chat_finder.lua` remains supported. It may migrate to
 the shared timing/reporting core only if that is a small behavior-preserving
@@ -137,9 +146,9 @@ The structural work contract is observable and independent of machine speed:
 - managed-footer discovery during redraw must not request `0..-1` or otherwise
   scan all document lines; and
 - increasing a fixture from 1,000 to 5,000 lines with the same viewport shape
-  must not increase the combined keystroke/redraw line-read counter beyond a
-  small fixed allowance for setup noise, defined by the harness and asserted in
-  correctness tests.
+  must not increase the measured `edit_total` or `decoration_redraw`
+  `lines_requested` counters at all. Counters reset after fixture setup and
+  warmup, so setup reads are excluded and the fixed allowance is exactly zero.
 
 ### Behavior and lifecycle requirements
 
@@ -164,8 +173,10 @@ Freshness oracles by event:
 - Scrolling or opening a second window recomputes correct highlights for that
   window's bounded viewport without requiring a text edit.
 - Streaming/programmatic edits that emit normal `TextChanged` converge through
-  that event; stream completion must leave diagnostics current even if an
-  intermediate edit did not emit it.
+  that event. The chat-response stream-finalization callback explicitly invokes
+  the same `refresh_diagnostics(buf)` entry point once after the final buffer
+  mutation, so completion leaves diagnostics current even if intermediate edits
+  emitted no `TextChanged`.
 - Undo/redo and external buffer mutations converge on their normal
   `TextChanged`/`BufWritePost` event.
 - `BufUnload`/`BufDelete` cancels pending generations and removes buffer-owned
@@ -249,3 +260,12 @@ named synchronous events, gives redraw work explicit bounds, versions the JSON
 envelope/location, and enumerates the lifecycle matrix. Diagnostics and
 highlight caches are no longer forced into one invalidation abstraction merely
 for `ARCH-DRY`.
+
+### 2026-07-12 — spec-review observability pass
+
+The second fresh review found four remaining loopholes. The fixed structural
+allowance is now zero after counter reset; stream finalization names an explicit
+diagnostic refresh hook; all in-scope text access derives from an instrumented
+`LineReader` enforced by an architecture test; and the report schema now states
+timing units, attribution, phase identity, and exact work-counter fields. The
+durable baseline is explicitly the issue-log summary, never generated JSON.
