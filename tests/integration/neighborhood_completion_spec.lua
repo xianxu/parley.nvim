@@ -99,6 +99,7 @@ describe("neighborhood completion", function()
 
     it("configures the policy-backed Parley completion source", function()
         local captured
+        local registered
         package.loaded.cmp = {
             config = {
                 sources = function(sources)
@@ -110,6 +111,9 @@ describe("neighborhood completion", function()
                     captured = config
                 end,
             },
+            register_source = function(name, source)
+                registered = { name = name, source = source }
+            end,
         }
 
         local buf, path = make_chat()
@@ -121,5 +125,10 @@ describe("neighborhood completion", function()
 
         assert.is_not_nil(captured)
         assert.same({ "parley_path", "buffer" }, { captured.sources[1].name, captured.sources[2].name })
+        assert.equals("parley_path", registered.name)
+        local items
+        registered.source:complete({ context = { bufnr = buf, cursor_before_line = "REA" } },
+            function(result) items = result end)
+        assert.equals("README.md", items[1].word)
     end)
 end)

@@ -273,3 +273,14 @@ that repo; global chats remain narrow. Policy roots use `fs_realpath` with a
 normalized fallback. Added global-chat, symlink/absolute resolver, repo-Markdown
 attachment, repeat-attachment, and non-repo Markdown regressions
 (`ARCH-PURPOSE`, `ARCH-PURE`).
+
+### 2026-07-11 — first-existing containment correction
+
+Reason: the second close review found that an escaping first-root symlink could
+fall through to a lower-priority valid file, diverging from completion's
+first-wins label.
+
+Delta: the first existing candidate is authoritative: it either passes
+containment or the read is rejected. Added the collision regression, direct
+pure merger coverage, real cmp-source callback coverage, and root-policy-only
+dispatcher enforcement (`ARCH-PURPOSE`, `ARCH-DRY`).

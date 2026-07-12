@@ -190,8 +190,9 @@ end
 function M.merge_completion_candidates(per_root)
     local seen, out = {}, {}
     for _, items in ipairs(per_root or {}) do
-        table.sort(items)
-        for _, item in ipairs(items) do
+        local sorted = vim.deepcopy(items)
+        table.sort(sorted)
+        for _, item in ipairs(sorted) do
             if not seen[item] then seen[item] = true; out[#out + 1] = item end
         end
     end

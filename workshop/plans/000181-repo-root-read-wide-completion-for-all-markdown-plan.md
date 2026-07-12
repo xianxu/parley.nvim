@@ -26,7 +26,9 @@ already-canonical absolute roots by pure `build_policy(write_root, roots)`.
 - **DRY rationale:** `tool_loop`, `skill_invoke`, completion, and model context currently receive pieces of path policy separately. A shared value prevents enforcement and guidance from reconstructing different root sets (`ARCH-DRY`). Filesystem-dependent canonicalization stays in `policy_for_path`; the pure builder only orders and de-duplicates supplied strings (`ARCH-PURE`).
 - **Future extensions:** A subtree marker can change policy construction later without changing dispatcher or completion consumers.
 
-**CompletionCandidates** — ordered root-relative candidate labels merged from per-root filesystem results.
+**CompletionCandidates** — ordered root-relative string labels merged from
+per-root filesystem results; adapters wrap strings as cmp items only at the UI
+boundary.
 
 - **Relationships:** N:1 from per-root match lists to one de-duplicated display list; the earliest root owns a collision.
 - **DRY rationale:** Both built-in completion and cmp configuration need the same ordering and collision rule.
@@ -684,3 +686,14 @@ Delta: repo-root inclusion is artifact-scoped, policy roots are realpath-first,
 and the integration/security matrix now covers global chats in repo mode,
 ordinary repo/non-repo Markdown, repeat attachment, absolute reads, and symlink
 escape behavior.
+
+### 2026-07-11 — enforce first-existing containment and reconcile candidates
+
+Reason: the second close review found that an escaping first candidate could
+fall through to a lower root, and the plan described structured completion
+items while the shared pure core intentionally merges strings.
+
+Delta: the first existing candidate is now authoritative and rejected on
+containment failure; it never falls through. The Core Concepts contract now
+matches the string-label pure entity, with cmp item wrapping confined to the UI
+adapter. Root-policy enforcement no longer depends on legacy `cwd`.

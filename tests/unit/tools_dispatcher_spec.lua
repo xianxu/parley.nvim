@@ -216,7 +216,7 @@ describe("resolve_read_path ordered roots (#181)", function()
         vim.fn.mkdir(root, "p")
         local path, err = dispatcher.resolve_read_path("missing.md", { root })
         assert.is_nil(path)
-        assert.matches("read path not found", err)
+        assert.matches("read path .* configured roots", err)
     end)
 
     it("accepts absolute paths inside roots and rejects symlink escapes", function()
@@ -231,7 +231,35 @@ describe("resolve_read_path ordered roots (#181)", function()
         vim.loop.fs_symlink(outside .. "/outside.md", root .. "/escape.md")
         local escaped, err = dispatcher.resolve_read_path("escape.md", { root })
         assert.is_nil(escaped)
-        assert.matches("read path not found", err)
+        assert.matches("read path resolves outside configured roots", err)
+    end)
+
+    it("rejects an escaping first candidate instead of falling through", function()
+        local base = tmp_base .. "/precedence-" .. math.random(0, 0xFFFFFF)
+        local first, second, outside = base .. "/first", base .. "/second", base .. "/outside"
+        vim.fn.mkdir(first .. "/docs", "p")
+        vim.fn.mkdir(second .. "/docs", "p")
+        vim.fn.mkdir(outside, "p")
+        vim.fn.writefile({ "outside" }, outside .. "/note.md")
+        vim.fn.writefile({ "second" }, second .. "/docs/note.md")
+        vim.loop.fs_symlink(outside .. "/note.md", first .. "/docs/note.md")
+        local path, err = dispatcher.resolve_read_path("docs/note.md", { first, second })
+        assert.is_nil(path)
+        assert.matches("resolves outside configured roots", err)
+    end)
+
+    it("enforces an injected root_policy without legacy cwd", function()
+        local root = tmp_base .. "/policy-only-" .. math.random(0, 0xFFFFFF)
+        vim.fn.mkdir(root, "p")
+        vim.fn.writefile({ "ok" }, root .. "/doc.md")
+        registry.register({ name = "policy_read", kind = "read", description = "r",
+            input_schema = { type = "object" }, handler = function(input)
+                return { content = input.path, is_error = false }
+            end })
+        local res = dispatcher.execute_call({ id = "rp", name = "policy_read",
+            input = { path = "doc.md" } }, registry,
+            { root_policy = { write_root = root, read_roots = { root } } })
+        assert.equals(canonical(root .. "/doc.md"), res.content)
     end)
 end)
 

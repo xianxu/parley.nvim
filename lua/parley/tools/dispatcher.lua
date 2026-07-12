@@ -140,11 +140,13 @@ function M.resolve_read_path(path, read_roots)
         for _, root in ipairs(roots) do candidates[#candidates + 1] = root .. "/" .. path end
     end
     for _, candidate in ipairs(candidates) do
-        local real = vim.loop.fs_realpath(vim.fs.normalize(candidate))
-        if real then
+        candidate = vim.fs.normalize(candidate)
+        if vim.loop.fs_lstat(candidate) then
+            local real = vim.loop.fs_realpath(candidate)
             for _, root in ipairs(roots) do
                 if real == root or real:sub(1, #root + 1) == root .. "/" then return real end
             end
+            return nil, "read path resolves outside configured roots: " .. path
         end
     end
     return nil, "read path not found in configured roots: " .. path
@@ -274,12 +276,12 @@ function M.execute_call(call, tools_registry, opts)
     end
 
     local path_fields = { "path", "file_path" }
-    if opts.cwd and call.input and def.default_path and call.input.path == nil
+    if policy and call.input and def.default_path and call.input.path == nil
         and call.input.file_path == nil and call.input.paths == nil then
         call.input.path = def.default_path
     end
     for _, field in ipairs(path_fields) do
-        if opts.cwd and call.input and type(call.input[field]) == "string" then
+        if policy and call.input and type(call.input[field]) == "string" then
             local roots = roots_for_def()
             local abs, scope_err
             if def.kind ~= "write" then
@@ -298,7 +300,7 @@ function M.execute_call(call, tools_registry, opts)
             call.input[field] = abs
         end
     end
-    if opts.cwd and call.input and type(call.input.paths) == "table" then
+    if policy and call.input and type(call.input.paths) == "table" then
         local roots = roots_for_def()
         local resolved = {}
         for i, path in ipairs(call.input.paths) do
