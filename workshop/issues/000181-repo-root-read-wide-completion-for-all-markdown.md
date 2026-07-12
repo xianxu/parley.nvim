@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-07-10
 updated: 2026-07-10
-estimate_hours: 1.58
+estimate_hours: 3.58
 started: 2026-07-10T08:38:14-07:00
 ---
 
@@ -124,7 +124,9 @@ Non-goals:
   and repo root, the neighborhood copy wins; completion shows the relative path
   once.
 - Chat buffers retain existing behavior (no regression, no double-attach).
-- Outside repo mode, behavior is unchanged (own-folder neighborhood).
+- Outside repo mode, behavior is unchanged: global chats retain their existing
+  own-folder completion, while ordinary non-chat Markdown receives no new
+  Parley completion/source/autocmd attachment.
 - Atlas `infra/repo_mode.md` "Reference neighborhood (#147)" section updated to
   document the read-wide/write-narrow split and the all-markdown completion attach.
 - Unit tests cover: ordered read-set includes repo_root in repo mode; relative
@@ -139,12 +141,14 @@ Non-goals:
 ```estimate
 model: estimate-logic-v3.1
 familiarity: 1.0
-item: lua-neovim design=0.35 impl=0.55
-item: cross-cutting-refactor design=0.10 impl=0.25
-item: atlas-docs design=0.03 impl=0.05
-item: milestone-review design=0.02 impl=0.15
+item: lua-neovim design=0.50 impl=0.60
+item: lua-neovim design=0.50 impl=0.60
+item: skill-or-dispatcher design=0.20 impl=0.20
+item: cross-cutting-refactor design=0.20 impl=0.20
+item: atlas-docs design=0.04 impl=0.08
+item: milestone-review design=0.04 impl=0.20
 design-buffer: 0.15
-total: 1.58
+total: 3.58
 ```
 
 Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md`
@@ -164,9 +168,9 @@ the next recalibration rather than a timeless constant.
       write tools keep the narrow root. Update the payload guidance line
       through a shared policy formatter to reflect lookup precedence and the
       read/write split.
-- [ ] Completion: attach neighborhood completion (+ cmp-path source) in
-      `prep_md` for all markdown buffers; source repo-root candidates in repo
-      mode; guard against double-attach on chat buffers.
+- [ ] Completion: attach the policy-backed Parley completion source in
+      `prep_md` for repo-mode markdown; preserve the existing `prep_chat`
+      attachment for global chats; guard against double-attach.
 - [ ] Tests: read-set includes/excludes repo_root correctly; write-narrow
       rejection holds; `prep_md` attaches; non-repo-mode unchanged.
 - [ ] Atlas: update `infra/repo_mode.md` #147 section + `providers/tool_use.md`
@@ -234,3 +238,15 @@ fraction required by the reconciliation grammar.
 
 Delta: renamed the items to canonical `lua-neovim` / `milestone-review` and set
 the planned 15% buffer as `0.15`; the itemized total remains 1.58 hours.
+
+### 2026-07-11 — preserve non-repo markdown and re-estimate visible scope
+
+Reason: the `change-code` plan-quality review found that unconditional
+`prep_md` attachment would change ordinary non-repo Markdown, and that the
+initial estimate treated the dispatcher/security work and completion adapter as
+one small feature despite their separate integration/test surfaces.
+
+Delta: repo-mode `prep_md` attaches completion, global `prep_chat` retains its
+existing own-folder attachment, and ordinary non-repo Markdown stays untouched
+(`ARCH-PURPOSE`). The estimate now itemizes two Lua/Neovim features plus the
+dispatcher and cross-cutting wiring, totaling 3.58 calibrated hours.

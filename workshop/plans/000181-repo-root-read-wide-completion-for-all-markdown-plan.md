@@ -6,7 +6,7 @@
 
 **Architecture:** Extend `parley.neighborhood` with one ordered `RootPolicy` value containing a narrow `write_root` and widened `read_roots`; every caller consumes that policy rather than reconstructing roots. Keep filesystem probing in the dispatcher/completion adapters, while root derivation, ordering, de-duplication, and model guidance remain directly testable helpers.
 
-**Tech Stack:** Lua, Neovim APIs, Plenary/Busted, nvim-cmp/cmp-path integration.
+**Tech Stack:** Lua, Neovim APIs, Plenary/Busted, nvim-cmp integration.
 
 ---
 
@@ -53,7 +53,8 @@ already-canonical absolute roots by pure `build_policy(write_root, roots)`.
 
 **MarkdownCompletionAttach** — stores the policy buffer-locally, installs one completefunc/InsertEnter hook, and registers one Parley cmp source backed by the shared candidate merger.
 
-- **Injected into:** `prep_md`; `prep_chat` inherits it through its existing `prep_md(buf)` call.
+- **Injected into:** repo-mode `prep_md`; `prep_chat` retains the existing call
+  for global chats and becomes an idempotent no-op after repo-mode `prep_md`.
 - **Future extensions:** Candidate metadata and ranking can widen inside the dedicated source without changing attachment.
 
 **ToolPolicyWiring** — passes one policy to the dispatcher and formats model context from that same value.
@@ -455,8 +456,9 @@ inherits one markdown attachment` uses a fresh chat buffer and must observe one
 setup and one autocmd for that buffer while global registration stays 1. First
 synthetic InsertEnter MUST raise that buffer's setup to exactly 2 and remove the
 once-autocmd; second InsertEnter stays 2. Assert sources contain one
-`parley_path` and one `buffer`. Assert non-repo Markdown gets own-folder-only
-policy.
+`parley_path` and one `buffer`. Add separate cases: ordinary non-repo Markdown
+gets no policy, source, autocmd, or cmp setup; a global chat still gets its
+existing own-folder policy and one attachment.
 
 - [ ] **Step 2: Run completion tests and verify RED**
 
@@ -469,19 +471,22 @@ configures cmp-path directly.
 
 - [ ] **Step 3: Move attachment to the shared Markdown preparation seam**
 
-Set `vim.b[buf].parley_completion_attached = true` before side effects. Call
-`neighborhood.attach_completion(buf)` from `prep_md`; delete the later call in
-`prep_chat`. Register `parley_path` once globally, configure the buffer once on
-the initial scheduled attach, and retain one one-shot InsertEnter retry for lazy
-cmp loading. Repeated preparation returns the existing policy without new side
+Set `vim.b[buf].parley_completion_attached = true` before side effects. In
+`prep_md`, call `neighborhood.attach_completion(buf)` only when
+`config.repo_root` is nonblank. Keep the `prep_chat` call so global chats retain
+today's completion; in repo mode the buffer guard makes that second call a
+no-op. Register `parley_path` once globally, configure the buffer once on the
+initial scheduled attach, and retain one one-shot InsertEnter retry for lazy cmp
+loading. Repeated preparation returns the existing policy without new side
 effects.
 
 - [ ] **Step 4: Run completion tests and verify GREEN**
 
 Run: `make test-spec SPEC=providers/tool_use`
 
-Expected: exit 0 with the concrete registration/setup/autocmd counts above and
-zero failed assertions.
+Expected: exit 0 with the concrete registration/setup/autocmd counts above,
+global-chat compatibility, zero attachment counts for ordinary non-repo
+Markdown, and zero failed assertions.
 
 - [ ] **Step 5: Commit all-Markdown attachment**
 
@@ -660,3 +665,12 @@ Delta: replaced cmp-path with one Parley cmp source over the shared merger;
 separated pure policy construction from filesystem adapters; enumerated every
 chat/skill seam; specified attachment counts; and made verification, shadow
 sweeps, close evidence, and post-close handling executable.
+
+### 2026-07-11 — guard all-markdown attachment by repo mode
+
+Reason: `change-code` review caught that moving attachment unconditionally into
+`prep_md` would expand behavior outside the issue's stated repo-mode scope.
+
+Delta: `prep_md` attaches only with `config.repo_root`; `prep_chat` retains the
+global-chat path and relies on the idempotence guard in repo mode. Tests pin
+both unchanged non-repo cases.
