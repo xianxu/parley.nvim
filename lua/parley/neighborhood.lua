@@ -212,7 +212,14 @@ function M.completion_candidates(policy, base)
         end
         groups[#groups + 1] = items
     end
-    return M.merge_completion_candidates(groups)
+    local accepted = {}
+    local resolver = require("parley.tools.dispatcher").resolve_read_path
+    for _, label in ipairs(M.merge_completion_candidates(groups)) do
+        if resolver(label:gsub("/$", ""), policy.read_roots) then
+            accepted[#accepted + 1] = label
+        end
+    end
+    return accepted
 end
 
 function M.completefunc(findstart, base)

@@ -97,6 +97,20 @@ describe("neighborhood completion", function()
         assert.equals(#"open ", neighborhood.completefunc(1, ""))
     end)
 
+    it("omits escaping and dangling authoritative candidates without fallback", function()
+        local first, second, outside = repo .. "/first", repo .. "/second", tmpdir .. "/outside"
+        vim.fn.mkdir(first, "p")
+        vim.fn.mkdir(second, "p")
+        vim.fn.mkdir(outside, "p")
+        vim.fn.writefile({ "outside" }, outside .. "/same.md")
+        vim.fn.writefile({ "second" }, second .. "/same.md")
+        vim.loop.fs_symlink(outside .. "/same.md", first .. "/same.md")
+        vim.loop.fs_symlink(outside .. "/missing.md", first .. "/dangling.md")
+        local policy = { write_root = first, read_roots = { first, second } }
+        assert.same({}, neighborhood.completion_candidates(policy, "same"))
+        assert.same({}, neighborhood.completion_candidates(policy, "dangling"))
+    end)
+
     it("configures the policy-backed Parley completion source", function()
         local captured
         local registered

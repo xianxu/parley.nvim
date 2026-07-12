@@ -295,3 +295,13 @@ crashing. Added dangling-symlink and direct `build_policy` tests plus real cmp
 registration/callback and repeated-attachment counts. Dispatcher shape/kind
 tests remain the enforcement proof; existing chat and skill integration tests
 prove their policy entry points (`ARCH-PURE`, `ARCH-PURPOSE`).
+
+### 2026-07-11 — unify completion with canonical read acceptance
+
+Reason: the fourth close review found lexical completion could suggest escaping
+or dangling symlinks rejected by dispatcher enforcement.
+
+Delta: completion now filters first-wins labels through `resolve_read_path`;
+rejected authoritative candidates are omitted without lower-root fallback.
+Added parity coverage and the missing tool-use traceability entry (`ARCH-DRY`,
+`ARCH-PURPOSE`).

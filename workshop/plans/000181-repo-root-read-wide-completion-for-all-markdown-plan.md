@@ -709,3 +709,12 @@ real cmp callback/registration, and repeated attachment are tested. Scalar,
 array, default, kind, and write-narrow semantics are pinned at the shared
 dispatcher boundary consumed by chat and skills; their existing integration
 tests pin policy wiring rather than duplicating every dispatcher case.
+
+### 2026-07-11 — unify completion with canonical read acceptance
+
+Reason: close review found lexical completion candidates could violate the
+dispatcher containment contract.
+
+Delta: both completion adapters filter the shared labels through the canonical
+read resolver; escaping and dangling authoritative candidates are omitted
+without lower-root fallback. Added the missing build-message traceability entry.
