@@ -180,6 +180,7 @@ the next recalibration rather than a timeless constant.
 ## Log
 
 ### 2026-07-11 — implementation
+- 2026-07-11: closed — Re-close reviews the post-FIX-THEN-SHIP seam-test delta: mapped provider/tool-use and skill-system suites pass; full make -f Makefile.parley test JOBS=1 passes with lint clean across 244 files and all unit/integration/architecture specs green; git diff --check passes; ordinary nested Markdown reads widen to repo root while identical relative writes remain nested.; review verdict: SHIP
 - 2026-07-11: addressed final FIX-THEN-SHIP review — chat/tool-loop and skill invocation now prove repo-root-only reads from ordinary nested Markdown; the chat regression proves an identical relative write remains in the nested neighborhood and does not overwrite the repo-root candidate (`ARCH-PURPOSE`). Focused provider/tool-use and skill-system suites passed; stale dispatcher annotations now describe the root-policy API.
 - 2026-07-11: closed — Telemetry unavailable for the SDLC-created worktree, so no actual was guessed; focused provider/tool-use and skill-system suites passed; git diff --check passed; make -f Makefile.parley test JOBS=1 passed with lint 0 warnings/errors across 244 files and all unit/integration/architecture specs green; completion now filters through authoritative read enforcement with escaping/dangling collision parity tests and complete traceability; review verdict: FIX-THEN-SHIP
 
