@@ -261,3 +261,15 @@ Delta: repo-mode `prep_md` attaches completion, global `prep_chat` retains its
 existing own-folder attachment, and ordinary non-repo Markdown stays untouched
 (`ARCH-PURPOSE`). The estimate now itemizes two Lua/Neovim features plus the
 dispatcher and cross-cutting wiring, totaling 3.58 calibrated hours.
+
+### 2026-07-11 — boundary-review scope and canonicalization corrections
+
+Reason: close review found that configured repo mode widened global chats and
+that root identity was not explicitly realpath-canonicalized before policy
+de-duplication; the planned lifecycle/security test matrix was incomplete.
+
+Delta: implicit repo-root widening now requires the artifact itself to be within
+that repo; global chats remain narrow. Policy roots use `fs_realpath` with a
+normalized fallback. Added global-chat, symlink/absolute resolver, repo-Markdown
+attachment, repeat-attachment, and non-repo Markdown regressions
+(`ARCH-PURPOSE`, `ARCH-PURE`).

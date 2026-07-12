@@ -674,3 +674,13 @@ Reason: `change-code` review caught that moving attachment unconditionally into
 Delta: `prep_md` attaches only with `config.repo_root`; `prep_chat` retains the
 global-chat path and relies on the idempotence guard in repo mode. Tests pin
 both unchanged non-repo cases.
+
+### 2026-07-11 — close-review completion of the test matrix
+
+Reason: the first close review exposed global-chat widening and implicit rather
+than explicit root canonicalization, both missed by the initial tests.
+
+Delta: repo-root inclusion is artifact-scoped, policy roots are realpath-first,
+and the integration/security matrix now covers global chats in repo mode,
+ordinary repo/non-repo Markdown, repeat attachment, absolute reads, and symlink
+escape behavior.

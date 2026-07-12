@@ -45,8 +45,32 @@ describe("neighborhood completion", function()
     end)
 
     after_each(function()
+        parley.config.repo_root = repo
         package.loaded.cmp = saved_cmp
         pcall(vim.cmd, "bwipeout!")
+    end)
+
+    it("attaches once to repo markdown and leaves non-repo markdown untouched", function()
+        vim.fn.mkdir(repo .. "/docs", "p")
+        local path = repo .. "/docs/note.md"
+        vim.fn.writefile({ "note" }, path)
+        vim.cmd("edit! " .. vim.fn.fnameescape(path))
+        local buf = vim.api.nvim_get_current_buf()
+        parley.prep_md(buf)
+        assert.is_true(vim.b[buf].parley_completion_attached)
+        local policy = vim.b[buf].parley_root_policy
+        parley.prep_md(buf)
+        assert.same(policy, vim.b[buf].parley_root_policy)
+
+        pcall(vim.cmd, "bwipeout!")
+        parley.config.repo_root = nil
+        local outside = tmpdir .. "/outside.md"
+        vim.fn.writefile({ "outside" }, outside)
+        vim.cmd("edit! " .. vim.fn.fnameescape(outside))
+        buf = vim.api.nvim_get_current_buf()
+        parley.prep_md(buf)
+        assert.is_nil(vim.b[buf].parley_completion_attached)
+        assert.equals("", vim.bo[buf].completefunc)
     end)
 
     it("attaches a chat-local completefunc rooted at the neighborhood", function()

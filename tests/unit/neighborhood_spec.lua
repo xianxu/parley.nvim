@@ -97,6 +97,22 @@ describe("neighborhood root policy (#181)", function()
         assert.same({ "/notes" }, policy.read_roots)
     end)
 
+    it("keeps a global chat narrow while repo mode is active", function()
+        local policy = neighborhood.policy_for_path("/global/chats/chat.md", cfg({
+            tool_read_roots = {},
+        }), { "/global/chats" })
+        assert.same({ "/global/chats" }, policy.read_roots)
+    end)
+
+    it("canonicalizes symlink aliases before de-duplicating roots", function()
+        local base = (os.getenv("TMPDIR") or "/tmp") .. "/parley-policy-" .. math.random(1, 999999)
+        vim.fn.mkdir(base .. "/real", "p")
+        vim.loop.fs_symlink(base .. "/real", base .. "/alias")
+        local policy = neighborhood.policy_from_roots(base .. "/real", nil, { base .. "/alias" })
+        assert.same({ vim.loop.fs_realpath(base .. "/real") }, policy.read_roots)
+        vim.fn.delete(base, "rf")
+    end)
+
     it("formats guidance from the policy", function()
         assert.equals(table.concat({
             "Relative reads search these roots in order (first existing match wins):",

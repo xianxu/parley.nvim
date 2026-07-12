@@ -105,15 +105,20 @@ function M.build_policy(write_root, ordered_roots)
 end
 
 function M.policy_from_roots(write_root, repo_root, configured_roots)
-    write_root = clean(write_root)
+    local function canonical(path)
+        path = clean(path)
+        return path and (vim.loop.fs_realpath(path) or path) or nil
+    end
+    write_root = canonical(write_root)
     if not write_root then return nil, "buffer has no file" end
     local roots = { write_root }
-    repo_root = clean(repo_root)
+    repo_root = canonical(repo_root)
     if repo_root then roots[#roots + 1] = repo_root end
     for _, root in ipairs(configured_roots or {}) do
         if type(root) == "string" and root ~= "" then
             if root:sub(1, 1) == "~" then root = vim.fn.expand(root) end
-            roots[#roots + 1] = root:sub(1, 1) == "/" and clean(root) or join(write_root, root)
+            local resolved = root:sub(1, 1) == "/" and root or join(write_root, root)
+            roots[#roots + 1] = canonical(resolved)
         end
     end
     return M.build_policy(write_root, roots)
@@ -122,7 +127,10 @@ end
 function M.policy_for_path(path, config, chat_roots)
     local write_root, err = M.derive_for_path(path, config, chat_roots)
     if not write_root then return nil, err end
-    return M.policy_from_roots(write_root, config and config.repo_root,
+    local configured_repo = clean(config and config.repo_root)
+    local repo_root = configured_repo and path_within(path, configured_repo)
+        and configured_repo or nil
+    return M.policy_from_roots(write_root, repo_root,
         config and config.tool_read_roots)
 end
 
