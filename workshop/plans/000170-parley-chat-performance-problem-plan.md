@@ -40,6 +40,7 @@ draft ranges, and state checkpoints. One buffer cache owns one structure.
 |---|---|---|---|---|
 | `LineReader` | INTEGRATION | `lua/parley/line_reader.lua` | new | Neovim text reads + work observer |
 | `DiagnosticRefresh` | INTEGRATION | `lua/parley/diagnostic_refresh.lua` | new | diagnostic lifecycle autocmds |
+| `BufferLifecycle` | INTEGRATION | `lua/parley/buffer_lifecycle.lua` | new | shared autocmd registration/teardown |
 | `HighlightStructureCache` | INTEGRATION | `lua/parley/highlighter.lua` | modified | buffer attachment/generation/redraw |
 | `ChatTypingScenario` | INTEGRATION | `tests/perf/chat_typing.lua` | new | real Neovim input/autocmd/redraw |
 | `make perf` | INTEGRATION | `Makefile.parley` | modified | isolated environment + report output |
@@ -64,10 +65,14 @@ lines_requested,full_buffer,structure_rows_processed}`. `record_work(buf,event)`
 uses the same registry for CPU-side structure work without a text read.
 
 `DiagnosticRefresh.refresh(buf)` synchronously invokes timezone then footnote
-refresh. Its setup owns `InsertLeave`, `TextChanged`, `BufWritePost`, `BufEnter`,
-and `WinEnter`, explicitly not `TextChangedI`; stream finalization calls the same
-entry point. Buffer-validity checks and idempotent teardown make later event
-delivery harmless; this synchronous adapter has no generation machinery.
+refresh and exposes source-specific clear. It owns no autocmds or highlight
+state.
+
+`BufferLifecycle.setup(buf)` idempotently registers `InsertLeave`, `TextChanged`,
+`BufWritePost`, `BufEnter`, `WinEnter`, unload, and delete. `converge(buf,reason)`
+independently calls diagnostic refresh and structure rebuild exactly once in
+that order; `clear(buf)` independently tears both down. Stream finalization calls
+`converge`. It explicitly owns no `TextChangedI` handler.
 
 `HighlightStructureCache` attaches once per Parley buffer and is valid before the
 buffer is renderable. `on_lines` reads/classifies only changed rows. Body-only
@@ -236,7 +241,9 @@ structural bounds do.
 
 **Files:**
 - Create: `lua/parley/diagnostic_refresh.lua`
+- Create: `lua/parley/buffer_lifecycle.lua`
 - Create: `tests/unit/diagnostic_refresh_spec.lua`
+- Create: `tests/unit/buffer_lifecycle_spec.lua`
 - Create: `tests/integration/diagnostic_refresh_spec.lua`
 - Modify: `lua/parley/highlighter.lua`
 - Modify: `lua/parley/chat_respond.lua`
@@ -246,6 +253,10 @@ structural bounds do.
 - [ ] Write failing injected routing tests for ordered timezone/footnote refresh,
       invalid-buffer no-op, setup idempotence, and teardown. Keep this adapter
       synchronous; do not add speculative generations or timers.
+- [ ] Write failing lifecycle-coordinator tests with injected diagnostic/
+      structure consumers. Assert event registration idempotence, convergence
+      order (diagnostics then structure), exactly once per event, independent
+      teardown, and one shared stream-finalization entry point.
 - [ ] Write failing real-buffer integration cases with UTC and footnote content:
       diagnostics may be stale during `TextChangedI`, then synchronously current
       after each `InsertLeave`, `TextChanged`, `BufWritePost`, `BufEnter`, and
@@ -263,8 +274,10 @@ structural bounds do.
       it zero times. Tests assert call counts and real final diagnostics.
 - [ ] Run the three specs; verify the failures describe current eager insert
       refresh and absent finalization hook.
-- [ ] Implement `setup(parley, group)`, synchronous `refresh(buf)`, and
-      `clear(buf)`, plus source-specific footnote clear. Remove
+- [ ] Implement diagnostic synchronous `refresh(buf)` and `clear(buf)`, plus
+      source-specific footnote clear. Implement lifecycle `setup(buf)`,
+      `converge(buf,reason)`, and `clear(buf)` as the sole shared event owner.
+      Remove
       diagnostics from the `TextChangedI` highlighter handler; keep highlight
       redraw separate. Call `refresh(buf)` after the last successful stream
       mutation and before final control returns.
@@ -299,6 +312,9 @@ structural bounds do.
       state/ranges. Cover user/assistant/local/tool/reasoning/code state,
       managed footer, multiple drafts, insert/delete shifts, body fast path,
       and structural edits whose downstream state changes to EOF.
+- [ ] Require `build` and successful `replace` to return fresh structures without
+      mutating input arrays/ranges. Structural rejection returns nil and leaves
+      the original byte-for-byte/deep-equal unchanged; pin both contracts.
 - [ ] Pin query shapes: `state_before(s,row0)` returns
       `{in_question,in_code,in_reasoning,reasoning_explicit_end,in_tool}`;
       `footer_range(s,line_count)` returns `{start_row,end_row_exclusive}` or
@@ -334,7 +350,7 @@ structural bounds do.
 
 **Files:**
 - Modify: `lua/parley/highlighter.lua`
-- Modify: `lua/parley/diagnostic_refresh.lua`
+- Modify: `lua/parley/buffer_lifecycle.lua`
 - Modify: `tests/integration/highlighting_spec.lua`
 - Modify: `tests/arch/performance_line_reader_spec.lua`
 - Modify: `tests/integration/perf_chat_typing_spec.lua`
@@ -362,9 +378,14 @@ structural bounds do.
       rows); do not recompute. Share one cache across windows and clear it plus
       LineReader registry state in unload/delete.
 - [ ] Expose synchronous `highlighter.rebuild_structure(buf)` and call it from
-      DiagnosticRefresh's named convergence events and stream-leg finalization
-      before their callbacks return. While dirty the provider returns false;
-      after rebuild it renders current structure.
+      `BufferLifecycle.converge` independently after diagnostic refresh for each
+      named event and stream-leg finalization. While dirty the provider returns
+      false; after rebuild it renders current structure.
+- [ ] Make rebuild transactional: build a candidate under `pcall`, swap only on
+      success, and return `(nil,error)` on failure while retaining dirty/
+      unrenderable prior state. The lifecycle coordinator logs/notifies and
+      propagates synchronous event failure; no partial cache is installed. Test
+      initial-build and convergence-build failures plus later successful retry.
 - [ ] Feed chat/Markdown compute functions `structure` and `reader`. Replace
       footer/draft full scans with structure queries and bootstrap with
       `state_before`. `HighlightStructure` owns reasoning state, so provider
@@ -422,6 +443,7 @@ structural bounds do.
 - [ ] Run every new spec explicitly:
       `tests/unit/perf_harness_spec.lua`, `tests/unit/line_reader_spec.lua`,
       `tests/unit/diagnostic_refresh_spec.lua`,
+      `tests/unit/buffer_lifecycle_spec.lua`,
       `tests/unit/highlight_structure_spec.lua`,
       `tests/integration/perf_chat_typing_spec.lua`,
       `tests/integration/diagnostic_refresh_spec.lua`,
@@ -437,6 +459,7 @@ structural bounds do.
 nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile tests/unit/perf_harness_spec.lua' -c 'qa!'
 nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile tests/unit/line_reader_spec.lua' -c 'qa!'
 nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile tests/unit/diagnostic_refresh_spec.lua' -c 'qa!'
+nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile tests/unit/buffer_lifecycle_spec.lua' -c 'qa!'
 nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile tests/unit/highlight_structure_spec.lua' -c 'qa!'
 nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile tests/integration/perf_chat_typing_spec.lua' -c 'qa!'
 nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile tests/integration/diagnostic_refresh_spec.lua' -c 'qa!'
@@ -445,7 +468,7 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile te
 nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile tests/arch/performance_line_reader_spec.lua' -c 'qa!'
 ```
 
-      Paste the nine PASS results into the issue Log.
+      Paste the ten PASS results into the issue Log.
 - [ ] Commit exact tests/issue as `#170: prove chat performance lifecycle bounds`.
 
 ### Task 8: Tooling, atlas, traceability, and verification
@@ -590,3 +613,14 @@ non-keystroke events. `highlight_structure` now owns canonical decoration
 classification consumed by highlighter/chat parser, with `define` owning the
 footnote predicate. Estimate re-derived to 7.94h. Cleanup checks now scope the
 feature diff generically instead of freezing unrelated drafts.
+
+### 2026-07-12 — lifecycle coordinator and transactional cache
+
+Reason: second code-entry review found diagnostics incorrectly owning structural
+convergence, pure replacement mutation ambiguous, rebuild failure undefined, and
+the 7.94h estimate still compressed relative to the integration/test surface.
+
+Delta: added neutral `BufferLifecycle` as sole event owner; diagnostics and
+structure remain independent consumers. Replacement is non-mutating; cache
+rebuild swaps only complete candidates and surfaces failures while remaining
+dirty. Estimate re-derived across ten Lua concerns to 14.15h.

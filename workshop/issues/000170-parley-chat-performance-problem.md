@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-07-08
 updated: 2026-07-11
-estimate_hours: 7.94
+estimate_hours: 14.15
 started: 2026-07-11T21:57:07-07:00
 ---
 
@@ -136,6 +136,11 @@ cannot be proven valid for a redraw, recompute it within the explicit bounded
 context rather than display silently stale semantics. Optimize the measured
 typing path, not a speculative parser architecture (`ARCH-PURPOSE`).
 
+One neutral `BufferLifecycle` adapter owns shared event registration and
+teardown. At each convergence event it independently invokes diagnostic refresh
+and structure rebuild; neither consumer owns or calls the other. Stream
+finalization invokes the same coordinator entry point.
+
 The structural work contract is observable and independent of machine speed:
 
 - `TextChangedI` may inspect the current line/word for spell typeahead but must
@@ -253,24 +258,28 @@ threshold in this issue.
 model: estimate-logic-v3.1
 familiarity: 1.0
 item: issue-spec             design=0.30 impl=0.10
-item: lua-neovim             design=0.50 impl=0.55
-item: lua-neovim             design=0.50 impl=0.55
-item: lua-neovim             design=0.50 impl=0.55
-item: lua-neovim             design=0.50 impl=0.55
-item: lua-neovim             design=0.50 impl=0.55
-item: lua-neovim             design=0.50 impl=0.55
-item: cross-cutting-refactor design=0.15 impl=0.20
+item: lua-neovim             design=0.60 impl=0.60
+item: lua-neovim             design=0.60 impl=0.60
+item: lua-neovim             design=0.60 impl=0.60
+item: lua-neovim             design=0.60 impl=0.60
+item: lua-neovim             design=0.60 impl=0.60
+item: lua-neovim             design=0.60 impl=0.60
+item: lua-neovim             design=0.60 impl=0.60
+item: lua-neovim             design=0.60 impl=0.60
+item: lua-neovim             design=0.60 impl=0.60
+item: lua-neovim             design=0.60 impl=0.60
+item: cross-cutting-refactor design=0.20 impl=0.20
 item: atlas-docs             design=0.04 impl=0.08
 item: milestone-review       design=0.04 impl=0.20
 design-buffer: 0.15
-total: 7.94
+total: 14.15
 ```
 
-Six focused Lua/Neovim primitives cover statistics/reporting, real-input
-scenarios, instrumented reads, diagnostic routing, pure structure, and cache/
-provider integration. One cross-cutting primitive covers canonical read and
-grammar seams through existing consumers. Values apply the thorough-spec
-discount and v3.1 implementation scale. No library can replace these seams.
+Ten focused Lua/Neovim primitives cover statistics, reporting, fixtures/input,
+instrumented reads, diagnostic aggregation, lifecycle coordination, canonical
+classification, pure structure, cache maintenance, and provider integration.
+One cross-cutting primitive covers canonical seams through existing consumers.
+Values apply the thorough-spec discount and v3.1 implementation scale.
 
 *Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against
 `baseline-v3.1.md`. Method A only. The calibration source was stale at
@@ -319,3 +328,12 @@ edits mark decoration state dirty and rebuild only at named non-keystroke
 convergence events. The estimate was re-derived for six focused Lua features
 plus their cross-cutting seam (7.94h), and cleanup no longer freezes unrelated
 draft state.
+
+### 2026-07-12 — lifecycle ownership and estimate correction
+
+The second code-entry judge found diagnostic ownership of structure rebuilds
+contradicted separate freshness contracts. A neutral `BufferLifecycle` now owns
+events and independently calls both consumers. Pure replacement is
+transactional/non-mutating, and rebuild failure leaves the cache dirty without
+partial state. The estimate now itemizes ten Lua/Neovim concerns plus their
+integration surface (14.15h).
