@@ -60,13 +60,40 @@ The framework owns:
 - validity assertions that fail only when a scenario did not exercise what it
   claims, never because a timing crossed a threshold.
 
+Timing records distinguish **inclusive** scenarios from **isolated** phases.
+`edit_total` measures the complete edit/event/redraw interval and may contain
+nested work; `timezone_refresh`, `footnote_refresh`, `decoration_redraw`, and
+`spell_typeahead` are separate runs that call only that phase's public or test
+seam. Reports must not add or subtract overlapping timings or present isolated
+phase totals as a decomposition of `edit_total`.
+
 The first scenario creates normally attached Parley chat buffers at 100, 1,000,
-and 5,000 lines, positions a real window deep in the document, performs a
-representative insert edit, and drives the same Neovim event/redraw seams used
-interactively. It reports the combined edit path and separately attributable
-phases: `TextChangedI`, timezone refresh, managed-footnote refresh, chat
-decoration/redraw computation, and spell typeahead. Output emphasizes scaling
-ratios as well as median/p95 latency.
+and 5,000 lines by calling normal `parley.setup`, opening a named chat file in a
+real window, and allowing the production buffer handlers to attach. It positions
+the cursor in the middle of a long answer near 80% of the document, enters
+insert mode through Neovim input, inserts one ASCII character, and waits for
+both `changedtick` and a harness observer on the real `TextChangedI` autocmd.
+The harness must not invoke Parley's production callbacks directly for
+`edit_total`. A forced `redraw` after the edit exercises the installed
+decoration provider; observer counts prove that the autocmd and provider ran.
+Isolated phase scenarios may call their named seam directly and are labeled as
+such.
+
+In addition to wall-clock samples, the harness records structural work counters:
+buffer line-read calls and total lines requested by each observed phase. The
+adapter used to gather counters must preserve production behavior and be tested
+against a known sequence. These counters are correctness evidence and may fail
+tests when a documented work bound is violated; only elapsed time remains
+report-only. Output emphasizes scaling ratios as well as median/p95 latency.
+
+The JSON report has a versioned stable envelope:
+`schema_version`, `generated_at`, `environment` (OS, Neovim version, commit),
+and `scenarios[]` containing name, line count, iteration count, raw elapsed
+samples, median, p95, and work counters. By default `make perf` overwrites
+`.test-tmp/perf/parley-chat-typing.json`; `PERF_OUTPUT=<path>` overrides it.
+Generated reports are not committed. Baseline and optimized summaries—command,
+environment, medians/p95s, scaling ratios, and work counters—are appended to
+this issue's `## Log`, which is the durable comparison record.
 
 The existing `tests/perf_chat_finder.lua` remains supported. It may migrate to
 the shared timing/reporting core only if that is a small behavior-preserving
@@ -78,8 +105,10 @@ Use the baseline to confirm which Parley phases scale with document size before
 changing production behavior. Then:
 
 - remove complete timezone and managed-footnote diagnostic rebuilding from the
-  synchronous `TextChangedI` path; these diagnostics may converge on a deferred
-  or structural event, but ordinary typing must do only bounded bookkeeping;
+  synchronous `TextChangedI` path. Neither diagnostic source attaches a
+  `TextChangedI` handler. Both refresh synchronously on `InsertLeave`,
+  normal-mode `TextChanged`, `BufWritePost`, `BufEnter`, and `WinEnter`; thus
+  insert-mode staleness lasts only until insert mode ends, with no timer delay;
 - make chat and Markdown decoration computation genuinely viewport-bounded,
   including managed-footer discovery;
 - replace the highlighter's potentially unbounded backward bootstrap with a
@@ -88,13 +117,29 @@ changing production behavior. Then:
   the authoritative semantic structures rather than introducing a new
   continuously maintained exchange model.
 
-Prefer one shared invalidation/deferred-refresh mechanism for Parley diagnostics
-and highlight state (`ARCH-DRY`). Keep structural scanning/state transitions as
-pure functions and Neovim events, timers, buffers, and redraw callbacks as thin
-adapters (`ARCH-PURE`). If cached state cannot be proven valid, schedule a
-conservative recomputation outside the immediate keystroke callback rather than
-display silently stale semantics. Optimize the measured typing path, not a
-speculative parser architecture (`ARCH-PURPOSE`).
+Share timing/statistics/reporting and any identical buffer-lifecycle primitive,
+but do not force diagnostics and highlight state behind one invalidation API:
+their freshness contracts differ (`ARCH-DRY`). Keep structural scanning/state
+transitions as pure functions and Neovim events, buffers, and redraw callbacks
+as thin adapters (`ARCH-PURE`). Each cache owns its buffer-keyed state,
+generation, invalidation triggers, and teardown. If cached highlight state
+cannot be proven valid for a redraw, recompute it within the explicit bounded
+context rather than display silently stale semantics. Optimize the measured
+typing path, not a speculative parser architecture (`ARCH-PURPOSE`).
+
+The structural work contract is observable and independent of machine speed:
+
+- `TextChangedI` may inspect the current line/word for spell typeahead but must
+  request no document-wide line range;
+- a redraw may read the visible rows, the existing 20-line viewport margin, at
+  most 200 preceding context lines, and at most the existing 500-line reasoning
+  lookahead per reasoning opener encountered inside that bounded region;
+- managed-footer discovery during redraw must not request `0..-1` or otherwise
+  scan all document lines; and
+- increasing a fixture from 1,000 to 5,000 lines with the same viewport shape
+  must not increase the combined keystroke/redraw line-read counter beyond a
+  small fixed allowance for setup noise, defined by the harness and asserted in
+  correctness tests.
 
 ### Behavior and lifecycle requirements
 
@@ -108,6 +153,24 @@ Optimization must preserve:
 - bounded cleanup of timers/caches on buffer teardown; and
 - unchanged chat submission, recursion, and exchange-model semantics.
 
+Freshness oracles by event:
+
+- During insert mode, existing timezone/footnote diagnostics may remain at
+  their pre-insert state.
+- `InsertLeave`, normal-mode `TextChanged`, and `BufWritePost` synchronously
+  rebuild both diagnostic sources before their autocmd returns.
+- `BufEnter` and `WinEnter` synchronously hydrate diagnostics for the entered
+  buffer/window.
+- Scrolling or opening a second window recomputes correct highlights for that
+  window's bounded viewport without requiring a text edit.
+- Streaming/programmatic edits that emit normal `TextChanged` converge through
+  that event; stream completion must leave diagnostics current even if an
+  intermediate edit did not emit it.
+- Undo/redo and external buffer mutations converge on their normal
+  `TextChanged`/`BufWritePost` event.
+- `BufUnload`/`BufDelete` cancels pending generations and removes buffer-owned
+  cache state; a later callback is a no-op.
+
 No performance cache may be keyed only by buffer number without lifecycle
 cleanup. No delayed callback may mutate an invalid buffer or apply an obsolete
 generation.
@@ -116,20 +179,26 @@ generation.
 
 Add pure tests for timing statistics/report shaping and any extracted
 structural-state/invalidation logic. Add integration tests through real Neovim
-buffers for event wiring, deferred convergence, viewport/scroll correctness,
-multiple windows, streaming, undo/redo, external edits, and teardown.
+buffers for the exact freshness oracles above: insert-mode staleness followed by
+`InsertLeave`, normal `TextChanged`, `BufWritePost`, `BufEnter`/`WinEnter`,
+viewport scrolling, multiple windows, streaming completion, undo/redo, external
+edits, and `BufUnload`/`BufDelete` teardown.
 
 Run the report-only benchmark before and after implementation at all three
-document sizes. The optimized report must show that the synchronous
-Parley-owned keystroke path no longer performs document-wide diagnostic scans
-and that redraw work is bounded by viewport/context rather than total document
-length. Record results and environment metadata in `## Log`; do not convert the
-observed numbers into a CI threshold in this issue.
+document sizes on the same environment. Completion is determined by the
+structural work-counter assertions, not favorable timing noise: the optimized
+report must show no document-wide diagnostic scans in `TextChangedI` and no
+total-document redraw scan, with the 1,000→5,000 combined line-read count within
+the harness's fixed setup allowance. Record the elapsed results even if they are
+flat or noisy; they are evidence, not a gate. Append both summaries and
+environment metadata to `## Log`; do not convert elapsed numbers into a CI
+threshold in this issue.
 
 ## Done when
 
 - `make perf` runs reusable headless-Neovim scenarios and emits terminal plus
-  JSON reports without timing-based pass/fail gates.
+  versioned JSON reports at the documented location without timing-based
+  pass/fail gates.
 - A committed/logged baseline identifies the Parley-owned costs at
   100/1,000/5,000 lines before production optimization.
 - Ordinary insert-mode changes do not synchronously rebuild full-buffer timezone
@@ -139,15 +208,20 @@ observed numbers into a CI threshold in this issue.
 - Highlight and diagnostic behavior converges correctly across scrolling,
   multiple windows, streaming, undo/redo, external edits, writes, and teardown.
 - Before/after reports show the intended scaling improvement, and the complete
-  correctness/lint suite passes.
+  structural counters prove the defined work bounds; elapsed scaling is
+  recorded without becoming a gate; and the complete correctness/lint suite
+  passes.
 
 ## Plan
 
 - [ ] Build the reusable report-only headless performance framework and capture
-      the baseline.
-- [ ] Remove full-buffer diagnostic work from the synchronous keystroke path.
-- [ ] Bound decoration-provider structural work and cache/invalidate safely.
-- [ ] Verify lifecycle/correctness behavior and capture the optimized report.
+      the baseline, including observer and work-counter validity tests.
+- [ ] Remove full-buffer diagnostic work from `TextChangedI` and test every
+      specified convergence trigger.
+- [ ] Bound decoration-provider structural work and test scroll, multi-window,
+      generation, and teardown behavior.
+- [ ] Verify the complete lifecycle matrix and capture the optimized report on
+      the baseline environment.
 - [ ] Update tooling and atlas documentation with the benchmark and landed
       performance architecture.
 
@@ -163,3 +237,15 @@ unbounded backward highlight bootstrap, and full-buffer timezone/footnote
 refreshes on every `TextChangedI`. The operator selected a reusable real-Neovim
 benchmark harness, report-only enforcement, and Parley-owned hot paths as the
 scope; MarkdownPreview remains an optional manual comparison.
+
+### 2026-07-12 — spec-review precision pass
+
+Fresh-context review found the initial benchmark attribution, diagnostic
+freshness, structural bounds, JSON persistence, and lifecycle test oracles too
+ambiguous for implementation planning. The spec now distinguishes inclusive
+from isolated timings, defines the real insert-mode scenario and observer
+proofs, adds structural line-read counters, fixes diagnostic convergence to
+named synchronous events, gives redraw work explicit bounds, versions the JSON
+envelope/location, and enumerates the lifecycle matrix. Diagnostics and
+highlight caches are no longer forced into one invalidation abstraction merely
+for `ARCH-DRY`.
