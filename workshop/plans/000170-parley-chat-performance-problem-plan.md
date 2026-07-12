@@ -27,10 +27,12 @@ scenario owns one sample set; all reporters consume the same summary.
 attribution, units, environment, and work counters explicit so inclusive and
 isolated timings cannot be treated as additive.
 
-`HighlightStructure` indexes structural line fingerprints, managed-footer
-start, draft ranges, and chat-state checkpoints. It supports a pure full build,
-changed-range replacement, and state query before a viewport. One buffer cache
-owns one structure; N windows query it independently.
+`HighlightStructure` is the canonical decoration-state grammar after extraction:
+highlighter-local prefix/draft/reasoning/tool/code classification moves here;
+`define.lua` remains the canonical managed-footnote predicate and is injected;
+`chat_parser.lua` consumes the shared structural classifier while retaining
+semantic content assembly. The structure indexes fingerprints, footer start,
+draft ranges, and state checkpoints. One buffer cache owns one structure.
 
 ### Integration points
 
@@ -58,7 +60,8 @@ end-of-buffer sentinel and is a full-buffer attempt only when `start0==0`.
 partial end row is included); `reader:line(row0)` requests exactly one row.
 Invalid-buffer errors match native behavior and still emit the attempted event.
 Observer records are `{buf,phase,operation,requested={...},returned_lines,
-lines_requested,full_buffer}`.
+lines_requested,full_buffer,structure_rows_processed}`. `record_work(buf,event)`
+uses the same registry for CPU-side structure work without a text read.
 
 `DiagnosticRefresh.refresh(buf)` synchronously invokes timezone then footnote
 refresh. Its setup owns `InsertLeave`, `TextChanged`, `BufWritePost`, `BufEnter`,
@@ -67,12 +70,11 @@ entry point. Buffer-validity checks and idempotent teardown make later event
 delivery harmless; this synchronous adapter has no generation machinery.
 
 `HighlightStructureCache` attaches once per Parley buffer and is valid before the
-buffer is marked renderable. `on_lines` reads only the changed new range, splices
-stored fingerprints, and recomputes derived state in memory. It clears on
-detach/unload/delete. Decoration reads viewport + margin and bounded reasoning
-state only. Cache absence means the buffer is not attached/renderable; redraw
-returns false rather than inventing recovery machinery. Re-entry after unload
-performs one fresh synchronous attach/build before rendering.
+buffer is renderable. `on_lines` reads/classifies only changed rows. Body-only
+edits and locally safe body-line splices update in bounded work; structural
+fingerprint changes mark the cache dirty without scanning a suffix. Dirty redraw
+returns false. Named non-keystroke convergence events synchronously rebuild
+before returning. It clears on detach/unload/delete; re-entry builds once.
 
 `ChatTypingScenario` calls normal setup, opens a real chat window, edits via
 Neovim insert input, observes `TextChangedI`, forces redraw, and records inclusive
@@ -129,7 +131,7 @@ structural bounds do.
 - [ ] Run both new specs; expect missing module plus existing direct-read
       violations.
 - [ ] Implement `set_observer`, token-checked `clear_observer`, `with_phase`,
-      `clear_buffer`, and `for_buffer(buf, opts)` with `reader:lines`,
+      `clear_buffer`, `record_work`, and `for_buffer(buf, opts)` with `reader:lines`,
       `reader:text`, and `reader:line`. Tests inject `opts.delegate`; production
       instances use native Neovim and the buffer registry.
 - [ ] Make observer storage strictly buffer-scoped with a phase stack.
@@ -276,18 +278,24 @@ structural bounds do.
 **Files:**
 - Create: `lua/parley/highlight_structure.lua`
 - Create: `tests/unit/highlight_structure_spec.lua`
+- Modify: `lua/parley/chat_parser.lua`
+- Modify: `lua/parley/define.lua` (export canonical footnote predicate)
 - Modify: `tests/arch/buffer_mutation_spec.lua` pure-file list or create a
   focused pure-architecture spec
 
-- [ ] Extract/reuse the current prefix, managed-footnote, draft delimiter, code
-      fence, tool, and reasoning predicates as pure inputs/helpers; do not create
-      a second grammar beside `define.lua`, `chat_parser.lua`, and the existing
-      highlighter predicates (`ARCH-DRY`).
+- [ ] Move decoration structural classification (prefix, draft delimiter, code
+      fence, tool, reasoning) from `highlighter.lua` into
+      `highlight_structure.lua`; make it the canonical classifier consumed by
+      both highlighter and `chat_parser.lua`. Export/inject `define`'s existing
+      footnote predicate as the sole footer grammar. Delete local shadows
+      (`ARCH-DRY`).
 - [ ] Write failing pure tests with 0-based half-open change ranges. Require
       `fingerprint(line, patterns)` to return a compact token;
       `build(lines, patterns)` to return `{fingerprints,state_before,
       footer_start0,draft_ranges}`; `replace(s, first0, old_last0, new_lines,
-      patterns)` to return a new valid structure; and queries to return copied
+      patterns)` to return `(new_structure,rows_processed)` only for a same-line-
+      count, fingerprint-identical body edit, otherwise `(nil,rows_processed,
+      "structural")`; and queries to return copied
       state/ranges. Cover user/assistant/local/tool/reasoning/code state,
       managed footer, multiple drafts, insert/delete shifts, body fast path,
       and structural edits whose downstream state changes to EOF.
@@ -304,25 +312,18 @@ structural bounds do.
       `tasker.is_busy(buf,true)` on every query, so busy start/finalization needs
       no cache invalidation and post-stream semantics converge immediately.
 - [ ] Run the new spec; expect module-not-found RED.
-- [ ] Implement the named API with 0-based rows and half-open ranges. Store all
-      fingerprints; splice the changed range; recompute derived state from
-      `first0` forward in memory until the new state/fingerprint suffix equals
-      the shifted old suffix, otherwise to EOF. If line count and old/new
-      fingerprints are identical body tokens, return the existing derived
-      suffix immediately. The module must not require `vim` or perform IO.
-- [ ] Define suffix reuse exactly: `delta=#new_lines-(old_last0-first0)` and
-      `old_i=new_i-delta`; convergence requires equal incoming state and equal
-      fingerprint at aligned indices. On convergence, copy/shift all remaining
-      row-indexed state, footer start, and draft ranges by `delta`. Concrete
-      expected tables cover insertion before footer (+1), deletion before two
-      drafts (-1), removing `🤖:` (answer state changes to EOF), and inserting a
-      draft opener (state changes through matching closer).
-- [ ] Specify metadata splice rules: ranges wholly before `first0` are preserved;
-      ranges intersecting the replaced span or derived from recomputed state are
-      discarded/rebuilt; only metadata in the aligned suffix after convergence
-      shifts by `delta`. Test edit after footer (footer unchanged), edit between
-      drafts (first preserved, second aligned/shifted as applicable), removal of
-      the footer opener, and edits intersecting/removing each draft boundary.
+- [ ] Implement the named API with 0-based rows/half-open ranges. `replace`
+      fingerprints only `new_lines` and reports exactly `#new_lines` processed.
+      It updates in place/copy only when old/new span lengths match and every
+      aligned fingerprint is identical; otherwise it returns `"structural"`
+      without scanning/copying a suffix. Newline insertion/deletion, footer/
+      draft/marker edits, and code/reasoning changes are structural and defer to
+      a full convergence rebuild outside `TextChangedI`. No per-keystroke path
+      walks to EOF.
+- [ ] Test ordinary character edits process one row at 100/1,000/5,000 lines;
+      structural edit at row 1, newline, footer removal, and draft-boundary edits
+      each process only changed rows then return `"structural"`. Separately test
+      full `build` produces correct shifted footer/drafts after convergence.
 - [ ] Feed canonical cases from `tests/unit/parse_chat_spec.lua` and
       `tests/integration/highlighting_spec.lua` through the new structure and
       assert the historical state/footer/draft oracles match.
@@ -333,6 +334,7 @@ structural bounds do.
 
 **Files:**
 - Modify: `lua/parley/highlighter.lua`
+- Modify: `lua/parley/diagnostic_refresh.lua`
 - Modify: `tests/integration/highlighting_spec.lua`
 - Modify: `tests/arch/performance_line_reader_spec.lua`
 - Modify: `tests/integration/perf_chat_typing_spec.lua`
@@ -355,9 +357,14 @@ structural bounds do.
       backward bootstrap to violate counters.
 - [ ] On first buffer attach only, build structure via `LineReader` before
       marking the buffer renderable; attach `on_lines`; read only
-      `[firstline,new_lastline)` and call pure `replace` with Neovim's old/new
-      half-open ranges. Share one valid cache across windows and clear it plus
+      `[firstline,new_lastline)` and call pure `replace`. Record
+      `structure_rows_processed`. On `"structural"`, mark dirty in O(changed
+      rows); do not recompute. Share one cache across windows and clear it plus
       LineReader registry state in unload/delete.
+- [ ] Expose synchronous `highlighter.rebuild_structure(buf)` and call it from
+      DiagnosticRefresh's named convergence events and stream-leg finalization
+      before their callbacks return. While dirty the provider returns false;
+      after rebuild it renders current structure.
 - [ ] Feed chat/Markdown compute functions `structure` and `reader`. Replace
       footer/draft full scans with structure queries and bootstrap with
       `state_before`. `HighlightStructure` owns reasoning state, so provider
@@ -371,7 +378,8 @@ structural bounds do.
 - [ ] Run highlighting/arch/perf specs and `make perf`. Required non-timing
       assertions: `edit_total.full_buffer_reads == 0`,
       `decoration_redraw.full_buffer_reads == 0`, and 1,000-line
-      `lines_requested ==` 5,000-line `lines_requested`. Do not widen zero.
+      `lines_requested ==` 5,000-line `lines_requested`, plus identical
+      `structure_rows_processed` (one for the prose edit). Do not widen zero.
 - [ ] Commit exact files as `#170: bound chat decoration work to viewport state`.
 
 ---
@@ -491,12 +499,14 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile te
 - [ ] Finish via `sdlc pr` then `sdlc merge --yes`. Verify the PR is merged,
       main contains the implementation, #170 changed `codecomplete → done`, its
       issue and durable plan/review sidecars moved to `workshop/history/`, the
-      feature worktree/branch is removed, and unrelated user drafts remain
-      untouched.
+      feature worktree/branch is removed, and the feature branch diff contains
+      no unrelated paths.
 - [ ] Resolve the main worktree with `git worktree list --porcelain` before
-      merge cleanup. Before leaving the feature worktree capture unrelated dirty
-      path/status lines with
-      `git -C <main> status --short | rg 'workshop/issues/000(162|168|182)-' | sort > /tmp/parley-170-dirty.before`.
+      merge cleanup. Before publication run `git diff --name-only
+      $(git merge-base main HEAD)..HEAD`; classify every path against #170's
+      plan/spec and remove any accidentally staged unrelated path. Record the
+      primary checkout's current dirty paths for awareness, but do not require
+      peer/user work to remain frozen while #170 proceeds.
       From main after merge run: `gh pr view <N> --json
       state,mergedAt,url`; `git merge-base --is-ancestor <implementation-head>
       main`; `rg -n '^status: done$' workshop/history/000170-*.md`; `test ! -e
@@ -506,10 +516,9 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile te
       `test -e workshop/history/000170-parley-chat-performance-problem-close-review.md`.
 - [ ] Assert cleanup with
       `! git worktree list --porcelain | rg -q '000170-parley-chat-performance-problem'`
-      and `test -z "$(git branch --list '*000170*')"`. Capture post-merge dirty
-      lines using the same `git status --short | rg ... | sort` command into
-      `/tmp/parley-170-dirty.after`, then `cmp /tmp/parley-170-dirty.before
-      /tmp/parley-170-dirty.after`; expect exit 0.
+      and `test -z "$(git branch --list '*000170*')"`. Run `git status --short`
+      from main and confirm any dirty paths are outside the merged #170 diff;
+      do not edit or stage them.
 
 ## Revisions
 
@@ -568,3 +577,16 @@ measured keystroke interval, contradicting the zero diagnostic-read gate.
 Delta: `edit_total` now ends after `TextChangedI` and forced in-insert redraw;
 escape, synchronous convergence, and fixture reset occur after counters/timing
 stop.
+
+### 2026-07-12 — code-entry judge correction
+
+Reason: `sdlc change-code` found suffix-to-EOF recomputation could hide
+document-proportional CPU work behind clean line-read counters, and judged the
+4.13h estimate too small for the full eight-task surface.
+
+Delta: added `structure_rows_processed`; prose edits remain locally valid while
+structural edits only mark dirty during insertion and rebuild on named
+non-keystroke events. `highlight_structure` now owns canonical decoration
+classification consumed by highlighter/chat parser, with `define` owning the
+footnote predicate. Estimate re-derived to 7.94h. Cleanup checks now scope the
+feature diff generically instead of freezing unrelated drafts.

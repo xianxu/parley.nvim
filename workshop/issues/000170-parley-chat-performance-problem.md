@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-07-08
 updated: 2026-07-11
-estimate_hours: 4.13
+estimate_hours: 7.94
 started: 2026-07-11T21:57:07-07:00
 ---
 
@@ -97,7 +97,7 @@ The JSON report has a versioned stable envelope: `schema_version`,
 version, commit), and `scenarios[]`. Each scenario contains `name`, `phase`,
 `attribution` (`inclusive` or `isolated`), `line_count`, `iteration_count`,
 `elapsed_ms` (`samples`, `median`, `p95`), and `work` (`line_read_calls`,
-`lines_requested`, `full_buffer_reads`). By default `make perf` overwrites
+`lines_requested`, `full_buffer_reads`, `structure_rows_processed`). By default `make perf` overwrites
 `.test-tmp/perf/parley-chat-typing.json`; `PERF_OUTPUT=<path>` overrides it.
 Generated JSON reports are never committed. Only baseline and optimized
 summaries—command, environment, medians/p95s, scaling ratios, and work
@@ -150,6 +150,14 @@ The structural work contract is observable and independent of machine speed:
   `lines_requested` counters at all. Counters reset after fixture setup and
   warmup, so setup reads are excluded and the fixed allowance is exactly zero.
 
+For ordinary prose edits, structure maintenance may fingerprint/process only
+the changed rows; the 1,000- and 5,000-line scenarios must therefore report the
+same `structure_rows_processed`. A structural-marker edit during insert mode
+marks decoration state dirty in bounded changed-range work and may temporarily
+suppress Parley decorations. A synchronous full structure rebuild occurs on
+`InsertLeave`, normal `TextChanged`, `BufWritePost`, buffer entry, and
+stream-leg finalization—never inside `TextChangedI` or redraw.
+
 ### Behavior and lifecycle requirements
 
 Optimization must preserve:
@@ -166,6 +174,9 @@ Freshness oracles by event:
 
 - During insert mode, existing timezone/footnote diagnostics may remain at
   their pre-insert state.
+- During insert mode, a structural-marker edit may suppress Parley decorations
+  until `InsertLeave`; ordinary prose edits retain valid structure/decorations.
+  The convergence event rebuilds before its autocmd returns.
 - `InsertLeave`, normal-mode `TextChanged`, and `BufWritePost` synchronously
   rebuild both diagnostic sources before their autocmd returns.
 - `BufEnter` and `WinEnter` synchronously hydrate diagnostics for the entered
@@ -242,20 +253,24 @@ threshold in this issue.
 model: estimate-logic-v3.1
 familiarity: 1.0
 item: issue-spec             design=0.30 impl=0.10
-item: lua-neovim             design=0.30 impl=0.50
-item: lua-neovim             design=0.30 impl=0.50
-item: lua-neovim             design=0.30 impl=0.50
-item: lua-neovim             design=0.30 impl=0.50
-item: atlas-docs             design=0.03 impl=0.06
-item: milestone-review       design=0.04 impl=0.16
+item: lua-neovim             design=0.50 impl=0.55
+item: lua-neovim             design=0.50 impl=0.55
+item: lua-neovim             design=0.50 impl=0.55
+item: lua-neovim             design=0.50 impl=0.55
+item: lua-neovim             design=0.50 impl=0.55
+item: lua-neovim             design=0.50 impl=0.55
+item: cross-cutting-refactor design=0.15 impl=0.20
+item: atlas-docs             design=0.04 impl=0.08
+item: milestone-review       design=0.04 impl=0.20
 design-buffer: 0.15
-total: 4.13
+total: 7.94
 ```
 
-Four focused Lua/Neovim primitives cover the benchmark harness, instrumented
-line-reader seam, diagnostic event routing, and bounded highlight cache. Design
-values apply the thorough-spec discount; implementation values are already
-scaled to 40% per v3.1. No library can replace these repo-specific Neovim seams.
+Six focused Lua/Neovim primitives cover statistics/reporting, real-input
+scenarios, instrumented reads, diagnostic routing, pure structure, and cache/
+provider integration. One cross-cutting primitive covers canonical read and
+grammar seams through existing consumers. Values apply the thorough-spec
+discount and v3.1 implementation scale. No library can replace these seams.
 
 *Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against
 `baseline-v3.1.md`. Method A only. The calibration source was stale at
@@ -294,3 +309,13 @@ diagnostic refresh hook; all in-scope text access derives from an instrumented
 `LineReader` enforced by an architecture test; and the report schema now states
 timing units, attribution, phase identity, and exact work-counter fields. The
 durable baseline is explicitly the issue-log summary, never generated JSON.
+
+### 2026-07-12 — plan-quality gate correction
+
+The code-entry judge caught that buffer-read counters alone could hide
+document-proportional Lua recomputation after structural edits. The contract now
+counts processed structure rows: prose edits update locally, while structural
+edits mark decoration state dirty and rebuild only at named non-keystroke
+convergence events. The estimate was re-derived for six focused Lua features
+plus their cross-cutting seam (7.94h), and cleanup no longer freezes unrelated
+draft state.
