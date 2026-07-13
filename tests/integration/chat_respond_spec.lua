@@ -1018,6 +1018,9 @@ describe("chat_respond: guard branches", function()
         parley.tasker.is_busy = function() return true end
 
         local dispatcher_called = false
+        local warning
+        local original_warning = parley.logger.warning
+        parley.logger.warning = function(message) warning = message end
         parley.dispatcher.query = function(...)
             dispatcher_called = true
         end
@@ -1031,7 +1034,9 @@ describe("chat_respond: guard branches", function()
 
         -- Restore
         parley.tasker.is_busy = original_is_busy
+        parley.logger.warning = original_warning
         lifecycle.finalize_mutated_api_leg = original_finalize
+        assert.equals("A Parley process is already running. Stop it before resubmitting.", warning)
     end)
 
     it("returns early without calling dispatcher for non-chat file", function()

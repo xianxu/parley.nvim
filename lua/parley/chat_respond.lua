@@ -1148,7 +1148,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
 
     -- Check if there's already an active process for this buffer
     if not force and _parley.tasker.is_busy(buf, false) then
-        _parley.logger.warning("A Parley process is already running. Use stop to cancel or force to override.")
+        _parley.logger.warning("A Parley process is already running. Stop it before resubmitting.")
         return
     end
     local chat_pending = require("parley.chat_pending")
