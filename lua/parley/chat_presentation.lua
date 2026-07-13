@@ -4,6 +4,15 @@ local M = {}
 local REVEAL_DELAY_MS = 1000
 local MINIMUM_VISIBLE_MS = 1000
 local VERB_IDLE_MS = 15000
+local TIMED_EVENTS = {
+    reveal_due = true,
+    minimum_due = true,
+    activity = true,
+    idle = true,
+    content = true,
+    progress = true,
+    complete = true,
+}
 
 local function copy_array(values)
     local copied = {}
@@ -18,7 +27,6 @@ local function copy_state(state)
     for key, value in pairs(state) do
         copied[key] = value
     end
-    copied.staged = copy_array(state.staged)
     return copied
 end
 
@@ -58,9 +66,12 @@ local function staged_event(event)
     }
 end
 
-local function append_staged_actions(actions, staged)
-    for _, event in ipairs(staged) do
-        actions[#actions + 1] = visible_action(event)
+local function append_staged_actions(actions, staged_tail, staged_count)
+    local first_action = #actions
+    local node = staged_tail
+    for index = staged_count, 1, -1 do
+        actions[first_action + index] = visible_action(node.event)
+        node = node.previous
     end
 end
 
@@ -74,7 +85,8 @@ end
 local function finish(state)
     local finished = copy_state(state)
     finished.phase = "finished"
-    finished.staged = {}
+    finished.staged_tail = nil
+    finished.staged_count = 0
     finished.completion_pending = nil
     finished.pending_completion = nil
     return finished
@@ -83,14 +95,15 @@ end
 local function release_visible(state, event)
     local released = copy_state(state)
     released.phase = "released"
-    released.staged = {}
+    released.staged_tail = nil
+    released.staged_count = 0
     local actions = { { type = "hide" } }
-    append_staged_actions(actions, state.staged)
+    append_staged_actions(actions, state.staged_tail, state.staged_count)
     actions[#actions + 1] = visible_action(event)
     return released, actions
 end
 
-local function rotate_verb(state, event)
+local function rotate_verb(state, event, now_ms)
     local rotated = copy_state(state)
     local verb_count = #rotated.verbs
     local requested = tonumber(event.verb_index) or (rotated.verb_index + 1)
@@ -100,21 +113,22 @@ local function rotate_verb(state, event)
     end
     rotated.verb_index = requested
     rotated.verb = rotated.verbs[requested]
-    rotated.last_activity_at = event.now_ms
-    rotated.verb_due_at = event.now_ms + VERB_IDLE_MS
+    rotated.last_activity_at = now_ms
+    rotated.verb_due_at = now_ms + VERB_IDLE_MS
     return rotated, { { type = "show_playful", verb = rotated.verb } }
 end
 
 local function flush_showing(state, completion, completion_pending)
     local actions = { { type = "hide" } }
-    append_staged_actions(actions, state.staged)
+    append_staged_actions(actions, state.staged_tail, state.staged_count)
     if completion_pending then
         actions[#actions + 1] = continuation_action(completion)
         return finish(state), actions
     end
     local released = copy_state(state)
     released.phase = "released"
-    released.staged = {}
+    released.staged_tail = nil
+    released.staged_count = 0
     return released, actions
 end
 
@@ -136,7 +150,7 @@ M.initial = function(opts)
         minimum_at = now_ms + REVEAL_DELAY_MS + MINIMUM_VISIBLE_MS,
         verb_due_at = now_ms + VERB_IDLE_MS,
         last_activity_at = now_ms,
-        staged = {},
+        staged_count = 0,
     }
 end
 
@@ -147,7 +161,10 @@ M.transition = function(state, event)
     end
 
     local event_type = event.type
-    local now_ms = event.now_ms or 0
+    if TIMED_EVENTS[event_type] then
+        assert(type(event.now_ms) == "number", event_type .. " event requires now_ms")
+    end
+    local now_ms = event.now_ms
 
     if event_type == "cancel" or event_type == "stale" or event_type == "invalid" then
         local actions = state.phase == "showing" and { { type = "hide" } } or {}
@@ -157,7 +174,7 @@ M.transition = function(state, event)
     if event_type == "failure" then
         local actions = state.phase == "showing" and { { type = "hide" } } or {}
         if event.owns_transcript then
-            append_staged_actions(actions, state.staged)
+            append_staged_actions(actions, state.staged_tail, state.staged_count)
             actions[#actions + 1] = { type = "surface_failure", error = event.error }
         end
         return finish(state), actions
@@ -198,17 +215,21 @@ M.transition = function(state, event)
     end
 
     if event_type == "activity" then
-        return rotate_verb(state, event)
+        return rotate_verb(state, event, now_ms)
     end
     if event_type == "idle" and now_ms >= state.verb_due_at then
-        return rotate_verb(state, event)
+        return rotate_verb(state, event, now_ms)
     end
     if event_type == "content" or event_type == "progress" then
         if now_ms >= state.minimum_at then
             return release_visible(state, event)
         end
         local staged = copy_state(state)
-        staged.staged[#staged.staged + 1] = staged_event(event)
+        staged.staged_tail = {
+            event = staged_event(event),
+            previous = state.staged_tail,
+        }
+        staged.staged_count = state.staged_count + 1
         return staged, {}
     end
     if event_type == "complete" then
@@ -224,7 +245,7 @@ M.transition = function(state, event)
         if state.completion_pending then
             return flush_showing(state, state.pending_completion, true)
         end
-        if #state.staged > 0 then
+        if state.staged_count > 0 then
             return flush_showing(state)
         end
     end

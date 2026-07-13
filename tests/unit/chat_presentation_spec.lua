@@ -30,7 +30,7 @@ describe("chat presentation controller", function()
             minimum_at = 2025,
             verb_due_at = 15025,
             last_activity_at = 25,
-            staged = {},
+            staged_count = 0,
         }, state)
     end)
 
@@ -46,7 +46,7 @@ describe("chat presentation controller", function()
         assert.are.equal("released", released.phase)
         assert.are.same({ { type = "emit_content", qid = "q", chunk = "hello" } }, actions)
         assert.are.equal("waiting", state.phase)
-        assert.are.same({}, state.staged)
+        assert.are.equal(0, state.staged_count)
     end)
 
     it("releases meaningful progress before reveal without showing", function()
@@ -79,11 +79,11 @@ describe("chat presentation controller", function()
         assert.are.same({ { type = "show_playful", verb = "brewing" } }, reveal_actions)
         assert.are.same({}, content_actions)
         assert.are.same({}, progress_actions)
-        assert.are.same({
-            { type = "content", qid = "q", chunk = "hello" },
-            { type = "progress", message = "Searching web... query" },
-        }, staged.staged)
-        assert.are.same({}, showing.staged)
+        assert.are.equal(2, staged.staged_count)
+        assert.are.equal("progress", staged.staged_tail.event.type)
+        assert.are.equal("content", staged.staged_tail.previous.event.type)
+        assert.are.equal(0, showing.staged_count)
+        assert.is_nil(showing.staged_tail)
     end)
 
     it("starts the minimum-visible window when a delayed reveal is delivered", function()
@@ -108,7 +108,8 @@ describe("chat presentation controller", function()
         local released, actions = transition(staged, { type = "minimum_due", now_ms = 2000 })
 
         assert.are.equal("released", released.phase)
-        assert.are.same({}, released.staged)
+        assert.are.equal(0, released.staged_count)
+        assert.is_nil(released.staged_tail)
         assert.are.same({
             { type = "hide" },
             { type = "emit_content", qid = "q", chunk = "one" },
@@ -131,6 +132,52 @@ describe("chat presentation controller", function()
             { type = "hide" },
             { type = "emit_content", qid = "q", chunk = "now" },
         }, actions)
+    end)
+
+    it("shares a persistent staged chain on O(1) append and visits each node once on flush", function()
+        local showing = select(1, reveal(initial()))
+        local previous = showing
+        for index = 1, 64 do
+            local appended = select(1, transition(previous, {
+                type = "content", now_ms = 1200, qid = "q", chunk = tostring(index),
+            }))
+            assert.are.equal(index, appended.staged_count)
+            assert.are.equal(previous.staged_tail, appended.staged_tail.previous)
+            assert.are.equal(index - 1, previous.staged_count)
+            previous = appended
+        end
+
+        local visits = {}
+        local tail = nil
+        for index = 1, 8 do
+            visits[index] = 0
+            local backing = {
+                event = { type = "content", qid = "q", chunk = tostring(index) },
+                previous = tail,
+            }
+            tail = setmetatable({}, {
+                __index = function(_, key)
+                    if key == "event" then
+                        visits[index] = visits[index] + 1
+                    end
+                    return backing[key]
+                end,
+            })
+        end
+        local instrumented = {}
+        for key, value in pairs(showing) do
+            instrumented[key] = value
+        end
+        instrumented.staged_tail = tail
+        instrumented.staged_count = 8
+
+        local released, actions = transition(instrumented, { type = "minimum_due", now_ms = 2000 })
+        assert.are.equal("released", released.phase)
+        assert.are.equal(9, #actions)
+        for index = 1, 8 do
+            assert.are.equal(tostring(index), actions[index + 1].chunk)
+            assert.are.equal(1, visits[index])
+        end
     end)
 
     it("keeps showing after minimum when no visible event or completion exists", function()
@@ -182,6 +229,12 @@ describe("chat presentation controller", function()
         assert.are.equal(2, unchanged.verb_index)
         assert.are.equal(29000, unchanged.verb_due_at)
         assert.are.same({}, actions)
+    end)
+
+    it("requires timestamps on timing-sensitive events", function()
+        assert.has_error(function()
+            transition(select(1, reveal(initial())), { type = "activity", verb_index = 2 })
+        end, "activity event requires now_ms")
     end)
 
     it("continues a tool-only completion immediately before reveal", function()
@@ -276,50 +329,61 @@ describe("chat presentation controller", function()
         assert.are.same({}, later_actions)
     end)
 
-    it("provider failure with ownership bypasses minimum and preserves staged output", function()
-        local showing = select(1, reveal(initial()))
-        local staged = select(1, transition(showing, {
-            type = "content", now_ms = 1200, qid = "q", chunk = "partial",
-        }))
-        local finished, actions = transition(staged, {
-            type = "failure", now_ms = 1300, owns_transcript = true, error = "transport failed",
-        })
-
-        assert.are.equal("finished", finished.phase)
-        assert.are.same({}, finished.staged)
-        assert.are.same({
-            { type = "hide" },
-            { type = "emit_content", qid = "q", chunk = "partial" },
-            { type = "surface_failure", error = "transport failed" },
-        }, actions)
-    end)
-
-    for _, terminal_type in ipairs({ "cancel", "stale", "invalid" }) do
-        it(terminal_type .. " hides and discards staged output", function()
-            local showing = select(1, reveal(initial()))
-            local staged = select(1, transition(showing, {
-                type = "content", now_ms = 1200, qid = "q", chunk = "discard me",
+    local terminal_cases = {
+        { name = "owned failure", event = { type = "failure", owns_transcript = true, error = "failed" } },
+        { name = "unowned failure", event = { type = "failure", owns_transcript = false, error = "failed" } },
+        { name = "cancel", event = { type = "cancel" } },
+        { name = "stale", event = { type = "stale" } },
+        { name = "invalid", event = { type = "invalid" } },
+    }
+    local phase_cases = {
+        { name = "waiting", make = function() return initial() end },
+        { name = "showing", make = function() return select(1, reveal(initial())) end },
+        { name = "released", make = function()
+            return select(1, transition(initial(), {
+                type = "content", now_ms = 500, qid = "q", chunk = "visible",
             }))
-            local finished, actions = transition(staged, { type = terminal_type, now_ms = 1300 })
+        end },
+    }
+    for _, phase_case in ipairs(phase_cases) do
+        for _, terminal_case in ipairs(terminal_cases) do
+            it(terminal_case.name .. " terminates " .. phase_case.name .. " with phase-appropriate actions", function()
+                local state = phase_case.make()
+                if phase_case.name == "showing" then
+                    state = select(1, transition(state, {
+                        type = "content", now_ms = 1200, qid = "q", chunk = "partial",
+                    }))
+                end
+                local event = {}
+                for key, value in pairs(terminal_case.event) do
+                    event[key] = value
+                end
+                event.now_ms = 1300
+                local finished, actions = transition(state, event)
 
-            assert.are.equal("finished", finished.phase)
-            assert.are.same({}, finished.staged)
-            assert.are.same({ { type = "hide" } }, actions)
-        end)
+                local expected = {}
+                if phase_case.name == "showing" then
+                    expected[#expected + 1] = { type = "hide" }
+                end
+                if terminal_case.event.owns_transcript then
+                    if phase_case.name == "showing" then
+                        expected[#expected + 1] = { type = "emit_content", qid = "q", chunk = "partial" }
+                    end
+                    expected[#expected + 1] = { type = "surface_failure", error = "failed" }
+                end
+                assert.are.equal("finished", finished.phase)
+                assert.are.equal(0, finished.staged_count)
+                assert.is_nil(finished.staged_tail)
+                assert.are.same(expected, actions)
+
+                local later, later_actions = transition(finished, {
+                    type = "content", now_ms = 1400, qid = "q", chunk = "late",
+                })
+                assert.are.equal(finished, later)
+                assert.are.same({}, later_actions)
+            end)
+        end
     end
-
-    it("a failure without ownership discards staged output", function()
-        local showing = select(1, reveal(initial()))
-        local staged = select(1, transition(showing, {
-            type = "content", now_ms = 1200, qid = "q", chunk = "discard me",
-        }))
-        local finished, actions = transition(staged, {
-            type = "failure", now_ms = 1300, owns_transcript = false, error = "stale failure",
-        })
-
-        assert.are.equal("finished", finished.phase)
-        assert.are.same({ { type = "hide" } }, actions)
-    end)
 
     it("events after a terminal transition are no-ops", function()
         local finished = select(1, transition(initial(), {
