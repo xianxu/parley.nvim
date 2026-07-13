@@ -7,7 +7,7 @@ created: 2026-07-13
 updated: 2026-07-13
 estimate_hours: 1.50
 started: 2026-07-13T14:51:27-07:00
-actual_hours: 1.76
+actual_hours: 2.03
 ---
 
 # Keep recursive progress visible above folds
@@ -99,6 +99,7 @@ implementation calibration is already reflected in each `impl=` value.
 ## Log
 
 ### 2026-07-13
+- 2026-07-13: closed — Two-round recursive tool-loop regressions prove the delayed spinner is outside all closed tool folds; staged output obeys its minimum and now has an exact one-occurrence oracle before provider error, semantic status follows the stream tip, and cancellation cleans timers/ownership/lease. Mapped specs, lint, and serialized full suite pass. Re-closing performs the required post-review-fix audit; the sole unchecked row is this active publish gate.; review verdict: SHIP
 - 2026-07-13: closed — Two-round recursive tool-loop regressions prove the delayed spinner is outside all closed tool folds, staged output obeys its minimum and flushes before provider error, semantic status follows the stream tip, and cancellation cleans timers/ownership/lease; mapped specs, lint, and serialized full suite pass. The sole unchecked row is this active close/publish/merge gate.; review verdict: FIX-THEN-SHIP
 
 Traced the missing UI through the production tool loop. `process_response`

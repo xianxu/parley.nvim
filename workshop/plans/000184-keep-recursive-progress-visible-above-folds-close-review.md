@@ -16,26 +16,24 @@
 ## Review
 
 ```verdict
-verdict: FIX-THEN-SHIP
+verdict: SHIP
 confidence: high
 ```
 
-The production fix and architecture passed review. One Important test-oracle gap remained: the post-minimum assertion proved staged output was present, but not that it flushed exactly once.
+The change fulfills issue #184 with a minimal spatial fix: recursive progress anchors to the model-derived separator outside Parley-generated folds, while existing temporal and writer-relocation behavior remains intact. No findings remain.
 
-## Finding
+## Strengths
 
-- `tests/integration/chat_respond_spec.lua`: add an exact occurrence or transcript-line assertion for the staged final answer after release.
-
-## Resolution
-
-The regression now counts the final answer in the rendered transcript and requires exactly one occurrence. The mapped response-progress suite is rerun before re-review.
+- Anchor and insertion share the canonical stream-block position; no fold-state query or duplicate scan was introduced.
+- The production-path regression drives two recursive tool rounds and checks the waiting third leg outside all four generated folds.
+- Terminal cases cover cancellation cleanup, partial-output-before-error ordering, fold stability, and exactly-once staged release.
+- The response-progress atlas accurately describes the placement contract; no README change is required because no user-invoked surface changed.
 
 ## Verified by reviewer
 
 - `make test-spec SPEC=chat/response_progress`
 - `make test-spec SPEC=chat/exchange_model`
 - `make lint` — zero warnings/errors across 265 files
-- `make test JOBS=1`
 - `git diff --check 4286ac3..HEAD`
 
-Architecture: `ARCH-DRY`, `ARCH-PURE`, and `ARCH-PURPOSE` passed. No README change is needed because no user-invoked surface changed.
+Architecture: `ARCH-DRY`, `ARCH-PURE`, and `ARCH-PURPOSE` passed.
