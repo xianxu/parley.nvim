@@ -1028,8 +1028,7 @@ M._compute_window_decorations = compute_window_decorations
 
 M.setup_buf_handler = function()
     local interview = require("parley.interview")
-    local skill_render = require("parley.skill_render")
-    local timezone_diagnostics = require("parley.timezone_diagnostics")
+    local buffer_lifecycle = require("parley.buffer_lifecycle")
     local gid = _parley.helpers.create_augroup("ParleyBufHandler", { clear = true })
 
     -- Register decoration provider: highlights are computed synchronously
@@ -1113,8 +1112,7 @@ M.setup_buf_handler = function()
             _parley.prep_chat(buf, file_name)
             _parley.display_agent(buf, file_name)
             interview.highlight_timestamps(buf)
-            timezone_diagnostics.refresh_buffer(buf)
-            skill_render.refresh_footnote_diagnostics(buf)
+            buffer_lifecycle.setup(buf)
             _parley.highlight_chat_branch_refs(buf)
             -- Disable markdown strikethrough in chat buffers — tilde (~) in file
             -- paths like ~/workspace/file.md triggers false strikethrough rendering.
@@ -1126,8 +1124,7 @@ M.setup_buf_handler = function()
             _parley.setup_markdown_keymaps(buf)
             _parley.highlight_chat_branch_refs(buf)
             interview.highlight_timestamps(buf)
-            timezone_diagnostics.refresh_buffer(buf)
-            skill_render.refresh_footnote_diagnostics(buf)
+            buffer_lifecycle.setup(buf)
             -- Disable native markdown strikethrough so only the 🤖-gated
             -- review-deletion strike (🤖~X~, rendered in compute_markdown_highlights)
             -- shows — a bare ~X~ or a `~/path` tilde must not cross out text.
@@ -1148,24 +1145,9 @@ M.setup_buf_handler = function()
         if _parley.not_chat(buf, file_name) == nil then
             _parley.display_agent(buf, file_name)
             interview.highlight_timestamps(buf)
-            timezone_diagnostics.refresh_buffer(buf)
-            skill_render.refresh_footnote_diagnostics(buf)
         -- Handle non-chat markdown files
         elseif _parley.is_markdown(buf, file_name) then
             interview.highlight_timestamps(buf)
-            timezone_diagnostics.refresh_buffer(buf)
-            skill_render.refresh_footnote_diagnostics(buf)
-        end
-    end, gid)
-
-    _parley.helpers.autocmd({ "TextChanged", "TextChangedI", "BufWritePost" }, nil, function(event)
-        local buf = event.buf
-        if not vim.api.nvim_buf_is_valid(buf) then
-            return
-        end
-        if _parley._parley_bufs[buf] then
-            timezone_diagnostics.refresh_buffer(buf)
-            skill_render.refresh_footnote_diagnostics(buf)
         end
     end, gid)
 
@@ -1189,7 +1171,6 @@ M.setup_buf_handler = function()
             end
         end
         interview.clear_match_cache(buf)
-        timezone_diagnostics.clear(buf)
         if _parley._branch_topic_timers and _parley._branch_topic_timers[buf] then
             stop_and_close_timer(_parley._branch_topic_timers[buf])
             _parley._branch_topic_timers[buf] = nil

@@ -129,6 +129,13 @@ describe("chat_respond: completion callback", function()
     end)
 
     it("accesses headers correctly when topic is not '?'", function()
+        local lifecycle = require("parley.buffer_lifecycle")
+        local original_finalize = lifecycle.finalize_mutated_api_leg
+        local finalize_count = 0
+        lifecycle.finalize_mutated_api_leg = function(...)
+            finalize_count = finalize_count + 1
+            return original_finalize(...)
+        end
         -- Create a chat file with a normal topic (does not trigger topic generation)
         local chat_content = [[
 # topic: Normal Topic
@@ -153,11 +160,12 @@ describe("chat_respond: completion callback", function()
         parley.dispatcher.query = function(buf, provider, payload, handler, completion_callback)
             local mock_qid = "mock_qid_" .. tostring(math.random(100000))
             parley.tasker.set_query(mock_qid, {
-                response = "Lua is a scripting language.",
+                response = "Finished at 2026-07-12T12:00:00Z.",
                 buf = buf
             })
 
             vim.schedule(function()
+                handler(mock_qid, "Finished at 2026-07-12T12:00:00Z.")
                 completion_callback(mock_qid)
                 completion_called = true
             end)
@@ -170,9 +178,14 @@ describe("chat_respond: completion callback", function()
 
         -- Wait for callback
         vim.wait(100, function() return completion_called end, 10)
+        lifecycle.finalize_mutated_api_leg = original_finalize
 
         -- Assert no error
         assert.is_true(success, "chat_respond should not error: " .. tostring(err))
+        assert.equals(1, finalize_count, "normal API leg should finalize once")
+        assert.equals(1, #vim.diagnostic.get(buf, {
+            namespace = require("parley.timezone_diagnostics").diag_namespace(),
+        }), "normal API leg should leave real UTC diagnostics current")
     end)
 
     it("completion callback can access parsed_chat from outer scope", function()
@@ -224,6 +237,34 @@ describe("chat_respond: completion callback", function()
 
         assert.is_true(success, "chat_respond should not error: " .. tostring(err))
         assert.is_nil(callback_error, "Completion callback should not error: " .. tostring(callback_error))
+    end)
+
+    it("finalizes an aborted API leg after its response shell mutation", function()
+        vim.fn.writefile(vim.split([[
+# topic: Abort
+- file: test.md
+---
+
+💬: Stop here
+]], "\n"), test_file)
+        vim.cmd("edit " .. test_file)
+        vim.api.nvim_win_set_cursor(0, { 6, 0 })
+
+        local lifecycle = require("parley.buffer_lifecycle")
+        local original_finalize = lifecycle.finalize_mutated_api_leg
+        local finalize_count = 0
+        lifecycle.finalize_mutated_api_leg = function(...)
+            finalize_count = finalize_count + 1
+            return original_finalize(...)
+        end
+        parley.dispatcher.query = function(_, _, _, _, _, _, _, on_abort)
+            on_abort("expected abort")
+        end
+
+        parley.chat_respond({ range = 0 })
+        vim.wait(100, function() return finalize_count == 1 end, 10)
+        lifecycle.finalize_mutated_api_leg = original_finalize
+        assert.equals(1, finalize_count)
     end)
 end)
 
@@ -1186,6 +1227,13 @@ describe("chat_respond: pending request transcript drift", function()
     end)
 
     it("allows recursive tool resubmit when the transcript does not drift", function()
+        local lifecycle = require("parley.buffer_lifecycle")
+        local original_finalize = lifecycle.finalize_mutated_api_leg
+        local finalize_count = 0
+        lifecycle.finalize_mutated_api_leg = function(...)
+            finalize_count = finalize_count + 1
+            return original_finalize(...)
+        end
         local buf = open_simple_chat()
         parley._state.agent = "ToolSonnet"
         local scheduled = {}
@@ -1217,8 +1265,10 @@ describe("chat_respond: pending request transcript drift", function()
         parley.chat_respond({ range = 0 })
         captured_completion(qid)
         run_scheduled_until(scheduled, 1)
+        lifecycle.finalize_mutated_api_leg = original_finalize
 
         assert.equals(2, call_count, "valid recursive respond should call dispatcher again")
+        assert.equals(1, finalize_count, "completed recursive API leg should finalize once")
         assert.is_true(buffer_contains(buf, "🔧: read_file id=toolu_RECURSE_OK"))
         assert.is_true(buffer_contains(buf, "📎: read_file id=toolu_RECURSE_OK"))
     end)

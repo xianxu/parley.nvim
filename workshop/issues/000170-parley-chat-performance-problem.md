@@ -243,7 +243,7 @@ threshold in this issue.
 
 - [ ] Build the reusable report-only headless performance framework and capture
       the baseline, including observer and work-counter validity tests.
-- [ ] Remove full-buffer diagnostic work from `TextChangedI` and test every
+- [x] Remove full-buffer diagnostic work from `TextChangedI` and test every
       specified convergence trigger.
 - [ ] Bound decoration-provider structural work and test scroll, multi-window,
       generation, and teardown behavior.
@@ -367,3 +367,23 @@ The baseline exposes the intended current behavior before optimization:
 timezone and footnote refreshes perform full-buffer reads, and decoration work
 and latency grow sharply with document size. `ARCH-PURPOSE`: these observed
 proportional/full reads are the costs subsequent tasks must remove.
+
+### 2026-07-12 — diagnostics removed from the keystroke path
+
+`DiagnosticRefresh` now synchronously orders timezone then managed-footnote
+refresh, while neutral `BufferLifecycle` owns `InsertLeave`, `TextChanged`,
+`BufWritePost`, `BufEnter`, `WinEnter`, stream-leg finalization, and teardown.
+There is no `TextChangedI` diagnostic consumer. Real-buffer tests prove
+diagnostics remain stale through that insert event and are current before each
+named convergence autocmd returns; footnote teardown preserves unrelated
+diagnostics in the shared skill namespace. Normal, recursive-tool, and abort
+API legs each converge once after mutation, while the no-mutation coordinator
+path converges zero times (`ARCH-PURE`, `ARCH-DRY`).
+
+Focused evidence: diagnostic refresh 3/3, lifecycle 4/4, real-buffer diagnostic
+integration 7/7, and chat-response integration 31/31. `make -f
+Makefile.parley perf` completed with 5 warmups/20 samples: inclusive
+`edit_total.full_buffer_reads` fell from the baseline 6/4/4 at 100/1,000/5,000
+lines to 2/2/2; the two remaining reads are decoration work assigned to Tasks
+5–6, so diagnostic full-buffer reads during the measured edit are zero. Lint
+passed with 0 warnings/errors across 256 files and `git diff --check` passed.

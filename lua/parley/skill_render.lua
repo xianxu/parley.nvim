@@ -166,6 +166,23 @@ function M.refresh_footnote_diagnostics(buf, opts)
     vim.diagnostic.set(diag_ns_id, buf, diagnostics)
 end
 
+--- Clear only managed-footnote diagnostics/highlights. Other diagnostics in
+--- the shared skill namespace belong to live edit explanations and survive.
+function M.clear_footnote_diagnostics(buf)
+    ensure_namespaces()
+    if not vim.api.nvim_buf_is_valid(buf) then
+        return
+    end
+    vim.api.nvim_buf_clear_namespace(buf, footnote_hl_ns_id, 0, -1)
+    local diagnostics = {}
+    for _, existing in ipairs(vim.diagnostic.get(buf, { namespace = diag_ns_id })) do
+        if not is_footnote_diagnostic(existing) then
+            table.insert(diagnostics, existing)
+        end
+    end
+    vim.diagnostic.set(diag_ns_id, buf, diagnostics)
+end
+
 --- Attach INFO diagnostics from edit explanations. Each diagnostic spans the
 --- edit's line range (lnum..end_lnum) so "cursor in the region" matches, and its
 --- message is hard-wrapped to the window's usable width for `virtual_lines`

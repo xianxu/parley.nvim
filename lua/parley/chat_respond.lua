@@ -1546,6 +1546,18 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             stream_block_idx = stream_block_idx,
             recursion = is_recursion,
         })
+        -- Every dispatched API leg has already inserted its response shell.
+        -- Finalization is guarded so normal, recursive, and abort terminals all
+        -- converge exactly once, after their last transcript mutation.
+        local api_leg_mutated = true
+        local api_leg_finalized = false
+        local function finalize_mutated_api_leg()
+            if api_leg_finalized then
+                return
+            end
+            api_leg_finalized = true
+            require("parley.buffer_lifecycle").finalize_mutated_api_leg(buf, api_leg_mutated)
+        end
         local lease_notice_sent = false
         local function invalidate_pending_request(lease_reason)
             if not lease_notice_sent then
@@ -1787,6 +1799,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             vim.schedule(function()
                 clear_progress_indicator(nil)
                 collapse_empty_answer()
+                finalize_mutated_api_leg()
                 chat_lease.clear(buf, lease_generation)
                 vim.notify(msg or "parley: request aborted", vim.log.levels.WARN)
             end)
@@ -1801,9 +1814,11 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             vim.schedule_wrap(function(qid)
                 local qt = _parley.tasker.get_query(qid)
                 if not qt then
+                    finalize_mutated_api_leg()
                     return
                 end
                 if not lease_valid() then
+                    finalize_mutated_api_leg()
                     chat_lease.clear(buf, lease_generation)
                     return
                 end
@@ -1829,6 +1844,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                     }, model, target_idx)
                     lease_commit()
                     if outcome == "recurse" then
+                        finalize_mutated_api_leg()
                         -- Re-parse the (now updated) buffer and submit
                         -- again. force=true bypasses the is_busy check
                         -- that would otherwise reject an immediate
@@ -1975,6 +1991,8 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                 -- Refresh interview timestamps (decoration provider handles chat highlights)
                 local interview = require("parley.interview")
                 interview.highlight_timestamps(buf)
+
+                finalize_mutated_api_leg()
 
                 vim.cmd("doautocmd User ParleyDone")
 
