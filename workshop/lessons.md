@@ -184,3 +184,7 @@
 
 - **Repair authorization for a writer-invalidated UI anchor must be established immediately before mutation and consumed in the same uninterrupted callback.** #183 intentionally placed progress on the mutable stream tip, whose replacement invalidates its extmark. A first implementation repaired any missing mark afterward, which could revive one invalidated earlier by an external edit. Rule: validate the live mark immediately before the write, grant a one-use authorization, then mutate and relocate synchronously; never infer the cause of invalidation after the fact. Test both expected writer invalidation and pre-existing external invalidation through the real queued stream path.
 - **Normalize generated boundary-review sidecars before committing them.** The #183 re-review produced an 18,000-line raw terminal transcript with ANSI escapes and trailing whitespace, obscuring the actual verdict and failing `git diff --check`. Rule: retain durable metadata, findings, resolutions, and evidence in a concise sidecar; discard terminal plumbing and run `git diff --check` on the whole review window before publishing.
+
+## 2026-07-13 (#184)
+
+- **An “exactly once” requirement needs a cardinality oracle, not a presence oracle.** The folded-recursion regression proved staged output appeared after the spinner minimum, but `buffer_contains` would also pass if the release duplicated that output. Rule: when the contract says once/exactly-once/idempotent, count occurrences or assert the exact resulting sequence after the terminal transition.
