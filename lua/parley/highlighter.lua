@@ -1039,40 +1039,43 @@ M.setup_buf_handler = function()
     })
 
     -- Setup functions that only need to run when buffer is first loaded or entered
-    _parley.helpers.autocmd({ "BufEnter" }, nil, function(event)
-        local buf = event.buf
+    vim.api.nvim_create_autocmd({ "BufEnter" }, {
+        group = gid,
+        callback = function(event)
+            local buf = event.buf
 
-        if not vim.api.nvim_buf_is_valid(buf) then
-            return
-        end
+            if not vim.api.nvim_buf_is_valid(buf) then
+                return
+            end
 
-        local file_name = vim.api.nvim_buf_get_name(buf)
+            local file_name = vim.api.nvim_buf_get_name(buf)
 
-        -- Handle chat files
-        if _parley.not_chat(buf, file_name) == nil then
-            _parley._parley_bufs[buf] = "chat"
-            _parley.prep_chat(buf, file_name)
-            _parley.display_agent(buf, file_name)
-            interview.highlight_timestamps(buf)
-            buffer_lifecycle.setup(buf)
-            _parley.highlight_chat_branch_refs(buf)
-            -- Disable markdown strikethrough in chat buffers — tilde (~) in file
-            -- paths like ~/workspace/file.md triggers false strikethrough rendering.
-            M.disable_strikethrough(buf)
-        -- Handle non-chat markdown files
-        elseif _parley.is_markdown(buf, file_name) then
-            _parley._parley_bufs[buf] = "markdown"
-            _parley.prep_md(buf)
-            _parley.setup_markdown_keymaps(buf)
-            _parley.highlight_chat_branch_refs(buf)
-            interview.highlight_timestamps(buf)
-            buffer_lifecycle.setup(buf)
-            -- Disable native markdown strikethrough so only the 🤖-gated
-            -- review-deletion strike (🤖~X~, rendered in compute_markdown_highlights)
-            -- shows — a bare ~X~ or a `~/path` tilde must not cross out text.
-            M.disable_strikethrough(buf)
-        end
-    end, gid)
+            -- Handle chat files
+            if _parley.not_chat(buf, file_name) == nil then
+                _parley._parley_bufs[buf] = "chat"
+                _parley.prep_chat(buf, file_name)
+                _parley.display_agent(buf, file_name)
+                interview.highlight_timestamps(buf)
+                buffer_lifecycle.setup(buf)
+                _parley.highlight_chat_branch_refs(buf)
+                -- Disable markdown strikethrough in chat buffers — tilde (~) in file
+                -- paths like ~/workspace/file.md triggers false strikethrough rendering.
+                M.disable_strikethrough(buf)
+            -- Handle non-chat markdown files
+            elseif _parley.is_markdown(buf, file_name) then
+                _parley._parley_bufs[buf] = "markdown"
+                _parley.prep_md(buf)
+                _parley.setup_markdown_keymaps(buf)
+                _parley.highlight_chat_branch_refs(buf)
+                interview.highlight_timestamps(buf)
+                buffer_lifecycle.setup(buf)
+                -- Disable native markdown strikethrough so only the 🤖-gated
+                -- review-deletion strike (🤖~X~, rendered in compute_markdown_highlights)
+                -- shows — a bare ~X~ or a `~/path` tilde must not cross out text.
+                M.disable_strikethrough(buf)
+            end
+        end,
+    })
 
     _parley.helpers.autocmd({ "WinEnter" }, nil, function(event)
         local buf = event.buf
@@ -1103,21 +1106,26 @@ M.setup_buf_handler = function()
         end,
     })
 
-    -- Clean up when buffers are deleted
-    _parley.helpers.autocmd({ "BufDelete", "BufUnload" }, nil, function(event)
-        local buf = event.buf
-        _parley._parley_bufs[buf] = nil
-        for winid, cache in pairs(_decor_cache) do
-            if cache.bufnr == buf then
-                _decor_cache[winid] = nil
+    -- Classification teardown must be synchronous too: a scheduled cleanup for
+    -- an unloaded buffer handle can otherwise erase a new entry's classification
+    -- after Neovim reuses that numeric handle.
+    vim.api.nvim_create_autocmd({ "BufDelete", "BufUnload" }, {
+        group = gid,
+        callback = function(event)
+            local buf = event.buf
+            _parley._parley_bufs[buf] = nil
+            for winid, cache in pairs(_decor_cache) do
+                if cache.bufnr == buf then
+                    _decor_cache[winid] = nil
+                end
             end
-        end
-        interview.clear_match_cache(buf)
-        if _parley._branch_topic_timers and _parley._branch_topic_timers[buf] then
-            stop_and_close_timer(_parley._branch_topic_timers[buf])
-            _parley._branch_topic_timers[buf] = nil
-        end
-    end, gid)
+            interview.clear_match_cache(buf)
+            if _parley._branch_topic_timers and _parley._branch_topic_timers[buf] then
+                stop_and_close_timer(_parley._branch_topic_timers[buf])
+                _parley._branch_topic_timers[buf] = nil
+            end
+        end,
+    })
 end
 
 return M

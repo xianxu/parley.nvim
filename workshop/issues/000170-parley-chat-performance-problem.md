@@ -606,3 +606,22 @@ prune abort and empty output), `chat_respond_spec.lua` passed 33/33 (including
 both response-leg exactly-once cases), `make -f Makefile.parley perf` passed all
 structural gates, and `make -f Makefile.parley test JOBS=1` passed lint with 0
 warnings/errors across 259 files plus every unit/integration/architecture spec.
+
+2026-07-12: third close review found first-entry convergence was accidentally
+deferred: `highlighter.setup_buf_handler` registered its production `BufEnter`
+classifier through the generic scheduled helper, so the first event returned
+before lifecycle installation. New real-entry chat and Markdown regressions
+failed with no classification, diagnostics, or structure immediately after the
+event. Registering only that classifier directly makes lifecycle hydration
+synchronous while preserving its existing preparation behavior (`ARCH-PURPOSE`,
+Root Cause). The first performance rerun exposed the paired teardown race:
+scheduled unload cleanup erased a new classification after numeric buffer-handle
+reuse and suppressed decoration redraw. Making classification teardown direct
+restored the gate; `make perf` passed with 100→5,000 medians of 2.45→2.63 ms
+inclusive and 0.25→0.36 ms isolated redraw.
+
+Correction verification: production highlighting passed 47/47, diagnostic
+lifecycle passed 9/9, buffer lifecycle passed 6/6, and diagnostic refresh
+passed 3/3. `make -f Makefile.parley test JOBS=1` passed lint with 0
+warnings/errors across 259 files and all unit/integration/architecture specs;
+`git diff --check` passed.

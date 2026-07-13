@@ -23,6 +23,9 @@ Pending responses also hold a per-buffer chat lease (`lua/parley/chat_lease.lua`
 events. It invokes diagnostics and highlight structure independently on
 `InsertLeave`, normal `TextChanged`, `BufWritePost`, `BufEnter`, and `WinEnter`;
 chat-response finalization enters the same coordinator after a mutated API leg.
+The production `BufEnter` classifier installs the lifecycle synchronously, so a
+new chat or Markdown buffer is fully converged before its first entry event
+returns; unrelated helper-managed UI events may remain scheduled.
 `BufUnload`/`BufDelete` tears down lifecycle, structure, and LineReader state so
 obsolete callbacks and reused buffer handles are harmless.
 

@@ -1242,3 +1242,69 @@ describe("markdown chat reference rendering", function()
         assert.equals("🌿: " .. chat_path .. ": Actual topic", line)
     end)
 end)
+
+describe("production first-entry convergence", function()
+    after_each(function()
+        cleanup_extra_windows()
+        cleanup_bufs()
+    end)
+
+    for _, case in ipairs({
+        {
+            name = "chat",
+            path = function() return tmp_dir .. "/2026-07-12.12-34-56.789.md" end,
+            lines = {
+                "---",
+                "topic: First entry",
+                "file: 2026-07-12.12-34-56.789.md",
+                "---",
+                "",
+                "💬: at 2026-07-12T12:34:56Z",
+            },
+        },
+        {
+            name = "markdown",
+            path = function() return vim.fn.tempname() .. ".md" end,
+            lines = { "# Note", "at 2026-07-12T12:34:56Z" },
+        },
+    }) do
+        it("hydrates an unattached " .. case.name .. " buffer before BufEnter returns", function()
+            local buf = vim.api.nvim_create_buf(true, true)
+            vim.api.nvim_buf_set_name(buf, case.path())
+            vim.api.nvim_buf_set_lines(buf, 0, -1, false, case.lines)
+
+            parley.setup_buf_handler()
+            vim.api.nvim_exec_autocmds("BufEnter", { buffer = buf })
+
+            assert.equals(case.name, parley._parley_bufs[buf])
+            local cache = require("parley.highlighter")._structure_cache(buf)
+            assert.is_truthy(cache)
+            assert.is_true(cache.renderable)
+            local timezone = require("parley.timezone_diagnostics")
+            assert.equals(1, #vim.diagnostic.get(buf, { namespace = timezone.diag_namespace() }))
+        end)
+    end
+
+    it("keeps classification after an edit reuses an unloaded buffer handle", function()
+        local source = vim.fn.tempname() .. ".txt"
+        local chat_path = tmp_dir .. "/2026-07-12.12-34-56.790.md"
+        vim.fn.writefile({ "source" }, source)
+        vim.fn.writefile({
+            "---", "topic: Reused entry", "file: 2026-07-12.12-34-56.790.md", "---", "",
+            "💬: at 2026-07-12T12:34:56Z",
+        }, chat_path)
+        parley.setup_buf_handler()
+        vim.cmd("edit " .. vim.fn.fnameescape(source))
+        vim.cmd("edit " .. vim.fn.fnameescape(chat_path))
+        local buf = vim.api.nvim_get_current_buf()
+
+        vim.wait(20, function() return false end, 1)
+
+        assert.equals("chat", parley._parley_bufs[buf])
+        local cache = require("parley.highlighter")._structure_cache(buf)
+        assert.is_truthy(cache)
+        assert.is_true(cache.renderable)
+        pcall(vim.fn.delete, source)
+        pcall(vim.fn.delete, chat_path)
+    end)
+end)

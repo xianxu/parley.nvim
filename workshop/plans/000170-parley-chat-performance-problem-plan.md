@@ -684,3 +684,19 @@ empty-output regressions, and made the prune callback return quietly on a nil
 topic, matching the already guarded response leg and preserving exactly-once
 finalization. Added a README developer entry pointing to the detailed
 `make perf` documentation.
+
+### 2026-07-12 — synchronous production first entry
+
+Reason: the third close review found that the production `BufEnter` classifier
+was registered through `_parley.helpers.autocmd`, whose `vim.schedule_wrap`
+returned before chat/Markdown classification and `BufferLifecycle.setup`.
+Existing lifecycle tests pre-installed the coordinator and did not exercise the
+first real production entry boundary.
+
+Delta: the production `BufEnter` classifier now uses a direct synchronous
+autocmd while retaining its existing classification, preparation, keymap,
+spell, highlight, and lifecycle body. Classification teardown is synchronous
+as well, preventing a queued unload callback from erasing a newly reused buffer
+handle after entry. A real-entry integration matrix creates
+unattached named chat and Markdown buffers and requires diagnostics plus a
+renderable structure immediately when `nvim_exec_autocmds` returns.
