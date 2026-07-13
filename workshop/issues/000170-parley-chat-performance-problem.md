@@ -465,3 +465,6 @@ Attachment/build counters prove idempotent setup and exactly one new pair after
 each legitimate reentry. An integrated candidate-failure case proves the prior
 cache stays dirty/unrenderable, notification and synchronous propagation occur,
 and lifecycle retry swaps a complete new candidate.
+Repeated real registered `BufEnter` callbacks also retain exactly one effective
+build and attachment while the cache is clean; structural dirty state remains
+the sole trigger for convergence rebuilding.

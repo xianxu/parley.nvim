@@ -607,6 +607,8 @@ describe("decoration provider cache", function()
         parley._parley_bufs[buf] = "chat"
         assert.is_truthy(highlighter.rebuild_structure(buf))
         local prior = highlighter._structure_cache(buf).structure
+        vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "🧠: structural replacement" })
+        assert.is_true(highlighter._structure_cache(buf).dirty)
         local original = model.build
         model.build = function() error("forced rebuild failure") end
         local rebuilt, err = highlighter.rebuild_structure(buf)
@@ -747,6 +749,8 @@ describe("decoration provider cache", function()
             end
             lifecycle.setup(buf)
             lifecycle.setup(buf)
+            handlers.BufEnter({ buf = buf, event = "BufEnter" })
+            handlers.BufEnter({ buf = buf, event = "BufEnter" })
             vim.api.nvim_buf_attach = original_attach
             assert.equals(1, attaches, event_name)
             assert.equals(1, builds, event_name)

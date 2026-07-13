@@ -898,6 +898,10 @@ end
 
 function M.rebuild_structure(buf)
     if not vim.api.nvim_buf_is_valid(buf) then return nil, "invalid buffer" end
+    local existing = structure_caches[buf]
+    if existing and existing.renderable and not existing.dirty then
+        return existing.structure
+    end
     local ok, candidate = pcall(build_structure, buf)
     if not ok then
         local cache = structure_caches[buf]
