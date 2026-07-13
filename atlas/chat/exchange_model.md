@@ -54,6 +54,7 @@ Because the model is live state, `chat_respond` protects every pending async wri
 | `grow_question(k, delta)` | Question grew (e.g., raw_request_fence) |
 | `block_start(k, b)` | 0-indexed line where block content starts |
 | `block_end(k, b)` | 0-indexed last line of block |
+| `last_nonempty_block_end(k)` | Last visible block line, or `nil` when none is visible |
 | `append_pos(k)` | Where the next block would go |
 | `exchange_start(k)` | Where exchange k begins |
 | `exchange_total_size(k)` | Total lines in exchange k |

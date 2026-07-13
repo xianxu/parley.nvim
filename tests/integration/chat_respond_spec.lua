@@ -56,6 +56,12 @@ local function pending_virtual_text(buf)
     return chunks and chunks[1] and chunks[1][1] and chunks[1][1][1] or nil
 end
 
+local function pending_mark(buf)
+    local ns = vim.api.nvim_get_namespaces().parley_chat_pending
+    if not ns then return nil end
+    return vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })[1]
+end
+
 local function pending_runtime()
     local runtime = { now = 0, queue = {}, timers = {} }
     runtime.clock = { now_ms = function() return runtime.now end }
@@ -778,6 +784,12 @@ describe("chat_respond: buffer state after completion", function()
         assert.is_true(vim.wait(1050, function()
             return ns and #vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true }) == 1
         end, 10))
+        local lines_before_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+        local agent_row
+        for index, line in ipairs(lines_before_content) do
+            if line:match("^🤖:") then agent_row = index - 1 end
+        end
+        assert.equals(agent_row, pending_mark(buf)[2], "fresh progress must begin below the agent header")
         assert.is_true(vim.wait(300, function() return completion_called end, 10))
         assert.is_false(buffer_contains(buf, "Release notes summary"),
             "content received during minimum must stay staged")
@@ -884,6 +896,8 @@ describe("chat_respond: buffer state after completion", function()
         local buf = vim.api.nvim_get_current_buf()
         vim.api.nvim_win_set_cursor(0, { 6, 0 })
         local finish
+        local write
+        local qid = "qid_remote_status"
         local runtime = pending_runtime()
         require("parley.chat_pending").start = function(opts)
             opts.clock, opts.scheduler = runtime.clock, runtime.scheduler
@@ -891,8 +905,8 @@ describe("chat_respond: buffer state after completion", function()
         end
 
         parley.dispatcher.query = function(buf_arg, _provider, _payload, handler, completion_callback,
-                _callback, progress_callback)
-            local qid = "qid_remote_status"
+            _callback, progress_callback)
+            write = handler
             parley.tasker.set_query(qid, { response = "answer", raw_response = "", buf = buf_arg })
             handler(qid, "answer")
             progress_callback(qid, { message = "Searching web...", text = "release notes" })
@@ -905,9 +919,75 @@ describe("chat_respond: buffer state after completion", function()
             return buffer_contains(buf, "answer")
                 and pending_virtual_text(buf) == "Searching web... release notes"
         end, 10), vim.inspect({ text = pending_virtual_text(buf), lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false) }))
+        local first_mark = pending_mark(buf)
+        local first_mark_id = first_mark[1]
+        local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+        local answer_row
+        for index, line in ipairs(lines) do
+            if line == "answer" then answer_row = index - 1 end
+        end
+        assert.equals(answer_row, first_mark[2])
+
+        vim.api.nvim_buf_set_lines(buf, 0, 0, false, { "inserted above response" })
+        write(qid, "\nsecond\nthird")
+        runtime:drain()
+        assert.is_true(vim.wait(500, function()
+            return buffer_contains(buf, "third") and pending_mark(buf)
+                and pending_mark(buf)[2] > answer_row
+        end, 10))
+        local moved_mark = pending_mark(buf)
+        local moved_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+        assert.equals(first_mark_id, moved_mark[1])
+        assert.equals("Searching web... release notes", pending_virtual_text(buf))
+        assert.equals("third", moved_lines[moved_mark[2] + 1])
         finish()
         runtime:drain()
         assert.is_true(vim.wait(300, function() return pending_virtual_text(buf) == nil end, 10))
+    end)
+
+    it("does not revive externally invalidated progress for a queued stream write", function()
+        local chat_content = [[
+# topic: External invalidation
+- file: test.md
+---
+
+💬: stream
+]]
+        vim.fn.writefile(vim.split(chat_content, "\n"), test_file)
+        vim.cmd("edit " .. test_file)
+        local buf = vim.api.nvim_get_current_buf()
+        vim.api.nvim_win_set_cursor(0, { 6, 0 })
+        local runtime = pending_runtime()
+        require("parley.chat_pending").start = function(opts)
+            opts.clock, opts.scheduler = runtime.clock, runtime.scheduler
+            return canonical_pending_start(opts)
+        end
+        local write
+        local qid = "qid_external_invalidation"
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, handler,
+                _completion_callback, _callback, progress_callback)
+            write = handler
+            parley.tasker.set_query(qid, { response = "answer late", raw_response = "", buf = buf_arg })
+            handler(qid, "answer")
+            progress_callback(qid, { message = "Reasoning" })
+        end
+
+        parley.chat_respond({ range = 0 })
+        runtime:drain()
+        assert.is_true(vim.wait(500, function()
+            return buffer_contains(buf, "answer") and pending_virtual_text(buf) == "Reasoning"
+        end, 10))
+        local mark = pending_mark(buf)
+        vim.api.nvim_buf_set_lines(buf, mark[2], mark[2] + 1, false, { "externally replaced" })
+
+        write(qid, " late")
+        runtime:drain()
+        assert.is_true(vim.wait(500, function()
+            return not require("parley.chat_pending").is_active(buf)
+        end, 10))
+        assert.is_nil(pending_mark(buf))
+        assert.is_true(buffer_contains(buf, "externally replaced"))
+        assert.is_false(buffer_contains(buf, "answer late"))
     end)
 
     it("keeps topic-generation fallback outside playful chat sessions", function()
@@ -1248,6 +1328,13 @@ describe("chat_respond: pending request transcript drift", function()
         assert.is_true(vim.wait(1300, function()
             return starts == 2 and (pending_virtual_text(buf) or ""):match(" cooking$") ~= nil
         end, 10))
+        local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+        local last_nonempty_row
+        for index, line in ipairs(lines) do
+            if line:match("%S") then last_nonempty_row = index - 1 end
+        end
+        assert.equals(last_nonempty_row, pending_mark(buf)[2],
+            "recursive progress must begin below the last existing tool/result content")
         pending.start = original_start
     end)
 

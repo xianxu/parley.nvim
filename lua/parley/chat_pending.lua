@@ -139,6 +139,25 @@ M.start = function(opts)
         session.playful_verb = nil
     end
 
+    local function set_mark(text, row, col)
+        local ok, mark_id = pcall(vim.api.nvim_buf_set_extmark, session.buf, namespace,
+            row, col, {
+                id = session.extmark_id,
+                virt_lines = { { { text, "Comment" } } },
+                virt_lines_above = false,
+                invalidate = true,
+            })
+        if not ok then
+            return false
+        end
+        session.extmark_id = mark_id
+        session.extmark_hidden = false
+        session.last_mark_row = row
+        session.last_mark_col = col
+        session.visible_text = text
+        return true
+    end
+
     local function render(text)
         if not vim.api.nvim_buf_is_valid(session.buf) then
             return false
@@ -158,22 +177,7 @@ M.start = function(opts)
                 return false
             end
         end
-        local ok, mark_id = pcall(vim.api.nvim_buf_set_extmark, session.buf, namespace,
-            row, col, {
-                id = session.extmark_id,
-                virt_lines = { { { text, "Comment" } } },
-                virt_lines_above = false,
-                invalidate = true,
-            })
-        if not ok then
-            return false
-        end
-        session.extmark_id = mark_id
-        session.extmark_hidden = false
-        session.last_mark_row = row
-        session.last_mark_col = col
-        session.visible_text = text
-        return true
+        return set_mark(text, row, col)
     end
 
     local function render_playful()
@@ -380,6 +384,60 @@ M.start = function(opts)
             end
             dispatch(event_factory(), context)
         end)
+    end
+
+    -- Validate immediately before the stream writer mutates the pending line.
+    -- Since before_write, mutation, and tip_written share one scheduled callback,
+    -- this authorization can only cover invalidation caused by that mutation.
+    session.before_write = function(_self)
+        session.tip_repair_authorized = false
+        if session.finished then
+            -- Reducer actions may already have emitted staged content into the
+            -- scheduled stream writer before finish hid the presentation.
+            return session.visible_text == nil
+        end
+        if not vim.api.nvim_buf_is_valid(session.buf) then
+            dispatch({ type = "invalid" })
+            return false
+        end
+        if session.visible_text then
+            local position = vim.api.nvim_buf_get_extmark_by_id(
+                session.buf, namespace, session.extmark_id, { details = true })
+            if #position < 2 or (position[3] and position[3].invalid) then
+                dispatch({ type = "invalid" })
+                return false
+            end
+        end
+        session.tip_repair_authorized = true
+        return true
+    end
+
+    -- Called synchronously from dispatcher.create_handler's scheduled writer.
+    -- The pending stream line may have just invalidated this extmark; repaint it
+    -- before the writer yields so queued frame/progress work never sees a gap.
+    session.tip_written = function(_self, last_written_line_0)
+        local repair_authorized = session.tip_repair_authorized
+        session.tip_repair_authorized = false
+        if session.finished or type(last_written_line_0) ~= "number"
+                or not vim.api.nvim_buf_is_valid(session.buf) then
+            return
+        end
+        session.anchor_line = last_written_line_0
+        session.last_mark_row = last_written_line_0
+        session.last_mark_col = 0
+        if not session.visible_text then
+            return
+        end
+        local position = vim.api.nvim_buf_get_extmark_by_id(
+            session.buf, namespace, session.extmark_id, { details = true })
+        local mark_is_valid = #position >= 2 and not (position[3] and position[3].invalid)
+        if not mark_is_valid and not repair_authorized then
+            dispatch({ type = "invalid" })
+            return
+        end
+        if not set_mark(session.visible_text, last_written_line_0, 0) then
+            dispatch({ type = "invalid" })
+        end
     end
 
     session.activity = function(_self, _qid)

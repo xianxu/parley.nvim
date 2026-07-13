@@ -256,6 +256,82 @@ describe("chat pending extmark adapter", function()
         assert.matches("^⠹ brewing$", virtual_text(buf))
     end)
 
+    it("uses a hidden tip update for the first reveal", function()
+        local buf = new_scratch()
+        local runtime = new_runtime()
+        local session = start_fake(buf, runtime)
+        vim.api.nvim_buf_set_lines(buf, 1, 1, false, { "generated tip" })
+
+        session:tip_written(1)
+        runtime:advance(1000)
+        runtime:drain()
+
+        assert.equals(1, extmark(buf)[2])
+        assert.equals("⠙ brewing", virtual_text(buf))
+    end)
+
+    it("repairs invalidating writes synchronously without changing lifecycle state", function()
+        local buf = new_scratch()
+        local runtime = new_runtime()
+        local session, emitted = start_fake(buf, runtime)
+        runtime:advance(1000)
+        runtime:drain()
+        session:content("q", "one")
+        session:content("q", "two")
+        runtime:drain()
+
+        local text, mark = virtual_text(buf)
+        local mark_id = mark[1]
+        local state = session.state
+        local minimum_timer = session.timers.minimum
+        local frame_timer = session.timers.frame
+        runtime:advance(120)
+        assert.is_true(session:before_write())
+        vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "answer", "pending" })
+        session:tip_written(1)
+
+        local repaired_text, repaired_mark = virtual_text(buf)
+        assert.equals(mark_id, repaired_mark[1])
+        assert.equals(text, repaired_text)
+        assert.equals(1, repaired_mark[2])
+        assert.equals(state, session.state)
+        assert.equals(minimum_timer, session.timers.minimum)
+        assert.equals(frame_timer, session.timers.frame)
+
+        runtime:drain()
+        assert.is_true(chat_pending.is_active(buf), "queued frame must see the repaired mark")
+        assert.equals(mark_id, extmark(buf)[1])
+        assert.equals(1, extmark(buf)[2])
+
+        local completions = 0
+        session:complete("q", function() completions = completions + 1 end)
+        runtime:drain()
+        runtime:advance(880)
+        runtime:drain()
+        assert.same({ { "q", "one" }, { "q", "two" } }, emitted)
+        assert.equals(1, completions)
+        assert.is_false(chat_pending.is_active(buf))
+
+        session:tip_written(0)
+        assert.is_nil(extmark(buf))
+        assert.equals(1, completions)
+    end)
+
+    it("rejects a write when progress was invalidated before the writer callback", function()
+        local buf = new_scratch()
+        local runtime = new_runtime()
+        local session = start_fake(buf, runtime)
+        runtime:advance(1000)
+        runtime:drain()
+
+        vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "externally replaced" })
+        assert.is_false(session:before_write())
+        assert.is_false(chat_pending.is_active(buf))
+
+        session:tip_written(0)
+        assert.is_nil(extmark(buf))
+    end)
+
     it("stages content until the minimum and flushes it in FIFO order", function()
         local buf = new_scratch()
         local runtime = new_runtime()

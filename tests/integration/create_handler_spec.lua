@@ -262,4 +262,48 @@ describe("create_handler: streaming behavior", function()
         local cursor = vim.api.nvim_win_get_cursor(win)
         assert.equals(1, cursor[1])
     end)
+
+    it("reports the tracked last written row after growth and edits above", function()
+        local callbacks = {}
+        local growth_seen = false
+        local handler = parley.dispatcher.create_handler(buf, nil, 3, true, "", false, function(delta)
+            growth_seen = delta == 1
+        end, {
+            after_write = function(qid, chunk, delta, last_written_line_0)
+                table.insert(callbacks, {
+                    qid = qid,
+                    chunk = chunk,
+                    delta = delta,
+                    row = last_written_line_0,
+                    growth_seen = growth_seen,
+                    line = vim.api.nvim_buf_get_lines(buf, last_written_line_0,
+                        last_written_line_0 + 1, false)[1],
+                })
+            end,
+        })
+
+        handler(mock_qid, "A\nB")
+        assert.is_true(vim.wait(100, function() return #callbacks == 1 end, 10))
+        assert.same({
+            qid = mock_qid,
+            chunk = "A\nB",
+            delta = 1,
+            row = 4,
+            growth_seen = true,
+            line = "B",
+        }, callbacks[1])
+
+        vim.api.nvim_buf_set_lines(buf, 0, 0, false, { "inserted above" })
+        growth_seen = false
+        handler(mock_qid, "\nC")
+        assert.is_true(vim.wait(100, function() return #callbacks == 2 end, 10))
+        assert.same({
+            qid = mock_qid,
+            chunk = "\nC",
+            delta = 1,
+            row = 6,
+            growth_seen = true,
+            line = "C",
+        }, callbacks[2])
+    end)
 end)
