@@ -11,33 +11,121 @@ started: 2026-07-12T21:56:40-07:00
 
 # claude code style progression text in parley chat
 
-now that we are using parley chat to do more complex chat (moving to agentic direction), sometimes it takes a long time for agent to respond. we should have a consistent agent is doing something text in buffer. Several design decisions:
-
-1. that line is ephemeral, not part of nvim history.
-2. it would have some animation, we can use the ⠙ sequence. 
-3. it would cycle through bunch of random verb, like brewing, cooking, dragon-slaying etc. 
-4. verb would change on receiving any SSE response, or every 15 seconds, whichever is shorter. 
-5. all those are just cosmetic, before real thing is displayed.
-
-It looks something:
-
-⠙ brewing
-
-the verb is randomly picked from a list of playful verbs.  
-
-
 ## Problem
+
+Agentic chat responses can remain silent long enough that users cannot tell
+whether Parley is still working. The existing in-buffer progress indicator is
+limited to web-search mode, mutates buffer text, and does not provide one
+consistent waiting cue for every LLM response that will become chat content.
+
+Inline definition has the same feedback gap at a smaller spatial scale: it
+currently uses the detached luabar even though the selected term is the clear
+place to show pending work.
 
 ## Spec
 
+### Chat response presentation
+
+- Apply the playful pending state to every LLM call whose response becomes chat
+  content, including recursive LLM legs around local tool calls. Exclude
+  background topic generation and other calls whose output does not become chat
+  content. Do not show it while a local tool itself is executing.
+- Start each eligible call in a silent waiting state. If visible output arrives
+  within one second, stream normally and never show the playful indicator.
+  Visible output means answer text, reasoning status, or remote-tool status; a
+  raw SSE event without visible content does not end the wait.
+- If the call remains without visible output for one second, render an
+  ephemeral virtual line below the response header in the form `⠙ brewing`.
+  The line must be an extmark decoration: it does not enter buffer text, the
+  exchange model, undo history, saved files, parsing, or later prompts.
+- Animate the glyph from the canonical braille spinner sequence. Choose the
+  verb from an internal playful vocabulary (for example `brewing`, `cooking`,
+  and `dragon-slaying`) and avoid immediately repeating the visible verb. The
+  vocabulary is cosmetic and is not user configuration in this issue.
+- While the playful line is visible, change its verb on each received SSE event
+  or after 15 seconds without an SSE event, whichever happens first. Spinner
+  glyph animation remains independent of verb changes.
+- Once shown, keep the playful line visible for at least one second. Buffer all
+  visible server output received during that minimum window. Hide the line at
+  the later of (a) the first visible output and (b) the minimum-visible
+  deadline, flush all buffered output once in original order, then resume
+  ordinary streaming. If no visible output has arrived, retain the indicator
+  beyond its minimum rather than hiding it into another silent state.
+- After release, preserve existing provider-specific progress behavior such as
+  reasoning and remote web-search status. The playful indicator is only the
+  pre-output presentation stage, not a replacement for meaningful status.
+- A successful empty completion honors the minimum duration if the indicator
+  became visible, then removes it. A terminal failure or cancellation removes
+  it immediately, discards staged cosmetic state, and surfaces the existing
+  error without waiting for the minimum duration. Stale leases and invalid or
+  deleted buffers must not receive late writes or leave timers/extmarks alive.
+
+### Inline definition presentation
+
+- On visual `<M-CR>`, immediately place an animated virtual spinner after the
+  selected term, so `CVR` is presented as `CVR ⠙` without changing buffer text.
+  Anchor it to the selection with an extmark and remove it on every terminal
+  path.
+- Definition does not use the detached luabar. Document Review remains a
+  luabar consumer because it has no unambiguous inline anchor.
+- On a valid definition result, remove the virtual spinner immediately and run
+  the existing durable footnote flow, producing `CVR[^cvr]` and its managed
+  definition. There is no one-second delay or minimum-visible duration for
+  definition.
+- On failure, missing structured output, a stale selection, cancellation, or
+  buffer deletion, remove the virtual spinner without adding a footnote.
+
+### Design boundaries
+
+- Use a small pure response-presentation controller for chat timing, state
+  transitions, buffering decisions, and verb selection. Inject time and random
+  choice so its behavior is deterministic under unit test (`ARCH-PURE`).
+- Keep Neovim timers, extmarks, dispatcher callbacks, exchange-model access,
+  and stream writes in thin adapters. The exchange model remains the sole owner
+  of real chat positions; cosmetic virtual text is anchored to its durable
+  response header rather than modeled as content.
+- Reuse the existing canonical spinner frames. Keep the detached luabar,
+  chat-pending virtual line, and selection-anchored definition spinner as
+  separate renderers because they have different locations and lifecycle
+  policies (`ARCH-DRY`, `ARCH-PURPOSE`).
+- Expose raw SSE activity separately from semantic provider progress so playful
+  verb changes do not alter existing progress-event contracts.
+
 ## Done when
 
--
+- Fast chat output streams normally without ever showing playful progress.
+- A chat call silent for one second shows an ephemeral animated playful line;
+  once shown, it remains at least one second, stages incoming output, flushes it
+  exactly once in order, and resumes streaming without transcript drift.
+- SSE activity and a 15-second idle interval independently rotate the playful
+  verb without coupling verb changes to spinner-frame animation.
+- Every chat-producing LLM leg is covered, while topic generation and local
+  tool execution do not show the playful line.
+- Terminal, cancellation, stale-lease, and invalid-buffer paths clean up all
+  timers, extmarks, and buffered state; failures bypass the minimum duration.
+- Definition shows an immediate selection-anchored virtual spinner, never uses
+  the luabar, and replaces the spinner with the existing durable footnote on
+  success; all non-success paths remove it without a footnote.
+- Document Review continues to use the detached luabar.
+- Pure timing/state tests, real-entry-point chat and definition integration
+  tests, atlas updates, and the full `make test` suite pass.
 
 ## Plan
 
-- [ ]
+- [ ] Write and approve the durable implementation plan.
+- [ ] Implement the approved plan with tests and update the atlas.
+- [ ] Run the full verification and close through the SDLC gates.
 
 ## Log
 
 ### 2026-07-10
+
+### 2026-07-12
+
+Claimed the issue and crystallized the temporal UI contract. The design uses a
+pure chat presentation controller with extmark-backed renderers: delayed and
+minimum-visible staging for chat, immediate selection-anchored feedback for
+definition, and the existing detached luabar retained only where it has no
+natural inline anchor. `ARCH-PURE` shaped the injected clock/random boundary;
+`ARCH-DRY` keeps the spinner sequence canonical without conflating distinct UI
+surfaces; `ARCH-PURPOSE` keeps every chat-producing LLM leg in scope.
