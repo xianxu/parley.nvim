@@ -207,6 +207,37 @@ describe("vault", function()
                 function() errors = errors + 1 end)
             assert.equals(2, errors)
         end)
+
+        it("B11: rejects empty string and command inputs without launching or succeeding", function()
+            local runs = 0
+            local successes = 0
+            local errors = 0
+            tasker.run = function() runs = runs + 1 end
+
+            for _, secret in ipairs({ "", "   ", {} }) do
+                vault.resolve_secret("empty_" .. tostring(errors), secret,
+                    function() successes = successes + 1 end,
+                    function() errors = errors + 1 end)
+            end
+
+            assert.equals(0, runs)
+            assert.equals(0, successes)
+            assert.equals(3, errors)
+        end)
+
+        it("B12: never treats a stored empty string as resolved", function()
+            local successes = 0
+            local errors = 0
+            vault.add_secret("stored_empty", "")
+            vault.run_with_secret("stored_empty", function() successes = successes + 1 end,
+                function() errors = errors + 1 end)
+            vault.add_secret("stored_space", "   ")
+            vault.run_with_secret("stored_space", function() successes = successes + 1 end,
+                function() errors = errors + 1 end)
+
+            assert.equals(0, successes)
+            assert.equals(2, errors)
+        end)
     end)
 
     describe("Group C: run_with_secret", function()

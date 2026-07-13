@@ -19,6 +19,7 @@ describe("tasker.run integration", function()
         -- Stop any running processes
         tasker.stop()
         tasker._handles = {}
+        tasker._uv = nil
     end)
 
     describe("Group A: Basic subprocess execution", function()
@@ -502,6 +503,140 @@ describe("tasker.run integration", function()
     end)
 
     describe("Group G: drain-safe terminal", function()
+        local function fake_uv(opts)
+            opts = opts or {}
+            local state = { pipes = {}, spawn_calls = 0 }
+            local runtime = {}
+            runtime.new_pipe = function()
+                local pipe = { closing = false, close_calls = 0 }
+                pipe.read_stop = function() end
+                pipe.is_closing = function(self) return self.closing end
+                pipe.close = function(self)
+                    self.closing = true
+                    self.close_calls = self.close_calls + 1
+                end
+                table.insert(state.pipes, pipe)
+                return pipe
+            end
+            runtime.spawn = function(_cmd, _spawn_opts, on_exit)
+                state.spawn_calls = state.spawn_calls + 1
+                state.on_exit = on_exit
+                if opts.spawn_error then return nil, opts.spawn_error end
+                local handle = { closing = false }
+                handle.is_closing = function(self) return self.closing end
+                handle.close = function(self) self.closing = true end
+                state.handle = handle
+                return handle, 4242
+            end
+            runtime.read_start = function(pipe, reader) pipe.reader = reader end
+            return runtime, state
+        end
+
+        for _, case in ipairs({
+            { name = "exit before both EOFs", exit_first = true },
+            { name = "both EOFs before exit", exit_first = false },
+        }) do
+            it("coordinates " .. case.name .. " and schedules terminal once", function()
+                local runtime, state = fake_uv()
+                tasker._uv = runtime
+                local events = {}
+                local terminal
+                tasker.run(nil, "fake", {}, function(code, signal, stdout, stderr, io_error)
+                    table.insert(events, "terminal")
+                    terminal = { code, signal, stdout, stderr, io_error }
+                end, function(err, data)
+                    table.insert(events, { stream = "stdout", err = err, data = data })
+                end, function(err, data)
+                    table.insert(events, { stream = "stderr", err = err, data = data })
+                end)
+
+                if case.exit_first then state.on_exit(0, 0) end
+                state.pipes[1].reader(nil, "out")
+                state.pipes[1].reader(nil, nil)
+                assert.is_nil(terminal)
+                state.pipes[2].reader(nil, "err")
+                state.pipes[2].reader(nil, nil)
+                if not case.exit_first then
+                    assert.is_nil(terminal)
+                    state.on_exit(0, 0)
+                end
+                assert.is_nil(terminal, "terminal must remain scheduled off the fast callback")
+                assert.is_true(vim.wait(100, function() return terminal ~= nil end, 5))
+                assert.same({ 0, 0, "out", "err" }, { terminal[1], terminal[2], terminal[3], terminal[4] })
+                assert.is_nil(terminal[5])
+                assert.equals("terminal", events[#events])
+                assert.equals(1, vim.tbl_count(vim.tbl_filter(function(value)
+                    return value == "terminal"
+                end, events)))
+                local final_by_stream = {}
+                for _, event in ipairs(events) do
+                    if type(event) == "table" then final_by_stream[event.stream] = event end
+                end
+                assert.is_nil(final_by_stream.stdout.err)
+                assert.is_nil(final_by_stream.stdout.data)
+                assert.is_nil(final_by_stream.stderr.err)
+                assert.is_nil(final_by_stream.stderr.data)
+            end)
+        end
+
+        it("forwards a read error then one final nil before the terminal", function()
+            local runtime, state = fake_uv()
+            tasker._uv = runtime
+            local stdout_events = {}
+            local terminal
+            tasker.run(nil, "fake", {}, function(_code, _signal, stdout, _stderr, io_error)
+                terminal = { stdout = stdout, io_error = io_error }
+            end, function(err, data)
+                table.insert(stdout_events, { err = err, data = data })
+            end)
+
+            state.pipes[1].reader(nil, "unterminated")
+            state.pipes[1].reader("read boom", nil)
+            state.pipes[1].reader(nil, nil) -- defensive late libuv delivery is ignored
+            state.pipes[2].reader(nil, nil)
+            state.on_exit(9, 0)
+            assert.is_true(vim.wait(100, function() return terminal ~= nil end, 5))
+            assert.equals(3, #stdout_events)
+            assert.equals("read boom", stdout_events[2].err)
+            assert.is_nil(stdout_events[2].data)
+            assert.is_nil(stdout_events[3].err)
+            assert.is_nil(stdout_events[3].data)
+            assert.equals("unterminated", terminal.stdout)
+            assert.is_truthy(terminal.io_error)
+        end)
+
+        it("rejects busy work before allocating pipes", function()
+            local runtime, state = fake_uv()
+            tasker._uv = runtime
+            local original_is_busy = tasker.is_busy
+            tasker.is_busy = function() return true end
+            local starts = 0
+            local terminals = 0
+            tasker.run(9, "fake", {}, function() terminals = terminals + 1 end,
+                nil, nil, function() starts = starts + 1 end)
+            tasker.is_busy = original_is_busy
+            assert.is_true(vim.wait(100, function() return starts == 1 end, 5))
+            assert.equals(0, #state.pipes)
+            assert.equals(0, state.spawn_calls)
+            assert.equals(0, #tasker._handles)
+            assert.equals(0, terminals)
+        end)
+
+        it("closes both pipes and reports one spawn rejection without a terminal", function()
+            local runtime, state = fake_uv({ spawn_error = "ENOENT" })
+            tasker._uv = runtime
+            local starts = 0
+            local terminals = 0
+            tasker.run(nil, "fake", {}, function() terminals = terminals + 1 end,
+                nil, nil, function() starts = starts + 1 end)
+            assert.is_true(vim.wait(100, function() return starts == 1 end, 5))
+            assert.equals(2, #state.pipes)
+            assert.equals(1, state.pipes[1].close_calls)
+            assert.equals(1, state.pipes[2].close_calls)
+            assert.equals(0, #tasker._handles)
+            assert.equals(0, terminals)
+        end)
+
         it("G1: waits for both readers and preserves their final nil before terminal", function()
             local events = {}
             local stdout
@@ -552,18 +687,21 @@ describe("tasker.run integration", function()
 
         it("G3: reconstructs a stderr trailer split at every byte", function()
             local marker = "__PARLEY_HTTP_split__503\n"
-            local captured
-            tasker.run(nil, "sh", {
-                "-c",
-                'value="$1"; i=1; while [ "$i" -le "${#value}" ]; do printf "%s" "$(printf "%s" "$value" | cut -c "$i")" >&2; i=$((i+1)); done; printf "\\n" >&2',
-                "sh",
-                marker:sub(1, -2),
-            }, function(_code, _signal, _stdout, stderr)
-                captured = stderr
-            end)
-
-            assert.is_true(vim.wait(1000, function() return captured ~= nil end, 10))
-            assert.equals(marker, captured)
+            for split = 0, #marker do
+                local runtime, state = fake_uv()
+                tasker._uv = runtime
+                local captured
+                tasker.run(nil, "fake", {}, function(_code, _signal, _stdout, stderr)
+                    captured = stderr
+                end)
+                state.pipes[1].reader(nil, nil)
+                if split > 0 then state.pipes[2].reader(nil, marker:sub(1, split)) end
+                if split < #marker then state.pipes[2].reader(nil, marker:sub(split + 1)) end
+                state.pipes[2].reader(nil, nil)
+                state.on_exit(0, 0)
+                assert.is_true(vim.wait(100, function() return captured ~= nil end, 5))
+                assert.equals(marker, captured, "split boundary " .. split)
+            end
         end)
     end)
 end)

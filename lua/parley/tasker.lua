@@ -8,6 +8,7 @@ local uv = vim.uv or vim.loop
 
 local M = {}
 M._handles = {}
+M._uv = nil -- injectable transport seam for deterministic drain-order tests
 M._queries = {} -- table of latest queries
 M._debug = {
     is_busy_calls = 0,
@@ -288,6 +289,7 @@ end
 ---@param on_start_error function | nil # scheduled launch rejection callback(message)
 M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_error)
 	logger.debug("run command: " .. cmd .. " " .. table.concat(args, " "), true)
+	local run_uv = M._uv or uv
 
 	-- Run cleanup routine to remove stale processes
 	M.cleanup_stale_handles()
@@ -302,8 +304,8 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
 	end
 
 	local handle, pid
-	local stdout = uv.new_pipe(false)
-	local stderr = uv.new_pipe(false)
+	local stdout = run_uv.new_pipe(false)
+	local stderr = run_uv.new_pipe(false)
 	local stdout_data = ""
 	local stderr_data = ""
 	local exit_code
@@ -347,7 +349,7 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
 	end
 
 	local spawn_error
-	handle, pid = uv.spawn(cmd, {
+	handle, pid = run_uv.spawn(cmd, {
 		args = args,
 		stdio = { nil, stdout, stderr },
 		hide = true,
@@ -370,7 +372,8 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
 
 	M.add_handle(handle, pid, buf)
 
-	uv.read_start(stdout, function(err, data)
+	run_uv.read_start(stdout, function(err, data)
+		if stdout_done then return end
 		if err then
 			logger.error("Error reading stdout: " .. vim.inspect(err))
 			io_error = io_error or ("stdout: " .. tostring(err))
@@ -380,6 +383,9 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
 		end
 		if out_reader then
 			out_reader(err, data)
+			if err then
+				out_reader(nil, nil)
+			end
 		end
 		if err or data == nil then
 			stdout_done = true
@@ -388,7 +394,8 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
 		end
 	end)
 
-	uv.read_start(stderr, function(err, data)
+	run_uv.read_start(stderr, function(err, data)
+		if stderr_done then return end
 		if err then
 			logger.error("Error reading stderr: " .. vim.inspect(err))
 			io_error = io_error or ("stderr: " .. tostring(err))
@@ -398,6 +405,9 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
 		end
 		if err_reader then
 			err_reader(err, data)
+			if err then
+				err_reader(nil, nil)
+			end
 		end
 		if err or data == nil then
 			stderr_done = true

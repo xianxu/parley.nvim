@@ -83,9 +83,16 @@ V.resolve_secret = function(name, secret, callback, on_error)
 			on_error(message)
 		end
 	end)
-	if secrets[name] and type(secrets[name]) ~= "table" then
+	local stored = secrets[name]
+	if type(stored) == "string" and stored:match("%S") then
 		logger.debug("vault resolver secret " .. name .. " already resolved", true)
 		callback()
+		return
+	end
+	if not secret or (type(secret) == "string" and not secret:match("%S"))
+		or (type(secret) == "table" and (#secret == 0
+			or type(secret[1]) ~= "string" or not secret[1]:match("%S"))) then
+		fail("vault resolver for " .. name .. " got empty secret")
 		return
 	end
 
@@ -105,11 +112,6 @@ V.resolve_secret = function(name, secret, callback, on_error)
 		V._obfuscated_secrets[name] = s:sub(1, 3) .. string.rep("*", #s - 6) .. s:sub(-3)
 
 		callback()
-	end
-
-	if not secret or (type(secret) == "string" and not secret:match("%S")) then
-		fail("vault resolver for " .. name .. " got empty secret")
-		return
 	end
 
 	if type(secret) == "table" then
@@ -221,7 +223,8 @@ end
 ---@param on_error function | nil # optional missing/resolution failure callback(message)
 V.run_with_secret = function(name, callback, on_error)
 	name = resolve_secret_name(name)
-	if not secrets[name] then
+	local secret = secrets[name]
+	if not secret then
 		local message = "vault secret " .. name .. " not found"
 		logger.warning(message, true)
 		if on_error then
@@ -229,14 +232,18 @@ V.run_with_secret = function(name, callback, on_error)
 		end
 		return
 	end
-	if type(secrets[name]) == "table" then
-		V.resolve_secret(name, secrets[name], function()
+	if type(secret) == "table" then
+		V.resolve_secret(name, secret, function()
 			logger.debug("vault run_with_secret: " .. name .. " resolved, running callback", true)
 			callback()
 		end, on_error)
-	else
+	elseif type(secret) == "string" and secret:match("%S") then
 		logger.debug("vault run_with_secret: " .. name .. " already resolved, running callback", true)
 		callback()
+	else
+		local message = "vault secret " .. name .. " is empty"
+		logger.warning(message, true)
+		if on_error then on_error(message) end
 	end
 end
 
