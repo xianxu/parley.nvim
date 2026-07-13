@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-07-10
 updated: 2026-07-12
-estimate_hours: 8.19
+estimate_hours: 8.72
 started: 2026-07-12T21:56:40-07:00
 ---
 
@@ -122,6 +122,10 @@ place to show pending work.
   `on_exit(qid)` and the assembled-response callback, when present—exactly once
   after transport drain, so topic generation, memory preferences, and other
   existing consumers cannot strand teardown.
+- Route failures before a transport starts through the existing pre-start abort
+  class exactly once. Missing/unresolved vault secrets, a busy subprocess slot,
+  and process-spawn rejection must all notify the chat/skill caller so it can
+  remove pending extmarks and timers rather than waiting forever.
 - Model provider failure, cancellation/invalidation, successful completion, and
   deferred local-tool transition as distinct terminal actions; do not collapse
   them into a single cleanup callback that loses real buffered output.
@@ -157,11 +161,11 @@ item: lua-neovim design=0.60 impl=0.60
 item: lua-neovim design=0.60 impl=0.60
 item: lua-neovim design=0.40 impl=0.50
 item: api-integration design=0.40 impl=0.50
-item: cross-cutting-refactor design=0.20 impl=0.20
+item: cross-cutting-refactor design=0.40 impl=0.50
 item: atlas-docs design=0.15 impl=0.08
 item: milestone-review design=0.15 impl=0.20
 design-buffer: 0.15
-total: 8.19
+total: 8.72
 ```
 
 Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md`
@@ -169,7 +173,8 @@ against `baseline-v3.1.md`. Method A only. The four `lua-neovim` primitives
 separate the pure response controller, chat adapter/integration, drain-safe
 task/dispatcher transport, and Definition's selection-anchored lifecycle. The
 API integration covers the real curl/SSE process fixture; the cross-cutting
-item covers compatibility consumers. Implementation values already apply
+item covers compatibility consumers and pre-launch vault/task ownership.
+Implementation values already apply
 v3.1's 40% AI-paired ship-wall-clock scale.
 
 ## Plan
@@ -183,6 +188,13 @@ v3.1's 40% AI-paired ship-wall-clock scale.
 - [ ] Close, publish, and merge through the SDLC gates.
 
 ## Revisions
+
+### 2026-07-13T00:38:31-07:00 — launch-failure gate correction
+
+Required missing/unresolved secrets, busy subprocess rejection, and spawn
+failure to reach the existing pre-start abort owner exactly once. Added
+real-entry chat and Definition cleanup coverage, reset revised-plan approval,
+and recalibrated the expanded compatibility work from 8.19 to 8.72 hours.
 
 ### 2026-07-13T00:32:14-07:00 — compatibility review correction
 
@@ -283,3 +295,15 @@ an unrelated in-progress #162 issue edit.
 A second fresh-eyes review approved the gate corrections after the dispatcher
 compatibility path was extended to callback-only memory preference generation
 and the process-level test was moved ahead of production chat wiring.
+
+### 2026-07-13 — launch-failure gate revision
+
+The second SDLC plan-quality pass found that vault resolution and subprocess
+launch rejection could return without any terminal callback after the UI had
+started. The revised plan makes those failures additive pre-start aborts and
+tests cleanup through the real chat and Definition entries.
+
+### 2026-07-13 — launch-failure correction approved
+
+Fresh review approved the additive vault/task launch error channels, their
+single dispatcher abort owner, and the real-entry cleanup coverage.

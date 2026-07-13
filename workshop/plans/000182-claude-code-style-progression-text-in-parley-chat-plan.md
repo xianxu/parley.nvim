@@ -44,6 +44,7 @@ All three symbols are tested without Neovim IO or mocks in `tests/unit/chat_pres
 | `chat_pending.start` | `lua/parley/chat_pending.lua` | new | Neovim extmarks, libuv timers, serialized callback actions |
 | `selection_spinner.start` | `lua/parley/selection_spinner.lua` | new | selection-anchored extmark and animation timer |
 | `tasker.run` | `lua/parley/tasker.lua` | modified | drain-safe subprocess exit plus stdout/stderr pipe EOF |
+| `vault.run_with_secret` | `lua/parley/vault.lua` | modified | secret resolution and exactly-once launch abort delivery |
 | `dispatcher.query` | `lua/parley/dispatcher.lua` | modified | curl process, raw SSE stream, transport terminal |
 | `chat_respond.respond` | `lua/parley/chat_respond.lua` | modified | exchange model, chat lease, stream/tool continuations |
 | `skill_invoke.invoke` / `skill_invoke.cancel` | `lua/parley/skill_invoke.lua` | modified | headless skill process and terminal ownership |
@@ -59,6 +60,15 @@ All three symbols are tested without Neovim IO or mocks in `tests/unit/chat_pres
 - **`tasker.run`** — drains stdout and stderr to EOF before reporting the process terminal, regardless of whether pipe EOF or process exit arrives first.
   - **Injected into:** `dispatcher.query` receives a callback only after its stdout reader has consumed the final fragment; existing four-argument callbacks remain compatible.
   - **Future extensions:** The optional fifth `io_error` result can classify pipe failures for other subprocess consumers.
+- **`vault.run_with_secret`** — appends an optional error callback that reports
+  missing secrets and every resolver terminal that cannot produce a usable
+  secret; `tasker.run` likewise appends a launch-error callback for busy/spawn
+  rejection.
+  - **Injected into:** Dispatcher folds both sources into its once-guarded
+    qid-free `on_abort(msg)` path; existing vault/task callers omit the new
+    arguments and retain their current behavior.
+  - **Future extensions:** Other interactive callers may opt into explicit
+    launch-failure teardown without changing legacy fire-and-forget callers.
 - **`dispatcher.query`** — invokes raw activity once per blank-line-delimited SSE event record (including a final EOF-terminated record), preserves semantic `on_progress`, and chooses exactly one normal or transport-error terminal after drain-safe `tasker.run` completion.
   - **Injected into:** Chat and Definition's `skill_invoke` path use the new error callback. Existing callers that omit it receive the historical `on_exit(qid)` fallback and retain teardown behavior.
   - **Future extensions:** Provider HTTP-status classification can widen the typed failure record without overloading pre-query `on_abort`.
@@ -176,14 +186,24 @@ git commit -m "#182: add pure chat presentation controller"
 **Files:**
 - Modify: `lua/parley/dispatcher.lua:155-415`
 - Modify: `lua/parley/tasker.lua:282-355`
+- Modify: `lua/parley/vault.lua:75-218`
 - Modify: `tests/unit/dispatcher_query_spec.lua:422-526`
 - Modify: `tests/integration/tasker_run_spec.lua`
+- Modify: `tests/unit/vault_spec.lua`
 - Modify: `tests/integration/topic_gen_spec.lua`
 - Modify: `tests/integration/cliproxy_caller_teardown_spec.lua`
 
 - [ ] **Step 1: Write RED drain-order and dispatcher callback tests**
 
 First drive captured process-exit and pipe-reader callbacks in both permutations: stdout/stderr EOF before process exit, and process exit before stdout/stderr EOF. Assert `tasker.run` waits for all three signals, retains final fragments, invokes its public callback once, and reports read failure through an additive fifth `io_error` result.
+
+Add launch tests for the appended `tasker.run(..., on_start_error)` callback:
+busy rejection and `uv.spawn` returning no handle each schedule exactly one
+error, close any allocated pipes, never invoke the process-terminal callback,
+and never register a handle. In vault tests, append `on_error` to
+`resolve_secret`/`run_with_secret` and cover a missing secret, empty resolver
+input/output, resolver command nonzero exit, and resolver launch rejection;
+each failure calls it once and never calls the success callback.
 
 Then retain the dispatcher-facing `tasker.run` terminal callback and stdout reader. Assert that one complete SSE event calls callbacks in this order:
 
@@ -210,6 +230,8 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim \
 nvim -n --headless --noplugin -u tests/minimal_init.vim \
   -c "PlenaryBustedFile tests/unit/dispatcher_query_spec.lua" -c "qa!"
 nvim -n --headless --noplugin -u tests/minimal_init.vim \
+  -c "PlenaryBustedFile tests/unit/vault_spec.lua" -c "qa!"
+nvim -n --headless --noplugin -u tests/minimal_init.vim \
   -c "PlenaryBustedFile tests/integration/topic_gen_spec.lua" -c "qa!"
 nvim -n --headless --noplugin -u tests/minimal_init.vim \
   -c "PlenaryBustedFile tests/integration/cliproxy_caller_teardown_spec.lua" -c "qa!"
@@ -217,7 +239,7 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim \
 
 Expected: FAIL because `tasker.run` closes pipes at process exit instead of
 draining, `query` has no activity/error callbacks or task exit status, and the
-real legacy consumers do not receive a failure fallback after drain.
+vault/task launch failures and real legacy consumers have no reliable terminal.
 
 - [ ] **Step 3: Make `tasker.run` drain-safe**
 
@@ -236,6 +258,17 @@ Whichever signal makes `maybe_finish` ready must schedule the public callback
 onto the Neovim main loop (retain the current `vim.schedule_wrap` behavior);
 existing callers must never move into a libuv fast-event context merely because
 pipe EOF happened last.
+
+Append `on_start_error` after `err_reader`. Allocate pipes only after the busy
+check, and if `uv.spawn` returns no handle, close both pipes and schedule the
+error callback once on the main loop. Existing callers that omit the new
+callback retain their current no-op failure behavior.
+
+Append `on_error` to `vault.resolve_secret` and `vault.run_with_secret`.
+Propagate missing/empty secrets, empty or nonzero resolver output, and resolver
+launch rejection through one once-guarded error closure; never run the success
+callback on those paths. Existing vault consumers that omit it remain
+backward-compatible.
 
 - [ ] **Step 4: Implement the additive dispatcher contract**
 
@@ -258,7 +291,11 @@ on_error(qid, { code=code, signal=signal,
 `legacy_complete` invokes every historical surface the caller supplied, in the
 existing order: synchronous `on_exit(qid)`, then scheduled
 `callback(qt.response)`. Keep adapter `pre_query` failures on the existing
-qid-free `on_abort(msg)` path. If post-start transport failure occurs and
+qid-free `on_abort(msg)` path. Create one once-guarded `abort_before_start(msg)`
+and pass it to both `vault.run_with_secret` and dispatcher-owned `tasker.run`,
+so missing/resolution-failed secrets, busy rejection, and spawn failure share
+the same caller terminal without colliding with adapter `pre_query` failure.
+If post-start transport failure occurs and
 `on_error` is nil, log it and call `legacy_complete` exactly once; this treats
 the drained partial response as ordinary legacy completion, preserving teardown
 for `generate_topic`, callback-only memory preferences, callers that supply both
@@ -275,6 +312,8 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim \
 nvim -n --headless --noplugin -u tests/minimal_init.vim \
   -c "PlenaryBustedFile tests/integration/tasker_run_spec.lua" -c "qa!"
 nvim -n --headless --noplugin -u tests/minimal_init.vim \
+  -c "PlenaryBustedFile tests/unit/vault_spec.lua" -c "qa!"
+nvim -n --headless --noplugin -u tests/minimal_init.vim \
   -c "PlenaryBustedFile tests/integration/topic_gen_spec.lua" -c "qa!"
 nvim -n --headless --noplugin -u tests/minimal_init.vim \
   -c "PlenaryBustedFile tests/integration/cliproxy_caller_teardown_spec.lua" -c "qa!"
@@ -286,8 +325,9 @@ both real legacy consumers terminate after a failed transport.
 - [ ] **Step 6: Commit the drain and dispatcher contracts**
 
 ```bash
-git add lua/parley/tasker.lua lua/parley/dispatcher.lua \
+git add lua/parley/tasker.lua lua/parley/vault.lua lua/parley/dispatcher.lua \
   tests/unit/dispatcher_query_spec.lua tests/integration/tasker_run_spec.lua \
+  tests/unit/vault_spec.lua \
   tests/integration/topic_gen_spec.lua tests/integration/cliproxy_caller_teardown_spec.lua
 git commit -m "#182: expose SSE activity and transport failures"
 ```
@@ -378,9 +418,14 @@ Through `parley.chat_respond`, cover:
 - topic-generation transport failure still reaches its historical completion
   teardown through the dispatcher fallback and never creates a playful session;
 - provider failure flushes valid partial output before warning; abort/cancel/stale lease/deleted buffer discard staged output and clean up immediately;
+- missing vault secret and subprocess busy/spawn rejection reach the real chat
+  entry's abort path exactly once and leave no pending extmark/timer;
 - exact reveal/minimum callback permutations do not double-flush or double-run completion.
 
-Use the real `M.respond` entry and exchange model; fake only the dispatcher callback delivery for these exhaustive timing cases.
+Use the real `M.respond` entry and exchange model; fake only dispatcher callback
+delivery for the exhaustive timing cases. For missing-secret and launch-reject
+cases keep the real dispatcher and replace only the failing vault/task boundary,
+then inspect the real pending namespace and timer registry after abort delivery.
 
 - [ ] **Step 2: Run `chat_respond_spec.lua` and verify RED**
 
@@ -491,7 +536,7 @@ the frame advances
 detached progress is inactive
 ```
 
-Then cover success (spinner removed before `CVR[^cvr]` edit), no tool output, source/no-agent synchronous failure, pre-query abort, post-start transport failure, explicit cancel, stale selection, and deleted buffer. For transport failure, assert the terminal hook removes the inline spinner, detached progress remains inactive, and no footnote is written. Every non-success leaves no footnote and no timer/extmark.
+Then cover success (spinner removed before `CVR[^cvr]` edit), no tool output, source/no-agent synchronous failure, pre-query abort, post-start transport failure, missing vault secret, subprocess busy/spawn rejection, explicit cancel, stale selection, and deleted buffer. Drive the secret/launch cases through real `define_visual` and real dispatcher while replacing only the failing vault/task boundary; assert the terminal hook removes the inline spinner exactly once, detached progress remains inactive, and no footnote is written. Every non-success leaves no footnote and no timer/extmark.
 
 - [ ] **Step 6: Implement `selection_spinner.start` and Definition wiring**
 
@@ -595,6 +640,13 @@ git commit -m "#182: document LLM progress presentation"
 Run `sdlc actual --issue 182`, then follow `sdlc close --help`. Close with the targeted, process-fake, mapped, full-suite, diff, and manual evidence; use only the precise atlas/project bypass if the gate says it is genuinely inapplicable. Publish once with `sdlc pr` then `sdlc merge`; verify `main` contains the branch tip.
 
 ## Revisions
+
+### 2026-07-13T00:38:31-07:00 — launch-failure gate correction
+
+Added optional vault-resolution and task-launch error channels, folded them
+through dispatcher's existing once-guarded pre-start abort class, and required
+real chat/Definition entry tests for missing secrets, busy rejection, and spawn
+failure. Recalibrated compatibility/launch ownership to 8.72 hours.
 
 ### 2026-07-13T00:32:14-07:00 — compatibility review correction
 
