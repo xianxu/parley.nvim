@@ -37,6 +37,20 @@ describe("chat typing performance scenario", function()
         }))
     end)
 
+    it("rejects invalid work samples before max aggregation", function()
+        local invalid = {
+            { line_read_calls = -1, lines_requested = 0, full_buffer_reads = 0, structure_rows_processed = 0 },
+            { line_read_calls = 1.5, lines_requested = 0, full_buffer_reads = 0, structure_rows_processed = 0 },
+            { line_read_calls = 1, lines_requested = 0, full_buffer_reads = 2, structure_rows_processed = 0 },
+            { line_read_calls = 1, lines_requested = 0, full_buffer_reads = 0 },
+        }
+        for _, sample in ipairs(invalid) do
+            local ok, err = pcall(chat_typing.max_work, { sample })
+            assert.is_false(ok)
+            assert.matches("work sample", err)
+        end
+    end)
+
     it("excludes warmups from measured sample indexes", function()
         assert.is_nil(chat_typing.measured_index(1, 5))
         assert.is_nil(chat_typing.measured_index(5, 5))
@@ -111,5 +125,19 @@ describe("chat typing performance scenario", function()
         assert.is_true(sample.insert_mode)
         assert.is_true(sample.restored)
         vim.fn.delete(output)
+    end)
+
+    it("terminates a failed async benchmark promptly with nonzero status", function()
+        local lua = [[require('tests.perf.chat_typing').start({
+            sizes={100}, warmups=0, iterations=1,
+            measure_edit=function(_, _, done) done(nil, 'forced async failure') end,
+        })]]
+        local job = vim.fn.jobstart({ "nvim", "-n", "--headless", "--noplugin", "-u",
+            "tests/minimal_init.vim", "-c", "lua " .. lua }, { stdout_buffered = true, stderr_buffered = true })
+        assert.is_true(job > 0)
+        local status = vim.fn.jobwait({ job }, 3000)[1]
+        if status == -1 then vim.fn.jobstop(job) end
+        assert.is_not.equals(-1, status, "failed benchmark hung instead of exiting")
+        assert.is_not.equals(0, status, "failed benchmark exited successfully")
     end)
 end)

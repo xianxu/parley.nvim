@@ -44,9 +44,20 @@ end
 
 function M.max_work(samples)
     local result = empty_work()
-    for _, sample in ipairs(samples) do
+    for index, sample in ipairs(samples) do
+        if type(sample) ~= "table" then
+            error(string.format("work sample[%d] must be a table", index), 2)
+        end
         for _, field in ipairs(WORK_FIELDS) do
-            result[field] = math.max(result[field], sample[field] or 0)
+            local value = sample[field]
+            if type(value) ~= "number" or value ~= value or value == math.huge or value == -math.huge
+                or value < 0 or value % 1 ~= 0 then
+                error(string.format("work sample[%d].%s must be a nonnegative integer", index, field), 2)
+            end
+            result[field] = math.max(result[field], value)
+        end
+        if sample.full_buffer_reads > sample.line_read_calls then
+            error(string.format("work sample[%d].full_buffer_reads must not exceed line_read_calls", index), 2)
         end
     end
     return result
@@ -264,7 +275,34 @@ function M.start(opts)
     local iterations = opts.iterations or 20
     local report = M.new_report(environment())
     local sizes = opts.sizes or { 100, 1000, 5000 }
+    local measure_edit = opts.measure_edit or M.measure_edit_sample
     local size_index = 0
+    local active_scenario
+    local failed = false
+    local function fatal(err)
+        if failed then return end
+        failed = true
+        local buf = active_scenario and active_scenario.buf
+        if buf then
+            require("parley.line_reader").clear_buffer(buf)
+            pcall(vim.api.nvim_del_augroup_by_name, "ParleyPerfObserver_" .. buf)
+            pcall(vim.api.nvim_del_augroup_by_name, "ParleyPerfLeave_" .. buf)
+            require("parley")._parley_bufs[buf] = nil
+        end
+        pcall(vim.cmd, "stopinsert")
+        if active_scenario then
+            pcall(active_scenario.close, active_scenario)
+            active_scenario = nil
+        end
+        vim.api.nvim_err_writeln("parley chat typing benchmark failed: " .. tostring(err))
+        vim.cmd("cquit 1")
+    end
+    local function guarded(fn)
+        vim.schedule(function()
+            local ok, err = xpcall(fn, debug.traceback)
+            if not ok then fatal(err) end
+        end)
+    end
     local function finish()
         local output = opts.output or os.getenv("PERF_OUTPUT") or ".test-tmp/perf/parley-chat-typing.json"
         M.write_report(output, harness.encode(report))
@@ -277,17 +315,19 @@ function M.start(opts)
         local n = sizes[size_index]
         if not n then return finish() end
         local scenario = M.open_fixture(n)
+        active_scenario = scenario
         local samples, work = {}, {}
         local edit_index = 0
+        local safe_edit_done
         local function edit_done(sample, err)
-            if not sample then error(err, 0) end
+            if not sample then return fatal(err) end
             edit_index = edit_index + 1
             local measured = M.measured_index(edit_index, warmups)
             if measured then
                 samples[measured], work[measured] = sample.elapsed_ms, sample.work
             end
             if edit_index < warmups + iterations then
-                return M.measure_edit_sample(scenario, nil, edit_done)
+                return measure_edit(scenario, nil, safe_edit_done)
             end
             M.add_result(report, "edit_total", "inclusive", n, samples, M.max_work(work))
             for phase, fn in pairs(isolated_phases(scenario)) do
@@ -299,11 +339,17 @@ function M.start(opts)
                 M.add_result(report, phase, "isolated", n, phase_samples, M.max_work(phase_work))
             end
             scenario:close()
-            vim.schedule(next_size)
+            active_scenario = nil
+            guarded(next_size)
         end
-        M.measure_edit_sample(scenario, nil, edit_done)
+        safe_edit_done = function(...)
+            local args = { n = select("#", ...), ... }
+            local ok, err = xpcall(function() edit_done(unpack(args, 1, args.n)) end, debug.traceback)
+            if not ok then fatal(err) end
+        end
+        measure_edit(scenario, nil, safe_edit_done)
     end
-    vim.schedule(next_size)
+    guarded(next_size)
 end
 
 return M
