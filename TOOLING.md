@@ -26,8 +26,9 @@ new parent directory) with:
 make perf PERF_OUTPUT=/path/to/parley-chat-typing.json
 ```
 
-The JSON envelope has `schema_version`, `generated_at`, `timing_unit`,
-`environment`, and `scenarios`. Every scenario records `name`, `phase`,
+The JSON envelope has `schema_version: 1`, `generated_at`,
+`timing_unit: "milliseconds"`, `environment` (`os`, `nvim`, and the measured
+git `commit`), and `scenarios`. Every scenario records `name`, `phase`,
 `attribution` (`inclusive` or `isolated`), `line_count`, `iteration_count`,
 `elapsed_ms` (`samples`, `median`, `p95`), and `work`
 (`line_read_calls`, `lines_requested`, `full_buffer_reads`, and
