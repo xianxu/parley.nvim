@@ -1,4 +1,5 @@
 local chat_pending = require("parley.chat_pending")
+local logger = require("parley.logger")
 
 local uv = vim.uv or vim.loop
 
@@ -323,6 +324,50 @@ describe("chat pending extmark adapter", function()
         runtime:drain()
         assert.equals(1, completions)
         assert.equals(0, runtime:open_timer_count())
+    end)
+
+    it("contains emitter failures without logging callback data", function()
+        local buf = new_scratch()
+        local runtime = new_runtime()
+        local emitted = {}
+        local session = chat_pending.start({
+            buf = buf,
+            anchor_line = 0,
+            lease_valid = function() return true end,
+            emit_content = function(_qid, chunk)
+                if chunk == "private chunk" then
+                    error("private thrown secret")
+                end
+                table.insert(emitted, chunk)
+            end,
+            choose_verb_index = function() return 1 end,
+            clock = runtime.clock,
+            scheduler = runtime.scheduler,
+        })
+        runtime:drain()
+        runtime:advance(1000)
+        runtime:drain()
+        session:content("q", "private chunk")
+        session:content("q", "public tail")
+        local completed = 0
+        session:complete("q", function() completed = completed + 1 end)
+        runtime:drain()
+
+        local logs = {}
+        local original_error = logger.error
+        logger.error = function(message) table.insert(logs, message) end
+        runtime:advance(1000)
+        runtime:drain()
+        logger.error = original_error
+
+        assert.same({ "public tail" }, emitted)
+        assert.equals(1, completed)
+        assert.is_nil(extmark(buf))
+        assert.equals(0, runtime:open_timer_count())
+        local combined = table.concat(logs, "\n")
+        assert.is_truthy(combined:find("chat pending content emitter callback failed", 1, true))
+        assert.is_nil(combined:find("private chunk", 1, true))
+        assert.is_nil(combined:find("private thrown secret", 1, true))
     end)
 
     it("surfaces owned failures after staged partial output", function()

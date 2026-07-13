@@ -1,8 +1,10 @@
 -- Main-loop adapter for one chat-producing LLM leg's pending presentation.
 local M = {}
 
+local logger = require("parley.logger")
 local presentation = require("parley.chat_presentation")
 local spinner = require("parley.progress").SPINNER
+local unpack_values = unpack
 
 local namespace = vim.api.nvim_create_namespace("parley_chat_pending")
 local active_by_buf = {}
@@ -47,9 +49,19 @@ local production_scheduler = {
     end,
 }
 
-local function call_safely(callback, ...)
-    if type(callback) == "function" then
-        pcall(callback, ...)
+local function call_safely(label, callback, ...)
+    if type(callback) ~= "function" then
+        return
+    end
+    local arguments = { n = select("#", ...), ... }
+    local ok = xpcall(function()
+        callback(unpack_values(arguments, 1, arguments.n))
+    end, function()
+        -- Callback errors can contain provider output, chunks, or secrets.
+        return nil
+    end)
+    if not ok then
+        logger.error("chat pending " .. label .. " callback failed")
     end
 end
 
@@ -94,7 +106,7 @@ M.start = function(opts)
     local function cancel_timer(name)
         local cancel = session.timers[name]
         session.timers[name] = nil
-        call_safely(cancel)
+        call_safely("timer cancellation", cancel)
     end
 
     local function cancel_timers()
@@ -225,15 +237,15 @@ M.start = function(opts)
                     return
                 end
             elseif action.type == "emit_content" then
-                call_safely(session.emit_content, action.qid, action.chunk)
+                call_safely("content emitter", session.emit_content, action.qid, action.chunk)
             elseif action.type == "hide" then
                 hide()
             elseif action.type == "continue_completion" then
                 hide()
-                call_safely(action.completion)
+                call_safely("completion", action.completion)
             elseif action.type == "surface_failure" then
                 hide()
-                call_safely(context and context.surface_failure, action.error)
+                call_safely("failure surface", context and context.surface_failure, action.error)
             end
         end
     end
