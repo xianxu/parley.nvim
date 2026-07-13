@@ -465,3 +465,15 @@ fixture description to enumerate only its implemented modes.
 The corrected boundary passes 16 shared skill-lifecycle, 24 real Definition,
 and 5 caller-teardown cases, lint, and the complete suite with `JOBS=1`; the
 single-worker run avoids unrelated cross-worktree Neovim process contention.
+
+### 2026-07-13 — moving-anchor close-review correction
+
+The second mandatory review found that animation repaints reset chat and
+Definition extmarks to their initial numeric coordinates after edits above the
+anchor. Both renderers now resolve the live extmark position before repainting
+and terminate on unexpected invalidation. Chat deliberately retains the current
+position across its playful-to-semantic hide/recreate handoff. New real-buffer
+regressions insert a line above each visible mark, advance animation, and prove
+the mark remains on its tracked row. The focused boundaries pass 22 chat-pending
+and 25 Definition cases; all 7 real curl/SSE cases, lint, and the complete
+single-worker repository suite also exit 0.

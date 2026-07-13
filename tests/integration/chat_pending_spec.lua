@@ -239,6 +239,23 @@ describe("chat pending extmark adapter", function()
         assert.matches(" dragon%-slaying$", virtual_text(buf))
     end)
 
+    it("repaints at the extmark's tracked row after text moves the anchor", function()
+        local buf = new_scratch()
+        local runtime = new_runtime()
+        start_fake(buf, runtime)
+        runtime:advance(1000)
+        runtime:drain()
+        assert.equals(0, extmark(buf)[2])
+
+        vim.api.nvim_buf_set_lines(buf, 0, 0, false, { "inserted above" })
+        assert.equals(1, extmark(buf)[2], "Neovim must move the pending mark with its anchor")
+        runtime:advance(120)
+        runtime:drain()
+
+        assert.equals(1, extmark(buf)[2], "animation repaint reset the tracked row")
+        assert.matches("^⠹ brewing$", virtual_text(buf))
+    end)
+
     it("stages content until the minimum and flushes it in FIFO order", function()
         local buf = new_scratch()
         local runtime = new_runtime()

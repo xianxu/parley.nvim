@@ -124,7 +124,16 @@ M.start = function(opts)
 
     local function hide()
         if session.extmark_id then
+            if vim.api.nvim_buf_is_valid(session.buf) then
+                local position = vim.api.nvim_buf_get_extmark_by_id(
+                    session.buf, namespace, session.extmark_id, { details = true })
+                if #position >= 2 and not (position[3] and position[3].invalid) then
+                    session.last_mark_row = position[1]
+                    session.last_mark_col = position[2]
+                end
+            end
             pcall(vim.api.nvim_buf_del_extmark, session.buf, namespace, session.extmark_id)
+            session.extmark_hidden = true
         end
         session.visible_text = nil
         session.playful_verb = nil
@@ -134,8 +143,23 @@ M.start = function(opts)
         if not vim.api.nvim_buf_is_valid(session.buf) then
             return false
         end
+        local row = session.anchor_line
+        local col = 0
+        if session.extmark_id then
+            local position = vim.api.nvim_buf_get_extmark_by_id(
+                session.buf, namespace, session.extmark_id, { details = true })
+            if #position >= 2 and not (position[3] and position[3].invalid) then
+                row = position[1]
+                col = position[2]
+            elseif session.extmark_hidden and session.last_mark_row then
+                row = session.last_mark_row
+                col = session.last_mark_col
+            else
+                return false
+            end
+        end
         local ok, mark_id = pcall(vim.api.nvim_buf_set_extmark, session.buf, namespace,
-            session.anchor_line, 0, {
+            row, col, {
                 id = session.extmark_id,
                 virt_lines = { { { text, "Comment" } } },
                 virt_lines_above = false,
@@ -145,6 +169,9 @@ M.start = function(opts)
             return false
         end
         session.extmark_id = mark_id
+        session.extmark_hidden = false
+        session.last_mark_row = row
+        session.last_mark_col = col
         session.visible_text = text
         return true
     end
@@ -207,7 +234,9 @@ M.start = function(opts)
                 end
                 if session.playful_verb then
                     session.frame_index = session.frame_index % #spinner + 1
-                    render_playful()
+                    if not render_playful() then
+                        dispatch({ type = "invalid" })
+                    end
                 end
             end)
         end)

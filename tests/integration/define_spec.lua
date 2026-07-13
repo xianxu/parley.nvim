@@ -310,6 +310,32 @@ describe("define_visual + render_definition (#161)", function()
         held_exit("late")
     end)
 
+    it("repaints Definition progress at its tracked position after preceding edits", function()
+        local held_exit
+        parley.dispatcher.query = function(_b, _p, _payload, _h, on_exit)
+            held_exit = on_exit
+        end
+        vim.fn.setpos("'<", { buf, 3, 9, 0 })
+        vim.fn.setpos("'>", { buf, 3, 12, 0 })
+        require("parley").define_visual(buf)
+        local initial = spinner_marks(buf)[1]
+        assert.are.equal(2, initial[2])
+
+        vim.api.nvim_buf_set_lines(buf, 0, 0, false, { "inserted above" })
+        local moved = spinner_marks(buf)[1]
+        assert.are.equal(3, moved[2], "Neovim must move the selection mark")
+        local first_frame = moved[4].virt_text[1][1]
+        assert.is_true(vim.wait(500, function()
+            local current = spinner_marks(buf)[1]
+            return current and current[4].virt_text[1][1] ~= first_frame
+        end, 10), "spinner frame did not advance")
+
+        assert.are.equal(3, spinner_marks(buf)[1][2],
+            "animation repaint reset the tracked selection row")
+        require("parley.skill_invoke").cancel(buf)
+        held_exit("late")
+    end)
+
     it("removes inline progress on pre-query abort, transport failure, and explicit cancel", function()
         local modes = { "abort", "transport", "cancel" }
         for _, mode in ipairs(modes) do

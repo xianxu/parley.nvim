@@ -634,9 +634,9 @@ git diff --check origin/main...HEAD
 
 Expected: every command exits 0 with no warnings or whitespace errors.
 
-- [x] **Step 5: Perform the manual temporal smoke test**
+- [x] **Step 5: Perform the production-shaped headless temporal smoke test**
 
-In Neovim, use a test provider or temporarily delayed endpoint to verify: fast answer/no spinner; slow answer/playful line after one second; staged burst after minimum; remote status handoff; tool recursion with no spinner during local execution; immediate `CVR ⠙` Definition transition to `CVR[^cvr]`; Review still uses the detached luabar. Record exact observations in the issue Log.
+In headless Neovim, use real scratch-buffer extmarks, injected production-shaped clocks, real entry points, and the loopback curl/SSE fixture to verify: fast answer/no spinner; slow answer/playful line after one second; staged burst after minimum; remote status handoff; tool recursion with no spinner during local execution; immediate `CVR ⠙` Definition transition to `CVR[^cvr]`; Review still uses the detached luabar. Record exact observations in the issue Log.
 
 - [x] **Step 6: Check off the issue plan and commit docs/evidence**
 
@@ -652,6 +652,17 @@ git commit -m "#182: document LLM progress presentation"
 Run `sdlc actual --issue 182`, then follow `sdlc close --help`. Close with the targeted, process-fake, mapped, full-suite, diff, and manual evidence; use only the precise atlas/project bypass if the gate says it is genuinely inapplicable. Publish once with `sdlc pr` then `sdlc merge`; verify `main` contains the branch tip.
 
 ## Revisions
+
+### 2026-07-13T03:46:46-07:00 — moving-anchor close-review correction
+
+The second boundary review found that both transient renderers recreated their
+extmarks at original numeric coordinates, defeating Neovim's tracked movement
+after edits above an anchor. Repaints now resolve each live extmark's current
+row/column and terminate on unexpected invalidation; chat's deliberate
+playful-to-semantic hide/recreate preserves its tracked position and mark id.
+Added movement regressions for chat animation and Definition animation. Also
+corrected Task 6 Step 5's checked wording to name the production-shaped headless
+smoke that was actually performed.
 
 ### 2026-07-13T03:36:15-07:00 — close-review corrections
 

@@ -36,7 +36,20 @@ function M.start(buf, row, col)
             stop()
             return
         end
-        local ok, mark = pcall(vim.api.nvim_buf_set_extmark, buf, namespace, row, col, {
+        local current_row = row
+        local current_col = col
+        if extmark then
+            local position = vim.api.nvim_buf_get_extmark_by_id(
+                buf, namespace, extmark, { details = true })
+            if #position < 2 or (position[3] and position[3].invalid) then
+                stop()
+                return
+            end
+            current_row = position[1]
+            current_col = position[2]
+        end
+        local ok, mark = pcall(vim.api.nvim_buf_set_extmark, buf, namespace,
+            current_row, current_col, {
             id = extmark,
             virt_text = { { " " .. require("parley.progress").frame(tick) } },
             virt_text_pos = "inline",
