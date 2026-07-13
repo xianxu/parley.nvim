@@ -1,12 +1,13 @@
 ---
 id: 000184
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-13
 updated: 2026-07-13
 estimate_hours: 1.50
 started: 2026-07-13T14:51:27-07:00
+actual_hours: 1.76
 ---
 
 # Keep recursive progress visible above folds
@@ -98,6 +99,7 @@ implementation calibration is already reflected in each `impl=` value.
 ## Log
 
 ### 2026-07-13
+- 2026-07-13: closed — Two-round recursive tool-loop regressions prove the delayed spinner is outside all closed tool folds, staged output obeys its minimum and flushes before provider error, semantic status follows the stream tip, and cancellation cleans timers/ownership/lease; mapped specs, lint, and serialized full suite pass. The sole unchecked row is this active close/publish/merge gate.; review verdict: FIX-THEN-SHIP
 
 Traced the missing UI through the production tool loop. `process_response`
 appends the final `tool_result`, schedules `tool_folds.apply_folds`, and then
@@ -134,6 +136,11 @@ Verification passed: `chat_respond_spec.lua` 48/48, mapped
 `chat/exchange_model`, lint across 265 files with zero warnings/errors, and the
 serialized full repository suite. Scoped diff checking is clean; the checkout
 continues to preserve the operator's unrelated pre-existing #162 edit.
+
+The first boundary review returned `FIX-THEN-SHIP` with one Important test-
+oracle finding: post-minimum output was checked for presence but not exact
+cardinality. The regression now counts the final staged answer and requires one
+occurrence, directly proving the plan's exactly-once release contract.
 
 ## Revisions
 
