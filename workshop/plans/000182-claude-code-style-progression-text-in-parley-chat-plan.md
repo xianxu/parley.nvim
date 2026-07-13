@@ -193,7 +193,7 @@ git commit -m "#182: add pure chat presentation controller"
 - Modify: `tests/integration/topic_gen_spec.lua`
 - Modify: `tests/integration/cliproxy_caller_teardown_spec.lua`
 
-- [ ] **Step 1: Write RED drain-order and dispatcher callback tests**
+- [x] **Step 1: Write RED drain-order and dispatcher callback tests**
 
 First drive captured process-exit and pipe-reader callbacks in both permutations: stdout/stderr EOF before process exit, and process exit before stdout/stderr EOF. Assert `tasker.run` waits for all three signals, retains final fragments, invokes its public callback once, and reports read failure through an additive fifth `io_error` result.
 
@@ -220,7 +220,7 @@ proves its supplied assembled-response callback advances every tag and finishes
 the batch. These tests use the real consumer functions and real dispatcher,
 monkeypatching only `tasker.run` to deliver a drained nonzero transport terminal.
 
-- [ ] **Step 2: Run tasker and dispatcher specs and verify RED**
+- [x] **Step 2: Run tasker and dispatcher specs and verify RED**
 
 Run:
 
@@ -241,7 +241,7 @@ Expected: FAIL because `tasker.run` closes pipes at process exit instead of
 draining, `query` has no activity/error callbacks or task exit status, and the
 vault/task launch failures and real legacy consumers have no reliable terminal.
 
-- [ ] **Step 3: Make `tasker.run` drain-safe**
+- [x] **Step 3: Make `tasker.run` drain-safe**
 
 Replace process-exit-time `read_stop`/close with a production three-signal coordinator:
 
@@ -270,7 +270,7 @@ launch rejection through one once-guarded error closure; never run the success
 callback on those paths. Existing vault consumers that omit it remain
 backward-compatible.
 
-- [ ] **Step 4: Implement the additive dispatcher contract**
+- [x] **Step 4: Implement the additive dispatcher contract**
 
 Change the public signature only by appending callbacks:
 
@@ -314,7 +314,7 @@ for `generate_topic`, callback-only memory preferences, callers that supply both
 surfaces, and callers that supply neither. Callers that opt into `on_error`
 receive only that terminal and never either legacy surface.
 
-- [ ] **Step 5: Run dispatcher and tasker tests and verify GREEN**
+- [x] **Step 5: Run dispatcher and tasker tests and verify GREEN**
 
 Run:
 
@@ -334,7 +334,7 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim \
 Expected: PASS; existing semantic progress expectations remain unchanged, and
 both real legacy consumers terminate after a failed transport.
 
-- [ ] **Step 6: Commit the drain and dispatcher contracts**
+- [x] **Step 6: Commit the drain and dispatcher contracts**
 
 ```bash
 git add lua/parley/tasker.lua lua/parley/vault.lua lua/parley/dispatcher.lua \
@@ -652,6 +652,14 @@ git commit -m "#182: document LLM progress presentation"
 Run `sdlc actual --issue 182`, then follow `sdlc close --help`. Close with the targeted, process-fake, mapped, full-suite, diff, and manual evidence; use only the precise atlas/project bypass if the gate says it is genuinely inapplicable. Publish once with `sdlc pr` then `sdlc merge`; verify `main` contains the branch tip.
 
 ## Revisions
+
+### 2026-07-13T01:58:42-07:00 — Task 2 execution
+
+Checked off the drain-safe task/dispatcher boundary after RED/GREEN
+implementation and independent specification and quality reviews. Review-driven
+fixes contain callback exceptions without stranding lifecycle cleanup, isolate
+legacy completion surfaces, and keep provider and callback diagnostics bounded;
+the focused boundary now passes 110 tests.
 
 ### 2026-07-13T01:26:31-07:00 — Task 1 execution
 

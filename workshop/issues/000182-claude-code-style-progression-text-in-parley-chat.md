@@ -189,7 +189,7 @@ v3.1's 40% AI-paired ship-wall-clock scale.
 
 - [x] Approve the durable plan at `workshop/plans/000182-claude-code-style-progression-text-in-parley-chat-plan.md`.
 - [x] Build the pure chat presentation reducer with exhaustive event-order tests.
-- [ ] Add separate raw-SSE activity and post-start transport-error callbacks.
+- [x] Add separate raw-SSE activity and post-start transport-error callbacks.
 - [ ] Replace the buffer-backed web spinner with the extmark-backed chat adapter.
 - [ ] Add Definition's immediate selection spinner and generalized skill terminal cleanup.
 - [ ] Update README/atlas/traceability and pass targeted, process, mapped, and full verification.
@@ -379,3 +379,13 @@ Implemented the pure immutable presentation reducer and formatter with 41
 focused tests. Fresh reviews caught and closed delayed-reveal minimum timing,
 nil completion ownership, and quadratic staged-event copying; staging now uses
 an O(1) persistent chain with one linear ordered flush.
+
+### 2026-07-13 — Task 2 complete
+
+Made subprocess completion drain-safe across process exit, stdout EOF, and
+stderr EOF; added raw SSE/JSONL activity plus body-preserving provider failure
+terminals; and preserved every legacy completion surface. The focused boundary
+passes 110 tests. Fresh specification and quality reviews found no blocking
+issues after callback exception containment, bounded diagnostics, and completion
+isolation were added. `ARCH-PURE` kept transport framing deterministic at the
+dispatcher seam while lifecycle ownership remains in the task integration.
