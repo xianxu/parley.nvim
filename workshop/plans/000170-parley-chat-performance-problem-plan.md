@@ -444,6 +444,7 @@ structural bounds do.
       `tests/unit/perf_harness_spec.lua`, `tests/unit/line_reader_spec.lua`,
       `tests/unit/diagnostic_refresh_spec.lua`,
       `tests/unit/buffer_lifecycle_spec.lua`,
+      `tests/unit/chat_respond_footnote_spec.lua`,
       `tests/unit/highlight_structure_spec.lua`,
       `tests/integration/perf_chat_typing_spec.lua`,
       `tests/integration/diagnostic_refresh_spec.lua`,
@@ -460,6 +461,7 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile te
 nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile tests/unit/line_reader_spec.lua' -c 'qa!'
 nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile tests/unit/diagnostic_refresh_spec.lua' -c 'qa!'
 nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile tests/unit/buffer_lifecycle_spec.lua' -c 'qa!'
+nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile tests/unit/chat_respond_footnote_spec.lua' -c 'qa!'
 nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile tests/unit/highlight_structure_spec.lua' -c 'qa!'
 nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile tests/integration/perf_chat_typing_spec.lua' -c 'qa!'
 nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile tests/integration/diagnostic_refresh_spec.lua' -c 'qa!'
@@ -468,7 +470,7 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile te
 nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile tests/arch/performance_line_reader_spec.lua' -c 'qa!'
 ```
 
-      Paste the ten PASS results into the issue Log.
+      Paste the eleven PASS results into the issue Log.
 - [x] Commit exact tests/issue as `#170: prove chat performance lifecycle bounds`.
 
 ### Task 8: Tooling, atlas, traceability, and verification
@@ -647,3 +649,15 @@ the structure-backed redraw and hard counter gates, plus
 `tests/unit/buffer_lifecycle_spec.lua` to pin notify/propagate behavior. Two
 combined highlighting tests now install the Task 4 lifecycle; Task 7 still owns
 the final one-oracle-per-named-test sweep.
+
+### 2026-07-12 — complete focused-spec command set
+
+Reason: final traceability review found the original Task 7 ten-command list
+omitted the newly added focused managed-footnote grammar spec even though the
+implementation and full suite already exercised it.
+
+Delta: added the literal `PlenaryBustedFile
+tests/unit/chat_respond_footnote_spec.lua` command to the required verification
+block and expanded the recorded focused PASS set from ten to eleven. The issue
+Log preserves that the original Task 7 list contained ten commands and records
+the subsequent explicit 1/1 PASS that completes the set.

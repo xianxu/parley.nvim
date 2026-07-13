@@ -534,10 +534,11 @@ Every lifecycle oracle now has its own exact named test. Named convergence
 autocmd cases assert diagnostics before `nvim_exec_autocmds` returns; undo,
 redo, external edit, stream/API-leg, scrolling, and second-window cases assert
 the structure synchronously; separate `BufUnload`/`BufDelete` tests assert
-cleared state plus invalid-buffer and obsolete-callback no-ops. The ten required
-commands were executed individually and passed: `perf_harness_spec.lua` 8/8,
+cleared state plus invalid-buffer and obsolete-callback no-ops. The eleven
+required commands were executed individually and passed: `perf_harness_spec.lua` 8/8,
 `line_reader_spec.lua` 8/8, `diagnostic_refresh_spec.lua` 3/3,
-`buffer_lifecycle_spec.lua` 6/6, `highlight_structure_spec.lua` 9/9,
+`buffer_lifecycle_spec.lua` 6/6, `chat_respond_footnote_spec.lua` 1/1,
+`highlight_structure_spec.lua` 9/9,
 `perf_chat_typing_spec.lua` 13/13, integration
 `diagnostic_refresh_spec.lua` 9/9, `highlighting_spec.lua` 44/44,
 `chat_respond_spec.lua` 33/33, and `performance_line_reader_spec.lua` 4/4.
@@ -552,9 +553,10 @@ coordinator, bounded highlight structure, per-window redraw, LineReader
 observability, and teardown. #170 adds eleven test files: nine `*_spec.lua`
 files plus the two `tests/perf/` support modules. `atlas/traceability.yaml` maps
 all nine added specs, and a reverse exact-path sweep found no missing spec.
-This added-spec set is distinct from Task 7's ten-command verification list,
-which exercises eight added specs plus two modified integration specs and does
-not include the added focused `chat_respond_footnote_spec.lua`. In addition,
+The original Task 7 verification list contained ten commands (eight added specs
+plus two modified integration specs) and omitted the added focused
+`chat_respond_footnote_spec.lua`; final traceability review ran that literal
+command at 1/1 PASS, expanding the required focused set to eleven. In addition,
 `scripts/spec_test_map.sh has-mapping atlas/chat/lifecycle.md` passed.
 
 Final commands passed: `make -f Makefile.parley perf`, `make -f Makefile.parley
