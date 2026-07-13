@@ -1,12 +1,13 @@
 ---
 id: 000185
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-13
 updated: 2026-07-13
 estimate_hours: 0.50
 started: 2026-07-13T16:32:47-07:00
+actual_hours: 0.24
 ---
 
 # Use everyday cooking verbs for playful progress
@@ -67,6 +68,7 @@ private data replacement plus an exact table-driven integration oracle.
 ## Log
 
 ### 2026-07-13
+- 2026-07-13: closed — The adapter renders exactly 28 approved capitalized cooking/everyday verbs in order with chooser cardinality 28, rotates through controlled distinct entries, and excludes dragon-slaying; mapped response-progress, lint across 265 files, and the serialized full suite pass.; review verdict: SHIP
 
 The operator selected a curated everyday/cooking vocabulary and explicitly
 approved title-case display. The change reuses the existing injected pool and
