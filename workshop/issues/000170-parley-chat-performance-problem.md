@@ -249,7 +249,7 @@ threshold in this issue.
       generation, and teardown behavior.
 - [x] Verify the complete lifecycle matrix and capture the optimized report on
       the baseline environment.
-- [ ] Update tooling and atlas documentation with the benchmark and landed
+- [x] Update tooling and atlas documentation with the benchmark and landed
       performance architecture.
 
 ## Estimate
@@ -541,3 +541,40 @@ commands were executed individually and passed: `perf_harness_spec.lua` 8/8,
 `perf_chat_typing_spec.lua` 13/13, integration
 `diagnostic_refresh_spec.lua` 9/9, `highlighting_spec.lua` 44/44,
 `chat_respond_spec.lua` 33/33, and `performance_line_reader_spec.lua` 4/4.
+
+### 2026-07-12 — tooling, traceability, and final verification
+
+`TOOLING.md` now documents `make perf`, its default/overridden JSON path and
+complete versioned schema, inclusive-versus-isolated attribution, report-only
+elapsed timings, hard structural gates, optional `:MarkdownPreview` comparison,
+and diagnostic/structure convergence. `atlas/chat/lifecycle.md` maps the neutral
+coordinator, bounded highlight structure, per-window redraw, LineReader
+observability, and teardown. `atlas/traceability.yaml` maps all ten #170 specs;
+a reverse exact-path sweep found no missing spec, and
+`scripts/spec_test_map.sh has-mapping atlas/chat/lifecycle.md` passed.
+
+Final commands passed: `make -f Makefile.parley perf`, `make -f Makefile.parley
+test JOBS=1` (259 Lua files, 0 lint warnings/errors, all unit/integration/arch
+specs green), and `git diff --check`. This final report-only run again satisfied
+all immutable structural gates; its 1,000→5,000 medians were 2.68→2.49 ms for
+inclusive edit and 0.31→0.29 ms for isolated redraw (timing noise is not a
+gate).
+
+The three exact repository sweeps from the plan found no defect:
+
+- Buffer-read matches in `lua/parley/line_reader.lua` are the adapter-owned
+  primitives. Matches in tests, benchmark restoration/capture, architecture
+  literals, and #170 artifacts are evidence-only. Other production matches are
+  explicit non-keystroke/out-of-scope commands (copy/export/review/issue/
+  picker/navigation), submission/stream/tool/fold parsing, or bounded local
+  reads; the scoped architecture test independently forbids direct reads in
+  highlighter, timezone, footnote, and spell paths.
+- `DiagnosticRefresh` is the sole diagnostic lifecycle consumer behind
+  `BufferLifecycle`. Direct diagnostic refresh calls are isolated benchmark or
+  focused test seams, plus the deliberate immediate inline-definition render.
+  Other autocmd/`TextChangedI` matches are spell's permitted one-line typeahead,
+  unrelated vision/issue/picker UI, shared helpers, teardown, tests, and docs.
+- All `parse_chat|exchange_model` production matches are existing submission,
+  streaming/tool/fold/export/outline/finder consumers or definitions; tests and
+  atlas describe them. Neither the benchmark nor the new per-keystroke
+  lifecycle adds a parse/model call (`ARCH-DRY`, `ARCH-PURPOSE`).

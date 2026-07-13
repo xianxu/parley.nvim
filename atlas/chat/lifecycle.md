@@ -17,6 +17,32 @@ Assembles context (with memory summarization), streams LLM response into buffer.
 
 Pending responses also hold a per-buffer chat lease (`lua/parley/chat_lease.lua`) anchored on an `invalidate=true` extmark on the response's `🤖:` agent-header line (#138). Each async callback validates the lease before mutating the transcript; ordinary edits and streaming move the anchor and stay valid, while deleting that line — undo/redo of the inserted response, or removing the header — invalidates the lease, stops/suppresses late stream/tool/progress/topic writes, and prevents recursive tool resubmit from using a stale live model. (Pre-#138 the lease keyed on buffer `changedtick`, which mis-read Parley's own writes/spinner frames as drift; the extmark anchor makes `commit` a no-op.)
 
+## Editing, Diagnostics, and Decoration Convergence
+
+`lua/parley/buffer_lifecycle.lua` is the neutral owner of buffer convergence
+events. It invokes diagnostics and highlight structure independently on
+`InsertLeave`, normal `TextChanged`, `BufWritePost`, `BufEnter`, and `WinEnter`;
+chat-response finalization enters the same coordinator after a mutated API leg.
+`BufUnload`/`BufDelete` tears down lifecycle, structure, and LineReader state so
+obsolete callbacks and reused buffer handles are harmless.
+
+Ordinary insert keystrokes do not rebuild document-wide timezone or managed
+footnote diagnostics. Those diagnostics may remain stale during `TextChangedI`
+and are synchronously current before the next convergence event returns.
+Structural-marker edits mark decorations dirty in bounded changed-row work and
+may suppress them until convergence; ordinary prose edits keep the current
+structure valid.
+
+`lua/parley/highlight_structure.lua` owns the pure canonical prefix/fence/tool/
+reasoning structure. `lua/parley/highlighter.lua` keeps one buffer-owned
+structure snapshot and per-window viewport decorations. A redraw reads only
+the visible rows plus its fixed context/reasoning allowances, never scans the
+whole document for a managed footer, and recomputes separately for scrolling or
+multiple windows. `lua/parley/line_reader.lua` is the observable adapter for all
+performance-sensitive buffer reads; the report-only `make perf` suite asserts
+structural work bounds while treating elapsed timings as evidence rather than
+CI budgets.
+
 ## Follow Cursor (`:ParleyToggleFollowCursor` / `<C-g>l`)
 Toggles auto-follow of streaming insertion point.
 

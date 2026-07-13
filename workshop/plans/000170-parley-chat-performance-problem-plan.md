@@ -481,28 +481,28 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile te
 - Modify: `workshop/issues/000170-parley-chat-performance-problem.md`
 - Modify: this plan
 
-- [ ] Document `make perf`, schema/path/override, report-only timing, structural
+- [x] Document `make perf`, schema/path/override, report-only timing, structural
       gates, optional MarkdownPreview comparison, diagnostic convergence, and
       bounded highlight structure. Map all new specs in traceability.
-- [ ] In `atlas/traceability.yaml`, map each Done-when and every lifecycle oracle
+- [x] In `atlas/traceability.yaml`, map each Done-when and every lifecycle oracle
       to the named tests from Task 7. Reverse-sweep every new #170 test and
       confirm it appears under the schema's relevant feature entry.
-- [ ] Run `make -f Makefile.parley perf`, then
+- [x] Run `make -f Makefile.parley perf`, then
       `make -f Makefile.parley test JOBS=1`, then `git diff --check`. If
       user-owned dirty issue drafts make the last command red, record them and
       check `main..HEAD` plus #170 paths without editing those drafts.
-- [ ] Run from repo root:
+- [x] Run from repo root:
       `rg -n 'nvim_buf_get_lines|nvim_buf_get_text|vim\.fn\.getline|nvim_get_current_line' . -g '!workshop/history/**' -g '!construct/generated/**' -g '!.git/**' -g '!.test-*/**'`;
       classify every match as LineReader adapter-owned, explicitly out of scope,
       or defect. Defects must be fixed; no unexplained matches remain.
-- [ ] Run from repo root:
+- [x] Run from repo root:
       `rg -n 'refresh_buffer|refresh_footnote_diagnostics|diagnostic_refresh|TextChangedI|nvim_create_autocmd' . -g '!workshop/history/**' -g '!construct/generated/**' -g '!.git/**' -g '!.test-*/**'`
       and
       `rg -n 'parse_chat|exchange_model' . -g '!workshop/history/**' -g '!construct/generated/**' -g '!.git/**' -g '!.test-*/**'`.
       Classify every result; lifecycle consumers derive from
       `DiagnosticRefresh`, and no new exchange parse/model call exists
       (`ARCH-DRY`, `ARCH-PURPOSE`).
-- [ ] Tick issue/plan boxes only after evidence exists. Commit docs/artifacts as
+- [x] Tick issue/plan boxes only after evidence exists. Commit docs/artifacts as
       `#170: document bounded chat performance pipeline`.
 - [ ] Run `sdlc actual --issue 170`; inspect measured hours. Attempt close with
       `sdlc close --issue 170 --verified '<perf counters + focused/full suite +
