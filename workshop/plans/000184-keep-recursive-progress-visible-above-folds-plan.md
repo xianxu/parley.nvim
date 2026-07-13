@@ -82,13 +82,24 @@ assert.equals("", vim.api.nvim_buf_get_lines(buf,
 Because `final_result_fold_end_1` is 1-indexed while `mark[2]` is 0-indexed,
 their equality proves the mark is on the row immediately after the final folded
 tool result. The empty next row is the recursive stream placeholder, so that
-row is precisely its stable preceding separator. Capture the extmark ID, deliver `"final answer"`
-through the third leg's real response handler, and assert the same ID moves to
-the line containing that text. Complete during the visible minimum and prove
-the answer stays staged until the remaining deadline, then appears exactly
-once and the decoration disappears.
+row is precisely its stable preceding separator. Deliver `"final answer"`
+through the third leg's real response handler during the visible minimum and
+assert the spinner keeps the same ID and separator row while the text remains
+absent. Complete during that minimum, advance the remaining deadline, and prove
+the spinner disappears before the answer flushes exactly once.
 
-- [ ] **Step 3: Write folded-recursive terminal regressions**
+- [ ] **Step 3: Write the released semantic-status relocation regression**
+
+Start another two-round third leg, but deliver `"first"` before the reveal so
+the waiting reducer releases directly and the real writer places it outside the
+fold. Capture dispatcher argument 7 (`on_progress`), send a meaningful
+`{ message = "Reasoning" }` event, and record its extmark ID at the first
+written row. Deliver `" second"` through the content handler, drain both
+schedulers, and assert the same status ID moves to the writer-reported row
+containing `"first second"`. This retains #183's movement contract without
+confusing it with the playful minimum.
+
+- [ ] **Step 4: Write folded-recursive terminal regressions**
 
 Reuse the helper in two focused cases:
 
@@ -114,7 +125,7 @@ entries whose `closed` field is false).
    retain their closed starts and ends. Restore `vim.notify` even if the
    assertion fails by following the spec file's existing save/restore pattern.
 
-- [ ] **Step 4: Run the mapped regression and verify RED**
+- [ ] **Step 5: Run the mapped regression and verify RED**
 
 Run:
 
@@ -124,8 +135,8 @@ make test-spec SPEC=chat/response_progress
 
 Expected: FAIL because the third-leg mark is inside the final closed tool-result
 fold (`foldclosed(mark[2] + 1) ~= -1`) and is not the separator adjacent to the
-stream placeholder. The terminal cases may already pass; the placement
-assertion must be observed failing before production code changes.
+stream placeholder. Semantic relocation and terminal cases may already pass;
+the placement assertion must be observed failing before production code changes.
 
 ### Task 2: Anchor recursion to the stable pre-stream separator
 
@@ -158,8 +169,9 @@ make test-spec SPEC=chat/response_progress
 ```
 
 Expected: PASS. The third-leg spinner is silent through 999 ms, visible at
-1000 ms outside the final tool fold, preserves its ID when the first chunk
-lands, and both folded terminal cases clean up exactly once.
+1000 ms outside the final tool fold, stays there while minimum-visible content
+is staged, semantic status later follows released streaming with the same ID,
+and both folded terminal cases clean up exactly once.
 
 - [ ] **Step 3: Run the exchange-model mapping**
 
@@ -240,3 +252,10 @@ Expanded terminal fold snapshots from the two result folds to all four
 tool-use/result folds across both recursive rounds, and made the provider-error
 sequence explicit: reveal, deliver partial content, drain it into staging,
 invoke dispatcher `on_error`, then prove the staged write precedes notification.
+
+### 2026-07-13 — reducer-contract revision
+
+Corrected an impossible test expectation exposed by reading the pure reducer.
+Playful progress now stays at the separator while minimum-visible content is
+staged and hides before flush; a separate released semantic-status case proves
+same-ID writer relocation through the same folded recursive entry.

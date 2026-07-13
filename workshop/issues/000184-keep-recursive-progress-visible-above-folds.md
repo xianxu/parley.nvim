@@ -55,9 +55,12 @@ row is outside the closed fold, and therefore codifies the invisible placement.
   row for which `foldclosed(row + 1) == -1`.
 - The recursive progress row is the stable separator immediately before the
   stream placeholder and visually follows the final folded tool result.
-- The third leg's first streamed chunk relocates the same extmark ID from the
-  separator to the written generation tip without changing the one-second
-  minimum-visibility deadline or other presentation lifecycle state.
+- Content received while the third leg's playful spinner is visible remains
+  staged for the one-second minimum; the spinner stays at the fold-visible
+  separator until it is hidden, then accumulated text flushes in order.
+- After a folded recursive leg has released to normal streaming, meaningful
+  semantic status appears at the written tip and a later chunk relocates that
+  same status extmark ID to the new writer-reported tip.
 - Through a folded recursive leg, cancellation removes the decoration, timers,
   pending ownership, and lease while discarding staged output; provider failure
   removes the decoration and releases staged partial output before surfacing
@@ -112,6 +115,12 @@ The SDLC plan-quality gate then required terminal tests to snapshot all four
 tool-use/result folds across both rounds and to explicitly create staged partial
 content before invoking provider failure. The durable plan now pins both.
 
+Pre-implementation reducer review found that the earlier same-ID requirement
+contradicted #182's minimum-visible staging: a visible playful mark is hidden
+before staged content is written. The spec now requires that playful mark to
+remain at the separator through the minimum and tests same-ID relocation on
+semantic status after release, where the writer actually runs.
+
 ## Revisions
 
 ### 2026-07-13 — fresh spec review
@@ -126,3 +135,10 @@ run through the folded-recursive separator path.
 
 Renamed the unchanged review primitive from `boundary-review` to the canonical
 `milestone-review` vocabulary required by the estimate-reconciliation gate.
+
+### 2026-07-13 — temporal-contract correction
+
+Separated the playful-minimum case from semantic-status movement. Visible
+playful progress remains at the separator while content stages, then hides
+before the flush; same-ID relocation applies to semantic status during released
+streaming, matching the pure reducer's established actions.
