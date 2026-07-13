@@ -26,10 +26,13 @@ place to show pending work.
 
 ### Chat response presentation
 
-- Apply the playful pending state to every LLM call whose response becomes chat
-  content, including recursive LLM legs around local tool calls. Exclude
-  background topic generation and other calls whose output does not become chat
-  content. Do not show it while a local tool itself is executing.
+- Apply the playful pending state only to dispatcher legs started by
+  `chat_respond.respond`: both the initial response leg and each recursive LLM
+  leg around local tool calls. Exclude `generate_topic`, memory preferences,
+  generic skill invocations (including Document Review and Voice Apply), and
+  every other background/utility LLM call. Definition uses its dedicated
+  immediate adapter below. Do not show playful chat progress while a local tool
+  itself is executing.
 - Start each eligible call in a silent waiting state. If visible output arrives
   within one second, stream normally and never show the playful indicator.
   Visible output means answer text, reasoning status, or remote-tool status; a
@@ -44,7 +47,8 @@ place to show pending work.
   vocabulary is cosmetic and is not user configuration in this issue.
 - While the playful line is visible, change its verb on each received SSE event
   or after 15 seconds without an SSE event, whichever happens first. Spinner
-  glyph animation remains independent of verb changes.
+  glyph animation remains independent of verb changes. Avoid immediate verb
+  repetition within one call; consecutive calls do not share verb history.
 - Once shown, keep the playful line visible for at least one second. Buffer all
   visible server output received during that minimum window. Hide the line at
   the later of (a) the first visible output and (b) the minimum-visible
@@ -54,11 +58,26 @@ place to show pending work.
 - After release, preserve existing provider-specific progress behavior such as
   reasoning and remote web-search status. The playful indicator is only the
   pre-output presentation stage, not a replacement for meaningful status.
+- A tool-use-only LLM leg that completes before the playful indicator appears
+  starts its local tool immediately. If the indicator is already visible, stage
+  the transition until its minimum-visible deadline, then remove the indicator
+  before starting the local tool. Never run a local tool behind a still-visible
+  playful indicator.
 - A successful empty completion honors the minimum duration if the indicator
-  became visible, then removes it. A terminal failure or cancellation removes
-  it immediately, discards staged cosmetic state, and surfaces the existing
-  error without waiting for the minimum duration. Stale leases and invalid or
-  deleted buffers must not receive late writes or leave timers/extmarks alive.
+  became visible, then removes it. A provider failure with a still-valid chat
+  lease bypasses the minimum: remove the indicator, flush any staged real output
+  once in original order, then surface the existing error. User cancellation,
+  a stale lease, or an invalid/deleted buffer removes the indicator immediately
+  and discards staged output because that response no longer owns a writable
+  transcript. No terminal path may leave timers or extmarks alive.
+- Callbacks are serialized through the Neovim event loop, and the controller
+  applies events in callback order. The first event that crosses the reveal or
+  minimum deadline performs that transition exactly once: visible output
+  processed before reveal releases directly with no indicator; reveal processed
+  first shows it; visible output at/after the minimum releases and flushes;
+  failure preempts either timer using the valid-lease rule above; cancellation,
+  stale lease, and invalid buffer preempt every write. Later callbacks become
+  no-ops after the controller reaches its terminal state.
 
 ### Inline definition presentation
 
@@ -68,6 +87,11 @@ place to show pending work.
   path.
 - Definition does not use the detached luabar. Document Review remains a
   luabar consumer because it has no unambiguous inline anchor.
+- The shared skill invocation boundary must therefore support two independent,
+  backward-compatible controls: suppress detached progress for Definition, and
+  run an idempotent terminal cleanup hook on success, failure, cancellation, or
+  process abort. Review, Voice Apply, and existing generic callers retain their
+  current luabar behavior by default.
 - On a valid definition result, remove the virtual spinner immediately and run
   the existing durable footnote flow, producing `CVR[^cvr]` and its managed
   definition. There is no one-second delay or minimum-visible duration for
@@ -90,6 +114,9 @@ place to show pending work.
   policies (`ARCH-DRY`, `ARCH-PURPOSE`).
 - Expose raw SSE activity separately from semantic provider progress so playful
   verb changes do not alter existing progress-event contracts.
+- Model provider failure, cancellation/invalidation, successful completion, and
+  deferred local-tool transition as distinct terminal actions; do not collapse
+  them into a single cleanup callback that loses real buffered output.
 
 ## Done when
 
@@ -102,7 +129,8 @@ place to show pending work.
 - Every chat-producing LLM leg is covered, while topic generation and local
   tool execution do not show the playful line.
 - Terminal, cancellation, stale-lease, and invalid-buffer paths clean up all
-  timers, extmarks, and buffered state; failures bypass the minimum duration.
+  timers, extmarks, and buffered state. Provider failures bypass the minimum
+  and preserve valid partial output; cancellation or lost ownership discards it.
 - Definition shows an immediate selection-anchored virtual spinner, never uses
   the luabar, and replaces the spinner with the existing durable footnote on
   success; all non-success paths remove it without a footnote.
@@ -115,6 +143,17 @@ place to show pending work.
 - [ ] Write and approve the durable implementation plan.
 - [ ] Implement the approved plan with tests and update the atlas.
 - [ ] Run the full verification and close through the SDLC gates.
+
+## Revisions
+
+### 2026-07-12T23:53:24-07:00 — fresh-eyes spec review
+
+Clarified the exact eligible LLM entry points, deferred tool-use-only
+transitions until a visible indicator satisfies its minimum, separated provider
+failure from cancellation/lost ownership, preserved valid partial output before
+errors, defined callback-order tie breaking, and specified the shared
+invocation controls required for Definition-owned cleanup without changing
+Review or Voice Apply progress.
 
 ## Log
 
@@ -129,3 +168,10 @@ definition, and the existing detached luabar retained only where it has no
 natural inline anchor. `ARCH-PURE` shaped the injected clock/random boundary;
 `ARCH-DRY` keeps the spinner sequence canonical without conflating distinct UI
 surfaces; `ARCH-PURPOSE` keeps every chat-producing LLM leg in scope.
+
+### 2026-07-12 — spec review revision
+
+The first independent review found ambiguous eligibility, tool-transition,
+partial-output, tie-breaking, and Definition cancellation contracts. The spec
+now classifies each path and preserves staged real output before a provider
+error while discarding it only after cancellation or lost transcript ownership.
