@@ -180,11 +180,39 @@ describe("chat pending extmark adapter", function()
         runtime:drain()
 
         local text, mark = virtual_text(buf)
-        assert.equals("⠙ brewing", text)
+        assert.equals("⠙ Baking", text)
         assert.equals(0, mark[2])
         assert.is_false(mark[4].virt_lines_above)
         assert.is_true(mark[4].invalidate)
         assert.same({ "assistant:" }, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+    end)
+
+    it("renders the complete capitalized everyday cooking verb pool", function()
+        local expected = {
+            "Baking", "Brewing", "Caramelizing", "Chopping", "Concocting", "Cooking",
+            "Crafting", "Cultivating", "Fermenting", "Garnishing", "Kneading",
+            "Marinating", "Mulling", "Noodling", "Percolating", "Puttering", "Seasoning",
+            "Simmering", "Sketching", "Sprouting", "Steeping", "Stewing", "Tinkering",
+            "Toasting", "Unfurling", "Whisking", "Working", "Zesting",
+        }
+
+        for index, verb in ipairs(expected) do
+            local buf = new_scratch()
+            local runtime = new_runtime()
+            local observed_count
+            start_fake(buf, runtime, {
+                choose_verb_index = function(count)
+                    observed_count = count
+                    return index
+                end,
+            })
+
+            runtime:advance(1000)
+            runtime:drain()
+
+            assert.equals(#expected, observed_count)
+            assert.equals("⠙ " .. verb, virtual_text(buf))
+        end
     end)
 
     it("rearms a one-shot timer delivered before its reducer deadline", function()
@@ -201,13 +229,13 @@ describe("chat pending extmark adapter", function()
         assert.is_nil(extmark(buf))
         runtime:advance(1)
         runtime:drain()
-        assert.equals("⠙ brewing", virtual_text(buf))
+        assert.equals("⠙ Baking", virtual_text(buf))
     end)
 
     it("animates only the glyph and rotates verbs on activity and idle", function()
         local buf = new_scratch()
         local runtime = new_runtime()
-        local choices = { 1, 2, 3 }
+        local choices = { 2, 3, 28 }
         local choice = 0
         local session = start_fake(buf, runtime, {
             choose_verb_index = function()
@@ -218,25 +246,25 @@ describe("chat pending extmark adapter", function()
         runtime:advance(1000)
         runtime:drain()
         local first = virtual_text(buf)
-        assert.equals("⠙ brewing", first)
+        assert.equals("⠙ Brewing", first)
 
         runtime:advance(120)
         runtime:drain()
         local framed = virtual_text(buf)
-        assert.matches("^⠹ brewing$", framed)
+        assert.matches("^⠹ Brewing$", framed)
 
         session:activity("q")
         assert.equals(framed, virtual_text(buf))
         runtime:drain()
         local active = virtual_text(buf)
-        assert.matches("^⠹ cooking$", active)
+        assert.matches("^⠹ Caramelizing$", active)
 
         runtime:advance(14999)
         runtime:drain()
-        assert.matches(" cooking$", virtual_text(buf))
+        assert.matches(" Caramelizing$", virtual_text(buf))
         runtime:advance(1)
         runtime:drain()
-        assert.matches(" dragon%-slaying$", virtual_text(buf))
+        assert.matches(" Zesting$", virtual_text(buf))
     end)
 
     it("repaints at the extmark's tracked row after text moves the anchor", function()
@@ -253,7 +281,7 @@ describe("chat pending extmark adapter", function()
         runtime:drain()
 
         assert.equals(1, extmark(buf)[2], "animation repaint reset the tracked row")
-        assert.matches("^⠹ brewing$", virtual_text(buf))
+        assert.matches("^⠹ Baking$", virtual_text(buf))
     end)
 
     it("uses a hidden tip update for the first reveal", function()
@@ -267,7 +295,7 @@ describe("chat pending extmark adapter", function()
         runtime:drain()
 
         assert.equals(1, extmark(buf)[2])
-        assert.equals("⠙ brewing", virtual_text(buf))
+        assert.equals("⠙ Baking", virtual_text(buf))
     end)
 
     it("repairs invalidating writes synchronously without changing lifecycle state", function()

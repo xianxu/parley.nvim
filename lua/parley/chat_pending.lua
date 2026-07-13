@@ -8,7 +8,36 @@ local unpack_values = unpack
 
 local namespace = vim.api.nvim_create_namespace("parley_chat_pending")
 local active_by_buf = {}
-local verbs = { "brewing", "cooking", "dragon-slaying" }
+local verbs = {
+    "Baking",
+    "Brewing",
+    "Caramelizing",
+    "Chopping",
+    "Concocting",
+    "Cooking",
+    "Crafting",
+    "Cultivating",
+    "Fermenting",
+    "Garnishing",
+    "Kneading",
+    "Marinating",
+    "Mulling",
+    "Noodling",
+    "Percolating",
+    "Puttering",
+    "Seasoning",
+    "Simmering",
+    "Sketching",
+    "Sprouting",
+    "Steeping",
+    "Stewing",
+    "Tinkering",
+    "Toasting",
+    "Unfurling",
+    "Whisking",
+    "Working",
+    "Zesting",
+}
 
 local function monotonic_now_ms()
     local uv = vim.uv or vim.loop

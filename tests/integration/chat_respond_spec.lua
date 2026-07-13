@@ -1518,7 +1518,7 @@ describe("chat_respond: pending request transcript drift", function()
 
         parley.chat_respond({ range = 0 })
         assert.is_true(vim.wait(1300, function()
-            return (pending_virtual_text(buf) or ""):match(" brewing$") ~= nil
+            return (pending_virtual_text(buf) or ""):match(" Baking$") ~= nil
         end, 10))
         first_completion(qid)
         vim.wait(300, function() return false end, 10)
@@ -1527,7 +1527,7 @@ describe("chat_respond: pending request transcript drift", function()
             return buffer_contains(buf, "🔧: read_file id=toolu_SLOW") and call_count == 2
         end, 10))
         assert.is_true(vim.wait(1300, function()
-            return starts == 2 and (pending_virtual_text(buf) or ""):match(" cooking$") ~= nil
+            return starts == 2 and (pending_virtual_text(buf) or ""):match(" Brewing$") ~= nil
         end, 10))
         local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
         local last_nonempty_row

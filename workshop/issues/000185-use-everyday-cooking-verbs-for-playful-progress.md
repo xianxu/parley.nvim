@@ -44,9 +44,9 @@ and lowercase copy reads less like a polished status label.
 
 ## Plan
 
-- [ ] Add a failing adapter regression for the capitalized approved pool.
-- [ ] Replace the private pool and update deterministic rendering assertions.
-- [ ] Complete mapped/full verification and prepare the change for close review and publication.
+- [x] Add a failing adapter regression for the capitalized approved pool.
+- [x] Replace the private pool and update deterministic rendering assertions.
+- [x] Complete mapped/full verification and prepare the change for close review and publication.
 
 ## Estimate
 
@@ -76,3 +76,10 @@ Fresh spec review strengthened the pool oracle: three sample words would not
 detect an omission, duplicate, or unauthorized extra. The adapter test must
 observe a count of 28 and render every chooser index in the approved order
 through the existing injection boundary (`ARCH-PURPOSE`).
+
+TDD RED proved the old adapter reported a pool size of 3 instead of 28 and
+rendered lowercase `cooking` at controlled index 2. GREEN replaced only the
+private production pool, then rendered every approved index with an observed
+cardinality of 28 and rotated deterministically through Brewing, Caramelizing,
+and Zesting. The mapped response-progress suite, lint (265 files, zero
+warnings/errors), serialized full repository suite, and scoped diff check pass.

@@ -38,7 +38,7 @@ non-empty verb array and remains the single source for rotation semantics.
 - Modify: `tests/integration/chat_pending_spec.lua`
 - Modify: `lua/parley/chat_pending.lua:11`
 
-- [ ] **Step 1: Write the failing adapter assertions**
+- [x] **Step 1: Write the failing adapter assertions**
 
 Add one table-driven adapter case containing the exact 28 approved words. For
 each controlled chooser index, start a session, record the chooser's `count`
@@ -50,7 +50,7 @@ testing; it also excludes `dragon-slaying`.
 Update the deterministic activity/idle case to require `Brewing`,
 `Caramelizing`, and `Zesting`, using chooser indices 2, 3, and 28.
 
-- [ ] **Step 2: Run the focused spec and verify RED**
+- [x] **Step 2: Run the focused spec and verify RED**
 
 Run:
 
@@ -62,17 +62,17 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim \
 Expected: FAIL because the existing pool is lowercase, has only three entries,
 and index 28 does not select `Zesting`.
 
-- [ ] **Step 3: Replace the private verb pool**
+- [x] **Step 3: Replace the private verb pool**
 
 Set `verbs` in `chat_pending.lua` to the exact 28-item approved capitalized list
 from the issue Spec. Do not modify the reducer, timers, chooser, or renderer.
 
-- [ ] **Step 4: Update remaining capitalization assertions and verify GREEN**
+- [x] **Step 4: Update remaining capitalization assertions and verify GREEN**
 
 Update existing deterministic expectations from lowercase `brewing` to
 `Brewing`, then rerun the focused spec. Expected: all cases pass.
 
-- [ ] **Step 5: Run mapped and repository verification**
+- [x] **Step 5: Run mapped and repository verification**
 
 Run:
 
@@ -86,7 +86,7 @@ git diff --check
 Expected: all mapped specs and the serialized repository suite pass; lint and
 diff checking are clean.
 
-- [ ] **Step 6: Record implementation evidence and commit**
+- [x] **Step 6: Record implementation evidence and commit**
 
 Check all implementation/verification rows once their evidence exists. Append
 RED/GREEN/full-suite evidence to the issue Log, and commit only #185's source,
