@@ -1057,7 +1057,11 @@ M.setup_buf_handler = function()
                 _parley.display_agent(buf, file_name)
                 interview.highlight_timestamps(buf)
                 buffer_lifecycle.setup(buf)
-                _parley.highlight_chat_branch_refs(buf)
+                vim.schedule(function()
+                    if vim.api.nvim_buf_is_valid(buf) then
+                        _parley.highlight_chat_branch_refs(buf)
+                    end
+                end)
                 -- Disable markdown strikethrough in chat buffers — tilde (~) in file
                 -- paths like ~/workspace/file.md triggers false strikethrough rendering.
                 M.disable_strikethrough(buf)
@@ -1066,9 +1070,13 @@ M.setup_buf_handler = function()
                 _parley._parley_bufs[buf] = "markdown"
                 _parley.prep_md(buf)
                 _parley.setup_markdown_keymaps(buf)
-                _parley.highlight_chat_branch_refs(buf)
                 interview.highlight_timestamps(buf)
                 buffer_lifecycle.setup(buf)
+                vim.schedule(function()
+                    if vim.api.nvim_buf_is_valid(buf) then
+                        _parley.highlight_chat_branch_refs(buf)
+                    end
+                end)
                 -- Disable native markdown strikethrough so only the 🤖-gated
                 -- review-deletion strike (🤖~X~, rendered in compute_markdown_highlights)
                 -- shows — a bare ~X~ or a `~/path` tilde must not cross out text.

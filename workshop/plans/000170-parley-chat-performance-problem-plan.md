@@ -700,3 +700,14 @@ as well, preventing a queued unload callback from erasing a newly reused buffer
 handle after entry. A real-entry integration matrix creates
 unattached named chat and Markdown buffers and requires diagnostics plus a
 renderable structure immediately when `nvim_exec_autocmds` returns.
+
+### 2026-07-12 — keep branch-topic UI outside synchronous entry
+
+Reason: the first full-suite rerun after synchronous entry showed the production
+handler also allocated a branch-topic timer before `BufEnter` returned. That UI
+work is unrelated to the classification/lifecycle freshness contract and
+changed the deterministic stale-timer ordering from two replacements to three.
+
+Delta: chat/Markdown classification, preparation, diagnostics, and structure
+remain synchronous; only branch-reference topic refresh is scheduled, restoring
+its prior asynchronous ownership and timer replacement order.

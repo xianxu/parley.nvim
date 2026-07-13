@@ -625,3 +625,15 @@ lifecycle passed 9/9, buffer lifecycle passed 6/6, and diagnostic refresh
 passed 3/3. `make -f Makefile.parley test JOBS=1` passed lint with 0
 warnings/errors across 259 files and all unit/integration/architecture specs;
 `git diff --check` passed.
+
+2026-07-12: the parent full-suite rerun exposed one over-broad consequence of
+direct entry: branch-reference topic refresh allocated its timer synchronously,
+so `timer_race_spec` observed three timers instead of the two explicit
+replacement calls. Trace confirmed this was an extra legitimate UI timer, not a
+double-close. Only branch-reference refresh is deferred again; first-entry
+classification, diagnostics, and renderable structure remain synchronous.
+Standalone timer-race passed 5/5 repeated runs (`ARCH-PURPOSE`).
+Follow-up verification also passed highlighting 47/47, `make perf` structural
+gates (100→5,000 medians 2.37→2.59 ms inclusive and 0.22→0.31 ms redraw), and
+the full `make -f Makefile.parley test JOBS=1` suite with zero lint findings
+across 259 files and all specs green.
