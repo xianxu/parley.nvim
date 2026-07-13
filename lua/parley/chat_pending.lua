@@ -80,8 +80,6 @@ M.start = function(opts)
         detail_state = {},
         finished = false,
     }
-    active_by_buf[buf] = session
-
     local function now_ms()
         return session.clock.now_ms()
     end
@@ -187,6 +185,11 @@ M.start = function(opts)
                     dispatch({ type = "invalid" })
                     return
                 end
+                local ok, valid = pcall(session.lease_valid)
+                if not ok or not valid then
+                    dispatch({ type = "stale" })
+                    return
+                end
                 if session.playful_verb then
                     session.frame_index = session.frame_index % #spinner + 1
                     render_playful()
@@ -262,6 +265,9 @@ M.start = function(opts)
         end
         if previous_phase == "waiting" and next_state.phase ~= "waiting" then
             cancel_timer("reveal")
+            if next_state.phase == "released" then
+                cancel_timer("idle")
+            end
         end
         if next_state.phase == "showing" and previous_phase ~= "showing" then
             schedule_after("minimum", 1000, function()
@@ -338,7 +344,8 @@ M.start = function(opts)
         submit(function() return { type = "cancel" } end)
     end
 
-    scheduler.enqueue(function()
+    active_by_buf[buf] = session
+    local enqueued, enqueue_error = pcall(scheduler.enqueue, function()
         if session.finished then
             return
         end
@@ -351,6 +358,10 @@ M.start = function(opts)
         end)
         reset_idle_timer()
     end)
+    if not enqueued then
+        finish()
+        error(enqueue_error, 0)
+    end
 
     return session
 end

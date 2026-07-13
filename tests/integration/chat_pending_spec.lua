@@ -225,6 +225,41 @@ describe("chat pending extmark adapter", function()
         assert.is_nil(extmark(buf))
     end)
 
+    it("cancels every playful timer when fast content releases waiting", function()
+        local buf = new_scratch()
+        local runtime = new_runtime()
+        local session, emitted = start_fake(buf, runtime)
+
+        runtime:advance(500)
+        session:content("q", "fast")
+        runtime:drain()
+        assert.same({ { "q", "fast" } }, emitted)
+        assert.is_nil(extmark(buf))
+        assert.equals(0, runtime:open_timer_count())
+
+        runtime:advance(15000)
+        runtime:drain()
+        assert.is_nil(extmark(buf))
+        assert.equals(0, runtime:open_timer_count())
+    end)
+
+    it("keeps fast semantic status but cancels every playful timer", function()
+        local buf = new_scratch()
+        local runtime = new_runtime()
+        local session = start_fake(buf, runtime)
+
+        runtime:advance(500)
+        session:progress("q", { message = "Reasoning" })
+        runtime:drain()
+        assert.equals("Reasoning", virtual_text(buf))
+        assert.equals(0, runtime:open_timer_count())
+
+        runtime:advance(15000)
+        runtime:drain()
+        assert.equals("Reasoning", virtual_text(buf))
+        assert.equals(0, runtime:open_timer_count())
+    end)
+
     it("renders semantic status in the same extmark while content streams", function()
         local buf = new_scratch()
         local runtime = new_runtime()
@@ -342,6 +377,27 @@ describe("chat pending extmark adapter", function()
         assert.equals(0, second_runtime:open_timer_count())
     end)
 
+    it("frame ticks terminate a shown session whose lease became stale", function()
+        local buf = new_scratch()
+        local runtime = new_runtime()
+        local valid = true
+        start_fake(buf, runtime, {
+            lease_valid = function() return valid end,
+        })
+        runtime:advance(1000)
+        runtime:drain()
+        runtime:advance(1000)
+        runtime:drain()
+        assert.is_truthy(extmark(buf))
+        assert.is_truthy(runtime:open_timer_count() > 0)
+
+        valid = false
+        runtime:advance(120)
+        runtime:drain()
+        assert.is_nil(extmark(buf))
+        assert.equals(0, runtime:open_timer_count())
+    end)
+
     it("enforces one active session per buffer and cancel_all is idempotent", function()
         local buf = new_scratch()
         local runtime = new_runtime()
@@ -358,6 +414,35 @@ describe("chat pending extmark adapter", function()
 
         local replacement = start_fake(buf, runtime)
         assert.is_truthy(replacement)
+    end)
+
+    it("does not publish sessions whose initializer fails", function()
+        for _, chooser in ipairs({
+            function() error("chooser failed") end,
+            function() return 99 end,
+        }) do
+            local buf = new_scratch()
+            local runtime = new_runtime()
+            assert.has_error(function()
+                chat_pending.start({
+                    buf = buf,
+                    anchor_line = 0,
+                    lease_valid = function() return true end,
+                    emit_content = function() end,
+                    choose_verb_index = chooser,
+                    clock = runtime.clock,
+                    scheduler = runtime.scheduler,
+                })
+            end)
+            local cancelled = pcall(chat_pending.cancel_all, "after failed initializer")
+            assert.is_true(cancelled)
+            runtime:drain()
+
+            local retry = start_fake(buf, runtime)
+            assert.is_truthy(retry)
+            retry:cancel("done")
+            runtime:drain()
+        end
     end)
 
     it("uses the production scheduler to leave a real uv fast event", function()
