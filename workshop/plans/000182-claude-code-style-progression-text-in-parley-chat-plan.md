@@ -416,7 +416,7 @@ git commit -m "#182: render staged chat progress with extmarks"
 - Create: `tests/fixtures/fake_sse_server`
 - Create: `tests/integration/chat_progress_process_spec.lua`
 
-- [ ] **Step 1: Rewrite the old spinner tests as RED behavioral tests**
+- [x] **Step 1: Rewrite the old spinner tests as RED behavioral tests**
 
 Through `parley.chat_respond`, cover:
 
@@ -439,11 +439,11 @@ delivery for the exhaustive timing cases. For missing-secret and launch-reject
 cases keep the real dispatcher and replace only the failing vault/task boundary,
 then inspect the real pending namespace and timer registry after abort delivery.
 
-- [ ] **Step 2: Run `chat_respond_spec.lua` and verify RED**
+- [x] **Step 2: Run `chat_respond_spec.lua` and verify RED**
 
 Expected: failures show the current immediate `🔎 … Submitting...` buffer line, web-search gating, and direct stream writes.
 
-- [ ] **Step 3: Add and run one process-level curl/SSE RED test**
+- [x] **Step 3: Add and run one process-level curl/SSE RED test**
 
 Implement `fake_sse_server` as an executable local Python HTTP server whose mode is selected by an argument/environment variable. The test starts it on a free port, points an OpenAI-compatible test provider at it, and invokes the real chat entry without monkeypatching `dispatcher.query` or `tasker.run`. Specify a delayed-stream mode that must show the virtual line, buffer first text until the minimum, then flush and complete. Add a partial-then-broken-connection mode that makes curl exit nonzero, an HTTP 401 error-body mode, and a partial-SSE-then-HTTP-500 mode. Each failure must hide the extmark first, expose any real partial text second, and notify the body/status error last; the status trailer is never visible or counted as activity. Ensure the server is reaped in teardown even on assertion failure.
 
@@ -458,7 +458,7 @@ Expected: FAIL against the pre-wiring chat path because the delayed response has
 no extmark-backed presentation session and the broken transport lacks the
 required chat failure ordering.
 
-- [ ] **Step 4: Wire one presentation session into every `M.respond` dispatcher leg**
+- [x] **Step 4: Wire one presentation session into every `M.respond` dispatcher leg**
 
 Delete the old `spinner_active`, spinner exchange block, buffer-line mutation, and timer code. Always create only `agent_header` + `stream_placeholder` real blocks. After `chat_lease.begin`, start `chat_pending` anchored directly at `model:block_start(target_idx, 2)` (already the response header's 0-based buffer row); with `virt_lines_above=false`, the virtual line renders below that durable header.
 
@@ -479,7 +479,7 @@ Extract the current completion body into an idempotent continuation. Classify to
 
 Modify `M.cmd_stop` explicitly to call `require("parley.chat_pending").cancel_all("user")` before `_parley.tasker.stop(signal)`. This makes user cancellation discard staged output before curl termination can be observed as a transport error.
 
-- [ ] **Step 5: Run chat response, process, lease, and timer-race specs and verify GREEN**
+- [x] **Step 5: Run chat response, process, lease, and timer-race specs and verify GREEN**
 
 ```bash
 nvim -n --headless --noplugin -u tests/minimal_init.vim \
@@ -494,7 +494,7 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim \
 
 Expected: PASS; playful text is absent from buffer lines and the exchange model.
 
-- [ ] **Step 6: Commit the chat integration**
+- [x] **Step 6: Commit the chat integration**
 
 ```bash
 git add lua/parley/chat_respond.lua tests/integration/chat_respond_spec.lua \
@@ -652,6 +652,26 @@ git commit -m "#182: document LLM progress presentation"
 Run `sdlc actual --issue 182`, then follow `sdlc close --help`. Close with the targeted, process-fake, mapped, full-suite, diff, and manual evidence; use only the precise atlas/project bypass if the gate says it is genuinely inapplicable. Publish once with `sdlc pr` then `sdlc merge`; verify `main` contains the branch tip.
 
 ## Revisions
+
+### 2026-07-13T02:58:16-07:00 — Task 4 execution
+
+Checked off real chat integration after the expanded entry matrix passed 43
+cases, the real curl/prestart matrix passed 7 cases, and the process suite
+passed 12 consecutive stress runs. Two fresh review loops verified exact-once
+discard teardown, force preflight before mutation, early-timer rearming,
+initial/recursive session ownership, tool timing, failure ordering, and fixture
+reaping with no remaining blocking findings.
+
+### 2026-07-13T02:37:40-07:00 — Task 4 production-clock correction
+
+The real curl/SSE stress run exposed a mismatch between `chat_pending`'s
+high-resolution default clock and libuv's millisecond timer clock: a one-shot
+minimum callback could arrive fractionally before the reducer deadline and be
+ignored forever. Expanded Task 4's review-fix surface to
+`lua/parley/chat_pending.lua` and `tests/integration/chat_pending_spec.lua` so
+the adapter owns one coherent production timing contract rather than injecting
+a chat-only clock override. Added repeated process verification to the GREEN
+gate.
 
 ### 2026-07-13T02:16:55-07:00 — Task 3 execution
 

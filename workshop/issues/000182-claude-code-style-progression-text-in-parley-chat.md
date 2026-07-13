@@ -190,7 +190,7 @@ v3.1's 40% AI-paired ship-wall-clock scale.
 - [x] Approve the durable plan at `workshop/plans/000182-claude-code-style-progression-text-in-parley-chat-plan.md`.
 - [x] Build the pure chat presentation reducer with exhaustive event-order tests.
 - [x] Add separate raw-SSE activity and post-start transport-error callbacks.
-- [ ] Replace the buffer-backed web spinner with the extmark-backed chat adapter.
+- [x] Replace the buffer-backed web spinner with the extmark-backed chat adapter.
 - [ ] Add Definition's immediate selection spinner and generalized skill terminal cleanup.
 - [ ] Update README/atlas/traceability and pass targeted, process, mapped, and full verification.
 - [ ] Close, publish, and merge through the SDLC gates.
@@ -400,3 +400,23 @@ status, cancellation, invalid-buffer, stale-lease, reentrancy, and callback
 failure cases. Fresh reviews approved the boundary after closing three timer and
 construction ownership gaps. `ARCH-PURE` keeps all timing policy in the reducer;
 the adapter is the sole Neovim IO owner.
+
+### 2026-07-13 — Task 4 review correction
+
+The first fresh review reproduced an intermittent real-process stall and found
+the real-entry behavioral matrix incomplete. The stall revealed that the
+adapter compared high-resolution deadlines against millisecond libuv timers;
+an early one-shot callback could be ignored without rescheduling. Task 4 now
+fixes that timing contract at `chat_pending` itself, stress-runs the process
+fixture, and adds the missing `M.respond` glue-path coverage before acceptance.
+
+### 2026-07-13 — Task 4 complete
+
+Removed the buffer/model-backed web spinner and routed every chat-producing
+initial and recursive LLM leg through the extmark adapter. The accepted boundary
+covers fast and slow output, exact deadline orders, semantic status, tool-only
+completion, recursive verbs, topic exclusion, provider and pre-start failures,
+Stop/stale/deleted discard cleanup, and force preflight. A real loopback curl/SSE
+fixture verifies delayed success plus broken, HTTP 401, and partial HTTP 500
+failures; it passed 12 consecutive stress runs. `ARCH-PURPOSE` drove the full
+entry matrix, while `ARCH-DRY` moved deadline correction into the shared adapter.
