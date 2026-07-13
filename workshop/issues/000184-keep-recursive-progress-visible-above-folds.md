@@ -74,7 +74,7 @@ familiarity: 1.0
 item: issue-spec       design=0.50 impl=0.08
 item: lua-neovim       design=0.20 impl=0.28
 item: atlas-docs       design=0.05 impl=0.04
-item: boundary-review  design=0.10 impl=0.12
+item: milestone-review design=0.10 impl=0.12
 design-buffer: 0.13
 total: 1.50
 ```
@@ -117,3 +117,8 @@ multi-call reproduction explicit as two consecutive recursive rounds followed
 by a waiting third LLM leg, pinned silent/reveal/minimum timing and same-ID
 stream relocation, and required cancellation plus provider-failure cleanup to
 run through the folded-recursive separator path.
+
+### 2026-07-13 — estimate vocabulary correction
+
+Renamed the unchanged review primitive from `boundary-review` to the canonical
+`milestone-review` vocabulary required by the estimate-reconciliation gate.
