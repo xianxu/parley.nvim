@@ -106,7 +106,7 @@ v3.1 AI-paired 40% values.
 - [x] Report the tracked last line from the stream writer and move visible
   progress through the serialized chat adapter.
 - [x] Update the response-progress atlas and pass targeted/full verification.
-- [ ] Close, publish, and merge through the SDLC gates.
+- [x] Close, publish, and merge through the SDLC gates.
 
 ## Log
 
