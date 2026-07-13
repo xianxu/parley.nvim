@@ -1,12 +1,13 @@
 ---
 id: 000182
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-10
-updated: 2026-07-12
+updated: 2026-07-13
 estimate_hours: 8.94
 started: 2026-07-12T21:56:40-07:00
+actual_hours: N/A
 ---
 
 # claude code style progression text in parley chat
@@ -291,6 +292,7 @@ now classifies each path and preserves staged real output before a provider
 error while discarding it only after cancellation or lost transcript ownership.
 
 ### 2026-07-13 — plan-quality gate revision
+- 2026-07-13: closed — All mapped behavior, 7 real curl/SSE cases, 22 chat-pending, 25 Definition, 16 shared skill lifecycle, lint, full JOBS=1 make test, and diff checks pass; both REWORK rounds are fixed with real-entry setup-terminal and moving-anchor regressions; actual telemetry is unavailable and the sole unchecked row is this close/publish workflow.; review verdict: SHIP
 
 The SDLC judge rejected the approved draft because post-start errors could
 strand legacy dispatcher consumers, Definition omitted that terminal, SSE
