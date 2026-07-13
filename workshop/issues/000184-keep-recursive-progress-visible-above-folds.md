@@ -90,9 +90,9 @@ implementation calibration is already reflected in each `impl=` value.
 ## Plan
 
 - [x] Approve the regression design and calibrated estimate.
-- [ ] Add a failing real-path folded recursive-progress regression.
-- [ ] Derive the recursive anchor from the stable pre-stream separator.
-- [ ] Update the response-progress atlas and pass targeted/full verification.
+- [x] Add a failing real-path folded recursive-progress regression.
+- [x] Derive the recursive anchor from the stable pre-stream separator.
+- [x] Update the response-progress atlas and pass targeted/full verification.
 - [ ] Close, publish, and merge through the SDLC gates.
 
 ## Log
@@ -120,6 +120,20 @@ contradicted #182's minimum-visible staging: a visible playful mark is hidden
 before staged content is written. The spec now requires that playful mark to
 remain at the separator through the minimum and tests same-ID relocation on
 semantic status after release, where the writer actually runs.
+
+The production-entry regression reproduced the bug after two consecutive tool
+rounds: at the one-second reveal, `foldclosed(spinner_row + 1)` returned the
+final result fold's start instead of `-1`. Anchoring the recursive session to
+the insertion row shared with the stream placeholder made that regression
+GREEN while preserving the existing writer-owned relocation. The same fixture
+proves all four tool folds remain closed through staged completion,
+cancellation, and provider failure; partial output is flushed before the error
+notification and every terminal closes its timers, pending owner, and lease.
+
+Verification passed: `chat_respond_spec.lua` 48/48, mapped
+`chat/exchange_model`, lint across 265 files with zero warnings/errors, and the
+serialized full repository suite. Scoped diff checking is clean; the checkout
+continues to preserve the operator's unrelated pre-existing #162 edit.
 
 ## Revisions
 

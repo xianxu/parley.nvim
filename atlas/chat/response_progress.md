@@ -15,10 +15,10 @@ One `chat_pending` session owns one dispatched chat leg:
    responses never show pending copy. Raw transport activity is not visible
    output and does not end the wait.
 2. A still-silent fresh leg shows a virtual line below its `🤖:` response
-   header; a recursive tool leg starts below the last existing answer/tool/result
-   block. The line initially takes the form `⠙ brewing`. The glyph animates from
-   `progress.SPINNER`; SSE/JSONL activity and 15 seconds of transport idleness
-   rotate the playful verb independently.
+   header; a recursive tool leg starts on the stable pre-stream separator
+   outside Parley-generated tool folds. The line initially takes the form
+   `⠙ brewing`. The glyph animates from `progress.SPINNER`; SSE/JSONL activity
+   and 15 seconds of transport idleness rotate the playful verb independently.
 3. Once shown, the line remains visible for at least one second. Visible output
    arriving during that interval is staged in callback order. At the minimum
    deadline Parley removes the playful line and releases all staged output once;
@@ -40,9 +40,11 @@ renders the reducer's actions, and owns all timers and the extmark.
 The pending/status line is an `invalidate=true` extmark with `virt_lines`; it
 never enters Markdown, the exchange model, undo history, saved files, parser
 input, or a future prompt. Its presentation anchor moves with the generation
-tip: the response header before fresh content, the final visible block before a
-recursive leg, and the stream writer's tracked last line after every write. The
-writer reports that extmark-adjusted row after buffer/model growth, and
+tip: the response header before fresh content, the stable separator immediately
+before a recursive stream placeholder, and the stream writer's tracked last line
+after every write. The separator is outside Parley's tool folds, so closed tool
+results cannot hide a waiting recursive leg. The writer reports that
+extmark-adjusted row after buffer/model growth, and
 `chat_pending` repairs a replacement-invalidated visible mark with the same ID
 and text in that same scheduled callback. Immediately before mutation it also
 requires the visible mark to be valid; that uninterrupted authorization allows

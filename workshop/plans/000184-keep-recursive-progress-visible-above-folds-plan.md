@@ -48,7 +48,7 @@ The bug is solely in the Neovim placement shell.
 **Files:**
 - Modify: `tests/integration/chat_respond_spec.lua:1287`
 
-- [ ] **Step 1: Factor a test helper that reaches a waiting third LLM leg**
+- [x] **Step 1: Factor a test helper that reaches a waiting third LLM leg**
 
 Add a local helper beside the existing recursive-tool regressions. It installs
 the existing deterministic pending runtime and a fake provider transport, then
@@ -66,7 +66,7 @@ capture to the live `dispatcher.query` signature so only provider transport is
 faked. Drive each fast tool-only completion through `runtime:drain()` and
 `vim.wait` until the next recursive query is registered.
 
-- [ ] **Step 2: Write the failing fold-visibility and timing regression**
+- [x] **Step 2: Write the failing fold-visibility and timing regression**
 
 Using that helper, assert the third leg has no virtual text initially or at
 999 ms. Advance to 1000 ms, capture the pending mark, and assert:
@@ -88,7 +88,7 @@ assert the spinner keeps the same ID and separator row while the text remains
 absent. Complete during that minimum, advance the remaining deadline, and prove
 the spinner disappears before the answer flushes exactly once.
 
-- [ ] **Step 3: Write the released semantic-status relocation regression**
+- [x] **Step 3: Write the released semantic-status relocation regression**
 
 Start another two-round third leg, but deliver `"first"` before the reveal so
 the waiting reducer releases directly and the real writer places it outside the
@@ -99,7 +99,7 @@ schedulers, and assert the same status ID moves to the writer-reported row
 containing `"first second"`. This retains #183's movement contract without
 confusing it with the playful minimum.
 
-- [ ] **Step 4: Write folded-recursive terminal regressions**
+- [x] **Step 4: Write folded-recursive terminal regressions**
 
 Reuse the helper in two focused cases:
 
@@ -125,7 +125,7 @@ entries whose `closed` field is false).
    retain their closed starts and ends. Restore `vim.notify` even if the
    assertion fails by following the spec file's existing save/restore pattern.
 
-- [ ] **Step 5: Run the mapped regression and verify RED**
+- [x] **Step 5: Run the mapped regression and verify RED**
 
 Run:
 
@@ -144,7 +144,7 @@ the placement assertion must be observed failing before production code changes.
 - Modify: `lua/parley/chat_respond.lua:1465-1475`
 - Test: `tests/integration/chat_respond_spec.lua:1287`
 
-- [ ] **Step 1: Implement the minimal spatial fix**
+- [x] **Step 1: Implement the minimal spatial fix**
 
 Change only the recursive branch:
 
@@ -160,7 +160,7 @@ if is_recursion then
 The anchor and insertion index intentionally share one value. Do not query
 `foldclosed`, open folds, add reducer spatial state, or alter `tip_written`.
 
-- [ ] **Step 2: Run the mapped regression and verify GREEN**
+- [x] **Step 2: Run the mapped regression and verify GREEN**
 
 Run:
 
@@ -173,7 +173,7 @@ Expected: PASS. The third-leg spinner is silent through 999 ms, visible at
 is staged, semantic status later follows released streaming with the same ID,
 and both folded terminal cases clean up exactly once.
 
-- [ ] **Step 3: Run the exchange-model mapping**
+- [x] **Step 3: Run the exchange-model mapping**
 
 Run:
 
@@ -184,7 +184,7 @@ make test-spec SPEC=chat/exchange_model
 Expected: PASS. `last_nonempty_block_end` remains used by `append_pos`; no pure
 model contract changed.
 
-- [ ] **Step 4: Commit the TDD slice**
+- [x] **Step 4: Commit the TDD slice**
 
 Stage only:
 
@@ -200,7 +200,7 @@ git commit -m "#184: keep recursive progress outside tool folds"
 - Modify: `atlas/traceability.yaml`
 - Modify: `workshop/issues/000184-keep-recursive-progress-visible-above-folds.md`
 
-- [ ] **Step 1: Update the response-progress map**
+- [x] **Step 1: Update the response-progress map**
 
 Replace “below the last existing answer/tool/result block” / “final visible
 block” with the precise contract: a recursive leg starts at the stable
@@ -208,7 +208,7 @@ pre-stream separator outside Parley-generated tool folds, then follows the
 writer-reported row after content. Add #184's folded two-round integration test
 to traceability if the mapped spec entry does not already cover it.
 
-- [ ] **Step 2: Run lint and the serialized full suite**
+- [x] **Step 2: Run lint and the serialized full suite**
 
 Run:
 
@@ -221,7 +221,7 @@ git diff --check
 Expected: lint reports zero warnings/errors; all unit, architecture, and
 integration specs pass; diff check emits no output.
 
-- [ ] **Step 3: Update issue evidence and commit**
+- [x] **Step 3: Update issue evidence and commit**
 
 Check the completed implementation/verification plan rows in #184 and append a
 dated Log entry recording RED, GREEN, fold visibility, terminal proof, mapped
