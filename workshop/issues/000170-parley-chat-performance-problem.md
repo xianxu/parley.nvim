@@ -1,12 +1,13 @@
 ---
 id: 000170
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-08
-updated: 2026-07-11
+updated: 2026-07-12
 estimate_hours: 14.15
 started: 2026-07-11T21:57:07-07:00
+actual_hours: N/A
 ---
 
 # parley chat performance problem
@@ -290,6 +291,7 @@ derivation time, so this value is provisional until recalibration.*
 ### 2026-07-08
 
 ### 2026-07-12 — audited and designed
+- 2026-07-12: closed — Fresh make perf passed after synchronous first-entry fix with structural gates intact; make test JOBS=1 passed all unit/arch/integration specs including first-entry hydration, timer race, and ChatPrune abort/empty regressions, luacheck 0/0 across 259 files, and git diff --check clean. Active-time telemetry unavailable for isolated worktree.; review verdict: SHIP
 
 Static audit found viewport-bounded output masking three document-proportional
 inputs: full-buffer managed-footer discovery during redraw, potentially

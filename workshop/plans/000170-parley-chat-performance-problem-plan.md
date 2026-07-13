@@ -504,14 +504,14 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile te
       (`ARCH-DRY`, `ARCH-PURPOSE`).
 - [x] Tick issue/plan boxes only after evidence exists. Commit docs/artifacts as
       `#170: document bounded chat performance pipeline`.
-- [ ] Run `sdlc actual --issue 170`; inspect measured hours. Attempt close with
+- [x] Run `sdlc actual --issue 170`; inspect measured hours. Attempt close with
       `sdlc close --issue 170 --verified '<perf counters + focused/full suite +
       lint + diff evidence>'`, never a remembered actual. If review refuses,
       fix findings test-first, rerun focused/perf/full verification, commit the
       fixes, and rerun `sdlc close`. Only after successful finalization commit
       issue/status/sidecar changes with required `Review-Verdict:` and
       `Review-Window:` trailers.
-- [ ] After successful close, stage only
+- [x] After successful close, stage only
       `workshop/issues/000170-parley-chat-performance-problem.md`,
       `workshop/plans/000170-parley-chat-performance-problem-plan.md`, and
       `workshop/plans/000170-parley-chat-performance-problem-close-review.md`
