@@ -416,3 +416,13 @@ two legacy diagnostic-autocmd assertions in that combined file still encode
 the eager lifecycle intentionally removed by Task 4 and are reserved for Task
 7's lifecycle shadow sweep. Lint passed with 0 warnings/errors across 258 files
 and `git diff --check` passed.
+
+Task 5 review found that the public one-row counter concealed a full structure
+copy and that each reasoning opener scanned toward EOF. The follow-up now
+returns a fresh persistent root sharing immutable derived arrays, with tests
+pinning one visited row and zero copied entries at 100/1,000/5,000 lines.
+Reasoning end modes are indexed in one backward pass; 2,000 openers plus a
+distant terminator prove exactly two linear visits per document row. The final
+private footnote regex in `chat_respond` was replaced by
+`define.is_footnote_line`; leading-whitespace parity and an architecture shadow
+search defend canonical ownership (`ARCH-DRY`).

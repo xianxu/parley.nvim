@@ -90,13 +90,29 @@ describe("highlight_structure", function()
             for i = 2, count do lines[i] = "prose " .. i end
             local original = structure.build(lines, patterns)
             local snapshot = vim.deepcopy(original)
-            local replaced, rows = structure.replace(original, 50, 51, { "changed prose" }, patterns)
+            local replaced, rows, reason, work = structure.replace(original, 50, 51, { "changed prose" }, patterns)
             assert.equals(1, rows)
+            assert.is_nil(reason)
+            assert.are.same({ rows_visited = 1, entries_copied = 0 }, work)
             assert.is_not_nil(replaced)
             assert.are.same(snapshot, original)
             assert.is_not.equal(original, replaced)
-            assert.is_not.equal(original.fingerprints, replaced.fingerprints)
+            assert.equals(original.fingerprints, replaced.fingerprints)
+            assert.equals(original.state_before, replaced.state_before)
+            assert.equals(original.draft_ranges, replaced.draft_ranges)
         end
+    end)
+
+    it("indexes many reasoning openers with linear, exactly-accounted work", function()
+        local lines = { "🤖: answer" }
+        for i = 1, 2000 do
+            lines[#lines + 1] = "🧠: pass " .. i
+        end
+        lines[#lines + 1] = "🧠:[END]"
+        local built, rows, work = structure.build(lines, patterns)
+        assert.equals(#lines, rows)
+        assert.are.same({ rows_visited = #lines * 2, entries_copied = 0 }, work)
+        assert.is_true(structure.state_before(built, 2000).reasoning_explicit_end)
     end)
 
     it("rejects structural replacements without suffix work or mutation", function()

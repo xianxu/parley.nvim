@@ -87,20 +87,6 @@ local function copy_state(value)
     }
 end
 
-local function reasoning_has_end(fingerprints, row)
-    for next_row = row + 2, #fingerprints do
-        local token = fingerprints[next_row]
-        if token == TOKENS.reasoning_end then return true end
-        if token == TOKENS.user or token == TOKENS.assistant
-            or token == TOKENS["local"] or token == TOKENS.branch
-            or token == TOKENS.summary or token == TOKENS.tool_use
-            or token == TOKENS.tool_result then
-            return false
-        end
-    end
-    return false
-end
-
 function M.build(lines, patterns)
     lines = lines or {}
     patterns = patterns or M.patterns()
@@ -110,11 +96,30 @@ function M.build(lines, patterns)
         footer_start0 = nil,
         draft_ranges = {},
     }
+    local work = { rows_visited = 0, entries_copied = 0 }
     for row = 0, #lines - 1 do
+        work.rows_visited = work.rows_visited + 1
         local classified = M.classify(lines[row + 1], patterns)
         result.fingerprints[row + 1] = classified.token
         if not result.footer_start0 and classified.kind == "footnote" then
             result.footer_start0 = row
+        end
+    end
+
+    local reasoning_explicit = {}
+    local end_ahead = false
+    for index = #result.fingerprints, 1, -1 do
+        work.rows_visited = work.rows_visited + 1
+        local token = result.fingerprints[index]
+        if token == TOKENS.reasoning then
+            reasoning_explicit[index] = end_ahead
+        elseif token == TOKENS.reasoning_end then
+            end_ahead = true
+        elseif token == TOKENS.user or token == TOKENS.assistant
+            or token == TOKENS["local"] or token == TOKENS.branch
+            or token == TOKENS.summary or token == TOKENS.tool_use
+            or token == TOKENS.tool_result then
+            end_ahead = false
         end
     end
 
@@ -160,7 +165,7 @@ function M.build(lines, patterns)
             state.reasoning_explicit_end = false
         elseif token == TOKENS.reasoning then
             state.in_reasoning = true
-            state.reasoning_explicit_end = reasoning_has_end(result.fingerprints, row)
+            state.reasoning_explicit_end = reasoning_explicit[row + 1] or false
         elseif state.in_reasoning and lines[row + 1]:match("^%s*$") and not state.reasoning_explicit_end then
             state.in_reasoning = false
         end
@@ -170,36 +175,30 @@ function M.build(lines, patterns)
             start_row = draft_start, end_row_exclusive = #lines,
         }
     end
-    return result, #lines
-end
-
-local function copy_structure(structure)
-    local out = {
-        fingerprints = {}, state_before = {}, footer_start0 = structure.footer_start0,
-        draft_ranges = {},
-    }
-    for i, token in ipairs(structure.fingerprints or {}) do out.fingerprints[i] = token end
-    for i, value in ipairs(structure.state_before or {}) do out.state_before[i] = copy_state(value) end
-    for i, range in ipairs(structure.draft_ranges or {}) do
-        out.draft_ranges[i] = { start_row = range.start_row, end_row_exclusive = range.end_row_exclusive }
-    end
-    return out
+    return result, #lines, work
 end
 
 function M.replace(structure, first0, old_last0, new_lines, patterns)
     new_lines = new_lines or {}
     patterns = patterns or M.patterns()
-    if old_last0 - first0 ~= #new_lines then return nil, #new_lines, "structural" end
+    local work = { rows_visited = #new_lines, entries_copied = 0 }
+    if old_last0 - first0 ~= #new_lines then return nil, #new_lines, "structural", work end
     local fingerprints = {}
+    local identical = true
     for i, line in ipairs(new_lines) do
         fingerprints[i] = M.fingerprint(line, patterns)
         if fingerprints[i] ~= structure.fingerprints[first0 + i] then
-            return nil, #new_lines, "structural"
+            identical = false
         end
     end
-    local out = copy_structure(structure)
-    for i, token in ipairs(fingerprints) do out.fingerprints[first0 + i] = token end
-    return out, #new_lines
+    if not identical then return nil, #new_lines, "structural", work end
+    local out = {
+        fingerprints = structure.fingerprints,
+        state_before = structure.state_before,
+        footer_start0 = structure.footer_start0,
+        draft_ranges = structure.draft_ranges,
+    }
+    return out, #new_lines, nil, work
 end
 
 function M.state_before(structure, row0, opts)

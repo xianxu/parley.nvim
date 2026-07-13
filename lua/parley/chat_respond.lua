@@ -76,15 +76,12 @@ local function trim(str)
     return (str or ""):gsub("^%s*(.-)%s*$", "%1")
 end
 
-local function is_footnote_definition_line(line)
-    return (line or ""):match("^%[%^[^%]]+%]:") ~= nil
-end
-
 local function trailing_footnote_boundary(lines, search_start_0)
+    local is_footnote_line = require("parley.define").is_footnote_line
     local search_start = (search_start_0 or 0) + 1
     local footnote_start = nil
     for i = search_start, #lines do
-        if is_footnote_definition_line(lines[i]) then
+        if is_footnote_line(lines[i]) then
             footnote_start = i
             break
         end
@@ -95,7 +92,7 @@ local function trailing_footnote_boundary(lines, search_start_0)
 
     for i = footnote_start, #lines do
         local line = lines[i] or ""
-        if line:match("%S") and not is_footnote_definition_line(line) then
+        if line:match("%S") and not is_footnote_line(line) then
             return nil
         end
     end
@@ -110,6 +107,8 @@ local function trailing_footnote_boundary(lines, search_start_0)
     end
     return boundary - 1
 end
+
+M._trailing_footnote_boundary = trailing_footnote_boundary
 
 local function find_chat_header_end(lines)
     return _parley.chat_parser.find_header_end(lines)
