@@ -297,3 +297,212 @@ describe("skill_invoke.invoke", function()
         assert.equals("sibling repo root file", done_result.results[1].content:match("sibling repo root file"))
     end)
 end)
+
+describe("skill_invoke terminal ownership (#182)", function()
+    local parley = require("parley")
+    local skill_invoke = require("parley.skill_invoke")
+    local assembly = require("parley.skill_assembly")
+    local tasker = require("parley.tasker")
+    local tmpdir, path, buf, original_query, original_resolve
+
+    local function terminal_manifest(overrides)
+        return vim.tbl_extend("force", {
+            name = "terminal-test",
+            description = "d",
+            scope = "global",
+            activation = { manual = true },
+            source = function() return "SYSTEM" end,
+            tools = {},
+        }, overrides or {})
+    end
+
+    before_each(function()
+        tmpdir = vim.fn.tempname() .. "-skill-terminal"
+        vim.fn.mkdir(tmpdir, "p")
+        path = tmpdir .. "/doc.md"
+        vim.fn.writefile({ "alpha" }, path)
+        vim.cmd("edit! " .. vim.fn.fnameescape(path))
+        buf = vim.api.nvim_get_current_buf()
+        original_query = parley.dispatcher.query
+        original_resolve = assembly.resolve_agent
+        assembly.resolve_agent = function()
+            return { model = "m", provider = "anthropic" }
+        end
+        require("parley.progress").stop()
+    end)
+
+    after_each(function()
+        parley.dispatcher.query = original_query
+        assembly.resolve_agent = original_resolve
+        pcall(skill_invoke.cancel, buf)
+        pcall(function() require("parley.progress").stop() end)
+        pcall(vim.cmd, "enew!")
+        vim.fn.delete(tmpdir, "rf")
+    end)
+
+    it("suppresses detached progress only when explicitly requested", function()
+        local held_exit
+        parley.dispatcher.query = function(_b, _p, _pl, _h, on_exit)
+            held_exit = on_exit
+        end
+        skill_invoke.invoke(buf, terminal_manifest(), {}, { detached_progress = false })
+        assert.is_false(require("parley.progress").is_active())
+        skill_invoke.cancel(buf)
+
+        skill_invoke.invoke(buf, terminal_manifest(), {}, {})
+        assert.is_true(require("parley.progress").is_active())
+        skill_invoke.cancel(buf)
+        tasker.set_query("late", { raw_response = "" })
+        held_exit("late")
+    end)
+
+    it("owns each async terminal once and orders terminal before done", function()
+        local terminals = {
+            {
+                name = "success",
+                fire = function(c) tasker.set_query("q", { raw_response = "" }); c.on_exit("q") end,
+            },
+            { name = "pre-query abort", fire = function(c) c.on_abort("abort") end },
+            { name = "transport error", fire = function(c) c.on_error("q", { code = 7 }) end },
+        }
+        for _, case in ipairs(terminals) do
+            local callbacks, events = {}, {}
+            parley.dispatcher.query = function(_b, _p, _pl, _h, on_exit, _cb, _prog, on_abort, _activity, on_error)
+                callbacks = { on_exit = on_exit, on_abort = on_abort, on_error = on_error }
+            end
+            skill_invoke.invoke(buf, terminal_manifest(), {}, {
+                detached_progress = false,
+                on_terminal = function() table.insert(events, "terminal") end,
+                on_done = function() table.insert(events, "done") end,
+            })
+            case.fire(callbacks)
+            assert.is_true(vim.wait(1000, function() return #events == 2 end, 10), case.name)
+            callbacks.on_abort("late")
+            callbacks.on_error("q", { code = 8 })
+            assert.are.same({ "terminal", "done" }, events, case.name)
+            assert.is_false(skill_invoke.is_in_flight(buf), case.name)
+        end
+    end)
+
+    it("cancel delivers terminal cleanup once, skips done, and ignores late callbacks", function()
+        local held_exit, held_error, events = nil, nil, {}
+        parley.dispatcher.query = function(_b, _p, _pl, _h, on_exit, _cb, _prog, _abort, _activity, on_error)
+            held_exit, held_error = on_exit, on_error
+        end
+        skill_invoke.invoke(buf, terminal_manifest(), {}, {
+            detached_progress = false,
+            on_terminal = function() table.insert(events, "terminal") end,
+            on_done = function() table.insert(events, "done") end,
+        })
+        skill_invoke.cancel(buf)
+        skill_invoke.cancel(buf)
+        tasker.set_query("late", { raw_response = "" })
+        held_exit("late")
+        held_error("late", { code = 7 })
+        vim.wait(100, function() return false end)
+        assert.are.same({ "terminal" }, events)
+    end)
+
+    it("finishes invalid scheduled completion without reading or delivering done", function()
+        local held_exit, events = nil, {}
+        parley.dispatcher.query = function(_b, _p, _pl, _h, on_exit)
+            held_exit = on_exit
+        end
+        skill_invoke.invoke(buf, terminal_manifest(), {}, {
+            detached_progress = false,
+            on_terminal = function(result) table.insert(events, result.msg) end,
+            on_done = function() table.insert(events, "done") end,
+        })
+        vim.api.nvim_buf_delete(buf, { force = true })
+        tasker.set_query("deleted", { raw_response = "" })
+        held_exit("deleted")
+        assert.is_true(vim.wait(1000, function() return #events > 0 end, 10))
+        assert.are.same({ "buffer invalid" }, events)
+    end)
+
+    it("delivers synchronous terminal failures once before done", function()
+        local cases = {
+            {
+                name = "no file",
+                setup = function()
+                    vim.cmd("enew!")
+                    buf = vim.api.nvim_get_current_buf()
+                end,
+                manifest = terminal_manifest(),
+                message = "buffer has no file",
+            },
+            {
+                name = "source failure",
+                setup = function() end,
+                manifest = terminal_manifest({ source = function() error("boom") end }),
+                message = "source failed",
+            },
+            {
+                name = "no agent",
+                setup = function() assembly.resolve_agent = function() return nil end end,
+                manifest = terminal_manifest(),
+                message = "no agent",
+            },
+        }
+        for _, case in ipairs(cases) do
+            if case.name ~= "no file" then
+                vim.cmd("edit! " .. vim.fn.fnameescape(path))
+                buf = vim.api.nvim_get_current_buf()
+            end
+            case.setup()
+            local events = {}
+            skill_invoke.invoke(buf, case.manifest, {}, {
+                detached_progress = false,
+                on_terminal = function(result) table.insert(events, "terminal:" .. result.msg) end,
+                on_done = function() table.insert(events, "done") end,
+            })
+            assert.are.equal(2, #events, case.name)
+            assert.is_truthy(events[1]:find(case.message, 1, true), case.name)
+            assert.are.equal("done", events[2], case.name)
+            assert.is_false(skill_invoke.is_in_flight(buf), case.name)
+        end
+    end)
+
+    it("rejects a second invocation through its own ordered terminal", function()
+        parley.dispatcher.query = function() end
+        skill_invoke.invoke(buf, terminal_manifest(), {}, { detached_progress = false })
+        local events = {}
+        skill_invoke.invoke(buf, terminal_manifest(), {}, {
+            detached_progress = false,
+            on_terminal = function(result) table.insert(events, "terminal:" .. result.msg) end,
+            on_done = function() table.insert(events, "done") end,
+        })
+        assert.are.same({ "terminal:already running", "done" }, events)
+        assert.is_true(skill_invoke.is_in_flight(buf), "the first invocation must remain owned")
+        skill_invoke.cancel(buf)
+    end)
+
+    it("finishes a malformed scheduled completion and contains terminal callback failure", function()
+        parley.dispatcher.query = function(_b, _p, _payload, _handler, on_exit)
+            tasker.set_query("malformed", {
+                raw_response = sse({
+                    { type = "content_block_start", index = 0,
+                      content_block = { type = "tool_use", id = "bad", input = {} } },
+                    { type = "content_block_stop", index = 0 },
+                    { type = "message_stop" },
+                }),
+            })
+            vim.schedule(function() on_exit("malformed") end)
+        end
+        local done, terminal_calls = nil, 0
+        skill_invoke.invoke(buf, terminal_manifest(), {}, {
+            on_terminal = function()
+                terminal_calls = terminal_calls + 1
+                error("caller failure must be contained")
+            end,
+            on_done = function(result) done = result end,
+        })
+        assert.is_true(vim.wait(1000, function() return done ~= nil end, 10),
+            "malformed completion leaked its terminal")
+        assert.are.equal(1, terminal_calls)
+        assert.is_false(done.ok)
+        assert.are.equal("completion failed", done.msg)
+        assert.is_false(skill_invoke.is_in_flight(buf))
+        assert.is_false(require("parley.progress").is_active())
+    end)
+end)

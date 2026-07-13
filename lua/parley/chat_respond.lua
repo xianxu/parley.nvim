@@ -340,6 +340,7 @@ M.cmd_stop = function(signal)
         original_free_cursor_value = nil
     end
 
+    require("parley.chat_pending").cancel_all("user")
     _parley.tasker.stop(signal)
 
     -- After stopping, repair any unmatched 🔧: blocks in the buffer.
@@ -1147,7 +1148,12 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
 
     -- Check if there's already an active process for this buffer
     if not force and _parley.tasker.is_busy(buf, false) then
-        _parley.logger.warning("A Parley process is already running. Use stop to cancel or force to override.")
+        _parley.logger.warning("A Parley process is already running. Stop it before resubmitting.")
+        return
+    end
+    local chat_pending = require("parley.chat_pending")
+    if type(chat_pending.is_active) == "function" and chat_pending.is_active(buf) then
+        _parley.logger.warning("A Parley response is already pending in this chat. Stop it before resubmitting.")
         return
     end
 
@@ -1445,39 +1451,17 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             target_idx = exchange_idx or #model.exchanges
         end
 
-        local spinner_frames = require("parley.progress").SPINNER -- single source (#133)
-        local spinner_message = "Submitting..."
-        local progress_detail_text = ""
-        local progress_detail_key = nil
-        local spinner_frame_index = 1
-        local spinner_timer = nil
-        local stop_spinner
-        -- Spinner shows on every API call to Claude (initial and recursive).
-        local spinner_active = _parley._state.web_search and true or false
-        local spinner_running = false
-        local initial_progress_text = ""
-        if spinner_active then
-            initial_progress_text = "🔎 " .. spinner_frames[spinner_frame_index] .. " " .. spinner_message
-        end
-
         -- Compute response_start_line using the model.
         --
         -- Every visible element is a block in the model. The model
         -- handles margins between non-empty blocks automatically.
         -- We just add blocks and ask for positions.
         --
-        -- spinner_block_idx / stream_block_idx: indices into
-        -- model.exchanges[target_idx].blocks for the spinner and
-        -- streaming blocks. Used by clear_progress_indicator and
-        -- on_lines_changed respectively.
         -- Every visible element is a block in the model. The model
         -- handles margins between non-empty blocks automatically.
         -- We add blocks to the model, then insert the corresponding
         -- lines (margin + content) into the buffer.
         --
-        -- spinner_block_idx / stream_block_idx: block indices used by
-        -- clear_progress_indicator and on_lines_changed.
-        local spinner_block_idx
         local stream_block_idx
         if is_recursion then
             -- Recursion: append streaming placeholder after existing blocks.
@@ -1486,19 +1470,10 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             local pos = model:block_start(target_idx, stream_block_idx)
             buffer_edit.insert_lines_at(buf, pos - 1, { "", "" })  -- margin + blank content
         else
-            -- Fresh answer: add agent_header + optional spinner + streaming placeholder.
+            -- Fresh answer: add agent_header + streaming placeholder. Pending
+            -- presentation is an extmark and never enters the exchange model.
             model:add_block(target_idx, "agent_header", 1)
             model:add_block(target_idx, "stream_placeholder", 1)
-            if spinner_active then
-                -- Insert spinner between agent_header and stream_placeholder.
-                -- We added stream_placeholder already, so spinner goes before it.
-                -- Actually, let's just add blocks in order. Remove stream_placeholder,
-                -- add spinner, then re-add stream_placeholder.
-                model:remove_block(target_idx, #model.exchanges[target_idx].blocks)
-                model:add_block(target_idx, "spinner", 1)
-                spinner_block_idx = #model.exchanges[target_idx].blocks
-                model:add_block(target_idx, "stream_placeholder", 1)
-            end
             stream_block_idx = #model.exchanges[target_idx].blocks
 
             -- Before inserting, clean up any trailing blank lines after
@@ -1531,10 +1506,6 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                 end
             end
             local insert_lines = { "", agent_prefix .. agent_suffix }
-            if spinner_active then
-                table.insert(insert_lines, "")  -- margin before spinner
-                table.insert(insert_lines, initial_progress_text)
-            end
             table.insert(insert_lines, "")  -- margin before stream_placeholder
             table.insert(insert_lines, "")  -- stream_placeholder content (blank)
             buffer_edit.insert_lines_at(buf, insert_start, insert_lines)
@@ -1542,8 +1513,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
 
         -- #138: anchor the lease on the agent-header (`🤖:`) line — block 2 of the
         -- exchange (block 1 is the question; same index in fresh + recursion paths). It's the
-        -- structural marker for the response: streaming, the spinner, and
-        -- progress-clear all operate on the blocks *below* it, so ordinary writes
+        -- structural marker for the response: streaming operates below it, so ordinary writes
         -- leave it untouched, while undo/redo of the inserted response (or the
         -- user deleting the `🤖:` line) removes it and invalidates the lease.
         -- Anchoring on the stream line itself fails: stream_replace_at_line
@@ -1566,14 +1536,15 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             require("parley.buffer_lifecycle").finalize_mutated_api_leg(buf, api_leg_mutated)
         end
         local lease_notice_sent = false
+        local pending_session
         local function invalidate_pending_request(lease_reason)
             if not lease_notice_sent then
                 lease_notice_sent = true
                 _parley.logger.warning(lease_reason or "Parley request cancelled because the chat transcript changed")
                 vim.notify(lease_reason or "Parley request cancelled because the chat transcript changed", vim.log.levels.WARN)
             end
-            if stop_spinner then
-                stop_spinner()
+            if pending_session then
+                pending_session:cancel("stale")
             end
             pcall(function()
                 _parley.tasker.stop()
@@ -1623,155 +1594,20 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
         -- correct because any prior inserts (fence, etc.) updated the
         -- model via grow_question.
         local response_start_line = model:block_start(target_idx, stream_block_idx)
-        local function set_progress_indicator_line(text)
-            if not spinner_active or not spinner_block_idx then
-                return
-            end
-            if vim.in_fast_event() then
-                vim.schedule(function()
-                    set_progress_indicator_line(text)
-                end)
-                return
-            end
-            if not vim.api.nvim_buf_is_valid(buf) then
-                return
-            end
-            if not lease_valid() then
-                return
-            end
-            -- Recompute position from the model (streaming may have
-            -- shifted it via grow_block).
-            local pos = model:block_start(target_idx, spinner_block_idx)
-            local existing = vim.api.nvim_buf_get_lines(buf, pos, pos + 1, false)[1]
-            if existing == nil then
-                return
-            end
-            -- Issue #80: join each spinner frame to the previous undo
-            -- block so 90ms-cadence updates don't pile up as separate
-            -- entries. Same pattern dispatcher.create_handler uses for
-            -- streaming chunks. helpers.undojoin swallows E790.
-            require("parley.helper").undojoin(buf)
-            require("parley.buffer_edit").replace_line_at(buf, pos, text)
-            lease_commit()
-        end
-
-        local function render_spinner_line()
-            if not spinner_active then
-                return
-            end
-            if vim.in_fast_event() then
-                vim.schedule(render_spinner_line)
-                return
-            end
-            local text = "🔎 " .. spinner_frames[spinner_frame_index] .. " " .. spinner_message
-            set_progress_indicator_line(text)
-        end
-
-        stop_spinner = function()
-            if not spinner_running then
-                return
-            end
-            spinner_running = false
-            stop_and_close_timer(spinner_timer)
-            spinner_timer = nil
-        end
-
-        local function clear_progress_indicator(qt)
-            if not spinner_active then
-                return
-            end
-            if vim.in_fast_event() then
-                vim.schedule(function()
-                    clear_progress_indicator(qt)
-                end)
-                return
-            end
-            stop_spinner()
-            spinner_active = false
-            if vim.api.nvim_buf_is_valid(buf) and spinner_block_idx then
-                if not lease_valid() then
-                    return
-                end
-                -- Delete the spinner block + its margin from the buffer.
-                local spin_start = model:block_start(target_idx, spinner_block_idx)
-                local spin_size = model.exchanges[target_idx].blocks[spinner_block_idx].size
-                -- Delete: margin (1 line before content) + content lines.
-                local delete_start = spin_start - 1
-                local delete_count = 1 + spin_size
-                -- Issue #80: join the cleanup delete to the prior undo
-                -- block so the entire response cycle (spinner frames +
-                -- streaming + cleanup) collapses to one undoable unit.
-                require("parley.helper").undojoin(buf)
-                buffer_edit.delete_lines_after(buf, delete_start, delete_count)
-                -- Set size to 0 — model treats it as invisible (rule 3).
-                model:set_block_size(target_idx, spinner_block_idx, 0)
-                spinner_block_idx = nil
-                -- Update qt line tracking.
-                if qt then
-                    if type(qt.first_line) == "number" and qt.first_line >= delete_start then
-                        qt.first_line = qt.first_line - delete_count
-                    end
-                    if type(qt.last_line) == "number" and qt.last_line >= delete_start then
-                        qt.last_line = qt.last_line - delete_count
-                    end
-                end
-            end
-            lease_commit()
-        end
-
-        local function start_spinner()
-            if not spinner_active then
-                return
-            end
-            spinner_running = true
-            render_spinner_line()
-            spinner_timer = vim.loop.new_timer()
-            spinner_timer:start(
-                90,
-                90,
-                vim.schedule_wrap(function()
-                    if not spinner_running then
-                        return
-                    end
-                    spinner_frame_index = spinner_frame_index + 1
-                    if spinner_frame_index > #spinner_frames then
-                        spinner_frame_index = 1
-                    end
-                    render_spinner_line()
-                end)
-            )
-        end
-
-        start_spinner()
-
         local function on_stream_lines_changed(delta)
             model:grow_block(target_idx, stream_block_idx, delta)
         end
         local base_handler = _parley.dispatcher.create_handler(buf, win, response_start_line, true, "", function()
             return is_follow_cursor_enabled(override_free_cursor)
         end, on_stream_lines_changed, {
-            before_write = function(_qid, chunk)
-                if type(chunk) == "string" and chunk ~= "" then
-                    stop_spinner()
-                end
+            before_write = function(_qid, _chunk)
                 return lease_valid()
             end,
             after_write = function()
                 lease_commit()
             end,
         })
-        local function request_clear_progress_indicator(qt)
-            if vim.in_fast_event() then
-                vim.schedule(function()
-                    clear_progress_indicator(qt)
-                end)
-                return
-            end
-            clear_progress_indicator(qt)
-        end
-        local response_handler = function(qid, chunk)
-            base_handler(qid, chunk)
-        end
+        local response_handler = function(qid, chunk) pending_session:content(qid, chunk) end
 
         -- Shared empty-answer collapse (#131): used by on_exit (tool-use-only /
         -- empty response) AND on_abort, so a failed managed-cliproxy start tears
@@ -1799,18 +1635,39 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             end
         end
 
-        -- Abort teardown (#131): the dispatcher invokes this (qid-free) when the
-        -- managed cliproxy can't be started, so the request fails fast — spinner
-        -- stopped, empty answer block collapsed, error surfaced — never hangs.
-        local function on_abort(msg)
-            vim.schedule(function()
-                clear_progress_indicator(nil)
-                collapse_empty_answer()
-                finalize_mutated_api_leg()
-                chat_lease.clear(buf, lease_generation)
-                vim.notify(msg or "parley: request aborted", vim.log.levels.WARN)
-            end)
+        local leg_teardown_done = false
+        local discard_notice
+        local function teardown_chat_leg(notice)
+            if leg_teardown_done then return end
+            leg_teardown_done = true
+            local owns_shell = false
+            if vim.api.nvim_buf_is_valid(buf) then
+                owns_shell = chat_lease.validate(buf, lease_generation, buf_changedtick(buf)) == true
+            end
+            if owns_shell then collapse_empty_answer() end
+            finalize_mutated_api_leg()
+            chat_lease.clear(buf, lease_generation)
+            if notice then vim.notify(notice, vim.log.levels.WARN) end
         end
+
+        -- Abort teardown (#131): the dispatcher invokes this (qid-free) when the
+        -- managed cliproxy can't be started, so the request fails fast and the
+        -- response shell is torn down exactly once.
+        local function on_abort(msg)
+            discard_notice = msg or "parley: request aborted"
+            pending_session:cancel("abort")
+        end
+
+        pending_session = chat_pending.start({
+            buf = buf,
+            anchor_line = model:block_start(target_idx, 2),
+            lease_valid = lease_valid,
+            emit_content = base_handler,
+            choose_verb_index = function(count) return math.random(count) end,
+            on_discard = function()
+                teardown_chat_leg(discard_notice)
+            end,
+        })
 
         -- call the model and write response
         _parley.dispatcher.query(
@@ -1818,293 +1675,287 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             agent_info.provider,
             final_payload,
             response_handler,
-            vim.schedule_wrap(function(qid)
+            function(qid)
                 local qt = _parley.tasker.get_query(qid)
                 if not qt then
-                    finalize_mutated_api_leg()
-                    return
-                end
-                if not lease_valid() then
-                    finalize_mutated_api_leg()
-                    chat_lease.clear(buf, lease_generation)
-                    return
-                end
-                request_clear_progress_indicator(qt)
-
-                -- Collapse the empty stream placeholder (tool-use-only or empty
-                -- response). Shared with the #131 abort path.
-                collapse_empty_answer()
-
-                -- Tool loop hook: if the streamed response contained
-                -- tool_use blocks, write 🔧:/📎: into the buffer and
-                -- re-submit. Finalization only runs on "done".
-                if agent_info and agent_info.tools and #agent_info.tools > 0 then
-                    local tool_loop = require("parley.tool_loop")
-                    if not lease_valid() then
-                        finalize_mutated_api_leg()
-                        chat_lease.clear(buf, lease_generation)
-                        return
-                    end
-                    local outcome = tool_loop.process_response(buf, qt.raw_response or "", {
-                        max_tool_iterations = agent_info.max_tool_iterations or require("parley.defaults").max_tool_iterations,
-                        tool_result_max_bytes = agent_info.tool_result_max_bytes or 102400,
-                        root_policy = agent_info.root_policy,
-                    }, model, target_idx)
-                    lease_commit()
-                    if outcome == "recurse" then
-                        finalize_mutated_api_leg()
-                        -- Re-parse the (now updated) buffer and submit
-                        -- again. force=true bypasses the is_busy check
-                        -- that would otherwise reject an immediate
-                        -- re-submit. The recursive respond() inherits
-                        -- the same callback so user-provided
-                        -- callbacks still fire on the final iteration.
+                    pending_session:complete(qid, function()
                         vim.schedule(function()
-                            if not lease_valid() then
-                                finalize_mutated_api_leg()
-                                chat_lease.clear(buf, lease_generation)
-                                return
-                            end
-                            M.respond({ root_policy = agent_info.root_policy }, callback,
-                                override_free_cursor, true, model, target_idx)
-                        end)
-                        return
-                    end
-                end
-
-                local streamed_cursor_line = query_cursor_line(qt)
-
-                -- Clean up trailing blanks after the current exchange.
-                -- The model tracks content sizes precisely, but streaming
-                -- may leave stray blank lines in the buffer. Delete
-                -- everything between the exchange's model-computed end
-                -- and the next exchange (or end of buffer).
-                local exchange_end = model:exchange_start(target_idx) + model:exchange_total_size(target_idx)
-                local line_count = vim.api.nvim_buf_line_count(buf)
-                -- Find where the next content starts (next 💬: or end of buffer).
-                local next_content_start = line_count  -- default: end of buffer
-                local all_current_lines = vim.api.nvim_buf_get_lines(buf, 0, line_count, false)
-                local footnote_boundary = trailing_footnote_boundary(all_current_lines, exchange_end)
-                if footnote_boundary then
-                    next_content_start = footnote_boundary
-                elseif exchange_idx and exchange_idx < #parsed_chat.exchanges then
-                    -- There's a next exchange — find where it starts in the
-                    -- current buffer. Re-read to account for streaming mutations.
-                    local cur_lines = vim.api.nvim_buf_get_lines(buf, exchange_end, line_count, false)
-                    for i, l in ipairs(cur_lines) do
-                        if l:match("%S") then
-                            next_content_start = exchange_end + i - 1
-                            break
-                        end
-                    end
-                end
-                -- Delete excess blanks: keep exactly 1 margin line between
-                -- current exchange end and next content.
-                local excess = next_content_start - exchange_end - 1  -- -1 for the 1 margin we keep
-                if excess > 0 then
-                    if not guarded_write(function()
-                        _parley.helpers.undojoin(buf)
-                        buffer_edit.delete_lines_after(buf, exchange_end + 1, excess)
-                    end) then
-                        finalize_mutated_api_leg()
-                        chat_lease.clear(buf, lease_generation)
-                        return
-                    end
-                end
-
-                -- Only add a new user prompt at the end if we're not in the middle of the document
-                _parley.logger.debug("exchange_idx: " .. tostring(exchange_idx) .. " and #parsed_chat: " .. tostring(#parsed_chat))
-
-                if exchange_idx == #parsed_chat.exchanges then
-                    -- Insert position is right after the cleaned-up exchange.
-                    local insert_at = exchange_end
-
-                    if not guarded_write(function()
-                        _parley.helpers.undojoin(buf)
-                        -- Insert: margin + user_prefix + trailing blank
-                        buffer_edit.insert_lines_at(buf, insert_at, { "", _parley.config.chat_user_prefix, "" })
-                        _parley.helpers.undojoin(buf)
-                        buffer_edit.append_blank_at_end(buf)
-                    end) then
-                        finalize_mutated_api_leg()
-                        chat_lease.clear(buf, lease_generation)
-                        return
-                    end
-                end
-
-                -- if topic is ?, then generate it
-                local topic_generation_started = false
-                if headers.topic == "?" then
-                    if not lease_valid() then
-                        finalize_mutated_api_leg()
-                        chat_lease.clear(buf, lease_generation)
-                        return
-                    end
-                    topic_generation_started = true
-                    -- Topic gen: drop the leading system-prompt messages (1, or 2
-                    -- for a synthetic system prompt) AND ancestors — keep only the
-                    -- current-file conversation. Carrying the system prompt makes
-                    -- the model obey its 🧠:/persona mandate and open with a
-                    -- thinking block, which would otherwise become the "topic".
-                    local sys_lead = #require("parley.system_prompt_msgs").build(agent_info)
-                    local topic_msgs = M._conversation_after_lead(messages, sys_lead + ancestor_msg_count)
-                    table.insert(topic_msgs, { role = "assistant", content = qt.response })
-
-                    M.generate_topic(topic_msgs, agent_info.provider, agent_info.model, function(topic, _reason)
-                        if not topic then
                             finalize_mutated_api_leg()
                             chat_lease.clear(buf, lease_generation)
-                            return
-                        end
+                        end)
+                    end)
+                    return
+                end
+                local function continue_completion()
+                    if not lease_valid() then
+                        finalize_mutated_api_leg()
+                        chat_lease.clear(buf, lease_generation)
+                        return
+                    end
+                    -- Collapse the empty stream placeholder (tool-use-only or empty
+                    -- response). Shared with the #131 abort path.
+                    collapse_empty_answer()
+
+                    -- Tool loop hook: if the streamed response contained
+                    -- tool_use blocks, write 🔧:/📎: into the buffer and
+                    -- re-submit. Finalization only runs on "done".
+                    if agent_info and agent_info.tools and #agent_info.tools > 0 then
+                        local tool_loop = require("parley.tool_loop")
                         if not lease_valid() then
                             finalize_mutated_api_leg()
                             chat_lease.clear(buf, lease_generation)
                             return
                         end
-                        _parley.helpers.undojoin(buf)
-                        local all_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-                        set_chat_topic_line(buf, all_lines, topic)
+                        local outcome = tool_loop.process_response(buf, qt.raw_response or "", {
+                            max_tool_iterations = agent_info.max_tool_iterations or require("parley.defaults").max_tool_iterations,
+                            tool_result_max_bytes = agent_info.tool_result_max_bytes or 102400,
+                            root_policy = agent_info.root_policy,
+                        }, model, target_idx)
                         lease_commit()
-                        finalize_mutated_api_leg()
-                        chat_lease.clear(buf, lease_generation)
-                    end, { buf = buf, find_line = function()
-                        return M.find_topic_line(buf)
-                    end, before_write = function()
-                        return lease_valid()
-                    end, after_write = function()
-                        lease_commit()
-                    end })
-                end
+                        if outcome == "recurse" then
+                            finalize_mutated_api_leg()
+                            -- Re-parse the (now updated) buffer and submit
+                            -- again. force=true bypasses the is_busy check
+                            -- that would otherwise reject an immediate
+                            -- re-submit. The recursive respond() inherits
+                            -- the same callback so user-provided
+                            -- callbacks still fire on the final iteration.
+                            vim.schedule(function()
+                                if not lease_valid() then
+                                    finalize_mutated_api_leg()
+                                    chat_lease.clear(buf, lease_generation)
+                                    return
+                                end
+                                M.respond({ root_policy = agent_info.root_policy }, callback,
+                                    override_free_cursor, true, model, target_idx)
+                            end)
+                            return
+                        end
+                    end
 
-                -- Place cursor appropriately
-                _parley.logger.debug(
-                    "Cursor movement check - use_free_cursor: "
-                        .. tostring(use_free_cursor)
-                        .. ", config.chat_free_cursor: "
-                        .. tostring(_parley.config.chat_free_cursor)
-                )
+                    local streamed_cursor_line = query_cursor_line(qt)
 
-                if is_follow_cursor_enabled(override_free_cursor) then
+                    -- Clean up trailing blanks after the current exchange.
+                    -- The model tracks content sizes precisely, but streaming
+                    -- may leave stray blank lines in the buffer. Delete
+                    -- everything between the exchange's model-computed end
+                    -- and the next exchange (or end of buffer).
+                    local exchange_end = model:exchange_start(target_idx) + model:exchange_total_size(target_idx)
+                    local line_count = vim.api.nvim_buf_line_count(buf)
+                    -- Find where the next content starts (next 💬: or end of buffer).
+                    local next_content_start = line_count  -- default: end of buffer
+                    local all_current_lines = vim.api.nvim_buf_get_lines(buf, 0, line_count, false)
+                    local footnote_boundary = trailing_footnote_boundary(all_current_lines, exchange_end)
+                    if footnote_boundary then
+                        next_content_start = footnote_boundary
+                    elseif exchange_idx and exchange_idx < #parsed_chat.exchanges then
+                        -- There's a next exchange — find where it starts in the
+                        -- current buffer. Re-read to account for streaming mutations.
+                        local cur_lines = vim.api.nvim_buf_get_lines(buf, exchange_end, line_count, false)
+                        for i, l in ipairs(cur_lines) do
+                            if l:match("%S") then
+                                next_content_start = exchange_end + i - 1
+                                break
+                            end
+                        end
+                    end
+                    -- Delete excess blanks: keep exactly 1 margin line between
+                    -- current exchange end and next content.
+                    local excess = next_content_start - exchange_end - 1  -- -1 for the 1 margin we keep
+                    if excess > 0 then
+                        if not guarded_write(function()
+                            _parley.helpers.undojoin(buf)
+                            buffer_edit.delete_lines_after(buf, exchange_end + 1, excess)
+                        end) then
+                            finalize_mutated_api_leg()
+                            chat_lease.clear(buf, lease_generation)
+                            return
+                        end
+                    end
+
+                    -- Only add a new user prompt at the end if we're not in the middle of the document
+                    _parley.logger.debug("exchange_idx: " .. tostring(exchange_idx) .. " and #parsed_chat: " .. tostring(#parsed_chat))
+
+                    if exchange_idx == #parsed_chat.exchanges then
+                        -- Insert position is right after the cleaned-up exchange.
+                        local insert_at = exchange_end
+
+                        if not guarded_write(function()
+                            _parley.helpers.undojoin(buf)
+                            -- Insert: margin + user_prefix + trailing blank
+                            buffer_edit.insert_lines_at(buf, insert_at, { "", _parley.config.chat_user_prefix, "" })
+                            _parley.helpers.undojoin(buf)
+                            buffer_edit.append_blank_at_end(buf)
+                        end) then
+                            finalize_mutated_api_leg()
+                            chat_lease.clear(buf, lease_generation)
+                            return
+                        end
+                    end
+
+                    -- if topic is ?, then generate it
+                    local topic_generation_started = false
+                    if headers.topic == "?" then
+                        if not lease_valid() then
+                            finalize_mutated_api_leg()
+                            chat_lease.clear(buf, lease_generation)
+                            return
+                        end
+                        topic_generation_started = true
+                        -- Topic gen: drop the leading system-prompt messages (1, or 2
+                        -- for a synthetic system prompt) AND ancestors — keep only the
+                        -- current-file conversation. Carrying the system prompt makes
+                        -- the model obey its 🧠:/persona mandate and open with a
+                        -- thinking block, which would otherwise become the "topic".
+                        local sys_lead = #require("parley.system_prompt_msgs").build(agent_info)
+                        local topic_msgs = M._conversation_after_lead(messages, sys_lead + ancestor_msg_count)
+                        table.insert(topic_msgs, { role = "assistant", content = qt.response })
+
+                        M.generate_topic(topic_msgs, agent_info.provider, agent_info.model, function(topic, _reason)
+                            if not topic then
+                                finalize_mutated_api_leg()
+                                chat_lease.clear(buf, lease_generation)
+                                return
+                            end
+                            if not lease_valid() then
+                                finalize_mutated_api_leg()
+                                chat_lease.clear(buf, lease_generation)
+                                return
+                            end
+                            _parley.helpers.undojoin(buf)
+                            local all_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+                            set_chat_topic_line(buf, all_lines, topic)
+                            lease_commit()
+                            finalize_mutated_api_leg()
+                            chat_lease.clear(buf, lease_generation)
+                        end, { buf = buf, find_line = function()
+                            return M.find_topic_line(buf)
+                        end, before_write = function()
+                            return lease_valid()
+                        end, after_write = function()
+                            lease_commit()
+                        end })
+                    end
+
+                    -- Place cursor appropriately
                     _parley.logger.debug(
-                        "Moving cursor - exchange_idx: "
-                            .. tostring(exchange_idx)
-                            .. ", component: "
-                            .. tostring(component)
-                            .. ", streamed_cursor_line: "
-                            .. tostring(streamed_cursor_line)
+                        "Cursor movement check - use_free_cursor: "
+                            .. tostring(use_free_cursor)
+                            .. ", config.chat_free_cursor: "
+                            .. tostring(_parley.config.chat_free_cursor)
                     )
 
-                    local line = streamed_cursor_line
-                    if not line then
-                        if exchange_idx and component == "question" then
-                            line = response_start_line + 2
-                        else
-                            line = vim.api.nvim_buf_line_count(buf)
+                    if is_follow_cursor_enabled(override_free_cursor) then
+                        _parley.logger.debug(
+                            "Moving cursor - exchange_idx: "
+                                .. tostring(exchange_idx)
+                                .. ", component: "
+                                .. tostring(component)
+                                .. ", streamed_cursor_line: "
+                                .. tostring(streamed_cursor_line)
+                        )
+
+                        local line = streamed_cursor_line
+                        if not line then
+                            if exchange_idx and component == "question" then
+                                line = response_start_line + 2
+                            else
+                                line = vim.api.nvim_buf_line_count(buf)
+                            end
                         end
+                        _parley.logger.debug("Moving cursor to completion position: " .. tostring(line))
+                        _parley.helpers.cursor_to_line(line, buf, win)
+                    else
+                        _parley.logger.debug("Not moving cursor due to free_cursor setting")
                     end
-                    _parley.logger.debug("Moving cursor to completion position: " .. tostring(line))
-                    _parley.helpers.cursor_to_line(line, buf, win)
-                else
-                    _parley.logger.debug("Not moving cursor due to free_cursor setting")
-                end
-                -- Refresh interview timestamps (decoration provider handles chat highlights)
-                local interview = require("parley.interview")
-                interview.highlight_timestamps(buf)
+                    -- Refresh interview timestamps (decoration provider handles chat highlights)
+                    local interview = require("parley.interview")
+                    interview.highlight_timestamps(buf)
 
-                if not topic_generation_started then
-                    finalize_mutated_api_leg()
-                end
-
-                vim.cmd("doautocmd User ParleyDone")
-
-                -- Re-apply folds so freshly streamed 🧠:/🔧:/📎: blocks
-                -- collapse the same way they do on file open. apply_folds
-                -- is idempotent and reads the current buffer state.
-                pcall(function()
-                    require("parley.tool_folds").apply_folds(buf)
-                end)
-
-                -- Raw-mode logging (debug/learning aid). Writes per-turn
-                -- markdown logs to <chat-dir>/.parley-logs/<basename>/.
-                pcall(function()
-                    local rm = _parley.config.raw_mode or {}
-                    if not (rm.enable and (rm.log_exchange or rm.log_raw)) then return end
-                    local chat_path = vim.api.nvim_buf_get_name(buf)
-                    if chat_path == "" then return end
-                    local raw_log = require("parley.raw_log")
-                    if rm.log_exchange then
-                        raw_log.write_exchange_turn(chat_path, messages)
+                    if not topic_generation_started then
+                        finalize_mutated_api_leg()
                     end
-                    if rm.log_raw then
-                        local sse_lines
-                        if qt.raw_response and qt.raw_response ~= "" then
-                            sse_lines = vim.split(qt.raw_response, "\n", { plain = true })
+
+                    vim.cmd("doautocmd User ParleyDone")
+
+                    -- Re-apply folds so freshly streamed 🧠:/🔧:/📎: blocks
+                    -- collapse the same way they do on file open. apply_folds
+                    -- is idempotent and reads the current buffer state.
+                    pcall(function()
+                        require("parley.tool_folds").apply_folds(buf)
+                    end)
+
+                    -- Raw-mode logging (debug/learning aid). Writes per-turn
+                    -- markdown logs to <chat-dir>/.parley-logs/<basename>/.
+                    pcall(function()
+                        local rm = _parley.config.raw_mode or {}
+                        if not (rm.enable and (rm.log_exchange or rm.log_raw)) then return end
+                        local chat_path = vim.api.nvim_buf_get_name(buf)
+                        if chat_path == "" then return end
+                        local raw_log = require("parley.raw_log")
+                        if rm.log_exchange then
+                            raw_log.write_exchange_turn(chat_path, messages)
                         end
-                        local assembled = {
-                            stop_reason = qt.stop_reason,
-                            content = qt.response and { { type = "text", text = qt.response } } or nil,
-                            usage = qt.usage,
-                        }
-                        raw_log.write_raw_turn(chat_path, {
-                            request = final_payload,
-                            assembled = assembled,
-                            sse_lines = sse_lines,
-                        })
-                    end
-                end)
+                        if rm.log_raw then
+                            local sse_lines
+                            if qt.raw_response and qt.raw_response ~= "" then
+                                sse_lines = vim.split(qt.raw_response, "\n", { plain = true })
+                            end
+                            local assembled = {
+                                stop_reason = qt.stop_reason,
+                                content = qt.response and { { type = "text", text = qt.response } } or nil,
+                                usage = qt.usage,
+                            }
+                            raw_log.write_raw_turn(chat_path, {
+                                request = final_payload,
+                                assembled = assembled,
+                                sse_lines = sse_lines,
+                            })
+                        end
+                    end)
 
-                -- Call the callback if provided
-                if callback then
-                    callback()
+                    -- Call the callback if provided
+                    if callback then
+                        callback()
+                    end
+                    if not topic_generation_started then
+                        chat_lease.clear(buf, lease_generation)
+                    end
                 end
-                if not topic_generation_started then
-                    chat_lease.clear(buf, lease_generation)
-                end
-            end),
+                -- create_handler intentionally schedules buffer writes. Queue
+                -- completion behind all content actions flushed by chat_pending
+                -- so lease teardown cannot overtake the last staged write.
+                pending_session:complete(qid, function() vim.schedule(continue_completion) end)
+            end,
             nil,
-            vim.schedule_wrap(function(_, progress_event)
+            function(qid, progress_event)
                 if not progress_event or type(progress_event) ~= "table" then
                     return
                 end
-                if not spinner_active then
-                    return
-                end
-                local message = progress_event.message
-                local detail = progress_event.text
-                if type(detail) == "string" and detail ~= "" then
-                    local detail_key = table.concat({
-                        tostring(progress_event.phase or ""),
-                        tostring(progress_event.kind or ""),
-                        tostring(progress_event.tool or ""),
-                        tostring(progress_event.block_type or ""),
-                    }, ":")
-                    if progress_detail_key ~= detail_key then
-                        progress_detail_key = detail_key
-                        progress_detail_text = ""
-                    end
-                    progress_detail_text = progress_detail_text .. detail
-                    local compact = progress_detail_text:gsub("%s+", " "):gsub("^%s+", "")
-                    if compact ~= "" then
-                        if progress_event.kind == "reasoning" then
-                            message = "Reasoning: " .. compact
-                        else
-                            local base = (type(progress_event.message) == "string" and progress_event.message ~= "")
-                                and progress_event.message
-                                or "Working..."
-                            message = base .. " " .. compact
+                pending_session:progress(qid, progress_event)
+            end,
+            on_abort,
+            function(qid) pending_session:activity(qid) end,
+            function(qid, err)
+                pending_session:failure(qid, err, function(failure)
+                    -- As above, staged content schedules its concrete buffer
+                    -- write; surface the terminal only after that write runs.
+                    vim.schedule(function()
+                        local status = failure and failure.http_status
+                        local body = failure and failure.body
+                        local message = "parley: provider request failed"
+                        if status and (status < 200 or status > 299) then
+                            message = message .. " (HTTP " .. tostring(status) .. ")"
+                        elseif failure and failure.code then
+                            message = message .. " (exit " .. tostring(failure.code) .. ")"
                         end
-                    end
-                else
-                    progress_detail_text = ""
-                    progress_detail_key = nil
-                end
-
-                if type(message) == "string" and message ~= "" and message ~= spinner_message then
-                    spinner_message = message
-                    render_spinner_line()
-                end
-            end),
-            on_abort
+                        if type(body) == "string" and body:match("%S") then
+                            message = message .. ": " .. body:sub(1, 500)
+                        end
+                        teardown_chat_leg(message)
+                    end)
+                end)
+            end
         )
     end)
 end

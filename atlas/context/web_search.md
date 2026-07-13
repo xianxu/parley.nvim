@@ -9,5 +9,6 @@ Anthropic (tool-based), Google AI (`google_search` tool), OpenAI (search-model s
 
 ## UI
 - Lualine: `[w]` when active, `[w?]` if unsupported by agent
-- In-buffer animated spinner and progress line during search/reasoning, cleared on completion
-- All providers normalize progress events to a shared shape (`kind`, `phase`, `message`)
+- Chat-producing LLM legs use the shared [response-progress](../chat/response_progress.md) extmark: a delayed playful line covers initial silence, then meaningful search/reasoning status replaces it without changing transcript text
+- Web search does not own a buffer-backed initial spinner; non-chat web-enabled calls keep the progress surface of their caller (for example Definition's selection spinner or Document Review's detached luabar)
+- All providers normalize semantic progress events to a shared shape (`kind`, `phase`, `message`); raw transport activity is a separate callback used only for playful verb timing

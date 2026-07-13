@@ -7,6 +7,7 @@ local tmp_dir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-chat-res
 
 -- Bootstrap parley
 local parley = require("parley")
+local canonical_pending_start = require("parley.chat_pending").start
 parley.setup({
     chat_dir = tmp_dir,
     state_dir = tmp_dir .. "/state",
@@ -47,9 +48,50 @@ local function buffer_contains(buf, needle)
     return text:find(needle, 1, true) ~= nil
 end
 
+local function pending_virtual_text(buf)
+    local ns = vim.api.nvim_get_namespaces().parley_chat_pending
+    if not ns then return nil end
+    local marks = vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })
+    local chunks = marks[1] and marks[1][4] and marks[1][4].virt_lines
+    return chunks and chunks[1] and chunks[1][1] and chunks[1][1][1] or nil
+end
+
+local function pending_runtime()
+    local runtime = { now = 0, queue = {}, timers = {} }
+    runtime.clock = { now_ms = function() return runtime.now end }
+    runtime.scheduler = {
+        enqueue = function(callback) table.insert(runtime.queue, callback) end,
+    }
+    local function timer(delay, repeating, callback)
+        local item = { due = runtime.now + delay, repeating = repeating, delay = delay,
+            callback = callback, closed = false }
+        table.insert(runtime.timers, item)
+        return function() item.closed = true end
+    end
+    runtime.scheduler.after = function(delay, callback) return timer(delay, false, callback) end
+    runtime.scheduler.every = function(delay, callback) return timer(delay, true, callback) end
+    function runtime:fire_due()
+        for _, item in ipairs(self.timers) do
+            if not item.closed and item.due <= self.now then
+                if item.repeating then item.due = item.due + item.delay else item.closed = true end
+                item.callback()
+            end
+        end
+    end
+    function runtime:advance(milliseconds)
+        self.now = self.now + milliseconds
+        self:fire_due()
+    end
+    function runtime:drain()
+        while #self.queue > 0 do table.remove(self.queue, 1)() end
+    end
+    return runtime
+end
+
 describe("chat_respond: completion callback", function()
     local test_file
     local original_query
+    local original_pending_start
 
     before_each(function()
         -- Create a unique test file with valid timestamp format
@@ -57,6 +99,7 @@ describe("chat_respond: completion callback", function()
 
         -- Save original dispatcher.query
         original_query = parley.dispatcher.query
+        original_pending_start = canonical_pending_start
     end)
 
     after_each(function()
@@ -64,6 +107,7 @@ describe("chat_respond: completion callback", function()
         if original_query then
             parley.dispatcher.query = original_query
         end
+        require("parley.chat_pending").start = original_pending_start
 
         -- Clean up test file
         if test_file and vim.fn.filereadable(test_file) == 1 then
@@ -122,7 +166,7 @@ describe("chat_respond: completion callback", function()
         end)
 
         -- Wait a bit for scheduled callback to execute
-        vim.wait(100, function() return completion_called end, 10)
+        vim.wait(200, function() return completion_called end, 10)
 
         -- Assert no error during the call or in the callback
         assert.is_true(success, "chat_respond should not error: " .. tostring(err))
@@ -177,7 +221,7 @@ describe("chat_respond: completion callback", function()
         end)
 
         -- Wait for callback
-        vim.wait(100, function() return completion_called end, 10)
+        vim.wait(200, function() return completion_called and finalize_count == 1 end, 10)
         lifecycle.finalize_mutated_api_leg = original_finalize
 
         -- Assert no error
@@ -377,7 +421,9 @@ describe("chat_respond: buffer state after completion", function()
         end
 
         parley.chat_respond({range = 0})
-        vim.wait(200, function() return completion_called end, 10)
+        vim.wait(300, function()
+            return completion_called and buffer_contains(buf, "Release notes summary")
+        end, 10)
 
         local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
         local has_new_prompt = false
@@ -652,7 +698,7 @@ describe("chat_respond: buffer state after completion", function()
         assert.equals(2, user_prompt_count, "Should not append new user prompt in middle of document")
     end)
 
-    it("keeps web-search progress visible while response streams and clears it on completion", function()
+    it("streams answer content arriving before reveal without playful UI", function()
         local chat_content = [[
 # topic: Test Topic
 - file: test.md
@@ -665,269 +711,247 @@ describe("chat_respond: buffer state after completion", function()
         vim.cmd("edit " .. test_file)
         local buf = vim.api.nvim_get_current_buf()
         vim.api.nvim_win_set_cursor(0, {6, 0})
-
-        local original_web_search = parley._state.web_search
-        parley._state.web_search = true
-
-        local completion_called = false
-        local saw_initial_indicator = false
-        parley.dispatcher.query = function(buf_arg, provider, payload, handler, completion_callback, _callback, progress_callback)
-            local mock_qid = "qid_web_progress"
-            parley.tasker.set_query(mock_qid, {
-                response = "Release notes summary",
-                buf = buf_arg
-            })
-
-            local before_lines = vim.api.nvim_buf_get_lines(buf_arg, 0, -1, false)
-            for _, line in ipairs(before_lines) do
-                if line:match("^🔎 %S+ Submitting%.%.%.$") then
-                    saw_initial_indicator = true
-                    break
-                end
-            end
-
-            if progress_callback then
-                progress_callback(mock_qid, { message = "Searching web..." })
-            end
-            if handler then
-                handler(mock_qid, "Release notes summary")
-            end
-
-            vim.defer_fn(function()
-                vim.schedule(function()
-                    completion_callback(mock_qid)
-                    completion_called = true
-                end)
-            end, 500)
-        end
-
-        parley.chat_respond({ range = 0 })
-
-        vim.wait(300, function()
-            local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-            local has_progress_line = false
-            local has_answer_text = false
-            for _, line in ipairs(lines) do
-                if line:match("^🔎 %S+ ") then
-                    has_progress_line = true
-                end
-                if line:find("Release notes summary", 1, true) then
-                    has_answer_text = true
-                end
-            end
-            return has_progress_line and has_answer_text
-        end, 10)
-
-        local active_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-        local has_active_progress_line = false
-        local has_active_answer_text = false
-        for _, line in ipairs(active_lines) do
-            if line:match("^🔎 %S+ ") then
-                has_active_progress_line = true
-            end
-            if line:find("Release notes summary", 1, true) then
-                has_active_answer_text = true
-            end
-        end
-
-        vim.wait(700, function()
-            return completion_called
-        end, 10)
-
-        parley._state.web_search = original_web_search
-
-        assert.is_true(saw_initial_indicator, "Expected initial submitting progress indicator to be present")
-        assert.is_true(has_active_progress_line, "Progress indicator should remain visible while response text streams")
-        assert.is_true(has_active_answer_text, "Expected streamed answer text to be present before completion")
-        local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-        local has_progress_line = false
-        local has_answer_text = false
-        for _, line in ipairs(lines) do
-            if line:match("^🔎 %S+ ") then
-                has_progress_line = true
-            end
-            if line:find("Release notes summary", 1, true) then
-                has_answer_text = true
-            end
-        end
-        assert.is_false(has_progress_line, "Progress indicator should be cleared after response completes")
-        assert.is_true(has_answer_text, "Expected streamed answer text to be present")
-    end)
-
-    it("keeps late tool progress visible when it arrives after answer text", function()
-        local chat_content = [[
-# topic: Test Topic
-- file: test.md
----
-
-💬: Find latest release notes.
-]]
-
-        vim.fn.writefile(vim.split(chat_content, "\n"), test_file)
-        vim.cmd("edit " .. test_file)
-        local buf = vim.api.nvim_get_current_buf()
-        vim.api.nvim_win_set_cursor(0, {6, 0})
-
-        local original_web_search = parley._state.web_search
-        parley._state.web_search = true
-
-        local completion_called = false
-        parley.dispatcher.query = function(buf_arg, provider, payload, handler, completion_callback, _callback, progress_callback)
-            local mock_qid = "qid_web_progress_late_tool"
-            parley.tasker.set_query(mock_qid, {
-                response = "Release notes summary",
-                buf = buf_arg
-            })
-
-            if handler then
-                handler(mock_qid, "Release notes summary")
-            end
-
-            vim.defer_fn(function()
-                vim.schedule(function()
-                    if progress_callback then
-                        progress_callback(mock_qid, {
-                            message = "Searching web...",
-                            text = "latest neovim release notes",
-                        })
-                    end
-                end)
-            end, 30)
-
-            vim.defer_fn(function()
-                vim.schedule(function()
-                    completion_callback(mock_qid)
-                    completion_called = true
-                end)
-            end, 500)
-        end
-
-        parley.chat_respond({ range = 0 })
-
-        local saw_late_progress_with_answer = vim.wait(300, function()
-            local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-            local has_progress_line = false
-            local has_answer_text = false
-            for _, line in ipairs(lines) do
-                if line:find("Searching web... latest neovim release notes", 1, true) then
-                    has_progress_line = true
-                end
-                if line:find("Release notes summary", 1, true) then
-                    has_answer_text = true
-                end
-            end
-            return has_progress_line and has_answer_text
-        end, 10)
-
-        vim.wait(700, function()
-            return completion_called
-        end, 10)
-
-        parley._state.web_search = original_web_search
-
-        assert.is_true(saw_late_progress_with_answer, "Late tool progress should remain visible even after answer text starts")
-
-        local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-        local has_progress_line = false
-        local has_answer_text = false
-        for _, line in ipairs(lines) do
-            if line:find("Searching web...", 1, true) then
-                has_progress_line = true
-            end
-            if line:find("Release notes summary", 1, true) then
-                has_answer_text = true
-            end
-        end
-        assert.is_false(has_progress_line, "Late tool progress indicator should clear on completion")
-        assert.is_true(has_answer_text, "Expected streamed answer text to remain after completion")
-    end)
-
-    it("animates spinner locally while waiting without SSE events", function()
-        local chat_content = [[
-# topic: Test Topic
-- file: test.md
----
-
-💬: Search for docs.
-]]
-
-        vim.fn.writefile(vim.split(chat_content, "\n"), test_file)
-        vim.cmd("edit " .. test_file)
-        local buf = vim.api.nvim_get_current_buf()
-        vim.api.nvim_win_set_cursor(0, {6, 0})
-
-        local original_web_search = parley._state.web_search
-        parley._state.web_search = true
 
         local completion_called = false
         parley.dispatcher.query = function(buf_arg, provider, payload, handler, completion_callback)
-            local mock_qid = "qid_spinner_wait"
+            local mock_qid = "qid_fast_answer"
             parley.tasker.set_query(mock_qid, {
-                response = "",
+                response = "Release notes summary",
                 buf = buf_arg
             })
-            vim.defer_fn(function()
-                vim.schedule(function()
-                    completion_callback(mock_qid)
-                    completion_called = true
-                end)
-            end, 260)
+            if handler then
+                handler(mock_qid, "Release notes summary")
+            end
+            completion_callback(mock_qid)
+            completion_called = true
         end
 
         parley.chat_respond({ range = 0 })
-
-        vim.wait(120, function()
-            local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-            for _, line in ipairs(lines) do
-                if line:match("^🔎 %S+ Submitting%.%.%.$") then
-                    return true
-                end
-            end
-            return false
+        vim.wait(300, function()
+            return completion_called and buffer_contains(buf, "Release notes summary")
         end, 10)
 
-        local first_spinner_line = nil
-        for _, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
-            if line:match("^🔎 %S+ Submitting%.%.%.$") then
-                first_spinner_line = line
-                break
+        local text = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+        local ns = vim.api.nvim_get_namespaces().parley_chat_pending
+        local marks = ns and vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true }) or {}
+        assert.is_true(text:find("Release notes summary", 1, true) ~= nil)
+        assert.is_true(text:find("Submitting...", 1, true) == nil)
+        assert.equals(0, #marks)
+        local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+        local parsed = parley.parse_chat(lines, 3)
+        local model = require("parley.exchange_model").from_parsed_chat(parsed)
+        for _, block in ipairs(model.exchanges[1].blocks) do
+            assert.is_not.equals("spinner", block.kind)
+        end
+    end)
+
+    it("shows a virtual playful line after one second and stages content for its minimum", function()
+        local chat_content = [[
+# topic: Test Topic
+- file: test.md
+---
+
+💬: Find latest release notes.
+]]
+
+        vim.fn.writefile(vim.split(chat_content, "\n"), test_file)
+        vim.cmd("edit " .. test_file)
+        local buf = vim.api.nvim_get_current_buf()
+        vim.api.nvim_win_set_cursor(0, {6, 0})
+
+        local completion_called = false
+        parley.dispatcher.query = function(buf_arg, provider, payload, handler, completion_callback)
+            local mock_qid = "qid_slow_answer"
+            parley.tasker.set_query(mock_qid, {
+                response = "Release notes summary",
+                buf = buf_arg
+            })
+            vim.defer_fn(function()
+                handler(mock_qid, "Release notes summary")
+                completion_callback(mock_qid)
+                completion_called = true
+            end, 1100)
+        end
+
+        parley.chat_respond({ range = 0 })
+        local ns = vim.api.nvim_get_namespaces().parley_chat_pending
+        assert.is_true(vim.wait(1050, function()
+            return ns and #vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true }) == 1
+        end, 10))
+        assert.is_true(vim.wait(300, function() return completion_called end, 10))
+        assert.is_false(buffer_contains(buf, "Release notes summary"),
+            "content received during minimum must stay staged")
+        assert.is_true(vim.wait(1300, function()
+            return buffer_contains(buf, "Release notes summary")
+        end, 10))
+        assert.equals(0, #vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true }))
+    end)
+
+    it("lets same-deadline content beat reveal exactly once through M.respond", function()
+        local chat_content = [[
+# topic: Boundary
+- file: test.md
+---
+
+💬: boundary
+]]
+        vim.fn.writefile(vim.split(chat_content, "\n"), test_file)
+        vim.cmd("edit " .. test_file)
+        local buf = vim.api.nvim_get_current_buf()
+        vim.api.nvim_win_set_cursor(0, { 6, 0 })
+        local runtime = pending_runtime()
+        require("parley.chat_pending").start = function(opts)
+            opts.clock, opts.scheduler = runtime.clock, runtime.scheduler
+            return canonical_pending_start(opts)
+        end
+        local handler, complete
+        local callback_count = 0
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, content, on_exit)
+            handler, complete = content, on_exit
+            parley.tasker.set_query("qid_boundary_content", {
+                response = "boundary answer", raw_response = "", buf = buf_arg,
+            })
+        end
+        parley.chat_respond({ range = 0 }, function() callback_count = callback_count + 1 end)
+        runtime:drain()
+        runtime.now = 1000
+        handler("qid_boundary_content", "boundary answer")
+        runtime:fire_due()
+        complete("qid_boundary_content")
+        runtime:drain()
+
+        assert.is_nil(pending_virtual_text(buf))
+        assert.is_true(vim.wait(300, function()
+            return buffer_contains(buf, "boundary answer") and callback_count == 1
+        end, 10))
+        assert.equals(1, callback_count)
+    end)
+
+    it("lets same-deadline reveal stage content and releases one continuation at minimum", function()
+        local chat_content = [[
+# topic: Boundary
+- file: test.md
+---
+
+💬: boundary
+]]
+        vim.fn.writefile(vim.split(chat_content, "\n"), test_file)
+        vim.cmd("edit " .. test_file)
+        local buf = vim.api.nvim_get_current_buf()
+        vim.api.nvim_win_set_cursor(0, { 6, 0 })
+        local runtime = pending_runtime()
+        require("parley.chat_pending").start = function(opts)
+            opts.clock, opts.scheduler = runtime.clock, runtime.scheduler
+            return canonical_pending_start(opts)
+        end
+        local handler, complete
+        local callback_count = 0
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, content, on_exit)
+            handler, complete = content, on_exit
+            parley.tasker.set_query("qid_boundary_reveal", {
+                response = "staged boundary", raw_response = "", buf = buf_arg,
+            })
+        end
+        parley.chat_respond({ range = 0 }, function() callback_count = callback_count + 1 end)
+        runtime:drain()
+        runtime:advance(1000)
+        handler("qid_boundary_reveal", "staged boundary")
+        complete("qid_boundary_reveal")
+        runtime:drain()
+        assert.is_not_nil(pending_virtual_text(buf))
+        assert.is_false(buffer_contains(buf, "staged boundary"))
+        assert.equals(0, callback_count)
+
+        runtime:advance(1000)
+        runtime:drain()
+        assert.is_true(vim.wait(300, function()
+            return buffer_contains(buf, "staged boundary") and callback_count == 1
+        end, 10))
+        assert.is_nil(pending_virtual_text(buf))
+        assert.equals(1, callback_count)
+    end)
+
+    it("keeps meaningful remote status visible after release until completion", function()
+        local chat_content = [[
+# topic: Test Topic
+- file: test.md
+---
+
+💬: Find latest release notes.
+]]
+        vim.fn.writefile(vim.split(chat_content, "\n"), test_file)
+        vim.cmd("edit " .. test_file)
+        local buf = vim.api.nvim_get_current_buf()
+        vim.api.nvim_win_set_cursor(0, { 6, 0 })
+        local finish
+        local runtime = pending_runtime()
+        require("parley.chat_pending").start = function(opts)
+            opts.clock, opts.scheduler = runtime.clock, runtime.scheduler
+            return canonical_pending_start(opts)
+        end
+
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, handler, completion_callback,
+                _callback, progress_callback)
+            local qid = "qid_remote_status"
+            parley.tasker.set_query(qid, { response = "answer", raw_response = "", buf = buf_arg })
+            handler(qid, "answer")
+            progress_callback(qid, { message = "Searching web...", text = "release notes" })
+            finish = function() completion_callback(qid) end
+        end
+
+        parley.chat_respond({ range = 0 })
+        runtime:drain()
+        assert.is_true(vim.wait(1000, function()
+            return buffer_contains(buf, "answer")
+                and pending_virtual_text(buf) == "Searching web... release notes"
+        end, 10), vim.inspect({ text = pending_virtual_text(buf), lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false) }))
+        finish()
+        runtime:drain()
+        assert.is_true(vim.wait(300, function() return pending_virtual_text(buf) == nil end, 10))
+    end)
+
+    it("keeps topic-generation fallback outside playful chat sessions", function()
+        local chat_content = [[
+# topic: ?
+- file: test.md
+---
+
+💬: Name this chat.
+]]
+        vim.fn.writefile(vim.split(chat_content, "\n"), test_file)
+        vim.cmd("edit " .. test_file)
+        local buf = vim.api.nvim_get_current_buf()
+        vim.api.nvim_win_set_cursor(0, { 6, 0 })
+        local pending = require("parley.chat_pending")
+        local starts = 0
+        pending.start = function(opts)
+            starts = starts + 1
+            return canonical_pending_start(opts)
+        end
+        local query_count = 0
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, handler, on_exit)
+            query_count = query_count + 1
+            local qid = "qid_topic_" .. query_count
+            if query_count == 1 then
+                parley.tasker.set_query(qid, { response = "answer", raw_response = "", buf = buf_arg })
+                handler(qid, "answer")
+                on_exit(qid)
+            else
+                parley.tasker.set_query(qid, { response = "Fixture Topic", raw_response = "", buf = buf_arg })
+                handler(qid, "Fixture Topic")
+                -- This is the legacy completion surface dispatcher uses after
+                -- an unopted topic transport failure as well as normal exit.
+                on_exit(qid)
             end
         end
-        assert.is_not_nil(first_spinner_line, "Expected spinner line while waiting")
 
-        vim.wait(140, function()
-            local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-            for _, line in ipairs(lines) do
-                if line:match("^🔎 %S+ Submitting%.%.%.$") and line ~= first_spinner_line then
-                    return true
-                end
-            end
-            return false
-        end, 10)
-
-        local spinner_changed = false
-        for _, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
-            if line:match("^🔎 %S+ Submitting%.%.%.$") and line ~= first_spinner_line then
-                spinner_changed = true
-                break
-            end
-        end
-        assert.is_true(spinner_changed, "Expected spinner frame to advance locally")
-
-        vim.wait(500, function()
-            return completion_called
-        end, 10)
-
-        parley._state.web_search = original_web_search
-
-        local has_spinner = false
-        for _, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
-            if line:find("Submitting...", 1, true) then
-                has_spinner = true
-                break
-            end
-        end
-        assert.is_false(has_spinner, "Spinner line should clear on completion")
+        parley.chat_respond({ range = 0 })
+        assert.is_true(vim.wait(500, function()
+            return query_count == 2 and (vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1] or "")
+                :find("Fixture Topic", 1, true) ~= nil
+        end, 10))
+        assert.equals(1, starts, "topic generation must not create a playful session")
+        assert.is_nil(pending_virtual_text(buf))
     end)
 end)
 
@@ -938,6 +962,21 @@ describe("chat_respond: guard branches", function()
     before_each(function()
         test_file = make_chat_filename()
         original_query = parley.dispatcher.query
+    end)
+
+    it("cancels pending presentation before stopping task processes", function()
+        local pending = require("parley.chat_pending")
+        local original_cancel_all = pending.cancel_all
+        local original_stop = parley.tasker.stop
+        local observed = {}
+        pending.cancel_all = function(reason) table.insert(observed, "cancel:" .. reason) end
+        parley.tasker.stop = function() table.insert(observed, "stop") end
+
+        parley.cmd.Stop()
+
+        pending.cancel_all = original_cancel_all
+        parley.tasker.stop = original_stop
+        assert.same({ "cancel:user", "stop" }, observed)
     end)
 
     after_each(function()
@@ -979,6 +1018,9 @@ describe("chat_respond: guard branches", function()
         parley.tasker.is_busy = function() return true end
 
         local dispatcher_called = false
+        local warning
+        local original_warning = parley.logger.warning
+        parley.logger.warning = function(message) warning = message end
         parley.dispatcher.query = function(...)
             dispatcher_called = true
         end
@@ -992,7 +1034,9 @@ describe("chat_respond: guard branches", function()
 
         -- Restore
         parley.tasker.is_busy = original_is_busy
+        parley.logger.warning = original_warning
         lifecycle.finalize_mutated_api_leg = original_finalize
+        assert.equals("A Parley process is already running. Stop it before resubmitting.", warning)
     end)
 
     it("returns early without calling dispatcher for non-chat file", function()
@@ -1048,6 +1092,7 @@ describe("chat_respond: pending request transcript drift", function()
     local original_web_search
     local original_schedule
     local original_new_timer
+    local original_pending_start
     local scratch_file
 
     before_each(function()
@@ -1059,6 +1104,7 @@ describe("chat_respond: pending request transcript drift", function()
         original_web_search = parley._state.web_search
         original_schedule = vim.schedule
         original_new_timer = vim.uv.new_timer
+        original_pending_start = canonical_pending_start
     end)
 
     after_each(function()
@@ -1071,6 +1117,7 @@ describe("chat_respond: pending request transcript drift", function()
         if original_new_timer then
             vim.uv.new_timer = original_new_timer
         end
+        require("parley.chat_pending").start = original_pending_start
         parley._state.agent = original_agent
         parley._state.web_search = original_web_search
         if test_file and vim.fn.filereadable(test_file) == 1 then
@@ -1113,6 +1160,189 @@ describe("chat_respond: pending request transcript drift", function()
         end
         return cursor
     end
+
+    it("runs a tool-only completion immediately before playful reveal", function()
+        local buf = open_simple_chat()
+        parley._state.agent = "ToolSonnet"
+        local completion
+        local qid = "qid_tool_before_reveal"
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, _handler, on_exit)
+            completion = on_exit
+            parley.tasker.set_query(qid, {
+                response = "",
+                raw_response = mk_read_file_sse_response("toolu_FAST", scratch_file),
+                buf = buf_arg,
+            })
+        end
+
+        parley.chat_respond({ range = 0 })
+        completion(qid)
+        assert.is_true(vim.wait(500, function()
+            return buffer_contains(buf, "🔧: read_file id=toolu_FAST")
+        end, 10))
+        assert.is_nil(pending_virtual_text(buf))
+    end)
+
+    it("rejects force resubmit before mutating a chat that already owns a pending session", function()
+        local buf = open_simple_chat()
+        local call_count = 0
+        parley.dispatcher.query = function(buf_arg)
+            call_count = call_count + 1
+            parley.tasker.set_query("qid_force_owned", {
+                response = "", raw_response = "", buf = buf_arg,
+            })
+        end
+        parley.chat_respond({ range = 0 })
+        local before = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+        local lease = require("parley.chat_lease").current(buf)
+
+        local ok = pcall(parley.chat_respond, { range = 0 }, nil, nil, true)
+
+        assert.is_true(ok)
+        assert.equals(1, call_count)
+        assert.same(before, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+        assert.equals(lease.generation, require("parley.chat_lease").current(buf).generation)
+    end)
+
+    it("hides a shown leg before its local tool and starts recursion with a fresh verb", function()
+        local buf = open_simple_chat()
+        parley._state.agent = "ToolSonnet"
+        local pending = require("parley.chat_pending")
+        local original_start = pending.start
+        local starts = 0
+        pending.start = function(opts)
+            starts = starts + 1
+            local choice = starts
+            opts.choose_verb_index = function() return choice end
+            return original_start(opts)
+        end
+        local first_completion
+        local call_count = 0
+        local qid = "qid_tool_after_reveal"
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, _handler, on_exit)
+            call_count = call_count + 1
+            if call_count == 1 then
+                first_completion = on_exit
+                parley.tasker.set_query(qid, {
+                    response = "",
+                    raw_response = mk_read_file_sse_response("toolu_SLOW", scratch_file),
+                    buf = buf_arg,
+                })
+            else
+                parley.tasker.set_query("qid_recursive_wait", {
+                    response = "", raw_response = "", buf = buf_arg,
+                })
+            end
+        end
+
+        parley.chat_respond({ range = 0 })
+        assert.is_true(vim.wait(1300, function()
+            return (pending_virtual_text(buf) or ""):match(" brewing$") ~= nil
+        end, 10))
+        first_completion(qid)
+        vim.wait(300, function() return false end, 10)
+        assert.is_false(buffer_contains(buf, "toolu_SLOW"), "tool must not run behind the visible indicator")
+        assert.is_true(vim.wait(1200, function()
+            return buffer_contains(buf, "🔧: read_file id=toolu_SLOW") and call_count == 2
+        end, 10))
+        assert.is_true(vim.wait(1300, function()
+            return starts == 2 and (pending_virtual_text(buf) or ""):match(" cooking$") ~= nil
+        end, 10))
+        pending.start = original_start
+    end)
+
+    it("discards staged output and tears down the chat leg once when its lease goes stale", function()
+        local lifecycle = require("parley.buffer_lifecycle")
+        local original_finalize = lifecycle.finalize_mutated_api_leg
+        local finalize_count = 0
+        lifecycle.finalize_mutated_api_leg = function(...)
+            finalize_count = finalize_count + 1
+            return original_finalize(...)
+        end
+        local buf = open_simple_chat()
+        local handler
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, response_handler)
+            handler = response_handler
+            parley.tasker.set_query("qid_staged_stale", {
+                response = "staged secret", raw_response = "", buf = buf_arg,
+            })
+        end
+        parley.chat_respond({ range = 0 })
+        assert.is_true(vim.wait(1300, function() return pending_virtual_text(buf) ~= nil end, 10))
+        handler("qid_staged_stale", "staged secret")
+        vim.cmd("silent! undo")
+        local before_discard = finalize_count
+        handler("qid_staged_stale", "later")
+
+        assert.is_true(vim.wait(500, function()
+            return pending_virtual_text(buf) == nil and finalize_count == before_discard + 1
+                and require("parley.chat_lease").current(buf) == nil
+        end, 10), vim.inspect({ pending = pending_virtual_text(buf), finalize_count = finalize_count,
+            lease = require("parley.chat_lease").current(buf) }))
+        lifecycle.finalize_mutated_api_leg = original_finalize
+        assert.is_false(buffer_contains(buf, "staged secret"))
+        assert.equals(before_discard + 1, finalize_count)
+    end)
+
+    it("tears down a staged chat leg once when its buffer is deleted", function()
+        local lifecycle = require("parley.buffer_lifecycle")
+        local original_finalize = lifecycle.finalize_mutated_api_leg
+        local finalize_count = 0
+        lifecycle.finalize_mutated_api_leg = function(...)
+            finalize_count = finalize_count + 1
+            return original_finalize(...)
+        end
+        local buf = open_simple_chat()
+        local handler
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, response_handler)
+            handler = response_handler
+            parley.tasker.set_query("qid_staged_deleted", {
+                response = "deleted staged", raw_response = "", buf = buf_arg,
+            })
+        end
+        parley.chat_respond({ range = 0 })
+        assert.is_true(vim.wait(1300, function() return pending_virtual_text(buf) ~= nil end, 10))
+        handler("qid_staged_deleted", "deleted staged")
+        vim.api.nvim_buf_delete(buf, { force = true })
+        handler("qid_staged_deleted", "later")
+
+        assert.is_true(vim.wait(500, function()
+            return finalize_count == 1 and require("parley.chat_lease").current(buf) == nil
+                and not require("parley.chat_pending").is_active(buf)
+        end, 10))
+        lifecycle.finalize_mutated_api_leg = original_finalize
+        assert.equals(1, finalize_count)
+    end)
+
+    it("cmd Stop discards staged output and tears down its owned chat leg once", function()
+        local lifecycle = require("parley.buffer_lifecycle")
+        local original_finalize = lifecycle.finalize_mutated_api_leg
+        local finalize_count = 0
+        lifecycle.finalize_mutated_api_leg = function(...)
+            finalize_count = finalize_count + 1
+            return original_finalize(...)
+        end
+        local buf = open_simple_chat()
+        local handler
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, response_handler)
+            handler = response_handler
+            parley.tasker.set_query("qid_staged_stop", {
+                response = "cancelled staged", raw_response = "", buf = buf_arg,
+            })
+        end
+        parley.chat_respond({ range = 0 })
+        assert.is_true(vim.wait(1300, function() return pending_virtual_text(buf) ~= nil end, 10))
+        handler("qid_staged_stop", "cancelled staged")
+        parley.cmd.Stop()
+
+        assert.is_true(vim.wait(500, function()
+            return pending_virtual_text(buf) == nil and finalize_count == 1
+                and require("parley.chat_lease").current(buf) == nil
+        end, 10))
+        lifecycle.finalize_mutated_api_leg = original_finalize
+        assert.is_false(buffer_contains(buf, "cancelled staged"))
+        assert.equals(1, finalize_count)
+    end)
 
     it("does not insert a late stream chunk after undo invalidates the pending response", function()
         local buf = open_simple_chat()
@@ -1279,7 +1509,9 @@ describe("chat_respond: pending request transcript drift", function()
         assert.is_not_nil(captured_completion, "expected completion callback to be captured")
 
         captured_completion(qid)
-        local cursor = run_scheduled_until(scheduled, 1, function()
+        local cursor = run_scheduled_until(scheduled, 1)
+        assert.is_true(vim.wait(200, function() return cursor <= #scheduled end, 10))
+        cursor = run_scheduled_until(scheduled, cursor, function()
             return buffer_contains(buf, "🔧: read_file id=toolu_RECURSE_UNDO")
         end)
         assert.is_true(buffer_contains(buf, "🔧: read_file id=toolu_RECURSE_UNDO"))
@@ -1336,10 +1568,13 @@ describe("chat_respond: pending request transcript drift", function()
         parley.chat_respond({ range = 0 })
         captured_completion(qid)
         local cursor = run_scheduled_until(scheduled, 1)
+        assert.is_true(vim.wait(200, function() return cursor <= #scheduled end, 10))
+        cursor = run_scheduled_until(scheduled, cursor, function() return call_count == 2 end)
         assert.equals(2, call_count, "valid recursive respond should call dispatcher again")
         captured_handler("qid_recursive_second", "final at 2026-07-12T12:00:00Z")
         cursor = run_scheduled_until(scheduled, cursor)
         captured_completion("qid_recursive_second")
+        vim.wait(200, function() return cursor <= #scheduled end, 10)
         run_scheduled_until(scheduled, cursor)
         lifecycle.finalize_mutated_api_leg = original_finalize
 

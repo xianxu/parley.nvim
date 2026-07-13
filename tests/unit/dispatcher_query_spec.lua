@@ -15,6 +15,7 @@ local dispatcher = require("parley.dispatcher")
 local vault = require("parley.vault")
 local tasker = require("parley.tasker")
 local helpers = require("parley.helper")
+local logger = require("parley.logger")
 
 describe("dispatcher.query internals", function()
     local original_vault_get_secret
@@ -22,6 +23,8 @@ describe("dispatcher.query internals", function()
     local original_tasker_run
     local original_tasker_set_query
     local captured_out_reader
+    local captured_terminal
+    local captured_args
     local captured_qid
     local handler_calls
     local on_exit_calls
@@ -37,6 +40,8 @@ describe("dispatcher.query internals", function()
 
         -- Reset capture variables
         captured_out_reader = nil
+        captured_terminal = nil
+        captured_args = nil
         captured_qid = nil
         handler_calls = {}
         on_exit_calls = {}
@@ -63,6 +68,8 @@ describe("dispatcher.query internals", function()
         -- Mock tasker.run to capture out_reader
         tasker.run = function(buf, cmd, args, callback, out_reader, err_reader)
             captured_out_reader = out_reader
+            captured_terminal = callback
+            captured_args = args
         end
 
         -- Set up minimal fake providers with names that match the code
@@ -107,6 +114,20 @@ describe("dispatcher.query internals", function()
         return function(_qid, event)
             table.insert(on_progress_calls, event)
         end
+    end
+
+    local function status_stderr(status, prefix)
+        local write_out
+        for i, arg in ipairs(captured_args) do
+            if arg == "--write-out" then
+                write_out = captured_args[i + 1]
+                break
+            end
+        end
+        assert.is_truthy(write_out)
+        local sentinel = write_out:match("%%{stderr}(.-)%%{http_code}")
+        assert.is_truthy(sentinel)
+        return (prefix or "") .. sentinel .. status .. "\n"
     end
 
     describe("Group A: out_reader chunk reassembly", function()
@@ -256,6 +277,8 @@ describe("dispatcher.query internals", function()
             captured_out_reader(nil, clean_fixture .. "\n")
             captured_out_reader(nil, nil) -- EOF
 
+            captured_terminal(0, 0, "", status_stderr("200"), nil)
+
             -- Check metrics (flexible assertions - exact values depend on fixture)
             local metrics = tasker.get_cache_metrics()
             -- input_tokens should be present and > 0
@@ -284,6 +307,8 @@ describe("dispatcher.query internals", function()
             local chunk = '{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}\n'
             captured_out_reader(nil, chunk)
             captured_out_reader(nil, nil) -- EOF
+
+            captured_terminal(0, 0, "", status_stderr("200"), nil)
 
             -- Metrics should be reset to nil
             local metrics = tasker.get_cache_metrics()
@@ -371,6 +396,7 @@ describe("dispatcher.query internals", function()
             local chunk = 'data: {"choices":[{"delta":{"content":"Test"}}]}\n'
             captured_out_reader(nil, chunk)
             captured_out_reader(nil, nil) -- EOF
+            captured_terminal(0, 0, "", status_stderr("200"), nil)
 
             -- on_exit should have been called once
             assert.equals(1, #on_exit_calls)
@@ -389,6 +415,7 @@ describe("dispatcher.query internals", function()
             local chunk = 'data: {"choices":[{"delta":{"content":"Hello world"}}]}\n'
             captured_out_reader(nil, chunk)
             captured_out_reader(nil, nil) -- EOF
+            captured_terminal(0, 0, "", status_stderr("200"), nil)
 
             -- Need to wait for vim.schedule to execute
             vim.wait(100, function()
@@ -571,5 +598,313 @@ describe("dispatcher.query internals", function()
                 make_handler(), make_on_exit(), make_callback(), nil, function() end)
             assert.is_not_nil(captured_out_reader) -- query() ran (tasker.run captured)
         end)
+    end)
+
+    describe("Group I: raw activity and drained transport terminal", function()
+        it("I1: emits one activity per SSE record before semantic callbacks", function()
+            local observed = {}
+            local handler = function() table.insert(observed, "content") end
+            local progress = function() table.insert(observed, "progress") end
+            local activity = function() table.insert(observed, "activity") end
+            dispatcher.query(nil, "openai", { model = "gpt-4", messages = {} },
+                handler, nil, nil, progress, nil, activity)
+
+            captured_out_reader(nil,
+                'event: message\n: comment\ndata: {"choices":[{"delta":{"reasoning_content":"x"}}]}\n' ..
+                'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n' ..
+                'extension: value\ndata: {"choices":[{"delta":{"content":"!"}}]}\n\n')
+            assert.same({ "activity", "progress", "content", "activity", "content" }, observed)
+        end)
+
+        it("I2: counts structural JSONL lines independently and EOF does not duplicate", function()
+            local activities = 0
+            local content = {}
+            dispatcher.query(nil, "openai", { model = "m", messages = {} }, function(_qid, chunk)
+                table.insert(content, chunk)
+            end,
+                nil, nil, nil, nil, function() activities = activities + 1 end)
+            captured_out_reader(nil,
+                '{"choices":[{"delta":{"content":"a"}}]}\n {"choices":[{"delta":{"content":"b"}}]}')
+            assert.equals(1, activities)
+            assert.same({ "a" }, content)
+            captured_out_reader(nil, nil)
+            assert.equals(2, activities)
+            assert.same({ "a", "b" }, content)
+        end)
+
+        it("I3: waits for drained 2xx terminal before legacy completion", function()
+            local events = {}
+            dispatcher.query(nil, "openai", { model = "gpt-4", messages = {} }, function() end,
+                function() table.insert(events, "exit") end,
+                function() table.insert(events, "callback") end)
+            captured_out_reader(nil, 'data: {"choices":[{"delta":{"content":"ok"}}]}')
+            captured_out_reader(nil, nil)
+            assert.same({}, events)
+            captured_terminal(0, 0, 'data: {"choices":[{"delta":{"content":"ok"}}]}',
+                status_stderr("200"), nil)
+            assert.equals("exit", events[1])
+            assert.is_true(vim.wait(100, function() return #events == 2 end, 10))
+            assert.same({ "exit", "callback" }, events)
+        end)
+
+        it("I4: reports HTTP and process failures once without legacy completion", function()
+            local errors = {}
+            local legacy = 0
+            dispatcher.query(nil, "openai", { model = "gpt-4", messages = {} }, function() end,
+                function() legacy = legacy + 1 end, function() legacy = legacy + 1 end,
+                nil, nil, nil, function(_qid, failure) table.insert(errors, failure) end)
+            captured_out_reader(nil, "denied")
+            captured_out_reader(nil, nil)
+            captured_terminal(0, 0, "denied", status_stderr("401", "curl warning\n"), nil)
+            assert.equals(1, #errors)
+            assert.equals(401, errors[1].http_status)
+            assert.equals("denied", errors[1].body)
+            assert.equals("curl warning\n", errors[1].stderr)
+            assert.equals(0, legacy)
+
+            captured_terminal(7, 0, "denied", status_stderr("000"), nil)
+            assert.equals(1, #errors)
+        end)
+
+        it("I5: missing status is an opted-in IO failure and legacy fallback otherwise", function()
+            local failure
+            dispatcher.query(nil, "openai", { model = "gpt-4", messages = {} }, function() end,
+                nil, nil, nil, nil, nil, function(_qid, value) failure = value end)
+            captured_out_reader(nil, nil)
+            captured_terminal(0, 0, "", "plain stderr", nil)
+            assert.is_truthy(failure.io_error)
+
+            local exits = 0
+            dispatcher.query(nil, "openai", { model = "gpt-4", messages = {} }, function() end,
+                function() exits = exits + 1 end)
+            captured_out_reader(nil, nil)
+            captured_terminal(22, 0, "", status_stderr("500"), nil)
+            assert.equals(1, exits)
+        end)
+
+        it("I6: pre-start vault and task launch failures share once-guarded abort", function()
+            local aborts = 0
+            vault.run_with_secret = function(_provider, _success, on_error)
+                on_error("missing")
+                on_error("duplicate")
+            end
+            dispatcher.query(nil, "openai", { model = "gpt-4", messages = {} }, function() end,
+                nil, nil, nil, function() aborts = aborts + 1 end)
+            assert.equals(1, aborts)
+
+            vault.run_with_secret = function(_provider, success) success() end
+            tasker.run = function(_buf, _cmd, _args, _terminal, _out, _err, on_start_error)
+                on_start_error("busy")
+                on_start_error("duplicate")
+            end
+            dispatcher.query(nil, "openai", { model = "gpt-4", messages = {} }, function() end,
+                nil, nil, nil, function() aborts = aborts + 1 end)
+            assert.equals(2, aborts)
+        end)
+
+        it("I7: flushes an unterminated semantic line after a read error before failure", function()
+            local events = {}
+            local failure
+            local body = 'data: {"choices":[{"delta":{"content":"partial"}}]}'
+            dispatcher.query(nil, "openai", { model = "gpt-4", messages = {} },
+                function(_qid, content) table.insert(events, "content:" .. content) end,
+                nil, nil, nil, nil, nil, function(_qid, value)
+                    table.insert(events, "failure")
+                    failure = value
+                end)
+            captured_out_reader(nil, body)
+            captured_out_reader("read boom", nil)
+            assert.same({}, events)
+            captured_out_reader(nil, nil)
+            assert.same({ "content:partial" }, events)
+            captured_terminal(9, 0, body, status_stderr("000"), "stdout: read boom")
+            assert.same({ "content:partial", "failure" }, events)
+            assert.equals(body, failure.body)
+            assert.is_truthy(failure.io_error)
+        end)
+
+        it("I8: reports partial SSE plus HTTP 500 with byte-exact body", function()
+            local chunks = {}
+            local failure
+            local body = 'data: {"choices":[{"delta":{"content":"partial"}}]}'
+            dispatcher.query(nil, "openai", { model = "gpt-4", messages = {} },
+                function(_qid, content) table.insert(chunks, content) end,
+                nil, nil, nil, nil, nil, function(_qid, value) failure = value end)
+            captured_out_reader(nil, body)
+            captured_out_reader(nil, nil)
+            captured_terminal(0, 0, body, status_stderr("500"), nil)
+            assert.same({ "partial" }, chunks)
+            assert.equals(body, failure.body)
+            assert.equals(500, failure.http_status)
+        end)
+
+        it("I9: reports a process terminal failure independently and only once", function()
+            local failures = {}
+            dispatcher.query(nil, "openai", { model = "gpt-4", messages = {} }, function() end,
+                nil, nil, nil, nil, nil, function(_qid, value)
+                    table.insert(failures, value)
+                end)
+            captured_out_reader(nil, nil)
+            captured_terminal(28, 9, "", status_stderr("000"), nil)
+            captured_terminal(0, 0, "", status_stderr("200"), nil)
+            assert.equals(1, #failures)
+            assert.equals(28, failures[1].code)
+            assert.equals(9, failures[1].signal)
+            assert.equals(0, failures[1].http_status)
+        end)
+
+        it("I10: treats malformed as well as missing status trailers as IO errors", function()
+            local failures = {}
+            dispatcher.query(nil, "openai", { model = "gpt-4", messages = {} }, function() end,
+                nil, nil, nil, nil, nil, function(_qid, value)
+                    table.insert(failures, value)
+                end)
+            local malformed = status_stderr("200"):gsub("200\n$", "20x\n")
+            captured_out_reader(nil, nil)
+            captured_terminal(0, 0, "", malformed, nil)
+            assert.is_truthy(failures[1].io_error)
+
+            dispatcher.query(nil, "openai", { model = "gpt-4", messages = {} }, function() end,
+                nil, nil, nil, nil, nil, function(_qid, value)
+                    table.insert(failures, value)
+                end)
+            captured_out_reader(nil, nil)
+            captured_terminal(0, 0, "", "", nil)
+            assert.is_truthy(failures[2].io_error)
+        end)
+
+        it("I11: legacy failure logging exposes only bounded metadata", function()
+            local marker = "AUTHORIZATION_SECRET_MARKER"
+            local body = 'data: {"choices":[{"delta":{"content":"' .. marker .. '"}}]}\n'
+            local stderr_prefix = "Authorization: Bearer " .. marker .. "\n"
+            local messages = {}
+            local notifications = {}
+            local original_debug = logger.debug
+            local original_error = logger.error
+            local original_warning = logger.warning
+            local original_notify = vim.notify
+            local function capture(message) table.insert(messages, tostring(message)) end
+            logger.debug = capture
+            logger.error = capture
+            logger.warning = capture
+            vim.notify = function(message) table.insert(notifications, tostring(message)) end
+
+            local ok, err = pcall(function()
+                dispatcher.query(nil, "openai", { model = "gpt-4", messages = {} }, function() end)
+                captured_out_reader(nil, body)
+                captured_out_reader(nil, nil)
+                captured_terminal(0, 0, body, status_stderr("500", stderr_prefix), nil)
+            end)
+
+            logger.debug = original_debug
+            logger.error = original_error
+            logger.warning = original_warning
+            vim.notify = original_notify
+            assert.is_true(ok, tostring(err))
+
+            local combined = table.concat(messages, "\n") .. table.concat(notifications, "\n")
+            assert.is_falsy(combined:find(marker, 1, true))
+            local failure_log
+            for _, message in ipairs(messages) do
+                if message:find("query failed", 1, true) then failure_log = message end
+                assert.is_true(#message < 512, "log message must remain bounded")
+            end
+            assert.is_truthy(failure_log)
+            assert.is_truthy(failure_log:find("body_bytes=" .. #body, 1, true))
+            assert.is_truthy(failure_log:find("stderr_bytes=" .. #stderr_prefix, 1, true))
+        end)
+
+        it("I12: throwing on_exit cannot block namespace cleanup or assembled callback", function()
+            local marker = "RESPONSE_SECRET_MARKER"
+            local body = 'data: {"choices":[{"delta":{"content":"' .. marker .. '"}}]}\n'
+            local callback_calls = 0
+            local exit_calls = 0
+            local logs = {}
+            local buf = vim.api.nvim_create_buf(false, true)
+            local ns = vim.api.nvim_create_namespace("parley-dispatcher-throwing-exit")
+            vim.api.nvim_buf_set_extmark(buf, ns, 0, 0, {})
+            local original_error = logger.error
+            logger.error = function(message) table.insert(logs, tostring(message)) end
+
+            dispatcher.query(buf, "openai", { model = "gpt-4", messages = {} }, function() end,
+                function()
+                    exit_calls = exit_calls + 1
+                    error("on_exit exploded")
+                end,
+                function(response)
+                    callback_calls = callback_calls + 1
+                    assert.equals(marker, response)
+                end)
+            local qt = tasker.get_query(captured_qid)
+            qt.ns_id = ns
+            captured_out_reader(nil, body)
+            captured_out_reader(nil, nil)
+            local ok, err = pcall(captured_terminal, 0, 0, body, status_stderr("200"), nil)
+            local completed = vim.wait(100, function()
+                return callback_calls == 1 and #vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, {}) == 0
+            end, 5)
+
+            logger.error = original_error
+            pcall(vim.api.nvim_buf_delete, buf, { force = true })
+            assert.is_true(ok, tostring(err))
+            assert.is_true(completed)
+            assert.equals(1, exit_calls)
+            assert.equals(1, callback_calls)
+            local combined = table.concat(logs, "\n")
+            assert.is_truthy(combined:find("on_exit", 1, true))
+            assert.is_falsy(combined:find(marker, 1, true))
+            assert.is_true(#combined < 512)
+        end)
+
+        it("I13: contains and logs a throwing scheduled assembled callback", function()
+            local callback_calls = 0
+            local logs = {}
+            local original_error = logger.error
+            logger.error = function(message) table.insert(logs, tostring(message)) end
+            dispatcher.query(nil, "openai", { model = "gpt-4", messages = {} }, function() end,
+                nil, function()
+                    callback_calls = callback_calls + 1
+                    error("assembled callback exploded")
+                end)
+            captured_out_reader(nil, nil)
+            captured_terminal(0, 0, "", status_stderr("200"), nil)
+            assert.is_true(vim.wait(100, function() return callback_calls == 1 end, 5))
+            vim.wait(20, function() return false end, 5)
+            logger.error = original_error
+
+            assert.equals(1, callback_calls)
+            local combined = table.concat(logs, "\n")
+            assert.is_truthy(combined:find("assembled response callback", 1, true))
+            assert.is_true(#combined < 512)
+        end)
+
+        for _, terminal_kind in ipairs({ "success", "error_fallback" }) do
+            for _, surfaces in ipairs({
+                { name = "on_exit only", on_exit = true },
+                { name = "callback only", callback = true },
+                { name = "both", on_exit = true, callback = true },
+                { name = "neither" },
+            }) do
+                it("legacy " .. terminal_kind .. " invokes " .. surfaces.name .. " once after drain", function()
+                    local events = {}
+                    local on_exit = surfaces.on_exit and function() table.insert(events, "exit") end or nil
+                    local callback = surfaces.callback and function() table.insert(events, "callback") end or nil
+                    dispatcher.query(nil, "openai", { model = "gpt-4", messages = {} }, function() end,
+                        on_exit, callback)
+                    captured_out_reader(nil, nil)
+                    assert.same({}, events)
+                    local status = terminal_kind == "success" and "200" or "500"
+                    captured_terminal(0, 0, "", status_stderr(status), nil)
+
+                    local expected = {}
+                    if surfaces.on_exit then table.insert(expected, "exit") end
+                    if surfaces.callback then
+                        assert.is_true(vim.wait(100, function() return #events == #expected + 1 end, 5))
+                        table.insert(expected, "callback")
+                    end
+                    assert.same(expected, events)
+                end)
+            end
+        end
     end)
 end)

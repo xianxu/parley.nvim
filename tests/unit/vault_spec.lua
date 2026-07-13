@@ -172,6 +172,72 @@ describe("vault", function()
 
             tasker.run = original_run
         end)
+
+        it("B9: reports missing and empty resolver results once without success", function()
+            local successes = 0
+            local errors = {}
+            vault.resolve_secret("missing", nil, function() successes = successes + 1 end,
+                function(message) table.insert(errors, message) end)
+            assert.equals(0, successes)
+            assert.equals(1, #errors)
+
+            tasker.run = function(_buf, _cmd, _args, callback)
+                callback(0, 0, "   ", "")
+            end
+            vault.resolve_secret("empty", { "echo" }, function() successes = successes + 1 end,
+                function(message) table.insert(errors, message) end)
+            assert.equals(0, successes)
+            assert.equals(2, #errors)
+        end)
+
+        it("B10: reports resolver exit and launch rejection once", function()
+            local errors = 0
+            tasker.run = function(_buf, _cmd, _args, callback)
+                callback(7, 0, "", "bad")
+            end
+            vault.resolve_secret("exit", { "bad" }, function() error("success") end,
+                function() errors = errors + 1 end)
+            assert.equals(1, errors)
+
+            tasker.run = function(_buf, _cmd, _args, _callback, _out, _err, on_start_error)
+                on_start_error("could not start")
+                on_start_error("duplicate")
+            end
+            vault.resolve_secret("launch", { "bad" }, function() error("success") end,
+                function() errors = errors + 1 end)
+            assert.equals(2, errors)
+        end)
+
+        it("B11: rejects empty string and command inputs without launching or succeeding", function()
+            local runs = 0
+            local successes = 0
+            local errors = 0
+            tasker.run = function() runs = runs + 1 end
+
+            for _, secret in ipairs({ "", "   ", {} }) do
+                vault.resolve_secret("empty_" .. tostring(errors), secret,
+                    function() successes = successes + 1 end,
+                    function() errors = errors + 1 end)
+            end
+
+            assert.equals(0, runs)
+            assert.equals(0, successes)
+            assert.equals(3, errors)
+        end)
+
+        it("B12: never treats a stored empty string as resolved", function()
+            local successes = 0
+            local errors = 0
+            vault.add_secret("stored_empty", "")
+            vault.run_with_secret("stored_empty", function() successes = successes + 1 end,
+                function() errors = errors + 1 end)
+            vault.add_secret("stored_space", "   ")
+            vault.run_with_secret("stored_space", function() successes = successes + 1 end,
+                function() errors = errors + 1 end)
+
+            assert.equals(0, successes)
+            assert.equals(2, errors)
+        end)
     end)
 
     describe("Group C: run_with_secret", function()
@@ -212,6 +278,24 @@ describe("vault", function()
                 called = true
             end)
             assert.is_false(called)
+        end)
+
+        it("C4: propagates missing and resolver failures once", function()
+            local successes = 0
+            local errors = 0
+            vault.run_with_secret("missing", function() successes = successes + 1 end,
+                function() errors = errors + 1 end)
+            assert.equals(0, successes)
+            assert.equals(1, errors)
+
+            vault.add_secret("command", { "bad" })
+            tasker.run = function(_buf, _cmd, _args, callback)
+                callback(1, 0, "", "bad")
+            end
+            vault.run_with_secret("command", function() successes = successes + 1 end,
+                function() errors = errors + 1 end)
+            assert.equals(0, successes)
+            assert.equals(2, errors)
         end)
     end)
 

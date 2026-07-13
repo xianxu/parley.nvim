@@ -1,12 +1,13 @@
 ---
 id: 000182
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-10
-updated: 2026-07-12
-estimate_hours: 4.62
+updated: 2026-07-13
+estimate_hours: 8.94
 started: 2026-07-12T21:56:40-07:00
+actual_hours: N/A
 ---
 
 # claude code style progression text in parley chat
@@ -49,6 +50,11 @@ place to show pending work.
   or after 15 seconds without an SSE event, whichever happens first. Spinner
   glyph animation remains independent of verb changes. Avoid immediate verb
   repetition within one call; consecutive calls do not share verb history.
+  Here an SSE event is one blank-line-delimited record: comments, `event:`, and
+  multiple `data:` fields inside that record rotate the verb only once, and EOF
+  terminates one final unterminated record. Activity is observed at the first
+  field/comment and never delays semantic parsing; supported non-SSE JSONL
+  streams treat each complete non-empty line as one activity record.
 - Once shown, keep the playful line visible for at least one second. Buffer all
   visible server output received during that minimum window. Hide the line at
   the later of (a) the first visible output and (b) the minimum-visible
@@ -64,9 +70,10 @@ place to show pending work.
   before starting the local tool. Never run a local tool behind a still-visible
   playful indicator.
 - A successful empty completion honors the minimum duration if the indicator
-  became visible, then removes it. A provider failure with a still-valid chat
-  lease bypasses the minimum: remove the indicator, flush any staged real output
-  once in original order, then surface the existing error. User cancellation,
+  became visible, then removes it. A provider failure—either a transport/process
+  failure or an HTTP response outside 200–299—with a still-valid chat lease
+  bypasses the minimum: remove the indicator, flush any staged real output once
+  in original order, then surface the existing error. User cancellation,
   a stale lease, or an invalid/deleted buffer removes the indicator immediately
   and discards staged output because that response no longer owns a writable
   transcript. No terminal path may leave timers or extmarks alive.
@@ -114,6 +121,20 @@ place to show pending work.
   policies (`ARCH-DRY`, `ARCH-PURPOSE`).
 - Expose raw SSE activity separately from semantic provider progress so playful
   verb changes do not alter existing progress-event contracts.
+- Give callers an additive post-start provider-error callback. Callers that do
+  not opt in receive every historical completion surface they supplied—both
+  `on_exit(qid)` and the assembled-response callback, when present—exactly once
+  after transport drain, so topic generation, memory preferences, and other
+  existing consumers cannot strand teardown.
+- Preserve each HTTP response body while classifying its final status outside
+  the SSE stream. Curl writes a qid-specific status trailer to stderr, leaving
+  response stdout byte-for-byte untouched. The trailer is transport metadata:
+  it is not an SSE event, visible content, raw provider response, or playful
+  activity.
+- Route failures before a transport starts through the existing pre-start abort
+  class exactly once. Missing/unresolved vault secrets, a busy subprocess slot,
+  and process-spawn rejection must all notify the chat/skill caller so it can
+  remove pending extmarks and timers rather than waiting forever.
 - Model provider failure, cancellation/invalidation, successful completion, and
   deferred local-tool transition as distinct terminal actions; do not collapse
   them into a single cleanup callback that loses real buffered output.
@@ -144,32 +165,83 @@ place to show pending work.
 model: estimate-logic-v3.1
 familiarity: 1.0
 item: issue-spec design=1.20 impl=0.08
-item: lua-neovim design=0.40 impl=0.60
-item: lua-neovim design=0.30 impl=0.50
-item: lua-neovim design=0.30 impl=0.40
-item: atlas-docs design=0.10 impl=0.08
-item: milestone-review design=0.10 impl=0.20
+item: lua-neovim design=0.50 impl=0.60
+item: lua-neovim design=0.60 impl=0.60
+item: lua-neovim design=0.60 impl=0.60
+item: lua-neovim design=0.40 impl=0.50
+item: api-integration design=0.50 impl=0.60
+item: cross-cutting-refactor design=0.40 impl=0.50
+item: atlas-docs design=0.15 impl=0.08
+item: milestone-review design=0.15 impl=0.20
 design-buffer: 0.15
-total: 4.62
+total: 8.94
 ```
 
 Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md`
-against `baseline-v3.1.md`. Method A only. The three `lua-neovim` primitives
-separate chat response presentation, drain-safe task/dispatcher transport
-coordination, and Definition's selection-anchored lifecycle; implementation
-values already apply v3.1's 40% AI-paired ship-wall-clock scale.
+against `baseline-v3.1.md`. Method A only. The four `lua-neovim` primitives
+separate the pure response controller, chat adapter/integration, drain-safe
+task/dispatcher transport, and Definition's selection-anchored lifecycle. The
+API integration covers the real curl/SSE process fixture; the cross-cutting
+item covers compatibility consumers and pre-launch vault/task ownership.
+Implementation values already apply
+v3.1's 40% AI-paired ship-wall-clock scale.
 
 ## Plan
 
 - [x] Approve the durable plan at `workshop/plans/000182-claude-code-style-progression-text-in-parley-chat-plan.md`.
-- [ ] Build the pure chat presentation reducer with exhaustive event-order tests.
-- [ ] Add separate raw-SSE activity and post-start transport-error callbacks.
-- [ ] Replace the buffer-backed web spinner with the extmark-backed chat adapter.
-- [ ] Add Definition's immediate selection spinner and generalized skill terminal cleanup.
-- [ ] Update README/atlas/traceability and pass targeted, process, mapped, and full verification.
+- [x] Build the pure chat presentation reducer with exhaustive event-order tests.
+- [x] Add separate raw-SSE activity and post-start transport-error callbacks.
+- [x] Replace the buffer-backed web spinner with the extmark-backed chat adapter.
+- [x] Add Definition's immediate selection spinner and generalized skill terminal cleanup.
+- [x] Update README/atlas/traceability and pass targeted, process, mapped, and full verification.
 - [ ] Close, publish, and merge through the SDLC gates.
 
 ## Revisions
+
+### 2026-07-13T00:56:07-07:00 — framing precision gate correction
+
+Pinned Definition's initial canonical frame to tick 1 (`⠙`), made every valid
+SSE field part of one record while distinguishing JSONL structurally, and moved
+the qid-specific HTTP status trailer to stderr so response stdout is preserved
+byte-for-byte across unterminated bodies and arbitrary chunk splits. Reset plan
+approval pending fresh review.
+
+### 2026-07-13T00:50:00-07:00 — streaming-framing gate correction
+
+Decoupled raw activity framing from semantic delivery: the first field marks
+SSE activity, every semantic line still streams immediately, blank lines only
+reset record ownership, and non-SSE JSONL lines remain independently streamed.
+Reset revised-plan approval pending fresh review.
+
+### 2026-07-13T00:45:35-07:00 — HTTP failure gate correction
+
+Expanded provider failure to include non-2xx HTTP responses while preserving
+streamed bodies and excluding curl's internal status trailer from SSE activity.
+Added real 401 and partial-body 500 process coverage, reset revised-plan
+approval, and recalibrated the API fixture work from 8.72 to 8.94 hours.
+
+### 2026-07-13T00:38:31-07:00 — launch-failure gate correction
+
+Required missing/unresolved secrets, busy subprocess rejection, and spawn
+failure to reach the existing pre-start abort owner exactly once. Added
+real-entry chat and Definition cleanup coverage, reset revised-plan approval,
+and recalibrated the expanded compatibility work from 8.19 to 8.72 hours.
+
+### 2026-07-13T00:32:14-07:00 — compatibility review correction
+
+Expanded the dispatcher fallback to cover both historical completion surfaces:
+topic generation's `on_exit` and memory preferences' assembled-response
+callback. Reset plan approval while the materially revised plan returns through
+fresh review.
+
+### 2026-07-13T00:28:50-07:00 — SDLC plan-quality gate corrections
+
+Defined blank-line-delimited SSE event framing, preserved a legacy completion
+fallback for dispatcher consumers that omit the additive transport-error hook,
+required Definition to own post-start transport failure, and made main-loop
+FIFO scheduling part of the chat adapter contract. Recalibrated the estimate
+from 4.62 to 8.19 hours for the expanded transport, compatibility, process-fake,
+race-test, documentation, and review surface.
 
 ### 2026-07-13T00:13:49-07:00 — plan review corrections
 
@@ -219,6 +291,15 @@ partial-output, tie-breaking, and Definition cancellation contracts. The spec
 now classifies each path and preserves staged real output before a provider
 error while discarding it only after cancellation or lost transcript ownership.
 
+### 2026-07-13 — plan-quality gate revision
+- 2026-07-13: closed — All mapped behavior, 7 real curl/SSE cases, 22 chat-pending, 25 Definition, 16 shared skill lifecycle, lint, full JOBS=1 make test, and diff checks pass; both REWORK rounds are fixed with real-entry setup-terminal and moving-anchor regressions; actual telemetry is unavailable and the sole unchecked row is this close/publish workflow.; review verdict: SHIP
+
+The SDLC judge rejected the approved draft because post-start errors could
+strand legacy dispatcher consumers, Definition omitted that terminal, SSE
+activity was line-oriented rather than record-oriented, libuv callbacks lacked
+an explicit main-loop queue, and the estimate understated the enlarged scope.
+The durable plan and spec now close each gap before implementation begins.
+
 ### 2026-07-13 — durable plan drafted
 
 The 520-line implementation plan decomposes the work into a pure reducer,
@@ -240,3 +321,161 @@ process Stop, and guarantees Definition terminal cleanup before buffer access.
 The operator approved the reviewed durable plan for execution. Implementation
 will run in an SDLC-owned isolated worktree because the main checkout contains
 an unrelated in-progress #162 issue edit.
+
+### 2026-07-13 — corrected plan approved
+
+A second fresh-eyes review approved the gate corrections after the dispatcher
+compatibility path was extended to callback-only memory preference generation
+and the process-level test was moved ahead of production chat wiring.
+
+### 2026-07-13 — launch-failure gate revision
+
+The second SDLC plan-quality pass found that vault resolution and subprocess
+launch rejection could return without any terminal callback after the UI had
+started. The revised plan makes those failures additive pre-start aborts and
+tests cleanup through the real chat and Definition entries.
+
+### 2026-07-13 — launch-failure correction approved
+
+Fresh review approved the additive vault/task launch error channels, their
+single dispatcher abort owner, and the real-entry cleanup coverage.
+
+### 2026-07-13 — HTTP failure gate revision
+
+The third SDLC plan-quality pass found that curl's default exit behavior treats
+HTTP 401/429/500 as successful processes. The plan now carries an internal
+status trailer outside SSE semantics and maps non-2xx responses to the same
+body-preserving provider-failure terminal.
+
+### 2026-07-13 — HTTP failure correction approved
+
+Fresh review approved the body-preserving HTTP status channel, its exclusion
+from SSE semantics, and the 401/partial-500 process coverage.
+
+### 2026-07-13 — streaming-framing gate revision
+
+The fourth SDLC plan-quality pass found that parsing a whole SSE record only at
+its blank delimiter would regress current newline-driven semantic streaming.
+The corrected plan observes activity without buffering semantic lines and adds
+GoogleAI/Ollama-style JSONL regressions.
+
+### 2026-07-13 — streaming-framing correction approved
+
+Fresh review approved independent activity framing with immediate semantic
+delivery for both SSE and newline-delimited provider streams.
+
+### 2026-07-13 — framing precision gate revision
+
+The fifth SDLC plan-quality pass found the wrong initial Definition glyph,
+unknown SSE fields that could double-count activity, and an ambiguous stdout
+status boundary. The plan now fixes all three with explicit tests.
+
+### 2026-07-13 — framing precision correction approved
+
+Fresh review approved the exact initial glyph, extension-field record ownership,
+and stderr-based HTTP status framing with byte-split coverage.
+
+### 2026-07-13 — Task 1 complete
+
+Implemented the pure immutable presentation reducer and formatter with 41
+focused tests. Fresh reviews caught and closed delayed-reveal minimum timing,
+nil completion ownership, and quadratic staged-event copying; staging now uses
+an O(1) persistent chain with one linear ordered flush.
+
+### 2026-07-13 — Task 2 complete
+
+Made subprocess completion drain-safe across process exit, stdout EOF, and
+stderr EOF; added raw SSE/JSONL activity plus body-preserving provider failure
+terminals; and preserved every legacy completion surface. The focused boundary
+passes 110 tests. Fresh specification and quality reviews found no blocking
+issues after callback exception containment, bounded diagnostics, and completion
+isolation were added. `ARCH-PURE` kept transport framing deterministic at the
+dispatcher seam while lifecycle ownership remains in the task integration.
+
+### 2026-07-13 — Task 3 complete
+
+Added the dedicated chat pending adapter: one extmark-backed virtual line per
+buffer, canonical spinner frames, injected FIFO scheduler/clock seams, and
+idempotent timer/registry cleanup. Sixteen integration tests include a real
+libuv fast-event handoff and deterministic reveal, minimum, activity, idle,
+status, cancellation, invalid-buffer, stale-lease, reentrancy, and callback
+failure cases. Fresh reviews approved the boundary after closing three timer and
+construction ownership gaps. `ARCH-PURE` keeps all timing policy in the reducer;
+the adapter is the sole Neovim IO owner.
+
+### 2026-07-13 — Task 4 review correction
+
+The first fresh review reproduced an intermittent real-process stall and found
+the real-entry behavioral matrix incomplete. The stall revealed that the
+adapter compared high-resolution deadlines against millisecond libuv timers;
+an early one-shot callback could be ignored without rescheduling. Task 4 now
+fixes that timing contract at `chat_pending` itself, stress-runs the process
+fixture, and adds the missing `M.respond` glue-path coverage before acceptance.
+
+### 2026-07-13 — Task 4 complete
+
+Removed the buffer/model-backed web spinner and routed every chat-producing
+initial and recursive LLM leg through the extmark adapter. The accepted boundary
+covers fast and slow output, exact deadline orders, semantic status, tool-only
+completion, recursive verbs, topic exclusion, provider and pre-start failures,
+Stop/stale/deleted discard cleanup, and force preflight. A real loopback curl/SSE
+fixture verifies delayed success plus broken, HTTP 401, and partial HTTP 500
+failures; it passed 12 consecutive stress runs. `ARCH-PURPOSE` drove the full
+entry matrix, while `ARCH-DRY` moved deadline correction into the shared adapter.
+
+### 2026-07-13 — Task 5 complete
+
+Definition now renders an immediate selection-anchored ` ⠙` virtual spinner,
+suppresses the detached luabar, and removes the transient mark before writing
+the durable footnote. The generalized skill invocation terminal is exact-once
+across synchronous setup failures, dispatcher abort/error, completion, cancel,
+late delivery, and invalid buffers while existing Review and Voice Apply callers
+retain their detached progress default. Fresh reviews approved the boundary
+after malformed tool completion and every Definition-owned failure seam were
+covered. `ARCH-DRY` centralizes terminal cleanup; `ARCH-PURPOSE` keeps the
+selection spinner specific to Definition's natural inline anchor.
+
+### 2026-07-13 — Task 6 complete
+
+Mapped the new presentation boundary in README, atlas lifecycle, response
+progress, web-search, inline-Definition, tool-use, provider, and traceability
+documentation, then removed the orphaned buffer-progress editing API. Shadow
+searches found no obsolete implementation (the sole `Submitting...` match is a
+negative regression assertion). The four mapped feature groups, `make lint`,
+`make test-changed`, and the full `make test` suite all exited 0; `git diff
+--check origin/main...HEAD` was clean.
+
+The noninteractive temporal smoke used real scratch-buffer extmarks, injected
+production-shaped clocks, and the loopback curl/SSE process fixture. It
+observed fast-answer/no-mark, delayed reveal and minimum-visible staged flush,
+semantic remote-status handoff, tool recursion with the mark removed before
+local execution, immediate Definition `CVR ⠙` cleanup before `CVR[^cvr]`, and
+unchanged detached luabar behavior for Review. This automated substitute avoids
+claiming an unavailable GUI-manual run while exercising the same user-visible
+state transitions.
+
+### 2026-07-13 — close-review correction
+
+The mandatory boundary review reproduced a synchronous Definition cleanup leak:
+payload or other setup failures after terminal registration could throw past
+`skill_invoke.finish`. The invocation now protects every fallible synchronous
+setup step and converges failure through the same exact-once terminal. A real
+`define_visual` regression proves throwing payload preparation removes the
+inline spinner, releases in-flight ownership, writes no footnote, and does not
+escape to the caller. The review also corrected the durable plan's process
+fixture description to enumerate only its implemented modes.
+The corrected boundary passes 16 shared skill-lifecycle, 24 real Definition,
+and 5 caller-teardown cases, lint, and the complete suite with `JOBS=1`; the
+single-worker run avoids unrelated cross-worktree Neovim process contention.
+
+### 2026-07-13 — moving-anchor close-review correction
+
+The second mandatory review found that animation repaints reset chat and
+Definition extmarks to their initial numeric coordinates after edits above the
+anchor. Both renderers now resolve the live extmark position before repainting
+and terminate on unexpected invalidation. Chat deliberately retains the current
+position across its playful-to-semantic hide/recreate handoff. New real-buffer
+regressions insert a line above each visible mark, advance animation, and prove
+the mark remains on its tracked row. The focused boundaries pass 22 chat-pending
+and 25 Definition cases; all 7 real curl/SSE cases, lint, and the complete
+single-worker repository suite also exit 0.
