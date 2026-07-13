@@ -350,7 +350,7 @@ git commit -m "#182: expose SSE activity and transport failures"
 - Create: `lua/parley/chat_pending.lua`
 - Create: `tests/integration/chat_pending_spec.lua`
 
-- [ ] **Step 1: Write RED integration tests against a real scratch buffer**
+- [x] **Step 1: Write RED integration tests against a real scratch buffer**
 
 Create a response header line and pass a fake production-shaped clock/scheduler (`now_ms`, FIFO `enqueue`, `after`, `every`; each timer registration returns an idempotent cancel closure). Advance it rather than sleeping or calling private adapter methods, and inspect the dedicated namespace with `nvim_buf_get_extmarks(..., {details=true})`. Assert:
 
@@ -368,7 +368,7 @@ method there, and assert the resulting extmark/UI observation occurs later on
 the main loop with `vim.in_fast_event() == false`. This guards the real default,
 not only the injected fake queue.
 
-- [ ] **Step 2: Run the adapter spec and verify RED**
+- [x] **Step 2: Run the adapter spec and verify RED**
 
 ```bash
 nvim -n --headless --noplugin -u tests/minimal_init.vim \
@@ -377,7 +377,7 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim \
 
 Expected: FAIL because `parley.chat_pending` does not exist.
 
-- [ ] **Step 3: Implement `chat_pending.start` as the only chat IO owner**
+- [x] **Step 3: Implement `chat_pending.start` as the only chat IO owner**
 
 The constructor accepts:
 
@@ -397,11 +397,11 @@ Expose `activity`, `content`, `progress`, `complete`, `failure`, and `cancel` me
 
 Use a dedicated namespace, `invalidate=true`, `virt_lines_above=false`, and `pcall` cleanup. Every timer callback first checks `nvim_buf_is_valid(buf)` and self-cancels the whole session when false; extmark invalidation alone does not own libuv timer closure. Reuse `require("parley.progress").SPINNER`; do not add spinner frames or chat content to `exchange_model`.
 
-- [ ] **Step 4: Run the adapter and pure specs and verify GREEN**
+- [x] **Step 4: Run the adapter and pure specs and verify GREEN**
 
 Run both Task 1 and Task 3 commands. Expected: PASS with no leaked timer warnings after Neovim exits.
 
-- [ ] **Step 5: Commit the chat adapter**
+- [x] **Step 5: Commit the chat adapter**
 
 ```bash
 git add lua/parley/chat_pending.lua tests/integration/chat_pending_spec.lua
@@ -652,6 +652,14 @@ git commit -m "#182: document LLM progress presentation"
 Run `sdlc actual --issue 182`, then follow `sdlc close --help`. Close with the targeted, process-fake, mapped, full-suite, diff, and manual evidence; use only the precise atlas/project bypass if the gate says it is genuinely inapplicable. Publish once with `sdlc pr` then `sdlc merge`; verify `main` contains the branch tip.
 
 ## Revisions
+
+### 2026-07-13T02:16:55-07:00 — Task 3 execution
+
+Checked off the extmark/timer adapter after 16 integration tests, 41 reducer
+tests, and two fresh review loops. Review-driven cases now retire every playful
+timer on fast release, terminate stale leases from animation callbacks, publish
+registry ownership only after successful construction, and contain callback
+failures with static bounded diagnostics.
 
 ### 2026-07-13T01:58:42-07:00 — Task 2 execution
 

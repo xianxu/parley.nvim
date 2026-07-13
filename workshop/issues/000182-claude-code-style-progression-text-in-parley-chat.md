@@ -389,3 +389,14 @@ passes 110 tests. Fresh specification and quality reviews found no blocking
 issues after callback exception containment, bounded diagnostics, and completion
 isolation were added. `ARCH-PURE` kept transport framing deterministic at the
 dispatcher seam while lifecycle ownership remains in the task integration.
+
+### 2026-07-13 — Task 3 complete
+
+Added the dedicated chat pending adapter: one extmark-backed virtual line per
+buffer, canonical spinner frames, injected FIFO scheduler/clock seams, and
+idempotent timer/registry cleanup. Sixteen integration tests include a real
+libuv fast-event handoff and deterministic reveal, minimum, activity, idle,
+status, cancellation, invalid-buffer, stale-lease, reentrancy, and callback
+failure cases. Fresh reviews approved the boundary after closing three timer and
+construction ownership gaps. `ARCH-PURE` keeps all timing policy in the reducer;
+the adapter is the sole Neovim IO owner.
