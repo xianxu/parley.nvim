@@ -1,12 +1,13 @@
 ---
 id: 000183
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-13
 updated: 2026-07-13
 estimate_hours: 2.02
 started: 2026-07-13T13:44:15-07:00
+actual_hours: N/A
 ---
 
 # Keep response progress at current generation tip
@@ -111,6 +112,7 @@ v3.1 AI-paired 40% values.
 ## Log
 
 ### 2026-07-13
+- 2026-07-13: closed — Fixed REWORK finding with a same-callback pre-write validity authorization: externally invalidated progress now terminates before mutation, while writer-caused invalidation alone may repair the same ID. RED/GREEN proven in real-buffer adapter and queued chat-stream regressions. Verified make -f Makefile.local test-spec SPEC=chat/response_progress; make -f Makefile.local test-spec SPEC=chat/exchange_model; make -f Makefile.local test JOBS=1 (lint 0 warnings/errors; all unit, arch, integration specs pass); git diff --check. --no-plan-check acknowledges the sole remaining checkbox is the close/publish/merge action currently being executed; --no-actual acknowledges unavailable worktree transcript telemetry rather than inventing hours.; review verdict: FIX-THEN-SHIP
 
 Claimed the follow-up after confirming #182's adapter always receives the fixed
 agent-header row. The selected design keeps the structural chat lease on that
