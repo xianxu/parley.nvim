@@ -94,7 +94,7 @@ implementation calibration is already reflected in each `impl=` value.
 - [x] Add a failing real-path folded recursive-progress regression.
 - [x] Derive the recursive anchor from the stable pre-stream separator.
 - [x] Update the response-progress atlas and pass targeted/full verification.
-- [ ] Close, publish, and merge through the SDLC gates.
+- [x] Close, publish, and merge through the SDLC gates.
 
 ## Log
 
@@ -142,6 +142,9 @@ The first boundary review returned `FIX-THEN-SHIP` with one Important test-
 oracle finding: post-minimum output was checked for presence but not exact
 cardinality. The regression now counts the final staged answer and requires one
 occurrence, directly proving the plan's exactly-once release contract.
+
+The post-fix boundary review returned `SHIP` with no findings. PR #148 merged
+the reviewed HEAD into `main`, and the SDLC publish gate archived this issue.
 
 ## Revisions
 
