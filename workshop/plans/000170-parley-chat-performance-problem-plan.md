@@ -635,3 +635,15 @@ Delta: fixture line two uses the production-required `- file: perf.md` header
 instead of the invalid model header, and the measured character is fed with
 Neovim's `t` mode instead of `xt`; a child-Neovim probe pins one changedtick,
 exactly one `TextChangedI`, continued Insert mode, and installed redraw work.
+
+### 2026-07-12 — executable cache/performance gates
+
+Reason: the isolated redraw benchmark could not exercise the production
+provider without constructing its real buffer-owned structure, and lifecycle
+failure propagation needed a direct adapter oracle.
+
+Delta: Task 6 also updates `tests/perf/chat_typing.lua` so `make perf` executes
+the structure-backed redraw and hard counter gates, plus
+`tests/unit/buffer_lifecycle_spec.lua` to pin notify/propagate behavior. Two
+combined highlighting tests now install the Task 4 lifecycle; Task 7 still owns
+the final one-oracle-per-named-test sweep.
