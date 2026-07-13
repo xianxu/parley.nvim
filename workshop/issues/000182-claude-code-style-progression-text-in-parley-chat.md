@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-07-10
 updated: 2026-07-12
-estimate_hours: 8.72
+estimate_hours: 8.94
 started: 2026-07-12T21:56:40-07:00
 ---
 
@@ -67,9 +67,10 @@ place to show pending work.
   before starting the local tool. Never run a local tool behind a still-visible
   playful indicator.
 - A successful empty completion honors the minimum duration if the indicator
-  became visible, then removes it. A provider failure with a still-valid chat
-  lease bypasses the minimum: remove the indicator, flush any staged real output
-  once in original order, then surface the existing error. User cancellation,
+  became visible, then removes it. A provider failure—either a transport/process
+  failure or an HTTP response outside 200–299—with a still-valid chat lease
+  bypasses the minimum: remove the indicator, flush any staged real output once
+  in original order, then surface the existing error. User cancellation,
   a stale lease, or an invalid/deleted buffer removes the indicator immediately
   and discards staged output because that response no longer owns a writable
   transcript. No terminal path may leave timers or extmarks alive.
@@ -117,11 +118,14 @@ place to show pending work.
   policies (`ARCH-DRY`, `ARCH-PURPOSE`).
 - Expose raw SSE activity separately from semantic provider progress so playful
   verb changes do not alter existing progress-event contracts.
-- Give callers an additive post-start transport-error callback. Callers that do
+- Give callers an additive post-start provider-error callback. Callers that do
   not opt in receive every historical completion surface they supplied—both
   `on_exit(qid)` and the assembled-response callback, when present—exactly once
   after transport drain, so topic generation, memory preferences, and other
   existing consumers cannot strand teardown.
+- Preserve each HTTP response body while classifying its final status outside
+  the SSE stream. The internal curl status trailer is transport metadata: it is
+  not an SSE event, visible content, raw provider response, or playful activity.
 - Route failures before a transport starts through the existing pre-start abort
   class exactly once. Missing/unresolved vault secrets, a busy subprocess slot,
   and process-spawn rejection must all notify the chat/skill caller so it can
@@ -160,12 +164,12 @@ item: lua-neovim design=0.50 impl=0.60
 item: lua-neovim design=0.60 impl=0.60
 item: lua-neovim design=0.60 impl=0.60
 item: lua-neovim design=0.40 impl=0.50
-item: api-integration design=0.40 impl=0.50
+item: api-integration design=0.50 impl=0.60
 item: cross-cutting-refactor design=0.40 impl=0.50
 item: atlas-docs design=0.15 impl=0.08
 item: milestone-review design=0.15 impl=0.20
 design-buffer: 0.15
-total: 8.72
+total: 8.94
 ```
 
 Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md`
@@ -188,6 +192,13 @@ v3.1's 40% AI-paired ship-wall-clock scale.
 - [ ] Close, publish, and merge through the SDLC gates.
 
 ## Revisions
+
+### 2026-07-13T00:45:35-07:00 — HTTP failure gate correction
+
+Expanded provider failure to include non-2xx HTTP responses while preserving
+streamed bodies and excluding curl's internal status trailer from SSE activity.
+Added real 401 and partial-body 500 process coverage, reset revised-plan
+approval, and recalibrated the API fixture work from 8.72 to 8.94 hours.
 
 ### 2026-07-13T00:38:31-07:00 — launch-failure gate correction
 
@@ -307,3 +318,15 @@ tests cleanup through the real chat and Definition entries.
 
 Fresh review approved the additive vault/task launch error channels, their
 single dispatcher abort owner, and the real-entry cleanup coverage.
+
+### 2026-07-13 — HTTP failure gate revision
+
+The third SDLC plan-quality pass found that curl's default exit behavior treats
+HTTP 401/429/500 as successful processes. The plan now carries an internal
+status trailer outside SSE semantics and maps non-2xx responses to the same
+body-preserving provider-failure terminal.
+
+### 2026-07-13 — HTTP failure correction approved
+
+Fresh review approved the body-preserving HTTP status channel, its exclusion
+from SSE semantics, and the 401/partial-500 process coverage.

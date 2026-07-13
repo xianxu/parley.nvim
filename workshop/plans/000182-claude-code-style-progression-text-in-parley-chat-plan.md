@@ -4,7 +4,7 @@
 
 **Goal:** Give chat-producing LLM calls delayed, minimum-visible playful progress with ordered output staging, and give inline Definition an immediate selection-anchored spinner without transient buffer edits.
 
-**Architecture:** A pure reducer owns chat presentation states, deadlines, verb choice, and ordered staged events. Thin chat and selection adapters own Neovim timers/extmarks; `chat_respond` routes dispatcher callbacks through the chat adapter, while `skill_invoke` exposes backward-compatible terminal/progress controls for Definition. The dispatcher adds raw-SSE activity and post-start transport-failure channels without changing semantic progress callbacks.
+**Architecture:** A pure reducer owns chat presentation states, deadlines, verb choice, and ordered staged events. Thin chat and selection adapters own Neovim timers/extmarks; `chat_respond` routes dispatcher callbacks through the chat adapter, while `skill_invoke` exposes backward-compatible terminal/progress controls for Definition. The dispatcher adds raw-SSE activity and post-start provider-failure channels without changing semantic progress callbacks.
 
 **Tech Stack:** Lua, Neovim extmarks (`virt_lines` and inline `virt_text`), libuv timers, Plenary/Busted, curl/SSE, Python process-level test fixture.
 
@@ -69,7 +69,7 @@ All three symbols are tested without Neovim IO or mocks in `tests/unit/chat_pres
     arguments and retain their current behavior.
   - **Future extensions:** Other interactive callers may opt into explicit
     launch-failure teardown without changing legacy fire-and-forget callers.
-- **`dispatcher.query`** — invokes raw activity once per blank-line-delimited SSE event record (including a final EOF-terminated record), preserves semantic `on_progress`, and chooses exactly one normal or transport-error terminal after drain-safe `tasker.run` completion.
+- **`dispatcher.query`** — invokes raw activity once per blank-line-delimited SSE event record (including a final EOF-terminated record), preserves semantic `on_progress`, captures curl's final HTTP status outside the provider stream, and chooses exactly one normal or provider-error terminal after drain-safe `tasker.run` completion.
   - **Injected into:** Chat and Definition's `skill_invoke` path use the new error callback. Existing callers that omit it receive the historical `on_exit(qid)` fallback and retain teardown behavior.
   - **Future extensions:** Provider HTTP-status classification can widen the typed failure record without overloading pre-query `on_abort`.
 - **`chat_respond.respond`** — removes the web-search-only buffer/model spinner, starts one presentation session for every initial/recursive leg, and defers tool-loop execution behind a visible minimum when required.
@@ -211,7 +211,7 @@ Then retain the dispatcher-facing `tasker.run` terminal callback and stdout read
 assert.are.same({ "activity", "progress", "content" }, observed)
 ```
 
-Add cases for: a multiline `event:` + comment + multiple-`data:` record (one activity callback, then semantic/content callbacks in line order); two blank-line-delimited records (two activities); an EOF-terminated final record (one activity); empty keepalive separators (no activity); normal exit; curl `code ~= 0` after partial stdout with `on_error` present (one `on_error`, no legacy completion); and curl failure with `on_error=nil`. For both normal and fallback completion, assert each supplied legacy surface—`on_exit(qid)` and scheduled `callback(qt.response)`—runs exactly once and only after the three-signal drain; either surface may be nil independently.
+Add cases for: a multiline `event:` + comment + multiple-`data:` record (one activity callback, then semantic/content callbacks in line order); two blank-line-delimited records (two activities); an EOF-terminated final record (one activity); empty keepalive separators (no activity); normal 2xx exit; curl `code ~= 0` after partial stdout with `on_error` present; HTTP 401 with an error body; partial SSE content followed by HTTP 500; and failures with `on_error=nil`. Assert the internal status trailer produces no activity/content/raw-response bytes. With `on_error`, process failure or non-2xx calls it once with retained body/status and no legacy completion. For both normal and fallback completion, assert each supplied legacy surface—`on_exit(qid)` and scheduled `callback(qt.response)`—runs exactly once and only after the three-signal drain; either surface may be nil independently.
 
 At the real consumer boundary, add a topic-generation transport-failure test
 that proves its supplied `on_exit` tears down the scratch buffer/spinner and
@@ -283,10 +283,17 @@ Thread them into the private query. Maintain SSE record state separately from se
 
 ```lua
 legacy_complete(qid, qt.response)             -- code == 0
-on_error(qid, { code=code, signal=signal,
+on_error(qid, { code=code, signal=signal, http_status=status,
+                body=qt.raw_response,
                 stderr=stderr_data,
-                io_error=io_error })           -- code ~= 0 / read failure
+                io_error=io_error })           -- process/read failure or non-2xx
 ```
+
+Append a qid-specific `curl --write-out` sentinel containing `%{http_code}` to
+stdout. The stream parser recognizes only that exact terminal sentinel, removes
+it before SSE record framing/raw-response accumulation, and stores the numeric
+status. A status in 200–299 is successful; status 000 is governed by curl's
+process result; every other status is a provider failure even when curl exits 0.
 
 `legacy_complete` invokes every historical surface the caller supplied, in the
 existing order: synchronous `on_exit(qid)`, then scheduled
@@ -295,7 +302,7 @@ qid-free `on_abort(msg)` path. Create one once-guarded `abort_before_start(msg)`
 and pass it to both `vault.run_with_secret` and dispatcher-owned `tasker.run`,
 so missing/resolution-failed secrets, busy rejection, and spawn failure share
 the same caller terminal without colliding with adapter `pre_query` failure.
-If post-start transport failure occurs and
+If post-start process/read/HTTP failure occurs and
 `on_error` is nil, log it and call `legacy_complete` exactly once; this treats
 the drained partial response as ordinary legacy completion, preserving teardown
 for `generate_topic`, callback-only memory preferences, callers that supply both
@@ -433,7 +440,7 @@ Expected: failures show the current immediate `🔎 … Submitting...` buffer li
 
 - [ ] **Step 3: Add and run one process-level curl/SSE RED test**
 
-Implement `fake_sse_server` as an executable local Python HTTP server whose mode is selected by an argument/environment variable. The test starts it on a free port, points an OpenAI-compatible test provider at it, and invokes the real chat entry without monkeypatching `dispatcher.query` or `tasker.run`. Specify a delayed-stream mode that must show the virtual line, buffer first text until the minimum, then flush and complete. Add a partial-then-broken-connection mode that makes curl exit nonzero and must hide the extmark first, expose partial text second, and notify the error last. Ensure the server is reaped in teardown even on assertion failure.
+Implement `fake_sse_server` as an executable local Python HTTP server whose mode is selected by an argument/environment variable. The test starts it on a free port, points an OpenAI-compatible test provider at it, and invokes the real chat entry without monkeypatching `dispatcher.query` or `tasker.run`. Specify a delayed-stream mode that must show the virtual line, buffer first text until the minimum, then flush and complete. Add a partial-then-broken-connection mode that makes curl exit nonzero, an HTTP 401 error-body mode, and a partial-SSE-then-HTTP-500 mode. Each failure must hide the extmark first, expose any real partial text second, and notify the body/status error last; the status trailer is never visible or counted as activity. Ensure the server is reaped in teardown even on assertion failure.
 
 Run:
 
@@ -640,6 +647,13 @@ git commit -m "#182: document LLM progress presentation"
 Run `sdlc actual --issue 182`, then follow `sdlc close --help`. Close with the targeted, process-fake, mapped, full-suite, diff, and manual evidence; use only the precise atlas/project bypass if the gate says it is genuinely inapplicable. Publish once with `sdlc pr` then `sdlc merge`; verify `main` contains the branch tip.
 
 ## Revisions
+
+### 2026-07-13T00:45:35-07:00 — HTTP failure gate correction
+
+Added qid-specific curl HTTP-status framing outside the SSE/raw-response stream,
+classified non-2xx responses as provider failures while retaining their bodies,
+and required real 401 plus partial-body 500 process tests. Recalibrated the API
+fixture and classification work to 8.94 hours.
 
 ### 2026-07-13T00:38:31-07:00 — launch-failure gate correction
 
