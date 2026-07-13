@@ -58,7 +58,8 @@ For legs one and two, set `raw_response` to
 `mk_read_file_sse_response("toolu_FOLD_" .. leg, scratch_file)`; leave leg three
 pending. Return the third leg's qid, content callback, completion/terminal
 callbacks, plus the 1-indexed fold starts and ends returned by
-`foldclosed()`/`foldclosedend()` for the two final `📎:` blocks.
+`foldclosed()`/`foldclosedend()` for all four Parley-generated blocks across
+the two rounds (`🔧:` tool use and `📎:` result for each round).
 
 Do not call `tool_loop` directly or construct extmarks manually. Adapt callback
 capture to the live `dispatcher.query` signature so only provider transport is
@@ -98,16 +99,20 @@ entries whose `closed` field is false).
 1. Cancellation during the waiting third leg after reveal and staged content
    calls `parley.cmd.Stop()`. Assert no pending mark, active pending
    owner, or chat lease; staged content is absent; the deterministic runtime has
-   no live timers; both final tool folds retain their prior closed starts.
+   no live timers; all four tool-use/result folds retain their prior closed
+   starts and ends.
 2. Provider failure captures dispatcher argument 10, `on_error(qid, err)`, for
-   the third leg. Temporarily wrap `vim.notify`; for each notification record
-   whether the staged partial text is already present in the real buffer. Call
+   the third leg. Advance that leg through its 1000 ms reveal, deliver
+   `"partial before failure"` through its captured content handler, and drain
+   the pending runtime so the content is staged but absent from the buffer.
+   Temporarily wrap `vim.notify`; for each notification record whether that
+   partial text is already present in the real buffer. Call
    `on_error(third_qid, { code = 22, http_status = 500, body = "broken" })`,
    drain the pending runtime and Neovim schedule, then assert the matching
    provider-failure notification observed partial text first. Finally assert no
-   pending mark/owner/timers or lease remains and both folds retain their closed
-   starts. Restore `vim.notify` even if the assertion fails by following the
-   spec file's existing save/restore pattern.
+   pending mark/owner/timers or lease remains and all four tool-use/result folds
+   retain their closed starts and ends. Restore `vim.notify` even if the
+   assertion fails by following the spec file's existing save/restore pattern.
 
 - [ ] **Step 4: Run the mapped regression and verify RED**
 
@@ -228,3 +233,10 @@ result fold, named `parley.cmd.Stop()` and dispatcher argument 10 (`on_error`)
 as the terminal entry points, made `vim.notify` the partial-before-error
 observation boundary, and specified the deterministic runtime's open-timer
 counter by reuse of the existing pending-adapter test helper.
+
+### 2026-07-13 — SDLC plan-quality revision
+
+Expanded terminal fold snapshots from the two result folds to all four
+tool-use/result folds across both recursive rounds, and made the provider-error
+sequence explicit: reveal, deliver partial content, drain it into staging,
+invoke dispatcher `on_error`, then prove the staged write precedes notification.

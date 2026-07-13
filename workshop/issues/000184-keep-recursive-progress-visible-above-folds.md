@@ -108,6 +108,10 @@ The 1.50-hour v3.1 estimate and single-chunk durable implementation plan passed
 fresh-context review after its placement, provider-failure ordering, and timer
 cleanup oracles were made directly executable.
 
+The SDLC plan-quality gate then required terminal tests to snapshot all four
+tool-use/result folds across both rounds and to explicitly create staged partial
+content before invoking provider failure. The durable plan now pins both.
+
 ## Revisions
 
 ### 2026-07-13 — fresh spec review
