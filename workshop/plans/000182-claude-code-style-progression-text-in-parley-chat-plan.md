@@ -59,8 +59,8 @@ All three symbols are tested without Neovim IO or mocks in `tests/unit/chat_pres
 - **`tasker.run`** — drains stdout and stderr to EOF before reporting the process terminal, regardless of whether pipe EOF or process exit arrives first.
   - **Injected into:** `dispatcher.query` receives a callback only after its stdout reader has consumed the final fragment; existing four-argument callbacks remain compatible.
   - **Future extensions:** The optional fifth `io_error` result can classify pipe failures for other subprocess consumers.
-- **`dispatcher.query`** — invokes raw activity once per non-empty SSE line, preserves semantic `on_progress`, and chooses exactly one normal or transport-error terminal after drain-safe `tasker.run` completion.
-  - **Injected into:** Chat uses the new activity/error callbacks; all existing callers omit them and retain current behavior.
+- **`dispatcher.query`** — invokes raw activity once per blank-line-delimited SSE event record (including a final EOF-terminated record), preserves semantic `on_progress`, and chooses exactly one normal or transport-error terminal after drain-safe `tasker.run` completion.
+  - **Injected into:** Chat and Definition's `skill_invoke` path use the new error callback. Existing callers that omit it receive the historical `on_exit(qid)` fallback and retain teardown behavior.
   - **Future extensions:** Provider HTTP-status classification can widen the typed failure record without overloading pre-query `on_abort`.
 - **`chat_respond.respond`** — removes the web-search-only buffer/model spinner, starts one presentation session for every initial/recursive leg, and defers tool-loop execution behind a visible minimum when required.
   - **Injected into:** The session receives the existing lease and `create_handler` seams; it never computes transcript positions itself.
@@ -178,18 +178,27 @@ git commit -m "#182: add pure chat presentation controller"
 - Modify: `lua/parley/tasker.lua:282-355`
 - Modify: `tests/unit/dispatcher_query_spec.lua:422-526`
 - Modify: `tests/integration/tasker_run_spec.lua`
+- Modify: `tests/integration/topic_gen_spec.lua`
+- Modify: `tests/integration/cliproxy_caller_teardown_spec.lua`
 
 - [ ] **Step 1: Write RED drain-order and dispatcher callback tests**
 
 First drive captured process-exit and pipe-reader callbacks in both permutations: stdout/stderr EOF before process exit, and process exit before stdout/stderr EOF. Assert `tasker.run` waits for all three signals, retains final fragments, invokes its public callback once, and reports read failure through an additive fifth `io_error` result.
 
-Then retain the dispatcher-facing `tasker.run` terminal callback and stdout reader. Assert that one non-empty line calls callbacks in this order:
+Then retain the dispatcher-facing `tasker.run` terminal callback and stdout reader. Assert that one complete SSE event calls callbacks in this order:
 
 ```lua
 assert.are.same({ "activity", "progress", "content" }, observed)
 ```
 
-Add cases for an SSE line with no semantic event/content (activity only), empty lines/EOF (no activity), normal exit (one `on_exit`), and curl `code ~= 0` after partial stdout (one `on_error`, no `on_exit`, partial handlers already delivered).
+Add cases for: a multiline `event:` + comment + multiple-`data:` record (one activity callback, then semantic/content callbacks in line order); two blank-line-delimited records (two activities); an EOF-terminated final record (one activity); empty keepalive separators (no activity); normal exit; curl `code ~= 0` after partial stdout with `on_error` present (one `on_error`, no legacy completion); and curl failure with `on_error=nil`. For both normal and fallback completion, assert each supplied legacy surface—`on_exit(qid)` and scheduled `callback(qt.response)`—runs exactly once and only after the three-signal drain; either surface may be nil independently.
+
+At the real consumer boundary, add a topic-generation transport-failure test
+that proves its supplied `on_exit` tears down the scratch buffer/spinner and
+calls the topic callback, plus a memory-preferences transport-failure test that
+proves its supplied assembled-response callback advances every tag and finishes
+the batch. These tests use the real consumer functions and real dispatcher,
+monkeypatching only `tasker.run` to deliver a drained nonzero transport terminal.
 
 - [ ] **Step 2: Run tasker and dispatcher specs and verify RED**
 
@@ -200,9 +209,15 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim \
   -c "PlenaryBustedFile tests/integration/tasker_run_spec.lua" -c "qa!"
 nvim -n --headless --noplugin -u tests/minimal_init.vim \
   -c "PlenaryBustedFile tests/unit/dispatcher_query_spec.lua" -c "qa!"
+nvim -n --headless --noplugin -u tests/minimal_init.vim \
+  -c "PlenaryBustedFile tests/integration/topic_gen_spec.lua" -c "qa!"
+nvim -n --headless --noplugin -u tests/minimal_init.vim \
+  -c "PlenaryBustedFile tests/integration/cliproxy_caller_teardown_spec.lua" -c "qa!"
 ```
 
-Expected: FAIL because `tasker.run` closes pipes at process exit instead of draining, and `query` has no activity/error callbacks or task exit status.
+Expected: FAIL because `tasker.run` closes pipes at process exit instead of
+draining, `query` has no activity/error callbacks or task exit status, and the
+real legacy consumers do not receive a failure fallback after drain.
 
 - [ ] **Step 3: Make `tasker.run` drain-safe**
 
@@ -231,16 +246,24 @@ D.query = function(buf, provider, payload, handler, on_exit, callback,
     on_progress, on_abort, on_activity, on_error)
 ```
 
-Thread them into the private query. Call `on_activity(qid)` once before parsing each non-empty SSE line. Let stdout EOF process the final buffered line but never choose the terminal. The drain-safe `tasker.run` callback runs afterward and calls exactly one of:
+Thread them into the private query. Maintain SSE record state separately from semantic line parsing: the first non-empty field/comment marks a pending record; a blank line emits one `on_activity(qid)` before parsing/delivering that record's semantic progress/content; stdout EOF emits one activity for a final unterminated record. Never emit activity per `event:`/`data:` line. Let stdout EOF process the final buffered record, metrics, and fallback content extraction, but never invoke `on_exit`, the assembled-response callback, or the transport terminal. The drain-safe `tasker.run` callback owns terminal delivery afterward and calls exactly one of:
 
 ```lua
-on_exit(qid)                                  -- code == 0
+legacy_complete(qid, qt.response)             -- code == 0
 on_error(qid, { code=code, signal=signal,
                 stderr=stderr_data,
                 io_error=io_error })           -- code ~= 0 / read failure
 ```
 
-Keep adapter `pre_query` failures on the existing qid-free `on_abort(msg)` path. Existing callers that omit the new final args remain byte-for-byte compatible.
+`legacy_complete` invokes every historical surface the caller supplied, in the
+existing order: synchronous `on_exit(qid)`, then scheduled
+`callback(qt.response)`. Keep adapter `pre_query` failures on the existing
+qid-free `on_abort(msg)` path. If post-start transport failure occurs and
+`on_error` is nil, log it and call `legacy_complete` exactly once; this treats
+the drained partial response as ordinary legacy completion, preserving teardown
+for `generate_topic`, callback-only memory preferences, callers that supply both
+surfaces, and callers that supply neither. Callers that opt into `on_error`
+receive only that terminal and never either legacy surface.
 
 - [ ] **Step 5: Run dispatcher and tasker tests and verify GREEN**
 
@@ -251,15 +274,21 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim \
   -c "PlenaryBustedFile tests/unit/dispatcher_query_spec.lua" -c "qa!"
 nvim -n --headless --noplugin -u tests/minimal_init.vim \
   -c "PlenaryBustedFile tests/integration/tasker_run_spec.lua" -c "qa!"
+nvim -n --headless --noplugin -u tests/minimal_init.vim \
+  -c "PlenaryBustedFile tests/integration/topic_gen_spec.lua" -c "qa!"
+nvim -n --headless --noplugin -u tests/minimal_init.vim \
+  -c "PlenaryBustedFile tests/integration/cliproxy_caller_teardown_spec.lua" -c "qa!"
 ```
 
-Expected: PASS; existing semantic progress expectations remain unchanged.
+Expected: PASS; existing semantic progress expectations remain unchanged, and
+both real legacy consumers terminate after a failed transport.
 
 - [ ] **Step 6: Commit the drain and dispatcher contracts**
 
 ```bash
 git add lua/parley/tasker.lua lua/parley/dispatcher.lua \
-  tests/unit/dispatcher_query_spec.lua tests/integration/tasker_run_spec.lua
+  tests/unit/dispatcher_query_spec.lua tests/integration/tasker_run_spec.lua \
+  tests/integration/topic_gen_spec.lua tests/integration/cliproxy_caller_teardown_spec.lua
 git commit -m "#182: expose SSE activity and transport failures"
 ```
 
@@ -271,7 +300,7 @@ git commit -m "#182: expose SSE activity and transport failures"
 
 - [ ] **Step 1: Write RED integration tests against a real scratch buffer**
 
-Create a response header line and pass a fake production-shaped clock/scheduler (`now_ms`, `after`, `every`; each registration returns an idempotent cancel closure). Advance it rather than sleeping or calling private adapter methods, and inspect the dedicated namespace with `nvim_buf_get_extmarks(..., {details=true})`. Assert:
+Create a response header line and pass a fake production-shaped clock/scheduler (`now_ms`, FIFO `enqueue`, `after`, `every`; each timer registration returns an idempotent cancel closure). Advance it rather than sleeping or calling private adapter methods, and inspect the dedicated namespace with `nvim_buf_get_extmarks(..., {details=true})`. Assert:
 
 - no extmark before reveal;
 - `virt_lines` contains `⠙ brewing` after reveal;
@@ -280,6 +309,12 @@ Create a response header line and pass a fake production-shaped clock/scheduler 
 - semantic progress replaces playful text after release and may remain while content streams;
 - hide removes the extmark without changing buffer lines or undo sequence;
 - stop/cancel/buffer deletion are idempotent and close every timer.
+
+Also exercise the default production scheduler from a real `vim.uv` timer:
+record that the source callback is a fast event, invoke the public session
+method there, and assert the resulting extmark/UI observation occurs later on
+the main loop with `vim.in_fast_event() == false`. This guards the real default,
+not only the injected fake queue.
 
 - [ ] **Step 2: Run the adapter spec and verify RED**
 
@@ -302,11 +337,11 @@ local session = chat_pending.start({
     emit_content = function(qid, chunk) base_handler(qid, chunk) end,
     choose_verb_index = function(count) return math.random(count) end,
     clock = production_monotonic_clock,       -- optional; defaults internally
-    scheduler = production_timer_scheduler,  -- optional; defaults internally
+    scheduler = production_mainloop_scheduler, -- enqueue/after/every; optional
 })
 ```
 
-Expose `activity`, `content`, `progress`, `complete`, `failure`, and `cancel` methods. Timer registrations enqueue the same reducer events through private callbacks; no public reveal/tick test methods exist. Each source enters one FIFO event pump, asks `chat_presentation.transition` for actions, and executes actions sequentially. The adapter itself handles `render_status` actions by changing the same extmark from playful copy to meaningful provider status; only real content emission is injected. Register one active session per buffer plus `cancel_all`, so user Stop cleans every session before global `tasker.stop`; starting a recursive leg replaces only an already-finished session.
+Expose `activity`, `content`, `progress`, `complete`, `failure`, and `cancel` methods. Every public method and timer callback first goes through `scheduler.enqueue`; the production default is `vim.schedule`, making one FIFO main-loop pump the only place reducer state, extmarks, or timers are touched. Timer registrations enqueue the same reducer events through private callbacks; no public reveal/tick test methods exist. Tests inject a queue and assert callbacks delivered from a simulated fast-event source perform no UI work until that queue drains. The adapter handles `render_status` actions by changing the same extmark from playful copy to meaningful provider status; only real content emission is injected. Register one active session per buffer plus `cancel_all`, so user Stop cleans every session before global `tasker.stop`; starting a recursive leg replaces only an already-finished session.
 
 Use a dedicated namespace, `invalidate=true`, `virt_lines_above=false`, and `pcall` cleanup. Every timer callback first checks `nvim_buf_is_valid(buf)` and self-cancels the whole session when false; extmark invalidation alone does not own libuv timer closure. Reuse `require("parley.progress").SPINNER`; do not add spinner frames or chat content to `exchange_model`.
 
@@ -340,6 +375,8 @@ Through `parley.chat_respond`, cover:
 - tool-use-only completion: immediate local tool before reveal, deferred local tool after reveal until hide;
 - initial and recursive legs each create fresh sessions/verb histories;
 - topic generation never creates a playful session;
+- topic-generation transport failure still reaches its historical completion
+  teardown through the dispatcher fallback and never creates a playful session;
 - provider failure flushes valid partial output before warning; abort/cancel/stale lease/deleted buffer discard staged output and clean up immediately;
 - exact reveal/minimum callback permutations do not double-flush or double-run completion.
 
@@ -349,7 +386,22 @@ Use the real `M.respond` entry and exchange model; fake only the dispatcher call
 
 Expected: failures show the current immediate `🔎 … Submitting...` buffer line, web-search gating, and direct stream writes.
 
-- [ ] **Step 3: Wire one presentation session into every `M.respond` dispatcher leg**
+- [ ] **Step 3: Add and run one process-level curl/SSE RED test**
+
+Implement `fake_sse_server` as an executable local Python HTTP server whose mode is selected by an argument/environment variable. The test starts it on a free port, points an OpenAI-compatible test provider at it, and invokes the real chat entry without monkeypatching `dispatcher.query` or `tasker.run`. Specify a delayed-stream mode that must show the virtual line, buffer first text until the minimum, then flush and complete. Add a partial-then-broken-connection mode that makes curl exit nonzero and must hide the extmark first, expose partial text second, and notify the error last. Ensure the server is reaped in teardown even on assertion failure.
+
+Run:
+
+```bash
+nvim -n --headless --noplugin -u tests/minimal_init.vim \
+  -c "PlenaryBustedFile tests/integration/chat_progress_process_spec.lua" -c "qa!"
+```
+
+Expected: FAIL against the pre-wiring chat path because the delayed response has
+no extmark-backed presentation session and the broken transport lacks the
+required chat failure ordering.
+
+- [ ] **Step 4: Wire one presentation session into every `M.respond` dispatcher leg**
 
 Delete the old `spinner_active`, spinner exchange block, buffer-line mutation, and timer code. Always create only `agent_header` + `stream_placeholder` real blocks. After `chat_lease.begin`, start `chat_pending` anchored directly at `model:block_start(target_idx, 2)` (already the response header's 0-based buffer row); with `virt_lines_above=false`, the virtual line renders below that durable header.
 
@@ -370,11 +422,13 @@ Extract the current completion body into an idempotent continuation. Classify to
 
 Modify `M.cmd_stop` explicitly to call `require("parley.chat_pending").cancel_all("user")` before `_parley.tasker.stop(signal)`. This makes user cancellation discard staged output before curl termination can be observed as a transport error.
 
-- [ ] **Step 4: Run chat response, lease, and timer-race specs and verify GREEN**
+- [ ] **Step 5: Run chat response, process, lease, and timer-race specs and verify GREEN**
 
 ```bash
 nvim -n --headless --noplugin -u tests/minimal_init.vim \
   -c "PlenaryBustedFile tests/integration/chat_respond_spec.lua" -c "qa!"
+nvim -n --headless --noplugin -u tests/minimal_init.vim \
+  -c "PlenaryBustedFile tests/integration/chat_progress_process_spec.lua" -c "qa!"
 nvim -n --headless --noplugin -u tests/minimal_init.vim \
   -c "PlenaryBustedFile tests/integration/chat_lease_spec.lua" -c "qa!"
 nvim -n --headless --noplugin -u tests/minimal_init.vim \
@@ -383,20 +437,7 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim \
 
 Expected: PASS; playful text is absent from buffer lines and the exchange model.
 
-- [ ] **Step 5: Add one process-level curl/SSE RED test**
-
-Implement `fake_sse_server` as an executable local Python HTTP server whose mode is selected by an argument/environment variable. The test starts it on a free port, points an OpenAI-compatible test provider at it, and invokes the real chat entry without monkeypatching `dispatcher.query` or `tasker.run`. First prove a delayed stream shows the virtual line, buffers the first text until the minimum, then flushes and completes. Add a partial-then-broken-connection mode that makes curl exit nonzero and prove the extmark hides first, partial text appears second, and the error notification arrives last.
-
-- [ ] **Step 6: Run the process test and verify RED, then GREEN**
-
-```bash
-nvim -n --headless --noplugin -u tests/minimal_init.vim \
-  -c "PlenaryBustedFile tests/integration/chat_progress_process_spec.lua" -c "qa!"
-```
-
-Expected RED before the fixture/wiring is complete; expected GREEN after both modes drive the real curl/SSE terminal coordinator. Ensure the server is reaped in teardown even on assertion failure.
-
-- [ ] **Step 7: Commit the chat integration**
+- [ ] **Step 6: Commit the chat integration**
 
 ```bash
 git add lua/parley/chat_respond.lua tests/integration/chat_respond_spec.lua \
@@ -416,7 +457,7 @@ git commit -m "#182: stage slow LLM chat output behind playful progress"
 
 - [ ] **Step 1: Write RED skill lifecycle tests**
 
-Assert `opts.detached_progress=false` never activates `progress.is_active()`, while the default still activates it for existing callers. Add one table of terminal paths: no file, already running, source failure, no agent, success, pre-query abort, explicit `skill_invoke.cancel`, buffer deletion before scheduled completion, and late callback after cancellation. For every row assert `on_terminal` runs exactly once; on normal completion/abort it runs before `on_done`; repeated finish/cancel is harmless.
+Assert `opts.detached_progress=false` never activates `progress.is_active()`, while the default still activates it for existing callers. Add one table of terminal paths: no file, already running, source failure, no agent, success, pre-query abort, post-start transport error through dispatcher argument 10, explicit `skill_invoke.cancel`, buffer deletion before scheduled completion, and late callback after cancellation. For every row assert `on_terminal` runs exactly once; on normal completion/abort/transport error it runs before `on_done`; repeated finish/cancel is harmless. On transport error, assert detached progress stops before delivery and no later `on_exit` can deliver a second terminal.
 
 - [ ] **Step 2: Run `skill_invoke_spec.lua` and verify RED**
 
@@ -424,7 +465,7 @@ Expected: suppression and terminal-hook assertions fail because progress is unco
 
 - [ ] **Step 3: Centralize the invocation terminal path**
 
-Document the full opts shape and implement one once-guarded `finish(result, deliver_done)` per generation. Store the active terminal closure per buffer so `M.cancel(buf)` calls it before invalidating the generation and stopping the task. Start/stop the detached luabar only when `opts.detached_progress ~= false`; defaults remain unchanged. `finish` calls `opts.on_terminal(result)` before optional `opts.on_done(result)` and clears `_in_flight`/terminal registry exactly once.
+Document the full opts shape and implement one once-guarded `finish(result, deliver_done)` per generation. Store the active terminal closure per buffer so `M.cancel(buf)` calls it before invalidating the generation and stopping the task. Start/stop the detached luabar only when `opts.detached_progress ~= false`; defaults remain unchanged. `finish` calls `opts.on_terminal(result)` before optional `opts.on_done(result)` and clears `_in_flight`/terminal registry exactly once. Pass dispatcher argument 10 and route its post-start transport error into `finish({ ok=false, msg=... }, true)`; because the dispatcher chooses one terminal, the normal exit callback cannot race a second delivery.
 
 At the top of scheduled completion, before reload, `nvim_buf_get_lines`, tool rendering, or decoration work, check `nvim_buf_is_valid(buf)`. An invalid buffer immediately takes the centralized terminal path with `{ok=false, msg="buffer invalid"}` and skips `on_done`; the terminal hook still runs once. Guard every remaining completion-time buffer access that can race deletion.
 
@@ -450,7 +491,7 @@ the frame advances
 detached progress is inactive
 ```
 
-Then cover success (spinner removed before `CVR[^cvr]` edit), no tool output, source/no-agent synchronous failure, pre-query abort, explicit cancel, stale selection, and deleted buffer. Every non-success leaves no footnote and no timer/extmark.
+Then cover success (spinner removed before `CVR[^cvr]` edit), no tool output, source/no-agent synchronous failure, pre-query abort, post-start transport failure, explicit cancel, stale selection, and deleted buffer. For transport failure, assert the terminal hook removes the inline spinner, detached progress remains inactive, and no footnote is written. Every non-success leaves no footnote and no timer/extmark.
 
 - [ ] **Step 6: Implement `selection_spinner.start` and Definition wiring**
 
@@ -554,6 +595,22 @@ git commit -m "#182: document LLM progress presentation"
 Run `sdlc actual --issue 182`, then follow `sdlc close --help`. Close with the targeted, process-fake, mapped, full-suite, diff, and manual evidence; use only the precise atlas/project bypass if the gate says it is genuinely inapplicable. Publish once with `sdlc pr` then `sdlc merge`; verify `main` contains the branch tip.
 
 ## Revisions
+
+### 2026-07-13T00:32:14-07:00 — compatibility review correction
+
+Moved both legacy dispatcher completion surfaces behind the drain-safe terminal
+coordinator, specified exactly-once fallback delivery for callback-only memory
+preferences as well as `on_exit` topic generation, and added real-consumer
+regressions. Reordered the real curl/SSE fixture and process test ahead of chat
+production wiring so its RED-to-GREEN sequence is executable.
+
+### 2026-07-13T00:28:50-07:00 — SDLC plan-quality gate corrections
+
+Changed raw activity from per-line notification to blank-line-delimited SSE
+record framing; added a legacy dispatcher completion fallback for omitted error
+callbacks; routed Definition's post-start transport error through its single
+terminal owner; required a FIFO main-loop enqueue seam and fast-event ordering
+tests; and recalibrated the issue estimate to 8.19 hours.
 
 ### 2026-07-13T00:13:49-07:00 — first plan review
 

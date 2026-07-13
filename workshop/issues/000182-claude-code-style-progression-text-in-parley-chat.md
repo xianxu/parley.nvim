@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-07-10
 updated: 2026-07-12
-estimate_hours: 4.62
+estimate_hours: 8.19
 started: 2026-07-12T21:56:40-07:00
 ---
 
@@ -49,6 +49,9 @@ place to show pending work.
   or after 15 seconds without an SSE event, whichever happens first. Spinner
   glyph animation remains independent of verb changes. Avoid immediate verb
   repetition within one call; consecutive calls do not share verb history.
+  Here an SSE event is one blank-line-delimited record: comments, `event:`, and
+  multiple `data:` fields inside that record rotate the verb only once, and EOF
+  terminates one final unterminated record.
 - Once shown, keep the playful line visible for at least one second. Buffer all
   visible server output received during that minimum window. Hide the line at
   the later of (a) the first visible output and (b) the minimum-visible
@@ -114,6 +117,11 @@ place to show pending work.
   policies (`ARCH-DRY`, `ARCH-PURPOSE`).
 - Expose raw SSE activity separately from semantic provider progress so playful
   verb changes do not alter existing progress-event contracts.
+- Give callers an additive post-start transport-error callback. Callers that do
+  not opt in receive every historical completion surface they supplied—both
+  `on_exit(qid)` and the assembled-response callback, when present—exactly once
+  after transport drain, so topic generation, memory preferences, and other
+  existing consumers cannot strand teardown.
 - Model provider failure, cancellation/invalidation, successful completion, and
   deferred local-tool transition as distinct terminal actions; do not collapse
   them into a single cleanup callback that loses real buffered output.
@@ -144,20 +152,25 @@ place to show pending work.
 model: estimate-logic-v3.1
 familiarity: 1.0
 item: issue-spec design=1.20 impl=0.08
-item: lua-neovim design=0.40 impl=0.60
-item: lua-neovim design=0.30 impl=0.50
-item: lua-neovim design=0.30 impl=0.40
-item: atlas-docs design=0.10 impl=0.08
-item: milestone-review design=0.10 impl=0.20
+item: lua-neovim design=0.50 impl=0.60
+item: lua-neovim design=0.60 impl=0.60
+item: lua-neovim design=0.60 impl=0.60
+item: lua-neovim design=0.40 impl=0.50
+item: api-integration design=0.40 impl=0.50
+item: cross-cutting-refactor design=0.20 impl=0.20
+item: atlas-docs design=0.15 impl=0.08
+item: milestone-review design=0.15 impl=0.20
 design-buffer: 0.15
-total: 4.62
+total: 8.19
 ```
 
 Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md`
-against `baseline-v3.1.md`. Method A only. The three `lua-neovim` primitives
-separate chat response presentation, drain-safe task/dispatcher transport
-coordination, and Definition's selection-anchored lifecycle; implementation
-values already apply v3.1's 40% AI-paired ship-wall-clock scale.
+against `baseline-v3.1.md`. Method A only. The four `lua-neovim` primitives
+separate the pure response controller, chat adapter/integration, drain-safe
+task/dispatcher transport, and Definition's selection-anchored lifecycle. The
+API integration covers the real curl/SSE process fixture; the cross-cutting
+item covers compatibility consumers. Implementation values already apply
+v3.1's 40% AI-paired ship-wall-clock scale.
 
 ## Plan
 
@@ -170,6 +183,22 @@ values already apply v3.1's 40% AI-paired ship-wall-clock scale.
 - [ ] Close, publish, and merge through the SDLC gates.
 
 ## Revisions
+
+### 2026-07-13T00:32:14-07:00 — compatibility review correction
+
+Expanded the dispatcher fallback to cover both historical completion surfaces:
+topic generation's `on_exit` and memory preferences' assembled-response
+callback. Reset plan approval while the materially revised plan returns through
+fresh review.
+
+### 2026-07-13T00:28:50-07:00 — SDLC plan-quality gate corrections
+
+Defined blank-line-delimited SSE event framing, preserved a legacy completion
+fallback for dispatcher consumers that omit the additive transport-error hook,
+required Definition to own post-start transport failure, and made main-loop
+FIFO scheduling part of the chat adapter contract. Recalibrated the estimate
+from 4.62 to 8.19 hours for the expanded transport, compatibility, process-fake,
+race-test, documentation, and review surface.
 
 ### 2026-07-13T00:13:49-07:00 — plan review corrections
 
@@ -219,6 +248,14 @@ partial-output, tie-breaking, and Definition cancellation contracts. The spec
 now classifies each path and preserves staged real output before a provider
 error while discarding it only after cancellation or lost transcript ownership.
 
+### 2026-07-13 — plan-quality gate revision
+
+The SDLC judge rejected the approved draft because post-start errors could
+strand legacy dispatcher consumers, Definition omitted that terminal, SSE
+activity was line-oriented rather than record-oriented, libuv callbacks lacked
+an explicit main-loop queue, and the estimate understated the enlarged scope.
+The durable plan and spec now close each gap before implementation begins.
+
 ### 2026-07-13 — durable plan drafted
 
 The 520-line implementation plan decomposes the work into a pure reducer,
@@ -240,3 +277,9 @@ process Stop, and guarantees Definition terminal cleanup before buffer access.
 The operator approved the reviewed durable plan for execution. Implementation
 will run in an SDLC-owned isolated worktree because the main checkout contains
 an unrelated in-progress #162 issue edit.
+
+### 2026-07-13 — corrected plan approved
+
+A second fresh-eyes review approved the gate corrections after the dispatcher
+compatibility path was extended to callback-only memory preference generation
+and the process-level test was moved ahead of production chat wiring.
