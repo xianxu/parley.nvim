@@ -190,28 +190,6 @@ function M.stream_finalize(handle)
 end
 
 -- ============================================================================
--- Progress indicator
--- ============================================================================
-
---- Replace the line at the handle's position with `text`.
-function M.set_progress_line(handle, text)
-    if handle.dead then
-        return
-    end
-    local line = M.handle_line(handle)
-    vim.api.nvim_buf_set_lines(handle.buf, line, line + 1, false, { text or "" })
-end
-
---- Delete `count` lines starting at the handle's position.
-function M.clear_progress_lines(handle, count)
-    if handle.dead then
-        return
-    end
-    local line = M.handle_line(handle)
-    vim.api.nvim_buf_set_lines(handle.buf, line, line + count, false, {})
-end
-
--- ============================================================================
 -- Cancellation cleanup
 -- ============================================================================
 
