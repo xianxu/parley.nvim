@@ -472,7 +472,7 @@ the sole trigger for convergence rebuilding.
 ### 2026-07-12 — lifecycle shadow sweep and optimized report
 
 Command: `make -f Makefile.parley perf` at commit
-`b7c2ffd79f1e2e86d734c836c16eb3f36c1791c5`. Environment:
+`19192524c48bd24e9a0dbdb8f834eaac340e3f45` from a clean worktree. Environment:
 macOS 26.5.1 (25F80), Neovim 0.11.7. The identical baseline protocol ran 5
 warmups and 20 independent measured edits per size; elapsed values remain
 report-only.
@@ -487,36 +487,36 @@ capture branch, or deep copy. The figures below replace that invalidated run.
 
 | phase | lines | median ms | p95 ms | ratio vs 100 | work: calls / lines / full / structure |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| edit_total | 100 | 2.408896 | 2.798917 | 1.00x | 5 / 64 / 0 / 1 |
-| edit_total | 1,000 | 2.414833 | 3.588708 | 1.00x | 5 / 88 / 0 / 1 |
-| edit_total | 5,000 | 2.464042 | 3.695333 | 1.02x | 5 / 88 / 0 / 1 |
-| timezone_refresh | 100 | 0.039812 | 0.075167 | 1.00x | 1 / 100 / 1 / 0 |
-| timezone_refresh | 1,000 | 0.291000 | 0.312000 | 7.31x | 1 / 1,000 / 1 / 0 |
-| timezone_refresh | 5,000 | 1.490063 | 1.623959 | 37.43x | 1 / 5,000 / 1 / 0 |
-| footnote_refresh | 100 | 0.152250 | 0.212291 | 1.00x | 1 / 100 / 1 / 0 |
-| footnote_refresh | 1,000 | 0.865521 | 0.911167 | 5.68x | 1 / 1,000 / 1 / 0 |
-| footnote_refresh | 5,000 | 3.971230 | 4.184625 | 26.08x | 1 / 5,000 / 1 / 0 |
-| decoration_redraw | 100 | 0.269417 | 0.457917 | 1.00x | 1 / 40 / 0 / 0 |
-| decoration_redraw | 1,000 | 0.293500 | 0.332792 | 1.09x | 1 / 61 / 0 / 0 |
-| decoration_redraw | 5,000 | 0.296709 | 0.327709 | 1.10x | 1 / 61 / 0 / 0 |
-| spell_typeahead | 100 | 0.001480 | 0.025458 | 1.00x | 1 / 1 / 0 / 0 |
-| spell_typeahead | 1,000 | 0.001000 | 0.010250 | 0.68x | 1 / 1 / 0 / 0 |
-| spell_typeahead | 5,000 | 0.001021 | 0.020333 | 0.69x | 1 / 1 / 0 / 0 |
+| edit_total | 100 | 2.577105 | 3.659833 | 1.00x | 5 / 64 / 0 / 1 |
+| edit_total | 1,000 | 2.683500 | 3.728583 | 1.04x | 5 / 88 / 0 / 1 |
+| edit_total | 5,000 | 2.581771 | 3.675792 | 1.00x | 5 / 88 / 0 / 1 |
+| timezone_refresh | 100 | 0.056604 | 0.106208 | 1.00x | 1 / 100 / 1 / 0 |
+| timezone_refresh | 1,000 | 0.299375 | 0.340250 | 5.29x | 1 / 1,000 / 1 / 0 |
+| timezone_refresh | 5,000 | 1.533271 | 1.617916 | 27.09x | 1 / 5,000 / 1 / 0 |
+| footnote_refresh | 100 | 0.087542 | 0.110834 | 1.00x | 1 / 100 / 1 / 0 |
+| footnote_refresh | 1,000 | 0.794646 | 0.851167 | 9.08x | 1 / 1,000 / 1 / 0 |
+| footnote_refresh | 5,000 | 3.815042 | 4.114791 | 43.58x | 1 / 5,000 / 1 / 0 |
+| decoration_redraw | 100 | 0.219708 | 0.311916 | 1.00x | 1 / 40 / 0 / 0 |
+| decoration_redraw | 1,000 | 0.306667 | 0.341958 | 1.40x | 1 / 61 / 0 / 0 |
+| decoration_redraw | 5,000 | 0.301959 | 0.344166 | 1.37x | 1 / 61 / 0 / 0 |
+| spell_typeahead | 100 | 0.003730 | 0.016834 | 1.00x | 1 / 1 / 0 / 0 |
+| spell_typeahead | 1,000 | 0.001167 | 0.029417 | 0.31x | 1 / 1 / 0 / 0 |
+| spell_typeahead | 5,000 | 0.001187 | 0.025125 | 0.32x | 1 / 1 / 0 / 0 |
 
 Exact baseline-versus-optimized elapsed comparison (milliseconds; baseline →
 optimized) is: `edit_total` median/p95 100 `3.58/3.97 →
-2.408896/2.798917`, 1,000 `6.06/8.51 → 2.414833/3.588708`, 5,000
-`23.79/25.73 → 2.464042/3.695333`; `decoration_redraw` 100 `0.23/0.26
-→ 0.269417/0.457917`, 1,000 `1.45/2.44 → 0.293500/0.332792`, 5,000
-`8.08/8.23 → 0.296709/0.327709`; `timezone_refresh` 100 `0.03/0.12 →
-0.039812/0.075167`, 1,000 `0.30/0.33 → 0.291000/0.312000`, 5,000
-`1.64/1.89 → 1.490063/1.623959`; `footnote_refresh` 100 `0.12/0.19 →
-0.152250/0.212291`, 1,000 `0.81/0.84 → 0.865521/0.911167`, 5,000
-`3.89/3.95 → 3.971230/4.184625`; and `spell_typeahead` median/p95 100
-`<0.01/0.04 → 0.001480/0.025458`, 1,000 `<0.01/0.03 →
-0.001000/0.010250`, 5,000 `<0.01/0.02 → 0.001021/0.020333`.
+2.577105/3.659833`, 1,000 `6.06/8.51 → 2.683500/3.728583`, 5,000
+`23.79/25.73 → 2.581771/3.675792`; `decoration_redraw` 100 `0.23/0.26
+→ 0.219708/0.311916`, 1,000 `1.45/2.44 → 0.306667/0.341958`, 5,000
+`8.08/8.23 → 0.301959/0.344166`; `timezone_refresh` 100 `0.03/0.12 →
+0.056604/0.106208`, 1,000 `0.30/0.33 → 0.299375/0.340250`, 5,000
+`1.64/1.89 → 1.533271/1.617916`; `footnote_refresh` 100 `0.12/0.19 →
+0.087542/0.110834`, 1,000 `0.81/0.84 → 0.794646/0.851167`, 5,000
+`3.89/3.95 → 3.815042/4.114791`; and `spell_typeahead` median/p95 100
+`<0.01/0.04 → 0.003730/0.016834`, 1,000 `<0.01/0.03 →
+0.001167/0.029417`, 5,000 `<0.01/0.02 → 0.001187/0.025125`.
 The intended costs changed from baseline 5,000/100 median scaling of 6.64x to
-1.02x for inclusive edits and 35.17x to 1.10x for redraws. Isolated diagnostic
+1.00x for inclusive edits and 35.17x to 1.37x for redraws. Isolated diagnostic
 refresh remains deliberately document-proportional off the keystroke path.
 
 Immutable structural gates passed verbatim: diagnostic
