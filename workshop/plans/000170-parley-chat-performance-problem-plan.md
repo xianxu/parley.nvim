@@ -624,3 +624,14 @@ Delta: added neutral `BufferLifecycle` as sole event owner; diagnostics and
 structure remain independent consumers. Replacement is non-mutating; cache
 rebuild swaps only complete candidates and surfaces failures while remaining
 dirty. Estimate re-derived across ten Lua concerns to 14.15h.
+
+### 2026-07-12 — benchmark fidelity corrections
+
+Reason: implementing the real typing scenario exposed two fixture/input details
+that would otherwise prevent the benchmark from exercising a valid attached chat
+while remaining in Insert mode through the measured interval.
+
+Delta: fixture line two uses the production-required `- file: perf.md` header
+instead of the invalid model header, and the measured character is fed with
+Neovim's `t` mode instead of `xt`; a child-Neovim probe pins one changedtick,
+exactly one `TextChangedI`, continued Insert mode, and installed redraw work.
