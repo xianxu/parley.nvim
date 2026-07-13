@@ -85,6 +85,7 @@ M.start = function(opts)
         lease_valid = assert(opts.lease_valid, "lease_valid is required"),
         emit_content = assert(opts.emit_content, "emit_content is required"),
         choose_verb_index = assert(opts.choose_verb_index, "choose_verb_index is required"),
+        on_discard = opts.on_discard,
         scheduler = scheduler,
         clock = clock,
         timers = {},
@@ -102,6 +103,8 @@ M.start = function(opts)
         verbs = verbs,
         verb_index = initial_index,
     })
+    assert(session.on_discard == nil or type(session.on_discard) == "function",
+        "on_discard must be a function")
 
     local function cancel_timer(name)
         local cancel = session.timers[name]
@@ -220,6 +223,41 @@ M.start = function(opts)
         end)
     end
 
+    local function rearm_early_timer(event, state)
+        local deadline
+        local name
+        local event_factory
+        if event.type == "reveal_due" and state.phase == "waiting" then
+            deadline = state.reveal_at
+            name = "reveal"
+            event_factory = function()
+                return { type = "reveal_due", now_ms = now_ms() }
+            end
+        elseif event.type == "minimum_due" and state.phase == "showing" then
+            deadline = state.minimum_at
+            name = "minimum"
+            event_factory = function()
+                return { type = "minimum_due", now_ms = now_ms() }
+            end
+        elseif event.type == "idle"
+                and (state.phase == "waiting" or state.phase == "showing") then
+            deadline = state.verb_due_at
+            name = "idle"
+            event_factory = function()
+                return {
+                    type = "idle",
+                    now_ms = now_ms(),
+                    verb_index = session.choose_verb_index(#verbs),
+                }
+            end
+        end
+        if deadline and event.now_ms < deadline then
+            schedule_after(name, math.max(1, math.ceil(deadline - event.now_ms)), event_factory)
+            return true
+        end
+        return false
+    end
+
     local function apply_actions(actions, context)
         for _, action in ipairs(actions) do
             if action.type == "show_playful" then
@@ -267,12 +305,18 @@ M.start = function(opts)
             -- Release registry/timer ownership before a continuation starts a
             -- recursive LLM leg in this buffer.
             finish()
+            if event.type == "cancel" or event.type == "stale" or event.type == "invalid" then
+                call_safely("discard terminal", session.on_discard, event.type, event.reason)
+            end
             apply_actions(actions, context)
             return
         end
         apply_actions(actions, context)
 
         if session.finished then
+            return
+        end
+        if rearm_early_timer(event, next_state) then
             return
         end
         if previous_phase == "waiting" and next_state.phase ~= "waiting" then
@@ -352,8 +396,8 @@ M.start = function(opts)
         end, { surface_failure = surface_failure })
     end
 
-    session.cancel = function(_self, _reason)
-        submit(function() return { type = "cancel" } end)
+    session.cancel = function(_self, reason)
+        submit(function() return { type = "cancel", reason = reason } end)
     end
 
     active_by_buf[buf] = session
@@ -387,6 +431,12 @@ M.cancel_all = function(reason)
     for _, session in ipairs(sessions) do
         session:cancel(reason)
     end
+end
+
+-- Report only a fully constructed session that still owns this buffer.
+M.is_active = function(buf)
+    local session = active_by_buf[buf]
+    return session ~= nil and not session.finished
 end
 
 return M

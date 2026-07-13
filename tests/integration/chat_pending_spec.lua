@@ -64,6 +64,21 @@ local function fake_runtime()
             end
         end
     end
+    function runtime:fire_earliest_timer_early()
+        local earliest
+        for _, timer in pairs(timers) do
+            if not timer.closed and (not earliest or timer.due < earliest.due) then
+                earliest = timer
+            end
+        end
+        assert(earliest, "expected an open timer")
+        if earliest.interval then
+            earliest.due = earliest.due + earliest.interval
+        else
+            earliest.closed = true
+        end
+        earliest.callback()
+    end
     function runtime:open_timer_count()
         local count = 0
         for _, timer in pairs(timers) do
@@ -170,6 +185,23 @@ describe("chat pending extmark adapter", function()
         assert.is_false(mark[4].virt_lines_above)
         assert.is_true(mark[4].invalidate)
         assert.same({ "assistant:" }, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+    end)
+
+    it("rearms a one-shot timer delivered before its reducer deadline", function()
+        local buf = new_scratch()
+        local runtime = new_runtime()
+        start_fake(buf, runtime)
+
+        runtime:fire_earliest_timer_early()
+        runtime:drain()
+        assert.is_nil(extmark(buf))
+        assert.is_truthy(runtime:open_timer_count() > 0)
+        runtime:advance(999)
+        runtime:drain()
+        assert.is_nil(extmark(buf))
+        runtime:advance(1)
+        runtime:drain()
+        assert.equals("⠙ brewing", virtual_text(buf))
     end)
 
     it("animates only the glyph and rotates verbs on activity and idle", function()
@@ -422,6 +454,137 @@ describe("chat pending extmark adapter", function()
         assert.equals(0, second_runtime:open_timer_count())
     end)
 
+    it("invokes discard hooks once for cancel, frame-stale, and buffer-invalid", function()
+        local cases = {
+            {
+                drive = function(session, _buf, runtime)
+                    session:cancel("user")
+                    session:cancel("again")
+                    runtime:drain()
+                end,
+                expected = "cancel",
+            },
+            {
+                drive = function(_session, _buf, runtime, set_valid)
+                    runtime:advance(1000)
+                    runtime:drain()
+                    set_valid(false)
+                    runtime:advance(120)
+                    runtime:drain()
+                end,
+                expected = "stale",
+            },
+            {
+                drive = function(_session, buf, runtime)
+                    vim.api.nvim_buf_delete(buf, { force = true })
+                    runtime:advance(1000)
+                    runtime:drain()
+                end,
+                expected = "invalid",
+            },
+        }
+        for _, case in ipairs(cases) do
+            local buf = new_scratch()
+            local runtime = new_runtime()
+            local valid = true
+            local calls = {}
+            local session = chat_pending.start({
+                buf = buf,
+                anchor_line = 0,
+                lease_valid = function() return valid end,
+                emit_content = function() end,
+                choose_verb_index = function() return 1 end,
+                on_discard = function(kind) table.insert(calls, kind) end,
+                clock = runtime.clock,
+                scheduler = runtime.scheduler,
+            })
+            runtime:drain()
+            assert.is_true(chat_pending.is_active(buf))
+            case.drive(session, buf, runtime, function(value) valid = value end)
+            assert.same({ case.expected }, calls)
+            assert.is_false(chat_pending.is_active(buf))
+        end
+    end)
+
+    it("releases ownership before a reentrant discard hook", function()
+        local buf = new_scratch()
+        local runtime = new_runtime()
+        local replacement
+        local session = chat_pending.start({
+            buf = buf,
+            anchor_line = 0,
+            lease_valid = function() return true end,
+            emit_content = function() end,
+            choose_verb_index = function() return 1 end,
+            on_discard = function()
+                replacement = start_fake(buf, runtime)
+            end,
+            clock = runtime.clock,
+            scheduler = runtime.scheduler,
+        })
+        runtime:drain()
+        session:cancel("replace")
+        runtime:drain()
+        assert.is_truthy(replacement)
+        assert.is_true(chat_pending.is_active(buf))
+    end)
+
+    it("contains and redacts throwing discard hooks", function()
+        local buf = new_scratch()
+        local runtime = new_runtime()
+        local logs = {}
+        local original_error = logger.error
+        logger.error = function(message) table.insert(logs, message) end
+        local session = chat_pending.start({
+            buf = buf,
+            anchor_line = 0,
+            lease_valid = function() return true end,
+            emit_content = function() end,
+            choose_verb_index = function() return 1 end,
+            on_discard = function() error("discarded private secret") end,
+            clock = runtime.clock,
+            scheduler = runtime.scheduler,
+        })
+        runtime:drain()
+        session:cancel("private cancel reason")
+        runtime:drain()
+        logger.error = original_error
+
+        assert.is_false(chat_pending.is_active(buf))
+        local combined = table.concat(logs, "\n")
+        assert.is_truthy(combined:find("chat pending discard terminal callback failed", 1, true))
+        assert.is_nil(combined:find("discarded private secret", 1, true))
+        assert.is_nil(combined:find("private cancel reason", 1, true))
+        assert.is_truthy(start_fake(buf, runtime))
+    end)
+
+    it("does not invoke discard hooks for completion or provider failure", function()
+        for _, terminal in ipairs({ "complete", "failure" }) do
+            local buf = new_scratch()
+            local runtime = new_runtime()
+            local discarded = 0
+            local session = chat_pending.start({
+                buf = buf,
+                anchor_line = 0,
+                lease_valid = function() return true end,
+                emit_content = function() end,
+                choose_verb_index = function() return 1 end,
+                on_discard = function() discarded = discarded + 1 end,
+                clock = runtime.clock,
+                scheduler = runtime.scheduler,
+            })
+            runtime:drain()
+            if terminal == "complete" then
+                session:complete("q", function() end)
+            else
+                session:failure("q", "provider", function() end)
+            end
+            runtime:drain()
+            assert.equals(0, discarded)
+            assert.is_false(chat_pending.is_active(buf))
+        end
+    end)
+
     it("frame ticks terminate a shown session whose lease became stale", function()
         local buf = new_scratch()
         local runtime = new_runtime()
@@ -481,12 +644,15 @@ describe("chat pending extmark adapter", function()
             end)
             local cancelled = pcall(chat_pending.cancel_all, "after failed initializer")
             assert.is_true(cancelled)
+            assert.is_false(chat_pending.is_active(buf))
             runtime:drain()
 
             local retry = start_fake(buf, runtime)
             assert.is_truthy(retry)
+            assert.is_true(chat_pending.is_active(buf))
             retry:cancel("done")
             runtime:drain()
+            assert.is_false(chat_pending.is_active(buf))
         end
     end)
 
