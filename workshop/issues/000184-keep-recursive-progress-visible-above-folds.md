@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-07-13
 updated: 2026-07-13
-estimate_hours:
+estimate_hours: 1.50
 started: 2026-07-13T14:51:27-07:00
 ---
 
@@ -66,9 +66,27 @@ row is outside the closed fold, and therefore codifies the invisible placement.
   invalidation behavior retain their existing coverage.
 - Mapped response-progress tests, lint, and the full repository suite pass.
 
+## Estimate
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: issue-spec       design=0.50 impl=0.08
+item: lua-neovim       design=0.20 impl=0.28
+item: atlas-docs       design=0.05 impl=0.04
+item: boundary-review  design=0.10 impl=0.12
+design-buffer: 0.13
+total: 1.50
+```
+
+Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md`
+against `baseline-v3.1.md`. Method A only. The established #182/#183 pending
+adapter and tool-loop fixtures supply the library/pattern shortcut; v3.1's 40%
+implementation calibration is already reflected in each `impl=` value.
+
 ## Plan
 
-- [ ] Approve the regression design and calibrated estimate.
+- [x] Approve the regression design and calibrated estimate.
 - [ ] Add a failing real-path folded recursive-progress regression.
 - [ ] Derive the recursive anchor from the stable pre-stream separator.
 - [ ] Update the response-progress atlas and pass targeted/full verification.
@@ -85,6 +103,10 @@ schedules recursive `respond`; #183 initializes progress at
 design anchors to the canonical separator before the new stream placeholder,
 avoiding window-local fold queries and preserving the existing stream-tip
 relocation contract.
+
+The 1.50-hour v3.1 estimate and single-chunk durable implementation plan passed
+fresh-context review after its placement, provider-failure ordering, and timer
+cleanup oracles were made directly executable.
 
 ## Revisions
 
