@@ -337,3 +337,33 @@ events and independently calls both consumers. Pure replacement is
 transactional/non-mutating, and rebuild failure leaves the cache dirty without
 partial state. The estimate now itemizes ten Lua/Neovim concerns plus their
 integration surface (14.15h).
+
+### 2026-07-12 — real chat-typing baseline
+
+Command: `make -f Makefile.parley perf` at commit
+`5d21d1663ebe8d18021f45075445c5cb03c24a9b`. Environment: macOS 26.5.1
+(25F80), Neovim 0.11.7. The scenario used 5 warmups and 20 independent
+measured edits per size; elapsed values remain report-only.
+
+| phase | lines | median ms | p95 ms | ratio vs 100 | work: calls / lines / full / structure |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| edit_total | 100 | 3.58 | 3.97 | 1.00x | 12 / 801 / 6 / 0 |
+| edit_total | 1,000 | 6.06 | 8.51 | 1.69x | 1,175 / 6,817 / 4 / 0 |
+| edit_total | 5,000 | 23.79 | 25.73 | 6.64x | 7,575 / 35,617 / 4 / 0 |
+| timezone_refresh | 100 | 0.03 | 0.12 | 1.00x | 1 / 100 / 1 / 0 |
+| timezone_refresh | 1,000 | 0.30 | 0.33 | 9.20x | 1 / 1,000 / 1 / 0 |
+| timezone_refresh | 5,000 | 1.64 | 1.89 | 50.00x | 1 / 5,000 / 1 / 0 |
+| footnote_refresh | 100 | 0.12 | 0.19 | 1.00x | 1 / 100 / 1 / 0 |
+| footnote_refresh | 1,000 | 0.81 | 0.84 | 6.90x | 1 / 1,000 / 1 / 0 |
+| footnote_refresh | 5,000 | 3.89 | 3.95 | 33.31x | 1 / 5,000 / 1 / 0 |
+| decoration_redraw | 100 | 0.23 | 0.26 | 1.00x | 3 / 200 / 1 / 0 |
+| decoration_redraw | 1,000 | 1.45 | 2.44 | 6.29x | 577 / 2,408 / 1 / 0 |
+| decoration_redraw | 5,000 | 8.08 | 8.23 | 35.17x | 3,777 / 12,808 / 1 / 0 |
+| spell_typeahead | 100 | <0.01 | 0.04 | 1.00x | 1 / 1 / 0 / 0 |
+| spell_typeahead | 1,000 | <0.01 | 0.03 | 2.17x | 1 / 1 / 0 / 0 |
+| spell_typeahead | 5,000 | <0.01 | 0.02 | 1.17x | 1 / 1 / 0 / 0 |
+
+The baseline exposes the intended current behavior before optimization:
+timezone and footnote refreshes perform full-buffer reads, and decoration work
+and latency grow sharply with document size. `ARCH-PURPOSE`: these observed
+proportional/full reads are the costs subsequent tasks must remove.
