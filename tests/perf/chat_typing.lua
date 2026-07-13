@@ -79,6 +79,11 @@ function M.assert_edit_observed(observed)
     end
 end
 
+function M.select_edit_observer(capture_events, capture_factory, default_factory)
+    if capture_events then return capture_factory() end
+    return default_factory()
+end
+
 function M.new_report(environment)
     return harness.new_report(environment)
 end
@@ -198,14 +203,22 @@ function M.measure_edit_sample(scenario, opts, done)
                 callback = function() text_changed_i = text_changed_i + 1 end })
             local line_reader = require("parley.line_reader")
             local counter = M.new_counter()
-            local read_events = {}
             local decoration_redraw = false
             line_reader.clear_buffer(buf)
-            local token = line_reader.set_observer(buf, function(event)
-                counter:observe(event)
-                if opts.capture_events then read_events[#read_events + 1] = vim.deepcopy(event) end
-                if event.phase == "decoration_redraw" then decoration_redraw = true end
+            local observer, read_events = M.select_edit_observer(opts.capture_events, function()
+                local captured = {}
+                return function(event)
+                    counter:observe(event)
+                    captured[#captured + 1] = vim.deepcopy(event)
+                    if event.phase == "decoration_redraw" then decoration_redraw = true end
+                end, captured
+            end, function()
+                return function(event)
+                    counter:observe(event)
+                    if event.phase == "decoration_redraw" then decoration_redraw = true end
+                end, nil
             end)
+            local token = line_reader.set_observer(buf, observer)
             local started = vim.uv.hrtime()
             feed("X", "t")
             poll(function()

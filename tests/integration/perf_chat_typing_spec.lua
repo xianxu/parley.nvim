@@ -75,6 +75,20 @@ describe("chat typing performance scenario", function()
         line_reader.clear_buffer(buf)
     end)
 
+    it("keeps capture logic out of the default timed observer", function()
+        local capture_factory_called = false
+        local default = function() end
+        local observer, captured = chat_typing.select_edit_observer(false, function()
+            capture_factory_called = true
+            error("default observer reached capture logic")
+        end, function()
+            return default, nil
+        end)
+        assert.is_false(capture_factory_called)
+        assert.equals(default, observer)
+        assert.is_nil(captured)
+    end)
+
     it("rejects missing observer conditions with useful timeout diagnostics", function()
         local ok, err = pcall(chat_typing.assert_edit_observed, {
             changedtick = false, text_changed_i = 0, insert_mode = false, decoration_redraw = false,
