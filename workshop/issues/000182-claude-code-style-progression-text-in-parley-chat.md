@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-07-10
 updated: 2026-07-12
-estimate_hours:
+estimate_hours: 4.62
 started: 2026-07-12T21:56:40-07:00
 ---
 
@@ -138,13 +138,56 @@ place to show pending work.
 - Pure timing/state tests, real-entry-point chat and definition integration
   tests, atlas updates, and the full `make test` suite pass.
 
+## Estimate
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: issue-spec design=1.20 impl=0.08
+item: lua-neovim design=0.40 impl=0.60
+item: lua-neovim design=0.30 impl=0.50
+item: lua-neovim design=0.30 impl=0.40
+item: atlas-docs design=0.10 impl=0.08
+item: milestone-review design=0.10 impl=0.20
+design-buffer: 0.15
+total: 4.62
+```
+
+Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md`
+against `baseline-v3.1.md`. Method A only. The three `lua-neovim` primitives
+separate chat response presentation, drain-safe task/dispatcher transport
+coordination, and Definition's selection-anchored lifecycle; implementation
+values already apply v3.1's 40% AI-paired ship-wall-clock scale.
+
 ## Plan
 
-- [ ] Write and approve the durable implementation plan.
-- [ ] Implement the approved plan with tests and update the atlas.
-- [ ] Run the full verification and close through the SDLC gates.
+- [ ] Approve the durable plan at `workshop/plans/000182-claude-code-style-progression-text-in-parley-chat-plan.md`.
+- [ ] Build the pure chat presentation reducer with exhaustive event-order tests.
+- [ ] Add separate raw-SSE activity and post-start transport-error callbacks.
+- [ ] Replace the buffer-backed web spinner with the extmark-backed chat adapter.
+- [ ] Add Definition's immediate selection spinner and generalized skill terminal cleanup.
+- [ ] Update README/atlas/traceability and pass targeted, process, mapped, and full verification.
+- [ ] Close, publish, and merge through the SDLC gates.
 
 ## Revisions
+
+### 2026-07-13T00:13:49-07:00 — plan review corrections
+
+Made subprocess draining an explicit production contract in `tasker.run`, added
+injected clock/scheduler seams for deterministic adapter tests, assigned
+semantic status rendering to the chat adapter, wired global user Stop to cancel
+all sessions before process termination, and moved invalid-buffer Definition
+cleanup ahead of completion-time Neovim access. Recalibrated the estimate from
+4.09 to 4.62 hours by replacing the generic refactor item with a third focused
+Lua/Neovim primitive for transport lifecycle work.
+
+### 2026-07-13T00:07:30-07:00 — implementation plan
+
+Added the calibrated v3.1 estimate and replaced the workflow placeholders with
+the concrete durable-plan tasks. The plan adds a real curl/SSE process fixture
+after code exploration found that dispatcher currently has neither raw-event
+activity nor a post-start transport terminal; both are required to implement
+the approved partial-output failure contract faithfully.
 
 ### 2026-07-12T23:53:24-07:00 — fresh-eyes spec review
 
@@ -175,3 +218,19 @@ The first independent review found ambiguous eligibility, tool-transition,
 partial-output, tie-breaking, and Definition cancellation contracts. The spec
 now classifies each path and preserves staged real output before a provider
 error while discarding it only after cancellation or lost transcript ownership.
+
+### 2026-07-13 — durable plan drafted
+
+The 520-line implementation plan decomposes the work into a pure reducer,
+dispatcher terminal coordination, chat extmark adapter, real chat wiring,
+Definition terminal ownership, and documentation/verification. The estimate is
+4.62 focused ship-hours under estimate-logic-v3.1, including the completed
+brainstorm/spec and one SDLC boundary review.
+
+### 2026-07-13 — plan review revision
+
+The first plan review found that dispatcher correctness depends on tasker
+draining pipes after process exit and that timer/cancellation/invalid-buffer
+ownership needed explicit seams. The revised plan covers both EOF/exit orders,
+uses injected production-shaped scheduling, cancels sessions before global
+process Stop, and guarantees Definition terminal cleanup before buffer access.
