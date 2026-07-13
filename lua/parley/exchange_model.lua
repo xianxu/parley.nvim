@@ -41,6 +41,15 @@ Model.__index = Model
 
 local M = {}
 
+local function last_nonempty_block_index(exchange)
+    for i = #exchange.blocks, 1, -1 do
+        if exchange.blocks[i].size > 0 then
+            return i
+        end
+    end
+    return nil
+end
+
 --- Create a new empty model.
 --- @param header_lines integer  number of header lines (e.g. 4 for ---/topic/file/---)
 --- @return Model
@@ -163,18 +172,24 @@ function Model:block_end(k, b)
     return self:block_start(k, b) + self.exchanges[k].blocks[b].size - 1
 end
 
+--- 0-indexed last line of the final visible block, or nil if none is visible.
+function Model:last_nonempty_block_end(k)
+    local block_index = last_nonempty_block_index(self.exchanges[k])
+    if not block_index then
+        return nil
+    end
+    return self:block_end(k, block_index)
+end
+
 --- 0-indexed buffer line where the NEXT block would be inserted
 --- (after all existing blocks + margin).
 function Model:append_pos(k)
-    local n = #self.exchanges[k].blocks
-    if n == 0 then
+    if #self.exchanges[k].blocks == 0 then
         return self:exchange_start(k)
     end
-    -- Find the last non-empty block
-    for i = n, 1, -1 do
-        if self.exchanges[k].blocks[i].size > 0 then
-            return self:block_end(k, i) + 1 + MARGIN
-        end
+    local last_end = self:last_nonempty_block_end(k)
+    if last_end then
+        return last_end + 1 + MARGIN
     end
     -- All blocks are empty — append at exchange start + margin
     return self:exchange_start(k) + MARGIN

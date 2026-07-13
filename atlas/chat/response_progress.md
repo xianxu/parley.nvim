@@ -14,8 +14,9 @@ One `chat_pending` session owns one dispatched chat leg:
    remote-tool status received in that window is delivered normally, so fast
    responses never show pending copy. Raw transport activity is not visible
    output and does not end the wait.
-2. A still-silent leg shows a virtual line below its `🤖:` response header,
-   initially in the form `⠙ brewing`. The glyph animates from
+2. A still-silent fresh leg shows a virtual line below its `🤖:` response
+   header; a recursive tool leg starts below the last existing answer/tool/result
+   block. The line initially takes the form `⠙ brewing`. The glyph animates from
    `progress.SPINNER`; SSE/JSONL activity and 15 seconds of transport idleness
    rotate the playful verb independently.
 3. Once shown, the line remains visible for at least one second. Visible output
@@ -23,10 +24,11 @@ One `chat_pending` session owns one dispatched chat leg:
    deadline Parley removes the playful line and releases all staged output once;
    subsequent output streams normally. With no visible output, the playful line
    remains rather than returning to silence.
-4. Meaningful provider progress uses the same extmark after release. Reasoning
-   details and remote-tool status therefore replace the playful copy without
-   becoming transcript text, while answer chunks continue through the ordinary
-   stream writer.
+4. Meaningful provider progress uses the same extmark after release. Each
+   ordinary stream write synchronously relocates that mark below its final
+   written line before the writer yields. Reasoning details and remote-tool
+   status therefore replace the playful copy without becoming transcript text
+   and remain at the current generation tip as answer chunks arrive.
 
 `chat_presentation` is the pure reducer for deadlines, staging, terminal
 decisions, and provider-detail accumulation. `chat_pending` is the Neovim IO
@@ -37,8 +39,15 @@ renders the reducer's actions, and owns all timers and the extmark.
 
 The pending/status line is an `invalidate=true` extmark with `virt_lines`; it
 never enters Markdown, the exchange model, undo history, saved files, parser
-input, or a future prompt. It is anchored to the durable response-header line
-owned by the exchange model. The independent chat lease decides whether that
+input, or a future prompt. Its presentation anchor moves with the generation
+tip: the response header before fresh content, the final visible block before a
+recursive leg, and the stream writer's tracked last line after every write. The
+writer reports that extmark-adjusted row after buffer/model growth, and
+`chat_pending` repairs a replacement-invalidated visible mark with the same ID
+and text in that same scheduled callback.
+
+The independent chat lease remains anchored to the durable response-header
+line and never follows the replaceable stream line. It decides whether that
 header still owns the in-flight response. Deleting or invalidating the header
 therefore cancels the session and suppresses late writes.
 
@@ -89,6 +98,7 @@ retain the detached luabar progress UI by default.
 - `lua/parley/chat_presentation.lua` — pure response-presentation reducer.
 - `lua/parley/chat_pending.lua` — main-loop timer/extmark adapter and registry.
 - `lua/parley/chat_respond.lua` — eligible initial/recursive leg integration.
+- `lua/parley/exchange_model.lua` — pure recursive initial-tip query.
 - `lua/parley/dispatcher.lua`, `lua/parley/tasker.lua`, `lua/parley/vault.lua` —
   activity, drained terminal, HTTP failure, and pre-start failure boundaries.
 - `lua/parley/selection_spinner.lua`, `lua/parley/skill_invoke.lua` — immediate

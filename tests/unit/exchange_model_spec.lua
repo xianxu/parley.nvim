@@ -29,6 +29,32 @@ describe("exchange_model: single exchange, question only", function()
 end)
 
 describe("exchange_model: single exchange with blocks", function()
+    it("reports the last non-empty block end through trailing empty blocks", function()
+        local m = em.new(4)
+        m:add_exchange(1)
+        m:add_block(1, "agent_header", 1)
+        m:add_block(1, "text", 3)
+        m:add_block(1, "stream_placeholder", 0)
+
+        assert.equals(11, m:last_nonempty_block_end(1))
+    end)
+
+    it("reports the only non-empty block end", function()
+        local m = em.new(4)
+        m:add_exchange(1)
+        m:add_block(1, "stream_placeholder", 0)
+
+        assert.equals(5, m:last_nonempty_block_end(1))
+    end)
+
+    it("returns nil when an exchange has no non-empty blocks", function()
+        local m = em.new(4)
+        m:add_exchange(0)
+        m:add_block(1, "stream_placeholder", 0)
+
+        assert.is_nil(m:last_nonempty_block_end(1))
+    end)
+
     it("agent_header block starts after question + margin", function()
         local m = em.new(4)
         m:add_exchange(1)

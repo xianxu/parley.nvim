@@ -101,11 +101,11 @@ v3.1 AI-paired 40% values.
 ## Plan
 
 - [x] Approve the durable implementation plan and calibrated estimate.
-- [ ] Add failing adapter and real-entry regressions for fresh, recursive, and
+- [x] Add failing adapter and real-entry regressions for fresh, recursive, and
   streaming tip movement.
-- [ ] Report the tracked last line from the stream writer and move visible
+- [x] Report the tracked last line from the stream writer and move visible
   progress through the serialized chat adapter.
-- [ ] Update the response-progress atlas and pass targeted/full verification.
+- [x] Update the response-progress atlas and pass targeted/full verification.
 - [ ] Close, publish, and merge through the SDLC gates.
 
 ## Log
@@ -144,3 +144,32 @@ The SDLC plan-quality gate then found an `ARCH-DRY`/`ARCH-PURE` issue in the
 planned recursive lookup: `chat_respond` would have repeated exchange-model
 layout traversal. The plan now adds a semantic, pure model query with unit tests
 and makes the response IO shell consume it.
+
+### 2026-07-13 — implementation and verification
+
+TDD RED established the absent contracts: `last_nonempty_block_end` was missing,
+`chat_pending` had no synchronous `tip_written` operation, and the stream
+handler did not report its tracked final row. GREEN added the pure model query,
+same-ID extmark repair inside the scheduled writer callback, fresh/recursive
+initial anchors, and writer-owned row reporting after buffer/model growth.
+
+Real-buffer regressions now cover hidden first reveal at the moved tip, visible
+replacement repair with stable ID/text/timers/reducer state, queued-frame
+ordering, staged FIFO plus exact-once completion, edits above a multi-line
+stream, and recursive placement after tool/result content. `ARCH-DRY` keeps the
+last-visible-block traversal in `exchange_model`; `ARCH-PURE` leaves the temporal
+reducer unchanged and confines extmark mutation to the Neovim adapter.
+
+Verification passed:
+
+- `make -f Makefile.local test-spec SPEC=chat/response_progress`
+- `make -f Makefile.local test-spec SPEC=chat/exchange_model`
+- `make -f Makefile.local test JOBS=1` — lint clean; all unit, architecture,
+  and integration specs passed
+- `git diff --check`
+
+The first parallel full-suite run exposed a pre-existing cross-test filesystem
+race in `tools_builtin_find_spec.lua`: its `find .` can traverse a transient
+directory while another unit process deletes it. The test passed alone, the
+affected files have no #183 diff, and the serialized full run passed without
+altering that unrelated surface.

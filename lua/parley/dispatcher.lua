@@ -575,8 +575,11 @@ D.create_handler = function(buf, win, line, first_undojoin, prefix, cursor, on_l
 		if on_lines_changed and delta > 0 then
 			on_lines_changed(delta)
 		end
+		local end_line = first_line + finished_lines + 1
+		qt.first_line = first_line
+		qt.last_line = end_line - 1
 		if opts.after_write then
-			opts.after_write(qid, chunk, delta)
+			opts.after_write(qid, chunk, delta, end_line - 1)
 		end
 		pending_line = new_pending
 		helpers.undojoin(buf)
@@ -584,10 +587,6 @@ D.create_handler = function(buf, win, line, first_undojoin, prefix, cursor, on_l
 		for i = previous_pending_index, finished_lines do
 			vim.api.nvim_buf_add_highlight(buf, qt.ns_id, hl_handler_group, first_line + i, 0, -1)
 		end
-
-		local end_line = first_line + finished_lines + 1
-		qt.first_line = first_line
-		qt.last_line = end_line - 1
 
 		-- move cursor to the end of the response
 		local should_move_cursor

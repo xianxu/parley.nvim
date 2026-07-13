@@ -1463,8 +1463,11 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
         -- lines (margin + content) into the buffer.
         --
         local stream_block_idx
+        local initial_progress_tip
         if is_recursion then
             -- Recursion: append streaming placeholder after existing blocks.
+            initial_progress_tip = assert(model:last_nonempty_block_end(target_idx),
+                "recursive response requires existing visible content")
             model:add_block(target_idx, "stream_placeholder", 1)
             stream_block_idx = #model.exchanges[target_idx].blocks
             local pos = model:block_start(target_idx, stream_block_idx)
@@ -1475,6 +1478,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             model:add_block(target_idx, "agent_header", 1)
             model:add_block(target_idx, "stream_placeholder", 1)
             stream_block_idx = #model.exchanges[target_idx].blocks
+            initial_progress_tip = model:block_start(target_idx, 2)
 
             -- Before inserting, clean up any trailing blank lines after
             -- the question in the buffer. The model's margin will be the
@@ -1603,7 +1607,8 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             before_write = function(_qid, _chunk)
                 return lease_valid()
             end,
-            after_write = function()
+            after_write = function(_qid, _chunk, _delta, last_written_line_0)
+                pending_session:tip_written(last_written_line_0)
                 lease_commit()
             end,
         })
@@ -1660,7 +1665,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
 
         pending_session = chat_pending.start({
             buf = buf,
-            anchor_line = model:block_start(target_idx, 2),
+            anchor_line = initial_progress_tip,
             lease_valid = lease_valid,
             emit_content = base_handler,
             choose_verb_index = function(count) return math.random(count) end,
