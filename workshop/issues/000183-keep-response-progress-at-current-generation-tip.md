@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-07-13
 updated: 2026-07-13
-estimate_hours:
+estimate_hours: 2.02
 started: 2026-07-13T13:44:15-07:00
 ---
 
@@ -80,9 +80,27 @@ describes current work at a stale spatial location.
 - Focused adapter/real-entry regressions, mapped chat tests, lint, and the full
   repository suite pass.
 
+## Estimate
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: issue-spec             design=0.75 impl=0.08
+item: lua-neovim             design=0.30 impl=0.40
+item: atlas-docs             design=0.05 impl=0.04
+item: milestone-review       design=0.10 impl=0.12
+design-buffer: 0.15
+total: 2.02
+```
+
+Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md`
+against `baseline-v3.1.md`. Method A only. The thoroughly reviewed behavioral
+spec discounts the remaining Lua design work; implementation values are the
+v3.1 AI-paired 40% values.
+
 ## Plan
 
-- [ ] Approve the durable implementation plan and calibrated estimate.
+- [x] Approve the durable implementation plan and calibrated estimate.
 - [ ] Add failing adapter and real-entry regressions for fresh, recursive, and
   streaming tip movement.
 - [ ] Report the tracked last line from the stream writer and move visible
@@ -110,3 +128,14 @@ mutable pending line. The spec now requires synchronous same-callback repair
 with the same extmark ID, defines the handler's exact tracked-row argument,
 pins recursive initial placement before the new placeholder exists, and makes
 hidden spatial fallback plus lifecycle-preservation tests explicit.
+
+### 2026-07-13 — plan review revision
+
+Fresh plan review required stronger proof at two boundaries: recursive initial
+placement now uses the canonical adapter and asserts the real virtual line, and
+the relocation suite now carries ordered staged output through invalidation and
+termination to prove FIFO plus exact-once behavior rather than relying on the
+unchanged #182 tests alone.
+
+The revised durable plan received a fresh-context `APPROVED` verdict with both
+Important findings resolved.
