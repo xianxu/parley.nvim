@@ -51,7 +51,9 @@ place to show pending work.
   repetition within one call; consecutive calls do not share verb history.
   Here an SSE event is one blank-line-delimited record: comments, `event:`, and
   multiple `data:` fields inside that record rotate the verb only once, and EOF
-  terminates one final unterminated record.
+  terminates one final unterminated record. Activity is observed at the first
+  field/comment and never delays semantic parsing; supported non-SSE JSONL
+  streams treat each complete non-empty line as one activity record.
 - Once shown, keep the playful line visible for at least one second. Buffer all
   visible server output received during that minimum window. Hide the line at
   the later of (a) the first visible output and (b) the minimum-visible
@@ -193,6 +195,13 @@ v3.1's 40% AI-paired ship-wall-clock scale.
 
 ## Revisions
 
+### 2026-07-13T00:50:00-07:00 — streaming-framing gate correction
+
+Decoupled raw activity framing from semantic delivery: the first field marks
+SSE activity, every semantic line still streams immediately, blank lines only
+reset record ownership, and non-SSE JSONL lines remain independently streamed.
+Reset revised-plan approval pending fresh review.
+
 ### 2026-07-13T00:45:35-07:00 — HTTP failure gate correction
 
 Expanded provider failure to include non-2xx HTTP responses while preserving
@@ -330,3 +339,15 @@ body-preserving provider-failure terminal.
 
 Fresh review approved the body-preserving HTTP status channel, its exclusion
 from SSE semantics, and the 401/partial-500 process coverage.
+
+### 2026-07-13 — streaming-framing gate revision
+
+The fourth SDLC plan-quality pass found that parsing a whole SSE record only at
+its blank delimiter would regress current newline-driven semantic streaming.
+The corrected plan observes activity without buffering semantic lines and adds
+GoogleAI/Ollama-style JSONL regressions.
+
+### 2026-07-13 — streaming-framing correction approved
+
+Fresh review approved independent activity framing with immediate semantic
+delivery for both SSE and newline-delimited provider streams.

@@ -211,7 +211,7 @@ Then retain the dispatcher-facing `tasker.run` terminal callback and stdout read
 assert.are.same({ "activity", "progress", "content" }, observed)
 ```
 
-Add cases for: a multiline `event:` + comment + multiple-`data:` record (one activity callback, then semantic/content callbacks in line order); two blank-line-delimited records (two activities); an EOF-terminated final record (one activity); empty keepalive separators (no activity); normal 2xx exit; curl `code ~= 0` after partial stdout with `on_error` present; HTTP 401 with an error body; partial SSE content followed by HTTP 500; and failures with `on_error=nil`. Assert the internal status trailer produces no activity/content/raw-response bytes. With `on_error`, process failure or non-2xx calls it once with retained body/status and no legacy completion. For both normal and fallback completion, assert each supplied legacy surface—`on_exit(qid)` and scheduled `callback(qt.response)`—runs exactly once and only after the three-signal drain; either surface may be nil independently.
+Add cases for: a multiline `event:` + comment + multiple-`data:` SSE record (one activity at its first field/comment while each semantic line is parsed immediately); two blank-line-delimited records (two activities); an EOF-terminated final record (one activity already emitted, no duplicate at EOF); empty keepalive separators (no activity); and two GoogleAI/Ollama-style JSONL lines without blank separators (two activities and immediate per-line content). Preserve exact `activity` before `progress`/`content` order for the first semantic line of each record. Also cover normal 2xx exit; curl `code ~= 0` after partial stdout with `on_error` present; HTTP 401 with an error body; partial SSE content followed by HTTP 500; and failures with `on_error=nil`. Assert the internal status trailer produces no activity/content/raw-response bytes. With `on_error`, process failure or non-2xx calls it once with retained body/status and no legacy completion. For both normal and fallback completion, assert each supplied legacy surface—`on_exit(qid)` and scheduled `callback(qt.response)`—runs exactly once and only after the three-signal drain; either surface may be nil independently.
 
 At the real consumer boundary, add a topic-generation transport-failure test
 that proves its supplied `on_exit` tears down the scratch buffer/spinner and
@@ -279,7 +279,7 @@ D.query = function(buf, provider, payload, handler, on_exit, callback,
     on_progress, on_abort, on_activity, on_error)
 ```
 
-Thread them into the private query. Maintain SSE record state separately from semantic line parsing: the first non-empty field/comment marks a pending record; a blank line emits one `on_activity(qid)` before parsing/delivering that record's semantic progress/content; stdout EOF emits one activity for a final unterminated record. Never emit activity per `event:`/`data:` line. Let stdout EOF process the final buffered record, metrics, and fallback content extraction, but never invoke `on_exit`, the assembled-response callback, or the transport terminal. The drain-safe `tasker.run` callback owns terminal delivery afterward and calls exactly one of:
+Thread them into the private query. Maintain SSE record ownership separately from semantic line parsing. A comment or recognized SSE field (`data`, `event`, `id`, or `retry`) emits `on_activity(qid)` only when no record is active, then marks it active; blank lines only clear that flag. Process every complete line through the existing semantic progress/content extraction immediately—never buffer semantic delivery until the blank delimiter. A non-empty line that is not SSE framing is a complete JSONL/activity record: emit activity and parse it immediately without retaining SSE record ownership. EOF does not duplicate activity for an already-started unterminated record; it only processes any final partial line using the same rule. Let stdout EOF finish metrics and fallback content extraction, but never invoke `on_exit`, the assembled-response callback, or the provider terminal. The drain-safe `tasker.run` callback owns terminal delivery afterward and calls exactly one of:
 
 ```lua
 legacy_complete(qid, qt.response)             -- code == 0
@@ -647,6 +647,13 @@ git commit -m "#182: document LLM progress presentation"
 Run `sdlc actual --issue 182`, then follow `sdlc close --help`. Close with the targeted, process-fake, mapped, full-suite, diff, and manual evidence; use only the precise atlas/project bypass if the gate says it is genuinely inapplicable. Publish once with `sdlc pr` then `sdlc merge`; verify `main` contains the branch tip.
 
 ## Revisions
+
+### 2026-07-13T00:50:00-07:00 — streaming-framing gate correction
+
+Separated raw record ownership from semantic parsing: SSE activity fires at the
+first field and blank lines only reset it, while every semantic line continues
+streaming immediately. Added newline-delimited GoogleAI/Ollama regression cases
+where each complete line is an independent activity record.
 
 ### 2026-07-13T00:45:35-07:00 — HTTP failure gate correction
 
