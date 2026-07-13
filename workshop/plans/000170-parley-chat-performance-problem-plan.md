@@ -415,32 +415,32 @@ structural bounds do.
 - Modify: `tests/integration/perf_chat_typing_spec.lua`
 - Modify: `workshop/issues/000170-parley-chat-performance-problem.md`
 
-- [ ] Map every oracle to its own named test—separate tests for `InsertLeave`,
+- [x] Map every oracle to its own named test—separate tests for `InsertLeave`,
       `TextChanged`, `BufWritePost`, `BufEnter`, `WinEnter`, scroll, second
       window, normal stream completion, recursive completion, abort-after-write,
       undo, redo, external edit, `BufUnload`, and `BufDelete`. Each synchronous
       event test asserts diagnostics are current before `nvim_exec_autocmds`
       returns; teardown tests assert invalid-buffer and obsolete callbacks no-op.
-- [ ] Use exact test names: `keeps diagnostics stale during TextChangedI`,
+- [x] Use exact test names: `keeps diagnostics stale during TextChangedI`,
       `refreshes synchronously on InsertLeave`, `... on TextChanged`, `... on
       BufWritePost`, `hydrates on BufEnter`, `hydrates on WinEnter`, `recomputes
       after scroll`, `shares structure across a second window`, `refreshes a
       normal completed API leg`, `refreshes each recursive API leg`, `refreshes
       abort after mutation`, `converges after undo`, `... after redo`, `... after
       external edit`, `clears on BufUnload`, and `clears on BufDelete`.
-- [ ] Run `make perf` on the identical baseline OS/Neovim environment and append
+- [x] Run `make perf` on the identical baseline OS/Neovim environment and append
       command, commit, OS, Neovim version, medians, p95s, scaling ratios, and
       every phase's work counters plus exact before/after comparison to `## Log`.
-- [ ] Assert the immutable structural gates verbatim: diagnostic
+- [x] Assert the immutable structural gates verbatim: diagnostic
       `full_buffer_reads==0` during `edit_total`; redraw
       `full_buffer_reads==0`; and 1,000-line `lines_requested` equals 5,000-line
       `lines_requested` separately for `edit_total` and `decoration_redraw`.
-- [ ] Also assert range bounds directly: `TextChangedI` LineReader events touch
+- [x] Also assert range bounds directly: `TextChangedI` LineReader events touch
       only the current row; decoration has the exact one-call sequence
       `[T,min(B+1+20,N))`; preceding-context reads are zero (therefore ≤200);
       reasoning lookahead reads are zero (therefore ≤500/opener); managed-footer
       discovery never issues `0,-1` or an equivalent full-span call.
-- [ ] Run every new spec explicitly:
+- [x] Run every new spec explicitly:
       `tests/unit/perf_harness_spec.lua`, `tests/unit/line_reader_spec.lua`,
       `tests/unit/diagnostic_refresh_spec.lua`,
       `tests/unit/buffer_lifecycle_spec.lua`,
@@ -452,7 +452,7 @@ structural bounds do.
       `tests/arch/performance_line_reader_spec.lua`, each via
       `nvim -n --headless --noplugin -u tests/minimal_init.vim -c
       'PlenaryBustedFile <path>' -c 'qa!'`; expect all pass.
-- [ ] Execute the command once per listed path (no wildcard/template-only
+- [x] Execute the command once per listed path (no wildcard/template-only
       evidence) using:
 
 ```bash
@@ -469,7 +469,7 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile te
 ```
 
       Paste the ten PASS results into the issue Log.
-- [ ] Commit exact tests/issue as `#170: prove chat performance lifecycle bounds`.
+- [x] Commit exact tests/issue as `#170: prove chat performance lifecycle bounds`.
 
 ### Task 8: Tooling, atlas, traceability, and verification
 

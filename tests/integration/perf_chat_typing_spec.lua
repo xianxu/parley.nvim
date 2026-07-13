@@ -129,6 +129,36 @@ describe("chat typing performance scenario", function()
         assert.matches("zero full%-buffer reads", err)
     end)
 
+    it("asserts direct range bounds for the measured TextChangedI", function()
+        local output = vim.fn.tempname() .. ".json"
+        local command = { "nvim", "-n", "--headless", "--noplugin", "-u", "tests/minimal_init.vim",
+            "-c", "lua require('tests.perf.chat_typing').run_probe(" .. vim.fn.string(output) .. ")" }
+        local raw = vim.fn.system(command)
+        assert.equals(0, vim.v.shell_error, raw)
+        local sample = vim.json.decode(table.concat(vim.fn.readfile(output), "\n"))
+        local structure_events = {}
+        local edit_reads = {}
+        for _, event in ipairs(sample.read_events) do
+            if event.operation == "structure_replace" then structure_events[#structure_events + 1] = event end
+            if event.phase == nil and (event.operation == "line" or event.operation == "lines") then
+                edit_reads[#edit_reads + 1] = event
+            end
+            assert.is_false(event.full_buffer)
+            if event.requested then
+                assert.is_false(event.requested.start_row == 0 and event.requested.end_row == -1,
+                    "managed-footer discovery must not issue a full-span read")
+            end
+        end
+        assert.equals(1, #structure_events)
+        assert.equals(1, structure_events[1].structure_rows_processed)
+        assert.equals(2, #edit_reads)
+        assert.same({ start_row = 79, end_row = 80, strict = false }, edit_reads[1].requested)
+        assert.same({ row = 79 }, edit_reads[2].requested)
+        assert.equals(1, edit_reads[1].lines_requested)
+        assert.equals(1, edit_reads[2].lines_requested)
+        vim.fn.delete(output)
+    end)
+
     it("uses real input and production attachment for an edit sample", function()
         local output = vim.fn.tempname() .. ".json"
         local command = { "nvim", "-n", "--headless", "--noplugin", "-u", "tests/minimal_init.vim",

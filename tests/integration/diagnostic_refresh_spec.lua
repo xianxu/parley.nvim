@@ -78,8 +78,11 @@ describe("diagnostic refresh lifecycle", function()
         assert.equals("unrelated", remaining[1].message)
     end)
 
-    for _, event in ipairs({ "BufUnload", "BufDelete" }) do
-        it("clears timezone and footnotes on " .. event, function()
+    for _, case in ipairs({
+        { event = "BufUnload", name = "clears on BufUnload" },
+        { event = "BufDelete", name = "clears on BufDelete" },
+    }) do
+        it(case.name, function()
             local ns = skill_render.diag_namespace()
             local existing = vim.diagnostic.get(buf, { namespace = ns })
             table.insert(existing, {
@@ -87,7 +90,7 @@ describe("diagnostic refresh lifecycle", function()
                 severity = vim.diagnostic.severity.INFO,
             })
             vim.diagnostic.set(ns, buf, existing)
-            vim.api.nvim_exec_autocmds(event, { buffer = buf })
+            vim.api.nvim_exec_autocmds(case.event, { buffer = buf })
             assert.equals(0, #vim.diagnostic.get(buf, { namespace = timezone.diag_namespace() }))
             local remaining = vim.diagnostic.get(buf, { namespace = ns })
             assert.equals(1, #remaining)

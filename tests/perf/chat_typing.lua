@@ -198,10 +198,12 @@ function M.measure_edit_sample(scenario, opts, done)
                 callback = function() text_changed_i = text_changed_i + 1 end })
             local line_reader = require("parley.line_reader")
             local counter = M.new_counter()
+            local read_events = {}
             local decoration_redraw = false
             line_reader.clear_buffer(buf)
             local token = line_reader.set_observer(buf, function(event)
                 counter:observe(event)
+                if opts.capture_events then read_events[#read_events + 1] = vim.deepcopy(event) end
                 if event.phase == "decoration_redraw" then decoration_redraw = true end
             end)
             local started = vim.uv.hrtime()
@@ -217,7 +219,8 @@ function M.measure_edit_sample(scenario, opts, done)
                 poll(function() return decoration_redraw end, "decoration_redraw", function()
                     local observed = { changedtick = true, text_changed_i = text_changed_i,
                         insert_mode = true, decoration_redraw = true,
-                        elapsed_ms = (vim.uv.hrtime() - started) / 1000000, work = counter:snapshot() }
+                        elapsed_ms = (vim.uv.hrtime() - started) / 1000000,
+                        work = counter:snapshot(), read_events = read_events }
                     line_reader.clear_observer(buf, token)
                     vim.api.nvim_del_augroup_by_id(group)
                     local insert_leave = false
@@ -241,7 +244,7 @@ end
 
 function M.run_probe(output)
     local scenario = M.open_fixture(100)
-    M.measure_edit_sample(scenario, { timeout_ms = 1000 }, function(sample, err)
+    M.measure_edit_sample(scenario, { timeout_ms = 1000, capture_events = true }, function(sample, err)
         if not sample then
             vim.fn.writefile({ tostring(err) }, output)
             vim.cmd("cquit 1")

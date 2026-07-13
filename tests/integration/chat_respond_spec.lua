@@ -128,7 +128,7 @@ describe("chat_respond: completion callback", function()
         assert.is_true(success, "chat_respond should not error: " .. tostring(err))
     end)
 
-    it("accesses headers correctly when topic is not '?'", function()
+    it("refreshes a normal completed API leg", function()
         local lifecycle = require("parley.buffer_lifecycle")
         local original_finalize = lifecycle.finalize_mutated_api_leg
         local finalize_count = 0
@@ -239,7 +239,7 @@ describe("chat_respond: completion callback", function()
         assert.is_nil(callback_error, "Completion callback should not error: " .. tostring(callback_error))
     end)
 
-    it("finalizes an aborted API leg after its response shell mutation", function()
+    it("refreshes abort after mutation", function()
         vim.fn.writefile(vim.split([[
 # topic: Abort
 - file: test.md
@@ -1294,7 +1294,7 @@ describe("chat_respond: pending request transcript drift", function()
         assert.equals(1, finalize_count, "mutated tool leg must finalize before delayed lease failure")
     end)
 
-    it("allows recursive tool resubmit when the transcript does not drift", function()
+    it("refreshes each recursive API leg", function()
         local lifecycle = require("parley.buffer_lifecycle")
         local original_finalize = lifecycle.finalize_mutated_api_leg
         local finalize_count = 0
