@@ -189,16 +189,33 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 	})
 
 	local function legacy_complete(query_id, qt)
+		local function invoke_surface(label, fn, ...)
+			if type(fn) ~= "function" then return end
+			local args = { ... }
+			local arg_count = select("#", ...)
+			local ok = xpcall(function()
+				fn(unpack(args, 1, arg_count))
+			end, function() return nil end)
+			if not ok then logger.error(provider .. " " .. label .. " failed") end
+		end
+
+		local function schedule_surface(label, fn)
+			local ok = pcall(vim.schedule, function()
+				invoke_surface(label, fn)
+			end)
+			if not ok then logger.error(provider .. " " .. label .. " scheduling failed") end
+		end
+
 		if type(on_exit) == "function" then
-			on_exit(query_id)
+			invoke_surface("on_exit", on_exit, query_id)
 			if qt.ns_id and qt.buf then
-				vim.schedule(function()
+				schedule_surface("namespace cleanup", function()
 					vim.api.nvim_buf_clear_namespace(qt.buf, qt.ns_id, 0, -1)
 				end)
 			end
 		end
 		if type(callback) == "function" then
-			vim.schedule(function()
+			schedule_surface("assembled response callback", function()
 				callback(qt.response)
 			end)
 		end

@@ -814,6 +814,70 @@ describe("dispatcher.query internals", function()
             assert.is_truthy(failure_log:find("stderr_bytes=" .. #stderr_prefix, 1, true))
         end)
 
+        it("I12: throwing on_exit cannot block namespace cleanup or assembled callback", function()
+            local marker = "RESPONSE_SECRET_MARKER"
+            local body = 'data: {"choices":[{"delta":{"content":"' .. marker .. '"}}]}\n'
+            local callback_calls = 0
+            local exit_calls = 0
+            local logs = {}
+            local buf = vim.api.nvim_create_buf(false, true)
+            local ns = vim.api.nvim_create_namespace("parley-dispatcher-throwing-exit")
+            vim.api.nvim_buf_set_extmark(buf, ns, 0, 0, {})
+            local original_error = logger.error
+            logger.error = function(message) table.insert(logs, tostring(message)) end
+
+            dispatcher.query(buf, "openai", { model = "gpt-4", messages = {} }, function() end,
+                function()
+                    exit_calls = exit_calls + 1
+                    error("on_exit exploded")
+                end,
+                function(response)
+                    callback_calls = callback_calls + 1
+                    assert.equals(marker, response)
+                end)
+            local qt = tasker.get_query(captured_qid)
+            qt.ns_id = ns
+            captured_out_reader(nil, body)
+            captured_out_reader(nil, nil)
+            local ok, err = pcall(captured_terminal, 0, 0, body, status_stderr("200"), nil)
+            local completed = vim.wait(100, function()
+                return callback_calls == 1 and #vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, {}) == 0
+            end, 5)
+
+            logger.error = original_error
+            pcall(vim.api.nvim_buf_delete, buf, { force = true })
+            assert.is_true(ok, tostring(err))
+            assert.is_true(completed)
+            assert.equals(1, exit_calls)
+            assert.equals(1, callback_calls)
+            local combined = table.concat(logs, "\n")
+            assert.is_truthy(combined:find("on_exit", 1, true))
+            assert.is_falsy(combined:find(marker, 1, true))
+            assert.is_true(#combined < 512)
+        end)
+
+        it("I13: contains and logs a throwing scheduled assembled callback", function()
+            local callback_calls = 0
+            local logs = {}
+            local original_error = logger.error
+            logger.error = function(message) table.insert(logs, tostring(message)) end
+            dispatcher.query(nil, "openai", { model = "gpt-4", messages = {} }, function() end,
+                nil, function()
+                    callback_calls = callback_calls + 1
+                    error("assembled callback exploded")
+                end)
+            captured_out_reader(nil, nil)
+            captured_terminal(0, 0, "", status_stderr("200"), nil)
+            assert.is_true(vim.wait(100, function() return callback_calls == 1 end, 5))
+            vim.wait(20, function() return false end, 5)
+            logger.error = original_error
+
+            assert.equals(1, callback_calls)
+            local combined = table.concat(logs, "\n")
+            assert.is_truthy(combined:find("assembled response callback", 1, true))
+            assert.is_true(#combined < 512)
+        end)
+
         for _, terminal_kind in ipairs({ "success", "error_fallback" }) do
             for _, surfaces in ipairs({
                 { name = "on_exit only", on_exit = true },
