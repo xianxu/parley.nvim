@@ -48,6 +48,22 @@ and lowercase copy reads less like a polished status label.
 - [ ] Replace the private pool and update deterministic rendering assertions.
 - [ ] Complete mapped/full verification and prepare the change for close review and publication.
 
+## Estimate
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: issue-spec       design=0.08 impl=0.02
+item: lua-neovim       design=0.06 impl=0.14
+item: milestone-review design=0.07 impl=0.08
+design-buffer: 0.05
+total: 0.50
+```
+
+Derived from the provisional repo-local v3.1 calibration. The change reuses
+the established pending adapter and deterministic runtime; implementation is a
+private data replacement plus an exact table-driven integration oracle.
+
 ## Log
 
 ### 2026-07-13
