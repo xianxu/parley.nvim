@@ -241,6 +241,41 @@ describe("chat presentation controller", function()
         }, actions)
     end)
 
+    it("remembers a nil-payload completion until the minimum deadline", function()
+        local showing = select(1, reveal(initial()))
+        local deferred, immediate = transition(showing, {
+            type = "complete", now_ms = 1100, completion = nil,
+        })
+        local finished, actions = transition(deferred, { type = "minimum_due", now_ms = 2000 })
+
+        assert.are.equal("showing", deferred.phase)
+        assert.is_true(deferred.completion_pending)
+        assert.are.same({}, immediate)
+        assert.are.equal("finished", finished.phase)
+        assert.are.same({
+            { type = "hide" },
+            { type = "continue_completion" },
+        }, actions)
+    end)
+
+    it("finishes a nil-payload completion at minimum and ignores later callbacks", function()
+        local showing = select(1, reveal(initial()))
+        local finished, actions = transition(showing, {
+            type = "complete", now_ms = 2000, completion = nil,
+        })
+        local later, later_actions = transition(finished, {
+            type = "content", now_ms = 2000, qid = "q", chunk = "late",
+        })
+
+        assert.are.equal("finished", finished.phase)
+        assert.are.same({
+            { type = "hide" },
+            { type = "continue_completion" },
+        }, actions)
+        assert.are.equal(finished, later)
+        assert.are.same({}, later_actions)
+    end)
+
     it("provider failure with ownership bypasses minimum and preserves staged output", function()
         local showing = select(1, reveal(initial()))
         local staged = select(1, transition(showing, {

@@ -75,6 +75,7 @@ local function finish(state)
     local finished = copy_state(state)
     finished.phase = "finished"
     finished.staged = {}
+    finished.completion_pending = nil
     finished.pending_completion = nil
     return finished
 end
@@ -104,10 +105,10 @@ local function rotate_verb(state, event)
     return rotated, { { type = "show_playful", verb = rotated.verb } }
 end
 
-local function flush_showing(state, completion)
+local function flush_showing(state, completion, completion_pending)
     local actions = { { type = "hide" } }
     append_staged_actions(actions, state.staged)
-    if completion ~= nil then
+    if completion_pending then
         actions[#actions + 1] = continuation_action(completion)
         return finish(state), actions
     end
@@ -212,15 +213,16 @@ M.transition = function(state, event)
     end
     if event_type == "complete" then
         if now_ms >= state.minimum_at then
-            return flush_showing(state, event.completion)
+            return flush_showing(state, event.completion, true)
         end
         local deferred = copy_state(state)
+        deferred.completion_pending = true
         deferred.pending_completion = event.completion
         return deferred, {}
     end
     if event_type == "minimum_due" and now_ms >= state.minimum_at then
-        if state.pending_completion ~= nil then
-            return flush_showing(state, state.pending_completion)
+        if state.completion_pending then
+            return flush_showing(state, state.pending_completion, true)
         end
         if #state.staged > 0 then
             return flush_showing(state)
