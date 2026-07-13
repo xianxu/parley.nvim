@@ -191,7 +191,7 @@ v3.1's 40% AI-paired ship-wall-clock scale.
 - [x] Build the pure chat presentation reducer with exhaustive event-order tests.
 - [x] Add separate raw-SSE activity and post-start transport-error callbacks.
 - [x] Replace the buffer-backed web spinner with the extmark-backed chat adapter.
-- [ ] Add Definition's immediate selection spinner and generalized skill terminal cleanup.
+- [x] Add Definition's immediate selection spinner and generalized skill terminal cleanup.
 - [ ] Update README/atlas/traceability and pass targeted, process, mapped, and full verification.
 - [ ] Close, publish, and merge through the SDLC gates.
 
@@ -420,3 +420,15 @@ Stop/stale/deleted discard cleanup, and force preflight. A real loopback curl/SS
 fixture verifies delayed success plus broken, HTTP 401, and partial HTTP 500
 failures; it passed 12 consecutive stress runs. `ARCH-PURPOSE` drove the full
 entry matrix, while `ARCH-DRY` moved deadline correction into the shared adapter.
+
+### 2026-07-13 — Task 5 complete
+
+Definition now renders an immediate selection-anchored ` ⠙` virtual spinner,
+suppresses the detached luabar, and removes the transient mark before writing
+the durable footnote. The generalized skill invocation terminal is exact-once
+across synchronous setup failures, dispatcher abort/error, completion, cancel,
+late delivery, and invalid buffers while existing Review and Voice Apply callers
+retain their detached progress default. Fresh reviews approved the boundary
+after malformed tool completion and every Definition-owned failure seam were
+covered. `ARCH-DRY` centralizes terminal cleanup; `ARCH-PURPOSE` keeps the
+selection spinner specific to Definition's natural inline anchor.

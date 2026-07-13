@@ -512,21 +512,21 @@ git commit -m "#182: stage slow LLM chat output behind playful progress"
 - Modify: `tests/integration/define_spec.lua:193-412`
 - Modify: `tests/integration/cliproxy_caller_teardown_spec.lua`
 
-- [ ] **Step 1: Write RED skill lifecycle tests**
+- [x] **Step 1: Write RED skill lifecycle tests**
 
 Assert `opts.detached_progress=false` never activates `progress.is_active()`, while the default still activates it for existing callers. Add one table of terminal paths: no file, already running, source failure, no agent, success, pre-query abort, post-start transport error through dispatcher argument 10, explicit `skill_invoke.cancel`, buffer deletion before scheduled completion, and late callback after cancellation. For every row assert `on_terminal` runs exactly once; on normal completion/abort/transport error it runs before `on_done`; repeated finish/cancel is harmless. On transport error, assert detached progress stops before delivery and no later `on_exit` can deliver a second terminal.
 
-- [ ] **Step 2: Run `skill_invoke_spec.lua` and verify RED**
+- [x] **Step 2: Run `skill_invoke_spec.lua` and verify RED**
 
 Expected: suppression and terminal-hook assertions fail because progress is unconditional and cancellation only bumps generation.
 
-- [ ] **Step 3: Centralize the invocation terminal path**
+- [x] **Step 3: Centralize the invocation terminal path**
 
 Document the full opts shape and implement one once-guarded `finish(result, deliver_done)` per generation. Store the active terminal closure per buffer so `M.cancel(buf)` calls it before invalidating the generation and stopping the task. Start/stop the detached luabar only when `opts.detached_progress ~= false`; defaults remain unchanged. `finish` calls `opts.on_terminal(result)` before optional `opts.on_done(result)` and clears `_in_flight`/terminal registry exactly once. Pass dispatcher argument 10 and route its post-start transport error into `finish({ ok=false, msg=... }, true)`; because the dispatcher chooses one terminal, the normal exit callback cannot race a second delivery.
 
 At the top of scheduled completion, before reload, `nvim_buf_get_lines`, tool rendering, or decoration work, check `nvim_buf_is_valid(buf)`. An invalid buffer immediately takes the centralized terminal path with `{ok=false, msg="buffer invalid"}` and skips `on_done`; the terminal hook still runs once. Guard every remaining completion-time buffer access that can race deletion.
 
-- [ ] **Step 4: Run skill and cliproxy caller teardown specs and verify GREEN**
+- [x] **Step 4: Run skill and cliproxy caller teardown specs and verify GREEN**
 
 ```bash
 nvim -n --headless --noplugin -u tests/minimal_init.vim \
@@ -537,7 +537,7 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim \
 
 Expected: PASS; existing Review/Voice/generic luabar assertions remain green.
 
-- [ ] **Step 5: Write RED selection-spinner and real Definition entry tests**
+- [x] **Step 5: Write RED selection-spinner and real Definition entry tests**
 
 Hold the real `define_visual` query open and assert immediately:
 
@@ -550,7 +550,7 @@ detached progress is inactive
 
 Then cover success (spinner removed before `CVR[^cvr]` edit), no tool output, source/no-agent synchronous failure, pre-query abort, post-start transport failure, missing vault secret, subprocess busy/spawn rejection, explicit cancel, stale selection, and deleted buffer. Drive the secret/launch cases through real `define_visual` and real dispatcher while replacing only the failing vault/task boundary; assert the terminal hook removes the inline spinner exactly once, detached progress remains inactive, and no footnote is written. Every non-success leaves no footnote and no timer/extmark.
 
-- [ ] **Step 6: Implement `selection_spinner.start` and Definition wiring**
+- [x] **Step 6: Implement `selection_spinner.start` and Definition wiring**
 
 Create a dedicated namespace and `virt_text_pos="inline"` mark at `{row=er-1, col=ec}` with `invalidate=true`. Initialize the canonical spinner tick to `1`, so the synchronous first render is exactly `progress.frame(1) == "⠙"`; subsequent timer callbacks increment and wrap it. Return an idempotent stop closure that always stops/closes its 90 ms timer before attempting `pcall(nvim_buf_del_extmark, ...)`. Each animation callback checks buffer validity first and invokes that stop closure when invalid, so buffer deletion cannot leave the timer alive.
 
@@ -568,7 +568,7 @@ skill_invoke.invoke(buf, manifest, { phrase = phrase }, {
 
 Guard `render_definition` against an invalid buffer before reading lines.
 
-- [ ] **Step 7: Run Definition tests and verify GREEN**
+- [x] **Step 7: Run Definition tests and verify GREEN**
 
 ```bash
 nvim -n --headless --noplugin -u tests/minimal_init.vim \
@@ -577,7 +577,7 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim \
 
 Expected: PASS; the durable footnote/undo/projection tests remain unchanged after the transient spinner disappears.
 
-- [ ] **Step 8: Commit Definition progress**
+- [x] **Step 8: Commit Definition progress**
 
 ```bash
 git add lua/parley/selection_spinner.lua lua/parley/skill_invoke.lua lua/parley/init.lua \
@@ -652,6 +652,15 @@ git commit -m "#182: document LLM progress presentation"
 Run `sdlc actual --issue 182`, then follow `sdlc close --help`. Close with the targeted, process-fake, mapped, full-suite, diff, and manual evidence; use only the precise atlas/project bypass if the gate says it is genuinely inapplicable. Publish once with `sdlc pr` then `sdlc merge`; verify `main` contains the branch tip.
 
 ## Revisions
+
+### 2026-07-13T03:18:36-07:00 — Task 5 execution
+
+Checked off Definition's immediate inline progress after 16 skill lifecycle, 23
+real Definition, and 5 cliproxy teardown cases passed two fresh review loops.
+Review-driven cases now protect the entire scheduled completion pipeline and
+prove source, agent, malformed output, no-tool, transport, launch, cancel,
+stale-selection, and deleted-buffer terminals remove the inline timer/extmark
+exactly once before any durable footnote delivery.
 
 ### 2026-07-13T02:58:16-07:00 — Task 4 execution
 
