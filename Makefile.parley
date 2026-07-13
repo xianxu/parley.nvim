@@ -1,7 +1,7 @@
 # Parley-specific targets (Lua/Neovim plugin) — include from your project Makefile:
 #   include Makefile.parley
 
-.PHONY: help-parley test test-unit test-integration test-spec test-changed lint fixtures model-check model-checker test-clean-env
+.PHONY: help-parley test test-unit test-integration test-spec test-changed perf lint fixtures model-check model-checker test-clean-env
 
 help-parley:
 	@printf '%s\n' \
@@ -11,6 +11,7 @@ help-parley:
 	"  make test-integration Run integration tests sequentially" \
 	"  make test-spec SPEC=  Run tests for a specific spec key" \
 	"  make test-changed     Run tests for changed spec files" \
+	"  make perf             Report real headless chat-typing performance" \
 	"  make lint             Run luacheck on lua/ and tests/" \
 	"  make fixtures         Refresh SSE fixture files from real APIs" \
 	"  make model-check      Check latest model offerings from providers" \
@@ -160,6 +161,14 @@ test-changed:
 		echo "One or more shell tests failed"; \
 		exit 1; \
 	fi
+
+# Report-only real-Neovim chat typing benchmark. Elapsed timings never gate CI;
+# scenario validity and structural work accounting still fail loudly.
+PERF_OUTPUT ?= $(TEST_TMP)/perf/parley-chat-typing.json
+perf:
+	@$(PREP_TEST_ENV)
+	@$(TEST_ENV) PERF_OUTPUT="$(PERF_OUTPUT)" nvim -n --headless --noplugin -u tests/minimal_init.vim \
+	  -c "lua require('tests.perf.chat_typing').start()"
 
 # Run static analysis for Lua code and tests.
 lint:

@@ -127,15 +127,18 @@ end
 --- Rehydrate persisted managed markdown footnotes into Parley diagnostics.
 --- Existing non-footnote diagnostics in the shared namespace are preserved.
 --- @param buf number|nil
-function M.refresh_footnote_diagnostics(buf)
+--- @param opts table|nil optional { reader = LineReader }
+function M.refresh_footnote_diagnostics(buf, opts)
     ensure_namespaces()
     buf = buf or vim.api.nvim_get_current_buf()
     if not vim.api.nvim_buf_is_valid(buf) then
         return
     end
 
+    opts = opts or {}
     local define = require("parley.define")
-    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    local reader = opts.reader or require("parley.line_reader").for_buffer(buf)
+    local lines = reader:lines(0, -1, false)
     local width = M.diagnostic_wrap_width()
     local diagnostics = {}
     vim.api.nvim_buf_clear_namespace(buf, footnote_hl_ns_id, 0, -1)
@@ -160,6 +163,23 @@ function M.refresh_footnote_diagnostics(buf)
         })
     end
 
+    vim.diagnostic.set(diag_ns_id, buf, diagnostics)
+end
+
+--- Clear only managed-footnote diagnostics/highlights. Other diagnostics in
+--- the shared skill namespace belong to live edit explanations and survive.
+function M.clear_footnote_diagnostics(buf)
+    ensure_namespaces()
+    if not vim.api.nvim_buf_is_valid(buf) then
+        return
+    end
+    vim.api.nvim_buf_clear_namespace(buf, footnote_hl_ns_id, 0, -1)
+    local diagnostics = {}
+    for _, existing in ipairs(vim.diagnostic.get(buf, { namespace = diag_ns_id })) do
+        if not is_footnote_diagnostic(existing) then
+            table.insert(diagnostics, existing)
+        end
+    end
     vim.diagnostic.set(diag_ns_id, buf, diagnostics)
 end
 

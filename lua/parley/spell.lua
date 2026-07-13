@@ -93,7 +93,10 @@ function M.suggest(opts)
 	local min_word = opts.min_word or 4
 	local max_suggest = opts.max_suggest or 9
 
-	local line = vim.api.nvim_get_current_line()
+	local buf = vim.api.nvim_get_current_buf()
+	local reader = opts.reader or require("parley.line_reader").for_buffer(buf)
+	local row = vim.api.nvim_win_get_cursor(0)[1] - 1
+	local line = reader:line(row)
 	local col = vim.fn.col(".") - 1
 	local start, word = M.word_at_cursor(line, col)
 	if not word or #word < min_word then

@@ -60,6 +60,7 @@ end)
 
 describe("arch: pure files have no nvim state interaction", function()
     local PURE_FILES = {
+        "lua/parley/highlight_structure.lua",
         "lua/parley/tools/types.lua",
         "lua/parley/tools/serialize.lua",
         "lua/parley/tools/init.lua",
@@ -75,4 +76,15 @@ describe("arch: pure files have no nvim state interaction", function()
             })
         end)
     end
+end)
+
+describe("arch: managed footnote grammar has one predicate", function()
+    it("has no private footnote-definition predicate shadows", function()
+        arch.assert_pattern_scoping({
+            pattern = "is_footnote_definition_line",
+            scope = "lua/parley/**/*.lua",
+            allow_only_in = {},
+            rationale = "ARCH-DRY: define.is_footnote_line owns managed footnote recognition",
+        })
+    end)
 end)

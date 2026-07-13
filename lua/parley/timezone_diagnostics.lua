@@ -142,7 +142,8 @@ function M.refresh_buffer(buf, opts)
     end
 
     opts = opts or {}
-    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    local reader = opts.reader or require("parley.line_reader").for_buffer(buf)
+    local lines = reader:lines(0, -1, false)
     local diagnostics = M.build_diagnostics(lines, {
         to_local = opts.to_local or real_local_time,
     })

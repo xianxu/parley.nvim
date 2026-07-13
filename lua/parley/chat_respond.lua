@@ -76,15 +76,12 @@ local function trim(str)
     return (str or ""):gsub("^%s*(.-)%s*$", "%1")
 end
 
-local function is_footnote_definition_line(line)
-    return (line or ""):match("^%[%^[^%]]+%]:") ~= nil
-end
-
 local function trailing_footnote_boundary(lines, search_start_0)
+    local is_footnote_line = require("parley.define").is_footnote_line
     local search_start = (search_start_0 or 0) + 1
     local footnote_start = nil
     for i = search_start, #lines do
-        if is_footnote_definition_line(lines[i]) then
+        if is_footnote_line(lines[i]) then
             footnote_start = i
             break
         end
@@ -95,7 +92,7 @@ local function trailing_footnote_boundary(lines, search_start_0)
 
     for i = footnote_start, #lines do
         local line = lines[i] or ""
-        if line:match("%S") and not is_footnote_definition_line(line) then
+        if line:match("%S") and not is_footnote_line(line) then
             return nil
         end
     end
@@ -110,6 +107,8 @@ local function trailing_footnote_boundary(lines, search_start_0)
     end
     return boundary - 1
 end
+
+M._trailing_footnote_boundary = trailing_footnote_boundary
 
 local function find_chat_header_end(lines)
     return _parley.chat_parser.find_header_end(lines)
@@ -917,7 +916,8 @@ end
 -- @param messages  table    array of {role, content} (the conversation so far)
 -- @param provider  string   provider name (e.g. "anthropic", "openai")
 -- @param model     string   model name
--- @param callback  function called with (topic_string) on completion
+-- @param callback  function called with (topic_string, nil) on success or
+--                  (nil, reason) on terminal failure
 -- @param spinner   table|nil optional {buf, find_line} — buf is the buffer to animate,
 --                  find_line() returns 0-indexed line number of the topic line (or nil to skip)
 --- Pure: drop the first `lead` messages from a built messages array, returning
@@ -1005,14 +1005,22 @@ M.generate_topic = function(messages, provider, model, callback, spinner)
     local topic_buf = vim.api.nvim_create_buf(false, true)
     local topic_handler = _parley.dispatcher.create_handler(topic_buf, nil, 0, false, "", false)
 
-    -- Abort teardown (#131): stop the topic spinner + drop the scratch buffer
-    -- if the managed cliproxy can't start, so topic-gen fails quietly (no hang).
-    local function on_abort(msg)
+    local finished = false
+    local function finish(topic, reason)
+        if finished then return end
+        finished = true
         stop_and_close_timer(spinner_timer)
         spinner_timer = nil
         if vim.api.nvim_buf_is_valid(topic_buf) then
             vim.api.nvim_buf_delete(topic_buf, { force = true })
         end
+        callback(topic, reason)
+    end
+
+    -- Abort teardown (#131): stop the topic spinner + drop the scratch buffer
+    -- if the managed cliproxy can't start, so topic-gen fails quietly (no hang).
+    local function on_abort(msg)
+        finish(nil, "abort")
         vim.notify(msg or "parley: topic generation aborted", vim.log.levels.WARN)
     end
 
@@ -1022,14 +1030,13 @@ M.generate_topic = function(messages, provider, model, callback, spinner)
         _parley.dispatcher.prepare_payload(msgs, model, provider),
         topic_handler,
         vim.schedule_wrap(function()
-            stop_and_close_timer(spinner_timer)
-            spinner_timer = nil
             local topic = vim.api.nvim_buf_get_lines(topic_buf, 0, -1, false)[1] or ""
-            vim.api.nvim_buf_delete(topic_buf, { force = true })
             topic = topic:gsub("^%s*(.-)%s*$", "%1")
             topic = topic:gsub("%.$", "")
             if topic ~= "" then
-                callback(topic)
+                finish(topic, nil)
+            else
+                finish(nil, "empty")
             end
         end),
         nil,
@@ -1546,6 +1553,18 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             stream_block_idx = stream_block_idx,
             recursion = is_recursion,
         })
+        -- Every dispatched API leg has already inserted its response shell.
+        -- Finalization is guarded so normal, recursive, and abort terminals all
+        -- converge exactly once, after their last transcript mutation.
+        local api_leg_mutated = true
+        local api_leg_finalized = false
+        local function finalize_mutated_api_leg()
+            if api_leg_finalized then
+                return
+            end
+            api_leg_finalized = true
+            require("parley.buffer_lifecycle").finalize_mutated_api_leg(buf, api_leg_mutated)
+        end
         local lease_notice_sent = false
         local function invalidate_pending_request(lease_reason)
             if not lease_notice_sent then
@@ -1787,6 +1806,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             vim.schedule(function()
                 clear_progress_indicator(nil)
                 collapse_empty_answer()
+                finalize_mutated_api_leg()
                 chat_lease.clear(buf, lease_generation)
                 vim.notify(msg or "parley: request aborted", vim.log.levels.WARN)
             end)
@@ -1801,9 +1821,11 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             vim.schedule_wrap(function(qid)
                 local qt = _parley.tasker.get_query(qid)
                 if not qt then
+                    finalize_mutated_api_leg()
                     return
                 end
                 if not lease_valid() then
+                    finalize_mutated_api_leg()
                     chat_lease.clear(buf, lease_generation)
                     return
                 end
@@ -1819,6 +1841,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                 if agent_info and agent_info.tools and #agent_info.tools > 0 then
                     local tool_loop = require("parley.tool_loop")
                     if not lease_valid() then
+                        finalize_mutated_api_leg()
                         chat_lease.clear(buf, lease_generation)
                         return
                     end
@@ -1829,6 +1852,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                     }, model, target_idx)
                     lease_commit()
                     if outcome == "recurse" then
+                        finalize_mutated_api_leg()
                         -- Re-parse the (now updated) buffer and submit
                         -- again. force=true bypasses the is_busy check
                         -- that would otherwise reject an immediate
@@ -1837,6 +1861,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                         -- callbacks still fire on the final iteration.
                         vim.schedule(function()
                             if not lease_valid() then
+                                finalize_mutated_api_leg()
                                 chat_lease.clear(buf, lease_generation)
                                 return
                             end
@@ -1881,6 +1906,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                         _parley.helpers.undojoin(buf)
                         buffer_edit.delete_lines_after(buf, exchange_end + 1, excess)
                     end) then
+                        finalize_mutated_api_leg()
                         chat_lease.clear(buf, lease_generation)
                         return
                     end
@@ -1900,6 +1926,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                         _parley.helpers.undojoin(buf)
                         buffer_edit.append_blank_at_end(buf)
                     end) then
+                        finalize_mutated_api_leg()
                         chat_lease.clear(buf, lease_generation)
                         return
                     end
@@ -1909,6 +1936,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                 local topic_generation_started = false
                 if headers.topic == "?" then
                     if not lease_valid() then
+                        finalize_mutated_api_leg()
                         chat_lease.clear(buf, lease_generation)
                         return
                     end
@@ -1922,8 +1950,14 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                     local topic_msgs = M._conversation_after_lead(messages, sys_lead + ancestor_msg_count)
                     table.insert(topic_msgs, { role = "assistant", content = qt.response })
 
-                    M.generate_topic(topic_msgs, agent_info.provider, agent_info.model, function(topic)
+                    M.generate_topic(topic_msgs, agent_info.provider, agent_info.model, function(topic, _reason)
+                        if not topic then
+                            finalize_mutated_api_leg()
+                            chat_lease.clear(buf, lease_generation)
+                            return
+                        end
                         if not lease_valid() then
+                            finalize_mutated_api_leg()
                             chat_lease.clear(buf, lease_generation)
                             return
                         end
@@ -1931,6 +1965,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                         local all_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
                         set_chat_topic_line(buf, all_lines, topic)
                         lease_commit()
+                        finalize_mutated_api_leg()
                         chat_lease.clear(buf, lease_generation)
                     end, { buf = buf, find_line = function()
                         return M.find_topic_line(buf)
@@ -1975,6 +2010,10 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                 -- Refresh interview timestamps (decoration provider handles chat highlights)
                 local interview = require("parley.interview")
                 interview.highlight_timestamps(buf)
+
+                if not topic_generation_started then
+                    finalize_mutated_api_leg()
+                end
 
                 vim.cmd("doautocmd User ParleyDone")
 

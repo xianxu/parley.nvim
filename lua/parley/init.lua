@@ -3459,7 +3459,8 @@ M.cmd.ChatPrune = function()
 				return chat_respond.find_topic_line(child_buf)
 			end }
 		end
-		chat_respond.generate_topic(topic_msgs, agent_info.provider, agent_info.model, function(topic)
+		chat_respond.generate_topic(topic_msgs, agent_info.provider, agent_info.model, function(topic, _reason)
+			if not topic then return end
 			-- Update child file's topic header
 			local cbuf = vim.fn.bufnr(new_file)
 			if cbuf ~= -1 and vim.api.nvim_buf_is_valid(cbuf) then

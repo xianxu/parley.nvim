@@ -60,155 +60,13 @@ local function stop_and_close_timer(timer)
 end
 
 local HIGHLIGHT_VIEWPORT_MARGIN = 20
-local HIGHLIGHT_CONTEXT_LINES = 200
+local structure_caches = {}
 
 local function resolve_path(path, base_dir)
     return _parley.resolve_chat_path(path, base_dir)
 end
 
 
-local function get_chat_highlight_prefix_patterns()
-    local user_prefix = _parley.config.chat_user_prefix
-    local local_prefix = _parley.config.chat_local_prefix
-    local memory_enabled = _parley.config.chat_memory and _parley.config.chat_memory.enable
-    local reasoning_prefix = memory_enabled and _parley.config.chat_memory.reasoning_prefix or "🧠:"
-    local summary_prefix = memory_enabled and _parley.config.chat_memory.summary_prefix or "📝:"
-
-    local assistant_prefix
-    if type(_parley.config.chat_assistant_prefix) == "string" then
-        assistant_prefix = _parley.config.chat_assistant_prefix
-    elseif type(_parley.config.chat_assistant_prefix) == "table" then
-        assistant_prefix = _parley.config.chat_assistant_prefix[1]
-    end
-
-    local branch_prefix = _parley.config.chat_branch_prefix or "🌿:"
-    return {
-        reasoning_pattern = "^" .. vim.pesc(reasoning_prefix),
-        reasoning_end_pattern = "^%s*" .. vim.pesc(reasoning_prefix) .. "%[END%]%s*$",
-        summary_pattern = "^" .. vim.pesc(summary_prefix),
-        user_pattern = "^" .. vim.pesc(user_prefix),
-        assistant_pattern = "^" .. vim.pesc(assistant_prefix),
-        local_pattern = "^" .. vim.pesc(local_prefix),
-        branch_pattern = "^" .. vim.pesc(branch_prefix),
-    }
-end
-
--- Hard cap on how far forward the buffer-aware lookahead will scan
--- when deciding a reasoning block's termination mode. Reasoning blocks
--- in practice are well under this; the cap exists to bound work on a
--- pathologically long buffer with no terminator.
-local REASONING_LOOKAHEAD_MAX = 500
-
--- Scan forward from a 🧠: opener at 1-indexed `from_line` in the buffer
--- to decide the block's termination mode. Returns true if a 🧠:[END]
--- marker appears before the next structural marker — explicit-end mode
--- (blank lines inside the block stay highlighted as ParleyThinking).
---
--- Reads directly from the buffer rather than a line slice so the result
--- is consistent regardless of the visible viewport. The earlier
--- slice-based lookahead missed [END] markers that fell beyond the
--- prefix_lines / visible window, causing continuation lines to lose
--- their dim highlight whenever the viewport top fell between 🧠: and
--- 🧠:[END]. Mirrors the parser's lookahead in chat_parser.lua.
-local function reasoning_block_has_end_marker(buf, from_line, patterns)
-    local line_count = vim.api.nvim_buf_line_count(buf)
-    local stop = math.min(from_line + REASONING_LOOKAHEAD_MAX, line_count)
-    if from_line + 1 > stop then return false end
-    local ahead_lines = vim.api.nvim_buf_get_lines(buf, from_line, stop, false)
-    for _, ahead in ipairs(ahead_lines) do
-        if ahead:match(patterns.reasoning_end_pattern) then
-            return true
-        end
-        if ahead:match(patterns.user_pattern)
-            or ahead:match(patterns.assistant_pattern)
-            or ahead:match(patterns.local_pattern)
-            or ahead:match(patterns.summary_pattern)
-            or ahead:match(patterns.branch_pattern)
-            or ahead:match("^🔧:")
-            or ahead:match("^📎:") then
-            return false
-        end
-    end
-    return false
-end
-
-local function bootstrap_chat_highlight_state(buf, start_line, patterns, streaming)
-    if start_line <= 1 then
-        return false, false, false, false
-    end
-
-    local scan_start = math.max(1, start_line - HIGHLIGHT_CONTEXT_LINES)
-    local bootstrap_start = scan_start
-    local bootstrap_in_block = false
-
-    while bootstrap_start > 1 do
-        local previous_lines = vim.api.nvim_buf_get_lines(buf, bootstrap_start - 2, bootstrap_start - 1, false)
-        local previous_line = previous_lines[1] or ""
-        if previous_line:match(patterns.user_pattern) then
-            bootstrap_in_block = true
-            break
-        end
-        if previous_line:match(patterns.assistant_pattern) or previous_line:match(patterns.local_pattern) then
-            bootstrap_in_block = false
-            break
-        end
-        bootstrap_start = bootstrap_start - 1
-    end
-
-    local in_block = bootstrap_in_block
-    local in_code_block = false
-    local in_reasoning_block = false
-    if start_line <= bootstrap_start then
-        return in_block, in_code_block, in_reasoning_block, false
-    end
-
-    local prefix_lines = vim.api.nvim_buf_get_lines(buf, bootstrap_start - 1, start_line - 1, false)
-    local in_reasoning_explicit_end = false
-    for idx, line in ipairs(prefix_lines) do
-        if line:match("^%s*```") then
-            in_code_block = not in_code_block
-        end
-
-        if line:match(patterns.user_pattern) then
-            in_block = true
-            in_reasoning_block = false
-        elseif line:match(patterns.assistant_pattern) or line:match(patterns.local_pattern) then
-            in_block = false
-            in_reasoning_block = false
-        elseif line:match(patterns.branch_pattern)
-            or line:match(patterns.summary_pattern)
-            or line:match("^🔧:")
-            or line:match("^📎:") then
-            in_reasoning_block = false
-        elseif line:match(patterns.reasoning_end_pattern) then
-            -- 🧠:[END] explicit terminator. Checked before
-            -- reasoning_pattern since the END marker also starts with
-            -- the reasoning prefix.
-            in_reasoning_block = false
-        elseif line:match(patterns.reasoning_pattern) then
-            in_reasoning_block = true
-            -- prefix_lines starts at bootstrap_start (1-indexed). The
-            -- 🧠: opener at array index `idx` corresponds to buffer
-            -- line `bootstrap_start + idx - 1`. The buffer-aware
-            -- lookahead scans forward from there into the live buffer
-            -- so it sees [END] markers that fall outside prefix_lines.
-            -- During streaming the [END] marker hasn't been emitted
-            -- yet, so optimistically assume explicit-end mode — blank
-            -- lines inside the in-progress reasoning stay dimmed
-            -- instead of prematurely terminating the block.
-            if streaming then
-                in_reasoning_explicit_end = true
-            else
-                local opener_line_nr = bootstrap_start + idx - 1
-                in_reasoning_explicit_end = reasoning_block_has_end_marker(buf, opener_line_nr, patterns)
-            end
-        elseif in_reasoning_block and line:match("^%s*$") and not in_reasoning_explicit_end then
-            in_reasoning_block = false
-        end
-    end
-
-    return in_block, in_code_block, in_reasoning_block, in_reasoning_explicit_end
-end
 
 local function merge_line_ranges(ranges)
     if #ranges <= 1 then
@@ -261,13 +119,14 @@ end
 
 -- Compute desired chat highlights for a 1-indexed line range.
 -- Returns a table keyed by 0-indexed row: { [row] = { {hl_group, col_start, col_end}, ... } }
--- Scans HIGHLIGHT_CONTEXT_LINES above start_line for block state context.
-local function compute_chat_highlights(buf, start_line, end_line)
+-- Structural state comes from the buffer cache; only the requested rows are read.
+local function compute_chat_highlights(buf, start_line, end_line, reader, structure, lines)
+    reader = reader or require("parley.line_reader").for_buffer(buf)
     local result = {}
-    local patterns = get_chat_highlight_prefix_patterns()
-    local lines = vim.api.nvim_buf_get_lines(buf, start_line - 1, end_line, false)
-    local all_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-    local footer_range = require("parley.define").managed_footnote_footer_range(all_lines)
+    local highlight_structure = require("parley.highlight_structure")
+    local patterns = highlight_structure.patterns(_parley.config)
+    lines = lines or reader:lines(start_line - 1, end_line, false)
+    local footer_range = highlight_structure.footer_range(structure, vim.api.nvim_buf_line_count(buf))
     -- While a stream is in flight for this buffer, the model has not
     -- yet emitted 🧠:[END]. Assume explicit-end mode so blank-line
     -- paragraph breaks inside the in-progress thinking region keep
@@ -276,14 +135,17 @@ local function compute_chat_highlights(buf, start_line, end_line)
     -- lookahead-decided mode takes over and a real [END] / structural
     -- marker controls termination.
     local streaming = require("parley.tasker").is_busy(buf, true)
-    local in_block, in_code_block, in_reasoning_block, in_reasoning_explicit_end =
-        bootstrap_chat_highlight_state(buf, start_line, patterns, streaming)
-
-    local in_tool_block = false  -- inside 🔧:/📎: fenced content
+    local initial = highlight_structure.state_before(structure, start_line - 1, { streaming = streaming })
+    local in_block = initial.in_question
+    local in_code_block = initial.in_code
+    local in_reasoning_block = initial.in_reasoning
+    local in_reasoning_explicit_end = initial.reasoning_explicit_end
+    local in_tool_block = initial.in_tool
 
     for offset, line in ipairs(lines) do
         local line_nr = start_line + offset - 1
-        if line:match("^%s*```") then
+        local line_kind = highlight_structure.classify(line, patterns).kind
+        if line_kind == "fence" then
             in_code_block = not in_code_block
             -- Exiting a code block while in a tool region ends the tool region
             if not in_code_block and in_tool_block then
@@ -298,7 +160,7 @@ local function compute_chat_highlights(buf, start_line, end_line)
 
         push_artifact_refs(result, row, line) -- #160: navigable artifact refs
 
-        local is_footer = footer_range and line_nr >= footer_range.start_line and line_nr <= footer_range.end_line
+        local is_footer = footer_range and row >= footer_range.start_row
         if is_footer then
             table.insert(result[row], { hl_group = "ParleyFootnote", col_start = 0, col_end = -1 })
             in_block = false
@@ -319,19 +181,21 @@ local function compute_chat_highlights(buf, start_line, end_line)
             -- highlight tracks parse boundaries even when the model omits
             -- the canonical blank-line terminator (or in pre-existing
             -- chats authored under the old single-line 🧠: convention).
-            local is_user = line:match(patterns.user_pattern)
-            local is_assistant = line:match(patterns.assistant_pattern)
-            local is_branch = line:match(patterns.branch_pattern)
-            local is_local = line:match(patterns.local_pattern)
-            local is_summary = line:match(patterns.summary_pattern)
-            local is_tool_use = line:match("^🔧:")
-            local is_tool_result = line:match("^📎:")
+            local classification = highlight_structure.classify(line, patterns)
+            local kind = classification.kind
+            local is_user = kind == "user"
+            local is_assistant = kind == "assistant"
+            local is_branch = kind == "branch"
+            local is_local = kind == "local"
+            local is_summary = kind == "summary"
+            local is_tool_use = kind == "tool_use"
+            local is_tool_result = kind == "tool_result"
             if is_user or is_assistant or is_branch or is_local
                 or is_summary or is_tool_use or is_tool_result then
                 in_reasoning_block = false
             end
 
-            if line:match(patterns.reasoning_end_pattern) then
+            if kind == "reasoning_end" then
                 -- 🧠:[END] explicit terminator. Highlight the marker line
                 -- itself as ParleyThinking (it's the closing delimiter of
                 -- the thinking region), then close the block. Must be
@@ -339,21 +203,13 @@ local function compute_chat_highlights(buf, start_line, end_line)
                 -- also starts with the reasoning prefix.
                 table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
                 in_reasoning_block = false
-            elseif line:match(patterns.reasoning_pattern) then
+            elseif kind == "reasoning" then
                 table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
                 in_reasoning_block = true
-                -- Buffer-aware lookahead: line_nr is the current 1-indexed
-                -- buffer line. Scanning the live buffer (rather than the
-                -- visible `lines` slice) catches [END] markers that fall
-                -- below the viewport bottom, which is the common case
-                -- after the cursor has moved up into the thinking region.
-                -- While streaming, force explicit-end mode (see comment at
-                -- the top of compute_chat_highlights).
-                if streaming then
-                    in_reasoning_explicit_end = true
-                else
-                    in_reasoning_explicit_end = reasoning_block_has_end_marker(buf, line_nr, patterns)
-                end
+                -- The structure owns terminator lookahead. Streaming is only
+                -- a redraw-time overlay for an unfinished reasoning block.
+                local after = highlight_structure.state_before(structure, row + 1, { streaming = streaming })
+                in_reasoning_explicit_end = after.reasoning_explicit_end
             elseif is_summary or line:match("^👂:") then
                 table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
             elseif is_tool_use or is_tool_result then
@@ -405,6 +261,7 @@ local function compute_chat_highlights(buf, start_line, end_line)
                 table.insert(result[row], { hl_group = "ParleyAnnotation", col_start = start_idx - 1, col_end = end_idx - 1 })
             end
         end
+        result[row].line_length = #line
     end
 
     return result
@@ -417,23 +274,13 @@ end
 -- is open is ignored.
 -- Returns { { open_row, close_row }, ... } in 0-indexed inclusive coords.
 local function scan_draft_blocks(lines)
+    local structure = require("parley.highlight_structure").build(lines)
     local blocks = {}
-    local open_row = nil
-    for i, line in ipairs(lines) do
-        local label = line:match("^=== (.+) ===%s*$")
-        if label then
-            if label == "end" then
-                if open_row then
-                    table.insert(blocks, { open_row = open_row, close_row = i - 1 })
-                    open_row = nil
-                end
-            elseif not open_row then
-                open_row = i - 1
-            end
-        end
-    end
-    if open_row then
-        table.insert(blocks, { open_row = open_row, close_row = #lines - 1 })
+    for _, range in ipairs(structure.draft_ranges) do
+        blocks[#blocks + 1] = {
+            open_row = range.start_row,
+            close_row = range.end_row_exclusive - 1,
+        }
     end
     return blocks
 end
@@ -463,17 +310,17 @@ end
 
 -- Compute desired markdown highlights for a 1-indexed line range.
 -- Returns a table keyed by 0-indexed row: { [row] = { {hl_group, col_start, col_end}, ... } }
-local function compute_markdown_highlights(buf, start_line, end_line)
+local function compute_markdown_highlights(buf, start_line, end_line, reader, structure, lines)
+    reader = reader or require("parley.line_reader").for_buffer(buf)
     local result = {}
     local branch_prefix = _parley.config.chat_branch_prefix or "🌿:"
-    local lines = vim.api.nvim_buf_get_lines(buf, start_line - 1, end_line, false)
-    local all_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-    local footer_range = require("parley.define").managed_footnote_footer_range(all_lines)
+    lines = lines or reader:lines(start_line - 1, end_line, false)
+    local footer_range = require("parley.highlight_structure").footer_range(
+        structure, vim.api.nvim_buf_line_count(buf))
     for offset, line in ipairs(lines) do
         local row = start_line + offset - 2
-        local line_nr = row + 1
         push_artifact_refs(result, row, line) -- #160: navigable artifact refs
-        if footer_range and line_nr >= footer_range.start_line and line_nr <= footer_range.end_line then
+        if footer_range and row >= footer_range.start_row then
             result[row] = result[row] or {}
             table.insert(result[row], { hl_group = "ParleyFootnote", col_start = 0, col_end = -1 })
         end
@@ -537,10 +384,16 @@ local function compute_markdown_highlights(buf, start_line, end_line)
         end
     end
 
-    -- Draft-block backgrounds (=== label === / === end ===). Full-buffer
-    -- scan so a block opened far above the viewport still paints visible
-    -- body lines. Bg-only highlight; markdown fg shows through.
-    local blocks = scan_draft_blocks(all_lines)
+    -- Draft-block backgrounds come from the buffer-owned structure, so an
+    -- opener above the viewport paints visible body lines without another read.
+    local blocks = {}
+    for _, range in ipairs(require("parley.highlight_structure").draft_blocks_in(
+        structure, start_line - 1, end_line)) do
+        blocks[#blocks + 1] = {
+            open_row = range.start_row,
+            close_row = range.end_row_exclusive - 1,
+        }
+    end
     local view_from = start_line - 1
     local view_to = end_line - 1
     for _, block in ipairs(blocks) do
@@ -557,6 +410,11 @@ local function compute_markdown_highlights(buf, start_line, end_line)
                 draft_block = true,
             })
         end
+    end
+
+    for row, highlights in pairs(result) do
+        local line = lines[row - (start_line - 1) + 1] or ""
+        highlights.line_length = #line
     end
 
     return result
@@ -872,7 +730,7 @@ local function highlight_inline_branch_links(buf, ranges)
         -- Clear existing extmarks in this range
         vim.api.nvim_buf_clear_namespace(buf, ns, range.start_line - 1, range.end_line)
 
-        local lines = vim.api.nvim_buf_get_lines(buf, range.start_line - 1, range.end_line, false)
+        local lines = require("parley.line_reader").for_buffer(buf):lines(range.start_line - 1, range.end_line, false)
         for offset, line in ipairs(lines) do
             local links = chat_parser.extract_inline_branch_links(line, branch_prefix)
             local line_idx = range.start_line + offset - 2 -- 0-indexed
@@ -914,7 +772,7 @@ M.highlight_chat_branch_refs = function(buf)
     local has_inline_branches = false
 
     for _, range in ipairs(ranges) do
-        local lines = vim.api.nvim_buf_get_lines(buf, range.start_line - 1, range.end_line, false)
+        local lines = require("parley.line_reader").for_buffer(buf):lines(range.start_line - 1, range.end_line, false)
         for _, line in ipairs(lines) do
             if line:sub(1, #branch_prefix) == branch_prefix then
                 has_branch_refs = true
@@ -962,7 +820,7 @@ M.highlight_chat_branch_refs = function(buf)
             local base_dir = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ":h")
             local refresh_ranges = get_visible_line_ranges(buf)
             for _, range in ipairs(refresh_ranges) do
-                local latest_lines = vim.api.nvim_buf_get_lines(buf, range.start_line - 1, range.end_line, false)
+                local latest_lines = require("parley.line_reader").for_buffer(buf):lines(range.start_line - 1, range.end_line, false)
                 for offset, line in ipairs(latest_lines) do
                     local updated_line = M.render_chat_branch_line(line, base_dir)
                     if updated_line ~= line then
@@ -982,6 +840,12 @@ end
 -- Simple clear-and-apply; used by tests on scratch buffers.
 -- Production highlighting is handled by the decoration provider.
 M.highlight_question_block = function(buf)
+    local cache = structure_caches[buf]
+    if not cache or cache.dirty then
+        local rebuilt, err = M.rebuild_structure(buf)
+        assert(rebuilt, err)
+        cache = structure_caches[buf]
+    end
     local ns = M.setup_highlights()
     local ranges = get_visible_line_ranges(buf)
 
@@ -990,7 +854,8 @@ M.highlight_question_block = function(buf)
     end
 
     for _, range in ipairs(ranges) do
-        local row_map = compute_chat_highlights(buf, range.start_line, range.end_line)
+        local reader = require("parley.line_reader").for_buffer(buf)
+        local row_map = compute_chat_highlights(buf, range.start_line, range.end_line, reader, cache.structure)
         for row, hls in pairs(row_map) do
             for _, hl in ipairs(hls) do
                 vim.api.nvim_buf_add_highlight(buf, ns, hl.hl_group, row, hl.col_start, hl.col_end)
@@ -999,10 +864,108 @@ M.highlight_question_block = function(buf)
     end
 end
 
+-- Production compute seam shared by the decoration provider and isolated
+-- performance runners. Scan breadth intentionally remains unchanged.
+local function compute_window_decorations(_winid, buf, toprow, botrow, reader, structure)
+    reader = reader or require("parley.line_reader").for_buffer(buf)
+    local buf_type = _parley._parley_bufs[buf]
+    if not structure then return nil end
+    local start_line = toprow + 1
+    local line_count = vim.api.nvim_buf_line_count(buf)
+    local end_line = math.min(botrow + 1 + HIGHLIGHT_VIEWPORT_MARGIN, line_count)
+    local lines = reader:lines(toprow, end_line, false)
+    if buf_type == "chat" then
+        return compute_chat_highlights(buf, start_line, end_line, reader, structure, lines)
+    elseif buf_type == "markdown" then
+        return compute_markdown_highlights(buf, start_line, end_line, reader, structure, lines)
+    end
+    return {}
+end
+
+M._compute_window_decorations = compute_window_decorations
+
+local function build_structure(buf)
+    local reader = require("parley.line_reader").for_buffer(buf)
+    local lines = reader:lines(0, -1, false)
+    local structure, rows, work = require("parley.highlight_structure").build(
+        lines, require("parley.highlight_structure").patterns(_parley.config))
+    require("parley.line_reader").record_work(buf, {
+        operation = "structure_build",
+        structure_rows_processed = work and work.rows_visited or rows,
+    })
+    return structure
+end
+
+function M.rebuild_structure(buf)
+    if not vim.api.nvim_buf_is_valid(buf) then return nil, "invalid buffer" end
+    local existing = structure_caches[buf]
+    if existing and existing.renderable and not existing.dirty then
+        return existing.structure
+    end
+    local ok, candidate = pcall(build_structure, buf)
+    if not ok then
+        local cache = structure_caches[buf]
+        if cache then cache.dirty = true; cache.renderable = false end
+        return nil, candidate
+    end
+    local cache = structure_caches[buf] or {}
+    cache.structure = candidate
+    cache.dirty = false
+    cache.renderable = true
+    structure_caches[buf] = cache
+    if not cache.attached then
+        local generation = {}
+        cache.generation = generation
+        cache.on_lines = function(_, changed_buf, _, firstline, lastline, new_lastline)
+            local current = structure_caches[changed_buf]
+            if not current or current.generation ~= generation or not vim.api.nvim_buf_is_valid(changed_buf) then
+                return true
+            end
+            local reader = require("parley.line_reader").for_buffer(changed_buf)
+            local new_lines = reader:lines(firstline, new_lastline, false)
+            local replaced, rows, reason = require("parley.highlight_structure").replace(
+                current.structure, firstline, lastline, new_lines,
+                require("parley.highlight_structure").patterns(_parley.config))
+            require("parley.line_reader").record_work(changed_buf, {
+                operation = "structure_replace", structure_rows_processed = rows,
+            })
+            if reason then
+                current.dirty = true
+                current.renderable = false
+            else
+                current.structure = replaced
+            end
+        end
+        cache.on_detach = function(_, detached_buf)
+            if structure_caches[detached_buf] and structure_caches[detached_buf].generation == generation then
+                structure_caches[detached_buf] = nil
+            end
+        end
+        local attached = vim.api.nvim_buf_attach(buf, false, {
+            on_lines = cache.on_lines,
+            on_detach = function(_, detached_buf)
+                cache.on_detach(nil, detached_buf)
+            end,
+        })
+        if not attached then
+            structure_caches[buf] = nil
+            return nil, "failed to attach structure cache"
+        end
+        cache.attached = true
+    end
+    return candidate
+end
+
+function M.clear_structure(buf)
+    structure_caches[buf] = nil
+    require("parley.line_reader").clear_buffer(buf)
+end
+
+M._structure_cache = function(buf) return structure_caches[buf] end
+
 M.setup_buf_handler = function()
     local interview = require("parley.interview")
-    local skill_render = require("parley.skill_render")
-    local timezone_diagnostics = require("parley.timezone_diagnostics")
+    local buffer_lifecycle = require("parley.buffer_lifecycle")
     local gid = _parley.helpers.create_augroup("ParleyBufHandler", { clear = true })
 
     -- Register decoration provider: highlights are computed synchronously
@@ -1021,17 +984,16 @@ M.setup_buf_handler = function()
             if not _parley._parley_bufs[bufnr] then
                 return false
             end
-            local buf_type = _parley._parley_bufs[bufnr]
-            local start_line = toprow + 1
-            local line_count = vim.api.nvim_buf_line_count(bufnr)
-            local end_line = math.min(botrow + 1 + HIGHLIGHT_VIEWPORT_MARGIN, line_count)
-            local row_map = nil
-
-            if buf_type == "chat" then
-                row_map = compute_chat_highlights(bufnr, start_line, end_line)
-            elseif buf_type == "markdown" then
-                row_map = compute_markdown_highlights(bufnr, start_line, end_line)
+            local structure_cache = structure_caches[bufnr]
+            if not structure_cache or structure_cache.dirty or not structure_cache.renderable then
+                return false
             end
+            local line_reader = require("parley.line_reader")
+            local reader = line_reader.for_buffer(bufnr)
+            local row_map = line_reader.with_phase(bufnr, "decoration_redraw", function()
+                return compute_window_decorations(
+                    winid, bufnr, toprow, botrow, reader, structure_cache.structure)
+            end)
 
             _decor_cache[winid] = {
                 bufnr = bufnr,
@@ -1042,8 +1004,6 @@ M.setup_buf_handler = function()
             local cache = _decor_cache[winid]
             if not cache or cache.bufnr ~= bufnr then return end
             local highlights = cache.rows[row]
-            local lines = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)
-            local line = lines[1] or ""
 
             if highlights then
                 for _, hl in ipairs(highlights) do
@@ -1060,7 +1020,7 @@ M.setup_buf_handler = function()
                     else
                         local end_col = hl.col_end
                         if end_col == -1 then
-                            end_col = #line
+                            end_col = highlights.line_length
                         end
                         pcall(vim.api.nvim_buf_set_extmark, bufnr, decor_ns, row, hl.col_start, {
                             end_row = row,
@@ -1079,42 +1039,51 @@ M.setup_buf_handler = function()
     })
 
     -- Setup functions that only need to run when buffer is first loaded or entered
-    _parley.helpers.autocmd({ "BufEnter" }, nil, function(event)
-        local buf = event.buf
+    vim.api.nvim_create_autocmd({ "BufEnter" }, {
+        group = gid,
+        callback = function(event)
+            local buf = event.buf
 
-        if not vim.api.nvim_buf_is_valid(buf) then
-            return
-        end
+            if not vim.api.nvim_buf_is_valid(buf) then
+                return
+            end
 
-        local file_name = vim.api.nvim_buf_get_name(buf)
+            local file_name = vim.api.nvim_buf_get_name(buf)
 
-        -- Handle chat files
-        if _parley.not_chat(buf, file_name) == nil then
-            _parley._parley_bufs[buf] = "chat"
-            _parley.prep_chat(buf, file_name)
-            _parley.display_agent(buf, file_name)
-            interview.highlight_timestamps(buf)
-            timezone_diagnostics.refresh_buffer(buf)
-            skill_render.refresh_footnote_diagnostics(buf)
-            _parley.highlight_chat_branch_refs(buf)
-            -- Disable markdown strikethrough in chat buffers — tilde (~) in file
-            -- paths like ~/workspace/file.md triggers false strikethrough rendering.
-            M.disable_strikethrough(buf)
-        -- Handle non-chat markdown files
-        elseif _parley.is_markdown(buf, file_name) then
-            _parley._parley_bufs[buf] = "markdown"
-            _parley.prep_md(buf)
-            _parley.setup_markdown_keymaps(buf)
-            _parley.highlight_chat_branch_refs(buf)
-            interview.highlight_timestamps(buf)
-            timezone_diagnostics.refresh_buffer(buf)
-            skill_render.refresh_footnote_diagnostics(buf)
-            -- Disable native markdown strikethrough so only the 🤖-gated
-            -- review-deletion strike (🤖~X~, rendered in compute_markdown_highlights)
-            -- shows — a bare ~X~ or a `~/path` tilde must not cross out text.
-            M.disable_strikethrough(buf)
-        end
-    end, gid)
+            -- Handle chat files
+            if _parley.not_chat(buf, file_name) == nil then
+                _parley._parley_bufs[buf] = "chat"
+                _parley.prep_chat(buf, file_name)
+                _parley.display_agent(buf, file_name)
+                interview.highlight_timestamps(buf)
+                buffer_lifecycle.setup(buf)
+                vim.schedule(function()
+                    if vim.api.nvim_buf_is_valid(buf) then
+                        _parley.highlight_chat_branch_refs(buf)
+                    end
+                end)
+                -- Disable markdown strikethrough in chat buffers — tilde (~) in file
+                -- paths like ~/workspace/file.md triggers false strikethrough rendering.
+                M.disable_strikethrough(buf)
+            -- Handle non-chat markdown files
+            elseif _parley.is_markdown(buf, file_name) then
+                _parley._parley_bufs[buf] = "markdown"
+                _parley.prep_md(buf)
+                _parley.setup_markdown_keymaps(buf)
+                interview.highlight_timestamps(buf)
+                buffer_lifecycle.setup(buf)
+                vim.schedule(function()
+                    if vim.api.nvim_buf_is_valid(buf) then
+                        _parley.highlight_chat_branch_refs(buf)
+                    end
+                end)
+                -- Disable native markdown strikethrough so only the 🤖-gated
+                -- review-deletion strike (🤖~X~, rendered in compute_markdown_highlights)
+                -- shows — a bare ~X~ or a `~/path` tilde must not cross out text.
+                M.disable_strikethrough(buf)
+            end
+        end,
+    })
 
     _parley.helpers.autocmd({ "WinEnter" }, nil, function(event)
         local buf = event.buf
@@ -1129,43 +1098,42 @@ M.setup_buf_handler = function()
         if _parley.not_chat(buf, file_name) == nil then
             _parley.display_agent(buf, file_name)
             interview.highlight_timestamps(buf)
-            timezone_diagnostics.refresh_buffer(buf)
-            skill_render.refresh_footnote_diagnostics(buf)
         -- Handle non-chat markdown files
         elseif _parley.is_markdown(buf, file_name) then
             interview.highlight_timestamps(buf)
-            timezone_diagnostics.refresh_buffer(buf)
-            skill_render.refresh_footnote_diagnostics(buf)
         end
     end, gid)
 
-    _parley.helpers.autocmd({ "TextChanged", "TextChangedI", "BufWritePost" }, nil, function(event)
-        local buf = event.buf
-        if not vim.api.nvim_buf_is_valid(buf) then
-            return
-        end
-        if _parley._parley_bufs[buf] then
-            timezone_diagnostics.refresh_buffer(buf)
-            skill_render.refresh_footnote_diagnostics(buf)
-        end
-    end, gid)
+    -- LineReader state must be invalidated synchronously: the generic helper
+    -- schedules callbacks, leaving a window where Neovim could reuse the
+    -- numeric buffer handle and expose the prior buffer's observer.
+    vim.api.nvim_create_autocmd({ "BufDelete", "BufUnload" }, {
+        group = gid,
+        callback = function(event)
+            M.clear_structure(event.buf)
+        end,
+    })
 
-    -- Clean up when buffers are deleted
-    _parley.helpers.autocmd({ "BufDelete", "BufUnload" }, nil, function(event)
-        local buf = event.buf
-        _parley._parley_bufs[buf] = nil
-        for winid, cache in pairs(_decor_cache) do
-            if cache.bufnr == buf then
-                _decor_cache[winid] = nil
+    -- Classification teardown must be synchronous too: a scheduled cleanup for
+    -- an unloaded buffer handle can otherwise erase a new entry's classification
+    -- after Neovim reuses that numeric handle.
+    vim.api.nvim_create_autocmd({ "BufDelete", "BufUnload" }, {
+        group = gid,
+        callback = function(event)
+            local buf = event.buf
+            _parley._parley_bufs[buf] = nil
+            for winid, cache in pairs(_decor_cache) do
+                if cache.bufnr == buf then
+                    _decor_cache[winid] = nil
+                end
             end
-        end
-        interview.clear_match_cache(buf)
-        timezone_diagnostics.clear(buf)
-        if _parley._branch_topic_timers and _parley._branch_topic_timers[buf] then
-            stop_and_close_timer(_parley._branch_topic_timers[buf])
-            _parley._branch_topic_timers[buf] = nil
-        end
-    end, gid)
+            interview.clear_match_cache(buf)
+            if _parley._branch_topic_timers and _parley._branch_topic_timers[buf] then
+                stop_and_close_timer(_parley._branch_topic_timers[buf])
+                _parley._branch_topic_timers[buf] = nil
+            end
+        end,
+    })
 end
 
 return M

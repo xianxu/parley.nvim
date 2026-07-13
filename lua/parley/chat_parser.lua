@@ -255,25 +255,16 @@ M.parse_chat = function(lines, header_end, config)
 	end
 
 	-- Get prefixes
+	local highlight_structure = require("parley.highlight_structure")
+	local decoration_patterns = highlight_structure.patterns(config)
 	local memory_enabled = config.chat_memory and config.chat_memory.enable
-	local summary_prefix = memory_enabled and config.chat_memory.summary_prefix or "📝:"
-	local reasoning_prefix = memory_enabled and config.chat_memory.reasoning_prefix or "🧠:"
-	local user_prefix = config.chat_user_prefix
-	local local_prefix = config.chat_local_prefix
-	local branch_prefix = config.chat_branch_prefix or "🌿:"
+	local summary_prefix = decoration_patterns.summary_prefix
+	local reasoning_prefix = decoration_patterns.reasoning_prefix
+	local user_prefix = decoration_patterns.user_prefix
+	local branch_prefix = decoration_patterns.branch_prefix
 	-- M2 Task 2.5 of #81: tool_use / tool_result prefixes for the
 	-- content_blocks list on an assistant answer.
-	local tool_use_prefix = config.chat_tool_use_prefix or "🔧:"
-	local tool_result_prefix = config.chat_tool_result_prefix or "📎:"
 	logger.debug("memory config: " .. vim.inspect({memory_enabled, summary_prefix, reasoning_prefix}))
-
-	-- Determine agent prefix
-	local agent_prefix = config.chat_assistant_prefix[1]
-	if type(config.chat_assistant_prefix) == "string" then
-		agent_prefix = config.chat_assistant_prefix
-	elseif type(config.chat_assistant_prefix) == "table" then
-		agent_prefix = config.chat_assistant_prefix[1]
-	end
 
 	-- Track the current exchange and component being built
 	local current_exchange = nil
@@ -506,11 +497,12 @@ M.parse_chat = function(lines, header_end, config)
 	-- Loop through content lines
 	for i = header_end + 1, #lines do
 		local line = lines[i]
+		local decoration_kind = highlight_structure.classify(line, decoration_patterns).kind
 
 		-- Check for branch reference (🌿:) — always detected, even between consecutive links.
 		-- Before the first question: first 🌿: is parent_link, subsequent ones are children.
 		-- After the first question: all 🌿: are child branches.
-		if line:sub(1, #branch_prefix) == branch_prefix then
+		if decoration_kind == "branch" then
 			in_reasoning_block = false
 			local rest = line:sub(#branch_prefix + 1):gsub("^%s*(.-)%s*$", "%1")
 			local path, topic = rest:match("^%s*([^:]+)%s*:%s*(.-)%s*$")
@@ -529,12 +521,12 @@ M.parse_chat = function(lines, header_end, config)
 			line_before_local = i
 
 		-- Check for local section (excluded from LLM context)
-		elseif (not line_before_local) and line:sub(1, #local_prefix) == local_prefix then
+		elseif (not line_before_local) and decoration_kind == "local" then
 			in_reasoning_block = false
 			line_before_local = i
 
 		-- Check for user message start
-		elseif line:sub(1, #user_prefix) == user_prefix then
+		elseif decoration_kind == "user" then
 			in_reasoning_block = false
 			first_question_seen = true
 			-- Content_blocks for the closing answer (if any) get attached
@@ -591,7 +583,7 @@ M.parse_chat = function(lines, header_end, config)
 			end
 
 		-- Check for assistant message start
-		elseif line:sub(1, #agent_prefix) == agent_prefix then
+		elseif decoration_kind == "assistant" then
 			in_reasoning_block = false
 			-- If we were building a previous component, finalize it.
 			-- (If the previous component was an answer, its content_blocks
@@ -643,7 +635,7 @@ M.parse_chat = function(lines, header_end, config)
 		-- can extract id/name from it later. Tool markers also
 		-- terminate any in-progress reasoning block (defensive — they
 		-- denote a structurally distinct region).
-		elseif current_component == "answer" and line:sub(1, #tool_use_prefix) == tool_use_prefix then
+		elseif current_component == "answer" and decoration_kind == "tool_use" then
 			in_reasoning_block = false
 			cb_finalize_block(i - 1)
 			cb_start_block("tool_use")
@@ -654,7 +646,7 @@ M.parse_chat = function(lines, header_end, config)
 			table.insert(content_parts, line)
 
 		-- Check for tool_result (📎:) header — same pattern as tool_use.
-		elseif current_component == "answer" and line:sub(1, #tool_result_prefix) == tool_result_prefix then
+		elseif current_component == "answer" and decoration_kind == "tool_result" then
 			in_reasoning_block = false
 			cb_finalize_block(i - 1)
 			cb_start_block("tool_result")
@@ -665,7 +657,7 @@ M.parse_chat = function(lines, header_end, config)
 		-- reasoning block (defensive against missing blank-line
 		-- terminator, plus backward-compat with chats authored under
 		-- the previous single-line 🧠: convention).
-		elseif current_component == "answer" and line:sub(1, #summary_prefix) == summary_prefix then
+		elseif current_component == "answer" and decoration_kind == "summary" then
 			in_reasoning_block = false
 			current_exchange.summary = {
 				line = i,
@@ -682,8 +674,7 @@ M.parse_chat = function(lines, header_end, config)
 		-- to reasoning.content (it's a delimiter, not reasoning).
 		-- Outside an active block it's treated as plain text and
 		-- never opens a new block.
-		elseif current_component == "answer"
-			and line:match("^%s*" .. vim.pesc(reasoning_prefix) .. "%[END%]%s*$") then
+		elseif current_component == "answer" and decoration_kind == "reasoning_end" then
 			in_reasoning_block = false
 			table.insert(content_parts, line)
 			cb_append_line(line, i)
@@ -693,22 +684,19 @@ M.parse_chat = function(lines, header_end, config)
 		-- only), structural marker (📝/🔧/📎/💬/🤖/🌿/🔒), or end of
 		-- answer. Lookahead determines which termination mode applies
 		-- to this block (see in_reasoning_explicit_end declaration).
-		elseif current_component == "answer" and line:sub(1, #reasoning_prefix) == reasoning_prefix then
+		elseif current_component == "answer" and decoration_kind == "reasoning" then
 			local has_end_marker = false
-			local end_marker_pat = "^%s*" .. vim.pesc(reasoning_prefix) .. "%[END%]%s*$"
 			for j = i + 1, #lines do
 				local ahead = lines[j]
-				if ahead:match(end_marker_pat) then
+				local ahead_kind = highlight_structure.classify(ahead, decoration_patterns).kind
+				if ahead_kind == "reasoning_end" then
 					has_end_marker = true
 					break
 				end
-				if ahead:sub(1, #summary_prefix) == summary_prefix
-					or ahead:sub(1, #tool_use_prefix) == tool_use_prefix
-					or ahead:sub(1, #tool_result_prefix) == tool_result_prefix
-					or ahead:sub(1, #user_prefix) == user_prefix
-					or (agent_prefix and ahead:sub(1, #agent_prefix) == agent_prefix)
-					or ahead:sub(1, #branch_prefix) == branch_prefix
-					or ahead:match("^🔒:") then
+				if ahead_kind == "summary" or ahead_kind == "tool_use"
+					or ahead_kind == "tool_result" or ahead_kind == "user"
+					or ahead_kind == "assistant" or ahead_kind == "branch"
+					or ahead_kind == "local" then
 					break
 				end
 			end
