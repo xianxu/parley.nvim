@@ -110,6 +110,25 @@ describe("chat typing performance scenario", function()
         vim.fn.delete(vim.fn.fnamemodify(root, ":h:h"), "rf")
     end)
 
+    it("enforces immutable full-read, scaling, and structure gates", function()
+        local report = chat_typing.new_report({ os = "test", nvim = "test", commit = "test" })
+        for _, n in ipairs({ 1000, 5000 }) do
+            chat_typing.add_result(report, "edit_total", "inclusive", n, { 1 }, {
+                line_read_calls = 2, lines_requested = 88, full_buffer_reads = 0,
+                structure_rows_processed = 1,
+            })
+            chat_typing.add_result(report, "decoration_redraw", "isolated", n, { 1 }, {
+                line_read_calls = 1, lines_requested = 61, full_buffer_reads = 0,
+                structure_rows_processed = 0,
+            })
+        end
+        assert.has_no.errors(function() chat_typing.assert_hard_gates(report) end)
+        report.scenarios[1].work.full_buffer_reads = 1
+        local ok, err = pcall(chat_typing.assert_hard_gates, report)
+        assert.is_false(ok)
+        assert.matches("zero full%-buffer reads", err)
+    end)
+
     it("uses real input and production attachment for an edit sample", function()
         local output = vim.fn.tempname() .. ".json"
         local command = { "nvim", "-n", "--headless", "--noplugin", "-u", "tests/minimal_init.vim",
@@ -124,6 +143,8 @@ describe("chat typing performance scenario", function()
         assert.is_true(sample.decoration_redraw)
         assert.is_true(sample.insert_mode)
         assert.is_true(sample.restored)
+        assert.equals(0, sample.work.full_buffer_reads)
+        assert.equals(1, sample.work.structure_rows_processed)
         vim.fn.delete(output)
     end)
 

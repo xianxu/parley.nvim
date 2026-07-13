@@ -82,6 +82,18 @@ local function capture_decoration_provider()
     return captured_provider
 end
 
+local function render_window(provider, ...)
+    local args = { ... }
+    local buf = args[2]
+    local highlighter = require("parley.highlighter")
+    local cache = highlighter._structure_cache(buf)
+    if not cache or cache.dirty then
+        local rebuilt, err = highlighter.rebuild_structure(buf)
+        assert.is_truthy(rebuilt, err)
+    end
+    return provider.on_win(nil, unpack(args))
+end
+
 describe("highlight_question_block: question lines", function()
     after_each(cleanup_bufs)
     it("applies Question highlight to 💬: line (row 0)", function()
@@ -228,8 +240,8 @@ describe("decoration provider cache", function()
 
         parley._parley_bufs[buf] = "chat"
 
-        provider.on_win(nil, wins[1], buf, 0, 0)
-        provider.on_win(nil, wins[2], buf, 70, 70)
+        render_window(provider, wins[1], buf, 0, 0)
+        render_window(provider, wins[2], buf, 70, 70)
 
         local original_set_extmark = vim.api.nvim_buf_set_extmark
         local extmarks = {}
@@ -269,8 +281,9 @@ describe("decoration provider cache", function()
         vim.api.nvim_win_set_buf(win, buf)
         parley._parley_bufs[buf] = "chat"
 
-        local events = {}
         local line_reader = require("parley.line_reader")
+        assert.is_truthy(require("parley.highlighter").rebuild_structure(buf))
+        local events = {}
         line_reader.set_observer(buf, function(event) events[#events + 1] = event end)
         provider.on_win(nil, win, buf, 0, 0)
         local reads_after_compute = #events
@@ -298,8 +311,9 @@ describe("decoration provider cache", function()
         vim.api.nvim_win_set_buf(win, buf)
         parley._parley_bufs[buf] = "chat"
 
-        local events = {}
         local line_reader = require("parley.line_reader")
+        assert.is_truthy(require("parley.highlighter").rebuild_structure(buf))
+        local events = {}
         line_reader.set_observer(buf, function(event) events[#events + 1] = event end)
         local ok, err = pcall(provider.on_win, nil, win, buf, 2, 2)
 
@@ -347,7 +361,7 @@ describe("decoration provider cache", function()
         -- paragraphs (rows 3-6, 0-indexed) and the [END] marker (row 7)
         -- are visible; the 🧠: opener (row 2) is in the bootstrap walk.
         -- toprow=3 (row index of "Continuation paragraph one."), botrow=7.
-        provider.on_win(nil, win, buf, 3, 7)
+        render_window(provider, win, buf, 3, 7)
 
         local original_set_extmark = vim.api.nvim_buf_set_extmark
         local extmarks = {}
@@ -410,7 +424,7 @@ describe("decoration provider cache", function()
         local original_is_busy = tasker.is_busy
         tasker.is_busy = function(b, _) return b == buf end
 
-        provider.on_win(nil, win, buf, 0, 5)
+        render_window(provider, win, buf, 0, 5)
 
         local original_set_extmark = vim.api.nvim_buf_set_extmark
         local extmarks = {}
@@ -457,7 +471,7 @@ describe("decoration provider cache", function()
         vim.api.nvim_win_set_buf(win, buf)
         parley._parley_bufs[buf] = "chat"
 
-        provider.on_win(nil, win, buf, 220, 240)
+        render_window(provider, win, buf, 220, 240)
 
         local original_set_extmark = vim.api.nvim_buf_set_extmark
         local extmarks = {}
@@ -485,6 +499,176 @@ describe("decoration provider cache", function()
             "expected question highlight when redraw begins inside a long unanswered question")
         assert.is_true(highlighted_rows[235] == true,
             "expected continuation lines in the viewport to keep question highlight state")
+    end)
+
+    it("does identical bounded work for matched 1000 and 5000 line viewports", function()
+        local function measure(line_count)
+            local provider = capture_decoration_provider()
+            local buf = vim.api.nvim_create_buf(false, true)
+            local lines = {}
+            for row = 1, line_count do lines[row] = ("body %05d"):format(row) end
+            lines[1] = "💬: question"
+            lines[501] = "🧠: reasoning"
+            lines[506] = "🧠:[END]"
+            lines[line_count - 2] = "=== draft ==="
+            lines[line_count - 1] = "=== end ==="
+            lines[line_count] = "[^x]: footer"
+            vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+            parley._parley_bufs[buf] = "chat"
+            local win = vim.api.nvim_get_current_win()
+            vim.api.nvim_win_set_buf(win, buf)
+            assert.is_truthy(require("parley.highlighter").rebuild_structure(buf))
+
+            local events = {}
+            local reader = require("parley.line_reader")
+            reader.set_observer(buf, function(event) events[#events + 1] = event end)
+            provider.on_win(nil, win, buf, 500, 509)
+            assert.equals(1, #events)
+            assert.are.same({ start_row = 500, end_row = 530, strict = false }, events[1].requested)
+            assert.equals(30, events[1].lines_requested)
+            assert.is_false(events[1].full_buffer)
+
+            events = {}
+            vim.api.nvim_buf_set_lines(buf, 503, 504, false, { "ordinary changed prose" })
+            local total_rows = 0
+            local full_reads = 0
+            for _, event in ipairs(events) do
+                total_rows = total_rows + event.structure_rows_processed
+                if event.full_buffer then full_reads = full_reads + 1 end
+            end
+            assert.equals(1, total_rows)
+            assert.equals(0, full_reads)
+            assert.is_true(require("parley.highlighter")._structure_cache(buf).renderable)
+            return { requested = 30, structure_rows = total_rows }
+        end
+
+        assert.are.same(measure(1000), measure(5000))
+    end)
+
+    it("marks structural edits dirty until lifecycle convergence rebuilds", function()
+        local provider = capture_decoration_provider()
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "💬: q", "body", "🤖: a" })
+        parley._parley_bufs[buf] = "chat"
+        local win = vim.api.nvim_get_current_win()
+        vim.api.nvim_win_set_buf(win, buf)
+        require("parley.buffer_lifecycle").setup(buf)
+        vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "🧠: changed marker" })
+        local cache = require("parley.highlighter")._structure_cache(buf)
+        assert.is_true(cache.dirty)
+        assert.is_false(provider.on_win(nil, win, buf, 0, 2))
+
+        require("parley.buffer_lifecycle").converge(buf, "InsertLeave")
+        cache = require("parley.highlighter")._structure_cache(buf)
+        assert.is_false(cache.dirty)
+        assert.is_true(cache.renderable)
+        assert.is_nil(provider.on_win(nil, win, buf, 0, 2))
+    end)
+
+    it("keeps an unfinished reasoning paragraph busy only while streaming", function()
+        local provider = capture_decoration_provider()
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+            "🤖: answer", "🧠: thought", "", "continued",
+        })
+        parley._parley_bufs[buf] = "chat"
+        local win = vim.api.nvim_get_current_win()
+        vim.api.nvim_win_set_buf(win, buf)
+        assert.is_truthy(require("parley.highlighter").rebuild_structure(buf))
+        local tasker = require("parley.tasker")
+        local original = tasker.is_busy
+        local busy = true
+        tasker.is_busy = function() return busy end
+        local original_extmark = vim.api.nvim_buf_set_extmark
+        local thinking = {}
+        vim.api.nvim_buf_set_extmark = function(_, _, row, _, opts)
+            if opts.hl_group == "ParleyThinking" then thinking[row] = true end
+            return 1
+        end
+        provider.on_win(nil, win, buf, 0, 3)
+        provider.on_line(nil, win, buf, 3)
+        assert.is_true(thinking[3])
+        busy = false
+        thinking = {}
+        provider.on_win(nil, win, buf, 0, 3)
+        provider.on_line(nil, win, buf, 3)
+        vim.api.nvim_buf_set_extmark = original_extmark
+        tasker.is_busy = original
+        -- No mutation or rebuild is needed: busy is a redraw-time overlay.
+        assert.is_nil(thinking[3])
+        assert.is_false(require("parley.highlighter")._structure_cache(buf).dirty)
+    end)
+
+    it("keeps failed rebuilds unrenderable and retries transactionally", function()
+        local highlighter = require("parley.highlighter")
+        local model = require("parley.highlight_structure")
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "💬: q", "body" })
+        parley._parley_bufs[buf] = "chat"
+        assert.is_truthy(highlighter.rebuild_structure(buf))
+        local prior = highlighter._structure_cache(buf).structure
+        local original = model.build
+        model.build = function() error("forced rebuild failure") end
+        local rebuilt, err = highlighter.rebuild_structure(buf)
+        model.build = original
+        assert.is_nil(rebuilt)
+        assert.matches("forced rebuild failure", err)
+        assert.equals(prior, highlighter._structure_cache(buf).structure)
+        assert.is_true(highlighter._structure_cache(buf).dirty)
+        assert.is_false(highlighter._structure_cache(buf).renderable)
+        assert.is_truthy(highlighter.rebuild_structure(buf))
+        assert.is_true(highlighter._structure_cache(buf).renderable)
+    end)
+
+    it("rejects an initial failed build and renders only after retry", function()
+        local highlighter = require("parley.highlighter")
+        local model = require("parley.highlight_structure")
+        local provider = capture_decoration_provider()
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "body" })
+        parley._parley_bufs[buf] = "chat"
+        local original = model.build
+        model.build = function() error("initial build failure") end
+        local rebuilt, err = highlighter.rebuild_structure(buf)
+        model.build = original
+        assert.is_nil(rebuilt)
+        assert.matches("initial build failure", err)
+        assert.is_nil(highlighter._structure_cache(buf))
+        assert.is_false(provider.on_win(nil, vim.api.nvim_get_current_win(), buf, 0, 0))
+        assert.is_truthy(highlighter.rebuild_structure(buf))
+    end)
+
+    it("sets up one shared build and attachment across reentry and windows", function()
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "body" })
+        parley._parley_bufs[buf] = "markdown"
+        local events = {}
+        require("parley.line_reader").set_observer(buf, function(event) events[#events + 1] = event end)
+        local lifecycle = require("parley.buffer_lifecycle")
+        lifecycle.setup(buf)
+        lifecycle.setup(buf)
+        local builds = 0
+        for _, event in ipairs(events) do
+            if event.operation == "structure_build" then builds = builds + 1 end
+        end
+        assert.equals(1, builds)
+        assert.is_true(require("parley.highlighter")._structure_cache(buf).attached)
+
+        lifecycle.clear(buf)
+        lifecycle.setup(buf)
+        assert.is_true(require("parley.highlighter")._structure_cache(buf).attached)
+    end)
+
+    it("makes obsolete attached callbacks no-op after teardown", function()
+        local highlighter = require("parley.highlighter")
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "body" })
+        parley._parley_bufs[buf] = "chat"
+        assert.is_truthy(highlighter.rebuild_structure(buf))
+        local callback = highlighter._structure_cache(buf).on_lines
+        highlighter.clear_structure(buf)
+        assert.is_true(callback(nil, buf, 0, 0, 1, 1))
+        assert.is_nil(highlighter._structure_cache(buf))
     end)
 end)
 
@@ -551,6 +735,7 @@ describe("timezone diagnostics", function()
         vim.api.nvim_win_set_buf(vim.api.nvim_get_current_win(), buf)
         parley._parley_bufs[buf] = "markdown"
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "no timestamp yet" })
+        require("parley.buffer_lifecycle").setup(buf)
 
         vim.cmd("doautocmd TextChanged")
         vim.wait(100, function()
@@ -685,6 +870,7 @@ describe("markdown footnote diagnostics", function()
             severity = vim.diagnostic.severity.INFO,
             source = "parley-skill",
         } })
+        require("parley.buffer_lifecycle").setup(buf)
 
         vim.cmd("doautocmd TextChanged")
         vim.wait(100, function()
@@ -731,7 +917,7 @@ describe("markdown footnote diagnostics", function()
 
         local win = vim.api.nvim_get_current_win()
         vim.api.nvim_win_set_buf(win, buf)
-        provider.on_win(nil, win, buf, 0, 2)
+        render_window(provider, win, buf, 0, 2)
 
         local original_set_extmark = vim.api.nvim_buf_set_extmark
         local extmarks = {}

@@ -62,4 +62,22 @@ describe("buffer lifecycle", function()
         handlers.TextChanged({ buf = 4, event = "TextChanged" })
         assert.are.same({}, calls)
     end)
+
+    it("propagates structure convergence failures after notifying", function()
+        local notified
+        local lifecycle = buffer_lifecycle._new({
+            is_valid = function() return true end,
+            create_autocmd = function() end,
+            diagnostics = { refresh = function() end, clear = function() end },
+            structure = {
+                rebuild = function() return nil, "candidate failed" end,
+                clear = function() end,
+            },
+            notify = function(err) notified = err end,
+        })
+        local ok, err = pcall(lifecycle.setup, 4)
+        assert.is_false(ok)
+        assert.matches("candidate failed", err)
+        assert.equals("candidate failed", notified)
+    end)
 end)

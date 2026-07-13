@@ -355,53 +355,53 @@ structural bounds do.
 - Modify: `tests/arch/performance_line_reader_spec.lua`
 - Modify: `tests/integration/perf_chat_typing_spec.lua`
 
-- [ ] Write failing cases comparing matched local viewports (same row content,
+- [x] Write failing cases comparing matched local viewports (same row content,
       window height, structural opener count, and reasoning lookahead shape) in 1,000 and
       5,000-line buffers; assert equal `lines_requested` and zero full-buffer
       reads. Cover footer, draft, reasoning, scrolling, two windows, body edit,
       marker edit + InsertLeave, streaming growth, undo/redo, external edit +
       BufWritePost, and unload/delete late-callback no-op. Add a real-producer
       seam case through actual buffer attach → `on_lines` → provider query.
-- [ ] Add real-provider reasoning cases: while `tasker.is_busy` is true, a blank
+- [x] Add real-provider reasoning cases: while `tasker.is_busy` is true, a blank
       line after an unfinished `🧠:` remains `ParleyThinking`; toggling busy false
       without a text edit immediately restores historical lookahead/terminator
       semantics on the next redraw.
-- [ ] Invoke real setup/BufEnter twice and assert one full build and one effective
+- [x] Invoke real setup/BufEnter twice and assert one full build and one effective
       `nvim_buf_attach`; two windows share it. Test `BufUnload` and `BufDelete`
       separately, then legitimate re-entry performs one new attach/build.
-- [ ] Run focused specs; expect current footer/draft `all_lines` reads and
+- [x] Run focused specs; expect current footer/draft `all_lines` reads and
       backward bootstrap to violate counters.
-- [ ] On first buffer attach only, build structure via `LineReader` before
+- [x] On first buffer attach only, build structure via `LineReader` before
       marking the buffer renderable; attach `on_lines`; read only
       `[firstline,new_lastline)` and call pure `replace`. Record
       `structure_rows_processed`. On `"structural"`, mark dirty in O(changed
       rows); do not recompute. Share one cache across windows and clear it plus
       LineReader registry state in unload/delete.
-- [ ] Expose synchronous `highlighter.rebuild_structure(buf)` and call it from
+- [x] Expose synchronous `highlighter.rebuild_structure(buf)` and call it from
       `BufferLifecycle.converge` independently after diagnostic refresh for each
       named event and stream-leg finalization. While dirty the provider returns
       false; after rebuild it renders current structure.
-- [ ] Make rebuild transactional: build a candidate under `pcall`, swap only on
+- [x] Make rebuild transactional: build a candidate under `pcall`, swap only on
       success, and return `(nil,error)` on failure while retaining dirty/
       unrenderable prior state. The lifecycle coordinator logs/notifies and
       propagates synchronous event failure; no partial cache is installed. Test
       initial-build and convergence-build failures plus later successful retry.
-- [ ] Feed chat/Markdown compute functions `structure` and `reader`. Replace
+- [x] Feed chat/Markdown compute functions `structure` and `reader`. Replace
       footer/draft full scans with structure queries and bootstrap with
       `state_before`. `HighlightStructure` owns reasoning state, so provider
       lookahead performs no reads. Cache absence means not renderable and the
       provider returns false; no dirty fallback/rebuild generation exists.
-- [ ] Resolve end columns while constructing the row map so `on_line` performs
+- [x] Resolve end columns while constructing the row map so `on_line` performs
       no reads. For `toprow=T`, `botrow=B`, line count `N`, assert the exact
       ordered read sequence is one call
       `lines(T,min(B+1+20,N),false)` and nothing else, totaling
       `min(B+1+20,N)-T`; require the identical sequence at both sizes.
-- [ ] Run highlighting/arch/perf specs and `make perf`. Required non-timing
+- [x] Run highlighting/arch/perf specs and `make perf`. Required non-timing
       assertions: `edit_total.full_buffer_reads == 0`,
       `decoration_redraw.full_buffer_reads == 0`, and 1,000-line
       `lines_requested ==` 5,000-line `lines_requested`, plus identical
       `structure_rows_processed` (one for the prose edit). Do not widen zero.
-- [ ] Commit exact files as `#170: bound chat decoration work to viewport state`.
+- [x] Commit exact files as `#170: bound chat decoration work to viewport state`.
 
 ---
 

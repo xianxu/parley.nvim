@@ -245,7 +245,7 @@ threshold in this issue.
       the baseline, including observer and work-counter validity tests.
 - [x] Remove full-buffer diagnostic work from `TextChangedI` and test every
       specified convergence trigger.
-- [ ] Bound decoration-provider structural work and test scroll, multi-window,
+- [x] Bound decoration-provider structural work and test scroll, multi-window,
       generation, and teardown behavior.
 - [ ] Verify the complete lifecycle matrix and capture the optimized report on
       the baseline environment.
@@ -431,3 +431,27 @@ The exact-accounting follow-up distinguishes the API's contractual
 `rows_processed` from measured implementation work: full builds now count all
 three linear passes, while a cardinality mismatch still returns
 `rows_processed = #new_lines` but records zero classifier visits.
+
+### 2026-07-12 — buffer-owned bounded decoration structure
+
+The decoration provider now shares one buffer-owned `HighlightStructure`
+across windows. Initial setup builds before attachment/renderability; real
+`on_lines` callbacks read only the changed half-open range and process exactly
+one row for ordinary prose. Grammar or cardinality changes mark the cache dirty
+without suffix work, and the provider declines to render until neutral
+`BufferLifecycle` independently rebuilds after diagnostics. Candidate builds
+swap transactionally; initial and convergence failures remain unrenderable,
+notify/propagate synchronously, and retry cleanly. Teardown clears both cache
+and reader state, with obsolete callbacks becoming no-ops (`ARCH-PURPOSE`).
+
+Matched 1,000/5,000-line tests pin the redraw to exactly one
+`lines(T,min(B+21,N),false)` call, identical requested rows, zero full reads,
+and one structure row for the edit. Footer, draft, viewport bootstrap, and
+reasoning lookahead perform no reads; busy reasoning is a redraw-only overlay.
+Focused evidence: highlighting 34/34, perf scenario 11/11, lifecycle 5/5, and
+performance architecture 4/4. `make -f Makefile.parley perf` passed its hard
+gates: `edit_total` full reads 0/0/0 and structure rows 1/1/1 at
+100/1,000/5,000; 1,000 and 5,000 requested rows matched at 88 for inclusive
+edit and 61 for isolated redraw. Redraw medians were 0.22/0.33/0.30 ms and
+inclusive edit medians 2.52/2.50/2.36 ms (report-only). Lint and diff-check
+passed.

@@ -15,7 +15,11 @@ function M._new(deps)
             return
         end
         deps.diagnostics.refresh(buf)
-        deps.structure.rebuild(buf)
+        local rebuilt, err = deps.structure.rebuild(buf)
+        if rebuilt == nil and err then
+            if deps.notify then deps.notify(err) end
+            error(err, 0)
+        end
     end
 
     function lifecycle.clear(buf)
@@ -66,14 +70,17 @@ local default = M._new({
         rebuild = function(buf)
             local highlighter = require("parley.highlighter")
             if highlighter.rebuild_structure then
-                highlighter.rebuild_structure(buf)
+                return highlighter.rebuild_structure(buf)
             end
         end,
-        clear = function() end,
+        clear = function(buf)
+            require("parley.highlighter").clear_structure(buf)
+        end,
     },
     create_autocmd = function(events, callback)
         vim.api.nvim_create_autocmd(events, { group = group, callback = callback })
     end,
+    notify = function(err) vim.notify("Parley structure rebuild failed: " .. tostring(err), vim.log.levels.ERROR) end,
 })
 
 M.setup = default.setup

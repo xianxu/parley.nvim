@@ -99,6 +99,29 @@ function M.write_report(path, encoded)
     if not ok then error("could not write performance report " .. path .. ": " .. tostring(err), 2) end
 end
 
+function M.assert_hard_gates(report)
+    local indexed = {}
+    for _, scenario in ipairs(report.scenarios or {}) do
+        indexed[scenario.phase .. ":" .. scenario.line_count] = scenario.work
+        if scenario.phase == "edit_total" or scenario.phase == "decoration_redraw" then
+            assert(scenario.work.full_buffer_reads == 0,
+                scenario.phase .. " must perform zero full-buffer reads")
+        end
+        if scenario.phase == "edit_total" then
+            assert(scenario.work.structure_rows_processed == 1,
+                "edit_total must process exactly one structure row")
+        end
+    end
+    for _, phase in ipairs({ "edit_total", "decoration_redraw" }) do
+        local one = indexed[phase .. ":1000"]
+        local five = indexed[phase .. ":5000"]
+        if one and five then
+            assert(one.lines_requested == five.lines_requested,
+                phase .. " lines_requested must match at 1000 and 5000 lines")
+        end
+    end
+end
+
 local setup_root
 local function ensure_setup()
     if setup_root then return setup_root end
@@ -254,7 +277,10 @@ local function isolated_phases(scenario)
         decoration_redraw = function()
             local win = vim.api.nvim_get_current_win()
             local top = math.max(0, scenario.target_line - 20)
-            require("parley.highlighter")._compute_window_decorations(win, buf, top, top + 40, reader)
+            local highlighter = require("parley.highlighter")
+            local cache = highlighter._structure_cache(buf)
+            assert(cache and cache.renderable, "decoration structure cache is not renderable")
+            highlighter._compute_window_decorations(win, buf, top, top + 40, reader, cache.structure)
         end,
         spell_typeahead = function() require("parley.spell").suggest({ reader = reader }) end,
     }
@@ -304,6 +330,7 @@ function M.start(opts)
         end)
     end
     local function finish()
+        M.assert_hard_gates(report)
         local output = opts.output or os.getenv("PERF_OUTPUT") or ".test-tmp/perf/parley-chat-typing.json"
         M.write_report(output, harness.encode(report))
         print(harness.render_table(report))
