@@ -106,7 +106,9 @@ Notes:
 1. Run `:ParleyChatNew` (default shortcut: `<C-g>c`) to create a new chat.
 2. Type your question after `💬:`, no need for anything else. `Topic: ?` will be automatically filled with summary of your question.
 3. Run `:ParleyChatRespond` (default shortcut: `<C-g><C-g>`) with mouse on the question line.
-4. Get response from the agent after `🤖:`, streaming in real time.
+4. Get a response from the agent after `🤖:`, streaming in real time. A slow
+   start shows a playful virtual progress line after one second; it never enters
+   the Markdown transcript.
 
 A Parley chat is a normal markdown file with a header and alternating `💬:` / `🤖:` blocks.
 
@@ -121,7 +123,7 @@ Most-used defaults:
 **In Chat Buffer**
 - `<C-g>?` show key bindings
 - `<C-g><C-g>` respond
-- `<M-CR>` respond (normal/insert); **visual-select a phrase + `<M-CR>`** → inline term definition — adds a markdown footnote reference/footer and shows a centered diagnostic float, honoring `:ToggleWebSearch` for unfamiliar terms
+- `<M-CR>` respond (normal/insert); **visual-select a phrase + `<M-CR>`** → inline term definition — immediately shows a spinner after the selection, then on success replaces it with a markdown footnote reference/footer and centered diagnostic float, honoring `:ToggleWebSearch` for unfamiliar terms
   - Reopened chats recover multi-word highlights from structured footnotes such as `[^acos]: "Advertising Cost of Sales". Ratio...`; generated ids such as `[^serverless-functions]` also recover `serverless functions` from the slug when that phrase appears before the reference.
 - `<C-g>G` respond all
 - `<C-g>x` stop
@@ -150,7 +152,7 @@ Most-used defaults:
 - Providers: OpenAI, Anthropic, Google AI, Ollama, OpenAI-compatible endpoints, and CLIProxyAPI.
   - parley can **manage a local `cliproxyapi`** for you — it renders the config from Lua and lazily starts/reuses/health-checks the proxy. `:ParleyProxy status|start|stop|restart|models <provider>|providers|login <provider>|update` (bare `:ParleyProxy` prints per-subcommand help). **On by default but dormant** — only acts when a cliproxyapi-provider agent runs, and reuses an existing proxy if one is up; a fresh machine needs `brew install cliproxyapi` + a one-time `:ParleyProxy login`. Set `cliproxy = { manage = false }` to opt out. See [atlas/providers/cliproxy-managed.md](atlas/providers/cliproxy-managed.md).
 - File context with `@@path/to/file` and directory patterns.
-- Web search toggle for supported providers.
+- Web search toggle for supported providers, with semantic search/reasoning status shown in the response's transient virtual progress line.
 - Outline navigation, highlighting.
 - Export chat to markdown or HTML, for blogging, e.g. [a chat about async programming](https://xianxu.github.io/2025/05/12/conversation_around_concurrent_programming_models.html).
 - Misc: notes, interview mode, raw mode, and export.

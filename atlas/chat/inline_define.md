@@ -23,13 +23,22 @@ rehydrates persisted managed footnotes in all markdown buffers.
    empty/whitespace, and computes a **bounded context** = the *enclosing
    exchange* of the selection (`define.context_for_selection` over `parse_chat`
    + `find_exchange_at_line`), falling back to the whole buffer.
-2. It fires a headless **`define` skill** turn via `skill_invoke.invoke` with
-   `opts.document = context`, `opts.no_reload = true`, and an `on_done`.
-3. The `define` skill (`lua/parley/skills/define/init.lua`) is **unforced** (no
+2. It immediately starts `selection_spinner` at the exclusive end of the
+   selected phrase. The inline virtual text begins as ` ⠙`, animates from the
+   canonical spinner frames, and never changes the buffer or waits for a reveal
+   threshold.
+3. It fires a headless **`define` skill** turn via `skill_invoke.invoke` with
+   `opts.document = context`, `opts.no_reload = true`,
+   `opts.detached_progress = false`, and the spinner's idempotent stop function
+   as `opts.on_terminal`. Definition therefore does not open the detached
+   luabar; Document Review and generic skills retain that default progress UI.
+4. The `define` skill (`lua/parley/skills/define/init.lua`) is **unforced** (no
    `force_tool`) so the server-side `web_search` tool can run when the global
    `:ToggleWebSearch` is on; its `source(ctx)` folds the phrase into the system
    prompt and asks the model to call `emit_definition({term, definition})`.
-4. **`render_definition`** (`on_done`), on a successful lookup: re-verifies the
+5. `skill_invoke` runs terminal cleanup before `on_done` on success, failure,
+   cancellation, process abort, or an invalid buffer. **`render_definition`**
+   (`on_done`), on a successful lookup: re-verifies the
    selection still holds the phrase (else skips — the buffer changed under the
    in-flight call), then **(a)** adds a `[^id]` reference after the selected term
    and inserts/updates a final managed footnote footer via one buffer rewrite
@@ -42,8 +51,9 @@ rehydrates persisted managed footnotes in all markdown buffers.
    `skill_render.format_diagnostic_message`) on the `parley_skill` namespace;
    **(d)** records the undo/redo projection states.
    `diag_display` opens a centered, non-focusable diagnostic float when the
-   cursor is on the term/footnote anchor span. A no-`emit_definition` response
-   leaves no footnote reference/footer.
+   cursor is on the term/footnote anchor span. A no-`emit_definition` response,
+   stale selection, cancellation, provider failure, or deleted buffer leaves no
+   footnote reference/footer and no pending spinner.
 
 ## Undo (`u`) — reuses review's projection
 
@@ -68,6 +78,7 @@ watcher doesn't mistake it for a user edit.
   `strip_definition_footnote_footer` / `footnote_diagnostics` (treat the first
   markdown footnote definition line as the managed footer boundary).
 - **IO shell** (`lua/parley/init.lua`): `define_visual`, `render_definition`;
+  `lua/parley/selection_spinner.lua` owns immediate selection-anchored progress;
   `lua/parley/buffer_edit.lua` owns the full-buffer footnote rewrite;
   `lua/parley/skill_render.lua` publishes footnote diagnostics; and
   `lua/parley/highlighter.lua` refreshes them from chat and markdown lifecycle
@@ -151,9 +162,12 @@ tool-call args (`result.calls[1].input`), read in `on_done`.
 - `lua/parley/chat_respond.lua` — strips managed footnote footer from LLM messages.
 - `lua/parley/skills/define/init.lua` — the unforced `define` skill.
 - `lua/parley/tools/builtin/emit_definition.lua` — output-only structured tool.
-- `lua/parley/skill_invoke.lua` — `opts.no_reload` / `opts.document` seams.
+- `lua/parley/selection_spinner.lua` — immediate inline canonical spinner and idempotent teardown.
+- `lua/parley/skill_invoke.lua` — `opts.no_reload` / `opts.document`, optional detached progress, and terminal cleanup seams.
 - `lua/parley/config.lua`, `lua/parley/keybinding_registry.lua` — the `<M-CR>` split.
-- `tests/unit/define_spec.lua`, `tests/integration/define_spec.lua` — coverage.
+- `tests/unit/define_spec.lua`, `tests/integration/define_spec.lua`, and
+  `tests/integration/skill_invoke_spec.lua` — pure, inline lifecycle, and shared
+  terminal coverage.
 
 ## Related
 

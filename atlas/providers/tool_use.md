@@ -85,4 +85,6 @@ Tool blocks in the transcript:
 - 🔧:/📎: blocks are dimmed (`ParleyThinking` highlight = `Comment`)
 - Error results highlighted with `ParleyToolError` = `DiagnosticError`
 - Completed tool blocks auto-folded via model-based manual folds
-- Spinner shows during every API call (including recursive rounds)
+- Each initial or recursive LLM round uses the delayed virtual
+  [response-progress](../chat/response_progress.md) presentation; fast visible
+  output bypasses it, and local tool execution itself shows no spinner

@@ -46,6 +46,28 @@ atlas:
       - tests/integration/not_chat_spec.lua
       - tests/integration/timer_race_spec.lua
 
+  chat/response_progress:
+    code:
+      - lua/parley/chat_presentation.lua
+      - lua/parley/chat_pending.lua
+      - lua/parley/chat_respond.lua
+      - lua/parley/chat_lease.lua
+      - lua/parley/dispatcher.lua
+      - lua/parley/tasker.lua
+      - lua/parley/vault.lua
+      - lua/parley/progress.lua
+      - tests/fixtures/fake_sse_server
+    tests:
+      - tests/unit/chat_presentation_spec.lua
+      - tests/unit/dispatcher_query_spec.lua
+      - tests/unit/vault_spec.lua
+      - tests/integration/chat_pending_spec.lua
+      - tests/integration/chat_respond_spec.lua
+      - tests/integration/chat_progress_process_spec.lua
+      - tests/integration/tasker_run_spec.lua
+      - tests/integration/topic_gen_spec.lua
+      - tests/integration/cliproxy_caller_teardown_spec.lua
+
   chat/memory:
     code:
       - lua/parley/init.lua
@@ -108,12 +130,15 @@ atlas:
       - lua/parley/tools/builtin/emit_definition.lua
       - lua/parley/tools/init.lua
       - lua/parley/skill_invoke.lua
+      - lua/parley/selection_spinner.lua
       - lua/parley/skill_render.lua
       - lua/parley/config.lua
       - lua/parley/keybinding_registry.lua
     tests:
       - tests/unit/define_spec.lua
       - tests/integration/define_spec.lua
+      - tests/integration/skill_invoke_spec.lua
+      - tests/integration/cliproxy_caller_teardown_spec.lua
 
   context/file_references:
     code:
