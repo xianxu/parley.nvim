@@ -213,7 +213,7 @@ describe("chat progress real curl process", function()
         end, 10), vim.inspect(notices))
         assert.equals(1, matching)
         assert.equals(0, #pending_marks(buf))
-        assert.is_true(text(buf):find("brewing", 1, true) == nil)
+        assert.is_true(text(buf):find("Baking", 1, true) == nil)
     end
 
     it("cleans one real chat session when the provider secret is missing", function()

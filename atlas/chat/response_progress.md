@@ -17,7 +17,7 @@ One `chat_pending` session owns one dispatched chat leg:
 2. A still-silent fresh leg shows a virtual line below its `🤖:` response
    header; a recursive tool leg starts on the stable pre-stream separator
    outside Parley-generated tool folds. The line initially takes the form
-   `⠙ brewing`. The glyph animates from `progress.SPINNER`; SSE/JSONL activity
+   `⠙ Baking`. The glyph animates from `progress.SPINNER`; SSE/JSONL activity
    and 15 seconds of transport idleness rotate the playful verb independently.
 3. Once shown, the line remains visible for at least one second. Visible output
    arriving during that interval is staged in callback order. At the minimum
