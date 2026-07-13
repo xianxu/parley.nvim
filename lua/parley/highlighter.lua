@@ -67,32 +67,6 @@ local function resolve_path(path, base_dir)
 end
 
 
-local function get_chat_highlight_prefix_patterns()
-    local user_prefix = _parley.config.chat_user_prefix
-    local local_prefix = _parley.config.chat_local_prefix
-    local memory_enabled = _parley.config.chat_memory and _parley.config.chat_memory.enable
-    local reasoning_prefix = memory_enabled and _parley.config.chat_memory.reasoning_prefix or "🧠:"
-    local summary_prefix = memory_enabled and _parley.config.chat_memory.summary_prefix or "📝:"
-
-    local assistant_prefix
-    if type(_parley.config.chat_assistant_prefix) == "string" then
-        assistant_prefix = _parley.config.chat_assistant_prefix
-    elseif type(_parley.config.chat_assistant_prefix) == "table" then
-        assistant_prefix = _parley.config.chat_assistant_prefix[1]
-    end
-
-    local branch_prefix = _parley.config.chat_branch_prefix or "🌿:"
-    return {
-        reasoning_pattern = "^" .. vim.pesc(reasoning_prefix),
-        reasoning_end_pattern = "^%s*" .. vim.pesc(reasoning_prefix) .. "%[END%]%s*$",
-        summary_pattern = "^" .. vim.pesc(summary_prefix),
-        user_pattern = "^" .. vim.pesc(user_prefix),
-        assistant_pattern = "^" .. vim.pesc(assistant_prefix),
-        local_pattern = "^" .. vim.pesc(local_prefix),
-        branch_pattern = "^" .. vim.pesc(branch_prefix),
-    }
-end
-
 -- Hard cap on how far forward the buffer-aware lookahead will scan
 -- when deciding a reasoning block's termination mode. Reasoning blocks
 -- in practice are well under this; the cap exists to bound work on a
@@ -116,16 +90,13 @@ local function reasoning_block_has_end_marker(buf, from_line, patterns, reader)
     if from_line + 1 > stop then return false end
     local ahead_lines = reader:lines(from_line, stop, false)
     for _, ahead in ipairs(ahead_lines) do
-        if ahead:match(patterns.reasoning_end_pattern) then
+        local kind = require("parley.highlight_structure").classify(ahead, patterns).kind
+        if kind == "reasoning_end" then
             return true
         end
-        if ahead:match(patterns.user_pattern)
-            or ahead:match(patterns.assistant_pattern)
-            or ahead:match(patterns.local_pattern)
-            or ahead:match(patterns.summary_pattern)
-            or ahead:match(patterns.branch_pattern)
-            or ahead:match("^🔧:")
-            or ahead:match("^📎:") then
+        if kind == "user" or kind == "assistant" or kind == "local"
+            or kind == "summary" or kind == "branch"
+            or kind == "tool_use" or kind == "tool_result" then
             return false
         end
     end
@@ -144,11 +115,12 @@ local function bootstrap_chat_highlight_state(buf, start_line, patterns, streami
     while bootstrap_start > 1 do
         local previous_lines = reader:lines(bootstrap_start - 2, bootstrap_start - 1, false)
         local previous_line = previous_lines[1] or ""
-        if previous_line:match(patterns.user_pattern) then
+        local previous_kind = require("parley.highlight_structure").classify(previous_line, patterns).kind
+        if previous_kind == "user" then
             bootstrap_in_block = true
             break
         end
-        if previous_line:match(patterns.assistant_pattern) or previous_line:match(patterns.local_pattern) then
+        if previous_kind == "assistant" or previous_kind == "local" then
             bootstrap_in_block = false
             break
         end
@@ -165,27 +137,26 @@ local function bootstrap_chat_highlight_state(buf, start_line, patterns, streami
     local prefix_lines = reader:lines(bootstrap_start - 1, start_line - 1, false)
     local in_reasoning_explicit_end = false
     for idx, line in ipairs(prefix_lines) do
-        if line:match("^%s*```") then
+        local kind = require("parley.highlight_structure").classify(line, patterns).kind
+        if kind == "fence" then
             in_code_block = not in_code_block
         end
 
-        if line:match(patterns.user_pattern) then
+        if kind == "user" then
             in_block = true
             in_reasoning_block = false
-        elseif line:match(patterns.assistant_pattern) or line:match(patterns.local_pattern) then
+        elseif kind == "assistant" or kind == "local" then
             in_block = false
             in_reasoning_block = false
-        elseif line:match(patterns.branch_pattern)
-            or line:match(patterns.summary_pattern)
-            or line:match("^🔧:")
-            or line:match("^📎:") then
+        elseif kind == "branch" or kind == "summary"
+            or kind == "tool_use" or kind == "tool_result" then
             in_reasoning_block = false
-        elseif line:match(patterns.reasoning_end_pattern) then
+        elseif kind == "reasoning_end" then
             -- 🧠:[END] explicit terminator. Checked before
             -- reasoning_pattern since the END marker also starts with
             -- the reasoning prefix.
             in_reasoning_block = false
-        elseif line:match(patterns.reasoning_pattern) then
+        elseif kind == "reasoning" then
             in_reasoning_block = true
             -- prefix_lines starts at bootstrap_start (1-indexed). The
             -- 🧠: opener at array index `idx` corresponds to buffer
@@ -265,7 +236,8 @@ end
 local function compute_chat_highlights(buf, start_line, end_line, reader)
     reader = reader or require("parley.line_reader").for_buffer(buf)
     local result = {}
-    local patterns = get_chat_highlight_prefix_patterns()
+    local highlight_structure = require("parley.highlight_structure")
+    local patterns = highlight_structure.patterns(_parley.config)
     local lines = reader:lines(start_line - 1, end_line, false)
     local all_lines = reader:lines(0, -1, false)
     local footer_range = require("parley.define").managed_footnote_footer_range(all_lines)
@@ -284,7 +256,8 @@ local function compute_chat_highlights(buf, start_line, end_line, reader)
 
     for offset, line in ipairs(lines) do
         local line_nr = start_line + offset - 1
-        if line:match("^%s*```") then
+        local line_kind = highlight_structure.classify(line, patterns).kind
+        if line_kind == "fence" then
             in_code_block = not in_code_block
             -- Exiting a code block while in a tool region ends the tool region
             if not in_code_block and in_tool_block then
@@ -320,19 +293,21 @@ local function compute_chat_highlights(buf, start_line, end_line, reader)
             -- highlight tracks parse boundaries even when the model omits
             -- the canonical blank-line terminator (or in pre-existing
             -- chats authored under the old single-line 🧠: convention).
-            local is_user = line:match(patterns.user_pattern)
-            local is_assistant = line:match(patterns.assistant_pattern)
-            local is_branch = line:match(patterns.branch_pattern)
-            local is_local = line:match(patterns.local_pattern)
-            local is_summary = line:match(patterns.summary_pattern)
-            local is_tool_use = line:match("^🔧:")
-            local is_tool_result = line:match("^📎:")
+            local classification = highlight_structure.classify(line, patterns)
+            local kind = classification.kind
+            local is_user = kind == "user"
+            local is_assistant = kind == "assistant"
+            local is_branch = kind == "branch"
+            local is_local = kind == "local"
+            local is_summary = kind == "summary"
+            local is_tool_use = kind == "tool_use"
+            local is_tool_result = kind == "tool_result"
             if is_user or is_assistant or is_branch or is_local
                 or is_summary or is_tool_use or is_tool_result then
                 in_reasoning_block = false
             end
 
-            if line:match(patterns.reasoning_end_pattern) then
+            if kind == "reasoning_end" then
                 -- 🧠:[END] explicit terminator. Highlight the marker line
                 -- itself as ParleyThinking (it's the closing delimiter of
                 -- the thinking region), then close the block. Must be
@@ -340,7 +315,7 @@ local function compute_chat_highlights(buf, start_line, end_line, reader)
                 -- also starts with the reasoning prefix.
                 table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
                 in_reasoning_block = false
-            elseif line:match(patterns.reasoning_pattern) then
+            elseif kind == "reasoning" then
                 table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
                 in_reasoning_block = true
                 -- Buffer-aware lookahead: line_nr is the current 1-indexed
@@ -419,23 +394,13 @@ end
 -- is open is ignored.
 -- Returns { { open_row, close_row }, ... } in 0-indexed inclusive coords.
 local function scan_draft_blocks(lines)
+    local structure = require("parley.highlight_structure").build(lines)
     local blocks = {}
-    local open_row = nil
-    for i, line in ipairs(lines) do
-        local label = line:match("^=== (.+) ===%s*$")
-        if label then
-            if label == "end" then
-                if open_row then
-                    table.insert(blocks, { open_row = open_row, close_row = i - 1 })
-                    open_row = nil
-                end
-            elseif not open_row then
-                open_row = i - 1
-            end
-        end
-    end
-    if open_row then
-        table.insert(blocks, { open_row = open_row, close_row = #lines - 1 })
+    for _, range in ipairs(structure.draft_ranges) do
+        blocks[#blocks + 1] = {
+            open_row = range.start_row,
+            close_row = range.end_row_exclusive - 1,
+        }
     end
     return blocks
 end

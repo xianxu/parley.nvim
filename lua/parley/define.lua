@@ -163,13 +163,13 @@ local function is_divider(line)
     return trim(line) == "---"
 end
 
-local function is_footnote_line(line)
+function M.is_footnote_line(line)
     return trim(line):match("^%[%^[^%]]+%]:") ~= nil
 end
 
 local function managed_footer_start(lines)
     for i, line in ipairs(lines or {}) do
-        if is_footnote_line(line) then
+        if M.is_footnote_line(line) then
             return i
         end
     end

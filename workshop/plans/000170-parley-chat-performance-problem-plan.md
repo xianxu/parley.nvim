@@ -296,13 +296,13 @@ structural bounds do.
 - Modify: `tests/arch/buffer_mutation_spec.lua` pure-file list or create a
   focused pure-architecture spec
 
-- [ ] Move decoration structural classification (prefix, draft delimiter, code
+- [x] Move decoration structural classification (prefix, draft delimiter, code
       fence, tool, reasoning) from `highlighter.lua` into
       `highlight_structure.lua`; make it the canonical classifier consumed by
       both highlighter and `chat_parser.lua`. Export/inject `define`'s existing
       footnote predicate as the sole footer grammar. Delete local shadows
       (`ARCH-DRY`).
-- [ ] Write failing pure tests with 0-based half-open change ranges. Require
+- [x] Write failing pure tests with 0-based half-open change ranges. Require
       `fingerprint(line, patterns)` to return a compact token;
       `build(lines, patterns)` to return `{fingerprints,state_before,
       footer_start0,draft_ranges}`; `replace(s, first0, old_last0, new_lines,
@@ -312,23 +312,23 @@ structural bounds do.
       state/ranges. Cover user/assistant/local/tool/reasoning/code state,
       managed footer, multiple drafts, insert/delete shifts, body fast path,
       and structural edits whose downstream state changes to EOF.
-- [ ] Require `build` and successful `replace` to return fresh structures without
+- [x] Require `build` and successful `replace` to return fresh structures without
       mutating input arrays/ranges. Structural rejection returns nil and leaves
       the original byte-for-byte/deep-equal unchanged; pin both contracts.
-- [ ] Pin query shapes: `state_before(s,row0)` returns
+- [x] Pin query shapes: `state_before(s,row0)` returns
       `{in_question,in_code,in_reasoning,reasoning_explicit_end,in_tool}`;
       `footer_range(s,line_count)` returns `{start_row,end_row_exclusive}` or
       nil; `draft_blocks_in(s,first0,last0)` returns copied intersecting
       `{start_row,end_row_exclusive}` ranges. All rows are 0-based and ranges
       half-open.
-- [ ] Add query-time streaming input:
+- [x] Add query-time streaming input:
       `state_before(s,row0,{streaming=true})` returns the stored state except an
       active reasoning region is overlaid with `reasoning_explicit_end=true`.
       The structure stays text-derived; provider passes
       `tasker.is_busy(buf,true)` on every query, so busy start/finalization needs
       no cache invalidation and post-stream semantics converge immediately.
-- [ ] Run the new spec; expect module-not-found RED.
-- [ ] Implement the named API with 0-based rows/half-open ranges. `replace`
+- [x] Run the new spec; expect module-not-found RED.
+- [x] Implement the named API with 0-based rows/half-open ranges. `replace`
       fingerprints only `new_lines` and reports exactly `#new_lines` processed.
       It updates in place/copy only when old/new span lengths match and every
       aligned fingerprint is identical; otherwise it returns `"structural"`
@@ -336,15 +336,15 @@ structural bounds do.
       draft/marker edits, and code/reasoning changes are structural and defer to
       a full convergence rebuild outside `TextChangedI`. No per-keystroke path
       walks to EOF.
-- [ ] Test ordinary character edits process one row at 100/1,000/5,000 lines;
+- [x] Test ordinary character edits process one row at 100/1,000/5,000 lines;
       structural edit at row 1, newline, footer removal, and draft-boundary edits
       each process only changed rows then return `"structural"`. Separately test
       full `build` produces correct shifted footer/drafts after convergence.
-- [ ] Feed canonical cases from `tests/unit/parse_chat_spec.lua` and
+- [x] Feed canonical cases from `tests/unit/parse_chat_spec.lua` and
       `tests/integration/highlighting_spec.lua` through the new structure and
       assert the historical state/footer/draft oracles match.
-- [ ] Add pure-architecture enforcement and run unit + arch specs; expect green.
-- [ ] Commit exact files as `#170: model bounded highlight structure`.
+- [x] Add pure-architecture enforcement and run unit + arch specs; expect green.
+- [x] Commit exact files as `#170: model bounded highlight structure`.
 
 ### Task 6: Buffer-owned structure cache and bounded redraw
 

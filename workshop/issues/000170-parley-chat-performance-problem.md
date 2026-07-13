@@ -397,3 +397,22 @@ now mutates and asserts both timezone and managed-footnote freshness, while
 separate `BufUnload` and `BufDelete` cases prove both sources clear and unrelated
 shared diagnostics survive. Focused suites pass 3/3, 4/4, 9/9, and 31/31;
 `make perf`, 256-file lint, and diff-check remain green.
+
+### 2026-07-12 — pure bounded highlight structure
+
+`highlight_structure` now owns the canonical prefix, fence, tool, reasoning,
+draft, blank-line, and managed-footer classifications used by both the parser
+and highlighter (`ARCH-DRY`). Its pure 0-based model records state before each
+row plus half-open footer/draft ranges. Same-cardinality prose replacement
+fingerprints only changed rows and returns a fresh structure; any grammar or
+line-count change rejects after exactly the supplied rows without suffix work.
+`define.is_footnote_line` remains the sole managed-footer predicate.
+
+TDD evidence: the new spec first failed because the module was absent, then
+passed 7/7; the complete unit suite passed 103 files, parser regression passed
+54/54, legacy draft regression passed 9/9, and the pure architecture boundary
+passed 6/6. The 25 highlighting cases relevant to structural rendering passed;
+two legacy diagnostic-autocmd assertions in that combined file still encode
+the eager lifecycle intentionally removed by Task 4 and are reserved for Task
+7's lifecycle shadow sweep. Lint passed with 0 warnings/errors across 258 files
+and `git diff --check` passed.
