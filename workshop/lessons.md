@@ -159,3 +159,6 @@
 
 ## 2026-07-08 (#178)
 - **After changing a shared parser rule, grep for every shadow parser before close.** #178 changed `define.managed_footnote_footer_range`, but `chat_parser.lua` still had a local footer scanner at close review. Rule: for grammar or boundary-policy changes, grep the old predicates/terms and route all consumers through shared helpers before boundary review.
+
+## 2026-07-12 (#170)
+- **Core-concept tables must name greppable code entities and classify the whole named boundary, not its pure subset.** #170 called conceptual `PerfSampleSet`/`PerfReport` entities PURE even though their shared harness also owned the clock, timestamp, and Neovim JSON encoder. The close review correctly treated the contradiction as architectural. Rule: before close, resolve every Core-concept row to an actual symbol/module and inspect all side effects at that location; name a deterministic function separately from its INTEGRATION shell instead of assigning purity to a conceptual bundle.

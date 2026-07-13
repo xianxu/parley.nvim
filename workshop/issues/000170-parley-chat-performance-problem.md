@@ -584,3 +584,10 @@ The three exact repository sweeps from the plan found no defect:
   streaming/tool/fold/export/outline/finder consumers or definitions; tests and
   atlas describe them. Neither the benchmark nor the new per-keystroke
   lifecycle adds a parse/model call (`ARCH-DRY`, `ARCH-PURPOSE`).
+
+2026-07-12: close review returned REWORK because the plan's Core concepts table
+called conceptual performance-report entities PURE even though the named
+harness owns clock, timestamp, and Neovim JSON integration. Corrected the table
+to name pure `harness.summarize(samples)` separately from integration
+`PerfHarness`; also corrected diagnostic autocmd ownership and the footnote
+predicate dependency wording (`ARCH-PURE`). No runtime change was required.

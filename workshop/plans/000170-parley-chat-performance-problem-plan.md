@@ -16,20 +16,17 @@
 
 | Name | Kind | Lives in | Status |
 |---|---|---|---|
-| `PerfSampleSet` | PURE | `tests/perf/harness.lua` | new |
-| `PerfReport` | PURE | `tests/perf/harness.lua` | new |
+| `harness.summarize(samples)` | PURE | `tests/perf/harness.lua` | new |
 | `HighlightStructure` | PURE | `lua/parley/highlight_structure.lua` | new |
 
-`PerfSampleSet` copies and sorts elapsed samples to compute median/p95. One
-scenario owns one sample set; all reporters consume the same summary.
-
-`PerfReport` validates and serializes the versioned envelope. It keeps phase,
-attribution, units, environment, and work counters explicit so inclusive and
-isolated timings cannot be treated as additive.
+`harness.summarize(samples)` copies and sorts elapsed samples to compute
+median/p95 deterministically. The surrounding harness is an integration shell:
+it obtains clock/time values and encodes JSON through Neovim before reporting.
 
 `HighlightStructure` is the canonical decoration-state grammar after extraction:
 highlighter-local prefix/draft/reasoning/tool/code classification moves here;
-`define.lua` remains the canonical managed-footnote predicate and is injected;
+`define.lua` remains the canonical managed-footnote predicate and is consumed
+as a pure dependency;
 `chat_parser.lua` consumes the shared structural classifier while retaining
 semantic content assembly. The structure indexes fingerprints, footer start,
 draft ranges, and state checkpoints. One buffer cache owns one structure.
@@ -39,7 +36,8 @@ draft ranges, and state checkpoints. One buffer cache owns one structure.
 | Name | Kind | Lives in | Status | Wraps |
 |---|---|---|---|---|
 | `LineReader` | INTEGRATION | `lua/parley/line_reader.lua` | new | Neovim text reads + work observer |
-| `DiagnosticRefresh` | INTEGRATION | `lua/parley/diagnostic_refresh.lua` | new | diagnostic lifecycle autocmds |
+| `PerfHarness` | INTEGRATION | `tests/perf/harness.lua` | new | clock/timestamp + Neovim JSON reporting |
+| `DiagnosticRefresh` | INTEGRATION | `lua/parley/diagnostic_refresh.lua` | new | ordered diagnostic refresh/clear |
 | `BufferLifecycle` | INTEGRATION | `lua/parley/buffer_lifecycle.lua` | new | shared autocmd registration/teardown |
 | `HighlightStructureCache` | INTEGRATION | `lua/parley/highlighter.lua` | modified | buffer attachment/generation/redraw |
 | `ChatTypingScenario` | INTEGRATION | `tests/perf/chat_typing.lua` | new | real Neovim input/autocmd/redraw |
@@ -649,6 +647,18 @@ the structure-backed redraw and hard counter gates, plus
 `tests/unit/buffer_lifecycle_spec.lua` to pin notify/propagate behavior. Two
 combined highlighting tests now install the Task 4 lifecycle; Task 7 still owns
 the final one-oracle-per-named-test sweep.
+
+### 2026-07-12 — close-review entity classification correction
+
+Reason: the boundary review found the Core concepts table used conceptual
+`PerfSampleSet`/`PerfReport` names and classified their clock/timestamp/JSON
+shell as PURE, contradicting the implemented integration boundary.
+
+Delta: the pure table now names the greppable deterministic
+`harness.summarize(samples)` function, while `PerfHarness` is an INTEGRATION
+entity owning clock/time/JSON reporting. The table also records
+`DiagnosticRefresh` as ordered refresh/clear rather than an autocmd owner and
+describes `define.is_footnote_line` as HighlightStructure's pure dependency.
 
 ### 2026-07-12 — complete focused-spec command set
 
