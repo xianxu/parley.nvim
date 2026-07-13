@@ -251,7 +251,7 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 				return
 			end
 			stdout_finished = true
-			logger.debug(qt.provider .. " response: \n" .. vim.inspect(qt.raw_response))
+			logger.debug(qt.provider .. " response received: body_bytes=" .. #qt.raw_response)
 
 			local adapter = providers.get(qt.provider)
 			local metrics = adapter.parse_usage(qt.raw_response)
@@ -287,7 +287,7 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 			if qt.response == "" then
 				local has_tool_use = qt.raw_response:find('"type":"tool_use"', 1, true) ~= nil
 				if not has_tool_use then
-					logger.error(qt.provider .. " response is empty: \n" .. vim.inspect(qt.raw_response))
+					logger.error(qt.provider .. " response is empty: body_bytes=" .. #qt.raw_response)
 				end
 			end
 
@@ -394,7 +394,12 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 			if type(on_error) == "function" then
 				on_error(qid, failure)
 			else
-				logger.error(provider .. " query failed: " .. vim.inspect(failure))
+				local safe_io_error = tostring(io_error or "none"):gsub("%s+", " "):sub(1, 160)
+				logger.error(string.format(
+					"%s query failed: code=%s signal=%s http_status=%s io_error=%s body_bytes=%d stderr_bytes=%d",
+					provider, tostring(code), tostring(signal), tostring(http_status), safe_io_error,
+					#qt.raw_response, #clean_stderr
+				))
 				legacy_complete(qid, qt)
 			end
 		else

@@ -528,7 +528,13 @@ describe("tasker.run integration", function()
                 state.handle = handle
                 return handle, 4242
             end
-            runtime.read_start = function(pipe, reader) pipe.reader = reader end
+            runtime.read_start = function(pipe, reader)
+                local stream = pipe == state.pipes[1] and "stdout" or "stderr"
+                if opts[stream .. "_start_throw"] then error(stream .. " start exploded") end
+                if opts[stream .. "_start_reject"] then return false, stream .. " start rejected" end
+                pipe.reader = reader
+                return 0
+            end
             return runtime, state
         end
 
@@ -604,6 +610,85 @@ describe("tasker.run integration", function()
             assert.equals("unterminated", terminal.stdout)
             assert.is_truthy(terminal.io_error)
         end)
+
+        it("contains throwing readers and still drains both streams once", function()
+            local runtime, state = fake_uv()
+            tasker._uv = runtime
+            local stdout_calls = 0
+            local stderr_calls = 0
+            local terminals = 0
+            tasker.run(nil, "fake", {}, function()
+                terminals = terminals + 1
+            end, function()
+                stdout_calls = stdout_calls + 1
+                error("stdout reader exploded")
+            end, function()
+                stderr_calls = stderr_calls + 1
+                error("stderr reader exploded")
+            end)
+
+            assert.has_no.errors(function()
+                state.pipes[1].reader(nil, "out")
+                state.pipes[1].reader(nil, nil)
+                state.pipes[2].reader(nil, "err")
+                state.pipes[2].reader(nil, nil)
+                state.on_exit(0, 0)
+            end)
+            assert.is_true(vim.wait(100, function() return terminals == 1 end, 5))
+            assert.equals(2, stdout_calls)
+            assert.equals(2, stderr_calls)
+            assert.equals(0, #tasker._handles)
+        end)
+
+        it("cleans up and emits finished when the public terminal throws", function()
+            local runtime, state = fake_uv()
+            tasker._uv = runtime
+            local terminals = 0
+            local finished = 0
+            local autocmd = vim.api.nvim_create_autocmd("User", {
+                pattern = "ParleyQueryFinished",
+                callback = function() finished = finished + 1 end,
+            })
+            tasker.run(nil, "fake", {}, function()
+                terminals = terminals + 1
+                error("terminal exploded")
+            end)
+            state.pipes[1].reader(nil, nil)
+            state.pipes[2].reader(nil, nil)
+            state.on_exit(0, 0)
+
+            assert.is_true(vim.wait(100, function()
+                return terminals == 1 and finished == 1 and #tasker._handles == 0
+            end, 5))
+            pcall(vim.api.nvim_del_autocmd, autocmd)
+            assert.equals(1, terminals)
+            assert.equals(1, finished)
+            assert.equals(0, #tasker._handles)
+        end)
+
+        for _, case in ipairs({
+            { stream = "stdout", opts = { stdout_start_throw = true }, live_pipe = 2 },
+            { stream = "stderr", opts = { stderr_start_reject = true }, live_pipe = 1 },
+        }) do
+            it("turns " .. case.stream .. " read_start rejection into a drained IO terminal", function()
+                local runtime, state = fake_uv(case.opts)
+                tasker._uv = runtime
+                local terminals = 0
+                local terminal_error
+                tasker.run(nil, "fake", {}, function(_code, _signal, _stdout, _stderr, io_error)
+                    terminals = terminals + 1
+                    terminal_error = io_error
+                end)
+
+                state.pipes[case.live_pipe].reader(nil, nil)
+                state.on_exit(0, 0)
+                assert.is_true(vim.wait(100, function() return terminals == 1 end, 5))
+                assert.is_truthy(terminal_error)
+                local rejected_pipe = case.stream == "stdout" and state.pipes[1] or state.pipes[2]
+                assert.equals(1, rejected_pipe.close_calls)
+                assert.equals(0, #tasker._handles)
+            end)
+        end
 
         it("rejects busy work before allocating pipes", function()
             local runtime, state = fake_uv()

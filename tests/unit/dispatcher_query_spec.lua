@@ -15,6 +15,7 @@ local dispatcher = require("parley.dispatcher")
 local vault = require("parley.vault")
 local tasker = require("parley.tasker")
 local helpers = require("parley.helper")
+local logger = require("parley.logger")
 
 describe("dispatcher.query internals", function()
     local original_vault_get_secret
@@ -770,6 +771,47 @@ describe("dispatcher.query internals", function()
             captured_out_reader(nil, nil)
             captured_terminal(0, 0, "", "", nil)
             assert.is_truthy(failures[2].io_error)
+        end)
+
+        it("I11: legacy failure logging exposes only bounded metadata", function()
+            local marker = "AUTHORIZATION_SECRET_MARKER"
+            local body = 'data: {"choices":[{"delta":{"content":"' .. marker .. '"}}]}\n'
+            local stderr_prefix = "Authorization: Bearer " .. marker .. "\n"
+            local messages = {}
+            local notifications = {}
+            local original_debug = logger.debug
+            local original_error = logger.error
+            local original_warning = logger.warning
+            local original_notify = vim.notify
+            local function capture(message) table.insert(messages, tostring(message)) end
+            logger.debug = capture
+            logger.error = capture
+            logger.warning = capture
+            vim.notify = function(message) table.insert(notifications, tostring(message)) end
+
+            local ok, err = pcall(function()
+                dispatcher.query(nil, "openai", { model = "gpt-4", messages = {} }, function() end)
+                captured_out_reader(nil, body)
+                captured_out_reader(nil, nil)
+                captured_terminal(0, 0, body, status_stderr("500", stderr_prefix), nil)
+            end)
+
+            logger.debug = original_debug
+            logger.error = original_error
+            logger.warning = original_warning
+            vim.notify = original_notify
+            assert.is_true(ok, tostring(err))
+
+            local combined = table.concat(messages, "\n") .. table.concat(notifications, "\n")
+            assert.is_falsy(combined:find(marker, 1, true))
+            local failure_log
+            for _, message in ipairs(messages) do
+                if message:find("query failed", 1, true) then failure_log = message end
+                assert.is_true(#message < 512, "log message must remain bounded")
+            end
+            assert.is_truthy(failure_log)
+            assert.is_truthy(failure_log:find("body_bytes=" .. #body, 1, true))
+            assert.is_truthy(failure_log:find("stderr_bytes=" .. #stderr_prefix, 1, true))
         end)
 
         for _, terminal_kind in ipairs({ "success", "error_fallback" }) do

@@ -315,13 +315,25 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
 	local stderr_done = false
 	local io_error
 
+	local function call_safely(label, fn, ...)
+		if not fn then return end
+		local call_args = { ... }
+		local arg_count = select("#", ...)
+		local ok, message = xpcall(function()
+			fn(unpack(call_args, 1, arg_count))
+		end, debug.traceback)
+		if not ok then
+			logger.error(label .. " callback failed: " .. tostring(message))
+		end
+	end
+
 	local finish = M.once(function()
 		vim.schedule(function()
-			if callback then
-				callback(exit_code, exit_signal, stdout_data, stderr_data, io_error)
-			end
+			call_safely("task terminal", callback,
+				exit_code, exit_signal, stdout_data, stderr_data, io_error)
 			M.remove_handle(pid)
-			vim.cmd("doautocmd User ParleyQueryFinished")
+			local ok, message = pcall(vim.cmd, "doautocmd User ParleyQueryFinished")
+			if not ok then logger.error("ParleyQueryFinished failed: " .. tostring(message)) end
 		end)
 	end)
 
@@ -372,7 +384,7 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
 
 	M.add_handle(handle, pid, buf)
 
-	run_uv.read_start(stdout, function(err, data)
+	local function stdout_callback(err, data)
 		if stdout_done then return end
 		if err then
 			logger.error("Error reading stdout: " .. vim.inspect(err))
@@ -381,20 +393,18 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
 		if data then
 			stdout_data = stdout_data .. data
 		end
-		if out_reader then
-			out_reader(err, data)
-			if err then
-				out_reader(nil, nil)
-			end
+		call_safely("stdout reader", out_reader, err, data)
+		if err then
+			call_safely("stdout reader EOF", out_reader, nil, nil)
 		end
 		if err or data == nil then
 			stdout_done = true
 			close_pipe(stdout)
 			maybe_finish()
 		end
-	end)
+	end
 
-	run_uv.read_start(stderr, function(err, data)
+	local function stderr_callback(err, data)
 		if stderr_done then return end
 		if err then
 			logger.error("Error reading stderr: " .. vim.inspect(err))
@@ -403,17 +413,33 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
 		if data then
 			stderr_data = stderr_data .. data
 		end
-		if err_reader then
-			err_reader(err, data)
-			if err then
-				err_reader(nil, nil)
-			end
+		call_safely("stderr reader", err_reader, err, data)
+		if err then
+			call_safely("stderr reader EOF", err_reader, nil, nil)
 		end
 		if err or data == nil then
 			stderr_done = true
 			close_pipe(stderr)
 			maybe_finish()
 		end
+	end
+
+	local function start_read(stream, pipe, reader, reject)
+		local ok, result, detail = pcall(run_uv.read_start, pipe, reader)
+		local failed = not ok or result == false
+			or (type(result) == "number" and result ~= 0)
+			or (result == nil and detail ~= nil)
+		if failed then
+			local reason = ok and (detail or result) or result
+			reject(stream .. " read_start failed: " .. tostring(reason))
+		end
+	end
+
+	start_read("stdout", stdout, stdout_callback, function(message)
+		stdout_callback(message, nil)
+	end)
+	start_read("stderr", stderr, stderr_callback, function(message)
+		stderr_callback(message, nil)
 	end)
 end
 
