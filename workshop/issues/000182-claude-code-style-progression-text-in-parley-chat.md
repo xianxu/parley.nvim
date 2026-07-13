@@ -192,7 +192,7 @@ v3.1's 40% AI-paired ship-wall-clock scale.
 - [x] Add separate raw-SSE activity and post-start transport-error callbacks.
 - [x] Replace the buffer-backed web spinner with the extmark-backed chat adapter.
 - [x] Add Definition's immediate selection spinner and generalized skill terminal cleanup.
-- [ ] Update README/atlas/traceability and pass targeted, process, mapped, and full verification.
+- [x] Update README/atlas/traceability and pass targeted, process, mapped, and full verification.
 - [ ] Close, publish, and merge through the SDLC gates.
 
 ## Revisions
@@ -432,3 +432,22 @@ retain their detached progress default. Fresh reviews approved the boundary
 after malformed tool completion and every Definition-owned failure seam were
 covered. `ARCH-DRY` centralizes terminal cleanup; `ARCH-PURPOSE` keeps the
 selection spinner specific to Definition's natural inline anchor.
+
+### 2026-07-13 — Task 6 complete
+
+Mapped the new presentation boundary in README, atlas lifecycle, response
+progress, web-search, inline-Definition, tool-use, provider, and traceability
+documentation, then removed the orphaned buffer-progress editing API. Shadow
+searches found no obsolete implementation (the sole `Submitting...` match is a
+negative regression assertion). The four mapped feature groups, `make lint`,
+`make test-changed`, and the full `make test` suite all exited 0; `git diff
+--check origin/main...HEAD` was clean.
+
+The noninteractive temporal smoke used real scratch-buffer extmarks, injected
+production-shaped clocks, and the loopback curl/SSE process fixture. It
+observed fast-answer/no-mark, delayed reveal and minimum-visible staged flush,
+semantic remote-status handoff, tool recursion with the mark removed before
+local execution, immediate Definition `CVR ⠙` cleanup before `CVR[^cvr]`, and
+unchanged detached luabar behavior for Review. This automated substitute avoids
+claiming an unavailable GUI-manual run while exercising the same user-visible
+state transitions.

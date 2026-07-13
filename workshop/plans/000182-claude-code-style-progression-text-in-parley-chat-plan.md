@@ -598,11 +598,11 @@ git commit -m "#182: anchor definition progress to the selection"
 - Modify: `README.md`
 - Modify: `workshop/issues/000182-claude-code-style-progression-text-in-parley-chat.md`
 
-- [ ] **Step 1: Write the atlas page and reconcile every old behavior statement**
+- [x] **Step 1: Write the atlas page and reconcile every old behavior statement**
 
 Map eligibility, state/event timing, extmark ownership, semantic status handoff, tool-only continuation, failure/cancellation distinction, and Definition's separate immediate renderer. Remove the old claim that web search owns a buffer-backed initial spinner. Add all new files/tests to traceability and link the new page from `atlas/index.md`; update README's chat and Definition descriptions.
 
-- [ ] **Step 2: Run architecture shadow searches**
+- [x] **Step 2: Run architecture shadow searches**
 
 ```bash
 rg -n "Submitting|spinner_active|spinner_block_idx|🔎" lua tests atlas README.md
@@ -612,7 +612,7 @@ rg -n "chat_presentation|chat_pending|selection_spinner" atlas README.md tests l
 
 Expected: no obsolete buffer-backed initial spinner implementation or stale documentation; every new consumer derives from the canonical spinner frames and lifecycle helpers (`ARCH-DRY`, `ARCH-PURPOSE`).
 
-- [ ] **Step 3: Run mapped feature tests**
+- [x] **Step 3: Run mapped feature tests**
 
 ```bash
 make test-spec SPEC=chat/response_progress
@@ -623,7 +623,7 @@ make test-spec SPEC=context/web_search
 
 Expected: all mapped unit, integration, architecture, and process-fake specs pass.
 
-- [ ] **Step 4: Run lint, changed-spec checks, and the full suite**
+- [x] **Step 4: Run lint, changed-spec checks, and the full suite**
 
 ```bash
 make lint
@@ -634,11 +634,11 @@ git diff --check origin/main...HEAD
 
 Expected: every command exits 0 with no warnings or whitespace errors.
 
-- [ ] **Step 5: Perform the manual temporal smoke test**
+- [x] **Step 5: Perform the manual temporal smoke test**
 
 In Neovim, use a test provider or temporarily delayed endpoint to verify: fast answer/no spinner; slow answer/playful line after one second; staged burst after minimum; remote status handoff; tool recursion with no spinner during local execution; immediate `CVR ⠙` Definition transition to `CVR[^cvr]`; Review still uses the detached luabar. Record exact observations in the issue Log.
 
-- [ ] **Step 6: Check off the issue plan and commit docs/evidence**
+- [x] **Step 6: Check off the issue plan and commit docs/evidence**
 
 ```bash
 git add atlas/chat/response_progress.md atlas/index.md atlas/chat/lifecycle.md \
@@ -652,6 +652,17 @@ git commit -m "#182: document LLM progress presentation"
 Run `sdlc actual --issue 182`, then follow `sdlc close --help`. Close with the targeted, process-fake, mapped, full-suite, diff, and manual evidence; use only the precise atlas/project bypass if the gate says it is genuinely inapplicable. Publish once with `sdlc pr` then `sdlc merge`; verify `main` contains the branch tip.
 
 ## Revisions
+
+### 2026-07-13T03:28:13-07:00 — Task 6 execution
+
+Reconciled the product map across the planned chat and Definition pages plus
+the provider/tool-use maps that also described the affected boundary, and
+removed the now-orphaned buffer-progress editing API. Because the execution
+environment is noninteractive, substituted production-shaped headless temporal
+smoke coverage for the GUI-manual step: real scratch-buffer extmarks, injected
+clocks, real entry points, and the loopback curl/SSE fixture cover every listed
+observation. Four mapped feature groups, lint, changed-spec selection, the full
+suite, shadow searches, and diff checks passed.
 
 ### 2026-07-13T03:18:36-07:00 — Task 5 execution
 
