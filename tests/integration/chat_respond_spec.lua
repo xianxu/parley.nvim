@@ -91,6 +91,13 @@ local function pending_runtime()
     function runtime:drain()
         while #self.queue > 0 do table.remove(self.queue, 1)() end
     end
+    function runtime:open_timer_count()
+        local count = 0
+        for _, timer in ipairs(self.timers) do
+            if not timer.closed then count = count + 1 end
+        end
+        return count
+    end
     return runtime
 end
 
@@ -1173,6 +1180,7 @@ describe("chat_respond: pending request transcript drift", function()
     local original_schedule
     local original_new_timer
     local original_pending_start
+    local original_notify
     local scratch_file
 
     before_each(function()
@@ -1185,6 +1193,7 @@ describe("chat_respond: pending request transcript drift", function()
         original_schedule = vim.schedule
         original_new_timer = vim.uv.new_timer
         original_pending_start = canonical_pending_start
+        original_notify = vim.notify
     end)
 
     after_each(function()
@@ -1198,6 +1207,7 @@ describe("chat_respond: pending request transcript drift", function()
             vim.uv.new_timer = original_new_timer
         end
         require("parley.chat_pending").start = original_pending_start
+        vim.notify = original_notify
         parley._state.agent = original_agent
         parley._state.web_search = original_web_search
         if test_file and vim.fn.filereadable(test_file) == 1 then
@@ -1241,6 +1251,78 @@ describe("chat_respond: pending request transcript drift", function()
         return cursor
     end
 
+    local function folded_ranges(buf)
+        local ranges = {}
+        for row, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+            if line:match("^🔧:") or line:match("^📎:") then
+                local start_1 = vim.fn.foldclosed(row)
+                local end_1 = vim.fn.foldclosedend(row)
+                if start_1 ~= -1 then
+                    table.insert(ranges, { start_1, end_1 })
+                end
+            end
+        end
+        return ranges
+    end
+
+    local function assert_folds_unchanged(ranges)
+        assert.equals(4, #ranges)
+        for _, range in ipairs(ranges) do
+            assert.equals(range[1], vim.fn.foldclosed(range[1]))
+            assert.equals(range[2], vim.fn.foldclosedend(range[1]))
+        end
+    end
+
+    local function start_two_folded_tool_rounds(buf, runtime)
+        parley._state.agent = "ToolSonnet"
+        require("parley.tool_loop").reset(buf)
+        require("parley.chat_pending").start = function(opts)
+            opts.clock, opts.scheduler = runtime.clock, runtime.scheduler
+            return canonical_pending_start(opts)
+        end
+
+        local calls = {}
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, handler, on_exit,
+                _callback, on_progress, on_abort, _on_activity, on_error)
+            local leg = #calls + 1
+            local qid = "qid_folded_recursive_" .. leg
+            calls[leg] = {
+                qid = qid,
+                write = handler,
+                complete = on_exit,
+                progress = on_progress,
+                abort = on_abort,
+                fail = on_error,
+            }
+            parley.tasker.set_query(qid, {
+                response = "",
+                raw_response = leg <= 2
+                    and mk_read_file_sse_response("toolu_FOLD_" .. leg, scratch_file)
+                    or "",
+                buf = buf_arg,
+            })
+        end
+
+        parley.chat_respond({ range = 0 })
+        runtime:drain()
+        for leg = 1, 2 do
+            calls[leg].complete(calls[leg].qid)
+            runtime:drain()
+            assert.is_true(vim.wait(700, function()
+                runtime:drain()
+                return #calls == leg + 1
+            end, 10), "expected recursive leg " .. (leg + 1))
+        end
+        runtime:drain()
+
+        local ranges
+        assert.is_true(vim.wait(700, function()
+            ranges = folded_ranges(buf)
+            return #ranges == 4
+        end, 10), vim.inspect(vim.api.nvim_buf_get_lines(buf, 0, -1, false)))
+        return calls, ranges
+    end
+
     it("runs a tool-only completion immediately before playful reveal", function()
         local buf = open_simple_chat()
         parley._state.agent = "ToolSonnet"
@@ -1282,6 +1364,122 @@ describe("chat_respond: pending request transcript drift", function()
         assert.equals(1, call_count)
         assert.same(before, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
         assert.equals(lease.generation, require("parley.chat_lease").current(buf).generation)
+    end)
+
+    it("shows a waiting third leg outside folds after two recursive tool rounds", function()
+        local buf = open_simple_chat()
+        local runtime = pending_runtime()
+        local calls, ranges = start_two_folded_tool_rounds(buf, runtime)
+
+        assert.is_nil(pending_virtual_text(buf))
+        runtime:advance(999)
+        runtime:drain()
+        assert.is_nil(pending_virtual_text(buf))
+        runtime:advance(1)
+        runtime:drain()
+
+        local mark = assert(pending_mark(buf))
+        local spinner_id, separator_row = mark[1], mark[2]
+        assert.is_not_nil(pending_virtual_text(buf))
+        assert.equals(-1, vim.fn.foldclosed(separator_row + 1))
+        assert.equals(ranges[#ranges][2], separator_row)
+        assert.equals("", vim.api.nvim_buf_get_lines(buf,
+            separator_row + 1, separator_row + 2, false)[1])
+
+        calls[3].write(calls[3].qid, "final answer")
+        runtime:drain()
+        local staged_mark = assert(pending_mark(buf))
+        assert.equals(spinner_id, staged_mark[1])
+        assert.equals(separator_row, staged_mark[2])
+        assert.is_false(buffer_contains(buf, "final answer"))
+
+        calls[3].complete(calls[3].qid)
+        runtime:drain()
+        runtime:advance(1000)
+        runtime:drain()
+        assert.is_true(vim.wait(700, function()
+            return pending_virtual_text(buf) == nil and buffer_contains(buf, "final answer")
+        end, 10))
+        assert_folds_unchanged(ranges)
+    end)
+
+    it("moves released recursive semantic status with the stream tip", function()
+        local buf = open_simple_chat()
+        local runtime = pending_runtime()
+        local calls = start_two_folded_tool_rounds(buf, runtime)
+
+        calls[3].write(calls[3].qid, "first")
+        runtime:drain()
+        assert.is_true(vim.wait(700, function() return buffer_contains(buf, "first") end, 10))
+        calls[3].progress(calls[3].qid, { message = "Reasoning" })
+        runtime:drain()
+        local first_mark = assert(pending_mark(buf))
+        assert.equals("Reasoning", pending_virtual_text(buf))
+
+        calls[3].write(calls[3].qid, " second")
+        runtime:drain()
+        assert.is_true(vim.wait(700, function() return buffer_contains(buf, "first second") end, 10))
+        local moved_mark = assert(pending_mark(buf))
+        assert.equals(first_mark[1], moved_mark[1])
+        assert.equals("first second", vim.api.nvim_buf_get_lines(buf,
+            moved_mark[2], moved_mark[2] + 1, false)[1])
+        parley.cmd.Stop()
+        runtime:drain()
+    end)
+
+    it("cancels a folded recursive leg without moving folds or staged output", function()
+        local buf = open_simple_chat()
+        local runtime = pending_runtime()
+        local calls, ranges = start_two_folded_tool_rounds(buf, runtime)
+        runtime:advance(1000)
+        runtime:drain()
+        calls[3].write(calls[3].qid, "cancelled staged")
+        runtime:drain()
+
+        parley.cmd.Stop()
+        runtime:drain()
+
+        assert.is_nil(pending_mark(buf))
+        assert.is_false(require("parley.chat_pending").is_active(buf))
+        assert.is_nil(require("parley.chat_lease").current(buf))
+        assert.equals(0, runtime:open_timer_count())
+        assert.is_false(buffer_contains(buf, "cancelled staged"))
+        assert_folds_unchanged(ranges)
+    end)
+
+    it("flushes folded recursive partial output before provider failure", function()
+        local buf = open_simple_chat()
+        local runtime = pending_runtime()
+        local calls, ranges = start_two_folded_tool_rounds(buf, runtime)
+        runtime:advance(1000)
+        runtime:drain()
+        calls[3].write(calls[3].qid, "partial before failure")
+        runtime:drain()
+        assert.is_false(buffer_contains(buf, "partial before failure"))
+
+        local notices = {}
+        vim.notify = function(message)
+            table.insert(notices, {
+                message = message,
+                partial_present = buffer_contains(buf, "partial before failure"),
+            })
+        end
+        calls[3].fail(calls[3].qid, {
+            code = 22,
+            http_status = 500,
+            body = "broken",
+        })
+        runtime:drain()
+
+        assert.is_true(vim.wait(700, function()
+            return #notices > 0 and not require("parley.chat_pending").is_active(buf)
+        end, 10))
+        assert.is_true(notices[#notices].partial_present)
+        assert.is_truthy(notices[#notices].message:find("provider request failed", 1, true))
+        assert.is_nil(pending_mark(buf))
+        assert.is_nil(require("parley.chat_lease").current(buf))
+        assert.equals(0, runtime:open_timer_count())
+        assert_folds_unchanged(ranges)
     end)
 
     it("hides a shown leg before its local tool and starts recursion with a fresh verb", function()
@@ -1333,8 +1531,12 @@ describe("chat_respond: pending request transcript drift", function()
         for index, line in ipairs(lines) do
             if line:match("%S") then last_nonempty_row = index - 1 end
         end
-        assert.equals(last_nonempty_row, pending_mark(buf)[2],
-            "recursive progress must begin below the last existing tool/result content")
+        local recursive_mark = pending_mark(buf)
+        assert.equals(last_nonempty_row + 1, recursive_mark[2],
+            "recursive progress must use the separator after existing tool/result content")
+        assert.equals("", vim.api.nvim_buf_get_lines(buf,
+            recursive_mark[2] + 1, recursive_mark[2] + 2, false)[1],
+            "recursive progress separator must precede the stream placeholder")
         pending.start = original_start
     end)
 

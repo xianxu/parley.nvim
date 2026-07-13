@@ -1466,12 +1466,11 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
         local initial_progress_tip
         if is_recursion then
             -- Recursion: append streaming placeholder after existing blocks.
-            initial_progress_tip = assert(model:last_nonempty_block_end(target_idx),
-                "recursive response requires existing visible content")
             model:add_block(target_idx, "stream_placeholder", 1)
             stream_block_idx = #model.exchanges[target_idx].blocks
             local pos = model:block_start(target_idx, stream_block_idx)
-            buffer_edit.insert_lines_at(buf, pos - 1, { "", "" })  -- margin + blank content
+            initial_progress_tip = pos - 1
+            buffer_edit.insert_lines_at(buf, initial_progress_tip, { "", "" })  -- margin + blank content
         else
             -- Fresh answer: add agent_header + streaming placeholder. Pending
             -- presentation is an extmark and never enters the exchange model.
