@@ -388,6 +388,77 @@ describe("define_visual + render_definition (#161)", function()
         assert.is_nil(text:find("[^asin]", 1, true))
     end)
 
+    it("cleans immediate progress on real Definition source and agent failures", function()
+        local define_manifest = require("parley.skills.define")
+        local original_source = define_manifest.source
+        local function invoke_and_assert_clean(label)
+            vim.fn.setpos("'<", { buf, 3, 9, 0 })
+            vim.fn.setpos("'>", { buf, 3, 12, 0 })
+            require("parley").define_visual(buf)
+            assert.are.equal(0, #spinner_marks(buf), label)
+            assert.is_false(require("parley.progress").is_active(), label)
+            assert.are.equal("here is ASIN in context",
+                vim.api.nvim_buf_get_lines(buf, 2, 3, false)[1], label)
+        end
+
+        define_manifest.source = function() error("source unavailable") end
+        invoke_and_assert_clean("source failure")
+        define_manifest.source = original_source
+
+        assembly.resolve_agent = function() return nil end
+        invoke_and_assert_clean("no agent")
+    end)
+
+    it("stops and closes the inline timer when the Definition buffer is deleted", function()
+        local held_exit
+        parley.dispatcher.query = function(_b, _p, _payload, _h, on_exit)
+            held_exit = on_exit
+        end
+        local original_new_timer = vim.uv.new_timer
+        local timer = { stopped = false, closed = false }
+        function timer:start(_delay, _repeat_ms, callback) self.callback = callback end
+        function timer:stop() self.stopped = true end
+        function timer:close() self.closed = true end
+        vim.uv.new_timer = function() return timer end
+
+        vim.fn.setpos("'<", { buf, 3, 9, 0 })
+        vim.fn.setpos("'>", { buf, 3, 12, 0 })
+        require("parley").define_visual(buf)
+        assert.are.equal(1, #spinner_marks(buf))
+        vim.api.nvim_buf_delete(buf, { force = true })
+        tasker.set_query("deleted-definition", { raw_response = "" })
+        held_exit("deleted-definition")
+        assert.is_true(vim.wait(1000, function() return timer.closed end, 10))
+        vim.uv.new_timer = original_new_timer
+
+        assert.is_true(timer.stopped)
+        assert.is_true(timer.closed)
+        assert.is_false(require("parley.progress").is_active())
+    end)
+
+    it("cleans Definition progress when malformed tool output breaks completion", function()
+        parley.dispatcher.query = function(_b, _p, _payload, _handler, on_exit)
+            tasker.set_query("malformed-definition", {
+                raw_response = sse({
+                    { type = "content_block_start", index = 0,
+                      content_block = { type = "tool_use", id = "bad", input = {} } },
+                    { type = "content_block_stop", index = 0 },
+                    { type = "message_stop" },
+                }),
+            })
+            vim.schedule(function() on_exit("malformed-definition") end)
+        end
+        vim.fn.setpos("'<", { buf, 3, 9, 0 })
+        vim.fn.setpos("'>", { buf, 3, 12, 0 })
+        require("parley").define_visual(buf)
+        assert.is_true(vim.wait(1000, function()
+            return #spinner_marks(buf) == 0
+        end, 10), "malformed completion leaked the Definition spinner")
+        assert.is_false(require("parley.progress").is_active())
+        assert.are.equal("here is ASIN in context",
+            vim.api.nvim_buf_get_lines(buf, 2, 3, false)[1])
+    end)
+
     it("word-wraps long define diagnostics to the diagnostic display width", function()
         local prior_win = vim.api.nvim_get_current_win()
         vim.cmd("vsplit")
@@ -525,6 +596,8 @@ describe("define_visual + render_definition (#161)", function()
         assert.are.equal("here is ASIN in context",
             vim.api.nvim_buf_get_lines(buf, 2, 3, false)[1],
             "a no-tool response must not footnote the term")
+        assert.are.equal(0, #spinner_marks(buf), "no-tool completion leaked spinner")
+        assert.is_false(require("parley.progress").is_active())
     end)
 end)
 

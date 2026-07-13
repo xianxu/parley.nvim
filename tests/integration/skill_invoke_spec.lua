@@ -476,4 +476,33 @@ describe("skill_invoke terminal ownership (#182)", function()
         assert.is_true(skill_invoke.is_in_flight(buf), "the first invocation must remain owned")
         skill_invoke.cancel(buf)
     end)
+
+    it("finishes a malformed scheduled completion and contains terminal callback failure", function()
+        parley.dispatcher.query = function(_b, _p, _payload, _handler, on_exit)
+            tasker.set_query("malformed", {
+                raw_response = sse({
+                    { type = "content_block_start", index = 0,
+                      content_block = { type = "tool_use", id = "bad", input = {} } },
+                    { type = "content_block_stop", index = 0 },
+                    { type = "message_stop" },
+                }),
+            })
+            vim.schedule(function() on_exit("malformed") end)
+        end
+        local done, terminal_calls = nil, 0
+        skill_invoke.invoke(buf, terminal_manifest(), {}, {
+            on_terminal = function()
+                terminal_calls = terminal_calls + 1
+                error("caller failure must be contained")
+            end,
+            on_done = function(result) done = result end,
+        })
+        assert.is_true(vim.wait(1000, function() return done ~= nil end, 10),
+            "malformed completion leaked its terminal")
+        assert.are.equal(1, terminal_calls)
+        assert.is_false(done.ok)
+        assert.are.equal("completion failed", done.msg)
+        assert.is_false(skill_invoke.is_in_flight(buf))
+        assert.is_false(require("parley.progress").is_active())
+    end)
 end)

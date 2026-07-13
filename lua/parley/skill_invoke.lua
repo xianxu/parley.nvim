@@ -243,70 +243,89 @@ function M.invoke(buf, manifest, args, opts)
                     finish({ ok = false, msg = "buffer invalid" }, false)
                     return
                 end
-                local qt = tasker.get_query(qid) or {}
-                local calls = providers.decode_anthropic_tool_calls_from_stream(qt.raw_response or "")
-                local results = {}
-                local applied = 0
-                local errors = {}
-                for i, call in ipairs(calls) do
-                    if call.name == "propose_edits" then
-                        call.input = call.input or {}
-                        call.input.file_path = artifact_path -- artifact-bound
-                        -- Some models emit `edits` as a JSON STRING rather than an
-                        -- array; coerce it once here so the batch actually applies
-                        -- (and render_propose_edits below gets a table). #133
-                        if type(call.input.edits) == "string" then
-                            local ok, decoded = pcall(vim.json.decode, call.input.edits)
-                            if ok and type(decoded) == "table" then
-                                call.input.edits = decoded
+                local function complete()
+                    local qt = tasker.get_query(qid) or {}
+                    local calls = providers.decode_anthropic_tool_calls_from_stream(qt.raw_response or "")
+                    local results = {}
+                    local applied = 0
+                    local errors = {}
+                    for i, call in ipairs(calls) do
+                        if call.name == "propose_edits" then
+                            call.input = call.input or {}
+                            call.input.file_path = artifact_path -- artifact-bound
+                            -- Some models emit `edits` as a JSON STRING rather than an
+                            -- array; coerce it once here so the batch actually applies
+                            -- (and render_propose_edits below gets a table). #133
+                            if type(call.input.edits) == "string" then
+                                local ok, decoded = pcall(vim.json.decode, call.input.edits)
+                                if ok and type(decoded) == "table" then
+                                    call.input.edits = decoded
+                                end
+                            end
+                        end
+                        results[i] = tools_dispatcher.execute_call(call, tools_registry,
+                            { cwd = cwd, root_policy = root_policy,
+                              page_limit = require("parley.config").tool_result_page_lines }) -- #140 #139
+                        if call.name == "propose_edits" then
+                            if results[i].is_error then
+                                table.insert(errors, results[i].content)
+                            else
+                                applied = applied + 1
                             end
                         end
                     end
-                    results[i] = tools_dispatcher.execute_call(call, tools_registry,
-                        { cwd = cwd, root_policy = root_policy,
-                          page_limit = require("parley.config").tool_result_page_lines }) -- #140 #139
-                    if call.name == "propose_edits" then
-                        if results[i].is_error then
-                            table.insert(errors, results[i].content)
-                        else
-                            applied = applied + 1
+                    if not vim.api.nvim_buf_is_valid(buf) then
+                        finish({ ok = false, msg = "buffer invalid" }, false)
+                        return
+                    end
+                    if not opts.no_reload then
+                        reload_buffer(buf)
+                    end
+                    if not vim.api.nvim_buf_is_valid(buf) then
+                        finish({ ok = false, msg = "buffer invalid" }, false)
+                        return
+                    end
+                    local new_content = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+                    local decorations = {}
+                    for _, call in ipairs(calls) do
+                        if not vim.api.nvim_buf_is_valid(buf) then
+                            finish({ ok = false, msg = "buffer invalid" }, false)
+                            return
+                        end
+                        if call.name == "propose_edits" then
+                            for _, d in ipairs(render_propose_edits(buf, call, original, new_content)) do
+                                table.insert(decorations, d)
+                            end
                         end
                     end
-                end
-                if not opts.no_reload then
-                    reload_buffer(buf)
-                end
-                local new_content = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
-                local decorations = {}
-                for _, call in ipairs(calls) do
-                    if call.name == "propose_edits" then
-                        for _, d in ipairs(render_propose_edits(buf, call, original, new_content)) do
-                            table.insert(decorations, d)
-                        end
+                    -- Surface failure rather than swallowing it: a tool error, or no
+                    -- tool call at all (a truncated/empty response), is logged so the
+                    -- caller (review) can STOP rather than resubmit blindly.
+                    if #calls == 0 then
+                        p.logger.warning("skill " .. tostring(manifest.name)
+                            .. ": model returned no tool call (response may be truncated)")
                     end
+                    for _, e in ipairs(errors) do
+                        p.logger.error("skill " .. tostring(manifest.name) .. ": " .. tostring(e))
+                    end
+                    -- Pure-fed payload: original/new_content/decorations let a
+                    -- caller (review) journal the round without re-reading the
+                    -- buffer (#133 M3).
+                    finish({
+                        ok = (#errors == 0),
+                        applied = applied,
+                        calls = calls,
+                        results = results,
+                        original = original,
+                        new_content = new_content,
+                        decorations = decorations,
+                    }, true)
                 end
-                -- Surface failure rather than swallowing it: a tool error, or no
-                -- tool call at all (a truncated/empty response), is logged so the
-                -- caller (review) can STOP rather than resubmit blindly.
-                if #calls == 0 then
-                    p.logger.warning("skill " .. tostring(manifest.name)
-                        .. ": model returned no tool call (response may be truncated)")
+                local ok_completion = xpcall(complete, function() return nil end)
+                if not ok_completion then
+                    p.logger.error("skill " .. tostring(manifest.name) .. " completion failed")
+                    finish({ ok = false, msg = "completion failed" }, true)
                 end
-                for _, e in ipairs(errors) do
-                    p.logger.error("skill " .. tostring(manifest.name) .. ": " .. tostring(e))
-                end
-                -- Pure-fed payload: original/new_content/decorations let a
-                -- caller (review) journal the round without re-reading the
-                -- buffer (#133 M3).
-                finish({
-                    ok = (#errors == 0),
-                    applied = applied,
-                    calls = calls,
-                    results = results,
-                    original = original,
-                    new_content = new_content,
-                    decorations = decorations,
-                }, true)
             end)
         end,
         nil,
