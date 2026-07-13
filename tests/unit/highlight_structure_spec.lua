@@ -111,8 +111,18 @@ describe("highlight_structure", function()
         lines[#lines + 1] = "🧠:[END]"
         local built, rows, work = structure.build(lines, patterns)
         assert.equals(#lines, rows)
-        assert.are.same({ rows_visited = #lines * 2, entries_copied = 0 }, work)
+        assert.are.same({ rows_visited = #lines * 3, entries_copied = 0 }, work)
         assert.is_true(structure.state_before(built, 2000).reasoning_explicit_end)
+    end)
+
+    it("separates cardinality rejection's contract count from actual visits", function()
+        local original = structure.build({ "💬: q", "body" }, patterns)
+        local replaced, rows_processed, reason, work =
+            structure.replace(original, 1, 1, { "inserted" }, patterns)
+        assert.is_nil(replaced)
+        assert.equals(1, rows_processed)
+        assert.equals("structural", reason)
+        assert.are.same({ rows_visited = 0, entries_copied = 0 }, work)
     end)
 
     it("rejects structural replacements without suffix work or mutation", function()

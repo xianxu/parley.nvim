@@ -129,6 +129,7 @@ function M.build(lines, patterns)
     })
     local draft_start
     for row = 0, #lines - 1 do
+        work.rows_visited = work.rows_visited + 1
         if result.footer_start0 and row >= result.footer_start0 then
             state.in_question = false
             state.in_reasoning = false
@@ -181,8 +182,10 @@ end
 function M.replace(structure, first0, old_last0, new_lines, patterns)
     new_lines = new_lines or {}
     patterns = patterns or M.patterns()
+    if old_last0 - first0 ~= #new_lines then
+        return nil, #new_lines, "structural", { rows_visited = 0, entries_copied = 0 }
+    end
     local work = { rows_visited = #new_lines, entries_copied = 0 }
-    if old_last0 - first0 ~= #new_lines then return nil, #new_lines, "structural", work end
     local fingerprints = {}
     local identical = true
     for i, line in ipairs(new_lines) do

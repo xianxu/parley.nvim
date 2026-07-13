@@ -426,3 +426,8 @@ distant terminator prove exactly two linear visits per document row. The final
 private footnote regex in `chat_respond` was replaced by
 `define.is_footnote_line`; leading-whitespace parity and an architecture shadow
 search defend canonical ownership (`ARCH-DRY`).
+
+The exact-accounting follow-up distinguishes the API's contractual
+`rows_processed` from measured implementation work: full builds now count all
+three linear passes, while a cardinality mismatch still returns
+`rows_processed = #new_lines` but records zero classifier visits.
