@@ -294,6 +294,56 @@ describe("chat_respond: buffer state after completion", function()
         end
     end)
 
+    local function assert_topic_terminal_finalizes(kind)
+        vim.fn.writefile(vim.split([[
+# topic: ?
+- file: test.md
+---
+
+💬: What time?
+]], "\n"), test_file)
+        vim.cmd("edit " .. test_file)
+        local buf = vim.api.nvim_get_current_buf()
+        vim.api.nvim_win_set_cursor(0, { 6, 0 })
+        local lifecycle = require("parley.buffer_lifecycle")
+        lifecycle.setup(buf)
+        local original_finalize = lifecycle.finalize_mutated_api_leg
+        local finalize_count = 0
+        lifecycle.finalize_mutated_api_leg = function(...)
+            finalize_count = finalize_count + 1
+            return original_finalize(...)
+        end
+        local calls = 0
+        parley.dispatcher.query = function(buf_arg, _, _, handler, completion, _, _, abort)
+            calls = calls + 1
+            if calls == 1 then
+                local qid = "qid_topic_terminal_primary_" .. kind
+                parley.tasker.set_query(qid, { response = "at 2026-07-12T12:00:00Z", buf = buf_arg })
+                handler(qid, "at 2026-07-12T12:00:00Z")
+                vim.schedule(function() completion(qid) end)
+            elseif kind == "abort" then
+                abort("expected topic abort")
+            else
+                vim.schedule(function() completion("qid_empty_topic") end)
+            end
+        end
+        parley.chat_respond({ range = 0 })
+        vim.wait(300, function() return finalize_count == 1 end, 10)
+        lifecycle.finalize_mutated_api_leg = original_finalize
+        assert.equals(1, finalize_count)
+        assert.equals(1, #vim.diagnostic.get(buf, {
+            namespace = require("parley.timezone_diagnostics").diag_namespace(),
+        }))
+    end
+
+    it("finalizes once when topic generation aborts", function()
+        assert_topic_terminal_finalizes("abort")
+    end)
+
+    it("finalizes once when topic generation returns empty", function()
+        assert_topic_terminal_finalizes("empty")
+    end)
+
     it("appends new user prompt after last exchange response", function()
         local chat_content = [[
 # topic: Test Topic

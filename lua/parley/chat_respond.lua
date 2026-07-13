@@ -1005,14 +1005,22 @@ M.generate_topic = function(messages, provider, model, callback, spinner)
     local topic_buf = vim.api.nvim_create_buf(false, true)
     local topic_handler = _parley.dispatcher.create_handler(topic_buf, nil, 0, false, "", false)
 
-    -- Abort teardown (#131): stop the topic spinner + drop the scratch buffer
-    -- if the managed cliproxy can't start, so topic-gen fails quietly (no hang).
-    local function on_abort(msg)
+    local finished = false
+    local function finish(topic, reason)
+        if finished then return end
+        finished = true
         stop_and_close_timer(spinner_timer)
         spinner_timer = nil
         if vim.api.nvim_buf_is_valid(topic_buf) then
             vim.api.nvim_buf_delete(topic_buf, { force = true })
         end
+        callback(topic, reason)
+    end
+
+    -- Abort teardown (#131): stop the topic spinner + drop the scratch buffer
+    -- if the managed cliproxy can't start, so topic-gen fails quietly (no hang).
+    local function on_abort(msg)
+        finish(nil, "abort")
         vim.notify(msg or "parley: topic generation aborted", vim.log.levels.WARN)
     end
 
@@ -1022,14 +1030,13 @@ M.generate_topic = function(messages, provider, model, callback, spinner)
         _parley.dispatcher.prepare_payload(msgs, model, provider),
         topic_handler,
         vim.schedule_wrap(function()
-            stop_and_close_timer(spinner_timer)
-            spinner_timer = nil
             local topic = vim.api.nvim_buf_get_lines(topic_buf, 0, -1, false)[1] or ""
-            vim.api.nvim_buf_delete(topic_buf, { force = true })
             topic = topic:gsub("^%s*(.-)%s*$", "%1")
             topic = topic:gsub("%.$", "")
             if topic ~= "" then
-                callback(topic)
+                finish(topic, nil)
+            else
+                finish(nil, "empty")
             end
         end),
         nil,
@@ -1943,7 +1950,12 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                     local topic_msgs = M._conversation_after_lead(messages, sys_lead + ancestor_msg_count)
                     table.insert(topic_msgs, { role = "assistant", content = qt.response })
 
-                    M.generate_topic(topic_msgs, agent_info.provider, agent_info.model, function(topic)
+                    M.generate_topic(topic_msgs, agent_info.provider, agent_info.model, function(topic, _reason)
+                        if not topic then
+                            finalize_mutated_api_leg()
+                            chat_lease.clear(buf, lease_generation)
+                            return
+                        end
                         if not lease_valid() then
                             finalize_mutated_api_leg()
                             chat_lease.clear(buf, lease_generation)
