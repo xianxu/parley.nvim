@@ -10,6 +10,8 @@ estimate_hours:
 
 # buffer undo operation during chat generation resulted in a huge error message
 
+I don't quite remember where we settled in terms of human edits during agent generation. but at least this shouldn't result in error that end user won't understand.
+
 ## Problem
 
 ## Spec
