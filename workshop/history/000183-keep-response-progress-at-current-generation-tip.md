@@ -107,11 +107,12 @@ v3.1 AI-paired 40% values.
 - [x] Report the tracked last line from the stream writer and move visible
   progress through the serialized chat adapter.
 - [x] Update the response-progress atlas and pass targeted/full verification.
-- [ ] Close, publish, and merge through the SDLC gates.
+- [x] Close, publish, and merge through the SDLC gates.
 
 ## Log
 
 ### 2026-07-13
+- 2026-07-13: published — PR #147 merged and the issue artifacts were archived. `sdlc merge --no-validate` precisely acknowledged the known worktree vocabulary-loader defect (`issue` vocabulary reported `have: []`); the close review, reviewed-HEAD publish gate, tests, and all other merge guards remained active.
 - 2026-07-13: closed — Fixed REWORK finding with a same-callback pre-write validity authorization: externally invalidated progress now terminates before mutation, while writer-caused invalidation alone may repair the same ID. RED/GREEN proven in real-buffer adapter and queued chat-stream regressions. Verified make -f Makefile.local test-spec SPEC=chat/response_progress; make -f Makefile.local test-spec SPEC=chat/exchange_model; make -f Makefile.local test JOBS=1 (lint 0 warnings/errors; all unit, arch, integration specs pass); git diff --check. --no-plan-check acknowledges the sole remaining checkbox is the close/publish/merge action currently being executed; --no-actual acknowledges unavailable worktree transcript telemetry rather than inventing hours.; review verdict: FIX-THEN-SHIP
 
 Claimed the follow-up after confirming #182's adapter always receives the fixed
