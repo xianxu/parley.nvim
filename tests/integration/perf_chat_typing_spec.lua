@@ -125,22 +125,57 @@ describe("chat typing performance scenario", function()
     end)
 
     it("enforces immutable full-read, scaling, and structure gates", function()
-        local report = chat_typing.new_report({ os = "test", nvim = "test", commit = "test" })
-        for _, n in ipairs({ 1000, 5000 }) do
-            chat_typing.add_result(report, "edit_total", "inclusive", n, { 1 }, {
-                line_read_calls = 2, lines_requested = 88, full_buffer_reads = 0,
-                structure_rows_processed = 1,
-            })
-            chat_typing.add_result(report, "decoration_redraw", "isolated", n, { 1 }, {
-                line_read_calls = 1, lines_requested = 61, full_buffer_reads = 0,
-                structure_rows_processed = 0,
-            })
+        local function valid_report()
+            local report = chat_typing.new_report({ os = "test", nvim = "test", commit = "test" })
+            for _, n in ipairs({ 1000, 5000 }) do
+                chat_typing.add_result(report, "edit_total", "inclusive", n, { 1 }, {
+                    line_read_calls = 2, lines_requested = 88, full_buffer_reads = 0,
+                    structure_rows_processed = 1,
+                })
+                chat_typing.add_result(report, "decoration_redraw", "isolated", n, { 1 }, {
+                    line_read_calls = 1, lines_requested = 61, full_buffer_reads = 0,
+                    structure_rows_processed = 0,
+                })
+            end
+            return report
         end
-        assert.has_no.errors(function() chat_typing.assert_hard_gates(report) end)
-        report.scenarios[1].work.full_buffer_reads = 1
-        local ok, err = pcall(chat_typing.assert_hard_gates, report)
+        assert.has_no.errors(function() chat_typing.assert_hard_gates(valid_report()) end)
+
+        local full_read = valid_report()
+        full_read.scenarios[1].work.full_buffer_reads = 1
+        local ok, err = pcall(chat_typing.assert_hard_gates, full_read)
         assert.is_false(ok)
         assert.matches("zero full%-buffer reads", err)
+
+        local wrong_structure = valid_report()
+        wrong_structure.scenarios[1].work.structure_rows_processed = 2
+        ok, err = pcall(chat_typing.assert_hard_gates, wrong_structure)
+        assert.is_false(ok)
+        assert.matches("exactly one structure row", err)
+
+        local unequal = valid_report()
+        unequal.scenarios[3].work.lines_requested = 89
+        ok, err = pcall(chat_typing.assert_hard_gates, unequal)
+        assert.is_false(ok)
+        assert.matches("lines_requested must match", err)
+
+        for _, missing in ipairs({
+            { phase = "edit_total", lines = 1000 },
+            { phase = "edit_total", lines = 5000 },
+            { phase = "decoration_redraw", lines = 1000 },
+            { phase = "decoration_redraw", lines = 5000 },
+        }) do
+            local incomplete = chat_typing.new_report({ os = "test", nvim = "test", commit = "test" })
+            for _, scenario in ipairs(valid_report().scenarios) do
+                if scenario.phase ~= missing.phase or scenario.line_count ~= missing.lines then
+                    chat_typing.add_result(incomplete, scenario.phase, scenario.attribution,
+                        scenario.line_count, { 1 }, scenario.work)
+                end
+            end
+            ok, err = pcall(chat_typing.assert_hard_gates, incomplete)
+            assert.is_false(ok, missing.phase .. ":" .. missing.lines)
+            assert.matches("requires " .. missing.phase .. " at " .. missing.lines .. " lines", err)
+        end
     end)
 
     it("asserts direct range bounds for the measured TextChangedI", function()

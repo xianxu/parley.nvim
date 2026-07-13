@@ -118,12 +118,14 @@ function M.assert_hard_gates(report)
         end
     end
     for _, phase in ipairs({ "edit_total", "decoration_redraw" }) do
+        for _, line_count in ipairs({ 1000, 5000 }) do
+            assert(indexed[phase .. ":" .. line_count],
+                string.format("hard gates requires %s at %d lines", phase, line_count))
+        end
         local one = indexed[phase .. ":1000"]
         local five = indexed[phase .. ":5000"]
-        if one and five then
-            assert(one.lines_requested == five.lines_requested,
-                phase .. " lines_requested must match at 1000 and 5000 lines")
-        end
+        assert(one.lines_requested == five.lines_requested,
+            phase .. " lines_requested must match at 1000 and 5000 lines")
     end
 end
 
