@@ -591,3 +591,18 @@ harness owns clock, timestamp, and Neovim JSON integration. Corrected the table
 to name pure `harness.summarize(samples)` separately from integration
 `PerfHarness`; also corrected diagnostic autocmd ownership and the footnote
 predicate dependency wording (`ARCH-PURE`). No runtime change was required.
+
+2026-07-12: second close review found that `generate_topic` now reports abort
+and empty terminal outcomes through `callback(nil, reason)`, while the prune
+consumer retained the former success-only assumption. Real `ChatPrune` tests
+reproduced `init.lua:239: attempt to concatenate local 'topic' (a nil value)`
+for both outcomes. The prune callback now returns quietly on nil, consistent
+with the response consumer; the success path is unchanged and response-leg
+finalization remains exactly once. README now exposes `make perf` and links the
+detailed TOOLING guide.
+
+Fresh correction evidence: `topic_gen_spec.lua` passed 6/6 (including real
+prune abort and empty output), `chat_respond_spec.lua` passed 33/33 (including
+both response-leg exactly-once cases), `make -f Makefile.parley perf` passed all
+structural gates, and `make -f Makefile.parley test JOBS=1` passed lint with 0
+warnings/errors across 259 files plus every unit/integration/architecture spec.

@@ -671,3 +671,16 @@ tests/unit/chat_respond_footnote_spec.lua` command to the required verification
 block and expanded the recorded focused PASS set from ten to eleven. The issue
 Log preserves that the original Task 7 list contained ten commands and records
 the subsequent explicit 1/1 PASS that completes the set.
+
+### 2026-07-12 — close-review topic callback correction
+
+Reason: the second close review traced the newly explicit
+`generate_topic(topic, reason)` terminal-failure callback into `ChatPrune`, whose
+consumer still assumed every callback carried a topic string and concatenated
+`nil` on abort or empty model output.
+
+Delta: traced both topic-generation consumers, added real `ChatPrune` abort and
+empty-output regressions, and made the prune callback return quietly on a nil
+topic, matching the already guarded response leg and preserving exactly-once
+finalization. Added a README developer entry pointing to the detailed
+`make perf` documentation.

@@ -21,6 +21,12 @@ The philosophy behind Parley is Keep Things Simple, and Local, and a bit of Unix
 - Leverage Neovim, and all its goodies
 - Minimal dependencies, install and it works, all you need is your API keys
 
+## Developer performance testing
+
+Run `make perf` to collect Parley's report-only chat-typing benchmark. See
+[TOOLING.md](TOOLING.md#chat-typing-performance-report) for the scenario, output schema,
+structural correctness gates, and optional MarkdownPreview comparison.
+
 Despite of such simple interface, it's very powerful, sometimes more so than official app
 - You can use "any" LLM providers, mix in the same conversation input from many different LLMs
 - Your chat transcript can be as complex as a tree with branches, to allow you to explore into different directions, without being forced into a linear conversation

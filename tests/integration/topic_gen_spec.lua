@@ -69,3 +69,66 @@ describe("generate_topic", function()
         assert.is_nil(last.content:find("🧠"))
     end)
 end)
+
+describe("ChatPrune topic generation failure", function()
+    local saved_generate_topic
+
+    local function write_parent(name)
+        local path = tmp_dir .. "/" .. name
+        vim.fn.writefile({
+            "---",
+            "topic: parent topic",
+            "file: " .. name,
+            "---",
+            "",
+            "💬: keep this exchange",
+            "",
+            "🤖: kept answer",
+            "",
+            "💬: prune this exchange",
+            "",
+            "🤖: pruned answer",
+            "",
+        }, path)
+        vim.cmd("edit! " .. vim.fn.fnameescape(path))
+        vim.api.nvim_win_set_cursor(0, { 10, 0 })
+        return path
+    end
+
+    before_each(function()
+        saved_generate_topic = chat_respond.generate_topic
+    end)
+
+    after_each(function()
+        chat_respond.generate_topic = saved_generate_topic
+        for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+            local name = vim.api.nvim_buf_get_name(buf)
+            if name:find(tmp_dir, 1, true) then
+                pcall(vim.api.nvim_buf_delete, buf, { force = true })
+            end
+        end
+        for _, path in ipairs(vim.fn.glob(tmp_dir .. "/*.md", false, true)) do
+            vim.fn.delete(path)
+        end
+    end)
+
+    for _, reason in ipairs({ "abort", "empty" }) do
+        it("keeps the pruned chat unchanged when topic generation returns " .. reason, function()
+            local parent = write_parent("2026-07-12-12000" .. (#reason) .. "-parent-" .. reason .. ".md")
+            chat_respond.generate_topic = function(_messages, _provider, _model, callback)
+                callback(nil, reason)
+            end
+
+            local ok, err = pcall(parley.cmd.ChatPrune)
+
+            assert.is_true(ok, tostring(err))
+            local parent_content = table.concat(vim.fn.readfile(parent), "\n")
+            assert.is_truthy(parent_content:find("🌿:", 1, true))
+            assert.is_falsy(parent_content:find("🌿:.-: nil"))
+            local children = vim.fn.glob(tmp_dir .. "/*.md", false, true)
+            assert.equals(2, #children)
+            local child = children[1] == parent and children[2] or children[1]
+            assert.is_truthy(table.concat(vim.fn.readfile(child), "\n"):find("topic: ?", 1, true))
+        end)
+    end
+end)

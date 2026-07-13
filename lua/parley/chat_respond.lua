@@ -916,7 +916,8 @@ end
 -- @param messages  table    array of {role, content} (the conversation so far)
 -- @param provider  string   provider name (e.g. "anthropic", "openai")
 -- @param model     string   model name
--- @param callback  function called with (topic_string) on completion
+-- @param callback  function called with (topic_string, nil) on success or
+--                  (nil, reason) on terminal failure
 -- @param spinner   table|nil optional {buf, find_line} — buf is the buffer to animate,
 --                  find_line() returns 0-indexed line number of the topic line (or nil to skip)
 --- Pure: drop the first `lead` messages from a built messages array, returning
