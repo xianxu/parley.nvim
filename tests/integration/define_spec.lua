@@ -196,7 +196,7 @@ describe("define_visual + render_definition (#161)", function()
     local assembly = require("parley.skill_assembly")
     local ns = require("parley.skill_render").diag_namespace()
 
-    local tmpdir, path, buf, orig_query, orig_resolve, query_called
+    local tmpdir, path, buf, orig_query, orig_prepare, orig_resolve, query_called
 
     before_each(function()
         require("parley.tools").register_builtins()
@@ -213,6 +213,7 @@ describe("define_visual + render_definition (#161)", function()
             return { model = "m", provider = "anthropic" }
         end
         orig_query = parley.dispatcher.query
+        orig_prepare = parley.dispatcher.prepare_payload
         parley.dispatcher.query = function(_b, _p, _payload, _h, on_exit)
             query_called = true
             tasker.set_query("qid_dv", {
@@ -225,6 +226,7 @@ describe("define_visual + render_definition (#161)", function()
 
     after_each(function()
         parley.dispatcher.query = orig_query
+        parley.dispatcher.prepare_payload = orig_prepare
         assembly.resolve_agent = orig_resolve
         pcall(function() require("parley.progress").stop() end)
         vim.fn.delete(tmpdir, "rf")
@@ -407,6 +409,22 @@ describe("define_visual + render_definition (#161)", function()
 
         assembly.resolve_agent = function() return nil end
         invoke_and_assert_clean("no agent")
+    end)
+
+    it("cleans immediate progress when synchronous skill setup throws", function()
+        parley.dispatcher.prepare_payload = function()
+            error("unsupported tool payload")
+        end
+        vim.fn.setpos("'<", { buf, 3, 9, 0 })
+        vim.fn.setpos("'>", { buf, 3, 12, 0 })
+
+        assert.has_no.errors(function()
+            require("parley").define_visual(buf)
+        end)
+        assert.are.equal(0, #spinner_marks(buf), "setup failure leaked Definition spinner")
+        assert.is_false(require("parley.skill_invoke").is_in_flight(buf))
+        assert.are.equal("here is ASIN in context",
+            vim.api.nvim_buf_get_lines(buf, 2, 3, false)[1])
     end)
 
     it("stops and closes the inline timer when the Definition buffer is deleted", function()

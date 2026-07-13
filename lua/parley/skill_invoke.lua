@@ -157,6 +157,7 @@ function M.invoke(buf, manifest, args, opts)
     end
     _terminals[buf] = finish
 
+    local function start_invocation()
     if not vim.api.nvim_buf_is_valid(buf) then
         finish({ ok = false, msg = "buffer invalid" }, false)
         return
@@ -224,8 +225,11 @@ function M.invoke(buf, manifest, args, opts)
     -- Detached progress bar: this is a ~30s headless op, so show a running cue
     -- (the first substantive-progress surface, #133 M7). Stopped on exit/abort.
     if detached_progress then
+        -- Claim cleanup ownership before startup: if the renderer raises after
+        -- partially constructing its UI, the setup guard below still calls stop.
+        progress_started = true
         progress_started = require("parley.progress").start(
-            "Parley " .. tostring(manifest.name) .. " running…")
+            "Parley " .. tostring(manifest.name) .. " running…") == true
     end
     local ok_query = pcall(llm.query,
         nil, -- headless: no streaming buffer insertion
@@ -347,6 +351,16 @@ function M.invoke(buf, manifest, args, opts)
     if not ok_query then
         p.logger.error("skill " .. tostring(manifest.name) .. " query failed")
         finish({ ok = false, msg = "query failed" }, true)
+    end
+    end
+
+    -- Every fallible synchronous setup step after terminal registration belongs
+    -- to this exchange. Converge failures through finish so contextual progress
+    -- and in-flight ownership cannot survive a payload/decoration/policy error.
+    local ok_setup = xpcall(start_invocation, function() return nil end)
+    if not ok_setup then
+        p.logger.error("skill " .. tostring(manifest.name) .. " setup failed")
+        finish({ ok = false, msg = "setup failed" }, true)
     end
 end
 

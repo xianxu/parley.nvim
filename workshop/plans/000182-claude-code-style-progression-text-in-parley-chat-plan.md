@@ -81,8 +81,8 @@ All three symbols are tested without Neovim IO or mocks in `tests/unit/chat_pres
 - **`define_visual`** — starts the inline spinner only after validating a non-empty selection, passes its stop function as terminal cleanup, and performs the existing footnote flow only after cleanup.
   - **Injected into:** `selection_spinner.start` and the generalized `skill_invoke` lifecycle.
   - **Future extensions:** None; the spinner has no one-second delay by design.
-- **`fake_sse_server`** — speaks actual HTTP/SSE to curl with deterministic fast, delayed, activity-only-then-visible, partial-then-fail, and tool-use-only modes.
-  - **Injected into:** A process integration spec points a test provider endpoint at the local server; callback-only tests remain for exhaustive race permutations.
+- **`fake_sse_server`** — speaks actual HTTP/SSE to curl with deterministic default-success, delayed-success, broken-transfer, unauthorized, and partial-HTTP-500 modes.
+  - **Injected into:** A process integration spec points a test provider endpoint at the local server; callback-driven entry tests cover activity-only and tool-use-only behavior plus exhaustive race permutations.
   - **Future extensions:** Additional transport edge fixtures can become modes instead of new fake processes.
 
 ## Chunk 1: Presentation controller, adapters, and integrations
@@ -652,6 +652,15 @@ git commit -m "#182: document LLM progress presentation"
 Run `sdlc actual --issue 182`, then follow `sdlc close --help`. Close with the targeted, process-fake, mapped, full-suite, diff, and manual evidence; use only the precise atlas/project bypass if the gate says it is genuinely inapplicable. Publish once with `sdlc pr` then `sdlc merge`; verify `main` contains the branch tip.
 
 ## Revisions
+
+### 2026-07-13T03:36:15-07:00 — close-review corrections
+
+The boundary review found one synchronous setup gap after `skill_invoke` had
+registered terminal ownership and one overstated process-fixture description.
+Protected the full fallible setup region through the shared terminal, added a
+real Definition regression for a throwing payload preparation step, and
+corrected the Core concepts entry to distinguish the fixture's actual HTTP/SSE
+modes from callback-driven activity/tool-only coverage.
 
 ### 2026-07-13T03:28:13-07:00 — Task 6 execution
 

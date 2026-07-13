@@ -451,3 +451,17 @@ local execution, immediate Definition `CVR ⠙` cleanup before `CVR[^cvr]`, and
 unchanged detached luabar behavior for Review. This automated substitute avoids
 claiming an unavailable GUI-manual run while exercising the same user-visible
 state transitions.
+
+### 2026-07-13 — close-review correction
+
+The mandatory boundary review reproduced a synchronous Definition cleanup leak:
+payload or other setup failures after terminal registration could throw past
+`skill_invoke.finish`. The invocation now protects every fallible synchronous
+setup step and converges failure through the same exact-once terminal. A real
+`define_visual` regression proves throwing payload preparation removes the
+inline spinner, releases in-flight ownership, writes no footnote, and does not
+escape to the caller. The review also corrected the durable plan's process
+fixture description to enumerate only its implemented modes.
+The corrected boundary passes 16 shared skill-lifecycle, 24 real Definition,
+and 5 caller-teardown cases, lint, and the complete suite with `JOBS=1`; the
+single-worker run avoids unrelated cross-worktree Neovim process contention.
