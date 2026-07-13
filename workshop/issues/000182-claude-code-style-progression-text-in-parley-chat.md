@@ -161,7 +161,7 @@ values already apply v3.1's 40% AI-paired ship-wall-clock scale.
 
 ## Plan
 
-- [ ] Approve the durable plan at `workshop/plans/000182-claude-code-style-progression-text-in-parley-chat-plan.md`.
+- [x] Approve the durable plan at `workshop/plans/000182-claude-code-style-progression-text-in-parley-chat-plan.md`.
 - [ ] Build the pure chat presentation reducer with exhaustive event-order tests.
 - [ ] Add separate raw-SSE activity and post-start transport-error callbacks.
 - [ ] Replace the buffer-backed web spinner with the extmark-backed chat adapter.
@@ -234,3 +234,9 @@ draining pipes after process exit and that timer/cancellation/invalid-buffer
 ownership needed explicit seams. The revised plan covers both EOF/exit orders,
 uses injected production-shaped scheduling, cancels sessions before global
 process Stop, and guarantees Definition terminal cleanup before buffer access.
+
+### 2026-07-13 — implementation authorized
+
+The operator approved the reviewed durable plan for execution. Implementation
+will run in an SDLC-owned isolated worktree because the main checkout contains
+an unrelated in-progress #162 issue edit.
