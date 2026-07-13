@@ -738,7 +738,7 @@ describe("dispatcher.query internals", function()
             assert.equals(500, failure.http_status)
         end)
 
-        it("I9: reports a real process failure independently and only once", function()
+        it("I9: reports a process terminal failure independently and only once", function()
             local failures = {}
             dispatcher.query(nil, "openai", { model = "gpt-4", messages = {} }, function() end,
                 nil, nil, nil, nil, nil, function(_qid, value)

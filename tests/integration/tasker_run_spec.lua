@@ -7,6 +7,7 @@
 -- without mocking uv.spawn. This verifies the actual libuv integration.
 
 local tasker = require("parley.tasker")
+local logger = require("parley.logger")
 
 describe("tasker.run integration", function()
     before_each(function()
@@ -664,6 +665,35 @@ describe("tasker.run integration", function()
             assert.equals(1, terminals)
             assert.equals(1, finished)
             assert.equals(0, #tasker._handles)
+        end)
+
+        it("logs bounded generic diagnostics for exceptional public callbacks", function()
+            local runtime, state = fake_uv()
+            tasker._uv = runtime
+            local marker = "CALLBACK_SECRET_MARKER"
+            local logs = {}
+            local original_error = logger.error
+            logger.error = function(message) table.insert(logs, tostring(message)) end
+            tasker.run(nil, "fake", {}, function()
+                error(marker .. string.rep("x", 2000))
+            end, function()
+                error(marker .. string.rep("y", 2000))
+            end)
+            state.pipes[1].reader(nil, "out")
+            state.pipes[1].reader(nil, nil)
+            state.pipes[2].reader(nil, nil)
+            state.on_exit(0, 0)
+            local completed = vim.wait(100, function() return #tasker._handles == 0 end, 5)
+            logger.error = original_error
+
+            assert.is_true(completed)
+            local combined = table.concat(logs, "\n")
+            assert.is_falsy(combined:find(marker, 1, true))
+            assert.is_truthy(combined:find("stdout reader callback failed", 1, true))
+            assert.is_truthy(combined:find("task terminal callback failed", 1, true))
+            for _, message in ipairs(logs) do
+                assert.is_true(#message < 256, "callback diagnostic must remain bounded")
+            end
         end)
 
         for _, case in ipairs({

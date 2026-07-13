@@ -319,11 +319,11 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
 		if not fn then return end
 		local call_args = { ... }
 		local arg_count = select("#", ...)
-		local ok, message = xpcall(function()
+		local ok = xpcall(function()
 			fn(unpack(call_args, 1, arg_count))
-		end, debug.traceback)
+		end, function() return nil end)
 		if not ok then
-			logger.error(label .. " callback failed: " .. tostring(message))
+			logger.error(label .. " callback failed")
 		end
 	end
 
