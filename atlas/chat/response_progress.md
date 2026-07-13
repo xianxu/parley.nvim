@@ -44,7 +44,10 @@ tip: the response header before fresh content, the final visible block before a
 recursive leg, and the stream writer's tracked last line after every write. The
 writer reports that extmark-adjusted row after buffer/model growth, and
 `chat_pending` repairs a replacement-invalidated visible mark with the same ID
-and text in that same scheduled callback.
+and text in that same scheduled callback. Immediately before mutation it also
+requires the visible mark to be valid; that uninterrupted authorization allows
+repair only for invalidation caused by the writer itself. A mark invalidated by
+an earlier external edit terminates the pending session instead of being revived.
 
 The independent chat lease remains anchored to the durable response-header
 line and never follows the replaceable stream line. It decides whether that

@@ -945,6 +945,51 @@ describe("chat_respond: buffer state after completion", function()
         assert.is_true(vim.wait(300, function() return pending_virtual_text(buf) == nil end, 10))
     end)
 
+    it("does not revive externally invalidated progress for a queued stream write", function()
+        local chat_content = [[
+# topic: External invalidation
+- file: test.md
+---
+
+💬: stream
+]]
+        vim.fn.writefile(vim.split(chat_content, "\n"), test_file)
+        vim.cmd("edit " .. test_file)
+        local buf = vim.api.nvim_get_current_buf()
+        vim.api.nvim_win_set_cursor(0, { 6, 0 })
+        local runtime = pending_runtime()
+        require("parley.chat_pending").start = function(opts)
+            opts.clock, opts.scheduler = runtime.clock, runtime.scheduler
+            return canonical_pending_start(opts)
+        end
+        local write
+        local qid = "qid_external_invalidation"
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, handler,
+                _completion_callback, _callback, progress_callback)
+            write = handler
+            parley.tasker.set_query(qid, { response = "answer late", raw_response = "", buf = buf_arg })
+            handler(qid, "answer")
+            progress_callback(qid, { message = "Reasoning" })
+        end
+
+        parley.chat_respond({ range = 0 })
+        runtime:drain()
+        assert.is_true(vim.wait(500, function()
+            return buffer_contains(buf, "answer") and pending_virtual_text(buf) == "Reasoning"
+        end, 10))
+        local mark = pending_mark(buf)
+        vim.api.nvim_buf_set_lines(buf, mark[2], mark[2] + 1, false, { "externally replaced" })
+
+        write(qid, " late")
+        runtime:drain()
+        assert.is_true(vim.wait(500, function()
+            return not require("parley.chat_pending").is_active(buf)
+        end, 10))
+        assert.is_nil(pending_mark(buf))
+        assert.is_true(buffer_contains(buf, "externally replaced"))
+        assert.is_false(buffer_contains(buf, "answer late"))
+    end)
+
     it("keeps topic-generation fallback outside playful chat sessions", function()
         local chat_content = [[
 # topic: ?

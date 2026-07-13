@@ -150,3 +150,13 @@ The gate identified a duplicated layout traversal in the proposed
 for the last non-empty block end and made the IO shell consume it, rather than
 repeating the model's backward scan or deriving the answer from private margin
 arithmetic.
+
+### 2026-07-13 — close-review rework
+
+Boundary review found that relocation did not distinguish a mark invalidated
+before the stream callback from one invalidated by its own pending-line
+replacement. Add a synchronous adapter pre-write validity check, wire it into
+the existing dispatcher `before_write` seam, authorize same-ID repair only for
+that uninterrupted write callback, and cover external invalidation followed by
+a queued stream write in a real buffer. Reopen verification and close until the
+revised contract passes the boundary review.

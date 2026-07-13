@@ -286,6 +286,7 @@ describe("chat pending extmark adapter", function()
         local minimum_timer = session.timers.minimum
         local frame_timer = session.timers.frame
         runtime:advance(120)
+        assert.is_true(session:before_write())
         vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "answer", "pending" })
         session:tip_written(1)
 
@@ -314,6 +315,21 @@ describe("chat pending extmark adapter", function()
         session:tip_written(0)
         assert.is_nil(extmark(buf))
         assert.equals(1, completions)
+    end)
+
+    it("rejects a write when progress was invalidated before the writer callback", function()
+        local buf = new_scratch()
+        local runtime = new_runtime()
+        local session = start_fake(buf, runtime)
+        runtime:advance(1000)
+        runtime:drain()
+
+        vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "externally replaced" })
+        assert.is_false(session:before_write())
+        assert.is_false(chat_pending.is_active(buf))
+
+        session:tip_written(0)
+        assert.is_nil(extmark(buf))
     end)
 
     it("stages content until the minimum and flushes it in FIFO order", function()

@@ -1605,7 +1605,10 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             return is_follow_cursor_enabled(override_free_cursor)
         end, on_stream_lines_changed, {
             before_write = function(_qid, _chunk)
-                return lease_valid()
+                if not lease_valid() then
+                    return false
+                end
+                return pending_session:before_write()
             end,
             after_write = function(_qid, _chunk, _delta, last_written_line_0)
                 pending_session:tip_written(last_written_line_0)

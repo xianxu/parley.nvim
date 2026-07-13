@@ -106,7 +106,7 @@ v3.1 AI-paired 40% values.
 - [x] Report the tracked last line from the stream writer and move visible
   progress through the serialized chat adapter.
 - [x] Update the response-progress atlas and pass targeted/full verification.
-- [x] Close, publish, and merge through the SDLC gates.
+- [ ] Close, publish, and merge through the SDLC gates.
 
 ## Log
 
@@ -173,3 +173,21 @@ race in `tools_builtin_find_spec.lua`: its `find .` can traverse a transient
 directory while another unit process deletes it. The test passed alone, the
 affected files have no #183 diff, and the serialized full run passed without
 altering that unrelated surface.
+
+### 2026-07-13 — close-review rework
+
+The mandatory boundary review returned `REWORK`: `tip_written` could repair a
+visible extmark that was already invalid before the acknowledged stream write,
+mistaking external invalidation for writer-caused invalidation. Reopened tests,
+implementation, verification, and close. The fix adds a synchronous pre-write
+validity authorization; because validation, mutation, and relocation share one
+scheduled callback, only that immediately following writer mutation may repair
+an invalidated ID (`ARCH-PURPOSE`).
+
+The rework regression failed first because no pre-write adapter seam existed and
+the real queued stream kept the session active. GREEN adds `before_write` to
+validate the visible mark and authorize only the uninterrupted writer mutation;
+finished/hidden sessions still allow content already emitted by the reducer,
+which preserves the existing staged-completion ordering. Verification passed
+again with both mapped specs, `make -f Makefile.local test JOBS=1` (lint clean;
+all unit, architecture, and integration specs), and `git diff --check`.
