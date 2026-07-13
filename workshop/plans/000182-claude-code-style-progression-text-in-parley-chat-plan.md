@@ -54,7 +54,7 @@ All three symbols are tested without Neovim IO or mocks in `tests/unit/chat_pres
 - **`chat_pending.start`** — creates one registered per-buffer session, anchors a dedicated `virt_lines` extmark below the durable response header, owns reveal/minimum/animation/verb timers, feeds every callback through the pure reducer, and executes emitted actions in order.
   - **Injected into:** `chat_respond.respond` supplies `lease_valid`, the real content emitter, and the existing completion/failure continuations.
   - **Future extensions:** A different chat progress renderer can consume the same reducer actions.
-- **`selection_spinner.start`** — renders `" " .. progress.frame(tick)` at the selection's exclusive end and returns an idempotent stop function.
+- **`selection_spinner.start`** — initializes `tick=1` and renders `" " .. progress.frame(tick)` (`⠙`) at the selection's exclusive end, then advances through the canonical sequence and returns an idempotent stop function.
   - **Injected into:** `define_visual`; it reuses `progress.SPINNER` but has no dependency on the detached luabar session (`ARCH-DRY`).
   - **Future extensions:** Other precisely anchored read-only skills can opt in explicitly.
 - **`tasker.run`** — drains stdout and stderr to EOF before reporting the process terminal, regardless of whether pipe EOF or process exit arrives first.
@@ -211,7 +211,7 @@ Then retain the dispatcher-facing `tasker.run` terminal callback and stdout read
 assert.are.same({ "activity", "progress", "content" }, observed)
 ```
 
-Add cases for: a multiline `event:` + comment + multiple-`data:` SSE record (one activity at its first field/comment while each semantic line is parsed immediately); two blank-line-delimited records (two activities); an EOF-terminated final record (one activity already emitted, no duplicate at EOF); empty keepalive separators (no activity); and two GoogleAI/Ollama-style JSONL lines without blank separators (two activities and immediate per-line content). Preserve exact `activity` before `progress`/`content` order for the first semantic line of each record. Also cover normal 2xx exit; curl `code ~= 0` after partial stdout with `on_error` present; HTTP 401 with an error body; partial SSE content followed by HTTP 500; and failures with `on_error=nil`. Assert the internal status trailer produces no activity/content/raw-response bytes. With `on_error`, process failure or non-2xx calls it once with retained body/status and no legacy completion. For both normal and fallback completion, assert each supplied legacy surface—`on_exit(qid)` and scheduled `callback(qt.response)`—runs exactly once and only after the three-signal drain; either surface may be nil independently.
+Add cases for: a multiline `event:` + comment + multiple-`data:` SSE record (one activity at its first field/comment while each semantic line is parsed immediately); an unknown `extension: value` field followed by `data:` in the same record (one activity); two blank-line-delimited records (two activities); an EOF-terminated final record (one activity already emitted, no duplicate at EOF); empty keepalive separators (no activity); and two GoogleAI/Ollama-style structural JSON/array lines without blank separators (two activities and immediate per-line content). Preserve exact `activity` before `progress`/`content` order for the first semantic line of each record. Also cover normal 2xx exit; curl `code ~= 0` after partial stdout with `on_error` present; HTTP 401 with an error body; partial SSE content followed by HTTP 500; and failures with `on_error=nil`. Assert response stdout, including an unterminated final body, remains byte-for-byte intact and the internal stderr status trailer produces no activity/content/raw-response bytes. Split the qid-specific stderr sentinel at every byte boundary through the tasker readers and prove the drain callback reconstructs one parseable trailer. With `on_error`, process failure or non-2xx calls it once with retained body/status and no legacy completion. For both normal and fallback completion, assert each supplied legacy surface—`on_exit(qid)` and scheduled `callback(qt.response)`—runs exactly once and only after the three-signal drain; either surface may be nil independently.
 
 At the real consumer boundary, add a topic-generation transport-failure test
 that proves its supplied `on_exit` tears down the scratch buffer/spinner and
@@ -279,7 +279,7 @@ D.query = function(buf, provider, payload, handler, on_exit, callback,
     on_progress, on_abort, on_activity, on_error)
 ```
 
-Thread them into the private query. Maintain SSE record ownership separately from semantic line parsing. A comment or recognized SSE field (`data`, `event`, `id`, or `retry`) emits `on_activity(qid)` only when no record is active, then marks it active; blank lines only clear that flag. Process every complete line through the existing semantic progress/content extraction immediately—never buffer semantic delivery until the blank delimiter. A non-empty line that is not SSE framing is a complete JSONL/activity record: emit activity and parse it immediately without retaining SSE record ownership. EOF does not duplicate activity for an already-started unterminated record; it only processes any final partial line using the same rule. Let stdout EOF finish metrics and fallback content extraction, but never invoke `on_exit`, the assembled-response callback, or the provider terminal. The drain-safe `tasker.run` callback owns terminal delivery afterward and calls exactly one of:
+Thread them into the private query. Maintain SSE record ownership separately from semantic line parsing. Classify a non-empty line whose first non-whitespace byte is `{` or `[` as a structural JSONL record; every other line is SSE syntax, including comments and standard or extension field names. The first SSE line emits `on_activity(qid)` and marks the record active; blank lines only clear that flag. Each structural JSONL line emits its own activity without retaining SSE ownership. Process every complete semantic line immediately—never buffer semantic delivery until the blank delimiter. EOF does not duplicate activity for an already-started unterminated record; it only processes any final partial line using the same rule. Let stdout EOF finish metrics and fallback content extraction, but never invoke `on_exit`, the assembled-response callback, or the provider terminal. The drain-safe `tasker.run` callback owns terminal delivery afterward and calls exactly one of:
 
 ```lua
 legacy_complete(qid, qt.response)             -- code == 0
@@ -289,11 +289,16 @@ on_error(qid, { code=code, signal=signal, http_status=status,
                 io_error=io_error })           -- process/read failure or non-2xx
 ```
 
-Append a qid-specific `curl --write-out` sentinel containing `%{http_code}` to
-stdout. The stream parser recognizes only that exact terminal sentinel, removes
-it before SSE record framing/raw-response accumulation, and stores the numeric
-status. A status in 200–299 is successful; status 000 is governed by curl's
-process result; every other status is a provider failure even when curl exits 0.
+Append `curl --write-out "%{stderr}<qid-specific-sentinel>%{http_code}\n"`.
+Stdout remains exclusively the provider body and needs no delimiter stripping
+or tail buffering. Tasker drains and concatenates stderr byte-for-byte across
+arbitrary chunks; only after both pipes and the process exit does dispatcher
+match the exact qid-specific terminal trailer, remove it from user-facing
+stderr, and store its three-digit status. An unterminated response body is
+therefore unchanged. A status in 200–299 is successful; status 000 is governed
+by curl's process result; every other status is a provider failure even when
+curl exits 0. If the exact trailer is missing/malformed, classify that as an IO
+failure for opted-in callers rather than guessing success.
 
 `legacy_complete` invokes every historical surface the caller supplied, in the
 existing order: synchronous `on_exit(qid)`, then scheduled
@@ -538,7 +543,7 @@ Hold the real `define_visual` query open and assert immediately:
 
 ```text
 buffer text remains "... CVR ..."
-an inline virt_text extmark at row er-1, col ec renders " ⠋"
+an inline virt_text extmark at row er-1, col ec renders " ⠙"
 the frame advances
 detached progress is inactive
 ```
@@ -547,7 +552,7 @@ Then cover success (spinner removed before `CVR[^cvr]` edit), no tool output, so
 
 - [ ] **Step 6: Implement `selection_spinner.start` and Definition wiring**
 
-Create a dedicated namespace and `virt_text_pos="inline"` mark at `{row=er-1, col=ec}` with `invalidate=true`. Return an idempotent stop closure that always stops/closes its 90 ms timer before attempting `pcall(nvim_buf_del_extmark, ...)`. Each animation callback checks buffer validity first and invokes that stop closure when invalid, so buffer deletion cannot leave the timer alive.
+Create a dedicated namespace and `virt_text_pos="inline"` mark at `{row=er-1, col=ec}` with `invalidate=true`. Initialize the canonical spinner tick to `1`, so the synchronous first render is exactly `progress.frame(1) == "⠙"`; subsequent timer callbacks increment and wrap it. Return an idempotent stop closure that always stops/closes its 90 ms timer before attempting `pcall(nvim_buf_del_extmark, ...)`. Each animation callback checks buffer validity first and invokes that stop closure when invalid, so buffer deletion cannot leave the timer alive.
 
 In `define_visual`, start it after non-empty phrase validation and call:
 
@@ -647,6 +652,13 @@ git commit -m "#182: document LLM progress presentation"
 Run `sdlc actual --issue 182`, then follow `sdlc close --help`. Close with the targeted, process-fake, mapped, full-suite, diff, and manual evidence; use only the precise atlas/project bypass if the gate says it is genuinely inapplicable. Publish once with `sdlc pr` then `sdlc merge`; verify `main` contains the branch tip.
 
 ## Revisions
+
+### 2026-07-13T00:56:07-07:00 — framing precision gate correction
+
+Pinned Definition's first canonical frame to tick 1 (`⠙`), classified structural
+JSON/array lines before treating every other valid field/comment as SSE record
+membership, and moved curl's qid-specific status trailer to drained stderr.
+Added unknown-field, unterminated-body, and every-byte sentinel-split tests.
 
 ### 2026-07-13T00:50:00-07:00 — streaming-framing gate correction
 

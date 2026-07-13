@@ -126,8 +126,10 @@ place to show pending work.
   after transport drain, so topic generation, memory preferences, and other
   existing consumers cannot strand teardown.
 - Preserve each HTTP response body while classifying its final status outside
-  the SSE stream. The internal curl status trailer is transport metadata: it is
-  not an SSE event, visible content, raw provider response, or playful activity.
+  the SSE stream. Curl writes a qid-specific status trailer to stderr, leaving
+  response stdout byte-for-byte untouched. The trailer is transport metadata:
+  it is not an SSE event, visible content, raw provider response, or playful
+  activity.
 - Route failures before a transport starts through the existing pre-start abort
   class exactly once. Missing/unresolved vault secrets, a busy subprocess slot,
   and process-spawn rejection must all notify the chat/skill caller so it can
@@ -194,6 +196,14 @@ v3.1's 40% AI-paired ship-wall-clock scale.
 - [ ] Close, publish, and merge through the SDLC gates.
 
 ## Revisions
+
+### 2026-07-13T00:56:07-07:00 — framing precision gate correction
+
+Pinned Definition's initial canonical frame to tick 1 (`⠙`), made every valid
+SSE field part of one record while distinguishing JSONL structurally, and moved
+the qid-specific HTTP status trailer to stderr so response stdout is preserved
+byte-for-byte across unterminated bodies and arbitrary chunk splits. Reset plan
+approval pending fresh review.
 
 ### 2026-07-13T00:50:00-07:00 — streaming-framing gate correction
 
@@ -351,3 +361,14 @@ GoogleAI/Ollama-style JSONL regressions.
 
 Fresh review approved independent activity framing with immediate semantic
 delivery for both SSE and newline-delimited provider streams.
+
+### 2026-07-13 — framing precision gate revision
+
+The fifth SDLC plan-quality pass found the wrong initial Definition glyph,
+unknown SSE fields that could double-count activity, and an ambiguous stdout
+status boundary. The plan now fixes all three with explicit tests.
+
+### 2026-07-13 — framing precision correction approved
+
+Fresh review approved the exact initial glyph, extension-field record ownership,
+and stderr-based HTTP status framing with byte-split coverage.
