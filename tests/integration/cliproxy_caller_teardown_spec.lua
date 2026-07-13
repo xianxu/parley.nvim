@@ -198,4 +198,40 @@ describe("cliproxy on_abort teardown per caller", function()
         assert.is_true(saw_fn) -- on_abort wired at arg position 8
         assert.is_false(skill_invoke.is_in_flight(buf)) -- guard cleared, buffer not blocked
     end)
+
+    it("skill_invoke transport terminal uses argument 10 exactly once", function()
+        local skill_invoke = require("parley.skill_invoke")
+        local doc = tmp_dir .. "/transport-doc.md"
+        vim.fn.writefile({ "hello world" }, doc)
+        vim.cmd("edit " .. doc)
+        local buf = vim.api.nvim_get_current_buf()
+        local manifest = {
+            name = "testskill",
+            source = function() return "System prompt." end,
+            agent = "agentX",
+        }
+        local saved_get_agent = parley.get_agent
+        parley.get_agent = function()
+            return { provider = "cliproxyapi", model = { model = "claude-x" }, name = "agentX" }
+        end
+        local saved_query = parley.dispatcher.query
+        local on_exit, on_error
+        parley.dispatcher.query = function(_b, _p, _pl, _h, exit, _cb, _op, _abort, _activity, err)
+            on_exit, on_error = exit, err
+        end
+        local events = {}
+        skill_invoke.invoke(buf, manifest, {}, {
+            detached_progress = false,
+            on_terminal = function() table.insert(events, "terminal") end,
+            on_done = function() table.insert(events, "done") end,
+        })
+        on_error("q", { code = 7 })
+        on_exit("q")
+        vim.wait(100, function() return false end)
+        parley.get_agent = saved_get_agent
+        parley.dispatcher.query = saved_query
+
+        assert.are.same({ "terminal", "done" }, events)
+        assert.is_false(skill_invoke.is_in_flight(buf))
+    end)
 end)

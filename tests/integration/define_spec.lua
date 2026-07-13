@@ -231,6 +231,11 @@ describe("define_visual + render_definition (#161)", function()
     end)
 
     local hl_ns = vim.api.nvim_create_namespace("parley_skill_hl")
+    local spinner_ns = vim.api.nvim_create_namespace("parley_selection_spinner")
+    local function spinner_marks(b)
+        if not vim.api.nvim_buf_is_valid(b) then return {} end
+        return vim.api.nvim_buf_get_extmarks(b, spinner_ns, 0, -1, { details = true })
+    end
     local function hl_on_line(b, line0)
         for _, m in ipairs(vim.api.nvim_buf_get_extmarks(b, hl_ns, 0, -1, {})) do
             if m[2] == line0 then return true end
@@ -271,6 +276,116 @@ describe("define_visual + render_definition (#161)", function()
         assert.are.equal(8, mark[3])
         assert.are.equal(2, mark[4].end_row)
         assert.are.equal(19, mark[4].end_col)
+        assert.are.equal(0, #spinner_marks(buf), "spinner must be removed before durable render")
+    end)
+
+    it("shows immediate inline canonical progress without mutating chat text or opening detached progress", function()
+        local held_exit
+        parley.dispatcher.query = function(_b, _p, _payload, _h, on_exit)
+            query_called = true
+            held_exit = on_exit
+        end
+        vim.fn.setpos("'<", { buf, 3, 9, 0 })
+        vim.fn.setpos("'>", { buf, 3, 12, 0 })
+        local before = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+        require("parley").define_visual(buf)
+
+        assert.are.same(before, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+        assert.is_false(require("parley.progress").is_active())
+        local mark = spinner_marks(buf)[1]
+        assert.is_not_nil(mark)
+        assert.are.equal(2, mark[2])
+        assert.are.equal(12, mark[3])
+        assert.are.same({ { " ⠙" } }, mark[4].virt_text)
+        assert.are.equal("inline", mark[4].virt_text_pos)
+
+        assert.is_true(vim.wait(500, function()
+            local current = spinner_marks(buf)[1]
+            return current and current[4].virt_text[1][1] ~= " ⠙"
+        end, 10), "spinner frame did not advance")
+        require("parley.skill_invoke").cancel(buf)
+        assert.are.equal(0, #spinner_marks(buf))
+        held_exit("late")
+    end)
+
+    it("removes inline progress on pre-query abort, transport failure, and explicit cancel", function()
+        local modes = { "abort", "transport", "cancel" }
+        for _, mode in ipairs(modes) do
+            local callbacks = {}
+            parley.dispatcher.query = function(_b, _p, _payload, _h, on_exit, _cb, _prog, on_abort, _activity, on_error)
+                callbacks = { on_exit = on_exit, on_abort = on_abort, on_error = on_error }
+            end
+            vim.fn.setpos("'<", { buf, 3, 9, 0 })
+            vim.fn.setpos("'>", { buf, 3, 12, 0 })
+            require("parley").define_visual(buf)
+            assert.are.equal(1, #spinner_marks(buf), mode)
+            if mode == "abort" then
+                callbacks.on_abort("missing secret")
+            elseif mode == "transport" then
+                callbacks.on_error("q", { code = 7 })
+            else
+                require("parley.skill_invoke").cancel(buf)
+            end
+            assert.are.equal(0, #spinner_marks(buf), mode)
+            assert.are.equal("here is ASIN in context",
+                vim.api.nvim_buf_get_lines(buf, 2, 3, false)[1], mode)
+            if callbacks.on_exit then callbacks.on_exit("late") end
+        end
+    end)
+
+    it("cleans inline progress through real dispatcher prestart failures", function()
+        local vault = require("parley.vault")
+        local runner = require("parley.tasker")
+        local original_run = runner.run
+        parley.dispatcher.query = orig_query
+
+        local function invoke_and_assert_clean(label)
+            vim.fn.setpos("'<", { buf, 3, 9, 0 })
+            vim.fn.setpos("'>", { buf, 3, 12, 0 })
+            require("parley").define_visual(buf)
+            assert.is_true(vim.wait(1000, function()
+                return not require("parley.skill_invoke").is_in_flight(buf)
+            end, 10), label)
+            assert.are.equal(0, #spinner_marks(buf), label)
+            assert.is_false(require("parley.progress").is_active(), label)
+            assert.are.equal("here is ASIN in context",
+                vim.api.nvim_buf_get_lines(buf, 2, 3, false)[1], label)
+        end
+
+        -- Real dispatcher + vault missing-secret path.
+        invoke_and_assert_clean("missing secret")
+
+        -- Real dispatcher/vault with only the task-launch boundary rejected.
+        vault.add_secret("anthropic", "test-secret")
+        for _, label in ipairs({ "busy", "spawn rejected" }) do
+            runner.run = function(_buf, _cmd, _args, _terminal, _out, _err, on_start_error)
+                on_start_error(label)
+            end
+            invoke_and_assert_clean(label)
+        end
+        runner.run = original_run
+    end)
+
+    it("removes progress and writes no footnote when the selection becomes stale", function()
+        local held_exit
+        parley.dispatcher.query = function(_b, _p, _payload, _h, on_exit)
+            held_exit = on_exit
+        end
+        vim.fn.setpos("'<", { buf, 3, 9, 0 })
+        vim.fn.setpos("'>", { buf, 3, 12, 0 })
+        require("parley").define_visual(buf)
+        assert.are.equal(1, #spinner_marks(buf))
+        vim.api.nvim_buf_set_lines(buf, 2, 3, false, { "here is CHANGED in context" })
+        tasker.set_query("stale-definition", {
+            raw_response = emit_definition_sse("ASIN", "Should not land."),
+        })
+        held_exit("stale-definition")
+        assert.is_true(vim.wait(1000, function()
+            return #spinner_marks(buf) == 0
+        end, 10))
+        local text = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+        assert.is_nil(text:find("Should not land", 1, true))
+        assert.is_nil(text:find("[^asin]", 1, true))
     end)
 
     it("word-wraps long define diagnostics to the diagnostic display width", function()

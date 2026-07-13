@@ -1604,6 +1604,9 @@ end
 -- renders → both decorations clear.
 -- `span` = the visual selection {sr, sc, er, ec} (1-based getpos values).
 local function render_definition(buf, span, phrase, result)
+	if not vim.api.nvim_buf_is_valid(buf) then
+		return
+	end
 	-- Pick the emit_definition call (unforced → the model may answer in text or
 	-- only call web_search; both mean "no definition"). Notify rather than
 	-- silently doing nothing, and leave no footnote edit.
@@ -1688,9 +1691,12 @@ function M.define_visual(buf)
 
 	local span = { sr, sc, er, ec }
 	local manifest = require("parley.skills.define")
+	local stop_selection_spinner = require("parley.selection_spinner").start(buf, er - 1, ec)
 	require("parley.skill_invoke").invoke(buf, manifest, { phrase = phrase }, {
 		document = context,
 		no_reload = true,
+		detached_progress = false,
+		on_terminal = stop_selection_spinner,
 		on_done = function(result) render_definition(buf, span, phrase, result) end,
 	})
 end

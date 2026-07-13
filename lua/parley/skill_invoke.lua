@@ -25,6 +25,8 @@ local _in_flight = {}
 -- their gen and no-op if a newer exchange superseded them — so a cancelled
 -- (killed) query's late callback can't clobber the new one's state. (#133)
 local _gen = {}
+-- The exact-once terminal owned by the active generation for each buffer.
+local _terminals = {}
 
 --- Is a skill exchange in flight for `buf`? Cleared on on_exit/on_abort, so an
 --- abort that can't start the query doesn't block the buffer forever (#131).
@@ -40,9 +42,12 @@ end
 --- review job). Lets a new round supersede a stuck/slow one (#133).
 --- @param buf number
 function M.cancel(buf)
+    local finish = _terminals[buf]
+    if finish then
+        finish({ ok = false, msg = "cancelled" }, false)
+    end
     _gen[buf] = (_gen[buf] or 0) + 1
     _in_flight[buf] = nil
-    pcall(function() require("parley.progress").stop() end)
     pcall(function() require("parley.tasker").stop() end)
 end
 
@@ -95,7 +100,8 @@ end
 --- @param buf number the artifact buffer
 --- @param manifest table SkillManifest
 --- @param args table|nil completable-arg values
---- @param opts table|nil { manual = boolean? (default true), on_done = fun(result)? }
+--- @param opts table|nil { manual=boolean?, no_reload=boolean?, document=string?,
+---   detached_progress=boolean?, on_terminal=fun(result)?, on_done=fun(result)? }
 function M.invoke(buf, manifest, args, opts)
     opts = opts or {}
     local manual = opts.manual
@@ -112,22 +118,55 @@ function M.invoke(buf, manifest, args, opts)
     local assembly = require("parley.skill_assembly")
     local skill_render = require("parley.skill_render")
 
-    local artifact_path = vim.api.nvim_buf_get_name(buf)
-    if artifact_path == "" then
-        p.logger.warning("skill " .. tostring(manifest.name) .. ": buffer has no file — open the artifact first")
-        if opts.on_done then
-            opts.on_done({ ok = false, msg = "buffer has no file" })
+    local function deliver_attempt(result, deliver_done)
+        if opts.on_terminal then
+            local ok = pcall(opts.on_terminal, result)
+            if not ok then p.logger.error("skill terminal callback failed") end
         end
-        return
+        if deliver_done and opts.on_done then
+            local ok = pcall(opts.on_done, result)
+            if not ok then p.logger.error("skill completion callback failed") end
+        end
     end
+
     if _in_flight[buf] then
         p.logger.warning("skill " .. tostring(manifest.name) .. ": already running on this buffer")
+        deliver_attempt({ ok = false, msg = "already running" }, true)
         return
     end
 
     -- This exchange's generation; on_exit/on_abort no-op if superseded (#133).
     local gen = (_gen[buf] or 0) + 1
     _gen[buf] = gen
+    local finished = false
+    local detached_progress = opts.detached_progress ~= false
+    local progress_started = false
+    local function finish(result, deliver_done)
+        if finished then return false end
+        finished = true
+        if progress_started then
+            pcall(function() require("parley.progress").stop() end)
+            progress_started = false
+        end
+        if _terminals[buf] == finish then
+            _terminals[buf] = nil
+            _in_flight[buf] = nil
+        end
+        deliver_attempt(result, deliver_done)
+        return true
+    end
+    _terminals[buf] = finish
+
+    if not vim.api.nvim_buf_is_valid(buf) then
+        finish({ ok = false, msg = "buffer invalid" }, false)
+        return
+    end
+    local ok_path, artifact_path = pcall(vim.api.nvim_buf_get_name, buf)
+    if not ok_path or artifact_path == "" then
+        p.logger.warning("skill " .. tostring(manifest.name) .. ": buffer has no file — open the artifact first")
+        finish({ ok = false, msg = "buffer has no file" }, true)
+        return
+    end
 
     -- Sync file == buffer so edits compute + apply against the same content.
     -- A read-only skill (opts.no_reload — e.g. define, #161) makes no edits, so
@@ -146,9 +185,7 @@ function M.invoke(buf, manifest, args, opts)
     local ok_src, body = pcall(manifest.source, { args = args or {}, repo_root = p.config.repo_root })
     if not ok_src then
         p.logger.error("skill " .. tostring(manifest.name) .. ": source failed: " .. tostring(body))
-        if opts.on_done then
-            opts.on_done({ ok = false, msg = "source failed: " .. tostring(body) })
-        end
+        finish({ ok = false, msg = "source failed: " .. tostring(body) }, true)
         return
     end
     -- opts.document lets a caller send a bounded context (e.g. define's enclosing
@@ -163,9 +200,7 @@ function M.invoke(buf, manifest, args, opts)
     })
     if not agent then
         p.logger.warning("skill " .. tostring(manifest.name) .. ": no tool-capable agent resolved")
-        if opts.on_done then
-            opts.on_done({ ok = false, msg = "no agent" })
-        end
+        finish({ ok = false, msg = "no agent" }, true)
         return
     end
 
@@ -188,8 +223,11 @@ function M.invoke(buf, manifest, args, opts)
     _in_flight[buf] = true
     -- Detached progress bar: this is a ~30s headless op, so show a running cue
     -- (the first substantive-progress surface, #133 M7). Stopped on exit/abort.
-    require("parley.progress").start("Parley " .. tostring(manifest.name) .. " running…")
-    llm.query(
+    if detached_progress then
+        progress_started = require("parley.progress").start(
+            "Parley " .. tostring(manifest.name) .. " running…")
+    end
+    local ok_query = pcall(llm.query,
         nil, -- headless: no streaming buffer insertion
         agent.provider,
         payload,
@@ -198,11 +236,13 @@ function M.invoke(buf, manifest, args, opts)
             vim.schedule(function()
                 -- Superseded by a newer exchange (the old one was cancelled) →
                 -- no-op so we don't reload/re-render or clobber the new state.
-                if _gen[buf] ~= gen then
+                if finished or _gen[buf] ~= gen then
                     return
                 end
-                require("parley.progress").stop()
-                _in_flight[buf] = nil
+                if not vim.api.nvim_buf_is_valid(buf) then
+                    finish({ ok = false, msg = "buffer invalid" }, false)
+                    return
+                end
                 local qt = tasker.get_query(qid) or {}
                 local calls = providers.decode_anthropic_tool_calls_from_stream(qt.raw_response or "")
                 local results = {}
@@ -255,36 +295,40 @@ function M.invoke(buf, manifest, args, opts)
                 for _, e in ipairs(errors) do
                     p.logger.error("skill " .. tostring(manifest.name) .. ": " .. tostring(e))
                 end
-                if opts.on_done then
-                    -- Pure-fed payload: original/new_content/decorations let a
-                    -- caller (review) journal the round without re-reading the
-                    -- buffer (#133 M3).
-                    opts.on_done({
-                        ok = (#errors == 0),
-                        applied = applied,
-                        calls = calls,
-                        results = results,
-                        original = original,
-                        new_content = new_content,
-                        decorations = decorations,
-                    })
-                end
+                -- Pure-fed payload: original/new_content/decorations let a
+                -- caller (review) journal the round without re-reading the
+                -- buffer (#133 M3).
+                finish({
+                    ok = (#errors == 0),
+                    applied = applied,
+                    calls = calls,
+                    results = results,
+                    original = original,
+                    new_content = new_content,
+                    decorations = decorations,
+                }, true)
             end)
         end,
         nil,
         nil,
         function(msg) -- on_abort
-            if _gen[buf] ~= gen then
+            if finished or _gen[buf] ~= gen then
                 return -- superseded by a newer exchange (cancelled) → no-op
             end
-            require("parley.progress").stop()
-            _in_flight[buf] = nil
             p.logger.error("skill " .. tostring(manifest.name) .. " abort: " .. tostring(msg))
-            if opts.on_done then
-                opts.on_done({ ok = false, msg = tostring(msg) })
-            end
+            finish({ ok = false, msg = tostring(msg) }, true)
+        end,
+        nil,
+        function(_qid, transport_error) -- on_error (dispatcher argument 10)
+            if finished or _gen[buf] ~= gen then return end
+            p.logger.error("skill " .. tostring(manifest.name) .. " transport error")
+            finish({ ok = false, msg = "transport error", error = transport_error }, true)
         end
     )
+    if not ok_query then
+        p.logger.error("skill " .. tostring(manifest.name) .. " query failed")
+        finish({ ok = false, msg = "query failed" }, true)
+    end
 end
 
 return M
