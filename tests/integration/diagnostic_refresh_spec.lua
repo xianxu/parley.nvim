@@ -6,6 +6,13 @@ local timezone = require("parley.timezone_diagnostics")
 describe("diagnostic refresh lifecycle", function()
     local buf
     local lifecycle
+    local function footnotes(bufnr)
+        local found = {}
+        for _, diagnostic in ipairs(vim.diagnostic.get(bufnr, { namespace = skill_render.diag_namespace() })) do
+            if diagnostic.source == "parley-footnote" then table.insert(found, diagnostic) end
+        end
+        return found
+    end
 
     before_each(function()
         buf = vim.api.nvim_create_buf(false, true)
@@ -35,9 +42,11 @@ describe("diagnostic refresh lifecycle", function()
 
     it("keeps diagnostics stale during TextChangedI", function()
         assert.equals(1, #vim.diagnostic.get(buf, { namespace = timezone.diag_namespace() }))
-        vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "time removed and ASIN[^asin]" })
+        assert.equals(1, #footnotes(buf))
+        vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "time and reference removed" })
         vim.api.nvim_exec_autocmds("TextChangedI", { buffer = buf })
         assert.equals(1, #vim.diagnostic.get(buf, { namespace = timezone.diag_namespace() }))
+        assert.equals(1, #footnotes(buf))
     end)
 
     for _, case in ipairs({
@@ -48,9 +57,10 @@ describe("diagnostic refresh lifecycle", function()
         { event = "WinEnter", name = "hydrates on WinEnter" },
     }) do
         it(case.name, function()
-            vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "time removed and ASIN[^asin]" })
+            vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "time and reference removed" })
             vim.api.nvim_exec_autocmds(case.event, { buffer = buf })
             assert.equals(0, #vim.diagnostic.get(buf, { namespace = timezone.diag_namespace() }))
+            assert.equals(0, #footnotes(buf))
         end)
     end
 
@@ -67,4 +77,21 @@ describe("diagnostic refresh lifecycle", function()
         assert.equals(1, #remaining)
         assert.equals("unrelated", remaining[1].message)
     end)
+
+    for _, event in ipairs({ "BufUnload", "BufDelete" }) do
+        it("clears timezone and footnotes on " .. event, function()
+            local ns = skill_render.diag_namespace()
+            local existing = vim.diagnostic.get(buf, { namespace = ns })
+            table.insert(existing, {
+                lnum = 0, col = 0, message = "unrelated", source = "parley-edit",
+                severity = vim.diagnostic.severity.INFO,
+            })
+            vim.diagnostic.set(ns, buf, existing)
+            vim.api.nvim_exec_autocmds(event, { buffer = buf })
+            assert.equals(0, #vim.diagnostic.get(buf, { namespace = timezone.diag_namespace() }))
+            local remaining = vim.diagnostic.get(buf, { namespace = ns })
+            assert.equals(1, #remaining)
+            assert.equals("unrelated", remaining[1].message)
+        end)
+    end
 end)

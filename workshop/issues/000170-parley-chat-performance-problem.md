@@ -387,3 +387,13 @@ Makefile.parley perf` completed with 5 warmups/20 samples: inclusive
 lines to 2/2/2; the two remaining reads are decoration work assigned to Tasks
 5–6, so diagnostic full-buffer reads during the measured edit are zero. Lint
 passed with 0 warnings/errors across 256 files and `git diff --check` passed.
+
+Task 4's spec-review follow-up audited every post-mutation terminal return and
+closed the remaining convergence exits, including delayed recursive lease
+failure and topic generation. The recursive integration now completes both API
+legs, proves one finalization per leg, and observes a real final UTC diagnostic;
+pre-dispatch busy/no-mutation exits prove zero finalizations. Each named event
+now mutates and asserts both timezone and managed-footnote freshness, while
+separate `BufUnload` and `BufDelete` cases prove both sources clear and unrelated
+shared diagnostics survive. Focused suites pass 3/3, 4/4, 9/9, and 31/31;
+`make perf`, 256-file lint, and diff-check remain green.

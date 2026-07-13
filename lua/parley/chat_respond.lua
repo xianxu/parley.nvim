@@ -1834,6 +1834,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                 if agent_info and agent_info.tools and #agent_info.tools > 0 then
                     local tool_loop = require("parley.tool_loop")
                     if not lease_valid() then
+                        finalize_mutated_api_leg()
                         chat_lease.clear(buf, lease_generation)
                         return
                     end
@@ -1853,6 +1854,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                         -- callbacks still fire on the final iteration.
                         vim.schedule(function()
                             if not lease_valid() then
+                                finalize_mutated_api_leg()
                                 chat_lease.clear(buf, lease_generation)
                                 return
                             end
@@ -1897,6 +1899,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                         _parley.helpers.undojoin(buf)
                         buffer_edit.delete_lines_after(buf, exchange_end + 1, excess)
                     end) then
+                        finalize_mutated_api_leg()
                         chat_lease.clear(buf, lease_generation)
                         return
                     end
@@ -1916,6 +1919,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                         _parley.helpers.undojoin(buf)
                         buffer_edit.append_blank_at_end(buf)
                     end) then
+                        finalize_mutated_api_leg()
                         chat_lease.clear(buf, lease_generation)
                         return
                     end
@@ -1925,6 +1929,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                 local topic_generation_started = false
                 if headers.topic == "?" then
                     if not lease_valid() then
+                        finalize_mutated_api_leg()
                         chat_lease.clear(buf, lease_generation)
                         return
                     end
@@ -1940,6 +1945,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
 
                     M.generate_topic(topic_msgs, agent_info.provider, agent_info.model, function(topic)
                         if not lease_valid() then
+                            finalize_mutated_api_leg()
                             chat_lease.clear(buf, lease_generation)
                             return
                         end
@@ -1947,6 +1953,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                         local all_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
                         set_chat_topic_line(buf, all_lines, topic)
                         lease_commit()
+                        finalize_mutated_api_leg()
                         chat_lease.clear(buf, lease_generation)
                     end, { buf = buf, find_line = function()
                         return M.find_topic_line(buf)
@@ -1992,7 +1999,9 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                 local interview = require("parley.interview")
                 interview.highlight_timestamps(buf)
 
-                finalize_mutated_api_leg()
+                if not topic_generation_started then
+                    finalize_mutated_api_leg()
+                end
 
                 vim.cmd("doautocmd User ParleyDone")
 

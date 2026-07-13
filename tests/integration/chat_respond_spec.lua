@@ -905,6 +905,13 @@ describe("chat_respond: guard branches", function()
     end)
 
     it("returns early without calling dispatcher when buffer is already busy", function()
+        local lifecycle = require("parley.buffer_lifecycle")
+        local original_finalize = lifecycle.finalize_mutated_api_leg
+        local finalize_count = 0
+        lifecycle.finalize_mutated_api_leg = function(...)
+            finalize_count = finalize_count + 1
+            return original_finalize(...)
+        end
         local chat_content = [[
 # topic: Test
 - file: test.md
@@ -931,9 +938,11 @@ describe("chat_respond: guard branches", function()
 
         -- Dispatcher should never have been called
         assert.is_false(dispatcher_called, "Dispatcher should not be called when buffer is busy")
+        assert.equals(0, finalize_count, "pre-dispatch no-mutation exit must not finalize")
 
         -- Restore
         parley.tasker.is_busy = original_is_busy
+        lifecycle.finalize_mutated_api_leg = original_finalize
     end)
 
     it("returns early without calling dispatcher for non-chat file", function()
@@ -1189,6 +1198,13 @@ describe("chat_respond: pending request transcript drift", function()
     end)
 
     it("does not recursively resubmit from a stale live model after undo", function()
+        local lifecycle = require("parley.buffer_lifecycle")
+        local original_finalize = lifecycle.finalize_mutated_api_leg
+        local finalize_count = 0
+        lifecycle.finalize_mutated_api_leg = function(...)
+            finalize_count = finalize_count + 1
+            return original_finalize(...)
+        end
         local buf = open_simple_chat()
         parley._state.agent = "ToolSonnet"
         local scheduled = {}
@@ -1222,8 +1238,10 @@ describe("chat_respond: pending request transcript drift", function()
 
         vim.cmd("silent! undo")
         run_scheduled_until(scheduled, cursor)
+        lifecycle.finalize_mutated_api_leg = original_finalize
 
         assert.equals(1, call_count, "stale recursive respond should not call dispatcher again")
+        assert.equals(1, finalize_count, "mutated tool leg must finalize before delayed lease failure")
     end)
 
     it("allows recursive tool resubmit when the transcript does not drift", function()
@@ -1235,6 +1253,7 @@ describe("chat_respond: pending request transcript drift", function()
             return original_finalize(...)
         end
         local buf = open_simple_chat()
+        lifecycle.setup(buf)
         parley._state.agent = "ToolSonnet"
         local scheduled = {}
         vim.schedule = function(fn)
@@ -1242,10 +1261,12 @@ describe("chat_respond: pending request transcript drift", function()
         end
         local call_count = 0
         local captured_completion
+        local captured_handler
         local qid = "qid_recursive_ok"
 
-        parley.dispatcher.query = function(buf_arg, _provider, _payload, _handler, completion_callback)
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, handler, completion_callback)
             call_count = call_count + 1
+            captured_handler = handler
             captured_completion = completion_callback
             if call_count == 1 then
                 parley.tasker.set_query(qid, {
@@ -1255,7 +1276,7 @@ describe("chat_respond: pending request transcript drift", function()
                 })
             else
                 parley.tasker.set_query("qid_recursive_second", {
-                    response = "final recursive answer",
+                    response = "final at 2026-07-12T12:00:00Z",
                     raw_response = "",
                     buf = buf_arg,
                 })
@@ -1264,11 +1285,19 @@ describe("chat_respond: pending request transcript drift", function()
 
         parley.chat_respond({ range = 0 })
         captured_completion(qid)
-        run_scheduled_until(scheduled, 1)
+        local cursor = run_scheduled_until(scheduled, 1)
+        assert.equals(2, call_count, "valid recursive respond should call dispatcher again")
+        captured_handler("qid_recursive_second", "final at 2026-07-12T12:00:00Z")
+        cursor = run_scheduled_until(scheduled, cursor)
+        captured_completion("qid_recursive_second")
+        run_scheduled_until(scheduled, cursor)
         lifecycle.finalize_mutated_api_leg = original_finalize
 
         assert.equals(2, call_count, "valid recursive respond should call dispatcher again")
-        assert.equals(1, finalize_count, "completed recursive API leg should finalize once")
+        assert.equals(2, finalize_count, "each completed recursive API leg should finalize once")
+        assert.equals(1, #vim.diagnostic.get(buf, {
+            namespace = require("parley.timezone_diagnostics").diag_namespace(),
+        }), "final recursive leg should leave real UTC diagnostics current")
         assert.is_true(buffer_contains(buf, "🔧: read_file id=toolu_RECURSE_OK"))
         assert.is_true(buffer_contains(buf, "📎: read_file id=toolu_RECURSE_OK"))
     end)
