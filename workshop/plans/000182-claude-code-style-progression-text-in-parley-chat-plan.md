@@ -93,7 +93,7 @@ All three symbols are tested without Neovim IO or mocks in `tests/unit/chat_pres
 - Create: `lua/parley/chat_presentation.lua`
 - Create: `tests/unit/chat_presentation_spec.lua`
 
-- [ ] **Step 1: Write failing state-table tests for fast and delayed visible output**
+- [x] **Step 1: Write failing state-table tests for fast and delayed visible output**
 
 Define the wished-for public API and assert actions, not internal mutation:
 
@@ -122,7 +122,7 @@ assert.are.same({}, staged_actions)
 assert.are.equal(1, #staged.staged)
 ```
 
-- [ ] **Step 2: Run the unit spec and verify RED**
+- [x] **Step 2: Run the unit spec and verify RED**
 
 Run:
 
@@ -133,15 +133,15 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim \
 
 Expected: FAIL because `parley.chat_presentation` does not exist.
 
-- [ ] **Step 3: Implement `initial` and the minimal waiting/showing/released transitions**
+- [x] **Step 3: Implement `initial` and the minimal waiting/showing/released transitions**
 
 Use immutable plain-table returns (copy only the small state), explicit millisecond deadlines (`reveal_at = start + 1000`, `minimum_at = reveal + 1000`, `verb_due_at = last_activity + 15000`), and tagged staged events. Visible `content` and `progress` share release timing but retain their distinct payloads.
 
-- [ ] **Step 4: Run the unit spec and verify GREEN**
+- [x] **Step 4: Run the unit spec and verify GREEN**
 
 Expected: PASS for the fast path, reveal, staging, minimum release, and ordered flush tests.
 
-- [ ] **Step 5: Add RED tests for the complete transition matrix**
+- [x] **Step 5: Add RED tests for the complete transition matrix**
 
 Cover separately:
 
@@ -160,11 +160,11 @@ same-deadline permutations -> callback order decides exactly once
 
 Use a deterministic requested `verb_index`; `transition` advances to the next available non-current index rather than calling `math.random`.
 
-- [ ] **Step 6: Implement the remaining minimal transitions and `progress_message`**
+- [x] **Step 6: Implement the remaining minimal transitions and `progress_message`**
 
 Port the current reasoning/tool detail accumulation from `chat_respond.lua` into `progress_message(detail_state, event) -> new_detail_state, message`, preserving whitespace compaction and key resets.
 
-- [ ] **Step 7: Run the unit spec, then lint the new files**
+- [x] **Step 7: Run the unit spec, then lint the new files**
 
 Run the unit command above, then:
 
@@ -174,7 +174,7 @@ luacheck lua/parley/chat_presentation.lua tests/unit/chat_presentation_spec.lua
 
 Expected: PASS with no warnings.
 
-- [ ] **Step 8: Commit the pure core**
+- [x] **Step 8: Commit the pure core**
 
 ```bash
 git add lua/parley/chat_presentation.lua tests/unit/chat_presentation_spec.lua
@@ -652,6 +652,13 @@ git commit -m "#182: document LLM progress presentation"
 Run `sdlc actual --issue 182`, then follow `sdlc close --help`. Close with the targeted, process-fake, mapped, full-suite, diff, and manual evidence; use only the precise atlas/project bypass if the gate says it is genuinely inapplicable. Publish once with `sdlc pr` then `sdlc merge`; verify `main` contains the branch tip.
 
 ## Revisions
+
+### 2026-07-13T01:26:31-07:00 — Task 1 execution
+
+Checked off the pure-controller task after RED/GREEN implementation and two
+fresh review loops. Review-driven tests now cover actual delayed reveal, nil
+completion terminals, cross-phase failure/cancellation, and structurally linear
+persistent staging.
 
 ### 2026-07-13T00:56:07-07:00 — framing precision gate correction
 

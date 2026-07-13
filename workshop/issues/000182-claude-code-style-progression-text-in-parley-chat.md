@@ -188,7 +188,7 @@ v3.1's 40% AI-paired ship-wall-clock scale.
 ## Plan
 
 - [x] Approve the durable plan at `workshop/plans/000182-claude-code-style-progression-text-in-parley-chat-plan.md`.
-- [ ] Build the pure chat presentation reducer with exhaustive event-order tests.
+- [x] Build the pure chat presentation reducer with exhaustive event-order tests.
 - [ ] Add separate raw-SSE activity and post-start transport-error callbacks.
 - [ ] Replace the buffer-backed web spinner with the extmark-backed chat adapter.
 - [ ] Add Definition's immediate selection spinner and generalized skill terminal cleanup.
@@ -372,3 +372,10 @@ status boundary. The plan now fixes all three with explicit tests.
 
 Fresh review approved the exact initial glyph, extension-field record ownership,
 and stderr-based HTTP status framing with byte-split coverage.
+
+### 2026-07-13 — Task 1 complete
+
+Implemented the pure immutable presentation reducer and formatter with 41
+focused tests. Fresh reviews caught and closed delayed-reveal minimum timing,
+nil completion ownership, and quadratic staged-event copying; staging now uses
+an O(1) persistent chain with one linear ordered flush.
