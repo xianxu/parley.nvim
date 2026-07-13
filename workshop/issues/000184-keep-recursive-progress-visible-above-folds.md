@@ -28,11 +28,13 @@ row is outside the closed fold, and therefore codifies the invisible placement.
 - For every recursive LLM leg, insert the stream placeholder first and anchor
   pending progress to its stable preceding separator row. That row is the
   visual append boundary after the completed answer/tool/result sequence, is
-  excluded from tool folds, and is not replaced by streaming.
+  excluded from every Parley-generated tool fold, and is not replaced by
+  streaming.
 - Do not derive placement from the current window's `foldclosed()` state or
   move/open folds. Folds are window-local while the pending extmark is
-  buffer-owned; the separator must remain a valid visible anchor in every
-  window regardless of which folds are open (`ARCH-PURPOSE`).
+  buffer-owned; the separator must remain outside Parley's generated tool folds
+  regardless of which of those folds a window has open (`ARCH-PURPOSE`). User-
+  created manual folds outside Parley's tool-fold contract are out of scope.
 - Once content arrives, retain #183's existing writer-owned relocation: move
   progress synchronously to the last written row after every chunk, preserving
   the same extmark ID, temporal reducer state, and repair authorization.
@@ -46,15 +48,22 @@ row is outside the closed fold, and therefore codifies the invisible placement.
 
 ## Done when
 
-- A real recursive response containing multiple client-side tool calls closes
-  its tool folds and then shows delayed progress at a row for which
-  `foldclosed(row + 1) == -1`.
+- A production-entry regression drives two consecutive recursive tool rounds
+  (assistant tool call → local result → recursive LLM call, repeated), closes
+  both rounds' tool-use/result folds, and then proves the third LLM leg has no
+  decoration before the one-second reveal and visible progress afterward at a
+  row for which `foldclosed(row + 1) == -1`.
 - The recursive progress row is the stable separator immediately before the
   stream placeholder and visually follows the final folded tool result.
-- The first streamed chunk still relocates progress to the written generation
-  tip without changing presentation lifecycle state.
-- Fresh responses, local-tool silence, fold compaction, cancellation, staging,
-  and external-invalidation behavior retain their existing coverage.
+- The third leg's first streamed chunk relocates the same extmark ID from the
+  separator to the written generation tip without changing the one-second
+  minimum-visibility deadline or other presentation lifecycle state.
+- Through a folded recursive leg, cancellation removes the decoration, timers,
+  pending ownership, and lease while discarding staged output; provider failure
+  removes the decoration and releases staged partial output before surfacing
+  the error. Neither terminal opens or moves Parley tool folds.
+- Fresh responses, local-tool silence, fold compaction, staging, and external-
+  invalidation behavior retain their existing coverage.
 - Mapped response-progress tests, lint, and the full repository suite pass.
 
 ## Plan
@@ -76,3 +85,13 @@ schedules recursive `respond`; #183 initializes progress at
 design anchors to the canonical separator before the new stream placeholder,
 avoiding window-local fold queries and preserving the existing stream-tip
 relocation contract.
+
+## Revisions
+
+### 2026-07-13 — fresh spec review
+
+Scoped the fold guarantee to Parley-generated tool folds, made the screenshot's
+multi-call reproduction explicit as two consecutive recursive rounds followed
+by a waiting third LLM leg, pinned silent/reveal/minimum timing and same-ID
+stream relocation, and required cancellation plus provider-failure cleanup to
+run through the folded-recursive separator path.
