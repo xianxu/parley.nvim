@@ -72,10 +72,17 @@ end
 ---@param name string # provider name
 ---@param secret string | table | nil # secret or command to retrieve it
 ---@param callback function | nil # callback to run after secret is resolved
-V.resolve_secret = function(name, secret, callback)
+---@param on_error function | nil # optional resolver failure callback(message)
+V.resolve_secret = function(name, secret, callback, on_error)
 	name = resolve_secret_name(name)
 	logger.debug("vault resolver started for " .. name .. ": " .. vim.inspect(secret), true)
 	callback = callback or function() end
+	local fail = tasker.once(function(message)
+		logger.warning(message, true)
+		if on_error then
+			on_error(message)
+		end
+	end)
 	if secrets[name] and type(secrets[name]) ~= "table" then
 		logger.debug("vault resolver secret " .. name .. " already resolved", true)
 		callback()
@@ -86,6 +93,12 @@ V.resolve_secret = function(name, secret, callback)
 		local s = secrets[name]
 		if s and type(s) == "string" then
 			secrets[name] = s:gsub("^%s*(.-)%s*$", "%1")
+			s = secrets[name]
+		end
+		if type(s) ~= "string" or not s:match("%S") then
+			secrets[name] = nil
+			fail("vault resolver got empty response for " .. name)
+			return
 		end
 		logger.debug("vault resolver finished for " .. name .. ": " .. vim.inspect(secrets[name]), true)
 
@@ -94,8 +107,8 @@ V.resolve_secret = function(name, secret, callback)
 		callback()
 	end
 
-	if not secret then
-		logger.warning("vault resolver for " .. name .. " got empty secret", true)
+	if not secret or (type(secret) == "string" and not secret:match("%S")) then
+		fail("vault resolver for " .. name .. " got empty secret")
 		return
 	end
 
@@ -103,17 +116,21 @@ V.resolve_secret = function(name, secret, callback)
 		local copy = vim.deepcopy(secret)
 		local cmd = table.remove(copy, 1)
 		local args = copy
-		tasker.run(nil, cmd, args, function(code, signal, stdout_data, stderr_data)
+		tasker.run(nil, cmd, args, function(code, signal, stdout_data, stderr_data, io_error)
+			if io_error then
+				fail("vault resolver for " .. name .. " failed: " .. tostring(io_error))
+				return
+			end
 			if code == 0 then
 				local content = stdout_data:match("^%s*(.-)%s*$")
 				if not string.match(content, "%S") then
-					logger.warning("vault resolver got empty response for " .. name .. " secret command " .. vim.inspect(secret))
+					fail("vault resolver got empty response for " .. name .. " secret command " .. vim.inspect(secret))
 					return
 				end
 				secrets[name] = content
 				post_process()
 			else
-				logger.warning(
+				fail(
 					"vault resolver for "
 						.. name
 						.. "secret command "
@@ -128,6 +145,8 @@ V.resolve_secret = function(name, secret, callback)
 						.. stderr_data
 				)
 			end
+		end, nil, nil, function(message)
+			fail("vault resolver for " .. name .. " launch failed: " .. tostring(message))
 		end)
 	else
 		secrets[name] = secret
@@ -199,17 +218,22 @@ end
 
 ---@param name string # secret name
 ---@param callback function # function to run after secret is resolved
-V.run_with_secret = function(name, callback)
+---@param on_error function | nil # optional missing/resolution failure callback(message)
+V.run_with_secret = function(name, callback, on_error)
 	name = resolve_secret_name(name)
 	if not secrets[name] then
-		logger.warning("vault secret " .. name .. " not found", true)
+		local message = "vault secret " .. name .. " not found"
+		logger.warning(message, true)
+		if on_error then
+			on_error(message)
+		end
 		return
 	end
 	if type(secrets[name]) == "table" then
 		V.resolve_secret(name, secrets[name], function()
 			logger.debug("vault run_with_secret: " .. name .. " resolved, running callback", true)
 			callback()
-		end)
+		end, on_error)
 	else
 		logger.debug("vault run_with_secret: " .. name .. " already resolved, running callback", true)
 		callback()

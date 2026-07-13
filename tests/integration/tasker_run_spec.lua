@@ -500,4 +500,70 @@ describe("tasker.run integration", function()
             assert.is_true(exit_called, "Should complete without out_reader/err_reader")
         end)
     end)
+
+    describe("Group G: drain-safe terminal", function()
+        it("G1: waits for both readers and preserves their final nil before terminal", function()
+            local events = {}
+            local stdout
+            local stderr
+
+            tasker.run(nil, "sh", { "-c", "printf out; printf err >&2" },
+                function(code, signal, stdout_data, stderr_data, io_error)
+                    table.insert(events, "terminal")
+                    stdout = stdout_data
+                    stderr = stderr_data
+                    assert.equals(0, code)
+                    assert.equals(0, signal)
+                    assert.is_nil(io_error)
+                end,
+                function(err, data)
+                    assert.is_nil(err)
+                    table.insert(events, data and "stdout" or "stdout_eof")
+                end,
+                function(err, data)
+                    assert.is_nil(err)
+                    table.insert(events, data and "stderr" or "stderr_eof")
+                end)
+
+            assert.is_true(vim.wait(1000, function()
+                return events[#events] == "terminal"
+            end, 10))
+            assert.equals("out", stdout)
+            assert.equals("err", stderr)
+            local before_terminal = { events[#events - 2], events[#events - 1] }
+            table.sort(before_terminal)
+            assert.same({ "stderr_eof", "stdout_eof" }, before_terminal)
+        end)
+
+        it("G2: schedules spawn rejection once and never calls terminal", function()
+            local start_errors = 0
+            local terminals = 0
+            tasker.run(nil, "parley-command-that-does-not-exist", {}, function()
+                terminals = terminals + 1
+            end, nil, nil, function(message)
+                start_errors = start_errors + 1
+                assert.is_truthy(tostring(message):find("start", 1, true))
+            end)
+
+            assert.is_true(vim.wait(1000, function() return start_errors == 1 end, 10))
+            assert.equals(0, terminals)
+            assert.equals(0, #tasker._handles)
+        end)
+
+        it("G3: reconstructs a stderr trailer split at every byte", function()
+            local marker = "__PARLEY_HTTP_split__503\n"
+            local captured
+            tasker.run(nil, "sh", {
+                "-c",
+                'value="$1"; i=1; while [ "$i" -le "${#value}" ]; do printf "%s" "$(printf "%s" "$value" | cut -c "$i")" >&2; i=$((i+1)); done; printf "\\n" >&2',
+                "sh",
+                marker:sub(1, -2),
+            }, function(_code, _signal, _stdout, stderr)
+                captured = stderr
+            end)
+
+            assert.is_true(vim.wait(1000, function() return captured ~= nil end, 10))
+            assert.equals(marker, captured)
+        end)
+    end)
 end)

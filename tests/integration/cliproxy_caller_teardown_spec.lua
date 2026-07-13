@@ -88,6 +88,37 @@ describe("cliproxy on_abort teardown per caller", function()
         assert.is_truthy(done) -- callback fired → on_abort → process_next past BOTH tags
     end)
 
+    it("memory_prefs advances every tag after drained transport failures", function()
+        local tasker = require("parley.tasker")
+        local agent = parley.get_agent()
+        vault.resolve_secret(agent.provider, "test-secret", function() end)
+        parley.dispatcher.providers[agent.provider] = parley.dispatcher.providers[agent.provider] or {}
+        parley.dispatcher.providers[agent.provider].endpoint = "http://unused.test"
+
+        local original_run = tasker.run
+        local runs = 0
+        tasker.run = function(_buf, _cmd, args, terminal, out_reader)
+            runs = runs + 1
+            local write_out
+            for i, arg in ipairs(args) do
+                if arg == "--write-out" then write_out = args[i + 1] end
+            end
+            local sentinel = write_out:match("%%{stderr}(.-)%%{http_code}")
+            out_reader(nil, nil)
+            terminal(7, 0, "", sentinel .. "000\n", nil)
+        end
+
+        local done
+        require("parley.memory_prefs").generate_preferences(
+            { topicA = { "s1" }, topicB = { "s2" } },
+            function(prefs) done = prefs end)
+        assert.is_true(vim.wait(1000, function() return done ~= nil end, 10))
+        tasker.run = original_run
+
+        assert.equals(2, runs)
+        assert.same({}, done)
+    end)
+
     -- chat_respond main path: mock D.query to invoke the real on_abort (arg 8);
     -- assert it's wired at the right position AND collapses the inserted answer
     -- block (default, non-web-search path — the round-2 gate's demanded test).

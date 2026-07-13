@@ -282,48 +282,89 @@ end
 ---@param buf number | nil # buffer number
 ---@param cmd string # command to execute
 ---@param args table # arguments for command
----@param callback function | nil # exit callback function(code, signal, stdout_data, stderr_data)
+---@param callback function | nil # exit callback function(code, signal, stdout_data, stderr_data, io_error)
 ---@param out_reader function | nil # stdout reader function(err, data)
 ---@param err_reader function | nil # stderr reader function(err, data)
-M.run = function(buf, cmd, args, callback, out_reader, err_reader)
+---@param on_start_error function | nil # scheduled launch rejection callback(message)
+M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_error)
 	logger.debug("run command: " .. cmd .. " " .. table.concat(args, " "), true)
+
+	-- Run cleanup routine to remove stale processes
+	M.cleanup_stale_handles()
+
+	if M.is_busy(buf, false) then
+		if on_start_error then
+			vim.schedule(function()
+				on_start_error("task start rejected: buffer is busy")
+			end)
+		end
+		return
+	end
 
 	local handle, pid
 	local stdout = uv.new_pipe(false)
 	local stderr = uv.new_pipe(false)
 	local stdout_data = ""
 	local stderr_data = ""
+	local exit_code
+	local exit_signal
+	local process_done = false
+	local stdout_done = false
+	local stderr_done = false
+	local io_error
 
-	-- Run cleanup routine to remove stale processes
-	M.cleanup_stale_handles()
+	local finish = M.once(function()
+		vim.schedule(function()
+			if callback then
+				callback(exit_code, exit_signal, stdout_data, stderr_data, io_error)
+			end
+			M.remove_handle(pid)
+			vim.cmd("doautocmd User ParleyQueryFinished")
+		end)
+	end)
 
-	if M.is_busy(buf, false) then
-		return
+	local function maybe_finish()
+		if process_done and stdout_done and stderr_done then
+			finish()
+		end
 	end
 
-	local on_exit = M.once(vim.schedule_wrap(function(code, signal)
-		stdout:read_stop()
-		stderr:read_stop()
-		stdout:close()
-		stderr:close()
+	local function close_pipe(pipe)
+		pcall(function() pipe:read_stop() end)
+		if not pipe:is_closing() then
+			pipe:close()
+		end
+	end
+
+	local function on_exit(code, signal)
+		exit_code = code
+		exit_signal = signal
+		process_done = true
 		if handle and not handle:is_closing() then
 			handle:close()
 		end
-		if callback then
-			callback(code, signal, stdout_data, stderr_data)
-		end
-		M.remove_handle(pid)
+		maybe_finish()
+	end
 
-		-- Trigger event for lualine update
-		vim.cmd("doautocmd User ParleyQueryFinished")
-	end))
-
+	local spawn_error
 	handle, pid = uv.spawn(cmd, {
 		args = args,
 		stdio = { nil, stdout, stderr },
 		hide = true,
 		detach = true,
 	}, on_exit)
+	if not handle then
+		spawn_error = pid
+		close_pipe(stdout)
+		close_pipe(stderr)
+		if on_start_error then
+			local report_start_error = M.once(on_start_error)
+			vim.schedule(function()
+				report_start_error("task start failed: " .. tostring(spawn_error))
+			end)
+		end
+		return
+	end
 
 	logger.debug(cmd .. " command started with pid: " .. pid, true)
 
@@ -332,6 +373,7 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader)
 	uv.read_start(stdout, function(err, data)
 		if err then
 			logger.error("Error reading stdout: " .. vim.inspect(err))
+			io_error = io_error or ("stdout: " .. tostring(err))
 		end
 		if data then
 			stdout_data = stdout_data .. data
@@ -339,17 +381,28 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader)
 		if out_reader then
 			out_reader(err, data)
 		end
+		if err or data == nil then
+			stdout_done = true
+			close_pipe(stdout)
+			maybe_finish()
+		end
 	end)
 
 	uv.read_start(stderr, function(err, data)
 		if err then
 			logger.error("Error reading stderr: " .. vim.inspect(err))
+			io_error = io_error or ("stderr: " .. tostring(err))
 		end
 		if data then
 			stderr_data = stderr_data .. data
 		end
 		if err_reader then
 			err_reader(err, data)
+		end
+		if err or data == nil then
+			stderr_done = true
+			close_pipe(stderr)
+			maybe_finish()
 		end
 	end)
 end

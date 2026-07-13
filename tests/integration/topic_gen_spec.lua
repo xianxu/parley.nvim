@@ -68,6 +68,36 @@ describe("generate_topic", function()
         -- and it carries no 🧠: thinking mandate
         assert.is_nil(last.content:find("🧠"))
     end)
+
+    it("falls back through real dispatcher teardown on drained transport failure", function()
+        local tasker = require("parley.tasker")
+        local vault = require("parley.vault")
+        vault.resolve_secret("openai", "test-secret", function() end)
+        parley.dispatcher.providers.openai = parley.dispatcher.providers.openai or {}
+        parley.dispatcher.providers.openai.endpoint = "http://unused.test"
+
+        local original_run = tasker.run
+        tasker.run = function(_buf, _cmd, args, terminal, out_reader)
+            local write_out
+            for i, arg in ipairs(args) do
+                if arg == "--write-out" then write_out = args[i + 1] end
+            end
+            local sentinel = write_out:match("%%{stderr}(.-)%%{http_code}")
+            out_reader(nil, nil)
+            terminal(7, 0, "", sentinel .. "000\n", nil)
+        end
+
+        local result
+        chat_respond.generate_topic({ { role = "user", content = "hello" } },
+            "openai", { model = "gpt-x" }, function(topic, reason)
+                result = { topic = topic, reason = reason }
+            end)
+        assert.is_true(vim.wait(500, function() return result ~= nil end, 10))
+        tasker.run = original_run
+
+        assert.is_nil(result.topic)
+        assert.equals("empty", result.reason)
+    end)
 end)
 
 describe("ChatPrune topic generation failure", function()

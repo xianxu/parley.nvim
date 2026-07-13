@@ -160,7 +160,8 @@ end
 ---@param on_exit function | nil # optional on_exit handler
 ---@param callback function | nil # optional callback handler
 ---@param on_progress function | nil # optional progress/status handler
-local query = function(buf, provider, payload, handler, on_exit, callback, on_progress)
+local query = function(buf, provider, payload, handler, on_exit, callback, on_progress,
+	on_activity, on_error, abort_before_start)
 	-- make sure handler is a function
 	if type(handler) ~= "function" then
 		logger.error(
@@ -187,43 +188,112 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 		ex_id = nil,
 	})
 
+	local function legacy_complete(query_id, qt)
+		if type(on_exit) == "function" then
+			on_exit(query_id)
+			if qt.ns_id and qt.buf then
+				vim.schedule(function()
+					vim.api.nvim_buf_clear_namespace(qt.buf, qt.ns_id, 0, -1)
+				end)
+			end
+		end
+		if type(callback) == "function" then
+			vim.schedule(function()
+				callback(qt.response)
+			end)
+		end
+	end
+
 	local out_reader = function()
 		local buffer = ""
+		local sse_record_active = false
+		local stdout_finished = false
 
-		---@param lines_chunk string
-		local function process_lines(lines_chunk)
+		local function emit_activity(query_id)
+			if type(on_activity) == "function" then
+				on_activity(query_id)
+			end
+		end
+
+		---@param line string
+		local function process_line(line)
 			local qt = tasker.get_query(qid)
 			if not qt then
 				return
 			end
+			if line == "" then
+				sse_record_active = false
+				return
+			end
 
-			local lines = vim.split(lines_chunk, "\n")
+			local first = line:match("^%s*(.)")
+			if first == "{" or first == "[" then
+				emit_activity(qid)
+			elseif not sse_record_active then
+				emit_activity(qid)
+				sse_record_active = true
+			end
 
-			for _, line in ipairs(lines) do
-				if line ~= "" and line ~= nil then
-					qt.raw_response = qt.raw_response .. line .. "\n"
+			local progress_event = D._extract_sse_progress_event(line, qt.provider)
+			if progress_event and type(on_progress) == "function" then
+				on_progress(qid, progress_event)
+			end
+
+			local content = D._extract_sse_content(line, qt.provider)
+			if content and type(content) == "string" and content ~= "" then
+				qt.response = qt.response .. content
+				handler(qid, content)
+			end
+		end
+
+		local function finish_stdout(qt)
+			if stdout_finished then
+				return
+			end
+			stdout_finished = true
+			logger.debug(qt.provider .. " response: \n" .. vim.inspect(qt.raw_response))
+
+			local adapter = providers.get(qt.provider)
+			local metrics = adapter.parse_usage(qt.raw_response)
+			tasker.set_cache_metrics(metrics)
+			qt.usage = metrics
+			qt.stop_reason = qt.raw_response:match('"stop_reason"%s*:%s*"([^"]+)"')
+				or qt.raw_response:match('"finish_reason"%s*:%s*"([^"]+)"')
+
+			local content = qt.response
+			if content == "" and qt.raw_response:match("choices") and qt.raw_response:match("content") then
+				local response
+				local ok, decoded = pcall(vim.json.decode, qt.raw_response)
+				if ok then
+					response = decoded
+				else
+					local json_str = qt.raw_response:match("{.-choices.-}")
+					if json_str then
+						local fallback_ok
+						fallback_ok, response = pcall(vim.json.decode, json_str)
+						if not fallback_ok then response = nil end
+					end
 				end
-
-				-- Skip empty lines
-				if line == "" or line == nil then
-					goto continue
+				if response and response.choices and response.choices[1]
+					and response.choices[1].message and response.choices[1].message.content then
+					content = response.choices[1].message.content
 				end
-
-				local progress_event = D._extract_sse_progress_event(line, qt.provider)
-				if progress_event and type(on_progress) == "function" then
-					on_progress(qid, progress_event)
-				end
-
-				-- Extract content using the provider adapter
-				local content = D._extract_sse_content(line, qt.provider)
-
-				if content and type(content) == "string" and content ~= "" then
+				if content and type(content) == "string" then
 					qt.response = qt.response .. content
 					handler(qid, content)
 				end
-
-				::continue::
 			end
+
+			if qt.response == "" then
+				local has_tool_use = qt.raw_response:find('"type":"tool_use"', 1, true) ~= nil
+				if not has_tool_use then
+					logger.error(qt.provider .. " response is empty: \n" .. vim.inspect(qt.raw_response))
+				end
+			end
+
+			pcall(function()
+				require("parley.cliproxy").check_auth_failure(qt.provider, qt.raw_response)
+			end)
 		end
 
 		-- closure for uv.read_start(stdout, fn)
@@ -236,106 +306,20 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 			if err then
 				logger.error(qt.provider .. " query stdout error: " .. vim.inspect(err))
 			elseif chunk then
-				-- add the incoming chunk to the buffer
+				qt.raw_response = qt.raw_response .. chunk
 				buffer = buffer .. chunk
-				local last_newline_pos = buffer:find("\n[^\n]*$")
-				if last_newline_pos then
-					local complete_lines = buffer:sub(1, last_newline_pos - 1)
-					-- save the rest of the buffer for the next chunk
-					buffer = buffer:sub(last_newline_pos + 1)
-
-					process_lines(complete_lines)
+				while true do
+					local newline = buffer:find("\n", 1, true)
+					if not newline then break end
+					process_line(buffer:sub(1, newline - 1):gsub("\r$", ""))
+					buffer = buffer:sub(newline + 1)
 				end
-				-- chunk is nil when EOF is reached
 			else
-				-- if there's remaining data in the buffer, process it
 				if #buffer > 0 then
-					process_lines(buffer)
+					process_line(buffer:gsub("\r$", ""))
+					buffer = ""
 				end
-
-				local raw_response = qt.raw_response
-				logger.debug(qt.provider .. " response: \n" .. vim.inspect(qt.raw_response))
-
-				-- Extract usage metrics via the provider adapter
-				local adapter = providers.get(qt.provider)
-				local metrics = adapter.parse_usage(raw_response)
-				tasker.set_cache_metrics(metrics)
-				-- Stash usage on the query object so raw-mode logging can
-				-- include it in the assembled-response YAML.
-				qt.usage = metrics
-				-- Best-effort stop_reason extraction for the log entry.
-				qt.stop_reason = raw_response:match('"stop_reason"%s*:%s*"([^"]+)"')
-					or raw_response:match('"finish_reason"%s*:%s*"([^"]+)"')
-
-				local content = qt.response
-
-				-- Handle content extraction for empty OpenAI-compatible responses
-				if content == "" and raw_response:match('choices') and raw_response:match("content") then
-						local response
-						local ok, decoded = pcall(vim.json.decode, raw_response)
-						if ok then
-							response = decoded
-						else
-							local json_str = raw_response:match("{.-choices.-}")
-							if json_str then
-								local fallback_ok
-								fallback_ok, response = pcall(vim.json.decode, json_str)
-								if not fallback_ok then
-									response = nil
-								end
-							end
-						end
-
-					if response and response.choices and
-					   response.choices[1] and response.choices[1].message and
-					   response.choices[1].message.content then
-						content = response.choices[1].message.content
-					end
-
-					if content and type(content) == "string" then
-						qt.response = qt.response .. content
-						handler(qid, content)
-					end
-				end
-
-				if qt.response == "" then
-					-- Tool-use-only responses (#81 M2): Anthropic streams
-					-- content_block_start with type=tool_use plus
-					-- input_json_delta chunks, but none of those carry
-					-- a `delta.text` field, so qt.response stays empty.
-					-- The response is perfectly valid — the tool_loop
-					-- driver will extract the tool_use blocks from
-					-- qt.raw_response and handle them. Only warn if
-					-- raw_response also has no tool_use events.
-					local has_tool_use = type(qt.raw_response) == "string"
-						and qt.raw_response:find('"type":"tool_use"', 1, true) ~= nil
-					if not has_tool_use then
-						logger.error(qt.provider .. " response is empty: \n" .. vim.inspect(qt.raw_response))
-					end
-				end
-
-				-- M3 (#131): detect a managed-cliproxy missing/invalid-credential
-				-- failure and offer the right :ParleyProxy login.
-				pcall(function()
-					require("parley.cliproxy").check_auth_failure(qt.provider, qt.raw_response)
-				end)
-
-				-- optional on_exit handler
-				if type(on_exit) == "function" then
-					on_exit(qid)
-					if qt.ns_id and qt.buf then
-						vim.schedule(function()
-							vim.api.nvim_buf_clear_namespace(qt.buf, qt.ns_id, 0, -1)
-						end)
-					end
-				end
-
-				-- optional callback handler
-				if type(callback) == "function" then
-					vim.schedule(function()
-						callback(qt.response)
-					end)
-				end
+				finish_stdout(qt)
 			end
 		end
 	end
@@ -347,7 +331,7 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 	local secret_name = providers.get_secret_name(provider)
 	local bearer = vault.get_secret(secret_name)
 	if not bearer then
-		logger.warning(provider .. " bearer token is missing")
+		abort_before_start(provider .. " bearer token is missing")
 		return
 	end
 
@@ -362,6 +346,8 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 	local args = {
 		"--no-buffer",
 		"-s",
+		"--write-out",
+		"%{stderr}__PARLEY_HTTP_" .. qid .. "__%{http_code}\n",
 		endpoint,
 		"-H",
 		"Content-Type: application/json",
@@ -377,7 +363,45 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 		table.insert(curl_params, header)
 	end
 
-	tasker.run(buf, "curl", curl_params, nil, out_reader(), nil)
+	local terminal = tasker.once(function(code, signal, _stdout_data, stderr_data, io_error)
+		local qt = tasker.get_query(qid)
+		if not qt then return end
+		stderr_data = stderr_data or ""
+		local sentinel = "__PARLEY_HTTP_" .. qid .. "__"
+		local trailer_size = #sentinel + 4
+		local trailer = stderr_data:sub(-trailer_size)
+		local status = trailer:sub(#sentinel + 1, #sentinel + 3)
+		local trailer_valid = trailer:sub(1, #sentinel) == sentinel
+			and status:match("^%d%d%d$") ~= nil and trailer:sub(-1) == "\n"
+		local clean_stderr = stderr_data
+		if trailer_valid then
+			clean_stderr = stderr_data:sub(1, #stderr_data - trailer_size)
+		else
+			io_error = io_error or "missing or malformed curl HTTP status trailer"
+		end
+		local http_status = trailer_valid and tonumber(status) or nil
+		local failed = io_error ~= nil or code ~= 0
+			or (http_status ~= 0 and (http_status < 200 or http_status > 299))
+		if failed then
+			local failure = {
+				code = code,
+				signal = signal,
+				http_status = http_status,
+				body = qt.raw_response,
+				stderr = clean_stderr,
+				io_error = io_error,
+			}
+			if type(on_error) == "function" then
+				on_error(qid, failure)
+			else
+				logger.error(provider .. " query failed: " .. vim.inspect(failure))
+				legacy_complete(qid, qt)
+			end
+		else
+			legacy_complete(qid, qt)
+		end
+	end)
+	tasker.run(buf, "curl", curl_params, terminal, out_reader(), nil, abort_before_start)
 end
 
 -- LLM query
@@ -388,30 +412,38 @@ end
 ---@param on_exit function | nil # optional on_exit handler
 ---@param callback function | nil # optional callback handler
 ---@param on_progress function | nil # optional progress/status handler
---- @param on_abort function | nil # optional abort handler. When an adapter's
+--- @param on_abort function | nil # optional qid-free pre-start abort handler
 ---   pre_query reports an error (e.g. the managed cliproxy can't be started),
 ---   the dispatcher invokes on_abort(msg) INSTEAD of running the query — the
 ---   caller uses it to tear down qid-free pre-query state (spinner, inserted
 ---   blocks, in-flight guards) so the request fails fast instead of hanging.
 ---   Additive + backward compatible: a one-arg pre_query (e.g. copilot) simply
 ---   ignores the error callback the dispatcher passes it.
-D.query = function(buf, provider, payload, handler, on_exit, callback, on_progress, on_abort)
+D.query = function(buf, provider, payload, handler, on_exit, callback, on_progress, on_abort,
+	on_activity, on_error)
+	local abort_before_start = tasker.once(function(msg)
+		logger.error("query abort before start [" .. tostring(provider) .. "]: " .. tostring(msg))
+		if type(on_abort) == "function" then
+			on_abort(msg)
+		end
+	end)
+	local function start_query()
+		query(buf, provider, payload, handler, on_exit, callback, on_progress,
+			on_activity, on_error, abort_before_start)
+	end
 	local adapter = providers.get(provider)
 	if adapter.pre_query then
 		return vault.run_with_secret(provider, function()
 			adapter.pre_query(function()
-				query(buf, provider, payload, handler, on_exit, callback, on_progress)
+				start_query()
 			end, function(msg)
-				logger.error("pre_query abort [" .. tostring(provider) .. "]: " .. tostring(msg))
-				if type(on_abort) == "function" then
-					on_abort(msg)
-				end
+				abort_before_start(msg)
 			end)
-		end)
+		end, abort_before_start)
 	end
 	vault.run_with_secret(provider, function()
-		query(buf, provider, payload, handler, on_exit, callback, on_progress)
-	end)
+		start_query()
+	end, abort_before_start)
 end
 
 -- response handler
