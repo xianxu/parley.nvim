@@ -80,4 +80,29 @@ describe("buffer lifecycle", function()
         assert.matches("candidate failed", err)
         assert.equals("candidate failed", notified)
     end)
+
+    it("rolls back initial ownership so setup can retry after convergence failure", function()
+        local attempts = 0
+        local clears = {}
+        local lifecycle = buffer_lifecycle._new({
+            is_valid = function() return true end,
+            create_autocmd = function() end,
+            diagnostics = {
+                refresh = function() end,
+                clear = function() clears[#clears + 1] = "diagnostics" end,
+            },
+            structure = {
+                rebuild = function()
+                    attempts = attempts + 1
+                    if attempts == 1 then return nil, "first build failed" end
+                    return {}
+                end,
+                clear = function() clears[#clears + 1] = "structure" end,
+            },
+        })
+        assert.is_false(pcall(lifecycle.setup, 4))
+        assert.are.same({ "diagnostics", "structure" }, clears)
+        assert.has_no.errors(function() lifecycle.setup(4) end)
+        assert.equals(2, attempts)
+    end)
 end)

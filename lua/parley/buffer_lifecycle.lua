@@ -50,7 +50,13 @@ function M._new(deps)
             return
         end
         active[buf] = true
-        lifecycle.converge(buf, "setup")
+        local ok, err = pcall(lifecycle.converge, buf, "setup")
+        if not ok then
+            active[buf] = nil
+            deps.diagnostics.clear(buf)
+            deps.structure.clear(buf)
+            error(err, 0)
+        end
     end
 
     function lifecycle.finalize_mutated_api_leg(buf, mutated)

@@ -455,3 +455,13 @@ gates: `edit_total` full reads 0/0/0 and structure rows 1/1/1 at
 edit and 61 for isolated redraw. Redraw medians were 0.22/0.33/0.30 ms and
 inclusive edit medians 2.52/2.50/2.36 ms (report-only). Lint and diff-check
 passed.
+
+Task 6's spec review found lifecycle ownership and integrated-event coverage
+gaps. Initial setup now rolls back both consumers and active ownership when
+convergence fails, so a later setup genuinely retries. Real-buffer tests drive
+stream growth, undo, redo, external `BufWritePost`, separate unload/delete
+teardown and reentry, shared two-window identity, and obsolete callbacks.
+Attachment/build counters prove idempotent setup and exactly one new pair after
+each legitimate reentry. An integrated candidate-failure case proves the prior
+cache stays dirty/unrenderable, notification and synchronous propagation occur,
+and lifecycle retry swaps a complete new candidate.
