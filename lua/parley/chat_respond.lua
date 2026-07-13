@@ -1151,6 +1151,11 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
         _parley.logger.warning("A Parley process is already running. Use stop to cancel or force to override.")
         return
     end
+    local chat_pending = require("parley.chat_pending")
+    if type(chat_pending.is_active) == "function" and chat_pending.is_active(buf) then
+        _parley.logger.warning("A Parley response is already pending in this chat. Stop it before resubmitting.")
+        return
+    end
 
     -- go to normal mode
     vim.cmd("stopinsert")
@@ -1602,13 +1607,6 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                 lease_commit()
             end,
         })
-        pending_session = require("parley.chat_pending").start({
-            buf = buf,
-            anchor_line = model:block_start(target_idx, 2),
-            lease_valid = lease_valid,
-            emit_content = base_handler,
-            choose_verb_index = function(count) return math.random(count) end,
-        })
         local response_handler = function(qid, chunk) pending_session:content(qid, chunk) end
 
         -- Shared empty-answer collapse (#131): used by on_exit (tool-use-only /
@@ -1637,18 +1635,39 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             end
         end
 
+        local leg_teardown_done = false
+        local discard_notice
+        local function teardown_chat_leg(notice)
+            if leg_teardown_done then return end
+            leg_teardown_done = true
+            local owns_shell = false
+            if vim.api.nvim_buf_is_valid(buf) then
+                owns_shell = chat_lease.validate(buf, lease_generation, buf_changedtick(buf)) == true
+            end
+            if owns_shell then collapse_empty_answer() end
+            finalize_mutated_api_leg()
+            chat_lease.clear(buf, lease_generation)
+            if notice then vim.notify(notice, vim.log.levels.WARN) end
+        end
+
         -- Abort teardown (#131): the dispatcher invokes this (qid-free) when the
         -- managed cliproxy can't be started, so the request fails fast and the
         -- response shell is torn down exactly once.
         local function on_abort(msg)
+            discard_notice = msg or "parley: request aborted"
             pending_session:cancel("abort")
-            vim.schedule(function()
-                collapse_empty_answer()
-                finalize_mutated_api_leg()
-                chat_lease.clear(buf, lease_generation)
-                vim.notify(msg or "parley: request aborted", vim.log.levels.WARN)
-            end)
         end
+
+        pending_session = chat_pending.start({
+            buf = buf,
+            anchor_line = model:block_start(target_idx, 2),
+            lease_valid = lease_valid,
+            emit_content = base_handler,
+            choose_verb_index = function(count) return math.random(count) end,
+            on_discard = function()
+                teardown_chat_leg(discard_notice)
+            end,
+        })
 
         -- call the model and write response
         _parley.dispatcher.query(
@@ -1922,9 +1941,6 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                     -- As above, staged content schedules its concrete buffer
                     -- write; surface the terminal only after that write runs.
                     vim.schedule(function()
-                        collapse_empty_answer()
-                        finalize_mutated_api_leg()
-                        chat_lease.clear(buf, lease_generation)
                         local status = failure and failure.http_status
                         local body = failure and failure.body
                         local message = "parley: provider request failed"
@@ -1936,7 +1952,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                         if type(body) == "string" and body:match("%S") then
                             message = message .. ": " .. body:sub(1, 500)
                         end
-                        vim.notify(message, vim.log.levels.WARN)
+                        teardown_chat_leg(message)
                     end)
                 end)
             end
