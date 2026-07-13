@@ -32,6 +32,7 @@ atlas:
       - tests/unit/line_reader_spec.lua
       - tests/unit/diagnostic_refresh_spec.lua
       - tests/unit/buffer_lifecycle_spec.lua
+      - tests/unit/chat_respond_footnote_spec.lua
       - tests/unit/highlight_structure_spec.lua
       - tests/integration/perf_chat_typing_spec.lua
       - tests/integration/diagnostic_refresh_spec.lua

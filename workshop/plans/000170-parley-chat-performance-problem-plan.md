@@ -97,19 +97,19 @@ structural bounds do.
 - Create: `tests/unit/perf_harness_spec.lua`
 - Modify: `tests/minimal_init.vim` only if `tests.perf.*` is not already loadable
 
-- [ ] Write failing tests for odd/even median, nearest-rank p95, input
+- [x] Write failing tests for odd/even median, nearest-rank p95, input
       non-mutation, empty-sample rejection, scenario validation, exact JSON
       envelope keys, and terminal rendering.
-- [ ] Run
+- [x] Run
       `nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile tests/unit/perf_harness_spec.lua' -c 'qa!'`;
       expect module-not-found RED.
-- [ ] Implement `summarize(samples)`, `measure(fn, iterations, now)`,
+- [x] Implement `summarize(samples)`, `measure(fn, iterations, now)`,
       `new_report(environment)`, `add_scenario(report, scenario)`,
       `encode(report)`, and `render_table(report)`. Inject `now`; default to
       `vim.uv.hrtime`. Validate the exact spec schema.
-- [ ] Rerun the spec and `luacheck tests/perf/harness.lua
+- [x] Rerun the spec and `luacheck tests/perf/harness.lua
       tests/unit/perf_harness_spec.lua`; expect green and zero lint findings.
-- [ ] Commit exact changed files as `#170: add reusable performance report core`.
+- [x] Commit exact changed files as `#170: add reusable performance report core`.
 
 ### Task 2: Instrumented LineReader seam
 
@@ -122,10 +122,10 @@ structural bounds do.
 - Modify: `lua/parley/highlighter.lua`
 - Modify: `lua/parley/spell.lua`
 
-- [ ] Write failing fake-delegate tests proving `lines`, `text`, and `line`
+- [x] Write failing fake-delegate tests proving `lines`, `text`, and `line`
       preserve results and record exact call count, requested line count, and
       `full_buffer=true` for `0,-1`.
-- [ ] Write a failing architecture test using
+- [x] Write a failing architecture test using
       `tests.arch.arch_helper.assert_pattern_scoping` that forbids direct
       `nvim_buf_get_lines`, `nvim_buf_get_text`, and `vim.fn.getline` in the
       exact scope `{line_reader.lua, highlighter.lua,
@@ -133,34 +133,34 @@ structural bounds do.
       `allow_only_in={"lua/parley/line_reader.lua"}` for each pattern. Also grep
       `nvim_buf_get_text`, `nvim_buf_get_lines`, `vim.fn.getline`, and
       `nvim_get_current_line`; classify future equivalents explicitly.
-- [ ] Run both new specs; expect missing module plus existing direct-read
+- [x] Run both new specs; expect missing module plus existing direct-read
       violations.
-- [ ] Implement `set_observer`, token-checked `clear_observer`, `with_phase`,
+- [x] Implement `set_observer`, token-checked `clear_observer`, `with_phase`,
       `clear_buffer`, `record_work`, and `for_buffer(buf, opts)` with `reader:lines`,
       `reader:text`, and `reader:line`. Tests inject `opts.delegate`; production
       instances use native Neovim and the buffer registry.
-- [ ] Make observer storage strictly buffer-scoped with a phase stack.
+- [x] Make observer storage strictly buffer-scoped with a phase stack.
       `with_phase` restores the prior phase after success or error and rethrows;
       tokens become invalid after `clear_buffer`. Inclusive `edit_total` uses one
       observer and counts each physical LineReader event once across nested phase
       labels; isolated runs install fresh observers after the inclusive token is
       cleared, so state cannot leak.
-- [ ] Change `timezone_diagnostics.refresh_buffer(buf, opts)` and
+- [x] Change `timezone_diagnostics.refresh_buffer(buf, opts)` and
       `skill_render.refresh_footnote_diagnostics(buf, opts)` to read through
       `opts.reader or line_reader.for_buffer(buf)`. Change
       `compute_chat_highlights`/`compute_markdown_highlights` to receive one
       reader created in decoration `on_win`. Do not narrow reads yet.
-- [ ] Change `spell.suggest(opts)` to use
+- [x] Change `spell.suggest(opts)` to use
       `opts.reader or line_reader.for_buffer(current_buf)` and
       `reader:line(cursor_row0)` instead of `nvim_get_current_line`, so both real
       `TextChangedI` and isolated spell phases account for the one-line read.
-- [ ] Rerun
+- [x] Rerun
       `nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile tests/unit/line_reader_spec.lua' -c 'qa!'`,
       `nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile tests/arch/performance_line_reader_spec.lua' -c 'qa!'`,
       `nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile tests/integration/highlighting_spec.lua' -c 'qa!'`,
       and `make -f Makefile.parley test-spec SPEC=providers/tool_use`; expect
       all pass and behavior unchanged.
-- [ ] Commit exact files as `#170: route performance-sensitive reads through LineReader`.
+- [x] Commit exact files as `#170: route performance-sensitive reads through LineReader`.
 
 ### Task 3: Real chat-typing scenario and baseline
 
@@ -173,30 +173,30 @@ structural bounds do.
 - Modify: `.gitignore` only if `.test-tmp/` is not ignored
 - Modify: `workshop/issues/000170-parley-chat-performance-problem.md` (`## Log`)
 
-- [ ] Write fixture tests for `build_chat_lines(n)`: exactly `n` lines, canonical
+- [x] Write fixture tests for `build_chat_lines(n)`: exactly `n` lines, canonical
       header, one user marker followed by a long assistant answer spanning the
       80% cursor row, and identical 60-line local viewport shape at every size.
-- [ ] Write attachment tests using a temp configured `chat_dir`,
+- [x] Write attachment tests using a temp configured `chat_dir`,
       `parley.setup({chat_dir=tmp, chat_spell={typeahead=true}})`, `:edit` of a
       named timestamp chat, `filetype=markdown`, and `_parley_bufs[buf]=="chat"`.
-- [ ] Write observer-registry tests proving phase restoration, token isolation,
+- [x] Write observer-registry tests proving phase restoration, token isolation,
       per-sample reset, and buffer teardown.
-- [ ] Write failing real-input validity tests: changedtick advances, the
+- [x] Write failing real-input validity tests: changedtick advances, the
       harness's later-registered `TextChangedI` autocmd fires exactly once, and
       a `decoration_redraw`-phased LineReader observation proves provider work.
-- [ ] Extract production `compute_window_decorations(winid,bufnr,toprow,botrow,
+- [x] Extract production `compute_window_decorations(winid,bufnr,toprow,botrow,
       reader)` in `highlighter.lua`. Installed `on_win` delegates to it inside
       `line_reader.with_phase(buf,"decoration_redraw",...)`; isolated runner
       calls the same function. Route `on_line` through the row-map's stored line
       length so it performs no parallel direct buffer read.
-- [ ] Run the integration spec; expect missing scenario/observer RED.
-- [ ] Pin fixture grammar exactly: lines 1–4 are `# topic: perf`,
+- [x] Run the integration spec; expect missing scenario/observer RED.
+- [x] Pin fixture grammar exactly: lines 1–4 are `# topic: perf`,
       `- model: test`, `---`, blank; line 5 is `💬: benchmark`; line 7 is
       `🤖: [Perf]`; line 6 is blank and prose begins at line 8. Remaining rows
       are deterministic assistant prose. Generate
       prose by local offset so the same 60-row prose shape is centered on
       `floor(n*0.8)` and that row is assistant prose at every size.
-- [ ] Implement fixture open/cleanup and `run_one_edit`. Drain input; set cursor;
+- [x] Implement fixture open/cleanup and `run_one_edit`. Drain input; set cursor;
       feed replaced termcodes for `i`; wait for insert mode; start timing; feed
       only `X` with mode `xt`; wait up to 1000ms for changedtick plus exactly one
       buffer-local later-registered `TextChangedI` while still in insert mode;
@@ -205,33 +205,33 @@ structural bounds do.
       untimed cleanup feed `<Esc>`, wait for normal mode and synchronous
       `InsertLeave` diagnostic convergence, then reset the line. Timeout errors
       name the missing condition. Remove the observer autocmd during cleanup.
-- [ ] Implement five warmups and twenty independent samples. Reset the line,
+- [x] Implement five warmups and twenty independent samples. Reset the line,
       autocmd count, and LineReader observer/counters before every sample.
       Scenario `work` is the component-wise maximum across samples; assert every
       structural count is internally consistent before summarizing.
-- [ ] Implement isolated phase runners: call
+- [x] Implement isolated phase runners: call
       `timezone_diagnostics.refresh_buffer`,
       `skill_render.refresh_footnote_diagnostics`, a test-exposed provider
       redraw driver, and `spell.suggest` under distinct `with_phase` labels.
-- [ ] Add `.PHONY`/help/target for `make perf`, reusing `PREP_TEST_ENV` and
+- [x] Add `.PHONY`/help/target for `make perf`, reusing `PREP_TEST_ENV` and
       `TEST_ENV`; default output is `.test-tmp/perf/parley-chat-typing.json`,
       overridden by `PERF_OUTPUT`.
-- [ ] Document report-only semantics, JSON path/schema, and optional manual
+- [x] Document report-only semantics, JSON path/schema, and optional manual
       MarkdownPreview comparison in `TOOLING.md`.
-- [ ] Run validity tests then `make -f Makefile.parley perf`. Stop if baseline
+- [x] Run validity tests then `make -f Makefile.parley perf`. Stop if baseline
       does not expose document-proportional reads; repair the scenario before
       production optimization.
-- [ ] The exact validity command is
+- [x] The exact validity command is
       `nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile tests/integration/perf_chat_typing_spec.lua' -c 'qa!'`;
       expect PASS before running `make perf`.
-- [ ] Append command, commit, OS/Neovim, medians/p95s, ratios, and work counters
+- [x] Append command, commit, OS/Neovim, medians/p95s, ratios, and work counters
       to `## Log`. Do not commit JSON.
-- [ ] Compute displayed ratios in `render_table` by grouping same-phase scenarios
+- [x] Compute displayed ratios in `render_table` by grouping same-phase scenarios
       by `(phase,attribution)`, ordering 100/1,000/5,000, and dividing each
       median/p95 by the 100-line value to two decimals. If the baseline statistic
       is zero, render `n/a` rather than divide. Unit-test grouping/order/precision/
       zero. JSON remains per-scenario; the durable Log copies rendered ratios.
-- [ ] Commit exact files as `#170: benchmark real chat typing path`.
+- [x] Commit exact files as `#170: benchmark real chat typing path`.
 
 ---
 
@@ -250,41 +250,41 @@ structural bounds do.
 - Modify: `lua/parley/skill_render.lua`
 - Modify: `tests/integration/chat_respond_spec.lua`
 
-- [ ] Write failing injected routing tests for ordered timezone/footnote refresh,
+- [x] Write failing injected routing tests for ordered timezone/footnote refresh,
       invalid-buffer no-op, setup idempotence, and teardown. Keep this adapter
       synchronous; do not add speculative generations or timers.
-- [ ] Write failing lifecycle-coordinator tests with injected diagnostic/
+- [x] Write failing lifecycle-coordinator tests with injected diagnostic/
       structure consumers. Assert event registration idempotence, convergence
       order (diagnostics then structure), exactly once per event, independent
       teardown, and one shared stream-finalization entry point.
-- [ ] Write failing real-buffer integration cases with UTC and footnote content:
+- [x] Write failing real-buffer integration cases with UTC and footnote content:
       diagnostics may be stale during `TextChangedI`, then synchronously current
       after each `InsertLeave`, `TextChanged`, `BufWritePost`, `BufEnter`, and
       `WinEnter`; unload/delete calls timezone clear plus a new source-specific
       `skill_render.clear_footnote_diagnostics(buf)` that removes only footnote
       diagnostics/highlights while preserving other shared-namespace entries.
-- [ ] Add failing chat-response cases for normal completion and tool-recursive
+- [x] Add failing chat-response cases for normal completion and tool-recursive
       completion where final content contains a UTC token and diagnostics
       converge without manually firing `TextChanged`. Assert one refresh per API
       leg after that leg's last mutation. An abort/error after a buffer mutation
       refreshes before exit; an empty/error path with no mutation does not.
-- [ ] Centralize terminal paths behind `finalize_mutated_api_leg(buf, mutated)`:
+- [x] Centralize terminal paths behind `finalize_mutated_api_leg(buf, mutated)`:
       normal and each recursive/tool API leg call it once after their last
       mutation; abort/error calls it iff that leg mutated; no-mutation paths call
       it zero times. Tests assert call counts and real final diagnostics.
-- [ ] Run the three specs; verify the failures describe current eager insert
+- [x] Run the three specs; verify the failures describe current eager insert
       refresh and absent finalization hook.
-- [ ] Implement diagnostic synchronous `refresh(buf)` and `clear(buf)`, plus
+- [x] Implement diagnostic synchronous `refresh(buf)` and `clear(buf)`, plus
       source-specific footnote clear. Implement lifecycle `setup(buf)`,
       `converge(buf,reason)`, and `clear(buf)` as the sole shared event owner.
       Remove
       diagnostics from the `TextChangedI` highlighter handler; keep highlight
       redraw separate. Call `refresh(buf)` after the last successful stream
       mutation and before final control returns.
-- [ ] Rerun focused specs and `make perf`; require zero diagnostic full-buffer
+- [x] Rerun focused specs and `make perf`; require zero diagnostic full-buffer
       reads inside `edit_total` at all sizes. Isolated convergence may scale and
       remains report-only.
-- [ ] Commit exact files as `#170: move diagnostics off the insert keystroke path`.
+- [x] Commit exact files as `#170: move diagnostics off the insert keystroke path`.
 
 ### Task 5: Pure bounded highlight structure
 

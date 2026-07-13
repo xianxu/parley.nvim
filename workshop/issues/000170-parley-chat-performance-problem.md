@@ -241,7 +241,7 @@ threshold in this issue.
 
 ## Plan
 
-- [ ] Build the reusable report-only headless performance framework and capture
+- [x] Build the reusable report-only headless performance framework and capture
       the baseline, including observer and work-counter validity tests.
 - [x] Remove full-buffer diagnostic work from `TextChangedI` and test every
       specified convergence trigger.
@@ -549,8 +549,12 @@ complete versioned schema, inclusive-versus-isolated attribution, report-only
 elapsed timings, hard structural gates, optional `:MarkdownPreview` comparison,
 and diagnostic/structure convergence. `atlas/chat/lifecycle.md` maps the neutral
 coordinator, bounded highlight structure, per-window redraw, LineReader
-observability, and teardown. `atlas/traceability.yaml` maps all ten #170 specs;
-a reverse exact-path sweep found no missing spec, and
+observability, and teardown. #170 adds eleven test files: nine `*_spec.lua`
+files plus the two `tests/perf/` support modules. `atlas/traceability.yaml` maps
+all nine added specs, and a reverse exact-path sweep found no missing spec.
+This added-spec set is distinct from Task 7's ten-command verification list,
+which exercises eight added specs plus two modified integration specs and does
+not include the added focused `chat_respond_footnote_spec.lua`. In addition,
 `scripts/spec_test_map.sh has-mapping atlas/chat/lifecycle.md` passed.
 
 Final commands passed: `make -f Makefile.parley perf`, `make -f Makefile.parley
