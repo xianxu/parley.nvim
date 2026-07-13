@@ -139,3 +139,8 @@ unchanged #182 tests alone.
 
 The revised durable plan received a fresh-context `APPROVED` verdict with both
 Important findings resolved.
+
+The SDLC plan-quality gate then found an `ARCH-DRY`/`ARCH-PURE` issue in the
+planned recursive lookup: `chat_respond` would have repeated exchange-model
+layout traversal. The plan now adds a semantic, pure model query with unit tests
+and makes the response IO shell consume it.

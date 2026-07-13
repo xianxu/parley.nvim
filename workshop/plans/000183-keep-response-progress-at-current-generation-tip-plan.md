@@ -72,32 +72,40 @@ by separating the durable ownership anchor from the movable cosmetic anchor.
 
 **Files:**
 
+- Modify `tests/unit/exchange_model_spec.lua`
 - Modify `tests/integration/chat_respond_spec.lua`
+- Modify `lua/parley/exchange_model.lua`
 - Modify `lua/parley/chat_respond.lua`
 
-1. Add a real-entry fresh-leg test that holds a slow response before its first
+1. Add pure exchange-model tests for a semantic
+   `last_nonempty_block_end(exchange_idx)` query covering mixed blocks, trailing
+   empty blocks, and an exchange with no non-empty blocks. Implement the query
+   beside `append_pos`, reusing one internal backward traversal so non-empty
+   block selection remains single-sourced; do not infer it with margin
+   arithmetic in `chat_respond` (`ARCH-DRY`, `ARCH-PURE`).
+2. Add a real-entry fresh-leg test that holds a slow response before its first
    chunk and asserts delayed progress is directly below the new `🤖:` row.
-2. Add a recursive-leg regression with existing answer/tool/result blocks that
+3. Add a recursive-leg regression with existing answer/tool/result blocks that
    runs the canonical pending adapter under the fake clock. Advance through the
    delayed reveal and assert the real extmark/virtual line renders below the
    last non-empty block as it existed before the new `stream_placeholder` was
    inserted, and not below the agent header or blank placeholder.
-3. Add a streaming regression that reveals semantic or remote-tool status,
+4. Add a streaming regression that reveals semantic or remote-tool status,
    writes successive single- and multi-line chunks, and asserts the same
    virtual mark follows each writer-reported tip. Include an edit above the
    response so stale exchange-model coordinates would fail.
-4. In `chat_respond`, compute `initial_progress_tip` before adding the recursive
-   placeholder by scanning the target exchange's blocks backward for the last
-   non-empty block and taking its model end row. For fresh calls, use the newly
+5. In `chat_respond`, compute `initial_progress_tip` before adding the recursive
+   placeholder by calling the exchange model's tested
+   `last_nonempty_block_end(target_idx)` query. For fresh calls, use the newly
    inserted agent-header row.
-5. Pass that initial row to `chat_pending.start`. In the stream handler's
+6. Pass that initial row to `chat_pending.start`. In the stream handler's
    existing `after_write` callback, synchronously call
    `pending_session:tip_written(last_written_line_0)` before lease commit and
    before the scheduled handler callback returns. Do not add `vim.schedule` or
    another queue hop.
-6. Run the focused chat-response, pending-adapter, and handler specs. Re-run the
-   existing #182 timing/terminal cases to prove the temporal policy did not
-   change.
+7. Run the focused exchange-model, chat-response, pending-adapter, and handler
+   specs. Re-run the existing #182 timing/terminal cases to prove the temporal
+   policy did not change.
 
 ## Task 3 — document and verify the invariant
 
@@ -134,3 +142,11 @@ Strengthened recursive placement from an argument-capture test to a canonical
 adapter/real-extmark assertion. Added an invalidating relocation sequence that
 also proves staged FIFO release and exact-once terminal delivery, so unchanged
 #182 lifecycle semantics are demonstrated across the new operation itself.
+
+### 2026-07-13 — SDLC plan-quality revision
+
+The gate identified a duplicated layout traversal in the proposed
+`chat_respond` implementation. Added a pure, unit-tested exchange-model query
+for the last non-empty block end and made the IO shell consume it, rather than
+repeating the model's backward scan or deriving the answer from private margin
+arithmetic.
