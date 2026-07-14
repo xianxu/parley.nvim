@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-07-08
 updated: 2026-07-13
-estimate_hours:
+estimate_hours: 1.85
 started: 2026-07-13T20:23:23-07:00
 ---
 
@@ -105,7 +105,35 @@ the pending-request confirmation.
 
 ## Plan
 
-- [ ] Implement the approved spec through the durable implementation plan.
+- [ ] Add buffer-scoped transport stopping with isolation and idempotence tests.
+- [ ] Add immutable pending identity and synchronous stale-session retirement.
+- [ ] Add the protected, non-yielding history cancellation transaction.
+- [ ] Add bounded prompt policy plus counted `u`/`<C-r>` chat mappings.
+- [ ] Update lifecycle/README/traceability docs and pass focused plus full verification.
+
+## Estimate
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: issue-spec       design=0.60 impl=0.04
+item: lua-neovim      design=0.30 impl=0.48
+item: atlas-docs      design=0.02 impl=0.04
+item: milestone-review design=0.10 impl=0.12
+design-buffer: 0.15
+total: 1.85
+```
+
+The approved spec and established pending/lease/keymap patterns earn the ×0.2
+design discount for the implementation and documentation primitives. The Lua
+implementation value is 40% of a 1.2-hour v2 implementation choice; other
+implementation values use the same v3.1 scaling. No external library or API can
+short-circuit this Neovim lifecycle work. The single `milestone-review`
+primitive represents the one issue-close boundary review, not a separate M1.
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against
+`baseline-v3.1.md`. Method A only. Calibration source reported stale on
+2026-07-14, so the per-primitive values are provisional.*
 
 ## Log
 
@@ -139,3 +167,11 @@ cardinality oracles.
 - Delta: defined buffer-scoped ownership and non-yielding ordering, numeric
   count preservation, two-buffer isolation, concrete confirmation outcomes,
   and bounded/cardinality-tested user messages.
+
+### 2026-07-14T11:35:00-07:00 — implementation planning
+
+- Reason: the approved spec was expanded into a durable, TDD-sequenced plan and
+  reconciled v3.1 estimate before entering code changes.
+- Delta: replaced the placeholder plan row with five atomic work items, added
+  the 1.85-hour Method A derivation, and linked implementation to
+  `workshop/plans/000168-buffer-undo-operation-during-chat-generation-resulted-in-a-huge-error-message-plan.md`.
