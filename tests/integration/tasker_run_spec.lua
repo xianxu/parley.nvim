@@ -819,4 +819,65 @@ describe("tasker.run integration", function()
             end
         end)
     end)
+
+    describe("Group C2: buffer-scoped stopping", function()
+        local function fake_handle(closing)
+            return {
+                is_closing = function() return closing == true end,
+            }
+        end
+
+        it("stops only matching buffer handles and is idempotent", function()
+            local killed = {}
+            tasker._uv = {
+                kill = function(pid, signal)
+                    table.insert(killed, { pid = pid, signal = signal })
+                    return 0
+                end,
+            }
+            tasker._handles = {
+                { handle = fake_handle(false), pid = 101, buf = 11 },
+                { handle = fake_handle(false), pid = 203, buf = 22 },
+                { handle = fake_handle(false), pid = 102, buf = 11 },
+            }
+
+            assert.equals(2, tasker.stop_buf(11))
+            assert.same({
+                { pid = 101, signal = 15 },
+                { pid = 102, signal = 15 },
+            }, killed)
+            assert.same({ 203 }, vim.tbl_map(function(item) return item.pid end, tasker._handles))
+
+            assert.equals(0, tasker.stop_buf(11))
+            assert.equals(2, #killed)
+            assert.same({ 203 }, vim.tbl_map(function(item) return item.pid end, tasker._handles))
+        end)
+
+        it("retires an already-closing match and emits one finished event", function()
+            local killed = {}
+            tasker._uv = {
+                kill = function(pid)
+                    table.insert(killed, pid)
+                    return 0
+                end,
+            }
+            tasker._handles = {
+                { handle = fake_handle(true), pid = 101, buf = 11 },
+                { handle = fake_handle(false), pid = 203, buf = 22 },
+            }
+            local scheduled = {}
+            local original_schedule = vim.schedule
+            vim.schedule = function(callback) table.insert(scheduled, callback) end
+
+            assert.equals(1, tasker.stop_buf(11))
+            assert.equals(1, #scheduled)
+            assert.same({}, killed)
+            assert.same({ 203 }, vim.tbl_map(function(item) return item.pid end, tasker._handles))
+
+            assert.equals(0, tasker.stop_buf(11))
+            assert.equals(1, #scheduled)
+            vim.schedule = original_schedule
+            scheduled[1]()
+        end)
+    end)
 end)

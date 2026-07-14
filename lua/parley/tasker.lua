@@ -255,29 +255,45 @@ M.cleanup_stale_handles = function()
 
 end
 
--- stop receiving responses for all processes and clean the handles
----@param signal number | nil # signal to send to the process
-M.stop = function(signal)
-	if #M._handles == 0 then
-		return
-	end
-
+local function stop_matching(matches, signal)
+	local kept = {}
+	local stopped = 0
+	local runtime = M._uv or uv
 	for _, h in ipairs(M._handles) do
-		if h.handle ~= nil and not h.handle:is_closing() then
-			pcall(function()
-				if type(h.pid) == "number" and h.pid > 0 then
-					uv.kill(h.pid, signal or 15)
-				end
-			end)
+		if matches(h) then
+			stopped = stopped + 1
+			if h.handle ~= nil and not h.handle:is_closing() then
+				pcall(function()
+					if type(h.pid) == "number" and h.pid > 0 then
+						runtime.kill(h.pid, signal or 15)
+					end
+				end)
+			end
+		else
+			table.insert(kept, h)
 		end
 	end
+	M._handles = kept
+	if stopped > 0 then
+		vim.schedule(function()
+			vim.cmd("doautocmd User ParleyQueryFinished")
+		end)
+	end
+	return stopped
+end
 
-	M._handles = {}
+-- Stop receiving responses for all processes and clean the handles.
+---@param signal number | nil # signal to send to the process
+M.stop = function(signal)
+	return stop_matching(function() return true end, signal)
+end
 
-	-- Trigger event for lualine update when stopping queries
-	vim.schedule(function()
-		vim.cmd("doautocmd User ParleyQueryFinished")
-	end)
+-- Stop only processes owned by one buffer, preserving unrelated work.
+---@param buf number # buffer number
+---@param signal number | nil # signal to send to the process
+---@return number # matching handle records retired
+M.stop_buf = function(buf, signal)
+	return stop_matching(function(handle) return handle.buf == buf end, signal)
 end
 
 ---@param buf number | nil # buffer number
