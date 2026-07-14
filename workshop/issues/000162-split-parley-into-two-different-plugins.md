@@ -15,6 +15,8 @@ I think it's time to split parley into two parts. keep parley.nvim about the cha
 
 do some investigation and present me with options. particularly, I'm interested how isolated those two aspects of code are. 
 
+I think the criteria of such split, is when I want to ship either parley chat as a feature, or ariadne as a more well rounded development stack with an nvim assistant. 
+
 ## Problem
 
 ## Spec
