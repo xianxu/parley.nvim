@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-07-08
 updated: 2026-07-13
-estimate_hours: 1.85
+estimate_hours: 4.01
 started: 2026-07-13T20:23:23-07:00
 ---
 
@@ -117,18 +117,22 @@ the pending-request confirmation.
 model: estimate-logic-v3.1
 familiarity: 1.0
 item: issue-spec       design=0.60 impl=0.04
-item: lua-neovim      design=0.30 impl=0.48
-item: atlas-docs      design=0.02 impl=0.04
-item: milestone-review design=0.10 impl=0.12
+item: lua-neovim      design=0.30 impl=0.60
+item: lua-neovim      design=0.30 impl=0.60
+item: lua-neovim      design=0.30 impl=0.60
+item: atlas-docs      design=0.04 impl=0.08
+item: milestone-review design=0.10 impl=0.20
 design-buffer: 0.15
-total: 1.85
+total: 4.01
 ```
 
 The approved spec and established pending/lease/keymap patterns earn the ×0.2
-design discount for the implementation and documentation primitives. The Lua
-implementation value is 40% of a 1.2-hour v2 implementation choice; other
-implementation values use the same v3.1 scaling. No external library or API can
-short-circuit this Neovim lifecycle work. The single `milestone-review`
+design discount for the implementation and documentation primitives. Three
+separate focused Lua primitives cover tasker filtering, pending lifecycle
+retirement, and guarded history/keymap behavior; each implementation value is
+40% of the v2 table's 1.5-hour high choice, which includes integration debugging
+and verification. Documentation and review use the same v3.1 scaling. No
+external library or API can short-circuit this Neovim lifecycle work. The single `milestone-review`
 primitive represents the one issue-close boundary review, not a separate M1.
 
 *Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against
@@ -175,3 +179,11 @@ cardinality oracles.
 - Delta: replaced the placeholder plan row with five atomic work items, added
   the 1.85-hour Method A derivation, and linked implementation to
   `workshop/plans/000168-buffer-undo-operation-during-chat-generation-resulted-in-a-huge-error-message-plan.md`.
+
+### 2026-07-14T11:50:00-07:00 — plan-quality estimate revision
+
+- Reason: the SDLC plan-quality judge found one `lua-neovim` primitive materially
+  underrepresented three independently implemented/tested lifecycle concerns.
+- Delta: decomposed tasker filtering, pending retirement, and guarded history
+  into three high-range focused Lua primitives; raised the derived estimate from
+  1.85 to 4.01 hours; implementation architecture and scope are unchanged.

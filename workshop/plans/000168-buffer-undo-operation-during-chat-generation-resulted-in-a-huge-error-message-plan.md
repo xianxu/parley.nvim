@@ -354,7 +354,7 @@ Expected: inspect every `rg` match for reachability; existing global Stop paths 
 
 - [ ] **Step 5: Update the issue checklist and log with evidence**
 
-Replace the placeholder issue-plan row with completed plain checkboxes summarizing Tasks 1-5. Append a dated log entry naming focused tests, full `make test`, two-buffer isolation, counted history, and bounded-notice evidence. Do not add an `M1` tag: this issue has one atomic close boundary.
+Mark the issue's five existing approved plan rows complete, reconciling their wording only if implementation discoveries require a revision entry. Append a dated log entry naming focused tests, full `make test`, two-buffer isolation, counted history, and bounded-notice evidence. Do not add an `M1` tag: this issue has one atomic close boundary.
 
 - [ ] **Step 6: Commit docs and acceptance evidence**
 
@@ -414,3 +414,12 @@ Expected: the commit records `codecomplete`, measured actual hours, the close lo
   generated close artifacts afterward, pins mutation completion before
   retirement, and treats global-stop grep hits as reachability findings rather
   than expecting an empty search.
+
+### 2026-07-14T11:50:00-07:00 — SDLC plan-quality estimate review
+
+- Reason: the gate found the single Lua primitive implausibly small for three
+  production ownership changes plus their integration/debugging surface.
+- Delta: the issue estimate now counts tasker filtering, pending retirement,
+  and guarded history as three focused `lua-neovim` primitives (4.01 hours
+  total), and Task 5 now marks the existing checklist instead of replacing a
+  nonexistent placeholder.
