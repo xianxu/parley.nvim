@@ -1229,6 +1229,10 @@ describe("chat_respond: pending request transcript drift", function()
     local original_new_timer
     local original_pending_start
     local original_notify
+    local original_history_confirm
+    local original_tasker_handles
+    local original_tasker_uv
+    local test_files
     local scratch_file
 
     before_each(function()
@@ -1242,6 +1246,12 @@ describe("chat_respond: pending request transcript drift", function()
         original_new_timer = vim.uv.new_timer
         original_pending_start = canonical_pending_start
         original_notify = vim.notify
+        original_history_confirm = require("parley.chat_history").confirm
+        original_tasker_handles = parley.tasker._handles
+        original_tasker_uv = parley.tasker._uv
+        parley.tasker._handles = {}
+        parley.tasker._uv = { kill = function() end }
+        test_files = { test_file }
     end)
 
     after_each(function()
@@ -1256,10 +1266,13 @@ describe("chat_respond: pending request transcript drift", function()
         end
         require("parley.chat_pending").start = original_pending_start
         vim.notify = original_notify
+        require("parley.chat_history").confirm = original_history_confirm
         parley._state.agent = original_agent
         parley._state.web_search = original_web_search
-        if test_file and vim.fn.filereadable(test_file) == 1 then
-            vim.fn.delete(test_file)
+        for _, path in ipairs(test_files or {}) do
+            if vim.fn.filereadable(path) == 1 then
+                vim.fn.delete(path)
+            end
         end
         if scratch_file and vim.fn.filereadable(scratch_file) == 1 then
             vim.fn.delete(scratch_file)
@@ -1269,9 +1282,12 @@ describe("chat_respond: pending request transcript drift", function()
                 pcall(vim.api.nvim_buf_delete, buf, { force = true })
             end
         end
+        parley.tasker._handles = original_tasker_handles
+        parley.tasker._uv = original_tasker_uv
     end)
 
-    local function open_simple_chat(topic)
+    local function open_simple_chat(topic, path)
+        path = path or test_file
         local chat_content = string.format([[
 # topic: %s
 - file: test.md
@@ -1280,12 +1296,134 @@ describe("chat_respond: pending request transcript drift", function()
 💬: What is Lua?
 ]], topic or "Test Topic")
 
-        vim.fn.writefile(vim.split(chat_content, "\n"), test_file)
-        vim.cmd("edit " .. test_file)
+        vim.fn.writefile(vim.split(chat_content, "\n"), path)
+        vim.cmd("edit " .. path)
         local buf = vim.api.nvim_get_current_buf()
         vim.api.nvim_win_set_cursor(0, { 6, 0 })
         return buf
     end
+
+    local function feed_mapped(keys)
+        local encoded = vim.api.nvim_replace_termcodes(keys, true, false, true)
+        vim.api.nvim_feedkeys(encoded, "mx", false)
+        vim.wait(100, function() return false end, 5)
+    end
+
+    it("installs guarded standard undo and redo mappings in prepared chats", function()
+        local buf = open_simple_chat()
+        local mapped = {}
+        for _, mapping in ipairs(vim.api.nvim_buf_get_keymap(buf, "n")) do
+            mapped[mapping.lhs:lower()] = mapping
+        end
+
+        assert.is_not_nil(mapped.u)
+        assert.is_not_nil(mapped["<c-r>"])
+        assert.is_truthy((mapped.u.desc or ""):find("history", 1, true))
+        assert.is_truthy((mapped["<c-r>"].desc or ""):find("history", 1, true))
+    end)
+
+    it("passes an inactive numeric count through native undo without prompting", function()
+        local buf = open_simple_chat()
+        local history = require("parley.chat_history")
+        history.confirm = function() error("inactive history must not prompt") end
+        local function make_edits()
+            vim.cmd("normal! Gofirst edit")
+            vim.cmd("normal! Gosecond edit")
+            vim.cmd("normal! Gothird edit")
+        end
+        make_edits()
+
+        feed_mapped("2u")
+        local mapped_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+
+        vim.cmd("normal! 2\022")
+        vim.cmd("normal! 2u")
+        assert.same(vim.api.nvim_buf_get_lines(buf, 0, -1, false), mapped_lines)
+    end)
+
+    it("default No leaves pending request and transcript history untouched", function()
+        local buf = open_simple_chat()
+        parley.dispatcher.query = function() end
+        parley.chat_respond({ range = 0 })
+        local pending = require("parley.chat_pending")
+        local before_identity = pending.identity(buf)
+        local before_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+        local before_seq = vim.fn.undotree().seq_cur
+        local prompts = {}
+        require("parley.chat_history").confirm = function(message, _buttons, default)
+            table.insert(prompts, message)
+            assert.equals(2, default)
+            return 2
+        end
+
+        feed_mapped("u")
+
+        assert.same(before_identity, pending.identity(buf))
+        assert.same(before_lines, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+        assert.equals(before_seq, vim.fn.undotree().seq_cur)
+        assert.equals(1, #prompts)
+        assert.is_truthy(prompts[1]:find(before_identity.agent, 1, true))
+    end)
+
+    for _, key in ipairs({ "u", "<C-r>" }) do
+        it("confirmed " .. key .. " cancels its pending request without a second notice", function()
+            local buf = open_simple_chat()
+            parley.dispatcher.query = function() end
+            parley.chat_respond({ range = 0 })
+            local pending = require("parley.chat_pending")
+            local identity = pending.identity(buf)
+            local prompts = {}
+            local notices = {}
+            require("parley.chat_history").confirm = function(message)
+                table.insert(prompts, message)
+                return 1
+            end
+            vim.notify = function(message) table.insert(notices, message) end
+
+            feed_mapped(key)
+
+            assert.is_nil(pending.identity(buf))
+            assert.is_nil(pending_virtual_text(buf))
+            assert.is_nil(require("parley.chat_lease").current(buf))
+            assert.equals(1, #prompts)
+            assert.is_truthy(prompts[1]:find(identity.agent, 1, true))
+            assert.same({}, notices)
+        end)
+    end
+
+    it("confirmed history cancellation leaves another chat request and handle active", function()
+        local pending = require("parley.chat_pending")
+        local second_file = test_file:gsub("%.md$", "-second.md")
+        table.insert(test_files, second_file)
+        local killed = {}
+        parley.tasker._uv = {
+            kill = function(pid) table.insert(killed, pid) end,
+        }
+        parley.dispatcher.query = function(buf)
+            local pid = 9000 + buf
+            parley.tasker.add_handle({ is_closing = function() return false end }, pid, buf)
+        end
+
+        local first_buf = open_simple_chat("First pending chat")
+        parley.chat_respond({ range = 0 })
+        local second_buf = open_simple_chat("Second pending chat", second_file)
+        parley.chat_respond({ range = 0 })
+        assert.is_not_nil(pending.identity(first_buf))
+        assert.is_not_nil(pending.identity(second_buf))
+        require("parley.chat_history").confirm = function() return 1 end
+
+        vim.api.nvim_set_current_buf(first_buf)
+        feed_mapped("u")
+
+        assert.is_nil(pending.identity(first_buf))
+        assert.is_not_nil(pending.identity(second_buf))
+        assert.same({ 9000 + first_buf }, killed)
+        assert.equals(1, #parley.tasker._handles)
+        assert.equals(second_buf, parley.tasker._handles[1].buf)
+
+        parley.tasker.stop_buf(second_buf)
+        pending.retire_stale_now(second_buf, "test cleanup")
+    end)
 
     local function run_scheduled_until(scheduled, cursor, predicate)
         cursor = cursor or 1
@@ -1684,10 +1822,14 @@ describe("chat_respond: pending request transcript drift", function()
         assert.equals(1, finalize_count)
     end)
 
-    it("does not insert a late stream chunk after undo invalidates the pending response", function()
+    it("lease fallback rejects late output and emits one bounded generic notice after :undo", function()
         local buf = open_simple_chat()
         local captured_handler
         local qid = "qid_late_stream_after_undo"
+        local notices = {}
+        vim.notify = function(message)
+            table.insert(notices, message)
+        end
 
         parley.dispatcher.query = function(buf_arg, _provider, _payload, handler)
             captured_handler = handler
@@ -1702,12 +1844,19 @@ describe("chat_respond: pending request transcript drift", function()
         assert.is_not_nil(captured_handler, "expected dispatcher handler to be captured")
 
         vim.cmd("silent! undo")
-        captured_handler(qid, "late chunk")
+        captured_handler(qid, "provider-body-MARKER")
+        captured_handler(qid, "stderr-MARKER exception-MARKER payload-MARKER")
         vim.wait(100, function()
-            return buffer_contains(buf, "late chunk")
+            return #notices > 0
         end, 10)
 
-        assert.is_false(buffer_contains(buf, "late chunk"))
+        assert.is_false(buffer_contains(buf, "provider-body-MARKER"))
+        assert.equals(1, #notices)
+        assert.is_true(#notices[1] <= 160)
+        assert.equals("Parley stopped the response because the chat was changed or undone.", notices[1])
+        for _, marker in ipairs({ "provider-body", "stderr", "exception", "payload" }) do
+            assert.is_nil(notices[1]:find(marker, 1, true))
+        end
     end)
 
     it("does not insert a late stream chunk after redo drift", function()

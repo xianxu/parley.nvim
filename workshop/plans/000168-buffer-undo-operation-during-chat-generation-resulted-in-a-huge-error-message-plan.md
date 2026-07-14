@@ -75,7 +75,7 @@ Also call `stop_buf(11)` again and assert no additional signal. Cover an already
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
-Run: `nvim --headless --noplugin -u tests/minimal_init.lua -c "PlenaryBustedFile tests/integration/tasker_run_spec.lua"`
+Run: `nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/tasker_run_spec.lua"`
 
 Expected: FAIL because `tasker.stop_buf` is nil.
 
@@ -125,7 +125,7 @@ Mutate the returned table and assert the next identity remains unchanged. Then c
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
-Run: `nvim --headless --noplugin -u tests/minimal_init.lua -c "PlenaryBustedFile tests/integration/chat_pending_spec.lua"`
+Run: `nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/chat_pending_spec.lua"`
 
 Expected: FAIL because `identity` and `retire_stale_now` do not exist and `start` does not accept `agent`.
 
@@ -163,8 +163,8 @@ Expected: every constructor supplies `agent`, and there is no fallback identity 
 Run:
 
 ```bash
-nvim --headless --noplugin -u tests/minimal_init.lua -c "PlenaryBustedFile tests/integration/chat_pending_spec.lua"
-nvim --headless --noplugin -u tests/minimal_init.lua -c "PlenaryBustedFile tests/integration/chat_respond_spec.lua"
+nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/chat_pending_spec.lua"
+nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/chat_respond_spec.lua"
 ```
 
 Expected: both files pass.
@@ -194,7 +194,7 @@ Add failure cases where `stop_buf` throws and where history mutation throws. In 
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
-Run: `nvim --headless --noplugin -u tests/minimal_init.lua -c "PlenaryBustedFile tests/integration/chat_respond_spec.lua"`
+Run: `nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/chat_respond_spec.lua"`
 
 Expected: FAIL because `cancel_for_history` does not exist.
 
@@ -207,9 +207,9 @@ Add `M.cancel_for_history(buf, mutate_history, deps)` with production defaults f
 Run:
 
 ```bash
-nvim --headless --noplugin -u tests/minimal_init.lua -c "PlenaryBustedFile tests/integration/chat_respond_spec.lua"
-nvim --headless --noplugin -u tests/minimal_init.lua -c "PlenaryBustedFile tests/integration/chat_pending_spec.lua"
-nvim --headless --noplugin -u tests/minimal_init.lua -c "PlenaryBustedFile tests/integration/tasker_run_spec.lua"
+nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/chat_respond_spec.lua"
+nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/chat_pending_spec.lua"
+nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/tasker_run_spec.lua"
 ```
 
 Expected: all pass; exact-once assertions remain green.
@@ -249,7 +249,7 @@ Test `guard` itself with injected functions: pending identity is read exactly on
 
 - [ ] **Step 2: Run the pure test and verify RED**
 
-Run: `nvim --headless --noplugin -u tests/minimal_init.lua -c "PlenaryBustedFile tests/unit/chat_history_spec.lua"`
+Run: `nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/chat_history_spec.lua"`
 
 Expected: FAIL because `parley.chat_history` does not exist.
 
@@ -283,7 +283,7 @@ Use the same path for counted `<C-r>` and verify `vim.v.count1` indirectly throu
 
 - [ ] **Step 6: Run the production test and verify RED**
 
-Run: `nvim --headless --noplugin -u tests/minimal_init.lua -c "PlenaryBustedFile tests/integration/chat_respond_spec.lua"`
+Run: `nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/chat_respond_spec.lua"`
 
 Expected: FAIL because prepared chats do not yet map `u`/`<C-r>`.
 
@@ -303,8 +303,8 @@ Pin the chosen mechanism with the production counted-history tests. The native c
 Run:
 
 ```bash
-nvim --headless --noplugin -u tests/minimal_init.lua -c "PlenaryBustedFile tests/unit/chat_history_spec.lua"
-nvim --headless --noplugin -u tests/minimal_init.lua -c "PlenaryBustedFile tests/integration/chat_respond_spec.lua"
+nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/chat_history_spec.lua"
+nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/chat_respond_spec.lua"
 ```
 
 Expected: both files pass, including exact history sequences and notice cardinality.
@@ -423,3 +423,10 @@ Expected: the commit records `codecomplete`, measured actual hours, the close lo
   and guarded history as three focused `lua-neovim` primitives (4.01 hours
   total), and Task 5 now marks the existing checklist instead of replacing a
   nonexistent placeholder.
+
+### 2026-07-14T13:10:00-07:00 — Test harness correction
+
+- Reason: execution showed this repository's minimal Neovim test harness is
+  `tests/minimal_init.vim`, not the `.lua` path written during planning.
+- Delta: corrected every focused-test command without changing test scope or
+  implementation intent.

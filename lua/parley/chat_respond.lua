@@ -1581,8 +1581,9 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
         local function invalidate_pending_request(lease_reason)
             if not lease_notice_sent then
                 lease_notice_sent = true
-                _parley.logger.warning(lease_reason or "Parley request cancelled because the chat transcript changed")
-                vim.notify(lease_reason or "Parley request cancelled because the chat transcript changed", vim.log.levels.WARN)
+                local notice = "Parley stopped the response because the chat was changed or undone."
+                _parley.logger.debug(notice .. " (" .. tostring(lease_reason or "lease invalid") .. ")")
+                vim.notify(notice, vim.log.levels.WARN)
             end
             if pending_session then
                 pending_session:cancel("stale")

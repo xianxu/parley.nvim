@@ -357,7 +357,7 @@ M.start = function(opts)
         if session.finished then
             return
         end
-        if event.type ~= "cancel" and event.type ~= "invalid" then
+        if event.type ~= "cancel" and event.type ~= "invalid" and not event.skip_lease_validation then
             local ok, valid = pcall(session.lease_valid)
             if not ok or not valid then
                 event = { type = "stale" }
@@ -522,7 +522,7 @@ M.start = function(opts)
     -- Synchronously retire a structurally stale session. This public contract
     -- never throws: all external callbacks reached by dispatch are contained.
     session.retire_stale_now = function(_self, reason)
-        dispatch({ type = "stale", reason = reason })
+        dispatch({ type = "stale", reason = reason, skip_lease_validation = true })
     end
 
     active_by_buf[buf] = session
