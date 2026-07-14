@@ -1172,6 +1172,54 @@ Not a chat file.
     end)
 end)
 
+describe("chat_respond: guarded history transaction", function()
+    local chat_respond = require("parley.chat_respond")
+
+    it("stops transport, mutates history, then retires synchronously", function()
+        local events = {}
+        local result = chat_respond.cancel_for_history(11, function()
+            table.insert(events, "history")
+        end, {
+            stop_buf = function(buf) table.insert(events, "stop:" .. buf) end,
+            retire_stale_now = function(buf) table.insert(events, "retire:" .. buf) end,
+            notify = function() error("unexpected notification") end,
+            log_error = function() error("unexpected log") end,
+        })
+
+        assert.is_true(result)
+        assert.same({ "stop:11", "history", "retire:11" }, events)
+    end)
+
+    for _, failure in ipairs({ "stop", "history" }) do
+        it("retires after a throwing " .. failure .. " stage with one bounded generic notice", function()
+            local secret = "PRIVATE_HISTORY_SECRET_" .. failure
+            local events = {}
+            local notices = {}
+            local logs = {}
+            local result = chat_respond.cancel_for_history(11, function()
+                table.insert(events, "history")
+                if failure == "history" then error(secret .. string.rep("x", 1000)) end
+            end, {
+                stop_buf = function(buf)
+                    table.insert(events, "stop:" .. buf)
+                    if failure == "stop" then error(secret .. string.rep("x", 1000)) end
+                end,
+                retire_stale_now = function(buf) table.insert(events, "retire:" .. buf) end,
+                notify = function(message) table.insert(notices, message) end,
+                log_error = function(message) table.insert(logs, message) end,
+            })
+
+            assert.is_false(result)
+            assert.same({ "stop:11", "history", "retire:11" }, events)
+            assert.equals(1, #notices)
+            assert.equals(1, #logs)
+            assert.equals(notices[1], logs[1])
+            assert.is_true(#notices[1] <= 160)
+            assert.is_nil(notices[1]:find(secret, 1, true))
+        end)
+    end
+end)
+
 describe("chat_respond: pending request transcript drift", function()
     local test_file
     local original_query

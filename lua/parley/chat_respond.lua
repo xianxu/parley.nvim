@@ -356,6 +356,44 @@ M.cmd_stop = function(signal)
     end)
 end
 
+-- Stop one buffer's transport, perform its native history mutation, then
+-- synchronously retire the structurally stale pending session. Each stage is
+-- attempted even when an earlier stage fails; raw errors are never surfaced.
+function M.cancel_for_history(buf, mutate_history, deps)
+    deps = deps or {}
+    local stop_buf = deps.stop_buf or function(target)
+        return require("parley.tasker").stop_buf(target)
+    end
+    local retire_stale_now = deps.retire_stale_now or function(target)
+        return require("parley.chat_pending").retire_stale_now(target, "history")
+    end
+    local notify = deps.notify or function(message)
+        vim.notify(message, vim.log.levels.ERROR)
+    end
+    local log_error = deps.log_error or function(message)
+        _parley.logger.error(message)
+    end
+    local failed = false
+    local function attempt(operation)
+        local ok = xpcall(operation, function()
+            return nil
+        end)
+        if not ok then failed = true end
+    end
+
+    attempt(function() stop_buf(buf) end)
+    attempt(mutate_history)
+    attempt(function() retire_stale_now(buf) end)
+
+    if failed then
+        local message = "Parley could not safely finish the requested history change."
+        log_error(message)
+        notify(message)
+        return false
+    end
+    return true
+end
+
 --------------------------------------------------------------------------------
 -- build_messages_from_model — reads content directly from buffer using
 -- the model's block positions. No re-parsing. Used by recursive tool-loop
