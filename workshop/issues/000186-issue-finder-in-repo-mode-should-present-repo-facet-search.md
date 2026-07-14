@@ -99,7 +99,7 @@ Finder description mirrors the changed super-repo behavior.
 ## Done when
 
 - Chat Finder uses the extracted reusable facet model with no visible or state-behavior regression.
-- In super-repo mode, Issue Finder shows the existing `[ALL] [NONE]` facet-bar style followed by one toggle per repository.
+- With a completely labelled super-repo root set containing at least two unique repositories, Issue Finder shows the existing `[ALL] [NONE]` facet-bar style followed by one toggle per repository; incomplete labelling omits the entire bar and repo filtering.
 - Repository toggles, ALL, and NONE filter Issue Finder rows in place with OR semantics while preserving the complete typed query.
 - Repository facet state persists across closes/reopens and across both `issues` and `history` views; newly discovered repositories default enabled without resetting prior choices.
 - Single-root Issue Finder remains unchanged and has no repository facet bar.
