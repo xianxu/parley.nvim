@@ -264,12 +264,13 @@ local function stop_matching(matches, signal)
 		if matches(h) then
 			stopped = stopped + 1
 			if h.handle ~= nil and not h.handle:is_closing() then
-				local ok = pcall(function()
+				local ok, result = pcall(function()
 					if type(h.pid) == "number" and h.pid > 0 then
-						runtime.kill(h.pid, signal or 15)
+						return runtime.kill(h.pid, signal or 15)
 					end
+					return 0
 				end)
-				if not ok then signal_failed = true end
+				if not ok or result == nil or result == false then signal_failed = true end
 			end
 		else
 			table.insert(kept, h)

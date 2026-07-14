@@ -17,27 +17,28 @@
 | Name | Lives in | Status |
 |------|----------|--------|
 | `HistoryGuardPolicy` | `lua/parley/chat_history.lua` | new |
-| `PendingIdentity` | `lua/parley/chat_pending.lua` | new |
 
 - **`HistoryGuardPolicy`** — formats a single-line, UTF-8-byte-bounded confirmation prompt and maps the concrete `vim.fn.confirm` result to proceed/decline.
   - **Relationships:** N:1 from guarded `u`/`<C-r>` invocations to the policy; it consumes zero or one `PendingIdentity` per invocation.
   - **DRY rationale:** prompt normalization, byte bounds, and confirmation semantics live once instead of being repeated in two mappings (`ARCH-DRY`).
   - **Future extensions:** additional destructive history keys can call the same policy without widening pending ownership.
-- **`PendingIdentity`** — immutable `{ agent = string }` snapshot returned only for a fully constructed, active per-buffer pending session.
-  - **Relationships:** 1:1 with an active pending session; the registry owns the session and returns a copied identity.
-  - **DRY rationale:** the pending registry remains the only source for activity and agent identity; mappings never inspect extmarks, tasker handles, or transcript text.
-  - **Future extensions:** add explicitly safe display metadata only; do not expose the mutable session.
-
 ### Integration points
 
 | Name | Lives in | Status | Wraps |
 |------|----------|--------|-------|
+| `PendingIdentity` | `lua/parley/chat_pending.lua` | new | mutable pending-session registry |
 | `Tasker.stop_buf` | `lua/parley/tasker.lua` | new | libuv process handles/signals |
 | `chat_pending.retire_stale_now` | `lua/parley/chat_pending.lua` | new | pending registry, timers, extmarks, discard callback |
 | `chat_respond.cancel_for_history` | `lua/parley/chat_respond.lua` | new | ordered buffer cancellation transaction |
 | `chat_history.guard` | `lua/parley/chat_history.lua` | new | `vim.fn.confirm` and native history callback |
 | Chat history keymaps | `lua/parley/init.lua` | new | buffer-local `u` and `<C-r>` mappings |
 
+- **`PendingIdentity`** — immutable `{ agent = string }` snapshot returned by
+  the integration registry only for a fully constructed, active per-buffer
+  pending session.
+  - **Relationships:** 1:1 with an active pending session; the mutable registry owns the session and returns a copied identity.
+  - **DRY rationale:** the pending registry remains the only source for activity and agent identity; mappings never inspect extmarks, tasker handles, or transcript text.
+  - **Future extensions:** add explicitly safe display metadata only; do not expose the mutable session.
 - **`Tasker.stop_buf`** — synchronously signals and removes only handles whose `buf` matches, preserving all unrelated handles.
   - **Injected into:** `chat_respond.cancel_for_history`; tests use fake handle records and an injected tasker UV seam.
   - **Future extensions:** global `stop` may later delegate to a shared filtered-stop helper, but only if that removes duplication without changing global semantics.
@@ -439,3 +440,12 @@ Expected: the commit records `codecomplete`, measured actual hours, the close lo
 - Delta: expanded production mapping tests across those acceptance seams,
   propagated a sanitized scoped-stop failure after handle partitioning, and
   reconciled completed implementation-plan checkboxes.
+
+### 2026-07-14T14:35:00-07:00 — Re-review libuv and purity correction
+
+- Reason: re-review verified that libuv reports ordinary signal failures as a
+  `nil, message, code` result rather than throwing, and found `PendingIdentity`
+  incorrectly classified as pure despite its mutable-registry lookup.
+- Delta: scoped stop now recognizes both thrown and return-shaped signal
+  failures, a non-throwing `EPERM` regression pins the production contract, and
+  `PendingIdentity` is classified as an integration snapshot/API.

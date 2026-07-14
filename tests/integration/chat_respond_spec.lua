@@ -1250,7 +1250,7 @@ describe("chat_respond: pending request transcript drift", function()
         original_tasker_handles = parley.tasker._handles
         original_tasker_uv = parley.tasker._uv
         parley.tasker._handles = {}
-        parley.tasker._uv = { kill = function() end }
+        parley.tasker._uv = { kill = function() return 0 end }
         test_files = { test_file }
     end)
 
@@ -1460,7 +1460,10 @@ describe("chat_respond: pending request transcript drift", function()
         table.insert(test_files, second_file)
         local killed = {}
         parley.tasker._uv = {
-            kill = function(pid) table.insert(killed, pid) end,
+            kill = function(pid)
+                table.insert(killed, pid)
+                return 0
+            end,
         }
         parley.dispatcher.query = function(buf)
             local pid = 9000 + buf

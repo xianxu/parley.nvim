@@ -894,5 +894,20 @@ describe("tasker.run integration", function()
             assert.is_false(ok)
             assert.same({ 203 }, vim.tbl_map(function(item) return item.pid end, tasker._handles))
         end)
+
+        it("reports libuv's non-throwing signal failure result", function()
+            tasker._uv = {
+                kill = function() return nil, "EPERM: operation not permitted", "EPERM" end,
+            }
+            tasker._handles = {
+                { handle = fake_handle(false), pid = 101, buf = 11 },
+                { handle = fake_handle(false), pid = 203, buf = 22 },
+            }
+
+            local ok = pcall(tasker.stop_buf, 11)
+
+            assert.is_false(ok)
+            assert.same({ 203 }, vim.tbl_map(function(item) return item.pid end, tasker._handles))
+        end)
     end)
 end)

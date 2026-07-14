@@ -154,6 +154,11 @@ confirmed undo/redo with exact transcript states, and mutation observed before
 synchronous retirement. The durable plan checklist was reconciled and the two
 prevention rules were recorded in `workshop/lessons.md`.
 
+Re-review resolution: tasker now also detects libuv's non-throwing
+`nil, message, code` signal failure shape, with an `EPERM` regression, and the
+durable plan correctly classifies pending identity as an integration snapshot
+over mutable registry state (`ARCH-PURE`).
+
 Investigated the original symptom against the current response lifecycle. Later
 #137/#138 lease work already prevents stale mutations after undo/redo; #168 now
 focuses on giving the user a choice before the standard history keys cancel a

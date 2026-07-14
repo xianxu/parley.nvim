@@ -8,56 +8,64 @@
 | window | `3ca5e5824d29d7ac96176fb5e30208fe39af9fac..HEAD` |
 | command | `sdlc close --issue 168` |
 | reviewer | codex |
-| timestamp | 2026-07-14 |
-| verdict | FIX-THEN-SHIP |
+| latest verdict | REWORK |
 
-## Summary
+## Validated strengths
 
-The reviewer found the buffer-scoped ownership design, synchronous cancellation
-ordering, structural-lease fallback, bounded messaging, and documentation sound.
-There were no Critical findings. The boundary required acceptance coverage and
-one transport-failure path to be completed before shipping.
+The reviews consistently validated buffer-scoped ownership, synchronous
+stop/history/retire ordering, immutable identity snapshots, structural-lease
+fallback, bounded user messaging, two-buffer isolation, and the README/atlas
+updates. No concern was raised about the chosen interaction or scope.
 
-## Important findings and resolutions
+## Review rounds and resolutions
 
-1. `tasker.stop_buf` removed scoped handle records but suppressed a failed OS
-   signal, so the protected history transaction could report success.
-   - Resolution: the shared partition completes cleanup and returns a failure
-     bit; the scoped wrapper raises a fixed sanitized error after partitioning.
-     A failing-kill integration test proves the target record is retired, the
-     unrelated record remains, and failure reaches the caller.
-2. Production mapping coverage did not prove counted inactive redo, counted
-   confirmed undo/redo, exact resulting history, mutation-before-retirement,
-   dismissal, or bounded multibyte agent naming.
-   - Resolution: production-path tests now drive each mapping with counts,
-     compare exact transcript states, observe the mutated state from inside the
-     retirement boundary, and cover dismissal plus a long multibyte label.
-3. The durable implementation plan remained unchecked after delivery.
-   - Resolution: completed steps through documentation and acceptance evidence
-     are checked; close/review artifact steps remain open until the successful
-     re-close.
+### Round 1 — FIX-THEN-SHIP
 
-## Minor finding and resolution
+1. Scoped handle records were removed while thrown signal failures were
+   suppressed.
+   - Resolution: partitioning now records failure and the scoped wrapper raises
+     a fixed sanitized error after cleanup; a throwing-kill regression passes.
+2. Production mapping coverage did not yet prove counted inactive redo,
+   counted confirmed undo/redo, exact history results, mutation before
+   retirement, dismissal, or bounded multibyte agent naming.
+   - Resolution: production tests now cover the complete matrix and observe
+     the mutated transcript from inside the retirement boundary.
+3. The durable implementation checklist remained unchecked.
+   - Resolution: delivered steps through documentation and acceptance evidence
+     are reconciled; final close-artifact steps remain open until SHIP.
+4. The module comment called the entire history module pure despite its thin
+   Neovim confirmation adapter.
+   - Resolution: the comment now distinguishes policy from the adapter.
 
-The module comment described all of `chat_history` as pure even though its
-confirmation adapter calls Neovim. The comment now identifies the module as
-policy plus a thin confirmation adapter; deterministic policy functions remain
-unit-tested separately.
+### Round 2 — REWORK
+
+1. Real `vim.uv.kill` failures are normally returned as
+   `nil, message, code`, not thrown. The first regression therefore did not
+   model `EPERM`/`ESRCH`, and return-shaped failures still looked successful.
+   - Resolution: scoped stopping checks both protected-call success and the
+     libuv success result. A non-throwing `EPERM` regression proves failure is
+     propagated after owned records are partitioned; tasker now passes 33
+     focused tests.
+2. `PendingIdentity` was listed as PURE even though identity lookup reads the
+   mutable pending-session registry and is tested through Neovim integration.
+   - Resolution: the durable plan now classifies it as an INTEGRATION snapshot
+     API wrapping the mutable registry (`ARCH-PURE`).
 
 ## Architecture
 
 - `ARCH-DRY`: pass — pending identity has one registry owner and filtered stop
   logic is shared.
-- `ARCH-PURE`: pass — deterministic prompt/decision policy remains separated
-  from Neovim glue.
-- `ARCH-PURPOSE`: addressed — the expanded production matrix enforces counted
-  standard-key behavior and the synchronous retirement boundary.
+- `ARCH-PURE`: addressed — deterministic history policy is pure; pending
+  identity is explicitly an integration snapshot.
+- `ARCH-PURPOSE`: addressed — counted standard keys, synchronous retirement,
+  fallback safety, and both thrown/return-shaped signal failures are enforced.
 
-## Verification
+## Verification after latest resolutions
 
-- Focused RED/GREEN evidence: failing transport signal test was red before the
-  sanitized propagation change; tasker suite then passed 32 tests.
-- Expanded `chat_respond` production suite passed 59 tests.
-- `make test-spec SPEC=chat/lifecycle` passed after all resolutions.
-- Full `make test` passed after all resolutions, including Luacheck with zero
-  warnings/errors and every unit, architecture, and integration spec.
+- Focused tasker RED/GREEN: the non-throwing `EPERM` case failed before the
+  result check, then all 33 tasker integration tests passed.
+- Production `chat_respond` suite: 59 tests passed.
+- `make test-spec SPEC=chat/lifecycle`: passed.
+- Full `make test`: passed, including zero lint errors and every unit,
+  architecture, and integration spec.
+- Final SHIP verdict is pending the next SDLC re-close review.
