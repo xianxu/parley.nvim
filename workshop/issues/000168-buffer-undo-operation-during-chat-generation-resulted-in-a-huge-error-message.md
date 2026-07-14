@@ -37,21 +37,40 @@ explains the consequence in user language:
 
 > Parley is checking with <Agent>. Changing history will cancel this request. Proceed?
 
-Choosing No, pressing Escape, or otherwise dismissing the prompt leaves both
-the transcript and request untouched. Choosing Yes cancels that buffer's
-pending response and then performs the requested native undo or redo exactly
-once. Cancellation continues to own the existing cleanup of transport,
-presentation, staged output, timers, leases, and late callbacks.
+The agent label is normalized to one line and truncated so the complete prompt
+is at most 160 UTF-8 bytes. Choosing No (the default), pressing Escape (the
+confirmation API's dismissal return), or otherwise dismissing the prompt leaves
+both the transcript and request untouched. Choosing Yes performs one
+non-yielding, buffer-scoped history cancellation transaction:
+
+1. stop only transport handles owned by this buffer, preventing new provider
+   delivery;
+2. execute the requested native undo or redo exactly once, preserving the
+   user's numeric count (`3u`, `2<C-r>`); and
+3. synchronously retire that buffer's pending session as structural drift,
+   discarding its presentation, staged output, timers, lease, and late
+   callbacks without trying to mutate the now-undone response shell.
+
+No scheduled cancellation step may remain between the history mutation and
+pending-session retirement; the mapping callback yields only after the
+transaction is terminal. The stop/retire operations are idempotent so a racing
+provider callback or lease validation cannot finalize the request twice.
 
 ### Pending request identity
 
 The existing per-buffer pending-session registry remains the source of truth
 for whether a response is active. A fully constructed session records the
-agent's display name and exposes only the read-only pending identity needed by
-the history guard. The history mapping does not infer activity from UI marks,
-tasker globals, or transcript text. This keeps ownership single-sourced
-(`ARCH-DRY`) and confines confirmation/key execution to thin Neovim glue around
-a small deterministic decision (`ARCH-PURE`).
+agent's display name and exposes the read-only pending identity needed by the
+history guard. It also owns synchronous retirement of that session. The tasker
+owns a buffer-scoped transport stop; a chat-response orchestration function
+combines transport stop, the injected native history mutation, and pending
+retirement in the ordering above. No layer performs global cancellation for a
+guarded history key, so a request in another buffer remains active.
+
+The history mapping does not infer activity from UI marks, tasker globals, or
+transcript text. This keeps ownership single-sourced (`ARCH-DRY`) and confines
+confirmation/key execution to thin Neovim glue around a small deterministic
+decision (`ARCH-PURE`).
 
 ### Safety fallback and scope
 
@@ -61,8 +80,12 @@ prepared chat buffers. Command-line history operations (`:undo`, `:redo`,
 the response header, and timing races are not pre-intercepted. The existing
 structural chat lease remains mandatory for all such paths: it invalidates the
 request after structural drift, suppresses stale stream/tool/progress/topic
-writes, and surfaces at most one concise cancellation notice. This fallback is
-also the final race guard after a confirmed history operation
+writes, and surfaces at most one concise cancellation notice per request. A
+fallback notice is at most 160 UTF-8 bytes and contains no provider response,
+stderr, exception text, traceback, serialized payload, or internal table. A
+confirmed standard-key transaction does not emit a second cancellation notice
+after the confirmation itself. This fallback is also the final race guard after
+a confirmed history operation
 (`ARCH-PURPOSE`).
 
 The mappings are chat-buffer behavior rather than configurable shortcuts: they
@@ -71,12 +94,13 @@ the pending-request confirmation.
 
 ## Done when
 
-- `u` and `<C-r>` retain native behavior without prompting when no chat response is pending.
+- `u` and `<C-r>` retain native behavior, including numeric counts, without prompting when no chat response is pending.
 - With a pending response, both keys show a default-No confirmation naming the active agent and explaining that proceeding cancels the request.
 - Declining or dismissing the confirmation changes neither transcript history nor the pending request.
-- Confirming cancels the buffer's request, performs the selected undo or redo exactly once, and leaves no pending presentation, staged output, lease, or late write.
-- Command-line/custom history paths remain protected by the structural lease and produce no raw stack trace or oversized provider/internal error.
-- Production-path integration tests cover inactive passthrough, decline/dismissal, confirmed undo and redo, agent naming, cleanup, and the lease fallback.
+- Confirming stops only the current buffer's transport, performs the selected counted undo or redo exactly once, synchronously retires that pending session, and leaves no presentation, staged output, lease, or late write.
+- A confirmed history operation in one chat buffer leaves an unrelated pending request in another buffer active.
+- Command-line/custom history paths remain protected by the structural lease and produce at most one cancellation notice of 160 UTF-8 bytes with no provider/internal body, stderr, exception, traceback, payload, or table dump.
+- Production-path integration tests cover inactive counted passthrough, concrete Yes/No/dismissal returns, confirmed counted undo and redo, bounded agent naming, exact-once synchronous cleanup, two-buffer isolation, and the lease fallback notice's cardinality/content/size.
 - Chat lifecycle/keybinding documentation describes the guarded standard keys and the non-intercepted fallback paths.
 
 ## Plan
@@ -96,3 +120,22 @@ pending request. Design reuses the per-buffer pending owner (`ARCH-DRY`), keeps
 history prompting as thin UI glue (`ARCH-PURE`), and retains the structural
 lease for every bypass/race path (`ARCH-PURPOSE`). `make test-spec
 SPEC=chat/lifecycle` passed during investigation.
+
+### 2026-07-14 — spec review revision
+
+Fresh-context review found underspecified cancellation ownership, asynchronous
+ordering, count-prefix behavior, and notice bounds. The spec now assigns
+buffer-scoped transport stop to tasker, synchronous session retirement to the
+pending registry, and transaction orchestration to the chat-response boundary;
+preserves numeric counts; and gives prompts/notices explicit size, content, and
+cardinality oracles.
+
+## Revisions
+
+### 2026-07-14T10:50:00-07:00 — fresh-context spec review
+
+- Reason: the first review found the approved interaction incomplete at its
+  cancellation and native-history boundaries.
+- Delta: defined buffer-scoped ownership and non-yielding ordering, numeric
+  count preservation, two-buffer isolation, concrete confirmation outcomes,
+  and bounded/cardinality-tested user messages.
