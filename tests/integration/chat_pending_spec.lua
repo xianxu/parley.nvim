@@ -122,12 +122,14 @@ local function start_fake(buf, runtime, opts)
     local emitted = opts.emitted or {}
     local session = chat_pending.start({
         buf = buf,
+        agent = opts.agent or "Test Agent",
         anchor_line = 0,
         lease_valid = opts.lease_valid or function() return true end,
         emit_content = function(qid, chunk)
             table.insert(emitted, { qid, chunk })
         end,
         choose_verb_index = opts.choose_verb_index or function() return 1 end,
+        on_discard = opts.on_discard,
         clock = runtime.clock,
         scheduler = runtime.scheduler,
     })
@@ -165,6 +167,68 @@ describe("chat pending extmark adapter", function()
         table.insert(buffers, buf)
         return buf
     end
+
+    it("returns copied identity only for an active pending session", function()
+        local buf = new_scratch()
+        local runtime = new_runtime()
+        start_fake(buf, runtime, { agent = "Claude" })
+
+        local identity = chat_pending.identity(buf)
+        assert.same({ agent = "Claude" }, identity)
+        identity.agent = "mutated"
+        assert.same({ agent = "Claude" }, chat_pending.identity(buf))
+        assert.is_nil(chat_pending.identity(99999))
+    end)
+
+    it("synchronously retires only one stale session and is idempotent", function()
+        local first_buf = new_scratch()
+        local second_buf = new_scratch()
+        local first_runtime = new_runtime()
+        local second_runtime = new_runtime()
+        local discarded = {}
+        start_fake(first_buf, first_runtime, {
+            agent = "Claude",
+            on_discard = function(event, reason) table.insert(discarded, { event, reason }) end,
+        })
+        start_fake(second_buf, second_runtime, { agent = "OpenAI" })
+        first_runtime:advance(1000)
+        first_runtime:drain()
+        assert.is_not_nil(extmark(first_buf))
+
+        assert.is_true(chat_pending.retire_stale_now(first_buf, "history"))
+
+        assert.is_nil(chat_pending.identity(first_buf))
+        assert.same({ agent = "OpenAI" }, chat_pending.identity(second_buf))
+        assert.is_nil(extmark(first_buf))
+        assert.equals(0, first_runtime:open_timer_count())
+        assert.same({ { "stale", "history" } }, discarded)
+        assert.is_false(chat_pending.retire_stale_now(first_buf, "history"))
+        assert.same({ { "stale", "history" } }, discarded)
+    end)
+
+    it("contains a throwing discard callback while completing retirement", function()
+        local buf = new_scratch()
+        local runtime = new_runtime()
+        local logs = {}
+        local original_error = logger.error
+        logger.error = function(message) table.insert(logs, tostring(message)) end
+        start_fake(buf, runtime, {
+            on_discard = function() error("PRIVATE_DISCARD_SECRET" .. string.rep("x", 1000)) end,
+        })
+
+        assert.has_no.errors(function()
+            assert.is_true(chat_pending.retire_stale_now(buf, "history"))
+        end)
+        logger.error = original_error
+
+        assert.is_nil(chat_pending.identity(buf))
+        assert.is_nil(extmark(buf))
+        assert.equals(0, runtime:open_timer_count())
+        assert.equals(1, #logs)
+        assert.is_truthy(logs[1]:find("discard terminal callback failed", 1, true))
+        assert.is_nil(logs[1]:find("PRIVATE_DISCARD_SECRET", 1, true))
+        assert.is_true(#logs[1] <= 160)
+    end)
 
     it("reveals a virtual playful line only after one second", function()
         local buf = new_scratch()
@@ -485,6 +549,7 @@ describe("chat pending extmark adapter", function()
         local emitted = {}
         local session = chat_pending.start({
             buf = buf,
+            agent = "Test Agent",
             anchor_line = 0,
             lease_valid = function() return true end,
             emit_content = function(_qid, chunk)
@@ -611,6 +676,7 @@ describe("chat pending extmark adapter", function()
             local calls = {}
             local session = chat_pending.start({
                 buf = buf,
+                agent = "Test Agent",
                 anchor_line = 0,
                 lease_valid = function() return valid end,
                 emit_content = function() end,
@@ -633,6 +699,7 @@ describe("chat pending extmark adapter", function()
         local replacement
         local session = chat_pending.start({
             buf = buf,
+            agent = "Test Agent",
             anchor_line = 0,
             lease_valid = function() return true end,
             emit_content = function() end,
@@ -658,6 +725,7 @@ describe("chat pending extmark adapter", function()
         logger.error = function(message) table.insert(logs, message) end
         local session = chat_pending.start({
             buf = buf,
+            agent = "Test Agent",
             anchor_line = 0,
             lease_valid = function() return true end,
             emit_content = function() end,
@@ -686,6 +754,7 @@ describe("chat pending extmark adapter", function()
             local discarded = 0
             local session = chat_pending.start({
                 buf = buf,
+                agent = "Test Agent",
                 anchor_line = 0,
                 lease_valid = function() return true end,
                 emit_content = function() end,
@@ -755,6 +824,7 @@ describe("chat pending extmark adapter", function()
             assert.has_error(function()
                 chat_pending.start({
                     buf = buf,
+                    agent = "Test Agent",
                     anchor_line = 0,
                     lease_valid = function() return true end,
                     emit_content = function() end,
@@ -781,6 +851,7 @@ describe("chat pending extmark adapter", function()
         local buf = new_scratch()
         local session = chat_pending.start({
             buf = buf,
+            agent = "Test Agent",
             anchor_line = 0,
             lease_valid = function() return true end,
             emit_content = function() end,

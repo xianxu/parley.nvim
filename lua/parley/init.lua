@@ -2066,6 +2066,36 @@ M.prep_chat = function(buf, file_name)
 		end, { buffer = buf, silent = true, desc = "Parley: search whole [...] anchor (#141)" })
 	end
 
+	-- Standard history keys stay native unless this chat owns a pending response.
+	-- Confirmed history changes stop only this buffer before retiring its session.
+	local history = require("parley.chat_history")
+	local function guarded_history(key)
+		return function()
+			local count = vim.v.count1
+			local function native_history()
+				if key == "u" then
+					vim.cmd("normal! " .. count .. "u")
+					return
+				end
+				local keys = vim.api.nvim_replace_termcodes(count .. "<C-r>", true, false, true)
+				vim.api.nvim_feedkeys(keys, "nx", false)
+			end
+			history.guard({
+				buf = buf,
+				pending_identity = require("parley.chat_pending").identity,
+				native_history = native_history,
+				confirm = history.confirm,
+				cancel_for_history = chat_respond.cancel_for_history,
+			})
+		end
+	end
+	vim.keymap.set("n", "u", guarded_history("u"), {
+		buffer = buf, silent = true, desc = "Parley: guard chat history undo",
+	})
+	vim.keymap.set("n", "<C-r>", guarded_history("redo"), {
+		buffer = buf, silent = true, desc = "Parley: guard chat history redo",
+	})
+
 	-- #161: one respond-callback set, shared by chat_respond and chat_define.
 	local respond_cb = make_respond_cb("ChatRespond")
 	local function chat_define_v()

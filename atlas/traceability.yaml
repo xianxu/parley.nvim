@@ -27,18 +27,24 @@ atlas:
       - lua/parley/dispatcher.lua
       - lua/parley/render.lua
       - lua/parley/chat_lease.lua
+      - lua/parley/chat_history.lua
+      - lua/parley/chat_pending.lua
+      - lua/parley/tasker.lua
     tests:
       - tests/unit/perf_harness_spec.lua
       - tests/unit/line_reader_spec.lua
       - tests/unit/diagnostic_refresh_spec.lua
       - tests/unit/buffer_lifecycle_spec.lua
       - tests/unit/chat_respond_footnote_spec.lua
+      - tests/unit/chat_history_spec.lua
       - tests/unit/highlight_structure_spec.lua
       - tests/integration/perf_chat_typing_spec.lua
       - tests/integration/diagnostic_refresh_spec.lua
       - tests/integration/highlighting_spec.lua
       - tests/arch/performance_line_reader_spec.lua
       - tests/integration/chat_lease_spec.lua
+      - tests/integration/chat_pending_spec.lua
+      - tests/integration/tasker_run_spec.lua
       - tests/integration/chat_move_spec.lua
       - tests/integration/create_handler_spec.lua
       - tests/integration/new_chat_spec.lua
