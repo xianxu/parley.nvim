@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-07-14
 updated: 2026-07-14
-estimate_hours:
+estimate_hours: 2.24
 started: 2026-07-14T12:24:51-07:00
 ---
 
@@ -106,6 +106,32 @@ Finder description mirrors the changed super-repo behavior.
 - Pure tests pin facet merging/filtering/transitions/projection, and production-shaped tests cover Chat Finder compatibility plus Issue Finder super-repo filtering and persistence.
 - The shared boundary is directly reusable by #187 without copying finder-specific facet policy.
 - Atlas and traceability describe the new shared surface and Issue Finder behavior.
+
+## Estimate
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim             design=0.4 impl=0.4
+item: lua-neovim             design=0.4 impl=0.4
+item: cross-cutting-refactor design=0.12 impl=0.14
+item: atlas-docs             design=0.025 impl=0.05
+item: milestone-review       design=0.02 impl=0.14
+design-buffer: 0.15
+total: 2.24
+```
+
+The two Lua/Neovim primitives cover the reusable facet model plus Chat Finder
+adapter and the production-shaped Issue Finder repository-facet integration.
+The cross-cutting refactor item covers replacing Chat Finder's inline policy
+while preserving its established behavior. Design uses the thorough-spec
+discount; implementation values use the v3.1 40% ship-wall-clock calibration.
+No library shortcut applies because this extends the repo's existing Lua and
+float-picker surfaces. The calibration source is currently marked stale, so
+the number is provisional pending #127's recalibration.
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against
+`baseline-v3.1.md`. Method A only.*
 
 ## Plan
 
