@@ -7,7 +7,7 @@ created: 2026-07-08
 updated: 2026-07-14
 estimate_hours: 4.01
 started: 2026-07-13T20:23:23-07:00
-actual_hours: 6.67
+actual_hours: 7.21
 ---
 
 # buffer undo operation during chat generation resulted in a huge error message
@@ -145,6 +145,7 @@ primitive represents the one issue-close boundary review, not a separate M1.
 ### 2026-07-08
 
 ### 2026-07-14
+- 2026-07-14: closed — post-REWORK: make test-spec SPEC=chat/lifecycle passed; make test passed with zero lint errors and all unit/architecture/integration specs; tasker 33 tests include thrown and libuv nil/message/code signal failures with scoped cleanup; chat_respond 59 production tests cover counted history and synchronous retirement; PendingIdentity reclassified INTEGRATION; git diff --check passed; lessons and review resolutions recorded; review verdict: SHIP
 - 2026-07-14: closed — make test-spec SPEC=chat/lifecycle passed; make test passed with Luacheck 267 files/0 warnings/0 errors and all unit, architecture, integration specs; git diff --check passed; atlas/chat/lifecycle.md and atlas/traceability.yaml updated; production regressions cover counted history, default-No, exact-once cancellation, bounded fallback notice, and two-buffer isolation; review verdict: FIX-THEN-SHIP
 
 Boundary-review resolution: scoped task stopping now reports sanitized signal

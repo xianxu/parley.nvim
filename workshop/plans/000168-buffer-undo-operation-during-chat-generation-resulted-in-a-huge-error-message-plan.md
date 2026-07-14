@@ -364,7 +364,7 @@ git add README.md atlas/chat/lifecycle.md atlas/traceability.yaml workshop/issue
 git commit -m "#168: document guarded chat history"
 ```
 
-- [ ] **Step 7: Close through the SDLC gate**
+- [x] **Step 7: Close through the SDLC gate**
 
 Run `sdlc actual --issue 168`, inspect the active-time attribution, and assign its printed measured value explicitly (this is measured evidence, not a remembered estimate). Then run:
 
@@ -375,7 +375,7 @@ sdlc close --issue 168 --actual "$MEASURED_HOURS" --verified '<exact focused/ful
 
 Expected: the close gate detects the atlas change, dispatches its single mandatory fresh-context boundary review, writes the issue to `codecomplete`, and creates/updates its boundary-review evidence without committing. If it returns Critical/Important findings, fix them, add prevention rules to `workshop/lessons.md`, rerun verification, and retry close. Do not hand-type hours and do not run a separate redundant review.
 
-- [ ] **Step 8: Normalize and commit close artifacts**
+- [x] **Step 8: Normalize and commit close artifacts**
 
 Inspect `git status --short` for the exact issue and generated boundary-review paths. Normalize any generated review sidecar by removing only presentation noise (raw terminal plumbing, ANSI, duplicated prompts/diffs, trailing whitespace); preserve every substantive finding, resolution, verdict, and verification record. Run `git diff --check`, stage only those exact #168 paths, then commit:
 
