@@ -40,7 +40,8 @@ finder-facet module without changing Chat Finder's visible behavior:
 - entries use OR semantics: an entry survives when any of its facets is
   enabled;
 - discovered facets merge into persistent state, with new facets enabled by
-  default and prior choices preserved;
+  default and prior choices preserved; temporarily undiscovered facet keys
+  remain in state so rediscovery restores the user's previous choice;
 - facet updates refresh the picker in place without clearing its query.
 
 The reusable module owns deterministic facet-state merging, filtering,
@@ -56,8 +57,13 @@ this issue does not redesign them.
 ### Repository facets in Issue Finder
 
 Issue Finder supplies one facet per repository only when super-repo expansion
-returns repository-labelled roots. In ordinary single-root mode it supplies no
-facet bar, preserving the existing layout and behavior.
+returns a complete set of non-empty repository labels for every scanned root
+and at least two unique repositories. In ordinary single-root mode it supplies
+no facet bar, preserving the existing layout and behavior. A partially labelled
+or unlabelled expanded root set fails closed to the existing unfiltered picker:
+the entire repo facet bar is omitted and no repository filtering is applied.
+It must never show a partial bar whose NONE action leaves unrepresented rows
+visible or impossible to re-enable.
 
 Repository facet labels use the same deterministic ordering as the canonical
 facet model. The Issue Finder session owns one shared
@@ -86,8 +92,8 @@ retaining finder-specific entries and persistent state.
 
 Update the Issue Finder lifecycle/behavior map and traceability for the shared
 facet model and super-repo repository bar. No new user notification or error
-path is introduced: absent, empty, or unlabelled repository roots simply omit
-the bar. README changes are required only if an existing user-facing Issue
+path is introduced: incomplete repository labelling omits the entire bar and
+preserves the unfiltered picker. README changes are required only if an existing user-facing Issue
 Finder description mirrors the changed super-repo behavior.
 
 ## Done when
@@ -116,3 +122,21 @@ Claimed and designed the issue. The approved direction extracts Chat Finder's
 existing facet behavior unchanged, reuses it for persistent Issue Finder
 repository facets only in super-repo mode, and keeps the boundary generic for
 #187 (`ARCH-DRY`, `ARCH-PURE`, `ARCH-PURPOSE`).
+
+### 2026-07-14 — spec review revision
+
+Fresh-context review found mixed labelled/unlabelled roots ambiguous. The spec
+now omits the entire facet bar and all repo filtering unless every expanded
+root has a non-empty label and at least two unique repositories are present.
+It also preserves temporarily undiscovered facet keys so rediscovery restores
+the prior selection.
+
+## Revisions
+
+### 2026-07-14T12:45:00-07:00 — fresh-context spec review
+
+- Reason: partial root labelling left ALL/NONE and unrepresented row behavior
+  undefined; rediscovery persistence was only implicit.
+- Delta: require a complete multi-repository label set before enabling the bar,
+  otherwise retain the existing unfiltered picker, and explicitly retain
+  undiscovered facet-state keys.
