@@ -105,11 +105,11 @@ the pending-request confirmation.
 
 ## Plan
 
-- [ ] Add buffer-scoped transport stopping with isolation and idempotence tests.
-- [ ] Add immutable pending identity and synchronous stale-session retirement.
-- [ ] Add the protected, non-yielding history cancellation transaction.
-- [ ] Add bounded prompt policy plus counted `u`/`<C-r>` chat mappings.
-- [ ] Update lifecycle/README/traceability docs and pass focused plus full verification.
+- [x] Add buffer-scoped transport stopping with isolation and idempotence tests.
+- [x] Add immutable pending identity and synchronous stale-session retirement.
+- [x] Add the protected, non-yielding history cancellation transaction.
+- [x] Add bounded prompt policy plus counted `u`/`<C-r>` chat mappings.
+- [x] Update lifecycle/README/traceability docs and pass focused plus full verification.
 
 ## Estimate
 
@@ -161,6 +161,21 @@ buffer-scoped transport stop to tasker, synchronous session retirement to the
 pending registry, and transaction orchestration to the chat-response boundary;
 preserves numeric counts; and gives prompts/notices explicit size, content, and
 cardinality oracles.
+
+### 2026-07-14 — implementation
+
+Added buffer-scoped transport retirement, immutable pending identity, guarded
+standard history keys, and the structural-lease fallback notice. Focused tests
+cover counted inactive history, default-No and dismissal, confirmed undo/redo,
+exact-once synchronous cleanup, bounded messages, and two-buffer isolation.
+The fallback now reports only “Parley stopped the response because the chat was
+changed or undone.” and never exposes provider or internal error content.
+
+Verification passed with `make test-spec SPEC=chat/lifecycle` and full
+`make test` (Luacheck: 267 files, 0 warnings/errors; all unit, architecture, and
+integration specs passed). `git diff --check` passed. Static reachability
+confirmed the guarded transaction calls only `stop_buf`; remaining global-stop
+hits belong to the explicit global Stop command and the lease fallback.
 
 ## Revisions
 

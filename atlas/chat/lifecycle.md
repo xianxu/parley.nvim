@@ -17,6 +17,15 @@ Assembles context (with memory summarization), streams LLM response into buffer.
 
 Pending responses also hold a per-buffer chat lease (`lua/parley/chat_lease.lua`) anchored on an `invalidate=true` extmark on the response's `🤖:` agent-header line (#138). Each async callback validates the lease before mutating the transcript; ordinary edits and streaming move the anchor and stay valid, while deleting that line — undo/redo of the inserted response, or removing the header — invalidates the lease, stops/suppresses late stream/tool/progress/topic writes, and prevents recursive tool resubmit from using a stale live model. The pending extmark and its staged output are discarded on lost ownership. (Pre-#138 the lease keyed on buffer `changedtick`, which mis-read Parley's own writes as drift; the extmark anchor makes `commit` a no-op.)
 
+While a response is pending, the chat buffer's standard `u` and `<C-r>` keys
+ask for default-No confirmation before changing history. Approval stops only
+that buffer's transport, performs the counted native history operation once,
+then synchronously retires its pending presentation and lease. With no pending
+response the keys remain native and do not prompt. Ex commands such as `:undo`,
+`:redo`, `:earlier`, and `:later`, plus custom mappings that bypass these keys,
+remain outside this interception seam; the structural lease rejects their late
+callbacks and emits one bounded generic cancellation notice.
+
 ## Editing, Diagnostics, and Decoration Convergence
 
 `lua/parley/buffer_lifecycle.lua` is the neutral owner of buffer convergence

@@ -127,6 +127,8 @@ Most-used defaults:
   - Reopened chats recover multi-word highlights from structured footnotes such as `[^acos]: "Advertising Cost of Sales". Ratio...`; generated ids such as `[^serverless-functions]` also recover `serverless functions` from the slug when that phrase appears before the reference.
 - `<C-g>G` respond all
 - `<C-g>x` stop
+- `u` / `<C-r>` undo/redo normally; while a response is pending, Parley asks
+  before cancelling that buffer's request and changing history (default: No)
 - `<C-g>t` chat outline
 - `<C-g>a` change agent
 - `<C-g>P` next system prompt
