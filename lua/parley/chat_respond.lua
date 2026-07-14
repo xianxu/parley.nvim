@@ -1667,6 +1667,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
 
         pending_session = chat_pending.start({
             buf = buf,
+            agent = agent_name,
             anchor_line = initial_progress_tip,
             lease_valid = lease_valid,
             emit_content = base_handler,

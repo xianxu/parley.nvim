@@ -98,6 +98,8 @@ end
 M.start = function(opts)
     opts = opts or {}
     local buf = assert(opts.buf, "buf is required")
+    local agent = assert(opts.agent, "agent is required")
+    assert(type(agent) == "string" and agent ~= "", "agent must be a non-empty string")
     local existing = active_by_buf[buf]
     assert(not existing or existing.finished, "chat pending session already active for buffer")
 
@@ -110,6 +112,7 @@ M.start = function(opts)
 
     local session = {
         buf = buf,
+        agent = agent,
         anchor_line = assert(opts.anchor_line, "anchor_line is required"),
         lease_valid = assert(opts.lease_valid, "lease_valid is required"),
         emit_content = assert(opts.emit_content, "emit_content is required"),
@@ -516,6 +519,12 @@ M.start = function(opts)
         submit(function() return { type = "cancel", reason = reason } end)
     end
 
+    -- Synchronously retire a structurally stale session. This public contract
+    -- never throws: all external callbacks reached by dispatch are contained.
+    session.retire_stale_now = function(_self, reason)
+        dispatch({ type = "stale", reason = reason })
+    end
+
     active_by_buf[buf] = session
     local enqueued, enqueue_error = pcall(scheduler.enqueue, function()
         if session.finished then
@@ -553,6 +562,28 @@ end
 M.is_active = function(buf)
     local session = active_by_buf[buf]
     return session ~= nil and not session.finished
+end
+
+-- Return a copied display identity only for a fully constructed active session.
+function M.identity(buf)
+    local session = active_by_buf[buf]
+    if not session or session.finished then
+        return nil
+    end
+    return { agent = session.agent }
+end
+
+-- Synchronously retire one stale session; no-op after ownership is gone.
+---@param buf number
+---@param reason string|nil
+---@return boolean retired
+function M.retire_stale_now(buf, reason)
+    local session = active_by_buf[buf]
+    if not session or session.finished then
+        return false
+    end
+    session:retire_stale_now(reason)
+    return true
 end
 
 return M
