@@ -62,7 +62,7 @@
 - Modify: `lua/parley/tasker.lua:258`
 - Test: `tests/integration/tasker_run_spec.lua`
 
-- [ ] **Step 1: Write the failing buffer-isolation tests**
+- [x] **Step 1: Write the failing buffer-isolation tests**
 
 Add tests that seed three fake handle records (two for buffer 11, one for buffer 22), call `tasker.stop_buf(11)`, and assert:
 
@@ -73,13 +73,13 @@ assert.same({ 203 }, vim.tbl_map(function(h) return h.pid end, tasker._handles))
 
 Also call `stop_buf(11)` again and assert no additional signal. Cover an already-closing matched handle: remove it without signaling, count it as a scoped stop, and emit the single scheduled `ParleyQueryFinished` event. Assert no event when no record matched.
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run: `nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/tasker_run_spec.lua"`
 
 Expected: FAIL because `tasker.stop_buf` is nil.
 
-- [ ] **Step 3: Implement one filtered stop primitive**
+- [x] **Step 3: Implement one filtered stop primitive**
 
 Extract a local helper that partitions `_handles`, signals matching live handles, preserves nonmatching records in order, and schedules `ParleyQueryFinished` only when at least one record matched. Implement:
 
@@ -93,13 +93,13 @@ end
 
 Keep `M.stop(signal)` behavior global by delegating to the same helper with an always-true predicate. Do not alter query history or other buffers' handles.
 
-- [ ] **Step 4: Run the focused test and verify GREEN**
+- [x] **Step 4: Run the focused test and verify GREEN**
 
 Run the command from Step 2.
 
 Expected: all `tasker.run integration` tests pass.
 
-- [ ] **Step 5: Commit the transport primitive**
+- [x] **Step 5: Commit the transport primitive**
 
 ```bash
 git add lua/parley/tasker.lua tests/integration/tasker_run_spec.lua
@@ -112,7 +112,7 @@ git commit -m "#168: stop chat transport by buffer"
 - Modify: `lua/parley/chat_pending.lua:98-560`
 - Test: `tests/integration/chat_pending_spec.lua`
 
-- [ ] **Step 1: Write failing registry contract tests**
+- [x] **Step 1: Write failing registry contract tests**
 
 Update the shared `start_fake` helper to accept/pass a stable agent first. Start two fake sessions with distinct buffers and `agent` values. Assert `identity(buf)` returns a copy only for the active session:
 
@@ -123,13 +123,13 @@ assert.is_nil(chat_pending.identity(99999))
 
 Mutate the returned table and assert the next identity remains unchanged. Then call `retire_stale_now(first_buf, "history")` and assert before return: the first session is inactive, its timers/extmark are gone, its discard callback ran once with `stale`, and the second session remains active. Repeating retirement returns false and does not call discard again. Add a throwing `on_discard` case and assert `retire_stale_now` still does not throw, the registry is clear, timers/extmark are gone, and only a bounded generic callback diagnostic is logged.
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run: `nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/chat_pending_spec.lua"`
 
 Expected: FAIL because `identity` and `retire_stale_now` do not exist and `start` does not accept `agent`.
 
-- [ ] **Step 3: Implement immutable identity and direct stale dispatch**
+- [x] **Step 3: Implement immutable identity and direct stale dispatch**
 
 Validate `opts.agent` as a non-empty string before publishing the session; store it on the private session. Add:
 
@@ -150,7 +150,7 @@ end
 
 The session method calls the existing local `dispatch({ type = "stale", reason = reason })` directly—never `submit`/`scheduler.enqueue`—so existing `finish`, timer cancellation, hide, registry release, and protected `on_discard` invocation remain the single terminal implementation. Document it in its Lua annotation as a no-throw public contract: callback failures are already contained by `call_safely`, and the new tests pin terminal cleanup under a throwing discard callback.
 
-- [ ] **Step 4: Update every `chat_pending.start` test fixture/caller with an agent label**
+- [x] **Step 4: Update every `chat_pending.start` test fixture/caller with an agent label**
 
 Pass the real `agent_info.display_name` from `chat_respond`; use stable labels such as `"Test Agent"` in direct test construction. Grep:
 
@@ -158,7 +158,7 @@ Run: `rg -n 'chat_pending\.start|pending\.start' lua tests`
 
 Expected: every constructor supplies `agent`, and there is no fallback identity inferred elsewhere.
 
-- [ ] **Step 5: Run focused pending and respond tests**
+- [x] **Step 5: Run focused pending and respond tests**
 
 Run:
 
@@ -169,7 +169,7 @@ nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests
 
 Expected: both files pass.
 
-- [ ] **Step 6: Commit pending ownership changes**
+- [x] **Step 6: Commit pending ownership changes**
 
 ```bash
 git add lua/parley/chat_pending.lua lua/parley/chat_respond.lua tests/integration/chat_pending_spec.lua tests/integration/chat_respond_spec.lua
@@ -182,7 +182,7 @@ git commit -m "#168: expose pending chat identity and retirement"
 - Modify: `lua/parley/chat_respond.lua:333-360`
 - Test: `tests/integration/chat_respond_spec.lua`
 
-- [ ] **Step 1: Write failing ordering, cleanup, and isolation tests**
+- [x] **Step 1: Write failing ordering, cleanup, and isolation tests**
 
 Inject fakes for `stop_buf`, `mutate_history`, and `retire_stale_now`, then assert the exact synchronous order:
 
@@ -192,17 +192,17 @@ assert.same({ "stop:11", "history", "retire:11" }, events)
 
 Add failure cases where `stop_buf` throws and where history mutation throws. In both cases all later stages must still run, retirement must complete before return, `chat_pending.identity(buf)` must already be nil, and the function must return `false` after emitting one fixed generic notice of at most 160 bytes without raw exception/provider/internal data. Do not inject a throwing retirement dependency: Task 2 defines `retire_stale_now` as no-throw and proves its callback-failure cleanup directly. Add a production-shaped two-buffer case proving the first session/handles retire while the second session/handles remain active.
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run: `nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/chat_respond_spec.lua"`
 
 Expected: FAIL because `cancel_for_history` does not exist.
 
-- [ ] **Step 3: Implement the protected transaction**
+- [x] **Step 3: Implement the protected transaction**
 
 Add `M.cancel_for_history(buf, mutate_history, deps)` with production defaults for tasker/pending. Run each stage under its own `xpcall` handler that records only a boolean failure and discards raw exception text. Attempt `stop_buf`, history mutation, and synchronous stale retirement in that order regardless of earlier failures. Because Task 2 makes retirement no-throw and terminal, return only after the pending session is inactive. Return `true` when every stage succeeds; otherwise log/notify one fixed message of at most 160 bytes and return `false`. Never call global `tasker.stop` or `chat_pending.cancel_all`.
 
-- [ ] **Step 4: Run focused lifecycle tests and verify GREEN**
+- [x] **Step 4: Run focused lifecycle tests and verify GREEN**
 
 Run:
 
@@ -214,7 +214,7 @@ nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests
 
 Expected: all pass; exact-once assertions remain green.
 
-- [ ] **Step 5: Commit transaction orchestration**
+- [x] **Step 5: Commit transaction orchestration**
 
 ```bash
 git add lua/parley/chat_respond.lua tests/integration/chat_respond_spec.lua
@@ -231,7 +231,7 @@ git commit -m "#168: cancel pending chat around history mutation"
 - Test: `tests/unit/chat_history_spec.lua`
 - Test: `tests/integration/chat_respond_spec.lua`
 
-- [ ] **Step 1: Write failing pure policy tests**
+- [x] **Step 1: Write failing pure policy tests**
 
 Cover one-line normalization of `\r`/`\n`, valid UTF-8 truncation, exact maximum prompt size, normal short labels, and confirmation returns `1` (Yes), `2` (default No), and `0` (dismissal). Put a unique sentinel beyond the truncation budget; assert the bounded label prefix remains, the sentinel is absent, and the prompt is no more than 160 bytes:
 
@@ -247,23 +247,23 @@ assert.is_false(history.should_proceed(0))
 
 Test `guard` itself with injected functions: pending identity is read exactly once; inactive calls native history once without confirming; choices `2` and `0` call neither native history nor cancellation; choice `1` calls `cancel_for_history` once with the same buffer and native callback. Assert the returned result enum for every branch.
 
-- [ ] **Step 2: Run the pure test and verify RED**
+- [x] **Step 2: Run the pure test and verify RED**
 
 Run: `nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/chat_history_spec.lua"`
 
 Expected: FAIL because `parley.chat_history` does not exist.
 
-- [ ] **Step 3: Implement the minimal pure policy and injected guard**
+- [x] **Step 3: Implement the minimal pure policy and injected guard**
 
 Implement `prompt(agent)`, `should_proceed(choice)`, and `guard(opts)`. `guard` calls `opts.pending_identity(buf)` once. With no identity it calls `opts.native_history()` directly. With identity it calls injected `confirm(prompt, "&Yes\n&No", 2)`; only result `1` calls `opts.cancel_for_history(buf, opts.native_history)`. It returns a small result enum (`"native"`, `"declined"`, `"cancelled"`) for deterministic tests.
 
-- [ ] **Step 4: Run the pure test and verify GREEN**
+- [x] **Step 4: Run the pure test and verify GREEN**
 
 Run the command from Step 2.
 
 Expected: all `chat_history` tests pass without creating a buffer or mocking Neovim IO.
 
-- [ ] **Step 5: Write failing production-keymap tests**
+- [x] **Step 5: Write failing production-keymap tests**
 
 Prepare a real chat buffer through the production setup path and retrieve its normal-mode mappings with `vim.api.nvim_buf_get_keymap`. Exercise mappings with remapping-enabled, termcode-replaced input:
 
@@ -281,13 +281,13 @@ Use the same path for counted `<C-r>` and verify `vim.v.count1` indirectly throu
 - a second buffer's pending identity and tasker handle remain active;
 - `:undo` bypasses the mapping but the lease fallback emits exactly one notice, `#notice <= 160`, containing none of injected provider body/stderr/exception/payload markers.
 
-- [ ] **Step 6: Run the production test and verify RED**
+- [x] **Step 6: Run the production test and verify RED**
 
 Run: `nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/chat_respond_spec.lua"`
 
 Expected: FAIL because prepared chats do not yet map `u`/`<C-r>`.
 
-- [ ] **Step 7: Install thin buffer-local mappings**
+- [x] **Step 7: Install thin buffer-local mappings**
 
 In chat preparation, map normal-mode `u` and `<C-r>` directly (not through the configurable keybinding registry). Capture `vim.v.count1`. The native undo callback may use `normal! {count}u`; redo must replace termcodes and execute non-remapped input, for example:
 
@@ -298,7 +298,7 @@ vim.api.nvim_feedkeys(redo, "nx", false)
 
 Pin the chosen mechanism with the production counted-history tests. The native callback must not merely enqueue redo and return: assert the expected undo-tree state before `cancel_for_history` advances to synchronous retirement, preserving the required mutation-before-retirement boundary. Call `chat_history.guard` with the production identity, confirm, and cancellation dependencies. Set `silent = true`, `buffer = buf`, and descriptive mapping text.
 
-- [ ] **Step 8: Run pure and production tests and verify GREEN**
+- [x] **Step 8: Run pure and production tests and verify GREEN**
 
 Run:
 
@@ -309,7 +309,7 @@ nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests
 
 Expected: both files pass, including exact history sequences and notice cardinality.
 
-- [ ] **Step 9: Commit guarded history keys**
+- [x] **Step 9: Commit guarded history keys**
 
 ```bash
 git add lua/parley/chat_history.lua lua/parley/init.lua tests/unit/chat_history_spec.lua tests/integration/chat_respond_spec.lua
@@ -324,23 +324,23 @@ git commit -m "#168: confirm before chat undo cancels response"
 - Modify: `README.md:120-150`
 - Modify: `workshop/issues/000168-buffer-undo-operation-during-chat-generation-resulted-in-a-huge-error-message.md`
 
-- [ ] **Step 1: Document the visible behavior and ownership**
+- [x] **Step 1: Document the visible behavior and ownership**
 
 Describe guarded standard keys, default-No prompt, count preservation, buffer-scoped cancellation ordering, and lease fallback for Ex/custom paths in `atlas/chat/lifecycle.md`. Add `chat_history.lua`, `chat_pending.lua`, `tasker.lua`, and their tests to the `chat/lifecycle` traceability entry. Add a concise README key note for `u`/`<C-r>` while a response is pending.
 
-- [ ] **Step 2: Run mapped lifecycle tests**
+- [x] **Step 2: Run mapped lifecycle tests**
 
 Run: `make test-spec SPEC=chat/lifecycle`
 
 Expected: exit 0; all mapped unit, integration, and architecture specs pass.
 
-- [ ] **Step 3: Run the full repository gate**
+- [x] **Step 3: Run the full repository gate**
 
 Run: `make test`
 
 Expected: exit 0, including lint, unit, integration, and architecture tests.
 
-- [ ] **Step 4: Run static acceptance checks**
+- [x] **Step 4: Run static acceptance checks**
 
 Run:
 
@@ -352,11 +352,11 @@ git status --short
 
 Expected: inspect every `rg` match for reachability; existing global Stop paths are legitimate, but no guarded-history callback may reach global stop/cancel. There are no whitespace errors, and only #168 files are modified.
 
-- [ ] **Step 5: Update the issue checklist and log with evidence**
+- [x] **Step 5: Update the issue checklist and log with evidence**
 
 Mark the issue's five existing approved plan rows complete, reconciling their wording only if implementation discoveries require a revision entry. Append a dated log entry naming focused tests, full `make test`, two-buffer isolation, counted history, and bounded-notice evidence. Do not add an `M1` tag: this issue has one atomic close boundary.
 
-- [ ] **Step 6: Commit docs and acceptance evidence**
+- [x] **Step 6: Commit docs and acceptance evidence**
 
 ```bash
 git add README.md atlas/chat/lifecycle.md atlas/traceability.yaml workshop/issues/000168-buffer-undo-operation-during-chat-generation-resulted-in-a-huge-error-message.md
@@ -430,3 +430,12 @@ Expected: the commit records `codecomplete`, measured actual hours, the close lo
   `tests/minimal_init.vim`, not the `.lua` path written during planning.
 - Delta: corrected every focused-test command without changing test scope or
   implementation intent.
+
+### 2026-07-14T14:05:00-07:00 — Boundary review acceptance expansion
+
+- Reason: the close review found that production coverage did not yet prove
+  counted redo, counted confirmed operations, or mutation-before-retirement,
+  and that transport signal failure was silently suppressed.
+- Delta: expanded production mapping tests across those acceptance seams,
+  propagated a sanitized scoped-stop failure after handle partitioning, and
+  reconciled completed implementation-plan checkboxes.

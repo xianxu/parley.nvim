@@ -258,16 +258,18 @@ end
 local function stop_matching(matches, signal)
 	local kept = {}
 	local stopped = 0
+	local signal_failed = false
 	local runtime = M._uv or uv
 	for _, h in ipairs(M._handles) do
 		if matches(h) then
 			stopped = stopped + 1
 			if h.handle ~= nil and not h.handle:is_closing() then
-				pcall(function()
+				local ok = pcall(function()
 					if type(h.pid) == "number" and h.pid > 0 then
 						runtime.kill(h.pid, signal or 15)
 					end
 				end)
+				if not ok then signal_failed = true end
 			end
 		else
 			table.insert(kept, h)
@@ -279,7 +281,7 @@ local function stop_matching(matches, signal)
 			vim.cmd("doautocmd User ParleyQueryFinished")
 		end)
 	end
-	return stopped
+	return stopped, signal_failed
 end
 
 -- Stop receiving responses for all processes and clean the handles.
@@ -293,7 +295,11 @@ end
 ---@param signal number | nil # signal to send to the process
 ---@return number # matching handle records retired
 M.stop_buf = function(buf, signal)
-	return stop_matching(function(handle) return handle.buf == buf end, signal)
+	local stopped, signal_failed = stop_matching(function(handle) return handle.buf == buf end, signal)
+	if signal_failed then
+		error("task transport stop failed", 0)
+	end
+	return stopped
 end
 
 ---@param buf number | nil # buffer number

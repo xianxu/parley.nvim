@@ -1,4 +1,4 @@
--- Pure policy for guarding standard chat history keys while a response is pending.
+-- Policy plus thin confirmation adapter for guarding standard chat history keys.
 local M = {}
 
 local MAX_PROMPT_BYTES = 160

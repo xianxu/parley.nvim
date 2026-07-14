@@ -879,5 +879,20 @@ describe("tasker.run integration", function()
             vim.schedule = original_schedule
             scheduled[1]()
         end)
+
+        it("retires scoped handles but reports a transport signal failure", function()
+            tasker._uv = {
+                kill = function() error("signal rejected") end,
+            }
+            tasker._handles = {
+                { handle = fake_handle(false), pid = 101, buf = 11 },
+                { handle = fake_handle(false), pid = 203, buf = 22 },
+            }
+
+            local ok = pcall(tasker.stop_buf, 11)
+
+            assert.is_false(ok)
+            assert.same({ 203 }, vim.tbl_map(function(item) return item.pid end, tasker._handles))
+        end)
     end)
 end)

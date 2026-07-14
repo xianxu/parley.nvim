@@ -1286,15 +1286,16 @@ describe("chat_respond: pending request transcript drift", function()
         parley.tasker._uv = original_tasker_uv
     end)
 
-    local function open_simple_chat(topic, path)
+    local function open_simple_chat(topic, path, extra_header)
         path = path or test_file
         local chat_content = string.format([[
 # topic: %s
+%s
 - file: test.md
 ---
 
 💬: What is Lua?
-]], topic or "Test Topic")
+]], topic or "Test Topic", extra_header or "")
 
         vim.fn.writefile(vim.split(chat_content, "\n"), path)
         vim.cmd("edit " .. path)
@@ -1307,6 +1308,12 @@ describe("chat_respond: pending request transcript drift", function()
         local encoded = vim.api.nvim_replace_termcodes(keys, true, false, true)
         vim.api.nvim_feedkeys(encoded, "mx", false)
         vim.wait(100, function() return false end, 5)
+    end
+
+    local function make_history_edits()
+        feed_mapped("Gofirst edit<Esc>")
+        feed_mapped("Gosecond edit<Esc>")
+        feed_mapped("Gothird edit<Esc>")
     end
 
     it("installs guarded standard undo and redo mappings in prepared chats", function()
@@ -1326,17 +1333,14 @@ describe("chat_respond: pending request transcript drift", function()
         local buf = open_simple_chat()
         local history = require("parley.chat_history")
         history.confirm = function() error("inactive history must not prompt") end
-        local function make_edits()
-            vim.cmd("normal! Gofirst edit")
-            vim.cmd("normal! Gosecond edit")
-            vim.cmd("normal! Gothird edit")
-        end
-        make_edits()
+        make_history_edits()
+        local original_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 
         feed_mapped("2u")
         local mapped_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 
-        vim.cmd("normal! 2\022")
+        feed_mapped("2<C-r>")
+        assert.same(original_lines, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
         vim.cmd("normal! 2u")
         assert.same(vim.api.nvim_buf_get_lines(buf, 0, -1, false), mapped_lines)
     end)
@@ -1365,9 +1369,27 @@ describe("chat_respond: pending request transcript drift", function()
         assert.is_truthy(prompts[1]:find(before_identity.agent, 1, true))
     end)
 
+    it("dismissal leaves pending request and transcript history untouched", function()
+        local buf = open_simple_chat()
+        parley.dispatcher.query = function() end
+        parley.chat_respond({ range = 0 })
+        local pending = require("parley.chat_pending")
+        local before_identity = pending.identity(buf)
+        local before_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+        local before_seq = vim.fn.undotree().seq_cur
+        require("parley.chat_history").confirm = function() return 0 end
+
+        feed_mapped("u")
+
+        assert.same(before_identity, pending.identity(buf))
+        assert.same(before_lines, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+        assert.equals(before_seq, vim.fn.undotree().seq_cur)
+    end)
+
     for _, key in ipairs({ "u", "<C-r>" }) do
-        it("confirmed " .. key .. " cancels its pending request without a second notice", function()
+        it("confirmed counted " .. key .. " mutates history before retiring without a second notice", function()
             local buf = open_simple_chat()
+            local before_response_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
             parley.dispatcher.query = function() end
             parley.chat_respond({ range = 0 })
             local pending = require("parley.chat_pending")
@@ -1380,8 +1402,30 @@ describe("chat_respond: pending request transcript drift", function()
             end
             vim.notify = function(message) table.insert(notices, message) end
 
-            feed_mapped(key)
+            make_history_edits()
+            local original_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+            local expected_lines
+            if key == "u" then
+                expected_lines = before_response_lines
+            else
+                vim.cmd("normal! 2u")
+                expected_lines = original_lines
+            end
+            local original_retire = pending.retire_stale_now
+            local mutation_seen_before_retire = false
+            pending.retire_stale_now = function(target, reason)
+                mutation_seen_before_retire = vim.deep_equal(
+                    expected_lines,
+                    vim.api.nvim_buf_get_lines(target, 0, -1, false)
+                )
+                return original_retire(target, reason)
+            end
 
+            feed_mapped("2" .. key)
+            pending.retire_stale_now = original_retire
+
+            assert.same(expected_lines, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+            assert.is_true(mutation_seen_before_retire)
             assert.is_nil(pending.identity(buf))
             assert.is_nil(pending_virtual_text(buf))
             assert.is_nil(require("parley.chat_lease").current(buf))
@@ -1390,6 +1434,25 @@ describe("chat_respond: pending request transcript drift", function()
             assert.same({}, notices)
         end)
     end
+
+    it("bounds a long multibyte agent label in the production prompt", function()
+        local long_model = string.rep("模型", 100) .. "TAIL_SECRET"
+        local buf = open_simple_chat("Long agent", nil, "- model: " .. long_model)
+        parley.dispatcher.query = function() end
+        parley.chat_respond({ range = 0 })
+        local prompt
+        require("parley.chat_history").confirm = function(message)
+            prompt = message
+            return 2
+        end
+
+        feed_mapped("u")
+
+        assert.is_not_nil(require("parley.chat_pending").identity(buf))
+        assert.is_true(#prompt <= 160)
+        assert.is_nil(prompt:find("TAIL_SECRET", 1, true))
+        assert.is_not_nil(vim.str_utfindex(prompt))
+    end)
 
     it("confirmed history cancellation leaves another chat request and handle active", function()
         local pending = require("parley.chat_pending")
