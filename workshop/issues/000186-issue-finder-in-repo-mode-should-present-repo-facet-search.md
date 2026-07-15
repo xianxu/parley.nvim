@@ -166,3 +166,11 @@ the prior selection.
 - Delta: require a complete multi-repository label set before enabling the bar,
   otherwise retain the existing unfiltered picker, and explicitly retain
   undiscovered facet-state keys.
+
+### 2026-07-14T17:01:00-07:00 — code-entry plan-quality gate
+
+- Reason: finder adapter fakes could not directly prove that the real picker's
+  live prompt and fuzzy query survive an in-place facet update.
+- Delta: add a production-shaped real `float_picker` regression before adapter
+  changes, while retaining adapter tests that prove facet callbacks use that
+  update path.

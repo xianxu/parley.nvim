@@ -144,8 +144,19 @@
 **Files:**
 - Modify: `lua/parley/chat_finder.lua:590-750`
 - Modify: `tests/unit/chat_finder_logic_spec.lua`
+- Modify: `tests/unit/float_picker_spec.lua`
 
-- [ ] **Step 1: Add a concrete passing characterization harness for Chat Finder facets**
+- [ ] **Step 1: Characterize real picker update query preservation**
+
+  Add a production-shaped test to `tests/unit/float_picker_spec.lua` that opens the real picker with a tag bar and an initial query of `"alpha"`, then finds the real prompt buffer, replaces its line with the prompt prefix plus the distinct whitespace-sensitive live query `"  alpha beta  "`, and executes the buffer's real `TextChanged` autocmd so `sync_query_from_prompt()` and `apply_filter()` run exactly as they do for user typing. Capture that exact prompt line, call the returned `picker.update()` with projected tags and items containing both `"alpha beta"` and `"alpha gamma"`, then assert the prompt line is byte-for-byte unchanged and only the `"alpha beta"` row remains visible. A stale initial/partial query would show both rows, so the result assertion independently proves update used the complete synchronized live query. Use the real prompt/results buffers and picker return value, not a capture fake.
+
+- [ ] **Step 2: Run the real picker characterization and record the green baseline**
+
+  Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/float_picker_spec.lua" -c "qa!"`
+
+  Expected: PASS on the existing `float_picker.update` implementation, proving the live prompt/query contract before finder adapters are changed. If it fails, stop and treat the picker defect as implementation work required by this issue before adapter refactoring.
+
+- [ ] **Step 3: Add a concrete passing characterization harness for Chat Finder facets**
 
   Add a `describe("ChatFinder facet compatibility")` block to `tests/unit/chat_finder_logic_spec.lua`. Reuse its real temporary chat roots and write three minimal chat markdown files whose frontmatter produces `alpha`, `beta`, and no tags. Replace `M.float_picker.open` with a capture fake that stores its `opts` and returns `{ update = function(new_items, new_tags) ... end }`; initialize `M._chat_finder.tag_state = { alpha = false, missing = false }` and `M._chat_finder.sticky_query` with a non-empty query before calling `M.cmd.ChatFinder()`.
 
@@ -157,13 +168,13 @@
   - the exact typed/sticky query is not reset by a facet update;
   - retained temporarily absent tag state is restored when that tag reappears.
 
-- [ ] **Step 2: Run the characterization spec and record the green baseline**
+- [ ] **Step 4: Run the Chat Finder characterization and record the green baseline**
 
   Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/chat_finder_logic_spec.lua" -c "qa!"`
 
   Expected: PASS on the existing inline implementation. These are characterization tests, so their green baseline proves the extraction preserves behavior; the pure model itself was developed red-green in Task 1.
 
-- [ ] **Step 3: Adapt Chat Finder to `finder_facets`**
+- [ ] **Step 5: Adapt Chat Finder to `finder_facets`**
 
   Require `parley.finder_facets` near the module imports. Replace only the inline collection/merge/filter/transition/projection block with calls to the pure API:
 
@@ -181,22 +192,24 @@
 
   `build_picker_data` filters through the model and then renders the same `{display, search_text = ordinal, value}` item shape. Tag callbacks assign the model's fresh state back to `_chat_finder.tag_state` before calling the existing `picker_ref.update`; leave `float_picker.lua`, tag-bar styling, recency, initial selection, and sticky-query handling unchanged.
 
-- [ ] **Step 4: Run focused Chat and facet specs**
+- [ ] **Step 6: Run focused Chat and facet specs**
 
   Run both headless commands from Tasks 1 and 2.
 
   Expected: PASS, including unchanged Chat Finder presentation and persistence behavior.
 
-- [ ] **Step 5: Run related picker/sticky regressions**
+- [ ] **Step 7: Run related picker/sticky regressions**
 
   Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/finder_sticky_spec.lua" -c "qa!"`
 
+  Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/float_picker_spec.lua" -c "qa!"`
+
   Expected: PASS.
 
-- [ ] **Step 6: Commit the Chat Finder adapter**
+- [ ] **Step 8: Commit the Chat Finder adapter**
 
   ```bash
-  git add lua/parley/chat_finder.lua tests/unit/chat_finder_logic_spec.lua
+  git add lua/parley/chat_finder.lua tests/unit/chat_finder_logic_spec.lua tests/unit/float_picker_spec.lua
   git commit -m "finder: #186 reuse facets in chat finder" -m "Keep the established facet UI and sticky-query behavior while moving its deterministic policy behind the reusable model.\n\nCo-Authored-By: Codex <noreply@openai.com>"
   ```
 
@@ -349,3 +362,13 @@
   Then run `sdlc close --issue 186 --verified '<focused specs, traceability specs, make test, git diff --check, and final diff-review evidence>'`; add `--no-atlas` only if the atlas gate does not recognize the already committed atlas update and explain that exact mismatch in the evidence. The command owns the mandatory fresh-context boundary review; fix every Critical/Important finding and rerun the same close command until it succeeds.
 
   Publish using the next action reported by `sdlc state`/`sdlc close` (`sdlc pr` then `sdlc merge` on a feature branch, or `sdlc push` only if the workflow remained on main).
+
+## Revisions
+
+### 2026-07-14T17:01:00-07:00 — code-entry plan-quality gate
+
+- Reason: adapter capture fakes could prove that callbacks use `picker.update`,
+  but could not prove the real picker preserves its live prompt and fuzzy query.
+- Delta: add a production-shaped `float_picker_spec.lua` characterization that
+  opens the real picker, updates items/tags in place, and compares prompt text
+  byte-for-byte while confirming filtering still uses the same query.
