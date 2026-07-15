@@ -28,6 +28,19 @@ local function find_any_float_win()
     return nil
 end
 
+local function find_float_win_with_text(text)
+    for _, win in ipairs(vim.api.nvim_list_wins()) do
+        local ok, cfg = pcall(vim.api.nvim_win_get_config, win)
+        if ok and cfg.relative ~= "" then
+            local lines = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(win), 0, -1, false)
+            if table.concat(lines, "\n"):find(text, 1, true) then
+                return win
+            end
+        end
+    end
+    return nil
+end
+
 -- Helper: return {width, height, row, col} for the float window config.
 local function float_layout(win)
     local cfg = vim.api.nvim_win_get_config(win)
@@ -177,6 +190,31 @@ describe("float_picker", function()
             assert.is_true(warned)
         end)
 
+        it("opens an empty picker when facets can restore its items", function()
+            local picker = float_picker.open({
+                title = "Test",
+                items = {},
+                tag_bar = {
+                    tags = { { label = "alpha", enabled = false } },
+                    on_toggle = function() end,
+                    on_all = function() end,
+                    on_none = function() end,
+                },
+                on_select = function() end,
+            })
+
+            assert.is_table(picker)
+            assert.is_function(picker.update)
+            assert.is_not_nil(find_float_win_with_text("(no matches)"))
+
+            picker.update(
+                { { display = "alpha item", search_text = "alpha item", value = 1 } },
+                { { label = "alpha", enabled = true } }
+            )
+
+            assert.is_not_nil(find_float_win_with_text("alpha item"))
+        end)
+
         it("truncates long items with an ellipsis", function()
             float_picker.open({
                 title = "Test",
@@ -208,6 +246,43 @@ describe("float_picker", function()
             assert.equals(2, #lines)
             assert.equals("", lines[1])
             assert.truthy(lines[2]:find("beta", 1, true))
+        end)
+
+        it("preserves a synchronized live query when items and facets update", function()
+            local picker = float_picker.open({
+                title = "Test",
+                initial_query = "alpha",
+                items = {
+                    { display = "alpha beta", search_text = "alpha beta", value = 1 },
+                    { display = "alpha gamma", search_text = "alpha gamma", value = 2 },
+                },
+                tag_bar = {
+                    tags = { { label = "repo", enabled = true } },
+                    on_toggle = function() end,
+                    on_all = function() end,
+                    on_none = function() end,
+                },
+                on_select = function() end,
+            })
+
+            local prompt_buf = vim.api.nvim_get_current_buf()
+            local live_prompt = ">   alpha beta  "
+            vim.api.nvim_buf_set_lines(prompt_buf, 0, -1, false, { live_prompt })
+            vim.api.nvim_exec_autocmds("TextChanged", { buffer = prompt_buf })
+
+            picker.update({
+                { display = "alpha beta", search_text = "alpha beta", value = 1 },
+                { display = "alpha gamma", search_text = "alpha gamma", value = 2 },
+            }, { { label = "repo", enabled = false } })
+
+            assert.equals(live_prompt, vim.api.nvim_buf_get_lines(prompt_buf, 0, 1, false)[1])
+            local results_win = find_float_win_with_text("alpha beta")
+            assert.is_not_nil(results_win)
+            local results = table.concat(
+                vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(results_win), 0, -1, false),
+                "\n"
+            )
+            assert.is_nil(results:find("alpha gamma", 1, true))
         end)
     end)
 

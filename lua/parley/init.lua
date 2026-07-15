@@ -3148,6 +3148,7 @@ M._issue_finder = {
 	initial_index = nil,
 	initial_value = nil,
 	query = nil, -- Complete prompt query preserved across invocations
+	repo_facet_state = nil, -- Shared repo facet choices across issues/history and invocations
 }
 
 M._vision_finder = {

@@ -1,12 +1,13 @@
 ---
 id: 000186
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-14
 updated: 2026-07-14
-estimate_hours:
+estimate_hours: 5.0
 started: 2026-07-14T12:24:51-07:00
+actual_hours: 5.48
 ---
 
 # issue finder in repo mode should present repo facet search
@@ -17,16 +18,232 @@ check on the implementation and style of chat finder's facet search bar. we shou
 
 ## Problem
 
+Issue Finder aggregates issues from every member repository in super-repo mode,
+but the only repository discriminator is the `{repo}` prefix embedded in each
+result row. Users can type that prefix into the fuzzy query, but cannot quickly
+include/exclude repositories, select none, or restore all repositories through
+the facet UI already established by Chat Finder. Reopening Issue Finder or
+switching between its `issues` and `history` views must not discard either the
+typed search or repository selection.
+
 ## Spec
+
+### Extract Chat Finder's facet behavior as the canonical model
+
+Chat Finder's current facet behavior and styling are the reference contract.
+Extract its deterministic state/filter/projection behavior into a reusable
+finder-facet module without changing Chat Finder's visible behavior:
+
+- the picker renders `[ALL] [NONE]   [facet…]` through the existing
+  `float_picker` tag bar;
+- enabled, disabled, ALL, NONE, and mixed highlighting/click behavior remain
+  unchanged;
+- entries use OR semantics: an entry survives when any of its facets is
+  enabled;
+- discovered facets merge into persistent state, with new facets enabled by
+  default and prior choices preserved; temporarily undiscovered facet keys
+  remain in state so rediscovery restores the user's previous choice;
+- facet updates refresh the picker in place without clearing its query.
+
+The reusable module owns deterministic facet-state merging, filtering,
+ALL/NONE/toggle transitions, and projection to the picker tag list
+(`ARCH-DRY`, `ARCH-PURE`). Finder modules remain thin owners of their persistent
+session state and item-specific facet extraction.
+
+Chat Finder consumes the extracted module for its existing tag facets,
+including the empty-string untagged facet. Its current ordering, filtering,
+state persistence, mouse interaction, and query behavior are regression-locked;
+this issue does not redesign them.
+
+### Repository facets in Issue Finder
+
+Issue Finder supplies one facet per repository only when super-repo expansion
+returns a complete set of non-empty repository labels for every scanned root
+and at least two unique repositories. In ordinary single-root mode it supplies
+no facet bar, preserving the existing layout and behavior. A partially labelled
+or unlabelled expanded root set fails closed to the existing unfiltered picker:
+the entire repo facet bar is omitted and no repository filtering is applied.
+It must never show a partial bar whose NONE action leaves unrepresented rows
+visible or impossible to re-enable.
+
+Repository facet labels use the same deterministic ordering as the canonical
+facet model. The Issue Finder session owns one shared
+`repo_facet_state` across both `issues` and `history` views. Switching views,
+closing/reopening the finder, changing the fuzzy query, or toggling facets does
+not reset the other state. Newly discovered super-repo members default enabled
+without re-enabling a repository the user disabled earlier.
+
+Issue scanning, the existing issues/history partition, and view-specific sort
+run as today. Repository facet filtering then selects rows by `issue.repo_name`;
+the fuzzy picker query applies to the resulting items. Facet clicks use the
+existing in-place picker update so the complete typed query and current finder
+session remain intact (`ARCH-PURPOSE`). ALL enables every repository, NONE
+disables every repository, and an individual button toggles only that
+repository.
+
+If persisted facet state filters the initial result set to zero (notably after
+NONE), `float_picker` still opens when a non-empty facet bar is supplied,
+renders its existing no-matches state, and keeps ALL reachable. The picker's
+existing warning/early-return behavior remains unchanged for a genuinely empty
+picker with no usable facet bar.
+
+### Reuse boundary for #187
+
+#187 is not implemented here. It must be able to adopt the extracted facet
+model for Markdown Finder repository facets without changing the model API or
+copying Chat/Issue Finder policy. Item-to-facet mapping stays injected so tags,
+repositories, and future facet kinds can share the same state machine while
+retaining finder-specific entries and persistent state.
+
+### Relationship to the registry-driven finder in #115
+
+#186 is the registry-independent facet-policy engine and the incremental Chat
+Finder/Issue Finder adapter delivery that #115 will consume. It does not define
+type descriptors, registry facet declarations, a shared all-finder component,
+or migrate note/vision finders. #115 depends on this issue and must inject its
+registry-derived facet keys into `finder_facets` instead of implementing a
+second merge/transition/filter/projection state machine (`ARCH-DRY`,
+`ARCH-PURPOSE`). The engine deliberately has no dependency on #115/#116 so Chat
+and Issue Finder keep working when the discovery registry is absent or invalid.
+
+### Documentation and safety
+
+Update the Issue Finder lifecycle/behavior map and traceability for the shared
+facet model and super-repo repository bar. No new user notification or error
+path is introduced: incomplete repository labelling omits the entire bar and
+preserves the unfiltered picker. README changes are required only if an existing user-facing Issue
+Finder description mirrors the changed super-repo behavior.
 
 ## Done when
 
--
+- Chat Finder uses the extracted reusable facet model with no visible or state-behavior regression.
+- With a completely labelled super-repo root set containing at least two unique repositories, Issue Finder shows the existing `[ALL] [NONE]` facet-bar style followed by one toggle per repository; incomplete labelling omits the entire bar and repo filtering.
+- Repository toggles, ALL, and NONE filter Issue Finder rows in place with OR semantics while preserving the complete typed query.
+- Repository facet state persists across closes/reopens and across both `issues` and `history` views; newly discovered repositories default enabled without resetting prior choices.
+- Single-root Issue Finder remains unchanged and has no repository facet bar.
+- Pure tests pin facet merging/filtering/transitions/projection, and production-shaped tests cover Chat Finder compatibility plus Issue Finder super-repo filtering and persistence.
+- The shared boundary is directly reusable by #187 without copying finder-specific facet policy.
+- Atlas and traceability describe the new shared surface and Issue Finder behavior.
+
+## Estimate
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim             design=0.45 impl=0.55
+item: lua-neovim             design=0.45 impl=0.55
+item: lua-neovim             design=0.5 impl=0.55
+item: lua-neovim             design=0.5 impl=0.55
+item: cross-cutting-refactor design=0.12 impl=0.18
+item: atlas-docs             design=0.025 impl=0.06
+item: milestone-review       design=0.02 impl=0.2
+design-buffer: 0.15
+total: 5.0
+```
+
+The four Lua/Neovim primitives separately cover the reusable facet model plus
+Chat Finder adapter, the real-picker live-query characterization, the picker's
+facet-backed empty-state behavior, and the production-shaped Issue Finder
+repository-facet integration.
+The cross-cutting refactor item covers replacing Chat Finder's inline policy
+while preserving its established behavior. Design uses the thorough-spec
+discount; implementation values use the v3.1 40% ship-wall-clock calibration.
+No library shortcut applies because this extends the repo's existing Lua and
+float-picker surfaces. The implementation ranges credit substantial existing
+in-repo scaffolding: Chat Finder already implements the reference state machine,
+`float_picker.update` already exists, and both finder specs already have
+production-shaped fake/session harnesses. Registry descriptors and finder
+unification remain in #115 and are not estimated here. The calibration source
+is currently marked stale, so the number is provisional pending #127's
+recalibration.
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against
+`baseline-v3.1.md`. Method A only.*
 
 ## Plan
 
-- [ ]
+- [x] Extract and regression-lock Chat Finder's canonical facet model.
+- [x] Integrate persistent repository facets into super-repo Issue Finder.
+- [x] Cover single-root, multi-root, query, view, reopen, and new-repository behavior.
+- [x] Update atlas/traceability and pass focused plus full verification.
 
 ## Log
 
 ### 2026-07-14
+- 2026-07-14: closed — Focused finder_facets, chat_finder, float_picker, issue_finder, and finder_sticky specs passed; make test-spec SPEC=modes/super_repo and SPEC=issues/issue-management passed; fresh make test passed with 0 lint warnings/errors and all suites green; git diff --check and sdlc issue validate --issue 186 passed; REWORK finding resolved by replacing conceptual Core-concept labels with verified greppable Lua exports, entry points, helpers, and state paths.; review verdict: SHIP
+- 2026-07-14: closed — Focused finder_facets, chat_finder, float_picker, issue_finder, and finder_sticky specs passed; make test-spec SPEC=modes/super_repo and SPEC=issues/issue-management passed; fresh make test passed with 0 lint warnings/errors and all unit/integration/arch suites green; git diff --check and sdlc issue validate --issue 186 passed; final diff inspection confirmed one pure finder_facets policy with thin Chat/Issue adapters and persisted-NONE recovery.; review verdict: FIX-THEN-SHIP
+
+Claimed and designed the issue. The approved direction extracts Chat Finder's
+existing facet behavior unchanged, reuses it for persistent Issue Finder
+repository facets only in super-repo mode, and keeps the boundary generic for
+#187 (`ARCH-DRY`, `ARCH-PURE`, `ARCH-PURPOSE`).
+
+### 2026-07-14 — spec review revision
+
+Fresh-context review found mixed labelled/unlabelled roots ambiguous. The spec
+now omits the entire facet bar and all repo filtering unless every expanded
+root has a non-empty label and at least two unique repositories are present.
+It also preserves temporarily undiscovered facet keys so rediscovery restores
+the prior selection.
+
+### 2026-07-14 — implementation and verification
+
+Extracted the dependency-free `finder_facets` model and migrated Chat Finder's
+existing policy to it. Issue Finder now exposes repository facets only for
+complete multi-repository super-repo roots, preserves repo choices across
+issues/history and reopen, and refreshes in place without touching the query.
+`float_picker` now permits an initially empty list only when a usable facet bar
+can restore items, keeping ALL reachable after persisted NONE.
+
+Verification evidence: focused facet/Chat/Issue/picker/sticky specs passed;
+`make test-spec SPEC=modes/super_repo` and
+`make test-spec SPEC=issues/issue-management` passed; after correcting one
+new luacheck simplification warning, `make lint` passed with 0 warnings/0
+errors and the complete `make test` suite passed. Final diff inspection found
+one pure state machine with thin finder adapters (`ARCH-DRY`, `ARCH-PURE`,
+`ARCH-PURPOSE`).
+
+## Revisions
+
+### 2026-07-14T12:45:00-07:00 — fresh-context spec review
+
+- Reason: partial root labelling left ALL/NONE and unrepresented row behavior
+  undefined; rediscovery persistence was only implicit.
+- Delta: require a complete multi-repository label set before enabling the bar,
+  otherwise retain the existing unfiltered picker, and explicitly retain
+  undiscovered facet-state keys.
+
+### 2026-07-14T17:01:00-07:00 — code-entry plan-quality gate
+
+- Reason: finder adapter fakes could not directly prove that the real picker's
+  live prompt and fuzzy query survive an in-place facet update.
+- Delta: add a production-shaped real `float_picker` regression before adapter
+  changes, while retaining adapter tests that prove facet callbacks use that
+  update path.
+
+### 2026-07-14T17:08:00-07:00 — cross-issue ownership review
+
+- Reason: #115 already owns registry-driven descriptor declarations and the
+  eventual shared finder component, creating an undeclared duplication risk.
+- Delta: define #186 as the registry-independent facet-policy engine and
+  current Chat/Issue adapter delivery; make #115 depend on and consume it rather
+  than reimplementing policy. Recalibrate the estimate while
+  naming the existing picker and test scaffolding credited by the derivation.
+
+### 2026-07-14T17:15:00-07:00 — executable dependency and estimate review
+
+- Reason: the plan recorded #115's dependency during planning but did not name
+  an execution-time verification step, and the real-picker characterization
+  was not separated as its own implementation primitive.
+- Delta: verify #115's dependency/ownership text before feature work and model
+  the real-picker regression as a third focused Lua/Neovim primitive, bringing
+  the calibrated ship-wall-clock estimate to 4.0 hours.
+
+### 2026-07-14T17:22:00-07:00 — persisted NONE recovery review
+
+- Reason: the current picker exits on zero initial items, so persisted NONE
+  would prevent Issue Finder from reopening its facet bar and make ALL
+  unreachable.
+- Delta: allow zero initial items only when a usable facet bar exists, cover
+  empty rendering/update behavior and NONE→reopen→ALL recovery, and add a fourth
+  Lua/Neovim primitive for a 5.0-hour calibrated estimate.

@@ -571,8 +571,10 @@ function M.open(opts)
     local on_cancel      = opts.on_cancel or function() end
     local on_query_change = opts.on_query_change or function() end
     local extra_mappings = opts.mappings or {}
+    local tag_bar_opts = opts.tag_bar  -- optional: { tags = [{label, enabled}], on_toggle = fn(label) }
+    local has_tag_bar = tag_bar_opts ~= nil and type(tag_bar_opts.tags) == "table" and #tag_bar_opts.tags > 0
 
-    if #items == 0 then
+    if #items == 0 and not has_tag_bar then
         vim.notify("No items to pick from", vim.log.levels.WARN)
         return
     end
@@ -586,9 +588,6 @@ function M.open(opts)
         return w
     end)()
     local desired_h = opts.height or #items
-
-    local tag_bar_opts = opts.tag_bar  -- optional: { tags = [{label, enabled}], on_toggle = fn(label) }
-    local has_tag_bar = tag_bar_opts ~= nil and type(tag_bar_opts.tags) == "table" and #tag_bar_opts.tags > 0
 
     local ui = vim.api.nvim_list_uis()[1] or { width = 80, height = 24 }
     local win_w, win_h, row, col, tag_bar_row, prompt_row = compute_layout(desired_w, desired_h, ui, has_tag_bar)
