@@ -1,11 +1,12 @@
 ---
 id: 000188
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-07-14
-updated: 2026-07-14
+updated: 2026-07-15
 estimate_hours:
+started: 2026-07-15T08:38:05-07:00
 ---
 
 # wrap facet bar across multiple lines
