@@ -4,6 +4,7 @@
 local M = {}
 local _parley
 local finder_sticky = require("parley.finder_sticky")
+local finder_facets = require("parley.finder_facets")
 
 -- Mtime-based metadata cache: avoids re-reading unchanged files on repeated opens.
 -- Key: resolved file path, Value: { mtime = number, topic = string, tags = {} }
@@ -586,71 +587,23 @@ M.open = function(options)
 
 		local entries = scan_chat_files(chat_roots, cutoff_time, is_filtering)
 
-		-- Collect all unique tags from current entries (for tag bar)
-		local all_tags_set = {}
-		local has_untagged = false
-		for _, entry in ipairs(entries) do
-			if #entry.tags == 0 then
-				has_untagged = true
-			else
-				for _, tag in ipairs(entry.tags) do
-					all_tags_set[tag] = true
-				end
-			end
+		local function chat_facets(entry)
+			return #entry.tags == 0 and { "" } or entry.tags
 		end
-		local all_tags = {}
-		for tag in pairs(all_tags_set) do
-			table.insert(all_tags, tag)
-		end
-		table.sort(all_tags)
-		if has_untagged then
-			table.insert(all_tags, "")  -- "" represents "no tag" files
-		end
-
-		-- Initialize or merge tag state
-		if _parley._chat_finder.tag_state == nil then
-			local state = {}
-			for _, tag in ipairs(all_tags) do
-				state[tag] = true
-			end
-			_parley._chat_finder.tag_state = state
-		else
-			-- New tags (not seen before) default to enabled
-			for _, tag in ipairs(all_tags) do
-				if _parley._chat_finder.tag_state[tag] == nil then
-					_parley._chat_finder.tag_state[tag] = true
-				end
-			end
-		end
+		local all_tags = finder_facets.discover(entries, chat_facets)
+		_parley._chat_finder.tag_state = finder_facets.merge_state(
+			_parley._chat_finder.tag_state,
+			all_tags
+		)
 
 		-- Build picker items and tag bar tags from entries + current tag_state.
 		-- Returns items list and tag_bar_tags list (or nil if no tags).
 		local function build_picker_data()
-			local any_tag_disabled = false
-			for _, enabled in pairs(_parley._chat_finder.tag_state) do
-				if not enabled then any_tag_disabled = true; break end
-			end
-
-			-- OR logic: include file if any of its tags is enabled.
-			-- Untagged files are included if the "" (no-tag) entry is enabled.
-			local tag_filtered_entries = entries
-			if any_tag_disabled then
-				local tag_state = _parley._chat_finder.tag_state
-				tag_filtered_entries = {}
-				for _, entry in ipairs(entries) do
-					local matches = false
-					if #entry.tags == 0 then
-						if tag_state[""] then matches = true end
-					else
-						for _, tag in ipairs(entry.tags) do
-							if tag_state[tag] then matches = true; break end
-						end
-					end
-					if matches then
-						table.insert(tag_filtered_entries, entry)
-					end
-				end
-			end
+			local tag_filtered_entries = finder_facets.filter(
+				entries,
+				_parley._chat_finder.tag_state,
+				chat_facets
+			)
 
 			local new_items = {}
 			for _, entry in ipairs(tag_filtered_entries) do
@@ -661,16 +614,7 @@ M.open = function(options)
 				})
 			end
 
-			local new_tag_bar_tags = nil
-			if #all_tags > 0 then
-				new_tag_bar_tags = {}
-				for _, tag in ipairs(all_tags) do
-					table.insert(new_tag_bar_tags, {
-						label = tag,
-						enabled = _parley._chat_finder.tag_state[tag] ~= false,
-					})
-				end
-			end
+			local new_tag_bar_tags = finder_facets.project(all_tags, _parley._chat_finder.tag_state)
 
 			return new_items, new_tag_bar_tags
 		end
@@ -735,15 +679,16 @@ M.open = function(options)
 				if picker_ref.update then picker_ref.update(new_items, new_tb_tags) end
 			end
 			local function set_all_tags(value)
-				for tag in pairs(_parley._chat_finder.tag_state) do
-					_parley._chat_finder.tag_state[tag] = value
-				end
+				_parley._chat_finder.tag_state = finder_facets.set_all(_parley._chat_finder.tag_state, value)
 				refresh_picker()
 			end
 			tag_bar = {
 				tags = tag_bar_tags,
 				on_toggle = function(tag_label)
-					_parley._chat_finder.tag_state[tag_label] = not _parley._chat_finder.tag_state[tag_label]
+					_parley._chat_finder.tag_state = finder_facets.toggle(
+						_parley._chat_finder.tag_state,
+						tag_label
+					)
 					refresh_picker()
 				end,
 				on_all  = function() set_all_tags(true)  end,

@@ -760,6 +760,69 @@ describe("ChatFinder logic", function()
             assert.matches("Shipping notes", captured.items[1].search_text)
         end)
 
+        it("keeps canonical facet behavior across toggles and rediscovery", function()
+            local captured = nil
+            local updates = {}
+            M.float_picker.open = function(opts)
+                captured = opts
+                return {
+                    update = function(items, tags)
+                        table.insert(updates, { items = items, tags = tags })
+                    end,
+                }
+            end
+
+            local function write_chat(name, topic, tags)
+                local file = io.open(tmpdir .. "/" .. name, "w")
+                local lines = { "---", "topic: " .. topic }
+                if tags then
+                    table.insert(lines, "tags: " .. tags)
+                end
+                table.insert(lines, "---")
+                table.insert(lines, "")
+                file:write(table.concat(lines, "\n"))
+                file:close()
+            end
+
+            write_chat("2026-02-04-10-00-00-alpha.md", "Alpha", "alpha")
+            write_chat("2026-02-03-10-00-00-beta.md", "Beta", "beta")
+            write_chat("2026-02-02-10-00-00-untagged.md", "Untagged")
+            M._chat_finder.tag_state = { alpha = false, missing = false }
+            M._chat_finder.sticky_query = "  [beta] exact  "
+
+            M.cmd.ChatFinder()
+
+            assert.same({
+                { label = "alpha", enabled = false },
+                { label = "beta", enabled = true },
+                { label = "", enabled = true },
+            }, captured.tag_bar.tags)
+            assert.is_false(M._chat_finder.tag_state.missing)
+            assert.is_true(M._chat_finder.tag_state.beta)
+
+            captured.tag_bar.on_toggle("beta")
+            assert.equals(1, #updates)
+            assert.equals(1, #updates[1].items)
+            assert.matches("untagged", updates[1].items[1].value)
+            assert.equals("  [beta] exact  ", M._chat_finder.sticky_query)
+
+            captured.tag_bar.on_none()
+            assert.equals(0, #updates[2].items)
+            captured.tag_bar.on_all()
+            assert.equals(3, #updates[3].items)
+
+            vim.fn.delete(tmpdir .. "/2026-02-03-10-00-00-beta.md")
+            M._chat_finder.opened = false
+            M.cmd.ChatFinder()
+            assert.is_true(M._chat_finder.tag_state.beta)
+
+            write_chat("2026-02-03-10-00-00-beta.md", "Beta", "beta")
+            M._chat_finder.tag_state.beta = false
+            M._chat_finder.opened = false
+            M.cmd.ChatFinder()
+            assert.is_false(M._chat_finder.tag_state.beta)
+        end)
+
         it("includes extra-root labels in finder search text", function()
             local captured = nil
             M.float_picker.open = function(opts)
