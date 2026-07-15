@@ -16,9 +16,9 @@
 
 | Name | Lives in | Status |
 |------|----------|--------|
-| `FinderFacetModel` | `lua/parley/finder_facets.lua` | new |
+| `M.discover`, `M.merge_state`, `M.toggle`, `M.set_all`, `M.filter`, `M.project` | `lua/parley/finder_facets.lua` | new |
 
-- **FinderFacetModel** — deterministic functions for merging discovered facet keys into persistent state, applying ALL/NONE/toggle transitions, OR-filtering entries by injected facet keys, and projecting ordered picker tags.
+- **`finder_facets` exports** — deterministic functions for merging discovered facet keys into persistent state, applying ALL/NONE/toggle transitions, OR-filtering entries by injected facet keys, and projecting ordered picker tags.
   - **Relationships:** one model serves N finder adapters; each finder session owns one state table; each entry maps to 0..N facet keys.
   - **DRY rationale:** it replaces Chat Finder's inline facet state machine and prevents Issue Finder and #187 from copying the same policy (`ARCH-DRY`, `ARCH-PURE`).
   - **Future extensions:** #187 can inject repository keys for Markdown Finder without changing the model; #115's registry-driven shared finder must consume this engine by injecting descriptor-derived keys rather than defining parallel facet policy. Registry/type-descriptor declarations and finder unification remain outside #186.
@@ -27,17 +27,17 @@
 
 | Name | Lives in | Status | Wraps |
 |------|----------|--------|-------|
-| `ChatFinderFacetAdapter` | `lua/parley/chat_finder.lua` | modified | chat scan entries, `_chat_finder.tag_state`, and `float_picker` |
-| `IssueFinderRepoFacetAdapter` | `lua/parley/issue_finder.lua` | modified | super-repo roots, issue scans, `_issue_finder.repo_facet_state`, and `float_picker` |
-| `IssueFinderSessionState` | `lua/parley/init.lua` | modified | persistent in-memory finder state |
+| `M.open` / local `chat_facets` / local `build_picker_data` | `lua/parley/chat_finder.lua` | modified | chat scan entries, `_chat_finder.tag_state`, and `float_picker` |
+| `M.open` / `eligible_repo_facets` / local `build_picker_data` | `lua/parley/issue_finder.lua` | modified | super-repo roots, issue scans, `_issue_finder.repo_facet_state`, and `float_picker` |
+| `_issue_finder.repo_facet_state` | `lua/parley/init.lua` | modified | persistent in-memory finder state |
 
-- **ChatFinderFacetAdapter** — maps each chat entry's tags (or `""` for untagged) into the pure model and converts surviving entries back into the exact current picker items.
+- **Chat Finder `M.open` facet locals** — map each chat entry's tags (or `""` for untagged) into the pure model and convert surviving entries back into the exact current picker items.
   - **Injected into:** `FinderFacetModel` receives the entry-to-facets function; the adapter supplies model output to the existing float picker.
   - **Future extensions:** Chat-specific recency and sticky-query behavior remain outside the model.
-- **IssueFinderRepoFacetAdapter** — enables repo facets only when all expanded roots have non-empty labels and at least two unique labels, maps `issue.repo_name` into the model, and updates the picker in place.
+- **Issue Finder `M.open` plus `eligible_repo_facets`** — enable repo facets only when all expanded roots have non-empty labels and at least two unique labels, map `issue.repo_name` into the model, and update the picker in place.
   - **Injected into:** `FinderFacetModel` receives repository keys only after the complete-label eligibility check; scanner and picker stay fakeable in production-shaped tests.
   - **Future extensions:** the same eligibility adapter pattern can be reused by Markdown Finder in #187.
-- **IssueFinderSessionState** — owns one `repo_facet_state` shared by issue/history views and later invocations.
+- **`_issue_finder.repo_facet_state`** — owns one state table shared by issue/history views and later invocations.
   - **Injected into:** `IssueFinderRepoFacetAdapter` reads and replaces/merges this table while the existing `query` field remains independent.
   - **Future extensions:** additional persistent Issue Finder presentation preferences belong beside, not inside, the pure model.
 
@@ -448,3 +448,11 @@ if any command fails.
 - Delta: add a red-green `float_picker` empty-with-facets contract, retain the
   non-faceted empty warning path, add NONE→reopen→ALL adapter coverage, and
   recalibrate to 5.0 ship-hours.
+
+### 2026-07-14T17:27:00-07:00 — boundary-review Core concepts correction
+
+- Reason: the Core concepts table used conceptual labels that were not
+  greppable code entities, contradicting the table's review contract.
+- Delta: replace them with the actual exported functions, local adapter helpers,
+  finder entry points, and `_issue_finder.repo_facet_state`; classifications and
+  implementation behavior are unchanged.
