@@ -244,6 +244,15 @@ stale by `sdlc estimate-source`, so this derivation is provisional.
   AST plus path-existence GREEN audit printed `traceability semantic audit:
   PASS (no duplicate mapping keys; all code/test paths exist)`.
 
+### 2026-07-15 — close-boundary readiness
+
+- Fresh post-repair verification passed all 10 `ui/pickers` mapped files (245
+  tests, 0 failures/errors), the complete serialized repository suite, and
+  Luacheck across 273 files with 0 warnings/errors.
+- Fresh spec and quality re-reviews approved the corrected Task 5 slice with no
+  Critical, Important, or Minor findings. The sole close-boundary plan step is
+  checked for the binary-owned boundary review.
+
 ## Revisions
 
 ### 2026-07-15

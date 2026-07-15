@@ -385,7 +385,7 @@
   git commit -m "docs: #188 map wrapped facet bars"
   ```
 
-- [ ] **Step 7: Cross the single SDLC close boundary**
+- [x] **Step 7: Cross the single SDLC close boundary**
 
   Run `sdlc close --issue 188 --verified '<focused and full-suite evidence>'`
   without a milestone tag. Follow the gate's measured-actual and atlas guidance;
