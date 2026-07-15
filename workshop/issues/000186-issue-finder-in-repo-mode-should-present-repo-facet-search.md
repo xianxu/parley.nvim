@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-07-14
 updated: 2026-07-14
-estimate_hours: 2.24
+estimate_hours: 2.75
 started: 2026-07-14T12:24:51-07:00
 ---
 
@@ -88,6 +88,17 @@ copying Chat/Issue Finder policy. Item-to-facet mapping stays injected so tags,
 repositories, and future facet kinds can share the same state machine while
 retaining finder-specific entries and persistent state.
 
+### Relationship to the registry-driven finder in #115
+
+#186 is the registry-independent facet-policy engine and the incremental Chat
+Finder/Issue Finder adapter delivery that #115 will consume. It does not define
+type descriptors, registry facet declarations, a shared all-finder component,
+or migrate note/vision finders. #115 depends on this issue and must inject its
+registry-derived facet keys into `finder_facets` instead of implementing a
+second merge/transition/filter/projection state machine (`ARCH-DRY`,
+`ARCH-PURPOSE`). The engine deliberately has no dependency on #115/#116 so Chat
+and Issue Finder keep working when the discovery registry is absent or invalid.
+
 ### Documentation and safety
 
 Update the Issue Finder lifecycle/behavior map and traceability for the shared
@@ -112,13 +123,13 @@ Finder description mirrors the changed super-repo behavior.
 ```estimate
 model: estimate-logic-v3.1
 familiarity: 1.0
-item: lua-neovim             design=0.4 impl=0.4
-item: lua-neovim             design=0.4 impl=0.4
-item: cross-cutting-refactor design=0.12 impl=0.14
-item: atlas-docs             design=0.025 impl=0.05
-item: milestone-review       design=0.02 impl=0.14
+item: lua-neovim             design=0.45 impl=0.55
+item: lua-neovim             design=0.45 impl=0.55
+item: cross-cutting-refactor design=0.12 impl=0.18
+item: atlas-docs             design=0.025 impl=0.06
+item: milestone-review       design=0.02 impl=0.18
 design-buffer: 0.15
-total: 2.24
+total: 2.75
 ```
 
 The two Lua/Neovim primitives cover the reusable facet model plus Chat Finder
@@ -127,8 +138,13 @@ The cross-cutting refactor item covers replacing Chat Finder's inline policy
 while preserving its established behavior. Design uses the thorough-spec
 discount; implementation values use the v3.1 40% ship-wall-clock calibration.
 No library shortcut applies because this extends the repo's existing Lua and
-float-picker surfaces. The calibration source is currently marked stale, so
-the number is provisional pending #127's recalibration.
+float-picker surfaces. The implementation ranges credit substantial existing
+in-repo scaffolding: Chat Finder already implements the reference state machine,
+`float_picker.update` already exists, and both finder specs already have
+production-shaped fake/session harnesses. Registry descriptors and finder
+unification remain in #115 and are not estimated here. The calibration source
+is currently marked stale, so the number is provisional pending #127's
+recalibration.
 
 *Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against
 `baseline-v3.1.md`. Method A only.*
@@ -174,3 +190,12 @@ the prior selection.
 - Delta: add a production-shaped real `float_picker` regression before adapter
   changes, while retaining adapter tests that prove facet callbacks use that
   update path.
+
+### 2026-07-14T17:08:00-07:00 — cross-issue ownership review
+
+- Reason: #115 already owns registry-driven descriptor declarations and the
+  eventual shared finder component, creating an undeclared duplication risk.
+- Delta: define #186 as the registry-independent facet-policy engine and
+  current Chat/Issue adapter delivery; make #115 depend on and consume it rather
+  than reimplementing policy. Recalibrate the estimate to 2.75 hours while
+  naming the existing picker and test scaffolding credited by the derivation.

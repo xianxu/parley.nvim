@@ -21,7 +21,7 @@
 - **FinderFacetModel** — deterministic functions for merging discovered facet keys into persistent state, applying ALL/NONE/toggle transitions, OR-filtering entries by injected facet keys, and projecting ordered picker tags.
   - **Relationships:** one model serves N finder adapters; each finder session owns one state table; each entry maps to 0..N facet keys.
   - **DRY rationale:** it replaces Chat Finder's inline facet state machine and prevents Issue Finder and #187 from copying the same policy (`ARCH-DRY`, `ARCH-PURE`).
-  - **Future extensions:** #187 can inject repository keys for Markdown Finder without changing the model; other finders can supply tags or future facet kinds while keeping their own item rendering.
+  - **Future extensions:** #187 can inject repository keys for Markdown Finder without changing the model; #115's registry-driven shared finder must consume this engine by injecting descriptor-derived keys rather than defining parallel facet policy. Registry/type-descriptor declarations and finder unification remain outside #186.
 
 ### Integration points
 
@@ -194,7 +194,13 @@
 
 - [ ] **Step 6: Run focused Chat and facet specs**
 
-  Run both headless commands from Tasks 1 and 2.
+  Run:
+
+  ```bash
+  nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/finder_facets_spec.lua" -c "qa!"
+  nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/chat_finder_logic_spec.lua" -c "qa!"
+  nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/float_picker_spec.lua" -c "qa!"
+  ```
 
   Expected: PASS, including unchanged Chat Finder presentation and persistence behavior.
 
@@ -372,3 +378,11 @@
 - Delta: add a production-shaped `float_picker_spec.lua` characterization that
   opens the real picker, updates items/tags in place, and compares prompt text
   byte-for-byte while confirming filtering still uses the same query.
+
+### 2026-07-14T17:08:00-07:00 — cross-issue ownership review
+
+- Reason: #115's future registry-driven shared finder also names Issue Finder
+  repository facets and could otherwise grow a parallel state machine.
+- Delta: declare `finder_facets` as the registry-independent policy engine that
+  #115 must consume; leave descriptor declarations and finder unification to
+  #115, and add #186 as its dependency.
