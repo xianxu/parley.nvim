@@ -68,27 +68,27 @@
 - Create: `tests/unit/repo_mode_spec.lua`
 - Modify: `atlas/traceability.yaml`
 
-- [ ] **Step 1: Write failing pure-policy tests**
+- [x] **Step 1: Write failing pure-policy tests**
 
 Cover `resolve(repo_modes, canonical_root)` returning `nil` for non-table maps, empty/non-string roots, missing entries, and unknown values; returning exact valid values; and keeping repo A isolated from repo B. Cover `updated(repo_modes, root, mode)` returning a fresh map, preserving only valid entries with non-empty string roots, discarding malformed entries, replacing the current root, starting empty for non-table input, and never mutating its input.
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/repo_mode_spec.lua" -c "qa!"`
 
 Expected: FAIL because `parley.repo_mode` does not exist.
 
-- [ ] **Step 3: Implement the minimal pure module**
+- [x] **Step 3: Implement the minimal pure module**
 
 Create `repo_mode.resolve` and `repo_mode.updated` around one private exact-value predicate. Do not call `vim`, touch files, or mutate arguments. Add the module and unit spec to the existing `modes/super_repo` traceability entry.
 
-- [ ] **Step 4: Run the focused test and verify GREEN**
+- [x] **Step 4: Run the focused test and verify GREEN**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/repo_mode_spec.lua" -c "qa!"`
 
 Expected: PASS with zero failures.
 
-- [ ] **Step 5: Commit the pure policy**
+- [x] **Step 5: Commit the pure policy**
 
 Commit: `super-repo: #190 add pure persisted-mode policy`
 
