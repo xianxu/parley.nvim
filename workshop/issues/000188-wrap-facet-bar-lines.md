@@ -133,7 +133,7 @@ stale by `sdlc estimate-source`, so this derivation is provisional.
 - [x] Teach the shared facet window, highlights, and mouse hit testing to consume
   the multi-row layout.
 - [x] Recompute facet height and prompt placement on open, resize, and update.
-- [ ] Run focused picker/finder regressions and the full test suite.
+- [x] Run focused picker/finder regressions and the full test suite.
 
 ## Log
 
@@ -211,6 +211,22 @@ stale by `sdlc estimate-source`, so this derivation is provisional.
 - Headless Neovim has no attached mouse grid for a native viewport probe, so
   fallthrough is enforced through returned raw termcodes plus expression and
   nonrecursive mapping metadata in all three modes.
+
+### 2026-07-15 — Task 5 documentation and verification
+
+- `make test-spec SPEC=ui/pickers` passed all 10 mapped files: 245 tests, 0
+  failures, and 0 errors. This includes automated headless UI coverage for
+  exact wrapping and highlights, extended graphemes, open/resize/update reflow,
+  active and zero-height facet-window transitions, `topline`-aware clicks and
+  wheel scrolling in every picker mode, native outside-bar fallthrough, and
+  single-row/query-preserving compatibility.
+- `make test JOBS=1` passed every emitted unit, architecture, and integration
+  spec file serially; Luacheck inspected 273 files with 0 warnings and 0 errors.
+- `git diff --check` reported no whitespace errors, and
+  `sdlc issue validate --issue 188` confirmed the issue schema conforms.
+- Atlas traceability now maps the pure positional authority and both focused
+  regression suites under `ui/pickers` (`ARCH-DRY`, `ARCH-PURE`,
+  `ARCH-PURPOSE`).
 
 ## Revisions
 

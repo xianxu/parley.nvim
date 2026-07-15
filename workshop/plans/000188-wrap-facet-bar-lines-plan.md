@@ -345,20 +345,20 @@
 - Modify: `workshop/issues/000188-wrap-facet-bar-lines.md`
 - Modify: `workshop/plans/000188-wrap-facet-bar-lines-plan.md`
 
-- [ ] **Step 1: Update the picker atlas and traceability map**
+- [x] **Step 1: Update the picker atlas and traceability map**
 
   Describe controlled multi-row layout, dynamic stacked geometry, capped-window
   scrolling, and the single model for render/highlight/hits. Add
   `lua/parley/facet_bar_layout.lua`, `tests/unit/facet_bar_layout_spec.lua`, and
   `tests/unit/float_picker_tag_bar_spec.lua` to `ui/pickers`.
 
-- [ ] **Step 2: Run focused verification**
+- [x] **Step 2: Run focused verification**
 
   Run: `make test-spec SPEC=ui/pickers`
 
   Expected: PASS for every test mapped to the picker spec.
 
-- [ ] **Step 3: Run the full verification suite serially**
+- [x] **Step 3: Run the full verification suite serially**
 
   Run: `make test JOBS=1`
 
@@ -366,19 +366,19 @@
   test files pass. Serial execution avoids the known shared-test-environment
   race in `tools_builtin_find_spec.lua`.
 
-- [ ] **Step 4: Check the final diff and issue schema**
+- [x] **Step 4: Check the final diff and issue schema**
 
   Run: `git diff --check && sdlc issue validate --issue 188`
 
   Expected: no whitespace errors; issue #188 conforms.
 
-- [ ] **Step 5: Record evidence and complete checkboxes**
+- [x] **Step 5: Record evidence and complete checkboxes**
 
   Tick each implemented issue/plan checkbox and append a dated `## Log` entry
   with focused/full verification evidence and any manual UI observation. Do not
   rewrite earlier log or revision entries.
 
-- [ ] **Step 6: Commit documentation and completion evidence**
+- [x] **Step 6: Commit documentation and completion evidence**
 
   ```bash
   git add atlas/ui/pickers.md atlas/traceability.yaml workshop/issues/000188-wrap-facet-bar-lines.md workshop/plans/000188-wrap-facet-bar-lines-plan.md

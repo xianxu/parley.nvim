@@ -17,12 +17,29 @@ The chat finder additionally pre-seeds `{}` (the primary chat root, which in rep
 Pickers that opt in via `recall_key` remember the id of the last `<CR>`-confirmed item (in-memory only) and place the cursor there on the next open. `recall_id_fn` lets callers point at the stable identity field (defaults to `item.value`; e.g. `item.name` for agent_picker, `item.dir` for root_dir_picker). Stale recall (id no longer present in items) silently falls through to whatever `initial_index` resolves — typically the first item. Cancel/`<Esc>` does not update recall; only confirmation does. Storage lives on `float_picker._last_selection` keyed by the picker's `recall_key`.
 
 ## Tag Bar
-Optional filterable row between results and prompt. The canonical pure model is
+Optional filterable bar between results and prompt. The canonical pure facet
+state model is
 `lua/parley/finder_facets.lua`: source/alphabetical discovery, contextual label
 eligibility, immutable persistent-state merge/toggle/set-all transitions, OR
 filtering, and picker-tag projection. Callers choose the facet domain, own its
 state, and translate the model into the common `[ALL] [NONE] [facet…]` bar;
-`float_picker` renders it and fires callbacks.
+they carry no finder-specific wrapping logic.
+
+`facet_bar_layout.build/hit` is the shared pure positional authority. It packs
+buttons into deterministic display-width-aware rows and records semantic byte
+and display-cell spans; rendering, highlights, and mouse hits all consume that
+same model. The `float_picker` adapter injects Neovim extended-grapheme units,
+renders the model, and dynamically sizes/reflows the results, facet, and prompt
+floats on open, resize, and update. Facet activation transitions create or
+remove the optional window, while the valid zero-height fallback retains the
+logical model without opening an invalid float.
+
+When vertical space caps the facet float, its buffer retains every row. Mouse
+wheel input over the bar scrolls its viewport, and hit testing translates
+visible screen coordinates through the window `topline` to model row/cell
+coordinates; wheel input outside the bar falls through to Neovim. A bar that
+fits on one visible row keeps the established presentation, callbacks, and
+query-preserving update behavior.
 
 Markdown Finder selects exactly one contextual domain. Ordinary mode shows
 source-ordered top-level directory facets (when at least two exist), while an
