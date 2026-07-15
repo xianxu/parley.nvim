@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-07-15
 updated: 2026-07-15
-estimate_hours:
+estimate_hours: 2.75
 started: 2026-07-15T12:00:53-07:00
 ---
 
@@ -119,6 +119,21 @@ The mode toggle also uses `<C-g>S`, while the desired mnemonic is `<C-g>p` for
   regressions.
 - [ ] Reconcile user-facing and atlas documentation; run mapped and full tests.
 
+## Estimate
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim design=0.50 impl=1.60
+item: atlas-docs design=0.15 impl=0.20
+item: milestone-review design=0.00 impl=0.20
+design-buffer: 0.15
+total: 2.75
+```
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md`
+against `baseline-v3.1.md`. Method A only.*
+
 ## Log
 
 ### 2026-07-15
@@ -153,3 +168,10 @@ The mode toggle also uses `<C-g>S`, while the desired mnemonic is `<C-g>p` for
   super-repo state still appeared active.
 - Delta: require exactly one restoration after all setup refreshes and verify
   the complete live sibling chat/note overlay in the default-agent setup path.
+
+### 2026-07-15 — implementation planning
+
+- Reason: the approved multi-file behavior needs a durable, test-first execution
+  record before crossing the code-change gate.
+- Delta: added the reconciled v3.1 estimate and detailed implementation plan at
+  `workshop/plans/000190-persist-repo-super-repo-state-across-nvim-sessions-plan.md`.
