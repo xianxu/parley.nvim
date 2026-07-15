@@ -376,11 +376,15 @@ atlas:
     code:
       - lua/parley/custom_prompts.lua
       - lua/parley/system_prompt_msgs.lua
+      - lua/parley/system_prompt_picker.lua
       - lua/parley/agent_info.lua
       - lua/parley/chat_respond.lua
+      - lua/parley/init.lua
     tests:
       - tests/unit/system_prompt_msgs_spec.lua
       - tests/unit/build_messages_spec.lua
+      - tests/unit/custom_prompts_spec.lua
+      - tests/unit/picker_items_spec.lua
 
   providers/tool_use:
     code:
@@ -424,15 +428,6 @@ atlas:
       - tests/unit/anthropic_tool_encode_spec.lua
       - tests/unit/config_tools_spec.lua
       - tests/unit/parley_harness_golden_spec.lua
-
-  providers/system_prompts:
-    code:
-      - lua/parley/custom_prompts.lua
-      - lua/parley/system_prompt_picker.lua
-      - lua/parley/init.lua
-    tests:
-      - tests/unit/custom_prompts_spec.lua
-      - tests/unit/picker_items_spec.lua
 
   infra/openshell:
     code:
@@ -511,7 +506,6 @@ atlas:
 
   ui/pickers:
     code:
-      - lua/parley/chat_dir_picker.lua
       - lua/parley/chat_dirs.lua
       - lua/parley/chat_finder.lua
       - lua/parley/note_finder.lua

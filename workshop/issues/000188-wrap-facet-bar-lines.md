@@ -231,6 +231,19 @@ stale by `sdlc estimate-source`, so this derivation is provisional.
   "traceability YAML: valid"'` parsed the traceability map successfully and
   printed `traceability YAML: valid`.
 
+### 2026-07-15 — Task 5 traceability quality follow-up
+
+- Root cause: independently added `providers/system_prompts` mappings shared a
+  scalar key, so ordinary YAML loading silently shadowed the earlier code/test
+  set; `ui/pickers` also retained `lua/parley/chat_dir_picker.lua` after
+  `a3d9bed` deliberately deleted that dormant UI. The RED semantic audit
+  reported exactly `duplicate key atlas/providers/system_prompts at line 428`
+  and `missing ui/pickers/code: lua/parley/chat_dir_picker.lua`.
+- Merged the system-prompt mapping as the duplicate-free union and removed only
+  the stale picker path (`ARCH-DRY`, `ARCH-PURPOSE`). The duplicate-aware Psych
+  AST plus path-existence GREEN audit printed `traceability semantic audit:
+  PASS (no duplicate mapping keys; all code/test paths exist)`.
+
 ## Revisions
 
 ### 2026-07-15
