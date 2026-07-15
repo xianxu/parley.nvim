@@ -61,7 +61,7 @@
 - Test: `tests/unit/finder_facets_spec.lua`
 - Test: `tests/unit/issue_finder_spec.lua`
 
-- [ ] **Step 1: Write failing pure eligibility tests**
+- [x] **Step 1: Write failing pure eligibility tests**
 
 Add cases proving `discover` retains its sorted default and can preserve stable
 first appearance when explicitly requested. Add eligibility cases proving
@@ -74,13 +74,13 @@ assert.is_nil(finder_facets.eligible_labels({ { repo_name = "alpha" }, {} }, tru
 assert.same({ "alpha", "beta" }, finder_facets.eligible_labels(valid_roots, true, labels))
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/finder_facets_spec.lua" -c "qa!"`
 
 Expected: FAIL because `eligible_labels` does not exist.
 
-- [ ] **Step 3: Implement ordered discovery and `eligible_labels` minimally**
+- [x] **Step 3: Implement ordered discovery and `eligible_labels` minimally**
 
 Extend `discover` with an optional ordering argument whose default remains
 alphabetical and whose explicit source-order mode preserves first appearance.
@@ -88,11 +88,11 @@ Validate every projected eligibility label as a non-empty string, use the
 default `discover` behavior for sorted/deduplicated output, and require at least
 two labels. Do not mutate roots or store state.
 
-- [ ] **Step 4: Replace Issue Finder's private eligibility helper**
+- [x] **Step 4: Replace Issue Finder's private eligibility helper**
 
 Delete `eligible_repo_facets`; call the shared helper with `root.repo_name`. Keep existing #186 behavior byte-for-byte and add/retain the integration assertions for incomplete, duplicated, and valid roots.
 
-- [ ] **Step 5: Run focused regressions and verify GREEN**
+- [x] **Step 5: Run focused regressions and verify GREEN**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/finder_facets_spec.lua" -c "qa!"`
 
@@ -100,7 +100,7 @@ Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedF
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit the shared policy**
+- [x] **Step 6: Commit the shared policy**
 
 ```bash
 git add lua/parley/finder_facets.lua lua/parley/issue_finder.lua tests/unit/finder_facets_spec.lua tests/unit/issue_finder_spec.lua
@@ -113,7 +113,7 @@ git commit -m "finder: #187 share facet eligibility" -m "Centralize labelled-roo
 - Modify: `lua/parley/markdown_finder.lua`
 - Create: `tests/unit/markdown_finder_spec.lua`
 
-- [ ] **Step 1: Write failing policy tests**
+- [x] **Step 1: Write failing policy tests**
 
 Drive `markdown_finder.build_picker_data` with plain Lua tables and assert:
 
@@ -136,13 +136,13 @@ alphabetical order; stable empty-member labels; ineligible active expansion
 returning all rows with no bar; eligible zero-row expansion retaining its bar;
 new labels default-on; absent labels retain state; and input/state non-mutation.
 
-- [ ] **Step 2: Run the new test and verify RED**
+- [x] **Step 2: Run the new test and verify RED**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/markdown_finder_spec.lua" -c "qa!"`
 
 Expected: FAIL because `build_picker_data` is not exported.
 
-- [ ] **Step 3: Implement the pure policy**
+- [x] **Step 3: Implement the pure policy**
 
 Use `finder_facets.eligible_labels`, `discover`, `merge_state`, `filter`, and
 `project`. Return fresh `{ items, tags, facet_domain, directory_state,
@@ -152,7 +152,7 @@ sorting, and appear only when at least two distinct directories exist.
 Super-repo facets come from eligible runtime member roots in canonical sorted
 order and never mix directory keys.
 
-- [ ] **Step 4: Run policy and canonical helper suites**
+- [x] **Step 4: Run policy and canonical helper suites**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/markdown_finder_spec.lua" -c "qa!"`
 
@@ -160,7 +160,7 @@ Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedF
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit the pure policy**
+- [x] **Step 5: Commit the pure policy**
 
 ```bash
 git add lua/parley/markdown_finder.lua tests/unit/markdown_finder_spec.lua
@@ -175,7 +175,7 @@ git commit -m "finder: #187 model contextual markdown facets" -m "Compose the sh
 - Test: `tests/unit/markdown_finder_spec.lua`
 - Test: `tests/unit/super_repo_spec.lua`
 
-- [ ] **Step 1: Add failing finder-entry tests with a fake picker**
+- [x] **Step 1: Add failing finder-entry tests with a fake picker**
 
 Set up a fake Parley shell and runtime `super_repo.get_state`. Assert the actual `open` options/callbacks provide:
 
@@ -193,13 +193,13 @@ valid member path independently of label validity and uses a safe display/search
 prefix only when the label is a non-empty string. It must not concatenate an
 invalid label or discard that member's successfully scanned rows.
 
-- [ ] **Step 2: Run the finder-entry suite and verify RED**
+- [x] **Step 2: Run the finder-entry suite and verify RED**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/markdown_finder_spec.lua" -c "qa!"`
 
 Expected: FAIL against the module-local `_tag_state`, structured-only sticky query, and config-cache member lookup.
 
-- [ ] **Step 3: Replace hidden state with `_markdown_finder` session fields**
+- [x] **Step 3: Replace hidden state with `_markdown_finder` session fields**
 
 Initialize in `lua/parley/init.lua`:
 
@@ -213,15 +213,15 @@ M._markdown_finder = {
 
 Remove `_tag_state` and Markdown's `finder_sticky` dependency. Store every query callback value verbatim, including `""`, and pass the exact stored value as `initial_query`.
 
-- [ ] **Step 4: Make `open` a thin adapter**
+- [x] **Step 4: Make `open` a thin adapter**
 
 Read active members from `_parley.super_repo.get_state()`; scan those member paths when active, otherwise scan the ordinary repo root. Pass plain inputs to `build_picker_data`, assign returned states to `_parley._markdown_finder`, and use `finder_facets.toggle/set_all` on the active domain before recomputing. Preserve the live picker query by using only `picker.update(items, tags)`.
 
-- [ ] **Step 5: Reconcile scan tests with explicit repo identity**
+- [x] **Step 5: Reconcile scan tests with explicit repo identity**
 
 Keep `_scan_members` coverage for display/search repo prefixes and adjust assertions to the policy's entry facet field if it changes. Confirm scanning stays IO-only and does not decide bar eligibility.
 
-- [ ] **Step 6: Run focused integration suites and verify GREEN**
+- [x] **Step 6: Run focused integration suites and verify GREEN**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/markdown_finder_spec.lua" -c "qa!"`
 
@@ -231,7 +231,7 @@ Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedF
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit the adapter**
+- [x] **Step 7: Commit the adapter**
 
 ```bash
 git add lua/parley/markdown_finder.lua lua/parley/init.lua tests/unit/markdown_finder_spec.lua tests/unit/super_repo_spec.lua
@@ -247,11 +247,11 @@ git commit -m "finder: #187 persist contextual markdown facets" -m "Move Markdow
 - Modify: `atlas/traceability.yaml`
 - Modify: `workshop/issues/000187-markdown-finder-in-repo-mode-should-present-repo-facet-search.md`
 
-- [ ] **Step 1: Update the atlas at the changed boundaries**
+- [x] **Step 1: Update the atlas at the changed boundaries**
 
 Document the contextual Markdown bar, shared eligibility policy, separate session states, verbatim complete-query behavior, and empty/ineligible expansion behavior. Add `lua/parley/markdown_finder.lua` and `tests/unit/markdown_finder_spec.lua` to the `ui/pickers` traceability surface, and retain/add both under `modes/super_repo`. Keep `atlas/index.md` unchanged because all edited pages are already linked.
 
-- [ ] **Step 2: Run formatting/static checks**
+- [x] **Step 2: Run formatting/static checks**
 
 Run: `make lint`
 
@@ -259,7 +259,7 @@ Run: `git diff --check`
 
 Expected: PASS with no warnings or whitespace errors.
 
-- [ ] **Step 3: Run focused and full verification**
+- [x] **Step 3: Run focused and full verification**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/finder_facets_spec.lua" -c "qa!"`
 
@@ -273,11 +273,11 @@ Run: `make test`
 
 Expected: all PASS.
 
-- [ ] **Step 4: Reconcile durable checkboxes and log evidence**
+- [x] **Step 4: Reconcile durable checkboxes and log evidence**
 
 Tick completed steps in this plan and the issue summary plan; append verification commands/results and any architecture decisions to `## Log`. Do not mark the close step complete before the boundary gate succeeds.
 
-- [ ] **Step 5: Commit documentation and issue evidence**
+- [x] **Step 5: Commit documentation and issue evidence**
 
 ```bash
 git add atlas/modes/super_repo.md atlas/ui/pickers.md atlas/issues/issue-management.md atlas/traceability.yaml workshop/issues/000187-markdown-finder-in-repo-mode-should-present-repo-facet-search.md workshop/plans/000187-markdown-finder-in-repo-mode-should-present-repo-facet-search-plan.md

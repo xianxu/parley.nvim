@@ -139,9 +139,9 @@ repo-local recalibration tracked by that source.
 ## Plan
 
 - [x] Write and approve the durable implementation plan.
-- [ ] Implement the mode-specific Markdown facet adapter with canonical helpers.
-- [ ] Add finder-level regressions for state, query, and picker behavior.
-- [ ] Update atlas documentation and run the full verification suite.
+- [x] Implement the mode-specific Markdown facet adapter with canonical helpers.
+- [x] Add finder-level regressions for state, query, and picker behavior.
+- [x] Update atlas documentation and run the full verification suite.
 
 ## Log
 
@@ -157,6 +157,20 @@ repo-local recalibration tracked by that source.
   the extensive test/verification surface, example commits omitted required
   trailers, and ordinary directory ordering was not pinned. Revised the plan
   and estimate rather than bypassing the gate.
+- Implemented canonical labelled-facet eligibility and source-order discovery,
+  then moved Markdown Finder onto a pure contextual policy with a thin runtime
+  adapter (`ARCH-DRY`, `ARCH-PURE`). Ordinary mode retains source-ordered
+  directory facets; super-repo mode uses root-derived alphabetical repo facets,
+  with invalid expansions unfiltered and zero-row/NONE states recoverable.
+- Finder-entry regressions drive real temporary Markdown trees, picker updates,
+  runtime mode switches, exact whitespace/cleared queries, empty results, and
+  source-window selection. Per-task spec and quality reviews passed after adding
+  the missing picker identity/selection assertions and correcting two atlas
+  eligibility descriptions.
+- Verification at `550b180`: `make lint` checked 270 files with zero warnings or
+  errors; focused finder suites passed 74/74 assertions; `make test` passed all
+  105 unit and 40 integration/architecture spec files; `git diff --check`, issue
+  validation, and the stale-claim shadow search were clean.
 
 ## Revisions
 
@@ -186,3 +200,11 @@ Raised the v3.1 estimate from 1.70 to 2.96 hours using separate
 cross-cutting-refactor and high-end focused Lua primitives, made every planned
 commit policy-compliant, and specified that ordinary directory facets retain
 their existing first-appearance order while repo facets remain alphabetized.
+
+### 2026-07-14T22:28:48-07:00 — implementation complete
+
+Landed the shared facet policy, pure Markdown policy, runtime adapter, 15-test
+Markdown suite, and picker/super-repo atlas mappings. Reconciled all durable
+plan checkboxes after independent lint, focused, full-suite, diff, schema, and
+shadow-search verification; the remaining transition is the binary-owned close
+review and close-artifact commit.
