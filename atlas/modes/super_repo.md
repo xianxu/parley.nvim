@@ -51,10 +51,11 @@ list as the authority. In super-repo mode its tag bar is repo-only:
 `[ALL] [NONE] [repo…]`. Repository choices are derived from the member roots,
 sorted alphabetically, and include members that currently yield no Markdown
 rows. An eligible expansion with zero total rows therefore retains the bar, so
-a persisted NONE state is recoverable through ALL. Incomplete, invalid, or
-duplicate member labels — and any mismatch between row labels and the eligible
-root set — leave the aggregate unfiltered and omit the bar rather than applying
-a partial facet policy.
+a persisted NONE state is recoverable through ALL. Incomplete labels or fewer
+than two distinct labels suppress the bar. Duplicate complete labels are
+deduplicated and suppress it only when they collapse the universe below two;
+any mismatch between row labels and the eligible root set likewise leaves the
+aggregate unfiltered with no bar rather than applying a partial facet policy.
 
 ## Finder query persistence
 
