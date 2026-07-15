@@ -45,16 +45,29 @@ super-repo simply pushes each member's chat/note dir into `chat_roots` /
 `note_roots` with `label = <repo_name>`. Issue / vision / markdown finders
 were extended explicitly during M3-M5.
 
-## Sticky `{repo}` filter
+Markdown Finder obtains the active member roots from `super_repo.get_state()`
+when each picker invocation opens; it does not treat the cached config member
+list as the authority. In super-repo mode its tag bar is repo-only:
+`[ALL] [NONE] [repo…]`. Repository choices are derived from the member roots,
+sorted alphabetically, and include members that currently yield no Markdown
+rows. An eligible expansion with zero total rows therefore retains the bar, so
+a persisted NONE state is recoverable through ALL. Incomplete, invalid, or
+duplicate member labels — and any mismatch between row labels and the eligible
+root set — leave the aggregate unfiltered and omit the bar rather than applying
+a partial facet policy.
 
-Chat, note, vision, and markdown finders preserve `{repo}` filter fragments
+## Finder query persistence
+
+Chat, note, and vision finders preserve `{repo}` filter fragments
 across reopens via `lua/parley/finder_sticky.lua`. Both completed (`{charon}`)
 and in-progress (`{char`) prompt fragments are extracted on every keystroke,
 normalised to the completed form, and re-seeded as `initial_query` next time.
 Chat finder additionally preserves `[tag]` fragments. Issue Finder is the
-intentional exception: it preserves the complete opaque query, including plain
-text, so the same filter survives view-cycle repaint and later invocations
-(#177).
+first intentional exception; Markdown Finder now follows the same complete,
+opaque policy. Each stores the prompt verbatim in its own in-memory finder state
+on every change, including whitespace and clearing to the empty string, so the
+query survives facet repaint and later invocations without going through
+`finder_sticky` (#177, #187).
 
 Matching is also forgiving of in-progress brackets: `{char` matches the same
 items as `{charon}` would (prefix match against the haystack `{repo}` token),
@@ -89,11 +102,13 @@ filter for plain repo mode's primary note root.
   `parley.is_super_repo_active()`; persistence gate consults pushed-dirs.
 - `lua/parley/issues.lua` — `scan_issues` accepts `repo_name` +
   `history_dir_override` opts.
-- `lua/parley/issue_finder.lua`, `vision_finder.lua`, `markdown_finder.lua`
-  — multi-root aggregation when `super_repo_members` is non-empty.
+- `lua/parley/issue_finder.lua`, `vision_finder.lua` — multi-root aggregation
+  through `super_repo.expand_roots`.
+- `lua/parley/markdown_finder.lua` — per-invocation aggregation and contextual
+  facets from the active `super_repo.get_state()` member roots.
 - `lua/parley/finder_sticky.lua` — shared `{root}` / `[tag]` extraction and
-  initial-query formatter used by chat, note, vision, and markdown finders;
-  Issue Finder owns its distinct full-query persistence policy.
+  initial-query formatter used by chat, note, and vision finders; Issue Finder
+  and Markdown Finder own separate full-query persistence state.
 - `lua/parley/lualine.lua` — `format_mode`, `create_mode_component`, and
   the filetype-component auto-replace at setup time.
 - `lua/parley/keybinding_registry.lua` — `super_repo_toggle` entry.

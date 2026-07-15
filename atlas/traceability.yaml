@@ -267,6 +267,7 @@ atlas:
       - tests/unit/finder_facets_spec.lua
       - tests/unit/chat_finder_logic_spec.lua
       - tests/unit/issue_finder_spec.lua
+      - tests/unit/markdown_finder_spec.lua
       - tests/unit/float_picker_spec.lua
 
   notes/structure:
@@ -514,6 +515,7 @@ atlas:
       - lua/parley/chat_dirs.lua
       - lua/parley/chat_finder.lua
       - lua/parley/note_finder.lua
+      - lua/parley/markdown_finder.lua
       - lua/parley/float_picker.lua
       - lua/parley/init.lua
       - lua/parley/config.lua
@@ -527,6 +529,7 @@ atlas:
       - tests/unit/picker_items_spec.lua
       - tests/unit/chat_finder_logic_spec.lua
       - tests/unit/note_finder_logic_spec.lua
+      - tests/unit/markdown_finder_spec.lua
       - tests/unit/pure_functions_spec.lua
 
   ui/keybindings:

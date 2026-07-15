@@ -20,11 +20,12 @@ default), so every reader derives from the one cue source.
 - `:ParleyIssueFinder` (`<C-y>f`): float picker with status badges and 2-state view cycling — `<Tab>` (natural key; `<C-a>` kept for back-compat) toggles between `issues` (all of `workshop/issues/`, done items visible — the default, sorted by the existing status/ID order) and `history` (archived items in `workshop/history/`, sorted by file modification time ascending so the newest archive row sits closest to the bottom-anchored prompt) (#158, superseding the tri-state all/active/all+history from #152). The complete prompt query is kept verbatim across that repaint and later Issue Finder invocations; clearing the prompt persists the empty query (#177). In super-repo mode, a completely labelled root set with at least two distinct repositories adds Chat Finder's existing `[ALL] [NONE]   [repo…]` facet bar. Repo choices share one persistent state across both views and invocations, and facet updates repaint in place without touching the query; newly discovered repos default on while temporarily absent choices are retained. Incomplete labels, a single unique repo, and ordinary single-root mode omit the bar and leave rows unfiltered. Persisted NONE still opens the empty picker so ALL remains reachable (#186).
 
 Facet discovery, persistent-state merging, immutable transitions, OR filtering,
-and picker-tag projection live in the pure `lua/parley/finder_facets.lua`
-model. Chat Finder and Issue Finder only supply item-specific facet keys and
-own their session/UI adapters; the registry-driven finder in #115 and Markdown
-Finder work in #187 consume the same policy rather than creating parallel state
-machines (`ARCH-DRY`, `ARCH-PURE`).
+picker-tag projection, and complete-labelled-root eligibility live in the pure
+`lua/parley/finder_facets.lua` model. Chat, Issue, and Markdown Finders supply
+their item-specific facet keys and own their session/UI adapters; Issue and
+Markdown also use the shared eligibility policy for contextual repository bars.
+Markdown's directory-versus-repository choice remains a picker concern rather
+than broadening issue-management policy (`ARCH-DRY`, `ARCH-PURE`).
 - `:ParleyIssueNext` (`<C-y>x`): open next runnable issue (oldest open with all deps done)
 - `:ParleyIssueStatus` (`<C-y>s`): cycle frontmatter status using the first lifecycle transition for the current status in generated vocabulary order
 - `:ParleyIssueDecompose` (`<C-y>i`): create child issue from plan line, add to parent deps, and write a markdown link `[issue NNNNNN](./NNNNNN-slug.md)` into the parent's plan line; the new child file gets a `Parent: [issue PPPPPP](./PPPPPP-...md)` backlink under its title. (M3 #116: decompose **retains** parley's `render_issue_template` — its semantics, parent.deps += child + the parent plan-line link + the backlink, are incompatible with `sdlc issue new`'s shape, so unlike `:ParleyIssueNew` it is not delegated.)
