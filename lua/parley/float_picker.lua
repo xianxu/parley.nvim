@@ -46,9 +46,9 @@ local APPROXIMATE_MATCH_HL = "ParleyPickerApproximateMatch"
 --   results top-border(1) + results bottom-border(1) +
 --   prompt  top-border(1) + prompt  content(1) + prompt bottom-border(1) = 5
 local PROMPT_OVERHEAD = 5
--- Rows consumed by the optional tag bar window:
---   top-border(1) + content(1) + bottom-border(1) = 3
-local TAG_BAR_OVERHEAD = 3
+-- Rows consumed by the optional tag bar window around its dynamic content:
+--   top-border(1) + bottom-border(1) = 2
+local TAG_BAR_BORDER_ROWS = 2
 
 -- Highlight namespace for fuzzy match characters in results.
 local MATCH_NS = vim.api.nvim_create_namespace("float_picker_match")
@@ -499,13 +499,19 @@ end
 -- ---------------------------------------------------------------------------
 
 -- Compute actual dimensions and positions for results, optional tag bar, and prompt windows.
--- Returns: win_w, win_h, row, col, tag_bar_row, prompt_row
--- When has_tag_bar is false/nil, tag_bar_row is nil and prompt_row follows results directly.
-local function compute_layout(desired_w, desired_h, ui, has_tag_bar)
+-- Returns: win_w, win_h, row, col, tag_bar_row, prompt_row, visible_tag_bar_h
+-- When tag_bar_h is false/nil/zero, tag_bar_row is nil and prompt_row follows results directly.
+local function compute_layout(desired_w, desired_h, ui, tag_bar_h)
     local screen_w = ui.width
     local screen_h = ui.height
     local win_w    = math.max(MIN_W, math.min(desired_w, screen_w - MARGIN_H * 2))
-    local extra    = has_tag_bar and TAG_BAR_OVERHEAD or 0
+    local requested_tag_bar_h = tag_bar_h == true and 1 or
+        (type(tag_bar_h) == "number" and math.max(0, tag_bar_h) or 0)
+    local max_tag_bar_h = math.max(0,
+        screen_h - MARGIN_V * 2 - PROMPT_OVERHEAD - TAG_BAR_BORDER_ROWS - MIN_H)
+    local visible_tag_bar_h = math.min(requested_tag_bar_h, max_tag_bar_h)
+    local has_tag_bar = visible_tag_bar_h > 0
+    local extra    = has_tag_bar and (visible_tag_bar_h + TAG_BAR_BORDER_ROWS) or 0
     local max_h    = math.max(MIN_H, screen_h - MARGIN_V * 2 - PROMPT_OVERHEAD - extra)
     local win_h    = math.max(MIN_H, math.min(desired_h, max_h))
     -- Centre based on total visual height
@@ -514,8 +520,9 @@ local function compute_layout(desired_w, desired_h, ui, has_tag_bar)
     local col      = math.floor((screen_w - win_w)   / 2)
     -- Tag bar (when present) sits between results and prompt
     local tag_bar_row = has_tag_bar and (row + win_h + 2) or nil
-    local prompt_row  = has_tag_bar and (tag_bar_row + TAG_BAR_OVERHEAD) or (row + win_h + 2)
-    return win_w, win_h, row, col, tag_bar_row, prompt_row
+    local prompt_row  = has_tag_bar and (tag_bar_row + visible_tag_bar_h + TAG_BAR_BORDER_ROWS) or
+        (row + win_h + 2)
+    return win_w, win_h, row, col, tag_bar_row, prompt_row, visible_tag_bar_h
 end
 
 -- Exported so sibling composite floats (e.g. review_menu, #133) reuse the same

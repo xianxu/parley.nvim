@@ -26,6 +26,18 @@ describe("review_menu", function()
         assert.is_not_nil(h)
         assert.is_true(vim.api.nvim_win_is_valid(h.list_win))
         assert.is_true(vim.api.nvim_win_is_valid(h.instr_win))
+        local ui = vim.api.nvim_list_uis()[1] or { width = 80, height = 24 }
+        local expected_w = math.max(20, math.min(70, ui.width - 8))
+        local expected_h = math.max(1, math.min(6, ui.height - 6 - 5))
+        local expected_row = math.floor((ui.height - (expected_h + 5)) / 2)
+        local expected_col = math.floor((ui.width - expected_w) / 2)
+        local list_cfg = vim.api.nvim_win_get_config(h.list_win)
+        local instr_cfg = vim.api.nvim_win_get_config(h.instr_win)
+        assert.are.same(
+            { expected_w, expected_h, expected_row, expected_col },
+            { list_cfg.width, list_cfg.height, list_cfg.row, list_cfg.col }
+        )
+        assert.equals(expected_row + expected_h + 2, instr_cfg.row)
         local list_buf = vim.api.nvim_win_get_buf(h.list_win)
         assert.are.equal(6, #vim.api.nvim_buf_get_lines(list_buf, 0, -1, false))
         -- the instruction window is a real, modifiable buffer (not buftype=prompt)
