@@ -16,6 +16,8 @@ atlas:
   chat/lifecycle:
     code:
       - lua/parley/init.lua
+      - lua/parley/config.lua
+      - lua/parley/keybinding_registry.lua
       - lua/parley/chat_respond.lua
       - lua/parley/buffer_lifecycle.lua
       - lua/parley/diagnostic_refresh.lua
@@ -31,6 +33,8 @@ atlas:
       - lua/parley/chat_pending.lua
       - lua/parley/tasker.lua
     tests:
+      - tests/unit/keybindings_spec.lua
+      - tests/unit/config_tools_spec.lua
       - tests/unit/perf_harness_spec.lua
       - tests/unit/line_reader_spec.lua
       - tests/unit/diagnostic_refresh_spec.lua
@@ -252,6 +256,8 @@ atlas:
 
   modes/super_repo:
     code:
+      - lua/parley/helper.lua
+      - lua/parley/repo_mode.lua
       - lua/parley/super_repo.lua
       - lua/parley/init.lua
       - lua/parley/issues.lua
@@ -263,6 +269,9 @@ atlas:
       - lua/parley/lualine.lua
       - lua/parley/keybinding_registry.lua
     tests:
+      - tests/arch/buffer_mutation_spec.lua
+      - tests/unit/helper_io_spec.lua
+      - tests/unit/repo_mode_spec.lua
       - tests/unit/super_repo_spec.lua
       - tests/unit/finder_facets_spec.lua
       - tests/unit/chat_finder_logic_spec.lua
@@ -437,6 +446,18 @@ atlas:
       - .openshell/overlay/setup.sh
     tests: []
 
+  infra/repo_mode:
+    code:
+      - lua/parley/init.lua
+      - lua/parley/helper.lua
+      - lua/parley/repo_mode.lua
+      - lua/parley/super_repo.lua
+    tests:
+      - tests/arch/buffer_mutation_spec.lua
+      - tests/unit/helper_io_spec.lua
+      - tests/unit/repo_mode_spec.lua
+      - tests/unit/super_repo_spec.lua
+
   infra/workflow:
     code:
       - Makefile.workflow
@@ -533,8 +554,10 @@ atlas:
     code:
       - lua/parley/init.lua
       - lua/parley/config.lua
+      - lua/parley/keybinding_registry.lua
     tests:
       - tests/unit/keybindings_spec.lua
+      - tests/unit/config_tools_spec.lua
 
   skills/skill-system:
     code:

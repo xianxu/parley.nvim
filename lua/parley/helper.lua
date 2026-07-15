@@ -436,6 +436,65 @@ _H.table_to_file = function(tbl, file_path)
 	file:close()
 end
 
+---@param tbl table # table to encode as JSON
+---@param file_path string # destination replaced only after a complete write
+---@param adapter table|nil # optional IO adapter for deterministic failure tests
+---@return boolean ok
+---@return string|nil err
+_H.table_to_file_atomic = function(tbl, file_path, adapter)
+	adapter = adapter or {}
+	local encode = adapter.encode or vim.json.encode
+	local open = adapter.open or io.open
+	local rename = adapter.rename or os.rename
+	local remove = adapter.remove or os.remove
+	local temp_path = adapter.temp_path or function(path)
+		local uv = vim.uv or vim.loop
+		local nonce = uv and uv.hrtime and uv.hrtime() or os.time()
+		return string.format("%s.tmp-%s-%06x", path, tostring(nonce), math.random(0, 0xFFFFFF))
+	end
+
+	local function failure(stage, detail)
+		local message = tostring(detail or "unknown error")
+		return false, (stage .. " failed: " .. message):sub(1, 240)
+	end
+	local function cleanup(path)
+		pcall(remove, path)
+	end
+
+	local encoded_ok, json = pcall(encode, tbl)
+	if not encoded_ok then
+		return failure("encode", json)
+	end
+
+	local tmp = temp_path(file_path)
+	local open_ok, file, open_err = pcall(open, tmp, "w")
+	if not open_ok or not file then
+		cleanup(tmp)
+		return failure("open", open_ok and open_err or file)
+	end
+
+	local write_ok, write_result, write_err = pcall(function() return file:write(json) end)
+	if not write_ok or not write_result then
+		pcall(function() file:close() end)
+		cleanup(tmp)
+		return failure("write", write_ok and write_err or write_result)
+	end
+
+	local close_ok, close_result, close_err = pcall(function() return file:close() end)
+	if not close_ok or not close_result then
+		cleanup(tmp)
+		return failure("close", close_ok and close_err or close_result)
+	end
+
+	local rename_ok, rename_result, rename_err = pcall(rename, tmp, file_path)
+	if not rename_ok or not rename_result then
+		cleanup(tmp)
+		return failure("rename", rename_ok and rename_err or rename_result)
+	end
+
+	return true
+end
+
 ---@param file_path string # the file path from where to read the json into a table
 ---@return table | nil # the table read from the file, or nil if an error occurred
 _H.file_to_table = function(file_path)

@@ -1,5 +1,15 @@
 # Lessons
 
+## 2026-07-15 (#190)
+
+- **A persisted path key is an identity boundary, so its normalization must have
+  one owner.** #190 initially repeated `expand → resolve → trim trailing slash`
+  in toggle persistence, startup restoration, and transient-root filtering;
+  the close review found that a later change could make reads and writes use
+  different keys. Rule: whenever a path becomes a durable map key, centralize
+  normalization before the first consumer and add an architecture check that
+  forbids parallel normalization expressions (`ARCH-DRY`).
+
 ## 2026-07-14 (#187)
 
 - **A changed user-facing command needs a README discoverability check even when

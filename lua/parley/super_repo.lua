@@ -3,12 +3,12 @@
 -- Toggle activates a runtime overlay on top of plain repo mode:
 --   * Discovers sibling .parley repos under the current repo's parent dir.
 --   * Pushes their workshop/parley and workshop/notes paths into chat_roots
---     and note_roots as extras (label = "repo" so they are filtered out of
---     persisted state.json — see init.lua persistence gate).
+--     and note_roots as labelled transient extras.
 --   * Writes are unchanged: still go to the current repo, exactly as plain
 --     repo mode does today.
 --
--- Toggle is transient — never persisted.
+-- This module owns only the runtime overlay. parley.init persists explicit
+-- user choices and restores them through set_active().
 
 local M = {}
 local _parley
@@ -213,11 +213,15 @@ local function deactivate()
 	return true
 end
 
-M.toggle = function()
-	if _state.active then
-		return deactivate()
+M.set_active = function(active)
+	if active then
+		return activate()
 	end
-	return activate()
+	return deactivate()
+end
+
+M.toggle = function()
+	return M.set_active(not _state.active)
 end
 
 return M

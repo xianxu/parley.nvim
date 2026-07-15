@@ -241,6 +241,87 @@ describe("super_repo.toggle", function()
 		assert.same(dirs(chat_before), dirs(parley.get_chat_roots()))
 	end)
 
+	it("set_active is idempotent and does not persist preferences", function()
+		local writes = 0
+		local original_writer = parley.helpers.table_to_file_atomic
+		parley.helpers.table_to_file_atomic = function()
+			writes = writes + 1
+			return true
+		end
+
+		assert.is_true(parley.super_repo.set_active(true))
+		local chat_once = vim.deepcopy(parley.get_chat_roots())
+		assert.is_true(parley.super_repo.set_active(true))
+		assert.same(chat_once, parley.get_chat_roots())
+		assert.is_true(parley.super_repo.set_active(false))
+		assert.is_true(parley.super_repo.set_active(false))
+		parley.helpers.table_to_file_atomic = original_writer
+
+		assert.equals(0, writes)
+		assert.is_false(parley.is_super_repo_active())
+	end)
+
+	it("explicit toggles persist canonical per-repo choices in both directions", function()
+		parley._state.repo_modes = {
+			[resolve(sibling_a)] = "repo",
+			invalid = "other",
+		}
+
+		assert.is_true(parley.toggle_super_repo())
+		local on_state = assert(parley.helpers.file_to_table(state_dir .. "/state.json"))
+		assert.equals("super_repo", on_state.repo_modes[resolve(current_repo)])
+		assert.equals("repo", on_state.repo_modes[resolve(sibling_a)])
+		assert.is_nil(on_state.repo_modes.invalid)
+
+		assert.is_true(parley.toggle_super_repo())
+		local off_state = assert(parley.helpers.file_to_table(state_dir .. "/state.json"))
+		assert.equals("repo", off_state.repo_modes[resolve(current_repo)])
+		assert.equals("repo", off_state.repo_modes[resolve(sibling_a)])
+	end)
+
+	it("stores an explicit toggle under the canonical root", function()
+		local linked_repo = workspace .. "/parley-link"
+		assert((vim.uv or vim.loop).fs_symlink(current_repo, linked_repo))
+		parley.config.repo_root = linked_repo
+
+		assert.is_true(parley.toggle_super_repo())
+
+		assert.equals("super_repo", parley._state.repo_modes[resolve(current_repo)])
+		assert.is_nil(parley._state.repo_modes[linked_repo])
+	end)
+
+	it("failed activation changes neither runtime mode nor saved preference", function()
+		parley._state.repo_modes = { [resolve(current_repo)] = "repo" }
+		local before = vim.deepcopy(parley._state.repo_modes)
+		parley.config.repo_root = nil
+
+		assert.is_false(parley.toggle_super_repo())
+
+		assert.is_false(parley.is_super_repo_active())
+		assert.same(before, parley._state.repo_modes)
+	end)
+
+	it("keeps a successful runtime toggle when its preference cannot be saved", function()
+		local state_file = state_dir .. "/state.json"
+		local durable_before = table.concat(vim.fn.readfile(state_file), "\n")
+		local original_writer = parley.helpers.table_to_file_atomic
+		local original_warning = parley.logger.warning
+		local warnings = {}
+		parley.helpers.table_to_file_atomic = function() return false, "forced failure" end
+		parley.logger.warning = function(message) table.insert(warnings, message) end
+
+		local ok = parley.toggle_super_repo()
+		parley.helpers.table_to_file_atomic = original_writer
+		parley.logger.warning = original_warning
+
+		assert.is_true(ok)
+		assert.is_true(parley.is_super_repo_active())
+		assert.equals("super_repo", parley._state.repo_modes[resolve(current_repo)])
+		assert.equals(durable_before, table.concat(vim.fn.readfile(state_file), "\n"))
+		assert.equals(1, #warnings)
+		assert.is_true(warnings[1]:find("preference not saved", 1, true) ~= nil)
+	end)
+
 	it("markdown_finder._scan_members aggregates with {repo} prefix and repo_name tag", function()
 		local md_finder = require("parley.markdown_finder")
 		md_finder.setup(parley)
@@ -383,6 +464,58 @@ describe("super_repo.toggle", function()
 		assert.is_nil(persisted_chat_set[resolve(sibling_b .. "/workshop/parley")])
 		assert.is_nil(persisted_note_set[resolve(sibling_a .. "/workshop/notes")])
 		assert.is_nil(persisted_note_set[resolve(sibling_b .. "/workshop/notes")])
+	end)
+
+	it("persist_state writes a transient-safe snapshot without changing live overlay roots", function()
+		parley.toggle_super_repo()
+		parley._state.repo_modes = {
+			[resolve(current_repo)] = "super_repo",
+			[resolve(sibling_a)] = "repo",
+		}
+		parley._state.durable_probe = "kept"
+		local chat_before = vim.deepcopy(parley.get_chat_roots())
+		local note_before = vim.deepcopy(parley.get_note_roots())
+
+		local ok, err = parley.persist_state()
+
+		assert.is_true(ok)
+		assert.is_nil(err)
+		assert.same(chat_before, parley.get_chat_roots())
+		assert.same(note_before, parley.get_note_roots())
+		local persisted = assert(parley.helpers.file_to_table(state_dir .. "/state.json"))
+		assert.is_nil(persisted.chat_roots)
+		assert.is_nil(persisted.chat_dirs)
+		assert.equals("kept", persisted.durable_probe)
+		assert.same(parley._state.repo_modes, persisted.repo_modes)
+		for _, root in ipairs(persisted.note_roots or {}) do
+			assert.is_not.equal("repo", root.label)
+			assert.is_false(vim.tbl_contains(parley.super_repo.get_pushed_note_dirs(), resolve(root.dir)))
+		end
+	end)
+
+	it("persist_state reports writer failure after passing a sanitized snapshot", function()
+		parley.toggle_super_repo()
+		parley._state.repo_modes = { [resolve(current_repo)] = "super_repo" }
+		local chat_before = vim.deepcopy(parley.get_chat_roots())
+		local note_before = vim.deepcopy(parley.get_note_roots())
+		local captured
+		local original_writer = parley.helpers.table_to_file_atomic
+		parley.helpers.table_to_file_atomic = function(snapshot)
+			captured = vim.deepcopy(snapshot)
+			return false, "forced write failure"
+		end
+
+		local ok, err = parley.persist_state()
+		parley.helpers.table_to_file_atomic = original_writer
+
+		assert.is_false(ok)
+		assert.equals("forced write failure", err)
+		assert.is_not_nil(captured)
+		assert.is_nil(captured.chat_roots)
+		assert.is_nil(captured.chat_dirs)
+		assert.same(parley._state.repo_modes, captured.repo_modes)
+		assert.same(chat_before, parley.get_chat_roots())
+		assert.same(note_before, parley.get_note_roots())
 	end)
 
 	it("lualine.format_mode returns glyph plus repo label for repo-backed modes", function()
@@ -569,5 +702,132 @@ describe("super_repo.toggle", function()
 
 		vim.api.nvim_del_augroup_by_id(augroup)
 		assert.equal(2, fired)
+	end)
+end)
+
+describe("super_repo startup restoration", function()
+	local function run_case(seed_modes, body, opts)
+		opts = opts or {}
+		local base = vim.fn.tempname() .. "-parley-super-repo-startup"
+		local workspace = base .. "/workspace"
+		local current = workspace .. "/current"
+		local sibling = workspace .. "/sibling"
+		local state_dir = base .. "/state"
+		local old_cwd = vim.fn.getcwd()
+
+		mkdir(current .. "/.git")
+		touch(current .. "/.parley")
+		touch(sibling .. "/.parley")
+		if opts.brain then mkdir(current .. "/.brain") end
+		local cwd = current
+		if opts.symlink then
+			cwd = workspace .. "/current-link"
+			assert((vim.uv or vim.loop).fs_symlink(current, cwd))
+		end
+		mkdir(state_dir)
+		if type(seed_modes) == "function" then
+			seed_modes = seed_modes({ current = current, sibling = sibling })
+		end
+		if seed_modes then
+			vim.fn.writefile({ vim.json.encode({ repo_modes = seed_modes }) }, state_dir .. "/state.json")
+		end
+
+		if parley.is_super_repo_active() then parley.super_repo.set_active(false) end
+		parley._state = {}
+		vim.cmd("cd " .. vim.fn.fnameescape(cwd))
+		local ok, err = pcall(body, {
+			base = base,
+			current = current,
+			sibling = sibling,
+			state_dir = state_dir,
+		})
+		if parley.is_super_repo_active() then parley.super_repo.set_active(false) end
+		vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+		vim.fn.delete(base, "rf")
+		if not ok then error(err) end
+	end
+
+	it("restores saved super-repo mode once after the default-agent refresh", function()
+		run_case(function(ctx) return { [resolve(ctx.current)] = "super_repo" } end, function(ctx)
+			local writes = {}
+			local original_writer = parley.helpers.table_to_file_atomic
+			parley.helpers.table_to_file_atomic = function(snapshot, path, adapter)
+				table.insert(writes, vim.deepcopy(snapshot))
+				return original_writer(snapshot, path, adapter)
+			end
+
+			parley.setup({ state_dir = ctx.state_dir, default_agent = "GPT5.4", api_keys = {} })
+			parley.helpers.table_to_file_atomic = original_writer
+
+			assert.equals(2, #writes)
+			for _, snapshot in ipairs(writes) do
+				assert.equals("super_repo", snapshot.repo_modes[resolve(ctx.current)])
+			end
+			assert.is_true(parley.is_super_repo_active())
+			assert.equals(resolve(ctx.base .. "/workspace"), parley.config.super_repo_root)
+			assert.same({ "current", "sibling" }, names(parley.config.super_repo_members))
+			assert.is_true(vim.tbl_contains(dirs(parley.get_chat_roots()), resolve(ctx.sibling .. "/workshop/parley")))
+			assert.is_true(vim.tbl_contains(dirs(parley.get_note_roots()), resolve(ctx.sibling .. "/workshop/notes")))
+		end)
+	end)
+
+	it("leaves unsaved brain repositories in ordinary mode after VimEnter", function()
+		run_case(nil, function(ctx)
+			parley.setup({ state_dir = ctx.state_dir, default_agent = "GPT5.4", api_keys = {} })
+
+			assert.is_false(parley.is_super_repo_active())
+			vim.api.nvim_exec_autocmds("VimEnter", {})
+			assert.is_false(parley.is_super_repo_active())
+		end, { brain = true })
+	end)
+
+	it("ignores invalid preferences and honors an explicit repo preference", function()
+		for _, saved in ipairs({ "invalid", "repo" }) do
+			run_case(function(ctx) return { [resolve(ctx.current)] = saved } end, function(ctx)
+				parley.setup({ state_dir = ctx.state_dir, default_agent = "GPT5.4", api_keys = {} })
+				assert.is_false(parley.is_super_repo_active())
+			end, { brain = true })
+		end
+	end)
+
+	it("uses canonical roots and isolates another repository's saved choice", function()
+		run_case(function(ctx) return { [resolve(ctx.current)] = "super_repo" } end, function(ctx)
+			parley.setup({ state_dir = ctx.state_dir, default_agent = "GPT5.4", api_keys = {} })
+			assert.is_true(parley.is_super_repo_active())
+		end, { symlink = true })
+
+		run_case(function(ctx) return { [resolve(ctx.sibling)] = "super_repo" } end, function(ctx)
+			parley.setup({ state_dir = ctx.state_dir, default_agent = "GPT5.4", api_keys = {} })
+			assert.is_false(parley.is_super_repo_active())
+		end)
+	end)
+
+	it("keeps a saved super-repo preference when startup activation fails", function()
+		run_case(function(ctx) return { [resolve(ctx.current)] = "super_repo" } end, function(ctx)
+			local original_compute = parley.super_repo.compute_members
+			local original_warning = parley.logger.warning
+			local original_writer = parley.helpers.table_to_file_atomic
+			local warnings = {}
+			local writes = {}
+			parley.super_repo.compute_members = function() return nil, "forced activation failure" end
+			parley.logger.warning = function(message) table.insert(warnings, message) end
+			parley.helpers.table_to_file_atomic = function(snapshot, path, adapter)
+				table.insert(writes, vim.deepcopy(snapshot))
+				return original_writer(snapshot, path, adapter)
+			end
+
+			parley.setup({ state_dir = ctx.state_dir, default_agent = "GPT5.4", api_keys = {} })
+			parley.super_repo.compute_members = original_compute
+			parley.logger.warning = original_warning
+			parley.helpers.table_to_file_atomic = original_writer
+
+			assert.equals(2, #writes)
+			assert.is_false(parley.is_super_repo_active())
+			assert.equals("super_repo", parley._state.repo_modes[resolve(ctx.current)])
+			local persisted = assert(parley.helpers.file_to_table(ctx.state_dir .. "/state.json"))
+			assert.equals("super_repo", persisted.repo_modes[resolve(ctx.current)])
+			assert.equals(1, #warnings)
+			assert.is_true(warnings[1]:find("forced activation failure", 1, true) ~= nil)
+		end)
 	end)
 end)

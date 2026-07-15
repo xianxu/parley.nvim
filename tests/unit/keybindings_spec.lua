@@ -163,11 +163,31 @@ describe("key bindings help", function()
         assert.is_false(has_line(lines, "<C-g><C-g>", "Respond"))
     end)
 
-    it("chat context includes toggle tool folds", function()
+    it("chat context uses branch mnemonic and omits unconfigured tool folds", function()
         setup_parley()
 
         local lines = parley._keybinding_help_lines("chat")
-        assert.is_true(has_line(lines, "<C-g>b", "Toggle tool folds"))
+        assert.is_true(has_line(lines, "<C-g>b", "Prune"))
+        assert.is_false(has_line(lines, "<C-g>b", "Toggle tool folds"))
+        assert.is_false(has_line(lines, "", "Toggle tool folds"))
+    end)
+
+    it("shows a configured tool-fold shortcut through the shared registry", function()
+        setup_parley({
+            chat_shortcut_toggle_tool_folds = { modes = { "n" }, shortcut = "<leader>tf" },
+        })
+
+        local lines = parley._keybinding_help_lines("chat")
+        assert.is_true(has_line(lines, "<leader>tf", "Toggle tool folds"))
+    end)
+
+    it("treats an empty configured shortcut as unbound", function()
+        setup_parley({
+            chat_shortcut_toggle_tool_folds = { modes = { "n" }, shortcut = "" },
+        })
+
+        local lines = parley._keybinding_help_lines("chat")
+        assert.is_false(has_line(lines, "", "Toggle tool folds"))
     end)
 
     it("markdown context includes review shortcuts", function()
@@ -198,7 +218,10 @@ describe("keybinding registry", function()
         local reg = require("parley.keybinding_registry")
         for _, entry in ipairs(reg.entries) do
             assert.is_not_nil(entry.id, "entry missing id")
-            assert.is_not_nil(entry.default_key, "entry " .. entry.id .. " missing default_key")
+            assert.is_true(
+                entry.default_key ~= nil or entry.config_key ~= nil,
+                "entry " .. entry.id .. " missing default_key/config_key"
+            )
             assert.is_not_nil(entry.default_modes, "entry " .. entry.id .. " missing default_modes")
             assert.is_not_nil(entry.scope, "entry " .. entry.id .. " missing scope")
             assert.is_not_nil(entry.desc, "entry " .. entry.id .. " missing desc")
@@ -230,5 +253,46 @@ describe("keybinding registry", function()
             if s == "repo" then has_repo = true end
         end
         assert.is_true(has_repo)
+    end)
+
+    it("derives migrated bindings from exposed config without registry literals", function()
+        setup_parley()
+        local reg = require("parley.keybinding_registry")
+        local by_id = {}
+        for _, entry in ipairs(reg.entries) do by_id[entry.id] = entry end
+
+        for _, expected in ipairs({
+            { id = "super_repo_toggle", key = "<C-g>p", modes = { "n", "i" } },
+            { id = "chat_prune", key = "<C-g>b", modes = { "n" } },
+        }) do
+            local entry = by_id[expected.id]
+            assert.is_nil(entry.default_key)
+            local keys, modes = reg.resolve_keys(entry, parley.config)
+            assert.same({ expected.key }, keys)
+            assert.same(expected.modes, modes)
+        end
+
+        assert.is_nil(by_id.chat_toggle_tool_folds.default_key)
+        local tool_keys = reg.resolve_keys(by_id.chat_toggle_tool_folds, parley.config)
+        assert.is_nil(tool_keys)
+        assert.is_true(has_line(parley._keybinding_help_lines("other"), "<C-g>p", "super-repo"))
+        assert.is_true(has_line(parley._keybinding_help_lines("chat"), "<C-g>b", "Prune"))
+    end)
+
+    it("registers tool folds only when a non-empty shortcut is configured", function()
+        local reg = require("parley.keybinding_registry")
+        local calls = {}
+        local callbacks = { chat_toggle_tool_folds = function() end }
+        local function set_keymap(_, mode, key)
+            table.insert(calls, { mode = mode, key = key })
+        end
+
+        reg.register_buffer({ "chat" }, 1, {}, callbacks, set_keymap)
+        assert.same({}, calls)
+
+        reg.register_buffer({ "chat" }, 1, {
+            chat_shortcut_toggle_tool_folds = { modes = { "n" }, shortcut = "<leader>tf" },
+        }, callbacks, set_keymap)
+        assert.same({ { mode = "n", key = "<leader>tf" } }, calls)
     end)
 end)
