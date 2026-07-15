@@ -52,7 +52,8 @@ facet when they share a row. Prefix plus whole button must fit the remaining
 content width; otherwise the button starts after the next row's one-cell
 indent, without carrying its old group gap. No trailing separator or padding
 is rendered. This preserves the visible one-row presentation and fixes exact
-row breaks for tests.
+row breaks for tests; byte-identical preservation of the old invisible trailing
+space is not required.
 
 Buttons normally remain intact. A button wider than a fresh row's usable width
 is split into maximal non-empty extended grapheme-cluster sequences; combining
@@ -65,14 +66,18 @@ preserve text. The picker's normal minimum width makes that fallback exceptional
 
 The shared picker geometry accepts the computed facet content height. Facet
 window overhead is therefore `content height + two border rows`; results yield
-vertical space down to the existing one-row minimum, and the prompt begins
-immediately below the facet window. If prompt, borders, one results row, and all
-facet rows cannot physically fit, valid on-screen geometry takes priority: the
-facet window is capped to the remaining positive height, retains every rendered
-row in its buffer, and permits vertical scrolling. Complete simultaneous facet
+vertical space down to `float_picker`'s existing `MIN_H = 1` results-row
+minimum, and the prompt begins immediately below the facet window. If prompt,
+borders, one results row, and all facet rows cannot physically fit, valid
+on-screen geometry takes priority: the facet window is capped to the remaining
+positive height and retains every rendered row in its buffer. Mouse-wheel input
+over its screen rectangle scrolls that non-focusable window; row hit testing
+maps the visible screen row through the facet window's current `topline` before
+querying semantic segments, so facets exposed by scrolling remain clickable.
+Wheel input elsewhere keeps its existing behavior. Complete simultaneous facet
 visibility is guaranteed whenever the editor can contain the required stack.
-The exported geometry helper remains compatible with non-faceted consumers
-such as Review Menu.
+The exported geometry helper's non-faceted behavior and Review Menu consumer
+remain unchanged.
 
 Opening, `VimResized`, and `picker.update(items, tags)` all follow one reflow
 path: compute the current picker width, rebuild the pure facet layout, then
@@ -99,6 +104,9 @@ argument preserves the current facet set. A picker opened without
   unchanged.
 - Automated tests cover exact row breaks, multibyte display widths, wrapped-row
   hit testing, resize/update reflow, and the single-row compatibility case.
+- Automated tests also cover indivisible over-width grapheme progress,
+  constrained-height scrolling with viewport-aware clicks, empty/non-empty
+  facet-window transitions, and unchanged non-faceted geometry.
 
 ## Plan
 
@@ -128,6 +136,12 @@ argument preserves the current facet set. A picker opened without
   grapheme-safe oversized buttons, constrained-height fallback, and facet
   window activation/deactivation during updates.
 
+### 2026-07-15 — constrained-height review resolution
+
+- Specified wheel scrolling for the non-focusable capped facet window,
+  `topline`-aware click mapping, and regression coverage for the new edge
+  contracts. Confirmed the current picker minimum is already `MIN_H = 1`.
+
 ## Revisions
 
 ### 2026-07-15
@@ -145,3 +159,12 @@ argument preserves the current facet set. A picker opened without
 - Delta: aligned action text with the existing UI and made each boundary
   deterministic, including a valid-geometry fallback for physically impossible
   full-height layouts.
+
+### 2026-07-15 — second fresh-context spec review
+
+- Reason: review identified that capped overflow rows lacked a reachable scroll
+  mechanism and that newly clarified edge contracts were absent from Done when.
+- Delta: defined mouse-wheel/topline behavior, expanded automated coverage, and
+  clarified visible—not trailing-whitespace—single-row compatibility. The
+  review's separate minimum-height concern was checked against
+  `float_picker.MIN_H = 1` and required no behavior change.
