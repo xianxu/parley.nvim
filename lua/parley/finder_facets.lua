@@ -8,23 +8,49 @@ local function copy_state(state)
 	return copied
 end
 
-M.discover = function(entries, facets_for_entry)
+M.discover = function(entries, facets_for_entry, ordering)
 	local seen = {}
+	local discovered = {}
+	local has_empty = false
 	for _, entry in ipairs(entries) do
 		for _, key in ipairs(facets_for_entry(entry)) do
-			seen[key] = true
+			if key == "" then
+				has_empty = true
+			elseif not seen[key] then
+				seen[key] = true
+				table.insert(discovered, key)
+			end
 		end
 	end
 
-	local discovered = {}
-	local has_empty = seen[""] == true
-	seen[""] = nil
-	for key in pairs(seen) do
-		table.insert(discovered, key)
+	if ordering ~= "source" then
+		table.sort(discovered)
 	end
-	table.sort(discovered)
 	if has_empty then
 		table.insert(discovered, "")
+	end
+	return discovered
+end
+
+M.eligible_labels = function(entries, active, label_for_entry)
+	if not active then
+		return nil
+	end
+
+	local labels = {}
+	for _, entry in ipairs(entries) do
+		local label = label_for_entry(entry)
+		if type(label) ~= "string" or label == "" then
+			return nil
+		end
+		table.insert(labels, label)
+	end
+
+	local discovered = M.discover(labels, function(label)
+		return { label }
+	end)
+	if #discovered < 2 then
+		return nil
 	end
 	return discovered
 end

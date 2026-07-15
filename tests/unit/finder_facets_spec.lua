@@ -6,7 +6,7 @@ end
 
 describe("finder facets", function()
     describe("discover", function()
-        it("deduplicates and sorts non-empty keys before the untagged key", function()
+        it("defaults to alphabetical non-empty keys before the untagged key", function()
             local calls = 0
             local entries = {
                 { facets = { "beta", "alpha" } },
@@ -23,8 +23,51 @@ describe("finder facets", function()
             assert.equals(3, calls)
         end)
 
+        it("preserves first appearance in source order while keeping the untagged key last", function()
+            local entries = {
+                { facets = { "beta", "", "alpha" } },
+                { facets = { "gamma", "beta" } },
+            }
+
+            assert.same({ "beta", "alpha", "gamma", "" }, finder_facets.discover(entries, facets, "source"))
+        end)
+
         it("returns an empty list when no facets are discovered", function()
             assert.same({}, finder_facets.discover({ { facets = {} } }, facets))
+        end)
+    end)
+
+    describe("eligible_labels", function()
+        local function repo_name(root)
+            return root.repo_name
+        end
+
+        it("returns nil when the label domain is inactive", function()
+            assert.is_nil(finder_facets.eligible_labels({ { repo_name = "alpha" }, { repo_name = "beta" } }, false, repo_name))
+        end)
+
+        it("returns nil when any projected label is incomplete", function()
+            for _, invalid in ipairs({ false, "" }) do
+                local roots = { { repo_name = "alpha" }, { repo_name = invalid } }
+                assert.is_nil(finder_facets.eligible_labels(roots, true, repo_name))
+            end
+            assert.is_nil(finder_facets.eligible_labels({ { repo_name = "alpha" }, {} }, true, repo_name))
+        end)
+
+        it("returns nil with fewer than two distinct labels", function()
+            assert.is_nil(finder_facets.eligible_labels({ { repo_name = "alpha" }, { repo_name = "alpha" } }, true, repo_name))
+        end)
+
+        it("returns sorted distinct labels without mutating entries", function()
+            local roots = {
+                { repo_name = "beta", marker = 1 },
+                { repo_name = "alpha", marker = 2 },
+                { repo_name = "beta", marker = 3 },
+            }
+            local before = vim.deepcopy(roots)
+
+            assert.same({ "alpha", "beta" }, finder_facets.eligible_labels(roots, true, repo_name))
+            assert.same(before, roots)
         end)
     end)
 

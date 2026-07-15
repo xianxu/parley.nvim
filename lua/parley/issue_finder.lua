@@ -63,24 +63,6 @@ M.sort_for_view = function(view_mode, issues)
     return sorted
 end
 
-local function eligible_repo_facets(roots, is_super_repo)
-    if not is_super_repo then
-        return nil
-    end
-    for _, root in ipairs(roots) do
-        if type(root.repo_name) ~= "string" or root.repo_name == "" then
-            return nil
-        end
-    end
-    local discovered = finder_facets.discover(roots, function(root)
-        return { root.repo_name }
-    end)
-    if #discovered < 2 then
-        return nil
-    end
-    return discovered
-end
-
 --------------------------------------------------------------------------------
 -- Reopen helper
 --------------------------------------------------------------------------------
@@ -195,7 +177,9 @@ M.open = function(_options)
         _parley._issue_finder.opened = false
         return
     end
-    local repo_facets = eligible_repo_facets(roots, sr_issues ~= nil)
+    local repo_facets = finder_facets.eligible_labels(roots, sr_issues ~= nil, function(root)
+        return root.repo_name
+    end)
 
     -- View mode: 0=issues (default), 1=history. Clamp with % 2 so any stale
     -- in-memory value (e.g. a `2` left by the pre-#158 tri-state) self-heals.
