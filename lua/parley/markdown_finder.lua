@@ -1,14 +1,11 @@
 -- Markdown file finder module for Parley
 -- Finds markdown files from repo root, including parley-managed directories
--- (chats, notes, issues, history, vision). The tag bar lets users filter by
--- top-level directory if they want to hide categories.
+-- (chats, notes, issues, history, vision). The contextual tag bar filters by
+-- top-level directory in ordinary mode and repository in super-repo mode.
 
 local M = {}
 local _parley
-local finder_sticky = require("parley.finder_sticky")
-
--- Tag state persists across opens within a session
-local _tag_state = {} -- { [dir_name] = true/false }
+local finder_facets = require("parley.finder_facets")
 
 M.setup = function(parley)
 	_parley = parley
@@ -76,71 +73,98 @@ local function scan_markdown_files(repo_root, max_depth)
 	return entries
 end
 
---- Build picker items and tag bar from entries, respecting tag_state.
---- @return table items, table|nil tag_bar_tags, table all_tags_ordered
-local function build_picker_data(entries)
-	-- Collect unique tags in order of first appearance (mtime-sorted)
-	local tag_order = {}
-	local tag_seen = {}
+local function entry_facets(entry)
+	return { entry.tag }
+end
+
+local function render_entry(entry)
+	return {
+		display = entry.display,
+		search_text = entry.search_text,
+		value = entry.value,
+	}
+end
+
+local function repo_entries_match(entries, repo_facets)
+	local known = {}
+	for _, label in ipairs(repo_facets) do
+		known[label] = true
+	end
 	for _, entry in ipairs(entries) do
-		if not tag_seen[entry.tag] then
-			tag_seen[entry.tag] = true
-			table.insert(tag_order, entry.tag)
+		if type(entry.tag) ~= "string" or entry.tag == "" or not known[entry.tag] then
+			return false
+		end
+	end
+	return true
+end
+
+--- Build contextual picker data without reading runtime or module state.
+--- @param opts table plain mode, entries, member roots, and facet states
+--- @return table result with items, tags, facet domain, and copied states
+M.build_picker_data = function(opts)
+	opts = opts or {}
+	local entries = opts.entries or {}
+	local directory_state = finder_facets.merge_state(opts.directory_state, {})
+	local repo_state = finder_facets.merge_state(opts.repo_state, {})
+	local visible = entries
+	local tags
+	local facet_domain
+
+	if opts.mode == "ordinary" then
+		local directory_facets = finder_facets.discover(entries, entry_facets, "source")
+		if #directory_facets >= 2 then
+			facet_domain = "directory"
+			directory_state = finder_facets.merge_state(directory_state, directory_facets)
+			visible = finder_facets.filter(entries, directory_state, entry_facets)
+			tags = finder_facets.project(directory_facets, directory_state)
+		end
+	elseif opts.mode == "super_repo" then
+		local repo_facets = finder_facets.eligible_labels(opts.member_roots or {}, true, function(root)
+			return root.name
+		end)
+		if repo_facets and repo_entries_match(entries, repo_facets) then
+			facet_domain = "repo"
+			repo_state = finder_facets.merge_state(repo_state, repo_facets)
+			visible = finder_facets.filter(entries, repo_state, entry_facets)
+			tags = finder_facets.project(repo_facets, repo_state)
 		end
 	end
 
-	-- Check if any tag is disabled
-	local any_disabled = false
-	for _, tag in ipairs(tag_order) do
-		if _tag_state[tag] == false then
-			any_disabled = true
-			break
-		end
-	end
-
-	-- Build filtered items
 	local items = {}
-	for _, entry in ipairs(entries) do
-		local enabled = _tag_state[entry.tag] ~= false
-		if not any_disabled or enabled then
-			table.insert(items, {
-				display = entry.display,
-				search_text = entry.search_text,
-				value = entry.value,
-			})
-		end
+	for _, entry in ipairs(visible) do
+		table.insert(items, render_entry(entry))
 	end
 
-	-- Build tag bar tags
-	local tag_bar_tags = nil
-	if #tag_order > 1 then
-		tag_bar_tags = {}
-		for _, tag in ipairs(tag_order) do
-			table.insert(tag_bar_tags, {
-				label = tag,
-				enabled = _tag_state[tag] ~= false,
-			})
-		end
-	end
-
-	return items, tag_bar_tags
+	return {
+		items = items,
+		tags = tags,
+		facet_domain = facet_domain,
+		directory_state = directory_state,
+		repo_state = repo_state,
+	}
 end
 
 --- Aggregate markdown entries across super-repo members.
---- Each entry is tagged by repo name and its display becomes "<repo>/<relative>".
+--- Each labelled entry is tagged by repo name and displayed as "{repo} <relative>".
 M._scan_members = function(members, max_depth)
 	local entries = {}
 	for _, m in ipairs(members or {}) do
-		local root_prefix = vim.fn.resolve(m.path):gsub("/+$", "") .. "/"
-		local sub_entries = scan_markdown_files(m.path, max_depth)
-		for _, e in ipairs(sub_entries) do
-			local relative = e.value:sub(1, #root_prefix) == root_prefix
-				and e.value:sub(#root_prefix + 1)
-				or vim.fn.fnamemodify(e.value, ":t")
-			e.display = "{" .. m.name .. "} " .. relative .. "  [" .. os.date("%Y-%m-%d", e.mtime) .. "]"
-			e.search_text = "{" .. m.name .. "} " .. (relative:gsub("[/%-_]", " "))
-			e.tag = m.name
-			table.insert(entries, e)
+		if type(m.path) == "string" and m.path ~= "" then
+			local root_prefix = vim.fn.resolve(m.path):gsub("/+$", "") .. "/"
+			local sub_entries = scan_markdown_files(m.path, max_depth)
+			for _, e in ipairs(sub_entries) do
+				local relative = e.value:sub(1, #root_prefix) == root_prefix
+					and e.value:sub(#root_prefix + 1)
+					or vim.fn.fnamemodify(e.value, ":t")
+				if type(m.name) == "string" and m.name ~= "" then
+					e.display = "{" .. m.name .. "} " .. relative .. "  [" .. os.date("%Y-%m-%d", e.mtime) .. "]"
+					e.search_text = "{" .. m.name .. "} " .. (relative:gsub("[/%-_]", " "))
+					e.tag = m.name
+				else
+					e.tag = nil
+				end
+				table.insert(entries, e)
+			end
 		end
 	end
 	table.sort(entries, function(a, b) return a.mtime > b.mtime end)
@@ -151,13 +175,14 @@ M.open = function()
 	local config = _parley.config
 	local max_depth = config.markdown_finder_max_depth or 4
 
-	-- Compute scan roots: super-repo members or single repo_root.
-	local sr_active = _parley.is_super_repo_active and _parley.is_super_repo_active()
-	local sr_members = config.super_repo_members or {}
+	local super_state = _parley.super_repo and _parley.super_repo.get_state()
+		or { active = false, members = {} }
+	local mode = super_state.active and "super_repo" or "ordinary"
+	local member_roots = super_state.members or {}
 
 	local entries
-	if sr_active and #sr_members > 0 then
-		entries = M._scan_members(sr_members, max_depth)
+	if mode == "super_repo" then
+		entries = M._scan_members(member_roots, max_depth)
 	else
 		local repo_root = config.repo_root
 		if not repo_root or repo_root == "" then
@@ -170,48 +195,72 @@ M.open = function()
 		entries = scan_markdown_files(repo_root, max_depth)
 	end
 
-	local items, tag_bar_tags = build_picker_data(entries)
+	local function compute_picker_data()
+		local result = M.build_picker_data({
+			mode = mode,
+			entries = entries,
+			member_roots = member_roots,
+			directory_state = _parley._markdown_finder.directory_facet_state,
+			repo_state = _parley._markdown_finder.repo_facet_state,
+		})
+		_parley._markdown_finder.directory_facet_state = result.directory_state
+		_parley._markdown_finder.repo_facet_state = result.repo_state
+		return result
+	end
+
+	local picker_data = compute_picker_data()
 
 	local source_win = vim.api.nvim_get_current_win()
 	local picker_ref = {}
 
 	local tag_bar = nil
-	if tag_bar_tags then
+	if picker_data.tags then
 		local function refresh_picker()
-			local new_items, new_tb_tags = build_picker_data(entries)
+			picker_data = compute_picker_data()
 			if picker_ref.update then
-				picker_ref.update(new_items, new_tb_tags)
+				picker_ref.update(picker_data.items, picker_data.tags)
 			end
 		end
-		local function set_all_tags(value)
-			for _, entry in ipairs(entries) do
-				_tag_state[entry.tag] = value
+		local function update_active_state(update)
+			if picker_data.facet_domain == "directory" then
+				_parley._markdown_finder.directory_facet_state = update(
+					_parley._markdown_finder.directory_facet_state
+				)
+			elseif picker_data.facet_domain == "repo" then
+				_parley._markdown_finder.repo_facet_state = update(
+					_parley._markdown_finder.repo_facet_state
+				)
 			end
 			refresh_picker()
 		end
 		tag_bar = {
-			tags = tag_bar_tags,
+			tags = picker_data.tags,
 			on_toggle = function(tag_label)
-				_tag_state[tag_label] = _tag_state[tag_label] == false
-				refresh_picker()
+				update_active_state(function(state)
+					return finder_facets.toggle(state, tag_label)
+				end)
 			end,
 			on_all = function()
-				set_all_tags(true)
+				update_active_state(function(state)
+					return finder_facets.set_all(state, true)
+				end)
 			end,
 			on_none = function()
-				set_all_tags(false)
+				update_active_state(function(state)
+					return finder_facets.set_all(state, false)
+				end)
 			end,
 		}
 	end
 
 	local picker = _parley.float_picker.open({
 		title = "Markdown Files",
-		items = items,
+		items = picker_data.items,
 		recall_key = "parley.markdown_finder",
 		anchor = "bottom",
-		initial_query = finder_sticky.format_initial_query(_parley._markdown_finder.sticky_query),
+		initial_query = _parley._markdown_finder.query,
 		on_query_change = function(query)
-			_parley._markdown_finder.sticky_query = finder_sticky.extract(query, { "root" })
+			_parley._markdown_finder.query = query
 		end,
 		tag_bar = tag_bar,
 		on_select = function(item)

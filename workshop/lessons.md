@@ -1,5 +1,21 @@
 # Lessons
 
+## 2026-07-14 (#187)
+
+- **A changed user-facing command needs a README discoverability check even when
+  README has no stale sentence to grep.** #187 updated Markdown Finder's facet
+  and query behavior and corrected every atlas consumer, but the close review
+  found that README did not mention `:ParleyMarkdownFinder` / `<C-g>m` at all.
+  Rule: for every visible command or keybinding changed, search README for the
+  command and key; absence is a documentation gap, not evidence that no update
+  is needed.
+- **A readiness file is ready only when its payload validates, not merely when
+  it exists.** The close review's full suite intermittently observed the fake
+  SSE server's port file after `open()` but before its write/close, producing a
+  readable empty file and `port=nil`; a clean retry passed. Rule: process-fixture
+  readiness polling must parse and validate the announced value inside the wait
+  predicate before consumers proceed.
+
 ## 2026-07-12 (#170)
 - **Making terminal failure explicit in an async callback changes every consumer contract.** `generate_topic` began calling `callback(nil, reason)` on abort/empty so the response leg could finalize exactly once, but `ChatPrune` still concatenated its callback argument as a guaranteed string. Rule: whenever a callback gains a failure invocation or return shape, grep every consumer and add one real-entry-point test per terminal outcome; shared-producer tests do not prove consumer glue handles the new contract.
 - **A bounded-work API must measure actual traversal/copying, not merely report a bounded logical row count.** A successful one-row structural replacement reported one row while deep-copying arrays proportional to the whole document, and reasoning openers each rescanned a suffix. Rule: performance tests must pin implementation-observable visits/sharing at multiple document sizes and adversarial repeated-marker fixtures; use persistent sharing and linear indexing where derived state is unchanged.
