@@ -5,6 +5,7 @@
 
 local M = {}
 local _parley
+local finder_facets = require("parley.finder_facets")
 local finder_sticky = require("parley.finder_sticky")
 
 -- Tag state persists across opens within a session
@@ -74,6 +75,77 @@ local function scan_markdown_files(repo_root, max_depth)
 	end)
 
 	return entries
+end
+
+local function entry_facets(entry)
+	return { entry.tag }
+end
+
+local function render_entry(entry)
+	return {
+		display = entry.display,
+		search_text = entry.search_text,
+		value = entry.value,
+	}
+end
+
+local function repo_entries_match(entries, repo_facets)
+	local known = {}
+	for _, label in ipairs(repo_facets) do
+		known[label] = true
+	end
+	for _, entry in ipairs(entries) do
+		if type(entry.tag) ~= "string" or entry.tag == "" or not known[entry.tag] then
+			return false
+		end
+	end
+	return true
+end
+
+--- Build contextual picker data without reading runtime or module state.
+--- @param opts table plain mode, entries, member roots, and facet states
+--- @return table result with items, tags, facet domain, and copied states
+M.build_picker_data = function(opts)
+	opts = opts or {}
+	local entries = opts.entries or {}
+	local directory_state = finder_facets.merge_state(opts.directory_state, {})
+	local repo_state = finder_facets.merge_state(opts.repo_state, {})
+	local visible = entries
+	local tags
+	local facet_domain
+
+	if opts.mode == "ordinary" then
+		local directory_facets = finder_facets.discover(entries, entry_facets, "source")
+		if #directory_facets >= 2 then
+			facet_domain = "directory"
+			directory_state = finder_facets.merge_state(directory_state, directory_facets)
+			visible = finder_facets.filter(entries, directory_state, entry_facets)
+			tags = finder_facets.project(directory_facets, directory_state)
+		end
+	elseif opts.mode == "super_repo" then
+		local repo_facets = finder_facets.eligible_labels(opts.member_roots or {}, true, function(root)
+			return root.name
+		end)
+		if repo_facets and repo_entries_match(entries, repo_facets) then
+			facet_domain = "repo"
+			repo_state = finder_facets.merge_state(repo_state, repo_facets)
+			visible = finder_facets.filter(entries, repo_state, entry_facets)
+			tags = finder_facets.project(repo_facets, repo_state)
+		end
+	end
+
+	local items = {}
+	for _, entry in ipairs(visible) do
+		table.insert(items, render_entry(entry))
+	end
+
+	return {
+		items = items,
+		tags = tags,
+		facet_domain = facet_domain,
+		directory_state = directory_state,
+		repo_state = repo_state,
+	}
 end
 
 --- Build picker items and tag bar from entries, respecting tag_state.
