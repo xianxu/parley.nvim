@@ -112,12 +112,12 @@ The mode toggle also uses `<C-g>S`, while the desired mnemonic is `<C-g>p` for
 
 ## Plan
 
-- [ ] Add the pure per-repo mode-preference policy and focused tests.
-- [ ] Extract reusable state serialization and integrate startup/toggle
+- [x] Add the pure per-repo mode-preference policy and focused tests.
+- [x] Extract reusable state serialization and integrate startup/toggle
   persistence without reloading live roots.
-- [ ] Migrate the peer, branch, and tool-fold keybinding defaults with collision
+- [x] Migrate the peer, branch, and tool-fold keybinding defaults with collision
   regressions.
-- [ ] Reconcile user-facing and atlas documentation; run mapped and full tests.
+- [x] Reconcile user-facing and atlas documentation; run mapped and full tests.
 
 ## Estimate
 
@@ -152,6 +152,24 @@ against `baseline-v3.1.md`. Method A only.*
   migrated configurable actions, `config.lua` now remains the sole default
   source and registry registration/help derive through `config_key`
   (`ARCH-DRY`).
+- Implemented a pure `repo_mode` policy plus one atomic, write-only state
+  boundary. Explicit peer-mode toggles now persist only after successful
+  runtime transitions, while a failed save keeps the live choice and preserves
+  the prior durable file.
+- Startup now applies the saved canonical-repo preference once, after all state
+  refreshes, through an idempotent non-persisting overlay transition. Removed
+  the `.brain` startup exception so unsaved brain repositories follow the same
+  ordinary-repo default as every peer.
+- Migrated peer toggle to `<C-g>p` and chat branch/prune to `<C-g>b`. Tool-fold
+  toggling remains configurable but intentionally has no default mapping or
+  help row; registry resolution and exposed config share one source of truth.
+- Verification: exact traceability selections for `modes/super_repo`,
+  `ui/keybindings`, `infra/repo_mode`, and `chat/lifecycle`; `make
+  test-changed`; `make lint` (0 warnings/errors in 275 files); `git diff
+  --check`; and `make test JOBS=1` all exited 0. The first parallel full-suite
+  run exposed a pre-existing ready-file race in
+  `chat_progress_process_spec.lua`; the unchanged test passed three isolated
+  repetitions and the complete reduced-parallelism rerun.
 
 ## Revisions
 

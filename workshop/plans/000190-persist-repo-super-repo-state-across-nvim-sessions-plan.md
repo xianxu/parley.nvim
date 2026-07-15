@@ -248,17 +248,17 @@ Commit: `keybindings: #190 use peer and branch mnemonics`
 - Modify: `workshop/issues/000190-persist-repo-super-repo-state-across-nvim-sessions.md`
 - Modify: `workshop/plans/000190-persist-repo-super-repo-state-across-nvim-sessions-plan.md`
 
-- [ ] **Step 1: Update every user-facing description**
+- [x] **Step 1: Update every user-facing description**
 
 Document `<C-g>p` as peer-mode toggle, `<C-g>b` as branch/prune, tool-fold as configurable with no default, per-canonical-repo persistence in `state.json`, ordinary unsaved default, synchronous startup restore, and brain parity. Add README discoverability for the peer toggle and configuration override.
 
-- [ ] **Step 2: Search for stale behavior and resolve every relevant hit**
+- [x] **Step 2: Search for stale behavior and resolve every relevant hit**
 
 Run: `rg -n '<C-g>S|Pruning \(`<C-g>p`\)|chat_shortcut_toggle_tool_folds.*<C-g>b|Brain repos auto|Toggle is transient|never persisted' README.md atlas lua tests`
 
 Expected: no stale assertions; fixture strings that intentionally test migration must be labeled as such or updated.
 
-- [ ] **Step 3: Run mapped tests and static checks**
+- [x] **Step 3: Run mapped tests and static checks**
 
 Before running mapped tests, confirm `atlas/traceability.yaml` maps optional-default registry/help behavior to `keybindings_spec.lua`, default-config migration to `config_tools_spec.lua`, repository-mode policy to `repo_mode_spec.lua`, atomic JSON writes to `helper_io_spec.lua`, and persistence/startup/toggle orchestration to `super_repo_spec.lua`. Extend the existing `modes/super_repo`, `ui/keybindings`, and `chat/lifecycle` entries and add an `infra/repo_mode` entry so every changed atlas file is mapped. Run these concrete selection checks and verify every intended test is selected:
 
@@ -278,13 +278,13 @@ Run: `git diff --check`
 
 Expected: all commands exit 0 with no failures or whitespace errors.
 
-- [ ] **Step 4: Run the full suite**
+- [x] **Step 4: Run the full suite**
 
 Run: `make test`
 
 Expected: exit 0 with zero failing tests.
 
-- [ ] **Step 5: Reconcile artifacts and commit**
+- [x] **Step 5: Reconcile artifacts and commit**
 
 Check every completed issue and durable-plan box, append implementation discoveries and exact verification evidence to `## Log`, and ensure atlas index/traceability stay consistent.
 

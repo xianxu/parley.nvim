@@ -7,12 +7,21 @@ Writes are unchanged: still go to the current repo.
 
 ## Activation
 
-- **Toggle**: `<C-g>S` (`global_shortcut_super_repo_toggle`).
+- **Toggle peers**: `<C-g>p` (`global_shortcut_super_repo_toggle`).
 - **Pre-condition**: cwd must be inside a `.parley` repo (i.e. `repo_root`
   is set by `apply_repo_local`). If not, the toggle fails with a notice.
 - **Workspace root**: parent of `repo_root`. Members are direct children of
   the workspace root whose own direct child is `.parley`.
-- **Transient** — never persisted to `state.json`.
+- **Per-repo preference**: a successful explicit toggle stores `repo` or
+  `super_repo` under the canonical current repo root in `state.json.repo_modes`.
+  A repository with no saved entry starts in ordinary repo mode. Global mode
+  has no repo preference.
+
+Setup restores a saved peer choice synchronously once, after the initial and
+optional default-agent state refreshes have settled repo-local roots. The
+restoration path changes only the runtime overlay and does not rewrite the
+preference. `.brain` has no special behavior: brain repositories follow the
+same saved choice and ordinary unsaved default as every other repository.
 
 ## Mode glyphs (lualine)
 
@@ -85,6 +94,12 @@ design (see `workshop/issues/000113-create-a-super-repo-mode.md`).
 
 ## Persistence safety
 
+State replacement is atomic and result-bearing. Explicit toggles update the
+runtime overlay first, then write a transient-safe snapshot without reloading
+state or reapplying roots. If that write fails, the new runtime mode remains
+active, the previous `state.json` remains intact, and Parley emits one bounded
+“preference not saved” warning.
+
 For **chat** roots: trivially safe. Issue #117 stopped persisting
 `chat_roots` / `chat_dirs` to `state.json` entirely — the chat root list
 is derived on every read from `config.chat_dir + repo + super-repo`.
@@ -99,10 +114,12 @@ filter for plain repo mode's primary note root.
 
 ## Code
 
-- `lua/parley/super_repo.lua` — module: `compute_members`, `is_active`,
-  `toggle`, `get_pushed_chat_dirs` / `get_pushed_note_dirs`.
+- `lua/parley/repo_mode.lua` — pure saved-mode selection and immutable map update.
+- `lua/parley/super_repo.lua` — runtime-only module: `compute_members`,
+  `is_active`, `set_active`, `toggle`, and pushed-root accessors.
 - `lua/parley/init.lua` — wires `parley.toggle_super_repo()` /
-  `parley.is_super_repo_active()`; persistence gate consults pushed-dirs.
+  `parley.is_super_repo_active()`, restores after setup refreshes, and owns the
+  write-only transient-safe persistence boundary.
 - `lua/parley/issues.lua` — `scan_issues` accepts `repo_name` +
   `history_dir_override` opts.
 - `lua/parley/issue_finder.lua`, `vision_finder.lua` — multi-root aggregation

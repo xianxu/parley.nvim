@@ -124,6 +124,9 @@ Most-used defaults:
   across finder reopenings within the current Neovim session. When a facet bar
   wraps beyond its visible height, point at the bar and use the mouse wheel to
   reach the remaining facets.
+- `<C-g>p` toggle peer (super-repo) mode - aggregate reads across sibling
+  `.parley` repositories. The explicit repo/peer choice persists separately for
+  each repository; an unsaved repository starts in ordinary repo mode.
 
 **In Chat Buffer**
 - `<C-g>?` show key bindings
@@ -138,6 +141,11 @@ Most-used defaults:
 - `<C-g>a` change agent
 - `<C-g>P` next system prompt
 - `<C-g>s` skill picker (review, voice-apply, etc.)
+- `<C-g>b` branch/prune - move the current exchange and following exchanges to
+  a child chat
+
+Tool-fold toggling is configurable but unbound by default. To opt in, set
+`chat_shortcut_toggle_tool_folds = { modes = { "n" }, shortcut = "<leader>tf" }`.
 - `<C-g>l` toggle follow cursor
 - `<C-g>i` to insert a fork in the chat tree, can be inline or standalone
 - `gf` smart go-to-file: on an ariadne artifact ref (`ariadne#11`, `#15 M4`, `pair#84`) resolves it and jumps (family picker when it resolves to many); on a plain path, Vim's native `gf`
