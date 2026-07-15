@@ -36,6 +36,7 @@ local M = {}
 M._last_selection = {}
 
 local logger = require("parley.logger")
+local facet_bar_layout = require("parley.facet_bar_layout")
 local MIN_W    = 20  -- minimum picker width  (chars)
 local MIN_H    = 1   -- minimum results height (lines)
 local MARGIN_H = 4   -- cols kept clear on each horizontal edge
@@ -529,6 +530,20 @@ end
 -- centered geometry instead of duplicating the math (ARCH-DRY).
 M.compute_layout = compute_layout
 
+local function display_text_units(text)
+    local units = {}
+    local count = vim.fn.strchars(text, true)
+    for index = 0, count - 1 do
+        table.insert(units, vim.fn.strcharpart(text, index, 1, true))
+    end
+    return units
+end
+
+local DISPLAY_TEXT_OPS = {
+    units = display_text_units,
+    width = vim.fn.strdisplaywidth,
+}
+
 -- Truncate a display string to fit within max_w display columns, appending "…".
 local function truncate(text, max_w)
     if vim.fn.strdisplaywidth(text) <= max_w then return text end
@@ -579,7 +594,11 @@ function M.open(opts)
     local on_query_change = opts.on_query_change or function() end
     local extra_mappings = opts.mappings or {}
     local tag_bar_opts = opts.tag_bar  -- optional: { tags = [{label, enabled}], on_toggle = fn(label) }
-    local has_tag_bar = tag_bar_opts ~= nil and type(tag_bar_opts.tags) == "table" and #tag_bar_opts.tags > 0
+    local tag_bar_capable = tag_bar_opts ~= nil
+    if tag_bar_capable and type(tag_bar_opts.tags) ~= "table" then
+        tag_bar_opts.tags = {}
+    end
+    local has_tag_bar = tag_bar_capable and #tag_bar_opts.tags > 0
 
     if #items == 0 and not has_tag_bar then
         vim.notify("No items to pick from", vim.log.levels.WARN)
@@ -596,8 +615,9 @@ function M.open(opts)
     end)()
     local desired_h = opts.height or #items
 
-    local ui = vim.api.nvim_list_uis()[1] or { width = 80, height = 24 }
-    local win_w, win_h, row, col, tag_bar_row, prompt_row = compute_layout(desired_w, desired_h, ui, has_tag_bar)
+    local ui = vim.api.nvim_list_uis()[1] or { width = vim.o.columns, height = vim.o.lines }
+    local win_w, win_h, row, col, tag_bar_row, prompt_row =
+        compute_layout(desired_w, desired_h, ui, false)
 
     local results_buf = vim.api.nvim_create_buf(false, true)
     vim.bo[results_buf].bufhidden = "wipe"
@@ -635,6 +655,7 @@ function M.open(opts)
     local closed = false
     local external_ui_active = false
     local resize_autocmd_id = nil
+    local close_all
     local on_key_ns = vim.api.nvim_create_namespace("float_picker_on_key")
 
     local function keycode(key)
@@ -695,96 +716,142 @@ function M.open(opts)
     local tag_col_ranges = {}  -- { {start_col, end_col, label}, ... } for click detection
     local TAG_BAR_NS = vim.api.nvim_create_namespace("float_picker_tag_bar")
 
-    if has_tag_bar then
-        tag_bar_buf = vim.api.nvim_create_buf(false, true)
-        vim.bo[tag_bar_buf].bufhidden = "wipe"
-        vim.bo[tag_bar_buf].buftype = "nofile"
-        local tag_bar_cfg = {
-            relative = "editor",
-            row = tag_bar_row,
-            col = col,
-            width = win_w,
-            height = 1,
-            style = "minimal",
-            border = "rounded",
-            focusable = false,
-        }
-        tag_bar_win = vim.api.nvim_open_win(tag_bar_buf, false, tag_bar_cfg)
-        vim.wo[tag_bar_win].wrap = false
-        vim.wo[tag_bar_win].number = false
-        vim.wo[tag_bar_win].relativenumber = false
-        vim.wo[tag_bar_win].signcolumn = "no"
-
-        -- Define highlight groups (default=true makes each call idempotent)
-        vim.api.nvim_set_hl(0, "ParleyTagOn",     { bold = true,    default = true })
-        vim.api.nvim_set_hl(0, "ParleyTagOff",    { link = "Comment", default = true })
-        vim.api.nvim_set_hl(0, "ParleyTagAction", { reverse = true, default = true })
-    end
-
     -- Sentinel labels for the fixed ALL/NONE action buttons (can't appear in real tag names)
     local TAG_ACTION_ALL  = "\0all"
     local TAG_ACTION_NONE = "\0none"
 
-    local function render_tag_bar()
+    local function render_tag_bar(model)
         if not has_tag_bar or not tag_bar_buf or not vim.api.nvim_buf_is_valid(tag_bar_buf) then
             return
         end
-        local parts = {}
         local ranges = {}
-        local col_pos = 2  -- 1-indexed, starts after leading space
-        local line = " "
-
-        -- Determine ALL/NONE active state from current tag enabled flags
-        local all_on, all_off = true, true
-        for _, tag in ipairs(tag_bar_opts.tags) do
-            if not tag.enabled then all_on = false end
-            if tag.enabled then all_off = false end
+        for _, segment in ipairs(model.segments) do
+            local label = segment.label
+            if segment.kind == "action" then
+                label = segment.label == "all" and TAG_ACTION_ALL or TAG_ACTION_NONE
+            end
+            table.insert(ranges, {
+                segment.byte_start + 1,
+                segment.byte_end,
+                label,
+                row = segment.row,
+            })
         end
-        -- all_active: ALL is the current state; none_active: NONE is the current state; mixed: neither
-        local all_active  = all_on
-        local none_active = all_off
-
-        local function add_button(btn, label, part_extra)
-            local start_col = col_pos
-            local end_col = col_pos + #btn - 1
-            local part = { text = btn, label = label, start_col = start_col, end_col = end_col }
-            for k, v in pairs(part_extra) do part[k] = v end
-            table.insert(parts, part)
-            table.insert(ranges, { start_col, end_col, label })
-            col_pos = end_col + 2
-            line = line .. btn .. " "
-        end
-
-        -- Fixed action buttons first
-        add_button("ALL",  TAG_ACTION_ALL,  { is_action = true, active = all_active })
-        add_button("NONE", TAG_ACTION_NONE, { is_action = true, active = none_active })
-
-        -- Separator
-        line = line .. " "
-        col_pos = col_pos + 1
-
-        -- Tag toggle buttons
-        for _, tag in ipairs(tag_bar_opts.tags) do
-            local btn = "[" .. (tag.label == "" and "" or tag.label) .. "]"
-            add_button(btn, tag.label, { enabled = tag.enabled })
-        end
-
         tag_col_ranges = ranges
         vim.bo[tag_bar_buf].modifiable = true
-        vim.api.nvim_buf_set_lines(tag_bar_buf, 0, -1, false, { line })
+        vim.api.nvim_buf_set_lines(tag_bar_buf, 0, -1, false, model.lines)
         vim.bo[tag_bar_buf].modifiable = false
-        -- Apply highlights
         vim.api.nvim_buf_clear_namespace(tag_bar_buf, TAG_BAR_NS, 0, -1)
-        for _, part in ipairs(parts) do
+        for _, segment in ipairs(model.segments) do
             local hl
-            if part.is_action then
-                hl = part.active and "ParleyTagAction" or "ParleyTagOff"
+            if segment.kind == "action" then
+                hl = segment.active and "ParleyTagAction" or "ParleyTagOff"
             else
-                hl = part.enabled and "ParleyTagOn" or "ParleyTagOff"
+                hl = segment.enabled and "ParleyTagOn" or "ParleyTagOff"
             end
             vim.api.nvim_buf_add_highlight(tag_bar_buf, TAG_BAR_NS, hl,
-                0, part.start_col - 1, part.end_col)
+                segment.row, segment.byte_start, segment.byte_end)
         end
+    end
+
+    local function reflow_picker()
+        if closed then return false end
+        if not vim.api.nvim_win_is_valid(results_win) or
+            not vim.api.nvim_win_is_valid(prompt_win) then
+            if close_all then close_all() end
+            return false
+        end
+
+        local tags = tag_bar_capable and tag_bar_opts.tags or {}
+        local should_have_tag_bar = tag_bar_capable and #tags > 0
+        if has_tag_bar and should_have_tag_bar and tag_bar_win and
+            not vim.api.nvim_win_is_valid(tag_bar_win) then
+            if close_all then close_all() end
+            return false
+        end
+
+        local current_ui = vim.api.nvim_list_uis()[1] or {
+            width = vim.o.columns,
+            height = vim.o.lines,
+        }
+        local content_width = select(1, compute_layout(desired_w, desired_h, current_ui, 0))
+        local model = should_have_tag_bar and
+            facet_bar_layout.build(tags, content_width, DISPLAY_TEXT_OPS) or nil
+        local facet_height
+        win_w, win_h, row, col, tag_bar_row, prompt_row, facet_height =
+            compute_layout(desired_w, desired_h, current_ui, model and model.height or 0)
+
+        local previous_topline = 1
+        local newly_activated = should_have_tag_bar and not has_tag_bar
+        if tag_bar_win and vim.api.nvim_win_is_valid(tag_bar_win) then
+            local view = vim.api.nvim_win_call(tag_bar_win, vim.fn.winsaveview)
+            previous_topline = tonumber(view.topline) or 1
+        end
+
+        if not should_have_tag_bar then
+            if tag_bar_win and vim.api.nvim_win_is_valid(tag_bar_win) then
+                vim.api.nvim_win_close(tag_bar_win, true)
+            end
+            tag_bar_win = nil
+            tag_bar_buf = nil
+            tag_col_ranges = {}
+            has_tag_bar = false
+        else
+            if not tag_bar_win then
+                tag_bar_buf = vim.api.nvim_create_buf(false, true)
+                vim.bo[tag_bar_buf].bufhidden = "wipe"
+                vim.bo[tag_bar_buf].buftype = "nofile"
+                tag_bar_win = vim.api.nvim_open_win(tag_bar_buf, false, {
+                    relative = "editor",
+                    row = tag_bar_row,
+                    col = col,
+                    width = win_w,
+                    height = facet_height,
+                    style = "minimal",
+                    border = "rounded",
+                    focusable = false,
+                })
+                vim.wo[tag_bar_win].wrap = false
+                vim.wo[tag_bar_win].number = false
+                vim.wo[tag_bar_win].relativenumber = false
+                vim.wo[tag_bar_win].signcolumn = "no"
+                vim.api.nvim_set_hl(0, "ParleyTagOn",     { bold = true, default = true })
+                vim.api.nvim_set_hl(0, "ParleyTagOff",    { link = "Comment", default = true })
+                vim.api.nvim_set_hl(0, "ParleyTagAction", { reverse = true, default = true })
+            else
+                vim.api.nvim_win_set_config(tag_bar_win, {
+                    relative = "editor",
+                    row = tag_bar_row,
+                    col = col,
+                    width = win_w,
+                    height = facet_height,
+                })
+            end
+            has_tag_bar = true
+            render_tag_bar(model)
+            local max_topline = math.max(1, #model.lines - facet_height + 1)
+            local topline = newly_activated and 1 or
+                math.max(1, math.min(previous_topline, max_topline))
+            vim.api.nvim_win_call(tag_bar_win, function()
+                vim.fn.winrestview({ topline = topline, leftcol = 0 })
+            end)
+        end
+
+        vim.api.nvim_win_set_config(results_win, {
+            relative = "editor",
+            row = row,
+            col = col,
+            width = win_w,
+            height = win_h,
+        })
+        vim.api.nvim_win_set_config(prompt_win, {
+            relative = "editor",
+            row = prompt_row,
+            col = col,
+            width = win_w,
+            height = 1,
+        })
+        return true
     end
 
     local function prompt_line()
@@ -903,7 +970,7 @@ function M.open(opts)
         return visual_row >= first_content_row() and visual_row <= last_content_row()
     end
 
-    local function close_all()
+    close_all = function()
         if closed then return end
         closed = true
         if resize_autocmd_id then
@@ -1174,7 +1241,7 @@ function M.open(opts)
     end
 
     render_prompt()
-    render_tag_bar()
+    reflow_picker()
     apply_filter(true)
     on_query_change(query_text)
 
@@ -1438,39 +1505,10 @@ function M.open(opts)
     resize_autocmd_id = vim.api.nvim_create_autocmd("VimResized", {
         callback = function()
             if not vim.api.nvim_win_is_valid(results_win) then
-                if resize_autocmd_id then
-                    pcall(vim.api.nvim_del_autocmd, resize_autocmd_id)
-                    resize_autocmd_id = nil
-                end
+                close_all()
                 return
             end
-            local new_ui = vim.api.nvim_list_uis()[1] or { width = 80, height = 24 }
-            local nw, nh, nr, nc, ntbr, npr = compute_layout(desired_w, desired_h, new_ui, has_tag_bar)
-            vim.api.nvim_win_set_config(results_win, {
-                relative = "editor",
-                row = nr,
-                col = nc,
-                width = nw,
-                height = nh,
-            })
-            if has_tag_bar and tag_bar_win and vim.api.nvim_win_is_valid(tag_bar_win) then
-                vim.api.nvim_win_set_config(tag_bar_win, {
-                    relative = "editor",
-                    row = ntbr,
-                    col = nc,
-                    width = nw,
-                    height = 1,
-                })
-            end
-            if vim.api.nvim_win_is_valid(prompt_win) then
-                vim.api.nvim_win_set_config(prompt_win, {
-                    relative = "editor",
-                    row = npr,
-                    col = nc,
-                    width = nw,
-                    height = 1,
-                })
-            end
+            if not reflow_picker() then return end
             refresh_results()
             set_selection(sel_idx)
             highlight_matches(query_text:gsub("^%s+", ""))
@@ -1507,11 +1545,13 @@ function M.open(opts)
     -- new_tag_bar_tags: optional list of {label, enabled} to refresh the tag bar display.
     local function update(new_items, new_tag_bar_tags)
         if closed then return end
-        items = new_items
-        if new_tag_bar_tags and has_tag_bar then
-            tag_bar_opts.tags = new_tag_bar_tags
-            render_tag_bar()
+        if new_items ~= nil then
+            items = new_items
         end
+        if new_tag_bar_tags ~= nil and tag_bar_capable then
+            tag_bar_opts.tags = new_tag_bar_tags
+        end
+        if not reflow_picker() then return end
         apply_filter(false)
     end
 
