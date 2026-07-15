@@ -179,6 +179,15 @@ stale by `sdlc estimate-source`, so this derivation is provisional.
 - Independent spec and quality reviews approved commit `0295d90` with no
   findings (`ARCH-DRY`, `ARCH-PURE`).
 
+### 2026-07-15 — Task 2 stacked geometry
+
+- Extended `float_picker.compute_layout` with requested/visible facet heights
+  while retaining its first six returns and boolean/non-faceted compatibility.
+- The expected five geometry assertions failed before implementation; serialized
+  unit/integration suites and independent reviews passed commit `9a9bb82`.
+- Quality review additionally swept screen heights 1–200, facet requests through
+  10,000, and historical non-faceted geometry without finding a boundary defect.
+
 ## Revisions
 
 ### 2026-07-15

@@ -169,21 +169,21 @@
 - Create: `tests/unit/float_picker_tag_bar_spec.lua`
 - Modify: `tests/integration/review_menu_spec.lua:17-24`
 
-- [ ] **Step 1: Write failing geometry compatibility and height tests**
+- [x] **Step 1: Write failing geometry compatibility and height tests**
 
   Assert numeric facet heights add `height + 2` border rows, results shrink no
   lower than `MIN_H = 1`, prompt row follows visible facet height, excessive
   facet height is capped to the positive available region, and
   `compute_layout(..., false)` returns the exact existing Review Menu geometry.
 
-- [ ] **Step 2: Run unit and integration tests to verify the old boolean contract fails**
+- [x] **Step 2: Run unit and integration tests to verify the old boolean contract fails**
 
   Run: `make test-unit JOBS=1 && make test-integration JOBS=1`
 
   Expected: the new numeric-height assertions FAIL; existing Review Menu tests
   remain green.
 
-- [ ] **Step 3: Extend `compute_layout` without breaking boolean callers**
+- [x] **Step 3: Extend `compute_layout` without breaking boolean callers**
 
   Treat a number as requested facet content height, `true` as legacy height 1,
   and false/nil as zero. Return the visible facet height as a seventh value.
@@ -191,13 +191,13 @@
   results row, then center the final valid stack. Keep the first six return
   values and non-faceted arithmetic compatible (`ARCH-DRY`).
 
-- [ ] **Step 4: Run geometry regressions**
+- [x] **Step 4: Run geometry regressions**
 
   Run: `make test-unit JOBS=1 && make test-integration JOBS=1`
 
   Expected: PASS with unchanged non-faceted geometry and bounded faceted stacks.
 
-- [ ] **Step 5: Commit the geometry seam**
+- [x] **Step 5: Commit the geometry seam**
 
   ```bash
   git add lua/parley/float_picker.lua tests/unit/float_picker_tag_bar_spec.lua tests/integration/review_menu_spec.lua
