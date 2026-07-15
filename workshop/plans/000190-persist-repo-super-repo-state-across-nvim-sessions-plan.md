@@ -290,7 +290,7 @@ Check every completed issue and durable-plan box, append implementation discover
 
 Commit: `docs: #190 document persistent peer mode`
 
-- [ ] **Step 6: Prepare and invoke the close boundary**
+- [x] **Step 6: Prepare and invoke the close boundary**
 
 Run `sdlc actual --issue 190`, then `sdlc close --issue 190 --verified '<fresh mapped/full test, lint, diff-check, and smoke-test evidence>'`, using only the precise `--no-atlas`/other gate flag if the command identifies a genuinely inapplicable guard. Let `sdlc close` dispatch the mandatory fresh-context boundary review; fix all Critical/Important findings before shipping.
 
