@@ -227,6 +227,9 @@ stale by `sdlc estimate-source`, so this derivation is provisional.
 - Atlas traceability now maps the pure positional authority and both focused
   regression suites under `ui/pickers` (`ARCH-DRY`, `ARCH-PURE`,
   `ARCH-PURPOSE`).
+- `ruby -e 'require "yaml"; YAML.load_file("atlas/traceability.yaml"); puts
+  "traceability YAML: valid"'` parsed the traceability map successfully and
+  printed `traceability YAML: valid`.
 
 ## Revisions
 
