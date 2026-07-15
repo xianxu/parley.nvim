@@ -43,10 +43,10 @@
 
 ## Preflight: Verify cross-issue ownership
 
-- [ ] Run: `rg -n '^deps:.*000186' workshop/issues/000115-improve-c-g-m-so-that-it-works-to-find-artifacts-of-interest.md`
-- [ ] Run: `rg -n 'must consume that engine' workshop/issues/000115-improve-c-g-m-so-that-it-works-to-find-artifacts-of-interest.md`
-- [ ] Run: `rg -n 'must not introduce a second facet-policy' workshop/issues/000115-improve-c-g-m-so-that-it-works-to-find-artifacts-of-interest.md`
-- [ ] Run: `sdlc issue validate --issue 115`
+- [x] Run: `rg -n '^deps:.*000186' workshop/issues/000115-improve-c-g-m-so-that-it-works-to-find-artifacts-of-interest.md`
+- [x] Run: `rg -n 'must consume that engine' workshop/issues/000115-improve-c-g-m-so-that-it-works-to-find-artifacts-of-interest.md`
+- [x] Run: `rg -n 'must not introduce a second facet-policy' workshop/issues/000115-improve-c-g-m-so-that-it-works-to-find-artifacts-of-interest.md`
+- [x] Run: `sdlc issue validate --issue 115`
 
 Expected: every grep finds its independent dependency/ownership assertion and
 schema validation passes. Stop and repair the planning artifact before Task 1
@@ -60,17 +60,17 @@ if any command fails.
 - Create: `lua/parley/finder_facets.lua`
 - Create: `tests/unit/finder_facets_spec.lua`
 
-- [ ] **Step 1: Write failing tests for discovery and state merging**
+- [x] **Step 1: Write failing tests for discovery and state merging**
 
   Cover deterministic sorted discovery, injected entry-to-facets mapping, new keys defaulting to `true`, prior enabled/disabled choices surviving, and temporarily undiscovered keys remaining in the returned state. Include the Chat Finder untagged mapping (`{ "" }`) as an ordinary facet key.
 
-- [ ] **Step 2: Run the pure spec and verify the missing module failure**
+- [x] **Step 2: Run the pure spec and verify the missing module failure**
 
   Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/finder_facets_spec.lua" -c "qa!"`
 
   Expected: FAIL because `parley.finder_facets` does not exist.
 
-- [ ] **Step 3: Implement the specified discovery and merge contracts**
+- [x] **Step 3: Implement the specified discovery and merge contracts**
 
   Add a dependency-free module with these exact contracts:
 
@@ -108,13 +108,13 @@ if any command fails.
 
   Do not embed chat, issue, repository, display-label, or picker knowledge. Preserve Chat Finder's canonical order: lexicographic non-empty keys, then the empty-string untagged key.
 
-- [ ] **Step 4: Run the focused spec and verify the merge cases pass**
+- [x] **Step 4: Run the focused spec and verify the merge cases pass**
 
   Run the Task 1 headless command.
 
   Expected: PASS for discovery and merge tests.
 
-- [ ] **Step 5: Write failing tests for transitions, filtering, and projection**
+- [x] **Step 5: Write failing tests for transitions, filtering, and projection**
 
   Pin these contracts:
 
@@ -125,17 +125,17 @@ if any command fails.
   - all-enabled is a no-op in result semantics and NONE returns zero mapped entries;
   - projection returns `{ label = key, enabled = state[key] ~= false }` in discovered order and returns `nil` for no discovered keys.
 
-- [ ] **Step 6: Run the focused spec and verify the new assertions fail**
+- [x] **Step 6: Run the focused spec and verify the new assertions fail**
 
   Run the Task 1 headless command.
 
   Expected: FAIL because the transition/filter/projection functions are absent.
 
-- [ ] **Step 7: Implement the specified immutable pure operations**
+- [x] **Step 7: Implement the specified immutable pure operations**
 
   Complete the API with these exact contracts: `toggle(state, key)` copies state and assigns `not (state[key] ~= false)` to `key`; `set_all(state, enabled)` copies state and assigns the boolean to every retained key; `filter(entries, state, facets_for_entry)` returns a fresh ordered list containing an entry iff any injected key has state value other than `false`; and `project(discovered, state)` returns `nil` for zero discovered keys or ordered `{ label = key, enabled = state[key] ~= false }` records otherwise. Adapters explicitly assign returned state to their session owner. Retained undiscovered keys never affect entries that do not carry those keys.
 
-- [ ] **Step 8: Run the pure spec and full diff check**
+- [x] **Step 8: Run the pure spec and full diff check**
 
   Run the Task 1 headless command.
 
@@ -143,7 +143,7 @@ if any command fails.
 
   Expected: all tests PASS and no whitespace errors.
 
-- [ ] **Step 9: Commit the pure model**
+- [x] **Step 9: Commit the pure model**
 
   ```bash
   git add lua/parley/finder_facets.lua tests/unit/finder_facets_spec.lua
@@ -158,17 +158,17 @@ if any command fails.
 - Modify: `tests/unit/chat_finder_logic_spec.lua`
 - Modify: `tests/unit/float_picker_spec.lua`
 
-- [ ] **Step 1: Characterize real picker update query preservation**
+- [x] **Step 1: Characterize real picker update query preservation**
 
   Add a production-shaped test to `tests/unit/float_picker_spec.lua` that opens the real picker with a tag bar and an initial query of `"alpha"`, then finds the real prompt buffer, replaces its line with the prompt prefix plus the distinct whitespace-sensitive live query `"  alpha beta  "`, and executes the buffer's real `TextChanged` autocmd so `sync_query_from_prompt()` and `apply_filter()` run exactly as they do for user typing. Capture that exact prompt line, call the returned `picker.update()` with projected tags and items containing both `"alpha beta"` and `"alpha gamma"`, then assert the prompt line is byte-for-byte unchanged and only the `"alpha beta"` row remains visible. A stale initial/partial query would show both rows, so the result assertion independently proves update used the complete synchronized live query. Use the real prompt/results buffers and picker return value, not a capture fake.
 
-- [ ] **Step 2: Run the real picker characterization and record the green baseline**
+- [x] **Step 2: Run the real picker characterization and record the green baseline**
 
   Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/float_picker_spec.lua" -c "qa!"`
 
   Expected: PASS on the existing `float_picker.update` implementation, proving the live prompt/query contract before finder adapters are changed. If it fails, stop and treat the picker defect as implementation work required by this issue before adapter refactoring.
 
-- [ ] **Step 3: Write a failing facet-backed empty-picker test**
+- [x] **Step 3: Write a failing facet-backed empty-picker test**
 
   In `tests/unit/float_picker_spec.lua`, open the real picker with `items = {}`
   and a non-empty `tag_bar.tags` list. Assert the picker return value exposes
@@ -177,14 +177,14 @@ if any command fails.
   Keep the existing test that an empty picker without a tag bar warns and
   returns early.
 
-- [ ] **Step 4: Run the picker spec and verify the empty facet picker fails**
+- [x] **Step 4: Run the picker spec and verify the empty facet picker fails**
 
   Run the Task 2 headless picker command.
 
   Expected: FAIL because `float_picker.open` warns/returns nil before creating
   the tag bar when `items` is empty.
 
-- [ ] **Step 5: Permit zero initial items only with a usable facet bar**
+- [x] **Step 5: Permit zero initial items only with a usable facet bar**
 
   In `lua/parley/float_picker.lua`, resolve `tag_bar_opts`/`has_tag_bar` before
   the empty-items guard and change the guard to return early only when both the
@@ -192,14 +192,14 @@ if any command fails.
   `(no matches)` rendering and `update` implementation; do not change warning
   behavior for an empty picker without facets.
 
-- [ ] **Step 6: Run the picker spec and verify both empty-state paths pass**
+- [x] **Step 6: Run the picker spec and verify both empty-state paths pass**
 
   Run the Task 2 headless picker command.
 
   Expected: PASS; facet-backed empty pickers open/update, while genuinely empty
   non-faceted pickers retain the warning/early return.
 
-- [ ] **Step 7: Add a concrete passing characterization harness for Chat Finder facets**
+- [x] **Step 7: Add a concrete passing characterization harness for Chat Finder facets**
 
   Add a `describe("ChatFinder facet compatibility")` block to `tests/unit/chat_finder_logic_spec.lua`. Reuse its real temporary chat roots and write three minimal chat markdown files whose frontmatter produces `alpha`, `beta`, and no tags. Replace `M.float_picker.open` with a capture fake that stores its `opts` and returns `{ update = function(new_items, new_tags) ... end }`; initialize `M._chat_finder.tag_state = { alpha = false, missing = false }` and `M._chat_finder.sticky_query` with a non-empty query before calling `M.cmd.ChatFinder()`.
 
@@ -211,13 +211,13 @@ if any command fails.
   - the exact typed/sticky query is not reset by a facet update;
   - retained temporarily absent tag state is restored when that tag reappears.
 
-- [ ] **Step 8: Run the Chat Finder characterization and record the green baseline**
+- [x] **Step 8: Run the Chat Finder characterization and record the green baseline**
 
   Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/chat_finder_logic_spec.lua" -c "qa!"`
 
   Expected: PASS on the existing inline implementation. These are characterization tests, so their green baseline proves the extraction preserves behavior; the pure model itself was developed red-green in Task 1.
 
-- [ ] **Step 9: Adapt Chat Finder to `finder_facets`**
+- [x] **Step 9: Adapt Chat Finder to `finder_facets`**
 
   Require `parley.finder_facets` near the module imports. Replace only the inline collection/merge/filter/transition/projection block with calls to the pure API:
 
@@ -235,7 +235,7 @@ if any command fails.
 
   `build_picker_data` filters through the model and then renders the same `{display, search_text = ordinal, value}` item shape. Tag callbacks assign the model's fresh state back to `_chat_finder.tag_state` before calling the existing `picker_ref.update`; beyond Step 5's narrowly scoped empty-with-facets guard, leave tag-bar styling, recency, initial selection, and sticky-query handling unchanged.
 
-- [ ] **Step 10: Run focused Chat and facet specs**
+- [x] **Step 10: Run focused Chat and facet specs**
 
   Run:
 
@@ -247,7 +247,7 @@ if any command fails.
 
   Expected: PASS, including unchanged Chat Finder presentation and persistence behavior.
 
-- [ ] **Step 11: Run related picker/sticky regressions**
+- [x] **Step 11: Run related picker/sticky regressions**
 
   Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/finder_sticky_spec.lua" -c "qa!"`
 
@@ -255,7 +255,7 @@ if any command fails.
 
   Expected: PASS.
 
-- [ ] **Step 12: Commit the picker and Chat Finder adapter**
+- [x] **Step 12: Commit the picker and Chat Finder adapter**
 
   ```bash
   git add lua/parley/chat_finder.lua lua/parley/float_picker.lua tests/unit/chat_finder_logic_spec.lua tests/unit/float_picker_spec.lua
@@ -271,11 +271,11 @@ if any command fails.
 - Modify: `lua/parley/init.lua:3140-3160`
 - Modify: `tests/unit/issue_finder_spec.lua`
 
-- [ ] **Step 1: Extend the fake Issue Finder harness for super-repo roots and picker updates**
+- [x] **Step 1: Extend the fake Issue Finder harness for super-repo roots and picker updates**
 
   Make the existing production-shaped describe block accept configurable `super_repo.expand_roots` results, root-specific `scan_issues` fixtures, and a fake picker whose returned object exposes `update(items, tags)`. Preserve the existing query-persistence assertions.
 
-- [ ] **Step 2: Write failing eligibility and initial-render tests**
+- [x] **Step 2: Write failing eligibility and initial-render tests**
 
   Cover:
 
@@ -284,25 +284,25 @@ if any command fails.
   - one unique label, any nil/empty label, or a partially labelled expanded set has `tag_bar == nil` and leaves every scanned row unfiltered;
   - eligibility is derived from expanded roots, not whichever current view happens to contain issues.
 
-- [ ] **Step 3: Run the Issue Finder spec and verify the facet assertions fail**
+- [x] **Step 3: Run the Issue Finder spec and verify the facet assertions fail**
 
   Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/issue_finder_spec.lua" -c "qa!"`
 
   Expected: FAIL because Issue Finder does not expose a repo tag bar.
 
-- [ ] **Step 4: Add persistent state, eligibility, and the initial repo tag bar**
+- [x] **Step 4: Add persistent state, eligibility, and the initial repo tag bar**
 
   Initialize `repo_facet_state = nil` in `_parley._issue_finder` in `init.lua`. In `issue_finder.lua`, add a small pure/local eligibility helper that returns sorted unique repository labels only when `sr_issues` exists, every constructed root has a non-empty `repo_name`, and at least two unique labels exist; otherwise return `nil`.
 
   Merge eligible labels through `finder_facets.merge_state`. For an eligible set, construct initial rendered items through a local `build_picker_data()` and pass a `tag_bar` with projected tags plus ALL/NONE/toggle callbacks to `float_picker.open`; the callbacks may call a local refresh function whose full current-item contract is pinned in Steps 6–7. Never filter or construct `tag_bar` when eligibility is nil (`ARCH-PURPOSE`). This is the minimum implementation needed for Step 2's initial-render tests to turn green.
 
-- [ ] **Step 5: Run the Issue Finder spec and verify initial eligibility passes**
+- [x] **Step 5: Run the Issue Finder spec and verify initial eligibility passes**
 
   Run the Task 3 headless command.
 
   Expected: initial render and fallback tests PASS; transition tests are not added yet.
 
-- [ ] **Step 6: Write failing in-place filtering and persistence tests**
+- [x] **Step 6: Write failing in-place filtering and persistence tests**
 
   Assert:
 
@@ -316,7 +316,7 @@ if any command fails.
   - a temporarily missing repo key remains disabled when it returns;
   - repository filtering runs after view filtering/sorting and preserves survivor order/item shapes.
 
-- [ ] **Step 7: Implement the picker-data and tag-bar adapter**
+- [x] **Step 7: Implement the picker-data and tag-bar adapter**
 
   Retain the sorted issue records separately from rendered items. Add one `build_picker_data()` function that conditionally filters sorted issues through `finder_facets.filter`, renders the existing item shape, and projects eligible repo tags. Add `picker_ref` and tag callbacks matching Chat Finder's current pattern:
 
@@ -331,13 +331,13 @@ if any command fails.
 
   Declare `items` and `tag_bar_tags` as the adapter's current rendered state, assign both before every `picker.update`, and make delete-selection lookup plus `context.issue_finder_items` read that current `items` variable. Assign the return of `toggle`/`set_all` into `_parley._issue_finder.repo_facet_state`, refresh in place, and pass `tag_bar` plus the existing `initial_query`/`on_query_change` to `float_picker.open`.
 
-- [ ] **Step 8: Run Issue Finder, pure facet, and Chat Finder specs**
+- [x] **Step 8: Run Issue Finder, pure facet, and Chat Finder specs**
 
   Run the three headless commands from Tasks 1–3.
 
   Expected: PASS with query, view, reopen, new-repo, rediscovery, and Chat compatibility coverage.
 
-- [ ] **Step 9: Commit the Issue Finder feature**
+- [x] **Step 9: Commit the Issue Finder feature**
 
   ```bash
   git add lua/parley/issue_finder.lua lua/parley/init.lua tests/unit/issue_finder_spec.lua
@@ -352,21 +352,21 @@ if any command fails.
 - Modify: `README.md` only if its current Issue Finder description mirrors super-repo behavior
 - Modify: `workshop/issues/000186-issue-finder-in-repo-mode-should-present-repo-facet-search.md`
 
-- [ ] **Step 1: Update the Issue Finder architecture map**
+- [x] **Step 1: Update the Issue Finder architecture map**
 
   Amend `atlas/issues/issue-management.md` to describe the complete-label, multi-repository eligibility rule, `[ALL] [NONE]` repo bar, persistent repo selection shared across issues/history, and query-preserving in-place refresh. Point to `finder_facets.lua` as the shared pure policy and note that Chat Finder remains the presentation contract.
 
-- [ ] **Step 2: Update traceability**
+- [x] **Step 2: Update traceability**
 
   Add `lua/parley/finder_facets.lua`, `tests/unit/finder_facets_spec.lua`, `tests/unit/chat_finder_logic_spec.lua`, and `tests/unit/issue_finder_spec.lua` to the relevant `modes/super_repo` and `issues/issue-management` code/test entries without removing existing coverage. Keep the YAML deterministic and deduplicated.
 
-- [ ] **Step 3: Check whether README requires a narrowly scoped update**
+- [x] **Step 3: Check whether README requires a narrowly scoped update**
 
   Run: `rg -n "Issue Finder|IssueFinder|super-repo" README.md`
 
   Expected: either no mirrored behavioral claim (leave README untouched) or one existing description updated to mention the repo bar. Do not add a new broad documentation section.
 
-- [ ] **Step 4: Run focused feature verification**
+- [x] **Step 4: Run focused feature verification**
 
   Run:
 
@@ -379,7 +379,7 @@ if any command fails.
 
   Expected: all focused specs PASS.
 
-- [ ] **Step 5: Run traceability and full-suite verification**
+- [x] **Step 5: Run traceability and full-suite verification**
 
   Run: `make test-spec SPEC=modes/super_repo`
 
@@ -391,13 +391,13 @@ if any command fails.
 
   Expected: traceability checks and the complete test suite PASS; no whitespace errors.
 
-- [ ] **Step 6: Review the final diff for architectural economy**
+- [x] **Step 6: Review the final diff for architectural economy**
 
   Run: `git diff --stat main...HEAD && git diff main...HEAD -- lua/parley/finder_facets.lua lua/parley/chat_finder.lua lua/parley/issue_finder.lua lua/parley/init.lua`
 
   Confirm the shared module contains no finder-specific UI/session policy, both adapters call one model rather than duplicating transitions/filtering, `float_picker.lua` remains unchanged unless a test proved a real contract gap, and #187 can map Markdown entries to repo keys without an API change (`ARCH-DRY`, `ARCH-PURE`, Simplicity First).
 
-- [ ] **Step 7: Update issue plan/log and commit documentation**
+- [x] **Step 7: Update issue plan/log and commit documentation**
 
   Mark the four issue-plan checkboxes complete only after their evidence exists. Append a dated `## Log` entry naming focused/full commands and outcomes; if implementation changed the approved plan, append (do not overwrite) a timestamped `## Revisions` entry explaining why and what changed.
 
@@ -406,7 +406,7 @@ if any command fails.
   git commit -m "docs: #186 map reusable finder facets" -m "Record the shared facet boundary, Issue Finder super-repo eligibility, and verified coverage so #187 can consume the same policy.\n\nCo-Authored-By: Codex <noreply@openai.com>"
   ```
 
-- [ ] **Step 8: Cross the issue close boundary**
+- [x] **Step 8: Cross the issue close boundary**
 
   Run: `sdlc actual --issue 186`
 

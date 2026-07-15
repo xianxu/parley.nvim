@@ -1,12 +1,13 @@
 ---
 id: 000186
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-14
 updated: 2026-07-14
 estimate_hours: 5.0
 started: 2026-07-14T12:24:51-07:00
+actual_hours: 5.23
 ---
 
 # issue finder in repo mode should present repo facet search
@@ -169,6 +170,7 @@ recalibration.
 ## Log
 
 ### 2026-07-14
+- 2026-07-14: closed — Focused finder_facets, chat_finder, float_picker, issue_finder, and finder_sticky specs passed; make test-spec SPEC=modes/super_repo and SPEC=issues/issue-management passed; fresh make test passed with 0 lint warnings/errors and all unit/integration/arch suites green; git diff --check and sdlc issue validate --issue 186 passed; final diff inspection confirmed one pure finder_facets policy with thin Chat/Issue adapters and persisted-NONE recovery.; review verdict: FIX-THEN-SHIP
 
 Claimed and designed the issue. The approved direction extracts Chat Finder's
 existing facet behavior unchanged, reuses it for persistent Issue Finder
