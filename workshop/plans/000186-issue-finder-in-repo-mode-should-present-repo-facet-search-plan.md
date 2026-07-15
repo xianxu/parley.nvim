@@ -154,6 +154,7 @@ if any command fails.
 
 **Files:**
 - Modify: `lua/parley/chat_finder.lua:590-750`
+- Modify: `lua/parley/float_picker.lua:560-610`
 - Modify: `tests/unit/chat_finder_logic_spec.lua`
 - Modify: `tests/unit/float_picker_spec.lua`
 
@@ -167,7 +168,38 @@ if any command fails.
 
   Expected: PASS on the existing `float_picker.update` implementation, proving the live prompt/query contract before finder adapters are changed. If it fails, stop and treat the picker defect as implementation work required by this issue before adapter refactoring.
 
-- [ ] **Step 3: Add a concrete passing characterization harness for Chat Finder facets**
+- [ ] **Step 3: Write a failing facet-backed empty-picker test**
+
+  In `tests/unit/float_picker_spec.lua`, open the real picker with `items = {}`
+  and a non-empty `tag_bar.tags` list. Assert the picker return value exposes
+  `update`, the result buffer displays `(no matches)`, and calling
+  `update({ alpha_item }, enabled_tags)` replaces the empty state with the row.
+  Keep the existing test that an empty picker without a tag bar warns and
+  returns early.
+
+- [ ] **Step 4: Run the picker spec and verify the empty facet picker fails**
+
+  Run the Task 2 headless picker command.
+
+  Expected: FAIL because `float_picker.open` warns/returns nil before creating
+  the tag bar when `items` is empty.
+
+- [ ] **Step 5: Permit zero initial items only with a usable facet bar**
+
+  In `lua/parley/float_picker.lua`, resolve `tag_bar_opts`/`has_tag_bar` before
+  the empty-items guard and change the guard to return early only when both the
+  item list is empty and no non-empty tag bar exists. Reuse the existing
+  `(no matches)` rendering and `update` implementation; do not change warning
+  behavior for an empty picker without facets.
+
+- [ ] **Step 6: Run the picker spec and verify both empty-state paths pass**
+
+  Run the Task 2 headless picker command.
+
+  Expected: PASS; facet-backed empty pickers open/update, while genuinely empty
+  non-faceted pickers retain the warning/early return.
+
+- [ ] **Step 7: Add a concrete passing characterization harness for Chat Finder facets**
 
   Add a `describe("ChatFinder facet compatibility")` block to `tests/unit/chat_finder_logic_spec.lua`. Reuse its real temporary chat roots and write three minimal chat markdown files whose frontmatter produces `alpha`, `beta`, and no tags. Replace `M.float_picker.open` with a capture fake that stores its `opts` and returns `{ update = function(new_items, new_tags) ... end }`; initialize `M._chat_finder.tag_state = { alpha = false, missing = false }` and `M._chat_finder.sticky_query` with a non-empty query before calling `M.cmd.ChatFinder()`.
 
@@ -179,13 +211,13 @@ if any command fails.
   - the exact typed/sticky query is not reset by a facet update;
   - retained temporarily absent tag state is restored when that tag reappears.
 
-- [ ] **Step 4: Run the Chat Finder characterization and record the green baseline**
+- [ ] **Step 8: Run the Chat Finder characterization and record the green baseline**
 
   Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/chat_finder_logic_spec.lua" -c "qa!"`
 
   Expected: PASS on the existing inline implementation. These are characterization tests, so their green baseline proves the extraction preserves behavior; the pure model itself was developed red-green in Task 1.
 
-- [ ] **Step 5: Adapt Chat Finder to `finder_facets`**
+- [ ] **Step 9: Adapt Chat Finder to `finder_facets`**
 
   Require `parley.finder_facets` near the module imports. Replace only the inline collection/merge/filter/transition/projection block with calls to the pure API:
 
@@ -201,9 +233,9 @@ if any command fails.
   )
   ```
 
-  `build_picker_data` filters through the model and then renders the same `{display, search_text = ordinal, value}` item shape. Tag callbacks assign the model's fresh state back to `_chat_finder.tag_state` before calling the existing `picker_ref.update`; leave `float_picker.lua`, tag-bar styling, recency, initial selection, and sticky-query handling unchanged.
+  `build_picker_data` filters through the model and then renders the same `{display, search_text = ordinal, value}` item shape. Tag callbacks assign the model's fresh state back to `_chat_finder.tag_state` before calling the existing `picker_ref.update`; beyond Step 5's narrowly scoped empty-with-facets guard, leave tag-bar styling, recency, initial selection, and sticky-query handling unchanged.
 
-- [ ] **Step 6: Run focused Chat and facet specs**
+- [ ] **Step 10: Run focused Chat and facet specs**
 
   Run:
 
@@ -215,7 +247,7 @@ if any command fails.
 
   Expected: PASS, including unchanged Chat Finder presentation and persistence behavior.
 
-- [ ] **Step 7: Run related picker/sticky regressions**
+- [ ] **Step 11: Run related picker/sticky regressions**
 
   Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/finder_sticky_spec.lua" -c "qa!"`
 
@@ -223,10 +255,10 @@ if any command fails.
 
   Expected: PASS.
 
-- [ ] **Step 8: Commit the Chat Finder adapter**
+- [ ] **Step 12: Commit the picker and Chat Finder adapter**
 
   ```bash
-  git add lua/parley/chat_finder.lua tests/unit/chat_finder_logic_spec.lua tests/unit/float_picker_spec.lua
+  git add lua/parley/chat_finder.lua lua/parley/float_picker.lua tests/unit/chat_finder_logic_spec.lua tests/unit/float_picker_spec.lua
   git commit -m "finder: #186 reuse facets in chat finder" -m "Keep the established facet UI and sticky-query behavior while moving its deterministic policy behind the reusable model.\n\nCo-Authored-By: Codex <noreply@openai.com>"
   ```
 
@@ -278,6 +310,8 @@ if any command fails.
   - ALL restores every row and NONE yields no rows;
   - the current complete query remains stored and is not rewritten during any update;
   - state survives cancel/reopen and the issues/history view-cycle repaint;
+  - after NONE, cancel/close and reopen still yields a picker with the repo bar
+    and no rows, and invoking ALL restores every row in place;
   - a new repo defaults enabled without re-enabling an earlier disabled repo;
   - a temporarily missing repo key remains disabled when it returns;
   - repository filtering runs after view filtering/sorting and preserves survivor order/item shapes.
@@ -406,3 +440,11 @@ if any command fails.
 - Delta: add a pre-delivery grep/schema check for #115's dependency and
   ownership contract; recalibrate #186 to 4.0 ship-hours with three focused
   Lua/Neovim primitives.
+
+### 2026-07-14T17:22:00-07:00 — persisted NONE recovery review
+
+- Reason: a zero-item initial render currently returns before creating the
+  facet bar, so persisted NONE would make ALL unreachable after reopening.
+- Delta: add a red-green `float_picker` empty-with-facets contract, retain the
+  non-faceted empty warning path, add NONE→reopen→ALL adapter coverage, and
+  recalibrate to 5.0 ship-hours.

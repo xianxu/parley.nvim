@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-07-14
 updated: 2026-07-14
-estimate_hours: 4.0
+estimate_hours: 5.0
 started: 2026-07-14T12:24:51-07:00
 ---
 
@@ -80,6 +80,12 @@ session remain intact (`ARCH-PURPOSE`). ALL enables every repository, NONE
 disables every repository, and an individual button toggles only that
 repository.
 
+If persisted facet state filters the initial result set to zero (notably after
+NONE), `float_picker` still opens when a non-empty facet bar is supplied,
+renders its existing no-matches state, and keeps ALL reachable. The picker's
+existing warning/early-return behavior remains unchanged for a genuinely empty
+picker with no usable facet bar.
+
 ### Reuse boundary for #187
 
 #187 is not implemented here. It must be able to adopt the extracted facet
@@ -126,16 +132,18 @@ familiarity: 1.0
 item: lua-neovim             design=0.45 impl=0.55
 item: lua-neovim             design=0.45 impl=0.55
 item: lua-neovim             design=0.5 impl=0.55
+item: lua-neovim             design=0.5 impl=0.55
 item: cross-cutting-refactor design=0.12 impl=0.18
 item: atlas-docs             design=0.025 impl=0.06
 item: milestone-review       design=0.02 impl=0.2
 design-buffer: 0.15
-total: 4.0
+total: 5.0
 ```
 
-The three Lua/Neovim primitives separately cover the reusable facet model plus
-Chat Finder adapter, the real-picker live-query characterization, and the
-production-shaped Issue Finder repository-facet integration.
+The four Lua/Neovim primitives separately cover the reusable facet model plus
+Chat Finder adapter, the real-picker live-query characterization, the picker's
+facet-backed empty-state behavior, and the production-shaped Issue Finder
+repository-facet integration.
 The cross-cutting refactor item covers replacing Chat Finder's inline policy
 while preserving its established behavior. Design uses the thorough-spec
 discount; implementation values use the v3.1 40% ship-wall-clock calibration.
@@ -210,3 +218,12 @@ the prior selection.
 - Delta: verify #115's dependency/ownership text before feature work and model
   the real-picker regression as a third focused Lua/Neovim primitive, bringing
   the calibrated ship-wall-clock estimate to 4.0 hours.
+
+### 2026-07-14T17:22:00-07:00 — persisted NONE recovery review
+
+- Reason: the current picker exits on zero initial items, so persisted NONE
+  would prevent Issue Finder from reopening its facet bar and make ALL
+  unreachable.
+- Delta: allow zero initial items only when a usable facet bar exists, cover
+  empty rendering/update behavior and NONE→reopen→ALL recovery, and add a fourth
+  Lua/Neovim primitive for a 5.0-hour calibrated estimate.
