@@ -713,7 +713,7 @@ function M.open(opts)
     -- Tag bar window (optional, between results and prompt)
     local tag_bar_buf = nil
     local tag_bar_win = nil
-    local tag_col_ranges = {}  -- { {start_col, end_col, label}, ... } for click detection
+    local tag_bar_model = nil
     local TAG_BAR_NS = vim.api.nvim_create_namespace("float_picker_tag_bar")
 
     -- Sentinel labels for the fixed ALL/NONE action buttons (can't appear in real tag names)
@@ -721,23 +721,9 @@ function M.open(opts)
     local TAG_ACTION_NONE = "\0none"
 
     local function render_tag_bar(model)
-        if not has_tag_bar or not tag_bar_buf or not vim.api.nvim_buf_is_valid(tag_bar_buf) then
+        if not tag_bar_buf or not vim.api.nvim_buf_is_valid(tag_bar_buf) then
             return
         end
-        local ranges = {}
-        for _, segment in ipairs(model.segments) do
-            local label = segment.label
-            if segment.kind == "action" then
-                label = segment.label == "all" and TAG_ACTION_ALL or TAG_ACTION_NONE
-            end
-            table.insert(ranges, {
-                segment.byte_start + 1,
-                segment.byte_end,
-                label,
-                row = segment.row,
-            })
-        end
-        tag_col_ranges = ranges
         vim.bo[tag_bar_buf].modifiable = true
         vim.api.nvim_buf_set_lines(tag_bar_buf, 0, -1, false, model.lines)
         vim.bo[tag_bar_buf].modifiable = false
@@ -781,21 +767,21 @@ function M.open(opts)
         win_w, win_h, row, col, tag_bar_row, prompt_row, facet_height =
             compute_layout(desired_w, desired_h, current_ui, model and model.height or 0)
 
+        local had_visible_tag_bar = tag_bar_win and vim.api.nvim_win_is_valid(tag_bar_win)
         local previous_topline = 1
-        local newly_activated = should_have_tag_bar and not has_tag_bar
-        if tag_bar_win and vim.api.nvim_win_is_valid(tag_bar_win) then
+        if had_visible_tag_bar then
             local view = vim.api.nvim_win_call(tag_bar_win, vim.fn.winsaveview)
             previous_topline = tonumber(view.topline) or 1
         end
 
-        if not should_have_tag_bar then
+        local should_show_tag_bar = should_have_tag_bar and facet_height > 0
+        if not should_show_tag_bar then
             if tag_bar_win and vim.api.nvim_win_is_valid(tag_bar_win) then
                 vim.api.nvim_win_close(tag_bar_win, true)
             end
             tag_bar_win = nil
             tag_bar_buf = nil
-            tag_col_ranges = {}
-            has_tag_bar = false
+            tag_bar_model = model
         else
             if not tag_bar_win then
                 tag_bar_buf = vim.api.nvim_create_buf(false, true)
@@ -827,15 +813,16 @@ function M.open(opts)
                     height = facet_height,
                 })
             end
-            has_tag_bar = true
+            tag_bar_model = model
             render_tag_bar(model)
             local max_topline = math.max(1, #model.lines - facet_height + 1)
-            local topline = newly_activated and 1 or
+            local topline = not had_visible_tag_bar and 1 or
                 math.max(1, math.min(previous_topline, max_topline))
             vim.api.nvim_win_call(tag_bar_win, function()
                 vim.fn.winrestview({ topline = topline, leftcol = 0 })
             end)
         end
+        has_tag_bar = should_have_tag_bar
 
         vim.api.nvim_win_set_config(results_win, {
             relative = "editor",
@@ -1296,22 +1283,24 @@ function M.open(opts)
     local function try_tag_bar_click(pos)
         local click_col = tag_bar_content_col(pos)
         if not click_col then return false end
-        for _, range in ipairs(tag_col_ranges) do
-            if click_col >= range[1] and click_col <= range[2] then
-                local label = range[3]
-                -- Defer so pending multi-click events are absorbed before any close.
-                vim.defer_fn(function()
-                    if closed then return end
-                    if label == TAG_ACTION_ALL and tag_bar_opts.on_all then
-                        tag_bar_opts.on_all()
-                    elseif label == TAG_ACTION_NONE and tag_bar_opts.on_none then
-                        tag_bar_opts.on_none()
-                    elseif tag_bar_opts.on_toggle then
-                        tag_bar_opts.on_toggle(label)
-                    end
-                end, 50)
-                return true
+        local segment = tag_bar_model and facet_bar_layout.hit(tag_bar_model, 0, click_col - 1)
+        if segment then
+            local label = segment.label
+            if segment.kind == "action" then
+                label = segment.label == "all" and TAG_ACTION_ALL or TAG_ACTION_NONE
             end
+            -- Defer so pending multi-click events are absorbed before any close.
+            vim.defer_fn(function()
+                if closed then return end
+                if label == TAG_ACTION_ALL and tag_bar_opts.on_all then
+                    tag_bar_opts.on_all()
+                elseif label == TAG_ACTION_NONE and tag_bar_opts.on_none then
+                    tag_bar_opts.on_none()
+                elseif tag_bar_opts.on_toggle then
+                    tag_bar_opts.on_toggle(label)
+                end
+            end, 50)
+            return true
         end
         focus_prompt()  -- clicked on whitespace in tag bar
         return true

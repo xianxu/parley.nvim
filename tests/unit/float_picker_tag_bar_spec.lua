@@ -101,6 +101,24 @@ local function highlight_spans(buf)
     return spans
 end
 
+local function click_facet_cell(facet_win, cell0)
+    local position = vim.api.nvim_win_get_position(facet_win)
+    local _, prompt_buf = prompt_float()
+    local mapping = vim.api.nvim_buf_call(prompt_buf, function()
+        return vim.fn.maparg("<LeftMouse>", "n", false, true)
+    end)
+    local original_getmousepos = vim.fn.getmousepos
+    vim.fn.getmousepos = function()
+        return {
+            screenrow = position[1] + 2,
+            screencol = position[2] + 2 + cell0,
+        }
+    end
+    mapping.callback()
+    vim.fn.getmousepos = original_getmousepos
+    vim.wait(100)
+end
+
 describe("float_picker facet bar geometry", function()
     it("adds numeric facet content height and two border rows to the visible stack", function()
         local win_w, win_h, row, col, tag_bar_row, prompt_row, facet_h =
@@ -286,6 +304,8 @@ describe("float_picker facet bar rendering", function()
         local _, prompt_buf = prompt_float()
         local live_query = ">   alpha item  "
         vim.api.nvim_buf_set_lines(prompt_buf, 0, -1, false, { live_query })
+        local expected_cursor_col = #live_query - 2
+        vim.api.nvim_win_set_cursor(vim.api.nvim_get_current_win(), { 1, expected_cursor_col })
         vim.api.nvim_exec_autocmds("TextChanged", { buffer = prompt_buf })
 
         vim.o.columns = 36
@@ -304,6 +324,68 @@ describe("float_picker facet bar rendering", function()
         assert.equals(results_height, results_config.height)
         assert.equals(prompt_row, prompt_config.row)
         assert.equals(live_query, vim.api.nvim_buf_get_lines(prompt_buf, 0, 1, false)[1])
+        assert.equals(expected_cursor_col, vim.api.nvim_win_get_cursor(vim.api.nvim_get_current_win())[2])
+    end)
+
+    it("withholds a zero-height facet float on open and restores it when space returns", function()
+        vim.o.columns = 40
+        vim.o.lines = 10
+        local tags = { { label = "still-logically-active", enabled = true } }
+
+        local ok, picker = pcall(open_picker, tags, { width = 30, height = 4 })
+
+        assert.is_true(ok, picker)
+        assert.is_table(picker)
+        assert.is_nil(facet_float())
+        assert.is_not_nil(results_float())
+        assert.is_not_nil(prompt_float())
+
+        vim.o.lines = 24
+        vim.api.nvim_exec_autocmds("VimResized", {})
+
+        local facet_win, _, _, lines = facet_float()
+        assert.is_not_nil(facet_win)
+        assert.truthy(table.concat(lines, "\n"):find("still-logically-active", 1, true))
+        assert.equals(1, vim.api.nvim_win_call(facet_win, vim.fn.winsaveview).topline)
+    end)
+
+    it("withholds a facet float when resize leaves zero rows and recreates it later", function()
+        vim.o.columns = 40
+        vim.o.lines = 24
+        local tags = { { label = "survives-collapse", enabled = true } }
+        open_picker(tags, { width = 30, height = 4 })
+        assert.is_not_nil(facet_float())
+
+        vim.o.lines = 10
+        local collapse_ok, collapse_error = pcall(vim.api.nvim_exec_autocmds, "VimResized", {})
+
+        assert.is_true(collapse_ok, collapse_error)
+        assert.is_nil(facet_float())
+        assert.is_not_nil(results_float())
+        assert.is_not_nil(prompt_float())
+
+        vim.o.lines = 24
+        local restore_ok, restore_error = pcall(vim.api.nvim_exec_autocmds, "VimResized", {})
+
+        assert.is_true(restore_ok, restore_error)
+        local facet_win, _, _, lines = facet_float()
+        assert.is_not_nil(facet_win)
+        assert.truthy(table.concat(lines, "\n"):find("survives-collapse", 1, true))
+        assert.equals(1, vim.api.nvim_win_call(facet_win, vim.fn.winsaveview).topline)
+    end)
+
+    it("does not dispatch a lower-row facet from first-row whitespace", function()
+        local toggled = nil
+        open_picker({ { label = "ordinary", enabled = true } }, {
+            width = 20,
+            on_toggle = function(label) toggled = label end,
+        })
+        local facet_win, _, _, lines = facet_float()
+        assert.are.same({ " ALL NONE", " [ordinary]" }, lines)
+
+        click_facet_cell(facet_win, 10)
+
+        assert.is_nil(toggled)
     end)
 
     it("removes and recreates the facet float while reclaiming geometry", function()
@@ -313,7 +395,12 @@ describe("float_picker facet bar rendering", function()
             { label = "a-long-facet-for-several-rows", enabled = true },
             { label = "another-long-facet-for-several-rows", enabled = false },
         }
-        local picker = open_picker(tags, { width = 34, height = 12 })
+        local all_calls = 0
+        local picker = open_picker(tags, {
+            width = 34,
+            height = 12,
+            on_all = function() all_calls = all_calls + 1 end,
+        })
         local old_facet_win = facet_float()
         vim.api.nvim_win_call(old_facet_win, function()
             vim.fn.winrestview({ topline = 2 })
@@ -335,6 +422,8 @@ describe("float_picker facet bar rendering", function()
         assert.are.same(facet_bar_layout.build(tags, new_facet_config.width, text_ops).lines, lines)
         local view = vim.api.nvim_win_call(new_facet_win, vim.fn.winsaveview)
         assert.equals(1, view.topline)
+        click_facet_cell(new_facet_win, 1)
+        assert.equals(1, all_calls)
     end)
 
     it("retains facets when update omits tags and preserves their numeric topline", function()
