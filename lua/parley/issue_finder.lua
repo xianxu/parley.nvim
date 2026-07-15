@@ -2,6 +2,7 @@
 -- Float picker UI for browsing, filtering, and managing issues
 
 local issues_mod = require("parley.issues")
+local finder_facets = require("parley.finder_facets")
 
 local M = {}
 local _parley
@@ -60,6 +61,24 @@ M.sort_for_view = function(view_mode, issues)
         return a.id < b.id
     end)
     return sorted
+end
+
+local function eligible_repo_facets(roots, is_super_repo)
+    if not is_super_repo then
+        return nil
+    end
+    for _, root in ipairs(roots) do
+        if type(root.repo_name) ~= "string" or root.repo_name == "" then
+            return nil
+        end
+    end
+    local discovered = finder_facets.discover(roots, function(root)
+        return { root.repo_name }
+    end)
+    if #discovered < 2 then
+        return nil
+    end
+    return discovered
 end
 
 --------------------------------------------------------------------------------
@@ -176,6 +195,7 @@ M.open = function(_options)
         _parley._issue_finder.opened = false
         return
     end
+    local repo_facets = eligible_repo_facets(roots, sr_issues ~= nil)
 
     -- View mode: 0=issues (default), 1=history. Clamp with % 2 so any stale
     -- in-memory value (e.g. a `2` left by the pre-#158 tri-state) self-heals.
@@ -195,9 +215,18 @@ M.open = function(_options)
 
     local sorted = M.sort_for_view(view_mode, M.filter_for_view(view_mode, all_issues))
 
-    -- Build picker items
-    local items = {}
-    for _, issue in ipairs(sorted) do
+    if repo_facets then
+        _parley._issue_finder.repo_facet_state = finder_facets.merge_state(
+            _parley._issue_finder.repo_facet_state,
+            repo_facets
+        )
+    end
+
+    local function issue_facets(issue)
+        return { issue.repo_name }
+    end
+
+    local function render_issue(issue)
         local prefix = issue.archived and "[archived]" or string.format("[%s]", issue.status)
         local label = issue.title ~= "" and issue.title or issue.slug
         local repo_prefix = issue.repo_name and ("{" .. issue.repo_name .. "} ") or ""
@@ -208,13 +237,35 @@ M.open = function(_options)
         if issue.created ~= "" then
             display = display .. " [" .. issue.created .. "]"
         end
-        table.insert(items, {
+        return {
             display = display,
             search_text = string.format("%s%s %s %s %s", repo_prefix, issue.status, issue.id, issue.title, issue.slug),
             value = issue.path,
             issue = issue,
-        })
+        }
     end
+
+    local function build_picker_data()
+        local visible = sorted
+        if repo_facets then
+            visible = finder_facets.filter(
+                sorted,
+                _parley._issue_finder.repo_facet_state,
+                issue_facets
+            )
+        end
+        local rendered = {}
+        for _, issue in ipairs(visible) do
+            table.insert(rendered, render_issue(issue))
+        end
+        local tags = nil
+        if repo_facets then
+            tags = finder_facets.project(repo_facets, _parley._issue_finder.repo_facet_state)
+        end
+        return rendered, tags
+    end
+
+    local items, repo_tag_bar_tags = build_picker_data()
 
     local source_win = _parley._issue_finder.source_win
     if not (source_win and vim.api.nvim_win_is_valid(source_win)) then
@@ -243,13 +294,44 @@ M.open = function(_options)
         cycle_view_shortcut.shortcut
     )
 
-    _parley.float_picker.open({
+    local picker_ref = {}
+    local tag_bar = nil
+    if repo_tag_bar_tags then
+        local function refresh_picker()
+            items, repo_tag_bar_tags = build_picker_data()
+            if picker_ref.update then
+                picker_ref.update(items, repo_tag_bar_tags)
+            end
+        end
+        local function set_all_repos(enabled)
+            _parley._issue_finder.repo_facet_state = finder_facets.set_all(
+                _parley._issue_finder.repo_facet_state,
+                enabled
+            )
+            refresh_picker()
+        end
+        tag_bar = {
+            tags = repo_tag_bar_tags,
+            on_toggle = function(repo_name)
+                _parley._issue_finder.repo_facet_state = finder_facets.toggle(
+                    _parley._issue_finder.repo_facet_state,
+                    repo_name
+                )
+                refresh_picker()
+            end,
+            on_all = function() set_all_repos(true) end,
+            on_none = function() set_all_repos(false) end,
+        }
+    end
+
+    local picker = _parley.float_picker.open({
         title = prompt_title,
         items = items,
         recall_key = "parley.issue_finder",
         initial_index = chat_finder_mod.resolve_finder_initial_index(_parley._issue_finder, items, "IssueFinder"),
         initial_query = _parley._issue_finder.query,
         anchor = "bottom",
+        tag_bar = tag_bar,
         on_query_change = function(query)
             _parley._issue_finder.query = query
         end,
@@ -340,6 +422,9 @@ M.open = function(_options)
             },
         },
     })
+    if picker then
+        picker_ref.update = picker.update
+    end
 
     _parley._issue_finder.initial_index = nil
     _parley._issue_finder.initial_value = nil

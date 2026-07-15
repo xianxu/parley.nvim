@@ -116,6 +116,8 @@ describe("IssueFinder query persistence", function()
     local deferred
     local fake
     local picker_calls
+    local picker_updates
+    local scan_results
 
     local function cycle_view_mapping(opts)
         for _, mapping in ipairs(opts.mappings) do
@@ -129,6 +131,8 @@ describe("IssueFinder query persistence", function()
     before_each(function()
         deferred = {}
         picker_calls = {}
+        picker_updates = {}
+        scan_results = {}
         fake = {
             _issue_finder = { opened = false, view_mode = 0 },
             config = {
@@ -139,6 +143,11 @@ describe("IssueFinder query persistence", function()
             float_picker = {
                 open = function(opts)
                     table.insert(picker_calls, opts)
+                    return {
+                        update = function(items, tags)
+                            table.insert(picker_updates, { items = items, tags = tags })
+                        end,
+                    }
                 end,
             },
             helpers = {},
@@ -148,7 +157,13 @@ describe("IssueFinder query persistence", function()
         }
 
         original_scan_issues = issues.scan_issues
-        issues.scan_issues = function(_, opts)
+        issues.scan_issues = function(dir, opts)
+            if opts.include_history and scan_results[opts.history_dir_override] then
+                return vim.deepcopy(scan_results[opts.history_dir_override])
+            end
+            if scan_results[dir] then
+                return vim.deepcopy(scan_results[dir])
+            end
             if opts.include_history then
                 return { {
                     id = "000002",
@@ -237,5 +252,182 @@ describe("IssueFinder query persistence", function()
         assert.matches("history", picker_calls[2].title)
         assert.equals("/tmp/archived.md", picker_calls[2].items[1].value)
         assert.equals("needle {repo}", picker_calls[2].initial_query)
+    end)
+
+    local function issue(id, repo_name, archived)
+        return {
+            id = id,
+            status = archived and "done" or "open",
+            title = repo_name .. " issue",
+            slug = repo_name .. "-issue",
+            path = "/tmp/" .. repo_name .. "-" .. id .. ".md",
+            archived = archived == true,
+            mtime = tonumber(id) or 0,
+            created = "",
+            repo_name = repo_name,
+        }
+    end
+
+    local function use_super_repos(repos)
+        local issue_roots = {}
+        local history_roots = {}
+        for _, repo in ipairs(repos) do
+            table.insert(issue_roots, { dir = "/" .. tostring(repo.name) .. "/issues", repo_name = repo.label })
+            table.insert(history_roots, { dir = "/" .. tostring(repo.name) .. "/history", repo_name = repo.label })
+        end
+        fake.super_repo = {
+            expand_roots = function(subdir)
+                if subdir == fake.config.issues_dir then
+                    return issue_roots
+                end
+                if subdir == fake.config.history_dir then
+                    return history_roots
+                end
+                return nil
+            end,
+        }
+    end
+
+    it("shows sorted repository facets for completely labelled super-repo roots", function()
+        use_super_repos({
+            { name = "zeta", label = "zeta" },
+            { name = "alpha", label = "alpha" },
+        })
+        scan_results["/zeta/issues"] = { issue("000002", "zeta") }
+        scan_results["/alpha/issues"] = { issue("000001", "alpha") }
+
+        issue_finder.open()
+
+        assert.is_table(picker_calls[1].tag_bar)
+        assert.same({
+            { label = "alpha", enabled = true },
+            { label = "zeta", enabled = true },
+        }, picker_calls[1].tag_bar.tags)
+        assert.equals(2, #picker_calls[1].items)
+    end)
+
+    it("omits repository facets outside a complete multi-repo expansion", function()
+        issue_finder.open()
+        assert.is_nil(picker_calls[1].tag_bar)
+
+        use_super_repos({
+            { name = "alpha", label = "alpha" },
+            { name = "missing", label = nil },
+        })
+        scan_results["/alpha/issues"] = { issue("000001", "alpha") }
+        scan_results["/missing/issues"] = { issue("000002", "missing") }
+        issue_finder.open()
+        assert.is_nil(picker_calls[2].tag_bar)
+        assert.equals(2, #picker_calls[2].items)
+
+        use_super_repos({
+            { name = "alpha-one", label = "alpha" },
+            { name = "alpha-two", label = "alpha" },
+        })
+        scan_results["/alpha-one/issues"] = { issue("000003", "alpha") }
+        scan_results["/alpha-two/issues"] = { issue("000004", "alpha") }
+        issue_finder.open()
+        assert.is_nil(picker_calls[3].tag_bar)
+        assert.equals(2, #picker_calls[3].items)
+    end)
+
+    it("derives facets from roots even when one repo has no issues in the current view", function()
+        use_super_repos({
+            { name = "alpha", label = "alpha" },
+            { name = "beta", label = "beta" },
+        })
+        scan_results["/alpha/issues"] = { issue("000001", "alpha") }
+        scan_results["/beta/issues"] = {}
+
+        issue_finder.open()
+
+        assert.same({
+            { label = "alpha", enabled = true },
+            { label = "beta", enabled = true },
+        }, picker_calls[1].tag_bar.tags)
+    end)
+
+    it("filters in place while preserving query and state across views and reopens", function()
+        use_super_repos({
+            { name = "alpha", label = "alpha" },
+            { name = "beta", label = "beta" },
+        })
+        scan_results["/alpha/issues"] = { issue("000001", "alpha") }
+        scan_results["/beta/issues"] = { issue("000002", "beta") }
+        scan_results["/alpha/history"] = { issue("000003", "alpha", true) }
+        scan_results["/beta/history"] = { issue("000004", "beta", true) }
+
+        issue_finder.open()
+        picker_calls[1].on_query_change("  exact {beta} query  ")
+        picker_calls[1].tag_bar.on_toggle("alpha")
+
+        assert.equals(1, #picker_updates[1].items)
+        assert.matches("beta", picker_updates[1].items[1].value)
+        assert.equals("  exact {beta} query  ", fake._issue_finder.query)
+
+        cycle_view_mapping(picker_calls[1]).fn(nil, function() end)
+        deferred[1]()
+        assert.same({
+            { label = "alpha", enabled = false },
+            { label = "beta", enabled = true },
+        }, picker_calls[2].tag_bar.tags)
+        assert.equals(1, #picker_calls[2].items)
+        assert.matches("beta", picker_calls[2].items[1].value)
+        assert.equals("  exact {beta} query  ", picker_calls[2].initial_query)
+
+        picker_calls[2].on_cancel()
+        issue_finder.open()
+        assert.is_false(fake._issue_finder.repo_facet_state.alpha)
+    end)
+
+    it("defaults new repos on and restores choices for temporarily absent repos", function()
+        use_super_repos({
+            { name = "alpha", label = "alpha" },
+            { name = "beta", label = "beta" },
+        })
+        scan_results["/alpha/issues"] = { issue("000001", "alpha") }
+        scan_results["/beta/issues"] = { issue("000002", "beta") }
+        issue_finder.open()
+        picker_calls[1].tag_bar.on_toggle("alpha")
+        picker_calls[1].tag_bar.on_toggle("beta")
+        picker_calls[1].on_cancel()
+
+        use_super_repos({
+            { name = "alpha", label = "alpha" },
+            { name = "gamma", label = "gamma" },
+        })
+        scan_results["/gamma/issues"] = { issue("000003", "gamma") }
+        issue_finder.open()
+        assert.is_false(fake._issue_finder.repo_facet_state.alpha)
+        assert.is_false(fake._issue_finder.repo_facet_state.beta)
+        assert.is_true(fake._issue_finder.repo_facet_state.gamma)
+        picker_calls[2].on_cancel()
+
+        use_super_repos({
+            { name = "beta", label = "beta" },
+            { name = "gamma", label = "gamma" },
+        })
+        issue_finder.open()
+        assert.is_false(fake._issue_finder.repo_facet_state.beta)
+    end)
+
+    it("reopens after NONE with ALL available to restore every row", function()
+        use_super_repos({
+            { name = "alpha", label = "alpha" },
+            { name = "beta", label = "beta" },
+        })
+        scan_results["/alpha/issues"] = { issue("000001", "alpha") }
+        scan_results["/beta/issues"] = { issue("000002", "beta") }
+
+        issue_finder.open()
+        picker_calls[1].tag_bar.on_none()
+        assert.equals(0, #picker_updates[1].items)
+        picker_calls[1].on_cancel()
+
+        issue_finder.open()
+        assert.equals(0, #picker_calls[2].items)
+        assert.is_table(picker_calls[2].tag_bar)
+        picker_calls[2].tag_bar.on_all()
+        assert.equals(2, #picker_updates[2].items)
     end)
 end)
