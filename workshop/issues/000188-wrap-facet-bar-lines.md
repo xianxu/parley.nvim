@@ -132,7 +132,7 @@ stale by `sdlc estimate-source`, so this derivation is provisional.
 - [x] Extract a pure display-width-aware facet row layout with focused tests.
 - [ ] Teach the shared facet window, highlights, and mouse hit testing to consume
   the multi-row layout.
-- [ ] Recompute facet height and prompt placement on open, resize, and update.
+- [x] Recompute facet height and prompt placement on open, resize, and update.
 - [ ] Run focused picker/finder regressions and the full test suite.
 
 ## Log
@@ -187,6 +187,17 @@ stale by `sdlc estimate-source`, so this derivation is provisional.
   unit/integration suites and independent reviews passed commit `9a9bb82`.
 - Quality review additionally swept screen heights 1–200, facet requests through
   10,000, and historical non-faceted geometry without finding a boundary defect.
+
+### 2026-07-15 — Task 3 shared reflow
+
+- Replaced the one-row renderer and parallel lifecycle calculations with
+  production grapheme units, pure-model rows/highlights, and one reflow path for
+  open, resize, and update. Unit, mapped picker, and lint verification passed.
+- Quality review found and reproduced two boundary defects: zero visible facet
+  height could open an invalid float, and row-0 whitespace could hit a lower-row
+  flattened range. Follow-up `1fed6b6` withheld zero-height windows while
+  retaining logical state and moved transitional clicks to
+  `facet_bar_layout.hit`; both review stages then approved with no findings.
 
 ## Revisions
 

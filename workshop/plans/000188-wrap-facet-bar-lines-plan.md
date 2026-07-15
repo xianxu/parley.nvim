@@ -210,7 +210,7 @@
 - Modify: `lua/parley/float_picker.lua:574-780,1434-1511`
 - Modify: `tests/unit/float_picker_tag_bar_spec.lua`
 
-- [ ] **Step 1: Write failing open/render/highlight tests**
+- [x] **Step 1: Write failing open/render/highlight tests**
 
   Open a narrow picker and assert the facet buffer contains every exact model
   row, its float height matches the visible layout height, multibyte highlights
@@ -222,14 +222,14 @@
   produce a different row; assert every production `display_text_units` cluster
   remains intact. Pin a wide one-row picker as visually identical to the old bar.
 
-- [ ] **Step 2: Run the picker test and observe one clipped row**
+- [x] **Step 2: Run the picker test and observe one clipped row**
 
   Run: `make test-unit JOBS=1`
 
   Expected: new picker tag-bar cases FAIL because the current renderer writes
   one line and fixes the facet window height to one.
 
-- [ ] **Step 3: Add the Neovim display-text adapter and shared reflow function**
+- [x] **Step 3: Add the Neovim display-text adapter and shared reflow function**
 
   Use Neovim 0.11's `strcharpart(..., skipcc=true)` extended-cluster behavior
   and measure with `strdisplaywidth`; do not hand-roll a partial Unicode
@@ -246,7 +246,7 @@
   preserve the numeric topline and clamp it rather than resetting. Enabled-only
   updates therefore do not jump away from a scrolled facet.
 
-- [ ] **Step 4: Write failing resize and empty/non-empty lifecycle tests**
+- [x] **Step 4: Write failing resize and empty/non-empty lifecycle tests**
 
   Fire `VimResized` after changing the test UI width and assert exact rewrapped
   rows, facet height, results height, prompt position, and preserved query.
@@ -261,19 +261,19 @@
   and resize paths and assert the existing cleanup/no-error contract rather than
   recreating orphaned windows.
 
-- [ ] **Step 5: Route open, resize, and `picker.update` through reflow**
+- [x] **Step 5: Route open, resize, and `picker.update` through reflow**
 
   Base capability on `opts.tag_bar ~= nil`, active content on `#tags > 0`, nil
   update tags on preservation, and `{}` on deactivation. Keep the existing
   selection/filter refresh order and never replace or rewrite the prompt buffer.
 
-- [ ] **Step 6: Run picker and mapped regressions**
+- [x] **Step 6: Run picker and mapped regressions**
 
   Run: `make test-unit JOBS=1 && make test-spec SPEC=ui/pickers`
 
   Expected: PASS; resize/update reflow and sticky query behavior remain green.
 
-- [ ] **Step 7: Commit rendering and lifecycle integration**
+- [x] **Step 7: Commit rendering and lifecycle integration**
 
   ```bash
   git add lua/parley/float_picker.lua tests/unit/float_picker_tag_bar_spec.lua
