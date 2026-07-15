@@ -119,6 +119,9 @@ Most-used defaults:
 **Global**
 - `<C-g>c` new chat - global hotkey
 - `<C-g>f` find chat - global hotkey
+- `<C-g>m` find Markdown files - directory facets in ordinary repo mode and
+  repository facets in super-repo mode; query text and facet choices persist
+  across finder reopenings within the current Neovim session
 
 **In Chat Buffer**
 - `<C-g>?` show key bindings
@@ -140,6 +143,7 @@ Most-used defaults:
 **Corresponding commands**
 - `:ParleyChatNew` create a new chat
 - `:ParleyChatFinder` chat finder
+- `:ParleyMarkdownFinder` Markdown finder with contextual directory/repository facets
 - `:ParleyChatRespond` answer current question
 - `:ParleyChatRespondAll` regenerate from start to cursor
 - `:ParleyStop` stop running generation

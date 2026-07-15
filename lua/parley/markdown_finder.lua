@@ -1,7 +1,7 @@
 -- Markdown file finder module for Parley
 -- Finds markdown files from repo root, including parley-managed directories
--- (chats, notes, issues, history, vision). The tag bar lets users filter by
--- top-level directory if they want to hide categories.
+-- (chats, notes, issues, history, vision). The contextual tag bar filters by
+-- top-level directory in ordinary mode and repository in super-repo mode.
 
 local M = {}
 local _parley
@@ -145,7 +145,7 @@ M.build_picker_data = function(opts)
 end
 
 --- Aggregate markdown entries across super-repo members.
---- Each entry is tagged by repo name and its display becomes "<repo>/<relative>".
+--- Each labelled entry is tagged by repo name and displayed as "{repo} <relative>".
 M._scan_members = function(members, max_depth)
 	local entries = {}
 	for _, m in ipairs(members or {}) do

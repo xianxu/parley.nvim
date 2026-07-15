@@ -1,12 +1,13 @@
 ---
 id: 000187
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-14
 updated: 2026-07-14
 estimate_hours: 2.96
 started: 2026-07-14T18:42:45-07:00
+actual_hours: 5.12
 ---
 
 # markdown finder in repo mode should present repo facet search
@@ -146,6 +147,7 @@ repo-local recalibration tracked by that source.
 ## Log
 
 ### 2026-07-14
+- 2026-07-14: closed — TDD RED evidence captured for shared eligibility, pure Markdown policy, and runtime adapter; fresh focused suites passed 74/74 assertions (finder_facets 17, markdown_finder 15, issue_finder 19, super_repo 23); make lint checked 270 files with 0 warnings/errors; make test passed all 105 unit and 40 integration/architecture spec files; git diff --check, issue validation, atlas traceability review, and stale-claim shadow search were clean. Atlas updated under modes/super_repo, ui/pickers, issues/issue-management, and traceability.; review verdict: FIX-THEN-SHIP
 
 - Recovered the interrupted session at the design checkpoint. Inspection found
   that super-repo scanning already overwrote directory tags with repo names, but
@@ -171,6 +173,13 @@ repo-local recalibration tracked by that source.
   errors; focused finder suites passed 74/74 assertions; `make test` passed all
   105 unit and 40 integration/architecture spec files; `git diff --check`, issue
   validation, and the stale-claim shadow search were clean.
+- Resolved the close review's `FIX-THEN-SHIP` findings by documenting
+  `:ParleyMarkdownFinder` / `<C-g>m` in README and correcting both stale module
+  comments. The review-run fixture flakes reproduced cleanly in isolation
+  (`chat_progress_process_spec.lua` 7/7 and `tools_builtin_find_spec.lua` 4/4),
+  then a fresh complete `make test` passed all 105 unit and 40
+  integration/architecture spec files. Compacted the generated review sidecar
+  to durable findings, resolutions, verdict, and evidence before commit.
 
 ## Revisions
 
