@@ -1,12 +1,13 @@
 ---
 id: 000188
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-14
 updated: 2026-07-15
 estimate_hours: 2.27
 started: 2026-07-15T08:38:05-07:00
+actual_hours: N/A
 ---
 
 # wrap facet bar across multiple lines
@@ -144,6 +145,7 @@ stale by `sdlc estimate-source`, so this derivation is provisional.
   shared, wrapping facet bar rather than finder-specific truncation.
 
 ### 2026-07-15 — controlled layout design
+- 2026-07-15: closed — Focused ui/pickers 247/247 and full make test JOBS=1 pass; Luacheck 273 files clean; tab-width RED/GREEN regression and semantic traceability audit pass; --no-actual because active-time-v3 found no transcript sources for the isolated worktree.; review verdict: FIX-THEN-SHIP
 
 - Chose an explicit display-width-aware row model over editor-managed wrapping
   or one float per row. One model drives text, highlights, hit testing, and
@@ -269,6 +271,14 @@ stale by `sdlc estimate-source`, so this derivation is provisional.
   unit, architecture, and integration file passed; Luacheck reported 0 warnings
   and 0 errors across 273 files. Diff, issue-schema, and semantic traceability
   audits also passed before the close retry.
+
+### 2026-07-15 — close-boundary FIX-THEN-SHIP
+
+- The whole-issue re-review approved the implementation, contextual-width fix,
+  tests, atlas, and README with no code findings. Its sole Important finding was
+  that a historical revision still described the temporary unchecked state
+  after REWORK; the plan now explicitly distinguishes that interval from the
+  successful retry. The SDLC gate finalized this issue as `codecomplete`.
 
 ## Revisions
 

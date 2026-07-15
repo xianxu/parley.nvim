@@ -425,3 +425,13 @@
   injected width contract to accept the starting cell, and added the missing
   README note for scrolling a capped wrapped bar. The failed close step remains
   unchecked until fresh verification and the retried boundary succeed.
+
+### 2026-07-15 — close-boundary state correction
+
+- Reason: the successful re-review read the prior revision's historical
+  post-REWORK state alongside the now-completed close checkboxes as a current
+  contradiction.
+- Delta: clarified that the prior sentence described the interval before fresh
+  verification and retry. The retry has now returned `FIX-THEN-SHIP`, the SDLC
+  gate finalized the issue as `codecomplete`, and both boundary checkboxes
+  therefore remain checked. No implementation scope changed.

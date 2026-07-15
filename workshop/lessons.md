@@ -215,3 +215,13 @@
 
 - **Durable plan checkboxes are boundary evidence, not optional bookkeeping.** The implementation, tests, issue Plan, and Log were complete, but the close review correctly refused to ship while the detailed plan still presented every step as pending. Rule: immediately before `sdlc close`, reconcile every durable-plan checkbox against commits and verification; leave only genuinely pending boundary or publish work unchecked.
 - **Core-concept tables must name symbols a reviewer can grep at their stated locations.** #186 described accurate architectural roles but labeled them with conceptual CamelCase entities that did not exist in Lua, making the plan/code cross-check fail despite correct behavior. Rule: name actual module exports, scoped entry points, local helpers, or state paths in the table; keep explanatory concepts in the prose below it.
+
+## 2026-07-15 (#188)
+
+- **A close-gate checkbox must describe readiness/invocation, while the revision
+  log records the verdict chronology.** `sdlc close` requires every plan box to
+  be checked before it dispatches the review, so wording such as “successfully
+  crossed” creates an impossible truth window and can contradict an earlier
+  REWORK revision. Rule: name the pre-gate step “prepare and invoke the close
+  boundary”; after the verdict, append the outcome and status transition instead
+  of making historical revision prose sound like current state.
