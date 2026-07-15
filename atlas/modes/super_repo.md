@@ -54,8 +54,10 @@ rows. An eligible expansion with zero total rows therefore retains the bar, so
 a persisted NONE state is recoverable through ALL. Incomplete labels or fewer
 than two distinct labels suppress the bar. Duplicate complete labels are
 deduplicated and suppress it only when they collapse the universe below two;
-any mismatch between row labels and the eligible root set likewise leaves the
-aggregate unfiltered with no bar rather than applying a partial facet policy.
+repo facets are also suppressed when a successfully scanned row has no label
+or has a label outside the eligible root set. Eligible roots with no rows remain
+valid facets. Suppression leaves the aggregate unfiltered with no bar rather
+than applying a partial facet policy.
 
 ## Finder query persistence
 
