@@ -1,5 +1,6 @@
 local float_picker = require("parley.float_picker")
 local facet_bar_layout = require("parley.facet_bar_layout")
+local logger = require("parley.logger")
 local compute_layout = float_picker.compute_layout
 
 local function display_text_units(text)
@@ -61,6 +62,7 @@ local function open_picker(tags, opts)
             { display = "delta item", value = 4 },
         },
         tag_bar = tag_bar,
+        mappings = opts.mappings,
         on_select = opts.on_select or function() end,
     })
 end
@@ -644,6 +646,43 @@ describe("float_picker facet bar rendering", function()
         end
     end)
 
+    it("cancels deferred facet singles when physical double and triple sequences arrive", function()
+        local surfaces = {
+            { window = prompt_float, mode = "i" },
+            { window = prompt_float, mode = "n" },
+            { window = results_float, mode = "n" },
+        }
+        local sequences = {
+            { "<LeftMouse>", "<2-LeftMouse>" },
+            { "<LeftMouse>", "<2-LeftMouse>", "<3-LeftMouse>" },
+        }
+        for _, surface in ipairs(surfaces) do
+            for _, sequence in ipairs(sequences) do
+                close_floats()
+                local toggles = 0
+                local confirms = 0
+                open_picker({ { label = "two-row-facet", enabled = true } }, {
+                    width = 20,
+                    on_toggle = function() toggles = toggles + 1 end,
+                    on_select = function() confirms = confirms + 1 end,
+                })
+                local facet_win = facet_float()
+                local _, buf = surface.window()
+                local position = facet_mouse_position(facet_win, 1, 2)
+
+                for _, key in ipairs(sequence) do
+                    invoke_mouse_mapping(buf, surface.mode, key, position)
+                end
+                vim.wait(80)
+
+                assert.equals(0, toggles,
+                    string.format("%s sequence dispatched facet", surface.mode))
+                assert.equals(0, confirms,
+                    string.format("%s sequence confirmed result", surface.mode))
+            end
+        end
+    end)
+
     it("scrolls one facet row per wheel event with exact numeric clamps in all picker modes", function()
         vim.o.columns = 40
         vim.o.lines = 16
@@ -700,11 +739,71 @@ describe("float_picker facet bar rendering", function()
         for _, surface in ipairs(surfaces) do
             local _, buf = surface.window()
             for _, key in ipairs({ "<ScrollWheelDown>", "<ScrollWheelUp>" }) do
-                local returned = invoke_mouse_mapping(buf, surface.mode, key, outside)
+                local returned, mapping = invoke_mouse_mapping(buf, surface.mode, key, outside)
                 assert.equals(vim.api.nvim_replace_termcodes(key, true, false, true), returned)
+                assert.equals(1, mapping.expr)
+                assert.equals(1, mapping.noremap)
             end
         end
         assert.equals(before, vim.api.nvim_win_call(facet_win, vim.fn.winsaveview).topline)
+    end)
+
+    it("keeps built-in facet wheels when extra mappings claim wheel keys", function()
+        vim.o.columns = 40
+        vim.o.lines = 16
+        local warnings = {}
+        local original_warning = logger.warning
+        logger.warning = function(message) table.insert(warnings, message) end
+        local extra_calls = 0
+        local ok, error_message = pcall(open_picker, {
+            { label = ("facet-"):rep(20), enabled = true },
+        }, {
+            width = 20,
+            mappings = {
+                { key = "<ScrollWheelDown>", fn = function() extra_calls = extra_calls + 1 end },
+                { key = "<ScrollWheelUp>", fn = function() extra_calls = extra_calls + 1 end },
+            },
+        })
+        logger.warning = original_warning
+        assert.is_true(ok, error_message)
+
+        local facet_win, _, config = facet_float()
+        local _, prompt_buf = prompt_float()
+        local position = facet_mouse_position(facet_win, config.height - 1, config.width - 1)
+        local down, mapping = invoke_mouse_mapping(
+            prompt_buf, "i", "<ScrollWheelDown>", position)
+
+        assert.equals(2, #warnings)
+        assert.truthy(warnings[1]:find("reserved key", 1, true))
+        assert.truthy(warnings[2]:find("reserved key", 1, true))
+        assert.equals(1, mapping.expr)
+        assert.equals(vim.api.nvim_replace_termcodes("<Ignore>", true, false, true), down)
+        assert.equals(0, extra_calls)
+    end)
+
+    it("reserves facet wheel mappings before an empty capable bar activates", function()
+        local warnings = 0
+        local original_warning = logger.warning
+        logger.warning = function() warnings = warnings + 1 end
+        local picker = open_picker({}, {
+            width = 20,
+            mappings = {
+                { key = "<ScrollWheelDown>", fn = function() error("must stay reserved") end },
+            },
+        })
+        logger.warning = original_warning
+        local _, prompt_buf = prompt_float()
+        local before = mapping_for(prompt_buf, "<ScrollWheelDown>", "i")
+
+        picker.update(nil, { { label = ("later-"):rep(20), enabled = true } })
+
+        local facet_win = facet_float()
+        local returned, after = invoke_mouse_mapping(
+            prompt_buf, "i", "<ScrollWheelDown>", facet_mouse_position(facet_win, 0, 2))
+        assert.equals(1, warnings)
+        assert.equals(1, before.expr)
+        assert.equals(1, after.expr)
+        assert.equals(vim.api.nvim_replace_termcodes("<Ignore>", true, false, true), returned)
     end)
 
     it("keeps click and wheel mappings safe while the zero-height facet has no window", function()

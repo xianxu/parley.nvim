@@ -668,6 +668,10 @@ function M.open(opts)
         [key_name(keycode("<CR>"))] = "<CR>",
         [key_name(keycode("<Esc>"))] = "<Esc>",
     }
+    if tag_bar_capable then
+        reserved_keys[key_name(keycode("<ScrollWheelDown>"))] = "<ScrollWheelDown>"
+        reserved_keys[key_name(keycode("<ScrollWheelUp>"))] = "<ScrollWheelUp>"
+    end
 
     local results_cfg = {
         relative = "editor",
@@ -714,6 +718,7 @@ function M.open(opts)
     local tag_bar_buf = nil
     local tag_bar_win = nil
     local tag_bar_model = nil
+    local tag_bar_click_generation = 0
     local TAG_BAR_NS = vim.api.nvim_create_namespace("float_picker_tag_bar")
 
     -- Sentinel labels for the fixed ALL/NONE action buttons (can't appear in real tag names)
@@ -1287,13 +1292,14 @@ function M.open(opts)
         if not mapped then return false end
         local segment = tag_bar_model and facet_bar_layout.hit(tag_bar_model, mapped.row, mapped.cell)
         if segment then
+            local click_generation = tag_bar_click_generation
             local label = segment.label
             if segment.kind == "action" then
                 label = segment.label == "all" and TAG_ACTION_ALL or TAG_ACTION_NONE
             end
             -- Defer so pending multi-click events are absorbed before any close.
             vim.defer_fn(function()
-                if closed then return end
+                if closed or click_generation ~= tag_bar_click_generation then return end
                 if label == TAG_ACTION_ALL and tag_bar_opts.on_all then
                     tag_bar_opts.on_all()
                 elseif label == TAG_ACTION_NONE and tag_bar_opts.on_none then
@@ -1305,6 +1311,12 @@ function M.open(opts)
             return true
         end
         focus_prompt()  -- clicked on whitespace in tag bar
+        return true
+    end
+
+    local function cancel_pending_tag_bar_click(pos)
+        if not tag_bar_mouse_position(pos) then return false end
+        tag_bar_click_generation = tag_bar_click_generation + 1
         return true
     end
 
@@ -1354,7 +1366,7 @@ function M.open(opts)
 
     local function prompt_dblclick()
         local pos = vim.fn.getmousepos()
-        if tag_bar_mouse_position(pos) then return end
+        if cancel_pending_tag_bar_click(pos) then return end
         if pos.winid == results_win and is_content_row(pos.line) then
             set_selection(index_for_visual_row(pos.line))
             confirm()
@@ -1375,7 +1387,7 @@ function M.open(opts)
     nmap_r("<LeftRelease>", function() end)
     nmap_r("<2-LeftMouse>", function()
         local pos = vim.fn.getmousepos()
-        if tag_bar_mouse_position(pos) then return end
+        if cancel_pending_tag_bar_click(pos) then return end
         if vim.api.nvim_win_is_valid(results_win) then
             sel_idx = index_for_visual_row(vim.api.nvim_win_get_cursor(results_win)[1])
         end
@@ -1383,7 +1395,7 @@ function M.open(opts)
     end)
     nmap_r("<3-LeftMouse>", function()
         local pos = vim.fn.getmousepos()
-        if tag_bar_mouse_position(pos) then return end
+        if cancel_pending_tag_bar_click(pos) then return end
     end)
     nmap_r("<CR>", confirm)
     nmap_r("<Esc>", cancel)
@@ -1392,7 +1404,7 @@ function M.open(opts)
     local function prompt_tripleclick()
         -- Suppress triple-click on tag bar; for results, just treat as single click.
         local pos = vim.fn.getmousepos()
-        if tag_bar_mouse_position(pos) then return end
+        if cancel_pending_tag_bar_click(pos) then return end
         if pos.winid == results_win and is_content_row(pos.line) then
             set_selection(index_for_visual_row(pos.line), { preserve_view = true })
             focus_prompt()
