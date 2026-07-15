@@ -11,20 +11,94 @@ started: 2026-07-15T12:00:53-07:00
 
 # persist repo super-repo state across nvim sessions
 
-This allows user to select the best mode they want for a repo they are working on once, then such preference is remembered. 
-
 ## Problem
+
+Repo mode is derived from the current `.parley` repository, but super-repo mode
+is a transient overlay. A user who prefers peer aggregation for one repository
+must re-enable it in every Neovim session. Brain repositories currently receive
+a separate automatic super-repo rule, so startup behavior depends on repository
+type rather than the user's explicit choice.
+
+The mode toggle also uses `<C-g>S`, while the desired mnemonic is `<C-g>p` for
+“peer.” That key is currently used by chat pruning, and the agreed replacement
+`<C-g>b` is currently used by the optional tool-fold toggle.
 
 ## Spec
 
+- Persist an explicit mode preference per `.parley` repository in Parley's
+  existing `state.json`. The stored shape is a `repo_modes` map from canonical,
+  resolved repository-root paths to exactly `"repo"` or `"super_repo"`.
+- A repository with no saved entry starts in ordinary repo mode. Global mode
+  outside a `.parley` repository remains unchanged and does not create a
+  preference.
+- Remove all `.brain`-specific startup behavior. Brain repositories follow the
+  same saved-preference/default rules as every other `.parley` repository; a
+  saved ordinary-repo choice therefore overrides the former automatic overlay.
+- Restore a saved `"super_repo"` preference only after repo-local chat/note
+  roots and persisted state have settled. Restoration activates the existing
+  super-repo overlay before normal use without rewriting the preference.
+- A successful user toggle immediately records the resulting mode for the
+  current canonical repo root. Toggling on records `"super_repo"`; toggling off
+  records `"repo"`. Failed activation leaves both the runtime mode and saved
+  preference unchanged.
+- Unknown values, malformed maps, or entries for other repositories are ignored
+  without error. If a valid saved super-repo preference cannot be activated,
+  Parley remains usable in ordinary repo mode, keeps the saved preference for a
+  future session, and uses the existing bounded warning path.
+- Keep runtime roots transient: `chat_roots`, `chat_dirs`, and super-repo-pushed
+  note roots must remain absent from persisted state. Extract the current state
+  serialization/write policy into one reusable write-only boundary so saving a
+  mode preference does not run the full state reload/root-restoration path
+  (`ARCH-DRY`, `ARCH-PURE`).
+- Keep preference selection/updates in a small deterministic core: resolving a
+  mode from `(repo_modes, canonical_root)` and returning an updated fresh map
+  must not mutate callers. Neovim filesystem resolution and JSON IO stay in the
+  adapter (`ARCH-PURE`).
+- Change the global peer-mode toggle default from `<C-g>S` to `<C-g>p` in normal
+  and insert mode. Change chat branch/prune from `<C-g>p` to `<C-g>b` in normal
+  mode. Remove the default key for `chat_shortcut_toggle_tool_folds`; users may
+  still assign that configurable action their own shortcut.
+- Update help, README, and atlas descriptions so “peer,” persistence, default
+  behavior, brain parity, and the two keybinding migrations agree with code
+  (`ARCH-PURPOSE`).
+
 ## Done when
 
--
+- A repo explicitly left in super-repo mode reopens in super-repo mode in a new
+  Neovim setup/session, while another repo with no preference opens in repo mode.
+- Toggling back to repo mode persists and prevents a later session—including in
+  a brain repo—from auto-enabling super-repo mode.
+- Mode persistence never restores transient sibling chat/note roots from disk
+  and never disturbs the live overlay while saving a toggle.
+- Invalid stored preferences and failed restoration degrade to ordinary repo
+  mode without corrupting the stored map.
+- `<C-g>p` toggles peer aggregation, `<C-g>b` branches/prunes a chat, and the
+  tool-fold action has no default collision.
+- Automated tests cover per-repo isolation, canonical-root lookup, immutable
+  preference updates, first-run defaulting, startup restoration, toggle-on/off
+  persistence, brain parity, failure preservation, transient-root filtering,
+  and the keybinding defaults.
 
 ## Plan
 
-- [ ]
+- [ ] Add the pure per-repo mode-preference policy and focused tests.
+- [ ] Extract reusable state serialization and integrate startup/toggle
+  persistence without reloading live roots.
+- [ ] Migrate the peer, branch, and tool-fold keybinding defaults with collision
+  regressions.
+- [ ] Reconcile user-facing and atlas documentation; run mapped and full tests.
 
 ## Log
 
 ### 2026-07-15
+
+- Claimed before design. The approved direction stores a canonical-root-keyed
+  `repo_modes` map in existing state rather than modifying `.parley` or adding
+  per-repo files. Ordinary repo mode is the unsaved default; explicit choices
+  win uniformly, so the brain-only auto-enable path is removed.
+- Keybinding design: `<C-g>p` becomes the peer overlay toggle, `<C-g>b` becomes
+  branch/prune, and tool-fold toggling remains configurable without a default.
+- Root-cause inspection found that calling the full `refresh_state()` after a
+  successful activation could restore pre-overlay note roots. The design
+  therefore reuses one extracted write-only persistence policy instead of
+  reloading state while saving the scalar preference (`ARCH-DRY`, `ARCH-PURE`).
