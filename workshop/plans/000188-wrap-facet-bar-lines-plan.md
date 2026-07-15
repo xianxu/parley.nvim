@@ -82,7 +82,7 @@
 - Create: `lua/parley/facet_bar_layout.lua`
 - Create: `tests/unit/facet_bar_layout_spec.lua`
 
-- [ ] **Step 1: Write failing tests for the canonical one-row model**
+- [x] **Step 1: Write failing tests for the canonical one-row model**
 
   Cover `ALL NONE  [alpha] [beta]` visible spacing, action/facet enabled state,
   zero-based end-exclusive byte/cell spans, hit lookup on each button, and
@@ -98,14 +98,14 @@
   assert.equals("alpha", layout.hit(model, 0, alpha_cell).label)
   ```
 
-- [ ] **Step 2: Run the unit suite and confirm the new module is missing**
+- [x] **Step 2: Run the unit suite and confirm the new module is missing**
 
   Run: `make test-unit JOBS=1`
 
   Expected: FAIL in `tests/unit/facet_bar_layout_spec.lua` because
   `parley.facet_bar_layout` cannot be required; unrelated unit files pass.
 
-- [ ] **Step 3: Implement the minimal one-row model and hit lookup**
+- [x] **Step 3: Implement the minimal one-row model and hit lookup**
 
   Export only the pure surface:
 
@@ -118,13 +118,13 @@
   record byte and cell offsets while appending, and never derive ranges from the
   rendered string afterward. Do not add wrapping yet.
 
-- [ ] **Step 4: Run the canonical model tests and verify they pass**
+- [x] **Step 4: Run the canonical model tests and verify they pass**
 
   Run: `make test-unit JOBS=1`
 
   Expected: PASS for one-row text, semantic state, spans, hits, and whitespace.
 
-- [ ] **Step 5: Add failing wrapping and Unicode boundary tests**
+- [x] **Step 5: Add failing wrapping and Unicode boundary tests**
 
   Pin exact breaks for: a facet moving intact; a facet split across three rows;
   multibyte byte spans differing from display-cell spans; `e` plus a combining
@@ -133,14 +133,14 @@
   Each fixture must arrive as one injected unit. Also cover an indivisible
   two-cell unit at a one-cell usable width consuming input and terminating.
 
-- [ ] **Step 6: Run the wrapping tests and verify RED behavior**
+- [x] **Step 6: Run the wrapping tests and verify RED behavior**
 
   Run: `make test-unit JOBS=1`
 
   Expected: FAIL on the first exact wrapped-row assertion because the minimal
   model still emits one over-width row.
 
-- [ ] **Step 7: Implement deterministic maximal non-empty unit packing**
+- [x] **Step 7: Implement deterministic maximal non-empty unit packing**
 
   Normalize width to at least one cell. Apply the spec's indent and group-gap
   rules, then consume the injected `units(text)` list into the largest prefix
@@ -148,14 +148,14 @@
   continuation segment retains the original `{ kind, label, enabled, active }`
   identity and begins after only the next row's standard indent.
 
-- [ ] **Step 8: Run focused unit verification**
+- [x] **Step 8: Run focused unit verification**
 
   Run: `make test-unit JOBS=1`
 
   Expected: PASS, including exact rows, byte/cell spans, hits, every extended
   grapheme fixture, and forced-progress cases.
 
-- [ ] **Step 9: Commit the pure core**
+- [x] **Step 9: Commit the pure core**
 
   ```bash
   git add lua/parley/facet_bar_layout.lua tests/unit/facet_bar_layout_spec.lua

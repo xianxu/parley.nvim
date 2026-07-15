@@ -129,7 +129,7 @@ stale by `sdlc estimate-source`, so this derivation is provisional.
 
 ## Plan
 
-- [ ] Extract a pure display-width-aware facet row layout with focused tests.
+- [x] Extract a pure display-width-aware facet row layout with focused tests.
 - [ ] Teach the shared facet window, highlights, and mouse hit testing to consume
   the multi-row layout.
 - [ ] Recompute facet height and prompt placement on open, resize, and update.
@@ -171,6 +171,13 @@ stale by `sdlc estimate-source`, so this derivation is provisional.
   deferred multi-click suppression tests.
 - Its second pass corrected the RED/GREEN ordering and added production-adapter,
   omitted-tag, capability, closed-handle, and invalid-window regressions.
+
+### 2026-07-15 — Task 1 pure layout
+
+- Added `facet_bar_layout.build/hit` under strict two-stage TDD. The module-missing
+  and wrapping RED states were observed; the serialized unit suite passed.
+- Independent spec and quality reviews approved commit `0295d90` with no
+  findings (`ARCH-DRY`, `ARCH-PURE`).
 
 ## Revisions
 
