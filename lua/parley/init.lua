@@ -64,9 +64,28 @@ note_dirs.setup(M)
 
 -- Super-repo module (loaded here; wired up immediately since it only needs M reference)
 local super_repo = require("parley.super_repo")
+local repo_mode = require("parley.repo_mode")
 super_repo.setup(M)
 M.super_repo = super_repo
-M.toggle_super_repo = function() return super_repo.toggle() end
+M.toggle_super_repo = function()
+	local transitioned, err = super_repo.toggle()
+	if not transitioned then
+		return false, err
+	end
+
+	local root = M.config.repo_root
+	if type(root) == "string" and root ~= "" then
+		local canonical_root = vim.fn.resolve(vim.fn.expand(root)):gsub("/+$", "")
+		local mode = super_repo.is_active() and "super_repo" or "repo"
+		M._state.repo_modes = repo_mode.updated(M._state.repo_modes, canonical_root, mode)
+		local persisted = M.persist_state()
+		if not persisted then
+			M.logger.warning("super-repo: preference not saved")
+		end
+	end
+
+	return true
+end
 M.is_super_repo_active = function() return super_repo.is_active() end
 
 -- Discovery registry (#116): the repo's noun-vocabulary (what file types exist
@@ -637,21 +656,6 @@ M.setup = function(opts)
 	apply_chat_roots(normalize_chat_roots(M.config.chat_dir, M.config.chat_dirs, M.config.chat_roots))
 	apply_note_roots(normalize_note_roots(M.config.notes_dir, M.config.note_dirs, M.config.note_roots))
 
-	-- Brain repos auto-enter super-repo mode. A repo is a brain iff it has a
-	-- `.brain/` directory at root (constitution convention). Deferred to
-	-- VimEnter so chat_roots/note_roots have settled before super_repo mutates
-	-- them, and to avoid racing other plugins' setup().
-	if M.config.repo_root and vim.fn.isdirectory(M.config.repo_root .. "/.brain") == 1 then
-		vim.api.nvim_create_autocmd("VimEnter", {
-			once = true,
-			callback = function()
-				if not super_repo.is_active() then
-					super_repo.toggle()
-				end
-			end,
-		})
-	end
-
 	-- repo-local dirs (issues, history, vision, notes) are resolved in apply_repo_local
 	-- against git root; skip them here to avoid creating in CWD
 	local skip_prepare = { chat_dir = true }
@@ -750,6 +754,14 @@ M.setup = function(opts)
 
 	if M.config.default_agent then
 		M.refresh_state({ agent = M.config.default_agent })
+	end
+
+	-- Restore the current repo's explicit mode only after every state refresh has
+	-- settled roots. This runtime transition is intentionally non-persisting.
+	if type(M.config.repo_root) == "string" and M.config.repo_root ~= "" then
+		local canonical_root = vim.fn.resolve(vim.fn.expand(M.config.repo_root)):gsub("/+$", "")
+		local saved_mode = repo_mode.resolve(M._state.repo_modes, canonical_root)
+		super_repo.set_active(saved_mode == "super_repo")
 	end
 
 	-- register user commands

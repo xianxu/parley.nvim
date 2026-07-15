@@ -252,6 +252,7 @@ atlas:
 
   modes/super_repo:
     code:
+      - lua/parley/helper.lua
       - lua/parley/repo_mode.lua
       - lua/parley/super_repo.lua
       - lua/parley/init.lua
@@ -264,6 +265,7 @@ atlas:
       - lua/parley/lualine.lua
       - lua/parley/keybinding_registry.lua
     tests:
+      - tests/unit/helper_io_spec.lua
       - tests/unit/repo_mode_spec.lua
       - tests/unit/super_repo_spec.lua
       - tests/unit/finder_facets_spec.lua

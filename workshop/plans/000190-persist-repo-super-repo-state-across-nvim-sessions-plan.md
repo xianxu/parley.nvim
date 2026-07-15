@@ -154,47 +154,47 @@ Commit: `state: #190 add atomic write-only persistence`
 - Modify: `tests/unit/super_repo_spec.lua`
 - Modify: `atlas/traceability.yaml`
 
-- [ ] **Step 1: Write failing runtime-transition tests**
+- [x] **Step 1: Write failing runtime-transition tests**
 
 Add tests for `super_repo.set_active(true|false)` being idempotent and non-persisting. Through `parley.toggle_super_repo`, assert successful on/off transitions update the current canonical root in `repo_modes`, preserve valid peer entries, and atomically persist; activation failure changes neither runtime state nor saved preference. Add a successful-runtime/failed-save regression starting from an existing state file: runtime and in-memory preference change, durable bytes remain identical, exactly one bounded warning contains “preference not saved,” and no success notification is emitted.
 
-- [ ] **Step 2: Run the super-repo spec and verify RED**
+- [x] **Step 2: Run the super-repo spec and verify RED**
 
 Run: `make test-spec SPEC=modes/super_repo`
 
 Expected: FAIL because `set_active` and toggle persistence are absent.
 
-- [ ] **Step 3: Implement explicit transition orchestration**
+- [x] **Step 3: Implement explicit transition orchestration**
 
 Export idempotent `super_repo.set_active(active)` as the non-persisting overlay API. Make `M.toggle_super_repo()` call the runtime toggle, update `M._state.repo_modes` through `repo_mode.updated` only on success, then call `M.persist_state`. On write failure, retain runtime mode and in-memory choice while emitting one bounded warning containing “preference not saved”; preserve the existing boolean runtime-transition return contract so callers do not misread persistence failure as transition failure.
 
-- [ ] **Step 4: Run the super-repo spec and verify GREEN**
+- [x] **Step 4: Run the super-repo spec and verify GREEN**
 
 Run: `make test-spec SPEC=modes/super_repo`
 
 Expected: PASS with zero failures.
 
-- [ ] **Step 5: Write failing production-path startup tests**
+- [x] **Step 5: Write failing production-path startup tests**
 
 Create temporary current/sibling repositories with `.parley`, pre-seed `state.json` under the configured state directory, supply a valid `default_agent`, and call real `parley.setup()`. Assert that setup returns with super-repo active, complete sibling chat/note roots, and member config; no later `VimEnter` is required. Spy on the atomic writer, account for the expected initial/default-agent refresh writes, assert every refresh payload preserves the saved preference, and prove restoration adds no writer call after `super_repo.set_active`. Add cases for unsaved default repo mode, explicit saved repo mode, per-repo isolation, canonical/symlink root lookup, invalid values, and an unsaved `.brain` repository remaining ordinary after setup plus synthetic `VimEnter`. For failed saved-super restoration, assert ordinary mode remains usable, the final saved preference remains `"super_repo"`, no post-transition write occurs, and exactly one bounded warning is emitted.
 
-- [ ] **Step 6: Run the startup tests and verify RED**
+- [x] **Step 6: Run the startup tests and verify RED**
 
 Run: `make test-spec SPEC=modes/super_repo`
 
 Expected: FAIL because setup does not restore saved preferences and still installs brain-specific `VimEnter` behavior.
 
-- [ ] **Step 7: Restore once after setup refreshes and remove brain treatment**
+- [x] **Step 7: Restore once after setup refreshes and remove brain treatment**
 
 Delete the `.brain` autocmd block. After the initial `refresh_state()` and optional default-agent `refresh_state(...)`, canonicalize `M.config.repo_root`, resolve its saved mode, and call `super_repo.set_active(mode == "super_repo")` exactly once for repo mode. Do nothing in global mode. A failed saved-super activation keeps the preference and uses the existing bounded warning path. Map the policy, state persistence, runtime transition, setup restoration, and toggle orchestration surfaces to `tests/unit/repo_mode_spec.lua`, `tests/unit/helper_io_spec.lua`, and `tests/unit/super_repo_spec.lua` in traceability.
 
-- [ ] **Step 8: Run the startup tests and verify GREEN**
+- [x] **Step 8: Run the startup tests and verify GREEN**
 
 Run: `make test-spec SPEC=modes/super_repo`
 
 Expected: PASS with zero failures; the default-agent case includes all sibling roots immediately on return.
 
-- [ ] **Step 9: Commit startup and toggle persistence**
+- [x] **Step 9: Commit startup and toggle persistence**
 
 Commit: `super-repo: #190 persist and restore peer mode`
 
