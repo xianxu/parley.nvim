@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-07-14
 updated: 2026-07-14
-estimate_hours:
+estimate_hours: 1.70
 started: 2026-07-14T18:42:45-07:00
 ---
 
@@ -111,9 +111,30 @@ being to resume the same Markdown search and facet selection.
   ALL/NONE/toggle behavior, query independence, and empty-result recovery.
 - Atlas documentation describes the mode-specific facet and query behavior.
 
+## Estimate
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: issue-spec         design=0.70 impl=0.04
+item: lua-neovim        design=0.20 impl=0.40
+item: atlas-docs        design=0.05 impl=0.04
+item: milestone-review  design=0.00 impl=0.12
+design-buffer: 0.15
+total: 1.70
+```
+
+Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md`
+against `baseline-v3.1.md`. Method A only. The focused Lua/Neovim primitive
+uses the thorough-spec design discount; v3.1 scales its midpoint implementation
+hour to 40%. The estimate includes the already completed issue-spec work and one
+single-pass close review. The calibration source is currently marked stale, so
+the derived total is provisional pending the repo-local recalibration tracked by
+that source.
+
 ## Plan
 
-- [ ] Write and approve the durable implementation plan.
+- [x] Write and approve the durable implementation plan.
 - [ ] Implement the mode-specific Markdown facet adapter with canonical helpers.
 - [ ] Add finder-level regressions for state, query, and picker behavior.
 - [ ] Update atlas documentation and run the full verification suite.
@@ -137,3 +158,16 @@ Clarified that shared eligibility belongs in `finder_facets`, named the pure
 policy and IO/UI shell, specified ineligible and empty super-repo behavior, and
 made complete-query persistence verbatim. Also anchored member discovery to the
 active `super_repo` runtime state API and scoped mode changes to finder reopen.
+
+### 2026-07-14T21:42:44-07:00 — implementation plan
+
+Added the calibrated v3.1 estimate and durable implementation plan after spec
+approval. The plan keeps one close boundary and threads TDD through shared
+eligibility, the pure contextual policy, the runtime adapter, and atlas updates.
+
+### 2026-07-14T21:46:57-07:00 — plan review
+
+Corrected focused test commands, made invalid member labels safe at the scan
+boundary, expanded picker traceability, and separated post-plan close artifact
+handling from implementation checkboxes. Noted that the current calibration
+source is stale, so the reconciled estimate remains provisional.
