@@ -3159,7 +3159,9 @@ M._vision_finder = {
 }
 
 M._markdown_finder = {
-	sticky_query = nil, -- Preserved {repo} filter across invocations (super-repo mode)
+	query = nil,
+	directory_facet_state = nil,
+	repo_facet_state = nil,
 }
 
 -- Create a new note with given subject

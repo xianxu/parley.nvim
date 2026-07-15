@@ -163,3 +163,194 @@ describe("markdown finder picker policy", function()
 		assert.is_not.equal(opts.entries[2], result.items[1])
 	end)
 end)
+
+describe("markdown finder entry point", function()
+	local base_dir
+	local ordinary_root
+	local fake
+	local runtime_state
+	local picker_calls
+	local picker_updates
+
+	local function write_markdown(path, timestamp)
+		vim.fn.mkdir(vim.fn.fnamemodify(path, ":h"), "p")
+		vim.fn.writefile({ "# note" }, path)
+		if timestamp then
+			vim.loop.fs_utime(path, timestamp, timestamp)
+		end
+	end
+
+	local function labels(tags)
+		local result = {}
+		for _, tag in ipairs(tags or {}) do
+			table.insert(result, tag.label)
+		end
+		return result
+	end
+
+	local function update_values(update)
+		local result = {}
+		for _, picker_item in ipairs(update.items) do
+			table.insert(result, picker_item.value)
+		end
+		return result
+	end
+
+	local function set_runtime(active, members)
+		runtime_state = { active = active, members = members or {} }
+	end
+
+	before_each(function()
+		base_dir = vim.fn.tempname() .. "-markdown-finder-entry"
+		ordinary_root = base_dir .. "/ordinary"
+		picker_calls = {}
+		picker_updates = {}
+		set_runtime(false)
+
+		fake = {
+			_markdown_finder = {
+				query = nil,
+				directory_facet_state = nil,
+				repo_facet_state = nil,
+			},
+			config = {
+				repo_root = ordinary_root,
+				markdown_finder_max_depth = 4,
+				-- Deliberately stale: runtime super-repo state must win.
+				super_repo_members = { { path = "/stale", name = "stale" } },
+			},
+			super_repo = {
+				get_state = function()
+					return vim.deepcopy(runtime_state)
+				end,
+			},
+			helpers = {
+				find_git_root = function() return ordinary_root end,
+			},
+			logger = { warning = function() end },
+			float_picker = {
+				open = function(opts)
+					table.insert(picker_calls, opts)
+					return {
+						update = function(...)
+							local args = { ... }
+							table.insert(picker_updates, {
+								items = args[1],
+								tags = args[2],
+								argument_count = select("#", ...),
+							})
+						end,
+					}
+				end,
+			},
+			open_buf = function() end,
+		}
+		markdown_finder.setup(fake)
+	end)
+
+	after_each(function()
+		markdown_finder.setup(require("parley"))
+		if base_dir then vim.fn.delete(base_dir, "rf") end
+	end)
+
+	it("opens an ordinary directory bar and repaints without changing the live query", function()
+		local now = os.time()
+		write_markdown(ordinary_root .. "/workshop/recent.md", now)
+		write_markdown(ordinary_root .. "/docs/older.md", now - 10)
+
+		markdown_finder.open()
+		local call = picker_calls[1]
+		assert.same({ "workshop", "docs" }, labels(call.tag_bar.tags))
+		call.on_query_change("  exact live query  ")
+		call.tag_bar.on_toggle("workshop")
+
+		assert.same({ vim.fn.resolve(ordinary_root .. "/docs/older.md") }, update_values(picker_updates[1]))
+		assert.equals(2, picker_updates[1].argument_count)
+		assert.equals("  exact live query  ", fake._markdown_finder.query)
+	end)
+
+	it("reopens with verbatim whitespace and a subsequently cleared query", function()
+		write_markdown(ordinary_root .. "/note.md")
+		markdown_finder.open()
+		picker_calls[1].on_query_change("   ")
+
+		markdown_finder.open()
+		assert.equals("   ", picker_calls[2].initial_query)
+		picker_calls[2].on_query_change("")
+
+		markdown_finder.open()
+		assert.equals("", picker_calls[3].initial_query)
+	end)
+
+	it("keeps directory and repository choices independent across runtime mode changes", function()
+		local now = os.time()
+		write_markdown(ordinary_root .. "/workshop/a.md", now)
+		write_markdown(ordinary_root .. "/docs/b.md", now - 10)
+		local alpha = base_dir .. "/alpha"
+		local beta = base_dir .. "/beta"
+		local gamma = base_dir .. "/gamma"
+		write_markdown(alpha .. "/a.md", now)
+		write_markdown(beta .. "/b.md", now - 10)
+		write_markdown(gamma .. "/g.md", now - 20)
+
+		markdown_finder.open()
+		picker_calls[1].tag_bar.on_toggle("workshop")
+		set_runtime(true, { { path = alpha, name = "alpha" }, { path = beta, name = "beta" } })
+		markdown_finder.open()
+		assert.same({ "alpha", "beta" }, labels(picker_calls[2].tag_bar.tags))
+		picker_calls[2].tag_bar.on_toggle("alpha")
+
+		set_runtime(false)
+		markdown_finder.open()
+		assert.is_false(fake._markdown_finder.directory_facet_state.workshop)
+		assert.is_true(fake._markdown_finder.directory_facet_state.docs)
+
+		set_runtime(true, { { path = beta, name = "beta" }, { path = gamma, name = "gamma" } })
+		markdown_finder.open()
+		assert.is_false(fake._markdown_finder.repo_facet_state.alpha)
+		assert.is_true(fake._markdown_finder.repo_facet_state.beta)
+		assert.is_true(fake._markdown_finder.repo_facet_state.gamma)
+	end)
+
+	it("reopens after NONE with the directory bar available for ALL restore", function()
+		write_markdown(ordinary_root .. "/workshop/a.md")
+		write_markdown(ordinary_root .. "/docs/b.md")
+		markdown_finder.open()
+		picker_calls[1].tag_bar.on_none()
+		assert.equals(0, #picker_updates[1].items)
+
+		markdown_finder.open()
+		assert.equals(0, #picker_calls[2].items)
+		assert.is_table(picker_calls[2].tag_bar)
+		picker_calls[2].tag_bar.on_all()
+		assert.equals(2, #picker_updates[2].items)
+	end)
+
+	it("scans invalidly labelled members and opens the aggregate without a bar", function()
+		local alpha = base_dir .. "/alpha"
+		local unlabelled = base_dir .. "/unlabelled"
+		write_markdown(alpha .. "/a.md")
+		write_markdown(unlabelled .. "/u.md")
+		set_runtime(true, {
+			{ path = alpha, name = "alpha" },
+			{ path = unlabelled },
+			{ path = "", name = "discard-path" },
+			{ path = 3, name = "discard-number" },
+		})
+
+		assert.has_no.errors(markdown_finder.open)
+		assert.equals(2, #picker_calls[1].items)
+		assert.is_nil(picker_calls[1].tag_bar)
+	end)
+
+	it("opens an eligible zero-row super expansion with a sorted repository bar", function()
+		set_runtime(true, {
+			{ path = base_dir .. "/zeta", name = "zeta" },
+			{ path = base_dir .. "/alpha", name = "alpha" },
+		})
+
+		markdown_finder.open()
+		assert.same({}, picker_calls[1].items)
+		assert.same({ "alpha", "zeta" }, labels(picker_calls[1].tag_bar.tags))
+	end)
+end)
