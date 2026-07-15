@@ -37,6 +37,10 @@ The mode toggle also uses `<C-g>S`, while the desired mnemonic is `<C-g>p` for
 - Restore a saved `"super_repo"` preference only after repo-local chat/note
   roots and persisted state have settled. Restoration activates the existing
   super-repo overlay before normal use without rewriting the preference.
+- After every setup-time state refresh (including the optional default-agent
+  refresh), `setup()` synchronously resolves and applies the saved mode before
+  returning. Restoration must not depend on a future `VimEnter` event and must
+  use a non-persisting activation path.
 - A successful user toggle immediately records the resulting mode for the
   current canonical repo root. Toggling on records `"super_repo"`; toggling off
   records `"repo"`. Failed activation leaves both the runtime mode and saved
@@ -45,11 +49,23 @@ The mode toggle also uses `<C-g>S`, while the desired mnemonic is `<C-g>p` for
   without error. If a valid saved super-repo preference cannot be activated,
   Parley remains usable in ordinary repo mode, keeps the saved preference for a
   future session, and uses the existing bounded warning path.
+- Selection treats a non-table `repo_modes` value as empty and recognizes only
+  exact `"repo"`/`"super_repo"` values for the current canonical root. Updating
+  a malformed map starts from empty; otherwise it returns a fresh map that
+  preserves entries for other non-empty string roots only when their value is
+  valid, discards invalid entries, and replaces only the current root. It never
+  mutates the caller's map.
 - Keep runtime roots transient: `chat_roots`, `chat_dirs`, and super-repo-pushed
   note roots must remain absent from persisted state. Extract the current state
   serialization/write policy into one reusable write-only boundary so saving a
   mode preference does not run the full state reload/root-restoration path
   (`ARCH-DRY`, `ARCH-PURE`).
+- The write-only state boundary reports success/failure and replaces
+  `state.json` atomically, so a failed preference save leaves the previous
+  durable file intact. If the runtime transition succeeds but persistence
+  fails, keep the resulting runtime mode, keep the last durable preference,
+  and emit one bounded warning that explicitly says the preference was not
+  saved; do not report persistence success.
 - Keep preference selection/updates in a small deterministic core: resolving a
   mode from `(repo_modes, canonical_root)` and returning an updated fresh map
   must not mutate callers. Neovim filesystem resolution and JSON IO stay in the
@@ -58,6 +74,11 @@ The mode toggle also uses `<C-g>S`, while the desired mnemonic is `<C-g>p` for
   and insert mode. Change chat branch/prune from `<C-g>p` to `<C-g>b` in normal
   mode. Remove the default key for `chat_shortcut_toggle_tool_folds`; users may
   still assign that configurable action their own shortcut.
+- Extend the shared keybinding registry to support configured actions with no
+  default shortcut. An unconfigured tool-fold action registers no mapping and
+  appears in no keybinding-help row; a non-empty user shortcut registers and is
+  displayed through the existing registry path, with the callback unchanged
+  (`ARCH-DRY`).
 - Update help, README, and atlas descriptions so “peer,” persistence, default
   behavior, brain parity, and the two keybinding migrations agree with code
   (`ARCH-PURPOSE`).
@@ -66,14 +87,23 @@ The mode toggle also uses `<C-g>S`, while the desired mnemonic is `<C-g>p` for
 
 - A repo explicitly left in super-repo mode reopens in super-repo mode in a new
   Neovim setup/session, while another repo with no preference opens in repo mode.
+- A production-path setup test pre-seeds `state.json`, calls `setup()` without a
+  future `VimEnter` trigger, and observes super-repo mode immediately on return.
+  An unsaved `.brain` repo remains in repo mode both after setup and after a
+  synthetic `VimEnter`.
 - Toggling back to repo mode persists and prevents a later session—including in
   a brain repo—from auto-enabling super-repo mode.
 - Mode persistence never restores transient sibling chat/note roots from disk
   and never disturbs the live overlay while saving a toggle.
 - Invalid stored preferences and failed restoration degrade to ordinary repo
   mode without corrupting the stored map.
+- Mixed valid/invalid maps preserve other valid repo choices while discarding
+  invalid entries; a write-failure regression proves the runtime transition,
+  unchanged durable file, and one bounded “preference not saved” warning.
 - `<C-g>p` toggles peer aggregation, `<C-g>b` branches/prunes a chat, and the
   tool-fold action has no default collision.
+- With no configured tool-fold shortcut, neither a mapping nor help row exists;
+  assigning one restores both through the shared registry.
 - Automated tests cover per-repo isolation, canonical-root lookup, immutable
   preference updates, first-run defaulting, startup restoration, toggle-on/off
   persistence, brain parity, failure preservation, transient-root filtering,
@@ -102,3 +132,15 @@ The mode toggle also uses `<C-g>S`, while the desired mnemonic is `<C-g>p` for
   successful activation could restore pre-overlay note roots. The design
   therefore reuses one extracted write-only persistence policy instead of
   reloading state while saving the scalar preference (`ARCH-DRY`, `ARCH-PURE`).
+
+## Revisions
+
+### 2026-07-15 — fresh-context spec review
+
+- Reason: review found implementation-defining ambiguity in startup timing,
+  optional keybinding/help semantics, mixed-map sanitization, and persistence
+  write failure.
+- Delta: made restoration synchronous before `setup()` returns; defined one
+  registry path for configurable unbound actions; specified immutable map
+  filtering; and required atomic, result-bearing state writes with bounded
+  failure behavior and production-path regressions.
