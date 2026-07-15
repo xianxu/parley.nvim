@@ -130,7 +130,7 @@ stale by `sdlc estimate-source`, so this derivation is provisional.
 ## Plan
 
 - [x] Extract a pure display-width-aware facet row layout with focused tests.
-- [ ] Teach the shared facet window, highlights, and mouse hit testing to consume
+- [x] Teach the shared facet window, highlights, and mouse hit testing to consume
   the multi-row layout.
 - [x] Recompute facet height and prompt placement on open, resize, and update.
 - [ ] Run focused picker/finder regressions and the full test suite.
@@ -198,6 +198,19 @@ stale by `sdlc estimate-source`, so this derivation is provisional.
   flattened range. Follow-up `1fed6b6` withheld zero-height windows while
   retaining logical state and moved transitional clicks to
   `facet_bar_layout.hit`; both review stages then approved with no findings.
+
+### 2026-07-15 — Task 4 viewport interaction
+
+- Added `topline`-aware row/cell mapping, model-based lower-row clicks, clamped
+  facet wheel scrolling in prompt/results modes, and native outside-bar
+  fallthrough. Focused tests grew to 27 cases and all mapped/lint checks passed.
+- Quality review reproduced pending single-click dispatch after a physical
+  double-click and extra mappings overwriting wheel reachability. Follow-up
+  `f7c7fbb` added multi-click generation cancellation and reserved wheel keys;
+  focused coverage reached 30 cases and both re-reviews approved.
+- Headless Neovim has no attached mouse grid for a native viewport probe, so
+  fallthrough is enforced through returned raw termcodes plus expression and
+  nonrecursive mapping metadata in all three modes.
 
 ## Revisions
 

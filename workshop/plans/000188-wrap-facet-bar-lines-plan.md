@@ -286,7 +286,7 @@
 - Modify: `lua/parley/float_picker.lua:1200-1295`
 - Modify: `tests/unit/float_picker_tag_bar_spec.lua`
 
-- [ ] **Step 1: Write failing viewport and wheel tests**
+- [x] **Step 1: Write failing viewport and wheel tests**
 
   Force more facet rows than the capped float height. Assert a mouse position
   maps to `buffer_row0 = topline - 1 + visible_row0`, clicking a segment on a
@@ -302,14 +302,14 @@
   mapping returns the original wheel termcode and native scrolling still occurs
   instead of consuming the event.
 
-- [ ] **Step 2: Run the picker test and verify hidden rows are unreachable**
+- [x] **Step 2: Run the picker test and verify hidden rows are unreachable**
 
   Run: `make test-unit JOBS=1`
 
   Expected: viewport and wheel cases FAIL because current mouse mapping assumes
   a single content row and has no facet scrolling path.
 
-- [ ] **Step 3: Implement screen-to-model coordinates and wheel dispatch**
+- [x] **Step 3: Implement screen-to-model coordinates and wheel dispatch**
 
   Add `tag_bar_mouse_position` to convert the facet screen rectangle to
   `(visible_row0, content_cell0)`, add the current window `topline - 1`, and call
@@ -323,14 +323,14 @@
   `<Ignore>`; otherwise return the original wheel termcode under a nonrecursive
   mapping so Neovim performs its native action without re-entering the adapter.
 
-- [ ] **Step 4: Run unit and mapped picker regressions**
+- [x] **Step 4: Run unit and mapped picker regressions**
 
   Run: `make test-unit JOBS=1 && make test-spec SPEC=ui/pickers`
 
   Expected: PASS, including scrolled click dispatch and all existing mouse,
   selection, query, finder, and Review Menu behaviors.
 
-- [ ] **Step 5: Commit viewport interaction**
+- [x] **Step 5: Commit viewport interaction**
 
   ```bash
   git add lua/parley/float_picker.lua tests/unit/float_picker_tag_bar_spec.lua
