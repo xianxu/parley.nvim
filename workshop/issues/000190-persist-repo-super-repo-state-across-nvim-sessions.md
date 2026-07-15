@@ -37,10 +37,10 @@ The mode toggle also uses `<C-g>S`, while the desired mnemonic is `<C-g>p` for
 - Restore a saved `"super_repo"` preference only after repo-local chat/note
   roots and persisted state have settled. Restoration activates the existing
   super-repo overlay before normal use without rewriting the preference.
-- After every setup-time state refresh (including the optional default-agent
-  refresh), `setup()` synchronously resolves and applies the saved mode before
-  returning. Restoration must not depend on a future `VimEnter` event and must
-  use a non-persisting activation path.
+- After all setup-time state refreshes have completed, including the optional
+  default-agent refresh, `setup()` synchronously resolves and applies the saved
+  mode exactly once before returning. Restoration must not depend on a future
+  `VimEnter` event and must use a non-persisting activation path.
 - A successful user toggle immediately records the resulting mode for the
   current canonical repo root. Toggling on records `"super_repo"`; toggling off
   records `"repo"`. Failed activation leaves both the runtime mode and saved
@@ -87,10 +87,11 @@ The mode toggle also uses `<C-g>S`, while the desired mnemonic is `<C-g>p` for
 
 - A repo explicitly left in super-repo mode reopens in super-repo mode in a new
   Neovim setup/session, while another repo with no preference opens in repo mode.
-- A production-path setup test pre-seeds `state.json`, calls `setup()` without a
-  future `VimEnter` trigger, and observes super-repo mode immediately on return.
-  An unsaved `.brain` repo remains in repo mode both after setup and after a
-  synthetic `VimEnter`.
+- A production-path setup test pre-seeds `state.json`, supplies a default agent,
+  calls `setup()` without a future `VimEnter` trigger, and observes both active
+  super-repo mode and the complete live sibling chat/note overlay immediately
+  on return. An unsaved `.brain` repo remains in repo mode both after setup and
+  after a synthetic `VimEnter`.
 - Toggling back to repo mode persists and prevents a later session—including in
   a brain repo—from auto-enabling super-repo mode.
 - Mode persistence never restores transient sibling chat/note roots from disk
@@ -144,3 +145,11 @@ The mode toggle also uses `<C-g>S`, while the desired mnemonic is `<C-g>p` for
   registry path for configurable unbound actions; specified immutable map
   filtering; and required atomic, result-bearing state writes with bounded
   failure behavior and production-path regressions.
+
+### 2026-07-15 — startup sequencing correction
+
+- Reason: follow-up review found that restoring after each setup refresh could
+  let the optional default-agent refresh replace live overlay roots while the
+  super-repo state still appeared active.
+- Delta: require exactly one restoration after all setup refreshes and verify
+  the complete live sibling chat/note overlay in the default-agent setup path.
