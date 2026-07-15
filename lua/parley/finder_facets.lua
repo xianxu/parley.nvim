@@ -41,7 +41,7 @@ end
 
 M.toggle = function(state, key)
 	local toggled = copy_state(state)
-	toggled[key] = not (toggled[key] ~= false)
+	toggled[key] = toggled[key] == false
 	return toggled
 end
 

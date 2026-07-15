@@ -255,13 +255,19 @@ atlas:
       - lua/parley/super_repo.lua
       - lua/parley/init.lua
       - lua/parley/issues.lua
+      - lua/parley/finder_facets.lua
       - lua/parley/issue_finder.lua
+      - lua/parley/float_picker.lua
       - lua/parley/vision_finder.lua
       - lua/parley/markdown_finder.lua
       - lua/parley/lualine.lua
       - lua/parley/keybinding_registry.lua
     tests:
       - tests/unit/super_repo_spec.lua
+      - tests/unit/finder_facets_spec.lua
+      - tests/unit/chat_finder_logic_spec.lua
+      - tests/unit/issue_finder_spec.lua
+      - tests/unit/float_picker_spec.lua
 
   notes/structure:
     code:
@@ -462,12 +468,16 @@ atlas:
     code:
       - lua/parley/issue_vocabulary.lua
       - lua/parley/issues.lua
+      - lua/parley/finder_facets.lua
       - lua/parley/issue_finder.lua
+      - lua/parley/float_picker.lua
       - lua/parley/init.lua
     tests:
       - tests/unit/issue_vocabulary_spec.lua
       - tests/unit/issues_spec.lua
+      - tests/unit/finder_facets_spec.lua
       - tests/unit/issue_finder_spec.lua
+      - tests/unit/float_picker_spec.lua
 
   ui/highlights:
     code:

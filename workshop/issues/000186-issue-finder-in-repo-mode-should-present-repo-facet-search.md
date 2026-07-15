@@ -161,10 +161,10 @@ recalibration.
 
 ## Plan
 
-- [ ] Extract and regression-lock Chat Finder's canonical facet model.
-- [ ] Integrate persistent repository facets into super-repo Issue Finder.
-- [ ] Cover single-root, multi-root, query, view, reopen, and new-repository behavior.
-- [ ] Update atlas/traceability and pass focused plus full verification.
+- [x] Extract and regression-lock Chat Finder's canonical facet model.
+- [x] Integrate persistent repository facets into super-repo Issue Finder.
+- [x] Cover single-root, multi-root, query, view, reopen, and new-repository behavior.
+- [x] Update atlas/traceability and pass focused plus full verification.
 
 ## Log
 
@@ -182,6 +182,23 @@ now omits the entire facet bar and all repo filtering unless every expanded
 root has a non-empty label and at least two unique repositories are present.
 It also preserves temporarily undiscovered facet keys so rediscovery restores
 the prior selection.
+
+### 2026-07-14 — implementation and verification
+
+Extracted the dependency-free `finder_facets` model and migrated Chat Finder's
+existing policy to it. Issue Finder now exposes repository facets only for
+complete multi-repository super-repo roots, preserves repo choices across
+issues/history and reopen, and refreshes in place without touching the query.
+`float_picker` now permits an initially empty list only when a usable facet bar
+can restore items, keeping ALL reachable after persisted NONE.
+
+Verification evidence: focused facet/Chat/Issue/picker/sticky specs passed;
+`make test-spec SPEC=modes/super_repo` and
+`make test-spec SPEC=issues/issue-management` passed; after correcting one
+new luacheck simplification warning, `make lint` passed with 0 warnings/0
+errors and the complete `make test` suite passed. Final diff inspection found
+one pure state machine with thin finder adapters (`ARCH-DRY`, `ARCH-PURE`,
+`ARCH-PURPOSE`).
 
 ## Revisions
 
