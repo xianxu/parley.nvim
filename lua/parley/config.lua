@@ -454,8 +454,9 @@ local config = {
 	chat_shortcut_delete = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>d" },
 	chat_shortcut_delete_tree = { modes = { "n" }, shortcut = "<C-g>D" },
 	chat_shortcut_stop = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>x" },
-	-- Toggle folds of 🔧:/📎: components within the exchange under cursor
-	chat_shortcut_toggle_tool_folds = { modes = { "n" }, shortcut = "<C-g>b" },
+	-- Toggle folds of 🔧:/📎: components within the exchange under cursor.
+	-- Intentionally unbound by default; configure chat_shortcut_toggle_tool_folds
+	-- to opt in.
 	chat_shortcut_agent = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>a" },
 	chat_shortcut_system_prompt = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>P" },
 	chat_shortcut_follow_cursor = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>l" },
@@ -465,7 +466,7 @@ local config = {
 	-- `sdlc resolve`), else native go-to-file. Transparent (native gf preserved on
 	-- plain paths); remap here to disable.
 	chat_shortcut_resolve_ref_gf = { modes = { "n" }, shortcut = "gf" },
-	chat_shortcut_prune = { modes = { "n" }, shortcut = "<C-g>p" },
+	chat_shortcut_prune = { modes = { "n" }, shortcut = "<C-g>b" },
 	chat_shortcut_export_markdown = { modes = { "n" }, shortcut = "<C-g>em" },
 	chat_shortcut_export_html = { modes = { "n" }, shortcut = "<C-g>eh" },
 	chat_shortcut_exchange_cut = { modes = { "n", "v" }, shortcut = "<C-g>X" },
@@ -570,7 +571,7 @@ local config = {
 	-- maximum directory depth for markdown finder (from repo root)
 	markdown_finder_max_depth = 6,
 	-- super-repo mode toggle (aggregates reads across sibling .parley repos)
-	global_shortcut_super_repo_toggle = { modes = { "n", "i" }, shortcut = "<C-g>S" },
+	global_shortcut_super_repo_toggle = { modes = { "n", "i" }, shortcut = "<C-g>p" },
 	-- global shortcuts for issue management
 	global_shortcut_issue_new = { modes = { "n", "i" }, shortcut = "<C-y>c" },
 	global_shortcut_issue_finder = { modes = { "n", "i" }, shortcut = "<C-y>f" },

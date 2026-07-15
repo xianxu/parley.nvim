@@ -208,11 +208,11 @@ Commit: `super-repo: #190 persist and restore peer mode`
 - Modify: `tests/unit/keybindings_spec.lua`
 - Modify: `tests/unit/config_tools_spec.lua`
 
-- [ ] **Step 1: Write failing registry and mapping tests**
+- [x] **Step 1: Write failing registry and mapping tests**
 
 Assert exposed config owns peer toggle `<C-g>p` in normal/insert and chat prune `<C-g>b` in normal, while tool-fold config is absent by default. Assert the three migrated registry entries carry no independent `default_key` and resolve solely from their `config_key`, so registration/help cannot drift from exposed config. Assert a configurable entry with no default is valid; absent or empty-string tool-fold configuration produces neither mapping nor help row; and a user config `{ modes = { "n" }, shortcut = "<leader>tf" }` restores both registration and help through the shared resolver.
 
-- [ ] **Step 2: Run keybinding tests and verify RED**
+- [x] **Step 2: Run keybinding tests and verify RED**
 
 Run: `make test-spec SPEC=ui/keybindings`
 
@@ -220,11 +220,11 @@ Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedF
 
 Expected: both fail on old exposed defaults, duplicated registry defaults, the mandatory `default_key` invariant, and configured tool-fold default.
 
-- [ ] **Step 3: Implement optional-default resolution and new defaults**
+- [x] **Step 3: Implement optional-default resolution and new defaults**
 
 Set peer and prune defaults only in `config.lua`. Remove `default_key` from all three migrated registry entries so their `config_key` is the sole resolution path; remove the tool-fold default config value while retaining registry modes, callback, and descriptions. Treat nil/empty shortcuts as unbound. Make help skip entries resolving to no key, while registration naturally skips them; require either `default_key` or `config_key` in the registry invariant. Add a drift test proving the peer/prune registration and help keys equal exposed config rather than a second registry literal (`ARCH-DRY`).
 
-- [ ] **Step 4: Run keybinding and config tests and verify GREEN**
+- [x] **Step 4: Run keybinding and config tests and verify GREEN**
 
 Run: `make test-spec SPEC=ui/keybindings`
 
@@ -232,7 +232,7 @@ Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedF
 
 Expected: both PASS with zero failures.
 
-- [ ] **Step 5: Commit the keybinding migration**
+- [x] **Step 5: Commit the keybinding migration**
 
 Commit: `keybindings: #190 use peer and branch mnemonics`
 

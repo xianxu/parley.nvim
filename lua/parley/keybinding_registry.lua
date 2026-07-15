@@ -99,7 +99,7 @@ end
 -- Each entry:
 --   id           - unique identifier, used as callback key
 --   config_key   - key in parley config table (nil if not configurable)
---   default_key  - default shortcut string
+--   default_key  - default shortcut string (optional when config_key is set)
 --   default_modes - default mode list
 --   scope        - scope name from the forest
 --   desc         - vim keymap description
@@ -193,7 +193,6 @@ M.entries = {
 	{
 		id = "super_repo_toggle",
 		config_key = "global_shortcut_super_repo_toggle",
-		default_key = "<C-g>S",
 		default_modes = { "n", "i" },
 		scope = "global",
 		desc = "Toggle super-repo mode (aggregate reads across sibling .parley repos)",
@@ -573,7 +572,6 @@ M.entries = {
 	{
 		id = "chat_prune",
 		config_key = "chat_shortcut_prune",
-		default_key = "<C-g>p",
 		default_modes = { "n" },
 		scope = "chat",
 		desc = "Parley prune chat",
@@ -623,7 +621,6 @@ M.entries = {
 	{
 		id = "chat_toggle_tool_folds",
 		config_key = "chat_shortcut_toggle_tool_folds",
-		default_key = "<C-g>b",
 		default_modes = { "n" },
 		scope = "chat",
 		desc = "Parley toggle tool folds",
@@ -916,8 +913,13 @@ end
 function M.resolve_keys(entry, config)
 	local function as_list(v)
 		if v == nil then return nil end
-		if type(v) == "string" then return { v } end
-		return v
+		if type(v) == "string" then return v ~= "" and { v } or nil end
+		if type(v) ~= "table" then return nil end
+		local keys = {}
+		for _, key in ipairs(v) do
+			if type(key) == "string" and key ~= "" then table.insert(keys, key) end
+		end
+		return #keys > 0 and keys or nil
 	end
 
 	if not entry.config_key then
@@ -1002,7 +1004,7 @@ function M.help_lines(context, config, bufnr)
 			table.insert(lines, M.scope_labels[scope] or scope)
 			for _, entry in ipairs(scope_entries) do
 				local key = resolve_display_shortcut(entry, config, bufnr)
-				add(key, entry.help_desc or entry.desc)
+				if key then add(key, entry.help_desc or entry.desc) end
 			end
 			table.insert(lines, "")
 		end

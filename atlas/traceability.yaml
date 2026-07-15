@@ -537,8 +537,10 @@ atlas:
     code:
       - lua/parley/init.lua
       - lua/parley/config.lua
+      - lua/parley/keybinding_registry.lua
     tests:
       - tests/unit/keybindings_spec.lua
+      - tests/unit/config_tools_spec.lua
 
   skills/skill-system:
     code:
