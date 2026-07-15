@@ -226,6 +226,88 @@ describe("helper I/O functions", function()
 
             assert.equals("deep", loaded.level1.level2.value)
         end)
+
+        it("F5: table_to_file_atomic replaces complete JSON and reports success", function()
+            local path = tmpdir .. "/atomic.json"
+            vim.fn.writefile({ "old" }, path)
+
+            local ok, err = helper.table_to_file_atomic({ nested = { value = 42 } }, path)
+
+            assert.is_true(ok)
+            assert.is_nil(err)
+            assert.same({ nested = { value = 42 } }, helper.file_to_table(path))
+            assert.same({}, vim.fn.glob(path .. ".tmp-*", false, true))
+        end)
+
+        it("F6: encode failure is bounded and leaves destination unchanged", function()
+            local path = tmpdir .. "/atomic.json"
+            vim.fn.writefile({ "durable" }, path)
+
+            local ok, err = helper.table_to_file_atomic({}, path, {
+                encode = function() error(string.rep("secret", 100)) end,
+            })
+
+            assert.is_false(ok)
+            assert.is_true(err:find("encode", 1, true) ~= nil)
+            assert.is_true(#err <= 240)
+            assert.same({ "durable" }, vim.fn.readfile(path))
+            assert.same({}, vim.fn.glob(path .. ".tmp-*", false, true))
+        end)
+
+        for _, stage in ipairs({ "write", "close" }) do
+            it("F7: " .. stage .. " failure cleans the temporary file and preserves destination", function()
+                local path = tmpdir .. "/atomic.json"
+                local temp_path = path .. ".tmp-test"
+                vim.fn.writefile({ "durable" }, path)
+                local removed
+                local handle = {
+                    write = function()
+                        if stage == "write" then return nil, string.rep("secret", 100) end
+                        return true
+                    end,
+                    close = function()
+                        if stage == "close" then return nil, string.rep("secret", 100) end
+                        return true
+                    end,
+                }
+
+                local ok, err = helper.table_to_file_atomic({}, path, {
+                    temp_path = function() return temp_path end,
+                    open = function()
+                        vim.fn.writefile({ "partial" }, temp_path)
+                        return handle
+                    end,
+                    remove = function(candidate)
+                        removed = candidate
+                        return os.remove(candidate)
+                    end,
+                })
+
+                assert.is_false(ok)
+                assert.is_true(err:find(stage, 1, true) ~= nil)
+                assert.is_true(#err <= 240)
+                assert.equals(temp_path, removed)
+                assert.equals(0, vim.fn.filereadable(temp_path))
+                assert.same({ "durable" }, vim.fn.readfile(path))
+            end)
+        end
+
+        it("F8: rename failure removes partial output and preserves destination bytes", function()
+            local path = tmpdir .. "/atomic.json"
+            local temp_path = path .. ".tmp-test"
+            vim.fn.writefile({ "durable" }, path)
+
+            local ok, err = helper.table_to_file_atomic({ changed = true }, path, {
+                temp_path = function() return temp_path end,
+                rename = function() return nil, string.rep("secret", 100) end,
+            })
+
+            assert.is_false(ok)
+            assert.is_true(err:find("rename", 1, true) ~= nil)
+            assert.is_true(#err <= 240)
+            assert.equals(0, vim.fn.filereadable(temp_path))
+            assert.same({ "durable" }, vim.fn.readfile(path))
+        end)
     end)
 
     describe("Group G: prepare_dir", function()

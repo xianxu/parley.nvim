@@ -1129,6 +1129,45 @@ M.setup = function(opts)
 	M.logger.debug("setup finished")
 end
 
+--- Persist the current state without reloading disk state or reapplying roots.
+--- Runtime-derived chat roots and repo/super-repo note roots are excluded.
+---@return boolean ok
+---@return string|nil err
+M.persist_state = function()
+	local persist_state = vim.deepcopy(M._state)
+	persist_state.chat_roots = nil
+	persist_state.chat_dirs = nil
+
+	local function resolve_dir(dir)
+		return vim.fn.resolve(vim.fn.expand(dir)):gsub("/+$", "")
+	end
+	local pushed_note = {}
+	for _, dir in ipairs(super_repo.get_pushed_note_dirs()) do
+		pushed_note[dir] = true
+	end
+	if type(persist_state.note_roots) == "table" then
+		local filtered = {}
+		for _, root in ipairs(persist_state.note_roots) do
+			if root.label ~= "repo" and not pushed_note[resolve_dir(root.dir)] then
+				table.insert(filtered, root)
+			end
+		end
+		persist_state.note_roots = #filtered > 0 and filtered or nil
+	end
+	if type(persist_state.note_roots) == "table" then
+		local dirs = {}
+		for _, root in ipairs(persist_state.note_roots) do
+			table.insert(dirs, root.dir)
+		end
+		persist_state.note_dirs = #dirs > 0 and dirs or nil
+	else
+		persist_state.note_dirs = nil
+	end
+
+	local state_file = M.config.state_dir .. "/state.json"
+	return M.helpers.table_to_file_atomic(persist_state, state_file)
+end
+
 ---@param update table | nil # table with options
 M.refresh_state = function(update)
 	local state_file = M.config.state_dir .. "/state.json"
@@ -1244,44 +1283,12 @@ M.refresh_state = function(update)
 		end
 	end
 
-	-- Note-mode roots are transient (super-repo toggle, or plain repo
-	-- mode tagging the primary with label = "repo"). Never persist them
-	-- — otherwise a later session with a different cwd would restore
-	-- roots it shouldn't have. Issue #117 M2: chat roots are no longer
-	-- persisted at all (derived from config + repo + super-repo); only
-	-- the note side still goes through strip_transient.
-	local persist_state = vim.deepcopy(M._state)
-	persist_state.chat_roots = nil
-	persist_state.chat_dirs = nil
-	local function resolve_dir(d)
-		local out = vim.fn.resolve(vim.fn.expand(d)):gsub("/+$", "")
-		return out
+	-- Runtime roots are filtered by the shared write-only boundary. Writing must
+	-- not reload state or disturb a live super-repo overlay.
+	local persisted, persist_err = M.persist_state()
+	if not persisted then
+		M.logger.warning("state: persistence failed: " .. tostring(persist_err or "unknown error"))
 	end
-	local function set_of(list)
-		local s = {}
-		for _, d in ipairs(list or {}) do s[d] = true end
-		return s
-	end
-	local pushed_note = set_of(super_repo.get_pushed_note_dirs())
-	if type(persist_state.note_roots) == "table" then
-		local filtered = {}
-		for _, root in ipairs(persist_state.note_roots) do
-			if root.label ~= "repo" and not pushed_note[resolve_dir(root.dir)] then
-				table.insert(filtered, root)
-			end
-		end
-		persist_state.note_roots = #filtered > 0 and filtered or nil
-	end
-	if type(persist_state.note_roots) == "table" then
-		local dirs = {}
-		for _, root in ipairs(persist_state.note_roots) do
-			table.insert(dirs, root.dir)
-		end
-		persist_state.note_dirs = #dirs > 0 and dirs or nil
-	else
-		persist_state.note_dirs = nil
-	end
-	M.helpers.table_to_file(persist_state, state_file)
 
 	local buf = vim.api.nvim_get_current_buf()
 	local file_name = vim.api.nvim_buf_get_name(buf)

@@ -100,47 +100,47 @@ Commit: `super-repo: #190 add pure persisted-mode policy`
 - Modify: `lua/parley/init.lua`
 - Modify: `tests/unit/super_repo_spec.lua`
 
-- [ ] **Step 1: Write failing atomic-writer tests**
+- [x] **Step 1: Write failing atomic-writer tests**
 
 Add tests proving `table_to_file_atomic` returns true and round-trips nested JSON. Through an optional IO adapter, force write, close, and rename failures independently; each must return false plus a bounded error, remove its unique sibling temporary file, and preserve pre-existing destination bytes byte-for-byte. Encoding happens before any destination-adjacent file is opened, so an encode exception is inherently destination-safe and must also return a bounded failure.
 
-- [ ] **Step 2: Run helper IO tests and verify RED**
+- [x] **Step 2: Run helper IO tests and verify RED**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/helper_io_spec.lua" -c "qa!"`
 
 Expected: FAIL because `table_to_file_atomic` is undefined.
 
-- [ ] **Step 3: Implement atomic replacement**
+- [x] **Step 3: Implement atomic replacement**
 
 Encode before opening, write to a unique sibling temporary path, check write/close outcomes, rename to the destination, remove the temporary file on every failure, and return a result. Keep legacy `table_to_file` behavior unchanged for unrelated consumers.
 
-- [ ] **Step 4: Run helper IO tests and verify GREEN**
+- [x] **Step 4: Run helper IO tests and verify GREEN**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/helper_io_spec.lua" -c "qa!"`
 
 Expected: PASS with zero failures.
 
-- [ ] **Step 5: Write failing state-boundary regressions**
+- [x] **Step 5: Write failing state-boundary regressions**
 
 Add production-facing tests that call the wished-for `parley.persist_state()`: it must omit `chat_roots`/`chat_dirs`, repo-labeled and super-repo-pushed note roots; preserve durable scalar state and `repo_modes`; and leave the active overlay roots byte-for-byte unchanged. Add an injected writer-failure test asserting `(false, err)`, no root reload/mutation, and that the writer received the correctly sanitized snapshot before failing.
 
-- [ ] **Step 6: Run mapped state tests and verify RED**
+- [x] **Step 6: Run mapped state tests and verify RED**
 
 Run: `make test-spec SPEC=modes/super_repo`
 
 Expected: FAIL because `parley.persist_state` is undefined.
 
-- [ ] **Step 7: Extract and reuse the persistence boundary**
+- [x] **Step 7: Extract and reuse the persistence boundary**
 
 Move the snapshot/filter/write tail of `refresh_state` into `M.persist_state()`, returning the atomic writer result. Make `refresh_state` call it once after its load/update/root-restoration work. Keep display refresh in `refresh_state`, not the write-only function.
 
-- [ ] **Step 8: Run mapped state tests and verify GREEN**
+- [x] **Step 8: Run mapped state tests and verify GREEN**
 
 Run: `make test-spec SPEC=modes/super_repo`
 
 Expected: PASS with zero failures and unchanged live roots.
 
-- [ ] **Step 9: Commit the persistence boundary**
+- [x] **Step 9: Commit the persistence boundary**
 
 Commit: `state: #190 add atomic write-only persistence`
 

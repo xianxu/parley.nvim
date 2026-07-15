@@ -385,6 +385,58 @@ describe("super_repo.toggle", function()
 		assert.is_nil(persisted_note_set[resolve(sibling_b .. "/workshop/notes")])
 	end)
 
+	it("persist_state writes a transient-safe snapshot without changing live overlay roots", function()
+		parley.toggle_super_repo()
+		parley._state.repo_modes = {
+			[resolve(current_repo)] = "super_repo",
+			[resolve(sibling_a)] = "repo",
+		}
+		parley._state.durable_probe = "kept"
+		local chat_before = vim.deepcopy(parley.get_chat_roots())
+		local note_before = vim.deepcopy(parley.get_note_roots())
+
+		local ok, err = parley.persist_state()
+
+		assert.is_true(ok)
+		assert.is_nil(err)
+		assert.same(chat_before, parley.get_chat_roots())
+		assert.same(note_before, parley.get_note_roots())
+		local persisted = assert(parley.helpers.file_to_table(state_dir .. "/state.json"))
+		assert.is_nil(persisted.chat_roots)
+		assert.is_nil(persisted.chat_dirs)
+		assert.equals("kept", persisted.durable_probe)
+		assert.same(parley._state.repo_modes, persisted.repo_modes)
+		for _, root in ipairs(persisted.note_roots or {}) do
+			assert.is_not.equal("repo", root.label)
+			assert.is_false(vim.tbl_contains(parley.super_repo.get_pushed_note_dirs(), resolve(root.dir)))
+		end
+	end)
+
+	it("persist_state reports writer failure after passing a sanitized snapshot", function()
+		parley.toggle_super_repo()
+		parley._state.repo_modes = { [resolve(current_repo)] = "super_repo" }
+		local chat_before = vim.deepcopy(parley.get_chat_roots())
+		local note_before = vim.deepcopy(parley.get_note_roots())
+		local captured
+		local original_writer = parley.helpers.table_to_file_atomic
+		parley.helpers.table_to_file_atomic = function(snapshot)
+			captured = vim.deepcopy(snapshot)
+			return false, "forced write failure"
+		end
+
+		local ok, err = parley.persist_state()
+		parley.helpers.table_to_file_atomic = original_writer
+
+		assert.is_false(ok)
+		assert.equals("forced write failure", err)
+		assert.is_not_nil(captured)
+		assert.is_nil(captured.chat_roots)
+		assert.is_nil(captured.chat_dirs)
+		assert.same(parley._state.repo_modes, captured.repo_modes)
+		assert.same(chat_before, parley.get_chat_roots())
+		assert.same(note_before, parley.get_note_roots())
+	end)
+
 	it("lualine.format_mode returns glyph plus repo label for repo-backed modes", function()
 		local lualine = require("parley.lualine")
 
