@@ -391,6 +391,16 @@
   without a milestone tag. Follow the gate's measured-actual and atlas guidance;
   resolve Critical/Important fresh-review findings before retrying.
 
+### Task 6: Resolve the close-boundary contextual-width finding
+
+- [x] Add pure and production-adapter RED regressions for a tab-containing
+  facet whose width depends on its starting display column.
+- [x] Make the injected display-width operation start-column-aware throughout
+  whole-button packing, split-unit packing, and semantic span calculation.
+- [x] Document mouse-wheel access to vertically capped wrapped facet bars in
+  the README.
+- [x] Re-run focused/full verification and retry the sole SDLC close boundary.
+
 ## Revisions
 
 ### 2026-07-15 — fresh-context plan review
@@ -405,3 +415,13 @@
   several adapter/lifecycle contracts lacked direct regression tests.
 - Delta: restored strict TDD ordering and added production grapheme rendering,
   omitted-tag/capability, closed-handle, and invalid-window cases.
+
+### 2026-07-15 — close-boundary contextual-width review
+
+- Reason: the binary-owned review reproduced incorrect packing and click spans
+  for tab-containing labels because display width was measured from column zero
+  instead of the fragment's actual starting cell.
+- Delta: added start-column-aware pure and production regressions, changed the
+  injected width contract to accept the starting cell, and added the missing
+  README note for scrolling a capped wrapped bar. The failed close step remains
+  unchecked until fresh verification and the retried boundary succeed.

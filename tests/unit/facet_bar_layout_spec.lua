@@ -13,6 +13,22 @@ local ascii_ops = {
     end,
 }
 
+local tabstop_ops = {
+    units = ascii_ops.units,
+    width = function(text, start_cell)
+        local cell = start_cell or 0
+        local start = cell
+        for index = 1, #text do
+            if text:sub(index, index) == "\t" then
+                cell = cell + (8 - (cell % 8))
+            else
+                cell = cell + 1
+            end
+        end
+        return cell - start
+    end,
+}
+
 local function injected_ops(unit_widths)
     local injected = {}
     for unit in pairs(unit_widths) do
@@ -202,6 +218,17 @@ describe("facet bar layout", function()
         assert.equals(15, facet.cell_end)
         assert.equals(facet, layout.hit(model, 0, 13))
         assert.is_nil(layout.hit(model, 0, 15))
+    end)
+
+    it("measures contextual-width units from their actual starting cell", function()
+        local model = layout.build({ { label = "a\tb", enabled = true } }, 18, tabstop_ops)
+        local facet = model.segments[3]
+
+        assert.same({ " ALL NONE  [a\tb]" }, model.lines)
+        assert.equals(11, facet.cell_start)
+        assert.equals(18, facet.cell_end)
+        assert.equals(facet, layout.hit(model, 0, 17))
+        assert.is_nil(layout.hit(model, 0, 18))
     end)
 
     it("keeps every injected extended grapheme unit indivisible", function()

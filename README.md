@@ -121,7 +121,9 @@ Most-used defaults:
 - `<C-g>f` find chat - global hotkey
 - `<C-g>m` find Markdown files - directory facets in ordinary repo mode and
   repository facets in super-repo mode; query text and facet choices persist
-  across finder reopenings within the current Neovim session
+  across finder reopenings within the current Neovim session. When a facet bar
+  wraps beyond its visible height, point at the bar and use the mouse wheel to
+  reach the remaining facets.
 
 **In Chat Buffer**
 - `<C-g>?` show key bindings

@@ -253,6 +253,23 @@ stale by `sdlc estimate-source`, so this derivation is provisional.
   Critical, Important, or Minor findings. The sole close-boundary plan step is
   checked for the binary-owned boundary review.
 
+### 2026-07-15 — close-boundary REWORK resolution
+
+- The binary-owned review reproduced a tab-sensitive positional defect: the
+  rendered facet ended at display cell 18 while its semantic span ended at 21,
+  making trailing blank cells clickable (`ARCH-PURPOSE`). It also required the
+  new wrapped-bar wheel interaction to be discoverable in the README.
+- Pure and production-adapter tests first failed on the exact premature wrap
+  and `21 != 18` span mismatch. The shared layout now passes each fragment's
+  actual starting cell into the injected width operation for whole-button fit,
+  split packing, and span endpoints; both focused regressions pass
+  (`ARCH-DRY`, `ARCH-PURE`).
+- Post-fix `make test-spec SPEC=ui/pickers` passed all 10 mapped files with 247
+  tests and no failures/errors. A fresh `make test JOBS=1` exited 0 after every
+  unit, architecture, and integration file passed; Luacheck reported 0 warnings
+  and 0 errors across 273 files. Diff, issue-schema, and semantic traceability
+  audits also passed before the close retry.
+
 ## Revisions
 
 ### 2026-07-15

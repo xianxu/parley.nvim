@@ -313,6 +313,24 @@ describe("float_picker facet bar rendering", function()
         end
     end)
 
+    it("keeps contextual tab spans aligned with the rendered line", function()
+        local toggled
+        open_picker({ { label = "a\tb", enabled = true } }, {
+            width = 60,
+            on_toggle = function(label) toggled = label end,
+        })
+
+        local facet_win, _, config, lines = facet_float()
+        local model = facet_bar_layout.build({ { label = "a\tb", enabled = true } }, config.width, text_ops)
+        local facet = model.segments[3]
+        local rendered_end = vim.fn.strdisplaywidth(lines[1])
+
+        assert.equals(rendered_end, facet.cell_end)
+        assert.is_nil(facet_bar_layout.hit(model, 0, rendered_end))
+        click_facet_cell(facet_win, rendered_end)
+        assert.is_nil(toggled)
+    end)
+
     it("reflows exact rows and geometry on resize without rewriting the live query", function()
         vim.o.columns = 70
         vim.o.lines = 30

@@ -46,13 +46,17 @@ function M.build(tags, content_width, text_ops)
     local segments = {}
     local row_has_segment = false
 
+    local function display_width(text, start_cell)
+        return text_ops.width(text, start_cell or 0)
+    end
+
     local function append_text(text)
         local row = #lines - 1
         local line = lines[#lines]
         local byte_start = #line
-        local cell_start = text_ops.width(line)
+        local cell_start = display_width(line)
         lines[#lines] = line .. text
-        return row, byte_start, #lines[#lines], cell_start, cell_start + text_ops.width(text)
+        return row, byte_start, #lines[#lines], cell_start, cell_start + display_width(text, cell_start)
     end
 
     local function append_segment(button, text)
@@ -71,19 +75,18 @@ function M.build(tags, content_width, text_ops)
         local unit_index = 1
         while unit_index <= #units do
             local chunk = ""
-            local chunk_width = 0
-            local line_width = text_ops.width(lines[#lines])
+            local line_width = display_width(lines[#lines])
 
             while unit_index <= #units do
                 local unit = units[unit_index]
-                local unit_width = text_ops.width(unit)
-                if chunk ~= "" and line_width + chunk_width + unit_width > width then
+                local candidate = chunk .. unit
+                local candidate_width = display_width(candidate, line_width)
+                if chunk ~= "" and line_width + candidate_width > width then
                     break
                 end
-                chunk = chunk .. unit
-                chunk_width = chunk_width + unit_width
+                chunk = candidate
                 unit_index = unit_index + 1
-                if line_width + chunk_width > width then
+                if line_width + candidate_width > width then
                     break
                 end
             end
@@ -97,11 +100,12 @@ function M.build(tags, content_width, text_ops)
 
     for index, button in ipairs(button_specs(tags)) do
         local gap = index == 1 and "" or (index == 3 and "  " or " ")
-        local line_width = text_ops.width(lines[#lines])
+        local line_width = display_width(lines[#lines])
         local prefix = row_has_segment and gap or ""
-        local whole_width = text_ops.width(button.text)
+        local prefix_width = display_width(prefix, line_width)
+        local whole_width = display_width(button.text, line_width + prefix_width)
 
-        if line_width + text_ops.width(prefix) + whole_width <= width then
+        if line_width + prefix_width + whole_width <= width then
             if prefix ~= "" then
                 append_text(prefix)
             end
@@ -110,7 +114,9 @@ function M.build(tags, content_width, text_ops)
             if row_has_segment then
                 next_row()
             end
-            if text_ops.width(lines[#lines]) + whole_width <= width then
+            line_width = display_width(lines[#lines])
+            whole_width = display_width(button.text, line_width)
+            if line_width + whole_width <= width then
                 append_segment(button, button.text)
             else
                 append_split(button)
