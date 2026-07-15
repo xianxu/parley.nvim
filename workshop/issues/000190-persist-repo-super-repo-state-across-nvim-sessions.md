@@ -148,6 +148,10 @@ against `baseline-v3.1.md`. Method A only.*
   successful activation could restore pre-overlay note roots. The design
   therefore reuses one extracted write-only persistence policy instead of
   reloading state while saving the scalar preference (`ARCH-DRY`, `ARCH-PURE`).
+- The first code-change gate rejected duplicated keybinding ownership. For the
+  migrated configurable actions, `config.lua` now remains the sole default
+  source and registry registration/help derive through `config_key`
+  (`ARCH-DRY`).
 
 ## Revisions
 
@@ -175,3 +179,10 @@ against `baseline-v3.1.md`. Method A only.*
   record before crossing the code-change gate.
 - Delta: added the reconciled v3.1 estimate and detailed implementation plan at
   `workshop/plans/000190-persist-repo-super-repo-state-across-nvim-sessions-plan.md`.
+
+### 2026-07-15 — code-gate architecture refinement
+
+- Reason: plan-quality review found that changing defaults independently in
+  config and registry would preserve two authoritative definitions.
+- Delta: make config the sole owner for migrated configurable defaults; registry
+  registration/help derive them through `config_key`, with a drift regression.

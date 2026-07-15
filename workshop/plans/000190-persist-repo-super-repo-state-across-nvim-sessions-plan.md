@@ -4,7 +4,7 @@
 
 **Goal:** Persist each repository's explicit repo/peer mode choice, restore it synchronously at startup, remove brain-only behavior, and migrate the peer/branch keybindings without a tool-fold collision.
 
-**Architecture:** A new pure `repo_mode` module owns validation, selection, and immutable updates of the canonical-root-keyed preference map. `init.lua` owns orchestration: it serializes transient-safe state through one atomic write-only boundary, restores mode once after all setup refreshes, and persists only successful explicit toggles. The existing keybinding registry gains optional-default resolution so one configurable action may intentionally remain unbound.
+**Architecture:** A new pure `repo_mode` module owns validation, selection, and immutable updates of the canonical-root-keyed preference map. `init.lua` owns orchestration: it serializes transient-safe state through one atomic write-only boundary, restores mode once after all setup refreshes, and persists only successful explicit toggles. For migrated configurable actions, `config.lua` is the sole default owner; the existing keybinding registry derives registration/help through `config_key` and gains optional-default resolution so one action may intentionally remain unbound.
 
 **Tech Stack:** Lua, Neovim APIs, plenary/busted tests, Markdown atlas/docs.
 
@@ -210,7 +210,7 @@ Commit: `super-repo: #190 persist and restore peer mode`
 
 - [ ] **Step 1: Write failing registry and mapping tests**
 
-Assert defaults resolve peer toggle to `<C-g>p` in normal/insert, chat prune to `<C-g>b` in normal, and tool-fold to no keys. Assert an entry with no default is valid; absent or empty-string tool-fold configuration produces neither mapping nor help row; and a user config `{ modes = { "n" }, shortcut = "<leader>tf" }` restores both registration and help through the shared resolver.
+Assert exposed config owns peer toggle `<C-g>p` in normal/insert and chat prune `<C-g>b` in normal, while tool-fold config is absent by default. Assert the three migrated registry entries carry no independent `default_key` and resolve solely from their `config_key`, so registration/help cannot drift from exposed config. Assert a configurable entry with no default is valid; absent or empty-string tool-fold configuration produces neither mapping nor help row; and a user config `{ modes = { "n" }, shortcut = "<leader>tf" }` restores both registration and help through the shared resolver.
 
 - [ ] **Step 2: Run keybinding tests and verify RED**
 
@@ -218,11 +218,11 @@ Run: `make test-spec SPEC=ui/keybindings`
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/config_tools_spec.lua" -c "qa!"`
 
-Expected: both fail on the old defaults, mandatory `default_key` invariant, and configured tool-fold default.
+Expected: both fail on old exposed defaults, duplicated registry defaults, the mandatory `default_key` invariant, and configured tool-fold default.
 
 - [ ] **Step 3: Implement optional-default resolution and new defaults**
 
-Set the peer and prune defaults in both config and registry. Remove the tool-fold default config value and registry `default_key`, retain its `config_key`, modes, callback, and descriptions. Treat nil/empty shortcuts as unbound. Make help skip entries resolving to no key, while registration naturally skips them; relax the registry invariant only for configurable entries.
+Set peer and prune defaults only in `config.lua`. Remove `default_key` from all three migrated registry entries so their `config_key` is the sole resolution path; remove the tool-fold default config value while retaining registry modes, callback, and descriptions. Treat nil/empty shortcuts as unbound. Make help skip entries resolving to no key, while registration naturally skips them; require either `default_key` or `config_key` in the registry invariant. Add a drift test proving the peer/prune registration and help keys equal exposed config rather than a second registry literal (`ARCH-DRY`).
 
 - [ ] **Step 4: Run keybinding and config tests and verify GREEN**
 
@@ -305,3 +305,8 @@ Run `sdlc actual --issue 190`, then `sdlc close --issue 190 --verified '<fresh m
 
 - Reason: re-review found that setup refresh writes make original-file byte equality an invalid oracle for restoration and that one traceability command remained symbolic.
 - Delta: count expected refresh writes and forbid only post-restoration writes while preserving `repo_modes`; name concrete traceability keys and selection commands for every changed atlas surface.
+
+### 2026-07-15 — plan-quality gate architecture refinement
+
+- Reason: the code-change gate found that setting migrated defaults in both config and registry retained duplicate authority.
+- Delta: `config.lua` solely owns peer/prune defaults; all three migrated registry entries derive via `config_key`, and a regression pins registration/help to exposed config (`ARCH-DRY`).
