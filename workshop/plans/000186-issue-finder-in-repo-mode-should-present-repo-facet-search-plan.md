@@ -41,6 +41,17 @@
   - **Injected into:** `IssueFinderRepoFacetAdapter` reads and replaces/merges this table while the existing `query` field remains independent.
   - **Future extensions:** additional persistent Issue Finder presentation preferences belong beside, not inside, the pure model.
 
+## Preflight: Verify cross-issue ownership
+
+- [ ] Run: `rg -n '^deps:.*000186' workshop/issues/000115-improve-c-g-m-so-that-it-works-to-find-artifacts-of-interest.md`
+- [ ] Run: `rg -n 'must consume that engine' workshop/issues/000115-improve-c-g-m-so-that-it-works-to-find-artifacts-of-interest.md`
+- [ ] Run: `rg -n 'must not introduce a second facet-policy' workshop/issues/000115-improve-c-g-m-so-that-it-works-to-find-artifacts-of-interest.md`
+- [ ] Run: `sdlc issue validate --issue 115`
+
+Expected: every grep finds its independent dependency/ownership assertion and
+schema validation passes. Stop and repair the planning artifact before Task 1
+if any command fails.
+
 ## Chunk 1: Extract and regression-lock the canonical facet model
 
 ### Task 1: Build the pure finder facet model with TDD
@@ -386,3 +397,12 @@
 - Delta: declare `finder_facets` as the registry-independent policy engine that
   #115 must consume; leave descriptor declarations and finder unification to
   #115, and add #186 as its dependency.
+
+### 2026-07-14T17:15:00-07:00 — executable dependency and estimate review
+
+- Reason: the committed #115 dependency was not represented as an executable
+  verification step, and the real-picker regression deserved its own estimate
+  primitive rather than being hidden inside adapter work.
+- Delta: add a pre-delivery grep/schema check for #115's dependency and
+  ownership contract; recalibrate #186 to 4.0 ship-hours with three focused
+  Lua/Neovim primitives.

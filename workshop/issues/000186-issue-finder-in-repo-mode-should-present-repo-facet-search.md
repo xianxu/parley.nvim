@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-07-14
 updated: 2026-07-14
-estimate_hours: 2.75
+estimate_hours: 4.0
 started: 2026-07-14T12:24:51-07:00
 ---
 
@@ -125,15 +125,17 @@ model: estimate-logic-v3.1
 familiarity: 1.0
 item: lua-neovim             design=0.45 impl=0.55
 item: lua-neovim             design=0.45 impl=0.55
+item: lua-neovim             design=0.5 impl=0.55
 item: cross-cutting-refactor design=0.12 impl=0.18
 item: atlas-docs             design=0.025 impl=0.06
-item: milestone-review       design=0.02 impl=0.18
+item: milestone-review       design=0.02 impl=0.2
 design-buffer: 0.15
-total: 2.75
+total: 4.0
 ```
 
-The two Lua/Neovim primitives cover the reusable facet model plus Chat Finder
-adapter and the production-shaped Issue Finder repository-facet integration.
+The three Lua/Neovim primitives separately cover the reusable facet model plus
+Chat Finder adapter, the real-picker live-query characterization, and the
+production-shaped Issue Finder repository-facet integration.
 The cross-cutting refactor item covers replacing Chat Finder's inline policy
 while preserving its established behavior. Design uses the thorough-spec
 discount; implementation values use the v3.1 40% ship-wall-clock calibration.
@@ -197,5 +199,14 @@ the prior selection.
   eventual shared finder component, creating an undeclared duplication risk.
 - Delta: define #186 as the registry-independent facet-policy engine and
   current Chat/Issue adapter delivery; make #115 depend on and consume it rather
-  than reimplementing policy. Recalibrate the estimate to 2.75 hours while
+  than reimplementing policy. Recalibrate the estimate while
   naming the existing picker and test scaffolding credited by the derivation.
+
+### 2026-07-14T17:15:00-07:00 — executable dependency and estimate review
+
+- Reason: the plan recorded #115's dependency during planning but did not name
+  an execution-time verification step, and the real-picker characterization
+  was not separated as its own implementation primitive.
+- Delta: verify #115's dependency/ownership text before feature work and model
+  the real-picker regression as a third focused Lua/Neovim primitive, bringing
+  the calibrated ship-wall-clock estimate to 4.0 hours.
