@@ -16,9 +16,18 @@
 
 | Name | Lives in | Status |
 |------|----------|--------|
+| `finder_facets.discover` | `lua/parley/finder_facets.lua` | modified |
 | `finder_facets.eligible_labels` | `lua/parley/finder_facets.lua` | new |
 | `markdown_finder.build_picker_data` | `lua/parley/markdown_finder.lua` | new |
 
+- **`finder_facets.discover`** — keeps its sorted default for existing consumers
+  and gains an explicit option for stable first-appearance ordering.
+  - **Relationships:** every facet policy may choose canonical alphabetical or
+    source-order discovery without reimplementing collection/deduplication.
+  - **DRY rationale:** preserves Markdown's current directory presentation while
+    retaining one discovery implementation (`ARCH-DRY`).
+  - **Future extensions:** no additional ordering modes are anticipated; add
+    only when a concrete finder contract requires one.
 - **`finder_facets.eligible_labels`** — validates a labelled facet universe and returns its canonical sorted distinct labels only when the caller declares the contextual facet domain active and at least two complete labels exist.
   - **Relationships:** N input roots produce 0-or-1 eligible label set; Issue Finder and Markdown Finder both consume the same helper.
   - **DRY rationale:** replaces Issue Finder's private `eligible_repo_facets` and prevents Markdown Finder from copying the same complete-label/multi-label rule (`ARCH-DRY`).
@@ -54,7 +63,10 @@
 
 - [ ] **Step 1: Write failing pure eligibility tests**
 
-Add cases proving inactive context, nil/empty labels, and fewer than two distinct labels return `nil`, while complete duplicated inputs return sorted distinct labels:
+Add cases proving `discover` retains its sorted default and can preserve stable
+first appearance when explicitly requested. Add eligibility cases proving
+inactive context, nil/empty labels, and fewer than two distinct labels return
+`nil`, while complete duplicated inputs return sorted distinct labels:
 
 ```lua
 assert.is_nil(finder_facets.eligible_labels(roots, false, labels))
@@ -68,9 +80,13 @@ Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedF
 
 Expected: FAIL because `eligible_labels` does not exist.
 
-- [ ] **Step 3: Implement `finder_facets.eligible_labels` minimally**
+- [ ] **Step 3: Implement ordered discovery and `eligible_labels` minimally**
 
-Validate every projected label as a non-empty string, use `discover` for sorted/deduplicated output, and require at least two labels. Do not mutate roots or store state.
+Extend `discover` with an optional ordering argument whose default remains
+alphabetical and whose explicit source-order mode preserves first appearance.
+Validate every projected eligibility label as a non-empty string, use the
+default `discover` behavior for sorted/deduplicated output, and require at least
+two labels. Do not mutate roots or store state.
 
 - [ ] **Step 4: Replace Issue Finder's private eligibility helper**
 
@@ -88,7 +104,7 @@ Expected: PASS.
 
 ```bash
 git add lua/parley/finder_facets.lua lua/parley/issue_finder.lua tests/unit/finder_facets_spec.lua tests/unit/issue_finder_spec.lua
-git commit -m "finder: #187 share facet eligibility"
+git commit -m "finder: #187 share facet eligibility" -m "Centralize labelled-root eligibility and preserve explicit source-order discovery for contextual finder consumers.\n\nCo-Authored-By: Codex <noreply@openai.com>"
 ```
 
 ### Task 2: Pure contextual Markdown policy
@@ -114,7 +130,11 @@ assert.same({ { label = "alpha", enabled = false }, { label = "beta", enabled = 
 assert.is_false(result.directory_state.workshop)
 ```
 
-Cover ordinary mode directory-only facets; eligible super-repo repository-only facets; stable empty-member labels; ineligible active expansion returning all rows with no bar; eligible zero-row expansion retaining its bar; new labels default-on; absent labels retain state; and input/state non-mutation.
+Cover ordinary mode directory-only facets in the existing first-appearance order
+of mtime-sorted entries; eligible super-repo repository-only facets in canonical
+alphabetical order; stable empty-member labels; ineligible active expansion
+returning all rows with no bar; eligible zero-row expansion retaining its bar;
+new labels default-on; absent labels retain state; and input/state non-mutation.
 
 - [ ] **Step 2: Run the new test and verify RED**
 
@@ -124,7 +144,13 @@ Expected: FAIL because `build_picker_data` is not exported.
 
 - [ ] **Step 3: Implement the pure policy**
 
-Use `finder_facets.eligible_labels`, `discover`, `merge_state`, `filter`, and `project`. Return fresh `{ items, tags, facet_domain, directory_state, repo_state }`; never read `_parley`, Vim, or module-local variables. Directory facets remain row-derived and appear only when at least two distinct directories exist. Super-repo facets come from eligible runtime member roots and never mix directory keys.
+Use `finder_facets.eligible_labels`, `discover`, `merge_state`, `filter`, and
+`project`. Return fresh `{ items, tags, facet_domain, directory_state,
+repo_state }`; never read `_parley`, Vim, or module-local variables. Directory
+facets remain row-derived, preserve first appearance by opting out of discovery
+sorting, and appear only when at least two distinct directories exist.
+Super-repo facets come from eligible runtime member roots in canonical sorted
+order and never mix directory keys.
 
 - [ ] **Step 4: Run policy and canonical helper suites**
 
@@ -138,7 +164,7 @@ Expected: PASS.
 
 ```bash
 git add lua/parley/markdown_finder.lua tests/unit/markdown_finder_spec.lua
-git commit -m "finder: #187 model contextual markdown facets"
+git commit -m "finder: #187 model contextual markdown facets" -m "Compose the shared pure facet model into explicit directory and repository domains without changing ordinary directory ordering.\n\nCo-Authored-By: Codex <noreply@openai.com>"
 ```
 
 ### Task 3: Wire runtime state, verbatim query, and picker repaint
@@ -209,7 +235,7 @@ Expected: PASS.
 
 ```bash
 git add lua/parley/markdown_finder.lua lua/parley/init.lua tests/unit/markdown_finder_spec.lua tests/unit/super_repo_spec.lua
-git commit -m "finder: #187 persist contextual markdown facets"
+git commit -m "finder: #187 persist contextual markdown facets" -m "Move Markdown Finder state into the Parley session and preserve complete queries while picker facets repaint independently.\n\nCo-Authored-By: Codex <noreply@openai.com>"
 ```
 
 ### Task 4: Documentation and full verification
@@ -255,7 +281,7 @@ Tick completed steps in this plan and the issue summary plan; append verificatio
 
 ```bash
 git add atlas/modes/super_repo.md atlas/ui/pickers.md atlas/issues/issue-management.md atlas/traceability.yaml workshop/issues/000187-markdown-finder-in-repo-mode-should-present-repo-facet-search.md workshop/plans/000187-markdown-finder-in-repo-mode-should-present-repo-facet-search-plan.md
-git commit -m "docs: #187 map contextual markdown facets"
+git commit -m "docs: #187 map contextual markdown facets" -m "Document the mode-specific bar, verbatim query contract, and shared pure policy across picker and super-repo traceability.\n\nCo-Authored-By: Codex <noreply@openai.com>"
 ```
 
 ## Boundary procedure after every implementation checkbox is complete

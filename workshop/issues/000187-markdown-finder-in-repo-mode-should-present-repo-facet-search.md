@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-07-14
 updated: 2026-07-14
-estimate_hours: 1.70
+estimate_hours: 2.96
 started: 2026-07-14T18:42:45-07:00
 ---
 
@@ -39,7 +39,8 @@ being to resume the same Markdown search and facet selection.
 ### Mode-specific facet bar
 
 - In ordinary repo mode, Markdown Finder keeps its existing top-level-directory
-  facet bar.
+  facet bar, including the current first-appearance order derived from
+  mtime-sorted entries.
 - In super-repo mode, the same bar represents repositories exclusively and is
   rendered as `[ALL] [NONE]   [repo…]`; top-level-directory facets are not mixed
   into that bar.
@@ -117,20 +118,23 @@ being to resume the same Markdown search and facet selection.
 model: estimate-logic-v3.1
 familiarity: 1.0
 item: issue-spec         design=0.70 impl=0.04
-item: lua-neovim        design=0.20 impl=0.40
-item: atlas-docs        design=0.05 impl=0.04
-item: milestone-review  design=0.00 impl=0.12
+item: cross-cutting-refactor design=0.20 impl=0.20
+item: lua-neovim        design=0.60 impl=0.60
+item: atlas-docs        design=0.10 impl=0.08
+item: milestone-review  design=0.00 impl=0.20
 design-buffer: 0.15
-total: 1.70
+total: 2.96
 ```
 
 Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md`
 against `baseline-v3.1.md`. Method A only. The focused Lua/Neovim primitive
-uses the thorough-spec design discount; v3.1 scales its midpoint implementation
-hour to 40%. The estimate includes the already completed issue-spec work and one
-single-pass close review. The calibration source is currently marked stale, so
-the derived total is provisional pending the repo-local recalibration tracked by
-that source.
+uses the thorough-spec design discount; the cross-cutting primitive covers the
+shared eligibility API and Issue Finder migration; and v3.1 scales the selected
+high-end implementation hours to 40%. The estimate includes the already
+completed issue-spec work, the extensive finder-entry test surface, full
+verification, and one single-pass close review. The calibration source is
+currently marked stale, so the derived total is provisional pending the
+repo-local recalibration tracked by that source.
 
 ## Plan
 
@@ -149,6 +153,10 @@ that source.
   domains. Chose an explicit contextual bar—directories in ordinary repo mode,
   repositories in super-repo mode—reusing `finder_facets` and preserving the
   complete in-session query.
+- `sdlc change-code` refused the first plan-quality pass: the estimate compressed
+  the extensive test/verification surface, example commits omitted required
+  trailers, and ordinary directory ordering was not pinned. Revised the plan
+  and estimate rather than bypassing the gate.
 
 ## Revisions
 
@@ -171,3 +179,10 @@ Corrected focused test commands, made invalid member labels safe at the scan
 boundary, expanded picker traceability, and separated post-plan close artifact
 handling from implementation checkboxes. Noted that the current calibration
 source is stale, so the reconciled estimate remains provisional.
+
+### 2026-07-14T21:50:25-07:00 — change-code refusal
+
+Raised the v3.1 estimate from 1.70 to 2.96 hours using separate
+cross-cutting-refactor and high-end focused Lua primitives, made every planned
+commit policy-compliant, and specified that ordinary directory facets retain
+their existing first-appearance order while repo facets remain alphabetized.
