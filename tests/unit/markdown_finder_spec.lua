@@ -269,6 +269,45 @@ describe("markdown finder entry point", function()
 		assert.equals("  exact live query  ", fake._markdown_finder.query)
 	end)
 
+	it("preserves picker identity and restores the source window before opening a selection", function()
+		local selected = ordinary_root .. "/selected.md"
+		write_markdown(selected)
+		local source_win = vim.api.nvim_get_current_win()
+		local opened
+		fake.open_buf = function(value, listed)
+			opened = {
+				value = value,
+				listed = listed,
+				win = vim.api.nvim_get_current_win(),
+			}
+		end
+
+		markdown_finder.open()
+		local call = picker_calls[1]
+		assert.equals("parley.markdown_finder", call.recall_key)
+		assert.equals("bottom", call.anchor)
+
+		local other_buf = vim.api.nvim_create_buf(false, true)
+		local other_win = vim.api.nvim_open_win(other_buf, true, {
+			relative = "editor",
+			row = 1,
+			col = 1,
+			width = 20,
+			height = 2,
+			style = "minimal",
+		})
+		call.on_select(call.items[1])
+		local selected_win = vim.api.nvim_get_current_win()
+		vim.api.nvim_win_close(other_win, true)
+
+		assert.equals(source_win, selected_win)
+		assert.same({
+			value = vim.fn.resolve(selected),
+			listed = true,
+			win = source_win,
+		}, opened)
+	end)
+
 	it("reopens with verbatim whitespace and a subsequently cleared query", function()
 		write_markdown(ordinary_root .. "/note.md")
 		markdown_finder.open()
