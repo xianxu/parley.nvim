@@ -88,3 +88,18 @@ describe("arch: managed footnote grammar has one predicate", function()
         })
     end)
 end)
+
+describe("arch: canonical repository identity has one normalizer", function()
+    it("centralizes init.lua path normalization", function()
+        local occurrences = 0
+        for _, line in ipairs(vim.fn.readfile("lua/parley/init.lua")) do
+            if line:find("vim.fn.resolve(vim.fn.expand", 1, true)
+                and line:find(':gsub("/+$", "")', 1, true)
+            then
+                occurrences = occurrences + 1
+            end
+        end
+        assert.equals(1, occurrences,
+            "ARCH-DRY: persisted repo identity and transient-root filtering must share resolve_dir_key")
+    end)
+end)

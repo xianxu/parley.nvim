@@ -62,6 +62,9 @@ local chat_root_display = function(r, i) return chat_dirs.chat_root_display(r, i
 local note_dirs = require("parley.note_dirs")
 note_dirs.setup(M)
 
+-- Canonical directory identity for persisted repo keys and root comparisons.
+local resolve_dir_key = function(d) return vim.fn.resolve(vim.fn.expand(d)):gsub("/+$", "") end
+
 -- Super-repo module (loaded here; wired up immediately since it only needs M reference)
 local super_repo = require("parley.super_repo")
 local repo_mode = require("parley.repo_mode")
@@ -75,7 +78,7 @@ M.toggle_super_repo = function()
 
 	local root = M.config.repo_root
 	if type(root) == "string" and root ~= "" then
-		local canonical_root = vim.fn.resolve(vim.fn.expand(root)):gsub("/+$", "")
+		local canonical_root = resolve_dir_key(root)
 		local mode = super_repo.is_active() and "super_repo" or "repo"
 		M._state.repo_modes = repo_mode.updated(M._state.repo_modes, canonical_root, mode)
 		local persisted = M.persist_state()
@@ -225,7 +228,6 @@ end
 -- apply_chat_roots / normalize_chat_roots accessed via chat_dirs.*
 local apply_chat_roots = function(...) return chat_dirs.apply_chat_roots(...) end
 local normalize_chat_roots = function(...) return chat_dirs.normalize_chat_roots(...) end
-local resolve_dir_key = function(d) return vim.fn.resolve(vim.fn.expand(d)):gsub("/+$", "") end
 
 M.get_chat_roots = function() return chat_dirs.get_chat_roots() end
 M.get_chat_dirs = function() return chat_dirs.get_chat_dirs() end
@@ -759,7 +761,7 @@ M.setup = function(opts)
 	-- Restore the current repo's explicit mode only after every state refresh has
 	-- settled roots. This runtime transition is intentionally non-persisting.
 	if type(M.config.repo_root) == "string" and M.config.repo_root ~= "" then
-		local canonical_root = vim.fn.resolve(vim.fn.expand(M.config.repo_root)):gsub("/+$", "")
+		local canonical_root = resolve_dir_key(M.config.repo_root)
 		local saved_mode = repo_mode.resolve(M._state.repo_modes, canonical_root)
 		super_repo.set_active(saved_mode == "super_repo")
 	end
@@ -1150,9 +1152,6 @@ M.persist_state = function()
 	persist_state.chat_roots = nil
 	persist_state.chat_dirs = nil
 
-	local function resolve_dir(dir)
-		return vim.fn.resolve(vim.fn.expand(dir)):gsub("/+$", "")
-	end
 	local pushed_note = {}
 	for _, dir in ipairs(super_repo.get_pushed_note_dirs()) do
 		pushed_note[dir] = true
@@ -1160,7 +1159,7 @@ M.persist_state = function()
 	if type(persist_state.note_roots) == "table" then
 		local filtered = {}
 		for _, root in ipairs(persist_state.note_roots) do
-			if root.label ~= "repo" and not pushed_note[resolve_dir(root.dir)] then
+			if root.label ~= "repo" and not pushed_note[resolve_dir_key(root.dir)] then
 				table.insert(filtered, root)
 			end
 		end
@@ -1251,15 +1250,15 @@ M.refresh_state = function(update)
 	-- In repo mode, ensure repo note dir is the primary root (overrides persisted state)
 	if M.config.repo_root and M.config.repo_note_dir then
 		local repo_note = M.config.repo_root .. "/" .. M.config.repo_note_dir
-		local resolved_repo = vim.fn.resolve(vim.fn.expand(repo_note)):gsub("/+$", "")
+		local resolved_repo = resolve_dir_key(repo_note)
 		local current_roots = M.get_note_roots()
 		local already_primary = #current_roots > 0
-			and vim.fn.resolve(vim.fn.expand(current_roots[1].dir)):gsub("/+$", "") == resolved_repo
+			and resolve_dir_key(current_roots[1].dir) == resolved_repo
 
 		if not already_primary then
 			local new_roots = { { dir = repo_note, label = "repo" } }
 			for _, root in ipairs(current_roots) do
-				if vim.fn.resolve(vim.fn.expand(root.dir)):gsub("/+$", "") ~= resolved_repo then
+				if resolve_dir_key(root.dir) ~= resolved_repo then
 					table.insert(new_roots, root)
 				end
 			end

@@ -269,6 +269,7 @@ atlas:
       - lua/parley/lualine.lua
       - lua/parley/keybinding_registry.lua
     tests:
+      - tests/arch/buffer_mutation_spec.lua
       - tests/unit/helper_io_spec.lua
       - tests/unit/repo_mode_spec.lua
       - tests/unit/super_repo_spec.lua
@@ -452,6 +453,7 @@ atlas:
       - lua/parley/repo_mode.lua
       - lua/parley/super_repo.lua
     tests:
+      - tests/arch/buffer_mutation_spec.lua
       - tests/unit/helper_io_spec.lua
       - tests/unit/repo_mode_spec.lua
       - tests/unit/super_repo_spec.lua

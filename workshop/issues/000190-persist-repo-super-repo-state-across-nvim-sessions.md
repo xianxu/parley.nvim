@@ -1,12 +1,13 @@
 ---
 id: 000190
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-15
 updated: 2026-07-15
 estimate_hours: 2.75
 started: 2026-07-15T12:00:53-07:00
+actual_hours: 4.81
 ---
 
 # persist repo super-repo state across nvim sessions
@@ -137,6 +138,7 @@ against `baseline-v3.1.md`. Method A only.*
 ## Log
 
 ### 2026-07-15
+- 2026-07-15: closed — Verified exact traceability selections for modes/super_repo, ui/keybindings, infra/repo_mode, and chat/lifecycle; make test-changed; make lint (0 warnings/errors in 275 files); git diff --check; three isolated chat_progress_process_spec.lua reruns; and full make test JOBS=1 all exited 0. The initial parallel full-suite run exposed the existing ready-file race in that unchanged integration fixture; reduced parallelism completed cleanly. Atlas documents the new repo-mode persistence surface and keybinding lifecycle.; review verdict: FIX-THEN-SHIP
 
 - Claimed before design. The approved direction stores a canonical-root-keyed
   `repo_modes` map in existing state rather than modifying `.parley` or adding
@@ -170,6 +172,12 @@ against `baseline-v3.1.md`. Method A only.*
   run exposed a pre-existing ready-file race in
   `chat_progress_process_spec.lua`; the unchanged test passed three isolated
   repetitions and the complete reduced-parallelism rerun.
+- The close review found one Important `ARCH-DRY` issue: persisted repo identity
+  and transient-root filtering repeated the same canonical path expression.
+  Hoisted and reused `resolve_dir_key` across every trailing-slash-normalized
+  path comparison in `init.lua`, and added an architecture regression that
+  requires exactly one owning expression. Focused architecture and mapped
+  super-repo tests passed after the consolidation.
 
 ## Revisions
 
