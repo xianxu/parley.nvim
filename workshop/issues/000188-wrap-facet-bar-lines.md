@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-07-14
 updated: 2026-07-15
-estimate_hours:
+estimate_hours: 2.27
 started: 2026-07-15T08:38:05-07:00
 ---
 
@@ -108,6 +108,25 @@ argument preserves the current facet set. A picker opened without
   constrained-height scrolling with viewport-aware clicks, empty/non-empty
   facet-window transitions, and unchanged non-faceted geometry.
 
+## Estimate
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: issue-spec design=0.30 impl=0.12
+item: lua-neovim design=0.60 impl=0.60
+item: atlas-docs design=0.10 impl=0.08
+item: milestone-review design=0.10 impl=0.20
+design-buffer: 0.15
+total: 2.27
+```
+
+Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md`
+against `baseline-v3.1.md`. Method A only. The thorough reviewed spec earns the
+v2.1 lineage's reduced design buffer; v3.1 scales implementation hours to the
+AI-paired ship-wall-clock unit. The calibration source is currently marked
+stale by `sdlc estimate-source`, so this derivation is provisional.
+
 ## Plan
 
 - [ ] Extract a pure display-width-aware facet row layout with focused tests.
@@ -142,6 +161,17 @@ argument preserves the current facet set. A picker opened without
   `topline`-aware click mapping, and regression coverage for the new edge
   contracts. Confirmed the current picker minimum is already `MIN_H = 1`.
 
+### 2026-07-15 — implementation planning
+
+- Derived a 2.27-hour v3.1 estimate and captured the executable TDD plan in
+  `workshop/plans/000188-wrap-facet-bar-lines-plan.md`. This remains one atomic
+  close boundary rather than artificial milestones.
+- Fresh-context plan review tightened greppable entity names, full grapheme
+  fixtures, lower-row highlight coverage, insert/normal wheel fallthrough, and
+  deferred multi-click suppression tests.
+- Its second pass corrected the RED/GREEN ordering and added production-adapter,
+  omitted-tag, capability, closed-handle, and invalid-window regressions.
+
 ## Revisions
 
 ### 2026-07-15
@@ -168,3 +198,25 @@ argument preserves the current facet set. A picker opened without
   clarified visible—not trailing-whitespace—single-row compatibility. The
   review's separate minimum-height concern was checked against
   `float_picker.MIN_H = 1` and required no behavior change.
+
+### 2026-07-15 — plan and estimate
+
+- Reason: the reviewed spec was approved for implementation planning.
+- Delta: added the reconciled v3.1 estimate and linked the durable plan; no
+  product scope or acceptance behavior changed.
+
+### 2026-07-15 — fresh-context plan review
+
+- Reason: the first plan review found execution gaps around traceable symbols,
+  Unicode fixtures, wrapped highlights, wheel fallthrough, active picker modes,
+  and multi-click behavior.
+- Delta: made each gap an explicit TDD assertion and based grapheme splitting on
+  Neovim's tested `strcharpart(..., skipcc=true)` contract.
+
+### 2026-07-15 — second plan review pass
+
+- Reason: review found one TDD ordering error and lifecycle/adapter contracts
+  that were specified but not yet tied to executable tests.
+- Delta: moved exact wrapping assertions before implementation and added direct
+  production-grapheme, omitted-tag, no-capability, closed, and invalid-window
+  cases.
