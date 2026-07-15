@@ -279,6 +279,8 @@ stale by `sdlc estimate-source`, so this derivation is provisional.
   that a historical revision still described the temporary unchecked state
   after REWORK; the plan now explicitly distinguishes that interval from the
   successful retry. The SDLC gate finalized this issue as `codecomplete`.
+- Operator smoke testing from the main checkout verified the wrapped facet-bar
+  behavior and approved the change for landing.
 
 ## Revisions
 
