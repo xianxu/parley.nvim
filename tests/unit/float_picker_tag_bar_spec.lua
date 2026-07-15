@@ -61,7 +61,7 @@ local function open_picker(tags, opts)
             { display = "delta item", value = 4 },
         },
         tag_bar = tag_bar,
-        on_select = function() end,
+        on_select = opts.on_select or function() end,
     })
 end
 
@@ -101,21 +101,39 @@ local function highlight_spans(buf)
     return spans
 end
 
-local function click_facet_cell(facet_win, cell0)
-    local position = vim.api.nvim_win_get_position(facet_win)
-    local _, prompt_buf = prompt_float()
-    local mapping = vim.api.nvim_buf_call(prompt_buf, function()
-        return vim.fn.maparg("<LeftMouse>", "n", false, true)
+local function mapping_for(buf, key, mode)
+    return vim.api.nvim_buf_call(buf, function()
+        return vim.fn.maparg(key, mode, false, true)
     end)
+end
+
+local function facet_mouse_position(facet_win, visible_row0, cell0)
+    local position = vim.api.nvim_win_get_position(facet_win)
+    return {
+        screenrow = position[1] + 2 + visible_row0,
+        screencol = position[2] + 2 + cell0,
+    }
+end
+
+local function with_mouse_position(position, fn)
     local original_getmousepos = vim.fn.getmousepos
-    vim.fn.getmousepos = function()
-        return {
-            screenrow = position[1] + 2,
-            screencol = position[2] + 2 + cell0,
-        }
-    end
-    mapping.callback()
+    vim.fn.getmousepos = function() return position end
+    local ok, result = pcall(fn)
     vim.fn.getmousepos = original_getmousepos
+    assert.is_true(ok, result)
+    return result
+end
+
+local function invoke_mouse_mapping(buf, mode, key, position)
+    local mapping = mapping_for(buf, key, mode)
+    assert.is_function(mapping.callback)
+    return with_mouse_position(position, mapping.callback), mapping
+end
+
+local function click_facet_cell(facet_win, cell0, visible_row0)
+    local _, prompt_buf = prompt_float()
+    invoke_mouse_mapping(prompt_buf, "n", "<LeftMouse>",
+        facet_mouse_position(facet_win, visible_row0 or 0, cell0))
     vim.wait(100)
 end
 
@@ -508,5 +526,204 @@ describe("float_picker facet bar rendering", function()
         assert.is_nil(results_float())
         assert.is_nil(facet_float())
         assert.is_nil(prompt_float())
+    end)
+
+    it("clicks a wide-Unicode facet on a scrolled lower model row", function()
+        vim.o.columns = 40
+        vim.o.lines = 16
+        local label = ("界é"):rep(24) .. "-lower"
+        local toggled = nil
+        open_picker({ { label = label, enabled = true } }, {
+            width = 20,
+            on_toggle = function(clicked) toggled = clicked end,
+        })
+
+        local facet_win, _, config = facet_float()
+        local model = facet_bar_layout.build({ { label = label, enabled = true } }, config.width, text_ops)
+        assert.is_true(#model.lines > config.height)
+        local target
+        for _, segment in ipairs(model.segments) do
+            if segment.label == label and segment.row >= 2 then
+                target = segment
+                break
+            end
+        end
+        assert.is_not_nil(target)
+        local topline = target.row
+        vim.api.nvim_win_call(facet_win, function()
+            vim.fn.winrestview({ topline = topline })
+        end)
+        local visible_row0 = target.row - (topline - 1)
+        local content_cell0 = math.min(target.cell_end - 1, target.cell_start + 5)
+
+        click_facet_cell(facet_win, content_cell0, visible_row0)
+
+        assert.equals(label, toggled)
+    end)
+
+    it("consumes whitespace clicks on every visible facet row and refocuses the prompt", function()
+        vim.o.columns = 40
+        vim.o.lines = 16
+        local toggles = 0
+        open_picker({ { label = "ordinary", enabled = true } }, {
+            width = 20,
+            on_toggle = function() toggles = toggles + 1 end,
+        })
+        local facet_win, _, config, lines = facet_float()
+        local results_win, results_buf = results_float()
+        local prompt_win = prompt_float()
+        assert.equals(2, #lines)
+
+        for visible_row0 = 0, config.height - 1 do
+            vim.api.nvim_set_current_win(results_win)
+            invoke_mouse_mapping(results_buf, "n", "<LeftMouse>",
+                facet_mouse_position(facet_win, visible_row0, config.width - 1))
+            assert.equals(prompt_win, vim.api.nvim_get_current_win())
+        end
+        vim.wait(80)
+        assert.equals(0, toggles)
+    end)
+
+    it("defers a facet single click for 50ms and dispatches it exactly once", function()
+        local calls = 0
+        local label = "deferred-facet-on-lower-row"
+        open_picker({ { label = label, enabled = true } }, {
+            width = 20,
+            on_toggle = function() calls = calls + 1 end,
+        })
+        local facet_win, _, config = facet_float()
+        local model = facet_bar_layout.build({ { label = label, enabled = true } }, config.width, text_ops)
+        local segment
+        for _, candidate in ipairs(model.segments) do
+            if candidate.label == label then segment = candidate break end
+        end
+        local _, prompt_buf = prompt_float()
+
+        invoke_mouse_mapping(prompt_buf, "i", "<LeftMouse>",
+            facet_mouse_position(facet_win, segment.row, segment.cell_start))
+
+        assert.equals(0, calls)
+        vim.wait(40)
+        assert.equals(0, calls)
+        assert.is_true(vim.wait(100, function() return calls == 1 end, 5))
+        vim.wait(30)
+        assert.equals(1, calls)
+    end)
+
+    it("absorbs double and triple clicks on every visible facet row in all picker modes", function()
+        local surfaces = {
+            { window = prompt_float, mode = "i" },
+            { window = prompt_float, mode = "n" },
+            { window = results_float, mode = "n" },
+        }
+        for _, key in ipairs({ "<2-LeftMouse>", "<3-LeftMouse>" }) do
+            for _, surface in ipairs(surfaces) do
+                for visible_row0 = 0, 1 do
+                    close_floats()
+                    local toggles = 0
+                    local confirms = 0
+                    open_picker({ { label = "two-row-facet", enabled = true } }, {
+                        width = 20,
+                        on_toggle = function() toggles = toggles + 1 end,
+                        on_select = function() confirms = confirms + 1 end,
+                    })
+                    local facet_win, _, config = facet_float()
+                    assert.equals(2, config.height)
+                    local _, buf = surface.window()
+
+                    invoke_mouse_mapping(buf, surface.mode, key,
+                        facet_mouse_position(facet_win, visible_row0, 2))
+                    vim.wait(80)
+
+                    assert.equals(0, confirms,
+                        string.format("%s %s row %d confirmed", surface.mode, key, visible_row0))
+                    assert.equals(0, toggles,
+                        string.format("%s %s row %d toggled", surface.mode, key, visible_row0))
+                end
+            end
+        end
+    end)
+
+    it("scrolls one facet row per wheel event with exact numeric clamps in all picker modes", function()
+        vim.o.columns = 40
+        vim.o.lines = 16
+        local label = ("wide界"):rep(30)
+        open_picker({ { label = label, enabled = true } }, { width = 20 })
+        local facet_win, _, config, lines = facet_float()
+        local max_topline = math.max(1, #lines - config.height + 1)
+        assert.is_true(max_topline >= 3)
+        local position = facet_mouse_position(facet_win, config.height - 1, config.width - 1)
+        local surfaces = {
+            { window = prompt_float, mode = "i" },
+            { window = prompt_float, mode = "n" },
+            { window = results_float, mode = "n" },
+        }
+
+        for _, surface in ipairs(surfaces) do
+            local _, buf = surface.window()
+            vim.api.nvim_win_call(facet_win, function() vim.fn.winrestview({ topline = 2 }) end)
+            local down, down_map = invoke_mouse_mapping(buf, surface.mode, "<ScrollWheelDown>", position)
+            assert.equals(vim.api.nvim_replace_termcodes("<Ignore>", true, false, true), down)
+            assert.equals(1, down_map.expr)
+            assert.equals(1, down_map.noremap)
+            assert.equals(3, vim.api.nvim_win_call(facet_win, vim.fn.winsaveview).topline)
+
+            local up = invoke_mouse_mapping(buf, surface.mode, "<ScrollWheelUp>", position)
+            assert.equals(vim.api.nvim_replace_termcodes("<Ignore>", true, false, true), up)
+            assert.equals(2, vim.api.nvim_win_call(facet_win, vim.fn.winsaveview).topline)
+
+            vim.api.nvim_win_call(facet_win, function() vim.fn.winrestview({ topline = max_topline }) end)
+            invoke_mouse_mapping(buf, surface.mode, "<ScrollWheelDown>", position)
+            assert.equals(max_topline, vim.api.nvim_win_call(facet_win, vim.fn.winsaveview).topline)
+            vim.api.nvim_win_call(facet_win, function() vim.fn.winrestview({ topline = 1 }) end)
+            invoke_mouse_mapping(buf, surface.mode, "<ScrollWheelUp>", position)
+            assert.equals(1, vim.api.nvim_win_call(facet_win, vim.fn.winsaveview).topline)
+        end
+    end)
+
+    it("returns native wheel termcodes outside the facet rectangle without consuming results scrolling", function()
+        local tags = { { label = ("facet-"):rep(20), enabled = true } }
+        local items = {}
+        for index = 1, 20 do
+            table.insert(items, { display = "item " .. index, value = index })
+        end
+        open_picker(tags, { width = 24, height = 4, items = items })
+        local facet_win = facet_float()
+        local before = vim.api.nvim_win_call(facet_win, vim.fn.winsaveview).topline
+        local surfaces = {
+            { window = prompt_float, mode = "i" },
+            { window = prompt_float, mode = "n" },
+            { window = results_float, mode = "n" },
+        }
+        local outside = { screenrow = 1, screencol = 1 }
+
+        for _, surface in ipairs(surfaces) do
+            local _, buf = surface.window()
+            for _, key in ipairs({ "<ScrollWheelDown>", "<ScrollWheelUp>" }) do
+                local returned = invoke_mouse_mapping(buf, surface.mode, key, outside)
+                assert.equals(vim.api.nvim_replace_termcodes(key, true, false, true), returned)
+            end
+        end
+        assert.equals(before, vim.api.nvim_win_call(facet_win, vim.fn.winsaveview).topline)
+    end)
+
+    it("keeps click and wheel mappings safe while the zero-height facet has no window", function()
+        vim.o.columns = 40
+        vim.o.lines = 16
+        open_picker({ { label = ("hidden-"):rep(20), enabled = true } }, { width = 20 })
+        local facet_win = facet_float()
+        local old_position = facet_mouse_position(facet_win, 0, 2)
+        vim.o.lines = 10
+        vim.api.nvim_exec_autocmds("VimResized", {})
+        assert.is_nil(facet_float())
+        local _, prompt_buf = prompt_float()
+
+        local click_ok = pcall(invoke_mouse_mapping, prompt_buf, "i", "<LeftMouse>", old_position)
+        local wheel_ok, returned = pcall(invoke_mouse_mapping,
+            prompt_buf, "i", "<ScrollWheelDown>", old_position)
+
+        assert.is_true(click_ok)
+        assert.is_true(wheel_ok)
+        assert.equals(vim.api.nvim_replace_termcodes("<ScrollWheelDown>", true, false, true), returned)
     end)
 end)

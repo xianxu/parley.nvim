@@ -1259,31 +1259,33 @@ function M.open(opts)
     end
 
 
-    -- Returns the 1-indexed buffer column if pos (from getmousepos()) is in the
-    -- tag bar content area, or nil otherwise.  We use screen coordinates because
-    -- getmousepos() returns the underlying (focusable) window's winid when the
-    -- mouse is over a non-focusable float, so winid comparison is unreliable.
-    local function tag_bar_content_col(pos)
+    -- Translate screen coordinates over the non-focusable facet float into the
+    -- zero-based row/cell coordinates owned by facet_bar_layout.
+    local function tag_bar_mouse_position(pos)
         if not has_tag_bar or not tag_bar_win or not vim.api.nvim_win_is_valid(tag_bar_win) then
             return nil
         end
-        local tb_pos = vim.api.nvim_win_get_position(tag_bar_win)  -- {row, col}, 0-indexed
+        local tb_pos = vim.api.nvim_win_get_position(tag_bar_win)
         local tb_cfg = vim.api.nvim_win_get_config(tag_bar_win)
-        -- With rounded border: content row is tb_pos[1]+1 (0-idx) = tb_pos[1]+2 (1-idx screenrow)
-        local content_screenrow = tb_pos[1] + 2
-        -- Content cols: tb_pos[2]+1 (0-idx left border) + 1 (1-idx) = tb_pos[2]+2 to tb_pos[2]+width-1
-        local content_screencol_start = tb_pos[2] + 2
-        local content_screencol_end   = tb_pos[2] + tb_cfg.width - 1
-        if pos.screenrow ~= content_screenrow then return nil end
-        if pos.screencol < content_screencol_start or pos.screencol > content_screencol_end then return nil end
-        -- Convert screencol to 1-indexed buffer column within content
-        return pos.screencol - (tb_pos[2] + 1)
+        local width = tonumber(tb_cfg.width) or 0
+        local height = tonumber(tb_cfg.height) or 0
+        local content_row = tb_pos[1] + 2
+        local content_col = tb_pos[2] + 2
+        if type(pos.screenrow) ~= "number" or type(pos.screencol) ~= "number" then return nil end
+        if pos.screenrow < content_row or pos.screenrow >= content_row + height then return nil end
+        if pos.screencol < content_col or pos.screencol >= content_col + width then return nil end
+        local view = vim.api.nvim_win_call(tag_bar_win, vim.fn.winsaveview)
+        local topline = tonumber(view.topline) or 1
+        return {
+            row = topline - 1 + (pos.screenrow - content_row),
+            cell = pos.screencol - content_col,
+        }
     end
 
     local function try_tag_bar_click(pos)
-        local click_col = tag_bar_content_col(pos)
-        if not click_col then return false end
-        local segment = tag_bar_model and facet_bar_layout.hit(tag_bar_model, 0, click_col - 1)
+        local mapped = tag_bar_mouse_position(pos)
+        if not mapped then return false end
+        local segment = tag_bar_model and facet_bar_layout.hit(tag_bar_model, mapped.row, mapped.cell)
         if segment then
             local label = segment.label
             if segment.kind == "action" then
@@ -1306,6 +1308,41 @@ function M.open(opts)
         return true
     end
 
+    local function scroll_tag_bar(delta)
+        if not tag_bar_win or not vim.api.nvim_win_is_valid(tag_bar_win) or not tag_bar_model then
+            return
+        end
+        local config = vim.api.nvim_win_get_config(tag_bar_win)
+        local height = tonumber(config.height) or 0
+        local max_topline = math.max(1, #tag_bar_model.lines - height + 1)
+        local view = vim.api.nvim_win_call(tag_bar_win, vim.fn.winsaveview)
+        local topline = math.max(1, math.min((tonumber(view.topline) or 1) + delta, max_topline))
+        vim.api.nvim_win_call(tag_bar_win, function()
+            vim.fn.winrestview({ topline = topline, leftcol = 0 })
+        end)
+    end
+
+    local function tag_bar_wheel(key, delta)
+        return function()
+            if tag_bar_mouse_position(vim.fn.getmousepos()) then
+                scroll_tag_bar(delta)
+                return keycode("<Ignore>")
+            end
+            return keycode(key)
+        end
+    end
+
+    local function map_wheel(buf, mode, key, delta)
+        vim.keymap.set(mode, key, tag_bar_wheel(key, delta), {
+            buffer = buf,
+            noremap = true,
+            silent = true,
+            nowait = true,
+            expr = true,
+            replace_keycodes = false,
+        })
+    end
+
     local function prompt_click()
         local pos = vim.fn.getmousepos()
         if try_tag_bar_click(pos) then return end
@@ -1317,6 +1354,7 @@ function M.open(opts)
 
     local function prompt_dblclick()
         local pos = vim.fn.getmousepos()
+        if tag_bar_mouse_position(pos) then return end
         if pos.winid == results_win and is_content_row(pos.line) then
             set_selection(index_for_visual_row(pos.line))
             confirm()
@@ -1337,7 +1375,7 @@ function M.open(opts)
     nmap_r("<LeftRelease>", function() end)
     nmap_r("<2-LeftMouse>", function()
         local pos = vim.fn.getmousepos()
-        if tag_bar_content_col(pos) then return end
+        if tag_bar_mouse_position(pos) then return end
         if vim.api.nvim_win_is_valid(results_win) then
             sel_idx = index_for_visual_row(vim.api.nvim_win_get_cursor(results_win)[1])
         end
@@ -1345,7 +1383,7 @@ function M.open(opts)
     end)
     nmap_r("<3-LeftMouse>", function()
         local pos = vim.fn.getmousepos()
-        if tag_bar_content_col(pos) then return end
+        if tag_bar_mouse_position(pos) then return end
     end)
     nmap_r("<CR>", confirm)
     nmap_r("<Esc>", cancel)
@@ -1354,7 +1392,7 @@ function M.open(opts)
     local function prompt_tripleclick()
         -- Suppress triple-click on tag bar; for results, just treat as single click.
         local pos = vim.fn.getmousepos()
-        if tag_bar_content_col(pos) then return end
+        if tag_bar_mouse_position(pos) then return end
         if pos.winid == results_win and is_content_row(pos.line) then
             set_selection(index_for_visual_row(pos.line), { preserve_view = true })
             focus_prompt()
@@ -1370,6 +1408,12 @@ function M.open(opts)
     imap_p("<LeftMouse>", prompt_click)
     imap_p("<2-LeftMouse>", prompt_dblclick)
     imap_p("<3-LeftMouse>", prompt_tripleclick)
+    map_wheel(prompt_buf, "i", "<ScrollWheelDown>", 1)
+    map_wheel(prompt_buf, "i", "<ScrollWheelUp>", -1)
+    map_wheel(prompt_buf, "n", "<ScrollWheelDown>", 1)
+    map_wheel(prompt_buf, "n", "<ScrollWheelUp>", -1)
+    map_wheel(results_buf, "n", "<ScrollWheelDown>", 1)
+    map_wheel(results_buf, "n", "<ScrollWheelUp>", -1)
     imap_p("<Up>", function()
         move_selection(-1)
         focus_prompt()
