@@ -5,15 +5,17 @@ local M = {}
 local _parley
 local finder_sticky = require("parley.finder_sticky")
 local finder_facets = require("parley.finder_facets")
+local finder_scan = require("parley.finder_scan")
+local finder_loader = require("parley.finder_loader")
+local finder_producer = require("parley.finder_producer")
+local async_file_source = require("parley.async_file_source")
+local chat_records = require("parley.chat_finder_records")
 
 -- Mtime-based metadata cache: avoids re-reading unchanged files on repeated opens.
 -- Key: resolved file path, Value: { mtime = number, topic = string, tags = {} }
 local _file_cache = {}
 
--- Prewarm state: when a prewarm is in flight, ChatFinder waits for it
--- instead of triggering a second filesystem traversal.
-local _prewarm_pending = false
-local _prewarm_callbacks = {}
+local _prewarm_session
 
 M.setup = function(parley)
 	_parley = parley
@@ -21,6 +23,10 @@ end
 
 M.clear_cache = function()
 	_file_cache = {}
+	if _prewarm_session then
+		_prewarm_session:cancel_owner()
+		_prewarm_session = nil
+	end
 end
 
 M.get_cache = function()
@@ -28,7 +34,7 @@ M.get_cache = function()
 end
 
 M.is_prewarming = function()
-	return _prewarm_pending
+	return _prewarm_session ~= nil and not _prewarm_session:is_retired()
 end
 
 M.invalidate_path = function(path)
@@ -349,180 +355,176 @@ M.prompt_delete_tree_confirmation = function(item_value, selected_index, items_c
 end
 
 --------------------------------------------------------------------------------
--- File scanning with mtime cache
+-- Asynchronous discovery and retained prewarm
 --------------------------------------------------------------------------------
 
---- Read and parse a single file's header, returning topic and tags.
---- Uses _file_cache to skip re-reading unchanged files.
---- @param resolved string already-resolved path (cache key)
-local function read_file_metadata(file, resolved, stat_mtime)
-	local cached = _file_cache[resolved]
-	if cached and cached.mtime == stat_mtime then
-		return cached.topic, cached.tags
-	end
-
-	local topic = ""
-	local tags = {}
-	local lines = vim.fn.readfile(file, "", 10)
-
-	local header_end = _parley.chat_parser.find_header_end(lines)
-	if header_end then
-		local parsed_chat = _parley.parse_chat(lines, header_end)
-		if parsed_chat.headers.topic then
-			topic = parsed_chat.headers.topic
-		end
-		if parsed_chat.headers.tags and type(parsed_chat.headers.tags) == "table" then
-			tags = parsed_chat.headers.tags
-		end
-	else
-		for _, line in ipairs(lines) do
-			local t = line:match("^# topic: (.+)")
-			if t then
-				topic = t
-				break
-			end
-		end
-	end
-
-	_file_cache[resolved] = { mtime = stat_mtime, topic = topic, tags = tags }
-	return topic, tags
+local function discovery_dependencies()
+	local injected = _parley._finder_dependencies or {}
+	return {
+		async_file_source = injected.async_file_source or async_file_source,
+		schedule = injected.schedule or vim.schedule,
+		now = injected.now or function()
+			return (vim.uv or vim.loop).hrtime() / 1000000
+		end,
+	}
 end
 
---- Scan chat roots and return sorted entries using the cache.
---- Shared by M.open() and M.prewarm().
-local function scan_chat_files(chat_roots, cutoff_time, is_filtering)
-	local files = {}
-	local seen_files = {}
-	local resolved_primary_dir = vim.fn.resolve(vim.fn.fnamemodify(vim.fn.expand(_parley.config.chat_dir), ":p"))
-	for _, root in ipairs(chat_roots) do
-		local dir = root.dir
-		local resolved_root_dir = vim.fn.resolve(vim.fn.fnamemodify(vim.fn.expand(dir), ":p"))
-		local is_primary_root = root.is_primary or resolved_root_dir == resolved_primary_dir
-		local pattern = vim.fn.fnameescape(dir) .. "/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*.md"
-		for _, file in ipairs(vim.fn.glob(pattern, false, true)) do
-			local resolved = vim.fn.resolve(file)
-			if not seen_files[resolved] then
-				seen_files[resolved] = true
-				table.insert(files, { path = file, resolved = resolved, root = root, is_primary_root = is_primary_root })
-			end
-		end
+local function discovery_snapshot()
+	local roots = {}
+	for ordinal, root in ipairs(_parley.get_chat_roots() or {}) do
+		local path = vim.fn.fnamemodify(vim.fn.expand(root.dir), ":p"):gsub("/+$", "")
+		roots[#roots + 1] = {
+			path = path,
+			label = root.label,
+			is_primary = root.is_primary == true or ordinal == 1,
+			optional = true,
+		}
 	end
-
-	-- Prune stale cache entries
-	for cached_path in pairs(_file_cache) do
-		if not seen_files[cached_path] then
-			_file_cache[cached_path] = nil
-		end
-	end
-
-	local entries = {}
-
-	for _, item in ipairs(files) do
-		local file = item.path
-		local resolved = item.resolved
-		local root = item.root
-		local is_primary_root = item.is_primary_root
-
-		-- Extract timestamp from filename first (no I/O needed)
-		local file_time
-		local filename = vim.fn.fnamemodify(file, ":t:r")
-		local year, month, day, hour, min, sec = filename:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)%-(%d%d)%-(%d%d)%-(%d%d)")
-
-		if year and month and day and hour and min and sec then
-			file_time = os.time({
-				year = tonumber(year), month = tonumber(month), day = tonumber(day),
-				hour = tonumber(hour), min = tonumber(min), sec = tonumber(sec),
-			})
-			-- Skip old files before stat — no I/O for filtered-out files with parseable filenames
-			if is_filtering and cutoff_time and file_time < cutoff_time then
-				goto continue
-			end
-		end
-
-		local stat = vim.loop.fs_stat(file)
-		if not stat then
-			goto continue
-		end
-
-		if not file_time then
-			file_time = stat.mtime.sec or (stat.birthtime and stat.birthtime.sec) or stat.mtime.sec
-			if is_filtering and cutoff_time and file_time < cutoff_time then
-				goto continue
-			end
-		end
-
-		local topic, tags = read_file_metadata(file, resolved, stat.mtime.sec)
-
-		local date_str = os.date("%Y-%m-%d", file_time)
-		local tags_display = ""
-		if #tags > 0 then
-			local tag_parts = {}
-			for _, tag in ipairs(tags) do
-				table.insert(tag_parts, "[" .. tag .. "]")
-			end
-			tags_display = table.concat(tag_parts, " ") .. " "
-		end
-		local tags_searchable = #tags > 0 and (" [" .. table.concat(tags, "] [") .. "]") or " []"
-		local display_filename = vim.fn.fnamemodify(file, ":t")
-		-- Strip slug from display (redundant with topic); keep just timestamp.md
-		local ts = display_filename:match("^(%d%d%d%d%-%d%d%-%d%d%.%d%d%-%d%d%-%d%d%.%d%d%d)")
-		if ts then
-			display_filename = ts .. ".md"
-		end
-		local root_prefix = is_primary_root and "" or string.format("{%s} ", root.label)
-		local root_searchable = is_primary_root and " {}" or (" {" .. root.label .. "}")
-
-		table.insert(entries, {
-			value = file,
-			display = display_filename .. " - " .. root_prefix .. tags_display .. topic .. " [" .. date_str .. "]",
-			ordinal = display_filename .. root_searchable .. " " .. tags_searchable .. " " .. topic,
-			timestamp = file_time,
-			tags = tags,
-		})
-
-		::continue::
-	end
-
-	table.sort(entries, function(a, b)
-		return a.timestamp > b.timestamp
-	end)
-
-	return entries
+	return finder_scan.snapshot({
+		kind = "chat",
+		roots = roots,
+		recursion = false,
+		max_depth = 1,
+		pattern = "YYYY-MM-DD*.md",
+		backend = { source = "libuv", header_lines = 10 },
+	})
 end
 
---- Prewarm the file metadata cache in the background.
+local function split_lines(payload)
+	local lines = {}
+	payload = payload or ""
+	for line in (payload .. "\n"):gmatch("(.-)\n") do
+		lines[#lines + 1] = line
+	end
+	return lines
+end
+
+local function identity_for(candidate)
+	return finder_scan.path_identity({
+		unresolved_absolute = candidate.unresolved_absolute,
+		resolved_absolute = candidate.resolved_absolute,
+		root_ordinal = candidate.root_ordinal,
+	})
+end
+
+local function prune_root_cache(root_path, seen_keys)
+	local seen = {}
+	for _, key in ipairs(seen_keys) do
+		seen[key] = true
+	end
+	for key, cached in pairs(_file_cache) do
+		if cached.root_path == root_path and not seen[key] then
+			_file_cache[key] = nil
+		end
+	end
+end
+
+local function new_session(snapshot, ownership, register_prewarm)
+	local dependencies = discovery_dependencies()
+	local session
+	session = finder_loader.new_session({
+		snapshot = snapshot,
+		ownership = ownership,
+		schedule = dependencies.schedule,
+		producer_factory = function(settle)
+			local data = snapshot:copy()
+			return finder_producer.run({
+				roots = data.roots,
+				acquire = function(on_root, on_complete)
+					return dependencies.async_file_source.scan({
+						roots = data.roots,
+						recurse = false,
+						max_depth = data.max_depth,
+						match = function(relative)
+							return relative:match("^%d%d%d%d%-%d%d%-%d%d.*%.md$") ~= nil
+						end,
+						read_policy = function(candidate)
+							return chat_records.read_decision(_file_cache, {
+								identity = identity_for(candidate),
+								stat = candidate.stat,
+							})
+						end,
+						concurrency = 16,
+					}, on_root, on_complete)
+				end,
+				adapter = function(candidate)
+					local input = {
+						kind = candidate.precomputed ~= nil and "cached" or "lines",
+						path = candidate.unresolved_absolute,
+						identity = candidate.identity or identity_for(candidate),
+						stat = candidate.stat,
+						root = candidate.root,
+						metadata = candidate.precomputed,
+						first_lines = split_lines(candidate.payload),
+					}
+					return chat_records.adapt(input)
+				end,
+				finalize = function(records)
+					local unique = finder_scan.deduplicate(records)
+					return finder_scan.sort(unique, function(left, right)
+						return left.timestamp > right.timestamp
+					end)
+				end,
+				batch = {
+					item_budget = 25,
+					time_budget_ms = 5,
+					now = dependencies.now,
+					schedule = dependencies.schedule,
+				},
+				on_record = function(record)
+					local cached = chat_records.cache_entry(record)
+					cached.root_path = record.root.path
+					_file_cache[record.identity.key] = cached
+				end,
+				on_root_success = function(root_ordinal, seen_keys)
+					prune_root_cache(data.roots[root_ordinal].path, seen_keys)
+				end,
+			}, settle)
+		end,
+		on_terminal = function(outcome, had_subscribers)
+			if not had_subscribers and outcome.kind ~= "success" then
+				_parley.logger.debug(string.format(
+					"ChatFinder prewarm: %s (%d roots, %d files failed)",
+					outcome.kind,
+					outcome.failed_root_count or 0,
+					outcome.failed_record_count or 0
+				))
+			end
+		end,
+		on_retire = function()
+			if register_prewarm and _prewarm_session == session then
+				_prewarm_session = nil
+			end
+		end,
+	})
+	return session
+end
+
 M.prewarm = function()
-	if _prewarm_pending or not _parley then
+	if not _parley then
 		return
 	end
-	_prewarm_pending = true
-	vim.defer_fn(function()
-		local ok, err = pcall(function()
-			local chat_roots = _parley.get_chat_roots()
-			if chat_roots and #chat_roots > 0 then
-				scan_chat_files(chat_roots, nil, false)
-			end
-		end)
-		if not ok and _parley then
-			_parley.logger.debug("ChatFinder prewarm error: " .. tostring(err))
-		end
-		_prewarm_pending = false
-		local callbacks = _prewarm_callbacks
-		_prewarm_callbacks = {}
-		for _, cb in ipairs(callbacks) do
-			cb()
-		end
-	end, 0)
+	local snapshot = discovery_snapshot()
+	if _prewarm_session and not _prewarm_session:is_retired()
+		and _prewarm_session:fingerprint() == snapshot:fingerprint() then
+		return
+	end
+	if _prewarm_session then
+		_prewarm_session:cancel_owner()
+	end
+	local session = new_session(snapshot, "retained", true)
+	_prewarm_session = session
+	session:start()
 end
 
--- Exposed for benchmarking (perf_chat_finder.lua)
-M._scan_chat_files = scan_chat_files
+M._materialize_records = chat_records.materialize
+M._discovery_snapshot = discovery_snapshot
 
 --------------------------------------------------------------------------------
 -- Main ChatFinder open function (was M.cmd.ChatFinder body)
 --------------------------------------------------------------------------------
 
-M.open = function(options)
+M.open = function(_)
 	if _parley._chat_finder.opened then
 		_parley.logger.warning("Chat finder is already open")
 		return
@@ -543,7 +545,14 @@ M.open = function(options)
 	-- IMPORTANT: The window should have been captured from the keybinding
 	_parley.logger.debug("ChatFinder using source_win: " .. (_parley._chat_finder.source_win or "nil"))
 
-	local chat_roots = _parley.get_chat_roots()
+	local snapshot = discovery_snapshot()
+	local session
+	if _prewarm_session and not _prewarm_session:is_retired()
+		and _prewarm_session:fingerprint() == snapshot:fingerprint() then
+		session = _prewarm_session
+	else
+		session = new_session(snapshot, "picker", false)
+	end
 	local delete_shortcut = _parley.config.chat_finder_mappings.delete or _parley.config.chat_shortcut_delete
 	local delete_tree_shortcut = _parley.config.chat_finder_mappings.delete_tree or { shortcut = "<C-D>" }
 	local move_shortcut = _parley.config.chat_finder_mappings.move or { shortcut = "<C-x>" }
@@ -552,16 +561,6 @@ M.open = function(options)
 	local cycle_filter_shortcut = _parley.config.chat_finder_mappings.cycle_filter or { shortcut = "<Tab>" }
 	local cycle_filter_prev_shortcut = _parley.config.chat_finder_mappings.cycle_filter_prev or { shortcut = "<S-Tab>" }
 	local keybindings_shortcut = _parley.config.global_shortcut_keybindings or { shortcut = "<C-g>?" }
-
-	-- If a prewarm is in flight, wait for it instead of scanning again
-	if _prewarm_pending then
-		_parley.logger.debug("ChatFinder: waiting for prewarm to finish")
-		_parley._chat_finder.opened = false
-		table.insert(_prewarm_callbacks, function()
-			M.open(options)
-		end)
-		return
-	end
 
 	-- Launch float picker for chat finder
 	do
@@ -585,12 +584,12 @@ M.open = function(options)
 
 		local is_filtering = not resolved_recency.current.is_all
 
-		local entries = scan_chat_files(chat_roots, cutoff_time, is_filtering)
+			local entries = {}
 
 		local function chat_facets(entry)
 			return #entry.tags == 0 and { "" } or entry.tags
 		end
-		local all_tags = finder_facets.discover(entries, chat_facets)
+			local all_tags = finder_facets.discover(entries, chat_facets)
 		_parley._chat_finder.tag_state = finder_facets.merge_state(
 			_parley._chat_finder.tag_state,
 			all_tags
@@ -672,18 +671,17 @@ M.open = function(options)
 		local picker_ref = {}
 
 		-- Build tag bar options (only shown when there are tags to display)
-		local tag_bar = nil
-		if tag_bar_tags then
 			local function refresh_picker()
 				local new_items, new_tb_tags = build_picker_data()
+				items = new_items
 				if picker_ref.update then picker_ref.update(new_items, new_tb_tags) end
 			end
 			local function set_all_tags(value)
 				_parley._chat_finder.tag_state = finder_facets.set_all(_parley._chat_finder.tag_state, value)
 				refresh_picker()
 			end
-			tag_bar = {
-				tags = tag_bar_tags,
+			local tag_bar = {
+				tags = tag_bar_tags or {},
 				on_toggle = function(tag_label)
 					_parley._chat_finder.tag_state = finder_facets.toggle(
 						_parley._chat_finder.tag_state,
@@ -694,20 +692,50 @@ M.open = function(options)
 				on_all  = function() set_all_tags(true)  end,
 				on_none = function() set_all_tags(false) end,
 			}
-		end
 
-		local picker = _parley.float_picker.open({
-			title = prompt_title,
-			items = items,
-			recall_key = "parley.chat_finder",
+			local binding = finder_loader.open_picker({
+				session = session,
+				picker_open = _parley.float_picker.open,
+				warning = function(failed_roots, failed_records)
+					_parley.logger.warning(string.format(
+						"Chat finder: partial scan (%d roots, %d files failed)",
+						failed_roots,
+						failed_records
+					))
+				end,
+				materialize = function(outcome)
+					entries = chat_records.materialize(outcome.records, {
+						cutoff_time = is_filtering and cutoff_time or nil,
+					})
+					all_tags = finder_facets.discover(entries, chat_facets)
+					_parley._chat_finder.tag_state = finder_facets.merge_state(
+						_parley._chat_finder.tag_state,
+						all_tags
+					)
+					local next_items, next_tags = build_picker_data()
+					items = next_items
+					return {
+						items = next_items,
+						tags = next_tags,
+						initial_index = M.resolve_finder_initial_index(
+							_parley._chat_finder,
+							next_items,
+							"ChatFinder"
+						),
+					}
+				end,
+				picker_options = {
+				title = prompt_title,
+				recall_key = "parley.chat_finder",
 			initial_index = M.resolve_finder_initial_index(_parley._chat_finder, items, "ChatFinder"),
 			initial_query = finder_sticky.format_initial_query(_parley._chat_finder.sticky_query),
 			tag_bar = tag_bar,
 			on_query_change = function(query)
 				_parley._chat_finder.sticky_query = finder_sticky.extract(query, { "root", "tag" })
 			end,
-			on_select = function(item)
-				local file_path = item.value
+				on_select = function(item)
+					_parley._chat_finder.opened = false
+					local file_path = item.value
 				local display = item.display
 
 				-- Check if we're in insert mode (for inserting chat references)
@@ -912,13 +940,14 @@ M.open = function(options)
 					end,
 				},
 			},
-		})
-		if picker then picker_ref.update = picker.update end
-	end
+				},
+			})
+			picker_ref.update = binding.picker.update
+			session:start()
+		end
 
 	_parley._chat_finder.initial_index = nil
 	_parley._chat_finder.initial_value = nil
-	_parley._chat_finder.opened = false
 end
 
 return M

@@ -226,6 +226,24 @@ describe("float_picker", function()
             picker.close()
         end)
 
+        it("applies a delayed initial selection when loading results arrive", function()
+            local picker = float_picker.open({
+                title = "Loading",
+                items = {},
+                status = { message = "scanning…", animated = true },
+                on_select = function() end,
+            })
+
+            picker.update({
+                { display = "first", value = 1 },
+                { display = "second", value = 2 },
+                { display = "third", value = 3 },
+            }, nil, 2)
+
+            assert.equals(2, vim.api.nvim_win_get_cursor(find_float_win())[1])
+            picker.close()
+        end)
+
         it("can replace loading with a persistent nonanimated error status", function()
             local picker = float_picker.open({
                 title = "Loading",

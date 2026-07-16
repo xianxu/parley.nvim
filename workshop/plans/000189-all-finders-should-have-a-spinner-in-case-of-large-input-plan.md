@@ -926,7 +926,7 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 - Modify: `tests/unit/chat_finder_logic_spec.lua`
 - Modify: `tests/perf_chat_finder.lua`
 
-- [ ] **Step 1: Write failing pure materializer tests**
+- [x] **Step 1: Write failing pure materializer tests**
 
   Specify the input union explicitly:
 
@@ -946,12 +946,12 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   opens/reads; only a miss/change returns `read({ head_lines = 10 })` and
   produces `lines`.
 
-- [ ] **Step 2: Run Chat logic tests and confirm RED**
+- [x] **Step 2: Run Chat logic tests and confirm RED**
 
   Run: `nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/chat_finder_records_spec.lua" -c qa`
   Expected: FAIL with `module 'parley.chat_finder_records' not found`.
 
-- [ ] **Step 3: Extract raw adapter and materializer**
+- [x] **Step 3: Extract raw adapter and materializer**
 
   Keep `chat_finder_records.lua` under about 300 lines and free of Neovim IO.
   The entry point injects a synchronous, non-mutating cache lookup as
@@ -963,16 +963,16 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   after settlement. Keep the benchmark pointed at the pure materializer with
   prebuilt records so it measures parsing rather than disk scheduling.
 
-- [ ] **Step 4: Write failing entry-point and prewarm join tests**
+- [x] **Step 4: Write failing entry-point and prewarm join tests**
 
   In `chat_finder_logic_spec.lua`, assert immediate picker return, a delayed producer permitting a scheduled sentinel and spinner tick, live sticky query, cancel/reopen, no post-cancel update, successful empty, all-absent optional roots, partial enumeration, total enumeration failure, and stat/read record failure. For fingerprint construction, vary finder kind; ordered normalized root path/label/primary; recursion/depth; filename pattern; and backend options one at a time and require a new producer, while recency/facets/query differences still join. Assert one producer for multiple matching subscribers and distinct recency materialization for two joined openers.
 
-- [ ] **Step 5: Run entry-point tests and confirm RED**
+- [x] **Step 5: Run entry-point tests and confirm RED**
 
   Run: `nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/chat_finder_logic_spec.lua" -c qa`
   Expected: FAIL at the immediate-open/prewarm assertions because current code waits for prewarm and scans synchronously.
 
-- [ ] **Step 6: Implement joinable Chat prewarm**
+- [x] **Step 6: Implement joinable Chat prewarm**
 
   Replace `_prewarm_pending/_prewarm_callbacks` with one retained in-flight
   `FinderLoadSession`. Its producer factory calls `finder_producer.run` with the
@@ -985,7 +985,7 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   successfully enumerated roots; retain failed-root entries until that root
   later enumerates successfully. Do not add finder-local subscriber arrays.
 
-- [ ] **Step 7: Run Chat/shared tests and commit**
+- [x] **Step 7: Run Chat/shared tests and commit**
 
   Run:
 
@@ -1428,3 +1428,13 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   subscription cancellation; add resource-aware late-completion cleanup to the
   operation queue; add regressions for both races (`ARCH-PURE`,
   `ARCH-PURPOSE`).
+
+### 2026-07-16 — Task 6 delayed-selection seam
+
+- Reason: asynchronous Chat discovery opens the picker before records exist, so
+  the prior synchronous `initial_value` resolution could only see an empty list
+  and lost delete/reopen selection restoration.
+- Delta: allow a settled materializer to pass one optional initial index through
+  `finder_loader.open_picker` to `float_picker.update`; Chat resolves its saved
+  value against the settled items. The seam remains optional for every other
+  finder and has a direct real-picker regression (`ARCH-DRY`, `ARCH-PURPOSE`).

@@ -250,7 +250,7 @@ M.open_picker = function(options)
             picker.set_status(picker_failure_status(options))
             return
         end
-        picker.update(result.items, result.tags)
+		picker.update(result.items, result.tags, result.initial_index)
     end)
 
     return { picker = picker, subscription = subscription }

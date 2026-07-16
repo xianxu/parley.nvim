@@ -586,3 +586,15 @@ stale on 2026-07-15, so the estimate is provisional.
   descriptors directly. Real loading-picker and injected-libuv regressions pin
   cancellation cardinality, no late repaint, and descriptor cleanup
   (`ARCH-PURE`, `ARCH-PURPOSE`).
+
+### 2026-07-16 — Task 6 implementation
+
+- Chat Finder now opens its animated shell before libuv traversal, joins only
+  exact retained-prewarm fingerprints, reads ten header lines only on cache
+  misses, and materializes recency/facets after settlement. Successful roots
+  prune their own cache entries while failed roots retain retryable metadata.
+- Pure records preserve dashed-name timestamps and dotted-name mtime fallback,
+  deterministic identity/order, tags/topic display, and overlapping-root
+  deduplication. Entry tests cover real spinner progress, cancel/late delivery,
+  join/mismatch, empty/partial/total outcomes, cache reuse/pruning, and existing
+  delete/move/recency behavior (`ARCH-DRY`, `ARCH-PURE`, `ARCH-PURPOSE`).

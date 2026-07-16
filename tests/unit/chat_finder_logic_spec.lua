@@ -22,6 +22,8 @@ describe("ChatFinder logic", function()
     local original_prompt_delete_confirmation
     local original_open_buf
     local original_track_file_access
+    local original_finder_dependencies
+    local original_logger_warning
 
     local function find_results_float_win()
         local current = vim.api.nvim_get_current_win()
@@ -45,6 +47,77 @@ describe("ChatFinder logic", function()
         return wins
     end
 
+    local function float_line_containing(needle)
+        for _, win in ipairs(find_float_wins()) do
+            local buf = vim.api.nvim_win_get_buf(win)
+            for _, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+                if line:find(needle, 1, true) then
+                    return line
+                end
+            end
+        end
+    end
+
+    local function picker_stub(opts)
+        local closed = false
+        return {
+            update = function(items, tags, initial_index)
+                opts.items = items
+				opts.initial_index = initial_index or opts.initial_index
+                if opts.tag_bar then
+                    opts.tag_bar.tags = tags or {}
+                end
+            end,
+            set_status = function(status) opts.status = status end,
+            current_query = function() return opts.initial_query or "" end,
+            close = function() closed = true end,
+            is_closed = function() return closed end,
+        }
+    end
+
+    local function synchronous_file_source()
+        return {
+            scan = function(options, on_root, on_complete)
+                for ordinal, root in ipairs(options.roots) do
+                    if vim.fn.isdirectory(root.path) == 0 then
+                        on_root({ root_ordinal = ordinal, status = "skipped", reason = "absent_optional" })
+                    else
+                        local candidates = {}
+                        local pattern = vim.fn.fnameescape(root.path) .. "/*.md"
+                        for _, path in ipairs(vim.fn.glob(pattern, false, true)) do
+                            local relative = vim.fn.fnamemodify(path, ":t")
+                            if options.match(relative, "file") then
+                                local candidate = {
+                                    root = root,
+                                    root_ordinal = ordinal,
+                                    relative = relative,
+                                    unresolved_absolute = path,
+                                    resolved_absolute = vim.fn.resolve(path),
+                                    stat = (vim.uv or vim.loop).fs_stat(path),
+                                }
+                                local decision = options.read_policy(candidate)
+                                if decision.kind == "ready" then
+                                    candidate.precomputed = decision.value
+                                else
+                                    candidate.payload = table.concat(vim.fn.readfile(path, "", 10), "\n")
+                                end
+                                candidates[#candidates + 1] = candidate
+                            end
+                        end
+                        on_root({
+                            root_ordinal = ordinal,
+                            status = "success",
+                            candidates = candidates,
+                            failures = {},
+                        })
+                    end
+                end
+                on_complete()
+                return { cancel = function() end }
+            end,
+        }
+    end
+
     before_each(function()
         -- Save original config
         original_config = vim.deepcopy(M.config)
@@ -57,6 +130,9 @@ describe("ChatFinder logic", function()
         original_prompt_delete_confirmation = M._prompt_chat_finder_delete_confirmation
         original_open_buf = M.open_buf
         original_track_file_access = require("parley.file_tracker").track_file_access
+        original_finder_dependencies = M._finder_dependencies
+        original_logger_warning = M.logger.warning
+        require("parley.chat_finder").clear_cache()
 
         -- Create a temp directory for chat files
         local random_suffix = string.format("%x", math.random(0, 0xFFFFFF))
@@ -85,6 +161,11 @@ describe("ChatFinder logic", function()
             presets = { 6, 12 },
         }
         M.config.global_shortcut_keybindings = { shortcut = "<C-g>?" }
+        M._finder_dependencies = {
+            async_file_source = synchronous_file_source(),
+            schedule = function(callback) callback() end,
+            now = function() return 0 end,
+        }
 
         -- Reset chat finder state
         M._chat_finder = {
@@ -102,6 +183,9 @@ describe("ChatFinder logic", function()
     end)
 
     after_each(function()
+		for _, win in ipairs(find_float_wins()) do
+			pcall(vim.api.nvim_win_close, win, true)
+		end
         -- Clean up temp directory
         if tmpdir then
             vim.fn.delete(tmpdir, "rf")
@@ -124,6 +208,9 @@ describe("ChatFinder logic", function()
         M._prompt_chat_finder_delete_confirmation = original_prompt_delete_confirmation
         M.open_buf = original_open_buf
         require("parley.file_tracker").track_file_access = original_track_file_access
+        M._finder_dependencies = original_finder_dependencies
+        M.logger.warning = original_logger_warning
+        require("parley.chat_finder").clear_cache()
     end)
 
     describe("Group A: Timestamp parsing from filename", function()
@@ -488,10 +575,403 @@ describe("ChatFinder logic", function()
     end)
 
     describe("Group F: Chat finder picker mappings", function()
+		local function loading_picker(captured, updates)
+			local closed = false
+			return {
+				update = function(items, tags)
+					updates[#updates + 1] = { items = items, tags = tags }
+				end,
+				set_status = function(status) captured.status_update = status end,
+				current_query = function() return captured.initial_query or "" end,
+				close = function() closed = true end,
+				is_closed = function() return closed end,
+			}
+		end
+
+		it("opens a loading picker before asynchronous acquisition starts", function()
+			local order = {}
+			local captured
+			local updates = {}
+			M.float_picker.open = function(opts)
+				order[#order + 1] = "picker"
+				captured = opts
+				return loading_picker(captured, updates)
+			end
+			M._finder_dependencies = {
+				schedule = function(callback) callback() end,
+				now = function() return 0 end,
+				async_file_source = {
+					scan = function()
+						order[#order + 1] = "scan"
+						return { cancel = function() end }
+					end,
+				},
+			}
+
+			M.cmd.ChatFinder()
+
+			assert.same({ "picker", "scan" }, order)
+			assert.same({ message = "scanning…", animated = true }, captured.status)
+			assert.same({}, captured.items)
+		end)
+
+        it("animates the real picker while Chat acquisition remains delayed", function()
+            local cancel_count = 0
+            M.float_picker.open = original_float_picker_open
+            M._finder_dependencies = {
+                schedule = vim.schedule,
+                async_file_source = {
+                    scan = function()
+                        return { cancel = function() cancel_count = cancel_count + 1 end }
+                    end,
+                },
+            }
+            local sentinel = false
+            vim.schedule(function() sentinel = true end)
+
+            M.cmd.ChatFinder()
+            local initial = float_line_containing("scanning…")
+
+            assert.is_not_nil(initial)
+            assert(vim.wait(1000, function()
+                local current = float_line_containing("scanning…")
+                return sentinel and current ~= nil and current ~= initial
+            end, 10), "Chat spinner did not tick while acquisition was pending")
+            vim.api.nvim_feedkeys(
+                vim.api.nvim_replace_termcodes("<Esc>", true, false, true),
+                "x",
+                true
+            )
+            assert(vim.wait(500, function() return cancel_count == 1 end, 10))
+        end)
+
+		it("joins a matching retained prewarm instead of starting a second scan", function()
+			local scan_count = 0
+			local finish_root
+			local finish_scan
+			local captured
+			local updates = {}
+			M.float_picker.open = function(opts)
+				captured = opts
+				return loading_picker(captured, updates)
+			end
+			M._finder_dependencies = {
+				schedule = function(callback) callback() end,
+				now = function() return 0 end,
+				async_file_source = {
+					scan = function(_, on_root, on_complete)
+						scan_count = scan_count + 1
+						finish_root = on_root
+						finish_scan = on_complete
+						return { cancel = function() end }
+					end,
+				},
+			}
+			vim.defer_fn = function(callback) callback() end
+
+			local chat_finder = require("parley.chat_finder")
+			chat_finder.prewarm()
+			M.cmd.ChatFinder()
+			assert.equals(1, scan_count)
+
+			finish_root({
+				root_ordinal = 1,
+				status = "success",
+				candidates = {
+					{
+						root = { path = tmpdir, label = "main", is_primary = true },
+						root_ordinal = 1,
+						relative = "2026-02-03-10-20-30-late.md",
+						unresolved_absolute = tmpdir .. "/2026-02-03-10-20-30-late.md",
+						resolved_absolute = tmpdir .. "/2026-02-03-10-20-30-late.md",
+						stat = { mtime = { sec = 100 } },
+						payload = "# topic: Joined\n",
+					},
+				},
+				failures = {},
+			})
+			finish_root({ root_ordinal = 2, status = "success", candidates = {}, failures = {} })
+			finish_scan()
+
+			assert.equals(1, #updates)
+			assert.equals("Joined", updates[1].items[1].display:match(" %- (.-) %[%d%d%d%d%-"))
+		end)
+
+		it("cancels picker-owned acquisition and ignores late root delivery", function()
+			local finish_root
+			local finish_scan
+			local cancel_count = 0
+			local captured
+			local updates = {}
+			M.float_picker.open = function(opts)
+				captured = opts
+				return loading_picker(captured, updates)
+			end
+			M._finder_dependencies = {
+				schedule = function(callback) callback() end,
+				now = function() return 0 end,
+				async_file_source = {
+					scan = function(_, on_root, on_complete)
+						finish_root = on_root
+						finish_scan = on_complete
+						return { cancel = function() cancel_count = cancel_count + 1 end }
+					end,
+				},
+			}
+
+			M.cmd.ChatFinder()
+			captured.on_cancel()
+			finish_root({ root_ordinal = 1, status = "success", candidates = {}, failures = {} })
+			finish_scan()
+
+			assert.equals(1, cancel_count)
+			assert.same({}, updates)
+		end)
+
+        it("keeps recency outside the exact discovery fingerprint", function()
+            local chat_finder = require("parley.chat_finder")
+            local first = chat_finder._discovery_snapshot()
+            local first_data = first:copy()
+
+            M.config.chat_finder_recency.months = 6
+            local recency_changed = chat_finder._discovery_snapshot()
+            M.config.chat_roots[2].label = "peer"
+            local root_changed = chat_finder._discovery_snapshot()
+
+            assert.equals("chat", first_data.kind)
+            assert.is_false(first_data.recursion)
+            assert.equals(1, first_data.max_depth)
+            assert.equals("YYYY-MM-DD*.md", first_data.pattern)
+            assert.same({ source = "libuv", header_lines = 10 }, first_data.backend)
+            assert.equals(first:fingerprint(), recency_changed:fingerprint())
+            assert.is_true(first:fingerprint() ~= root_changed:fingerprint())
+        end)
+
+        it("settles all-absent optional roots as a successful empty picker", function()
+            local captured
+            local updates = {}
+            M.float_picker.open = function(opts)
+                captured = opts
+                return loading_picker(captured, updates)
+            end
+            M._finder_dependencies = {
+                schedule = function(callback) callback() end,
+                now = function() return 0 end,
+                async_file_source = {
+                    scan = function(options, on_root, on_complete)
+                        for ordinal in ipairs(options.roots) do
+                            on_root({
+                                root_ordinal = ordinal,
+                                status = "skipped",
+                                reason = "absent_optional",
+                            })
+                        end
+                        on_complete()
+                        return { cancel = function() end }
+                    end,
+                },
+            }
+
+            M.cmd.ChatFinder()
+
+            assert.equals(1, #updates)
+            assert.same({}, updates[1].items)
+            assert.is_nil(captured.status_update)
+        end)
+
+        it("keeps a bounded error status when every Chat root fails", function()
+            local captured
+            local updates = {}
+            M.float_picker.open = function(opts)
+                captured = opts
+                return loading_picker(captured, updates)
+            end
+            M._finder_dependencies = {
+                schedule = function(callback) callback() end,
+                now = function() return 0 end,
+                async_file_source = {
+                    scan = function(options, on_root, on_complete)
+                        for ordinal in ipairs(options.roots) do
+                            on_root({
+                                root_ordinal = ordinal,
+                                status = "failed",
+                                failure = { kind = "root_enumeration", diagnostic = "EACCES" },
+                            })
+                        end
+                        on_complete()
+                        return { cancel = function() end }
+                    end,
+                },
+            }
+
+            M.cmd.ChatFinder()
+
+            assert.same({}, updates)
+            assert.is_false(captured.status_update.animated)
+            assert.truthy(captured.status_update.message:find("scan failed", 1, true))
+        end)
+
+        it("keeps successful Chat records and warns once for record failures", function()
+            local warning_count = 0
+            local captured
+            local updates = {}
+            M.logger.warning = function() warning_count = warning_count + 1 end
+            M.float_picker.open = function(opts)
+                captured = opts
+                return loading_picker(captured, updates)
+            end
+            M._finder_dependencies = {
+                schedule = function(callback) callback() end,
+                now = function() return 0 end,
+                async_file_source = {
+                    scan = function(options, on_root, on_complete)
+                        local root = options.roots[1]
+                        on_root({
+                            root_ordinal = 1,
+                            status = "success",
+                            candidates = {
+                                {
+                                    root = root,
+                                    root_ordinal = 1,
+                                    relative = "2026-02-03-10-20-30-good.md",
+                                    unresolved_absolute = root.path .. "/2026-02-03-10-20-30-good.md",
+                                    resolved_absolute = root.path .. "/2026-02-03-10-20-30-good.md",
+                                    stat = { mtime = { sec = 100 } },
+                                    payload = "# topic: Good\n",
+                                },
+                            },
+                            failures = { { kind = "read", diagnostic = "EIO" } },
+                        })
+                        on_root({ root_ordinal = 2, status = "success", candidates = {}, failures = {} })
+                        on_complete()
+                        return { cancel = function() end }
+                    end,
+                },
+            }
+
+            M.cmd.ChatFinder()
+
+            assert.equals(1, warning_count)
+            assert.equals(1, #updates)
+            assert.equals(1, #updates[1].items)
+        end)
+
+        it("replaces a mismatched retained prewarm instead of joining it", function()
+            local scan_count = 0
+            local cancel_count = 0
+            M._finder_dependencies = {
+                schedule = function(callback) callback() end,
+                now = function() return 0 end,
+                async_file_source = {
+                    scan = function()
+                        scan_count = scan_count + 1
+                        return { cancel = function() cancel_count = cancel_count + 1 end }
+                    end,
+                },
+            }
+            local chat_finder = require("parley.chat_finder")
+
+            chat_finder.prewarm()
+            M.config.chat_roots[2].label = "renamed"
+            chat_finder.prewarm()
+
+            assert.equals(2, scan_count)
+            assert.equals(1, cancel_count)
+        end)
+
+        it("reuses unchanged cached metadata without requesting another read", function()
+            local decisions = {}
+            local captured
+            M.float_picker.open = function(opts)
+                captured = opts
+                return picker_stub(opts)
+            end
+            M._finder_dependencies = {
+                schedule = function(callback) callback() end,
+                now = function() return 0 end,
+                async_file_source = {
+                    scan = function(options, on_root, on_complete)
+                        for ordinal, root in ipairs(options.roots) do
+                            local candidates = {}
+                            if ordinal == 1 then
+                                local path = root.path .. "/2026-02-03-10-20-30-cache.md"
+                                local item = {
+                                    root = root,
+                                    root_ordinal = ordinal,
+                                    relative = "2026-02-03-10-20-30-cache.md",
+                                    unresolved_absolute = path,
+                                    resolved_absolute = path,
+                                    stat = { mtime = { sec = 100 } },
+                                }
+                                local decision = options.read_policy(item)
+                                decisions[#decisions + 1] = decision.kind
+                                if decision.kind == "ready" then
+                                    item.precomputed = decision.value
+                                else
+                                    item.payload = "# topic: Cached once\n"
+                                end
+                                candidates[1] = item
+                            end
+                            on_root({
+                                root_ordinal = ordinal,
+                                status = "success",
+                                candidates = candidates,
+                                failures = {},
+                            })
+                        end
+                        on_complete()
+                        return { cancel = function() end }
+                    end,
+                },
+            }
+
+            M.cmd.ChatFinder()
+            captured.on_cancel()
+            M.cmd.ChatFinder()
+
+            assert.same({ "read", "ready" }, decisions)
+            assert.equals("Cached once", captured.items[1].display:match(" %- (.-) %[%d%d%d%d%-"))
+        end)
+
+        it("prunes cache only for roots that enumerate successfully", function()
+            local chat_finder = require("parley.chat_finder")
+            local cache = chat_finder.get_cache()
+            cache["/stale-main.md"] = { mtime = 1, topic = "main", tags = {}, root_path = tmpdir }
+            cache["/stale-peer.md"] = {
+                mtime = 1,
+                topic = "peer",
+                tags = {},
+                root_path = secondary_tmpdir,
+            }
+            M.float_picker.open = function(opts) return picker_stub(opts) end
+            M._finder_dependencies = {
+                schedule = function(callback) callback() end,
+                now = function() return 0 end,
+                async_file_source = {
+                    scan = function(_, on_root, on_complete)
+                        on_root({ root_ordinal = 1, status = "success", candidates = {}, failures = {} })
+                        on_root({
+                            root_ordinal = 2,
+                            status = "failed",
+                            failure = { kind = "root_enumeration", diagnostic = "EACCES" },
+                        })
+                        on_complete()
+                        return { cancel = function() end }
+                    end,
+                },
+            }
+
+            M.cmd.ChatFinder()
+
+            assert.is_nil(cache["/stale-main.md"])
+            assert.is_not_nil(cache["/stale-peer.md"])
+        end)
+
         it("opens with the active recency label and all four cycle mappings", function()
             local captured = nil
             M.float_picker.open = function(opts)
                 captured = opts
+            return picker_stub(opts)
             end
 
             local filename = "2026-02-01-10-00-00-recent.md"
@@ -515,6 +995,7 @@ describe("ChatFinder logic", function()
             local captured = nil
             M.float_picker.open = function(opts)
                 captured = opts
+            return picker_stub(opts)
             end
 
             local filepath = tmpdir .. "/2026-02-01-10-00-00-recent.md"
@@ -551,6 +1032,7 @@ describe("ChatFinder logic", function()
             local captured = nil
             M.float_picker.open = function(opts)
                 captured = opts
+            return picker_stub(opts)
             end
 
             local filenames = {
@@ -579,6 +1061,7 @@ describe("ChatFinder logic", function()
             local captured = nil
             M.float_picker.open = function(opts)
                 captured = opts
+            return picker_stub(opts)
             end
 
             local primary_path = tmpdir .. "/2026-02-04-10-00-00-primary.md"
@@ -618,6 +1101,7 @@ describe("ChatFinder logic", function()
                     assert.equals(1, #opts.items)
                     opts.on_select(opts.items[1])
                 end
+				return picker_stub(opts)
             end
 
             local filename = "2026-02-04-10-00-00-move-me.md"
@@ -665,6 +1149,7 @@ describe("ChatFinder logic", function()
                     assert.equals(special_tmpdir, opts.items[1].value)
                     opts.on_select(opts.items[1])
                 end
+				return picker_stub(opts)
             end
 
             local filename = "2026-02-04-10-00-00-escaped-root.md"
@@ -707,6 +1192,7 @@ describe("ChatFinder logic", function()
                     assert.equals(tilde_root, opts.items[1].value)
                     opts.on_select(opts.items[1])
                 end
+				return picker_stub(opts)
             end
 
             local filename = "2026-02-04-10-00-00-tilde-root.md"
@@ -729,6 +1215,7 @@ describe("ChatFinder logic", function()
             local captured = nil
             M.float_picker.open = function(opts)
                 captured = opts
+            return picker_stub(opts)
             end
             M.config.chat_assistant_prefix = { "🤖:" }
             M.config.chat_user_prefix = "💬:"
@@ -765,11 +1252,12 @@ describe("ChatFinder logic", function()
             local updates = {}
             M.float_picker.open = function(opts)
                 captured = opts
-                return {
-                    update = function(items, tags)
-                        table.insert(updates, { items = items, tags = tags })
-                    end,
-                }
+				local picker = picker_stub(opts)
+				picker.update = function(items, tags)
+					picker_stub(opts).update(items, tags)
+					table.insert(updates, { items = items, tags = tags })
+				end
+				return picker
             end
 
             local function write_chat(name, topic, tags)
@@ -791,6 +1279,7 @@ describe("ChatFinder logic", function()
             M._chat_finder.sticky_query = "  [beta] exact  "
 
             M.cmd.ChatFinder()
+            updates = {}
 
             assert.same({
                 { label = "alpha", enabled = false },
@@ -827,6 +1316,7 @@ describe("ChatFinder logic", function()
             local captured = nil
             M.float_picker.open = function(opts)
                 captured = opts
+            return picker_stub(opts)
             end
 
             local secondary_path = secondary_tmpdir .. "/2026-02-03-10-00-00-secondary.md"
@@ -845,6 +1335,7 @@ describe("ChatFinder logic", function()
             local captured = nil
             M.float_picker.open = function(opts)
                 captured = opts
+            return picker_stub(opts)
             end
 
             local primary_path = tmpdir .. "/2026-02-04-10-00-00-primary.md"
@@ -863,6 +1354,7 @@ describe("ChatFinder logic", function()
             local captured = nil
             M.float_picker.open = function(opts)
                 captured = opts
+            return picker_stub(opts)
             end
 
             M._chat_finder.sticky_query = "[workspace] {secondary} [client-a]"
@@ -883,6 +1375,7 @@ describe("ChatFinder logic", function()
             local captured = nil
             M.float_picker.open = function(opts)
                 captured = opts
+            return picker_stub(opts)
             end
 
             local filepath = tmpdir .. "/2026-02-04-10-00-00-tags.md"
@@ -905,6 +1398,7 @@ describe("ChatFinder logic", function()
             local captured = nil
             M.float_picker.open = function(opts)
                 captured = opts
+            return picker_stub(opts)
             end
 
             local primary_path = tmpdir .. "/2026-02-04-10-00-00-primary.md"
@@ -929,6 +1423,7 @@ describe("ChatFinder logic", function()
             local captured = nil
             M.float_picker.open = function(opts)
                 captured = opts
+            return picker_stub(opts)
             end
 
             local filepath = tmpdir .. "/2026-02-04-10-00-00-primary.md"

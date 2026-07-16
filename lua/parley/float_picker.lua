@@ -1665,11 +1665,14 @@ function M.open(opts)
 
     -- Update items and/or tag bar in-place (avoids close/reopen flash).
     -- new_tag_bar_tags: optional list of {label, enabled} to refresh the tag bar display.
-    local function update(new_items, new_tag_bar_tags)
+    local function update(new_items, new_tag_bar_tags, next_selection_index)
         if closed then return end
         if new_items ~= nil then
             items = new_items
             set_status(nil)
+            if type(next_selection_index) == "number" then
+                sel_idx = math.max(1, math.floor(next_selection_index))
+            end
             if not opts.height then
                 desired_h = math.max(1, #items)
             end
