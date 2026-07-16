@@ -60,12 +60,25 @@ imported package trees that are outside the repository's useful document set.
   retires and drops the replayable outcome. Finder-specific cache mutation
   happens during pre-settlement adaptation; terminal hooks only clear the
   prewarm registry and log bounded ownerless partial/failure outcomes.
+- Every lifecycle callback is isolated. Producer-factory exceptions settle a
+  bounded total failure after the picker is visible. Each
+  subscriber/materializer callback is protected independently so later
+  subscribers still receive the outcome. Terminal and retire hooks are
+  protected independently and retirement still happens exactly once. Arbitrary
+  thrown values are never stringified; only static lifecycle failure kinds
+  reach bounded diagnostics.
 - The producer pipeline is ordered exactly once as enumeration → async
   stat/read enrichment → sliced per-file adapter → outcome accumulation →
   session settlement. Adapter output is finder-specific raw metadata, not a
   rendered picker item. Subscribers run only total, deterministic open-time
   materialization (recency/facets/rendering) after settlement; no
   failure-counting work occurs after the terminal outcome.
+- One shared producer runner owns that pipeline for all five finders. It accepts
+  an injected acquisition stream, sliced pure adapter, finalizer, and optional
+  cache hooks; it alone coordinates root transactions, record failures,
+  composite cancellation, batching, and exactly-once settlement. Filesystem and
+  Git sources differ only in how they emit the common enriched root-event
+  schema; finders do not reimplement orchestration.
 - Enumeration failure makes the whole root fail and discards every record
   staged for that root. After successful enumeration, an individual async
   stat/read or parser failure discards only that record and increments
@@ -428,3 +441,12 @@ stale on 2026-07-15, so the estimate is provisional.
 - Delta: fully specified acquisition events/handles, moved async realpath into
   enrichment with benign fallback, made `PathIdentity` string-only, and split
   16.6 hours as M1 8.0, M2 4.5, final 4.1 with a 30% M1 revision threshold.
+
+### 2026-07-15 — fifth change-code gate refinement
+
+- Reason: the fifth mandatory judge found producer orchestration could repeat
+  across five finders and lifecycle callback exceptions could interrupt later
+  delivery or retirement.
+- Delta: added one injected `finder_producer` runner for acquisition through
+  settlement and specified independent static/bounded exception containment for
+  producer factory, subscriber/materializer, terminal, and retire callbacks.

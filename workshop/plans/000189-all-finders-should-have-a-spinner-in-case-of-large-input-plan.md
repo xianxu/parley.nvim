@@ -106,6 +106,14 @@ the final slice.
       process_exit = "process_exit",
       path_fragment_too_long = "path_fragment_too_long",
       invalid_path = "invalid_path",
+      producer_acquire_exception = "producer_acquire_exception",
+      producer_finalize_exception = "producer_finalize_exception",
+      producer_cache_hook_exception = "producer_cache_hook_exception",
+      producer_factory_exception = "producer_factory_exception",
+      subscriber_exception = "subscriber_exception",
+      materializer_exception = "materializer_exception",
+      terminal_hook_exception = "terminal_hook_exception",
+      retire_hook_exception = "retire_hook_exception",
   }
   ```
 
@@ -139,6 +147,7 @@ the final slice.
 |------|----------|--------|-------|
 | `AsyncFileSource` | `lua/parley/async_file_source.lua` | new | libuv directory/stat/open/read/realpath APIs |
 | `GitMarkdownSource` | `lua/parley/git_markdown_source.lua` | new | streaming `git ls-files` subprocesses |
+| `FinderProducer` | `lua/parley/finder_producer.lua` | new | shared acquisition-to-settlement orchestration |
 | `FinderLoadSession` | `lua/parley/finder_loader.lua` | new | producer ownership, subscribers, scheduling, warnings, and picker lifecycle |
 | `PickerStatus` | `lua/parley/float_picker.lua` | modified | results-buffer status rendering and local spinner timer |
 | `PickerStatusController` | `lua/parley/picker_status.lua` | new | status state and timer lifecycle |
@@ -226,6 +235,46 @@ the final slice.
   Completion runs exactly once asynchronously unless cancelled. `paths` remain
   raw NUL-framed relative strings for the pure Markdown path policy; any failure
   discards staged paths.
+- **`FinderProducer`** — one thin injected runner used by every finder; it owns
+  acquisition event consumption, root/record accumulation, sliced adapter
+  execution, final dedup/sort, cache hooks, composite cancellation, and one
+  settlement call.
+  - **Injected into:** each `FinderLoadSession.producer_factory`; filesystem
+  finders inject `AsyncFileSource.scan`, while Markdown injects a small
+  acquisition function that composes Git `list` with `read_paths` but emits the
+  identical root event schema.
+  - **Future extensions:** new disk-backed finders provide acquisition, adapter,
+  and total finalizer functions without copying lifecycle code.
+
+  Exact runner API:
+
+  ```lua
+  local handle = finder_producer.run({
+      roots = opaque_snapshot:copy().roots,
+      acquire = function(on_root, on_complete) return acquisition_handle end,
+      adapter = function(enriched_candidate) return record_or_skip_or_failure end,
+      finalize = function(records) return deterministic_raw_records end,
+      batch = { item_budget = 25, time_budget_ms = 5,
+          now = monotonic_now, schedule = schedule },
+      on_record = function(raw_record) end, -- optional cache update
+      on_root_success = function(root_ordinal, seen_keys) end, -- optional prune
+      diagnostic = function(kind) end, -- bounded static-kind sink
+  }, settle_once)
+  handle:cancel()
+  handle:is_cancelled()
+  ```
+
+  The runner accepts each root event once in any order, translates acquisition
+  failures into the shared accumulator, batches adapters for successful-root
+  candidates, isolates optional cache hooks, waits for every batch, applies the
+  total `finalize`, and invokes `settle_once(outcome)` once. A throwing
+  acquisition becomes a total `producer_acquire_exception`; a throwing
+  finalizer becomes a total `producer_finalize_exception`; and a throwing cache
+  hook records `producer_cache_hook_exception` without suppressing the record or
+  later hooks. Cancellation calls
+  the acquisition and pending-batch cancellation handles once, suppresses later
+  callbacks, and does not settle again. Acquisition/adapter/finalizer exceptions
+  collapse to registered static kinds without stringifying thrown values.
 - **`FinderLoadSession`** — binds a lazy producer factory to explicit
   subscriber handles and one ownership/retirement policy; it never drives
   parsing or batching.
@@ -572,13 +621,46 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   git commit -m "picker: #189 add animated lifecycle status"
   ```
 
-### Task 4: Add the exactly-once loader session
+### Task 4: Add shared producer orchestration and the exactly-once loader session
 
 **Files:**
+- Create: `lua/parley/finder_producer.lua`
+- Create: `tests/unit/finder_producer_spec.lua`
 - Create: `lua/parley/finder_loader.lua`
 - Create: `tests/unit/finder_loader_spec.lua`
 
-- [ ] **Step 1: Write failing session settlement tests**
+- [ ] **Step 1: Write failing producer orchestration tests**
+
+  Drive root events in different orders and cover skipped, failed, and
+  successful roots; per-record failures; sliced adapters; deterministic
+  finalization; optional record/root cache hooks; exactly-once settlement; and
+  composite cancellation. Assert the runner waits for all scheduled batches
+  before finalizing and never emits after cancellation.
+
+- [ ] **Step 2: Run the producer test and confirm RED**
+
+  Run: `nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/finder_producer_spec.lua" -c qa`
+  Expected: FAIL with `module 'parley.finder_producer' not found`.
+
+- [ ] **Step 3: Implement `finder_producer.run`**
+
+  Implement the exact injected API above as the sole owner of acquisition event
+  reduction, batch scheduling, outcome accumulation, cache hooks, finalization,
+  cancellation, and settlement.
+
+- [ ] **Step 4: Write failing producer exception-isolation tests**
+
+  Make acquisition, adapter, finalizer, `on_record`, and `on_root_success` throw
+  arbitrary tables/userdata. Assert only registered static kinds reach the
+  diagnostic/outcome boundaries, later hooks and records continue where the
+  contract permits, and settlement/cancellation remain exactly once.
+
+- [ ] **Step 5: Implement producer exception containment and confirm GREEN**
+
+  Add independent `pcall` boundaries and run the focused producer command;
+  expected zero failures.
+
+- [ ] **Step 6: Write failing session settlement tests**
 
   Use a lazy producer factory fake that emits already-adapted raw finder metadata
   plus final counts. Cover the exact API/ownership table above: subscription
@@ -588,36 +670,49 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   after retirement; and defensive snapshot access. Assert the session has no
   adapter or batcher dependency.
 
-- [ ] **Step 2: Run the focused test and confirm RED**
+- [ ] **Step 7: Write failing lifecycle exception-isolation tests**
+
+  Cover a throwing producer factory after the picker shell has opened; one
+  throwing subscriber not blocking later subscribers; one throwing materializer
+  affecting only that picker binding; a throwing `on_terminal` not blocking
+  `on_retire`; a throwing `on_retire` still leaving the session retired; and
+  arbitrary thrown values never being stringified. Assert diagnostics use only
+  registered lifecycle failure kinds.
+
+- [ ] **Step 8: Run the focused loader test and confirm RED**
 
   Run: `nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/finder_loader_spec.lua" -c qa`
   Expected: FAIL with `module 'parley.finder_loader' not found`.
 
-- [ ] **Step 3: Implement `new_session`**
+- [ ] **Step 9: Implement `new_session`**
 
   Store the producer factory without invoking it. Implement the exact public
   methods and subscription handle above. Accept only a terminal callback carrying
   a complete `ScanOutcome` of already-adapted raw finder metadata; do not parse
-  or mutate counts.
+  or mutate counts. Protect producer factory, each subscriber, terminal hook,
+  and retire hook independently. Factory exceptions settle a bounded total
+  failure; hook exceptions cannot prevent retirement, and retirement state is
+  committed before invoking `on_retire`.
 
-- [ ] **Step 4: Run session tests and confirm GREEN**
+- [ ] **Step 10: Run session tests and confirm GREEN**
 
-  Run the focused command; expected settlement group PASS.
+  Run the focused loader command; expected settlement and exception groups PASS.
 
-- [ ] **Step 5: Write failing picker-bridge lifecycle tests**
+- [ ] **Step 11: Write failing picker-bridge lifecycle tests**
 
   Cover synchronous loading, live query at total post-settlement materialization,
   partial warning, total error, successful empty, and settlement keeping
   `opened` true until actual picker close/select/cancel. Make the materializer
   deliberately total and assert `open_picker` never invokes an adapter/batcher.
   Assert the producer factory has not been invoked when the picker opener
-  returns.
+  returns. Make one materializer throw and assert only its picker binding gets a
+  bounded error while other subscribers still install their results.
 
-- [ ] **Step 6: Run picker-bridge tests and confirm RED**
+- [ ] **Step 12: Run picker-bridge tests and confirm RED**
 
-  Run the focused command; expected failure because `open_picker` is nil.
+  Run the focused loader command; expected failure because `open_picker` is nil.
 
-- [ ] **Step 7: Implement `open_picker`**
+- [ ] **Step 13: Implement `open_picker`**
 
   Open status first and return a `{ picker, subscription }` binding after
   subscribing the generation; do not call `session:start()`. The finder entry
@@ -625,18 +720,16 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   shell exists before the producer factory can start IO. On settlement apply
   only total deterministic recency/facet/render materialization and read
   `picker.current_query()` only at installation. All adapter batching belongs to
-  the producer before it calls session settlement.
+  the producer before it calls session settlement. Contain materializer throws
+  per binding as `materializer_exception`.
 
-- [ ] **Step 8: Run session/bridge tests and confirm GREEN**
-
-  Run the focused command; expected zero failures.
-
-- [ ] **Step 9: Run shared regression checks**
+- [ ] **Step 14: Run shared regression checks**
 
   Run:
 
   ```bash
   nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/finder_scan_spec.lua" -c qa
+  nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/finder_producer_spec.lua" -c qa
   nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/finder_loader_spec.lua" -c qa
   nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/float_picker_spec.lua" -c qa
   git diff --check
@@ -644,11 +737,11 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 
   Expected: all specs report zero failures; diff check is silent.
 
-- [ ] **Step 10: Commit the loader**
+- [ ] **Step 15: Commit producer and loader**
 
   ```bash
-  git add lua/parley/finder_loader.lua tests/unit/finder_loader_spec.lua
-  git commit -m "finder: #189 add shared loading sessions"
+  git add lua/parley/finder_producer.lua tests/unit/finder_producer_spec.lua lua/parley/finder_loader.lua tests/unit/finder_loader_spec.lua
+  git commit -m "finder: #189 add shared producer sessions"
   ```
 
 ### Task 5: Implement streaming Git-aware Markdown discovery
@@ -729,8 +822,9 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   Snapshot ordinary or ordered super-repo member roots; open the picker before
   starting Git; treat Git exit 0 as that root's enumeration success; pass
   accepted Git paths to `AsyncFileSource.read_paths` for bounded asynchronous
-  stats; count stat failures as record failures; run the pure path/entry adapter
-  through `SliceBatcher`; then settle the session exactly once. Subscribers
+  stats; count stat failures as record failures; inject that acquisition stream,
+  the pure path/entry adapter, and finalizer into `finder_producer.run`; do not
+  reimplement batching, accumulation, cancellation, or settlement. Subscribers
   apply existing `build_picker_data` and facet callbacks only after settlement.
   Cancelling the session cancels Git, path enrichment, and pending batches.
   Preserve repository facets in super-repo mode and directory facets in
@@ -828,7 +922,9 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 - [ ] **Step 6: Implement joinable Chat prewarm**
 
   Replace `_prewarm_pending/_prewarm_callbacks` with one retained in-flight
-  `FinderLoadSession`. `prewarm()` uses `ownership = "retained"`; a matching
+  `FinderLoadSession`. Its producer factory calls `finder_producer.run` with the
+  Chat acquisition/adapter/finalizer/cache hooks; it owns no local outcome,
+  batching, or cancellation state. `prewarm()` uses `ownership = "retained"`; a matching
   `open()` uses the shared subscription handle without taking producer
   ownership. On ownerless settlement discard the outcome, retain only per-file
   mtime metadata, log bounded partial/failure through `on_terminal`, and clear
@@ -887,7 +983,9 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 
 - [ ] **Step 6: Implement Note loader and joinable prewarm wiring**
 
-  Construct the exact discovery fingerprint in production, subscribe matching
+  Construct the exact discovery fingerprint in production and call
+  `finder_producer.run` with Note acquisition/adapter/finalizer/cache hooks;
+  keep no finder-local outcome, batching, or cancellation machinery. Subscribe matching
   opens through the shared subscription handle, preserve retained prewarm
   ownership on picker cancel, and route settled raw records through the total
   materializer and existing UI actions. Use shared `on_terminal`/`on_retire`
@@ -965,7 +1063,8 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 
   Snapshot issue/history roots for the chosen view, enumerate non-recursive
   `*.md`, asynchronously stat/read full payloads, and batch the pure adapter into
-  raw issue metadata before settling. After settlement, apply only total
+  raw issue metadata through `finder_producer.run`; do not duplicate root
+  transactions, batching, accumulation, cancellation, or settlement. After settlement, apply only total
   view/facet/render materialization and preserve all current actions. Keep
   canonical path+mtime cache ownership in the producer integration layer.
 
@@ -1018,7 +1117,9 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 - [ ] **Step 6: Migrate Vision Finder**
 
   Enumerate non-recursive `*.yaml`, async-read each payload, and batch the pure
-  adapter into raw initiative metadata before settling. After settlement, apply
+  adapter into raw initiative metadata through `finder_producer.run`; do not
+  duplicate root transactions, batching, accumulation, cancellation, or
+  settlement. After settlement, apply
   only total project filtering/render materialization through the shared loader,
   without changing the synchronous Vision domain API.
 
@@ -1056,7 +1157,13 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 
 - [ ] **Step 2: Update atlas and traceability**
 
-  Map `finder_scan`, `async_file_source`, `git_markdown_source`, `finder_loader`, `picker_status`, all four focused finder-record modules, production finders, process fixture, and all new unit/integration specs. Record the 25-record/5ms, 16-in-flight, 512-byte diagnostic, 4096-byte stderr, 16384-byte pending-path, ten-diagnostic, and 120ms spinner budgets as implementation constants rather than product promises.
+  Map `finder_scan`, `async_file_source`, `git_markdown_source`,
+  `finder_producer`, `finder_loader`, `picker_status`, all four focused
+  finder-record modules, production finders, process fixture, and all new
+  unit/integration specs. Record the 25-record/5ms, 16-in-flight, 512-byte
+  diagnostic, 4096-byte stderr, 16384-byte pending-path, ten-diagnostic, and
+  120ms spinner budgets as implementation constants rather than product
+  promises.
 
 - [ ] **Step 3: Run focused and mapped verification**
 
@@ -1163,3 +1270,14 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   events, sequencing, and cancellation handles; moved async realpath to the IO
   source; made identity string-pure; and allocated 8.0/4.5/4.1 hours with 30%
   cumulative revision thresholds after M1 and M2.
+
+### 2026-07-15 — fifth mandatory change-code gate
+
+- Reason: the fifth judge found five finder tasks could independently duplicate
+  acquisition-to-settlement orchestration and that callback exceptions could
+  interrupt later delivery or retirement.
+- Delta: introduced one injected `finder_producer.run` contract and TDD task for
+  root transactions, batching, outcome accumulation, cache hooks, cancellation,
+  finalization, and exactly-once settlement; required every finder to use it;
+  and specified independent static/bounded containment for producer,
+  subscriber/materializer, terminal, and retirement callback exceptions.
