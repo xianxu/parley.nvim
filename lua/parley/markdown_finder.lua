@@ -64,6 +64,8 @@ M.materialize_records = function(options)
 	local entries = {}
 	for _, record in ipairs(records) do
 		local mtime = record.stat.mtime.sec or 0
+		local native_path = record.resolved_absolute or record.unresolved_absolute
+		assert(type(native_path) == "string", "Markdown record requires a native path")
 		local tag = top_level_dir(record.relative)
 		local prefix = ""
 		if options.mode == "super_repo" then
@@ -72,7 +74,7 @@ M.materialize_records = function(options)
 		end
 		local picker_path = single_line(prefix .. record.relative)
 		entries[#entries + 1] = {
-			value = record.identity.key,
+			value = native_path,
 			display = picker_path .. "  [" .. os.date("%Y-%m-%d", mtime) .. "]",
 			search_text = picker_path:gsub("[/%-_]", " "),
 			mtime = mtime,

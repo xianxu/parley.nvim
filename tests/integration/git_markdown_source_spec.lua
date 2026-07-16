@@ -9,6 +9,32 @@ local function wait_for(predicate)
 end
 
 describe("Git Markdown source process protocol", function()
+    local function fake_process()
+        local pipes = {}
+        local exit_callback
+        local process = { closed = false, kill_count = 0 }
+        function process:is_closing() return self.closed end
+        function process:kill() self.kill_count = self.kill_count + 1; return true end
+        function process:close() self.closed = true end
+
+        local fake_uv = {
+            new_pipe = function()
+                local pipe = { closed = false, stop_count = 0 }
+                function pipe:is_closing() return self.closed end
+                function pipe:read_start(callback) self.callback = callback end
+                function pipe:read_stop() self.stop_count = self.stop_count + 1 end
+                function pipe:close() self.closed = true end
+                pipes[#pipes + 1] = pipe
+                return pipe
+            end,
+            spawn = function(_, _, callback)
+                exit_callback = callback
+                return process
+            end,
+        }
+        return fake_uv, pipes, process, function(code) exit_callback(code) end
+    end
+
     before_each(function()
         assert(uv.fs_chmod(fixture, 493))
     end)
@@ -58,6 +84,48 @@ describe("Git Markdown source process protocol", function()
 
         assert.equals("failed", result.status)
         assert.equals(failure_kind.path_fragment_too_long, result.failure.kind)
+    end)
+
+    for _, stream_case in ipairs({
+        { name = "stdout", failed = 1, other = 2 },
+        { name = "stderr", failed = 2, other = 1 },
+    }) do
+        it("retires " .. stream_case.name .. " read errors and settles once after child exit", function()
+            local fake_uv, pipes, process, exit = fake_process()
+            local results = {}
+            git_markdown_source.list({ root = "/repo", root_ordinal = 1, uv = fake_uv }, function(result)
+                results[#results + 1] = result
+            end)
+
+            pipes[stream_case.failed].callback("stream failed")
+            pipes[stream_case.other].callback(nil, nil)
+            exit(1)
+            exit(1)
+
+            assert.equals(1, #results)
+            assert.equals(failure_kind.process_stream, results[1].failure.kind)
+            assert.equals(1, pipes[stream_case.failed].stop_count)
+            assert.is_true(pipes[stream_case.failed].closed)
+            assert.equals(1, process.kill_count)
+        end)
+    end
+
+    it("retires stdout at the fragment cap and ignores later chunks", function()
+        local fake_uv, pipes, process, exit = fake_process()
+        local result
+        git_markdown_source.list({ root = "/repo", root_ordinal = 1, uv = fake_uv }, function(value)
+            result = value
+        end)
+
+        pipes[1].callback(nil, string.rep("x", 20000))
+        pipes[1].callback(nil, string.rep("y", 20000) .. "\0late.md\0")
+        pipes[2].callback(nil, nil)
+        exit(1)
+
+        assert.equals(failure_kind.path_fragment_too_long, result.failure.kind)
+        assert.equals(1, pipes[1].stop_count)
+        assert.is_true(pipes[1].closed)
+        assert.equals(1, process.kill_count)
     end)
 
     it("cancels idempotently and suppresses delayed completion", function()
@@ -155,6 +223,8 @@ describe("real Git Markdown listing", function()
         git(git_executable, root, "init", "-q")
         write(root .. "/tracked.md")
         git(git_executable, root, "add", "tracked.md")
+		write(root .. "/back\\slash.md")
+		git(git_executable, root, "add", "back\\slash.md")
         write(root .. "/.gitignore", { "*.md", "!free.md", "!line*" })
         write(root .. "/free.md")
         write(root .. "/ignored.md")
@@ -195,7 +265,7 @@ describe("real Git Markdown listing", function()
         wait_for(function() return result ~= nil end)
 
         assert.equals("success", result.status)
-        assert.same({ "free.md", "line\nbreak.md", "tracked.md" }, result.paths)
+        assert.same({ "back\\slash.md", "free.md", "line\nbreak.md", "tracked.md" }, result.paths)
 		assert.equals(1, vim.fn.filereadable(root .. "/submodule/inside.md"))
     end)
 

@@ -21,6 +21,19 @@
   nested repository is not evidence for submodule opacity. Rule: when a plan
   promises real Git edge cases, construct and assert each distinct Git object
   explicitly.
+- **A process-stream error is a terminal event for that stream.** Killing the
+  child does not guarantee another EOF callback, so waiting on an unretired pipe
+  can strand the whole lifecycle. Rule: on read error, stop/close that side,
+  mark it terminal, and test settlement after child exit for stdout and stderr.
+- **A byte cap constrains retained state, not only the failure threshold.**
+  Appending a whole chunk and checking afterward can retain arbitrarily more
+  than the advertised maximum. Rule: parse framed chunks incrementally and
+  reject before concatenation would cross the cap; ignore later callbacks from
+  the retired stream.
+- **Canonical comparison identity and native IO location are different path
+  fields.** Separator normalization makes ordering portable but corrupts legal
+  POSIX backslashes if reused for file opening. Rule: use canonical keys only
+  for dedup/sort and preserve resolved/unresolved native paths for IO.
 
 ## 2026-07-15 (#190)
 

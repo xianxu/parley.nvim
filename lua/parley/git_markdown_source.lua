@@ -82,6 +82,56 @@ M.list = function(options, on_complete)
         })
     end
 
+    local function retire_stdout()
+        if stdout_eof then
+            return
+        end
+        stdout_eof = true
+        pcall(stdout.read_stop, stdout)
+        close_handle(stdout)
+    end
+
+    local function retire_stderr()
+        if stderr_eof then
+            return
+        end
+        stderr_eof = true
+        pcall(stderr.read_stop, stderr)
+        close_handle(stderr)
+    end
+
+    local function fail_stdout(kind, diagnostic)
+        set_failure(kind, diagnostic)
+        pending_path = ""
+        paths = {}
+        path_seen = {}
+        retire_stdout()
+        request_kill()
+        finish_if_ready()
+    end
+
+    local function consume_stdout(data)
+        local cursor = 1
+        while cursor <= #data and not stdout_eof do
+            local delimiter = data:find("\0", cursor, true)
+            local fragment = delimiter and data:sub(cursor, delimiter - 1) or data:sub(cursor)
+            if #pending_path + #fragment > PATH_FRAGMENT_CAP then
+                fail_stdout(FAILURE_KIND.path_fragment_too_long)
+                return
+            end
+            pending_path = pending_path .. fragment
+            if not delimiter then
+                return
+            end
+            if pending_path ~= "" and not path_seen[pending_path] then
+                path_seen[pending_path] = true
+                paths[#paths + 1] = pending_path
+            end
+            pending_path = ""
+            cursor = delimiter + 1
+        end
+    end
+
     local args = {
         "-C", options.root,
         "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "*.md",
@@ -122,52 +172,35 @@ M.list = function(options, on_complete)
         end)
     else
         stdout:read_start(function(error_value, data)
-            if cancelled then
+            if cancelled or stdout_eof then
                 return
             end
             if error_value then
-                set_failure(FAILURE_KIND.process_stream, error_value)
-                request_kill()
+                fail_stdout(FAILURE_KIND.process_stream, error_value)
             elseif data then
-                pending_path = pending_path .. data
-                while true do
-                    local delimiter = pending_path:find("\0", 1, true)
-                    if not delimiter then
-                        break
-                    end
-                    local path = pending_path:sub(1, delimiter - 1)
-                    pending_path = pending_path:sub(delimiter + 1)
-                    if path ~= "" and not path_seen[path] then
-                        path_seen[path] = true
-                        paths[#paths + 1] = path
-                    end
-                end
-                if #pending_path > PATH_FRAGMENT_CAP then
-                    set_failure(FAILURE_KIND.path_fragment_too_long)
-                    request_kill()
-                end
+                consume_stdout(data)
             else
-                stdout_eof = true
-                close_handle(stdout)
+                retire_stdout()
                 finish_if_ready()
             end
         end)
 
         stderr:read_start(function(error_value, data)
-            if cancelled then
+            if cancelled or stderr_eof then
                 return
             end
             if error_value then
                 set_failure(FAILURE_KIND.process_stream, error_value)
+                retire_stderr()
                 request_kill()
+                finish_if_ready()
             elseif data then
                 local remaining = STDERR_CAP - #stderr_text
                 if remaining > 0 then
                     stderr_text = stderr_text .. data:sub(1, remaining)
                 end
             else
-                stderr_eof = true
-                close_handle(stderr)
+                retire_stderr()
                 finish_if_ready()
             end
         end)

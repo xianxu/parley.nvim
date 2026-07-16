@@ -1,66 +1,71 @@
-# Boundary Review — parley.nvim#189 (milestone M1)
+# Boundary Reviews — parley.nvim#189 (milestone M1)
 
 | field | value |
 |-------|-------|
 | issue | 189 — all finders should have a spinner in case of large input |
 | repo | parley.nvim |
 | boundary | milestone M1 |
-| milestone | M1 |
 | window | 909fbec1716a4fee67a3319455bee69192bacf75^..HEAD |
 | command | `sdlc milestone-close --issue 189 --milestone M1` |
 | reviewer | codex |
-| timestamp | 2026-07-16T00:07:06-07:00 |
-| verdict | REWORK |
 
-## Findings
+## Review 1 — 2026-07-16T00:07:06-07:00
 
-### Critical
+**Verdict:** REWORK
 
-1. `FinderProducer` accepted `{kind="record", value=nil}` and later indexed the
-   payload from a scheduled callback, which could strand the session.
-2. Async enrichment accepted any successful stat, allowing a tracked Markdown
-   symlink whose target was a directory to become selectable.
-3. The issue and plan described `cancelled` as a `ScanOutcome`, while the
-   implementation deliberately cancels and retires without settlement.
-4. The plan classified stateful, scheduler-driven `SliceBatcher` as PURE.
+### Findings
 
-### Important
+1. Critical: a `{kind="record", value=nil}` adapter result could crash a
+   scheduled producer callback and strand the session.
+2. Critical: successful stat accepted a directory reached through a tracked
+   symlink as a selectable Markdown record.
+3. Critical: the issue/plan described cancellation as a settled outcome while
+   implementation used non-settling retirement.
+4. Critical: the stateful scheduler-driven `SliceBatcher` was classified PURE.
+5. Important: total-failure presentation omitted finder/root/file aggregates;
+   failure construction was duplicated (`ARCH-DRY`).
+6. Important: real submodule and production delayed-spinner coverage were
+   missing, and README omitted the loading/Git inclusion boundary.
 
-1. Total-failure status omitted the finder name and aggregate root/file counts.
-2. Loader and producer duplicated total-failure construction (`ARCH-DRY`).
-3. The plan claimed real submodule coverage, but the fixture only built a nested
-   repository.
-4. No production-entry test proved a real spinner advanced during delayed disk
-   discovery and transitioned to results.
-5. README omitted immediate asynchronous loading and Markdown's exact Git
-   inclusion boundary.
+### Resolution
 
-## Resolutions
+Validated producer and stat payload shapes; single-sourced aggregate failure;
+scheduled session terminal delivery onto the main loop; added real submodule,
+real process-to-picker spinner, and directory-target tests; documented the UI
+and Git boundary; revised cancellation and batcher classification.
 
-- Validate adapter record payloads at the producer boundary; invalid payloads
-  become `invalid_adapter_result` without escaping scheduled work.
-- Require enriched stat targets to be files, retaining symlink-to-file support
-  while rejecting directory targets as `invalid_path`.
-- Define cancellation as non-settling retirement in the issue and plan, and
-  classify `SliceBatcher` as INTEGRATION.
-- Single-source total failures in `finder_scan.total_failure` and render bounded
-  finder/root/file aggregate status.
-- Construct a real local Git submodule fixture and assert it remains opaque to
-  the parent listing.
-- Add a real process → Markdown finder → async stat → real float-picker test.
-  The test exposed a libuv fast-event UI call; `FinderLoadSession` now schedules
-  terminal delivery through its injected main-loop scheduler.
-- Document immediate cancellable scanning and tracked-union-untracked-
-  nonignored Git semantics in README; map the new integration spec in atlas.
+## Review 2 — 2026-07-16
+
+**Verdict:** REWORK
+
+### Findings
+
+1. Critical: stdout/stderr read errors killed the child without retiring that
+   pipe, so a missing later EOF could leave `scanning…` forever.
+2. Critical: `identity.key` normalized backslashes and was reused as the picker
+   value, corrupting legal POSIX native paths.
+3. Important: the pending NUL fragment threshold detected overflow only after
+   concatenation and continued accepting chunks, so it was not a retention cap.
+
+### Resolution
+
+Stream errors now stop/close their side, mark it terminal, and settle once after
+child exit. NUL chunks are consumed incrementally and retire stdout before any
+retained fragment can exceed 16,384 bytes; later chunks are ignored. Markdown
+uses resolved/unresolved native paths for selection and reserves canonical keys
+for deduplication/sorting. Fake-process tests cover stdout/stderr errors and
+repeated post-cap chunks; real Git plus pure materialization cover a tracked
+backslash-bearing filename.
 
 ## Evidence to re-run
 
-- Focused finder producer/loader/scan, async file source, Git Markdown source,
-  Markdown finder, picker status, and real Markdown async integration specs.
+- Focused Git Markdown source, Markdown materializer/entry-point, producer,
+  loader, scan, async filesystem, picker status, and real delayed-picker specs.
 - `make test-changed`
 - `make lint`
+- `sdlc issue validate --issue 189`
 - `git diff --check`
 
-This compact record preserves the failed verdict and actionable review history;
-the generated prompt, repository diff, and raw terminal transcript were removed
-before re-review so they do not consume the next boundary window.
+This compact record preserves both failed verdicts and their resolutions. Raw
+prompts, diffs, and terminal transcripts were removed before re-review so they
+do not consume the next boundary window.

@@ -15,6 +15,7 @@ describe("markdown finder pure discovery policy", function()
 	it("materializes deterministic ordinary entries after canonical deduplication", function()
 		local winner = {
 			relative = "docs/a.md",
+			resolved_absolute = "/real/a.md",
 			root = { path = "/repo" },
 			stat = { mtime = { sec = 20 } },
 			identity = { key = "/real/a.md", source = { root_ordinal = 1, unresolved = "/repo/docs/a.md" } },
@@ -23,6 +24,7 @@ describe("markdown finder pure discovery policy", function()
 		duplicate.identity.source = { root_ordinal = 2, unresolved = "/alias/a.md" }
 		local older = {
 			relative = "root.md",
+			resolved_absolute = "/real/root.md",
 			root = { path = "/repo" },
 			stat = { mtime = { sec = 10 } },
 			identity = { key = "/real/root.md", source = { root_ordinal = 1, unresolved = "/repo/root.md" } },
@@ -43,10 +45,12 @@ describe("markdown finder pure discovery policy", function()
 		local records = {
 			{
 				relative = "z.md", root = { name = "zeta" }, stat = { mtime = { sec = 10 } },
+				resolved_absolute = "/z/z.md",
 				identity = { key = "/z/z.md", source = { root_ordinal = 2, unresolved = "/z/z.md" } },
 			},
 			{
 				relative = "a.md", root = { name = "alpha" }, stat = { mtime = { sec = 10 } },
+				resolved_absolute = "/a/a.md",
 				identity = { key = "/a/a.md", source = { root_ordinal = 1, unresolved = "/a/a.md" } },
 			},
 		}
@@ -62,6 +66,7 @@ describe("markdown finder pure discovery policy", function()
 		local path = "docs/line\nbreak.md"
 		local record = {
 			relative = path,
+			unresolved_absolute = "/repo/" .. path,
 			root = { path = "/repo" },
 			stat = { mtime = { sec = 10 } },
 			identity = { key = "/repo/" .. path, source = { root_ordinal = 1, unresolved = "/repo/" .. path } },
@@ -72,6 +77,24 @@ describe("markdown finder pure discovery policy", function()
 		assert.equals("/repo/" .. path, entries[1].value)
 		assert.is_nil(entries[1].display:find("\n", 1, true))
 		assert.is_nil(entries[1].search_text:find("\n", 1, true))
+	end)
+
+	it("opens the native path instead of its normalized comparison identity", function()
+		local native = "/repo/back\\slash.md"
+		local record = {
+			relative = "back\\slash.md",
+			unresolved_absolute = native,
+			root = { path = "/repo" },
+			stat = { mtime = { sec = 10 } },
+			identity = {
+				key = "/repo/back/slash.md",
+				source = { root_ordinal = 1, unresolved = "/repo/back/slash.md" },
+			},
+		}
+
+		local entries = markdown_finder.materialize_records({ mode = "ordinary", records = { record } })
+
+		assert.equals(native, entries[1].value)
 	end)
 end)
 

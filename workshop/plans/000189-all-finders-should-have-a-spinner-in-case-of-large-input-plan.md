@@ -1403,3 +1403,18 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   terminal delivery through its injected main-loop scheduler so libuv callbacks
   cannot touch Neovim UI APIs in a fast-event context (`ARCH-DRY`, `ARCH-PURE`,
   `ARCH-PURPOSE`).
+
+### 2026-07-16 — M1 second boundary-review rework
+
+- Reason: the second M1 boundary review found stdout/stderr read errors could
+  leave the producer waiting for EOF, the pending-fragment threshold failed
+  without bounding retained bytes, and normalized comparison identities were
+  reused as native picker paths on POSIX.
+- Delta: treat each stream error and overlong fragment as a terminal read-side
+  event with explicit stop/close plus exactly-once post-exit settlement; parse
+  NUL chunks incrementally without retaining a fragment beyond 16,384 bytes;
+  keep `identity.key` comparison-only and open
+  `resolved_absolute or unresolved_absolute`. Task 5 verification now includes
+  stdout/stderr error fakes, repeated post-cap chunks, a real tracked
+  backslash-bearing Git path, and native-path materialization
+  (`ARCH-PURE`, `ARCH-PURPOSE`).

@@ -551,3 +551,14 @@ stale on 2026-07-15, so the estimate is provisional.
 - Cancellation is now recorded as non-settling retirement and the stateful
   scheduled `SliceBatcher` is classified as INTEGRATION, matching the shipped
   contracts (`ARCH-DRY`, `ARCH-PURE`, `ARCH-PURPOSE`).
+
+### 2026-07-16 — M1 second boundary rework
+
+- The second mandatory review found that Git stream errors did not retire their
+  pipes, the pending path threshold did not cap retained fragments, and the
+  canonical comparison key was reused as a native selectable path. Stream
+  errors and overlong fragments now close their read side and settle once after
+  child exit; NUL parsing retains no fragment beyond the fixed cap; Markdown
+  rows open `resolved_absolute` or `unresolved_absolute` while identity keys
+  remain comparison-only. Fake-process and real-Git backslash-path regressions
+  cover all three findings (`ARCH-PURE`, `ARCH-PURPOSE`).
