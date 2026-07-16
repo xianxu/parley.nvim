@@ -469,3 +469,11 @@ stale on 2026-07-15, so the estimate is provisional.
 - Delta: added one shared per-record read-policy seam with cancellation and
   zero-read cache-hit tests, and made Vision adapt/deduplicate one file bundle
   before flattening stable source-identity-plus-ordinal initiatives.
+
+### 2026-07-15 — Task 1 implementation
+
+- Added the pure snapshot/fingerprint, path identity/dedup/sort, outcome,
+  bounded-diagnostic, and slice-batching policies with 23 focused tests.
+- The first combined module crossed the plan's 400-line guard, so the scheduling
+  state machine moved to `finder_batcher.lua`; `finder_scan.new_batcher` remains
+  the shared public seam (`ARCH-PURE`, Simplicity First).

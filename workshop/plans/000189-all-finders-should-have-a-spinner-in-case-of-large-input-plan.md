@@ -41,7 +41,7 @@ the final slice.
 | `ScanSnapshot` | `lua/parley/finder_scan.lua` | new |
 | `ScanOutcome` | `lua/parley/finder_scan.lua` | new |
 | `PathIdentity` | `lua/parley/finder_scan.lua` | new |
-| `SliceBatcher` | `lua/parley/finder_scan.lua` | new |
+| `SliceBatcher` | `lua/parley/finder_batcher.lua` | new; re-exported by `finder_scan.new_batcher` |
 | `DiagnosticPolicy` | `lua/parley/finder_scan.lua` | new |
 | `MarkdownPathPolicy` | `lua/parley/markdown_finder.lua` | new |
 | `ChatFinderRecord` | `lua/parley/chat_finder_records.lua` | new |
@@ -363,6 +363,7 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 
 **Files:**
 - Create: `lua/parley/finder_scan.lua`
+- Create: `lua/parley/finder_batcher.lua`
 - Create: `tests/unit/finder_scan_spec.lua`
 
 - [ ] **Step 1: Write failing snapshot/fingerprint tests**
@@ -487,7 +488,7 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 - [ ] **Step 16: Commit pure scan policy**
 
   ```bash
-  git add lua/parley/finder_scan.lua tests/unit/finder_scan_spec.lua
+  git add lua/parley/finder_scan.lua lua/parley/finder_batcher.lua tests/unit/finder_scan_spec.lua
   git commit -m "finder: #189 add deterministic scan policy"
   ```
 
@@ -1215,7 +1216,7 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 
 - [ ] **Step 2: Update atlas and traceability**
 
-  Map `finder_scan`, `async_file_source`, `git_markdown_source`,
+  Map `finder_scan`, `finder_batcher`, `async_file_source`, `git_markdown_source`,
   `finder_producer`, `finder_loader`, `picker_status`, all four focused
   finder-record modules, production finders, process fixture, and all new
   unit/integration specs. Record the 25-record/5ms, 16-in-flight, 512-byte
@@ -1349,3 +1350,11 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   zero-read cache hits, per-record failures, cancellation checks, and settlement
   tests; defined Vision's adapter result as one file bundle that is deduplicated
   before initiatives are flattened with stable source identity/ordinal keys.
+
+### 2026-07-15 — Task 1 size-guard revision
+
+- Reason: the first green implementation of `finder_scan.lua` reached 460
+  lines, crossing the plan's mandatory 400-line split threshold.
+- Delta: extracted the independently pure scheduling state machine to
+  `finder_batcher.lua` while retaining `finder_scan.new_batcher` as the single
+  public failure-vocabulary-aware seam and the existing focused test oracle.
