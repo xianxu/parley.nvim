@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-07-14
 updated: 2026-07-15
-estimate_hours: 9.2
+estimate_hours: 16.6
 started: 2026-07-15T17:02:57-07:00
 ---
 
@@ -50,6 +50,12 @@ imported package trees that are outside the repository's useful document set.
   after settlement. The producer returns an idempotent cancellation handle; the
   session exposes cancellation/subscription and rejects every repeated or stale
   settlement. A root counts as successful even when it contains zero matches.
+- The producer pipeline is ordered exactly once as enumeration → async
+  stat/read enrichment → sliced per-file adapter → outcome accumulation →
+  session settlement. Adapter output is finder-specific raw metadata, not a
+  rendered picker item. Subscribers run only total, deterministic open-time
+  materialization (recency/facets/rendering) after settlement; no
+  failure-counting work occurs after the terminal outcome.
 - Enumeration failure makes the whole root fail and discards every record
   staged for that root. After successful enumeration, an individual async
   stat/read or parser failure discards only that record and increments
@@ -58,6 +64,15 @@ imported package trees that are outside the repository's useful document set.
   `failure` means every attempted root failed enumeration. A successfully
   enumerated root whose every record later fails therefore settles as partial
   with an empty record set, not as total failure.
+- Filesystem enumeration consists of optional-root existence classification and
+  opening/draining every required directory scan to produce staged candidate
+  paths and entry types. `ENOENT` for an optional root is a skip; another root
+  preflight error, a directory-open/read error, or an unknown entry type needed
+  for safe traversal fails that root and discards its staged candidates. Only
+  after traversal succeeds do candidate `fs_stat`, file open/read, and parser
+  operations run; those are per-record enrichment failures and never roll back
+  the enumerated root. For Markdown, successful Git exit is the equivalent
+  enumeration boundary and later candidate stats are record enrichment.
 - A per-file adapter returns exactly `record`, intentional `skip`, or
   `failure(kind)`. Expected nonmatches and benign policy exclusions are skips
   and do not inflate failure counts. Failure kinds are static bounded enums;
@@ -247,24 +262,34 @@ familiarity: 1.5
 item: lua-neovim              design=0.60 impl=0.60
 item: lua-neovim              design=0.60 impl=0.60
 item: lua-neovim              design=0.60 impl=0.60
+item: lua-neovim              design=0.60 impl=0.60
+item: lua-neovim              design=0.60 impl=0.60
+item: lua-neovim              design=0.60 impl=0.60
 item: tui-screen              design=0.40 impl=0.40
 item: api-integration         design=0.60 impl=0.60
+item: api-integration         design=0.60 impl=0.60
+item: cross-cutting-refactor  design=0.20 impl=0.20
 item: cross-cutting-refactor  design=0.20 impl=0.20
 item: atlas-docs              design=0.10 impl=0.08
 item: milestone-review        design=0.10 impl=0.60
+item: ux-rename-iteration     design=0.30 impl=0.12
 design-buffer: 0.15
-total: 9.20
+total: 16.62
 ```
 
 Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md`
 against `baseline-v3.1.md`. Method A only. Design values apply the thorough-spec
 discount; implementation values are already scaled to 40% of the v2/v2.1
 primitive table. Familiarity is 1.5 because streaming libuv/Git cancellation is
-novel-but-bounded in this Lua codebase. The three `lua-neovim` primitives are
-the shared scan/session core, Chat/Note migration, and Issue/Vision migration;
-the API primitive is the streaming Git/libuv boundary; the milestone primitive
-covers M1, M2, and final integration review. The calibration source was stale
-on 2026-07-15, so the estimate is provisional.
+novel-but-bounded in this Lua codebase. The six `lua-neovim` primitives are
+scan policy, loader lifecycle, async filesystem source, picker status, Chat/Note
+migration, and Issue/Vision migration. The two API primitives are streaming Git
+and cancellable libuv integration; two refactors cover Markdown and the four
+artifact finders; the UX primitive covers operator smoke iteration; and the
+milestone primitive covers M1, M2, and final integration review. This applies
+the same v3.1 calibration that includes completed Parley #144/#147 anchors while
+accounting for #189's materially broader surface. The calibration source was
+stale on 2026-07-15, so the estimate is provisional.
 
 ## Log
 
@@ -357,3 +382,14 @@ on 2026-07-15, so the estimate is provisional.
   pre-close action, re-derived the estimate as 9.2 hours by delivery primitive,
   single-sourced failure kinds, explicitly preserved #122's current timestamp
   behavior, and clarified that `opened` tracks picker rather than scan lifetime.
+
+### 2026-07-15 — second change-code gate refinement
+
+- Reason: the second mandatory judge found that adapter work appeared to occur
+  after terminal settlement, filesystem enumeration versus enrichment was not
+  precise enough to classify failures, and 9.2 hours still compressed multiple
+  independent implementations into too few primitives.
+- Delta: fixed the one-way producer pipeline before settlement, defined root
+  traversal/Git exit as the transactional boundary and later stat/read/parse as
+  record enrichment, and re-derived 16.6 hours from six Lua features, two IO
+  integrations, two migrations, UX iteration, docs, and three reviews.
