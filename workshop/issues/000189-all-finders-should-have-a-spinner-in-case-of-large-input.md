@@ -102,6 +102,12 @@ imported package trees that are outside the repository's useful document set.
   their record-failure semantics. Pure path identity consumes only
   `{ unresolved_absolute, resolved_absolute?, root_ordinal }` strings and never
   calls the filesystem.
+- Async file acquisition supports an injected per-record read policy after stat
+  and before open/read. It either supplies cached metadata immediately, requests
+  a bounded payload read, or emits stat-only metadata. The policy performs no IO
+  or cache mutation; cache hits open/read nothing, cancellation is rechecked
+  before a conditional read starts, and completion waits for every requested
+  read.
 - A per-file adapter returns exactly `record`, intentional `skip`, or
   `failure(kind)`. Expected nonmatches and benign policy exclusions are skips
   and do not inflate failure counts. Failure kinds are static bounded enums;
@@ -131,6 +137,10 @@ imported package trees that are outside the repository's useful document set.
   async arrival order. The retained record is the minimum deterministic source
   tuple `(ordered root ordinal, normalized unresolved absolute path)`; tests
   cover overlapping roots and symlink aliases.
+- Vision adapts each YAML file to one file-identity bundle before deduplication;
+  only then does its total materializer flatten that bundle's 0:N initiatives.
+  Each initiative retains the source file identity plus stable parser ordinal,
+  so multiple initiatives from one file cannot collapse as path duplicates.
 - Loading and total-failure presentation is picker status, not a synthetic item:
   it bypasses fuzzy/sticky-query filtering, never enters the selectable item
   list, and ignores confirm/double-click. A retained query therefore cannot hide
@@ -450,3 +460,12 @@ stale on 2026-07-15, so the estimate is provisional.
 - Delta: added one injected `finder_producer` runner for acquisition through
   settlement and specified independent static/bounded exception containment for
   producer factory, subscriber/materializer, terminal, and retire callbacks.
+
+### 2026-07-15 — sixth change-code gate refinement
+
+- Reason: the sixth mandatory judge found Chat's stat-to-cache-to-conditional-read
+  pipeline could not be expressed by the scan-wide read option and Vision's
+  one-file-to-many initiatives conflicted with one-record adapter semantics.
+- Delta: added one shared per-record read-policy seam with cancellation and
+  zero-read cache-hit tests, and made Vision adapt/deduplicate one file bundle
+  before flattening stable source-identity-plus-ordinal initiatives.

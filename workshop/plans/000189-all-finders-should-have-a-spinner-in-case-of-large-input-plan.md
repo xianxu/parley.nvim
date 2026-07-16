@@ -106,6 +106,8 @@ the final slice.
       process_exit = "process_exit",
       path_fragment_too_long = "path_fragment_too_long",
       invalid_path = "invalid_path",
+      invalid_read_policy = "invalid_read_policy",
+      read_policy_exception = "read_policy_exception",
       producer_acquire_exception = "producer_acquire_exception",
       producer_finalize_exception = "producer_finalize_exception",
       producer_cache_hook_exception = "producer_cache_hook_exception",
@@ -136,8 +138,14 @@ the final slice.
   - **Relationships:** one Markdown file produces zero or one issue record.
   - **DRY rationale:** synchronous `issues.scan_issues` and the async finder share interpretation without adding another responsibility to `issues.lua`.
   - **Future extensions:** vocabulary validation remains outside discovery.
-- **`VisionFinderRecord`** — attaches namespace/file/root metadata to initiatives parsed from an already-read YAML payload.
-  - **Relationships:** one YAML file produces 0:N initiatives.
+- **`VisionFinderRecord`** — produces one file-level bundle containing the
+  namespace/file/root identity and the 0:N initiatives parsed from an
+  already-read YAML payload; its total materializer deduplicates bundles by file
+  identity before flattening initiatives.
+  - **Relationships:** one YAML file produces exactly one bundle, then 0:N
+    initiatives. Each flattened initiative carries its source file identity and
+    stable parser ordinal; its secondary key is the length-prefixed file key plus
+    ordinal, so initiatives from one file cannot collide during sorting.
   - **DRY rationale:** synchronous vision commands and the async picker retain one policy without growing the 2,000-line `vision.lua` domain module.
   - **Future extensions:** alternate vision formats would add adapters, not IO to the pure parser.
 
@@ -169,6 +177,7 @@ the final slice.
       max_depth = 4,
       match = function(relative, entry_type) return true end,
       read = "none" or "all" or { head_lines = 10 },
+      read_policy = nil or function(stat_record) return read_decision end,
       concurrency = 16,
   }, on_root, on_complete)
 
@@ -177,12 +186,32 @@ the final slice.
       root_ordinal = 1,
       paths = { "relative/from/root.md" },
       read = "none" or "all" or { head_lines = 10 },
+      read_policy = nil or function(stat_record) return read_decision end,
       concurrency = 16,
   }, on_complete)
 
   handle:cancel()       -- idempotent; suppresses every future callback
   handle:is_cancelled()
   ```
+
+  `read` and `read_policy` are mutually exclusive. After async stat/realpath and
+  before queueing any open/read, `read_policy(stat_record)` returns exactly one
+  of:
+
+  ```lua
+  { kind = "ready", value = opaque_cached_value }
+  { kind = "read", mode = "all" or { head_lines = 10 } }
+  { kind = "none" }
+  ```
+
+  `ready` emits a candidate with `precomputed = value` and performs no open/read;
+  `read` asynchronously fills `payload`; and `none` emits stat metadata only.
+  The policy is a synchronous injected cache lookup with no mutation or IO.
+  Invalid results and exceptions become per-record `invalid_read_policy` and
+  `read_policy_exception` failures without stringifying thrown values. The
+  cancellation token is checked after policy evaluation and again before a
+  queued read begins, so cancellation between phases suppresses IO and every
+  later callback.
 
   `scan` calls `on_root(event)` exactly once per ordered root, though root events
   may arrive in any order, then `on_complete()` exactly once after every root
@@ -198,7 +227,7 @@ the final slice.
   enriched_record = {
       root, root_ordinal, relative,
       unresolved_absolute, resolved_absolute, -- resolved may be nil
-      stat, payload, -- payload nil for read="none", otherwise a string
+      stat, payload, precomputed, -- exactly the fields selected by read policy
   }
   record_failure = {
       relative, unresolved_absolute,
@@ -493,7 +522,12 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 
 - [ ] **Step 5: Write failing concurrency/cancellation tests**
 
-  Assert at most 16 operations in flight, idempotent cancel, and no callbacks after cancellation.
+  Assert at most 16 operations in flight, idempotent cancel, and no callbacks
+  after cancellation. Exercise `read_policy` after stat: cache-hit `ready`
+  performs zero opens/reads, changed-mtime `read` queues the requested header
+  read, invalid/throwing policies become static record failures, cancellation
+  between policy evaluation and queued read suppresses that read, and root
+  completion waits for every conditional read.
 
 - [ ] **Step 5a: Run concurrency/cancellation tests and confirm RED**
 
@@ -507,8 +541,9 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 - [ ] **Step 7: Write failing `read_paths` tests**
 
   Specify the exact `read_paths(opts, on_complete)` schema above with async
-  stat/realpath/read, one completion payload, record failures, the shared
-  concurrency cap, and the shared cancellation handle.
+  stat/realpath/read, the identical per-path `read_policy` decisions, one
+  completion payload, record failures, the shared concurrency cap, and the
+  shared cancellation handle.
 
 - [ ] **Step 7a: Run `read_paths` tests and confirm RED**
 
@@ -897,9 +932,11 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   continue falling back to stat mtime, and content-derived activity ordering is
   out of scope. Also cover recency filtering, shared static parse failures,
   tags/topic parsing, deterministic timestamp/path ordering, and
-  overlapping-root/symlink dedup. Cache lookup occurs after async stat and
-  before async read: unchanged canonical path+mtime produces `cached`; only a
-  miss/change requests ten lines and produces `lines`.
+  overlapping-root/symlink dedup. Cache lookup occurs in
+  `AsyncFileSource.read_policy` after async stat and before async read:
+  unchanged canonical path+mtime returns `ready(cached)` and causes zero
+  opens/reads; only a miss/change returns `read({ head_lines = 10 })` and
+  produces `lines`.
 
 - [ ] **Step 2: Run Chat logic tests and confirm RED**
 
@@ -908,7 +945,15 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 
 - [ ] **Step 3: Extract raw adapter and materializer**
 
-  Keep `chat_finder_records.lua` under about 300 lines and free of Neovim IO. The entry point asks `AsyncFileSource` to stat, looks up canonical path+mtime in the cache, and reads only the first ten lines on miss/change. Return complete raw metadata independent of recency/query/facets; apply opener recency and tag/root facets after settlement. Keep the benchmark pointed at the pure materializer with prebuilt records so it measures parsing rather than disk scheduling.
+  Keep `chat_finder_records.lua` under about 300 lines and free of Neovim IO.
+  The entry point injects a synchronous, non-mutating cache lookup as
+  `AsyncFileSource.read_policy`; it returns `ready` for canonical path+mtime
+  hits and requests ten lines only on miss/change. The adapter consumes the
+  resulting `precomputed` or `payload` union and mutates the cache only through
+  the producer's post-adaptation `on_record` hook. Return complete raw metadata
+  independent of recency/query/facets; apply opener recency and tag/root facets
+  after settlement. Keep the benchmark pointed at the pure materializer with
+  prebuilt records so it measures parsing rather than disk scheduling.
 
 - [ ] **Step 4: Write failing entry-point and prewarm join tests**
 
@@ -1094,7 +1139,15 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 
 - [ ] **Step 1: Write failing vision-file materializer tests**
 
-  Specify `vision_finder_records.adapt({ path, name, lines, repo_name, identity })`. Assert reuse of `vision.parse_vision_yaml`, namespace/file/line/repo metadata, intentional non-YAML skip, project-only picker rendering, deterministic path ties, malformed adapter failure containment, and no mutation. Keep IO and cache ownership outside the pure module.
+  Specify `vision_finder_records.adapt({ path, name, lines, repo_name, identity })`
+  returning one `{ identity, source, initiatives = {...} }` file bundle. Assert
+  reuse of `vision.parse_vision_yaml`, namespace/file/line/repo metadata,
+  intentional non-YAML skip, project-only picker rendering, deterministic
+  initiative keys from length-prefixed file identity plus parser ordinal,
+  malformed adapter failure containment, and no mutation. Prove two or more
+  initiatives from one file survive file-bundle deduplication and flatten in
+  parser order before the existing primary sort. Keep IO and cache ownership
+  outside the pure module.
 
 - [ ] **Step 2: Run record tests and confirm RED**
 
@@ -1103,7 +1156,12 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 
 - [ ] **Step 3: Implement the pure Vision record module**
 
-  Keep it under about 180 lines and reuse `vision.parse_vision_yaml`/`parse_priority`; leave synchronous `vision.load_vision_dir` unchanged.
+  Keep it under about 180 lines and reuse
+  `vision.parse_vision_yaml`/`parse_priority`; leave synchronous
+  `vision.load_vision_dir` unchanged. `adapt` returns one file bundle;
+  `materialize_records` first applies shared file-identity deduplication, then
+  flattens initiatives with stable source identity/ordinal keys and applies the
+  existing initiative ordering.
 
 - [ ] **Step 4: Write failing Vision Finder lifecycle tests**
 
@@ -1281,3 +1339,13 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   finalization, and exactly-once settlement; required every finder to use it;
   and specified independent static/bounded containment for producer,
   subscriber/materializer, terminal, and retirement callback exceptions.
+
+### 2026-07-15 — sixth mandatory change-code gate
+
+- Reason: the sixth judge found Chat's stat-to-cache-to-conditional-read
+  pipeline was not expressible through a scan-wide read mode and Vision's
+  one-file-to-many initiatives conflicted with the one-record adapter algebra.
+- Delta: added an injected post-stat `read_policy` with ready/read/none results,
+  zero-read cache hits, per-record failures, cancellation checks, and settlement
+  tests; defined Vision's adapter result as one file bundle that is deduplicated
+  before initiatives are flattened with stable source identity/ordinal keys.
