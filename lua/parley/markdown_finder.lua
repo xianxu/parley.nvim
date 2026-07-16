@@ -69,8 +69,13 @@ M.materialize_records = function(options)
 		local tag = top_level_dir(record.relative)
 		local prefix = ""
 		if options.mode == "super_repo" then
-			tag = record.root.name
-			prefix = "{" .. tostring(tag or "") .. "} "
+			local repo_name = record.root.name
+			if type(repo_name) == "string" and repo_name ~= "" then
+				tag = repo_name
+				prefix = "{" .. repo_name .. "} "
+			else
+				tag = nil
+			end
 		end
 		local picker_path = single_line(prefix .. record.relative)
 		entries[#entries + 1] = {

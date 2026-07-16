@@ -128,6 +128,23 @@ describe("Git Markdown source process protocol", function()
         assert.equals(1, process.kill_count)
     end)
 
+    it("rejects exit-zero stdout with an unterminated NUL record", function()
+        local fake_uv, pipes, _, exit = fake_process()
+        local result
+        git_markdown_source.list({ root = "/repo", root_ordinal = 1, uv = fake_uv }, function(value)
+            result = value
+        end)
+
+        pipes[1].callback(nil, "partial.md")
+        pipes[1].callback(nil, nil)
+        pipes[2].callback(nil, nil)
+        exit(0)
+
+        assert.equals("failed", result.status)
+        assert.equals(failure_kind.process_stream, result.failure.kind)
+        assert.is_nil(result.paths)
+    end)
+
     it("cancels idempotently and suppresses delayed completion", function()
         local complete_count = 0
         local handle = git_markdown_source.list({

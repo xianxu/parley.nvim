@@ -180,8 +180,12 @@ M.list = function(options, on_complete)
             elseif data then
                 consume_stdout(data)
             else
-                retire_stdout()
-                finish_if_ready()
+                if pending_path ~= "" then
+                    fail_stdout(FAILURE_KIND.process_stream, "unterminated NUL path")
+                else
+                    retire_stdout()
+                    finish_if_ready()
+                end
             end
         end)
 

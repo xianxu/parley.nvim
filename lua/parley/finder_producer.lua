@@ -3,6 +3,41 @@ local finder_scan = require("parley.finder_scan")
 local M = {}
 local FAILURE_KIND = finder_scan.FAILURE_KIND
 
+local function is_array(value, element_valid)
+    if type(value) ~= "table" then
+        return false
+    end
+    local count = 0
+    for key, element in pairs(value) do
+        if type(key) ~= "number" or key < 1 or key % 1 ~= 0 or not element_valid(element) then
+            return false
+        end
+        count = count + 1
+    end
+    return count == #value
+end
+
+local function valid_event(event, root_count)
+    if type(event) ~= "table" then
+        return false, false
+    end
+    local ordinal = event.root_ordinal
+    if type(ordinal) ~= "number" or ordinal % 1 ~= 0 or ordinal < 1 or ordinal > root_count then
+        return false, false
+    end
+    if event.status == "success" then
+        local candidates_valid = is_array(event.candidates, function() return true end)
+        local failures_valid = is_array(event.failures, function(failure)
+            return type(failure) == "table" and finder_scan.is_failure_kind(failure.kind)
+        end)
+        return candidates_valid and failures_valid, true, ordinal
+    end
+    if event.status == "failed" then
+        return type(event.failure) == "table" and finder_scan.is_failure_kind(event.failure.kind), true, ordinal
+    end
+    return event.status == "skipped", true, ordinal
+end
+
 M.run = function(options, settle_once)
     assert(type(options) == "table" and type(options.roots) == "table", "producer roots are required")
     assert(type(options.acquire) == "function", "producer acquisition is required")
@@ -108,24 +143,33 @@ M.run = function(options, settle_once)
     end
 
     local function on_root(event)
-        if cancelled or settled or type(event) ~= "table" then
+        if cancelled or settled then
             return
         end
-        local ordinal = event.root_ordinal
-        if type(ordinal) ~= "number" or ordinal < 1 or ordinal > #options.roots or root_seen[ordinal] then
+        local validated, event_valid, ordinal_valid, ordinal = pcall(valid_event, event, #options.roots)
+        if not validated or not ordinal_valid then
+            deliver(finder_scan.total_failure(#options.roots, FAILURE_KIND.root_enumeration))
+            return
+        end
+        if root_seen[ordinal] then
             return
         end
         root_seen[ordinal] = true
         seen_root_count = seen_root_count + 1
 
-        if event.status == "success" then
+        if not event_valid then
+            finder_scan.root_failed(
+                accumulator,
+                ordinal,
+                FAILURE_KIND.root_enumeration,
+                FAILURE_KIND.root_enumeration
+            )
+        elseif event.status == "success" then
             successful_root(event)
         elseif event.status == "skipped" then
             finder_scan.root_skipped(accumulator, ordinal)
         elseif event.status == "failed" and type(event.failure) == "table" then
             finder_scan.root_failed(accumulator, ordinal, event.failure.kind, event.failure.diagnostic)
-        else
-            finder_scan.root_failed(accumulator, ordinal, FAILURE_KIND.root_enumeration)
         end
         maybe_settle()
     end

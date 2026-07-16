@@ -34,6 +34,20 @@
   fields.** Separator normalization makes ordering portable but corrupts legal
   POSIX backslashes if reused for file opening. Rule: use canonical keys only
   for dedup/sort and preserve resolved/unresolved native paths for IO.
+- **An asynchronous acquisition event is untrusted until its whole schema is
+  validated.** Checking only the table and ordinal lets bad failure kinds or
+  list shapes reach asserting reducers after the producer call has returned,
+  escaping synchronous containment and stranding UI. Rule: validate ordinal,
+  status, list shape, and registered kinds before any accumulator mutation;
+  collapse violations to one static bounded outcome.
+- **Framed protocols must reject EOF with a pending fragment.** Exit zero does
+  not make a missing final NUL valid; silently dropping it converts corruption
+  into empty success. Rule: at EOF, require the framing buffer to be empty and
+  test a below-cap truncated record separately from overflow.
+- **Compatibility tests must assert presentation, not only row cardinality.**
+  Invalid super-repo labels still produced two rows, but new `{}` prefixes
+  changed display/search semantics. Rule: for fallback records, pin visible and
+  searchable text alongside count.
 
 ## 2026-07-15 (#190)
 

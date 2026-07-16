@@ -562,3 +562,14 @@ stale on 2026-07-15, so the estimate is provisional.
   rows open `resolved_absolute` or `unresolved_absolute` while identity keys
   remain comparison-only. Fake-process and real-Git backslash-path regressions
   cover all three findings (`ARCH-PURE`, `ARCH-PURPOSE`).
+
+### 2026-07-16 — M1 third boundary rework
+
+- The third mandatory review found malformed asynchronous root events could
+  reach asserting reducers, exit-zero truncated NUL output could silently drop
+  a path, invalid super-repo labels gained a visible `{}` prefix, and adjacent
+  filesystem helpers were duplicated. The producer now validates complete
+  event schemas before mutation and collapses violations to bounded root
+  failures; Git rejects unterminated EOF; invalid labels retain unprefixed
+  rows; native join/error fallback policy lives once in `finder_scan` with
+  direct tests (`ARCH-DRY`, `ARCH-PURE`, `ARCH-PURPOSE`).

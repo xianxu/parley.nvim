@@ -223,6 +223,22 @@ M.sanitize_diagnostic = function(value, byte_cap)
     return utf8_prefix(value:gsub("[%z\1-\31\127]", " "), byte_cap)
 end
 
+M.is_failure_kind = function(kind)
+	return REGISTERED_FAILURE_KIND[kind] == true
+end
+
+M.join_path = function(left, right)
+	assert(type(left) == "string" and type(right) == "string", "path components must be strings")
+	return left:sub(-1) == "/" and left .. right or left .. "/" .. right
+end
+
+M.bounded_io_error = function(value)
+	if type(value) ~= "string" then
+		return "filesystem operation failed"
+	end
+	return M.sanitize_diagnostic(value)
+end
+
 M.deduplicate = function(records)
     local winners = {}
     for _, record in ipairs(records) do

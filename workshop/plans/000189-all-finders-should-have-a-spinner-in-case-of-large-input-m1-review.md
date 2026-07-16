@@ -9,63 +9,59 @@
 | command | `sdlc milestone-close --issue 189 --milestone M1` |
 | reviewer | codex |
 
-## Review 1 — 2026-07-16T00:07:06-07:00
+## Review 1 — REWORK
 
-**Verdict:** REWORK
+Malformed adapter records and directory-valued symlink targets could strand or
+pollute results; cancellation and `SliceBatcher` were misclassified in the
+artifacts; aggregate failure policy was duplicated/incomplete; real submodule,
+production-spinner, and README coverage were missing.
 
-### Findings
+Resolved by validating producer/stat payloads, single-sourcing failures,
+scheduling UI settlement, revising the contracts/classification, and adding the
+real process, picker, submodule, directory-target, and documentation coverage.
 
-1. Critical: a `{kind="record", value=nil}` adapter result could crash a
-   scheduled producer callback and strand the session.
-2. Critical: successful stat accepted a directory reached through a tracked
-   symlink as a selectable Markdown record.
-3. Critical: the issue/plan described cancellation as a settled outcome while
-   implementation used non-settling retirement.
-4. Critical: the stateful scheduler-driven `SliceBatcher` was classified PURE.
-5. Important: total-failure presentation omitted finder/root/file aggregates;
-   failure construction was duplicated (`ARCH-DRY`).
-6. Important: real submodule and production delayed-spinner coverage were
-   missing, and README omitted the loading/Git inclusion boundary.
+## Review 2 — REWORK
 
-### Resolution
+Git stream errors did not retire their pipe, pending fragments were not truly
+retention-bounded, and canonical identity keys were incorrectly reused as
+native selectable paths.
 
-Validated producer and stat payload shapes; single-sourced aggregate failure;
-scheduled session terminal delivery onto the main loop; added real submodule,
-real process-to-picker spinner, and directory-target tests; documented the UI
-and Git boundary; revised cancellation and batcher classification.
+Resolved by terminal stream stop/close, incremental cap-before-concatenation
+NUL parsing, native path selection, and fake-process plus real backslash-path
+regressions.
 
-## Review 2 — 2026-07-16
-
-**Verdict:** REWORK
+## Review 3 — REWORK
 
 ### Findings
 
-1. Critical: stdout/stderr read errors killed the child without retiring that
-   pipe, so a missing later EOF could leave `scanning…` forever.
-2. Critical: `identity.key` normalized backslashes and was reused as the picker
-   value, corrupting legal POSIX native paths.
-3. Important: the pending NUL fragment threshold detected overflow only after
-   concatenation and continued accepting chunks, so it was not a retention cap.
+1. Critical: malformed asynchronous root events could pass unregistered failure
+   kinds or invalid list/ordinal shapes into asserting reducers and strand the
+   producer.
+2. Critical: exit-zero stdout with a below-cap unterminated NUL fragment was
+   accepted as success and silently dropped.
+3. Important: invalid super-repo labels gained `{}` or stringified prefixes.
+4. Important: `join_path` and bounded filesystem-error fallback were duplicated
+   between traversal and enrichment (`ARCH-DRY`).
 
 ### Resolution
 
-Stream errors now stop/close their side, mark it terminal, and settle once after
-child exit. NUL chunks are consumed incrementally and retire stdout before any
-retained fragment can exceed 16,384 bytes; later chunks are ignored. Markdown
-uses resolved/unresolved native paths for selection and reserves canonical keys
-for deduplication/sorting. Fake-process tests cover stdout/stderr errors and
-repeated post-cap chunks; real Git plus pure materialization cover a tracked
-backslash-bearing filename.
+`FinderProducer` validates complete event schemas before mutating root state;
+invalid ordinals become bounded total failures and malformed known-root events
+become bounded root failures. Git EOF requires an empty pending fragment.
+Invalid labels render unprefixed as before. Native path joining and bounded IO
+fallback are single-sourced in `finder_scan`. Regressions cover delayed malformed
+events, truncated exit-zero framing, fallback display/search text, and the
+shared helpers.
 
 ## Evidence to re-run
 
-- Focused Git Markdown source, Markdown materializer/entry-point, producer,
-  loader, scan, async filesystem, picker status, and real delayed-picker specs.
+- Focused scan/producer/loader, Git source, Markdown materializer/entry-point,
+  async filesystem, picker status, and real delayed-picker specs.
 - `make test-changed`
 - `make lint`
 - `sdlc issue validate --issue 189`
 - `git diff --check`
 
-This compact record preserves both failed verdicts and their resolutions. Raw
-prompts, diffs, and terminal transcripts were removed before re-review so they
-do not consume the next boundary window.
+This compact record preserves all failed verdicts and resolutions. Raw prompts,
+diffs, and terminal transcripts were removed before re-review so they do not
+consume the next boundary window.

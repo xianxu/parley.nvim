@@ -25,6 +25,39 @@ local function immediate_batch()
 end
 
 describe("finder producer", function()
+    it("contains malformed asynchronous root events as bounded failures", function()
+        local malformed_events = {
+            { root_ordinal = 0.5, status = "skipped" },
+            { root_ordinal = 1, status = "failed", failure = { kind = "unregistered" } },
+            { root_ordinal = 1, status = "success", candidates = {}, failures = "invalid" },
+            { root_ordinal = 1, status = "success", candidates = {}, failures = { { kind = "raw" } } },
+        }
+
+        for _, event in ipairs(malformed_events) do
+            local on_root
+            local on_complete
+            local outcome
+            finder_producer.run({
+                roots = { {} },
+                acquire = function(root_callback, complete_callback)
+                    on_root = root_callback
+                    on_complete = complete_callback
+                    return { cancel = function() end }
+                end,
+                adapter = function(candidate) return { kind = "record", value = candidate } end,
+                finalize = function(records) return records end,
+                batch = immediate_batch(),
+            }, function(value) outcome = value end)
+
+            assert.has_no.errors(function()
+                on_root(event)
+                on_complete()
+            end)
+            assert.equals("failure", outcome.kind)
+            assert.equals(finder_scan.FAILURE_KIND.root_enumeration, outcome.diagnostics[1].kind)
+        end
+    end)
+
     it("orchestrates out-of-order root outcomes through one final settlement", function()
         local acquire = acquisition({
             {

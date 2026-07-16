@@ -260,6 +260,13 @@ describe("finder scan policy", function()
             ))
         end)
 
+		it("single-sources native path joining and bounded IO fallback text", function()
+			assert.equals("/repo/file.md", finder_scan.join_path("/repo", "file.md"))
+			assert.equals("/repo/file.md", finder_scan.join_path("/repo/", "file.md"))
+			assert.equals("filesystem operation failed", finder_scan.bounded_io_error(nil))
+			assert.equals("one two", finder_scan.bounded_io_error("one\ntwo"))
+		end)
+
         it("caps retained diagnostics and reports the omitted count", function()
             local acc = finder_scan.new_accumulator(1)
             finder_scan.root_succeeded(acc, 1, {})

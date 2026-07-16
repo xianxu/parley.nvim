@@ -3,17 +3,6 @@ local finder_scan = require("parley.finder_scan")
 local M = {}
 local FAILURE_KIND = finder_scan.FAILURE_KIND
 
-local function join_path(left, right)
-    return left:sub(-1) == "/" and left .. right or left .. "/" .. right
-end
-
-local function bounded_error(value)
-    if type(value) ~= "string" then
-        return "filesystem operation failed"
-    end
-    return finder_scan.sanitize_diagnostic(value)
-end
-
 local function sort_by_relative(items)
     table.sort(items, function(left, right) return left.relative < right.relative end)
 end
@@ -83,7 +72,7 @@ M.run = function(options, on_complete)
     local function fail_path(relative, absolute, kind, error_value)
         local failure = { relative = relative, unresolved_absolute = absolute, kind = kind }
         if error_value ~= nil then
-            failure.diagnostic = bounded_error(error_value)
+            failure.diagnostic = finder_scan.bounded_io_error(error_value)
         end
         failures[#failures + 1] = failure
         path_done()
@@ -183,7 +172,7 @@ M.run = function(options, on_complete)
     end
 
     for _, relative in ipairs(options.paths) do
-        local absolute = join_path(options.root.path, relative)
+        local absolute = finder_scan.join_path(options.root.path, relative)
         queue:call(function(done) return uv.fs_stat(absolute, done) end, function(stat_error, stat)
             if stat_error or not stat then
                 fail_path(relative, absolute, FAILURE_KIND.stat, stat_error)

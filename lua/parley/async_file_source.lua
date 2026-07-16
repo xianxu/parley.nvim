@@ -5,24 +5,13 @@ local operation_queue = require("parley.async_operation_queue")
 local M = {}
 local FAILURE_KIND = finder_scan.FAILURE_KIND
 
-local function join_path(left, right)
-    return left:sub(-1) == "/" and left .. right or left .. "/" .. right
-end
-
-local function bounded_error(value)
-    if type(value) ~= "string" then
-        return "filesystem operation failed"
-    end
-    return finder_scan.sanitize_diagnostic(value)
-end
-
 local function root_failure(root_ordinal, error_value)
     return {
         root_ordinal = root_ordinal,
         status = "failed",
         failure = {
             kind = FAILURE_KIND.root_enumeration,
-            diagnostic = bounded_error(error_value),
+            diagnostic = finder_scan.bounded_io_error(error_value),
         },
     }
 end
@@ -158,7 +147,7 @@ M.new = function(dependencies)
                                 local depth = parent_depth + 1
                                 if entry_type == "directory" then
                                     if options.recurse and depth < options.max_depth then
-                                        scan_directory(join_path(path, name), relative, depth)
+                                        scan_directory(finder_scan.join_path(path, name), relative, depth)
                                     end
                                 elseif entry_type == "file" or entry_type == "link" then
                                     if depth <= options.max_depth and options.match(relative, entry_type) then

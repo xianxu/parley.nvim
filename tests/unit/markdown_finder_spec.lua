@@ -531,6 +531,13 @@ describe("markdown finder entry point", function()
 		assert.has_no.errors(markdown_finder.open)
 		assert.equals(2, #picker_calls[1].items)
 		assert.same({}, picker_calls[1].tag_bar.tags)
+		local unlabelled_item
+		for _, picker_item in ipairs(picker_calls[1].items) do
+			if picker_item.display:find("u.md", 1, true) then unlabelled_item = picker_item end
+		end
+		assert.is_not_nil(unlabelled_item)
+		assert.is_nil(unlabelled_item.display:find("{}", 1, true))
+		assert.is_nil(unlabelled_item.search_text:find("{}", 1, true))
 	end)
 
 	it("opens an eligible zero-row super expansion with a sorted repository bar", function()
