@@ -94,6 +94,25 @@ describe("Vision finder records", function()
         assert.equals("Auth Service", vision.parse_priority(items[2].project))
     end)
 
+    it("defers bundle ordering to the shared canonical identity key", function()
+        local canonical_z = records.adapt(candidate({
+            path = "/native/a.yaml",
+            name = "a.yaml",
+            identity = identity("/canonical/z.yaml", 1),
+            lines = { "- project: Canonical Z" },
+        })).value
+        local canonical_a = records.adapt(candidate({
+            path = "/native/z.yaml",
+            name = "z.yaml",
+            identity = identity("/canonical/a.yaml", 2),
+            lines = { "- project: Canonical A" },
+        })).value
+
+        local items = records.materialize_records({ canonical_z, canonical_a })
+        assert.same({ "Canonical A", "Canonical Z" },
+            vim.tbl_map(function(item) return item.project end, items))
+    end)
+
     it("uses collision-safe length-prefixed file identity plus parser ordinal keys", function()
         local bundle = records.adapt(candidate()).value
         local items = records.materialize_records({ bundle })

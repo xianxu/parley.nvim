@@ -21,7 +21,7 @@ picker plus real delayed Chat/Note/Issue regressions prove exactly one old scan
 cancels before one replacement opens (`ARCH-PURPOSE`; other principles passed).
 
 The reviewer also saw unrelated `chat_progress_process_spec.lua` sandbox
-readiness/swap failures. The clean local full suite passed before and after this
+readiness/swap failures. Clean local full-suite runs passed before and after the
 review, including that integration spec.
 
 ## Review 3 — REWORK
@@ -33,14 +33,28 @@ the shared loader/picker settlement bridge and returning the counted Vision
 title for both empty and nonempty outcomes (`ARCH-PURPOSE`; other principles
 passed).
 
+## Review 4 — REWORK
+
+Critical: Issue and Vision compared native IO paths after their primary fields,
+preventing the shared sorter from applying the all-five canonical
+`identity.key` tie-break promised by the Spec. Resolved by making their local
+comparators express primary ordering only and defer ties to `finder_scan.sort`.
+Adversarial regressions use native paths and canonical identities in opposite
+orders (`ARCH-DRY`, `ARCH-PURPOSE`).
+
+Critical: the plan's Core concepts table used conceptual type names rather than
+greppable code entities. Resolved by naming the exact exported module entry
+points, including `finder_scan.snapshot`, `finder_scan.path_identity`,
+`finder_loader.new_session`, and each record module's adaptation/materialization
+functions.
+
 ## Evidence
 
-- `finder_loader_spec.lua`: 10 successes, 0 failures.
-- `float_picker_spec.lua`: 72 successes, 0 failures.
-- `vision_finder_spec.lua`: 9 successes, 0 failures, including empty/nonempty
-  settled title checks.
-- `make test-changed`: exit 0.
-- `make lint`: zero warnings/errors across 301 files.
-- `make test`: exit 0; every unit, architecture, and integration spec PASS,
-  including `chat_progress_process_spec.lua`.
-- `git diff --check`: clean.
+- `issue_finder_records_spec.lua`: 8 successes, 0 failures, including the
+  adversarial canonical/native ordering regression.
+- `vision_finder_records_spec.lua`: 8 successes, 0 failures, including the
+  adversarial canonical/native ordering regression.
+- Earlier review fixes: `finder_loader_spec.lua` 10/10,
+  `float_picker_spec.lua` 72/72, and `vision_finder_spec.lua` 9/9.
+- Full verification is refreshed before each close invocation and recorded in
+  the issue Log.

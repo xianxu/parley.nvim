@@ -135,6 +135,31 @@ describe("Issue finder records", function()
         assert.same({ "/history/000003-old.md" }, vim.tbl_map(function(item) return item.path end, history))
     end)
 
+    it("defers equal primary values to the shared canonical identity key", function()
+        local canonical_z = records.adapt(candidate({
+            path = "/native/a/000001-same.md",
+            name = "000001-same.md",
+            identity = identity("/canonical/z.md", 1),
+            lines = { "---", "status: open", "---", "# Native A" },
+        })).value
+        local canonical_a = records.adapt(candidate({
+            path = "/native/z/000001-same.md",
+            name = "000001-same.md",
+            identity = identity("/canonical/a.md", 2),
+            lines = { "---", "status: open", "---", "# Native Z" },
+        })).value
+
+        local active = records.materialize({ canonical_z, canonical_a }, { archived = false })
+        assert.same({ "/canonical/a.md", "/canonical/z.md" },
+            vim.tbl_map(function(item) return item.identity.key end, active))
+
+        canonical_z.archived = true
+        canonical_a.archived = true
+        local history = records.materialize({ canonical_z, canonical_a }, { archived = true })
+        assert.same({ "/canonical/a.md", "/canonical/z.md" },
+            vim.tbl_map(function(item) return item.identity.key end, history))
+    end)
+
     it("lets the shared batcher contain adapter exceptions as static failures", function()
         local results = {}
         finder_scan.new_batcher({

@@ -106,7 +106,7 @@ M.materialize = function(records, options)
         if left.id ~= right.id then
             return left.id < right.id
         end
-        return left.path < right.path
+        return false
     end)
 end
 

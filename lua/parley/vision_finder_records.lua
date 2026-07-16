@@ -84,9 +84,7 @@ local function initiative_key(identity, ordinal)
 end
 
 M.materialize_records = function(records)
-    local bundles = finder_scan.sort(finder_scan.deduplicate(records or {}), function(left, right)
-        return left.source.path < right.source.path
-    end)
+    local bundles = finder_scan.sort(finder_scan.deduplicate(records or {}), function() return false end)
     local items = {}
     for _, bundle in ipairs(bundles) do
         for _, initiative in ipairs(bundle.initiatives) do

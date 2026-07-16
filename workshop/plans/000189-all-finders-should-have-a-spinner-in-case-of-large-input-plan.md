@@ -38,15 +38,15 @@ the final slice.
 
 | Name | Lives in | Status |
 |------|----------|--------|
-| `ScanSnapshot` | `lua/parley/finder_scan.lua` | new |
-| `ScanOutcome` | `lua/parley/finder_scan.lua` | new |
-| `PathIdentity` | `lua/parley/finder_scan.lua` | new |
-| `DiagnosticPolicy` | `lua/parley/finder_scan.lua` | new |
-| `MarkdownPathPolicy` | `lua/parley/markdown_finder.lua` | new |
-| `ChatFinderRecord` | `lua/parley/chat_finder_records.lua` | new |
-| `NoteFinderRecord` | `lua/parley/note_finder_records.lua` | new |
-| `IssueFinderRecord` | `lua/parley/issue_finder_records.lua` | new |
-| `VisionFinderRecord` | `lua/parley/vision_finder_records.lua` | new |
+| `finder_scan.snapshot` | `lua/parley/finder_scan.lua` | new |
+| `finder_scan.outcome` | `lua/parley/finder_scan.lua` | new |
+| `finder_scan.path_identity` | `lua/parley/finder_scan.lua` | new |
+| `finder_scan.FAILURE_KIND` / `finder_scan.sanitize_diagnostic` | `lua/parley/finder_scan.lua` | new |
+| `markdown_finder.path_candidate` / `markdown_finder.materialize_records` | `lua/parley/markdown_finder.lua` | new |
+| `chat_finder_records.adapt` / `chat_finder_records.materialize` | `lua/parley/chat_finder_records.lua` | new |
+| `note_finder_records.adapt` / `note_finder_records.materialize` | `lua/parley/note_finder_records.lua` | new |
+| `issue_finder_records.adapt` / `issue_finder_records.materialize` | `lua/parley/issue_finder_records.lua` | new |
+| `vision_finder_records.adapt` / `vision_finder_records.materialize_records` | `lua/parley/vision_finder_records.lua` | new |
 
 - **`ScanSnapshot`** — immutable finder kind, ordered normalized root records, and backend-affecting discovery options used for producer identity.
   - **Relationships:** one snapshot owns 1:N roots; one loading session owns exactly one snapshot; multiple subscribers may join one matching prewarm snapshot.
@@ -148,16 +148,16 @@ the final slice.
 
 | Name | Lives in | Status | Wraps |
 |------|----------|--------|-------|
-| `AsyncFileSource` | `lua/parley/async_file_source.lua` | new | libuv directory/stat/open/read/realpath APIs |
-| `AsyncOperationQueue` | `lua/parley/async_operation_queue.lua` | new | shared concurrency/cancellation cap for libuv requests |
-| `AsyncFileEnrichment` | `lua/parley/async_file_enrichment.lua` | new | shared stat/realpath/read-policy/open/read/close pipeline |
-| `GitMarkdownSource` | `lua/parley/git_markdown_source.lua` | new | streaming `git ls-files` subprocesses |
-| `FinderProducer` | `lua/parley/finder_producer.lua` | new | shared acquisition-to-settlement orchestration |
-| `FinderLoadSession` | `lua/parley/finder_loader.lua` | new | producer ownership, subscribers, scheduling, warnings, and picker lifecycle |
-| `SliceBatcher` | `lua/parley/finder_batcher.lua` | new; re-exported by `finder_scan.new_batcher` | injected monotonic clock and event-loop scheduler |
-| `PickerStatus` | `lua/parley/float_picker.lua` | modified | results-buffer status rendering and local spinner timer |
-| `PickerStatusController` | `lua/parley/picker_status.lua` | new | status state and timer lifecycle |
-| `FakeGitFileList` | `tests/fixtures/fake_git_file_list` | new | process-level Git stdout/stderr/chunk/exit behavior |
+| `async_file_source.new` / `async_file_source.scan` / `async_file_source.read_paths` | `lua/parley/async_file_source.lua` | new | libuv directory/stat/open/read/realpath APIs |
+| `async_operation_queue.new` | `lua/parley/async_operation_queue.lua` | new | shared concurrency/cancellation cap for libuv requests |
+| `async_file_enrichment.run` | `lua/parley/async_file_enrichment.lua` | new | shared stat/realpath/read-policy/open/read/close pipeline |
+| `git_markdown_source.list` | `lua/parley/git_markdown_source.lua` | new | streaming `git ls-files` subprocesses |
+| `finder_producer.run` | `lua/parley/finder_producer.lua` | new | shared acquisition-to-settlement orchestration |
+| `finder_loader.new_session` / `finder_loader.open_picker` | `lua/parley/finder_loader.lua` | new | producer ownership, subscribers, scheduling, warnings, and picker lifecycle |
+| `finder_batcher.new` / `finder_scan.new_batcher` | `lua/parley/finder_batcher.lua` / `lua/parley/finder_scan.lua` | new | injected monotonic clock and event-loop scheduler |
+| `float_picker.open` | `lua/parley/float_picker.lua` | modified | results-buffer status rendering and local spinner timer |
+| `picker_status.new` | `lua/parley/picker_status.lua` | new | status state and timer lifecycle |
+| `tests/fixtures/fake_git_file_list` | `tests/fixtures/fake_git_file_list` | new | process-level Git stdout/stderr/chunk/exit behavior |
 
 - **`SliceBatcher`** — stateful scheduled adapter controller that yields after
   25 completed records or 5ms of injected monotonic time.
@@ -1468,4 +1468,15 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 - Delta: add one optional materialized-title field to the shared loader/picker
   settlement bridge; return Vision's counted title for empty and nonempty
   results; cover the bridge, real picker title mutation, and both Vision counts
+  (`ARCH-DRY`, `ARCH-PURPOSE`).
+
+### 2026-07-16 — fourth final close-review rework
+
+- Reason: re-review found Issue and Vision compared native IO paths before the
+  shared sorter could apply the Spec's canonical `identity.key` tie-break, and
+  the Core concepts table used conceptual names that could not be cross-checked
+  against exported code symbols.
+- Delta: limit local comparators to their actual primary fields and defer equal
+  values to `finder_scan.sort`; add opposite-native-versus-canonical ordering
+  regressions; replace every table row with exact exported module entry points
   (`ARCH-DRY`, `ARCH-PURPOSE`).

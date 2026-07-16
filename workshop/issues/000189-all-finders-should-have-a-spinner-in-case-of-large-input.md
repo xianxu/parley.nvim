@@ -709,3 +709,19 @@ stale on 2026-07-15, so the estimate is provisional.
   `make test-changed`, `make lint`, and `make test` pass; the full suite again
   includes a clean `chat_progress_process_spec.lua` run, and
   `git diff --check` is clean.
+
+### 2026-07-16 — fourth final boundary-review rework
+
+- Re-review found Issue and Vision used native IO paths as local comparator
+  ties, bypassing the shared canonical `identity.key` ordering promised for all
+  five finders. It also found the plan's Core concepts table named conceptual
+  entities rather than exact greppable exports.
+- Both local comparators now stop after their genuine primary fields and defer
+  ties to `finder_scan.sort`; adversarial regressions reverse native and
+  canonical ordering. The table now names each exported module entry point,
+  applying the existing Core-concept traceability lesson (`ARCH-DRY`,
+  `ARCH-PURPOSE`).
+- Focused Issue and Vision record suites pass 8/8 each. Full verification is
+  refreshed: `make test-changed` and the full `make test` suite exit 0; lint
+  reports zero warnings/errors across 301 files; every revised Core-concept row
+  resolves to an exported symbol; and `git diff --check` is clean.

@@ -2,6 +2,13 @@
 
 ## 2026-07-16 (#189)
 
+- **A finder-local comparator must stop at its actual primary fields.** Issue
+  and Vision compared native IO paths after equal status/ID or file-level
+  values, so the shared sorter never reached its canonical identity tie-break.
+  Rule: when a shared sorter owns deterministic ties, local comparators return
+  `false` after their primary fields tie; add an adversarial fixture whose
+  native paths and canonical identities sort in opposite directions
+  (`ARCH-DRY`, `ARCH-PURPOSE`).
 - **A derived metadata view must consume the canonical grammar, not reproduce
   its convenient subset.** Chat Finder's pure record adapter copied delimiter,
   key-prefix, and tag parsing from `chat_parser`, leaving two owners that could
