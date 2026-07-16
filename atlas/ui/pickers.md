@@ -13,6 +13,31 @@ AND-matching across whitespace-split tokens. Token-prefix scoring, bounded edit-
 
 The chat finder additionally pre-seeds `{}` (the primary chat root, which in repo mode is the repo chat root) on the first open of a parley session in plain repo mode, so the default view is scoped to repo chats and global chats are filtered out. The pre-seed is a one-shot — once the user clears or modifies the filter, sticky-query takes over and the default is never re-applied. Skipped in super-repo mode (whose whole point is aggregating siblings, which a `{}` narrowing would defeat).
 
+## Disk-backed loading lifecycle
+
+`finder_scan` owns immutable discovery snapshots, canonical path identity,
+outcome reduction, bounded diagnostics, and deterministic deduplication/sorting;
+`finder_batcher` applies adapters in event-loop slices. `finder_producer` is the
+single acquisition-to-settlement runner, and `finder_loader` owns lazy start,
+picker/retained producer ownership, subscribers, cancellation, and settlement
+delivery. Finder entry points remain responsible for their pure
+recency/facet/render materializers.
+
+`float_picker` can open with zero items and a nonselectable status row. Its
+`picker_status` controller animates `scanning…` with `parley.progress` frames,
+keeps the prompt live while loading, and tears its timer down when results,
+failure, selection, or cancellation retires the status. The implementation
+budgets are 25 adapted records or 5ms per slice, 16 concurrent filesystem
+operations, ten 512-byte diagnostics, and a 120ms spinner tick.
+
+Markdown Finder is the first disk-backed consumer of this lifecycle (#189). It
+opens and subscribes before starting IO, atomically installs settled results,
+warns while retaining rows on partial failure, and leaves a nonselectable error
+on total failure. Esc cancels Git, filesystem enrichment, batching, and the
+picker subscription; late callbacks cannot repaint the closed picker. Chat,
+Note, Issue, and Vision retain their existing discovery paths until their later
+#189 milestones migrate them to the same boundary.
+
 ## Recall (Last Selection)
 Pickers that opt in via `recall_key` remember the id of the last `<CR>`-confirmed item (in-memory only) and place the cursor there on the next open. `recall_id_fn` lets callers point at the stable identity field (defaults to `item.value`; e.g. `item.name` for agent_picker, `item.dir` for root_dir_picker). Stale recall (id no longer present in items) silently falls through to whatever `initial_index` resolves — typically the first item. Cancel/`<Esc>` does not update recall; only confirmation does. Storage lives on `float_picker._last_selection` keyed by the picker's `recall_key`.
 

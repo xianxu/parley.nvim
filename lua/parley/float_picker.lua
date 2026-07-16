@@ -904,6 +904,9 @@ function M.open(opts)
     end
 
     local function refresh_results()
+        if closed or not vim.api.nvim_buf_is_valid(results_buf) then
+            return
+        end
         vim.bo[results_buf].modifiable = true
         local lines = {}
         local total_rows = vim.api.nvim_win_is_valid(results_win) and vim.api.nvim_win_get_height(results_win) or win_h

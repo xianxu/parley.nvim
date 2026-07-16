@@ -188,12 +188,14 @@ describe("real Git Markdown listing", function()
     it("maps nonrepositories and missing executables to root failures", function()
         local nonrepo = vim.fn.tempname() .. "-nonrepo"
         vim.fn.mkdir(nonrepo, "p")
+        local nonrepo_env = vim.deepcopy(env)
+        nonrepo_env[#nonrepo_env + 1] = "GIT_CEILING_DIRECTORIES=" .. vim.fn.fnamemodify(nonrepo, ":h")
         local results = {}
         git_markdown_source.list({
             root = nonrepo,
             root_ordinal = 1,
             executable = git_executable,
-            env = env,
+            env = nonrepo_env,
         }, function(value) results[1] = value end)
         git_markdown_source.list({
             root = nonrepo,

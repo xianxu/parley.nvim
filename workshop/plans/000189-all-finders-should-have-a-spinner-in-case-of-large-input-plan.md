@@ -368,19 +368,19 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 - Create: `lua/parley/finder_batcher.lua`
 - Create: `tests/unit/finder_scan_spec.lua`
 
-- [ ] **Step 1: Write failing snapshot/fingerprint tests**
+- [x] **Step 1: Write failing snapshot/fingerprint tests**
 
   Cover immutable deep-copied ordered roots and every included/excluded
   fingerprint field. Mutate constructor input, an object returned by `copy()`,
   and the proxy itself; only proxy assignment errors and none changes the
   fingerprint or a later copy.
 
-- [ ] **Step 2: Run the focused test and confirm RED**
+- [x] **Step 2: Run the focused test and confirm RED**
 
   Run: `nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/finder_scan_spec.lua" -c qa`
   Expected: FAIL because `parley.finder_scan` does not exist.
 
-- [ ] **Step 3: Implement `ScanSnapshot` and fingerprinting**
+- [x] **Step 3: Implement `ScanSnapshot` and fingerprinting**
 
   Export the first two exact pure seams:
 
@@ -389,21 +389,21 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   M.fingerprint(snapshot) -- -> deterministic length-prefixed string
   ```
 
-- [ ] **Step 4: Run snapshot tests and confirm GREEN**
+- [x] **Step 4: Run snapshot tests and confirm GREEN**
 
   Run the focused command from Step 2; expected snapshot/fingerprint examples PASS while later path tests are not yet present.
 
-- [ ] **Step 5: Write failing path identity/dedup/sort tests**
+- [x] **Step 5: Write failing path identity/dedup/sort tests**
 
   Pass unresolved/resolved path strings directly. Cover `/` normalization,
   resolved-string preference and nil fallback, root ordinals, bytewise ties,
   overlapping roots, and arrival-order-independent canonical collision winners.
 
-- [ ] **Step 6: Run path tests and confirm RED**
+- [x] **Step 6: Run path tests and confirm RED**
 
   Run the focused command; expected FAIL because `path_identity` is nil.
 
-- [ ] **Step 7: Implement path identity, dedup, and stable sort**
+- [x] **Step 7: Implement path identity, dedup, and stable sort**
 
   Export:
 
@@ -417,20 +417,20 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   Normalize supplied strings lexically; never call IO, use locale collation, or
   depend on async arrival order.
 
-- [ ] **Step 8: Run path tests and confirm GREEN**
+- [x] **Step 8: Run path tests and confirm GREEN**
 
   Run the focused command; expected snapshot and path groups PASS.
 
-- [ ] **Step 9: Write failing outcome-algebra tests**
+- [x] **Step 9: Write failing outcome-algebra tests**
 
   Exercise all-absent success, partial roots/records, all attempted roots failed, and intentional skips.
 
-- [ ] **Step 9a: Run outcome tests and confirm RED**
+- [x] **Step 9a: Run outcome tests and confirm RED**
 
   Run: `nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/finder_scan_spec.lua" -c qa`
   Expected: FAIL because `new_accumulator`/`outcome` are nil.
 
-- [ ] **Step 10: Implement outcome reducers**
+- [x] **Step 10: Implement outcome reducers**
 
   Export:
 
@@ -443,17 +443,17 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   M.outcome(acc) -- success|partial|failure
   ```
 
-- [ ] **Step 11: Write failing diagnostic-policy tests**
+- [x] **Step 11: Write failing diagnostic-policy tests**
 
   Cover the exact exported `FAILURE_KIND` table above, arbitrary thrown values,
   invalid adapter results, ten-diagnostic cap, control-character replacement,
   and 512-byte UTF-8-safe truncation.
 
-- [ ] **Step 11a: Run diagnostic tests and confirm RED**
+- [x] **Step 11a: Run diagnostic tests and confirm RED**
 
   Run the exact focused command from Step 9a; expected FAIL because `sanitize_diagnostic` is nil and exception containment is absent.
 
-- [ ] **Step 12: Implement diagnostic policy**
+- [x] **Step 12: Implement diagnostic policy**
 
   Export:
 
@@ -461,15 +461,15 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   M.sanitize_diagnostic(text, byte_cap)
   ```
 
-- [ ] **Step 13: Write failing batch-budget tests**
+- [x] **Step 13: Write failing batch-budget tests**
 
   With an injected clock/scheduler, prove exact yielding after 25 records or 5ms, resume without loss/duplication, and adapter `pcall` containment.
 
-- [ ] **Step 13a: Run batch tests and confirm RED**
+- [x] **Step 13a: Run batch tests and confirm RED**
 
   Run the exact focused command from Step 9a; expected FAIL because `new_batcher` is nil.
 
-- [ ] **Step 14: Implement `SliceBatcher`**
+- [x] **Step 14: Implement `SliceBatcher`**
 
   Export:
 
@@ -483,11 +483,11 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   unregistered string as `invalid_adapter_result`, and schedules before the next
   record after either budget is exhausted.
 
-- [ ] **Step 15: Run the complete pure spec and diff check**
+- [x] **Step 15: Run the complete pure spec and diff check**
 
   Run the focused test from Step 2 and `git diff --check`; expected all groups PASS and silent diff check.
 
-- [ ] **Step 16: Commit pure scan policy**
+- [x] **Step 16: Commit pure scan policy**
 
   ```bash
   git add lua/parley/finder_scan.lua lua/parley/finder_batcher.lua tests/unit/finder_scan_spec.lua
@@ -503,7 +503,7 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 - Create: `tests/unit/async_file_source_spec.lua`
 - Create: `tests/integration/async_file_source_spec.lua`
 
-- [ ] **Step 1: Write failing traversal tests against an injected uv fake**
+- [x] **Step 1: Write failing traversal tests against an injected uv fake**
 
   Specify the exact `scan(opts, on_root, on_complete)` event and cancellation
   schemas above for absent roots, transactional enumeration failure, symlink
@@ -512,20 +512,20 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   error, or an unknown entry type needed for safe traversal fails the root and
   discards staged candidates.
 
-- [ ] **Step 2: Run unit tests and confirm RED**
+- [x] **Step 2: Run unit tests and confirm RED**
 
   Run: `nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/async_file_source_spec.lua" -c qa`
   Expected: FAIL with `module 'parley.async_file_source' not found`.
 
-- [ ] **Step 3: Implement asynchronous traversal**
+- [x] **Step 3: Implement asynchronous traversal**
 
   Use async root preflight and `fs_scandir`; directory links are file candidates only and never traversal roots. Stage candidate paths/types until every directory in that root drains successfully. Only after this transactional enumeration boundary publish candidates into async per-record stat/read enrichment; candidate stat/open/read failures increment record failures and never roll back the root.
 
-- [ ] **Step 4: Run traversal tests and confirm GREEN**
+- [x] **Step 4: Run traversal tests and confirm GREEN**
 
   Run the unit command; expected traversal group PASS.
 
-- [ ] **Step 5: Write failing concurrency/cancellation tests**
+- [x] **Step 5: Write failing concurrency/cancellation tests**
 
   Assert at most 16 operations in flight, idempotent cancel, and no callbacks
   after cancellation. Exercise `read_policy` after stat: cache-hit `ready`
@@ -534,43 +534,43 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   between policy evaluation and queued read suppresses that read, and root
   completion waits for every conditional read.
 
-- [ ] **Step 5a: Run concurrency/cancellation tests and confirm RED**
+- [x] **Step 5a: Run concurrency/cancellation tests and confirm RED**
 
   Run: `nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/async_file_source_spec.lua" -c qa`
   Expected: FAIL because traversal is uncapped and cancellation cleanup is incomplete.
 
-- [ ] **Step 6: Implement the shared operation queue and cancellation token**
+- [x] **Step 6: Implement the shared operation queue and cancellation token**
 
   Route traversal stat work through the capped queue and close queued/active handles exactly once.
 
-- [ ] **Step 7: Write failing `read_paths` tests**
+- [x] **Step 7: Write failing `read_paths` tests**
 
   Specify the exact `read_paths(opts, on_complete)` schema above with async
   stat/realpath/read, the identical per-path `read_policy` decisions, one
   completion payload, record failures, the shared concurrency cap, and the
   shared cancellation handle.
 
-- [ ] **Step 7a: Run `read_paths` tests and confirm RED**
+- [x] **Step 7a: Run `read_paths` tests and confirm RED**
 
   Run the exact unit command from Step 5a; expected FAIL because `read_paths` is nil.
 
-- [ ] **Step 8: Implement `read_paths` and descriptor cleanup**
+- [x] **Step 8: Implement `read_paths` and descriptor cleanup**
 
   Use async `fs_open`, repeated `fs_read`, `fs_close`, and optional `fs_realpath`; close every descriptor exactly once.
 
-- [ ] **Step 9: Run all unit groups and confirm GREEN**
+- [x] **Step 9: Run all unit groups and confirm GREEN**
 
   Run the unit command; expected zero failures.
 
-- [ ] **Step 10: Write real-libuv integration coverage**
+- [x] **Step 10: Write real-libuv integration coverage**
 
   Build temp roots with nested files, missing optional roots, a symlinked directory, and a denied/unreadable-or-injected-failing root. Verify a scheduled sentinel runs before completion and cancellation drains handles without a late terminal callback.
 
-- [ ] **Step 11: Run the integration spec and confirm GREEN**
+- [x] **Step 11: Run the integration spec and confirm GREEN**
 
   Run the integration command below; expected zero failures.
 
-- [ ] **Step 12: Run final checks**
+- [x] **Step 12: Run final checks**
 
   Run:
 
@@ -582,7 +582,7 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 
   Expected: both specs report zero failures; diff check is silent.
 
-- [ ] **Step 13: Commit the async file source**
+- [x] **Step 13: Commit the async file source**
 
   ```bash
   git add lua/parley/async_file_source.lua lua/parley/async_operation_queue.lua lua/parley/async_file_enrichment.lua tests/unit/async_file_source_spec.lua tests/integration/async_file_source_spec.lua
@@ -597,35 +597,35 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 - Create: `tests/unit/picker_status_spec.lua`
 - Modify: `tests/unit/float_picker_spec.lua`
 
-- [ ] **Step 1: Write failing controller timer tests**
+- [x] **Step 1: Write failing controller timer tests**
 
   Assert 120ms injected ticks use `progress.frame` and stop is idempotent.
 
-- [ ] **Step 2: Run controller tests and confirm RED**
+- [x] **Step 2: Run controller tests and confirm RED**
 
   Run the `picker_status_spec.lua` command below; expected module-not-found.
 
-- [ ] **Step 3: Implement the focused status controller**
+- [x] **Step 3: Implement the focused status controller**
 
   Keep it under 120 lines and expose start/set/stop/current-render state.
 
-- [ ] **Step 4: Run controller tests and confirm GREEN**
+- [x] **Step 4: Run controller tests and confirm GREEN**
 
   Run the controller command; expected zero failures.
 
-- [ ] **Step 5: Write failing float-picker status-render tests**
+- [x] **Step 5: Write failing float-picker status-render tests**
 
   Assert empty loading opens, status survives live query filtering, update clears it atomically, and error remains visible.
 
-- [ ] **Step 6: Write failing nonselection/teardown tests**
+- [x] **Step 6: Write failing nonselection/teardown tests**
 
   Assert confirm, double-click, movement, and mappings cannot select status; Esc/window destruction stops once and calls cancel once.
 
-- [ ] **Step 7: Run float-picker tests and confirm RED**
+- [x] **Step 7: Run float-picker tests and confirm RED**
 
   Run the `float_picker_spec.lua` command below; expected failure because empty status pickers warn and return.
 
-- [ ] **Step 8: Integrate the controller without synthetic items**
+- [x] **Step 8: Integrate the controller without synthetic items**
 
   Keep `status` separate from `items`/`filtered`; render it directly and suppress selection/highlighting/confirm while active. Return:
 
@@ -641,7 +641,7 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 
   Use `require("parley.progress").frame(tick)`; do not call the singleton `progress.start` bar.
 
-- [ ] **Step 9: Run picker/controller/progress specs and diff check**
+- [x] **Step 9: Run picker/controller/progress specs and diff check**
 
   Run:
 
@@ -654,7 +654,7 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 
   Expected: all three specs report zero failures; diff check is silent.
 
-- [ ] **Step 10: Commit picker status**
+- [x] **Step 10: Commit picker status**
 
   ```bash
   git add lua/parley/picker_status.lua lua/parley/float_picker.lua tests/unit/picker_status_spec.lua tests/unit/float_picker_spec.lua
@@ -669,7 +669,7 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 - Create: `lua/parley/finder_loader.lua`
 - Create: `tests/unit/finder_loader_spec.lua`
 
-- [ ] **Step 1: Write failing producer orchestration tests**
+- [x] **Step 1: Write failing producer orchestration tests**
 
   Drive root events in different orders and cover skipped, failed, and
   successful roots; per-record failures; sliced adapters; deterministic
@@ -677,30 +677,30 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   composite cancellation. Assert the runner waits for all scheduled batches
   before finalizing and never emits after cancellation.
 
-- [ ] **Step 2: Run the producer test and confirm RED**
+- [x] **Step 2: Run the producer test and confirm RED**
 
   Run: `nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/finder_producer_spec.lua" -c qa`
   Expected: FAIL with `module 'parley.finder_producer' not found`.
 
-- [ ] **Step 3: Implement `finder_producer.run`**
+- [x] **Step 3: Implement `finder_producer.run`**
 
   Implement the exact injected API above as the sole owner of acquisition event
   reduction, batch scheduling, outcome accumulation, cache hooks, finalization,
   cancellation, and settlement.
 
-- [ ] **Step 4: Write failing producer exception-isolation tests**
+- [x] **Step 4: Write failing producer exception-isolation tests**
 
   Make acquisition, adapter, finalizer, `on_record`, and `on_root_success` throw
   arbitrary tables/userdata. Assert only registered static kinds reach the
   diagnostic/outcome boundaries, later hooks and records continue where the
   contract permits, and settlement/cancellation remain exactly once.
 
-- [ ] **Step 5: Implement producer exception containment and confirm GREEN**
+- [x] **Step 5: Implement producer exception containment and confirm GREEN**
 
   Add independent `pcall` boundaries and run the focused producer command;
   expected zero failures.
 
-- [ ] **Step 6: Write failing session settlement tests**
+- [x] **Step 6: Write failing session settlement tests**
 
   Use a lazy producer factory fake that emits already-adapted raw finder metadata
   plus final counts. Cover the exact API/ownership table above: subscription
@@ -710,7 +710,7 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   after retirement; and defensive snapshot access. Assert the session has no
   adapter or batcher dependency.
 
-- [ ] **Step 7: Write failing lifecycle exception-isolation tests**
+- [x] **Step 7: Write failing lifecycle exception-isolation tests**
 
   Cover a throwing producer factory after the picker shell has opened; one
   throwing subscriber not blocking later subscribers; one throwing materializer
@@ -719,12 +719,12 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   arbitrary thrown values never being stringified. Assert diagnostics use only
   registered lifecycle failure kinds.
 
-- [ ] **Step 8: Run the focused loader test and confirm RED**
+- [x] **Step 8: Run the focused loader test and confirm RED**
 
   Run: `nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/finder_loader_spec.lua" -c qa`
   Expected: FAIL with `module 'parley.finder_loader' not found`.
 
-- [ ] **Step 9: Implement `new_session`**
+- [x] **Step 9: Implement `new_session`**
 
   Store the producer factory without invoking it. Implement the exact public
   methods and subscription handle above. Accept only a terminal callback carrying
@@ -734,11 +734,11 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   failure; hook exceptions cannot prevent retirement, and retirement state is
   committed before invoking `on_retire`.
 
-- [ ] **Step 10: Run session tests and confirm GREEN**
+- [x] **Step 10: Run session tests and confirm GREEN**
 
   Run the focused loader command; expected settlement and exception groups PASS.
 
-- [ ] **Step 11: Write failing picker-bridge lifecycle tests**
+- [x] **Step 11: Write failing picker-bridge lifecycle tests**
 
   Cover synchronous loading, live query at total post-settlement materialization,
   partial warning, total error, successful empty, and settlement keeping
@@ -748,11 +748,11 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   returns. Make one materializer throw and assert only its picker binding gets a
   bounded error while other subscribers still install their results.
 
-- [ ] **Step 12: Run picker-bridge tests and confirm RED**
+- [x] **Step 12: Run picker-bridge tests and confirm RED**
 
   Run the focused loader command; expected failure because `open_picker` is nil.
 
-- [ ] **Step 13: Implement `open_picker`**
+- [x] **Step 13: Implement `open_picker`**
 
   Open status first and return a `{ picker, subscription }` binding after
   subscribing the generation; do not call `session:start()`. The finder entry
@@ -763,7 +763,7 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   the producer before it calls session settlement. Contain materializer throws
   per binding as `materializer_exception`.
 
-- [ ] **Step 14: Run shared regression checks**
+- [x] **Step 14: Run shared regression checks**
 
   Run:
 
@@ -777,7 +777,7 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 
   Expected: all specs report zero failures; diff check is silent.
 
-- [ ] **Step 15: Commit producer and loader**
+- [x] **Step 15: Commit producer and loader**
 
   ```bash
   git add lua/parley/finder_producer.lua tests/unit/finder_producer_spec.lua lua/parley/finder_loader.lua tests/unit/finder_loader_spec.lua
@@ -793,71 +793,71 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 - Modify: `lua/parley/markdown_finder.lua`
 - Modify: `tests/unit/markdown_finder_spec.lua`
 
-- [ ] **Step 1: Write the executable process fixture**
+- [x] **Step 1: Write the executable process fixture**
 
   Support delayed/chunked NUL stdout, stderr, newline paths, overlong fragments, and exit codes; tests will chmod it via uv.
 
-- [ ] **Step 2: Write failing process framing/cancellation tests**
+- [x] **Step 2: Write failing process framing/cancellation tests**
 
   Launch the fixture through the exact `git_markdown_source.list(opts,
   on_complete)` contract and cover incremental NUL records, 4096 stderr cap,
   16384 pending-fragment failure, non-zero staged-output discard, exactly-once
   completion, and idempotent callback-suppressing cancellation.
 
-- [ ] **Step 3: Run process tests and confirm RED**
+- [x] **Step 3: Run process tests and confirm RED**
 
   Run the integration command below; expected module-not-found.
 
-- [ ] **Step 4: Implement process framing and staging**
+- [x] **Step 4: Implement process framing and staging**
 
   Incrementally split stdout, bound buffers, stage raw relative byte strings until exit 0, and return idempotent cancellation. Do not validate paths here and do not use `tasker.run`.
 
-- [ ] **Step 5: Run process framing tests and confirm GREEN**
+- [x] **Step 5: Run process framing tests and confirm GREEN**
 
   Run the integration command; expected fixture cases PASS.
 
-- [ ] **Step 6: Add hermetic real-Git protocol tests**
+- [x] **Step 6: Add hermetic real-Git protocol tests**
 
   Spawn `git -C ROOT ls-files -z --cached --others --exclude-standard -- '*.md'`. Real-repository tests set a temp `HOME`, `XDG_CONFIG_HOME`, `GIT_CONFIG_GLOBAL`, and `GIT_CONFIG_NOSYSTEM=1`, write an isolated global excludes file, and clean all temp state. Cover tracked-but-currently-ignored files, untracked global excludes, `.git` exclusion, nested repositories/submodules as opaque entries, newline filenames, and non-repo/missing-Git/non-zero root failures. Treat output as the set union Git provides and deduplicate defensively.
 
-- [ ] **Step 6a: Run real-Git protocol tests and confirm RED**
+- [x] **Step 6a: Run real-Git protocol tests and confirm RED**
 
   Run: `nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/git_markdown_source_spec.lua" -c qa`
   Expected: FAIL because exact Git argv/root-outcome mapping and defensive dedup are not implemented.
 
-- [ ] **Step 7: Implement exact Git invocation/root outcomes**
+- [x] **Step 7: Implement exact Git invocation/root outcomes**
 
   Add the exact argv, missing/non-repo/non-zero failure mapping, and defensive byte-string dedup; leave all path validation to `MarkdownPathPolicy`.
 
-- [ ] **Step 8: Run all Git-source tests and confirm GREEN**
+- [x] **Step 8: Run all Git-source tests and confirm GREEN**
 
   Run the integration command; expected zero failures.
 
-- [ ] **Step 9: Write failing pure Markdown path/materializer tests**
+- [x] **Step 9: Write failing pure Markdown path/materializer tests**
 
   Specify `M.path_candidate(root, relative, max_depth)` and `M.materialize_records(opts)` as the sole owners of absolute/escaping/non-Markdown rejection, component depth, facet identity, and mtime/path sorting.
 
-- [ ] **Step 10: Run pure Markdown tests and confirm RED**
+- [x] **Step 10: Run pure Markdown tests and confirm RED**
 
   Run the `markdown_finder_spec.lua` command below; expected failures for missing pure seams.
 
-- [ ] **Step 11: Implement pure Markdown path/materializer policy**
+- [x] **Step 11: Implement pure Markdown path/materializer policy**
 
   Keep it free of process/filesystem calls and consume only staged raw paths plus enriched stat/identity records.
 
-- [ ] **Step 12: Run pure Markdown tests and confirm GREEN**
+- [x] **Step 12: Run pure Markdown tests and confirm GREEN**
 
   Run the unit command; expected pure policy groups PASS.
 
-- [ ] **Step 13: Write failing Markdown entry-point lifecycle tests**
+- [x] **Step 13: Write failing Markdown entry-point lifecycle tests**
 
   Replace synchronous `_scan_members` cases with delayed injected sources; cover sentinel/spinner, live query, empty/all-absent, stat failure, partial/total roots, and Esc/late completion/reopen.
 
-- [ ] **Step 14: Run entry-point tests and confirm RED**
+- [x] **Step 14: Run entry-point tests and confirm RED**
 
   Run the unit command; expected failures because `open()` still scans synchronously.
 
-- [ ] **Step 15: Migrate `markdown_finder.open`**
+- [x] **Step 15: Migrate `markdown_finder.open`**
 
   Snapshot ordinary or ordered super-repo member roots; open the picker before
   starting Git; treat Git exit 0 as that root's enumeration success; pass
@@ -870,7 +870,7 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   Preserve repository facets in super-repo mode and directory facets in
   ordinary mode.
 
-- [ ] **Step 16: Run Markdown/shared tests and diff check**
+- [x] **Step 16: Run Markdown/shared tests and diff check**
 
   Run:
 
@@ -884,14 +884,14 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 
   Expected: all specs report zero failures; diff check is silent.
 
-- [ ] **Step 17: Commit Markdown discovery**
+- [x] **Step 17: Commit Markdown discovery**
 
   ```bash
   git add lua/parley/git_markdown_source.lua lua/parley/markdown_finder.lua tests/fixtures/fake_git_file_list tests/integration/git_markdown_source_spec.lua tests/unit/markdown_finder_spec.lua
   git commit -m "markdown: #189 stream Git-aware discovery"
   ```
 
-- [ ] **Step 18: Prepare and invoke the M1 boundary**
+- [x] **Step 18: Prepare and invoke the M1 boundary**
 
   Update `atlas/ui/pickers.md`, `atlas/infra/repo_mode.md`,
   `atlas/traceability.yaml`, and `atlas/index.md` if a new atlas page is
@@ -912,7 +912,7 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   before starting M2; do not silently preserve or back-fit the original
   estimate.
 
-## Chunk 2: Chat and Note prewarm migration
+
 
 ### Task 6: Move Chat discovery and cache materialization behind the loader
 

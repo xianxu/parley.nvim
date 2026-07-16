@@ -523,3 +523,16 @@ stale on 2026-07-15, so the estimate is provisional.
 - Removed the obsolete `_scan_members` synchronous test seam; super-repo
   aggregation is now covered through the production entry point and the pure
   repository materializer (`ARCH-DRY`).
+
+### 2026-07-16 — M1 mapped verification
+
+- `make test-changed` exposed that the real-Git “nonrepository” fixture could
+  inherit Parley's parent worktree when a mapped runner placed temp files under
+  `.test-tmp`. The fixture now sets `GIT_CEILING_DIRECTORIES` to make the
+  nonrepository boundary hermetic; it passes with repo-local `TMPDIR` and across
+  repeated standalone runs.
+- The broader facet-bar suite caught a status-era lifecycle regression:
+  `set_status(nil)` could detect and close an orphaned picker, then repaint its
+  wiped results buffer. The shared results renderer now rejects closed/invalid
+  ownership before mutation; both the 31-case facet suite and 68-case picker
+  suite pass.
