@@ -21,6 +21,13 @@ No subscriber or picker bridge performs parsing or other failure-counting work
 after settlement. A prewarm shares the settled raw finder metadata, never
 unparsed file payloads and never rendered items.
 
+**Estimate allocation:** M1 shared core + Markdown is 8.0 hours; M2 Chat/Note is
+4.5 hours; the final Issue/Vision/docs/integration slice is 4.1 hours, totaling
+16.6. After M1, a measured cumulative actual outside 5.6–10.4 hours (±30%)
+requires an appended estimate Revision before M2. After M2, a cumulative actual
+outside 8.75–16.25 hours (±30% around 12.5) requires the same revision before
+the final slice.
+
 **Tech Stack:** Lua, Neovim `vim.uv`/`vim.loop`, `uv.spawn`, plenary/busted tests, Git `ls-files` NUL streams.
 
 ---
@@ -60,6 +67,20 @@ unparsed file payloads and never rendered items.
   - **Relationships:** one raw file record has one identity; N colliding records reduce to one winner before sorting.
   - **DRY rationale:** deduplication and tie-breaking must not vary across asynchronous producers or finders.
   - **Future extensions:** platform-specific separator normalization remains isolated here.
+
+  It is strictly string-pure:
+
+  ```lua
+  M.path_identity({
+      unresolved_absolute = "/lexical/path",
+      resolved_absolute = "/optional/async-realpath/result",
+      root_ordinal = 1,
+  })
+  ```
+
+  `AsyncFileSource` performs optional asynchronous `fs_realpath`; lookup failure
+  supplies no `resolved_absolute` and is a benign fallback, not a path-identity
+  IO dependency or record failure.
 - **`SliceBatcher`** — deterministic record reducer that yields after 25 completed records or 5ms of injected monotonic time.
   - **Relationships:** one producer-owned batcher consumes enriched candidates after root enumeration completes; it invokes one finder adapter per atomic record before session settlement.
   - **DRY rationale:** every parser needs the same event-loop fairness and `record`/`skip`/`failure(kind)` containment.
@@ -126,10 +147,85 @@ unparsed file payloads and never rendered items.
 - **`AsyncFileSource`** — asynchronously traverses configured roots without following directory symlinks, with at most 16 filesystem operations in flight and idempotent cancellation.
   - **Injected into:** finder producers through `finder_loader`; tests use a deterministic callback fake while integration tests exercise real libuv temp directories.
   - **Future extensions:** alternate filename predicates and recursion depth are snapshot options.
-  - **Path-list enrichment:** `read_paths(paths, { stat = true, read = false, concurrency = 16 }, on_record, on_done)` owns Markdown's asynchronous stat acquisition and any later Git-listed-file reads. Cancellation, record-level failure counts, and concurrency are identical to traversal.
+  - **Path-list enrichment:** `read_paths(opts, on_complete)` owns Markdown's
+  asynchronous stat/realpath/read acquisition. Cancellation, record failures,
+  and concurrency are identical to traversal.
+
+  Exact acquisition API:
+
+  ```lua
+  local handle = async_file_source.scan({
+      roots = opaque_snapshot:copy().roots,
+      recurse = true,
+      max_depth = 4,
+      match = function(relative, entry_type) return true end,
+      read = "none" or "all" or { head_lines = 10 },
+      concurrency = 16,
+  }, on_root, on_complete)
+
+  local enrich_handle = async_file_source.read_paths({
+      root = root_record,
+      root_ordinal = 1,
+      paths = { "relative/from/root.md" },
+      read = "none" or "all" or { head_lines = 10 },
+      concurrency = 16,
+  }, on_complete)
+
+  handle:cancel()       -- idempotent; suppresses every future callback
+  handle:is_cancelled()
+  ```
+
+  `scan` calls `on_root(event)` exactly once per ordered root, though root events
+  may arrive in any order, then `on_complete()` exactly once after every root
+  event. Cancellation suppresses both callbacks. Event schemas are:
+
+  ```lua
+  { root_ordinal, status = "skipped", reason = "absent_optional" }
+  { root_ordinal, status = "failed",
+    failure = { kind = FAILURE_KIND.root_enumeration, diagnostic = bounded } }
+  { root_ordinal, status = "success", candidates = { enriched_record... },
+    failures = { record_failure... } }
+
+  enriched_record = {
+      root, root_ordinal, relative,
+      unresolved_absolute, resolved_absolute, -- resolved may be nil
+      stat, payload, -- payload nil for read="none", otherwise a string
+  }
+  record_failure = {
+      relative, unresolved_absolute,
+      kind = FAILURE_KIND.stat|open|read,
+      diagnostic = bounded,
+  }
+  ```
+
+  `read_paths` calls its `on_complete({ candidates, failures })` once and has no
+  root-enumeration status because successful Git listing already established the
+  root boundary. Both APIs return the same cancellation-handle shape.
 - **`GitMarkdownSource`** — spawns one Git command per member, incrementally parses NUL records, caps stderr at 4096 bytes and the pending unterminated path fragment at 16384 bytes, and discards staged stdout on non-zero exit.
   - **Injected into:** Markdown producer; the executable/runtime is replaceable so tests run the process-level fixture.
   - **Future extensions:** cancellation and concurrency remain per-root even if Git gains another listing mode.
+
+  Exact process API:
+
+  ```lua
+  local handle = git_markdown_source.list({
+      root = "/repo",
+      root_ordinal = 1,
+      executable = "git",
+      env = nil,
+  }, function(result) end)
+
+  success = { root_ordinal, status = "success", paths = { raw_relative... } }
+  failure = { root_ordinal, status = "failed",
+      failure = { kind = FAILURE_KIND.process_spawn|process_stream|
+          process_exit|path_fragment_too_long, diagnostic = bounded } }
+  handle:cancel()
+  handle:is_cancelled()
+  ```
+
+  Completion runs exactly once asynchronously unless cancelled. `paths` remain
+  raw NUL-framed relative strings for the pure Markdown path policy; any failure
+  discards staged paths.
 - **`FinderLoadSession`** — binds a lazy producer factory to explicit
   subscriber handles and one ownership/retirement policy; it never drives
   parsing or batching.
@@ -218,7 +314,9 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 
 - [ ] **Step 5: Write failing path identity/dedup/sort tests**
 
-  Cover `/` normalization, `realpath` fallback, root ordinals, bytewise ties, overlapping roots, and arrival-order-independent canonical collision winners.
+  Pass unresolved/resolved path strings directly. Cover `/` normalization,
+  resolved-string preference and nil fallback, root ordinals, bytewise ties,
+  overlapping roots, and arrival-order-independent canonical collision winners.
 
 - [ ] **Step 6: Run path tests and confirm RED**
 
@@ -229,12 +327,14 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   Export:
 
   ```lua
-  M.path_identity(path, root_ordinal, deps) -- -> { key, source = { root_ordinal, unresolved } }
+  M.path_identity({ unresolved_absolute, resolved_absolute, root_ordinal })
+      -- -> { key, source = { root_ordinal, unresolved } }
   M.deduplicate(records) -- -> one record per identity.key, minimum source tuple
   M.sort(records, primary_less) -- primary comparator, then identity.key bytewise
   ```
 
-  Normalize absolute paths lexically before optional injected `realpath`; never use locale collation or async arrival order.
+  Normalize supplied strings lexically; never call IO, use locale collation, or
+  depend on async arrival order.
 
 - [ ] **Step 8: Run path tests and confirm GREEN**
 
@@ -322,7 +422,12 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 
 - [ ] **Step 1: Write failing traversal tests against an injected uv fake**
 
-  Specify `scan({ roots, recurse, max_depth, match, read, concurrency = 16 }, on_root, on_done)` for absent roots, transactional enumeration failure, symlink directories, and component depth. Root preflight `ENOENT` skips an optional root; other preflight errors, any required-directory `fs_scandir` open/drain error, or an unknown entry type needed for safe traversal fails the root and discards staged candidates.
+  Specify the exact `scan(opts, on_root, on_complete)` event and cancellation
+  schemas above for absent roots, transactional enumeration failure, symlink
+  directories, and component depth. Root preflight `ENOENT` skips an optional
+  root; other preflight errors, any required-directory `fs_scandir` open/drain
+  error, or an unknown entry type needed for safe traversal fails the root and
+  discards staged candidates.
 
 - [ ] **Step 2: Run unit tests and confirm RED**
 
@@ -352,7 +457,9 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 
 - [ ] **Step 7: Write failing `read_paths` tests**
 
-  Specify `read_paths(paths, opts, on_record, on_done)` with async stat/read, record failures, the shared concurrency cap, and cancellation.
+  Specify the exact `read_paths(opts, on_complete)` schema above with async
+  stat/realpath/read, one completion payload, record failures, the shared
+  concurrency cap, and the shared cancellation handle.
 
 - [ ] **Step 7a: Run `read_paths` tests and confirm RED**
 
@@ -559,7 +666,10 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 
 - [ ] **Step 2: Write failing process framing/cancellation tests**
 
-  Launch the fixture as a real subprocess and cover incremental NUL records, 4096 stderr cap, 16384 pending-fragment failure, non-zero staged-output discard, and cancel-once.
+  Launch the fixture through the exact `git_markdown_source.list(opts,
+  on_complete)` contract and cover incremental NUL records, 4096 stderr cap,
+  16384 pending-fragment failure, non-zero staged-output discard, exactly-once
+  completion, and idempotent callback-suppressing cancellation.
 
 - [ ] **Step 3: Run process tests and confirm RED**
 
@@ -663,10 +773,9 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   issue/atlas mutations and fixes once, copying the emitted `Review-Verdict:`
   and `Review-Window:` lines verbatim into the commit trailers.
 
-  After the M1 commit, run `sdlc actual --issue 189` and compare the measured M1
-  window with the M1 share of the 16.6-hour derivation. If evidence materially
-  changes the remaining estimate, revise frontmatter and append an issue/plan
-  Revision before starting M2; do not silently preserve or back-fit the original
+  After the M1 commit, run `sdlc actual --issue 189`. If cumulative actual is
+  outside 5.6–10.4 hours, revise frontmatter and append an issue/plan Revision
+  before starting M2; do not silently preserve or back-fit the original
   estimate.
 
 ## Chunk 2: Chat and Note prewarm migration
@@ -815,6 +924,10 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 
   Fix Critical/Important findings before committing, then commit the gate-owned
   issue/atlas mutations and fixes once with the emitted review trailers.
+
+  After the M2 commit, run `sdlc actual --issue 189`. If cumulative actual is
+  outside 8.75–16.25 hours, revise the remaining estimate with an appended
+  Revision before the final slice.
 
 ## Chunk 3: Issue/Vision migration and release verification
 
@@ -1040,3 +1153,13 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   session/subscription methods, picker versus retained ownership, deterministic
   delivery-turn retirement hooks, picker-before-`start()` ordering, and an M1
   estimate calibration checkpoint.
+
+### 2026-07-15 — fourth mandatory change-code gate
+
+- Reason: the fourth judge found acquisition callback/cancellation schemas
+  implicit, filesystem realpath inside the pure identity API, and no numeric
+  estimate variance trigger by delivery slice.
+- Delta: specified exact `scan`, `read_paths`, and Git `list` inputs, result
+  events, sequencing, and cancellation handles; moved async realpath to the IO
+  source; made identity string-pure; and allocated 8.0/4.5/4.1 hours with 30%
+  cumulative revision thresholds after M1 and M2.

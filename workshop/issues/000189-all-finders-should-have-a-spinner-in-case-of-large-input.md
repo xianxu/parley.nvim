@@ -83,6 +83,12 @@ imported package trees that are outside the repository's useful document set.
   operations run; those are per-record enrichment failures and never roll back
   the enumerated root. For Markdown, successful Git exit is the equivalent
   enumeration boundary and later candidate stats are record enrichment.
+- Async acquisition resolves `realpath` as optional enrichment IO. A failed
+  optional realpath lookup falls back to the normalized unresolved absolute path
+  and is not itself a record failure; required stat/open/read failures retain
+  their record-failure semantics. Pure path identity consumes only
+  `{ unresolved_absolute, resolved_absolute?, root_ordinal }` strings and never
+  calls the filesystem.
 - A per-file adapter returns exactly `record`, intentional `skip`, or
   `failure(kind)`. Expected nonmatches and benign policy exclusions are skips
   and do not inflate failure counts. Failure kinds are static bounded enums;
@@ -413,3 +419,12 @@ stale on 2026-07-15, so the estimate is provisional.
   picker-owned versus retained-prewarm policies, deterministic delivery-turn
   retirement, ownerless terminal hooks, and opaque snapshots with defensive
   copy access. M1 now includes an estimate-calibration checkpoint.
+
+### 2026-07-15 — fourth change-code gate refinement
+
+- Reason: the fourth mandatory judge found async filesystem/Git callback
+  schemas and cancellation guarantees implicit, realpath IO inside the pure
+  path entity, and the estimate checkpoint missing a concrete variance trigger.
+- Delta: fully specified acquisition events/handles, moved async realpath into
+  enrichment with benign fallback, made `PathIdentity` string-only, and split
+  16.6 hours as M1 8.0, M2 4.5, final 4.1 with a 30% M1 revision threshold.
