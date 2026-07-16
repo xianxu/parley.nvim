@@ -487,3 +487,13 @@ stale on 2026-07-15, so the estimate is provisional.
   optional roots, depth, symlink non-traversal, failed roots, cache-hit zero
   reads, header reads, policy exceptions, concurrency, cancellation, event-loop
   yielding, and late-callback suppression.
+
+### 2026-07-15 — Task 3 implementation
+
+- Added a focused 120ms status controller using `parley.progress.frame` and a
+  nonselectable picker status surface that survives query filtering, transitions
+  atomically to results/errors, and exposes update/query/close lifecycle methods.
+- Three controller tests, five status-specific picker regressions, the full
+  68-case float-picker spec, and progress regressions pass. Debugging confirmed
+  ignored prompt submission emits an internal Escape; status confirm now
+  suppresses only that submit transition so a real Escape still cancels.
