@@ -1145,7 +1145,7 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 - Create: `tests/unit/vision_finder_records_spec.lua`
 - Create: `tests/unit/vision_finder_spec.lua`
 
-- [ ] **Step 1: Write failing vision-file materializer tests**
+- [x] **Step 1: Write failing vision-file materializer tests**
 
   Specify `vision_finder_records.adapt({ path, name, lines, repo_name, identity })`
   returning one `{ identity, source, initiatives = {...} }` file bundle. Assert
@@ -1157,12 +1157,12 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   parser order before the existing primary sort. Keep IO and cache ownership
   outside the pure module.
 
-- [ ] **Step 2: Run record tests and confirm RED**
+- [x] **Step 2: Run record tests and confirm RED**
 
   Run: `nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/vision_finder_records_spec.lua" -c qa`
   Expected: FAIL with `module 'parley.vision_finder_records' not found`.
 
-- [ ] **Step 3: Implement the pure Vision record module**
+- [x] **Step 3: Implement the pure Vision record module**
 
   Keep it under about 180 lines and reuse
   `vision.parse_vision_yaml`/`parse_priority`; leave synchronous
@@ -1171,16 +1171,16 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   flattens initiatives with stable source identity/ordinal keys and applies the
   existing initiative ordering.
 
-- [ ] **Step 4: Write failing Vision Finder lifecycle tests**
+- [x] **Step 4: Write failing Vision Finder lifecycle tests**
 
   In the dedicated `vision_finder_spec.lua`, use a delayed producer and assert `open()` returns with `scanning…`, then a scheduled sentinel and spinner tick run. Cover successful empty/all-absent roots, root aggregation, partial/total enumeration failure, read/parser record failures versus intentional skips, query changes during load, cancellation/reopen with ignored late completion, stable path ordering, and selection line jump after settlement.
 
-- [ ] **Step 5: Run entry-point tests and confirm RED**
+- [x] **Step 5: Run entry-point tests and confirm RED**
 
   Run: `nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/vision_finder_spec.lua" -c qa`
   Expected: FAIL at module/entry-point lifecycle assertions because current finder scans before opening.
 
-- [ ] **Step 6: Migrate Vision Finder**
+- [x] **Step 6: Migrate Vision Finder**
 
   Enumerate non-recursive `*.yaml`, async-read each payload, and batch the pure
   adapter into raw initiative metadata through `finder_producer.run`; do not
@@ -1189,7 +1189,7 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   only total project filtering/render materialization through the shared loader,
   without changing the synchronous Vision domain API.
 
-- [ ] **Step 7: Run focused tests and commit**
+- [x] **Step 7: Run focused tests and commit**
 
   ```bash
   nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/vision_finder_records_spec.lua" -c qa

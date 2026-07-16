@@ -638,3 +638,16 @@ stale on 2026-07-15, so the estimate is provisional.
   ignored late delivery, absent/partial/total outcomes, stat/read accounting,
   post-settlement repository facets, verbatim query persistence, and existing
   view/delete/status actions (`ARCH-DRY`, `ARCH-PURE`, `ARCH-PURPOSE`).
+
+### 2026-07-16 — Task 9 implementation
+
+- Vision Finder now opens before non-recursive YAML acquisition, caches parsed
+  file bundles by canonical identity and mtime, prunes successful roots, and
+  leaves the synchronous Vision domain loader unchanged.
+- Pure materialization deduplicates whole files before flattening project rows,
+  so every initiative survives in parser order with a length-prefixed
+  file-identity-plus-ordinal key and exact source-line selection.
+- Dedicated entry coverage pins live query changes, out-of-order multi-root
+  settlement, absent/partial/total outcomes, cancellation, real spinner/disk
+  behavior, stable ordering, line jumps, and zero-read cache reuse
+  (`ARCH-DRY`, `ARCH-PURE`, `ARCH-PURPOSE`).
