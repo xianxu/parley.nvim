@@ -3,6 +3,11 @@
 
 local issues_mod = require("parley.issues")
 local finder_facets = require("parley.finder_facets")
+local finder_scan = require("parley.finder_scan")
+local finder_loader = require("parley.finder_loader")
+local finder_producer = require("parley.finder_producer")
+local async_file_source = require("parley.async_file_source")
+local issue_records = require("parley.issue_finder_records")
 
 local M = {}
 local _parley
@@ -136,6 +141,201 @@ M.prompt_delete_confirmation = function(item_value, selected_index, items_count,
 end
 
 --------------------------------------------------------------------------------
+-- Asynchronous discovery
+--------------------------------------------------------------------------------
+
+local function discovery_dependencies()
+    local injected = _parley._finder_dependencies or {}
+    return {
+        async_file_source = injected.async_file_source or async_file_source,
+        schedule = injected.schedule or vim.schedule,
+        now = injected.now or function()
+            return (vim.uv or vim.loop).hrtime() / 1000000
+        end,
+    }
+end
+
+local function absolute_configured_dir(value, fallback)
+    if type(value) == "string" and value:sub(1, 1) == "/" then
+        return vim.fn.fnamemodify(vim.fn.expand(value), ":p"):gsub("/+$", "")
+    end
+    return fallback()
+end
+
+local function discovery_roots(view_mode)
+    local issue_roots = _parley.super_repo
+        and _parley.super_repo.expand_roots(_parley.config.issues_dir) or nil
+    local history_roots = _parley.super_repo
+        and _parley.super_repo.expand_roots(_parley.config.history_dir) or nil
+    local archived = M.includes_history(view_mode)
+    local selected = archived and history_roots or issue_roots
+    local roots = {}
+
+    if selected then
+        for _, root in ipairs(selected) do
+            if type(root.dir) == "string" and root.dir ~= "" then
+                roots[#roots + 1] = {
+                    path = vim.fn.fnamemodify(vim.fn.expand(root.dir), ":p"):gsub("/+$", ""),
+                    label = root.repo_name,
+                    repo_name = root.repo_name,
+                    archived = archived,
+                    optional = true,
+                }
+            end
+        end
+    else
+        local path
+        if archived then
+            path = absolute_configured_dir(_parley.config.history_dir, issues_mod.get_history_dir)
+        else
+            path = absolute_configured_dir(_parley.config.issues_dir, issues_mod.get_issues_dir)
+        end
+        if path then
+            roots[1] = { path = path, archived = archived, optional = true }
+        end
+    end
+    return roots, issue_roots ~= nil
+end
+
+local function discovery_snapshot(view_mode)
+    local roots, super_repo = discovery_roots(view_mode)
+    return finder_scan.snapshot({
+        kind = "issue",
+        roots = roots,
+        recursion = false,
+        max_depth = 1,
+        pattern = "*.md",
+        backend = { source = "libuv", read = "all", view = view_mode },
+    }), super_repo
+end
+
+local function split_lines(payload)
+    local lines = {}
+    for line in ((payload or "") .. "\n"):gmatch("(.-)\n") do
+        lines[#lines + 1] = line
+    end
+    return lines
+end
+
+local function identity_for(candidate)
+    return finder_scan.path_identity({
+        unresolved_absolute = candidate.unresolved_absolute,
+        resolved_absolute = candidate.resolved_absolute,
+        root_ordinal = candidate.root_ordinal,
+    })
+end
+
+local function file_cache()
+    return issues_mod.get_cache()
+end
+
+local function read_decision(candidate)
+    local identity = identity_for(candidate)
+    local mtime = candidate.stat and candidate.stat.mtime and candidate.stat.mtime.sec
+    local cached = file_cache()[identity.key]
+    if type(cached) == "table" and cached.mtime == mtime and type(cached.issue_data) == "table" then
+        return { kind = "ready", value = cached.issue_data }
+    end
+    return { kind = "read", mode = "all" }
+end
+
+local function cached_record(candidate, identity)
+    local record = vim.deepcopy(candidate.precomputed)
+    record.path = candidate.unresolved_absolute
+    record.mtime = candidate.stat.mtime.sec
+    record.archived = candidate.root.archived == true
+    record.repo_name = candidate.root.repo_name
+    record.identity = identity
+    return { kind = "record", value = record }
+end
+
+local function cache_entry(record)
+    return {
+        mtime = record.mtime,
+        root_path = record.root_path,
+        issue_data = {
+            id = record.id,
+            slug = record.slug,
+            title = record.title,
+            status = record.status,
+            deps = vim.deepcopy(record.deps),
+            created = record.created,
+            updated = record.updated,
+            github_issue = record.github_issue,
+            path = record.path,
+        },
+    }
+end
+
+local function new_session(snapshot)
+    local dependencies = discovery_dependencies()
+    return finder_loader.new_session({
+        snapshot = snapshot,
+        ownership = "picker",
+        schedule = dependencies.schedule,
+        producer_factory = function(settle)
+            local data = snapshot:copy()
+            return finder_producer.run({
+                roots = data.roots,
+                acquire = function(on_root, on_complete)
+                    return dependencies.async_file_source.scan({
+                        roots = data.roots,
+                        recurse = false,
+                        max_depth = 1,
+                        match = function(relative)
+                            return relative:match("%.md$") ~= nil
+                        end,
+                        read_policy = read_decision,
+                        concurrency = 16,
+                    }, on_root, on_complete)
+                end,
+                adapter = function(candidate)
+                    local identity = candidate.identity or identity_for(candidate)
+                    if candidate.precomputed ~= nil then
+                        return cached_record(candidate, identity)
+                    end
+                    return issue_records.adapt({
+                        path = candidate.unresolved_absolute,
+                        name = candidate.relative:match("([^/]+)$") or candidate.relative,
+                        mtime = candidate.stat.mtime.sec,
+                        lines = split_lines(candidate.payload),
+                        archived = candidate.root.archived == true,
+                        repo_name = candidate.root.repo_name,
+                        identity = identity,
+                    })
+                end,
+                finalize = function(records)
+                    return finder_scan.deduplicate(records)
+                end,
+                batch = {
+                    item_budget = 25,
+                    time_budget_ms = 5,
+                    now = dependencies.now,
+                    schedule = dependencies.schedule,
+                },
+                on_record = function(record)
+                    record.root_path = data.roots[record.identity.source.root_ordinal].path
+                    file_cache()[record.identity.key] = cache_entry(record)
+                    record.root_path = nil
+                end,
+                on_root_success = function(root_ordinal, seen_keys)
+                    local seen = {}
+                    for _, key in ipairs(seen_keys) do
+                        seen[key] = true
+                    end
+                    local root_path = data.roots[root_ordinal].path
+                    for key, cached in pairs(file_cache()) do
+                        if cached.root_path == root_path and not seen[key] then
+                            file_cache()[key] = nil
+                        end
+                    end
+                end,
+            }, settle)
+        end,
+    })
+end
+
+--------------------------------------------------------------------------------
 -- Main IssueFinder open function
 --------------------------------------------------------------------------------
 
@@ -152,52 +352,22 @@ M.open = function(_options)
     local toggle_done_shortcut = issue_finder_mappings.toggle_done or { shortcut = "<C-a>" }
     local cycle_view_shortcut = issue_finder_mappings.cycle_view or { shortcut = "<Tab>" }
 
-    -- Compute issue roots: in super-repo mode, one per member; otherwise just the single repo.
-    local sr_issues = _parley.super_repo and _parley.super_repo.expand_roots(_parley.config.issues_dir) or nil
-    local sr_history = _parley.super_repo and _parley.super_repo.expand_roots(_parley.config.history_dir) or nil
-    local roots
-    if sr_issues then
-        roots = {}
-        for i, r in ipairs(sr_issues) do
-            table.insert(roots, {
-                issues_dir = r.dir,
-                history_dir = sr_history and sr_history[i] and sr_history[i].dir or nil,
-                repo_name = r.repo_name,
-            })
-        end
-    else
-        roots = { {
-            issues_dir = issues_mod.get_issues_dir(),
-            history_dir = issues_mod.get_history_dir(),
-            repo_name = nil,
-        } }
-    end
-    if #roots == 0 or not roots[1].issues_dir then
-        _parley.logger.warning("issues_dir is not configured")
-        _parley._issue_finder.opened = false
-        return
-    end
-    local repo_facets = finder_facets.eligible_labels(roots, sr_issues ~= nil, function(root)
-        return root.repo_name
-    end)
-
     -- View mode: 0=issues (default), 1=history. Clamp with % 2 so any stale
     -- in-memory value (e.g. a `2` left by the pre-#158 tri-state) self-heals.
     local view_mode = (_parley._issue_finder.view_mode or 0) % 2
-    local include_history = M.includes_history(view_mode)
-    local all_issues = {}
-    for _, root in ipairs(roots) do
-        if root.issues_dir then
-            local got = issues_mod.scan_issues(root.issues_dir, {
-                include_history = include_history,
-                history_dir_override = root.history_dir,
-                repo_name = root.repo_name,
-            })
-            vim.list_extend(all_issues, got)
-        end
+    local snapshot, super_repo = discovery_snapshot(view_mode)
+    local roots = snapshot:copy().roots
+    if #roots == 0 then
+        _parley.logger.warning(M.includes_history(view_mode)
+            and "history_dir is not configured" or "issues_dir is not configured")
+        _parley._issue_finder.opened = false
+        return
     end
-
-    local sorted = M.sort_for_view(view_mode, M.filter_for_view(view_mode, all_issues))
+    local session = new_session(snapshot)
+    local repo_facets = finder_facets.eligible_labels(roots, super_repo, function(root)
+        return root.repo_name
+    end)
+    local sorted = {}
 
     if repo_facets then
         _parley._issue_finder.repo_facet_state = finder_facets.merge_state(
@@ -308,29 +478,58 @@ M.open = function(_options)
         }
     end
 
-    local picker = _parley.float_picker.open({
-        title = prompt_title,
-        items = items,
-        recall_key = "parley.issue_finder",
-        initial_index = chat_finder_mod.resolve_finder_initial_index(_parley._issue_finder, items, "IssueFinder"),
-        initial_query = _parley._issue_finder.query,
-        anchor = "bottom",
-        tag_bar = tag_bar,
-        on_query_change = function(query)
-            _parley._issue_finder.query = query
+    local loading = finder_loader.open_picker({
+        session = session,
+        picker_open = _parley.float_picker.open,
+        finder_name = "Issue finder",
+        warning = function(failed_roots, failed_records)
+            _parley.logger.warning(string.format(
+                "Issue finder: partial scan (%d roots, %d files failed)",
+                failed_roots,
+                failed_records
+            ))
         end,
-        on_select = function(item)
-            if source_win and vim.api.nvim_win_is_valid(source_win) then
-                vim.api.nvim_set_current_win(source_win)
-            end
-            _parley.open_buf(item.value, true)
+        materialize = function(outcome)
+            sorted = issue_records.materialize(outcome.records, {
+                archived = M.includes_history(view_mode),
+            })
+            items, repo_tag_bar_tags = build_picker_data()
+            return {
+                items = items,
+                tags = repo_tag_bar_tags,
+                initial_index = chat_finder_mod.resolve_finder_initial_index(
+                    _parley._issue_finder,
+                    items,
+                    "IssueFinder"
+                ),
+            }
         end,
-        on_cancel = function()
-            _parley._issue_finder.opened = false
-            _parley._issue_finder.initial_index = nil
-            _parley._issue_finder.initial_value = nil
-        end,
-        mappings = {
+        picker_options = {
+            title = prompt_title,
+            recall_key = "parley.issue_finder",
+            initial_index = chat_finder_mod.resolve_finder_initial_index(
+                _parley._issue_finder,
+                items,
+                "IssueFinder"
+            ),
+            initial_query = _parley._issue_finder.query,
+            anchor = "bottom",
+            tag_bar = tag_bar,
+            on_query_change = function(query)
+                _parley._issue_finder.query = query
+            end,
+            on_select = function(item)
+                if source_win and vim.api.nvim_win_is_valid(source_win) then
+                    vim.api.nvim_set_current_win(source_win)
+                end
+                _parley.open_buf(item.value, true)
+            end,
+            on_cancel = function()
+                _parley._issue_finder.opened = false
+                _parley._issue_finder.initial_index = nil
+                _parley._issue_finder.initial_value = nil
+            end,
+            mappings = {
             {
                 key = delete_shortcut.shortcut,
                 fn = function(item, close_fn, context)
@@ -404,11 +603,13 @@ M.open = function(_options)
                     end)
                 end,
             },
+            },
         },
     })
-    if picker then
-        picker_ref.update = picker.update
+    if loading and loading.picker then
+        picker_ref.update = loading.picker.update
     end
+    session:start()
 
     _parley._issue_finder.initial_index = nil
     _parley._issue_finder.initial_value = nil

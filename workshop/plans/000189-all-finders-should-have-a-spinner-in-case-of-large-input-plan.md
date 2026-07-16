@@ -1063,7 +1063,7 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   git commit -m "note: #189 share asynchronous finder prewarm"
   ```
 
-- [ ] **Step 5: Prepare and invoke the M2 boundary**
+- [x] **Step 5: Prepare and invoke the M2 boundary**
 
   Update atlas picker/note descriptions. Do not tick M2 or append its close log
   by hand; the gate owns those mutations. Run `make test-changed`, `make lint`,
@@ -1090,29 +1090,29 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 - Create: `tests/unit/issue_finder_records_spec.lua`
 - Modify: `tests/unit/issue_finder_spec.lua`
 
-- [ ] **Step 1: Write failing pure issue-record tests**
+- [x] **Step 1: Write failing pure issue-record tests**
 
   Specify `issue_finder_records.adapt({ path, name, mtime, lines, archived, repo_name, identity })`. Cover valid IDs, shared `issues.parse_frontmatter`/`extract_title` interpretation, intentional filename nonmatch skip, malformed-but-displayable payload, static adapter exception containment at the batcher, no mutation, and deterministic materialization/sorting. Reading, canonicalization, and mutable cache behavior are excluded from this pure module.
 
-- [ ] **Step 2: Run record tests and confirm RED**
+- [x] **Step 2: Run record tests and confirm RED**
 
   Run: `nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/issue_finder_records_spec.lua" -c qa`
   Expected: FAIL with `module 'parley.issue_finder_records' not found`.
 
-- [ ] **Step 3: Implement the pure issue record module**
+- [x] **Step 3: Implement the pure issue record module**
 
   Keep the new module under about 220 lines, call existing exported pure issue parsers, and return only `record`/`skip`/static `failure(kind)` values. Leave synchronous `issues.scan_issues` unchanged.
 
-- [ ] **Step 4: Write failing Issue Finder lifecycle tests**
+- [x] **Step 4: Write failing Issue Finder lifecycle tests**
 
   Use a delayed injected producer and assert `open()` returns while `scanning…` is visible, then a scheduled sentinel and spinner tick run before settlement. Cover issue/history views, successful empty/all-absent optional directories, super-repo partial and total enumeration failure, stat/read record failure counts, intentional skip count zero, deterministic status/ID/mtime/path ties, repository facets after settlement, live verbatim query, Esc/reopen with ignored late completion, and existing delete/status/view-cycle mappings after load.
 
-- [ ] **Step 5: Run entry-point tests and confirm RED**
+- [x] **Step 5: Run entry-point tests and confirm RED**
 
   Run: `nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/issue_finder_spec.lua" -c qa`
   Expected: FAIL at immediate-loading/delayed-producer assertions because current `open()` scans synchronously.
 
-- [ ] **Step 6: Migrate `issue_finder.open`**
+- [x] **Step 6: Migrate `issue_finder.open`**
 
   Snapshot issue/history roots for the chosen view, enumerate non-recursive
   `*.md`, asynchronously stat/read full payloads, and batch the pure adapter into
@@ -1121,7 +1121,7 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   view/facet/render materialization and preserve all current actions. Keep
   canonical path+mtime cache ownership in the producer integration layer.
 
-- [ ] **Step 7: Run focused tests and commit**
+- [x] **Step 7: Run focused tests and commit**
 
   ```bash
   nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/issue_finder_records_spec.lua" -c qa

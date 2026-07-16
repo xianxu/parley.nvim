@@ -110,6 +110,267 @@ describe("IssueFinder view-mode logic", function()
     end)
 end)
 
+describe("IssueFinder asynchronous discovery", function()
+    local fake
+    local captured
+    local updates
+    local on_root
+    local on_complete
+    local order
+    local scan_options
+    local warnings
+    local cancel_count
+
+    local function picker_stub(opts)
+        local closed = false
+        return {
+            update = function(items, tags, initial_index)
+                updates[#updates + 1] = { items = items, tags = tags, initial_index = initial_index }
+            end,
+            set_status = function(status) captured.status_update = status end,
+            current_query = function() return opts.initial_query or "" end,
+            is_closed = function() return closed end,
+            close = function() closed = true end,
+        }
+    end
+
+    local function float_line_containing(needle)
+        for _, win in ipairs(vim.api.nvim_list_wins()) do
+            local ok, config = pcall(vim.api.nvim_win_get_config, win)
+            if ok and config.relative ~= "" then
+                local buffer = vim.api.nvim_win_get_buf(win)
+                for _, line in ipairs(vim.api.nvim_buf_get_lines(buffer, 0, -1, false)) do
+                    if line:find(needle, 1, true) then
+                        return line
+                    end
+                end
+            end
+        end
+    end
+
+    before_each(function()
+        captured = nil
+        updates = {}
+        order = {}
+        warnings = {}
+        cancel_count = 0
+        fake = {
+            _issue_finder = { opened = false, view_mode = 0, query = "  live query  " },
+            _finder_dependencies = {
+                schedule = function(callback) callback() end,
+                now = function() return 0 end,
+                async_file_source = {
+                    scan = function(options, root_callback, complete_callback)
+                        order[#order + 1] = "scan"
+                        scan_options = options
+                        on_root = root_callback
+                        on_complete = complete_callback
+                        return { cancel = function()
+                            cancel_count = cancel_count + 1
+                            order[#order + 1] = "cancel"
+                        end }
+                    end,
+                },
+            },
+            config = {
+                issues_dir = "/repo/workshop/issues",
+                history_dir = "/repo/workshop/history",
+                issue_finder_mappings = {},
+            },
+            float_picker = {
+                open = function(opts)
+                    order[#order + 1] = "picker"
+                    captured = opts
+                    return picker_stub(opts)
+                end,
+            },
+            helpers = {},
+            logger = { warning = function(message) warnings[#warnings + 1] = message end },
+            cmd = {},
+            open_buf = function() end,
+        }
+        issue_finder.setup(fake)
+    end)
+
+    after_each(function()
+        issue_finder.setup(parley)
+    end)
+
+    it("opens scanning before disk acquisition and settles parsed rows without changing the query", function()
+        issue_finder.open()
+
+        assert.same({ "picker", "scan" }, order)
+        assert.same({ message = "scanning…", animated = true }, captured.status)
+        assert.equals("  live query  ", captured.initial_query)
+        assert.equals(0, #captured.items)
+
+        on_root({
+            root_ordinal = 1,
+            status = "success",
+            failures = {},
+            candidates = { {
+                unresolved_absolute = "/repo/workshop/issues/000189-async-finders.md",
+                resolved_absolute = "/repo/workshop/issues/000189-async-finders.md",
+                relative = "000189-async-finders.md",
+                root_ordinal = 1,
+                root = { path = "/repo/workshop/issues", optional = true },
+                stat = { mtime = { sec = 100 }, type = "file" },
+                payload = table.concat({
+                    "---",
+                    "status: working",
+                    "created: 2026-07-15",
+                    "---",
+                    "# Async finders",
+                }, "\n"),
+            } },
+        })
+        on_complete()
+
+        assert.equals(1, #updates)
+        assert.equals(1, #updates[1].items)
+        assert.equals("/repo/workshop/issues/000189-async-finders.md", updates[1].items[1].value)
+        assert.equals("  live query  ", fake._issue_finder.query)
+    end)
+
+    it("settles an absent optional directory as an empty successful picker", function()
+        issue_finder.open()
+        on_root({ root_ordinal = 1, status = "skipped", reason = "absent_optional" })
+        on_complete()
+
+        assert.equals(1, #updates)
+        assert.same({}, updates[1].items)
+        assert.is_nil(captured.status_update)
+        assert.same({}, warnings)
+    end)
+
+    it("animates the real picker while Issue acquisition remains delayed", function()
+        fake.float_picker.open = parley.float_picker.open
+        fake._finder_dependencies.schedule = vim.schedule
+        local sentinel = false
+        vim.schedule(function() sentinel = true end)
+
+        issue_finder.open()
+        local initial = float_line_containing("scanning…")
+
+        assert.is_not_nil(initial)
+        assert(vim.wait(1000, function()
+            local current = float_line_containing("scanning…")
+            return sentinel and current ~= nil and current ~= initial
+        end, 10), "Issue spinner did not tick while acquisition was pending")
+        vim.api.nvim_feedkeys(
+            vim.api.nvim_replace_termcodes("<Esc>", true, false, true),
+            "x",
+            true
+        )
+        assert(vim.wait(500, function() return cancel_count == 1 end, 10))
+    end)
+
+    it("reads and parses an issue through the real asynchronous disk source", function()
+        local root = vim.fn.tempname() .. "-issue-finder-real-source"
+        vim.fn.mkdir(root, "p")
+        local path = root .. "/000321-real-disk.md"
+        vim.fn.writefile({
+            "---",
+            "status: open",
+            "created: 2026-07-16",
+            "---",
+            "# Real disk issue",
+        }, path)
+        fake.config.issues_dir = root
+        fake._finder_dependencies = { schedule = vim.schedule }
+
+        issue_finder.open()
+
+        assert(vim.wait(1000, function() return #updates == 1 end, 10))
+        assert.equals(1, #updates[1].items)
+        assert.equals(path, updates[1].items[1].value)
+        assert.truthy(updates[1].items[1].display:find("Real disk issue", 1, true))
+        vim.fn.delete(root, "rf")
+    end)
+
+    it("keeps total failure visible and reports partial root plus record failures once", function()
+        issue_finder.open()
+        on_root({
+            root_ordinal = 1,
+            status = "failed",
+            failure = { kind = "root_enumeration", diagnostic = "denied" },
+        })
+        on_complete()
+
+        assert.is_false(captured.status_update.animated)
+        assert.truthy(captured.status_update.message:find("scan failed", 1, true))
+        assert.equals(0, #warnings)
+
+        captured.on_cancel()
+        fake.super_repo = {
+            expand_roots = function(subdir)
+                if subdir == fake.config.issues_dir then
+                    return {
+                        { dir = "/alpha/issues", repo_name = "alpha" },
+                        { dir = "/beta/issues", repo_name = "beta" },
+                    }
+                end
+                return {
+                    { dir = "/alpha/history", repo_name = "alpha" },
+                    { dir = "/beta/history", repo_name = "beta" },
+                }
+            end,
+        }
+        issue_finder.open()
+        on_root({
+            root_ordinal = 1,
+            status = "success",
+            candidates = {},
+            failures = {
+                { kind = "stat", diagnostic = "gone" },
+                { kind = "read", diagnostic = "unreadable" },
+            },
+        })
+        on_root({
+            root_ordinal = 2,
+            status = "failed",
+            failure = { kind = "root_enumeration", diagnostic = "denied" },
+        })
+        on_complete()
+
+        assert.equals(1, #warnings)
+        assert.truthy(warnings[1]:find("1 roots, 2 files failed", 1, true))
+        assert.same({}, updates[#updates].items)
+    end)
+
+    it("counts an intentional filename skip as neither warning nor failure", function()
+        issue_finder.open()
+        on_root({
+            root_ordinal = 1,
+            status = "success",
+            failures = {},
+            candidates = { {
+                unresolved_absolute = "/repo/workshop/issues/README.md",
+                resolved_absolute = "/repo/workshop/issues/README.md",
+                relative = "README.md",
+                root_ordinal = 1,
+                root = scan_options.roots[1],
+                stat = { mtime = { sec = 100 }, type = "file" },
+                payload = "# Index",
+            } },
+        })
+        on_complete()
+
+        assert.same({}, updates[1].items)
+        assert.same({}, warnings)
+    end)
+
+    it("cancels picker-owned acquisition and ignores late completion", function()
+        issue_finder.open()
+        captured.on_cancel()
+        assert.equals(1, cancel_count)
+
+        on_root({ root_ordinal = 1, status = "success", failures = {}, candidates = {} })
+        on_complete()
+        assert.equals(0, #updates)
+    end)
+end)
+
 describe("IssueFinder query persistence", function()
     local original_defer_fn
     local original_scan_issues
@@ -143,10 +404,19 @@ describe("IssueFinder query persistence", function()
             float_picker = {
                 open = function(opts)
                     table.insert(picker_calls, opts)
+                    local closed = false
                     return {
                         update = function(items, tags)
                             table.insert(picker_updates, { items = items, tags = tags })
+                            opts.items = items
+                            if opts.tag_bar and tags then
+                                opts.tag_bar.tags = tags
+                            end
                         end,
+                        set_status = function(status) opts.status_update = status end,
+                        current_query = function() return opts.initial_query or "" end,
+                        is_closed = function() return closed end,
+                        close = function() closed = true end,
                     }
                 end,
             },
@@ -154,6 +424,67 @@ describe("IssueFinder query persistence", function()
             logger = { warning = function() end },
             cmd = {},
             open_buf = function() end,
+        }
+
+        fake._finder_dependencies = {
+            schedule = function(callback) callback() end,
+            now = function() return 0 end,
+            async_file_source = {
+                scan = function(options, on_root, on_complete)
+                    for ordinal, root in ipairs(options.roots) do
+                        local found = scan_results[root.path]
+                        if found == nil then
+                            if root.archived then
+                                found = { {
+                                    id = "000002",
+                                    status = "done",
+                                    title = "Archived",
+                                    slug = "archived",
+                                    path = "/tmp/archived.md",
+                                    archived = true,
+                                    mtime = 2,
+                                    created = "",
+                                } }
+                            else
+                                found = { {
+                                    id = "000001",
+                                    status = "open",
+                                    title = "Active",
+                                    slug = "active",
+                                    path = "/tmp/active.md",
+                                    archived = false,
+                                    mtime = 1,
+                                    created = "",
+                                } }
+                            end
+                        end
+                        local candidates = {}
+                        for _, issue in ipairs(found) do
+                            local issue_data = vim.deepcopy(issue)
+                            issue_data.archived = nil
+                            issue_data.repo_name = nil
+                            issue_data.identity = nil
+                            candidates[#candidates + 1] = {
+                                unresolved_absolute = issue.path,
+                                resolved_absolute = issue.path,
+                                relative = issue.path:match("([^/]+)$"),
+                                root_ordinal = ordinal,
+                                root = root,
+                                stat = { type = "file", mtime = { sec = issue.mtime or 0 } },
+                                precomputed = issue_data,
+                            }
+                        end
+                        on_root({
+                            root_ordinal = ordinal,
+                            status = "success",
+                            candidates = candidates,
+                            failures = {},
+                        })
+                    end
+                    on_complete()
+                    return { cancel = function() end }
+                end,
+            },
         }
 
         original_scan_issues = issues.scan_issues
@@ -361,8 +692,8 @@ describe("IssueFinder query persistence", function()
         picker_calls[1].on_query_change("  exact {beta} query  ")
         picker_calls[1].tag_bar.on_toggle("alpha")
 
-        assert.equals(1, #picker_updates[1].items)
-        assert.matches("beta", picker_updates[1].items[1].value)
+        assert.equals(1, #picker_updates[#picker_updates].items)
+        assert.matches("beta", picker_updates[#picker_updates].items[1].value)
         assert.equals("  exact {beta} query  ", fake._issue_finder.query)
 
         cycle_view_mapping(picker_calls[1]).fn(nil, function() end)
@@ -421,13 +752,13 @@ describe("IssueFinder query persistence", function()
 
         issue_finder.open()
         picker_calls[1].tag_bar.on_none()
-        assert.equals(0, #picker_updates[1].items)
+        assert.equals(0, #picker_updates[#picker_updates].items)
         picker_calls[1].on_cancel()
 
         issue_finder.open()
         assert.equals(0, #picker_calls[2].items)
         assert.is_table(picker_calls[2].tag_bar)
         picker_calls[2].tag_bar.on_all()
-        assert.equals(2, #picker_updates[2].items)
+        assert.equals(2, #picker_updates[#picker_updates].items)
     end)
 end)

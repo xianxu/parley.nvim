@@ -624,3 +624,17 @@ stale on 2026-07-15, so the estimate is provisional.
   `chat_parser`, prove two subscribers can apply distinct opener policy to one
   retained outcome, cover opener-versus-mismatched-prewarm behavior, and expose
   Chat/Note asynchronous loading in README (`ARCH-DRY`, `ARCH-PURPOSE`).
+
+### 2026-07-16 — Task 8 implementation
+
+- Issue Finder now snapshots only the selected issue/history directories,
+  opens its animated shell before non-recursive libuv enumeration, reads full
+  payloads only on canonical path-plus-mtime cache misses, and settles through
+  the shared producer/loader contracts.
+- The pure record seam reuses the canonical frontmatter/title parsers and
+  vocabulary order, treats non-issue Markdown as intentional skips, and adds
+  path/identity tie-breaks for deterministic multi-repo duplicate IDs.
+- Entry coverage pins a real spinner tick and real disk scan, cancellation with
+  ignored late delivery, absent/partial/total outcomes, stat/read accounting,
+  post-settlement repository facets, verbatim query persistence, and existing
+  view/delete/status actions (`ARCH-DRY`, `ARCH-PURE`, `ARCH-PURPOSE`).
