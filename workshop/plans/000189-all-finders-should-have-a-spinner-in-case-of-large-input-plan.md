@@ -1276,7 +1276,7 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   git commit -m "docs: #189 map asynchronous finder discovery"
   ```
 
-- [ ] **Step 7: Prepare and invoke the final close boundary**
+- [x] **Step 7: Prepare and invoke the final close boundary**
 
   Before invoking the gate, tick this step and every other remaining durable
   plan checkbox plus the final plain issue-plan row; do not change issue status
@@ -1438,3 +1438,14 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   `finder_loader.open_picker` to `float_picker.update`; Chat resolves its saved
   value against the settled items. The seam remains optional for every other
   finder and has a direct real-picker regression (`ARCH-DRY`, `ARCH-PURPOSE`).
+
+### 2026-07-16 — final close-review rework
+
+- Reason: the final close review found Issue Finder retained the old immediate
+  `opened=false` lifecycle and asynchronous enrichment relinquished descriptor
+  ownership before a queued close actually started.
+- Delta: retain the Issue Finder guard through selection/cancellation or an
+  action-owned reopen; retain descriptors while close jobs are merely queued so
+  cancellation can close them directly; add focused regressions for duplicate
+  invocation across settlement and cancellation with a pending close
+  (`ARCH-PURE`, `ARCH-PURPOSE`).

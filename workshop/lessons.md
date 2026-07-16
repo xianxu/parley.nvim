@@ -308,3 +308,13 @@
   the result leaks its descriptor. Rule: resource-producing queued operations
   need an idempotent late-completion disposer; test the documented cancellation
   failure return followed by a successful completion.
+- **A picker-open guard must belong to the picker lifetime, not the launch
+  stack.** Resetting `opened` after starting async discovery admits a second
+  picker while the first is loading or settled. Rule: release the guard only at
+  selection, cancellation, or an action-owned close/reopen transition, and test
+  duplicate invocation both before and after settlement.
+- **Do not relinquish resource ownership merely because cleanup was queued.** A
+  saturated operation queue can discard a pending close during cancellation.
+  Rule: retain the descriptor until the close operation actually starts, so
+  cancellation can close it directly if the queued job never runs; test cancel
+  in the queued-but-not-started window.

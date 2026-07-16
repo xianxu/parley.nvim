@@ -519,6 +519,7 @@ M.open = function(_options)
                 _parley._issue_finder.query = query
             end,
             on_select = function(item)
+                _parley._issue_finder.opened = false
                 if source_win and vim.api.nvim_win_is_valid(source_win) then
                     vim.api.nvim_set_current_win(source_win)
                 end
@@ -613,7 +614,6 @@ M.open = function(_options)
 
     _parley._issue_finder.initial_index = nil
     _parley._issue_finder.initial_value = nil
-    _parley._issue_finder.opened = false
 end
 
 return M

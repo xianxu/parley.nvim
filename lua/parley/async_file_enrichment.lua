@@ -94,8 +94,14 @@ M.run = function(options, on_complete)
                 if not descriptors[fd] then
                     return
                 end
-                descriptors[fd] = nil
-                queue:call(function(done) return uv.fs_close(fd, done) end, callback)
+                queue:call(function(done)
+                    if not descriptors[fd] then
+                        done(nil)
+                        return nil
+                    end
+                    descriptors[fd] = nil
+                    return uv.fs_close(fd, done)
+                end, callback)
             end
 
             local read_next

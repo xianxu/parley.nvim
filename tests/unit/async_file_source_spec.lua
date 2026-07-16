@@ -1,4 +1,5 @@
 local async_file_source = require("parley.async_file_source")
+local file_enrichment = require("parley.async_file_enrichment")
 local failure_kind = require("parley.finder_scan").FAILURE_KIND
 
 local function fake_uv(options)
@@ -556,6 +557,54 @@ describe("asynchronous file source", function()
 
             assert.equals(1, close_count)
             assert.equals(0, completion_count)
+        end)
+
+        it("retains descriptor ownership while close is queued", function()
+            local pending = {}
+            local queue = {
+                call = function(_, start, callback)
+                    pending[#pending + 1] = { start = start, callback = callback }
+                end,
+            }
+            local function drive()
+                local job = table.remove(pending, 1)
+                assert.is_not_nil(job)
+                job.start(function(...) job.callback(...) end)
+            end
+
+            local fd = { path = "/repo/queued-close.md" }
+            local close_count = 0
+            local uv = {
+                fs_stat = function(_, callback)
+                    callback(nil, { type = "file", mtime = { sec = 1 } })
+                end,
+                fs_realpath = function(path, callback) callback(nil, path) end,
+                fs_open = function(_, _, _, callback) callback(nil, fd) end,
+                fs_read = function(_, _, _, callback) callback(nil, "") end,
+                fs_close = function(closed_fd, callback)
+                    assert.equals(fd, closed_fd)
+                    close_count = close_count + 1
+                    callback(nil)
+                end,
+            }
+            local handle = file_enrichment.run({
+                uv = uv,
+                queue = queue,
+                root = { path = "/repo" },
+                root_ordinal = 1,
+                paths = { "queued-close.md" },
+                read = "all",
+                is_cancelled = function() return false end,
+            }, function() error("cancelled enrichment must not complete") end)
+
+            drive() -- stat
+            drive() -- realpath
+            drive() -- open
+            drive() -- read; close remains queued behind saturated work
+            assert.equals(1, #pending)
+
+            handle.cancel()
+            assert.equals(1, close_count)
         end)
     end)
 end)

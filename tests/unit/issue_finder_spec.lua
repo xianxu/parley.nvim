@@ -232,6 +232,28 @@ describe("IssueFinder asynchronous discovery", function()
         assert.equals("  live query  ", fake._issue_finder.query)
     end)
 
+    it("retains the duplicate-open guard until selection or cancellation", function()
+        issue_finder.open()
+        local first_picker = captured
+
+        issue_finder.open()
+        assert.same({ "picker", "scan" }, order)
+        assert.equals("Issue finder is already open", warnings[#warnings])
+
+        on_root({ root_ordinal = 1, status = "success", failures = {}, candidates = {} })
+        on_complete()
+        issue_finder.open()
+        assert.same({ "picker", "scan" }, order)
+
+        first_picker.on_select({ value = "/repo/workshop/issues/000189-async-finders.md" })
+        issue_finder.open()
+        assert.same({ "picker", "scan", "picker", "scan" }, order)
+
+        captured.on_cancel()
+        issue_finder.open()
+        assert.same({ "picker", "scan", "picker", "scan", "cancel", "picker", "scan" }, order)
+    end)
+
     it("settles an absent optional directory as an empty successful picker", function()
         issue_finder.open()
         on_root({ root_ordinal = 1, status = "skipped", reason = "absent_optional" })
@@ -640,6 +662,7 @@ describe("IssueFinder query persistence", function()
     it("omits repository facets outside a complete multi-repo expansion", function()
         issue_finder.open()
         assert.is_nil(picker_calls[1].tag_bar)
+        picker_calls[1].on_cancel()
 
         use_super_repos({
             { name = "alpha", label = "alpha" },
@@ -650,6 +673,7 @@ describe("IssueFinder query persistence", function()
         issue_finder.open()
         assert.is_nil(picker_calls[2].tag_bar)
         assert.equals(2, #picker_calls[2].items)
+        picker_calls[2].on_cancel()
 
         use_super_repos({
             { name = "alpha-one", label = "alpha" },

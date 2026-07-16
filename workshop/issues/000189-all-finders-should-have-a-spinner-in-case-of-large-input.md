@@ -291,7 +291,7 @@ imported package trees that are outside the repository's useful document set.
   first Git-aware asynchronous vertical slice.
 - [x] M2 — Migrate Chat and Note, including exact-snapshot joinable prewarm and
   metadata-only settled cache retention.
-- [ ] Migrate Issue and Vision, reconcile docs/atlas/traceability, and run
+- [x] Migrate Issue and Vision, reconcile docs/atlas/traceability, and run
   focused, mapped, full, and manual verification before the final issue-close
   boundary.
 
@@ -668,3 +668,17 @@ stale on 2026-07-15, so the estimate is provisional.
   and reopened after Esc. The exact fixture was removed afterward.
 - Smoke also caught and corrected the README command spelling: the public
   Vision entry point remains `:ParleyVisionShow` (`ARCH-PURPOSE`).
+
+### 2026-07-16 — final boundary-review rework
+
+- The mandatory close review returned REWORK for two ownership gaps: Issue
+  Finder released its duplicate-open guard immediately after launch, and a
+  descriptor could lose its owner while its close remained queued behind
+  saturated work.
+- Issue now retains the guard across loading and settlement until selection,
+  cancellation, or an action-owned reopen. Enrichment retains descriptor
+  ownership until queued close work actually starts, allowing cancellation to
+  close a not-yet-started descriptor directly. Focused regressions pin both
+  windows (`ARCH-PURE`, `ARCH-PURPOSE`).
+- After the fixes, both focused suites, `make test-changed`, `make lint`, and
+  the full `make test` suite pass; `git diff --check` is clean.
