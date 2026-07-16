@@ -1373,3 +1373,13 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   stat/realpath/read-policy/open/read/close behavior in
   `async_file_enrichment.lua` for both public acquisition APIs (`ARCH-DRY`,
   `ARCH-PURE`).
+
+### 2026-07-15 — Task 5 obsolete-seam cleanup
+
+- Reason: migrating `markdown_finder.open` removed `_scan_members`, whose
+  integration test in `tests/unit/super_repo_spec.lua` directly exercised the
+  old synchronous glob implementation.
+- Delta: removed that obsolete test and cover the same super-repo aggregation,
+  repository prefixes, and facet identity through the injected production
+  entry point plus `materialize_records`; Task 5 therefore also modifies
+  `tests/unit/super_repo_spec.lua` (`ARCH-DRY`, `ARCH-PURE`).

@@ -6,6 +6,11 @@
 local M = {}
 local _parley
 local finder_facets = require("parley.finder_facets")
+local finder_scan = require("parley.finder_scan")
+local finder_loader = require("parley.finder_loader")
+local finder_producer = require("parley.finder_producer")
+local default_git_source = require("parley.git_markdown_source")
+local default_file_source = require("parley.async_file_source")
 
 M.setup = function(parley)
 	_parley = parley
@@ -21,55 +26,60 @@ local function top_level_dir(relative_path)
 	return "."
 end
 
---- Scan markdown files from repo_root up to max_depth levels.
---- @param repo_root string absolute path to git root
---- @param max_depth number maximum directory depth to search
---- @return table list of {value, display, search_text, mtime, tag}
-local function scan_markdown_files(repo_root, max_depth)
-	local files = {}
-	local seen = {}
+local function single_line(text)
+	return text:gsub("[%z\1-\31\127]", " ")
+end
 
-	for depth = 1, max_depth do
-		local pattern = repo_root
-		for _ = 1, depth - 1 do
-			pattern = pattern .. "/*"
-		end
-		pattern = pattern .. "/*.md"
-
-		local matches = vim.fn.glob(pattern, false, true)
-		for _, file in ipairs(matches) do
-			local resolved = vim.fn.resolve(file)
-			if not seen[resolved] and vim.fn.isdirectory(file) == 0 then
-				seen[resolved] = true
-				table.insert(files, resolved)
-			end
-		end
+M.path_candidate = function(root, relative, max_depth)
+	if type(root) ~= "string" or root == "" or type(relative) ~= "string" or relative == "" then
+		return nil
+	end
+	if relative:sub(1, 1) == "/" or relative:match("^%a:[/\\]") or not relative:match("%.md$") then
+		return nil
 	end
 
-	local root_prefix = vim.fn.resolve(repo_root):gsub("/+$", "") .. "/"
-	local entries = {}
-	for _, file in ipairs(files) do
-		local stat = vim.loop.fs_stat(file)
-		if stat then
-			local relative = file:sub(1, #root_prefix) == root_prefix
-				and file:sub(#root_prefix + 1)
-				or vim.fn.fnamemodify(file, ":t")
-			local tag = top_level_dir(relative)
-
-			table.insert(entries, {
-				value = file,
-				display = relative .. "  [" .. os.date("%Y-%m-%d", stat.mtime.sec) .. "]",
-				search_text = relative:gsub("[/%-_]", " "),
-				mtime = stat.mtime.sec,
-				tag = tag,
-			})
+	local depth = 0
+	for component in relative:gmatch("[^/]+") do
+		if component == "." or component == ".." or component == "" then
+			return nil
 		end
+		depth = depth + 1
+	end
+	if depth == 0 or depth > max_depth then
+		return nil
 	end
 
-	table.sort(entries, function(a, b)
-		return a.mtime > b.mtime
+	return {
+		relative = relative,
+		unresolved_absolute = root:gsub("/+$", "") .. "/" .. relative,
+	}
+end
+
+M.materialize_records = function(options)
+	local records = finder_scan.deduplicate(options.records or {})
+	records = finder_scan.sort(records, function(left, right)
+		return (left.stat.mtime.sec or 0) > (right.stat.mtime.sec or 0)
 	end)
 
+	local entries = {}
+	for _, record in ipairs(records) do
+		local mtime = record.stat.mtime.sec or 0
+		local tag = top_level_dir(record.relative)
+		local prefix = ""
+		if options.mode == "super_repo" then
+			tag = record.root.name
+			prefix = "{" .. tostring(tag or "") .. "} "
+		end
+		local picker_path = single_line(prefix .. record.relative)
+		entries[#entries + 1] = {
+			value = record.identity.key,
+			display = picker_path .. "  [" .. os.date("%Y-%m-%d", mtime) .. "]",
+			search_text = picker_path:gsub("[/%-_]", " "),
+			mtime = mtime,
+			tag = tag,
+			identity = record.identity,
+		}
+	end
 	return entries
 end
 
@@ -144,31 +154,145 @@ M.build_picker_data = function(opts)
 	}
 end
 
---- Aggregate markdown entries across super-repo members.
---- Each labelled entry is tagged by repo name and displayed as "{repo} <relative>".
-M._scan_members = function(members, max_depth)
-	local entries = {}
-	for _, m in ipairs(members or {}) do
-		if type(m.path) == "string" and m.path ~= "" then
-			local root_prefix = vim.fn.resolve(m.path):gsub("/+$", "") .. "/"
-			local sub_entries = scan_markdown_files(m.path, max_depth)
-			for _, e in ipairs(sub_entries) do
-				local relative = e.value:sub(1, #root_prefix) == root_prefix
-					and e.value:sub(#root_prefix + 1)
-					or vim.fn.fnamemodify(e.value, ":t")
-				if type(m.name) == "string" and m.name ~= "" then
-					e.display = "{" .. m.name .. "} " .. relative .. "  [" .. os.date("%Y-%m-%d", e.mtime) .. "]"
-					e.search_text = "{" .. m.name .. "} " .. (relative:gsub("[/%-_]", " "))
-					e.tag = m.name
-				else
-					e.tag = nil
-				end
-				table.insert(entries, e)
-			end
+local function valid_roots(mode, member_roots, repo_root)
+	if mode == "ordinary" then
+		return { { path = repo_root } }
+	end
+
+	local roots = {}
+	for _, member in ipairs(member_roots) do
+		if type(member.path) == "string" and member.path ~= "" then
+			roots[#roots + 1] = { path = member.path, name = member.name }
 		end
 	end
-	table.sort(entries, function(a, b) return a.mtime > b.mtime end)
-	return entries
+	return roots
+end
+
+local function acquisition(dependencies, roots, max_depth)
+	return function(on_root, on_complete)
+		local cancelled = false
+		local pending = #roots
+		local settled_roots = {}
+		local handles = {}
+		local handle = {}
+
+		local function add_handle(child)
+			if type(child) ~= "table" or type(child.cancel) ~= "function" then
+				return
+			end
+			if cancelled then
+				pcall(child.cancel, child)
+			else
+				handles[#handles + 1] = child
+			end
+		end
+
+		local function finish_root(ordinal, event)
+			if cancelled or settled_roots[ordinal] then
+				return
+			end
+			settled_roots[ordinal] = true
+			pending = pending - 1
+			on_root(event)
+			if pending == 0 then
+				on_complete()
+			end
+		end
+
+		local function fail_root(ordinal, kind, diagnostic)
+			finish_root(ordinal, {
+				root_ordinal = ordinal,
+				status = "failed",
+				failure = { kind = kind, diagnostic = diagnostic },
+			})
+		end
+
+		for ordinal, root in ipairs(roots) do
+			local ok, git_handle = pcall(dependencies.git_markdown_source.list, {
+				root = root.path,
+				root_ordinal = ordinal,
+				executable = dependencies.git_executable,
+				env = dependencies.git_env,
+			}, function(result)
+				if cancelled or settled_roots[ordinal] then
+					return
+				end
+				if type(result) ~= "table" or result.status ~= "success" then
+					local failure = type(result) == "table" and result.failure or nil
+					fail_root(
+						ordinal,
+						failure and failure.kind or finder_scan.FAILURE_KIND.root_enumeration,
+						failure and failure.diagnostic or nil
+					)
+					return
+				end
+
+				local paths = {}
+				for _, relative in ipairs(result.paths or {}) do
+					local candidate = M.path_candidate(root.path, relative, max_depth)
+					if candidate then
+						paths[#paths + 1] = candidate.relative
+					end
+				end
+				local read_ok, read_handle = pcall(dependencies.async_file_source.read_paths, {
+					root = root,
+					root_ordinal = ordinal,
+					paths = paths,
+					read = "none",
+					concurrency = 16,
+				}, function(result_set)
+					if cancelled or settled_roots[ordinal] then
+						return
+					end
+					local candidates = result_set.candidates or {}
+					local failures = result_set.failures or {}
+					table.sort(candidates, function(left, right) return left.relative < right.relative end)
+					table.sort(failures, function(left, right)
+						return (left.relative or "") < (right.relative or "")
+					end)
+					for _, candidate in ipairs(candidates) do
+						candidate.identity = finder_scan.path_identity({
+							unresolved_absolute = candidate.unresolved_absolute,
+							resolved_absolute = candidate.resolved_absolute,
+							root_ordinal = candidate.root_ordinal,
+						})
+					end
+					finish_root(ordinal, {
+						root_ordinal = ordinal,
+						status = "success",
+						candidates = candidates,
+						failures = failures,
+					})
+				end)
+				if read_ok then
+					add_handle(read_handle)
+				else
+					fail_root(ordinal, finder_scan.FAILURE_KIND.root_enumeration)
+				end
+			end)
+			if ok then
+				add_handle(git_handle)
+			else
+				fail_root(ordinal, finder_scan.FAILURE_KIND.root_enumeration)
+			end
+		end
+
+		if pending == 0 and #roots == 0 then
+			on_complete()
+		end
+
+		handle.cancel = function()
+			if cancelled then
+				return
+			end
+			cancelled = true
+			for _, child in ipairs(handles) do
+				pcall(child.cancel, child)
+			end
+		end
+		handle.is_cancelled = function() return cancelled end
+		return handle
+	end
 end
 
 M.open = function()
@@ -179,21 +303,35 @@ M.open = function()
 		or { active = false, members = {} }
 	local mode = super_state.active and "super_repo" or "ordinary"
 	local member_roots = super_state.members or {}
-
-	local entries
-	if mode == "super_repo" then
-		entries = M._scan_members(member_roots, max_depth)
-	else
-		local repo_root = config.repo_root
-		if not repo_root or repo_root == "" then
-			repo_root = _parley.helpers.find_git_root(vim.fn.getcwd())
-			if repo_root == "" then
-				_parley.logger.warning("Markdown finder: not in a git repository")
-				return
-			end
+	local repo_root = config.repo_root
+	if mode == "ordinary" and (not repo_root or repo_root == "") then
+		repo_root = _parley.helpers.find_git_root(vim.fn.getcwd())
+		if repo_root == "" then
+			_parley.logger.warning("Markdown finder: not in a git repository")
+			return
 		end
-		entries = scan_markdown_files(repo_root, max_depth)
 	end
+	local roots = valid_roots(mode, member_roots, repo_root)
+	local snapshot = finder_scan.snapshot({
+		kind = "markdown",
+		roots = roots,
+		max_depth = max_depth,
+		pattern = "*.md",
+		backend = "git",
+	})
+	local dependencies = _parley._finder_dependencies or {}
+	dependencies = {
+		git_markdown_source = dependencies.git_markdown_source or default_git_source,
+		async_file_source = dependencies.async_file_source or default_file_source,
+		git_executable = dependencies.git_executable,
+		git_env = dependencies.git_env,
+		now = dependencies.now or function()
+			return (vim.uv or vim.loop).hrtime() / 1000000
+		end,
+		schedule = dependencies.schedule or vim.schedule,
+	}
+	local entries = {}
+	local picker_data = { facet_domain = nil, items = {}, tags = nil }
 
 	local function compute_picker_data()
 		local result = M.build_picker_data({
@@ -208,54 +346,75 @@ M.open = function()
 		return result
 	end
 
-	local picker_data = compute_picker_data()
-
 	local source_win = vim.api.nvim_get_current_win()
 	local picker_ref = {}
-
-	local tag_bar = nil
-	if picker_data.tags then
-		local function refresh_picker()
-			picker_data = compute_picker_data()
-			if picker_ref.update then
-				picker_ref.update(picker_data.items, picker_data.tags)
-			end
+	local function refresh_picker()
+		picker_data = compute_picker_data()
+		if picker_ref.update then
+			picker_ref.update(picker_data.items, picker_data.tags)
 		end
-		local function update_active_state(update)
-			if picker_data.facet_domain == "directory" then
-				_parley._markdown_finder.directory_facet_state = update(
-					_parley._markdown_finder.directory_facet_state
-				)
-			elseif picker_data.facet_domain == "repo" then
-				_parley._markdown_finder.repo_facet_state = update(
-					_parley._markdown_finder.repo_facet_state
-				)
-			end
-			refresh_picker()
-		end
-		tag_bar = {
-			tags = picker_data.tags,
-			on_toggle = function(tag_label)
-				update_active_state(function(state)
-					return finder_facets.toggle(state, tag_label)
-				end)
-			end,
-			on_all = function()
-				update_active_state(function(state)
-					return finder_facets.set_all(state, true)
-				end)
-			end,
-			on_none = function()
-				update_active_state(function(state)
-					return finder_facets.set_all(state, false)
-				end)
-			end,
-		}
 	end
+	local function update_active_state(update)
+		if picker_data.facet_domain == "directory" then
+			_parley._markdown_finder.directory_facet_state = update(
+				_parley._markdown_finder.directory_facet_state
+			)
+		elseif picker_data.facet_domain == "repo" then
+			_parley._markdown_finder.repo_facet_state = update(
+				_parley._markdown_finder.repo_facet_state
+			)
+		end
+		refresh_picker()
+	end
+	local tag_bar = {
+		tags = {},
+		on_toggle = function(tag_label)
+			update_active_state(function(state) return finder_facets.toggle(state, tag_label) end)
+		end,
+		on_all = function()
+			update_active_state(function(state) return finder_facets.set_all(state, true) end)
+		end,
+		on_none = function()
+			update_active_state(function(state) return finder_facets.set_all(state, false) end)
+		end,
+	}
 
-	local picker = _parley.float_picker.open({
+	local session = finder_loader.new_session({
+		snapshot = snapshot,
+		ownership = "picker",
+		producer_factory = function(settle)
+			local data = snapshot:copy()
+			return finder_producer.run({
+				roots = data.roots,
+				acquire = acquisition(dependencies, data.roots, data.max_depth),
+				adapter = function(candidate) return { kind = "record", value = candidate } end,
+				finalize = function(records) return records end,
+				batch = {
+					item_budget = 25,
+					time_budget_ms = 5,
+					now = dependencies.now,
+					schedule = dependencies.schedule,
+				},
+			}, settle)
+		end,
+	})
+	local binding = finder_loader.open_picker({
+		session = session,
+		picker_open = _parley.float_picker.open,
+		warning = function(failed_roots, failed_records)
+			_parley.logger.warning(string.format(
+				"Markdown finder: partial scan (%d roots, %d files failed)",
+				failed_roots,
+				failed_records
+			))
+		end,
+		materialize = function(outcome)
+			entries = M.materialize_records({ mode = mode, records = outcome.records })
+			picker_data = compute_picker_data()
+			return picker_data
+		end,
+		picker_options = {
 		title = "Markdown Files",
-		items = picker_data.items,
 		recall_key = "parley.markdown_finder",
 		anchor = "bottom",
 		initial_query = _parley._markdown_finder.query,
@@ -270,8 +429,10 @@ M.open = function()
 			_parley.open_buf(item.value, true)
 		end,
 		on_cancel = function() end,
+		},
 	})
-	picker_ref.update = picker and picker.update or nil
+	picker_ref.update = binding.picker.update
+	session:start()
 end
 
 return M

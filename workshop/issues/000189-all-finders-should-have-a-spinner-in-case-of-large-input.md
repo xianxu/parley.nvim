@@ -507,3 +507,19 @@ stale on 2026-07-15, so the estimate is provisional.
   delivery-turn replay, defensive snapshots, independent terminal/retire hooks,
   and a picker bridge that opens/subscribes before callers start IO. Five
   producer and eight loader/bridge cases cover these contracts.
+
+### 2026-07-15 — Task 5 implementation
+
+- Replaced Markdown Finder's synchronous depth globs with one Git-backed
+  acquisition stream: `git ls-files` supplies tracked plus non-ignored
+  untracked Markdown paths, and the shared async file source supplies bounded
+  stat/realpath enrichment before producer settlement.
+- The picker now opens before Git starts, preserves its live query and
+  contextual directory/repository facets, cancels Git and enrichment on Esc,
+  warns on partial scans, and leaves a nonselectable error on total failure.
+  Process-level and entry-point coverage includes ignored files, nested repos,
+  NUL chunking, newline filenames, late process exit cleanup, stat/root
+  failures, cancellation, and reopen (`ARCH-PURE`, `ARCH-PURPOSE`).
+- Removed the obsolete `_scan_members` synchronous test seam; super-repo
+  aggregation is now covered through the production entry point and the pure
+  repository materializer (`ARCH-DRY`).

@@ -322,44 +322,6 @@ describe("super_repo.toggle", function()
 		assert.is_true(warnings[1]:find("preference not saved", 1, true) ~= nil)
 	end)
 
-	it("markdown_finder._scan_members aggregates with {repo} prefix and repo_name tag", function()
-		local md_finder = require("parley.markdown_finder")
-		md_finder.setup(parley)
-
-		-- Seed markdown files in two members.
-		vim.fn.writefile({ "# foo" }, sibling_a .. "/notes.md")
-		vim.fn.mkdir(sibling_a .. "/workshop", "p")
-		vim.fn.writefile({ "# bar" }, sibling_a .. "/workshop/foo.md")
-		vim.fn.writefile({ "# baz" }, sibling_b .. "/README.md")
-
-		local members = {
-			{ path = sibling_a, name = "ariadne" },
-			{ path = sibling_b, name = "brain" },
-		}
-		local entries = md_finder._scan_members(members, 4)
-
-		assert.is_true(#entries >= 3)
-		local found_a_root, found_a_nested, found_b = false, false, false
-		for _, e in ipairs(entries) do
-			if e.display:match("^{ariadne} notes%.md") then
-				found_a_root = true
-				assert.equal("ariadne", e.tag)
-				assert.is_true(e.search_text:find("{ariadne}", 1, true) == 1)
-			end
-			if e.display:match("^{ariadne} workshop/foo%.md") then
-				found_a_nested = true
-				assert.equal("ariadne", e.tag)
-			end
-			if e.display:match("^{brain} README%.md") then
-				found_b = true
-				assert.equal("brain", e.tag)
-			end
-		end
-		assert.is_true(found_a_root, "expected '{ariadne} notes.md' entry")
-		assert.is_true(found_a_nested, "expected '{ariadne} workshop/foo.md' entry")
-		assert.is_true(found_b, "expected '{brain} README.md' entry")
-	end)
-
 	it("scan_issues honours repo_name and history_dir_override (multi-root)", function()
 		-- Seed an issue in sibling_a's issues dir, and a done one in sibling_b's history.
 		local issues_a = sibling_a .. "/workshop/issues"
