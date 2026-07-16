@@ -36,10 +36,10 @@ imported package trees that are outside the repository's useful document set.
 - Discovery must be genuinely asynchronous. Deferring an unchanged synchronous
   glob/parse call until after the first spinner frame is not sufficient: disk
   enumeration plus stat/read operations use asynchronous process/libuv APIs.
-  In-memory metadata parsing is scheduled in slices capped by both 25 files and
-  5ms of elapsed work, whichever comes first, before yielding to the event loop.
-  One file's already-read payload remains the atomic parsing unit; the bound
-  prevents a large file set from monopolizing timers, input, redraw, or Esc.
+  In-memory metadata parsing is scheduled in slices bounded by injected item and
+  monotonic-time budgets before yielding to the event loop. One file's
+  already-read payload remains the atomic parsing unit; the implementation plan
+  owns the concrete budgets and their deterministic test clocks.
 - The shared loader takes an immutable snapshot of roots and finder options plus
   an injected asynchronous producer. It synchronously publishes `loading`, and
   settles exactly once with one of four outcomes: `success(records)`,
@@ -58,6 +58,11 @@ imported package trees that are outside the repository's useful document set.
   `failure` means every attempted root failed enumeration. A successfully
   enumerated root whose every record later fails therefore settles as partial
   with an empty record set, not as total failure.
+- A per-file adapter returns exactly `record`, intentional `skip`, or
+  `failure(kind)`. Expected nonmatches and benign policy exclusions are skips
+  and do not inflate failure counts. Failure kinds are static bounded enums;
+  arbitrary thrown values, raw file payloads, and process bodies are never
+  converted into diagnostics.
 
   | Session state | Event | Required effect |
   |---|---|---|
@@ -78,6 +83,10 @@ imported package trees that are outside the repository's useful document set.
   policy as the stable secondary key: `realpath` when available, otherwise
   normalized absolute path; separators normalized to `/`; compared as
   case-sensitive UTF-8 bytes with no locale collation.
+- Before sorting, canonical-key collisions are deduplicated independently of
+  async arrival order. The retained record is the minimum deterministic source
+  tuple `(ordered root ordinal, normalized unresolved absolute path)`; tests
+  cover overlapping roots and symlink aliases.
 - Loading and total-failure presentation is picker status, not a synthetic item:
   it bypasses fuzzy/sticky-query filtering, never enters the selectable item
   list, and ignores confirm/double-click. A retained query therefore cannot hide
@@ -117,8 +126,12 @@ imported package trees that are outside the repository's useful document set.
   does not cancel the shared prewarm. Success, partial failure, or total failure
   from the prewarm settles every still-live subscriber through the same outcome
   contract. A picker joins only when its shared path-key-normalized root list
-  and discovery policy exactly equal the immutable prewarm snapshot; a mismatch
-  starts a separate picker-owned producer while the prewarm continues. Prewarm
+  and discovery-policy fingerprint exactly equal the immutable prewarm snapshot.
+  That fingerprint contains finder kind, ordered normalized root records
+  (path/label/primary identity), traversal recursion/depth, filename pattern,
+  and backend-affecting enumeration options; recency, facets, and live query are
+  materializer/UI policy and are excluded. A mismatch starts a separate
+  picker-owned producer while the prewarm continues. Prewarm
   produces the complete unfiltered raw metadata set. Each joined opener
   snapshots its own current recency/cutoff and facet options and materializes
   that shared set independently, so joining never applies stale prewarm-time UI
@@ -146,21 +159,18 @@ imported package trees that are outside the repository's useful document set.
   starts a fresh session normally.
 - A partial outcome emits at most one user warning per finder session; a total
   failure replaces loading with one nonselectable error status. Each message is
-  at most 240 bytes, reports only the finder name plus aggregate failed-root and
+  bounded, reports only the finder name plus aggregate failed-root and
   failed-record counts, and never includes raw process output. Per-root
   technical diagnostics may be logged,
-  but each is independently truncated to 240 bytes. Capture is bounded at the
-  source: stderr readers retain at most 240 bytes; NUL path parsing retains only
-  complete records plus one at-most-4096-byte pending fragment, treating an
-  overlong unterminated fragment as a root failure. A session logs at most ten
-  root/record diagnostics plus one bounded omitted-count summary. Before
-  display/logging, diagnostic text replaces control characters with spaces and
-  truncates at a valid UTF-8 boundary no greater than 240 bytes. Confirming an
-  error/empty status performs no selection action.
-- The parser batcher accepts an injected monotonic clock. It checks elapsed time
-  between atomic records and yields before beginning record 26 or whenever the
-  elapsed slice time is at least 5ms. A single record that began within budget
-  may finish after 5ms; no wall-clock guarantee is claimed inside one atomic
+  but capture is bounded at the source: stderr readers and the one incomplete
+  NUL path fragment retain only their configured caps, and an overlong fragment
+  fails that root. Per-session diagnostic count is capped with one bounded
+  omitted-count summary. Before display/logging, diagnostic text replaces
+  control characters with spaces and truncates at a valid UTF-8 boundary. The
+  implementation plan owns the concrete byte/count budgets.
+- The parser batcher accepts an injected monotonic clock, checks budgets between
+  atomic records, and yields before beginning the next record after either
+  budget is exhausted. No wall-clock guarantee is claimed inside one atomic
   parser call.
 - Update README and atlas documentation for immediate asynchronous finder
   loading, the five-finder scope, Markdown's Git-ignore-aware boundary, and the
@@ -173,10 +183,9 @@ imported package trees that are outside the repository's useful document set.
 - A scheduled sentinel and spinner tick run while a deliberately delayed scan
   is pending, proving the UI is not merely painted before blocking work.
 - Injected async read/stat completion plus a metadata set exceeding both slice
-  limits proves, with a controlled monotonic clock, that parsing checks time
-  between atomic records and begins neither a 26th record nor another record
-  after the clock reaches 5ms; later slices resume without dropping or
-  duplicating entries.
+  limits proves, with a controlled monotonic clock, that parsing checks budgets
+  between atomic records and yields before beginning the next out-of-budget
+  record; later slices resume without dropping or duplicating entries.
 - Esc during loading closes the picker, retires its spinner/session, resets the
   finder `opened` flag, and ignores a later completion; reopening then succeeds.
 - Successful, empty, partial-failure, and total-failure scans produce complete
@@ -187,6 +196,9 @@ imported package trees that are outside the repository's useful document set.
 - A failed stat/read/parser drops only its record and yields partial success;
   failed root enumeration drops that root's staged records; total failure occurs
   only when every attempted root fails enumeration.
+- Intentional per-record skips remain distinct from failures and never increase
+  warning/error counts; thrown adapter values collapse to static failure kinds
+  without stringifying arbitrary data.
 - Chat and Note opens join an in-flight asynchronous prewarm without duplicating
   its scan only for an exactly matching normalized root/policy snapshot;
   mismatches start independent work. Different opener recency snapshots
@@ -204,7 +216,8 @@ imported package trees that are outside the repository's useful document set.
   tracked-but-ignored files, global excludes, nested repositories, submodules,
   and root-relative depth.
 - Equal primary sort values resolve by canonical item path for deterministic
-  ordering in all five finders.
+  ordering in all five finders; canonical-key collisions deduplicate by the
+  deterministic source tuple before sorting.
 - Existing finder interaction regressions remain green after results load, and
   automated tests cover the shared loader plus all five production entry-point
   seams.
@@ -284,3 +297,15 @@ imported package trees that are outside the repository's useful document set.
   match; mismatches start independent work. Query stays live in the prompt and
   is applied only after settled items install. Diagnostics also sanitize control
   characters and truncate on UTF-8 boundaries.
+
+### 2026-07-15 — fifth fresh-context review and operator decision
+
+- Reason: the fifth permitted review still found canonical-key collisions,
+  underspecified prewarm-policy equality, and record exceptions reaching the
+  diagnostic path. The operator approved proceeding without a sixth review and
+  agreed that numeric batching/buffer constants belong in the implementation
+  plan rather than the product spec.
+- Delta: added arrival-order-independent deduplication, enumerated the exact
+  discovery fingerprint, defined `record`/`skip`/static `failure(kind)`, and
+  moved concrete time/item/byte/count budgets to the durable plan while retaining
+  the responsiveness and source-bounded invariants.
