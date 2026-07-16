@@ -338,6 +338,7 @@ describe("markdown finder entry point", function()
 			_finder_dependencies = {
 				git_markdown_source = { list = list_markdown },
 				async_file_source = { read_paths = read_paths },
+				schedule = function(callback) callback() end,
 			},
 			float_picker = {
 				open = function(opts)
@@ -620,7 +621,7 @@ describe("markdown finder entry point", function()
 
 		markdown_finder.open()
 
-		assert.equals("scan failed", picker_calls[1].status.message)
+		assert.equals("Markdown Files: scan failed (roots: 1, files: 0)", picker_calls[1].status.message)
 		assert.is_false(picker_calls[1].status.animated)
 		assert.equals(0, #warnings)
 	end)

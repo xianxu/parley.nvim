@@ -42,9 +42,11 @@ imported package trees that are outside the repository's useful document set.
   owns the concrete budgets and their deterministic test clocks.
 - The shared loader takes an immutable snapshot of roots and finder options plus
   an injected asynchronous producer. It synchronously publishes `loading`, and
-  settles exactly once with one of four outcomes: `success(records)`,
+  settles exactly once with one of three outcomes: `success(records)`,
   `partial(records, failed_root_count, failed_record_count)`,
-  `failure(failed_root_count)`, or `cancelled`. Records are finder-specific raw
+  or `failure(failed_root_count)`. Cancellation is a non-settling retirement:
+  it invalidates the generation, suppresses subscribers and late producer
+  callbacks, and never publishes a replayable outcome. Records are finder-specific raw
   discovery/metadata values, not rendered picker items. Each subscriber applies
   its own immutable open-time options through a deterministic materializer
   after settlement. The producer returns an idempotent cancellation handle; the
@@ -121,7 +123,7 @@ imported package trees that are outside the repository's useful document set.
   | loading | owned picker cancels | invalidate generation, unsubscribe, and invoke producer cancel once |
   | loading | joined-prewarm picker cancels | invalidate/unsubscribe only; prewarm keeps ownership |
   | settled | subscribe before session retirement | replay the stored outcome once |
-  | settled/cancelled | repeated settle or cancel | no-op |
+  | settled/retired | repeated settle or cancel | no-op |
 
   A normal picker-owned session retires after delivery or cancellation. The
   separate prewarm retention/cache rule below governs its ownerless terminal.
@@ -536,3 +538,16 @@ stale on 2026-07-15, so the estimate is provisional.
   wiped results buffer. The shared results renderer now rejects closed/invalid
   ownership before mutation; both the 31-case facet suite and 68-case picker
   suite pass.
+
+### 2026-07-16 — M1 boundary rework
+
+- The mandatory review found malformed adapter payload handling, directory
+  symlink enrichment, aggregate total-failure presentation, duplicated failure
+  construction, real-submodule coverage, production loading coverage, README
+  discoverability, and two plan-contract contradictions. The fixes validate
+  records at the producer boundary, require stat targets to be files,
+  single-source aggregate failures, schedule terminal delivery before UI APIs,
+  and cover a real Git submodule plus the real Markdown picker lifecycle.
+- Cancellation is now recorded as non-settling retirement and the stateful
+  scheduled `SliceBatcher` is classified as INTEGRATION, matching the shipped
+  contracts (`ARCH-DRY`, `ARCH-PURE`, `ARCH-PURPOSE`).

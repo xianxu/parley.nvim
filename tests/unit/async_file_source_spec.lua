@@ -340,6 +340,29 @@ describe("asynchronous file source", function()
     end)
 
     describe("conditional path reads", function()
+		it("rejects directory targets while preserving regular-file candidates", function()
+			local uv = file_uv({
+				["/repo/directory.md"] = { stat = { type = "directory", mtime = { sec = 1 } } },
+				["/repo/file.md"] = { stat = { type = "file", mtime = { sec = 2 } } },
+			})
+			local source = async_file_source.new({ uv = uv })
+			local completion
+
+			source:read_paths({
+				root = { path = "/repo" },
+				root_ordinal = 1,
+				paths = { "directory.md", "file.md" },
+				read = "none",
+				concurrency = 16,
+			}, function(result) completion = result end)
+
+			assert.same({ "file.md" }, vim.tbl_map(function(candidate) return candidate.relative end,
+				completion.candidates))
+			assert.equals(1, #completion.failures)
+			assert.equals("directory.md", completion.failures[1].relative)
+			assert.equals(failure_kind.invalid_path, completion.failures[1].kind)
+		end)
+
         it("applies the same post-stat read policy during traversal", function()
             local uv = fake_uv({
                 directories = { ["/repo"] = { { "chat.md", "file" } } },

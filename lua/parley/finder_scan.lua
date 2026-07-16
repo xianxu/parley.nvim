@@ -304,6 +304,21 @@ M.new_accumulator = function(root_count)
     }
 end
 
+M.total_failure = function(root_count, kind)
+	assert(type(root_count) == "number" and root_count >= 0 and root_count % 1 == 0,
+		"root count must be non-negative")
+	assert(REGISTERED_FAILURE_KIND[kind] == true, "unregistered failure kind")
+	return {
+		kind = "failure",
+		successful_root_count = 0,
+		skipped_root_count = 0,
+		failed_root_count = root_count,
+		failed_record_count = 0,
+		diagnostics = { { kind = kind, message = kind } },
+		omitted_diagnostic_count = 0,
+	}
+end
+
 M.root_skipped = function(accumulator, ordinal)
     assert_root(accumulator, ordinal)
     accumulator.root_states[ordinal] = "skipped"

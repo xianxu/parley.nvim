@@ -123,7 +123,10 @@ Most-used defaults:
   repository facets in super-repo mode; query text and facet choices persist
   across finder reopenings within the current Neovim session. When a facet bar
   wraps beyond its visible height, point at the bar and use the mouse wheel to
-  reach the remaining facets.
+  reach the remaining facets. The picker opens immediately with a cancellable
+  animated `scanning…` row while Git discovers all tracked Markdown files plus
+  untracked, non-ignored Markdown files; ignored untracked files and Markdown
+  inside nested repositories or submodules are excluded from the parent scan.
 - `<C-g>p` toggle peer (super-repo) mode - aggregate reads across sibling
   `.parley` repositories. The explicit repo/peer choice persists separately for
   each repository; an unsaved repository starts in ordinary repo mode.
@@ -153,7 +156,7 @@ Tool-fold toggling is configurable but unbound by default. To opt in, set
 **Corresponding commands**
 - `:ParleyChatNew` create a new chat
 - `:ParleyChatFinder` chat finder
-- `:ParleyMarkdownFinder` Markdown finder with contextual directory/repository facets
+- `:ParleyMarkdownFinder` asynchronous Git-aware Markdown finder with contextual directory/repository facets
 - `:ParleyChatRespond` answer current question
 - `:ParleyChatRespondAll` regenerate from start to cursor
 - `:ParleyStop` stop running generation

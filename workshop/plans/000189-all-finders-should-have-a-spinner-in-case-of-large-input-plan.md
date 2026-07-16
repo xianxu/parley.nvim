@@ -41,7 +41,6 @@ the final slice.
 | `ScanSnapshot` | `lua/parley/finder_scan.lua` | new |
 | `ScanOutcome` | `lua/parley/finder_scan.lua` | new |
 | `PathIdentity` | `lua/parley/finder_scan.lua` | new |
-| `SliceBatcher` | `lua/parley/finder_batcher.lua` | new; re-exported by `finder_scan.new_batcher` |
 | `DiagnosticPolicy` | `lua/parley/finder_scan.lua` | new |
 | `MarkdownPathPolicy` | `lua/parley/markdown_finder.lua` | new |
 | `ChatFinderRecord` | `lua/parley/chat_finder_records.lua` | new |
@@ -59,7 +58,7 @@ the final slice.
   copy, assignment to the proxy errors, and neither callers nor sessions receive
   the private table. `FinderLoadSession` exposes only `fingerprint()` and
   `snapshot_copy()` delegates.
-- **`ScanOutcome`** — the closed `success`/`partial`/`failure`/`cancelled` terminal algebra plus aggregate root/record failure counts.
+- **`ScanOutcome`** — the closed `success`/`partial`/`failure` settlement algebra plus aggregate root/record failure counts. Cancellation retires a session without publishing an outcome.
   - **Relationships:** one session settles to at most one outcome; an outcome owns 0:N raw records and is replayed once to each live subscriber.
   - **DRY rationale:** all five finders need identical empty/partial/failure semantics.
   - **Future extensions:** new presentation detail belongs in bounded diagnostics, not additional terminal states.
@@ -81,10 +80,6 @@ the final slice.
   `AsyncFileSource` performs optional asynchronous `fs_realpath`; lookup failure
   supplies no `resolved_absolute` and is a benign fallback, not a path-identity
   IO dependency or record failure.
-- **`SliceBatcher`** — deterministic record reducer that yields after 25 completed records or 5ms of injected monotonic time.
-  - **Relationships:** one producer-owned batcher consumes enriched candidates after root enumeration completes; it invokes one finder adapter per atomic record before session settlement.
-  - **DRY rationale:** every parser needs the same event-loop fairness and `record`/`skip`/`failure(kind)` containment.
-  - **Future extensions:** budgets may become configuration only if profiling shows a user-facing need; tests inject both budgets and clock.
 - **`DiagnosticPolicy`** — sanitizes static failure kinds and bounded technical messages.
   - **Relationships:** one session retains at most ten diagnostics; each stored/logged diagnostic is at most 512 bytes and one omitted-count summary is allowed.
   - **DRY rationale:** process and filesystem failures need one non-leaking boundary.
@@ -159,9 +154,17 @@ the final slice.
 | `GitMarkdownSource` | `lua/parley/git_markdown_source.lua` | new | streaming `git ls-files` subprocesses |
 | `FinderProducer` | `lua/parley/finder_producer.lua` | new | shared acquisition-to-settlement orchestration |
 | `FinderLoadSession` | `lua/parley/finder_loader.lua` | new | producer ownership, subscribers, scheduling, warnings, and picker lifecycle |
+| `SliceBatcher` | `lua/parley/finder_batcher.lua` | new; re-exported by `finder_scan.new_batcher` | injected monotonic clock and event-loop scheduler |
 | `PickerStatus` | `lua/parley/float_picker.lua` | modified | results-buffer status rendering and local spinner timer |
 | `PickerStatusController` | `lua/parley/picker_status.lua` | new | status state and timer lifecycle |
 | `FakeGitFileList` | `tests/fixtures/fake_git_file_list` | new | process-level Git stdout/stderr/chunk/exit behavior |
+
+- **`SliceBatcher`** — stateful scheduled adapter controller that yields after
+  25 completed records or 5ms of injected monotonic time.
+  - **Injected into:** `FinderProducer`; unit tests inject a deterministic clock
+    and scheduler, while production uses the Neovim event loop.
+  - **Future extensions:** budgets may become configuration only if profiling
+    shows a user-facing need.
 
 - **`AsyncFileSource`** — asynchronously traverses configured roots without following directory symlinks, with at most 16 filesystem operations in flight and idempotent cancellation.
   - **Injected into:** finder producers through `finder_loader`; tests use a deterministic callback fake while integration tests exercise real libuv temp directories.
@@ -1383,3 +1386,20 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   repository prefixes, and facet identity through the injected production
   entry point plus `materialize_records`; Task 5 therefore also modifies
   `tests/unit/super_repo_spec.lua` (`ARCH-DRY`, `ARCH-PURE`).
+
+### 2026-07-16 — M1 boundary-review rework
+
+- Reason: the first M1 boundary review found two runtime correctness gaps
+  (malformed record payloads and directory-valued symlink targets), duplicated
+  total-failure policy, incomplete aggregate status text, missing real-submodule
+  and production-spinner coverage, absent README guidance, and plan claims that
+  described cancellation as a settlement and the scheduled batcher as PURE.
+- Delta: validate adapter record payloads at `FinderProducer`, require enriched
+  stat targets to be files, route all aggregate failures through
+  `finder_scan.total_failure`, report finder/root/file totals, add real Git
+  submodule and real float-picker delayed-scan coverage, document Markdown's
+  loading/Git boundary, classify `SliceBatcher` as INTEGRATION, and define
+  cancellation as non-settling retirement. `FinderLoadSession` now schedules
+  terminal delivery through its injected main-loop scheduler so libuv callbacks
+  cannot touch Neovim UI APIs in a fast-event context (`ARCH-DRY`, `ARCH-PURE`,
+  `ARCH-PURPOSE`).

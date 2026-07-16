@@ -3,18 +3,6 @@ local finder_scan = require("parley.finder_scan")
 local M = {}
 local FAILURE_KIND = finder_scan.FAILURE_KIND
 
-local function total_failure(root_count, kind)
-    return {
-        kind = "failure",
-        successful_root_count = 0,
-        skipped_root_count = 0,
-        failed_root_count = root_count,
-        failed_record_count = 0,
-        diagnostics = { { kind = kind, message = kind } },
-        omitted_diagnostic_count = 0,
-    }
-end
-
 M.run = function(options, settle_once)
     assert(type(options) == "table" and type(options.roots) == "table", "producer roots are required")
     assert(type(options.acquire) == "function", "producer acquisition is required")
@@ -62,7 +50,7 @@ M.run = function(options, settle_once)
 
         local ok, records = pcall(options.finalize, outcome.records)
         if not ok or type(records) ~= "table" then
-            deliver(total_failure(#options.roots, FAILURE_KIND.producer_finalize_exception))
+            deliver(finder_scan.total_failure(#options.roots, FAILURE_KIND.producer_finalize_exception))
             return
         end
         outcome.records = records
@@ -85,6 +73,10 @@ M.run = function(options, settle_once)
         local batch_handle = batcher:run(event.candidates or {}, options.adapter, function(result)
             if result.kind == "record" then
                 local record = result.value
+                if type(record) ~= "table" then
+                    record_failure(FAILURE_KIND.invalid_adapter_result)
+                    return
+                end
                 records[#records + 1] = record
                 if record.identity and type(record.identity.key) == "string" then
                     seen_keys[#seen_keys + 1] = record.identity.key
@@ -165,7 +157,7 @@ M.run = function(options, settle_once)
     if ok then
         acquisition_handle = result
     else
-        deliver(total_failure(#options.roots, FAILURE_KIND.producer_acquire_exception))
+        deliver(finder_scan.total_failure(#options.roots, FAILURE_KIND.producer_acquire_exception))
     end
     return handle
 end

@@ -26,6 +26,32 @@ local function success(records)
 end
 
 describe("finder loading session", function()
+    it("schedules terminal delivery before subscriber callbacks touch UI", function()
+        local pending = {}
+        local settle
+        local delivered = 0
+        local session = finder_loader.new_session({
+            snapshot = snapshot(),
+            ownership = "picker",
+            schedule = function(callback) pending[#pending + 1] = callback end,
+            producer_factory = function(callback)
+                settle = callback
+                return { cancel = function() end }
+            end,
+        })
+        session:subscribe(function() delivered = delivered + 1 end)
+        session:start()
+
+        settle(success())
+        assert.equals(0, delivered)
+        assert.is_false(session:is_settled())
+        assert.equals(1, #pending)
+
+        pending[1]()
+        assert.equals(1, delivered)
+        assert.is_true(session:is_settled())
+    end)
+
     it("starts lazily, delivers a settlement turn once, and retires", function()
         local factory_count = 0
         local settle
@@ -259,7 +285,7 @@ describe("finder picker bridge", function()
         })
         failure_session:start()
         failure_settle({ kind = "failure", failed_root_count = 1, failed_record_count = 0 })
-        assert.equals("scan failed", failure_state.statuses[1].message)
+		assert.equals("Finder: scan failed (roots: 1, files: 0)", failure_state.statuses[1].message)
         assert.is_false(failure_state.closed)
     end)
 
@@ -291,7 +317,7 @@ describe("finder picker bridge", function()
         session:start()
         settle(success({ { display = "ok", value = 1 } }))
 
-        assert.equals("scan failed", first_state.statuses[1].message)
+		assert.equals("Finder: scan failed (roots: 0, files: 0)", first_state.statuses[1].message)
         assert.same({ { display = "ok", value = 1 } }, second_state.updates[1].items)
         assert.same({ finder_scan.FAILURE_KIND.materializer_exception }, diagnostics)
     end)

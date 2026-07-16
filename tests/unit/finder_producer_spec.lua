@@ -108,6 +108,43 @@ describe("finder producer", function()
         assert.equals(1, settled)
     end)
 
+    it("settles a scheduled malformed record value as an invalid adapter result", function()
+        local acquire = acquisition({
+            {
+                root_ordinal = 1,
+                status = "success",
+                candidates = { { id = 1 }, { id = 2 } },
+                failures = {},
+            },
+        })
+        local pending = {}
+        local outcome
+
+        finder_producer.run({
+            roots = { {} },
+            acquire = acquire,
+            adapter = function(candidate)
+                if candidate.id == 1 then
+                    return { kind = "record", value = candidate }
+                end
+                return { kind = "record" }
+            end,
+            finalize = function(records) return records end,
+            batch = {
+                item_budget = 1,
+                time_budget_ms = 5,
+                now = function() return 0 end,
+                schedule = function(callback) pending[#pending + 1] = callback end,
+            },
+        }, function(value) outcome = value end)
+
+        assert.is_nil(outcome)
+        assert.has_no.errors(pending[1])
+        assert.equals("partial", outcome.kind)
+        assert.equals(1, outcome.failed_record_count)
+        assert.same({ { id = 1 } }, outcome.records)
+    end)
+
     it("contains producer and cache-hook exceptions as static kinds", function()
         local acquire = acquisition({
             {

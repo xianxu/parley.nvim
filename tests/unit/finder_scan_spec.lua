@@ -280,6 +280,21 @@ describe("finder scan policy", function()
                 finder_scan.record_failed(acc, "raw thrown value", "details")
             end)
         end)
+
+		it("constructs lifecycle total failures from the shared outcome policy", function()
+			assert.same({
+				kind = "failure",
+				successful_root_count = 0,
+				skipped_root_count = 0,
+				failed_root_count = 2,
+				failed_record_count = 0,
+				diagnostics = { {
+					kind = finder_scan.FAILURE_KIND.producer_factory_exception,
+					message = finder_scan.FAILURE_KIND.producer_factory_exception,
+				} },
+				omitted_diagnostic_count = 0,
+			}, finder_scan.total_failure(2, finder_scan.FAILURE_KIND.producer_factory_exception))
+		end)
     end)
 
     describe("slice batcher", function()

@@ -382,6 +382,7 @@ M.open = function()
 	local session = finder_loader.new_session({
 		snapshot = snapshot,
 		ownership = "picker",
+		schedule = dependencies.schedule,
 		producer_factory = function(settle)
 			local data = snapshot:copy()
 			return finder_producer.run({

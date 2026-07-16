@@ -464,6 +464,7 @@ atlas:
       - tests/unit/markdown_finder_spec.lua
       - tests/integration/git_markdown_source_spec.lua
       - tests/integration/async_file_source_spec.lua
+      - tests/integration/markdown_finder_async_spec.lua
 
   infra/workflow:
     code:
@@ -572,6 +573,7 @@ atlas:
       - tests/unit/async_file_source_spec.lua
       - tests/integration/async_file_source_spec.lua
       - tests/integration/git_markdown_source_spec.lua
+      - tests/integration/markdown_finder_async_spec.lua
       - tests/unit/pure_functions_spec.lua
 
   ui/keybindings:

@@ -1,5 +1,27 @@
 # Lessons
 
+## 2026-07-16 (#189)
+
+- **A scheduled controller is INTEGRATION even when its decisions are
+  deterministic.** `SliceBatcher` owns mutable progress and yields through an
+  injected scheduler/clock, so classifying it as PURE hid the event-loop seam.
+  Rule: classify the whole named symbol, not just its normalization policy
+  (`ARCH-PURE`).
+- **Async adapter and filesystem results must be validated at their consumer
+  boundaries.** A `{kind="record"}` with a nil payload crashed a scheduled
+  producer callback, while a successful stat could still identify a directory
+  reached through a tracked symlink. Rule: validate record payload shape before
+  storage and require the exact filesystem object type promised by the finder.
+- **A production loading test must cross both the real process and real picker
+  boundaries.** Unit lifecycle tests missed settlement running in a libuv fast
+  event, where querying the prompt raised `E5560` and left `scanning…` stranded.
+  Rule: for async UI, delay a real process, prove a real spinner frame advances,
+  and assert the real picker replaces it after settlement.
+- **Protocol coverage must instantiate every object named by the plan.** A
+  nested repository is not evidence for submodule opacity. Rule: when a plan
+  promises real Git edge cases, construct and assert each distinct Git object
+  explicitly.
+
 ## 2026-07-15 (#190)
 
 - **A persisted path key is an identity boundary, so its normalization must have

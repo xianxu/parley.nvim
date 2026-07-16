@@ -3,18 +3,6 @@ local finder_scan = require("parley.finder_scan")
 local M = {}
 local FAILURE_KIND = finder_scan.FAILURE_KIND
 
-local function total_failure(root_count, kind)
-    return {
-        kind = "failure",
-        successful_root_count = 0,
-        skipped_root_count = 0,
-        failed_root_count = root_count,
-        failed_record_count = 0,
-        diagnostics = { { kind = kind, message = kind } },
-        omitted_diagnostic_count = 0,
-    }
-end
-
 local function cancel_producer(handle)
     if type(handle) == "function" then
         pcall(handle)
@@ -28,6 +16,7 @@ M.new_session = function(options)
     assert(options.ownership == "picker" or options.ownership == "retained", "invalid session ownership")
     assert(type(options.snapshot) == "table", "session snapshot is required")
     assert(type(options.producer_factory) == "function", "producer factory is required")
+    assert(options.schedule == nil or type(options.schedule) == "function", "session scheduler must be a function")
 
     local subscribers = {}
     local subscriber_order = {}
@@ -35,6 +24,7 @@ M.new_session = function(options)
     local subscriber_count = 0
     local started = false
     local settled = false
+    local settlement_pending = false
     local retired = false
     local outcome
     local producer_handle
@@ -81,7 +71,7 @@ M.new_session = function(options)
         retire()
     end
 
-    local function settle(next_outcome)
+    local function deliver_settlement(next_outcome)
         if retired or settled then
             return
         end
@@ -109,6 +99,18 @@ M.new_session = function(options)
             end
         end
         retire()
+    end
+
+    local function settle(next_outcome)
+        if retired or settled or settlement_pending then
+            return
+        end
+        settlement_pending = true
+        local schedule = options.schedule or function(callback) callback() end
+        schedule(function()
+            settlement_pending = false
+            deliver_settlement(next_outcome)
+        end)
     end
 
     session.subscribe = function(_, callback)
@@ -161,7 +163,10 @@ M.new_session = function(options)
             end
         else
             report(FAILURE_KIND.producer_factory_exception)
-            settle(total_failure(#(options.snapshot:copy().roots or {}), FAILURE_KIND.producer_factory_exception))
+            settle(finder_scan.total_failure(
+                #(options.snapshot:copy().roots or {}),
+                FAILURE_KIND.producer_factory_exception
+            ))
         end
     end
 
@@ -187,8 +192,17 @@ M.new_session = function(options)
     return session
 end
 
-local function picker_failure_status()
-    return { message = "scan failed", animated = false }
+local function picker_failure_status(options, outcome)
+	local title = options.finder_name
+		or (options.picker_options and options.picker_options.title)
+		or "Finder"
+	local message = string.format(
+		"%s: scan failed (roots: %d, files: %d)",
+		title,
+		tonumber(outcome and outcome.failed_root_count) or 0,
+		tonumber(outcome and outcome.failed_record_count) or 0
+	)
+    return { message = finder_scan.sanitize_diagnostic(message), animated = false }
 end
 
 M.open_picker = function(options)
@@ -222,7 +236,7 @@ M.open_picker = function(options)
             return
         end
         if outcome.kind == "failure" then
-            picker.set_status(picker_failure_status())
+            picker.set_status(picker_failure_status(options, outcome))
             return
         end
         if outcome.kind == "partial" and options.warning then
@@ -233,7 +247,7 @@ M.open_picker = function(options)
         local ok, result = pcall(options.materialize, outcome, query)
         if not ok or type(result) ~= "table" or type(result.items) ~= "table" then
             options.session._report(FAILURE_KIND.materializer_exception)
-            picker.set_status(picker_failure_status())
+            picker.set_status(picker_failure_status(options))
             return
         end
         picker.update(result.items, result.tags)

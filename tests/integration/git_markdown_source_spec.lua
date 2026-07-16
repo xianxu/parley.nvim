@@ -131,6 +131,7 @@ describe("real Git Markdown listing", function()
     local home
     local git_executable
     local env
+	local submodule_source
 
     before_each(function()
         root = vim.fn.tempname() .. "-git-markdown"
@@ -163,11 +164,23 @@ describe("real Git Markdown listing", function()
         vim.fn.mkdir(root .. "/nested", "p")
         git(git_executable, root .. "/nested", "init", "-q")
         write(root .. "/nested/inside.md")
+
+		submodule_source = vim.fn.tempname() .. "-git-submodule-source"
+		vim.fn.mkdir(submodule_source, "p")
+		git(git_executable, submodule_source, "init", "-q")
+		write(submodule_source .. "/inside.md")
+		git(git_executable, submodule_source, "add", "inside.md")
+		git(git_executable, submodule_source,
+			"-c", "user.name=Parley Test", "-c", "user.email=parley@example.invalid",
+			"commit", "-q", "-m", "fixture")
+		git(git_executable, root, "-c", "protocol.file.allow=always",
+			"submodule", "add", "-q", submodule_source, "submodule")
     end)
 
     after_each(function()
         vim.fn.delete(root, "rf")
         vim.fn.delete(home, "rf")
+		vim.fn.delete(submodule_source, "rf")
     end)
 
     it("returns tracked plus untracked nonignored Markdown without descending nested repos", function()
@@ -183,6 +196,7 @@ describe("real Git Markdown listing", function()
 
         assert.equals("success", result.status)
         assert.same({ "free.md", "line\nbreak.md", "tracked.md" }, result.paths)
+		assert.equals(1, vim.fn.filereadable(root .. "/submodule/inside.md"))
     end)
 
     it("maps nonrepositories and missing executables to root failures", function()

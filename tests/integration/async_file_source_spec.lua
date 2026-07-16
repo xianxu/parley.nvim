@@ -1,4 +1,5 @@
 local async_file_source = require("parley.async_file_source")
+local failure_kind = require("parley.finder_scan").FAILURE_KIND
 
 local uv = vim.uv or vim.loop
 
@@ -55,8 +56,11 @@ describe("real asynchronous file source", function()
 
             assert.is_true(sentinel)
             assert.equals("success", events[1].status)
-            assert.same({ "docs/nested.md", "linked.md", "outside/hidden.md", "root.md" },
+            assert.same({ "docs/nested.md", "outside/hidden.md", "root.md" },
                 vim.tbl_map(function(item) return item.relative end, events[1].candidates))
+			assert.equals(1, #events[1].failures)
+			assert.equals("linked.md", events[1].failures[1].relative)
+			assert.equals(failure_kind.invalid_path, events[1].failures[1].kind)
             assert.equals("skipped", events[2].status)
         end)
     end)

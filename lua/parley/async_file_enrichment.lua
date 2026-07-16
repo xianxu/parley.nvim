@@ -189,6 +189,10 @@ M.run = function(options, on_complete)
                 fail_path(relative, absolute, FAILURE_KIND.stat, stat_error)
                 return
             end
+            if stat.type ~= "file" then
+                fail_path(relative, absolute, FAILURE_KIND.invalid_path)
+                return
+            end
             queue:call(function(done) return uv.fs_realpath(absolute, done) end, function(_, resolved)
                 apply_decision(relative, absolute, {
                     root = options.root,
