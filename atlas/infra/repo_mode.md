@@ -11,7 +11,7 @@ During `setup()`, after config merging:
 
 ## Behavior when active
 - `config.repo_root` is set to the git root path
-- Repo-local directories are auto-created: `workshop/parley/`, `workshop/notes/`, `workshop/issues/`, `workshop/vision/`, `workshop/history/`
+- Repo-local directories are auto-created: `workshop/parley/`, `workshop/notes/`, `workshop/issues/`, `workshop/vision/`, `workshop/history/issues/`
 - `workshop/parley/` (configurable via `repo_chat_dir`) becomes the primary chat directory, labeled `"repo"`
 - `workshop/notes/` (configurable via `repo_note_dir`) becomes the primary note directory
 - The user's global `chat_dir` is demoted to an extra search directory and explicitly labeled `"global"` (still findable, not written to). The global `notes_dir` is similarly demoted.
@@ -83,7 +83,7 @@ Notes still use the multi-root manager with freeform add/remove/rename via `:Par
 | `repo_chat_dir` | `"workshop/parley"` | Chat dir name within repo (primary in repo mode) |
 | `repo_note_dir` | `"workshop/notes"` | Note dir name within repo (primary in repo mode) |
 | `issues_dir` | `"workshop/issues"` | Issue tracker dir |
-| `history_dir` | `"workshop/history"` | Archived issues dir |
+| `history_dir` | `"workshop/history/issues"` | Archived issues dir |
 | `vision_dir` | `"workshop/vision"` | Vision tracker dir |
 | `note_roots` | `{}` | Structured note roots metadata |
 | `note_dirs` | `{}` | Additional note dirs (extras) |

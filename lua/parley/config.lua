@@ -556,7 +556,7 @@ local config = {
 	-- (e.g. "~/workspace/ariadne/bin/sdlc"). Read-only, so it's lock-free + fast.
 	sdlc_cmd = "sdlc",
 	-- issue history (repo-local, relative to git root)
-	history_dir = "workshop/history",
+	history_dir = "workshop/history/issues",
 	-- vision tracker (repo-local, relative to git root)
 	vision_dir = "workshop/vision",
 	-- global shortcuts for vision tracker

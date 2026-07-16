@@ -17,6 +17,7 @@ parley.setup({
 
 local issue_finder = require("parley.issue_finder")
 local issues = require("parley.issues")
+local default_config = require("parley.config")
 
 describe("IssueFinder view-mode logic", function()
     local function sample_issues()
@@ -174,7 +175,7 @@ describe("IssueFinder asynchronous discovery", function()
             },
             config = {
                 issues_dir = "/repo/workshop/issues",
-                history_dir = "/repo/workshop/history",
+                history_dir = default_config.history_dir,
                 issue_finder_mappings = {},
             },
             float_picker = {
@@ -230,6 +231,18 @@ describe("IssueFinder asynchronous discovery", function()
         assert.equals(1, #updates[1].items)
         assert.equals("/repo/workshop/issues/000189-async-finders.md", updates[1].items[1].value)
         assert.equals("  live query  ", fake._issue_finder.query)
+    end)
+
+    it("derives ordinary history discovery from the per-kind archive default", function()
+        fake._issue_finder.view_mode = 1
+
+        issue_finder.open()
+
+        local expected = vim.fn.fnamemodify(vim.fn.getcwd() .. "/workshop/history/issues", ":p")
+            :gsub("/+$", "")
+        assert.equals("workshop/history/issues", fake.config.history_dir)
+        assert.equals(expected, scan_options.roots[1].path)
+        assert.is_true(scan_options.roots[1].archived)
     end)
 
     it("retains the duplicate-open guard until selection or cancellation", function()
@@ -425,6 +438,8 @@ describe("IssueFinder query persistence", function()
     local picker_calls
     local picker_updates
     local scan_results
+    local expanded_subdirs
+    local last_scan_options
 
     local function cycle_view_mapping(opts)
         for _, mapping in ipairs(opts.mappings) do
@@ -440,6 +455,8 @@ describe("IssueFinder query persistence", function()
         picker_calls = {}
         picker_updates = {}
         scan_results = {}
+        expanded_subdirs = {}
+        last_scan_options = nil
         fake = {
             _issue_finder = { opened = false, view_mode = 0 },
             config = {
@@ -477,6 +494,7 @@ describe("IssueFinder query persistence", function()
             now = function() return 0 end,
             async_file_source = {
                 scan = function(options, on_root, on_complete)
+                    last_scan_options = options
                     for ordinal, root in ipairs(options.roots) do
                         local found = scan_results[root.path]
                         if found == nil then
@@ -654,6 +672,7 @@ describe("IssueFinder query persistence", function()
         end
         fake.super_repo = {
             expand_roots = function(subdir)
+                table.insert(expanded_subdirs, subdir)
                 if subdir == fake.config.issues_dir then
                     return issue_roots
                 end
@@ -664,6 +683,18 @@ describe("IssueFinder query persistence", function()
             end,
         }
     end
+
+    it("expands the per-kind archive default for super-repo history", function()
+        fake.config.history_dir = default_config.history_dir
+        fake._issue_finder.view_mode = 1
+        use_super_repos({ { name = "alpha", label = "alpha" } })
+
+        issue_finder.open()
+
+        assert.same({ "/alpha/history" },
+            vim.tbl_map(function(root) return root.path end, last_scan_options.roots))
+        assert.same({ "/unused/issues", "workshop/history/issues" }, expanded_subdirs)
+    end)
 
     it("shows sorted repository facets for completely labelled super-repo roots", function()
         use_super_repos({

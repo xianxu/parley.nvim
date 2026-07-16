@@ -17,7 +17,7 @@ default), so every reader derives from the one cue source.
 
 ## Commands
 - `:ParleyIssueNew` (`<C-y>c`): **delegates to `sdlc issue new`** (M3 #116) — the canonical creator (id allocation + the cue/sdlc-owned template + broadcast to origin/main per ariadne#82) — then opens the created file. The title prompt is prefixed with the destination repo — `[<repo>] Issue title: ` — where `<repo>` is the basename of the git root `issues_dir` resolves against (the editor's cwd root), so issues aren't created in the wrong repo (#142)
-- `:ParleyIssueFinder` (`<C-y>f`): opens immediately with cancellable `scanning…`, then atomically installs asynchronously parsed issue metadata. `<Tab>` (natural key; `<C-a>` kept for back-compat) toggles between `issues` (all of `workshop/issues/`, done items visible — the default, vocabulary status/ID/path order) and `history` (archived items in `workshop/history/`, mtime/ID/path order so the newest archive row sits closest to the bottom-anchored prompt) (#158, superseding the tri-state all/active/all+history from #152). Full payload reads occur only on canonical path-plus-mtime cache misses; parsing reuses `issues.parse_frontmatter`/`extract_title`. The complete prompt query is kept verbatim across repaint and later invocations; clearing persists the empty query (#177). In super-repo mode, a completely labelled root set with at least two distinct repositories adds `[ALL] [NONE]   [repo…]`; choices persist across views, newly discovered repos default on, temporarily absent choices are retained, and facet updates leave the live query untouched. Incomplete labels, one unique repo, and ordinary mode omit the bar. Persisted NONE still opens the empty picker so ALL remains reachable (#186, #189).
+- `:ParleyIssueFinder` (`<C-y>f`): opens immediately with cancellable `scanning…`, then atomically installs asynchronously parsed issue metadata. `<Tab>` (natural key; `<C-a>` kept for back-compat) toggles between `issues` (all of `workshop/issues/`, done items visible — the default, vocabulary status/ID/path order) and `history` (archived items in `workshop/history/issues/`, mtime/ID/path order so the newest archive row sits closest to the bottom-anchored prompt) (#158, superseding the tri-state all/active/all+history from #152). Full payload reads occur only on canonical path-plus-mtime cache misses; parsing reuses `issues.parse_frontmatter`/`extract_title`. The complete prompt query is kept verbatim across repaint and later invocations; clearing persists the empty query (#177). In super-repo mode, a completely labelled root set with at least two distinct repositories adds `[ALL] [NONE]   [repo…]`; choices persist across views, newly discovered repos default on, temporarily absent choices are retained, and facet updates leave the live query untouched. Incomplete labels, one unique repo, and ordinary mode omit the bar. Persisted NONE still opens the empty picker so ALL remains reachable (#186, #189, #191).
 
 Facet discovery, persistent-state merging, immutable transitions, OR filtering,
 picker-tag projection, and complete-labelled-root eligibility live in the pure
@@ -37,7 +37,9 @@ than broadening issue-management policy (`ARCH-DRY`, `ARCH-PURE`).
 - Child→parent navigation is derived from `deps` at scan time, not from the body backlink, so issues decomposed before this feature was added still navigate correctly.
 
 ## Archival
-Done issues moved to `workshop/history/` by `make push` or `make merge`. GitHub issues auto-closed. History is low-signal — agents should avoid reading it unless directed.
+Done issues move to `workshop/history/issues/` at the SDLC publish gate. GitHub
+issues are closed through the publish flow. History is low-signal — agents
+should avoid reading it unless directed.
 
 ## Makefile Integration
 - `make fetch N` / `make issue N`: create local issue from GitHub issue

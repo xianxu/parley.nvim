@@ -40,15 +40,15 @@ directory containing only subdirectories and returns no archived issues.
 
 ## Plan
 
-- [ ] In `tests/unit/issue_finder_spec.lua`, add failing ordinary and super-repo
+- [x] In `tests/unit/issue_finder_spec.lua`, add failing ordinary and super-repo
   discovery regressions deriving roots from `require("parley.config").history_dir`;
   in `tests/unit/issues_spec.lua`, pin next-ID archive discovery and existing
   explicit `history_dir`/`history_dir_override` forwarding.
-- [ ] Change only `lua/parley/config.lua`'s canonical `history_dir` default;
+- [x] Change only `lua/parley/config.lua`'s canonical `history_dir` default;
   keep `issues.get_history_dir()` and super-repo expansion as the shared
   consumers, then update stale fixtures plus `atlas/issues/issue-management.md`
   and `atlas/infra/repo_mode.md` (`ARCH-DRY`, `ARCH-PURPOSE`).
-- [ ] Run focused, mapped, lint, and diff verification; close and land.
+- [x] Run focused, mapped, lint, and diff verification; close and land.
 
 ## Estimate
 
@@ -78,6 +78,13 @@ this estimate is provisional.*
 - Fresh-context spec review approved the narrow default-path correction with no
   findings. This simple fix keeps its complete plan in the issue file rather
   than adding a separate durable plan.
+- TDD red reproduced the regression in ordinary Issue Finder, super-repo root
+  expansion, and next-ID allocation. Changing only `config.history_dir` to
+  `workshop/history/issues` made Issue Finder 30/30, issue management 102/102,
+  and neighborhood 13/13 pass; explicit custom overrides remain verbatim.
+- `make test-changed` and the full `make test` suite pass. Lint reports zero
+  warnings/errors across 301 files, atlas and comments contain no stale flat
+  production path, and `git diff --check` is clean.
 
 ## Revisions
 

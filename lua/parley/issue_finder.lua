@@ -22,7 +22,7 @@ end
 -- The IssueFinder cycles a TWO-state `view_mode` via (view_mode + 1) % 2, on
 -- both `<Tab>` (cycle_view — the natural key) and `<C-a>` (toggle_done, kept
 -- for back-compat). View 0 = `issues` (everything in `workshop/issues/`);
--- view 1 = `history` (the archived items in `workshop/history/`). #158
+-- view 1 = `history` (the archived items in `workshop/history/issues/`). #158
 -- (superseding the tri-state all/active/all+history from #152).
 --------------------------------------------------------------------------------
 

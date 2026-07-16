@@ -115,13 +115,13 @@ describe("run_sdlc_issue_new", function()
         assert.are.same({ "sdlc", "issue", "new", "--", "My Title" }, cap.argv)
     end)
 
-    it("forwards absolute --issues-dir/--history-dir (git-root-anchored, #116 M3 I1)", function()
+    it("preserves explicit absolute --issues-dir/--history-dir overrides", function()
         local cap = {}
-        run("t", { issues_dir = "/r/workshop/issues", history_dir = "/r/workshop/history" },
+        run("t", { issues_dir = "/r/workshop/issues", history_dir = "/r/custom-history" },
             fake("/r/workshop/issues/000001-t.md\n", 0, cap))
         assert.are.same(
             { "sdlc", "issue", "new", "--issues-dir", "/r/workshop/issues",
-              "--history-dir", "/r/workshop/history", "--", "t" },
+              "--history-dir", "/r/custom-history", "--", "t" },
             cap.argv)
     end)
 
@@ -150,6 +150,39 @@ describe("run_sdlc_issue_new", function()
         local cap = {}
         run("child task", { deps = { "000116" } }, fake("workshop/issues/000161-child.md\n", 0, cap))
         assert.are.same({ "sdlc", "issue", "new", "--deps", "000116", "--", "child task" }, cap.argv)
+    end)
+end)
+
+--------------------------------------------------------------------------------
+-- next_issue_id archive root
+--------------------------------------------------------------------------------
+
+describe("next_issue_id archive root", function()
+    local base_dir
+    local issues_dir
+
+    before_each(function()
+        base_dir = vim.fn.tempname() .. "-next-issue-id"
+        issues_dir = base_dir .. "/workshop/issues"
+        local archive_dir = base_dir .. "/workshop/history/issues"
+        vim.fn.mkdir(issues_dir, "p")
+        vim.fn.mkdir(archive_dir, "p")
+        vim.fn.writefile({}, issues_dir .. "/000001-active.md")
+        vim.fn.writefile({}, archive_dir .. "/000009-archived.md")
+        issues.setup({
+            config = { history_dir = require("parley.config").history_dir },
+            helpers = { find_git_root = function() return base_dir end },
+        })
+    end)
+
+    after_each(function()
+        issues.setup(parley)
+        vim.fn.delete(base_dir, "rf")
+    end)
+
+    it("includes IDs from the per-kind archive default", function()
+        assert.equals("workshop/history/issues", require("parley.config").history_dir)
+        assert.equals("000010", issues.next_issue_id(issues_dir))
     end)
 end)
 
