@@ -1,12 +1,13 @@
 ---
 id: 000191
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-16
 updated: 2026-07-16
 estimate_hours: 0.7
 started: 2026-07-16T12:19:56-07:00
+actual_hours: 0.58
 ---
 
 # Fix issue finder archive path
@@ -69,6 +70,7 @@ this estimate is provisional.*
 ## Log
 
 ### 2026-07-16
+- 2026-07-16: closed — Issue Finder history discovery now derives workshop/history/issues in ordinary and super-repo modes, next-ID allocation includes archived IDs there, and explicit overrides remain verbatim; TDD regressions pass (Issue Finder 30/30, issues 102/102, neighborhood 13/13), make test-changed and fresh make test exit 0, lint is clean across 301 files, and git diff --check is clean.; review verdict: SHIP
 
 - Root cause: commit `ebaf054` moved archived issues into the per-kind
   `workshop/history/issues/` subdirectory without updating Parley's
