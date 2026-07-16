@@ -25,20 +25,29 @@ directory containing only subdirectories and returns no archived issues.
   archive location from the migrated layout (`ARCH-DRY`, `ARCH-PURPOSE`).
 - Preserve explicit `history_dir` overrides exactly; do not add dual-directory
   fallback scanning or recursive traversal.
-- Update direct Issue Finder coverage to prove the production default selects
-  `workshop/history/issues`, and update stale atlas path descriptions.
+- Update coverage to prove the production default reaches ordinary Issue
+  Finder discovery, super-repo root expansion, and next-ID discovery while
+  explicit `history_dir`/`history_dir_override` values remain verbatim; update
+  stale atlas path descriptions.
 
 ## Done when
 
 - Issue Finder's history view discovers archived issue files under
   `workshop/history/issues/` in ordinary and super-repo modes.
 - Explicit custom `history_dir` values remain supported.
+- Next-ID allocation includes archived issue IDs from the migrated directory.
 - Focused tests, mapped tests, lint, and `git diff --check` pass.
 
 ## Plan
 
-- [ ] Add a failing regression for the migrated default archive path.
-- [ ] Change the canonical default and update stale test/atlas consumers.
+- [ ] In `tests/unit/issue_finder_spec.lua`, add failing ordinary and super-repo
+  discovery regressions deriving roots from `require("parley.config").history_dir`;
+  in `tests/unit/issues_spec.lua`, pin next-ID archive discovery and existing
+  explicit `history_dir`/`history_dir_override` forwarding.
+- [ ] Change only `lua/parley/config.lua`'s canonical `history_dir` default;
+  keep `issues.get_history_dir()` and super-repo expansion as the shared
+  consumers, then update stale fixtures plus `atlas/issues/issue-management.md`
+  and `atlas/infra/repo_mode.md` (`ARCH-DRY`, `ARCH-PURPOSE`).
 - [ ] Run focused, mapped, lint, and diff verification; close and land.
 
 ## Estimate
@@ -69,3 +78,15 @@ this estimate is provisional.*
 - Fresh-context spec review approved the narrow default-path correction with no
   findings. This simple fix keeps its complete plan in the issue file rather
   than adding a separate durable plan.
+
+## Revisions
+
+### 2026-07-16 — plan-quality consumer matrix
+
+- Reason: the first `sdlc change-code` review found the plan named ordinary
+  Issue Finder, super-repo expansion, next-ID allocation, and override
+  compatibility as consumers but promised only one unspecified regression.
+- Delta: name the exact production/test/atlas files and require coverage for
+  each derived path while retaining the single default-constant production
+  change. No fallback or new path resolver is added (`ARCH-DRY`,
+  `ARCH-PURPOSE`).
