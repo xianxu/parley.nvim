@@ -83,6 +83,12 @@ imported package trees that are outside the repository's useful document set.
   list, and ignores confirm/double-click. A retained query therefore cannot hide
   `scanning…` or the error state. Only settled success/partial records are
   materialized and installed as selectable items.
+- The visible prompt query remains live while loading. Query edits/clears update
+  the finder's existing sticky/query state immediately and are never restored
+  from the open-time snapshot. Settlement materializes the complete item/facet
+  domain from immutable scan/recency options, installs it, then filters with the
+  prompt buffer's current query. Facet state may be snapshotted because facet
+  controls do not exist until their settled domain is installed.
 - Extract deterministic file-list-to-entry policy from filesystem/process glue
   where practical. Finder-specific parsing and rendering remain separate, while
   shared enumeration, batching, and lifecycle mechanics stay reusable and
@@ -110,11 +116,14 @@ imported package trees that are outside the repository's useful document set.
   joined picker only unsubscribes and invalidates that picker generation; it
   does not cancel the shared prewarm. Success, partial failure, or total failure
   from the prewarm settles every still-live subscriber through the same outcome
-  contract. Prewarm captures only roots and produces the complete unfiltered
-  raw metadata set. Each joined opener snapshots its own current recency/cutoff,
-  facet, and query options and materializes that shared set independently, so
-  joining never applies stale prewarm-time UI policy or repeats concurrent disk
-  discovery. Once an ownerless prewarm settles, its terminal records are not
+  contract. A picker joins only when its shared path-key-normalized root list
+  and discovery policy exactly equal the immutable prewarm snapshot; a mismatch
+  starts a separate picker-owned producer while the prewarm continues. Prewarm
+  produces the complete unfiltered raw metadata set. Each joined opener
+  snapshots its own current recency/cutoff and facet options and materializes
+  that shared set independently, so joining never applies stale prewarm-time UI
+  policy or repeats concurrent disk discovery. Once an ownerless prewarm
+  settles, its terminal records are not
   replayed as a later picker's result: only the existing per-file mtime metadata
   cache remains. A later open always performs fresh asynchronous enumeration,
   prunes cache entries no longer present, and reuses unchanged metadata; changed
@@ -125,7 +134,7 @@ imported package trees that are outside the repository's useful document set.
   others and emits one warning. An absent optional directory is skipped rather
   than attempted, and all-absent optional roots therefore produce successful
   `(no matches)`. A configured root that is attempted but cannot be enumerated
-  is a failure; if every attempted root fails, the loading row becomes an error
+  is a failure; if every attempted root fails, the loading state becomes an error
   status and the picker remains cancellable. Existing required-root
   misconfiguration checks still warn and return before opening a picker.
 - Cancelling a loading picker requests cancellation of owned external work when
@@ -144,7 +153,9 @@ imported package trees that are outside the repository's useful document set.
   source: stderr readers retain at most 240 bytes; NUL path parsing retains only
   complete records plus one at-most-4096-byte pending fragment, treating an
   overlong unterminated fragment as a root failure. A session logs at most ten
-  root/record diagnostics plus one bounded omitted-count summary. Confirming an
+  root/record diagnostics plus one bounded omitted-count summary. Before
+  display/logging, diagnostic text replaces control characters with spaces and
+  truncates at a valid UTF-8 boundary no greater than 240 bytes. Confirming an
   error/empty status performs no selection action.
 - The parser batcher accepts an injected monotonic clock. It checks elapsed time
   between atomic records and yields before beginning record 26 or whenever the
@@ -176,11 +187,12 @@ imported package trees that are outside the repository's useful document set.
 - A failed stat/read/parser drops only its record and yields partial success;
   failed root enumeration drops that root's staged records; total failure occurs
   only when every attempted root fails enumeration.
-- Chat and Note opens join an in-flight asynchronous prewarm and do not perform
-  a duplicate scan; different opener recency snapshots materialize the same raw
-  prewarm records independently. After prewarm settles without a subscriber, a
-  later open re-enumerates, reuses only unchanged mtime metadata, prunes stale
-  cache entries, and retries prior partial/total failures.
+- Chat and Note opens join an in-flight asynchronous prewarm without duplicating
+  its scan only for an exactly matching normalized root/policy snapshot;
+  mismatches start independent work. Different opener recency snapshots
+  materialize matching raw prewarm records independently. After prewarm settles
+  without a subscriber, a later open re-enumerates, reuses only unchanged mtime
+  metadata, prunes stale cache entries, and retries prior partial/total failures.
 - Ordinary and super-repo Markdown Finder include all tracked Markdown files
   plus untracked non-ignored Markdown files, exclude ignored untracked files and
   Markdown reachable only through symlinked directories, treat nested
@@ -198,6 +210,9 @@ imported package trees that are outside the repository's useful document set.
   seams.
 - Loading and error status remains visible under a retained query and cannot be
   selected or confirmed through keyboard or mouse paths.
+- Text typed or cleared while loading remains the visible/stored query and is
+  applied to settled items; completion never restores the invocation-time
+  query.
 
 ## Plan
 
@@ -259,3 +274,13 @@ imported package trees that are outside the repository's useful document set.
   later opens re-enumerate; a shared normalized bytewise path key owns ties;
   Git paths stream NUL-delimited with bounded fragments/stderr; and per-session
   technical diagnostic count is capped.
+
+### 2026-07-15 — fourth fresh-context spec review
+
+- Reason: review found that a changed root set could incorrectly join an
+  in-flight prewarm and that a query edited during loading could be overwritten
+  by immutable opener options.
+- Delta: joining now requires an exact normalized root/discovery-policy snapshot
+  match; mismatches start independent work. Query stays live in the prompt and
+  is applied only after settled items install. Diagnostics also sanitize control
+  characters and truncate on UTF-8 boundaries.
