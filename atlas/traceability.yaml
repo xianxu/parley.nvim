@@ -291,11 +291,19 @@ atlas:
     code:
       - lua/parley/notes.lua
       - lua/parley/note_finder.lua
+      - lua/parley/note_finder_records.lua
+      - lua/parley/finder_producer.lua
+      - lua/parley/finder_loader.lua
+      - lua/parley/async_file_source.lua
       - lua/parley/init.lua
       - lua/parley/config.lua
       - lua/parley/float_picker.lua
     tests:
       - tests/unit/note_finder_logic_spec.lua
+      - tests/unit/note_finder_records_spec.lua
+      - tests/unit/finder_loader_spec.lua
+      - tests/unit/async_file_source_spec.lua
+      - tests/integration/async_file_source_spec.lua
       - tests/unit/keybindings_spec.lua
 
   notes/templates:
@@ -537,7 +545,9 @@ atlas:
     code:
       - lua/parley/chat_dirs.lua
       - lua/parley/chat_finder.lua
+      - lua/parley/chat_finder_records.lua
       - lua/parley/note_finder.lua
+      - lua/parley/note_finder_records.lua
       - lua/parley/markdown_finder.lua
       - lua/parley/float_picker.lua
       - lua/parley/picker_status.lua
@@ -564,7 +574,9 @@ atlas:
       - tests/unit/float_picker_tag_bar_spec.lua
       - tests/unit/picker_items_spec.lua
       - tests/unit/chat_finder_logic_spec.lua
+      - tests/unit/chat_finder_records_spec.lua
       - tests/unit/note_finder_logic_spec.lua
+      - tests/unit/note_finder_records_spec.lua
       - tests/unit/markdown_finder_spec.lua
       - tests/unit/picker_status_spec.lua
       - tests/unit/finder_scan_spec.lua

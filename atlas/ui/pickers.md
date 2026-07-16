@@ -30,13 +30,19 @@ failure, selection, or cancellation retires the status. The implementation
 budgets are 25 adapted records or 5ms per slice, 16 concurrent filesystem
 operations, ten 512-byte diagnostics, and a 120ms spinner tick.
 
-Markdown Finder is the first disk-backed consumer of this lifecycle (#189). It
-opens and subscribes before starting IO, atomically installs settled results,
-warns while retaining rows on partial failure, and leaves a nonselectable error
-on total failure. Esc cancels Git, filesystem enrichment, batching, and the
-picker subscription; late callbacks cannot repaint the closed picker. Chat,
-Note, Issue, and Vision retain their existing discovery paths until their later
-#189 milestones migrate them to the same boundary.
+Markdown, Chat, and Note Finders use this lifecycle (#189). Each opens and
+subscribes before starting IO, atomically installs settled results, warns while
+retaining rows on partial failure, and leaves a nonselectable error on total
+failure. Esc cancels picker-owned acquisition, enrichment, batching, and the
+subscription; late callbacks cannot repaint a closed picker. Chat and Note can
+instead join an exact retained-prewarm fingerprint: cancellation then removes
+only the picker subscriber while the cache-building owner continues. Issue and
+Vision retain their existing discovery paths until their later #189 milestones.
+
+Chat enumerates only dated Markdown names and reads ten header lines on cache
+misses. Note recursively enumerates Markdown metadata without body reads. Both
+apply recency only after raw records settle, update caches from adapted records,
+and prune stale entries only for roots that enumerated successfully.
 
 ## Recall (Last Selection)
 Pickers that opt in via `recall_key` remember the id of the last `<CR>`-confirmed item (in-memory only) and place the cursor there on the next open. `recall_id_fn` lets callers point at the stable identity field (defaults to `item.value`; e.g. `item.name` for agent_picker, `item.dir` for root_dir_picker). Stale recall (id no longer present in items) silently falls through to whatever `initial_index` resolves — typically the first item. Cancel/`<Esc>` does not update recall; only confirmation does. Storage lives on `float_picker._last_selection` keyed by the picker's `recall_key`.
@@ -78,7 +84,7 @@ remain.
 ## Picker Types
 - **Agent** (`:ParleyAgent`): select active agent
 - **System Prompt** (`:ParleySystemPrompt`): select active system prompt
-- **Chat Finder** (`:ParleyChatFinder` / `<C-g>f`): browse chats by recency, tags, and roots; mtime-cached metadata; sticky filter fragments across reopens
-- **Note Finder** (`:ParleyNoteFinder` / `<C-n>f`): same mechanics as Chat Finder for notes; special folders bypass recency
+- **Chat Finder** (`:ParleyChatFinder` / `<C-g>f`): asynchronously browse chats by recency, tags, and roots; joinable mtime-cached header prewarm; sticky filter fragments across reopens
+- **Note Finder** (`:ParleyNoteFinder` / `<C-n>f`): asynchronously browse recursive note metadata with joinable prewarm; special folders bypass recency
 - **Markdown Finder** (`:ParleyMarkdownFinder` / `<C-g>m`): browse repository Markdown by recency with contextual directory/repository facets and verbatim query persistence
 - **Outline** (`:ParleySearchChat` / `:ParleyOutline`): jump to headings and turns
