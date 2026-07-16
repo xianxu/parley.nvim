@@ -696,3 +696,16 @@ stale on 2026-07-15, so the estimate is provisional.
 - After this fix, all four focused suites, `make test-changed`, `make lint`, and
   `make test` pass; the full suite includes a clean
   `chat_progress_process_spec.lua` run, and `git diff --check` is clean.
+
+### 2026-07-16 — third final boundary-review rework
+
+- Re-review found Vision kept the provisional `Vision` loading-shell title
+  after settlement instead of preserving `Vision (N initiatives)`.
+- The shared loader/picker bridge now accepts an optional materialized title,
+  and Vision supplies the exact counted title for empty and nonempty outcomes.
+  Loader, real picker, and Vision entry-point regressions pin the behavior
+  (`ARCH-DRY`, `ARCH-PURPOSE`).
+- After the title fix, focused loader/picker/Vision suites,
+  `make test-changed`, `make lint`, and `make test` pass; the full suite again
+  includes a clean `chat_progress_process_spec.lua` run, and
+  `git diff --check` is clean.

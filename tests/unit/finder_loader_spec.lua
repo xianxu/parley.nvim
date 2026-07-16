@@ -185,12 +185,13 @@ end)
 
 describe("finder picker bridge", function()
     local function picker_fake()
-        local state = { updates = {}, statuses = {}, query = "live query", closed = false }
+        local state = { updates = {}, statuses = {}, titles = {}, query = "live query", closed = false }
         local picker = {
             update = function(items, tags)
                 state.updates[#state.updates + 1] = { items = items, tags = tags }
             end,
             set_status = function(status) state.statuses[#state.statuses + 1] = status end,
+            set_title = function(title) state.titles[#state.titles + 1] = title end,
             current_query = function() return state.query end,
             close = function() state.closed = true end,
             is_closed = function() return state.closed end,
@@ -222,7 +223,11 @@ describe("finder picker bridge", function()
             picker_options = { title = "Finder", initial_query = "old" },
             materialize = function(outcome, query)
                 assert.equals("live query", query)
-                return { items = outcome.records, tags = { { label = "repo", enabled = true } } }
+                return {
+                    items = outcome.records,
+                    tags = { { label = "repo", enabled = true } },
+                    title = "Finder (1 record)",
+                }
             end,
         })
 
@@ -236,6 +241,7 @@ describe("finder picker bridge", function()
         assert.equals(1, factory_count)
         assert.same({ { display = "record", value = 1 } }, picker_state.updates[1].items)
         assert.equals("repo", picker_state.updates[1].tags[1].label)
+        assert.same({ "Finder (1 record)" }, picker_state.titles)
     end)
 
     it("lets two subscribers materialize one retained outcome with distinct opener policy", function()

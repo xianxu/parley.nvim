@@ -1663,6 +1663,23 @@ function M.open(opts)
         end
     end
 
+    local function set_title(next_title)
+        assert(type(next_title) == "string", "picker title must be a string")
+        title = next_title
+        if not opts.width then
+            desired_w = math.max(desired_w, vim.fn.strdisplaywidth(title) + 4)
+        end
+        if not closed then
+            reflow_picker()
+            if vim.fn.has("nvim-0.9") == 1 and vim.api.nvim_win_is_valid(results_win) then
+                vim.api.nvim_win_set_config(results_win, {
+                    title = " " .. title .. " ",
+                    title_pos = "center",
+                })
+            end
+        end
+    end
+
     -- Update items and/or tag bar in-place (avoids close/reopen flash).
     -- new_tag_bar_tags: optional list of {label, enabled} to refresh the tag bar display.
     local function update(new_items, new_tag_bar_tags, next_selection_index)
@@ -1696,6 +1713,7 @@ function M.open(opts)
     return {
         update = update,
         set_status = set_status,
+        set_title = set_title,
         current_query = current_query_from_buffer,
         close = dismiss,
         is_closed = function() return closed end,

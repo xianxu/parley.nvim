@@ -259,6 +259,21 @@ describe("float_picker", function()
             picker.close()
         end)
 
+        it("updates the results-window title after loading settles", function()
+            local picker = float_picker.open({
+                title = "Vision",
+                items = {},
+                status = { message = "scanning…", animated = true },
+                on_select = function() end,
+            })
+
+            picker.set_title("Vision (2 initiatives)")
+
+            local config = vim.api.nvim_win_get_config(find_float_win_with_text("scanning…"))
+            assert.equals(" Vision (2 initiatives) ", config.title[1][1])
+            picker.close()
+        end)
+
         it("opens an empty picker when facets can restore its items", function()
             local picker = float_picker.open({
                 title = "Test",

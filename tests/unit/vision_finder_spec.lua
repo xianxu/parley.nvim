@@ -20,6 +20,7 @@ describe("VisionFinder asynchronous discovery", function()
                 updates[#updates + 1] = { items = items, tags = tags, initial_index = initial_index }
             end,
             set_status = function(status) captured.status_update = status end,
+            set_title = function(title) captured.settled_title = title end,
             current_query = function() return opts.initial_query or "" end,
             is_closed = function() return closed end,
             close = function() closed = true end,
@@ -128,6 +129,7 @@ describe("VisionFinder asynchronous discovery", function()
         assert.same({ "First", "Second" },
             vim.tbl_map(function(item) return item.project end, updates[1].items))
         assert.same({ 1, 4 }, vim.tbl_map(function(item) return item.line end, updates[1].items))
+        assert.equals("Vision (2 initiatives)", captured.settled_title)
     end)
 
     it("keeps query changes live while loading and jumps to the settled source line", function()
@@ -162,6 +164,7 @@ describe("VisionFinder asynchronous discovery", function()
         on_complete()
 
         assert.same({}, updates[1].items)
+        assert.equals("Vision (0 initiatives)", captured.settled_title)
         assert.is_nil(captured.status_update)
         assert.same({}, warnings)
     end)

@@ -1459,3 +1459,13 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   while status is active, preserve raw action-owned teardown after settlement,
   and add real delayed-loading action regressions for Chat, Note, and Issue plus
   a direct picker policy test (`ARCH-DRY`, `ARCH-PURPOSE`).
+
+### 2026-07-16 — third final close-review rework
+
+- Reason: re-review found the asynchronous Vision port permanently retained its
+  provisional `Vision` shell title instead of restoring the existing settled
+  `Vision (N initiatives)` title required by the compatibility contract.
+- Delta: add one optional materialized-title field to the shared loader/picker
+  settlement bridge; return Vision's counted title for empty and nonempty
+  results; cover the bridge, real picker title mutation, and both Vision counts
+  (`ARCH-DRY`, `ARCH-PURPOSE`).

@@ -213,6 +213,7 @@ M.open = function()
             items = vision_records.materialize_records(outcome.records)
             return {
                 items = items,
+                title = string.format("Vision (%d initiatives)", #items),
                 initial_index = chat_finder_mod.resolve_finder_initial_index(
                     _parley._vision_finder,
                     items,

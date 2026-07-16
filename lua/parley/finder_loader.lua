@@ -250,6 +250,14 @@ M.open_picker = function(options)
             picker.set_status(picker_failure_status(options))
             return
         end
+		if result.title ~= nil then
+			if type(result.title) ~= "string" or type(picker.set_title) ~= "function" then
+				options.session._report(FAILURE_KIND.materializer_exception)
+				picker.set_status(picker_failure_status(options))
+				return
+			end
+			picker.set_title(result.title)
+		end
 		picker.update(result.items, result.tags, result.initial_index)
     end)
 

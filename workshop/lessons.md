@@ -324,3 +324,9 @@
   subscription or acquisition. Rule: at the shared picker boundary, route
   mapping closes through dismissal while status is active and through raw
   teardown only after settlement; test every action-only loading consumer.
+- **A loading shell may use a provisional title, but settlement must restore
+  title semantics promised by the existing UI.** Migrating Vision to immediate
+  open preserved its rows and actions while silently dropping the initiative
+  count from the window title. Rule: inventory titles alongside mappings and
+  queries during async ports; if settled data determines a title, make it an
+  explicit settlement field and test empty plus nonempty outcomes.

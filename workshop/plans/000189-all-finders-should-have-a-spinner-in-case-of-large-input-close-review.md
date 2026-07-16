@@ -5,43 +5,40 @@
 
 ## Review 1 — REWORK
 
-Two Critical ownership findings:
-
-1. Issue Finder released `_issue_finder.opened` immediately after launch,
-   permitting duplicate pickers during loading or after settlement.
-2. Async enrichment relinquished descriptor ownership before a queued close
-   started, so queue cancellation could discard the only cleanup operation.
-
-Resolution: retain the picker guard until selection/cancellation/action-owned
-reopen, and retain descriptors until close work actually starts. Focused tests
-pin both windows. `ARCH-PURE` and `ARCH-PURPOSE` were flagged; `ARCH-DRY` passed.
+Critical: Issue Finder released its open guard immediately after launch, and
+async enrichment relinquished descriptor ownership before queued close work
+started. Resolved by retaining each owner through its actual terminal boundary,
+with duplicate-picker and saturated queued-close regressions (`ARCH-PURE`,
+`ARCH-PURPOSE`; `ARCH-DRY` passed).
 
 ## Review 2 — REWORK
 
-One Critical shared-picker finding:
+Critical: action-only Chat/Note recency and Issue view mappings received raw UI
+teardown during `scanning…`, bypassing loader cancellation before reopening.
+Resolved once in `float_picker`: mappings receive cancellation-aware dismissal
+only while status is active and raw action teardown after settlement. Direct
+picker plus real delayed Chat/Note/Issue regressions prove exactly one old scan
+cancels before one replacement opens (`ARCH-PURPOSE`; other principles passed).
 
-1. Action-only Chat/Note recency and Issue view mappings received raw
-   `close_all` while `scanning…` was active. Closing and reopening bypassed the
-   loader's cancellation-aware dismissal, leaving the first subscription or
-   picker-owned acquisition alive.
+The reviewer also saw unrelated `chat_progress_process_spec.lua` sandbox
+readiness/swap failures. The clean local full suite passed before and after this
+review, including that integration spec.
 
-Resolution: `float_picker` now supplies cancellation-aware `dismiss` as the
-mapping close callback only while a status row is active; settled action
-mappings retain raw action-owned teardown. A direct picker regression plus real
-delayed-acquisition Chat, Note, and Issue mapping tests prove exactly one old
-scan is canceled before one replacement scan opens, then clean up the replacement.
-`ARCH-PURPOSE` was flagged; `ARCH-DRY` and `ARCH-PURE` passed.
+## Review 3 — REWORK
 
-The reviewer also saw unrelated `chat_progress_process_spec.lua` readiness/swap
-failures in its sandbox. The implementor's clean local `make test` had passed
-before the review; full verification is refreshed after each accepted fix.
+Critical: Vision's pre-#189 settled title `Vision (N initiatives)` regressed to
+the permanent loading-shell title `Vision`, contrary to the explicit title
+compatibility requirement. Resolved by adding an optional materialized title to
+the shared loader/picker settlement bridge and returning the counted Vision
+title for both empty and nonempty outcomes (`ARCH-PURPOSE`; other principles
+passed).
 
 ## Evidence
 
-- `float_picker_spec.lua`: 71 successes, 0 failures.
-- `chat_finder_logic_spec.lua`: 48 successes, 0 failures.
-- `note_finder_logic_spec.lua`: 36 successes, 0 failures.
-- `issue_finder_spec.lua`: 28 successes, 0 failures.
+- `finder_loader_spec.lua`: 10 successes, 0 failures.
+- `float_picker_spec.lua`: 72 successes, 0 failures.
+- `vision_finder_spec.lua`: 9 successes, 0 failures, including empty/nonempty
+  settled title checks.
 - `make test-changed`: exit 0.
 - `make lint`: zero warnings/errors across 301 files.
 - `make test`: exit 0; every unit, architecture, and integration spec PASS,
