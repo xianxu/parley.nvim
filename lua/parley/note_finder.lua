@@ -5,14 +5,17 @@ local M = {}
 local _parley
 local _chat_finder_mod  -- set after both modules are loaded
 local finder_sticky = require("parley.finder_sticky")
+local finder_scan = require("parley.finder_scan")
+local finder_loader = require("parley.finder_loader")
+local finder_producer = require("parley.finder_producer")
+local async_file_source = require("parley.async_file_source")
+local note_records = require("parley.note_finder_records")
 
 -- Mtime-based cache: avoids re-classifying and re-stating unchanged files.
 -- Key: resolved file path, Value: { mtime, classification, inferred_time }
 local _file_cache = {}
 
--- Prewarm state (same pattern as chat_finder)
-local _prewarm_pending = false
-local _prewarm_callbacks = {}
+local _prewarm_session
 
 M.setup = function(parley)
 	_parley = parley
@@ -21,6 +24,10 @@ end
 
 M.clear_cache = function()
 	_file_cache = {}
+	if _prewarm_session then
+		_prewarm_session:cancel_owner()
+		_prewarm_session = nil
+	end
 end
 
 M.get_cache = function()
@@ -28,92 +35,11 @@ M.get_cache = function()
 end
 
 M.is_prewarming = function()
-	return _prewarm_pending
+	return _prewarm_session ~= nil and not _prewarm_session:is_retired()
 end
 
 M.invalidate_path = function(path)
 	_file_cache[vim.fn.resolve(path)] = nil
-end
-
---------------------------------------------------------------------------------
--- Local helpers
---------------------------------------------------------------------------------
-
---- Compute relative path from resolved root to resolved file.
-local function relative_to_root(resolved_file, expanded_root_prefix)
-	if resolved_file:sub(1, #expanded_root_prefix) == expanded_root_prefix then
-		return resolved_file:sub(#expanded_root_prefix + 1)
-	end
-	return resolved_file
-end
-
---- Infer a cutoff timestamp from directory structure (year/month/day).
---- @param relative string path relative to notes root
---- @param file_path string original file path (for filename extraction)
-local function infer_note_directory_cutoff_time(relative, file_path)
-	local parts = vim.split(relative, "/", { plain = true, trimempty = true })
-	local year = tonumber(parts[1] and parts[1]:match("^(%d%d%d%d)$"))
-	local month = tonumber(parts[2] and parts[2]:match("^(%d%d)$"))
-	local day = tonumber(vim.fn.fnamemodify(file_path, ":t"):match("^(%d%d)%-"))
-
-	if year and month and day then
-		return os.time({
-			year = year,
-			month = month,
-			day = day,
-			hour = 23,
-			min = 59,
-			sec = 59,
-		})
-	end
-
-	if year and month then
-		return os.time({
-			year = year,
-			month = month + 1,
-			day = 0,
-			hour = 23,
-			min = 59,
-			sec = 59,
-		})
-	end
-
-	if year then
-		return os.time({
-			year = year,
-			month = 12,
-			day = 31,
-			hour = 23,
-			min = 59,
-			sec = 59,
-		})
-	end
-
-	return nil
-end
-
---- Classify a note file path (template, base_folder, relative_path).
---- @param relative string path relative to notes root
-local function classify_note_finder_path(relative)
-	local parts = vim.split(relative, "/", { plain = true, trimempty = true })
-	local first_part = parts[1]
-	if not first_part or first_part == "templates" then
-		return {
-			is_template = first_part == "templates",
-			relative_path = relative,
-		}
-	end
-
-	local is_year = first_part:match("^%d%d%d%d$") ~= nil
-	local base_folder = nil
-	if not is_year then
-		base_folder = first_part
-	end
-	return {
-		is_template = false,
-		relative_path = relative,
-		base_folder = base_folder,
-	}
 end
 
 --------------------------------------------------------------------------------
@@ -211,318 +137,322 @@ M.prompt_delete_confirmation = function(item_value, selected_index, items_count,
 	end)
 end
 
---------------------------------------------------------------------------------
--- File scanning with mtime cache
---------------------------------------------------------------------------------
 
---- Scan note roots and return sorted entries using the cache.
---- Shared by M.open() and M.prewarm().
---- @param note_roots table array of root records {dir, label, is_primary} or a single dir string
---- @param cutoff_time number|nil optional recency cutoff
-local function scan_note_files(note_roots, cutoff_time)
-	-- Normalize: accept a single string (legacy) or a roots array
-	if type(note_roots) == "string" then
-		note_roots = { { dir = note_roots, label = "main", is_primary = true } }
-	end
-
-	-- Track seen files for cache pruning and deduplication
-	local seen_files = {}
-	local entries = {}
-
-	for _, root in ipairs(note_roots) do
-		local root_dir = root.dir
-		local is_primary_root = root.is_primary
-		local root_label = root.label or "extra"
-
-		local files = _parley.helpers.find_files(root_dir, "*.md", true)
-		local expanded_root_prefix = vim.fn.resolve(vim.fn.fnamemodify(vim.fn.expand(root_dir), ":p")):gsub("/+$", "") .. "/"
-
-		for _, file in ipairs(files) do
-			local resolved = vim.fn.resolve(file)
-			if seen_files[resolved] then
-				goto continue
-			end
-			seen_files[resolved] = true
-
-			-- Check cache: skip classify + infer if file unchanged
-			local stat = vim.loop.fs_stat(file)
-			if not stat then
-				goto continue
-			end
-
-			local cached = _file_cache[resolved]
-			local classification, inferred_time
-			if cached and cached.mtime == stat.mtime.sec then
-				classification = cached.classification
-				inferred_time = cached.inferred_time
-			else
-				local relative = relative_to_root(resolved, expanded_root_prefix)
-				classification = classify_note_finder_path(relative)
-				inferred_time = infer_note_directory_cutoff_time(relative, file)
-				_file_cache[resolved] = {
-					mtime = stat.mtime.sec,
-					classification = classification,
-					inferred_time = inferred_time,
-				}
-			end
-
-			if classification.is_template then
-				goto continue
-			end
-
-			local modified_time = stat.mtime.sec
-			local sort_time = inferred_time or modified_time
-			local range_time = inferred_time or modified_time
-			local is_special_folder = classification.base_folder ~= nil
-
-			if not is_special_folder and cutoff_time and range_time < cutoff_time then
-				goto continue
-			end
-
-			local root_prefix = is_primary_root and "" or string.format("{%s} ", root_label)
-
-			local display, search_text
-			if is_special_folder then
-				local file_name = vim.fn.fnamemodify(file, ":t")
-				display = string.format("%s{%s} %s [%s]", root_prefix, classification.base_folder, file_name, os.date("%Y-%m-%d", sort_time))
-				search_text = string.format("{%s} %s %s", classification.base_folder, file_name, classification.relative_path:gsub("%-", " "))
-			else
-				display = root_prefix .. classification.relative_path .. " [" .. os.date("%Y-%m-%d", sort_time) .. "]"
-				search_text = "{} " .. classification.relative_path:gsub("%-", " ")
-			end
-
-			-- For non-primary roots, add root label to search text for filtering
-			if not is_primary_root then
-				search_text = "{" .. root_label .. "} " .. search_text
-			end
-
-			table.insert(entries, {
-				value = file,
-				display = display,
-				ordinal = search_text,
-				timestamp = sort_time,
-				modified_time = modified_time,
-				base_folder = classification.base_folder,
-			})
-
-			::continue::
-		end
-	end
-
-	-- Prune stale cache entries
-	for cached_path in pairs(_file_cache) do
-		if not seen_files[cached_path] then
-			_file_cache[cached_path] = nil
-		end
-	end
-
-	table.sort(entries, function(a, b)
-		if a.timestamp == b.timestamp then
-			if a.modified_time ~= b.modified_time then
-				return a.modified_time > b.modified_time
-			end
-			return a.value < b.value
-		end
-		return a.timestamp > b.timestamp
-	end)
-
-	return entries
+local function discovery_dependencies()
+	local injected = _parley._finder_dependencies or {}
+	return {
+		async_file_source = injected.async_file_source or async_file_source,
+		schedule = injected.schedule or vim.schedule,
+		now = injected.now or function()
+			return (vim.uv or vim.loop).hrtime() / 1000000
+		end,
+	}
 end
 
---- Prewarm the note file metadata cache in the background.
+local function discovery_snapshot()
+	local roots = {}
+	for ordinal, root in ipairs(_parley.get_note_roots() or {}) do
+		roots[#roots + 1] = {
+			path = vim.fn.fnamemodify(vim.fn.expand(root.dir), ":p"):gsub("/+$", ""),
+			label = root.label,
+			is_primary = root.is_primary == true or ordinal == 1,
+			optional = true,
+		}
+	end
+	return finder_scan.snapshot({
+		kind = "note",
+		roots = roots,
+		recursion = true,
+		max_depth = math.huge,
+		pattern = "*.md",
+		backend = { source = "libuv", body = "none" },
+	})
+end
+
+local function identity_for(candidate)
+	return finder_scan.path_identity({
+		unresolved_absolute = candidate.unresolved_absolute,
+		resolved_absolute = candidate.resolved_absolute,
+		root_ordinal = candidate.root_ordinal,
+	})
+end
+
+local function prune_root_cache(root_path, seen_keys)
+	local seen = {}
+	for _, key in ipairs(seen_keys) do
+		seen[key] = true
+	end
+	for key, cached in pairs(_file_cache) do
+		if cached.root_path == root_path and not seen[key] then
+			_file_cache[key] = nil
+		end
+	end
+end
+
+local function new_session(snapshot, ownership, register_prewarm)
+	local dependencies = discovery_dependencies()
+	local session
+	session = finder_loader.new_session({
+		snapshot = snapshot,
+		ownership = ownership,
+		schedule = dependencies.schedule,
+		producer_factory = function(settle)
+			local data = snapshot:copy()
+			return finder_producer.run({
+				roots = data.roots,
+				acquire = function(on_root, on_complete)
+					return dependencies.async_file_source.scan({
+						roots = data.roots,
+						recurse = true,
+						max_depth = data.max_depth,
+						match = function(relative)
+							return relative:match("%.md$") ~= nil
+						end,
+						read_policy = function(candidate)
+							return note_records.read_decision(_file_cache, {
+								identity = identity_for(candidate),
+								stat = candidate.stat,
+							})
+						end,
+						concurrency = 16,
+					}, on_root, on_complete)
+				end,
+				adapter = function(candidate)
+					candidate.identity = candidate.identity or identity_for(candidate)
+					return note_records.adapt(candidate)
+				end,
+				finalize = function(records)
+					return finder_scan.sort(finder_scan.deduplicate(records), function(left, right)
+						if left.timestamp ~= right.timestamp then
+							return left.timestamp > right.timestamp
+						end
+						return left.modified_time > right.modified_time
+					end)
+				end,
+				batch = {
+					item_budget = 25,
+					time_budget_ms = 5,
+					now = dependencies.now,
+					schedule = dependencies.schedule,
+				},
+				on_record = function(record)
+					local cached = note_records.cache_entry(record)
+					cached.root_path = record.root.path
+					_file_cache[record.identity.key] = cached
+				end,
+				on_root_success = function(root_ordinal, seen_keys)
+					prune_root_cache(data.roots[root_ordinal].path, seen_keys)
+				end,
+			}, settle)
+		end,
+		on_terminal = function(outcome, had_subscribers)
+			if not had_subscribers and outcome.kind ~= "success" then
+				_parley.logger.debug(string.format(
+					"NoteFinder prewarm: %s (%d roots, %d files failed)",
+					outcome.kind,
+					outcome.failed_root_count or 0,
+					outcome.failed_record_count or 0
+				))
+			end
+		end,
+		on_retire = function()
+			if register_prewarm and _prewarm_session == session then
+				_prewarm_session = nil
+			end
+		end,
+	})
+	return session
+end
+
 M.prewarm = function()
-	if _prewarm_pending or not _parley then
+	if not _parley then
 		return
 	end
-	_prewarm_pending = true
-	vim.defer_fn(function()
-		local ok, err = pcall(function()
-			local note_roots = _parley.get_note_roots()
-			if note_roots and #note_roots > 0 then
-				scan_note_files(note_roots, nil)
-			end
-		end)
-		if not ok and _parley then
-			_parley.logger.debug("NoteFinder prewarm error: " .. tostring(err))
-		end
-		_prewarm_pending = false
-		local callbacks = _prewarm_callbacks
-		_prewarm_callbacks = {}
-		for _, cb in ipairs(callbacks) do
-			cb()
-		end
-	end, 0)
+	local snapshot = discovery_snapshot()
+	if _prewarm_session and not _prewarm_session:is_retired()
+		and _prewarm_session:fingerprint() == snapshot:fingerprint() then
+		return
+	end
+	if _prewarm_session then
+		_prewarm_session:cancel_owner()
+	end
+	local session = new_session(snapshot, "retained", true)
+	_prewarm_session = session
+	session:start()
 end
 
--- Exposed for benchmarking
-M._scan_note_files = scan_note_files
-
---------------------------------------------------------------------------------
--- Main NoteFinder open function (was M.cmd.NoteFinder body)
---------------------------------------------------------------------------------
-
-M.open = function(options)
+M._materialize_records = note_records.materialize
+M._discovery_snapshot = discovery_snapshot
+-- Open the picker immediately, then materialize the recursive disk scan into it.
+M.open = function(_)
 	if _parley._note_finder.opened then
 		_parley.logger.warning("Note finder is already open")
 		return
 	end
 	_parley._note_finder.opened = true
 
-	local note_finder_mappings = _parley.config.note_finder_mappings or {}
-	local delete_shortcut = note_finder_mappings.delete or _parley.config.chat_shortcut_delete
-	local next_recency_shortcut = note_finder_mappings.next_recency or { shortcut = "<C-a>" }
-	local previous_recency_shortcut = note_finder_mappings.previous_recency or { shortcut = "<C-s>" }
-	local keybindings_shortcut = _parley.config.global_shortcut_keybindings or { shortcut = "<C-g>?" }
-	local note_roots = _parley.get_note_roots()
-
-	-- If a prewarm is in flight, wait for it instead of scanning again
-	if _prewarm_pending then
-		_parley.logger.debug("NoteFinder: waiting for prewarm to finish")
-		_parley._note_finder.opened = false
-		table.insert(_prewarm_callbacks, function()
-			M.open(options)
-		end)
-		return
+	local snapshot = discovery_snapshot()
+	local session
+	if _prewarm_session and not _prewarm_session:is_retired()
+		and _prewarm_session:fingerprint() == snapshot:fingerprint() then
+		session = _prewarm_session
+	else
+		session = new_session(snapshot, "picker", false)
 	end
 
+	local mappings = _parley.config.note_finder_mappings or {}
+	local delete_shortcut = mappings.delete or _parley.config.chat_shortcut_delete
+	local next_recency_shortcut = mappings.next_recency or { shortcut = "<C-a>" }
+	local previous_recency_shortcut = mappings.previous_recency or { shortcut = "<C-s>" }
+	local keybindings_shortcut = _parley.config.global_shortcut_keybindings or { shortcut = "<C-g>?" }
 	local recency_config = _parley.config.note_finder_recency or {
 		filter_by_default = true,
 		months = 3,
 	}
-	local resolved_recency = _parley._resolve_note_finder_recency(recency_config, _parley._note_finder.recency_index)
+	local resolved_recency = _parley._resolve_note_finder_recency(
+		recency_config,
+		_parley._note_finder.recency_index
+	)
 	_parley._note_finder.recency_index = resolved_recency.index
 	_parley._note_finder.show_all = resolved_recency.current.is_all
-
-	local cutoff_time = nil
+	local cutoff_time
 	if resolved_recency.current.months then
 		cutoff_time = os.time() - (resolved_recency.current.months * 30 * 24 * 60 * 60)
 	end
 
-	local entries = scan_note_files(note_roots, cutoff_time)
-
 	local items = {}
-	for _, entry in ipairs(entries) do
-		table.insert(items, {
-			display = entry.display,
-			search_text = entry.ordinal,
-			value = entry.value,
-		})
-	end
-
 	local source_win = _parley._note_finder.source_win
 	if not (source_win and vim.api.nvim_win_is_valid(source_win)) then
 		source_win = vim.api.nvim_get_current_win()
 		_parley._note_finder.source_win = source_win
 	end
 
-	local prompt_title = string.format(
-		"Note Files (%s  %s/%s: cycle)",
-		resolved_recency.current.label,
-		next_recency_shortcut.shortcut,
-		previous_recency_shortcut.shortcut
-	)
+	local function cycle_recency(direction)
+		return function(_, close_fn)
+			local next_index, next_state = _parley._cycle_note_finder_recency(
+				recency_config,
+				_parley._note_finder.recency_index,
+				direction
+			)
+			_parley._note_finder.recency_index = next_index
+			_parley._note_finder.show_all = next_state.is_all
+			close_fn()
+			vim.defer_fn(function()
+				_parley._note_finder.opened = false
+				_parley._note_finder.source_win = source_win
+				_parley.cmd.NoteFinder()
+			end, 100)
+		end
+	end
 
-	_parley.float_picker.open({
-		title = prompt_title,
-		items = items,
-		recall_key = "parley.note_finder",
-		initial_index = _chat_finder_mod.resolve_finder_initial_index(_parley._note_finder, items, "NoteFinder"),
-		initial_query = finder_sticky.format_initial_query(_parley._note_finder.sticky_query),
-		anchor = "bottom",
-		on_query_change = function(query)
-			_parley._note_finder.sticky_query = finder_sticky.extract(query, { "root" })
+	finder_loader.open_picker({
+		session = session,
+		picker_open = _parley.float_picker.open,
+		warning = function(failed_roots, failed_records)
+			_parley.logger.warning(string.format(
+				"Note finder: partial scan (%d roots, %d files failed)",
+				failed_roots,
+				failed_records
+			))
 		end,
-		on_select = function(item)
-			if source_win and vim.api.nvim_win_is_valid(source_win) then
-				vim.api.nvim_set_current_win(source_win)
+		materialize = function(outcome)
+			local entries = note_records.materialize(outcome.records, {
+				cutoff_time = resolved_recency.current.is_all and nil or cutoff_time,
+			})
+			local next_items = {}
+			for _, entry in ipairs(entries) do
+				next_items[#next_items + 1] = {
+					display = entry.display,
+					search_text = entry.ordinal,
+					value = entry.value,
+				}
 			end
-			_parley.open_buf(item.value, true)
+			items = next_items
+			return {
+				items = next_items,
+				initial_index = _chat_finder_mod.resolve_finder_initial_index(
+					_parley._note_finder,
+					next_items,
+					"NoteFinder"
+				),
+			}
 		end,
-		on_cancel = function()
-			_parley._note_finder.opened = false
-			_parley._note_finder.initial_index = nil
-			_parley._note_finder.initial_value = nil
-		end,
-		mappings = {
-			{
-				key = delete_shortcut.shortcut,
-				fn = function(item, close_fn, context)
-					if not item then
-						return
-					end
-					local selected_index = 1
-					for idx, picker_item in ipairs(items) do
-						if picker_item.value == item.value then
-							selected_index = idx
-							break
+		picker_options = {
+			title = string.format(
+				"Note Files (%s  %s/%s: cycle)",
+				resolved_recency.current.label,
+				next_recency_shortcut.shortcut,
+				previous_recency_shortcut.shortcut
+			),
+			recall_key = "parley.note_finder",
+			initial_index = _chat_finder_mod.resolve_finder_initial_index(
+				_parley._note_finder,
+				items,
+				"NoteFinder"
+			),
+			initial_query = finder_sticky.format_initial_query(_parley._note_finder.sticky_query),
+			anchor = "bottom",
+			on_query_change = function(query)
+				_parley._note_finder.sticky_query = finder_sticky.extract(query, { "root" })
+			end,
+			on_select = function(item)
+				_parley._note_finder.opened = false
+				if source_win and vim.api.nvim_win_is_valid(source_win) then
+					vim.api.nvim_set_current_win(source_win)
+				end
+				_parley.open_buf(item.value, true)
+			end,
+			on_cancel = function()
+				_parley._note_finder.opened = false
+				_parley._note_finder.initial_index = nil
+				_parley._note_finder.initial_value = nil
+			end,
+			mappings = {
+				{
+					key = delete_shortcut.shortcut,
+					fn = function(item, close_fn, context)
+						if not item then
+							return
 						end
-					end
-
-					context.skip_focus_restore = true
-					context.note_finder_items = items
-					context.suspend_for_external_ui()
-					vim.defer_fn(function()
-						M.prompt_delete_confirmation(
-							item.value,
-							selected_index,
-							#items,
-							source_win,
-							close_fn,
-							context
-						)
-					end, 20)
-				end,
-			},
-			{
-				key = next_recency_shortcut.shortcut,
-				fn = function(_, close_fn)
-					local next_index, next_state = _parley._cycle_note_finder_recency(
-						recency_config,
-						_parley._note_finder.recency_index,
-						"previous"
-					)
-					_parley._note_finder.recency_index = next_index
-					_parley._note_finder.show_all = next_state.is_all
-					close_fn()
-					vim.defer_fn(function()
-						_parley._note_finder.opened = false
-						_parley._note_finder.source_win = source_win
-						_parley.cmd.NoteFinder()
-					end, 100)
-				end,
-			},
-			{
-				key = previous_recency_shortcut.shortcut,
-				fn = function(_, close_fn)
-					local next_index, next_state = _parley._cycle_note_finder_recency(
-						recency_config,
-						_parley._note_finder.recency_index,
-						"next"
-					)
-					_parley._note_finder.recency_index = next_index
-					_parley._note_finder.show_all = next_state.is_all
-					close_fn()
-					vim.defer_fn(function()
-						_parley._note_finder.opened = false
-						_parley._note_finder.source_win = source_win
-						_parley.cmd.NoteFinder()
-					end, 100)
-				end,
-			},
-			{
-				key = keybindings_shortcut.shortcut,
-				fn = function(_, _)
-					vim.schedule(function()
-						_parley.cmd.KeyBindings("note_finder")
-					end)
-				end,
+						local selected_index = 1
+						for index, picker_item in ipairs(items) do
+							if picker_item.value == item.value then
+								selected_index = index
+								break
+							end
+						end
+						context.skip_focus_restore = true
+						context.note_finder_items = items
+						context.suspend_for_external_ui()
+						vim.defer_fn(function()
+							M.prompt_delete_confirmation(
+								item.value,
+								selected_index,
+								#items,
+								source_win,
+								close_fn,
+								context
+							)
+						end, 20)
+					end,
+				},
+				{ key = next_recency_shortcut.shortcut, fn = cycle_recency("previous") },
+				{ key = previous_recency_shortcut.shortcut, fn = cycle_recency("next") },
+				{
+					key = keybindings_shortcut.shortcut,
+					fn = function()
+						vim.schedule(function()
+							_parley.cmd.KeyBindings("note_finder")
+						end)
+					end,
+				},
 			},
 		},
 	})
+	session:start()
 
 	_parley._note_finder.initial_index = nil
 	_parley._note_finder.initial_value = nil
-	_parley._note_finder.opened = false
 end
 
 return M

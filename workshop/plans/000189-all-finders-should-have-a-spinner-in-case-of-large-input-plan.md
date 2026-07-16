@@ -1012,29 +1012,29 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 - Create: `tests/unit/note_finder_records_spec.lua`
 - Modify: `tests/unit/note_finder_logic_spec.lua`
 
-- [ ] **Step 1: Write failing Note adapter/materializer tests**
+- [x] **Step 1: Write failing Note adapter/materializer tests**
 
   Feed enumerated path/stat/root records. Cover recursive traversal, template skips (not failures), directory-date inference, special-folder recency exemption, cache reuse/pruning, non-primary labels, timestamp/mtime/path ordering, and adapter exceptions.
 
-- [ ] **Step 2: Run record tests and confirm RED**
+- [x] **Step 2: Run record tests and confirm RED**
 
   Run: `nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/note_finder_records_spec.lua" -c qa`
   Expected: FAIL with `module 'parley.note_finder_records' not found`.
 
-- [ ] **Step 3: Extract Note IO from materialization**
+- [x] **Step 3: Extract Note IO from materialization**
 
   Keep `note_finder_records.lua` under about 260 lines and keep classification/cutoff inference pure over record metadata. Use `AsyncFileSource` recursively for `*.md`; no file body read is needed. Apply recency only per opener after the raw prewarm result settles. Prune only roots that enumerated successfully; retain and retry cache entries for failed roots.
 
-- [ ] **Step 4: Write failing Note lifecycle/prewarm tests**
+- [x] **Step 4: Write failing Note lifecycle/prewarm tests**
 
   Mirror Chat's delayed-producer immediate return/sentinel/spinner, cancel, fingerprint-field join/mismatch, ownerless-settlement, distinct-recency, successful-empty/all-absent, stat failure, partial/total failure retry, successful-root-only cache pruning, and no-duplicate-scan cases. Preserve delete and recency-cycle reopen behavior after settlement.
 
-- [ ] **Step 5: Run entry-point tests and confirm RED**
+- [x] **Step 5: Run entry-point tests and confirm RED**
 
   Run: `nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/note_finder_logic_spec.lua" -c qa`
   Expected: FAIL at immediate-open/prewarm assertions because current code waits and scans synchronously.
 
-- [ ] **Step 6: Implement Note loader and joinable prewarm wiring**
+- [x] **Step 6: Implement Note loader and joinable prewarm wiring**
 
   Construct the exact discovery fingerprint in production and call
   `finder_producer.run` with Note acquisition/adapter/finalizer/cache hooks;
@@ -1044,7 +1044,7 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   materializer and existing UI actions. Use shared `on_terminal`/`on_retire`
   hooks and do not add finder-local callback arrays.
 
-- [ ] **Step 7: Run Note/shared tests and commit**
+- [x] **Step 7: Run Note/shared tests and commit**
 
   Run:
 

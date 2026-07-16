@@ -598,3 +598,18 @@ stale on 2026-07-15, so the estimate is provisional.
   deduplication. Entry tests cover real spinner progress, cancel/late delivery,
   join/mismatch, empty/partial/total outcomes, cache reuse/pruning, and existing
   delete/move/recency behavior (`ARCH-DRY`, `ARCH-PURE`, `ARCH-PURPOSE`).
+
+### 2026-07-16 — Task 7 implementation
+
+- Note Finder now opens its animated shell before recursive libuv traversal,
+  joins only exact retained-prewarm fingerprints, and performs no body reads.
+  Recency remains opener-local while retained prewarms cache raw metadata for
+  later materialization.
+- Pure Note records own template skips, directory-date inference, special-folder
+  exemptions, root-labelled display/search, identity deduplication, and stable
+  timestamp/mtime/path order. Successful roots prune only their own cache;
+  failed roots retain retryable entries.
+- Entry-point coverage pins the real spinner, picker-owned cancellation, exact
+  join/mismatch, ownerless settlement, empty/partial/total outcomes, cache
+  reuse/pruning, selection restoration, and recency reopen after settlement
+  (`ARCH-DRY`, `ARCH-PURE`, `ARCH-PURPOSE`).
