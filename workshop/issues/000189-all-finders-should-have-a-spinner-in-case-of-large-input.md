@@ -43,19 +43,41 @@ imported package trees that are outside the repository's useful document set.
 - The shared loader takes an immutable snapshot of roots and finder options plus
   an injected asynchronous producer. It synchronously publishes `loading`, and
   settles exactly once with one of four outcomes: `success(records)`,
-  `partial(records, failed_root_count)`, `failure(failed_root_count)`, or
-  `cancelled`. Records are finder-specific raw discovery/metadata values, not
-  rendered picker items. Each subscriber applies its own immutable open-time
-  options through a deterministic materializer after settlement. The producer
-  returns an idempotent cancellation handle; the session exposes
-  cancellation/subscription and rejects every repeated or stale settlement. A
-  root counts as successful even when it contains zero matches.
+  `partial(records, failed_root_count, failed_record_count)`,
+  `failure(failed_root_count)`, or `cancelled`. Records are finder-specific raw
+  discovery/metadata values, not rendered picker items. Each subscriber applies
+  its own immutable open-time options through a deterministic materializer
+  after settlement. The producer returns an idempotent cancellation handle; the
+  session exposes cancellation/subscription and rejects every repeated or stale
+  settlement. A root counts as successful even when it contains zero matches.
+- Enumeration failure makes the whole root fail and discards every record
+  staged for that root. After successful enumeration, an individual async
+  stat/read or parser failure discards only that record and increments
+  `failed_record_count`; other records and roots continue. Any record failure,
+  or any failed root beside at least one successful root, produces `partial`.
+  `failure` means every attempted root failed enumeration. A successfully
+  enumerated root whose every record later fails therefore settles as partial
+  with an empty record set, not as total failure.
+
+  | Session state | Event | Required effect |
+  |---|---|---|
+  | loading | subscribe | register one subscriber for the immutable snapshot |
+  | loading | producer settles | store one outcome and deliver it once to every live subscriber |
+  | loading | owned picker cancels | invalidate generation, unsubscribe, and invoke producer cancel once |
+  | loading | joined-prewarm picker cancels | invalidate/unsubscribe only; prewarm keeps ownership |
+  | settled | subscribe before session retirement | replay the stored outcome once |
+  | settled/cancelled | repeated settle or cancel | no-op |
+
+  A normal picker-owned session retires after delivery or cancellation. The
+  separate prewarm retention/cache rule below governs its ownerless terminal.
 - Results replace the loading state as one complete, deterministically sorted
   set. Do not progressively reorder a list beneath the user's cursor. Existing
   titles, item rendering, primary sort order, facets, sticky queries, recall,
   selection, delete/move actions, and view cycling remain unchanged after
-  loading. When primary sort values tie, every finder uses canonical absolute
-  item path ascending as the stable secondary key.
+  loading. When primary sort values tie, every finder uses one shared path-key
+  policy as the stable secondary key: `realpath` when available, otherwise
+  normalized absolute path; separators normalized to `/`; compared as
+  case-sensitive UTF-8 bytes with no locale collation.
 - Loading and total-failure presentation is picker status, not a synthetic item:
   it bypasses fuzzy/sticky-query filtering, never enters the selectable item
   list, and ignores confirm/double-click. A retained query therefore cannot hide
@@ -77,8 +99,10 @@ imported package trees that are outside the repository's useful document set.
   not descended; a super-repo member is listed only by its own Git invocation.
   A missing Git executable, a root that is not a Git worktree, or a non-zero Git
   listing exit is that root's scan failure; there is no ignore-violating
-  filesystem fallback. Super-repo labels, aggregation, ordering, and repository
-  facets otherwise remain unchanged.
+  filesystem fallback. Listing uses NUL-delimited output and incremental stream
+  parsing, so paths containing newlines remain one record. A non-zero exit
+  discards every staged stdout path for that root. Super-repo labels,
+  aggregation, ordering, and repository facets otherwise remain unchanged.
 - Chat and Note prewarming uses the same asynchronous discovery path as an
   explicit open. If a prewarm is already in flight, opening the finder displays
   the loading picker and subscribes to that producer instead of hiding the
@@ -89,7 +113,13 @@ imported package trees that are outside the repository's useful document set.
   contract. Prewarm captures only roots and produces the complete unfiltered
   raw metadata set. Each joined opener snapshots its own current recency/cutoff,
   facet, and query options and materializes that shared set independently, so
-  joining never applies stale prewarm-time UI policy or repeats disk discovery.
+  joining never applies stale prewarm-time UI policy or repeats concurrent disk
+  discovery. Once an ownerless prewarm settles, its terminal records are not
+  replayed as a later picker's result: only the existing per-file mtime metadata
+  cache remains. A later open always performs fresh asynchronous enumeration,
+  prunes cache entries no longer present, and reuses unchanged metadata; changed
+  mtimes are reread. Ownerless partial/total prewarm failure is logged once and
+  not cached as a terminal outcome, so the next open retries normally.
 - Missing optional roots continue to contribute no entries. In a multi-root or
   super-repo scan, a failure in one root preserves successful results from the
   others and emits one warning. An absent optional directory is skipped rather
@@ -106,11 +136,16 @@ imported package trees that are outside the repository's useful document set.
   it is distinct from a scan failure. Reopening after cancellation or failure
   starts a fresh session normally.
 - A partial outcome emits at most one user warning per finder session; a total
-  failure replaces loading with one nonselectable error status. Each message is at
-  most 240 bytes, reports only the failed-root count and finder name, and never
-  includes raw process output. Per-root technical diagnostics may be logged,
-  but each is independently truncated to 240 bytes. Confirming an error/empty
-  status row performs no selection action.
+  failure replaces loading with one nonselectable error status. Each message is
+  at most 240 bytes, reports only the finder name plus aggregate failed-root and
+  failed-record counts, and never includes raw process output. Per-root
+  technical diagnostics may be logged,
+  but each is independently truncated to 240 bytes. Capture is bounded at the
+  source: stderr readers retain at most 240 bytes; NUL path parsing retains only
+  complete records plus one at-most-4096-byte pending fragment, treating an
+  overlong unterminated fragment as a root failure. A session logs at most ten
+  root/record diagnostics plus one bounded omitted-count summary. Confirming an
+  error/empty status performs no selection action.
 - The parser batcher accepts an injected monotonic clock. It checks elapsed time
   between atomic records and yields before beginning record 26 or whenever the
   elapsed slice time is at least 5ms. A single record that began within budget
@@ -138,15 +173,24 @@ imported package trees that are outside the repository's useful document set.
   nonselectable error state respectively, without leaked timers or duplicate
   terminal work. All-absent optional roots are specifically covered as a
   successful empty scan.
+- A failed stat/read/parser drops only its record and yields partial success;
+  failed root enumeration drops that root's staged records; total failure occurs
+  only when every attempted root fails enumeration.
 - Chat and Note opens join an in-flight asynchronous prewarm and do not perform
   a duplicate scan; different opener recency snapshots materialize the same raw
-  prewarm records independently.
+  prewarm records independently. After prewarm settles without a subscriber, a
+  later open re-enumerates, reuses only unchanged mtime metadata, prunes stale
+  cache entries, and retries prior partial/total failures.
 - Ordinary and super-repo Markdown Finder include all tracked Markdown files
   plus untracked non-ignored Markdown files, exclude ignored untracked files and
   Markdown reachable only through symlinked directories, treat nested
   repos/submodules as opaque, enforce root-relative component depth, fail safely
   when Git listing is unavailable, and retain existing display labels, primary
   sorting, and facets.
+- NUL-delimited Git process fakes cover newline-bearing filenames, incremental
+  chunks, non-zero exit with staged stdout, bounded stderr/pending fragments,
+  tracked-but-ignored files, global excludes, nested repositories, submodules,
+  and root-relative depth.
 - Equal primary sort values resolve by canonical item path for deterministic
   ordering in all five finders.
 - Existing finder interaction regressions remain green after results load, and
@@ -204,3 +248,14 @@ imported package trees that are outside the repository's useful document set.
   materialization; moved loading/error into nonfilterable, nonselectable picker
   status; defined Markdown inclusion as tracked union non-ignored untracked;
   and specified an injected monotonic clock checked between atomic records.
+
+### 2026-07-15 — third fresh-context spec review
+
+- Reason: review found undefined per-record failure effects, completed-prewarm
+  freshness/replay, cross-platform tie comparison, and diagnostic capture/log
+  volume.
+- Delta: record failures now produce partial results while root enumeration is
+  transactional; completed prewarm retains only an mtime metadata cache and
+  later opens re-enumerate; a shared normalized bytewise path key owns ties;
+  Git paths stream NUL-delimited with bounded fragments/stderr; and per-session
+  technical diagnostic count is capped.
