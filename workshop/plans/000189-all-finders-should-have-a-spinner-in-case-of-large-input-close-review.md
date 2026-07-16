@@ -1,41 +1,49 @@
-# #189 close review
+# #189 close reviews
 
-- Review window: `925c046..b71fec1`
-- Verdict: `REWORK`
-- Confidence: high
+- Review window: `925c046..HEAD`
 - Reviewer: SDLC-dispatched fresh-context Codex
 
-## Findings
+## Review 1 — REWORK
 
-1. Critical — `lua/parley/issue_finder.lua` reset `_issue_finder.opened`
-   immediately after starting asynchronous acquisition. A second invocation
-   could create a concurrent picker while the first was loading or settled.
-2. Critical — `lua/parley/async_file_enrichment.lua` removed a descriptor from
-   its ownership set before a queued `fs_close` began. Cancellation could clear
-   that queued close and then find no descriptor to close directly.
+Two Critical ownership findings:
 
-`ARCH-DRY` passed. The findings flagged `ARCH-PURPOSE` for inconsistent picker
-lifetime ownership and `ARCH-PURE` for the descriptor-ownership race at the IO
-boundary. No Important or Minor findings were reported. The reviewer otherwise
-confirmed the shared async architecture, pure materializers, Git boundary,
-documentation, atlas, and full green suite.
+1. Issue Finder released `_issue_finder.opened` immediately after launch,
+   permitting duplicate pickers during loading or after settlement.
+2. Async enrichment relinquished descriptor ownership before a queued close
+   started, so queue cancellation could discard the only cleanup operation.
 
-## Resolution
+Resolution: retain the picker guard until selection/cancellation/action-owned
+reopen, and retain descriptors until close work actually starts. Focused tests
+pin both windows. `ARCH-PURE` and `ARCH-PURPOSE` were flagged; `ARCH-DRY` passed.
 
-- Issue Finder now retains its guard until selection, cancellation, or an
-  action-owned reopen. The focused regression invokes the finder during loading
-  and after settlement, then proves selection and cancellation release it.
-- Async enrichment now relinquishes a descriptor only when the queued close
-  actually starts. A focused saturated-queue regression cancels while close is
-  pending and proves direct closure occurs exactly once.
-- The plan revision, issue Log, and `workshop/lessons.md` record both ownership
-  rules.
+## Review 2 — REWORK
+
+One Critical shared-picker finding:
+
+1. Action-only Chat/Note recency and Issue view mappings received raw
+   `close_all` while `scanning…` was active. Closing and reopening bypassed the
+   loader's cancellation-aware dismissal, leaving the first subscription or
+   picker-owned acquisition alive.
+
+Resolution: `float_picker` now supplies cancellation-aware `dismiss` as the
+mapping close callback only while a status row is active; settled action
+mappings retain raw action-owned teardown. A direct picker regression plus real
+delayed-acquisition Chat, Note, and Issue mapping tests prove exactly one old
+scan is canceled before one replacement scan opens, then clean up the replacement.
+`ARCH-PURPOSE` was flagged; `ARCH-DRY` and `ARCH-PURE` passed.
+
+The reviewer also saw unrelated `chat_progress_process_spec.lua` readiness/swap
+failures in its sandbox. The implementor's clean local `make test` had passed
+before the review; full verification is refreshed after each accepted fix.
 
 ## Evidence
 
-- `tests/unit/issue_finder_spec.lua`: 27 successes, 0 failures.
-- `tests/unit/async_file_source_spec.lua`: 14 successes, 0 failures.
+- `float_picker_spec.lua`: 71 successes, 0 failures.
+- `chat_finder_logic_spec.lua`: 48 successes, 0 failures.
+- `note_finder_logic_spec.lua`: 36 successes, 0 failures.
+- `issue_finder_spec.lua`: 28 successes, 0 failures.
 - `make test-changed`: exit 0.
 - `make lint`: zero warnings/errors across 301 files.
-- `make test`: exit 0 with every unit, architecture, and integration spec PASS.
+- `make test`: exit 0; every unit, architecture, and integration spec PASS,
+  including `chat_progress_process_spec.lua`.
 - `git diff --check`: clean.

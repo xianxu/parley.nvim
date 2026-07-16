@@ -583,6 +583,36 @@ describe("float_picker", function()
             assert.is_nil(find_any_float_win(), "window should be closed by mapping close_fn")
         end)
 
+        it("extra mapping close_fn dismisses through cancellation while status is active", function()
+            local cancel_count = 0
+            local mapped = false
+            float_picker.open({
+                title = "Loading",
+                items = {},
+                status = { message = "scanning…", animated = true },
+                on_select = function() end,
+                on_cancel = function() cancel_count = cancel_count + 1 end,
+                mappings = {
+                    {
+                        key = "<C-a>",
+                        fn = function(item, close_fn)
+                            assert.is_nil(item)
+                            close_fn()
+                            mapped = true
+                        end,
+                    },
+                },
+            })
+
+            vim.api.nvim_feedkeys(
+                vim.api.nvim_replace_termcodes("<C-a>", true, false, true), "x", true
+            )
+            assert(vim.wait(200, function() return mapped and cancel_count == 1 end))
+
+            assert.equals(1, cancel_count)
+            assert.is_nil(find_any_float_win(), "loading mapping should dismiss the picker")
+        end)
+
         it("control-key extra mappings are called from the prompt buffer", function()
             local mapped_item = nil
             float_picker.open({

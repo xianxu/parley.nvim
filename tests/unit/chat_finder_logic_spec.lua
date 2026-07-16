@@ -645,6 +645,29 @@ describe("ChatFinder logic", function()
             assert(vim.wait(500, function() return cancel_count == 1 end, 10))
         end)
 
+        it("cancels loading acquisition before a recency mapping reopens Chat", function()
+            local scan_count = 0
+            local cancel_count = 0
+            M.float_picker.open = original_float_picker_open
+            M._finder_dependencies = {
+                schedule = vim.schedule,
+                async_file_source = {
+                    scan = function()
+                        scan_count = scan_count + 1
+                        return { cancel = function() cancel_count = cancel_count + 1 end }
+                    end,
+                },
+            }
+
+            M.cmd.ChatFinder()
+            vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<C-a>", true, false, true), "x", true)
+
+            assert(vim.wait(1000, function() return cancel_count == 1 and scan_count == 2 end, 10))
+            assert.equals(1, scan_count - cancel_count)
+            vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "x", true)
+            assert(vim.wait(500, function() return cancel_count == 2 end, 10))
+        end)
+
 		it("joins a matching retained prewarm instead of starting a second scan", function()
 			local scan_count = 0
 			local finish_root

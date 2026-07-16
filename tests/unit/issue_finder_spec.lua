@@ -287,6 +287,30 @@ describe("IssueFinder asynchronous discovery", function()
         assert(vim.wait(500, function() return cancel_count == 1 end, 10))
     end)
 
+    it("cancels loading acquisition before the view mapping reopens Issue", function()
+        local scan_count = 0
+        fake.float_picker.open = parley.float_picker.open
+        fake._finder_dependencies = {
+            schedule = vim.schedule,
+            now = function() return 0 end,
+            async_file_source = {
+                scan = function()
+                    scan_count = scan_count + 1
+                    return { cancel = function() cancel_count = cancel_count + 1 end }
+                end,
+            },
+        }
+        fake.cmd.IssueFinder = function() issue_finder.open() end
+
+        issue_finder.open()
+        vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Tab>", true, false, true), "x", true)
+
+        assert(vim.wait(1000, function() return cancel_count == 1 and scan_count == 2 end, 10))
+        assert.equals(1, scan_count - cancel_count)
+        vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "x", true)
+        assert(vim.wait(500, function() return cancel_count == 2 end, 10))
+    end)
+
     it("reads and parses an issue through the real asynchronous disk source", function()
         local root = vim.fn.tempname() .. "-issue-finder-real-source"
         vim.fn.mkdir(root, "p")

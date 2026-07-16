@@ -1269,7 +1269,7 @@ function M.open(opts)
                 query_text
             ))
         end
-        fn(selected, close_all, context)
+        fn(selected, status_line ~= nil and dismiss or close_all, context)
         return context
     end
 

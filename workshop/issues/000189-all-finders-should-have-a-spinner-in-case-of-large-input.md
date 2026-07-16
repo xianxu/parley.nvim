@@ -682,3 +682,17 @@ stale on 2026-07-15, so the estimate is provisional.
   windows (`ARCH-PURE`, `ARCH-PURPOSE`).
 - After the fixes, both focused suites, `make test-changed`, `make lint`, and
   the full `make test` suite pass; `git diff --check` is clean.
+
+### 2026-07-16 — second final boundary-review rework
+
+- Re-review found loading Chat/Note recency and Issue view mappings used raw
+  action teardown before reopening, so the old loader could remain subscribed
+  or keep picker-owned acquisition alive.
+- The shared picker now gives mappings cancellation-aware dismissal while a
+  status row is active and preserves raw action teardown only after settlement.
+  Direct picker coverage and real delayed-acquisition Chat, Note, and Issue
+  mapping tests prove the old scan cancels exactly once before one replacement
+  opens (`ARCH-DRY`, `ARCH-PURPOSE`).
+- After this fix, all four focused suites, `make test-changed`, `make lint`, and
+  `make test` pass; the full suite includes a clean
+  `chat_progress_process_spec.lua` run, and `git diff --check` is clean.

@@ -1449,3 +1449,13 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   cancellation can close them directly; add focused regressions for duplicate
   invocation across settlement and cancellation with a pending close
   (`ARCH-PURE`, `ARCH-PURPOSE`).
+
+### 2026-07-16 — second final close-review rework
+
+- Reason: re-review found action-only Chat/Note recency and Issue view mappings
+  received raw teardown while loading, bypassing subscription/acquisition
+  cancellation before their scheduled reopen.
+- Delta: make the shared picker mapping close callback cancellation-aware only
+  while status is active, preserve raw action-owned teardown after settlement,
+  and add real delayed-loading action regressions for Chat, Note, and Issue plus
+  a direct picker policy test (`ARCH-DRY`, `ARCH-PURPOSE`).

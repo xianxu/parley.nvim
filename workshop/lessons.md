@@ -318,3 +318,9 @@
   Rule: retain the descriptor until the close operation actually starts, so
   cancellation can close it directly if the queued job never runs; test cancel
   in the queued-but-not-started window.
+- **An action-owned close is safe only after loading ownership has settled.**
+  Recency/view mappings legitimately close and reopen a settled picker without
+  cancellation, but the same raw teardown during `scanning…` strands the old
+  subscription or acquisition. Rule: at the shared picker boundary, route
+  mapping closes through dismissal while status is active and through raw
+  teardown only after settlement; test every action-only loading consumer.
