@@ -63,6 +63,16 @@ eligible. A failed member is a root failure: successful members remain visible
 with a bounded partial warning, while all-member failure leaves the picker open
 with an error status.
 
+### Artifact finder discovery
+
+All five disk-backed finders open before acquisition and share the same
+cancellable loading/outcome lifecycle. Chat scans dated Markdown headers, Note
+scans recursive metadata without bodies, Issue scans the selected non-recursive
+issue/history tree, Vision scans non-recursive YAML file bundles, and Markdown
+uses the Git boundary above. Super-repo mode expands those same operations per
+member; partial member failures retain successful rows and total failure leaves
+the picker open with a bounded error.
+
 ### Note roots
 Notes still use the multi-root manager with freeform add/remove/rename via `:ParleyNoteDirs` / `<C-n>h` and persist `note_roots` / `note_dirs` to state.json. The shared `root_dirs.lua` generic manager and `root_dir_picker.lua` UI exist primarily to serve the note system now; the chat side only uses the read paths (get/find/normalize/apply) and `super_repo.set_chat_roots`.
 

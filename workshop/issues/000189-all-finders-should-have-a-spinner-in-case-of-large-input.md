@@ -651,3 +651,20 @@ stale on 2026-07-15, so the estimate is provisional.
   settlement, absent/partial/total outcomes, cancellation, real spinner/disk
   behavior, stable ordering, line jumps, and zero-read cache reuse
   (`ARCH-DRY`, `ARCH-PURE`, `ARCH-PURPOSE`).
+
+### 2026-07-16 — Final verification and smoke
+
+- The full unit and integration suite, mapped tests, focused async/Git source
+  integrations, lint, and `git diff --check` pass. Lint reports zero warnings
+  or errors across 301 files.
+- Production Neovim smoke in `~/workspace/parley.nvim` showed immediate
+  animated loading followed by settled results for Chat, Note, Issue,
+  Markdown, and Vision (the current root has no Vision initiatives), with
+  post-load facets visible and Esc/reopen working.
+- `/tmp/parley-189-smoke.QsMPZs` contained 2,000 tracked Markdown documents and
+  2,000 ignored `vendor/` documents. Git discovery returned exactly 2,000
+  paths and zero vendor paths; the live picker displayed `scanning…`
+  immediately, accepted a retained `1999` query, settled to tracked results,
+  and reopened after Esc. The exact fixture was removed afterward.
+- Smoke also caught and corrected the README command spelling: the public
+  Vision entry point remains `:ParleyVisionShow` (`ARCH-PURPOSE`).

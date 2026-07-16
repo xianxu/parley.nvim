@@ -263,8 +263,10 @@ atlas:
       - lua/parley/issues.lua
       - lua/parley/finder_facets.lua
       - lua/parley/issue_finder.lua
+      - lua/parley/issue_finder_records.lua
       - lua/parley/float_picker.lua
       - lua/parley/vision_finder.lua
+      - lua/parley/vision_finder_records.lua
       - lua/parley/markdown_finder.lua
       - lua/parley/lualine.lua
       - lua/parley/keybinding_registry.lua
@@ -276,6 +278,9 @@ atlas:
       - tests/unit/finder_facets_spec.lua
       - tests/unit/chat_finder_logic_spec.lua
       - tests/unit/issue_finder_spec.lua
+      - tests/unit/issue_finder_records_spec.lua
+      - tests/unit/vision_finder_spec.lua
+      - tests/unit/vision_finder_records_spec.lua
       - tests/unit/markdown_finder_spec.lua
       - tests/unit/float_picker_spec.lua
 
@@ -486,8 +491,12 @@ atlas:
   vision/format:
     code:
       - lua/parley/vision.lua
+      - lua/parley/vision_finder.lua
+      - lua/parley/vision_finder_records.lua
     tests:
       - tests/unit/vision_spec.lua
+      - tests/unit/vision_finder_spec.lua
+      - tests/unit/vision_finder_records_spec.lua
 
   vision/exports:
     code:
@@ -503,6 +512,7 @@ atlas:
       - lua/parley/issues.lua
       - lua/parley/finder_facets.lua
       - lua/parley/issue_finder.lua
+      - lua/parley/issue_finder_records.lua
       - lua/parley/float_picker.lua
       - lua/parley/init.lua
     tests:
@@ -510,6 +520,7 @@ atlas:
       - tests/unit/issues_spec.lua
       - tests/unit/finder_facets_spec.lua
       - tests/unit/issue_finder_spec.lua
+      - tests/unit/issue_finder_records_spec.lua
       - tests/unit/float_picker_spec.lua
 
   ui/highlights:
@@ -549,6 +560,10 @@ atlas:
       - lua/parley/chat_parser.lua
       - lua/parley/note_finder.lua
       - lua/parley/note_finder_records.lua
+      - lua/parley/issue_finder.lua
+      - lua/parley/issue_finder_records.lua
+      - lua/parley/vision_finder.lua
+      - lua/parley/vision_finder_records.lua
       - lua/parley/markdown_finder.lua
       - lua/parley/float_picker.lua
       - lua/parley/picker_status.lua
@@ -579,6 +594,10 @@ atlas:
       - tests/unit/chat_parser_section_lines_spec.lua
       - tests/unit/note_finder_logic_spec.lua
       - tests/unit/note_finder_records_spec.lua
+      - tests/unit/issue_finder_spec.lua
+      - tests/unit/issue_finder_records_spec.lua
+      - tests/unit/vision_finder_spec.lua
+      - tests/unit/vision_finder_records_spec.lua
       - tests/unit/markdown_finder_spec.lua
       - tests/unit/picker_status_spec.lua
       - tests/unit/finder_scan_spec.lua

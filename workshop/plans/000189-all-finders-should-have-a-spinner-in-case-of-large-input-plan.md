@@ -1217,11 +1217,11 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 - Modify: `atlas/index.md` only if a new atlas page is added
 - Modify: `workshop/issues/000189-all-finders-should-have-a-spinner-in-case-of-large-input.md`
 
-- [ ] **Step 1: Update operator-facing documentation**
+- [x] **Step 1: Update operator-facing documentation**
 
   Document the five-finder disk-backed scope, immediate cancellable `scanning…`, complete-result replacement, partial/total failure presentation, and Markdown's tracked-union-untracked-nonignored Git boundary in ordinary and super-repo modes.
 
-- [ ] **Step 2: Update atlas and traceability**
+- [x] **Step 2: Update atlas and traceability**
 
   Map `finder_scan`, `finder_batcher`, `async_file_source`, `git_markdown_source`,
   `finder_producer`, `finder_loader`, `picker_status`, all four focused
@@ -1231,7 +1231,7 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   120ms spinner budgets as implementation constants rather than product
   promises.
 
-- [ ] **Step 3: Run focused and mapped verification**
+- [x] **Step 3: Run focused and mapped verification**
 
   Run:
 
@@ -1246,12 +1246,12 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 
   Expected: unit directory and both integration specs report zero failures, mapped tests pass, lint reports no warnings/errors, and diff check is silent.
 
-- [ ] **Step 4: Run the full suite**
+- [x] **Step 4: Run the full suite**
 
   Run: `make test`
   Expected: all unit and integration tests PASS with no leaked timers/handles at process exit.
 
-- [ ] **Step 5: Perform manual smoke test**
+- [x] **Step 5: Perform manual smoke test**
 
   In `~/workspace/parley.nvim`, use the real repository/super-repo roots for all five finders. Build a reproducible large Markdown root:
 
@@ -1269,7 +1269,7 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 
   Launch Neovim with that printed directory as cwd and Parley's local plugin path. Confirm the shell/spinner appears immediately, typing remains live, Esc cancels, reopen succeeds, only tracked docs appear, and post-load mappings/facets work. Remove only the printed `/tmp/parley-189-smoke.*` fixture after recording the exact path and observations in the issue Log.
 
-- [ ] **Step 6: Commit docs and verification log**
+- [x] **Step 6: Commit docs and verification log**
 
   ```bash
   git add README.md atlas workshop/issues/000189-all-finders-should-have-a-spinner-in-case-of-large-input.md

@@ -124,6 +124,10 @@ Most-used defaults:
 - `<C-n>f` find notes - the same immediate loading experience over recursive
   note metadata; note bodies are not read, and special folders still bypass
   recency filtering
+- `<C-y>f` find issues - asynchronously read issue/history metadata with
+  vocabulary-backed ordering and repository facets in super-repo mode
+- `<C-j>f` find vision initiatives - asynchronously read YAML file bundles,
+  preserving file/parser order and exact source-line jumps
 - `<C-g>m` find Markdown files - directory facets in ordinary repo mode and
   repository facets in super-repo mode; query text and facet choices persist
   across finder reopenings within the current Neovim session. When a facet bar
@@ -162,6 +166,8 @@ Tool-fold toggling is configurable but unbound by default. To opt in, set
 - `:ParleyChatNew` create a new chat
 - `:ParleyChatFinder` asynchronous chat finder with joinable metadata prewarm
 - `:ParleyNoteFinder` asynchronous recursive note finder with joinable metadata prewarm
+- `:ParleyIssueFinder` asynchronous issue/history finder
+- `:ParleyVisionShow` asynchronous project-initiative finder
 - `:ParleyMarkdownFinder` asynchronous Git-aware Markdown finder with contextual directory/repository facets
 - `:ParleyChatRespond` answer current question
 - `:ParleyChatRespondAll` regenerate from start to cursor
@@ -171,6 +177,13 @@ Tool-fold toggling is configurable but unbound by default. To opt in, set
 - `:ParleyAgent` switch agent
 - `:ParleySystemPrompt` switch system prompt
 - `:ParleyToggleFollowCursor` toggle live cursor-follow during streaming
+
+All five disk-backed finders open their picker shell immediately and keep the
+prompt live while `scanning…` animates. Settled results replace the loading row
+in one update; partial failures retain usable rows with a warning, total failure
+leaves a nonselectable error, and Esc cancels picker-owned work. Markdown uses
+Git's tracked union untracked-nonignored boundary, so ignored vendor trees are
+not searched in either ordinary or super-repo mode.
 
 ## What Parley Supports
 
