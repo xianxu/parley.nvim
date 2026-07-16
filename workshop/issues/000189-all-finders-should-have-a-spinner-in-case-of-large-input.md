@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-07-14
 updated: 2026-07-15
-estimate_hours: 3.2
+estimate_hours: 9.2
 started: 2026-07-15T17:02:57-07:00
 ---
 
@@ -151,9 +151,11 @@ imported package trees that are outside the repository's useful document set.
   status and the picker remains cancellable. Existing required-root
   misconfiguration checks still warn and return before opening a picker.
 - Cancelling a loading picker requests cancellation of owned external work when
-  supported and always invalidates its generation. Timers, handles, callbacks,
-  and finder `opened` flags are retired exactly once on cancel, completion,
-  failure, or picker/window destruction.
+  supported and always invalidates its generation. Scan timers, handles, and
+  callbacks are retired exactly once on scan cancellation, settlement, or
+  picker/window destruction. Finder `opened` flags track the picker lifetime:
+  scan settlement leaves them set while results or an error remain visible, and
+  select/cancel/window destruction retires them exactly once.
 - Successful empty discovery ends in the existing `(no matches)` presentation;
   it is distinct from a scan failure. Reopening after cancellation or failure
   starts a fresh session normally.
@@ -242,22 +244,27 @@ imported package trees that are outside the repository's useful document set.
 ```estimate
 model: estimate-logic-v3.1
 familiarity: 1.5
-item: lua-neovim              design=0.40 impl=0.40
-item: tui-screen              design=0.25 impl=0.26
-item: cross-cutting-refactor  design=0.12 impl=0.14
-item: real-api-discovery      design=0.00 impl=0.18
-item: atlas-docs              design=0.10 impl=0.05
-item: milestone-review        design=0.10 impl=0.36
+item: lua-neovim              design=0.60 impl=0.60
+item: lua-neovim              design=0.60 impl=0.60
+item: lua-neovim              design=0.60 impl=0.60
+item: tui-screen              design=0.40 impl=0.40
+item: api-integration         design=0.60 impl=0.60
+item: cross-cutting-refactor  design=0.20 impl=0.20
+item: atlas-docs              design=0.10 impl=0.08
+item: milestone-review        design=0.10 impl=0.60
 design-buffer: 0.15
-total: 3.20
+total: 9.20
 ```
 
 Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md`
 against `baseline-v3.1.md`. Method A only. Design values apply the thorough-spec
 discount; implementation values are already scaled to 40% of the v2/v2.1
 primitive table. Familiarity is 1.5 because streaming libuv/Git cancellation is
-novel-but-bounded in this Lua codebase. The calibration source was stale on
-2026-07-15, so the estimate is provisional.
+novel-but-bounded in this Lua codebase. The three `lua-neovim` primitives are
+the shared scan/session core, Chat/Note migration, and Issue/Vision migration;
+the API primitive is the streaming Git/libuv boundary; the milestone primitive
+covers M1, M2, and final integration review. The calibration source was stale
+on 2026-07-15, so the estimate is provisional.
 
 ## Log
 
@@ -340,3 +347,13 @@ novel-but-bounded in this Lua codebase. The calibration source was stale on
 - Delta: added the canonical durable plan, two intermediate milestones plus the
   final issue-close boundary, concrete operational budgets, and an estimate
   derived from estimate-logic-v3.1 rather than memory.
+
+### 2026-07-15 — change-code gate refinement
+
+- Reason: the mandatory plan-quality gate found invalid milestone commands,
+  close-bookkeeping order, an under-decomposed estimate, undefined shared
+  failure kinds, and an overlap ambiguity with open issue #122.
+- Delta: corrected boundary verbs/commit protocol, made the final checkbox a
+  pre-close action, re-derived the estimate as 9.2 hours by delivery primitive,
+  single-sourced failure kinds, explicitly preserved #122's current timestamp
+  behavior, and clarified that `opened` tracks picker rather than scan lifetime.

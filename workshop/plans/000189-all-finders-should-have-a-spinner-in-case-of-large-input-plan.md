@@ -47,6 +47,29 @@
   - **Relationships:** one session retains at most ten diagnostics; each stored/logged diagnostic is at most 512 bytes and one omitted-count summary is allowed.
   - **DRY rationale:** process and filesystem failures need one non-leaking boundary.
   - **Future extensions:** structured debug sinks may consume the same bounded records.
+
+  `finder_scan.FAILURE_KIND` is the only failure vocabulary:
+
+  ```lua
+  {
+      root_enumeration = "root_enumeration",
+      stat = "stat",
+      open = "open",
+      read = "read",
+      parse = "parse",
+      invalid_adapter_result = "invalid_adapter_result",
+      adapter_exception = "adapter_exception",
+      process_spawn = "process_spawn",
+      process_stream = "process_stream",
+      process_exit = "process_exit",
+      path_fragment_too_long = "path_fragment_too_long",
+      invalid_path = "invalid_path",
+  }
+  ```
+
+  IO sources and all five adapters import these values; they do not introduce
+  finder-local strings. Expected filename/suffix/policy nonmatches remain
+  `skip`, not failures.
 - **`MarkdownPathPolicy`** — transforms NUL-delimited Git paths into depth-checked Markdown candidates and deterministic picker entries.
   - **Relationships:** one member root yields 0:N relative paths; one path belongs to exactly one member invocation.
   - **DRY rationale:** ordinary and super-repo mode must apply identical inclusion/depth rules.
@@ -179,7 +202,9 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 
 - [ ] **Step 11: Write failing diagnostic-policy tests**
 
-  Cover static failure kinds, arbitrary thrown values, ten-diagnostic cap, control-character replacement, and 512-byte UTF-8-safe truncation.
+  Cover the exact exported `FAILURE_KIND` table above, arbitrary thrown values,
+  invalid adapter results, ten-diagnostic cap, control-character replacement,
+  and 512-byte UTF-8-safe truncation.
 
 - [ ] **Step 11a: Run diagnostic tests and confirm RED**
 
@@ -209,7 +234,11 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   M.new_batcher({ item_budget = 25, time_budget_ms = 5, now = now, schedule = schedule })
   ```
 
-  The batcher wraps adapter calls with `pcall`, accepts only `{ kind = "record", value = ... }`, `{ kind = "skip" }`, or `{ kind = "failure", failure_kind = STATIC_KIND }`, and schedules before the next record after either budget is exhausted.
+  The batcher wraps adapter calls with `pcall`, accepts only
+  `{ kind = "record", value = ... }`, `{ kind = "skip" }`, or
+  `{ kind = "failure", failure_kind = M.FAILURE_KIND.<member> }`, rejects any
+  unregistered string as `invalid_adapter_result`, and schedules before the next
+  record after either budget is exhausted.
 
 - [ ] **Step 15: Run the complete pure spec and diff check**
 
@@ -528,13 +557,21 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   git commit -m "markdown: #189 stream Git-aware discovery"
   ```
 
-- [ ] **Step 18: Close M1 boundary**
+- [ ] **Step 18: Prepare and invoke the M1 boundary**
 
-  Update the issue M1 checkbox/log and `atlas/ui/pickers.md`, `atlas/infra/repo_mode.md`, `atlas/traceability.yaml`, and `atlas/index.md` if a new atlas page is introduced. Run `make test-changed`, `make lint`, and `git diff --check`; record their actual outputs in the issue Log before replacing the evidence marker below and closing:
+  Update `atlas/ui/pickers.md`, `atlas/infra/repo_mode.md`,
+  `atlas/traceability.yaml`, and `atlas/index.md` if a new atlas page is
+  introduced. Do not tick M1 or append its close log by hand; the gate owns
+  those mutations. Run `make test-changed`, `make lint`, and `git diff --check`,
+  then invoke:
 
   ```bash
-  sdlc close --issue 189 --milestone M1 --verified 'finder_scan, async_file_source unit/integration, picker_status, float_picker, finder_loader, git_markdown_source integration, and markdown_finder specs pass; make test-changed and make lint pass; git diff --check is clean.'
+  sdlc milestone-close --issue 189 --milestone M1 --agent codex --verified 'finder_scan, async_file_source unit/integration, picker_status, float_picker, finder_loader, git_markdown_source integration, and markdown_finder specs pass; make test-changed and make lint pass; git diff --check is clean.'
   ```
+
+  Fix Critical/Important findings before committing, then commit the gate-owned
+  issue/atlas mutations and fixes once, copying the emitted `Review-Verdict:`
+  and `Review-Window:` lines verbatim into the commit trailers.
 
 ## Chunk 2: Chat and Note prewarm migration
 
@@ -556,7 +593,14 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   { kind = "lines", path, identity, stat, root, first_lines }
   ```
 
-  Cover filename timestamp fast-path, recency filtering, static parse failures, tags/topic parsing, deterministic timestamp/path ordering, and overlapping-root/symlink dedup. Cache lookup occurs after async stat and before async read: unchanged canonical path+mtime produces `cached`; only a miss/change requests ten lines and produces `lines`.
+  Preserve #189's current timestamp semantics without resolving open issue #122:
+  the legacy dashed filename fast-path still parses, real dotted chat filenames
+  continue falling back to stat mtime, and content-derived activity ordering is
+  out of scope. Also cover recency filtering, shared static parse failures,
+  tags/topic parsing, deterministic timestamp/path ordering, and
+  overlapping-root/symlink dedup. Cache lookup occurs after async stat and
+  before async read: unchanged canonical path+mtime produces `cached`; only a
+  miss/change requests ten lines and produces `lines`.
 
 - [ ] **Step 2: Run Chat logic tests and confirm RED**
 
@@ -652,13 +696,18 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   git commit -m "note: #189 share asynchronous finder prewarm"
   ```
 
-- [ ] **Step 5: Close M2 boundary**
+- [ ] **Step 5: Prepare and invoke the M2 boundary**
 
-  Update the issue M2 checkbox/log and atlas picker/note descriptions. Run `make test-changed`, `make lint`, and `git diff --check`; record actual output in the issue Log before replacing the evidence marker below and closing:
+  Update atlas picker/note descriptions. Do not tick M2 or append its close log
+  by hand; the gate owns those mutations. Run `make test-changed`, `make lint`,
+  and `git diff --check`, then invoke:
 
   ```bash
-  sdlc close --issue 189 --milestone M2 --verified 'Chat and Note record/entry-point specs cover delayed immediate-open, exact prewarm join, cancellation, partial/total outcomes, and successful-root cache pruning; shared specs, make test-changed, and make lint pass; git diff --check is clean.'
+  sdlc milestone-close --issue 189 --milestone M2 --agent codex --verified 'Chat and Note record/entry-point specs cover delayed immediate-open, exact prewarm join, cancellation, partial/total outcomes, and successful-root cache pruning; shared specs, make test-changed, and make lint pass; git diff --check is clean.'
   ```
+
+  Fix Critical/Important findings before committing, then commit the gate-owned
+  issue/atlas mutations and fixes once with the emitted review trailers.
 
 ## Chunk 3: Issue/Vision migration and release verification
 
@@ -827,11 +876,31 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   git commit -m "docs: #189 map asynchronous finder discovery"
   ```
 
-- [ ] **Step 7: Close issue #189 at the final boundary**
+- [ ] **Step 7: Prepare and invoke the final close boundary**
 
-  Update every remaining plan checkbox. Let the binary run the mandatory fresh-context boundary review; fix Critical/Important findings, add prevention rules to `workshop/lessons.md`, and rerun affected verification. Then use measured actuals:
+  Before invoking the gate, tick this step and every other remaining durable
+  plan checkbox plus the final plain issue-plan row; do not change issue status
+  or append the close log by hand. Let the binary run the mandatory
+  fresh-context boundary review; fix Critical/Important findings, add prevention
+  rules to `workshop/lessons.md`, and rerun affected verification. Then use
+  measured actuals:
 
   ```bash
   sdlc actual --issue 189
-  sdlc close --issue 189 --verified 'M1 and M2 boundary verdicts accepted; all new focused specs, make test-changed, make lint, and make test pass; git diff --check is clean; manual five-finder and 2,000 tracked/2,000 ignored Markdown smoke checks pass.'
+  sdlc close --issue 189 --agent codex --verified 'M1 and M2 boundary verdicts accepted; all new focused specs, make test-changed, make lint, and make test pass; git diff --check is clean; manual five-finder and 2,000 tracked/2,000 ignored Markdown smoke checks pass.'
   ```
+
+  Fix any boundary findings before committing. Commit close-owned issue changes,
+  fixes, lessons, and emitted review trailers in one final close commit.
+
+## Revisions
+
+### 2026-07-15 — mandatory change-code gate
+
+- Reason: the first gate invocation returned `VERDICT: FAILURE` for invalid
+  boundary commands/bookkeeping, a close-checkbox paradox, underestimated
+  scope, undefined failure-kind ownership, and ambiguity with issue #122.
+- Delta: use `milestone-close`, sequence gate-owned mutations before one trailer
+  commit, make the final step tickable before close, expand the estimate to 9.2
+  hours in the issue, define `finder_scan.FAILURE_KIND`, and preserve rather
+  than redesign Chat timestamp behavior.
