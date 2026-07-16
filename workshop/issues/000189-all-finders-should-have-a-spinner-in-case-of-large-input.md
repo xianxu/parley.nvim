@@ -42,25 +42,35 @@ imported package trees that are outside the repository's useful document set.
   prevents a large file set from monopolizing timers, input, redraw, or Esc.
 - The shared loader takes an immutable snapshot of roots and finder options plus
   an injected asynchronous producer. It synchronously publishes `loading`, and
-  settles exactly once with one of four outcomes: `success(items)`,
-  `partial(items, failed_root_count)`, `failure(failed_root_count)`, or
-  `cancelled`. The producer returns an idempotent cancellation handle; the
-  session exposes cancellation/subscription and rejects every repeated or stale
-  settlement. A root counts as successful even when it contains zero matches.
+  settles exactly once with one of four outcomes: `success(records)`,
+  `partial(records, failed_root_count)`, `failure(failed_root_count)`, or
+  `cancelled`. Records are finder-specific raw discovery/metadata values, not
+  rendered picker items. Each subscriber applies its own immutable open-time
+  options through a deterministic materializer after settlement. The producer
+  returns an idempotent cancellation handle; the session exposes
+  cancellation/subscription and rejects every repeated or stale settlement. A
+  root counts as successful even when it contains zero matches.
 - Results replace the loading state as one complete, deterministically sorted
   set. Do not progressively reorder a list beneath the user's cursor. Existing
   titles, item rendering, primary sort order, facets, sticky queries, recall,
   selection, delete/move actions, and view cycling remain unchanged after
   loading. When primary sort values tie, every finder uses canonical absolute
   item path ascending as the stable secondary key.
+- Loading and total-failure presentation is picker status, not a synthetic item:
+  it bypasses fuzzy/sticky-query filtering, never enters the selectable item
+  list, and ignores confirm/double-click. A retained query therefore cannot hide
+  `scanning…` or the error state. Only settled success/partial records are
+  materialized and installed as selectable items.
 - Extract deterministic file-list-to-entry policy from filesystem/process glue
   where practical. Finder-specific parsing and rendering remain separate, while
   shared enumeration, batching, and lifecycle mechanics stay reusable and
   injectable (`ARCH-PURE`).
 - Markdown discovery runs once per ordinary repo or super-repo member through
-  asynchronous Git-aware file listing. It includes tracked and untracked
-  non-ignored `*.md` files, honors repository and global Git ignore rules,
-  retains `markdown_finder_max_depth`, never descends into `.git`, and does not
+  asynchronous Git-aware file listing. Its inclusion set is all tracked `*.md`
+  files (even if a current ignore rule also matches them) union untracked
+  non-ignored `*.md` files. Repository and global Git ignore rules therefore
+  govern untracked discovery exactly as Git does. Discovery retains
+  `markdown_finder_max_depth`, never descends into `.git`, and does not
   follow symlinked directories. Depth is counted from the member root by path
   components: a root-level file has depth 1, matching the existing glob policy.
   Nested repositories and submodules are opaque to the parent listing and are
@@ -76,14 +86,17 @@ imported package trees that are outside the repository's useful document set.
   joined picker only unsubscribes and invalidates that picker generation; it
   does not cancel the shared prewarm. Success, partial failure, or total failure
   from the prewarm settles every still-live subscriber through the same outcome
-  contract.
+  contract. Prewarm captures only roots and produces the complete unfiltered
+  raw metadata set. Each joined opener snapshots its own current recency/cutoff,
+  facet, and query options and materializes that shared set independently, so
+  joining never applies stale prewarm-time UI policy or repeats disk discovery.
 - Missing optional roots continue to contribute no entries. In a multi-root or
   super-repo scan, a failure in one root preserves successful results from the
   others and emits one warning. An absent optional directory is skipped rather
   than attempted, and all-absent optional roots therefore produce successful
   `(no matches)`. A configured root that is attempted but cannot be enumerated
   is a failure; if every attempted root fails, the loading row becomes an error
-  state and the picker remains cancellable. Existing required-root
+  status and the picker remains cancellable. Existing required-root
   misconfiguration checks still warn and return before opening a picker.
 - Cancelling a loading picker requests cancellation of owned external work when
   supported and always invalidates its generation. Timers, handles, callbacks,
@@ -93,11 +106,16 @@ imported package trees that are outside the repository's useful document set.
   it is distinct from a scan failure. Reopening after cancellation or failure
   starts a fresh session normally.
 - A partial outcome emits at most one user warning per finder session; a total
-  failure replaces loading with one nonselectable error row. Each message is at
+  failure replaces loading with one nonselectable error status. Each message is at
   most 240 bytes, reports only the failed-root count and finder name, and never
   includes raw process output. Per-root technical diagnostics may be logged,
   but each is independently truncated to 240 bytes. Confirming an error/empty
   status row performs no selection action.
+- The parser batcher accepts an injected monotonic clock. It checks elapsed time
+  between atomic records and yields before beginning record 26 or whenever the
+  elapsed slice time is at least 5ms. A single record that began within budget
+  may finish after 5ms; no wall-clock guarantee is claimed inside one atomic
+  parser call.
 - Update README and atlas documentation for immediate asynchronous finder
   loading, the five-finder scope, Markdown's Git-ignore-aware boundary, and the
   shared lifecycle (`ARCH-PURPOSE`).
@@ -109,8 +127,10 @@ imported package trees that are outside the repository's useful document set.
 - A scheduled sentinel and spinner tick run while a deliberately delayed scan
   is pending, proving the UI is not merely painted before blocking work.
 - Injected async read/stat completion plus a metadata set exceeding both slice
-  limits proves parsing yields after 25 files or 5ms and later resumes without
-  dropping or duplicating entries.
+  limits proves, with a controlled monotonic clock, that parsing checks time
+  between atomic records and begins neither a 26th record nor another record
+  after the clock reaches 5ms; later slices resume without dropping or
+  duplicating entries.
 - Esc during loading closes the picker, retires its spinner/session, resets the
   finder `opened` flag, and ignores a later completion; reopening then succeeds.
 - Successful, empty, partial-failure, and total-failure scans produce complete
@@ -119,17 +139,21 @@ imported package trees that are outside the repository's useful document set.
   terminal work. All-absent optional roots are specifically covered as a
   successful empty scan.
 - Chat and Note opens join an in-flight asynchronous prewarm and do not perform
-  a duplicate scan.
-- Ordinary and super-repo Markdown Finder include tracked and untracked
-  non-ignored Markdown files, exclude Git-ignored files and Markdown reachable
-  only through symlinked directories, treat nested repos/submodules as opaque,
-  enforce root-relative component depth, fail safely when Git listing is
-  unavailable, and retain existing display labels, primary sorting, and facets.
+  a duplicate scan; different opener recency snapshots materialize the same raw
+  prewarm records independently.
+- Ordinary and super-repo Markdown Finder include all tracked Markdown files
+  plus untracked non-ignored Markdown files, exclude ignored untracked files and
+  Markdown reachable only through symlinked directories, treat nested
+  repos/submodules as opaque, enforce root-relative component depth, fail safely
+  when Git listing is unavailable, and retain existing display labels, primary
+  sorting, and facets.
 - Equal primary sort values resolve by canonical item path for deterministic
   ordering in all five finders.
 - Existing finder interaction regressions remain green after results load, and
   automated tests cover the shared loader plus all five production entry-point
   seams.
+- Loading and error status remains visible under a retained query and cannot be
+  selected or confirmed through keyboard or mouse paths.
 
 ## Plan
 
@@ -170,3 +194,13 @@ imported package trees that are outside the repository's useful document set.
   joined prewarms; success/failure rules for absent versus attempted roots;
   Git/depth/nested-repo behavior; canonical-path tie-breaking; and 240-byte,
   nonselectable failure presentation.
+
+### 2026-07-15 — second fresh-context spec review
+
+- Reason: review found unresolved coupling between prewarm and opener options,
+  possible query/selection treatment of lifecycle rows, ambiguity for tracked
+  files matching ignore rules, and a nondeterministic 5ms acceptance oracle.
+- Delta: made producers return raw metadata for per-subscriber pure
+  materialization; moved loading/error into nonfilterable, nonselectable picker
+  status; defined Markdown inclusion as tracked union non-ignored untracked;
+  and specified an injected monotonic clock checked between atomic records.
