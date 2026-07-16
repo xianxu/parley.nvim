@@ -477,3 +477,13 @@ stale on 2026-07-15, so the estimate is provisional.
 - The first combined module crossed the plan's 400-line guard, so the scheduling
   state machine moved to `finder_batcher.lua`; `finder_scan.new_batcher` remains
   the shared public seam (`ARCH-PURE`, Simplicity First).
+
+### 2026-07-15 — Task 2 implementation
+
+- Added transactional async traversal, a shared 16-operation libuv queue,
+  stat/realpath enrichment, cache-aware conditional reads, descriptor cleanup,
+  and callback-suppressing cancellation.
+- Eleven injected-uv unit cases and three real-libuv integration cases cover
+  optional roots, depth, symlink non-traversal, failed roots, cache-hit zero
+  reads, header reads, policy exceptions, concurrency, cancellation, event-loop
+  yielding, and late-callback suppression.

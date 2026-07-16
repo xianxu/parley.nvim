@@ -154,6 +154,8 @@ the final slice.
 | Name | Lives in | Status | Wraps |
 |------|----------|--------|-------|
 | `AsyncFileSource` | `lua/parley/async_file_source.lua` | new | libuv directory/stat/open/read/realpath APIs |
+| `AsyncOperationQueue` | `lua/parley/async_operation_queue.lua` | new | shared concurrency/cancellation cap for libuv requests |
+| `AsyncFileEnrichment` | `lua/parley/async_file_enrichment.lua` | new | shared stat/realpath/read-policy/open/read/close pipeline |
 | `GitMarkdownSource` | `lua/parley/git_markdown_source.lua` | new | streaming `git ls-files` subprocesses |
 | `FinderProducer` | `lua/parley/finder_producer.lua` | new | shared acquisition-to-settlement orchestration |
 | `FinderLoadSession` | `lua/parley/finder_loader.lua` | new | producer ownership, subscribers, scheduling, warnings, and picker lifecycle |
@@ -496,6 +498,8 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 
 **Files:**
 - Create: `lua/parley/async_file_source.lua`
+- Create: `lua/parley/async_operation_queue.lua`
+- Create: `lua/parley/async_file_enrichment.lua`
 - Create: `tests/unit/async_file_source_spec.lua`
 - Create: `tests/integration/async_file_source_spec.lua`
 
@@ -581,7 +585,7 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 - [ ] **Step 13: Commit the async file source**
 
   ```bash
-  git add lua/parley/async_file_source.lua tests/unit/async_file_source_spec.lua tests/integration/async_file_source_spec.lua
+  git add lua/parley/async_file_source.lua lua/parley/async_operation_queue.lua lua/parley/async_file_enrichment.lua tests/unit/async_file_source_spec.lua tests/integration/async_file_source_spec.lua
   git commit -m "finder: #189 add asynchronous file source"
   ```
 
@@ -1358,3 +1362,14 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 - Delta: extracted the independently pure scheduling state machine to
   `finder_batcher.lua` while retaining `finder_scan.new_batcher` as the single
   public failure-vocabulary-aware seam and the existing focused test oracle.
+
+### 2026-07-15 — Task 2 IO-boundary split
+
+- Reason: sharing conditional enrichment between traversal and `read_paths`
+  would have pushed the filesystem source past the plan's size guard and risked
+  two subtly different concurrency/cancellation implementations.
+- Delta: kept traversal/root transactions in `async_file_source.lua`, extracted
+  the 16-operation queue to `async_operation_queue.lua`, and single-sourced
+  stat/realpath/read-policy/open/read/close behavior in
+  `async_file_enrichment.lua` for both public acquisition APIs (`ARCH-DRY`,
+  `ARCH-PURE`).
