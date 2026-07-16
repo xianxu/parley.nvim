@@ -1,4 +1,5 @@
 local finder_scan = require("parley.finder_scan")
+local chat_parser = require("parley.chat_parser")
 
 local M = {}
 local INVALID = finder_scan.FAILURE_KIND.invalid_adapter_result
@@ -19,51 +20,6 @@ local function copy_tags(tags)
         result[#result + 1] = tag
     end
     return result
-end
-
-local function header_metadata(lines)
-    local topic = ""
-    local tags = {}
-    local header_end
-    if lines[1] and lines[1]:match("^%s*%-%-%-%s*$") then
-        for index = 2, #lines do
-            if lines[index]:match("^%s*%-%-%-%s*$") then
-                header_end = index
-                break
-            end
-        end
-    else
-        for index, line in ipairs(lines) do
-            if line:match("^%s*%-%-%-%s*$") then
-                header_end = index
-                break
-            end
-        end
-    end
-
-    if not header_end then
-        for _, line in ipairs(lines) do
-            local value = line:match("^# topic: (.+)")
-            if value then
-                topic = value
-                break
-            end
-        end
-        return topic, tags
-    end
-
-    for index = 1, header_end do
-        local key, value = lines[index]:match("^%s*[-#]?%s*([%w_%.%+]+):%s*(.*)$")
-        if key == "topic" then
-            topic = value
-        elseif key == "tags" then
-            tags = {}
-            for tag in value:gmatch("[^,%s]+") do
-                tags[#tags + 1] = tag
-            end
-        end
-    end
-    return topic, tags
 end
 
 local function valid_base(input)
@@ -121,7 +77,12 @@ M.adapt = function(input)
                 return failure()
             end
         end
-        topic, tags = header_metadata(input.first_lines)
+        local headers = chat_parser.parse_header_metadata(
+            input.first_lines,
+            chat_parser.find_header_end(input.first_lines)
+        )
+        topic = headers.topic or ""
+        tags = copy_tags(headers.tags or {})
     else
         return failure()
     end

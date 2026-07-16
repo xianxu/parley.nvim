@@ -546,6 +546,7 @@ atlas:
       - lua/parley/chat_dirs.lua
       - lua/parley/chat_finder.lua
       - lua/parley/chat_finder_records.lua
+      - lua/parley/chat_parser.lua
       - lua/parley/note_finder.lua
       - lua/parley/note_finder_records.lua
       - lua/parley/markdown_finder.lua
@@ -575,6 +576,7 @@ atlas:
       - tests/unit/picker_items_spec.lua
       - tests/unit/chat_finder_logic_spec.lua
       - tests/unit/chat_finder_records_spec.lua
+      - tests/unit/chat_parser_section_lines_spec.lua
       - tests/unit/note_finder_logic_spec.lua
       - tests/unit/note_finder_records_spec.lua
       - tests/unit/markdown_finder_spec.lua

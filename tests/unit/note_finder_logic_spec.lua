@@ -711,6 +711,37 @@ describe("NoteFinder logic", function()
             assert.equals(1, cancel_count)
         end)
 
+        it("starts picker-owned work instead of joining a mismatched running prewarm", function()
+            local scan_count = 0
+            local cancel_counts = { 0, 0 }
+            local captured
+            M.float_picker.open = function(opts)
+                captured = opts
+                return picker_stub(opts)
+            end
+            M._finder_dependencies = {
+                schedule = function(callback) callback() end,
+                now = function() return 0 end,
+                async_file_source = {
+                    scan = function()
+                        scan_count = scan_count + 1
+                        local ordinal = scan_count
+                        return { cancel = function() cancel_counts[ordinal] = cancel_counts[ordinal] + 1 end }
+                    end,
+                },
+            }
+            local note_finder = require("parley.note_finder")
+
+            note_finder.prewarm()
+            M.config.note_roots[1].label = "renamed"
+            M.cmd.NoteFinder()
+
+            assert.equals(2, scan_count)
+            captured.on_cancel()
+            assert.same({ 0, 1 }, cancel_counts)
+            assert.is_true(note_finder.is_prewarming())
+        end)
+
         it("retires ownerless prewarm settlement after populating the cache", function()
             local finish_root
             local finish_scan

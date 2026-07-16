@@ -2,6 +2,17 @@
 
 ## 2026-07-16 (#189)
 
+- **A derived metadata view must consume the canonical grammar, not reproduce
+  its convenient subset.** Chat Finder's pure record adapter copied delimiter,
+  key-prefix, and tag parsing from `chat_parser`, leaving two owners that could
+  drift. Rule: when a finder needs metadata from an existing document format,
+  export the smallest pure parser seam from the format owner and add parity
+  fixtures for legacy and current syntax (`ARCH-DRY`).
+- **A joinable raw outcome needs a policy-divergence test, not only a join-count
+  test.** One opener joining a prewarm proved scan reuse but did not prove that
+  multiple subscribers could independently apply recency to the same records.
+  Rule: shared async-result tests must bind at least two subscribers with
+  different materialization policies and assert both projections.
 - **A scheduled controller is INTEGRATION even when its decisions are
   deterministic.** `SliceBatcher` owns mutable progress and yields through an
   injected scheduler/clock, so classifying it as PURE hid the event-loop seam.

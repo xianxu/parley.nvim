@@ -238,6 +238,47 @@ describe("finder picker bridge", function()
         assert.equals("repo", picker_state.updates[1].tags[1].label)
     end)
 
+    it("lets two subscribers materialize one retained outcome with distinct opener policy", function()
+        local settle
+        local recent_picker, recent_state = picker_fake()
+        local all_picker, all_state = picker_fake()
+        local session = finder_loader.new_session({
+            snapshot = snapshot(),
+            ownership = "retained",
+            producer_factory = function(callback)
+                settle = callback
+                return { cancel = function() end }
+            end,
+        })
+        local function bind(picker, cutoff)
+            finder_loader.open_picker({
+                session = session,
+                picker_open = function() return picker end,
+                picker_options = {},
+                materialize = function(outcome)
+                    local items = {}
+                    for _, record in ipairs(outcome.records) do
+                        if cutoff == nil or record.timestamp >= cutoff then
+                            items[#items + 1] = record
+                        end
+                    end
+                    return { items = items }
+                end,
+            })
+        end
+        bind(recent_picker, 50)
+        bind(all_picker, nil)
+
+        session:start()
+        settle(success({
+            { display = "recent", value = 1, timestamp = 100 },
+            { display = "old", value = 2, timestamp = 10 },
+        }))
+
+        assert.same({ 1 }, vim.tbl_map(function(item) return item.value end, recent_state.updates[1].items))
+        assert.same({ 1, 2 }, vim.tbl_map(function(item) return item.value end, all_state.updates[1].items))
+    end)
+
     it("shows partial warnings and total errors without closing the picker", function()
         local settle
         local warning_count = 0

@@ -1,4 +1,5 @@
 local records = require("parley.chat_finder_records")
+local chat_parser = require("parley.chat_parser")
 local failure_kind = require("parley.finder_scan").FAILURE_KIND
 
 local function candidate(overrides)
@@ -18,6 +19,37 @@ local function candidate(overrides)
 end
 
 describe("Chat finder records", function()
+    it("shares canonical legacy and frontmatter header metadata parsing", function()
+        local fixtures = {
+            {
+                "# topic: Legacy topic",
+                "- tags: legacy, archive",
+                "---",
+            },
+            {
+                "---",
+                "# topic: Frontmatter topic",
+                "- tags: roadmap launch",
+                "---",
+            },
+        }
+
+        local legacy = chat_parser.parse_header_metadata(fixtures[1], 3)
+        local frontmatter = chat_parser.parse_header_metadata(fixtures[2], 4)
+
+        assert.equals("Legacy topic", legacy.topic)
+        assert.same({ "legacy", "archive" }, legacy.tags)
+        assert.equals("Frontmatter topic", frontmatter.topic)
+        assert.same({ "roadmap", "launch" }, frontmatter.tags)
+
+        for _, lines in ipairs(fixtures) do
+            local adapted = records.adapt(candidate({ kind = "lines", first_lines = lines }))
+            local parsed = chat_parser.parse_header_metadata(lines, chat_parser.find_header_end(lines))
+            assert.equals(parsed.topic or "", adapted.value.topic)
+            assert.same(parsed.tags or {}, adapted.value.tags)
+        end
+    end)
+
     it("adapts cached metadata without requiring header lines", function()
         local input = candidate({
             kind = "cached",

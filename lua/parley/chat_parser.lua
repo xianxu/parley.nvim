@@ -6,6 +6,7 @@
 --
 -- Public API:
 --   M.parse_chat(lines, header_end, config) -> parsed_chat
+--   M.parse_header_metadata(lines, header_end) -> headers
 --
 -- `config` must contain:
 --   config.chat_user_prefix        (string)
@@ -78,6 +79,74 @@ local function parse_header_config_value(value)
 	end
 
 	return value
+end
+
+---Parse chat header metadata through the canonical legacy/frontmatter grammar.
+---When no separator is present, preserve the finder fallback for `# topic:`.
+---@param lines table
+---@param header_end number|nil
+---@return table
+M.parse_header_metadata = function(lines, header_end)
+	local headers = {}
+	if type(lines) ~= "table" then
+		return headers
+	end
+	if header_end == nil then
+		for _, line in ipairs(lines) do
+			if type(line) == "string" then
+				local topic = line:match("^# topic: (.+)")
+				if topic then
+					headers.topic = topic
+					break
+				end
+			end
+		end
+		return headers
+	end
+
+	for i = 1, math.min(header_end, #lines) do
+		local key, value = parse_header_key_value(lines[i])
+		if key ~= nil then
+			local is_append = key:sub(-1) == "+"
+			local base_key = is_append and key:sub(1, -2) or key
+			if base_key == "role" then
+				base_key = "system_prompt"
+			end
+			if base_key ~= "" then
+				local parsed_value = value
+				if base_key == "tags" then
+					parsed_value = {}
+					for tag in value:gmatch("[^,%s]+") do
+						local trimmed_tag = trim(tag)
+						if trimmed_tag ~= "" then
+							parsed_value[#parsed_value + 1] = trimmed_tag
+						end
+					end
+				end
+
+				if is_append then
+					headers._append = headers._append or {}
+					headers._append[base_key] = headers._append[base_key] or {}
+					headers._append[base_key][#headers._append[base_key] + 1] = parsed_value
+				else
+					headers[base_key] = parsed_value
+				end
+
+				if base_key ~= "file" and base_key ~= "model" and base_key ~= "provider"
+					and base_key ~= "system_prompt" and base_key ~= "topic" and base_key ~= "tags" then
+					local config_value = parse_header_config_value(value)
+					if is_append then
+						local config_key = "config_" .. base_key
+						headers._append[config_key] = headers._append[config_key] or {}
+						headers._append[config_key][#headers._append[config_key] + 1] = config_value
+					else
+						headers["config_" .. base_key] = config_value
+					end
+				end
+			end
+		end
+	end
+	return headers
 end
 
 -- Structure to represent a parsed chat:
@@ -187,72 +256,11 @@ end
 M.parse_chat = function(lines, header_end, config)
 	local result = {
 		header_end = header_end,
-		headers = {},
+		headers = M.parse_header_metadata(lines, header_end),
 		exchanges = {},
 		parent_link = nil,
 		branches = {}
 	}
-
-	-- Parse headers
-	for i = 1, header_end do
-		local line = lines[i]
-		local key, value = parse_header_key_value(line)
-		if key ~= nil then
-			local is_append = key:sub(-1) == "+"
-			local base_key = is_append and key:sub(1, -2) or key
-			-- Backward-compat alias: role -> system_prompt.
-			if base_key == "role" then
-				base_key = "system_prompt"
-			end
-			if base_key == "" then
-				goto continue
-			end
-
-			if is_append then
-				result.headers._append = result.headers._append or {}
-				result.headers._append[base_key] = result.headers._append[base_key] or {}
-
-				local append_value = value
-				if base_key == "tags" then
-					local tags = {}
-					for tag in value:gmatch("[^,%s]+") do
-						local trimmed_tag = trim(tag)
-						if trimmed_tag and trimmed_tag ~= "" then
-							table.insert(tags, trimmed_tag)
-						end
-					end
-					append_value = tags
-				end
-				table.insert(result.headers._append[base_key], append_value)
-			elseif base_key == "tags" then
-				-- Parse tags into individual items
-				local tags = {}
-				for tag in value:gmatch("[^,%s]+") do
-					local trimmed_tag = trim(tag)
-					if trimmed_tag and trimmed_tag ~= "" then
-						table.insert(tags, trimmed_tag)
-					end
-				end
-				result.headers[base_key] = tags
-			else
-				result.headers[base_key] = value
-			end
-
-			-- Parse configuration override parameters
-			if base_key ~= "file" and base_key ~= "model" and base_key ~= "provider" and base_key ~= "system_prompt" and base_key ~= "topic" and base_key ~= "tags" then
-				local config_value = parse_header_config_value(value)
-				if is_append then
-					result.headers._append = result.headers._append or {}
-					local append_config_key = "config_" .. base_key
-					result.headers._append[append_config_key] = result.headers._append[append_config_key] or {}
-					table.insert(result.headers._append[append_config_key], config_value)
-				else
-					result.headers["config_" .. base_key] = config_value
-				end
-			end
-		end
-		::continue::
-	end
 
 	-- Get prefixes
 	local highlight_structure = require("parley.highlight_structure")

@@ -289,7 +289,7 @@ imported package trees that are outside the repository's useful document set.
 
 - [x] M1 — Add shared scan/session/picker primitives and ship Markdown as the
   first Git-aware asynchronous vertical slice.
-- [ ] M2 — Migrate Chat and Note, including exact-snapshot joinable prewarm and
+- [x] M2 — Migrate Chat and Note, including exact-snapshot joinable prewarm and
   metadata-only settled cache retention.
 - [ ] Migrate Issue and Vision, reconcile docs/atlas/traceability, and run
   focused, mapped, full, and manual verification before the final issue-close
@@ -613,3 +613,14 @@ stale on 2026-07-15, so the estimate is provisional.
   join/mismatch, ownerless settlement, empty/partial/total outcomes, cache
   reuse/pruning, selection restoration, and recency reopen after settlement
   (`ARCH-DRY`, `ARCH-PURE`, `ARCH-PURPOSE`).
+
+### 2026-07-16 — M2 boundary review
+
+- 2026-07-16: closed M2 — Chat and Note record/entry-point specs cover delayed immediate-open, exact prewarm join, cancellation, partial/total outcomes, and successful-root cache pruning; shared specs, make test-changed, and make lint pass; git diff --check is clean; --force only bypasses the #87 cumulative-vs-increment comparator contradiction (9.23 cumulative, 8.73 prior boundary, 0.50 increment).; review verdict: FIX-THEN-SHIP
+- Because `--force` also suppressed the automatic judge, the documented manual
+  recovery reviewed the exact `8a46807..HEAD` window and returned
+  FIX-THEN-SHIP with no Critical findings.
+- The Important fixes single-source legacy/frontmatter topic and tag parsing in
+  `chat_parser`, prove two subscribers can apply distinct opener policy to one
+  retained outcome, cover opener-versus-mismatched-prewarm behavior, and expose
+  Chat/Note asynchronous loading in README (`ARCH-DRY`, `ARCH-PURPOSE`).
