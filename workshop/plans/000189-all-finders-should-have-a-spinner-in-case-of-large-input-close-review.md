@@ -1,6 +1,6 @@
 # #189 close reviews
 
-- Review window: `925c046..HEAD`
+- Review window: `925c046..b02dcd7`
 - Reviewer: SDLC-dispatched fresh-context Codex
 
 ## Review 1 — REWORK
@@ -48,13 +48,24 @@ points, including `finder_scan.snapshot`, `finder_scan.path_identity`,
 `finder_loader.new_session`, and each record module's adaptation/materialization
 functions.
 
+## Review 5 — SHIP (high confidence)
+
+No Critical, Important, or Minor findings. The reviewer verified that all five
+disk-backed finders use the shared asynchronous lifecycle, loading/error rows
+remain nonselectable, cancellation and settlement ownership are centralized,
+Git-aware Markdown behavior and deterministic materialization match the Spec,
+and README/atlas/plan traceability is complete. `ARCH-DRY`, `ARCH-PURE`, and
+`ARCH-PURPOSE` all pass; no further plan revisions were recommended.
+
 ## Evidence
 
 - `issue_finder_records_spec.lua`: 8 successes, 0 failures, including the
   adversarial canonical/native ordering regression.
 - `vision_finder_records_spec.lua`: 8 successes, 0 failures, including the
   adversarial canonical/native ordering regression.
-- Earlier review fixes: `finder_loader_spec.lua` 10/10,
-  `float_picker_spec.lua` 72/72, and `vision_finder_spec.lua` 9/9.
-- Full verification is refreshed before each close invocation and recorded in
-  the issue Log.
+- `make test-changed`: exit 0.
+- `make lint`: zero warnings/errors across 301 files.
+- `make test`: exit 0; all unit, architecture, and integration specs pass,
+  including `chat_progress_process_spec.lua`.
+- Production five-finder smoke and the 2,000-tracked/2,000-ignored Markdown
+  fixture passed; `git diff --check` is clean.

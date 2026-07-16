@@ -1,12 +1,13 @@
 ---
 id: 000189
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-14
-updated: 2026-07-15
+updated: 2026-07-16
 estimate_hours: 16.6
 started: 2026-07-15T17:02:57-07:00
+actual_hours: 11.65
 ---
 
 # all finders should have a spinner in case of large input
@@ -527,6 +528,7 @@ stale on 2026-07-15, so the estimate is provisional.
   repository materializer (`ARCH-DRY`).
 
 ### 2026-07-16 — M1 mapped verification
+- 2026-07-16: closed — All five disk-backed finders open immediately with animated scanning status, settle asynchronously with canonical ordering and preserved actions/facets, skip Git-ignored Markdown, and cancel/reopen safely; focused Issue/Vision regressions pass 8/8 each, make test-changed and make test exit 0, lint is clean across 301 files, production plus 2,000-tracked/2,000-ignored smoke passed, and git diff --check is clean.; review verdict: SHIP
 - 2026-07-16: closed M1 — Focused malformed-event/truncated-framing/invalid-label/shared-IO-policy, Git stream-error/fragment-cap/native-path, finder scan/producer/loader, async file source unit+real-libuv, real Git/submodule/backslash path, Markdown entry-point, real delayed process-to-picker spinner, picker status, and float-picker specs pass; make test-changed passes; make lint reports 0 warnings/errors in 292 files; issue validation and git diff --check pass.; review verdict: FIX-THEN-SHIP
 
 - `make test-changed` exposed that the real-Git “nonrepository” fixture could
