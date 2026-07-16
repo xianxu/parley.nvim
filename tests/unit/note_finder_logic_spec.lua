@@ -12,6 +12,85 @@ describe("NoteFinder logic", function()
     local original_open_buf
     local original_create_note_file
     local original_notify
+    local original_finder_dependencies
+    local original_logger_warning
+
+    local function find_float_wins()
+        local wins = {}
+        for _, win in ipairs(vim.api.nvim_list_wins()) do
+            local ok, cfg = pcall(vim.api.nvim_win_get_config, win)
+            if ok and cfg.relative ~= "" then
+                wins[#wins + 1] = win
+            end
+        end
+        return wins
+    end
+
+    local function float_line_containing(needle)
+        for _, win in ipairs(find_float_wins()) do
+            local buf = vim.api.nvim_win_get_buf(win)
+            for _, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+                if line:find(needle, 1, true) then
+                    return line
+                end
+            end
+        end
+    end
+
+    local function picker_stub(opts)
+        local closed = false
+        return {
+            update = function(items, _, initial_index)
+                opts.items = items
+                opts.initial_index = initial_index or opts.initial_index
+            end,
+            set_status = function(status) opts.status_update = status end,
+            current_query = function() return opts.initial_query or "" end,
+            close = function() closed = true end,
+            is_closed = function() return closed end,
+        }
+    end
+
+    local function synchronous_file_source()
+        return {
+            scan = function(options, on_root, on_complete)
+                for ordinal, root in ipairs(options.roots) do
+                    if vim.fn.isdirectory(root.path) == 0 then
+                        on_root({ root_ordinal = ordinal, status = "skipped", reason = "absent_optional" })
+                    else
+                        local candidates = {}
+                        local pattern = vim.fn.fnameescape(root.path) .. "/**/*.md"
+                        for _, path in ipairs(vim.fn.glob(pattern, false, true)) do
+                            local relative = path:sub(#root.path + 2)
+                            if options.match(relative, "file") then
+                                local candidate = {
+                                    root = root,
+                                    root_ordinal = ordinal,
+                                    relative = relative,
+                                    unresolved_absolute = path,
+                                    resolved_absolute = vim.fn.resolve(path),
+                                    stat = (vim.uv or vim.loop).fs_stat(path),
+                                }
+                                local decision = options.read_policy(candidate)
+                                if decision.kind == "ready" then
+                                    candidate.precomputed = decision.value
+                                end
+                                candidates[#candidates + 1] = candidate
+                            end
+                        end
+                        on_root({
+                            root_ordinal = ordinal,
+                            status = "success",
+                            candidates = candidates,
+                            failures = {},
+                        })
+                    end
+                end
+                on_complete()
+                return { cancel = function() end }
+            end,
+        }
+    end
 
     local function write_file(path, lines)
         vim.fn.mkdir(vim.fn.fnamemodify(path, ":h"), "p")
@@ -36,6 +115,9 @@ describe("NoteFinder logic", function()
         original_open_buf = M.open_buf
         original_create_note_file = M._create_note_file
         original_notify = vim.notify
+        original_finder_dependencies = M._finder_dependencies
+        original_logger_warning = M.logger.warning
+        require("parley.note_finder").clear_cache()
 
         -- Use a guaranteed-unique temp dir: vim.fn.tempname() is process- and
         -- call-unique, so parallel/sequential spec processes never collide (the
@@ -49,6 +131,8 @@ describe("NoteFinder logic", function()
         notes_dir = vim.fn.resolve(notes_dir)
 
         M.config.notes_dir = notes_dir
+        M.config.note_dirs = { notes_dir }
+        M.config.note_roots = { { dir = notes_dir, label = "main", is_primary = true } }
         M.config.note_finder_mappings = {
             delete = { shortcut = "<C-d>" },
             next_recency = { shortcut = "<C-a>" },
@@ -60,6 +144,11 @@ describe("NoteFinder logic", function()
             presets = { 6, 12 },
         }
         M.config.global_shortcut_keybindings = { shortcut = "<C-g>?" }
+        M._finder_dependencies = {
+            async_file_source = synchronous_file_source(),
+            schedule = function(callback) callback() end,
+            now = function() return 0 end,
+        }
 
         M._note_finder = {
             opened = false,
@@ -73,6 +162,9 @@ describe("NoteFinder logic", function()
     end)
 
     after_each(function()
+        for _, win in ipairs(find_float_wins()) do
+            pcall(vim.api.nvim_win_close, win, true)
+        end
         if notes_dir then
             vim.fn.delete(notes_dir, "rf")
         end
@@ -87,6 +179,9 @@ describe("NoteFinder logic", function()
         M.open_buf = original_open_buf
         M._create_note_file = original_create_note_file
         vim.notify = original_notify
+        M._finder_dependencies = original_finder_dependencies
+        M.logger.warning = original_logger_warning
+        require("parley.note_finder").clear_cache()
     end)
 
     it("resolves and cycles note recency presets", function()
@@ -135,6 +230,7 @@ describe("NoteFinder logic", function()
         local captured = nil
         M.float_picker.open = function(opts)
             captured = opts
+            return picker_stub(opts)
         end
 
         M.cmd.NoteFinder()
@@ -174,6 +270,7 @@ describe("NoteFinder logic", function()
         local captured = nil
         M.float_picker.open = function(opts)
             captured = opts
+            return picker_stub(opts)
         end
 
         M.cmd.NoteFinder()
@@ -197,6 +294,7 @@ describe("NoteFinder logic", function()
         local opened = nil
         M.float_picker.open = function(opts)
             captured = opts
+            return picker_stub(opts)
         end
         M.open_buf = function(path, from_finder)
             opened = { path = path, from_finder = from_finder }
@@ -230,6 +328,7 @@ describe("NoteFinder logic", function()
         local captured = nil
         M.float_picker.open = function(opts)
             captured = opts
+            return picker_stub(opts)
         end
 
         M.cmd.NoteFinder()
@@ -246,6 +345,7 @@ describe("NoteFinder logic", function()
         local captured = nil
         M.float_picker.open = function(opts)
             captured = opts
+            return picker_stub(opts)
         end
 
         M.cmd.NoteFinder()
@@ -256,6 +356,7 @@ describe("NoteFinder logic", function()
         captured.on_query_change("{K} evergreen")
         assert.equals("{K}", M._note_finder.sticky_query)
 
+        captured.on_cancel()
         M.cmd.NoteFinder()
         assert.equals("{K} ", captured.initial_query)
 
@@ -271,6 +372,7 @@ describe("NoteFinder logic", function()
         local captured = nil
         M.float_picker.open = function(opts)
             captured = opts
+            return picker_stub(opts)
         end
 
         M.cmd.NoteFinder()
@@ -279,8 +381,493 @@ describe("NoteFinder logic", function()
         captured.on_query_change("{} dated")
         assert.equals("{}", M._note_finder.sticky_query)
 
+        captured.on_cancel()
         M.cmd.NoteFinder()
         assert.equals("{} ", captured.initial_query)
+    end)
+
+    describe("asynchronous Note discovery", function()
+        local function loading_picker(captured, updates)
+            local picker = picker_stub(captured)
+            picker.update = function(items, _, initial_index)
+                updates[#updates + 1] = { items = items, initial_index = initial_index }
+            end
+            return picker
+        end
+
+        it("opens a loading picker before recursive acquisition starts", function()
+            local order = {}
+            local captured
+            local updates = {}
+            M.float_picker.open = function(opts)
+                order[#order + 1] = "picker"
+                captured = opts
+                return loading_picker(captured, updates)
+            end
+            M._finder_dependencies = {
+                schedule = function(callback) callback() end,
+                now = function() return 0 end,
+                async_file_source = {
+                    scan = function()
+                        order[#order + 1] = "scan"
+                        return { cancel = function() end }
+                    end,
+                },
+            }
+
+            M.cmd.NoteFinder()
+
+            assert.same({ "picker", "scan" }, order)
+            assert.same({ message = "scanning…", animated = true }, captured.status)
+            assert.same({}, captured.items)
+        end)
+
+        it("animates the real picker while Note acquisition remains delayed", function()
+            local cancel_count = 0
+            M.float_picker.open = original_float_picker_open
+            M._finder_dependencies = {
+                schedule = vim.schedule,
+                async_file_source = {
+                    scan = function()
+                        return { cancel = function() cancel_count = cancel_count + 1 end }
+                    end,
+                },
+            }
+            local sentinel = false
+            vim.schedule(function() sentinel = true end)
+
+            M.cmd.NoteFinder()
+            local initial = float_line_containing("scanning…")
+
+            assert.is_not_nil(initial)
+            assert(vim.wait(1000, function()
+                local current = float_line_containing("scanning…")
+                return sentinel and current ~= nil and current ~= initial
+            end, 10), "Note spinner did not tick while acquisition was pending")
+            vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "x", true)
+            assert(vim.wait(500, function() return cancel_count == 1 end, 10))
+        end)
+
+        it("cancels loading acquisition before a recency mapping reopens Note", function()
+            local scan_count = 0
+            local cancel_count = 0
+            M.float_picker.open = original_float_picker_open
+            M._finder_dependencies = {
+                schedule = vim.schedule,
+                async_file_source = {
+                    scan = function()
+                        scan_count = scan_count + 1
+                        return { cancel = function() cancel_count = cancel_count + 1 end }
+                    end,
+                },
+            }
+
+            M.cmd.NoteFinder()
+            vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<C-a>", true, false, true), "x", true)
+
+            assert(vim.wait(1000, function() return cancel_count == 1 and scan_count == 2 end, 10))
+            assert.equals(1, scan_count - cancel_count)
+            vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "x", true)
+            assert(vim.wait(500, function() return cancel_count == 2 end, 10))
+        end)
+
+        it("joins matching retained prewarm and settles its subscriber once", function()
+            local scan_count = 0
+            local finish_root
+            local finish_scan
+            local captured
+            local updates = {}
+            M.float_picker.open = function(opts)
+                captured = opts
+                return loading_picker(captured, updates)
+            end
+            M._finder_dependencies = {
+                schedule = function(callback) callback() end,
+                now = function() return 0 end,
+                async_file_source = {
+                    scan = function(_, on_root, on_complete)
+                        scan_count = scan_count + 1
+                        finish_root = on_root
+                        finish_scan = on_complete
+                        return { cancel = function() end }
+                    end,
+                },
+            }
+            local note_finder = require("parley.note_finder")
+
+            note_finder.prewarm()
+            M.cmd.NoteFinder()
+            assert.equals(1, scan_count)
+
+            local root = note_finder._discovery_snapshot():copy().roots[1]
+            local path = root.path .. "/K/joined.md"
+            finish_root({
+                root_ordinal = 1,
+                status = "success",
+                candidates = { {
+                    root = root,
+                    root_ordinal = 1,
+                    relative = "K/joined.md",
+                    unresolved_absolute = path,
+                    resolved_absolute = path,
+                    stat = { mtime = { sec = 100 } },
+                } },
+                failures = {},
+            })
+            finish_scan()
+
+            assert.equals(1, #updates)
+            assert.equals(path, updates[1].items[1].value)
+        end)
+
+        it("cancels picker-owned acquisition and ignores late delivery", function()
+            local finish_root
+            local finish_scan
+            local cancel_count = 0
+            local captured
+            local updates = {}
+            M.float_picker.open = function(opts)
+                captured = opts
+                return loading_picker(captured, updates)
+            end
+            M._finder_dependencies = {
+                schedule = function(callback) callback() end,
+                now = function() return 0 end,
+                async_file_source = {
+                    scan = function(_, on_root, on_complete)
+                        finish_root = on_root
+                        finish_scan = on_complete
+                        return { cancel = function() cancel_count = cancel_count + 1 end }
+                    end,
+                },
+            }
+
+            M.cmd.NoteFinder()
+            captured.on_cancel()
+            finish_root({ root_ordinal = 1, status = "success", candidates = {}, failures = {} })
+            finish_scan()
+
+            assert.equals(1, cancel_count)
+            assert.same({}, updates)
+        end)
+
+        it("fingerprints recursive discovery but excludes opener recency", function()
+            local note_finder = require("parley.note_finder")
+            local first = note_finder._discovery_snapshot()
+            local data = first:copy()
+
+            M.config.note_finder_recency.months = 6
+            local recency_changed = note_finder._discovery_snapshot()
+            M.config.note_roots[1].label = "renamed"
+            local root_changed = note_finder._discovery_snapshot()
+
+            assert.equals("note", data.kind)
+            assert.is_true(data.recursion)
+            assert.equals("*.md", data.pattern)
+            assert.same({ source = "libuv", body = "none" }, data.backend)
+            assert.equals(first:fingerprint(), recency_changed:fingerprint())
+            assert.is_true(first:fingerprint() ~= root_changed:fingerprint())
+        end)
+
+        it("settles all-absent optional roots as a successful empty picker", function()
+            local captured
+            local updates = {}
+            M.float_picker.open = function(opts)
+                captured = opts
+                return loading_picker(captured, updates)
+            end
+            M._finder_dependencies = {
+                schedule = function(callback) callback() end,
+                now = function() return 0 end,
+                async_file_source = {
+                    scan = function(options, on_root, on_complete)
+                        for ordinal in ipairs(options.roots) do
+                            on_root({ root_ordinal = ordinal, status = "skipped", reason = "absent_optional" })
+                        end
+                        on_complete()
+                        return { cancel = function() end }
+                    end,
+                },
+            }
+
+            M.cmd.NoteFinder()
+
+            assert.equals(1, #updates)
+            assert.same({}, updates[1].items)
+            assert.is_nil(captured.status_update)
+        end)
+
+        it("shows total failure and retries a later prewarm", function()
+            local scan_count = 0
+            local captured
+            local updates = {}
+            M.float_picker.open = function(opts)
+                captured = opts
+                return loading_picker(captured, updates)
+            end
+            M._finder_dependencies = {
+                schedule = function(callback) callback() end,
+                now = function() return 0 end,
+                async_file_source = {
+                    scan = function(_, on_root, on_complete)
+                        scan_count = scan_count + 1
+                        on_root({
+                            root_ordinal = 1,
+                            status = "failed",
+                            failure = { kind = "root_enumeration", diagnostic = "EACCES" },
+                        })
+                        on_complete()
+                        return { cancel = function() end }
+                    end,
+                },
+            }
+            local note_finder = require("parley.note_finder")
+
+            M.cmd.NoteFinder()
+            captured.on_cancel()
+            note_finder.prewarm()
+
+            assert.same({}, updates)
+            assert.is_false(captured.status_update.animated)
+            assert.truthy(captured.status_update.message:find("scan failed", 1, true))
+            assert.equals(2, scan_count)
+        end)
+
+        it("keeps successful records and warns once for stat failures", function()
+            local warning_count = 0
+            local captured
+            local updates = {}
+            M.logger.warning = function() warning_count = warning_count + 1 end
+            M.float_picker.open = function(opts)
+                captured = opts
+                return loading_picker(captured, updates)
+            end
+            M._finder_dependencies = {
+                schedule = function(callback) callback() end,
+                now = function() return 0 end,
+                async_file_source = {
+                    scan = function(options, on_root, on_complete)
+                        local root = options.roots[1]
+                        local path = root.path .. "/K/good.md"
+                        on_root({
+                            root_ordinal = 1,
+                            status = "success",
+                            candidates = { {
+                                root = root,
+                                root_ordinal = 1,
+                                relative = "K/good.md",
+                                unresolved_absolute = path,
+                                resolved_absolute = path,
+                                stat = { mtime = { sec = 100 } },
+                            } },
+                            failures = { { kind = "stat", diagnostic = "EIO" } },
+                        })
+                        on_complete()
+                        return { cancel = function() end }
+                    end,
+                },
+            }
+
+            M.cmd.NoteFinder()
+
+            assert.equals(1, warning_count)
+            assert.equals(1, #updates)
+            assert.equals(1, #updates[1].items)
+        end)
+
+        it("prunes cache only for roots that enumerate successfully", function()
+            local note_finder = require("parley.note_finder")
+            local cache = note_finder.get_cache()
+            local extra = vim.fn.tempname() .. "-parley-note-extra"
+            vim.fn.mkdir(extra, "p")
+            M.config.note_roots = {
+                { dir = notes_dir, label = "main", is_primary = true },
+                { dir = extra, label = "peer", is_primary = false },
+            }
+            cache["/stale-main.md"] = { mtime = 1, root_path = notes_dir }
+            cache["/stale-peer.md"] = { mtime = 1, root_path = extra }
+            M.logger.warning = function() end
+            M.float_picker.open = function(opts) return picker_stub(opts) end
+            M._finder_dependencies = {
+                schedule = function(callback) callback() end,
+                now = function() return 0 end,
+                async_file_source = {
+                    scan = function(_, on_root, on_complete)
+                        on_root({ root_ordinal = 1, status = "success", candidates = {}, failures = {} })
+                        on_root({
+                            root_ordinal = 2,
+                            status = "failed",
+                            failure = { kind = "root_enumeration", diagnostic = "EACCES" },
+                        })
+                        on_complete()
+                        return { cancel = function() end }
+                    end,
+                },
+            }
+
+            M.cmd.NoteFinder()
+            assert.is_nil(cache["/stale-main.md"])
+            assert.is_not_nil(cache["/stale-peer.md"])
+            vim.fn.delete(extra, "rf")
+        end)
+
+        it("replaces a mismatched retained prewarm", function()
+            local scan_count = 0
+            local cancel_count = 0
+            M._finder_dependencies = {
+                schedule = function(callback) callback() end,
+                now = function() return 0 end,
+                async_file_source = {
+                    scan = function()
+                        scan_count = scan_count + 1
+                        return { cancel = function() cancel_count = cancel_count + 1 end }
+                    end,
+                },
+            }
+            local note_finder = require("parley.note_finder")
+
+            note_finder.prewarm()
+            M.config.note_roots[1].label = "renamed"
+            note_finder.prewarm()
+
+            assert.equals(2, scan_count)
+            assert.equals(1, cancel_count)
+        end)
+
+        it("starts picker-owned work instead of joining a mismatched running prewarm", function()
+            local scan_count = 0
+            local cancel_counts = { 0, 0 }
+            local captured
+            M.float_picker.open = function(opts)
+                captured = opts
+                return picker_stub(opts)
+            end
+            M._finder_dependencies = {
+                schedule = function(callback) callback() end,
+                now = function() return 0 end,
+                async_file_source = {
+                    scan = function()
+                        scan_count = scan_count + 1
+                        local ordinal = scan_count
+                        return { cancel = function() cancel_counts[ordinal] = cancel_counts[ordinal] + 1 end }
+                    end,
+                },
+            }
+            local note_finder = require("parley.note_finder")
+
+            note_finder.prewarm()
+            M.config.note_roots[1].label = "renamed"
+            M.cmd.NoteFinder()
+
+            assert.equals(2, scan_count)
+            captured.on_cancel()
+            assert.same({ 0, 1 }, cancel_counts)
+            assert.is_true(note_finder.is_prewarming())
+        end)
+
+        it("retires ownerless prewarm settlement after populating the cache", function()
+            local finish_root
+            local finish_scan
+            M._finder_dependencies = {
+                schedule = function(callback) callback() end,
+                now = function() return 0 end,
+                async_file_source = {
+                    scan = function(options, on_root, on_complete)
+                        finish_root = function()
+                            local root = options.roots[1]
+                            local path = root.path .. "/K/prewarmed.md"
+                            on_root({
+                                root_ordinal = 1,
+                                status = "success",
+                                candidates = { {
+                                    root = root,
+                                    root_ordinal = 1,
+                                    relative = "K/prewarmed.md",
+                                    unresolved_absolute = path,
+                                    resolved_absolute = path,
+                                    stat = { mtime = { sec = 100 } },
+                                } },
+                                failures = {},
+                            })
+                        end
+                        finish_scan = on_complete
+                        return { cancel = function() end }
+                    end,
+                },
+            }
+            local note_finder = require("parley.note_finder")
+
+            note_finder.prewarm()
+            finish_root()
+            finish_scan()
+
+            assert.is_false(note_finder.is_prewarming())
+            assert.is_not_nil(note_finder.get_cache()[notes_dir .. "/K/prewarmed.md"])
+        end)
+
+        it("reuses unchanged cached classification without reading a body", function()
+            local decisions = {}
+            local captured
+            M.float_picker.open = function(opts)
+                captured = opts
+                return picker_stub(opts)
+            end
+            M._finder_dependencies = {
+                schedule = function(callback) callback() end,
+                now = function() return 0 end,
+                async_file_source = {
+                    scan = function(options, on_root, on_complete)
+                        local root = options.roots[1]
+                        local path = root.path .. "/K/cached.md"
+                        local item = {
+                            root = root,
+                            root_ordinal = 1,
+                            relative = "K/cached.md",
+                            unresolved_absolute = path,
+                            resolved_absolute = path,
+                            stat = { mtime = { sec = 100 } },
+                        }
+                        local decision = options.read_policy(item)
+                        decisions[#decisions + 1] = decision.kind
+                        if decision.kind == "ready" then
+                            item.precomputed = decision.value
+                        end
+                        on_root({ root_ordinal = 1, status = "success", candidates = { item }, failures = {} })
+                        on_complete()
+                        return { cancel = function() end }
+                    end,
+                },
+            }
+
+            M.cmd.NoteFinder()
+            captured.on_cancel()
+            M.cmd.NoteFinder()
+
+            assert.same({ "none", "ready" }, decisions)
+            assert.equals(notes_dir .. "/K/cached.md", captured.items[1].value)
+        end)
+
+        it("reopens with the next recency state after records settle", function()
+            local picker_calls = {}
+            local deferred
+            write_file(notes_dir .. "/K/settled.md")
+            M.float_picker.open = function(opts)
+                picker_calls[#picker_calls + 1] = opts
+                return picker_stub(opts)
+            end
+
+            M.cmd.NoteFinder()
+            vim.defer_fn = function(callback) deferred = callback end
+            local closed = false
+            local start_index = M._note_finder.recency_index
+            picker_calls[1].mappings[2].fn(nil, function() closed = true end)
+
+            assert.is_true(closed)
+            assert.is_true(M._note_finder.recency_index ~= start_index)
+            deferred()
+            assert.equals(2, #picker_calls)
+            assert.truthy(picker_calls[2].title:find("Recent: 6 months", 1, true))
+        end)
     end)
 
     it("creates braced top-level notes directly under notes_dir", function()

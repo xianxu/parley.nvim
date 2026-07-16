@@ -1,30 +1,729 @@
 ---
 id: 000189
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-14
-updated: 2026-07-15
-estimate_hours:
+updated: 2026-07-16
+estimate_hours: 16.6
 started: 2026-07-15T17:02:57-07:00
+actual_hours: 11.65
 ---
 
 # all finders should have a spinner in case of large input
 
-in particular, markdown finder in super-repo mode is slow. we can add a spinner so user knows something is happening. also need to not block UI. third, just for super repo mode's markdown finder, maybe we should restrict where we look for markdown files, for example, don't need to look in imported package path, or .git etc. 
-
 ## Problem
+
+Parley's five disk-backed finders—Chat, Note, Issue, Vision, and Markdown—scan
+their roots before opening the picker. On a large root or in super-repo mode,
+that synchronous work can leave Neovim apparently unresponsive with no visible
+indication that discovery is in progress. Markdown Finder is the clearest case:
+it repeatedly expands depth globs across every peer and can inspect ignored or
+imported package trees that are outside the repository's useful document set.
 
 ## Spec
 
+- Scope this work to the five disk-backed finders: Chat, Note, Issue, Vision,
+  and Markdown. In-memory agent, model, system-prompt, skill, and similar
+  pickers retain their current behavior.
+- Every disk-backed finder opens its picker shell synchronously before discovery
+  begins. While discovery is pending, the results surface shows an animated
+  `scanning…` state using the canonical frames from `parley.progress`; users can
+  cancel immediately with the picker's existing controls.
+- Loading is a shared picker/session lifecycle rather than five finder-local
+  spinners. The shared boundary owns loading/result/error transitions,
+  idempotent teardown, cancellation, and generation identity so a late callback
+  cannot update or reopen a closed or superseded picker (`ARCH-DRY`).
+- Discovery must be genuinely asynchronous. Deferring an unchanged synchronous
+  glob/parse call until after the first spinner frame is not sufficient: disk
+  enumeration plus stat/read operations use asynchronous process/libuv APIs.
+  In-memory metadata parsing is scheduled in slices bounded by injected item and
+  monotonic-time budgets before yielding to the event loop. One file's
+  already-read payload remains the atomic parsing unit; the implementation plan
+  owns the concrete budgets and their deterministic test clocks.
+- The shared loader takes an immutable snapshot of roots and finder options plus
+  an injected asynchronous producer. It synchronously publishes `loading`, and
+  settles exactly once with one of three outcomes: `success(records)`,
+  `partial(records, failed_root_count, failed_record_count)`,
+  or `failure(failed_root_count)`. Cancellation is a non-settling retirement:
+  it invalidates the generation, suppresses subscribers and late producer
+  callbacks, and never publishes a replayable outcome. Records are finder-specific raw
+  discovery/metadata values, not rendered picker items. Each subscriber applies
+  its own immutable open-time options through a deterministic materializer
+  after settlement. The producer returns an idempotent cancellation handle; the
+  session exposes cancellation/subscription and rejects every repeated or stale
+  settlement. A root counts as successful even when it contains zero matches.
+- Session construction is lazy: it stores a producer factory but cannot start
+  IO. `subscribe()` returns an idempotent subscriber-only cancellation handle;
+  `start()` invokes the factory at most once; picker-owned sessions cancel the
+  producer when their last subscriber leaves while loading, while retained
+  prewarm sessions keep producer ownership with zero subscribers. Settlement
+  snapshots and drains live subscribers once, admits/replays subscriptions made
+  during that delivery turn, runs one owner/ownerless terminal hook, then
+  retires and drops the replayable outcome. Finder-specific cache mutation
+  happens during pre-settlement adaptation; terminal hooks only clear the
+  prewarm registry and log bounded ownerless partial/failure outcomes.
+- Every lifecycle callback is isolated. Producer-factory exceptions settle a
+  bounded total failure after the picker is visible. Each
+  subscriber/materializer callback is protected independently so later
+  subscribers still receive the outcome. Terminal and retire hooks are
+  protected independently and retirement still happens exactly once. Arbitrary
+  thrown values are never stringified; only static lifecycle failure kinds
+  reach bounded diagnostics.
+- The producer pipeline is ordered exactly once as enumeration → async
+  stat/read enrichment → sliced per-file adapter → outcome accumulation →
+  session settlement. Adapter output is finder-specific raw metadata, not a
+  rendered picker item. Subscribers run only total, deterministic open-time
+  materialization (recency/facets/rendering) after settlement; no
+  failure-counting work occurs after the terminal outcome.
+- One shared producer runner owns that pipeline for all five finders. It accepts
+  an injected acquisition stream, sliced pure adapter, finalizer, and optional
+  cache hooks; it alone coordinates root transactions, record failures,
+  composite cancellation, batching, and exactly-once settlement. Filesystem and
+  Git sources differ only in how they emit the common enriched root-event
+  schema; finders do not reimplement orchestration.
+- Enumeration failure makes the whole root fail and discards every record
+  staged for that root. After successful enumeration, an individual async
+  stat/read or parser failure discards only that record and increments
+  `failed_record_count`; other records and roots continue. Any record failure,
+  or any failed root beside at least one successful root, produces `partial`.
+  `failure` means every attempted root failed enumeration. A successfully
+  enumerated root whose every record later fails therefore settles as partial
+  with an empty record set, not as total failure.
+- Filesystem enumeration consists of optional-root existence classification and
+  opening/draining every required directory scan to produce staged candidate
+  paths and entry types. `ENOENT` for an optional root is a skip; another root
+  preflight error, a directory-open/read error, or an unknown entry type needed
+  for safe traversal fails that root and discards its staged candidates. Only
+  after traversal succeeds do candidate `fs_stat`, file open/read, and parser
+  operations run; those are per-record enrichment failures and never roll back
+  the enumerated root. For Markdown, successful Git exit is the equivalent
+  enumeration boundary and later candidate stats are record enrichment.
+- Async acquisition resolves `realpath` as optional enrichment IO. A failed
+  optional realpath lookup falls back to the normalized unresolved absolute path
+  and is not itself a record failure; required stat/open/read failures retain
+  their record-failure semantics. Pure path identity consumes only
+  `{ unresolved_absolute, resolved_absolute?, root_ordinal }` strings and never
+  calls the filesystem.
+- Async file acquisition supports an injected per-record read policy after stat
+  and before open/read. It either supplies cached metadata immediately, requests
+  a bounded payload read, or emits stat-only metadata. The policy performs no IO
+  or cache mutation; cache hits open/read nothing, cancellation is rechecked
+  before a conditional read starts, and completion waits for every requested
+  read.
+- A per-file adapter returns exactly `record`, intentional `skip`, or
+  `failure(kind)`. Expected nonmatches and benign policy exclusions are skips
+  and do not inflate failure counts. Failure kinds are static bounded enums;
+  arbitrary thrown values, raw file payloads, and process bodies are never
+  converted into diagnostics.
+
+  | Session state | Event | Required effect |
+  |---|---|---|
+  | loading | subscribe | register one subscriber for the immutable snapshot |
+  | loading | producer settles | store one outcome and deliver it once to every live subscriber |
+  | loading | owned picker cancels | invalidate generation, unsubscribe, and invoke producer cancel once |
+  | loading | joined-prewarm picker cancels | invalidate/unsubscribe only; prewarm keeps ownership |
+  | settled | subscribe before session retirement | replay the stored outcome once |
+  | settled/retired | repeated settle or cancel | no-op |
+
+  A normal picker-owned session retires after delivery or cancellation. The
+  separate prewarm retention/cache rule below governs its ownerless terminal.
+- Results replace the loading state as one complete, deterministically sorted
+  set. Do not progressively reorder a list beneath the user's cursor. Existing
+  titles, item rendering, primary sort order, facets, sticky queries, recall,
+  selection, delete/move actions, and view cycling remain unchanged after
+  loading. When primary sort values tie, every finder uses one shared path-key
+  policy as the stable secondary key: `realpath` when available, otherwise
+  normalized absolute path; separators normalized to `/`; compared as
+  case-sensitive UTF-8 bytes with no locale collation.
+- Before sorting, canonical-key collisions are deduplicated independently of
+  async arrival order. The retained record is the minimum deterministic source
+  tuple `(ordered root ordinal, normalized unresolved absolute path)`; tests
+  cover overlapping roots and symlink aliases.
+- Vision adapts each YAML file to one file-identity bundle before deduplication;
+  only then does its total materializer flatten that bundle's 0:N initiatives.
+  Each initiative retains the source file identity plus stable parser ordinal,
+  so multiple initiatives from one file cannot collapse as path duplicates.
+- Loading and total-failure presentation is picker status, not a synthetic item:
+  it bypasses fuzzy/sticky-query filtering, never enters the selectable item
+  list, and ignores confirm/double-click. A retained query therefore cannot hide
+  `scanning…` or the error state. Only settled success/partial records are
+  materialized and installed as selectable items.
+- The visible prompt query remains live while loading. Query edits/clears update
+  the finder's existing sticky/query state immediately and are never restored
+  from the open-time snapshot. Settlement materializes the complete item/facet
+  domain from immutable scan/recency options, installs it, then filters with the
+  prompt buffer's current query. Facet state may be snapshotted because facet
+  controls do not exist until their settled domain is installed.
+- Extract deterministic file-list-to-entry policy from filesystem/process glue
+  where practical. Finder-specific parsing and rendering remain separate, while
+  shared enumeration, batching, and lifecycle mechanics stay reusable and
+  injectable (`ARCH-PURE`).
+- Markdown discovery runs once per ordinary repo or super-repo member through
+  asynchronous Git-aware file listing. Its inclusion set is all tracked `*.md`
+  files (even if a current ignore rule also matches them) union untracked
+  non-ignored `*.md` files. Repository and global Git ignore rules therefore
+  govern untracked discovery exactly as Git does. Discovery retains
+  `markdown_finder_max_depth`, never descends into `.git`, and does not
+  follow symlinked directories. Depth is counted from the member root by path
+  components: a root-level file has depth 1, matching the existing glob policy.
+  Nested repositories and submodules are opaque to the parent listing and are
+  not descended; a super-repo member is listed only by its own Git invocation.
+  A missing Git executable, a root that is not a Git worktree, or a non-zero Git
+  listing exit is that root's scan failure; there is no ignore-violating
+  filesystem fallback. Listing uses NUL-delimited output and incremental stream
+  parsing, so paths containing newlines remain one record. A non-zero exit
+  discards every staged stdout path for that root. Super-repo labels,
+  aggregation, ordering, and repository facets otherwise remain unchanged.
+- Chat and Note prewarming uses the same asynchronous discovery path as an
+  explicit open. If a prewarm is already in flight, opening the finder displays
+  the loading picker and subscribes to that producer instead of hiding the
+  request or starting a duplicate scan. The prewarm owns its work: cancelling a
+  joined picker only unsubscribes and invalidates that picker generation; it
+  does not cancel the shared prewarm. Success, partial failure, or total failure
+  from the prewarm settles every still-live subscriber through the same outcome
+  contract. A picker joins only when its shared path-key-normalized root list
+  and discovery-policy fingerprint exactly equal the immutable prewarm snapshot.
+  That fingerprint contains finder kind, ordered normalized root records
+  (path/label/primary identity), traversal recursion/depth, filename pattern,
+  and backend-affecting enumeration options; recency, facets, and live query are
+  materializer/UI policy and are excluded. A mismatch starts a separate
+  picker-owned producer while the prewarm continues. Prewarm
+  produces the complete unfiltered raw metadata set. Each joined opener
+  snapshots its own current recency/cutoff and facet options and materializes
+  that shared set independently, so joining never applies stale prewarm-time UI
+  policy or repeats concurrent disk discovery. Once an ownerless prewarm
+  settles, its terminal records are not
+  replayed as a later picker's result: only the existing per-file mtime metadata
+  cache remains. A later open always performs fresh asynchronous enumeration,
+  prunes cache entries no longer present, and reuses unchanged metadata; changed
+  mtimes are reread. Ownerless partial/total prewarm failure is logged once and
+  not cached as a terminal outcome, so the next open retries normally.
+- Missing optional roots continue to contribute no entries. In a multi-root or
+  super-repo scan, a failure in one root preserves successful results from the
+  others and emits one warning. An absent optional directory is skipped rather
+  than attempted, and all-absent optional roots therefore produce successful
+  `(no matches)`. A configured root that is attempted but cannot be enumerated
+  is a failure; if every attempted root fails, the loading state becomes an error
+  status and the picker remains cancellable. Existing required-root
+  misconfiguration checks still warn and return before opening a picker.
+- Cancelling a loading picker requests cancellation of owned external work when
+  supported and always invalidates its generation. Scan timers, handles, and
+  callbacks are retired exactly once on scan cancellation, settlement, or
+  picker/window destruction. Finder `opened` flags track the picker lifetime:
+  scan settlement leaves them set while results or an error remain visible, and
+  select/cancel/window destruction retires them exactly once.
+- Successful empty discovery ends in the existing `(no matches)` presentation;
+  it is distinct from a scan failure. Reopening after cancellation or failure
+  starts a fresh session normally.
+- A partial outcome emits at most one user warning per finder session; a total
+  failure replaces loading with one nonselectable error status. Each message is
+  bounded, reports only the finder name plus aggregate failed-root and
+  failed-record counts, and never includes raw process output. Per-root
+  technical diagnostics may be logged,
+  but capture is bounded at the source: stderr readers and the one incomplete
+  NUL path fragment retain only their configured caps, and an overlong fragment
+  fails that root. Per-session diagnostic count is capped with one bounded
+  omitted-count summary. Before display/logging, diagnostic text replaces
+  control characters with spaces and truncates at a valid UTF-8 boundary. The
+  implementation plan owns the concrete byte/count budgets.
+- The parser batcher accepts an injected monotonic clock, checks budgets between
+  atomic records, and yields before beginning the next record after either
+  budget is exhausted. No wall-clock guarantee is claimed inside one atomic
+  parser call.
+- Update README and atlas documentation for immediate asynchronous finder
+  loading, the five-finder scope, Markdown's Git-ignore-aware boundary, and the
+  shared lifecycle (`ARCH-PURPOSE`).
+
 ## Done when
 
--
+- Each of the five disk-backed finder entry points synchronously returns with a
+  visible animated loading picker before its injected discovery completes.
+- A scheduled sentinel and spinner tick run while a deliberately delayed scan
+  is pending, proving the UI is not merely painted before blocking work.
+- Injected async read/stat completion plus a metadata set exceeding both slice
+  limits proves, with a controlled monotonic clock, that parsing checks budgets
+  between atomic records and yields before beginning the next out-of-budget
+  record; later slices resume without dropping or duplicating entries.
+- Esc during loading closes the picker, retires its spinner/session, resets the
+  finder `opened` flag, and ignores a later completion; reopening then succeeds.
+- Successful, empty, partial-failure, and total-failure scans produce complete
+  results, `(no matches)`, bounded warning plus partial results, and bounded
+  nonselectable error state respectively, without leaked timers or duplicate
+  terminal work. All-absent optional roots are specifically covered as a
+  successful empty scan.
+- A failed stat/read/parser drops only its record and yields partial success;
+  failed root enumeration drops that root's staged records; total failure occurs
+  only when every attempted root fails enumeration.
+- Intentional per-record skips remain distinct from failures and never increase
+  warning/error counts; thrown adapter values collapse to static failure kinds
+  without stringifying arbitrary data.
+- Chat and Note opens join an in-flight asynchronous prewarm without duplicating
+  its scan only for an exactly matching normalized root/policy snapshot;
+  mismatches start independent work. Different opener recency snapshots
+  materialize matching raw prewarm records independently. After prewarm settles
+  without a subscriber, a later open re-enumerates, reuses only unchanged mtime
+  metadata, prunes stale cache entries, and retries prior partial/total failures.
+- Ordinary and super-repo Markdown Finder include all tracked Markdown files
+  plus untracked non-ignored Markdown files, exclude ignored untracked files and
+  Markdown reachable only through symlinked directories, treat nested
+  repos/submodules as opaque, enforce root-relative component depth, fail safely
+  when Git listing is unavailable, and retain existing display labels, primary
+  sorting, and facets.
+- NUL-delimited Git process fakes cover newline-bearing filenames, incremental
+  chunks, non-zero exit with staged stdout, bounded stderr/pending fragments,
+  tracked-but-ignored files, global excludes, nested repositories, submodules,
+  and root-relative depth.
+- Equal primary sort values resolve by canonical item path for deterministic
+  ordering in all five finders; canonical-key collisions deduplicate by the
+  deterministic source tuple before sorting.
+- Existing finder interaction regressions remain green after results load, and
+  automated tests cover the shared loader plus all five production entry-point
+  seams.
+- Loading and error status remains visible under a retained query and cannot be
+  selected or confirmed through keyboard or mouse paths.
+- Text typed or cleared while loading remains the visible/stored query and is
+  applied to settled items; completion never restores the invocation-time
+  query.
 
 ## Plan
 
-- [ ]
+- [x] M1 — Add shared scan/session/picker primitives and ship Markdown as the
+  first Git-aware asynchronous vertical slice.
+- [x] M2 — Migrate Chat and Note, including exact-snapshot joinable prewarm and
+  metadata-only settled cache retention.
+- [x] Migrate Issue and Vision, reconcile docs/atlas/traceability, and run
+  focused, mapped, full, and manual verification before the final issue-close
+  boundary.
+
+## Estimate
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.5
+item: lua-neovim              design=0.60 impl=0.60
+item: lua-neovim              design=0.60 impl=0.60
+item: lua-neovim              design=0.60 impl=0.60
+item: lua-neovim              design=0.60 impl=0.60
+item: lua-neovim              design=0.60 impl=0.60
+item: lua-neovim              design=0.60 impl=0.60
+item: tui-screen              design=0.40 impl=0.40
+item: api-integration         design=0.60 impl=0.60
+item: api-integration         design=0.60 impl=0.60
+item: cross-cutting-refactor  design=0.20 impl=0.20
+item: cross-cutting-refactor  design=0.20 impl=0.20
+item: atlas-docs              design=0.10 impl=0.08
+item: milestone-review        design=0.10 impl=0.60
+item: ux-rename-iteration     design=0.30 impl=0.12
+design-buffer: 0.15
+total: 16.62
+```
+
+Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md`
+against `baseline-v3.1.md`. Method A only. Design values apply the thorough-spec
+discount; implementation values are already scaled to 40% of the v2/v2.1
+primitive table. Familiarity is 1.5 because streaming libuv/Git cancellation is
+novel-but-bounded in this Lua codebase. The six `lua-neovim` primitives are
+scan policy, loader lifecycle, async filesystem source, picker status, Chat/Note
+migration, and Issue/Vision migration. The two API primitives are streaming Git
+and cancellable libuv integration; two refactors cover Markdown and the four
+artifact finders; the UX primitive covers operator smoke iteration; and the
+milestone primitive covers M1, M2, and final integration review. This applies
+the same v3.1 calibration that includes completed Parley #144/#147 anchors while
+accounting for #189's materially broader surface. The calibration source was
+stale on 2026-07-15, so the estimate is provisional.
 
 ## Log
 
 ### 2026-07-14
+
+- Initial request: show progress for large finder inputs, keep Neovim
+  responsive, and avoid irrelevant Markdown traversal such as `.git` and
+  imported package paths.
+
+### 2026-07-15
+
+- Claimed before design. Scope is the five disk-backed finders only. Approved
+  an immediate picker-shell spinner, atomic result replacement, one shared
+  cancellation/loading lifecycle, and Git-ignore-aware Markdown discovery that
+  does not follow symlinked directories (`ARCH-DRY`, `ARCH-PURE`,
+  `ARCH-PURPOSE`).
+
+## Revisions
+
+### 2026-07-15 — fresh-context spec review
+
+- Reason: review found that the first draft named the shared architecture but
+  left responsiveness bounds, loader outcomes, joined-prewarm ownership,
+  missing-root behavior, Git edge cases, deterministic ties, and bounded error
+  presentation insufficiently precise for implementation planning.
+- Delta: defined async stat/read seams plus 25-file/5ms parsing slices; an
+  exactly-once four-outcome loader contract; subscriber-only cancellation for
+  joined prewarms; success/failure rules for absent versus attempted roots;
+  Git/depth/nested-repo behavior; canonical-path tie-breaking; and 240-byte,
+  nonselectable failure presentation.
+
+### 2026-07-15 — second fresh-context spec review
+
+- Reason: review found unresolved coupling between prewarm and opener options,
+  possible query/selection treatment of lifecycle rows, ambiguity for tracked
+  files matching ignore rules, and a nondeterministic 5ms acceptance oracle.
+- Delta: made producers return raw metadata for per-subscriber pure
+  materialization; moved loading/error into nonfilterable, nonselectable picker
+  status; defined Markdown inclusion as tracked union non-ignored untracked;
+  and specified an injected monotonic clock checked between atomic records.
+
+### 2026-07-15 — third fresh-context spec review
+
+- Reason: review found undefined per-record failure effects, completed-prewarm
+  freshness/replay, cross-platform tie comparison, and diagnostic capture/log
+  volume.
+- Delta: record failures now produce partial results while root enumeration is
+  transactional; completed prewarm retains only an mtime metadata cache and
+  later opens re-enumerate; a shared normalized bytewise path key owns ties;
+  Git paths stream NUL-delimited with bounded fragments/stderr; and per-session
+  technical diagnostic count is capped.
+
+### 2026-07-15 — fourth fresh-context spec review
+
+- Reason: review found that a changed root set could incorrectly join an
+  in-flight prewarm and that a query edited during loading could be overwritten
+  by immutable opener options.
+- Delta: joining now requires an exact normalized root/discovery-policy snapshot
+  match; mismatches start independent work. Query stays live in the prompt and
+  is applied only after settled items install. Diagnostics also sanitize control
+  characters and truncate on UTF-8 boundaries.
+
+### 2026-07-15 — fifth fresh-context review and operator decision
+
+- Reason: the fifth permitted review still found canonical-key collisions,
+  underspecified prewarm-policy equality, and record exceptions reaching the
+  diagnostic path. The operator approved proceeding without a sixth review and
+  agreed that numeric batching/buffer constants belong in the implementation
+  plan rather than the product spec.
+- Delta: added arrival-order-independent deduplication, enumerated the exact
+  discovery fingerprint, defined `record`/`skip`/static `failure(kind)`, and
+  moved concrete time/item/byte/count budgets to the durable plan while retaining
+  the responsiveness and source-bounded invariants.
+
+### 2026-07-15 — durable implementation planning
+
+- Reason: the approved spec spans shared UI lifecycle, two IO backends, five
+  production finders, prewarm ownership, process fakes, and documentation, so a
+  checkable multi-boundary plan is required before source changes.
+- Delta: added the canonical durable plan, two intermediate milestones plus the
+  final issue-close boundary, concrete operational budgets, and an estimate
+  derived from estimate-logic-v3.1 rather than memory.
+
+### 2026-07-15 — change-code gate refinement
+
+- Reason: the mandatory plan-quality gate found invalid milestone commands,
+  close-bookkeeping order, an under-decomposed estimate, undefined shared
+  failure kinds, and an overlap ambiguity with open issue #122.
+- Delta: corrected boundary verbs/commit protocol, made the final checkbox a
+  pre-close action, re-derived the estimate as 9.2 hours by delivery primitive,
+  single-sourced failure kinds, explicitly preserved #122's current timestamp
+  behavior, and clarified that `opened` tracks picker rather than scan lifetime.
+
+### 2026-07-15 — second change-code gate refinement
+
+- Reason: the second mandatory judge found that adapter work appeared to occur
+  after terminal settlement, filesystem enumeration versus enrichment was not
+  precise enough to classify failures, and 9.2 hours still compressed multiple
+  independent implementations into too few primitives.
+- Delta: fixed the one-way producer pipeline before settlement, defined root
+  traversal/Git exit as the transactional boundary and later stat/read/parse as
+  record enrichment, and re-derived 16.6 hours from six Lua features, two IO
+  integrations, two migrations, UX iteration, docs, and three reviews.
+
+### 2026-07-15 — third change-code gate refinement
+
+- Reason: the third mandatory judge found the session API did not yet expose
+  subscriber-only cancellation, producer ownership, lazy start ordering,
+  prewarm retirement hooks, or enforceable snapshot immutability.
+- Delta: specified lazy producer factories, explicit subscription handles,
+  picker-owned versus retained-prewarm policies, deterministic delivery-turn
+  retirement, ownerless terminal hooks, and opaque snapshots with defensive
+  copy access. M1 now includes an estimate-calibration checkpoint.
+
+### 2026-07-15 — fourth change-code gate refinement
+
+- Reason: the fourth mandatory judge found async filesystem/Git callback
+  schemas and cancellation guarantees implicit, realpath IO inside the pure
+  path entity, and the estimate checkpoint missing a concrete variance trigger.
+- Delta: fully specified acquisition events/handles, moved async realpath into
+  enrichment with benign fallback, made `PathIdentity` string-only, and split
+  16.6 hours as M1 8.0, M2 4.5, final 4.1 with a 30% M1 revision threshold.
+
+### 2026-07-15 — fifth change-code gate refinement
+
+- Reason: the fifth mandatory judge found producer orchestration could repeat
+  across five finders and lifecycle callback exceptions could interrupt later
+  delivery or retirement.
+- Delta: added one injected `finder_producer` runner for acquisition through
+  settlement and specified independent static/bounded exception containment for
+  producer factory, subscriber/materializer, terminal, and retire callbacks.
+
+### 2026-07-15 — sixth change-code gate refinement
+
+- Reason: the sixth mandatory judge found Chat's stat-to-cache-to-conditional-read
+  pipeline could not be expressed by the scan-wide read option and Vision's
+  one-file-to-many initiatives conflicted with one-record adapter semantics.
+- Delta: added one shared per-record read-policy seam with cancellation and
+  zero-read cache-hit tests, and made Vision adapt/deduplicate one file bundle
+  before flattening stable source-identity-plus-ordinal initiatives.
+
+### 2026-07-15 — Task 1 implementation
+
+- Added the pure snapshot/fingerprint, path identity/dedup/sort, outcome,
+  bounded-diagnostic, and slice-batching policies with 23 focused tests.
+- The first combined module crossed the plan's 400-line guard, so the scheduling
+  state machine moved to `finder_batcher.lua`; `finder_scan.new_batcher` remains
+  the shared public seam (`ARCH-PURE`, Simplicity First).
+
+### 2026-07-15 — Task 2 implementation
+
+- Added transactional async traversal, a shared 16-operation libuv queue,
+  stat/realpath enrichment, cache-aware conditional reads, descriptor cleanup,
+  and callback-suppressing cancellation.
+- Eleven injected-uv unit cases and three real-libuv integration cases cover
+  optional roots, depth, symlink non-traversal, failed roots, cache-hit zero
+  reads, header reads, policy exceptions, concurrency, cancellation, event-loop
+  yielding, and late-callback suppression.
+
+### 2026-07-15 — Task 3 implementation
+
+- Added a focused 120ms status controller using `parley.progress.frame` and a
+  nonselectable picker status surface that survives query filtering, transitions
+  atomically to results/errors, and exposes update/query/close lifecycle methods.
+- Three controller tests, five status-specific picker regressions, the full
+  68-case float-picker spec, and progress regressions pass. Debugging confirmed
+  ignored prompt submission emits an internal Escape; status confirm now
+  suppresses only that submit transition so a real Escape still cancels.
+
+### 2026-07-15 — Task 4 implementation
+
+- Added the shared `finder_producer.run` pipeline for out-of-order root events,
+  sliced adapters, cache hooks, static exception containment, finalization,
+  composite cancellation, and exactly-once settlement.
+- Added lazy picker/retained loading sessions with subscriber-only cancellation,
+  delivery-turn replay, defensive snapshots, independent terminal/retire hooks,
+  and a picker bridge that opens/subscribes before callers start IO. Five
+  producer and eight loader/bridge cases cover these contracts.
+
+### 2026-07-15 — Task 5 implementation
+
+- Replaced Markdown Finder's synchronous depth globs with one Git-backed
+  acquisition stream: `git ls-files` supplies tracked plus non-ignored
+  untracked Markdown paths, and the shared async file source supplies bounded
+  stat/realpath enrichment before producer settlement.
+- The picker now opens before Git starts, preserves its live query and
+  contextual directory/repository facets, cancels Git and enrichment on Esc,
+  warns on partial scans, and leaves a nonselectable error on total failure.
+  Process-level and entry-point coverage includes ignored files, nested repos,
+  NUL chunking, newline filenames, late process exit cleanup, stat/root
+  failures, cancellation, and reopen (`ARCH-PURE`, `ARCH-PURPOSE`).
+- Removed the obsolete `_scan_members` synchronous test seam; super-repo
+  aggregation is now covered through the production entry point and the pure
+  repository materializer (`ARCH-DRY`).
+
+### 2026-07-16 — M1 mapped verification
+- 2026-07-16: closed — All five disk-backed finders open immediately with animated scanning status, settle asynchronously with canonical ordering and preserved actions/facets, skip Git-ignored Markdown, and cancel/reopen safely; focused Issue/Vision regressions pass 8/8 each, make test-changed and make test exit 0, lint is clean across 301 files, production plus 2,000-tracked/2,000-ignored smoke passed, and git diff --check is clean.; review verdict: SHIP
+- 2026-07-16: closed M1 — Focused malformed-event/truncated-framing/invalid-label/shared-IO-policy, Git stream-error/fragment-cap/native-path, finder scan/producer/loader, async file source unit+real-libuv, real Git/submodule/backslash path, Markdown entry-point, real delayed process-to-picker spinner, picker status, and float-picker specs pass; make test-changed passes; make lint reports 0 warnings/errors in 292 files; issue validation and git diff --check pass.; review verdict: FIX-THEN-SHIP
+
+- `make test-changed` exposed that the real-Git “nonrepository” fixture could
+  inherit Parley's parent worktree when a mapped runner placed temp files under
+  `.test-tmp`. The fixture now sets `GIT_CEILING_DIRECTORIES` to make the
+  nonrepository boundary hermetic; it passes with repo-local `TMPDIR` and across
+  repeated standalone runs.
+- The broader facet-bar suite caught a status-era lifecycle regression:
+  `set_status(nil)` could detect and close an orphaned picker, then repaint its
+  wiped results buffer. The shared results renderer now rejects closed/invalid
+  ownership before mutation; both the 31-case facet suite and 68-case picker
+  suite pass.
+
+### 2026-07-16 — M1 boundary rework
+
+- The mandatory review found malformed adapter payload handling, directory
+  symlink enrichment, aggregate total-failure presentation, duplicated failure
+  construction, real-submodule coverage, production loading coverage, README
+  discoverability, and two plan-contract contradictions. The fixes validate
+  records at the producer boundary, require stat targets to be files,
+  single-source aggregate failures, schedule terminal delivery before UI APIs,
+  and cover a real Git submodule plus the real Markdown picker lifecycle.
+- Cancellation is now recorded as non-settling retirement and the stateful
+  scheduled `SliceBatcher` is classified as INTEGRATION, matching the shipped
+  contracts (`ARCH-DRY`, `ARCH-PURE`, `ARCH-PURPOSE`).
+
+### 2026-07-16 — M1 second boundary rework
+
+- The second mandatory review found that Git stream errors did not retire their
+  pipes, the pending path threshold did not cap retained fragments, and the
+  canonical comparison key was reused as a native selectable path. Stream
+  errors and overlong fragments now close their read side and settle once after
+  child exit; NUL parsing retains no fragment beyond the fixed cap; Markdown
+  rows open `resolved_absolute` or `unresolved_absolute` while identity keys
+  remain comparison-only. Fake-process and real-Git backslash-path regressions
+  cover all three findings (`ARCH-PURE`, `ARCH-PURPOSE`).
+
+### 2026-07-16 — M1 third boundary rework
+
+- The third mandatory review found malformed asynchronous root events could
+  reach asserting reducers, exit-zero truncated NUL output could silently drop
+  a path, invalid super-repo labels gained a visible `{}` prefix, and adjacent
+  filesystem helpers were duplicated. The producer now validates complete
+  event schemas before mutation and collapses violations to bounded root
+  failures; Git rejects unterminated EOF; invalid labels retain unprefixed
+  rows; native join/error fallback policy lives once in `finder_scan` with
+  direct tests (`ARCH-DRY`, `ARCH-PURE`, `ARCH-PURPOSE`).
+
+### 2026-07-16 — M1 final boundary fixes
+
+- The FIX-THEN-SHIP review found two lifecycle gaps: non-selection picker
+  destruction could leave its producer alive, and an uncancellable `fs_open`
+  could return a descriptor after queue cancellation with no remaining owner.
+- Picker dismissal now notifies its subscription exactly once while confirmed
+  selection and mapping-owned completion retain raw teardown. The shared queue
+  exposes an injected late-completion disposer, and enrichment closes late open
+  descriptors directly. Real loading-picker and injected-libuv regressions pin
+  cancellation cardinality, no late repaint, and descriptor cleanup
+  (`ARCH-PURE`, `ARCH-PURPOSE`).
+
+### 2026-07-16 — Task 6 implementation
+
+- Chat Finder now opens its animated shell before libuv traversal, joins only
+  exact retained-prewarm fingerprints, reads ten header lines only on cache
+  misses, and materializes recency/facets after settlement. Successful roots
+  prune their own cache entries while failed roots retain retryable metadata.
+- Pure records preserve dashed-name timestamps and dotted-name mtime fallback,
+  deterministic identity/order, tags/topic display, and overlapping-root
+  deduplication. Entry tests cover real spinner progress, cancel/late delivery,
+  join/mismatch, empty/partial/total outcomes, cache reuse/pruning, and existing
+  delete/move/recency behavior (`ARCH-DRY`, `ARCH-PURE`, `ARCH-PURPOSE`).
+
+### 2026-07-16 — Task 7 implementation
+
+- Note Finder now opens its animated shell before recursive libuv traversal,
+  joins only exact retained-prewarm fingerprints, and performs no body reads.
+  Recency remains opener-local while retained prewarms cache raw metadata for
+  later materialization.
+- Pure Note records own template skips, directory-date inference, special-folder
+  exemptions, root-labelled display/search, identity deduplication, and stable
+  timestamp/mtime/path order. Successful roots prune only their own cache;
+  failed roots retain retryable entries.
+- Entry-point coverage pins the real spinner, picker-owned cancellation, exact
+  join/mismatch, ownerless settlement, empty/partial/total outcomes, cache
+  reuse/pruning, selection restoration, and recency reopen after settlement
+  (`ARCH-DRY`, `ARCH-PURE`, `ARCH-PURPOSE`).
+
+### 2026-07-16 — M2 boundary review
+
+- 2026-07-16: closed M2 — Chat and Note record/entry-point specs cover delayed immediate-open, exact prewarm join, cancellation, partial/total outcomes, and successful-root cache pruning; shared specs, make test-changed, and make lint pass; git diff --check is clean; --force only bypasses the #87 cumulative-vs-increment comparator contradiction (9.23 cumulative, 8.73 prior boundary, 0.50 increment).; review verdict: FIX-THEN-SHIP
+- Because `--force` also suppressed the automatic judge, the documented manual
+  recovery reviewed the exact `8a46807..HEAD` window and returned
+  FIX-THEN-SHIP with no Critical findings.
+- The Important fixes single-source legacy/frontmatter topic and tag parsing in
+  `chat_parser`, prove two subscribers can apply distinct opener policy to one
+  retained outcome, cover opener-versus-mismatched-prewarm behavior, and expose
+  Chat/Note asynchronous loading in README (`ARCH-DRY`, `ARCH-PURPOSE`).
+
+### 2026-07-16 — Task 8 implementation
+
+- Issue Finder now snapshots only the selected issue/history directories,
+  opens its animated shell before non-recursive libuv enumeration, reads full
+  payloads only on canonical path-plus-mtime cache misses, and settles through
+  the shared producer/loader contracts.
+- The pure record seam reuses the canonical frontmatter/title parsers and
+  vocabulary order, treats non-issue Markdown as intentional skips, and adds
+  path/identity tie-breaks for deterministic multi-repo duplicate IDs.
+- Entry coverage pins a real spinner tick and real disk scan, cancellation with
+  ignored late delivery, absent/partial/total outcomes, stat/read accounting,
+  post-settlement repository facets, verbatim query persistence, and existing
+  view/delete/status actions (`ARCH-DRY`, `ARCH-PURE`, `ARCH-PURPOSE`).
+
+### 2026-07-16 — Task 9 implementation
+
+- Vision Finder now opens before non-recursive YAML acquisition, caches parsed
+  file bundles by canonical identity and mtime, prunes successful roots, and
+  leaves the synchronous Vision domain loader unchanged.
+- Pure materialization deduplicates whole files before flattening project rows,
+  so every initiative survives in parser order with a length-prefixed
+  file-identity-plus-ordinal key and exact source-line selection.
+- Dedicated entry coverage pins live query changes, out-of-order multi-root
+  settlement, absent/partial/total outcomes, cancellation, real spinner/disk
+  behavior, stable ordering, line jumps, and zero-read cache reuse
+  (`ARCH-DRY`, `ARCH-PURE`, `ARCH-PURPOSE`).
+
+### 2026-07-16 — Final verification and smoke
+
+- The full unit and integration suite, mapped tests, focused async/Git source
+  integrations, lint, and `git diff --check` pass. Lint reports zero warnings
+  or errors across 301 files.
+- Production Neovim smoke in `~/workspace/parley.nvim` showed immediate
+  animated loading followed by settled results for Chat, Note, Issue,
+  Markdown, and Vision (the current root has no Vision initiatives), with
+  post-load facets visible and Esc/reopen working.
+- `/tmp/parley-189-smoke.QsMPZs` contained 2,000 tracked Markdown documents and
+  2,000 ignored `vendor/` documents. Git discovery returned exactly 2,000
+  paths and zero vendor paths; the live picker displayed `scanning…`
+  immediately, accepted a retained `1999` query, settled to tracked results,
+  and reopened after Esc. The exact fixture was removed afterward.
+- Smoke also caught and corrected the README command spelling: the public
+  Vision entry point remains `:ParleyVisionShow` (`ARCH-PURPOSE`).
+
+### 2026-07-16 — final boundary-review rework
+
+- The mandatory close review returned REWORK for two ownership gaps: Issue
+  Finder released its duplicate-open guard immediately after launch, and a
+  descriptor could lose its owner while its close remained queued behind
+  saturated work.
+- Issue now retains the guard across loading and settlement until selection,
+  cancellation, or an action-owned reopen. Enrichment retains descriptor
+  ownership until queued close work actually starts, allowing cancellation to
+  close a not-yet-started descriptor directly. Focused regressions pin both
+  windows (`ARCH-PURE`, `ARCH-PURPOSE`).
+- After the fixes, both focused suites, `make test-changed`, `make lint`, and
+  the full `make test` suite pass; `git diff --check` is clean.
+
+### 2026-07-16 — second final boundary-review rework
+
+- Re-review found loading Chat/Note recency and Issue view mappings used raw
+  action teardown before reopening, so the old loader could remain subscribed
+  or keep picker-owned acquisition alive.
+- The shared picker now gives mappings cancellation-aware dismissal while a
+  status row is active and preserves raw action teardown only after settlement.
+  Direct picker coverage and real delayed-acquisition Chat, Note, and Issue
+  mapping tests prove the old scan cancels exactly once before one replacement
+  opens (`ARCH-DRY`, `ARCH-PURPOSE`).
+- After this fix, all four focused suites, `make test-changed`, `make lint`, and
+  `make test` pass; the full suite includes a clean
+  `chat_progress_process_spec.lua` run, and `git diff --check` is clean.
+
+### 2026-07-16 — third final boundary-review rework
+
+- Re-review found Vision kept the provisional `Vision` loading-shell title
+  after settlement instead of preserving `Vision (N initiatives)`.
+- The shared loader/picker bridge now accepts an optional materialized title,
+  and Vision supplies the exact counted title for empty and nonempty outcomes.
+  Loader, real picker, and Vision entry-point regressions pin the behavior
+  (`ARCH-DRY`, `ARCH-PURPOSE`).
+- After the title fix, focused loader/picker/Vision suites,
+  `make test-changed`, `make lint`, and `make test` pass; the full suite again
+  includes a clean `chat_progress_process_spec.lua` run, and
+  `git diff --check` is clean.
+
+### 2026-07-16 — fourth final boundary-review rework
+
+- Re-review found Issue and Vision used native IO paths as local comparator
+  ties, bypassing the shared canonical `identity.key` ordering promised for all
+  five finders. It also found the plan's Core concepts table named conceptual
+  entities rather than exact greppable exports.
+- Both local comparators now stop after their genuine primary fields and defer
+  ties to `finder_scan.sort`; adversarial regressions reverse native and
+  canonical ordering. The table now names each exported module entry point,
+  applying the existing Core-concept traceability lesson (`ARCH-DRY`,
+  `ARCH-PURPOSE`).
+- Focused Issue and Vision record suites pass 8/8 each. Full verification is
+  refreshed: `make test-changed` and the full `make test` suite exit 0; lint
+  reports zero warnings/errors across 301 files; every revised Core-concept row
+  resolves to an exported symbol; and `git diff --check` is clean.

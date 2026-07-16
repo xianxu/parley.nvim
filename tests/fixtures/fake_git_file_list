@@ -1,0 +1,30 @@
+#!/bin/sh
+
+root="$2"
+
+case "$root" in
+    *chunked*)
+        printf 'alpha.md\0line\n'
+        sleep 0.02
+        printf 'break.md\0alpha.md\0'
+        ;;
+    *nonzero*)
+        printf 'staged.md\0'
+        printf 'fatal: %05000d\n' 0 >&2
+        exit 7
+        ;;
+    *overlong*)
+        i=0
+        while [ "$i" -lt 17000 ]; do
+            printf x
+            i=$((i + 1))
+        done
+        ;;
+    *delayed*)
+        sleep 0.2
+        printf 'late.md\0'
+        ;;
+    *)
+        printf 'default.md\0'
+        ;;
+esac

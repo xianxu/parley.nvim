@@ -1,5 +1,103 @@
 local markdown_finder = require("parley.markdown_finder")
 
+describe("markdown finder pure discovery policy", function()
+	it("accepts only root-relative Markdown paths within component depth", function()
+		assert.same({
+			relative = "docs/note.md",
+			unresolved_absolute = "/repo/docs/note.md",
+		}, markdown_finder.path_candidate("/repo", "docs/note.md", 2))
+		for _, path in ipairs({ "/absolute.md", "../escape.md", "docs/../../escape.md", "note.txt" }) do
+			assert.is_nil(markdown_finder.path_candidate("/repo", path, 4))
+		end
+		assert.is_nil(markdown_finder.path_candidate("/repo", "one/two/too-deep.md", 2))
+	end)
+
+	it("materializes deterministic ordinary entries after canonical deduplication", function()
+		local winner = {
+			relative = "docs/a.md",
+			resolved_absolute = "/real/a.md",
+			root = { path = "/repo" },
+			stat = { mtime = { sec = 20 } },
+			identity = { key = "/real/a.md", source = { root_ordinal = 1, unresolved = "/repo/docs/a.md" } },
+		}
+		local duplicate = vim.deepcopy(winner)
+		duplicate.identity.source = { root_ordinal = 2, unresolved = "/alias/a.md" }
+		local older = {
+			relative = "root.md",
+			resolved_absolute = "/real/root.md",
+			root = { path = "/repo" },
+			stat = { mtime = { sec = 10 } },
+			identity = { key = "/real/root.md", source = { root_ordinal = 1, unresolved = "/repo/root.md" } },
+		}
+
+		local entries = markdown_finder.materialize_records({
+			mode = "ordinary",
+			records = { older, duplicate, winner },
+		})
+
+		assert.equals(2, #entries)
+		assert.same({ "/real/a.md", "/real/root.md" }, vim.tbl_map(function(value) return value.value end, entries))
+		assert.equals("docs", entries[1].tag)
+		assert.equals(".", entries[2].tag)
+	end)
+
+	it("uses repository identity and stable path ties in super-repo mode", function()
+		local records = {
+			{
+				relative = "z.md", root = { name = "zeta" }, stat = { mtime = { sec = 10 } },
+				resolved_absolute = "/z/z.md",
+				identity = { key = "/z/z.md", source = { root_ordinal = 2, unresolved = "/z/z.md" } },
+			},
+			{
+				relative = "a.md", root = { name = "alpha" }, stat = { mtime = { sec = 10 } },
+				resolved_absolute = "/a/a.md",
+				identity = { key = "/a/a.md", source = { root_ordinal = 1, unresolved = "/a/a.md" } },
+			},
+		}
+
+		local entries = markdown_finder.materialize_records({ mode = "super_repo", records = records })
+
+		assert.same({ "/a/a.md", "/z/z.md" }, vim.tbl_map(function(value) return value.value end, entries))
+		assert.equals("alpha", entries[1].tag)
+		assert.truthy(entries[1].display:find("{alpha}", 1, true))
+	end)
+
+	it("preserves newline path identity while keeping picker text on one line", function()
+		local path = "docs/line\nbreak.md"
+		local record = {
+			relative = path,
+			unresolved_absolute = "/repo/" .. path,
+			root = { path = "/repo" },
+			stat = { mtime = { sec = 10 } },
+			identity = { key = "/repo/" .. path, source = { root_ordinal = 1, unresolved = "/repo/" .. path } },
+		}
+
+		local entries = markdown_finder.materialize_records({ mode = "ordinary", records = { record } })
+
+		assert.equals("/repo/" .. path, entries[1].value)
+		assert.is_nil(entries[1].display:find("\n", 1, true))
+		assert.is_nil(entries[1].search_text:find("\n", 1, true))
+	end)
+
+	it("opens the native path instead of its normalized comparison identity", function()
+		local native = "/repo/back\\slash.md"
+		local record = {
+			relative = "back\\slash.md",
+			unresolved_absolute = native,
+			root = { path = "/repo" },
+			stat = { mtime = { sec = 10 } },
+			identity = {
+				key = "/repo/back/slash.md",
+				source = { root_ordinal = 1, unresolved = "/repo/back/slash.md" },
+			},
+		}
+
+		local entries = markdown_finder.materialize_records({ mode = "ordinary", records = { record } })
+
+		assert.equals(native, entries[1].value)
+	end)
+end)
+
 local function entry(name, tag)
 	return {
 		display = name .. " display",
@@ -171,6 +269,7 @@ describe("markdown finder entry point", function()
 	local runtime_state
 	local picker_calls
 	local picker_updates
+	local warnings
 
 	local function write_markdown(path, timestamp)
 		vim.fn.mkdir(vim.fn.fnamemodify(path, ":h"), "p")
@@ -205,7 +304,38 @@ describe("markdown finder entry point", function()
 		ordinary_root = base_dir .. "/ordinary"
 		picker_calls = {}
 		picker_updates = {}
+		warnings = {}
 		set_runtime(false)
+
+		local function list_markdown(options, on_complete)
+			local prefix = options.root:gsub("/+$", "") .. "/"
+			local paths = {}
+			for _, path in ipairs(vim.fn.glob(options.root .. "/**/*.md", false, true)) do
+				paths[#paths + 1] = path:sub(#prefix + 1)
+			end
+			table.sort(paths)
+			on_complete({ root_ordinal = options.root_ordinal, status = "success", paths = paths })
+			return { cancel = function() end, is_cancelled = function() return false end }
+		end
+		local function read_paths(options, on_complete)
+			local candidates = {}
+			for _, relative in ipairs(options.paths) do
+				local absolute = options.root.path .. "/" .. relative
+				local stat = vim.loop.fs_stat(absolute)
+				if stat then
+					candidates[#candidates + 1] = {
+						root = options.root,
+						root_ordinal = options.root_ordinal,
+						relative = relative,
+						unresolved_absolute = absolute,
+						resolved_absolute = vim.fn.resolve(absolute),
+						stat = stat,
+					}
+				end
+			end
+			on_complete({ candidates = candidates, failures = {} })
+			return { cancel = function() end, is_cancelled = function() return false end }
+		end
 
 		fake = {
 			_markdown_finder = {
@@ -227,19 +357,39 @@ describe("markdown finder entry point", function()
 			helpers = {
 				find_git_root = function() return ordinary_root end,
 			},
-			logger = { warning = function() end },
+			logger = { warning = function(message) warnings[#warnings + 1] = message end },
+			_finder_dependencies = {
+				git_markdown_source = { list = list_markdown },
+				async_file_source = { read_paths = read_paths },
+				schedule = function(callback) callback() end,
+			},
 			float_picker = {
 				open = function(opts)
 					table.insert(picker_calls, opts)
+					local query = opts.initial_query or ""
+					local closed = false
+					local on_query_change = opts.on_query_change
+					opts.on_query_change = function(value)
+						query = value
+						if on_query_change then on_query_change(value) end
+					end
 					return {
 						update = function(...)
 							local args = { ... }
+							opts.items = args[1]
+							if opts.tag_bar then opts.tag_bar.tags = args[2] or {} end
 							table.insert(picker_updates, {
 								items = args[1],
 								tags = args[2],
 								argument_count = select("#", ...),
+								query = query,
 							})
 						end,
+						set_status = function(status) opts.status = status end,
+						current_query = function() return query end,
+						set_query = function(value) query = value end,
+						close = function() closed = true end,
+						is_closed = function() return closed end,
 					}
 				end,
 			},
@@ -264,8 +414,9 @@ describe("markdown finder entry point", function()
 		call.on_query_change("  exact live query  ")
 		call.tag_bar.on_toggle("workshop")
 
-		assert.same({ vim.fn.resolve(ordinary_root .. "/docs/older.md") }, update_values(picker_updates[1]))
-		assert.equals(2, picker_updates[1].argument_count)
+		local update = picker_updates[#picker_updates]
+		assert.same({ vim.fn.resolve(ordinary_root .. "/docs/older.md") }, update_values(update))
+		assert.equals(2, update.argument_count)
 		assert.equals("  exact live query  ", fake._markdown_finder.query)
 	end)
 
@@ -356,13 +507,13 @@ describe("markdown finder entry point", function()
 		write_markdown(ordinary_root .. "/docs/b.md")
 		markdown_finder.open()
 		picker_calls[1].tag_bar.on_none()
-		assert.equals(0, #picker_updates[1].items)
+		assert.equals(0, #picker_updates[#picker_updates].items)
 
 		markdown_finder.open()
 		assert.equals(0, #picker_calls[2].items)
 		assert.is_table(picker_calls[2].tag_bar)
 		picker_calls[2].tag_bar.on_all()
-		assert.equals(2, #picker_updates[2].items)
+		assert.equals(2, #picker_updates[#picker_updates].items)
 	end)
 
 	it("scans invalidly labelled members and opens the aggregate without a bar", function()
@@ -379,7 +530,14 @@ describe("markdown finder entry point", function()
 
 		assert.has_no.errors(markdown_finder.open)
 		assert.equals(2, #picker_calls[1].items)
-		assert.is_nil(picker_calls[1].tag_bar)
+		assert.same({}, picker_calls[1].tag_bar.tags)
+		local unlabelled_item
+		for _, picker_item in ipairs(picker_calls[1].items) do
+			if picker_item.display:find("u.md", 1, true) then unlabelled_item = picker_item end
+		end
+		assert.is_not_nil(unlabelled_item)
+		assert.is_nil(unlabelled_item.display:find("{}", 1, true))
+		assert.is_nil(unlabelled_item.search_text:find("{}", 1, true))
 	end)
 
 	it("opens an eligible zero-row super expansion with a sorted repository bar", function()
@@ -391,5 +549,110 @@ describe("markdown finder entry point", function()
 		markdown_finder.open()
 		assert.same({}, picker_calls[1].items)
 		assert.same({ "alpha", "zeta" }, labels(picker_calls[1].tag_bar.tags))
+	end)
+
+	it("opens the scanning shell before Git starts and settles against the live query", function()
+		local listed_after_picker = false
+		local finish_list
+		fake._finder_dependencies.git_markdown_source.list = function(_, on_complete)
+			listed_after_picker = #picker_calls == 1
+			finish_list = on_complete
+			return { cancel = function() end, is_cancelled = function() return false end }
+		end
+		write_markdown(ordinary_root .. "/docs/note.md")
+
+		markdown_finder.open()
+
+		assert.is_true(listed_after_picker)
+		assert.same({}, picker_calls[1].items)
+		assert.equals("scanning…", picker_calls[1].status.message)
+		picker_calls[1].on_query_change("live query")
+		finish_list({ root_ordinal = 1, status = "success", paths = { "docs/note.md" } })
+
+		assert.equals("live query", picker_updates[1].query)
+		assert.same({ vim.fn.resolve(ordinary_root .. "/docs/note.md") }, update_values(picker_updates[1]))
+	end)
+
+	it("cancels in-flight Markdown acquisition and ignores a late root result", function()
+		local finish_list
+		local cancel_count = 0
+		fake._finder_dependencies.git_markdown_source.list = function(_, on_complete)
+			finish_list = on_complete
+			return {
+				cancel = function() cancel_count = cancel_count + 1 end,
+				is_cancelled = function() return cancel_count > 0 end,
+			}
+		end
+
+		markdown_finder.open()
+		picker_calls[1].on_cancel()
+		finish_list({ root_ordinal = 1, status = "success", paths = {} })
+
+		assert.equals(1, cancel_count)
+		assert.equals(0, #picker_updates)
+		assert.has_no.errors(markdown_finder.open)
+		assert.equals(2, #picker_calls)
+	end)
+
+	it("keeps successful roots and warns once when another Git root fails", function()
+		local alpha = base_dir .. "/alpha"
+		local beta = base_dir .. "/beta"
+		write_markdown(alpha .. "/note.md")
+		set_runtime(true, { { path = alpha, name = "alpha" }, { path = beta, name = "beta" } })
+		local default_list = fake._finder_dependencies.git_markdown_source.list
+		fake._finder_dependencies.git_markdown_source.list = function(options, on_complete)
+			if options.root == beta then
+				on_complete({
+					root_ordinal = options.root_ordinal,
+					status = "failed",
+					failure = { kind = "process_exit", diagnostic = "not a repository" },
+				})
+				return { cancel = function() end }
+			end
+			return default_list(options, on_complete)
+		end
+
+		markdown_finder.open()
+
+		assert.equals(1, #picker_calls[1].items)
+		assert.equals(1, #warnings)
+		assert.truthy(warnings[1]:find("1 roots", 1, true))
+	end)
+
+	it("reports stat failures as partial without inventing a selectable row", function()
+		fake._finder_dependencies.git_markdown_source.list = function(options, on_complete)
+			on_complete({ root_ordinal = options.root_ordinal, status = "success", paths = { "gone.md" } })
+			return { cancel = function() end }
+		end
+		fake._finder_dependencies.async_file_source.read_paths = function(_, on_complete)
+			on_complete({
+				candidates = {},
+				failures = { { kind = "stat", diagnostic = "missing" } },
+			})
+			return { cancel = function() end }
+		end
+
+		markdown_finder.open()
+
+		assert.same({}, picker_calls[1].items)
+		assert.equals(1, #warnings)
+		assert.truthy(warnings[1]:find("1 files", 1, true))
+	end)
+
+	it("leaves a bounded failure status when every Git root fails", function()
+		fake._finder_dependencies.git_markdown_source.list = function(options, on_complete)
+			on_complete({
+				root_ordinal = options.root_ordinal,
+				status = "failed",
+				failure = { kind = "process_exit", diagnostic = "not a repository" },
+			})
+			return { cancel = function() end }
+		end
+
+		markdown_finder.open()
+
+		assert.equals("Markdown Files: scan failed (roots: 1, files: 0)", picker_calls[1].status.message)
+		assert.is_false(picker_calls[1].status.animated)
+		assert.equals(0, #warnings)
 	end)
 end)

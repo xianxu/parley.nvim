@@ -37,6 +37,7 @@ M._last_selection = {}
 
 local logger = require("parley.logger")
 local facet_bar_layout = require("parley.facet_bar_layout")
+local picker_status = require("parley.picker_status")
 local MIN_W    = 20  -- minimum picker width  (chars)
 local MIN_H    = 1   -- minimum results height (lines)
 local MARGIN_H = 4   -- cols kept clear on each horizontal edge
@@ -588,6 +589,7 @@ end
 ---                         (e.g. item.name for agents, item.dir for root dirs).
 function M.open(opts)
     local items          = opts.items or {}
+    local initial_status = opts.status
     local title          = opts.title or "Select"
     local on_select      = opts.on_select or function() end
     local on_cancel      = opts.on_cancel or function() end
@@ -600,7 +602,7 @@ function M.open(opts)
     end
     local has_tag_bar = tag_bar_capable and #tag_bar_opts.tags > 0
 
-    if #items == 0 and not has_tag_bar then
+    if #items == 0 and not has_tag_bar and initial_status == nil then
         vim.notify("No items to pick from", vim.log.levels.WARN)
         return
     end
@@ -611,9 +613,12 @@ function M.open(opts)
             local iw = vim.fn.strdisplaywidth(item.display) + 2
             if iw > w then w = iw end
         end
+        if initial_status and type(initial_status.message) == "string" then
+            w = math.max(w, vim.fn.strdisplaywidth(initial_status.message) + 4)
+        end
         return w
     end)()
-    local desired_h = opts.height or #items
+    local desired_h = opts.height or math.max(#items, initial_status and 1 or 0)
 
     local ui = vim.api.nvim_list_uis()[1] or { width = vim.o.columns, height = vim.o.lines }
     local win_w, win_h, row, col, tag_bar_row, prompt_row =
@@ -653,9 +658,13 @@ function M.open(opts)
     local query_text = type(opts.initial_query) == "string" and opts.initial_query or ""
     local query_cursor = #query_text
     local closed = false
+    local status_line = initial_status and "  " .. initial_status.message or nil
+    local status_controller = opts.status_controller or picker_status.new()
+    local suppress_prompt_submit_escape = false
     local external_ui_active = false
     local resize_autocmd_id = nil
     local close_all
+    local dismiss
     local on_key_ns = vim.api.nvim_create_namespace("float_picker_on_key")
 
     local function keycode(key)
@@ -749,7 +758,7 @@ function M.open(opts)
         if closed then return false end
         if not vim.api.nvim_win_is_valid(results_win) or
             not vim.api.nvim_win_is_valid(prompt_win) then
-            if close_all then close_all() end
+            if dismiss then dismiss() end
             return false
         end
 
@@ -757,7 +766,7 @@ function M.open(opts)
         local should_have_tag_bar = tag_bar_capable and #tags > 0
         if has_tag_bar and should_have_tag_bar and tag_bar_win and
             not vim.api.nvim_win_is_valid(tag_bar_win) then
-            if close_all then close_all() end
+            if dismiss then dismiss() end
             return false
         end
 
@@ -896,10 +905,15 @@ function M.open(opts)
     end
 
     local function refresh_results()
+        if closed or not vim.api.nvim_buf_is_valid(results_buf) then
+            return
+        end
         vim.bo[results_buf].modifiable = true
         local lines = {}
         local total_rows = vim.api.nvim_win_is_valid(results_win) and vim.api.nvim_win_get_height(results_win) or win_h
-        if anchor == "top" then
+        if status_line ~= nil then
+            lines = { truncate(status_line, win_w - 1) }
+        elseif anchor == "top" then
             for i = 1, #filtered do
                 table.insert(lines, truncate(" " .. filtered[i].display, win_w - 1))
             end
@@ -933,6 +947,9 @@ function M.open(opts)
     end
 
     local function first_content_row()
+        if status_line ~= nil then
+            return 0
+        end
         if anchor == "top" then
             return 1
         end
@@ -949,6 +966,9 @@ function M.open(opts)
     end
 
     local function last_content_row()
+        if status_line ~= nil then
+            return 0
+        end
         if anchor == "top" then
             return math.min(math.max(1, #filtered), results_row_count())
         end
@@ -956,6 +976,9 @@ function M.open(opts)
     end
 
     local function is_content_row(visual_row)
+        if status_line ~= nil then
+            return false
+        end
         if #filtered == 0 then
             return anchor == "top" and visual_row == 1 or visual_row == results_row_count()
         end
@@ -965,6 +988,7 @@ function M.open(opts)
     close_all = function()
         if closed then return end
         closed = true
+        status_controller:stop()
         if resize_autocmd_id then
             pcall(vim.api.nvim_del_autocmd, resize_autocmd_id)
             resize_autocmd_id = nil
@@ -985,8 +1009,18 @@ function M.open(opts)
         end
     end
 
+    local cancel_notified = false
+    dismiss = function()
+        close_all()
+        if cancel_notified then
+            return
+        end
+        cancel_notified = true
+        vim.schedule(on_cancel)
+    end
+
     local function get_selected_item()
-        if #filtered == 0 then return nil end
+        if status_line ~= nil or #filtered == 0 then return nil end
         return filtered[math.max(1, math.min(sel_idx, #filtered))]
     end
 
@@ -1043,7 +1077,7 @@ function M.open(opts)
     end
 
     local function move_selection(delta_rows)
-        if #filtered == 0 then
+        if status_line ~= nil or #filtered == 0 then
             return
         end
         local current_row = visual_row_for_index(sel_idx)
@@ -1055,6 +1089,14 @@ function M.open(opts)
     end
 
     local function confirm()
+        if status_line ~= nil then
+            suppress_prompt_submit_escape = true
+            vim.schedule(function()
+                suppress_prompt_submit_escape = false
+            end)
+            focus_prompt()
+            return
+        end
         local item = get_selected_item()
         close_all()
         if item then
@@ -1069,8 +1111,7 @@ function M.open(opts)
     end
 
     local function cancel()
-        close_all()
-        vim.schedule(on_cancel)
+        dismiss()
     end
 
     local function suspend_for_external_ui()
@@ -1228,7 +1269,7 @@ function M.open(opts)
                 query_text
             ))
         end
-        fn(selected, close_all, context)
+        fn(selected, status_line ~= nil and dismiss or close_all, context)
         return context
     end
 
@@ -1415,6 +1456,7 @@ function M.open(opts)
     nmap_p("<2-LeftMouse>", prompt_dblclick)
     nmap_p("<3-LeftMouse>", prompt_tripleclick)
     nmap_p("<CR>", confirm)
+    imap_p("<CR>", confirm)
     nmap_p("<Esc>", cancel)
     nmap_p("q", cancel)
     imap_p("<LeftMouse>", prompt_click)
@@ -1500,6 +1542,11 @@ function M.open(opts)
         local mouse = vim.fn.getmousepos()
         local translated = key_name(key)
 
+        if translated == "<Esc>" and suppress_prompt_submit_escape then
+            suppress_prompt_submit_escape = false
+            return
+        end
+
         if cur_win == prompt_win and mouse.winid == results_win then
             if translated == "<LeftMouse>" and is_content_row(mouse.line) then
                 vim.schedule(function()
@@ -1550,7 +1597,7 @@ function M.open(opts)
     resize_autocmd_id = vim.api.nvim_create_autocmd("VimResized", {
         callback = function()
             if not vim.api.nvim_win_is_valid(results_win) then
-                close_all()
+                dismiss()
                 return
             end
             if not reflow_picker() then return end
@@ -1586,12 +1633,71 @@ function M.open(opts)
         callback = on_win_leave,
     })
 
+    local function set_status(next_status)
+        status_controller:stop()
+        if next_status == nil then
+            status_line = nil
+        else
+            assert(type(next_status) == "table" and type(next_status.message) == "string",
+                "picker status requires a message")
+            if not opts.height then
+                desired_h = 1
+            end
+            if not opts.width then
+                desired_w = math.max(desired_w, vim.fn.strdisplaywidth(next_status.message) + 4)
+            end
+            if next_status.animated then
+                status_controller:start(next_status.message, function(line)
+                    if not closed then
+                        status_line = line
+                        refresh_results()
+                    end
+                end)
+            else
+                status_line = "  " .. next_status.message
+            end
+        end
+        if not closed then
+            reflow_picker()
+            refresh_results()
+        end
+    end
+
+    local function set_title(next_title)
+        assert(type(next_title) == "string", "picker title must be a string")
+        title = next_title
+        if not opts.width then
+            desired_w = math.max(desired_w, vim.fn.strdisplaywidth(title) + 4)
+        end
+        if not closed then
+            reflow_picker()
+            if vim.fn.has("nvim-0.9") == 1 and vim.api.nvim_win_is_valid(results_win) then
+                vim.api.nvim_win_set_config(results_win, {
+                    title = " " .. title .. " ",
+                    title_pos = "center",
+                })
+            end
+        end
+    end
+
     -- Update items and/or tag bar in-place (avoids close/reopen flash).
     -- new_tag_bar_tags: optional list of {label, enabled} to refresh the tag bar display.
-    local function update(new_items, new_tag_bar_tags)
+    local function update(new_items, new_tag_bar_tags, next_selection_index)
         if closed then return end
         if new_items ~= nil then
             items = new_items
+            set_status(nil)
+            if type(next_selection_index) == "number" then
+                sel_idx = math.max(1, math.floor(next_selection_index))
+            end
+            if not opts.height then
+                desired_h = math.max(1, #items)
+            end
+            if not opts.width then
+                for _, item in ipairs(items) do
+                    desired_w = math.max(desired_w, vim.fn.strdisplaywidth(item.display) + 2)
+                end
+            end
         end
         if new_tag_bar_tags ~= nil and tag_bar_capable then
             tag_bar_opts.tags = new_tag_bar_tags
@@ -1600,8 +1706,18 @@ function M.open(opts)
         apply_filter(false)
     end
 
+    if initial_status then
+        set_status(initial_status)
+    end
     focus_prompt()
-    return { update = update }
+    return {
+        update = update,
+        set_status = set_status,
+        set_title = set_title,
+        current_query = current_query_from_buffer,
+        close = dismiss,
+        is_closed = function() return closed end,
+    }
 end
 
 return M

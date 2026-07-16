@@ -1,5 +1,72 @@
 # Lessons
 
+## 2026-07-16 (#189)
+
+- **A finder-local comparator must stop at its actual primary fields.** Issue
+  and Vision compared native IO paths after equal status/ID or file-level
+  values, so the shared sorter never reached its canonical identity tie-break.
+  Rule: when a shared sorter owns deterministic ties, local comparators return
+  `false` after their primary fields tie; add an adversarial fixture whose
+  native paths and canonical identities sort in opposite directions
+  (`ARCH-DRY`, `ARCH-PURPOSE`).
+- **A derived metadata view must consume the canonical grammar, not reproduce
+  its convenient subset.** Chat Finder's pure record adapter copied delimiter,
+  key-prefix, and tag parsing from `chat_parser`, leaving two owners that could
+  drift. Rule: when a finder needs metadata from an existing document format,
+  export the smallest pure parser seam from the format owner and add parity
+  fixtures for legacy and current syntax (`ARCH-DRY`).
+- **A joinable raw outcome needs a policy-divergence test, not only a join-count
+  test.** One opener joining a prewarm proved scan reuse but did not prove that
+  multiple subscribers could independently apply recency to the same records.
+  Rule: shared async-result tests must bind at least two subscribers with
+  different materialization policies and assert both projections.
+- **A scheduled controller is INTEGRATION even when its decisions are
+  deterministic.** `SliceBatcher` owns mutable progress and yields through an
+  injected scheduler/clock, so classifying it as PURE hid the event-loop seam.
+  Rule: classify the whole named symbol, not just its normalization policy
+  (`ARCH-PURE`).
+- **Async adapter and filesystem results must be validated at their consumer
+  boundaries.** A `{kind="record"}` with a nil payload crashed a scheduled
+  producer callback, while a successful stat could still identify a directory
+  reached through a tracked symlink. Rule: validate record payload shape before
+  storage and require the exact filesystem object type promised by the finder.
+- **A production loading test must cross both the real process and real picker
+  boundaries.** Unit lifecycle tests missed settlement running in a libuv fast
+  event, where querying the prompt raised `E5560` and left `scanning…` stranded.
+  Rule: for async UI, delay a real process, prove a real spinner frame advances,
+  and assert the real picker replaces it after settlement.
+- **Protocol coverage must instantiate every object named by the plan.** A
+  nested repository is not evidence for submodule opacity. Rule: when a plan
+  promises real Git edge cases, construct and assert each distinct Git object
+  explicitly.
+- **A process-stream error is a terminal event for that stream.** Killing the
+  child does not guarantee another EOF callback, so waiting on an unretired pipe
+  can strand the whole lifecycle. Rule: on read error, stop/close that side,
+  mark it terminal, and test settlement after child exit for stdout and stderr.
+- **A byte cap constrains retained state, not only the failure threshold.**
+  Appending a whole chunk and checking afterward can retain arbitrarily more
+  than the advertised maximum. Rule: parse framed chunks incrementally and
+  reject before concatenation would cross the cap; ignore later callbacks from
+  the retired stream.
+- **Canonical comparison identity and native IO location are different path
+  fields.** Separator normalization makes ordering portable but corrupts legal
+  POSIX backslashes if reused for file opening. Rule: use canonical keys only
+  for dedup/sort and preserve resolved/unresolved native paths for IO.
+- **An asynchronous acquisition event is untrusted until its whole schema is
+  validated.** Checking only the table and ordinal lets bad failure kinds or
+  list shapes reach asserting reducers after the producer call has returned,
+  escaping synchronous containment and stranding UI. Rule: validate ordinal,
+  status, list shape, and registered kinds before any accumulator mutation;
+  collapse violations to one static bounded outcome.
+- **Framed protocols must reject EOF with a pending fragment.** Exit zero does
+  not make a missing final NUL valid; silently dropping it converts corruption
+  into empty success. Rule: at EOF, require the framing buffer to be empty and
+  test a below-cap truncated record separately from overflow.
+- **Compatibility tests must assert presentation, not only row cardinality.**
+  Invalid super-repo labels still produced two rows, but new `{}` prefixes
+  changed display/search semantics. Rule: for fallback records, pin visible and
+  searchable text alongside count.
+
 ## 2026-07-15 (#190)
 
 - **A persisted path key is an identity boundary, so its normalization must have
@@ -235,3 +302,38 @@
   REWORK revision. Rule: name the pre-gate step “prepare and invoke the close
   boundary”; after the verdict, append the outcome and status transition instead
   of making historical revision prose sound like current state.
+
+## 2026-07-16 (#189)
+
+- **UI teardown and lifecycle dismissal are different operations.** A picker
+  can disappear through window invalidation or its public close method without
+  traversing the keyboard cancel path. Rule: every non-selection destruction
+  must notify the lifecycle owner exactly once; reserve raw teardown only for
+  successful selection or an action that explicitly owns completion.
+- **Suppressing a late IO callback does not dispose resources created by that
+  callback.** Cancellation may fail while `fs_open` later succeeds, so dropping
+  the result leaks its descriptor. Rule: resource-producing queued operations
+  need an idempotent late-completion disposer; test the documented cancellation
+  failure return followed by a successful completion.
+- **A picker-open guard must belong to the picker lifetime, not the launch
+  stack.** Resetting `opened` after starting async discovery admits a second
+  picker while the first is loading or settled. Rule: release the guard only at
+  selection, cancellation, or an action-owned close/reopen transition, and test
+  duplicate invocation both before and after settlement.
+- **Do not relinquish resource ownership merely because cleanup was queued.** A
+  saturated operation queue can discard a pending close during cancellation.
+  Rule: retain the descriptor until the close operation actually starts, so
+  cancellation can close it directly if the queued job never runs; test cancel
+  in the queued-but-not-started window.
+- **An action-owned close is safe only after loading ownership has settled.**
+  Recency/view mappings legitimately close and reopen a settled picker without
+  cancellation, but the same raw teardown during `scanning…` strands the old
+  subscription or acquisition. Rule: at the shared picker boundary, route
+  mapping closes through dismissal while status is active and through raw
+  teardown only after settlement; test every action-only loading consumer.
+- **A loading shell may use a provisional title, but settlement must restore
+  title semantics promised by the existing UI.** Migrating Vision to immediate
+  open preserved its rows and actions while silently dropping the initiative
+  count from the window title. Rule: inventory titles alongside mappings and
+  queries during async ports; if settled data determines a title, make it an
+  explicit settlement field and test empty plus nonempty outcomes.

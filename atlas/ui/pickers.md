@@ -13,6 +13,45 @@ AND-matching across whitespace-split tokens. Token-prefix scoring, bounded edit-
 
 The chat finder additionally pre-seeds `{}` (the primary chat root, which in repo mode is the repo chat root) on the first open of a parley session in plain repo mode, so the default view is scoped to repo chats and global chats are filtered out. The pre-seed is a one-shot — once the user clears or modifies the filter, sticky-query takes over and the default is never re-applied. Skipped in super-repo mode (whose whole point is aggregating siblings, which a `{}` narrowing would defeat).
 
+## Disk-backed loading lifecycle
+
+`finder_scan` owns immutable discovery snapshots, canonical path identity,
+outcome reduction, bounded diagnostics, and deterministic deduplication/sorting;
+`finder_batcher` applies adapters in event-loop slices. `finder_producer` is the
+single acquisition-to-settlement runner, and `finder_loader` owns lazy start,
+picker/retained producer ownership, subscribers, cancellation, and settlement
+delivery. Finder entry points remain responsible for their pure
+recency/facet/render materializers.
+
+`float_picker` can open with zero items and a nonselectable status row. Its
+`picker_status` controller animates `scanning…` with `parley.progress` frames,
+keeps the prompt live while loading, and tears its timer down when results,
+failure, selection, or cancellation retires the status. The implementation
+budgets are 25 adapted records or 5ms per slice, 16 concurrent filesystem
+operations, ten 512-byte diagnostics, a 4096-byte Git stderr capture, a
+16384-byte pending Git path fragment, and a 120ms spinner tick. These are
+implementation constants, not product-level promises.
+
+Markdown, Chat, Note, Issue, and Vision Finders use this lifecycle (#189). Each opens and
+subscribes before starting IO, atomically installs settled results, warns while
+retaining rows on partial failure, and leaves a nonselectable error on total
+failure. Esc cancels picker-owned acquisition, enrichment, batching, and the
+subscription; late callbacks cannot repaint a closed picker. Chat and Note can
+instead join an exact retained-prewarm fingerprint: cancellation then removes
+only the picker subscriber while the cache-building owner continues.
+
+Chat enumerates only dated Markdown names and reads ten header lines on cache
+misses. Note recursively enumerates Markdown metadata without body reads. Both
+apply recency only after raw records settle, update caches from adapted records,
+and prune stale entries only for roots that enumerated successfully.
+
+Issue snapshots only the selected issue or history directories, reads full
+payloads on canonical path-plus-mtime cache misses, and reuses the canonical
+frontmatter/title parser plus generated vocabulary ordering. Vision reads YAML
+into one bundle per file, deduplicates bundles before flattening projects, and
+keeps parser ordinals/source lines stable. Both preserve existing query, facet,
+view, status, delete, and selection actions after settlement.
+
 ## Recall (Last Selection)
 Pickers that opt in via `recall_key` remember the id of the last `<CR>`-confirmed item (in-memory only) and place the cursor there on the next open. `recall_id_fn` lets callers point at the stable identity field (defaults to `item.value`; e.g. `item.name` for agent_picker, `item.dir` for root_dir_picker). Stale recall (id no longer present in items) silently falls through to whatever `initial_index` resolves — typically the first item. Cancel/`<Esc>` does not update recall; only confirmation does. Storage lives on `float_picker._last_selection` keyed by the picker's `recall_key`.
 
@@ -53,7 +92,9 @@ remain.
 ## Picker Types
 - **Agent** (`:ParleyAgent`): select active agent
 - **System Prompt** (`:ParleySystemPrompt`): select active system prompt
-- **Chat Finder** (`:ParleyChatFinder` / `<C-g>f`): browse chats by recency, tags, and roots; mtime-cached metadata; sticky filter fragments across reopens
-- **Note Finder** (`:ParleyNoteFinder` / `<C-n>f`): same mechanics as Chat Finder for notes; special folders bypass recency
+- **Chat Finder** (`:ParleyChatFinder` / `<C-g>f`): asynchronously browse chats by recency, tags, and roots; joinable mtime-cached header prewarm; sticky filter fragments across reopens
+- **Note Finder** (`:ParleyNoteFinder` / `<C-n>f`): asynchronously browse recursive note metadata with joinable prewarm; special folders bypass recency
 - **Markdown Finder** (`:ParleyMarkdownFinder` / `<C-g>m`): browse repository Markdown by recency with contextual directory/repository facets and verbatim query persistence
+- **Issue Finder** (`:ParleyIssueFinder` / `<C-y>f`): asynchronously browse current issues or history with vocabulary ordering, verbatim query persistence, and contextual repository facets
+- **Vision Finder** (`:ParleyVisionShow` / `<C-j>f`): asynchronously browse project initiatives from YAML bundles and jump to exact source lines
 - **Outline** (`:ParleySearchChat` / `:ParleyOutline`): jump to headings and turns

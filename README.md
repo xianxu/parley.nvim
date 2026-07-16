@@ -118,12 +118,24 @@ Most-used defaults:
 
 **Global**
 - `<C-g>c` new chat - global hotkey
-- `<C-g>f` find chat - global hotkey
+- `<C-g>f` find chat - opens immediately with a cancellable animated
+  `scanning…` row while Chat Finder asynchronously discovers chat headers; an
+  exact background prewarm is reused when available
+- `<C-n>f` find notes - the same immediate loading experience over recursive
+  note metadata; note bodies are not read, and special folders still bypass
+  recency filtering
+- `<C-y>f` find issues - asynchronously read issue/history metadata with
+  vocabulary-backed ordering and repository facets in super-repo mode
+- `<C-j>f` find vision initiatives - asynchronously read YAML file bundles,
+  preserving file/parser order and exact source-line jumps
 - `<C-g>m` find Markdown files - directory facets in ordinary repo mode and
   repository facets in super-repo mode; query text and facet choices persist
   across finder reopenings within the current Neovim session. When a facet bar
   wraps beyond its visible height, point at the bar and use the mouse wheel to
-  reach the remaining facets.
+  reach the remaining facets. The picker opens immediately with a cancellable
+  animated `scanning…` row while Git discovers all tracked Markdown files plus
+  untracked, non-ignored Markdown files; ignored untracked files and Markdown
+  inside nested repositories or submodules are excluded from the parent scan.
 - `<C-g>p` toggle peer (super-repo) mode - aggregate reads across sibling
   `.parley` repositories. The explicit repo/peer choice persists separately for
   each repository; an unsaved repository starts in ordinary repo mode.
@@ -152,8 +164,11 @@ Tool-fold toggling is configurable but unbound by default. To opt in, set
 
 **Corresponding commands**
 - `:ParleyChatNew` create a new chat
-- `:ParleyChatFinder` chat finder
-- `:ParleyMarkdownFinder` Markdown finder with contextual directory/repository facets
+- `:ParleyChatFinder` asynchronous chat finder with joinable metadata prewarm
+- `:ParleyNoteFinder` asynchronous recursive note finder with joinable metadata prewarm
+- `:ParleyIssueFinder` asynchronous issue/history finder
+- `:ParleyVisionShow` asynchronous project-initiative finder
+- `:ParleyMarkdownFinder` asynchronous Git-aware Markdown finder with contextual directory/repository facets
 - `:ParleyChatRespond` answer current question
 - `:ParleyChatRespondAll` regenerate from start to cursor
 - `:ParleyStop` stop running generation
@@ -162,6 +177,13 @@ Tool-fold toggling is configurable but unbound by default. To opt in, set
 - `:ParleyAgent` switch agent
 - `:ParleySystemPrompt` switch system prompt
 - `:ParleyToggleFollowCursor` toggle live cursor-follow during streaming
+
+All five disk-backed finders open their picker shell immediately and keep the
+prompt live while `scanning…` animates. Settled results replace the loading row
+in one update; partial failures retain usable rows with a warning, total failure
+leaves a nonselectable error, and Esc cancels picker-owned work. Markdown uses
+Git's tracked union untracked-nonignored boundary, so ignored vendor trees are
+not searched in either ordinary or super-repo mode.
 
 ## What Parley Supports
 

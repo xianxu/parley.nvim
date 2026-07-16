@@ -45,6 +45,34 @@ repo mode, then configured read roots. The first existing match wins. Repo-mode
 candidate merger; global chats retain own-folder completion, and ordinary
 non-repo Markdown is unchanged. (#181)
 
+### Markdown discovery
+
+Markdown Finder enumerates each active repository root with
+`git -C ROOT ls-files -z --cached --others --exclude-standard -- '*.md'`.
+The result is the union of tracked Markdown (even when a current ignore rule
+matches it) and untracked, non-ignored Markdown; `.git`, ignored vendor trees,
+and nested repositories are not recursively scanned. Paths remain NUL-framed
+through the process boundary, then `async_file_source.read_paths` performs
+bounded stat/realpath enrichment before pure depth, identity, recency, and facet
+materialization.
+
+Ordinary repo mode runs this pipeline for `config.repo_root` and presents
+top-level-directory facets. Super-repo mode runs one independent Git process per
+valid member root and presents repository facets when every member label is
+eligible. A failed member is a root failure: successful members remain visible
+with a bounded partial warning, while all-member failure leaves the picker open
+with an error status.
+
+### Artifact finder discovery
+
+All five disk-backed finders open before acquisition and share the same
+cancellable loading/outcome lifecycle. Chat scans dated Markdown headers, Note
+scans recursive metadata without bodies, Issue scans the selected non-recursive
+issue/history tree, Vision scans non-recursive YAML file bundles, and Markdown
+uses the Git boundary above. Super-repo mode expands those same operations per
+member; partial member failures retain successful rows and total failure leaves
+the picker open with a bounded error.
+
 ### Note roots
 Notes still use the multi-root manager with freeform add/remove/rename via `:ParleyNoteDirs` / `<C-n>h` and persist `note_roots` / `note_dirs` to state.json. The shared `root_dirs.lua` generic manager and `root_dir_picker.lua` UI exist primarily to serve the note system now; the chat side only uses the read paths (get/find/normalize/apply) and `super_repo.set_chat_roots`.
 

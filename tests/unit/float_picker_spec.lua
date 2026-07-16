@@ -190,6 +190,90 @@ describe("float_picker", function()
             assert.is_true(warned)
         end)
 
+        it("opens an empty picker with a nonselectable loading status", function()
+            local warned = false
+            vim.notify = function() warned = true end
+
+            local picker = float_picker.open({
+                title = "Loading",
+                items = {},
+                status = { message = "scanning…", animated = true },
+                on_select = function() error("status must not be selectable") end,
+            })
+
+            assert.is_table(picker)
+            assert.is_not_nil(find_float_win_with_text("scanning…"))
+            assert.is_false(warned)
+            picker.close()
+        end)
+
+        it("keeps status visible under a retained query and replaces it atomically", function()
+            local picker = float_picker.open({
+                title = "Loading",
+                items = {},
+                initial_query = "hidden query",
+                status = { message = "scanning…", animated = true },
+                on_select = function() end,
+            })
+
+            assert.is_not_nil(find_float_win_with_text("scanning…"))
+            assert.equals("hidden query", picker.current_query())
+
+            picker.update({ { display = "hidden query result", value = 1 } })
+
+            assert.is_nil(find_float_win_with_text("scanning…"))
+            assert.is_not_nil(find_float_win_with_text("hidden query result"))
+            picker.close()
+        end)
+
+        it("applies a delayed initial selection when loading results arrive", function()
+            local picker = float_picker.open({
+                title = "Loading",
+                items = {},
+                status = { message = "scanning…", animated = true },
+                on_select = function() end,
+            })
+
+            picker.update({
+                { display = "first", value = 1 },
+                { display = "second", value = 2 },
+                { display = "third", value = 3 },
+            }, nil, 2)
+
+            assert.equals(2, vim.api.nvim_win_get_cursor(find_float_win())[1])
+            picker.close()
+        end)
+
+        it("can replace loading with a persistent nonanimated error status", function()
+            local picker = float_picker.open({
+                title = "Loading",
+                items = {},
+                status = { message = "scanning…", animated = true },
+                on_select = function() end,
+            })
+
+            picker.set_status({ message = "scan failed", animated = false })
+
+            assert.is_nil(find_float_win_with_text("scanning…"))
+            assert.is_not_nil(find_float_win_with_text("scan failed"))
+            picker.close()
+        end)
+
+        it("updates the results-window title after loading settles", function()
+            local picker = float_picker.open({
+                title = "Vision",
+                items = {},
+                status = { message = "scanning…", animated = true },
+                on_select = function() end,
+            })
+
+            picker.set_title("Vision (2 initiatives)")
+
+            local config = vim.api.nvim_win_get_config(find_float_win_with_text("scanning…"))
+            assert.equals(" Vision (2 initiatives) ", config.title[1][1])
+            picker.close()
+        end)
+
         it("opens an empty picker when facets can restore its items", function()
             local picker = float_picker.open({
                 title = "Test",
@@ -290,6 +374,83 @@ describe("float_picker", function()
     -- Key mappings
     -- -------------------------------------------------------------------------
     describe("key mappings", function()
+        it("ignores confirm while a status row is active", function()
+            local selected = false
+            local cancelled = false
+            local picker = float_picker.open({
+                title = "Loading",
+                items = {},
+                status = { message = "scanning…", animated = true },
+                on_select = function() selected = true end,
+                on_cancel = function() cancelled = true end,
+            })
+
+            vim.api.nvim_feedkeys(
+                vim.api.nvim_replace_termcodes("<CR>", true, false, true), "x", true
+            )
+            vim.wait(50, function() return false end)
+
+            assert.is_false(selected)
+            assert.is_false(cancelled)
+            assert.is_false(picker.is_closed())
+            assert.is_not_nil(find_float_win_with_text("scanning…"))
+            picker.close()
+        end)
+
+        it("tears down an animated status exactly once on cancel", function()
+            local active = false
+            local stop_count = 0
+            local controller = {
+                start = function(_, message, render)
+                    active = true
+                    render(" frame " .. message)
+                end,
+                stop = function()
+                    if active then
+                        active = false
+                        stop_count = stop_count + 1
+                    end
+                end,
+            }
+            local cancel_count = 0
+            local picker = float_picker.open({
+                title = "Loading",
+                items = {},
+                status = { message = "scanning…", animated = true },
+                status_controller = controller,
+                on_select = function() end,
+                on_cancel = function() cancel_count = cancel_count + 1 end,
+            })
+
+            vim.api.nvim_feedkeys(
+                vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "x", true
+            )
+            vim.wait(200, function() return cancel_count == 1 end)
+            picker.close()
+
+            assert.equals(1, cancel_count)
+            assert.equals(1, stop_count)
+            assert.is_false(active)
+        end)
+
+        it("notifies cancellation exactly once when closed programmatically", function()
+            local cancel_count = 0
+            local picker = float_picker.open({
+                title = "Loading",
+                items = {},
+                status = { message = "scanning…", animated = true },
+                on_select = function() end,
+                on_cancel = function() cancel_count = cancel_count + 1 end,
+            })
+
+            picker.close()
+            picker.close()
+            vim.wait(200, function() return cancel_count == 1 end)
+
+            assert.equals(1, cancel_count)
+            assert.is_true(picker.is_closed())
+        end)
+
         it("<CR> calls on_select with the current item and closes the window", function()
             local selected = nil
             float_picker.open({
@@ -435,6 +596,36 @@ describe("float_picker", function()
             assert.is_true(closed_via_mapping)
             assert.is_false(cancelled)
             assert.is_nil(find_any_float_win(), "window should be closed by mapping close_fn")
+        end)
+
+        it("extra mapping close_fn dismisses through cancellation while status is active", function()
+            local cancel_count = 0
+            local mapped = false
+            float_picker.open({
+                title = "Loading",
+                items = {},
+                status = { message = "scanning…", animated = true },
+                on_select = function() end,
+                on_cancel = function() cancel_count = cancel_count + 1 end,
+                mappings = {
+                    {
+                        key = "<C-a>",
+                        fn = function(item, close_fn)
+                            assert.is_nil(item)
+                            close_fn()
+                            mapped = true
+                        end,
+                    },
+                },
+            })
+
+            vim.api.nvim_feedkeys(
+                vim.api.nvim_replace_termcodes("<C-a>", true, false, true), "x", true
+            )
+            assert(vim.wait(200, function() return mapped and cancel_count == 1 end))
+
+            assert.equals(1, cancel_count)
+            assert.is_nil(find_any_float_win(), "loading mapping should dismiss the picker")
         end)
 
         it("control-key extra mappings are called from the prompt buffer", function()
