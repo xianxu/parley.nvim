@@ -50,6 +50,16 @@ imported package trees that are outside the repository's useful document set.
   after settlement. The producer returns an idempotent cancellation handle; the
   session exposes cancellation/subscription and rejects every repeated or stale
   settlement. A root counts as successful even when it contains zero matches.
+- Session construction is lazy: it stores a producer factory but cannot start
+  IO. `subscribe()` returns an idempotent subscriber-only cancellation handle;
+  `start()` invokes the factory at most once; picker-owned sessions cancel the
+  producer when their last subscriber leaves while loading, while retained
+  prewarm sessions keep producer ownership with zero subscribers. Settlement
+  snapshots and drains live subscribers once, admits/replays subscriptions made
+  during that delivery turn, runs one owner/ownerless terminal hook, then
+  retires and drops the replayable outcome. Finder-specific cache mutation
+  happens during pre-settlement adaptation; terminal hooks only clear the
+  prewarm registry and log bounded ownerless partial/failure outcomes.
 - The producer pipeline is ordered exactly once as enumeration → async
   stat/read enrichment → sliced per-file adapter → outcome accumulation →
   session settlement. Adapter output is finder-specific raw metadata, not a
@@ -393,3 +403,13 @@ stale on 2026-07-15, so the estimate is provisional.
   traversal/Git exit as the transactional boundary and later stat/read/parse as
   record enrichment, and re-derived 16.6 hours from six Lua features, two IO
   integrations, two migrations, UX iteration, docs, and three reviews.
+
+### 2026-07-15 — third change-code gate refinement
+
+- Reason: the third mandatory judge found the session API did not yet expose
+  subscriber-only cancellation, producer ownership, lazy start ordering,
+  prewarm retirement hooks, or enforceable snapshot immutability.
+- Delta: specified lazy producer factories, explicit subscription handles,
+  picker-owned versus retained-prewarm policies, deterministic delivery-turn
+  retirement, ownerless terminal hooks, and opaque snapshots with defensive
+  copy access. M1 now includes an estimate-calibration checkpoint.

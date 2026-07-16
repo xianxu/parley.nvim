@@ -46,6 +46,12 @@ unparsed file payloads and never rendered items.
   - **Relationships:** one snapshot owns 1:N roots; one loading session owns exactly one snapshot; multiple subscribers may join one matching prewarm snapshot.
   - **DRY rationale:** Chat and Note must compare precisely the same producer identity, and every finder needs stable root ordinals.
   - **Future extensions:** add a backend option only when it changes which raw records discovery can return; UI query/facets never enter this entity.
+
+  The snapshot is an opaque proxy over closure-private deep-copied data. Its
+  public API is `fingerprint()` and `copy()`; `copy()` always returns a new deep
+  copy, assignment to the proxy errors, and neither callers nor sessions receive
+  the private table. `FinderLoadSession` exposes only `fingerprint()` and
+  `snapshot_copy()` delegates.
 - **`ScanOutcome`** — the closed `success`/`partial`/`failure`/`cancelled` terminal algebra plus aggregate root/record failure counts.
   - **Relationships:** one session settles to at most one outcome; an outcome owns 0:N raw records and is replayed once to each live subscriber.
   - **DRY rationale:** all five finders need identical empty/partial/failure semantics.
@@ -124,9 +130,47 @@ unparsed file payloads and never rendered items.
 - **`GitMarkdownSource`** — spawns one Git command per member, incrementally parses NUL records, caps stderr at 4096 bytes and the pending unterminated path fragment at 16384 bytes, and discards staged stdout on non-zero exit.
   - **Injected into:** Markdown producer; the executable/runtime is replaceable so tests run the process-level fixture.
   - **Future extensions:** cancellation and concurrency remain per-root even if Git gains another listing mode.
-- **`FinderLoadSession`** — publishes loading synchronously, subscribes to one producer-owned terminal outcome, and prevents stale callbacks from touching a closed picker; it never drives parsing or batching.
-  - **Injected into:** the five finder entry points; a producer that has already completed enumeration/enrichment/adapter batching, logger, and picker opener are dependencies. The producer owns scheduler/clock/batcher; the picker bridge only subscribes and materializes a terminal raw-metadata outcome.
+- **`FinderLoadSession`** — binds a lazy producer factory to explicit
+  subscriber handles and one ownership/retirement policy; it never drives
+  parsing or batching.
+  - **Injected into:** the five finder entry points; producer factory, logger,
+  picker opener, `ownership = "picker" | "retained"`, `on_terminal`, and
+  `on_retire` are dependencies. The producer owns scheduler/clock/batcher; the
+  picker bridge only subscribes and materializes a terminal raw-metadata
+  outcome.
   - **Future extensions:** other disk-backed pickers can opt in without changing `float_picker` semantics. Session settlement never clears the finder's `opened` flag; only actual picker close/select/cancel does.
+
+  Exact API:
+
+  ```lua
+  local session = finder_loader.new_session({
+      snapshot = opaque_snapshot,
+      ownership = "picker" or "retained",
+      producer_factory = function(settle_once) return cancel_producer end,
+      on_terminal = function(outcome, had_subscribers) end,
+      on_retire = function() end,
+  })
+  local subscription = session:subscribe(function(outcome) end)
+  subscription:cancel() -- idempotent; never directly cancels retained producer
+  session:start()       -- idempotent; only point that invokes producer_factory
+  session:cancel_owner() -- idempotent explicit producer-owner cancellation
+  session:fingerprint()
+  session:snapshot_copy()
+  session:is_settled()
+  session:is_retired()
+  session:subscriber_count()
+  ```
+
+  With `ownership = "picker"`, the last live subscription cancelling while
+  loading invokes `cancel_producer` once and retires. With `"retained"`, zero
+  subscribers never cancels loading work. Settlement freezes the current
+  subscriber queue, delivers each callback once, admits/replays subscribers
+  added during that delivery turn, calls `on_terminal(outcome,
+  had_subscribers)`, then drops the stored outcome, calls `on_retire`, and
+  refuses later subscriptions. Chat/Note set `on_retire` to clear their one
+  in-flight prewarm registry; `on_terminal` logs bounded partial/failure only
+  when `had_subscribers == false`. Their per-file caches were already updated by
+  producer adapters before settlement and are not mutated from terminal hooks.
 - **`PickerStatus`** — allows `float_picker.open({ status = ... })` with zero items, keeps status outside filtering/selection, and exposes `set_status`, `update`, `current_query`, and `close`.
   - **Injected into:** `FinderLoadSession`; timer creation is injectable in unit tests and uses `parley.progress.frame` at 120ms in production.
   - **Future extensions:** other nonselectable lifecycle statuses can reuse the same API.
@@ -149,7 +193,10 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 
 - [ ] **Step 1: Write failing snapshot/fingerprint tests**
 
-  Cover immutable deep-copied ordered roots and every included/excluded fingerprint field.
+  Cover immutable deep-copied ordered roots and every included/excluded
+  fingerprint field. Mutate constructor input, an object returned by `copy()`,
+  and the proxy itself; only proxy assignment errors and none changes the
+  fingerprint or a later copy.
 
 - [ ] **Step 2: Run the focused test and confirm RED**
 
@@ -426,10 +473,13 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 
 - [ ] **Step 1: Write failing session settlement tests**
 
-  Use a producer fake that emits already-adapted raw finder metadata plus final
-  counts. Cover subscribe/replay, exactly-once settle, stale/repeated settle,
-  owner versus joined cancel, and cancel-once. Assert the session has no adapter
-  or batcher dependency.
+  Use a lazy producer factory fake that emits already-adapted raw finder metadata
+  plus final counts. Cover the exact API/ownership table above: subscription
+  cancel idempotence; picker last-subscriber producer cancellation; retained
+  zero-subscriber continuation; delivery-turn replay; repeated settlement;
+  explicit owner cancellation; ownerless `on_terminal`; `on_retire`; refusal
+  after retirement; and defensive snapshot access. Assert the session has no
+  adapter or batcher dependency.
 
 - [ ] **Step 2: Run the focused test and confirm RED**
 
@@ -438,9 +488,10 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 
 - [ ] **Step 3: Implement `new_session`**
 
-  Accept only a producer whose terminal callback carries a complete
-  `ScanOutcome` of already-adapted raw finder metadata. Return `subscribe`,
-  `cancel`, `is_settled`, and `snapshot`; do not parse or mutate counts.
+  Store the producer factory without invoking it. Implement the exact public
+  methods and subscription handle above. Accept only a terminal callback carrying
+  a complete `ScanOutcome` of already-adapted raw finder metadata; do not parse
+  or mutate counts.
 
 - [ ] **Step 4: Run session tests and confirm GREEN**
 
@@ -452,6 +503,8 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   partial warning, total error, successful empty, and settlement keeping
   `opened` true until actual picker close/select/cancel. Make the materializer
   deliberately total and assert `open_picker` never invokes an adapter/batcher.
+  Assert the producer factory has not been invoked when the picker opener
+  returns.
 
 - [ ] **Step 6: Run picker-bridge tests and confirm RED**
 
@@ -459,8 +512,11 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 
 - [ ] **Step 7: Implement `open_picker`**
 
-  Open status first, subscribe the generation, apply only total deterministic
-  recency/facet/render materialization to settled raw metadata, and read
+  Open status first and return a `{ picker, subscription }` binding after
+  subscribing the generation; do not call `session:start()`. The finder entry
+  point calls `session:start()` only after `open_picker` returns, proving the
+  shell exists before the producer factory can start IO. On settlement apply
+  only total deterministic recency/facet/render materialization and read
   `picker.current_query()` only at installation. All adapter batching belongs to
   the producer before it calls session settlement.
 
@@ -607,6 +663,12 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   issue/atlas mutations and fixes once, copying the emitted `Review-Verdict:`
   and `Review-Window:` lines verbatim into the commit trailers.
 
+  After the M1 commit, run `sdlc actual --issue 189` and compare the measured M1
+  window with the M1 share of the 16.6-hour derivation. If evidence materially
+  changes the remaining estimate, revise frontmatter and append an issue/plan
+  Revision before starting M2; do not silently preserve or back-fit the original
+  estimate.
+
 ## Chunk 2: Chat and Note prewarm migration
 
 ### Task 6: Move Chat discovery and cache materialization behind the loader
@@ -656,7 +718,14 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 
 - [ ] **Step 6: Implement joinable Chat prewarm**
 
-  Replace `_prewarm_pending/_prewarm_callbacks` with one retained in-flight `FinderLoadSession`. `prewarm()` owns the producer; a matching `open()` subscribes without taking cancellation ownership. On ownerless settlement discard the terminal outcome, retain only per-file mtime metadata, log bounded partial/failure once, and force the next open to re-enumerate. Prune cache entries only for successfully enumerated roots; retain failed-root entries until that root later enumerates successfully, then retry/prune normally.
+  Replace `_prewarm_pending/_prewarm_callbacks` with one retained in-flight
+  `FinderLoadSession`. `prewarm()` uses `ownership = "retained"`; a matching
+  `open()` uses the shared subscription handle without taking producer
+  ownership. On ownerless settlement discard the outcome, retain only per-file
+  mtime metadata, log bounded partial/failure through `on_terminal`, and clear
+  `_prewarm_session` through `on_retire`. Prune cache entries only for
+  successfully enumerated roots; retain failed-root entries until that root
+  later enumerates successfully. Do not add finder-local subscriber arrays.
 
 - [ ] **Step 7: Run Chat/shared tests and commit**
 
@@ -709,7 +778,11 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
 
 - [ ] **Step 6: Implement Note loader and joinable prewarm wiring**
 
-  Construct the exact discovery fingerprint in production, subscribe matching opens, preserve prewarm ownership on picker cancel, and route settled raw records through the pure materializer and existing UI actions.
+  Construct the exact discovery fingerprint in production, subscribe matching
+  opens through the shared subscription handle, preserve retained prewarm
+  ownership on picker cancel, and route settled raw records through the total
+  materializer and existing UI actions. Use shared `on_terminal`/`on_retire`
+  hooks and do not add finder-local callback arrays.
 
 - [ ] **Step 7: Run Note/shared tests and commit**
 
@@ -957,3 +1030,13 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   boundary with later stat/read/parse failures per-record, and expanded the
   issue estimate to six Lua primitives plus two IO integrations and two
   migrations.
+
+### 2026-07-15 — third mandatory change-code gate
+
+- Reason: the third judge found the session interface could not yet express
+  subscriber cancellation, producer ownership/start ordering, ownerless prewarm
+  hooks/retirement, or enforceable snapshot immutability.
+- Delta: specified an opaque snapshot proxy, lazy `producer_factory`, exact
+  session/subscription methods, picker versus retained ownership, deterministic
+  delivery-turn retirement hooks, picker-before-`start()` ordering, and an M1
+  estimate calibration checkpoint.
