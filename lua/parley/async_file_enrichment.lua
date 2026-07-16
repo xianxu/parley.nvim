@@ -130,6 +130,10 @@ M.run = function(options, on_complete)
                 end)
             end
             read_next()
+        end, function(open_error, fd)
+            if not open_error and fd ~= nil then
+                pcall(uv.fs_close, fd, function() end)
+            end
         end)
     end
 

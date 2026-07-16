@@ -664,6 +664,7 @@ function M.open(opts)
     local external_ui_active = false
     local resize_autocmd_id = nil
     local close_all
+    local dismiss
     local on_key_ns = vim.api.nvim_create_namespace("float_picker_on_key")
 
     local function keycode(key)
@@ -757,7 +758,7 @@ function M.open(opts)
         if closed then return false end
         if not vim.api.nvim_win_is_valid(results_win) or
             not vim.api.nvim_win_is_valid(prompt_win) then
-            if close_all then close_all() end
+            if dismiss then dismiss() end
             return false
         end
 
@@ -765,7 +766,7 @@ function M.open(opts)
         local should_have_tag_bar = tag_bar_capable and #tags > 0
         if has_tag_bar and should_have_tag_bar and tag_bar_win and
             not vim.api.nvim_win_is_valid(tag_bar_win) then
-            if close_all then close_all() end
+            if dismiss then dismiss() end
             return false
         end
 
@@ -1008,6 +1009,16 @@ function M.open(opts)
         end
     end
 
+    local cancel_notified = false
+    dismiss = function()
+        close_all()
+        if cancel_notified then
+            return
+        end
+        cancel_notified = true
+        vim.schedule(on_cancel)
+    end
+
     local function get_selected_item()
         if status_line ~= nil or #filtered == 0 then return nil end
         return filtered[math.max(1, math.min(sel_idx, #filtered))]
@@ -1100,8 +1111,7 @@ function M.open(opts)
     end
 
     local function cancel()
-        close_all()
-        vim.schedule(on_cancel)
+        dismiss()
     end
 
     local function suspend_for_external_ui()
@@ -1587,7 +1597,7 @@ function M.open(opts)
     resize_autocmd_id = vim.api.nvim_create_autocmd("VimResized", {
         callback = function()
             if not vim.api.nvim_win_is_valid(results_win) then
-                close_all()
+                dismiss()
                 return
             end
             if not reflow_picker() then return end
@@ -1684,7 +1694,7 @@ function M.open(opts)
         update = update,
         set_status = set_status,
         current_query = current_query_from_buffer,
-        close = close_all,
+        close = dismiss,
         is_closed = function() return closed end,
     }
 end

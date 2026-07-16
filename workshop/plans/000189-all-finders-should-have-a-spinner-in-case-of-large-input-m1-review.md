@@ -5,7 +5,6 @@
 | issue | 189 — all finders should have a spinner in case of large input |
 | repo | parley.nvim |
 | boundary | milestone M1 |
-| window | 909fbec1716a4fee67a3319455bee69192bacf75^..HEAD |
 | command | `sdlc milestone-close --issue 189 --milestone M1` |
 | reviewer | codex |
 
@@ -32,36 +31,45 @@ regressions.
 
 ## Review 3 — REWORK
 
-### Findings
+Malformed asynchronous root events could reach asserting reducers; exit-zero
+stdout with an unterminated NUL fragment could silently drop a path; invalid
+super-repo labels gained visible prefixes; and adjacent filesystem path/error
+helpers were duplicated (`ARCH-DRY`).
 
-1. Critical: malformed asynchronous root events could pass unregistered failure
-   kinds or invalid list/ordinal shapes into asserting reducers and strand the
-   producer.
-2. Critical: exit-zero stdout with a below-cap unterminated NUL fragment was
-   accepted as success and silently dropped.
-3. Important: invalid super-repo labels gained `{}` or stringified prefixes.
-4. Important: `join_path` and bounded filesystem-error fallback were duplicated
-   between traversal and enrichment (`ARCH-DRY`).
+Resolved by full root-event schema validation, strict EOF framing, unprefixed
+fallback labels, and shared native path/error policy in `finder_scan`.
+
+## Review 4 — FIX-THEN-SHIP
+
+The M1 vertical slice was confirmed genuinely asynchronous, Git-aware,
+deterministically materialized, documented, and broadly covered. Two Important
+cancellation cleanup gaps remained:
+
+1. Window invalidation and programmatic `picker.close()` performed raw UI
+   teardown without notifying the picker-owned loader subscription, allowing
+   its producer to outlive the UI (`ARCH-PURPOSE`).
+2. Queue cancellation suppressed all late callbacks, so an uncancellable
+   `fs_open` that later succeeded could return a descriptor no owner saw or
+   closed.
 
 ### Resolution
 
-`FinderProducer` validates complete event schemas before mutating root state;
-invalid ordinals become bounded total failures and malformed known-root events
-become bounded root failures. Git EOF requires an empty pending fragment.
-Invalid labels render unprefixed as before. Native path joining and bounded IO
-fallback are single-sourced in `finder_scan`. Regressions cover delayed malformed
-events, truncated exit-zero framing, fallback display/search text, and the
-shared helpers.
+Raw teardown remains the selection/mapping completion path; every
+non-selection dismissal now routes through one idempotent cancellation
+notification. The operation queue accepts a per-job late-completion disposer,
+and file enrichment uses it to directly close a successful late `fs_open`
+descriptor. Regressions destroy a real loading Markdown picker, assert one
+producer cancellation and no late repaint, and model failed `uv.cancel`
+followed by a successful open whose descriptor is closed exactly once.
 
-## Evidence to re-run
+### Evidence
 
-- Focused scan/producer/loader, Git source, Markdown materializer/entry-point,
-  async filesystem, picker status, and real delayed-picker specs.
+- Focused Markdown loading-picker, float-picker, and async-file-source specs.
 - `make test-changed`
 - `make lint`
 - `sdlc issue validate --issue 189`
 - `git diff --check`
 
-This compact record preserves all failed verdicts and resolutions. Raw prompts,
-diffs, and terminal transcripts were removed before re-review so they do not
-consume the next boundary window.
+The generated raw prompts, diff, ANSI output, and duplicated reviewer response
+were compacted before commit; the durable verdict chronology, findings,
+resolutions, and reproducible evidence are preserved here.

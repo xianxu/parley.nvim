@@ -518,5 +518,44 @@ describe("asynchronous file source", function()
             assert.equals(0, calls.opens())
             assert.equals(0, complete_count)
         end)
+
+        it("closes a descriptor returned after cancellation cannot stop fs_open", function()
+            local finish_open
+            local fd = { path = "/repo/late.md" }
+            local close_count = 0
+            local completion_count = 0
+            local uv = {
+                fs_stat = function(_, callback)
+                    callback(nil, { type = "file", mtime = { sec = 1 } })
+                end,
+                fs_realpath = function(path, callback) callback(nil, path) end,
+                fs_open = function(_, _, _, callback)
+                    finish_open = callback
+                    return { kind = "open-request" }
+                end,
+                fs_close = function(closed_fd, callback)
+                    assert.equals(fd, closed_fd)
+                    close_count = close_count + 1
+                    callback(nil)
+                end,
+                cancel = function() return nil, "EBUSY" end,
+            }
+            local source = async_file_source.new({ uv = uv })
+            local handle = source:read_paths({
+                root = { path = "/repo" },
+                root_ordinal = 1,
+                paths = { "late.md" },
+                read = "all",
+                concurrency = 16,
+            }, function()
+                completion_count = completion_count + 1
+            end)
+
+            handle:cancel()
+            finish_open(nil, fd)
+
+            assert.equals(1, close_count)
+            assert.equals(0, completion_count)
+        end)
     end)
 end)

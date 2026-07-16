@@ -1418,3 +1418,13 @@ The change deliberately uses existing `finder_facets`, `finder_sticky`, recency,
   stdout/stderr error fakes, repeated post-cap chunks, a real tracked
   backslash-bearing Git path, and native-path materialization
   (`ARCH-PURE`, `ARCH-PURPOSE`).
+
+### 2026-07-16 — M1 final boundary-review fixes
+
+- Reason: M1 re-review found that invalidated or programmatically closed picker
+  windows bypassed loader cancellation, and queue cancellation could discard a
+  late successful `fs_open` descriptor.
+- Delta: route non-selection picker destruction through exactly-once
+  subscription cancellation; add resource-aware late-completion cleanup to the
+  operation queue; add regressions for both races (`ARCH-PURE`,
+  `ARCH-PURPOSE`).

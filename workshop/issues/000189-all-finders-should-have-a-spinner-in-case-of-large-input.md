@@ -287,7 +287,7 @@ imported package trees that are outside the repository's useful document set.
 
 ## Plan
 
-- [ ] M1 — Add shared scan/session/picker primitives and ship Markdown as the
+- [x] M1 — Add shared scan/session/picker primitives and ship Markdown as the
   first Git-aware asynchronous vertical slice.
 - [ ] M2 — Migrate Chat and Note, including exact-snapshot joinable prewarm and
   metadata-only settled cache retention.
@@ -527,6 +527,7 @@ stale on 2026-07-15, so the estimate is provisional.
   repository materializer (`ARCH-DRY`).
 
 ### 2026-07-16 — M1 mapped verification
+- 2026-07-16: closed M1 — Focused malformed-event/truncated-framing/invalid-label/shared-IO-policy, Git stream-error/fragment-cap/native-path, finder scan/producer/loader, async file source unit+real-libuv, real Git/submodule/backslash path, Markdown entry-point, real delayed process-to-picker spinner, picker status, and float-picker specs pass; make test-changed passes; make lint reports 0 warnings/errors in 292 files; issue validation and git diff --check pass.; review verdict: FIX-THEN-SHIP
 
 - `make test-changed` exposed that the real-Git “nonrepository” fixture could
   inherit Parley's parent worktree when a mapped runner placed temp files under
@@ -573,3 +574,15 @@ stale on 2026-07-15, so the estimate is provisional.
   failures; Git rejects unterminated EOF; invalid labels retain unprefixed
   rows; native join/error fallback policy lives once in `finder_scan` with
   direct tests (`ARCH-DRY`, `ARCH-PURE`, `ARCH-PURPOSE`).
+
+### 2026-07-16 — M1 final boundary fixes
+
+- The FIX-THEN-SHIP review found two lifecycle gaps: non-selection picker
+  destruction could leave its producer alive, and an uncancellable `fs_open`
+  could return a descriptor after queue cancellation with no remaining owner.
+- Picker dismissal now notifies its subscription exactly once while confirmed
+  selection and mapping-owned completion retain raw teardown. The shared queue
+  exposes an injected late-completion disposer, and enrichment closes late open
+  descriptors directly. Real loading-picker and injected-libuv regressions pin
+  cancellation cardinality, no late repaint, and descriptor cleanup
+  (`ARCH-PURE`, `ARCH-PURPOSE`).

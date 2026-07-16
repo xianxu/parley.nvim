@@ -24,7 +24,11 @@ M.new = function(uv, limit)
                     active[token] = nil
                     active_count = active_count - 1
                 end
-                if not cancelled then
+                if cancelled then
+                    if job.dispose then
+                        pcall(job.dispose, ...)
+                    end
+                else
                     job.callback(...)
                     pump()
                 end
@@ -41,9 +45,11 @@ M.new = function(uv, limit)
     end
 
     local queue = {}
-    queue.call = function(_, start, callback)
+    -- dispose receives a late completion after cancellation so callers can
+    -- release resources created by operations whose requests could not stop.
+    queue.call = function(_, start, callback, dispose)
         if not cancelled then
-            queued[#queued + 1] = { start = start, callback = callback }
+            queued[#queued + 1] = { start = start, callback = callback, dispose = dispose }
             pump()
         end
     end

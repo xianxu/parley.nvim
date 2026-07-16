@@ -400,6 +400,24 @@ describe("float_picker", function()
             assert.is_false(active)
         end)
 
+        it("notifies cancellation exactly once when closed programmatically", function()
+            local cancel_count = 0
+            local picker = float_picker.open({
+                title = "Loading",
+                items = {},
+                status = { message = "scanning…", animated = true },
+                on_select = function() end,
+                on_cancel = function() cancel_count = cancel_count + 1 end,
+            })
+
+            picker.close()
+            picker.close()
+            vim.wait(200, function() return cancel_count == 1 end)
+
+            assert.equals(1, cancel_count)
+            assert.is_true(picker.is_closed())
+        end)
+
         it("<CR> calls on_select with the current item and closes the window", function()
             local selected = nil
             float_picker.open({

@@ -37,6 +37,19 @@ local function line_containing(needle)
 	end
 end
 
+local function float_win_containing(needle)
+	for _, win in ipairs(vim.api.nvim_list_wins()) do
+		local ok, config = pcall(vim.api.nvim_win_get_config, win)
+		if ok and config.relative ~= "" then
+			local buf = vim.api.nvim_win_get_buf(win)
+			local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+			if table.concat(lines, "\n"):find(needle, 1, true) then
+				return win
+			end
+		end
+	end
+end
+
 local function git(root, ...)
 	local command = { vim.fn.exepath("git"), "-C", root, ... }
 	vim.fn.system(command)
@@ -90,6 +103,36 @@ describe("real asynchronous Markdown finder", function()
 			"delayed Markdown result did not settle; lines=" .. table.concat(picker_lines(), " | ")
 				.. "; warnings=" .. table.concat(warnings, " | "))
 		assert.same({}, warnings)
+	end)
+
+	it("cancels a loading producer once when its results window is destroyed", function()
+		local settle_git
+		local cancel_count = 0
+		local git_source = {
+			list = function(_, on_complete)
+				settle_git = on_complete
+				return {
+					cancel = function()
+						cancel_count = cancel_count + 1
+					end,
+				}
+			end,
+		}
+		markdown_finder.setup(parley_for(root, warnings, { git_markdown_source = git_source }))
+
+		markdown_finder.open()
+		local results_win = float_win_containing("scanning…")
+		assert.is_not_nil(results_win)
+		vim.api.nvim_win_close(results_win, true)
+		vim.api.nvim_exec_autocmds("VimResized", {})
+
+		assert(vim.wait(500, function() return cancel_count == 1 end, 10),
+			"destroying the picker did not cancel its producer")
+		settle_git({ status = "success", paths = { "late.md" } })
+		vim.wait(50, function() return false end, 10)
+
+		assert.equals(1, cancel_count)
+		assert.same({}, picker_lines(), "late settlement must not repaint a destroyed picker")
 	end)
 
 	it("excludes a tracked Markdown symlink whose target is a directory", function()

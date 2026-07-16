@@ -284,3 +284,16 @@
   REWORK revision. Rule: name the pre-gate step “prepare and invoke the close
   boundary”; after the verdict, append the outcome and status transition instead
   of making historical revision prose sound like current state.
+
+## 2026-07-16 (#189)
+
+- **UI teardown and lifecycle dismissal are different operations.** A picker
+  can disappear through window invalidation or its public close method without
+  traversing the keyboard cancel path. Rule: every non-selection destruction
+  must notify the lifecycle owner exactly once; reserve raw teardown only for
+  successful selection or an action that explicitly owns completion.
+- **Suppressing a late IO callback does not dispose resources created by that
+  callback.** Cancellation may fail while `fs_open` later succeeds, so dropping
+  the result leaks its descriptor. Rule: resource-producing queued operations
+  need an idempotent late-completion disposer; test the documented cancellation
+  failure return followed by a successful completion.
