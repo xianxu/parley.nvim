@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-07-14
 updated: 2026-07-15
-estimate_hours:
+estimate_hours: 3.2
 started: 2026-07-15T17:02:57-07:00
 ---
 
@@ -229,13 +229,35 @@ imported package trees that are outside the repository's useful document set.
 
 ## Plan
 
-- [ ] Add the shared loading-picker/session lifecycle and async scan primitives.
-- [ ] Move Markdown discovery to Git-aware async listing and bounded entry
-  transformation.
-- [ ] Wire Chat, Note, Issue, and Vision—including Chat/Note prewarm—to the
-  shared lifecycle without changing post-load behavior.
-- [ ] Reconcile README/atlas/traceability and run focused, mapped, and full
-  verification.
+- [ ] M1 — Add shared scan/session/picker primitives and ship Markdown as the
+  first Git-aware asynchronous vertical slice.
+- [ ] M2 — Migrate Chat and Note, including exact-snapshot joinable prewarm and
+  metadata-only settled cache retention.
+- [ ] Migrate Issue and Vision, reconcile docs/atlas/traceability, and run
+  focused, mapped, full, and manual verification before the final issue-close
+  boundary.
+
+## Estimate
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.5
+item: lua-neovim              design=0.40 impl=0.40
+item: tui-screen              design=0.25 impl=0.26
+item: cross-cutting-refactor  design=0.12 impl=0.14
+item: real-api-discovery      design=0.00 impl=0.18
+item: atlas-docs              design=0.10 impl=0.05
+item: milestone-review        design=0.10 impl=0.36
+design-buffer: 0.15
+total: 3.20
+```
+
+Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md`
+against `baseline-v3.1.md`. Method A only. Design values apply the thorough-spec
+discount; implementation values are already scaled to 40% of the v2/v2.1
+primitive table. Familiarity is 1.5 because streaming libuv/Git cancellation is
+novel-but-bounded in this Lua codebase. The calibration source was stale on
+2026-07-15, so the estimate is provisional.
 
 ## Log
 
@@ -309,3 +331,12 @@ imported package trees that are outside the repository's useful document set.
   discovery fingerprint, defined `record`/`skip`/static `failure(kind)`, and
   moved concrete time/item/byte/count budgets to the durable plan while retaining
   the responsiveness and source-bounded invariants.
+
+### 2026-07-15 — durable implementation planning
+
+- Reason: the approved spec spans shared UI lifecycle, two IO backends, five
+  production finders, prewarm ownership, process fakes, and documentation, so a
+  checkable multi-boundary plan is required before source changes.
+- Delta: added the canonical durable plan, two intermediate milestones plus the
+  final issue-close boundary, concrete operational budgets, and an estimate
+  derived from estimate-logic-v3.1 rather than memory.
