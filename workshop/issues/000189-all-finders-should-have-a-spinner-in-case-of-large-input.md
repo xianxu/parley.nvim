@@ -497,3 +497,13 @@ stale on 2026-07-15, so the estimate is provisional.
   68-case float-picker spec, and progress regressions pass. Debugging confirmed
   ignored prompt submission emits an internal Escape; status confirm now
   suppresses only that submit transition so a real Escape still cancels.
+
+### 2026-07-15 — Task 4 implementation
+
+- Added the shared `finder_producer.run` pipeline for out-of-order root events,
+  sliced adapters, cache hooks, static exception containment, finalization,
+  composite cancellation, and exactly-once settlement.
+- Added lazy picker/retained loading sessions with subscriber-only cancellation,
+  delivery-turn replay, defensive snapshots, independent terminal/retire hooks,
+  and a picker bridge that opens/subscribes before callers start IO. Five
+  producer and eight loader/bridge cases cover these contracts.
