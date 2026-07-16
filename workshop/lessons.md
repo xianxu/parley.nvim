@@ -1,5 +1,17 @@
 # Lessons
 
+## 2026-07-16 (#191)
+
+- **Moving an artifact into a typed archive subdirectory is also a consumer
+  configuration migration.** The filesystem move to
+  `workshop/history/issues/` landed while Parley's `history_dir` default still
+  named the parent container, so non-recursive Issue Finder and next-ID scans
+  silently returned no archived records. Rule: for every archive-layout move,
+  shadow-sweep configured defaults, ordinary and super-repo expansion, ID
+  allocation, neighborhood classification, tests, and atlas; keep one new
+  canonical path rather than adding legacy fallback traversal (`ARCH-DRY`,
+  `ARCH-PURPOSE`).
+
 ## 2026-07-16 (#189)
 
 - **A finder-local comparator must stop at its actual primary fields.** Issue

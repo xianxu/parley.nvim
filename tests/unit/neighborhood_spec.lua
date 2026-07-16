@@ -7,7 +7,7 @@ local function cfg(overrides)
         repo_note_dir = "workshop/notes",
         issues_dir = "workshop/issues",
         vision_dir = "workshop/vision",
-        history_dir = "workshop/history",
+        history_dir = "workshop/history/issues",
     }, overrides or {})
 end
 
@@ -34,7 +34,7 @@ describe("neighborhood.derive_for_path", function()
             "workshop/notes/design.md",
             "workshop/issues/000147-topic.md",
             "workshop/vision/roadmap.yaml",
-            "workshop/history/000001-done.md",
+            "workshop/history/issues/000001-done.md",
         }) do
             local root = neighborhood.derive_for_path("/workspace/repo/" .. rel, cfg(), roots)
 

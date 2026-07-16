@@ -1,7 +1,7 @@
 # AI Workflow
 
 ## Overview
-Issue-driven development workflow for AI coding agents. Work is tracked in single-file-per-issue markdown files under `workshop/issues/`, with completed work archived to `workshop/history/`. Two operational modes: direct-on-main for small changes, worktree-based branches for larger work.
+Issue-driven development workflow for AI coding agents. Work is tracked in single-file-per-issue markdown files under `workshop/issues/`, with completed work archived to `workshop/history/issues/`. Two operational modes: direct-on-main for small changes, worktree-based branches for larger work.
 
 ## Issue File Format
 Each issue is a markdown file at `workshop/issues/NNNNNN-slug.md` with YAML frontmatter:
@@ -24,7 +24,7 @@ Standard sections: `# Title`, `## Done when`, `## Plan` (checkable items, steps 
 ### Direct-on-Main (small changes)
 1. `make fetch 42` — fetches GitHub issue #42, creates `workshop/issues/NNNNNN-slug.md`
 2. Work directly on main branch
-3. `make push` — auto-commits, runs pre-merge checks, pushes, closes done GitHub issues, archives done issue files to `workshop/history/`
+3. `make push` — auto-commits, runs pre-merge checks, pushes, closes done GitHub issues, archives done issue files to `workshop/history/issues/`
 
 ### Worktree Branch (larger changes)
 1. `make issue 42` — fetches GitHub issue, creates worktree at `../worktree/<repo>-42/` on branch `<repo>-42`, creates issue file inside worktree
@@ -72,7 +72,7 @@ GitHub Issue → make fetch/issue → workshop/issues/NNNNNN-slug.md
                                   workshop/plans/NNNNNN-slug-plan.md (complex only)
                                   atlas/*.md (updated incrementally)
               work...
-              make push/merge  → workshop/history/NNNNNN-slug.md (archived)
+              make push/merge  → workshop/history/issues/NNNNNN-slug.md (archived)
                                  GitHub issue closed
 ```
 
