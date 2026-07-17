@@ -57,6 +57,12 @@ function M.increment_iter(bufnr)
     state_by_buf[bufnr].iter = state_by_buf[bufnr].iter + 1
 end
 
+function M.register_live_model(bufnr, model, exchange_idx)
+    state_by_buf[bufnr] = state_by_buf[bufnr] or { iter = 0 }
+    state_by_buf[bufnr].model = model
+    state_by_buf[bufnr].exchange_idx = exchange_idx
+end
+
 --- Clear all state for a buffer (called on tool-loop-done and
 --- whenever the caller wants to start fresh).
 --- @param bufnr integer
@@ -95,22 +101,9 @@ end
 --- tool_result and writes synthetic 📎: results for them.
 --- @param bufnr integer
 function M.repair_unmatched_tool_blocks(bufnr)
-    local chat_parser = require("parley.chat_parser")
-    local exchange_model_mod = require("parley.exchange_model")
-    local cfg = require("parley.config")
-    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-    local header_end = chat_parser.find_header_end(lines) or 0
-    local parsed = chat_parser.parse_chat(lines, header_end, cfg)
-    local model = exchange_model_mod.from_parsed_chat(parsed)
-
-    -- Find the last exchange with an answer
-    local ex_idx = nil
-    for i = #model.exchanges, 1, -1 do
-        if #model.exchanges[i].blocks > 1 then
-            ex_idx = i
-            break
-        end
-    end
+    local state = state_by_buf[bufnr]
+    local model = state and state.model
+    local ex_idx = state and state.exchange_idx
     if not ex_idx then return end
 
     -- Scan blocks: every tool_use must be followed by a tool_result
@@ -166,6 +159,7 @@ function M._append_section_to_answer(bufnr, model, exchange_idx, section)
         table.insert(insert_lines, l)
     end
     buffer_edit.insert_lines_at(bufnr, pos - 1, insert_lines)
+    require("parley.tool_folds")._apply_block_fold(bufnr, nil, model, exchange_idx, blk_idx)
 end
 
 --------------------------------------------------------------------------------
@@ -283,11 +277,6 @@ function M.process_response(bufnr, raw_response, agent_info, live_model, exchang
     end
 
     M.increment_iter(bufnr)
-
-    -- Auto-close tool folds so the buffer stays compact
-    pcall(function()
-        require("parley.tool_folds").close_tool_folds(bufnr)
-    end)
 
     return "recurse"
 end

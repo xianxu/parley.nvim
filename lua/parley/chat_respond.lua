@@ -1488,6 +1488,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             model = exchange_model.from_parsed_chat(parsed_chat)
             target_idx = exchange_idx or #model.exchanges
         end
+        tool_loop_mod.register_live_model(buf, model, target_idx)
 
         -- Compute response_start_line using the model.
         --
@@ -1639,6 +1640,55 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
         local function on_stream_lines_changed(delta)
             model:grow_block(target_idx, stream_block_idx, delta)
         end
+        local provisional_thinking_idx
+        local function reconcile_stream_span(last_written_line_0)
+            local first_block = stream_block_idx
+            local first_line = model:block_start(target_idx, first_block)
+            local current_lines = vim.api.nvim_buf_get_lines(buf, first_line, last_written_line_0 + 1, false)
+            local patterns = require("parley.highlight_structure").patterns(_parley.config)
+            local has_reasoning_end = false
+            for _, line in ipairs(current_lines) do
+                if require("parley.highlight_structure").classify(line, patterns).kind == "reasoning_end" then
+                    has_reasoning_end = true
+                    break
+                end
+            end
+            if has_reasoning_end and provisional_thinking_idx then
+                first_block = provisional_thinking_idx
+                first_line = model:block_start(target_idx, first_block)
+                current_lines = vim.api.nvim_buf_get_lines(buf, first_line, last_written_line_0 + 1, false)
+            end
+            if M._stream_reconcile_observer then
+                M._stream_reconcile_observer({
+                    first_line = first_line,
+                    last_line = last_written_line_0,
+                    rows_visited = #current_lines,
+                    widened = first_block == provisional_thinking_idx,
+                })
+            end
+            local reduced = require("parley.answer_structure").reduce(current_lines, patterns, { streaming = true })
+            local replacements = {}
+            for _, section in ipairs(reduced.sections) do
+                replacements[#replacements + 1] = {
+                    kind = section.kind,
+                    size = section.line_end - section.line_start + 1,
+                }
+            end
+            if #replacements == 0 then return end
+            local old_count = stream_block_idx - first_block + 1
+            local changed = model:replace_span(target_idx, first_block, old_count, replacements)
+            stream_block_idx = changed[#changed]
+            if has_reasoning_end then
+                provisional_thinking_idx = nil
+            elseif #replacements >= 2 and replacements[#replacements - 1].kind == "thinking"
+                and replacements[#replacements].kind == "text" then
+                provisional_thinking_idx = changed[#changed - 1]
+            end
+            local fold = require("parley.tool_folds")
+            for _, block_index in ipairs(changed) do
+                fold._apply_block_fold(buf, win, model, target_idx, block_index)
+            end
+        end
         local base_handler = _parley.dispatcher.create_handler(buf, win, response_start_line, true, "", function()
             return is_follow_cursor_enabled(override_free_cursor)
         end, on_stream_lines_changed, {
@@ -1649,6 +1699,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                 return pending_session:before_write()
             end,
             after_write = function(_qid, _chunk, _delta, last_written_line_0)
+                reconcile_stream_span(last_written_line_0)
                 pending_session:tip_written(last_written_line_0)
                 lease_commit()
             end,
@@ -1924,13 +1975,6 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                     end
 
                     vim.cmd("doautocmd User ParleyDone")
-
-                    -- Re-apply folds so freshly streamed 🧠:/🔧:/📎: blocks
-                    -- collapse the same way they do on file open. apply_folds
-                    -- is idempotent and reads the current buffer state.
-                    pcall(function()
-                        require("parley.tool_folds").apply_folds(buf)
-                    end)
 
                     -- Raw-mode logging (debug/learning aid). Writes per-turn
                     -- markdown logs to <chat-dir>/.parley-logs/<basename>/.

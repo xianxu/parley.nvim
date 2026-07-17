@@ -106,6 +106,29 @@ function Model:remove_block(k, b)
     table.remove(self.exchanges[k].blocks, b)
 end
 
+--- Replace a contiguous block span with semantic sections.
+--- Returns the 1-based indices of every inserted block.
+function Model:replace_span(k, first_block, old_count, sections)
+    local exchange = assert(self.exchanges[k], "invalid exchange index")
+    assert(type(first_block) == "number" and type(old_count) == "number" and old_count >= 0,
+        "invalid replacement span")
+    assert(first_block >= 1 and first_block <= #exchange.blocks + 1, "invalid replacement start")
+    assert(first_block + old_count - 1 <= #exchange.blocks, "replacement exceeds exchange")
+    sections = sections or {}
+    for _, section in ipairs(sections) do
+        assert(type(section.kind) == "string" and type(section.size) == "number" and section.size >= 0,
+            "invalid replacement section")
+    end
+    for _ = 1, old_count do table.remove(exchange.blocks, first_block) end
+    local changed = {}
+    for offset, section in ipairs(sections) do
+        local index = first_block + offset - 1
+        table.insert(exchange.blocks, index, { kind = section.kind, size = section.size })
+        changed[#changed + 1] = index
+    end
+    return changed
+end
+
 -- ============================================================================
 -- Position queries (all return 0-indexed buffer line)
 -- ============================================================================
@@ -260,7 +283,7 @@ function M.from_parsed_chat(parsed_chat)
             local k = #model.exchanges
             -- Agent header is the first answer block (🤖: line, 1 line)
             model:add_block(k, "agent_header", 1)
-            for _, sec in ipairs(ex.answer.sections or {}) do
+            for _, sec in ipairs(ex.answer.semantic_sections or ex.answer.sections or {}) do
                 local sec_size = 1
                 if sec.line_start and sec.line_end then
                     sec_size = sec.line_end - sec.line_start + 1

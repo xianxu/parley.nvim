@@ -17,7 +17,16 @@ The parser decides termination mode per-block at open time by looking ahead from
 Structural markers (`📝/🔧/📎/💬/🤖/🌿/🔒`) always terminate either mode.
 
 ## Parser → Model Pipeline
-`chat_parser.parse_chat` produces structured exchanges with `line_start`/`line_end` spans. `exchange_model.from_parsed_chat` converts these to size-based blocks. The parser trims leading/trailing blank lines from all components so the model's margins are the single source of truth.
+`answer_structure.reduce` is the one semantic answer grammar. It produces
+`text`, `thinking`, `summary`, `tool_use`, and `tool_result` spans for both
+`chat_parser.parse_chat` and bounded streaming reconciliation.
+
+`chat_parser.parse_chat` still owns full transcript/exchange parsing and the
+backward-compatible `content_blocks`; it also attaches semantic spans that
+`exchange_model.from_parsed_chat` converts to size-based blocks. Initial load
+parses the transcript once. Streaming normally reduces only the insertion block;
+when a later `🧠:[END]` resolves a provisional legacy blank, it reduces exactly
+that opener-through-terminator span and no earlier line.
 
 ## Excluded from LLM Context
 `🔒:` local sections, `🌿:` branch links (full-line).

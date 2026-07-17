@@ -481,6 +481,21 @@ M.parse_chat = function(lines, header_end, config)
 			current_exchange.answer.sections = cb_state.blocks
 			-- Backward-compat alias.
 			current_exchange.answer.content_blocks = cb_state.blocks
+			local body_start = current_exchange.answer.line_start + 1
+			local body_lines = {}
+			for line_no = body_start, end_line_no do
+				body_lines[#body_lines + 1] = lines[line_no]
+			end
+			local reduced = require("parley.answer_structure").reduce(body_lines, decoration_patterns)
+			current_exchange.answer.semantic_sections = {}
+			for _, section in ipairs(reduced.sections) do
+				current_exchange.answer.semantic_sections[#current_exchange.answer.semantic_sections + 1] = {
+					kind = section.kind,
+					type = section.kind,
+					line_start = body_start + section.line_start - 1,
+					line_end = body_start + section.line_end - 1,
+				}
+			end
 		end
 		cb_state = nil
 	end
