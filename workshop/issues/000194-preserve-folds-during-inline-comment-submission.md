@@ -59,29 +59,29 @@ request context.
 
 ## Done when
 
-- [ ] Submitting an inline comment preserves a previously closed one-line
+- [x] Submitting an inline comment preserves a previously closed one-line
       summary fold and its gutter marker.
-- [ ] Submission creates no fold ranges inside an unchanged question or answer.
-- [ ] Unrelated user-created manual folds retain the same covered logical text
+- [x] Submission creates no fold ranges inside an unchanged question or answer.
+- [x] Unrelated user-created manual folds retain the same covered logical text
       and closed state through both paths. Ranges before an edit remain
       numerically unchanged; ranges after an insertion/replacement shift only by
       that edit's line-count delta.
-- [ ] Marker removal/replacement and new-turn insertion use bounded edits; the
+- [x] Marker removal/replacement and new-turn insertion use bounded edits; the
       production submission paths never call `replace_all_lines`.
-- [ ] Existing drill-in serialization, request-targeting, and payload assertions
+- [x] Existing drill-in serialization, request-targeting, and payload assertions
       pass without expectation changes; added end and branch assertions prove
       the serialized buffer and dispatched payload retain pre-change behavior.
-- [ ] Automated pure tests cover ordered edit planning, including nearby
+- [x] Automated pure tests cover ordered edit planning, including nearby
       unquoted markers with interacting inferred source regions. Real Neovim
       integration tests cover the reported fold-loss/fold-migration behavior.
 
 ## Plan
 
-- [ ] Add a pure bounded drill-in edit plan with multi-marker ordering tests.
-- [ ] Apply the plan through narrow `buffer_edit` operations in both submission
+- [x] Add a pure bounded drill-in edit plan with multi-marker ordering tests.
+- [x] Apply the plan through narrow `buffer_edit` operations in both submission
       paths.
-- [ ] Add real Neovim regressions for summary and unrelated manual folds.
-- [ ] Update lifecycle documentation and run mapped/full verification.
+- [x] Add real Neovim regressions for summary and unrelated manual folds.
+- [x] Update lifecycle documentation and run mapped/full verification.
 
 ## Estimate
 
@@ -123,3 +123,18 @@ half-open contract, required exact conflict precedence and EOF placement, and
 expanded the real-window regression to prove both logical fold coverage and the
 rendered gutter marker. Estimate revised from 1.8h to 2.5h after correcting the
 arithmetic and accounting for those boundary cases.
+
+Implemented normalized half-open marker/anchor edit plans and a validating
+bottom-to-top Neovim adapter, then replaced both drill-in whole-buffer rewrites
+with bounded marker edits plus path-specific narrow destination operations.
+Production regressions prove a closed one-line summary retains its gutter fold,
+a later user fold shifts with its logical text, and no fold migrates into an
+unchanged question (`ARCH-DRY`, `ARCH-PURE`, `ARCH-PURPOSE`).
+
+TDD evidence: `drill_in_spec.lua` failed 5 new cases before
+`gather_edit_plan`, then passed 113/113; `buffer_edit_spec.lua` failed before
+`apply_text_edits`, then passed 23/23; `chat_respond_spec.lua` failed both new
+paths on the `replace_all_lines` sentinel, then passed 63/63. `make test-spec
+SPEC=chat/drill_in`, `make test`, `make test-changed`, and `git diff --check`
+all passed. A transient real-process fixture port failure passed on exact rerun
+and the subsequent full suite.

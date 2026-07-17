@@ -75,7 +75,7 @@
 - Modify: `lua/parley/drill_in.lua`
 - Modify: `tests/unit/drill_in_spec.lua`
 
-- [ ] **Step 1: Write RED tests for original-coordinate plans**
+- [x] **Step 1: Write RED tests for original-coordinate plans**
 
 Add named cases asserting explicit markers, inferred bracket insertions,
 multiline markers, multiple markers, and nearby unquoted markers produce sorted,
@@ -85,21 +85,21 @@ output fixtures: marker edits win; the first intersecting inferred span owns its
 bracket pair; later intersecting inferred spans are undecorated; neither ready
 marker nor gathered block is lost.
 
-- [ ] **Step 2: Run the exact unit spec and verify RED**
+- [x] **Step 2: Run the exact unit spec and verify RED**
 
 Run:
 `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/drill_in_spec.lua" -c "qa!"`
 
 Expected: FAIL because `gather_edit_plan` is absent.
 
-- [ ] **Step 3: Implement the minimum normalized planner**
+- [x] **Step 3: Implement the minimum normalized planner**
 
 Promote the existing local edit collection out of `gather_and_strip`. Validate
 and normalize candidates before returning them; retain `splice` as the single
 compatibility renderer. Make `gather_and_strip` delegate and return its existing
 two values unchanged.
 
-- [ ] **Step 4: Re-run the exact unit spec and verify GREEN**
+- [x] **Step 4: Re-run the exact unit spec and verify GREEN**
 
 Expected: all existing and new drill-in assertions pass without expectation
 changes.
@@ -110,7 +110,7 @@ changes.
 - Modify: `lua/parley/buffer_edit.lua`
 - Modify: `tests/unit/buffer_edit_spec.lua`
 
-- [ ] **Step 1: Write RED adapter tests**
+- [x] **Step 1: Write RED adapter tests**
 
 Using a real scratch buffer, assert byte edits map across multibyte/multiline
 text, apply bottom-to-top, touch only the requested slice, and reject malformed
@@ -119,14 +119,14 @@ or overlapping plans before the first mutation. Cover insertion at byte 1 and
 replacement, multibyte text before each endpoint, nonzero `start_row0`, empty
 source, and a source slice ending before later untouched buffer text.
 
-- [ ] **Step 2: Run the exact adapter spec and verify RED**
+- [x] **Step 2: Run the exact adapter spec and verify RED**
 
 Run:
 `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/buffer_edit_spec.lua" -c "qa!"`
 
 Expected: FAIL because `apply_text_edits` is absent.
 
-- [ ] **Step 3: Implement `apply_text_edits`**
+- [x] **Step 3: Implement `apply_text_edits`**
 
 Convert every half-open byte boundary against `source_text` before mutation,
 validate the entire plan before the first write, then issue descending
@@ -134,11 +134,11 @@ validate the entire plan before the first write, then issue descending
 for destination bookkeeping while leaving coordinate ownership with extmark
 handles.
 
-- [ ] **Step 4: Re-run the exact adapter spec and verify GREEN**
+- [x] **Step 4: Re-run the exact adapter spec and verify GREEN**
 
 Expected: adapter tests and all existing buffer-edit tests pass.
 
-- [ ] **Step 5: Commit Chunk 1**
+- [x] **Step 5: Commit Chunk 1**
 
 Commit the pure plan and thin adapter with a `#194:` subject and model co-author
 trailer.
@@ -151,7 +151,7 @@ trailer.
 - Modify: `lua/parley/chat_respond.lua`
 - Modify: `tests/integration/chat_respond_spec.lua`
 
-- [ ] **Step 1: Write RED production integration tests**
+- [x] **Step 1: Write RED production integration tests**
 
 In a real window set `foldmethod=manual`, `foldenable=true`, `foldminlines=0`,
 and `foldcolumn=1`; create and close a one-line summary fold plus a separate user
@@ -164,7 +164,7 @@ shift by the measured insertion delta. Spy on `replace_all_lines` and fail if
 either path calls it. Keep existing serialized-buffer and dispatched-payload
 assertions unchanged.
 
-- [ ] **Step 2: Run the exact integration spec and verify RED**
+- [x] **Step 2: Run the exact integration spec and verify RED**
 
 Run:
 `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/chat_respond_spec.lua" -c "qa!"`
@@ -172,7 +172,7 @@ Run:
 Expected: the new tests fail because both paths call `replace_all_lines`, the
 summary fold disappears, or a fold migrates into question text.
 
-- [ ] **Step 3: Implement bounded end submission**
+- [x] **Step 3: Implement bounded end submission**
 
 Plan over the full joined chat and apply marker/anchor edits. Because the
 destination is EOF, use no extmark: after edits, delete only the maximal
@@ -181,7 +181,7 @@ buffer is nonempty followed by `format_blocks(blocks)`. Test no trailing blank,
 one/multiple trailing blanks, and a marker on the final line. Re-read/reparse
 exactly as today.
 
-- [ ] **Step 4: Implement bounded branch submission**
+- [x] **Step 4: Implement bounded branch submission**
 
 Plan over the selected exchange slice. For a middle branch, create the position
 handle at 0-based row `exch_end`, the insertion boundary before
@@ -193,7 +193,7 @@ resolved 0-based insertion row plus inserted-line count. Test middle and final-
 exchange branches and preserve cursor retargeting plus stale-later-exchange
 exclusion.
 
-- [ ] **Step 5: Re-run unit and integration specs and verify GREEN**
+- [x] **Step 5: Re-run unit and integration specs and verify GREEN**
 
 Run the exact `drill_in_spec.lua`, `buffer_edit_spec.lua`, and
 `chat_respond_spec.lua` commands from prior steps.
@@ -208,19 +208,19 @@ Expected: all pass; old serialization/payload assertions require no changes.
 - Modify: `workshop/issues/000194-preserve-folds-during-inline-comment-submission.md`
 - Modify: `workshop/plans/000194-preserve-folds-during-inline-comment-submission-plan.md`
 
-- [ ] **Step 1: Update atlas and traceability**
+- [x] **Step 1: Update atlas and traceability**
 
 Document drill-in submission as bounded marker/anchor edits plus path-specific
 destination insertion. Map planner, adapter, unit specs, and integration fold
 regressions.
 
-- [ ] **Step 2: Run mapped verification**
+- [x] **Step 2: Run mapped verification**
 
 Run: `make test-spec SPEC=chat/lifecycle`
 
 Expected: every mapped file passes.
 
-- [ ] **Step 3: Run full verification**
+- [x] **Step 3: Run full verification**
 
 Run: `make test`
 
@@ -230,12 +230,12 @@ Run: `git diff --check`
 
 Expected: all exit 0 with no lint warnings or test failures.
 
-- [ ] **Step 4: Reconcile tracker evidence**
+- [x] **Step 4: Reconcile tracker evidence**
 
 Tick issue/plan checks and append exact RED/GREEN/full-suite evidence to the
 issue Log.
 
-- [ ] **Step 5: Commit Chunk 2**
+- [x] **Step 5: Commit Chunk 2**
 
 Commit integration, regressions, docs, and tracker evidence with a `#194:`
 subject and model co-author trailer.

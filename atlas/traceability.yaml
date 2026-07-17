@@ -135,11 +135,13 @@ atlas:
   chat/drill_in:
     code:
       - lua/parley/drill_in.lua
+      - lua/parley/buffer_edit.lua
       - lua/parley/chat_respond.lua
       - lua/parley/highlighter.lua
       - lua/parley/skills/review/init.lua
     tests:
       - tests/unit/drill_in_spec.lua
+      - tests/unit/buffer_edit_spec.lua
       - tests/unit/highlighter_spec.lua
       - tests/integration/chat_respond_spec.lua
 
