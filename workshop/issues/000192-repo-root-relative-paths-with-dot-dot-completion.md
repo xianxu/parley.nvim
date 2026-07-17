@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-07-16
 updated: 2026-07-16
-estimate_hours:
+estimate_hours: 1.2
 started: 2026-07-16T17:11:59-07:00
 ---
 
@@ -85,7 +85,35 @@ ordered-precedence tests flip to the new semantics.
 
 ## Plan
 
-- [ ]
+Detailed plan: `workshop/plans/000192-repo-root-dot-dot-completion-plan.md`.
+Single-pass close (one review boundary), plain checkboxes:
+
+- [ ] Task 1: `resolve_read_path` → single base + confinement (wrap
+  `resolve_path_in_cwd` + existence; new `(path, cwd, read_roots)` signature;
+  update `execute_call` call sites; rewrite #181 unit tests)
+- [ ] Task 2: `completion_candidates` → write-root glob + textual prefix-strip
+  labels + resolver filter; delete `relative_to_root` +
+  `merge_completion_candidates`; integration tests for `../sibling` typed-form
+  completion, escape filtering, no non-base root-relative candidates
+- [ ] Task 3: `format_tool_context` reword to single-base + confinement contract
+- [ ] Task 4: cmp buffer config re-assert on BufEnter (drop once-only guard for
+  the cmp part; flip repeat-attach test; add BufEnter re-assert test)
+- [ ] Task 5: full suite + live verification in brain chat (`../ariadne/`
+  completion, "tell me about ../ariadne/" ls call) + atlas
+  (`infra/repo_mode.md`, `providers/tool_use.md`) + close
+
+## Estimate
+
+estimate_hours: 1.2 (range 0.6–1.8)
+
+Method A: "Lua / Neovim feature (single, focused)" design 1–3 ×0.2
+spec-quality (thorough plan resolves decisions) = 0.2–0.6; + atlas/docs
+0.05–0.2 design; +15% buffer (plan doc) → design 0.29–0.92. Impl at 40%
+(v3.1): (0.5–1.5)×0.4 + docs (0.05–0.2)×0.4 + close-review chunk
+(0.2–0.5)×0.4 → 0.3–0.88. Total 0.6–1.8, midpoint 1.2.
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md`
+against `baseline-v3.1.md`. Method A only.*
 
 ## Log
 
