@@ -38,12 +38,20 @@ repositories use exactly the same policy; `.brain` does not imply peer mode.
 ### Reference neighborhood (#147)
 Relative tool paths and chat-buffer file completion use a per-artifact
 neighborhood root, not the editor process cwd. `lua/parley/neighborhood.lua`
-derives a root policy from the artifact path: writes use the artifact
-neighborhood, while reads search neighborhood first, then `config.repo_root` in
-repo mode, then configured read roots. The first existing match wins. Repo-mode
-`prep_md` attaches built-in and nvim-cmp completion backed by the same ordered
-candidate merger; global chats retain own-folder completion, and ordinary
-non-repo Markdown is unchanged. (#181)
+derives a root policy from the artifact path with two separated concepts
+(#192): the **write root** (repo root in repo mode; the artifact folder
+otherwise) is the single resolution base — every relative path, read or
+write, means "relative to the write root," including `../sibling` traversal —
+while `policy.read_roots` (write root + `tool_read_roots`-derived, default
+`{'../'}`) is a pure permission boundary: the resolved realpath must land
+within one of them, never a fallback resolution base. Completion globs the
+write root only and labels candidates by textual prefix-strip (so `..`
+survives in typed form), filtered through the same read resolver — completion
+offers exactly what reads accept. Repo-mode `prep_md` attaches built-in and
+nvim-cmp completion backed by this policy and re-asserts the cmp buffer
+config on every BufEnter/InsertEnter so host configs that also call
+`cmp.setup.buffer` on BufEnter cannot displace it; global chats retain
+own-folder completion, and ordinary non-repo Markdown is unchanged.
 
 ### Markdown discovery
 

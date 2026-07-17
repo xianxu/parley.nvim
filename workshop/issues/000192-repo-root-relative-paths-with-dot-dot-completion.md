@@ -98,7 +98,7 @@ Single-pass close (one review boundary), plain checkboxes:
 - [x] Task 3: `format_tool_context` reword to single-base + confinement contract
 - [x] Task 4: cmp buffer config re-assert on BufEnter (drop once-only guard for
   the cmp part; flip repeat-attach test; add BufEnter re-assert test)
-- [ ] Task 5: full suite + live verification in brain chat (`../ariadne/`
+- [x] Task 5: full suite + live verification in brain chat (`../ariadne/`
   completion, "tell me about ../ariadne/" ls call) + atlas
   (`infra/repo_mode.md`, `providers/tool_use.md`) + close
 
@@ -156,3 +156,29 @@ from plan:
 - `tests/integration/chat_progress_process_spec.lua` failed once in the first
   sequential integration run, passes standalone and in all subsequent full
   runs — order-dependent flake, not #192-related.
+
+### 2026-07-16 — verification + closeout (Task 5)
+
+- Full suite re-run by the main session: 161 specs PASS, zero FAIL/Error.
+- Live end-to-end on the real brain/ariadne layout (headless nvim, real
+  policy `policy_from_roots(brain, brain, {'../'})`, real dispatcher +
+  builtin `ls`):
+  - `../ar` → `{ "../ariadne/" }`; `../ariadne/works` →
+    `{ "../ariadne/workshop/" }` (typed-form segment continuation).
+  - accidental form `ariadne/` → `{}`; `ls ariadne` → error
+    `read path not found: ariadne` (names the path).
+  - `ls ../ariadne` succeeds (real listing); `../../Documents`-class escapes
+    neither complete nor resolve.
+  - `../../blogs/` IS offered — verified consistent, not a hole:
+    `~/blogs` symlinks into `~/workspace` (inside the permitted root), so
+    reads accept it and completion mirrors enforcement, per the invariant.
+  - `format_tool_context` emits the new single-base + confinement contract.
+- Interactive insert-mode typing + a real chat-LLM round-trip were not
+  exercised headlessly; the cmp source/completefunc surface is covered by the
+  integration specs, and the candidate/tool path above is the same code the
+  interactive flow calls. Operator smoke-test in a live chat is a welcome
+  confirmation but not a close blocker.
+- Atlas reconciled to current state: `infra/repo_mode.md` (Reference
+  neighborhood) + `providers/tool_use.md` (root-policy scope) now describe
+  single-base + confinement; swept atlas for stale "first existing
+  match"/"search these roots in order" wording — zero hits.

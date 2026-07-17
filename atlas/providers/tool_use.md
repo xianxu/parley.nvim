@@ -61,14 +61,18 @@ Tool blocks in the transcript:
 ## Safety
 
 - **root-policy scope**: chat and `skill_invoke` pass one neighborhood policy to
-  the dispatcher and model guidance. Read tools search its canonical roots in
-  order (artifact neighborhood, repo root in repo mode, configured
-  `tool_read_roots`) and require the first existing match; this applies to
+  the dispatcher and model guidance. All relative paths resolve against the
+  policy's **write root** — the single base; `../sibling` traversal is the
+  canonical spelling for peer-repo reads (#192). Read tools then require the
+  resolved realpath to exist and to land within the permission set
+  (`policy.read_roots` = write root + configured `tool_read_roots`); the
+  permission roots are never fallback resolution bases. This applies to
   `path`, `file_path`, `paths`, and injected `default_path`. Absolute paths and
   symlinks must remain within a read root. Write tools ignore the wider set and
-  retain `resolve_path_in_cwd` confinement plus missing-leaf creation semantics.
-  Tools without path fields, such as `chat_history_search`, are unaffected.
-  (#147, #181)
+  retain `resolve_path_in_cwd` confinement plus missing-leaf creation semantics
+  (reads share the same mechanism via `resolve_read_path`, differing only by
+  extra roots + existence). Tools without path fields, such as
+  `chat_history_search`, are unaffected. (#147, #192)
 - **Tool argv safety** (#144, #149): `ls`, `grep`, `find`, `chat_history_search`, and optional `ack` no longer accept raw shell fragments. Each exposes structured fields and builds argv lists for the named binary, so shell metacharacters (`;`, `|`, `$()`, backticks, `>`) are data, not syntax. The shared pure helper (`lua/parley/tools/builtin/argv.lua`) validates local positive allowlists and numeric process flags: `ls` allows compact display flags only; `grep` allows a small read-only flag set and rejects `rg` execution/arbitrary-read flags such as `--pre`, `--hostname-bin`, and `-f`; `find` has no free `flags` field and only exposes path/name/type/depth predicates; `ack` exposes pattern/path/type/context fields with no raw `command` or `flags` escape hatch; `chat_history_search` keeps its explicit chat-root cwd bypass but validates `before`/`after`/`max_count` as non-negative integers before invoking `rg` or `grep` through argv-list execution. `grep`, `ack`, and `chat_history_search` insert `--` before pattern/path positionals so dash-leading patterns cannot be parsed as options; omitted-path defaults for cwd-confined tools are declared as `default_path = "."` so the dispatcher canonicalizes them through the cwd/read-root guard before execution.
 - **Output pager** (#139): a horizontal substrate cap — *every tool's output is a paged stream.* The registry (`register`) injects `offset`/`limit` params into every non-write, non-`self_paginates` tool's schema, and the dispatcher windows each result to lines `[offset, offset+limit)` (offset 1-indexed; `limit` defaults to `tool_result_page_lines` = 200, clamped ≤ 2000), stripping the params so the handler never sees them. When the window is partial it appends a footer naming the **true total** + the next page: `[lines 1-200 of 1,240,118 — pass offset=201 for the next page, or narrow your query]`. `read_file` sets `self_paginates = true` — its native `offset`/`limit` (line-window of the file) *is* the contract, so the dispatcher neither injects nor slices it (a no-limit read falls back to the byte-cap). Deep paging on shell tools re-runs the tool (run+slice, no cache — v1). The 100KB byte-cap (`truncate`) stays as the backstop for pathological single lines. Orthogonal to input safety (#144) — slices *after* the handler.
 - **Iteration cap**: `max_tool_iterations` (default 42, single-sourced in `defaults.lua` `#154`) — writes synthetic `📎: (iteration limit reached — max N rounds)` when hit
