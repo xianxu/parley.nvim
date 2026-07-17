@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-07-16
 updated: 2026-07-16
-estimate_hours:
+estimate_hours: 2.2
 started: 2026-07-16T22:54:13-07:00
 ---
 
@@ -77,7 +77,29 @@ leaving the conversational spine visible.
 
 ## Plan
 
-- [ ]
+- [ ] Make parser/model answer sections use the canonical semantic block kinds.
+- [ ] Track streaming insertion-point structure without whole-document parsing.
+- [ ] Apply initial and streaming folds from model blocks without clearing
+      unrelated folds.
+- [ ] Verify terminal paths, performance bounds, documentation, and regressions.
+
+## Estimate
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: issue-spec design=0.5 impl=0.04
+item: lua-neovim design=0.6 impl=0.6
+item: atlas-docs design=0.05 impl=0.04
+item: milestone-review design=0.0 impl=0.2
+design-buffer: 0.15
+total: 2.2
+```
+
+Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md`
+against `baseline-v3.1.md`. Method A only. The implementation estimate uses
+40% of the v2 Lua/Neovim and documentation implementation ranges; the detailed
+approved spec and established exchange-model architecture reduce design cost.
 
 ## Log
 
@@ -106,3 +128,8 @@ Defined success, cancellation, failure, and empty-output fold behavior; scoped
 incremental replacement to the active Parley-managed fold while preserving
 completed and user-created folds outside its range; and made chunk-boundary and
 ordinary marker-like content explicit regression cases.
+
+### 2026-07-17 — implementation plan prepared
+
+Decomposed the work around one pure incremental segment tracker and one thin
+manual-fold shell. Estimated 2.2 focused ship-hours using estimate-logic-v3.1.
