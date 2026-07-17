@@ -349,3 +349,17 @@
   count from the window title. Rule: inventory titles alongside mappings and
   queries during async ports; if settled data determines a title, make it an
   explicit settlement field and test empty plus nonempty outcomes.
+- **When flipping a shared helper's semantics, grep tests for the pinned
+  *behavior*, not just the symbol.** #192's plan initially missed
+  `tool_loop_spec.lua` (asserted the old ordered-roots fallthrough) and
+  `build_messages_spec.lua` (asserted `format_tool_context`'s old wording) —
+  neither names the changed function. Rule: before rewriting a helper, grep
+  for its error strings and output phrases across `lua/ tests/ atlas/`.
+- **Error-message text is part of a resolver's API here.** Specs assert
+  `matches(...)` on messages throughout; a plan changing a resolver must state
+  the new message contract explicitly per case (and remember `assert.matches`
+  takes Lua patterns — tmpdir names contain magic `-`).
+- **Module-local one-shot flags persist across `it` blocks** (e.g.
+  `cmp_registered` in neighborhood.lua) within a plenary spec-file run. Tests
+  asserting registration/setup counts must assert deltas, reload the module,
+  or expose a reset — never absolute counts on a fresh stub.
