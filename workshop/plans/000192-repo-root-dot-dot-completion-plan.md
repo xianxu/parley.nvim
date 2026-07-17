@@ -235,7 +235,7 @@ end
 - Test: `tests/unit/neighborhood_spec.lua` (~122-132)
 - Test: `tests/unit/build_messages_spec.lua` (~line 136 asserts the OLD wording `"Relative reads search these roots in order"` — update it to the new first line in the same task)
 
-- [ ] **Step 1: Update the unit test** to the new wording:
+- [x] **Step 1: Update the unit test** to the new wording:
 
 ```lua
 it("formats guidance from the policy", function()
@@ -252,8 +252,8 @@ it("formats guidance from the policy", function()
 end)
 ```
 
-- [ ] **Step 2: Run to verify failure**, **Step 3: implement the matching wording** (and update `build_messages_spec.lua:136`), **Step 4: run to PASS** — `make -f Makefile.parley test-spec SPEC=unit/neighborhood` AND `SPEC=unit/build_messages`.
-- [ ] **Step 5: Commit** — `#192: tool context states single-base + confinement contract`.
+- [x] **Step 2: Run to verify failure**, **Step 3: implement the matching wording** (and update `build_messages_spec.lua:136`), **Step 4: run to PASS** — `make -f Makefile.parley test-spec SPEC=unit/neighborhood` AND `SPEC=unit/build_messages`.
+- [x] **Step 5: Commit** — `#192: tool context states single-base + confinement contract`.
 
 ## Chunk 3: deterministic cmp attach
 

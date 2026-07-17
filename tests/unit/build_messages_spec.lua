@@ -133,7 +133,7 @@ describe("_build_messages: basic structure", function()
             },
         })
 
-        assert.matches("Relative reads search these roots in order", messages[1].content)
+        assert.matches("Relative paths resolve from:", messages[1].content)
         assert.matches("Relative writes resolve only from: /workspace/repo", messages[1].content)
     end)
 

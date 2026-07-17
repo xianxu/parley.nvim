@@ -95,7 +95,7 @@ Single-pass close (one review boundary), plain checkboxes:
   labels + resolver filter; delete `relative_to_root` +
   `merge_completion_candidates`; integration tests for `../sibling` typed-form
   completion, escape filtering, no non-base root-relative candidates
-- [ ] Task 3: `format_tool_context` reword to single-base + confinement contract
+- [x] Task 3: `format_tool_context` reword to single-base + confinement contract
 - [ ] Task 4: cmp buffer config re-assert on BufEnter (drop once-only guard for
   the cmp part; flip repeat-attach test; add BufEnter re-assert test)
 - [ ] Task 5: full suite + live verification in brain chat (`../ariadne/`

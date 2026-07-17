@@ -136,7 +136,10 @@ end
 
 function M.format_tool_context(policy)
     if not policy or not policy.write_root then return nil end
-    local lines = { "Relative reads search these roots in order (first existing match wins):" }
+    local lines = {
+        "Relative paths resolve from: " .. policy.write_root,
+        "Reads may traverse outside it (e.g. ../sibling/file) but must stay within:",
+    }
     for _, root in ipairs(policy.read_roots or {}) do lines[#lines + 1] = "- " .. root end
     lines[#lines + 1] = "Relative writes resolve only from: " .. policy.write_root
     return table.concat(lines, "\n")
