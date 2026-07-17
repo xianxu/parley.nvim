@@ -91,7 +91,7 @@ Single-pass close (one review boundary), plain checkboxes:
 - [x] Task 1: `resolve_read_path` → single base + confinement (wrap
   `resolve_path_in_cwd` + existence; new `(path, cwd, read_roots)` signature;
   update `execute_call` call sites; rewrite #181 unit tests)
-- [ ] Task 2: `completion_candidates` → write-root glob + textual prefix-strip
+- [x] Task 2: `completion_candidates` → write-root glob + textual prefix-strip
   labels + resolver filter; delete `relative_to_root` +
   `merge_completion_candidates`; integration tests for `../sibling` typed-form
   completion, escape filtering, no non-base root-relative candidates

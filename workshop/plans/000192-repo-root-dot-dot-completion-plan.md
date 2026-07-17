@@ -170,7 +170,7 @@ Notes: the up-front `fs_realpath(joined)` check is what produces `read path not 
 - Modify: `lua/parley/neighborhood.lua` (`completion_candidates` ~202-223; delete `relative_to_root` ~171-184 and `merge_completion_candidates` ~190-200)
 - Test: `tests/integration/neighborhood_completion_spec.lua`, `tests/unit/neighborhood_spec.lua`
 
-- [ ] **Step 1: Write failing integration tests.** In the integration spec, add a sibling repo next to `repo` (`tmpdir .. "/sibling"` with `docs/note.md`) and cases:
+- [x] **Step 1: Write failing integration tests.** In the integration spec, add a sibling repo next to `repo` (`tmpdir .. "/sibling"` with `docs/note.md`) and cases:
 
 ```lua
 it("completes ../sibling traversal in typed form", function()
@@ -190,9 +190,9 @@ end)
 
 The existing escape/dangling test (~line 100) keeps its assertions (`{}` both) — it now passes via write-root glob + resolver filter.
 
-- [ ] **Step 2: Run to verify failure** — `make -f Makefile.parley test-spec SPEC=integration/neighborhood_completion` — the `../sib` cases fail (empty today).
+- [x] **Step 2: Run to verify failure** — `make -f Makefile.parley test-spec SPEC=integration/neighborhood_completion` — the `../sib` cases fail (empty today).
 
-- [ ] **Step 3: Implement** — replace `completion_candidates`; delete `relative_to_root` and `merge_completion_candidates`:
+- [x] **Step 3: Implement** — replace `completion_candidates`; delete `relative_to_root` and `merge_completion_candidates`:
 
 ```lua
 function M.completion_candidates(policy, base)
@@ -222,11 +222,11 @@ function M.completion_candidates(policy, base)
 end
 ```
 
-- [ ] **Step 4: Update the unit spec** — in `tests/unit/neighborhood_spec.lua`, delete the `merge_completion_candidates` test (~134-138). `build_policy`/`policy_for_path` tests are unchanged (read_roots still computed the same way — they just mean permission now).
+- [x] **Step 4: Update the unit spec** — in `tests/unit/neighborhood_spec.lua`, delete the `merge_completion_candidates` test (~134-138). `build_policy`/`policy_for_path` tests are unchanged (read_roots still computed the same way — they just mean permission now).
 
-- [ ] **Step 5: Run the FULL suite** — `make -f Makefile.parley test` — expect PASS (the neighborhood/completion surface is exercised beyond its own specs).
+- [x] **Step 5: Run the FULL suite** — `make -f Makefile.parley test` — expect PASS (the neighborhood/completion surface is exercised beyond its own specs).
 
-- [ ] **Step 6: Commit** — `#192: complete dot-dot traversal in typed form from the write root`.
+- [x] **Step 6: Commit** — `#192: complete dot-dot traversal in typed form from the write root`.
 
 ### Task 3: reword `format_tool_context` (TDD)
 

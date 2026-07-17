@@ -130,10 +130,4 @@ describe("neighborhood root policy (#181)", function()
             read_roots = { "/repo/data", "/repo" },
         }))
     end)
-
-    it("merges string candidates first-root-first without mutating inputs", function()
-        local groups = { { "z", "same" }, { "a", "same" } }
-        assert.same({ "same", "z", "a" }, neighborhood.merge_completion_candidates(groups))
-        assert.same({ { "z", "same" }, { "a", "same" } }, groups)
-    end)
 end)

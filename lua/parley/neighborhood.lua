@@ -168,58 +168,34 @@ function M.policy_for_buf(buf)
     return M.policy_for_path(path, config, roots)
 end
 
-local function relative_to_root(path, root)
-    path = clean(path)
-    root = clean(root)
-    if not path or not root then
-        return nil
-    end
-    if path == root then
-        return ""
-    end
-    if path:sub(1, #root + 1) == root .. "/" then
-        return path:sub(#root + 2)
-    end
-    return nil
-end
-
 local function policy_for_completion(buf)
     return vim.b[buf].parley_root_policy or M.policy_for_buf(buf)
 end
 
-function M.merge_completion_candidates(per_root)
-    local seen, out = {}, {}
-    for _, items in ipairs(per_root or {}) do
-        local sorted = vim.deepcopy(items)
-        table.sort(sorted)
-        for _, item in ipairs(sorted) do
-            if not seen[item] then seen[item] = true; out[#out + 1] = item end
-        end
-    end
-    return out
-end
-
 function M.completion_candidates(policy, base)
-    local groups = {}
-    for _, root in ipairs(policy and policy.read_roots or {}) do
-        local items = {}
-        for _, match in ipairs(vim.fn.glob(root .. "/" .. (base or "") .. "*", false, true)) do
-            local rel = relative_to_root(match, root)
-            if rel and rel ~= "" then
-                if vim.fn.isdirectory(match) == 1 then rel = rel .. "/" end
-                items[#items + 1] = rel
+    if not policy or not policy.write_root then
+        return {}
+    end
+    -- policies are fs_realpath-canonical (no trailing slash) today; the strip
+    -- arithmetic below silently corrupts labels if that ever changes, so guard
+    local root = policy.write_root:gsub("/+$", "")
+    local resolver = require("parley.tools.dispatcher").resolve_read_path
+    local items = {}
+    -- Glob echoes the pattern prefix verbatim (".." survives textually), so
+    -- stripping "<root>/" yields labels in the exact form the user typed.
+    for _, match in ipairs(vim.fn.glob(root .. "/" .. (base or "") .. "*", false, true)) do
+        local label = match:sub(#root + 2)
+        if label ~= "" then
+            if vim.fn.isdirectory(match) == 1 then
+                label = label .. "/"
+            end
+            if resolver(label:gsub("/$", ""), root, policy.read_roots) then
+                items[#items + 1] = label
             end
         end
-        groups[#groups + 1] = items
     end
-    local accepted = {}
-    local resolver = require("parley.tools.dispatcher").resolve_read_path
-    for _, label in ipairs(M.merge_completion_candidates(groups)) do
-        if resolver(label:gsub("/$", ""), policy.write_root, policy.read_roots) then
-            accepted[#accepted + 1] = label
-        end
-    end
-    return accepted
+    table.sort(items)
+    return items
 end
 
 function M.completefunc(findstart, base)

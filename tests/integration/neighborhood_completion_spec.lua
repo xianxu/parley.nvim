@@ -97,6 +97,29 @@ describe("neighborhood completion", function()
         assert.equals(#"open ", neighborhood.completefunc(1, ""))
     end)
 
+    it("completes ../sibling traversal in typed form", function()
+        local sibling = tmpdir .. "/sibling"
+        vim.fn.mkdir(sibling .. "/docs", "p")
+        vim.fn.writefile({ "note" }, sibling .. "/docs/note.md")
+        local policy = { write_root = repo, read_roots = { repo, tmpdir } }
+        assert.same({ "../sibling/" }, neighborhood.completion_candidates(policy, "../sib"))
+        assert.same({ "../sibling/docs/" }, neighborhood.completion_candidates(policy, "../sibling/d"))
+    end)
+
+    it("filters traversal escaping the permitted roots", function()
+        local sibling = tmpdir .. "/sibling"
+        vim.fn.mkdir(sibling, "p")
+        local policy = { write_root = repo, read_roots = { repo } } -- tmpdir NOT permitted
+        assert.same({}, neighborhood.completion_candidates(policy, "../sib"))
+    end)
+
+    it("no longer offers non-base root-relative candidates", function()
+        local sibling = tmpdir .. "/sibling"
+        vim.fn.mkdir(sibling, "p")
+        local policy = { write_root = repo, read_roots = { repo, tmpdir } }
+        assert.same({}, neighborhood.completion_candidates(policy, "sibling/"))
+    end)
+
     it("omits escaping and dangling authoritative candidates without fallback", function()
         local first, second, outside = repo .. "/first", repo .. "/second", tmpdir .. "/outside"
         vim.fn.mkdir(first, "p")
