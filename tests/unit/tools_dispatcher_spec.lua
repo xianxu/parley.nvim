@@ -195,67 +195,78 @@ describe("resolve_path_in_cwd allowed_roots (#140)", function()
     end)
 end)
 
-describe("resolve_read_path ordered roots (#181)", function()
-    it("falls through to repo root and prefers neighborhood collisions", function()
-        local n = math.random(0, 0xFFFFFF)
-        local repo = tmp_base .. "/policy-repo-" .. n
-        local neighborhood = repo .. "/data"
-        vim.fn.mkdir(neighborhood .. "/atlas", "p")
-        vim.fn.mkdir(repo .. "/atlas", "p")
-        vim.fn.writefile({ "local" }, neighborhood .. "/atlas/index.md")
-        vim.fn.writefile({ "repo" }, repo .. "/atlas/index.md")
-        assert.equals(canonical(neighborhood .. "/atlas/index.md"),
-            dispatcher.resolve_read_path("atlas/index.md", { neighborhood, repo }))
-        vim.fn.delete(neighborhood .. "/atlas/index.md")
-        assert.equals(canonical(repo .. "/atlas/index.md"),
-            dispatcher.resolve_read_path("atlas/index.md", { neighborhood, repo }))
+describe("resolve_read_path single base + confinement (#192)", function()
+    -- Layout per case: cwd = write root (the single resolution base);
+    -- roots = permission set (cwd + workspace parent). Traversal (../sibling)
+    -- resolves FROM cwd and must LAND within a permitted root.
+    local base, cwd, sib, out, roots
+    before_each(function()
+        base = tmp_base .. "/single-base-" .. math.random(0, 0xFFFFFF)
+        cwd = base .. "/repo"
+        sib = base .. "/sibling"
+        out = tmp_base .. "/outside-" .. math.random(0, 0xFFFFFF)
+        vim.fn.mkdir(cwd .. "/atlas", "p")
+        vim.fn.mkdir(sib .. "/docs", "p")
+        vim.fn.mkdir(out, "p")
+        vim.fn.writefile({ "index" }, cwd .. "/atlas/index.md")
+        vim.fn.writefile({ "note" }, sib .. "/docs/note.md")
+        vim.fn.writefile({ "secret" }, out .. "/secret.md")
+        roots = { cwd, base }
+    end)
+
+    it("resolves a cwd-relative path", function()
+        assert.equals(canonical(cwd .. "/atlas/index.md"),
+            dispatcher.resolve_read_path("atlas/index.md", cwd, roots))
+    end)
+
+    it("resolves ../sibling traversal within a permitted root", function()
+        assert.equals(canonical(sib .. "/docs/note.md"),
+            dispatcher.resolve_read_path("../sibling/docs/note.md", cwd, roots))
+    end)
+
+    it("does NOT resolve against non-base permission roots", function()
+        -- workspace-root-relative spelling (old #181 fallback) must fail:
+        -- cwd/sibling/docs/note.md doesn't exist → not-found names the typed path
+        local path, err = dispatcher.resolve_read_path("sibling/docs/note.md", cwd, roots)
+        assert.is_nil(path)
+        assert.equals("read path not found: sibling/docs/note.md", err)
+    end)
+
+    it("rejects traversal escaping every permitted root, naming the knob", function()
+        -- targets an EXISTING file so the confinement branch (not not-found) fires
+        local escape = "../../" .. vim.fn.fnamemodify(out, ":t") .. "/secret.md"
+        local path, err = dispatcher.resolve_read_path(escape, cwd, { cwd })
+        assert.is_nil(path)
+        assert.matches("tool_read_roots", err)
     end)
 
     it("rejects missing reads instead of synthesizing a leaf", function()
-        local root = tmp_base .. "/missing-read-" .. math.random(0, 0xFFFFFF)
-        vim.fn.mkdir(root, "p")
-        local path, err = dispatcher.resolve_read_path("missing.md", { root })
+        local path, err = dispatcher.resolve_read_path("missing.md", cwd, { cwd })
         assert.is_nil(path)
-        assert.matches("read path .* configured roots", err)
+        assert.equals("read path not found: missing.md", err)
     end)
 
     it("accepts absolute paths inside roots and rejects symlink escapes", function()
-        local root = tmp_base .. "/abs-read-" .. math.random(0, 0xFFFFFF)
-        local outside = tmp_base .. "/abs-outside-" .. math.random(0, 0xFFFFFF)
-        vim.fn.mkdir(root, "p")
-        vim.fn.mkdir(outside, "p")
-        vim.fn.writefile({ "inside" }, root .. "/inside.md")
-        vim.fn.writefile({ "outside" }, outside .. "/outside.md")
-        assert.equals(canonical(root .. "/inside.md"),
-            dispatcher.resolve_read_path(root .. "/inside.md", { root }))
-        vim.loop.fs_symlink(outside .. "/outside.md", root .. "/escape.md")
-        local escaped, err = dispatcher.resolve_read_path("escape.md", { root })
+        assert.equals(canonical(cwd .. "/atlas/index.md"),
+            dispatcher.resolve_read_path(cwd .. "/atlas/index.md", cwd, { cwd }))
+        vim.loop.fs_symlink(out .. "/secret.md", cwd .. "/escape.md")
+        local escaped, err = dispatcher.resolve_read_path("escape.md", cwd, { cwd })
         assert.is_nil(escaped)
-        assert.matches("read path resolves outside configured roots", err)
+        assert.matches("outside working directory and configured read roots", err)
     end)
 
-    it("rejects an escaping first candidate instead of falling through", function()
-        local base = tmp_base .. "/precedence-" .. math.random(0, 0xFFFFFF)
-        local first, second, outside = base .. "/first", base .. "/second", base .. "/outside"
-        vim.fn.mkdir(first .. "/docs", "p")
-        vim.fn.mkdir(second .. "/docs", "p")
-        vim.fn.mkdir(outside, "p")
-        vim.fn.writefile({ "outside" }, outside .. "/note.md")
-        vim.fn.writefile({ "second" }, second .. "/docs/note.md")
-        vim.loop.fs_symlink(outside .. "/note.md", first .. "/docs/note.md")
-        local path, err = dispatcher.resolve_read_path("docs/note.md", { first, second })
+    it("rejects an absolute existing path outside every permitted root", function()
+        local path, err = dispatcher.resolve_read_path(out .. "/secret.md", cwd, { cwd })
         assert.is_nil(path)
-        assert.matches("resolves outside configured roots", err)
+        assert.matches("outside working directory and configured read roots", err)
     end)
 
     it("rejects a dangling symlink without crashing", function()
-        local root = tmp_base .. "/dangling-" .. math.random(0, 0xFFFFFF)
-        vim.fn.mkdir(root, "p")
-        vim.loop.fs_symlink(root .. "/missing-target", root .. "/dangling.md")
-        local ok, path, err = pcall(dispatcher.resolve_read_path, "dangling.md", { root })
+        vim.loop.fs_symlink(cwd .. "/missing-target", cwd .. "/dangling.md")
+        local ok, path, err = pcall(dispatcher.resolve_read_path, "dangling.md", cwd, { cwd })
         assert.is_true(ok)
         assert.is_nil(path)
-        assert.matches("cannot resolve read path", err)
+        assert.equals("read path not found: dangling.md", err)
     end)
 
     it("enforces an injected root_policy without legacy cwd", function()
@@ -570,7 +581,7 @@ describe("execute_call", function()
             { cwd = cwd, read_roots = {} }
         )
         assert.is_true(res.is_error)
-        assert.matches("read path not found in configured roots", res.content)
+        assert.matches("read path not found: missing.txt", res.content)
         assert.not_matches("should not run", res.content)
     end)
 

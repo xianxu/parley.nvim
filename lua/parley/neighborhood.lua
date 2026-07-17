@@ -136,7 +136,10 @@ end
 
 function M.format_tool_context(policy)
     if not policy or not policy.write_root then return nil end
-    local lines = { "Relative reads search these roots in order (first existing match wins):" }
+    local lines = {
+        "Relative paths resolve from: " .. policy.write_root,
+        "Reads may traverse outside it (e.g. ../sibling/file) but must stay within:",
+    }
     for _, root in ipairs(policy.read_roots or {}) do lines[#lines + 1] = "- " .. root end
     lines[#lines + 1] = "Relative writes resolve only from: " .. policy.write_root
     return table.concat(lines, "\n")
@@ -168,58 +171,34 @@ function M.policy_for_buf(buf)
     return M.policy_for_path(path, config, roots)
 end
 
-local function relative_to_root(path, root)
-    path = clean(path)
-    root = clean(root)
-    if not path or not root then
-        return nil
-    end
-    if path == root then
-        return ""
-    end
-    if path:sub(1, #root + 1) == root .. "/" then
-        return path:sub(#root + 2)
-    end
-    return nil
-end
-
 local function policy_for_completion(buf)
     return vim.b[buf].parley_root_policy or M.policy_for_buf(buf)
 end
 
-function M.merge_completion_candidates(per_root)
-    local seen, out = {}, {}
-    for _, items in ipairs(per_root or {}) do
-        local sorted = vim.deepcopy(items)
-        table.sort(sorted)
-        for _, item in ipairs(sorted) do
-            if not seen[item] then seen[item] = true; out[#out + 1] = item end
-        end
-    end
-    return out
-end
-
 function M.completion_candidates(policy, base)
-    local groups = {}
-    for _, root in ipairs(policy and policy.read_roots or {}) do
-        local items = {}
-        for _, match in ipairs(vim.fn.glob(root .. "/" .. (base or "") .. "*", false, true)) do
-            local rel = relative_to_root(match, root)
-            if rel and rel ~= "" then
-                if vim.fn.isdirectory(match) == 1 then rel = rel .. "/" end
-                items[#items + 1] = rel
+    if not policy or not policy.write_root then
+        return {}
+    end
+    -- policies are fs_realpath-canonical (no trailing slash) today; the strip
+    -- arithmetic below silently corrupts labels if that ever changes, so guard
+    local root = policy.write_root:gsub("/+$", "")
+    local resolver = require("parley.tools.dispatcher").resolve_read_path
+    local items = {}
+    -- Glob echoes the pattern prefix verbatim (".." survives textually), so
+    -- stripping "<root>/" yields labels in the exact form the user typed.
+    for _, match in ipairs(vim.fn.glob(root .. "/" .. (base or "") .. "*", false, true)) do
+        local label = match:sub(#root + 2)
+        if label ~= "" then
+            if vim.fn.isdirectory(match) == 1 then
+                label = label .. "/"
+            end
+            if resolver(label:gsub("/$", ""), root, policy.read_roots) then
+                items[#items + 1] = label
             end
         end
-        groups[#groups + 1] = items
     end
-    local accepted = {}
-    local resolver = require("parley.tools.dispatcher").resolve_read_path
-    for _, label in ipairs(M.merge_completion_candidates(groups)) do
-        if resolver(label:gsub("/$", ""), policy.read_roots) then
-            accepted[#accepted + 1] = label
-        end
-    end
-    return accepted
+    table.sort(items)
+    return items
 end
 
 function M.completefunc(findstart, base)
@@ -315,9 +294,13 @@ function M.attach_completion(buf)
     vim.b[buf].parley_root_policy = policy
     vim.api.nvim_set_option_value("completefunc", "v:lua.require'parley.neighborhood'.completefunc", { buf = buf })
     schedule_cmp_attach(buf)
-    vim.api.nvim_create_autocmd("InsertEnter", {
+    -- Re-assert the cmp buffer config on every entry: host configs that call
+    -- cmp.setup.buffer on BufEnter (e.g. a global markdown path-completion
+    -- autocmd) would otherwise displace the parley source after a buffer
+    -- switch. schedule_cmp_attach runs via vim.schedule, so it lands after
+    -- all synchronous autocmd handlers — parley deterministically wins.
+    vim.api.nvim_create_autocmd({ "BufEnter", "InsertEnter" }, {
         buffer = buf,
-        once = true,
         callback = function()
             schedule_cmp_attach(buf)
         end,

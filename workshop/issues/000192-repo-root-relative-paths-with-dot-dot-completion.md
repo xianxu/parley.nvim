@@ -1,12 +1,13 @@
 ---
 id: 000192
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-16
 updated: 2026-07-16
-estimate_hours:
+estimate_hours: 1.2
 started: 2026-07-16T17:11:59-07:00
+actual_hours: 0.95
 ---
 
 # repo-root relative paths with dot-dot completion
@@ -85,11 +86,46 @@ ordered-precedence tests flip to the new semantics.
 
 ## Plan
 
-- [ ]
+Detailed plan: `workshop/plans/000192-repo-root-dot-dot-completion-plan.md`.
+Single-pass close (one review boundary), plain checkboxes:
+
+- [x] Task 1: `resolve_read_path` → single base + confinement (wrap
+  `resolve_path_in_cwd` + existence; new `(path, cwd, read_roots)` signature;
+  update `execute_call` call sites; rewrite #181 unit tests)
+- [x] Task 2: `completion_candidates` → write-root glob + textual prefix-strip
+  labels + resolver filter; delete `relative_to_root` +
+  `merge_completion_candidates`; integration tests for `../sibling` typed-form
+  completion, escape filtering, no non-base root-relative candidates
+- [x] Task 3: `format_tool_context` reword to single-base + confinement contract
+- [x] Task 4: cmp buffer config re-assert on BufEnter (drop once-only guard for
+  the cmp part; flip repeat-attach test; add BufEnter re-assert test)
+- [x] Task 5: full suite + live verification in brain chat (`../ariadne/`
+  completion, "tell me about ../ariadne/" ls call) + atlas
+  (`infra/repo_mode.md`, `providers/tool_use.md`) + close
+
+## Estimate
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim design=0.40 impl=0.40
+item: atlas-docs design=0.10 impl=0.05
+item: milestone-review design=0.00 impl=0.15
+design-buffer: 0.15
+total: 1.20
+```
+
+Method A: "Lua / Neovim feature (single, focused)" design 1–3 ×0.2
+spec-quality (thorough plan resolves decisions) → 0.4 mid; impl at 40%
+(v3.1) of 0.5–1.5 → 0.4 mid. Range 0.6–1.8.
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md`
+against `baseline-v3.1.md`. Method A only.*
 
 ## Log
 
 ### 2026-07-16
+- 2026-07-16: closed — full suite 161 specs PASS 0 fail; live e2e on real brain/ariadne layout: ../ar completes to ../ariadne/, segment-continues to ../ariadne/workshop/, accidental ariadne/ form correctly dead (error names path), ls ../ariadne succeeds via dispatcher+builtin ls, ../../Documents-class escapes neither complete nor resolve, ~/blogs symlink case verified confinement-consistent; atlas swept to new semantics; review verdict: SHIP
 
 Created from design discussion in brain repo-mode chat
 (brain: workshop/parley/2026-07-16.16-38-57.920.md context). Empirically
@@ -99,3 +135,52 @@ the brain-base candidate and confines correctly (`../../etc/hosts` refused);
 `vim.fn.resolve` collapses `..`, which is what kills `..` labels today;
 operator runs nvim-cmp (not blink) with a BufEnter cmp-path re-install for
 markdown — source of the nondeterministic completion.
+
+### 2026-07-16 — implementation session (Tasks 1–4)
+
+All four code tasks landed TDD, full suite green after each chunk. Deviations
+from plan:
+
+- Two more specs pinned the OLD resolver behavior beyond the plan's list:
+  `tests/integration/skill_invoke_spec.lua` ("widens relative reads…" — the
+  skill-side twin of the tool_loop fallthrough test; flipped to `../../`
+  traversal spelling) and `tests/unit/tools_dispatcher_spec.lua:578` (#144
+  paths-array test asserted the old "not found in configured roots" message).
+  Confirms the lesson: grep for pinned *behavior*, not just symbol names.
+- Plan-ordering gap: Task 1's full-suite gate runs before Task 2 rewrites
+  the completion caller, so the old `completion_candidates` got a one-line
+  arity bridge (`resolver(label, policy.write_root, policy.read_roots)`) in
+  the Task 1 commit; Task 2 then replaced the function wholesale.
+- The existing repeat-attach assertion (`setup_count` unchanged) still holds —
+  the `parley_completion_attached` guard still early-returns repeat
+  `attach_completion` calls; only the autocmd re-assert path re-runs
+  `cmp.setup.buffer`. No flip needed; added the new BufEnter re-assert test.
+- `tests/integration/chat_progress_process_spec.lua` failed once in the first
+  sequential integration run, passes standalone and in all subsequent full
+  runs — order-dependent flake, not #192-related.
+
+### 2026-07-16 — verification + closeout (Task 5)
+
+- Full suite re-run by the main session: 161 specs PASS, zero FAIL/Error.
+- Live end-to-end on the real brain/ariadne layout (headless nvim, real
+  policy `policy_from_roots(brain, brain, {'../'})`, real dispatcher +
+  builtin `ls`):
+  - `../ar` → `{ "../ariadne/" }`; `../ariadne/works` →
+    `{ "../ariadne/workshop/" }` (typed-form segment continuation).
+  - accidental form `ariadne/` → `{}`; `ls ariadne` → error
+    `read path not found: ariadne` (names the path).
+  - `ls ../ariadne` succeeds (real listing); `../../Documents`-class escapes
+    neither complete nor resolve.
+  - `../../blogs/` IS offered — verified consistent, not a hole:
+    `~/blogs` symlinks into `~/workspace` (inside the permitted root), so
+    reads accept it and completion mirrors enforcement, per the invariant.
+  - `format_tool_context` emits the new single-base + confinement contract.
+- Interactive insert-mode typing + a real chat-LLM round-trip were not
+  exercised headlessly; the cmp source/completefunc surface is covered by the
+  integration specs, and the candidate/tool path above is the same code the
+  interactive flow calls. Operator smoke-test in a live chat is a welcome
+  confirmation but not a close blocker.
+- Atlas reconciled to current state: `infra/repo_mode.md` (Reference
+  neighborhood) + `providers/tool_use.md` (root-policy scope) now describe
+  single-base + confinement; swept atlas for stale "first existing
+  match"/"search these roots in order" wording — zero hits.

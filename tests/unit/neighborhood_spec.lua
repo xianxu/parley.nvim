@@ -121,7 +121,8 @@ describe("neighborhood root policy (#181)", function()
 
     it("formats guidance from the policy", function()
         assert.equals(table.concat({
-            "Relative reads search these roots in order (first existing match wins):",
+            "Relative paths resolve from: /repo/data",
+            "Reads may traverse outside it (e.g. ../sibling/file) but must stay within:",
             "- /repo/data",
             "- /repo",
             "Relative writes resolve only from: /repo/data",
@@ -129,11 +130,5 @@ describe("neighborhood root policy (#181)", function()
             write_root = "/repo/data",
             read_roots = { "/repo/data", "/repo" },
         }))
-    end)
-
-    it("merges string candidates first-root-first without mutating inputs", function()
-        local groups = { { "z", "same" }, { "a", "same" } }
-        assert.same({ "same", "z", "a" }, neighborhood.merge_completion_candidates(groups))
-        assert.same({ { "z", "same" }, { "a", "same" } }, groups)
     end)
 end)

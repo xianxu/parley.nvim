@@ -97,6 +97,29 @@ describe("neighborhood completion", function()
         assert.equals(#"open ", neighborhood.completefunc(1, ""))
     end)
 
+    it("completes ../sibling traversal in typed form", function()
+        local sibling = tmpdir .. "/sibling"
+        vim.fn.mkdir(sibling .. "/docs", "p")
+        vim.fn.writefile({ "note" }, sibling .. "/docs/note.md")
+        local policy = { write_root = repo, read_roots = { repo, tmpdir } }
+        assert.same({ "../sibling/" }, neighborhood.completion_candidates(policy, "../sib"))
+        assert.same({ "../sibling/docs/" }, neighborhood.completion_candidates(policy, "../sibling/d"))
+    end)
+
+    it("filters traversal escaping the permitted roots", function()
+        local sibling = tmpdir .. "/sibling"
+        vim.fn.mkdir(sibling, "p")
+        local policy = { write_root = repo, read_roots = { repo } } -- tmpdir NOT permitted
+        assert.same({}, neighborhood.completion_candidates(policy, "../sib"))
+    end)
+
+    it("no longer offers non-base root-relative candidates", function()
+        local sibling = tmpdir .. "/sibling"
+        vim.fn.mkdir(sibling, "p")
+        local policy = { write_root = repo, read_roots = { repo, tmpdir } }
+        assert.same({}, neighborhood.completion_candidates(policy, "sibling/"))
+    end)
+
     it("omits escaping and dangling authoritative candidates without fallback", function()
         local first, second, outside = repo .. "/first", repo .. "/second", tmpdir .. "/outside"
         vim.fn.mkdir(first, "p")
@@ -153,5 +176,37 @@ describe("neighborhood completion", function()
         registered.source:complete({ context = { bufnr = buf, cursor_before_line = "REA" } },
             function(result) items = result end)
         assert.equals("README.md", items[1].word)
+    end)
+
+    it("re-asserts the parley buffer config on BufEnter", function()
+        local captured
+        local register_count = 0
+        package.loaded.cmp = {
+            config = { sources = function(sources) return sources end },
+            setup = {
+                buffer = function(config) captured = config end,
+            },
+            register_source = function() register_count = register_count + 1 end,
+        }
+
+        local buf, path = make_chat()
+        parley.prep_chat(buf, path)
+        vim.wait(100, function() return captured ~= nil end)
+        assert.is_not_nil(captured)
+
+        -- A host config clobbers the buffer-local cmp config after attach
+        -- (e.g. a global markdown path-completion BufEnter autocmd); parley
+        -- must win back the buffer on re-entry.
+        -- CAUTION: cmp_registered is a module-local one-shot in neighborhood.lua
+        -- and persists across it-blocks — assert register_count deltas, not
+        -- absolute counts.
+        local registers_before = register_count
+        captured = nil
+        vim.api.nvim_exec_autocmds("BufEnter", { buffer = buf })
+        vim.wait(100, function() return captured ~= nil end)
+        assert.is_not_nil(captured)
+        assert.same({ "parley_path", "buffer" },
+            { captured.sources[1].name, captured.sources[2].name })
+        assert.equals(registers_before, register_count)
     end)
 end)
