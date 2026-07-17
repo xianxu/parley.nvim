@@ -25,12 +25,20 @@ disturb unrelated completed semantic blocks or user-created folds.
 
 Inline-comment submission must mutate only the text it logically changes:
 
-- Replace or remove each resolved inline marker at its original bounded span.
-  Apply multiple marker edits from the end of the buffer toward the beginning so
-  earlier positions remain stable.
-- Insert the formatted follow-up turn independently at the existing
-  model/parser-derived exchange boundary. End-append and past-exchange branch
-  submission must share the same bounded mutation mechanism (`ARCH-DRY`).
+- Plan every textual transformation as a bounded edit in original-buffer
+  coordinates: marker replacement/removal, explicit-anchor replacement,
+  inferred-anchor bracket insertion, and destination insertion. No edit may
+  include unchanged text merely to simplify application.
+- The pure planner emits a deterministic normalized list of non-overlapping
+  edits. It must merge or suppress interacting inferred-anchor and neighboring
+  marker/anchor candidates without duplicating brackets or losing a marker;
+  tests define those conflict semantics. Apply edits from the end of the buffer
+  toward the beginning so earlier coordinates remain stable.
+- Share the bounded edit representation and applicator between both paths
+  (`ARCH-DRY`), while retaining their distinct placement semantics. End
+  submission appends formatted blocks within the existing final unanswered user
+  turn and preserves its trailing-blank normalization. Past-exchange branching
+  inserts a new prefixed user turn at the parser/model-derived boundary.
 - Keep marker discovery and edit planning pure. The plan describes ordered,
   non-overlapping replacements and insertions; `buffer_edit` remains the thin
   Neovim mutation shell (`ARCH-PURE`).
@@ -38,27 +46,32 @@ Inline-comment submission must mutate only the text it logically changes:
   snapshot/recreate user folds. Unchanged questions, answers, thinking,
   summaries, tool blocks, and manual folds must never fall inside a submitted
   edit range (`ARCH-PURPOSE`).
-- If a marker itself lies inside a folded semantic block, editing that marker's
-  exact span is allowed to affect that overlapping fold. This exception does
-  not extend to other lines in the block or unrelated folds.
+- If a marker or explicit/inferred anchor edit overlaps a folded semantic block,
+  only that exact edit span may affect the overlapping fold. This exception does
+  not extend to unrelated text or folds.
 
 The resulting serialized chat and API payload must remain equivalent to the
 current drill-in behavior: markers collapse to their bracketed/plain anchor,
-formatted quote/question blocks appear in the new user turn, and branching
-still excludes later exchanges from the request context.
+end submission extends the existing unanswered user turn, branch submission
+creates a new turn, and branching still excludes later exchanges from the
+request context.
 
 ## Done when
 
 - [ ] Submitting an inline comment preserves a previously closed one-line
       summary fold and its gutter marker.
 - [ ] Submission creates no fold ranges inside an unchanged question or answer.
-- [ ] Unrelated user-created manual folds retain their exact ranges and closed
-      state through both end-append and past-exchange branch submission.
+- [ ] Unrelated user-created manual folds retain the same covered logical text
+      and closed state through both paths. Ranges before an edit remain
+      numerically unchanged; ranges after an insertion/replacement shift only by
+      that edit's line-count delta.
 - [ ] Marker removal/replacement and new-turn insertion use bounded edits; the
       production submission paths never call `replace_all_lines`.
-- [ ] Existing drill-in serialized output, request targeting, and payload tests
-      remain unchanged.
-- [ ] Automated pure tests cover ordered edit planning and real Neovim
+- [ ] Existing drill-in serialization, request-targeting, and payload assertions
+      pass without expectation changes; added end and branch assertions prove
+      the serialized buffer and dispatched payload retain pre-change behavior.
+- [ ] Automated pure tests cover ordered edit planning, including nearby
+      unquoted markers with interacting inferred source regions. Real Neovim
       integration tests cover the reported fold-loss/fold-migration behavior.
 
 ## Plan
@@ -78,3 +91,8 @@ found both drill-in submission paths reconstruct the full line array and pass it
 to `replace_all_lines`, allowing Neovim to invalidate or migrate unrelated
 manual folds. Approved direction: pure bounded edit planning plus narrow buffer
 application; no fold snapshot/rebuild workaround.
+
+Fresh spec review clarified that anchor bracketing is itself a bounded edit,
+that folds after an insertion must shift with their logical text, and that end
+submission appends within an existing turn while branching inserts a new turn.
+It also required deterministic normalization for interacting inferred anchors.
