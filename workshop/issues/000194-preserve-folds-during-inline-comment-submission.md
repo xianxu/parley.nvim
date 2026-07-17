@@ -89,11 +89,11 @@ request context.
 model: estimate-logic-v3.1
 familiarity: 1.0
 item: issue-spec design=0.25 impl=0.02
-item: lua-pure-edit-plan design=0.5 impl=0.4
-item: neovim-buffer-integration design=0.3 impl=0.4
-item: regression-tests design=0.12 impl=0.25
+item: lua-neovim design=0.5 impl=0.4
+item: lua-neovim design=0.3 impl=0.4
+item: lua-neovim design=0.12 impl=0.25
 item: atlas-docs design=0.03 impl=0.02
-item: boundary-review design=0.0 impl=0.15
+item: milestone-review design=0.0 impl=0.15
 design-buffer: 0.06
 total: 2.5
 ```
