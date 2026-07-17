@@ -5,7 +5,7 @@ deps: [193]
 github_issue:
 created: 2026-07-17
 updated: 2026-07-17
-estimate_hours: 1.8
+estimate_hours: 2.5
 started: 2026-07-17T11:07:51-07:00
 ---
 
@@ -88,13 +88,13 @@ request context.
 model: estimate-logic-v3.1
 familiarity: 1.0
 item: issue-spec design=0.25 impl=0.02
-item: lua-pure-edit-plan design=0.35 impl=0.35
-item: neovim-buffer-integration design=0.2 impl=0.3
-item: regression-tests design=0.08 impl=0.15
+item: lua-pure-edit-plan design=0.5 impl=0.4
+item: neovim-buffer-integration design=0.3 impl=0.4
+item: regression-tests design=0.12 impl=0.25
 item: atlas-docs design=0.03 impl=0.02
 item: boundary-review design=0.0 impl=0.15
-design-buffer: 0.05
-total: 1.8
+design-buffer: 0.11
+total: 2.5
 ```
 
 Derived against `estimate-logic-v3.1.md`. The existing drill-in parser already
@@ -116,3 +116,9 @@ Fresh spec review clarified that anchor bracketing is itself a bounded edit,
 that folds after an insertion must shift with their logical text, and that end
 submission appends within an existing turn while branching inserts a new turn.
 It also required deterministic normalization for interacting inferred anchors.
+
+Fresh plan review replaced ambiguous inclusive edit coordinates with a
+half-open contract, required exact conflict precedence and EOF placement, and
+expanded the real-window regression to prove both logical fold coverage and the
+rendered gutter marker. Estimate revised from 1.8h to 2.5h after correcting the
+arithmetic and accounting for those boundary cases.
