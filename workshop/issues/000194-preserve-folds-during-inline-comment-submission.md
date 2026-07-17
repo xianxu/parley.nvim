@@ -5,7 +5,7 @@ deps: [193]
 github_issue:
 created: 2026-07-17
 updated: 2026-07-17
-estimate_hours:
+estimate_hours: 1.8
 started: 2026-07-17T11:07:51-07:00
 ---
 
@@ -81,6 +81,26 @@ request context.
       paths.
 - [ ] Add real Neovim regressions for summary and unrelated manual folds.
 - [ ] Update lifecycle documentation and run mapped/full verification.
+
+## Estimate
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: issue-spec design=0.25 impl=0.02
+item: lua-pure-edit-plan design=0.35 impl=0.35
+item: neovim-buffer-integration design=0.2 impl=0.3
+item: regression-tests design=0.08 impl=0.15
+item: atlas-docs design=0.03 impl=0.02
+item: boundary-review design=0.0 impl=0.15
+design-buffer: 0.05
+total: 1.8
+```
+
+Derived against `estimate-logic-v3.1.md`. The existing drill-in parser already
+computes absolute byte spans and the buffer mutation shell is established; the
+remaining uncertainty is normalization of interacting inferred-anchor edits and
+Neovim fold behavior across multi-edit application.
 
 ## Log
 
