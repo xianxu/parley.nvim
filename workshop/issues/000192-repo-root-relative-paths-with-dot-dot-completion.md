@@ -96,7 +96,7 @@ Single-pass close (one review boundary), plain checkboxes:
   `merge_completion_candidates`; integration tests for `../sibling` typed-form
   completion, escape filtering, no non-base root-relative candidates
 - [x] Task 3: `format_tool_context` reword to single-base + confinement contract
-- [ ] Task 4: cmp buffer config re-assert on BufEnter (drop once-only guard for
+- [x] Task 4: cmp buffer config re-assert on BufEnter (drop once-only guard for
   the cmp part; flip repeat-attach test; add BufEnter re-assert test)
 - [ ] Task 5: full suite + live verification in brain chat (`../ariadne/`
   completion, "tell me about ../ariadne/" ls call) + atlas
@@ -133,3 +133,26 @@ the brain-base candidate and confines correctly (`../../etc/hosts` refused);
 `vim.fn.resolve` collapses `..`, which is what kills `..` labels today;
 operator runs nvim-cmp (not blink) with a BufEnter cmp-path re-install for
 markdown — source of the nondeterministic completion.
+
+### 2026-07-16 — implementation session (Tasks 1–4)
+
+All four code tasks landed TDD, full suite green after each chunk. Deviations
+from plan:
+
+- Two more specs pinned the OLD resolver behavior beyond the plan's list:
+  `tests/integration/skill_invoke_spec.lua` ("widens relative reads…" — the
+  skill-side twin of the tool_loop fallthrough test; flipped to `../../`
+  traversal spelling) and `tests/unit/tools_dispatcher_spec.lua:578` (#144
+  paths-array test asserted the old "not found in configured roots" message).
+  Confirms the lesson: grep for pinned *behavior*, not just symbol names.
+- Plan-ordering gap: Task 1's full-suite gate runs before Task 2 rewrites
+  the completion caller, so the old `completion_candidates` got a one-line
+  arity bridge (`resolver(label, policy.write_root, policy.read_roots)`) in
+  the Task 1 commit; Task 2 then replaced the function wholesale.
+- The existing repeat-attach assertion (`setup_count` unchanged) still holds —
+  the `parley_completion_attached` guard still early-returns repeat
+  `attach_completion` calls; only the autocmd re-assert path re-runs
+  `cmp.setup.buffer`. No flip needed; added the new BufEnter re-assert test.
+- `tests/integration/chat_progress_process_spec.lua` failed once in the first
+  sequential integration run, passes standalone and in all subsequent full
+  runs — order-dependent flake, not #192-related.

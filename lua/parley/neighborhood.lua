@@ -294,9 +294,13 @@ function M.attach_completion(buf)
     vim.b[buf].parley_root_policy = policy
     vim.api.nvim_set_option_value("completefunc", "v:lua.require'parley.neighborhood'.completefunc", { buf = buf })
     schedule_cmp_attach(buf)
-    vim.api.nvim_create_autocmd("InsertEnter", {
+    -- Re-assert the cmp buffer config on every entry: host configs that call
+    -- cmp.setup.buffer on BufEnter (e.g. a global markdown path-completion
+    -- autocmd) would otherwise displace the parley source after a buffer
+    -- switch. schedule_cmp_attach runs via vim.schedule, so it lands after
+    -- all synchronous autocmd handlers — parley deterministically wins.
+    vim.api.nvim_create_autocmd({ "BufEnter", "InsertEnter" }, {
         buffer = buf,
-        once = true,
         callback = function()
             schedule_cmp_attach(buf)
         end,

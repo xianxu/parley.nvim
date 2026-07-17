@@ -177,4 +177,36 @@ describe("neighborhood completion", function()
             function(result) items = result end)
         assert.equals("README.md", items[1].word)
     end)
+
+    it("re-asserts the parley buffer config on BufEnter", function()
+        local captured
+        local register_count = 0
+        package.loaded.cmp = {
+            config = { sources = function(sources) return sources end },
+            setup = {
+                buffer = function(config) captured = config end,
+            },
+            register_source = function() register_count = register_count + 1 end,
+        }
+
+        local buf, path = make_chat()
+        parley.prep_chat(buf, path)
+        vim.wait(100, function() return captured ~= nil end)
+        assert.is_not_nil(captured)
+
+        -- A host config clobbers the buffer-local cmp config after attach
+        -- (e.g. a global markdown path-completion BufEnter autocmd); parley
+        -- must win back the buffer on re-entry.
+        -- CAUTION: cmp_registered is a module-local one-shot in neighborhood.lua
+        -- and persists across it-blocks — assert register_count deltas, not
+        -- absolute counts.
+        local registers_before = register_count
+        captured = nil
+        vim.api.nvim_exec_autocmds("BufEnter", { buffer = buf })
+        vim.wait(100, function() return captured ~= nil end)
+        assert.is_not_nil(captured)
+        assert.same({ "parley_path", "buffer" },
+            { captured.sources[1].name, captured.sources[2].name })
+        assert.equals(registers_before, register_count)
+    end)
 end)

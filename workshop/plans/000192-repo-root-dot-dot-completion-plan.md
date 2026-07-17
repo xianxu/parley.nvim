@@ -263,7 +263,7 @@ end)
 - Modify: `lua/parley/neighborhood.lua` (`attach_completion` ~308-326)
 - Test: `tests/integration/neighborhood_completion_spec.lua` (~114-156)
 
-- [ ] **Step 1: Update + add integration tests** (stubbed cmp, existing pattern):
+- [x] **Step 1: Update + add integration tests** (stubbed cmp, existing pattern):
   - Flip the repeat-attach assertion (~147-151): after `neighborhood.attach_completion(buf)` + `vim.wait`, assert `register_count == 1` still, but drop/replace the `setup_count` equality — re-attach may re-run `cmp.setup.buffer`.
   - Add:
 
@@ -284,8 +284,8 @@ it("re-asserts the parley buffer config on BufEnter", function()
 end)
 ```
 
-- [ ] **Step 2: Run to verify the new test fails** (current InsertEnter autocmd is `once` and BufEnter isn't wired).
-- [ ] **Step 3: Implement** — in `attach_completion`, replace the `once=true` InsertEnter autocmd with a persistent re-assert:
+- [x] **Step 2: Run to verify the new test fails** (current InsertEnter autocmd is `once` and BufEnter isn't wired).
+- [x] **Step 3: Implement** — in `attach_completion`, replace the `once=true` InsertEnter autocmd with a persistent re-assert:
 
 ```lua
 -- Re-assert the cmp buffer config on every entry: host configs that call
@@ -303,8 +303,8 @@ vim.api.nvim_create_autocmd({ "BufEnter", "InsertEnter" }, {
 
 The one-time parts (policy snapshot, `completefunc`, `parley_root_policy`, source registration guard) stay under the existing `parley_completion_attached` guard.
 
-- [ ] **Step 4: Run the integration spec to PASS.**
-- [ ] **Step 5: Commit** — `#192: re-assert cmp buffer config on BufEnter` (body: names the host-clobber race).
+- [x] **Step 4: Run the integration spec to PASS.**
+- [x] **Step 5: Commit** — `#192: re-assert cmp buffer config on BufEnter` (body: names the host-clobber race).
 
 ## Chunk 4: verification + closeout
 
