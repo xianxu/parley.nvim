@@ -25,20 +25,21 @@ disturb unrelated completed semantic blocks or user-created folds.
 
 Inline-comment submission must mutate only the text it logically changes:
 
-- Plan every textual transformation as a bounded edit in original-buffer
-  coordinates: marker replacement/removal, explicit-anchor replacement,
-  inferred-anchor bracket insertion, and destination insertion. No edit may
-  include unchanged text merely to simplify application.
+- Plan every marker/anchor transformation as a bounded byte edit in original-
+  buffer coordinates: marker replacement/removal, explicit-anchor replacement,
+  and inferred-anchor bracket insertion. No edit may include unchanged text
+  merely to simplify application.
 - The pure planner emits a deterministic normalized list of non-overlapping
   edits. It must merge or suppress interacting inferred-anchor and neighboring
   marker/anchor candidates without duplicating brackets or losing a marker;
   tests define those conflict semantics. Apply edits from the end of the buffer
   toward the beginning so earlier coordinates remain stable.
-- Share the bounded edit representation and applicator between both paths
-  (`ARCH-DRY`), while retaining their distinct placement semantics. End
-  submission appends formatted blocks within the existing final unanswered user
-  turn and preserves its trailing-blank normalization. Past-exchange branching
-  inserts a new prefixed user turn at the parser/model-derived boundary.
+- Share the bounded byte-edit representation and applicator for marker/anchor
+  transformation between both paths (`ARCH-DRY`). Destination mutation remains
+  path-specific and uses narrow `buffer_edit` line operations: end submission
+  appends formatted blocks within the existing final unanswered user turn and
+  preserves trailing-blank normalization; past-exchange branching inserts a new
+  prefixed user turn at the parser/model-derived boundary.
 - Keep marker discovery and edit planning pure. The plan describes ordered,
   non-overlapping replacements and insertions; `buffer_edit` remains the thin
   Neovim mutation shell (`ARCH-PURE`).
@@ -93,7 +94,7 @@ item: neovim-buffer-integration design=0.3 impl=0.4
 item: regression-tests design=0.12 impl=0.25
 item: atlas-docs design=0.03 impl=0.02
 item: boundary-review design=0.0 impl=0.15
-design-buffer: 0.11
+design-buffer: 0.06
 total: 2.5
 ```
 

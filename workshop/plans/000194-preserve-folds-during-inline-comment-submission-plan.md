@@ -41,7 +41,9 @@
   `[start_byte, end_byte)`, and equality represents insertion.
   - **Relationships:** N:1 with the original joined text; coordinates never
     refer to already-mutated content.
-  - **DRY rationale:** one edit representation serves end and branch paths.
+  - **DRY rationale:** one edit representation serves marker/anchor
+    transformation in both end and branch paths; destination line placement
+    deliberately remains path-specific.
 
 ### Integration points
 
@@ -60,6 +62,8 @@
   appends blocks at EOF within the final unanswered user turn or uses an extmark
   boundary to insert a new prefixed turn after a past exchange. It never calls
   `replace_all_lines`.
+  Destination deletion/insertion uses existing narrow `buffer_edit` line
+  operations rather than forcing line placement into the byte-edit abstraction.
   - **Future extensions:** destination placement stays path-specific rather than
     leaking into marker transformation.
 
@@ -253,3 +257,10 @@ destination rows exact (including EOF), expanded adapter boundary cases, and
 required a rendered fold-column assertion in addition to logical range checks.
 Revised the estimate to 2.5h after correcting its arithmetic and accounting for
 the newly explicit edge work.
+
+### 2026-07-17 — shared-applicator scope correction
+
+Aligned the spec and plan on one deliberate boundary: the shared half-open edit
+representation owns marker/anchor transformation, while end/branch destination
+placement uses path-specific narrow line operations in `buffer_edit`. Reduced
+the design buffer by 0.05h so the estimate items sum exactly to 2.5h.
