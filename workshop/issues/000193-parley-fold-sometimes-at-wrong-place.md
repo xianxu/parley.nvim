@@ -38,7 +38,14 @@ leaving the conversational spine visible.
 - Maintain folds incrementally from changed model blocks. Create or resize a
   fold only when the insertion-point block is foldable; skip fold work for
   non-foldable blocks. Completed tool blocks receive one fold when written.
-  Existing folds must remain intact rather than being cleared and rebuilt.
+  Never clear or rebuild folds outside the changed block range, including
+  user-created manual folds. An update may replace only the Parley-managed fold
+  for the active insertion-point block.
+- On success, cancellation, or transport failure, finalize any non-empty
+  emitted semantic block using its current range and remove transient
+  insertion state. If the active block is empty, remove its Parley-managed fold
+  rather than leaving an empty or stale fold. Preserve completed-block and
+  unrelated user folds on every terminal path.
 - Initial chat loading may parse the document once, construct the complete
   exchange model, and create folds for all foldable blocks.
 - Keep structural classification in the canonical parser/decoration grammar;
@@ -58,9 +65,13 @@ leaving the conversational spine visible.
 - [ ] Foldable insertion points are created/resized incrementally while
       non-foldable insertion points perform no fold creation work.
 - [ ] Finalization preserves correct folds without a whole-document corrective
-      pass, including multi-round tool exchanges.
+      pass on success, cancellation, failure, or empty output, including
+      multi-round tool exchanges.
+- [ ] Fold updates never clear folds outside the changed block range, including
+      user-created manual folds.
 - [ ] Automated tests cover parser/model structure, initial folds, partial
-      streaming, structural transitions, tool blocks, and final-state parity.
+      streaming, structural transitions across chunk boundaries, marker-like
+      ordinary content, tool blocks, terminal outcomes, and final-state parity.
 - [ ] Atlas documentation lists the canonical exchange structure and folding
       lifecycle.
 
@@ -88,3 +99,10 @@ Moved the operator's free-form report into a concrete Problem, Spec, and Done
 when contract. Added the explicit requirement that streaming consult the live
 exchange structure and update only its insertion point rather than reparsing
 the document.
+
+### 2026-07-17 — closed first spec-review gaps
+
+Defined success, cancellation, failure, and empty-output fold behavior; scoped
+incremental replacement to the active Parley-managed fold while preserving
+completed and user-created folds outside its range; and made chunk-boundary and
+ordinary marker-like content explicit regression cases.
