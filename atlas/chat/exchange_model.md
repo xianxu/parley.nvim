@@ -11,10 +11,12 @@ Exchange = {
     blocks = {
         { kind = "question",      size = 1 },   -- 💬:
         { kind = "agent_header",  size = 1 },   -- 🤖:
-        { kind = "text",          size = 5 },   -- response text (may contain 🧠:, 📝:)
+        { kind = "thinking",      size = 2 },   -- 🧠: semantic block
+        { kind = "text",          size = 5 },   -- ordinary response text
         { kind = "tool_use",      size = 4 },   -- 🔧: + json fence
         { kind = "tool_result",   size = 10 },  -- 📎: + content fence
         { kind = "text",          size = 3 },   -- more response text
+        { kind = "summary",       size = 1 },   -- 📝: semantic block
     }
 }
 ```
@@ -30,17 +32,25 @@ Exchange = {
 
 The model is built once per `M.respond` call and lives through the entire response lifecycle:
 
-- **Streaming**: `on_lines_changed` callback calls `grow_block` to keep the streaming section's size current.
+- **Streaming**: ordinary writes reduce and replace only the current insertion
+  block. A late `🧠:[END]` is the sole wider case: it reconciles only the
+  recorded provisional thinking opener through the insertion block. Neither
+  path reparses the chat.
 - **Tool loop**: `add_block` appends 🔧:/📎: blocks. The model is passed to recursive `M.respond` calls — no rebuilding.
 - **Spinner**: tracked as a block; set to size 0 when cleared.
 - **Prompt append**: uses `exchange_total_size` to compute insertion point.
-- **Folding**: `apply_folds` reads block positions from the model.
+- **Folding**: `thinking`, `summary`, `tool_use`, and `tool_result` ranges come
+  only from the model. Neovim shrinks a manual fold when its streaming tail is
+  replaced, so Parley recreates only that active foldable range; ordinary text
+  performs no fold command.
 
 Because the model is live state, `chat_respond` protects every pending async write with a chat lease anchored on an `invalidate=true` extmark on the response's agent-header line (#138). The anchor distinguishes Parley-owned writes from structural edits: streaming and ordinary edits move the anchor (valid), while deleting the header — undo/redo or other structural drift — invalidates the pending response instead of reconciling the model against a changed serialized transcript. (Pre-#138 the lease keyed on `changedtick` and committed each Parley write's new tick; the extmark anchor makes that commit unnecessary.)
 
 ## Loading from Parser
 
-`from_parsed_chat(parsed_chat)` builds a model from parser output. The parser trims leading/trailing blank lines from all components (questions, answers, sections) so the model's margins are the single source of truth for gaps.
+`from_parsed_chat(parsed_chat)` builds a model from parser output. The shared
+`answer_structure` reducer supplies semantic answer spans; the parser trims
+leading/trailing blank lines so model margins remain the source of truth.
 
 ## API
 

@@ -1,12 +1,13 @@
 ---
 id: 000193
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-16
-updated: 2026-07-16
+updated: 2026-07-17
 estimate_hours: 2.2
 started: 2026-07-16T22:54:13-07:00
+actual_hours: 2.23
 ---
 
 # parley fold sometimes at wrong place
@@ -44,12 +45,12 @@ leaving the conversational spine visible.
 - Maintain folds incrementally from changed model blocks. Create or resize a
   fold only when the insertion-point block is foldable; skip fold work for
   non-foldable blocks. Completed tool blocks receive one fold when written.
-  Never clear or rebuild folds outside the changed block range, including
-  user-created manual folds. Since manual folds have no ownership identifier,
-  maintenance must be append-only: widening may add an outer Parley fold, but
-  it must never delete a fold to shrink or replace it. A contained older Parley
-  fold may remain nested after widening; observable folding must match a fresh
-  load at the outer semantic-block ranges, but exact nested fold sets need not.
+  A streaming tail replacement invalidates the range of any manual fold
+  containing that tail (the real Neovim behavior shrinks it to the first line),
+  so recreate the active Parley fold from its changed model range after each
+  foldable write. Never clear, delete, or rebuild folds outside the rewritten
+  insertion/provisional span; manual folds overlapping that actively rewritten
+  span cannot be preserved because Neovim itself discards them.
 - On success, cancellation, or transport failure, finalize any non-empty
   emitted semantic block using its current range and remove transient
   insertion state. Do not create a fold for an empty active block. Preserve
@@ -65,33 +66,34 @@ leaving the conversational spine visible.
 
 ## Done when
 
-- [ ] The exchange model exposes first-class thinking and summary blocks.
-- [ ] Initial loading folds thinking, summary, tool calls, and tool results but
+- [x] The exchange model exposes first-class thinking and summary blocks.
+- [x] Initial loading folds thinking, summary, tool calls, and tool results but
       not questions, agent headers, ordinary answer text, or transient state.
-- [ ] Streaming updates only the current insertion-point block, except that a
+- [x] Streaming updates only the current insertion-point block, except that a
       late explicit thinking terminator may replace its bounded provisional
       opener-to-terminator span; it never parses the whole chat.
-- [ ] Foldable insertion points are created/widened incrementally while
+- [x] Foldable insertion points are recreated from their changed model range
+      after each write while
       non-foldable insertion points perform no fold creation work.
-- [ ] Finalization preserves correct folds without a whole-document corrective
+- [x] Finalization preserves correct folds without a whole-document corrective
       pass on success, cancellation, failure, or empty output, including
       multi-round tool exchanges.
-- [ ] Fold updates never clear folds outside the changed block range, including
-      user-created manual folds.
-- [ ] Automated tests cover parser/model structure, initial folds, partial
+- [x] Fold updates never clear folds outside the actively rewritten block range;
+      unrelated user-created manual folds remain intact.
+- [x] Automated tests cover parser/model structure, initial folds, partial
       streaming, structural transitions across chunk boundaries, marker-like
-      ordinary content, tool blocks, terminal outcomes, and observable outer
-      fold parity with a fresh load while permitting contained historical folds.
-- [ ] Atlas documentation lists the canonical exchange structure and folding
+      ordinary content, tool blocks, terminal outcomes, and exact observable
+      fold parity with a fresh load.
+- [x] Atlas documentation lists the canonical exchange structure and folding
       lifecycle.
 
 ## Plan
 
-- [ ] Make parser/model answer sections use the canonical semantic block kinds.
-- [ ] Track streaming insertion-point structure without whole-document parsing.
-- [ ] Apply initial and streaming folds from model blocks without clearing
+- [x] Make parser/model answer sections use the canonical semantic block kinds.
+- [x] Track streaming insertion-point structure without whole-document parsing.
+- [x] Apply initial and streaming folds from model blocks without clearing
       unrelated folds.
-- [ ] Verify terminal paths, performance bounds, documentation, and regressions.
+- [x] Verify terminal paths, performance bounds, documentation, and regressions.
 
 ## Estimate
 
@@ -116,12 +118,26 @@ approved spec and established exchange-model architecture reduce design cost.
 ### 2026-07-16
 
 ### 2026-07-17
+- 2026-07-17: closed — Semantic thinking, summary, tool-use, and tool-result folds remain correct during streaming; a 1,000-row history probe visits only the two-row insertion tail with zero streaming whole-chat parses, while full make test and mapped lifecycle suites pass.; review verdict: SHIP
 
 Claimed the issue and mapped the split folding lifecycle. The approved design
 makes semantic exchange blocks and the live insertion point the only folding
 inputs: initial load parses once, streaming mutates one block at a time, and
 fold UI work is skipped for non-foldable blocks (`ARCH-DRY`, `ARCH-PURE`,
 `ARCH-PURPOSE`).
+
+Implemented one canonical answer-structure reducer and first-class semantic
+model blocks, insertion-span replacement during streaming, immediate folds for
+tool calls/results, live-model cancellation repair, and one-parse initial fold
+enumeration. A production integration probe with 1,000 historical rows observed
+only the two-row live tail on each write and rejected any streaming whole-chat
+parse.
+
+Verification: `make test-spec SPEC=chat/parsing`, `make test-spec
+SPEC=chat/exchange_model`, and `make test-spec SPEC=chat/lifecycle` passed;
+`tests/integration/chat_respond_spec.lua` passed 61/61; `make lint` completed
+with 0 warnings and 0 errors across 304 files; `make test` passed the complete
+unit, architecture, and integration suite; `git diff --check` passed.
 
 ## Revisions
 
@@ -159,3 +175,12 @@ Removed contradictory fold-replacement permission, bounded late-terminator
 reconciliation to its provisional opener-through-terminator span, and defined
 final parity by observable outer semantic folds while permitting harmless
 contained folds left by append-only widening.
+
+### 2026-07-17 — manual-fold feasibility result
+
+A real Neovim test proved that replacing the streamed tail shrinks the manual
+fold containing it to its first line rather than growing it. With operator approval,
+replaced append-only widening with active-range recreation after foldable
+writes. Folds outside the rewritten range remain untouched; folds overlapping
+that range are outside the preservation guarantee because Neovim removes them
+during the write itself.

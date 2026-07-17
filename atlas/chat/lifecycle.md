@@ -20,6 +20,13 @@ registry.
 ## Response (`:ParleyChatRespond` / `<C-g><C-g>`)
 Assembles context (with memory summarization), streams LLM response into buffer. The [exchange model](exchange_model.md) is the single source of truth for all transcript mutations during the response lifecycle — streaming text growth, tool block insertion, and prompt append all go through the model. [Response progress](response_progress.md) is cosmetic extmark state that begins at the response header (or a recursive leg's last visible block), then follows the current generation tip; it never becomes a model block. A per-buffer pending-session guard prevents duplicate calls.
 
+Streaming fold maintenance is insertion-scoped. After each write, Parley reduces
+only the active insertion block, updates its semantic model span, and recreates
+the fold only for foldable kinds. A late explicit thinking terminator may widen
+that bounded read to its recorded provisional opener. Tool calls/results fold
+immediately from their known appended block indices. Success and cancellation
+use the live model; there is no final whole-chat fold reparse.
+
 Pending responses also hold a per-buffer chat lease (`lua/parley/chat_lease.lua`) anchored on an `invalidate=true` extmark on the response's `🤖:` agent-header line (#138). Each async callback validates the lease before mutating the transcript; ordinary edits and streaming move the anchor and stay valid, while deleting that line — undo/redo of the inserted response, or removing the header — invalidates the lease, stops/suppresses late stream/tool/progress/topic writes, and prevents recursive tool resubmit from using a stale live model. The pending extmark and its staged output are discarded on lost ownership. (Pre-#138 the lease keyed on buffer `changedtick`, which mis-read Parley's own writes as drift; the extmark anchor makes `commit` a no-op.)
 
 While a response is pending, the chat buffer's standard `u` and `<C-r>` keys

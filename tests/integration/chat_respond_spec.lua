@@ -2006,6 +2006,85 @@ describe("chat_respond: pending request transcript drift", function()
         assert.is_true(buffer_contains(buf, "first second"))
     end)
 
+    it("recreates a thinking fold from only the active streamed block", function()
+        local buf = open_simple_chat()
+        local captured_handler
+        local qid = "qid_stream_thinking_fold"
+
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, handler)
+            captured_handler = handler
+            parley.tasker.set_query(qid, { response = "", raw_response = "", buf = buf_arg })
+        end
+
+        parley.chat_respond({ range = 0 })
+        captured_handler(qid, "🧠: first\n")
+        captured_handler(qid, "second")
+
+        assert.is_true(vim.wait(200, function()
+            return buffer_contains(buf, "second")
+        end, 10))
+        local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+        local thinking_row
+        for row, line in ipairs(lines) do
+            if line == "🧠: first" then thinking_row = row break end
+        end
+        assert.is_not_nil(thinking_row)
+        vim.cmd("normal! zM")
+        assert.equals(thinking_row, vim.fn.foldclosed(thinking_row))
+        assert.equals(thinking_row + 1, vim.fn.foldclosedend(thinking_row))
+    end)
+
+    it("reduces only the active streamed span without reparsing transcript history", function()
+        local buf = open_simple_chat()
+        local history = {
+            "# topic: Test Topic", "- file: test.md", "---", "",
+            "💬: old question", "", "🤖: [TestAgent]",
+        }
+        for index = 1, 1000 do
+            history[#history + 1] = "old transcript row " .. index
+        end
+        history[#history + 1] = ""
+        history[#history + 1] = "💬: What is Lua?"
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, history)
+        vim.api.nvim_win_set_cursor(0, { #history, 0 })
+
+        local captured_handler
+        local qid = "qid_stream_bounded_reconcile"
+        local observations = {}
+        local respond_module = require("parley.chat_respond")
+        local parser = require("parley.chat_parser")
+        local original_parse_chat = parser.parse_chat
+
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, handler)
+            captured_handler = handler
+            parley.tasker.set_query(qid, { response = "", raw_response = "", buf = buf_arg })
+        end
+
+        local ok, err = pcall(function()
+            parley.chat_respond({ range = 0 })
+            vim.wait(50, function() return false end, 5)
+            parser.parse_chat = function()
+                error("streaming must not parse the whole document")
+            end
+            respond_module._stream_reconcile_observer = function(event)
+                observations[#observations + 1] = event
+            end
+            captured_handler(qid, "🧠: first\n")
+            captured_handler(qid, "second")
+            assert.is_true(vim.wait(200, function()
+                return #observations == 2
+            end, 10))
+        end)
+        parser.parse_chat = original_parse_chat
+        respond_module._stream_reconcile_observer = nil
+        assert.is_true(ok, err)
+        assert.equals(2, #observations)
+        assert.equals(2, observations[1].rows_visited)
+        assert.equals(2, observations[2].rows_visited)
+        assert.is_true(observations[1].first_line >= 1000)
+        assert.equals(observations[1].first_line + 1, observations[2].last_line)
+    end)
+
     it("does not append tool blocks when undo invalidates before tool-loop processing", function()
         local buf = open_simple_chat()
         parley._state.agent = "ToolSonnet"

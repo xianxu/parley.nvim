@@ -185,6 +185,35 @@ describe("exchange_model: two exchanges", function()
     end)
 end)
 
+describe("exchange_model: replace_span", function()
+    it("replaces only the requested insertion span and returns changed indices", function()
+        local m = em.new(4)
+        m:add_exchange(1)
+        m:add_block(1, "agent_header", 1)
+        m:add_block(1, "tool_result", 3)
+        m:add_block(1, "stream_placeholder", 4)
+
+        local changed = m:replace_span(1, 4, 1, {
+            { kind = "thinking", size = 2 },
+            { kind = "text", size = 1 },
+        })
+
+        assert.same({ 4, 5 }, changed)
+        assert.same({ "question", "agent_header", "tool_result", "thinking", "text" },
+            vim.tbl_map(function(block) return block.kind end, m.exchanges[1].blocks))
+        assert.equals(3, m.exchanges[1].blocks[3].size)
+    end)
+
+    it("rejects invalid spans and negative section sizes", function()
+        local m = em.new(0)
+        m:add_exchange(1)
+        assert.has_error(function() m:replace_span(1, 2, 1, {}) end)
+        assert.has_error(function()
+            m:replace_span(1, 1, 1, { { kind = "text", size = -1 } })
+        end)
+    end)
+end)
+
 describe("exchange_model: from_parsed_chat", function()
     it("loads exchange structure from parser output", function()
         local parsed = {
@@ -281,15 +310,16 @@ describe("exchange_model: from_parsed_chat with real parser", function()
         local m = em.from_parsed_chat(parsed)
 
         assert.equals(2, #m.exchanges)
-        -- Exchange 1: question + agent_header + text(thinking) + tool_use + tool_result + text(response+summary)
+        -- Exchange 1: every semantic answer entity is its own model block.
         local blocks = m.exchanges[1].blocks
-        assert.equals(6, #blocks)
+        assert.equals(7, #blocks)
         assert.equals("question", blocks[1].kind)
         assert.equals("agent_header", blocks[2].kind)
-        assert.equals("text", blocks[3].kind)         -- thinking
+        assert.equals("thinking", blocks[3].kind)
         assert.equals("tool_use", blocks[4].kind)
         assert.equals("tool_result", blocks[5].kind)
-        assert.equals("text", blocks[6].kind)          -- response + summary
+        assert.equals("text", blocks[6].kind)
+        assert.equals("summary", blocks[7].kind)
 
         -- Positions match actual buffer content
         assert.equals("💬: read file", lines[m:block_start(1, 1) + 1])
@@ -298,6 +328,7 @@ describe("exchange_model: from_parsed_chat with real parser", function()
         assert.equals("🔧: read_file id=toolu_01", lines[m:block_start(1, 4) + 1])
         assert.equals("📎: read_file id=toolu_01", lines[m:block_start(1, 5) + 1])
         assert.equals("The file says something.", lines[m:block_start(1, 6) + 1])
+        assert.equals("📝: summary line", lines[m:block_start(1, 7) + 1])
     end)
 
     it("parser trims trailing blanks from question", function()
