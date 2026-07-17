@@ -188,3 +188,58 @@ describe("buffer_edit.append_section_to_answer", function()
         assert.matches("^```json", lines[5])
     end)
 end)
+
+describe("buffer_edit.apply_text_edits", function()
+    it("applies half-open multibyte edits inside a bounded nonzero-row slice", function()
+        local b = mk_buf({ "before", "αb", "cde", "after" })
+        local delta = be.apply_text_edits(b, 1, "αb\ncde", {
+            { start_byte = 1, end_byte = 1, replacement = ">" },
+            { start_byte = 3, end_byte = 4, replacement = "B" },
+            { start_byte = 8, end_byte = 8, replacement = "<" },
+        })
+        assert.equals(0, delta)
+        assert.same({ "before", ">αB", "cde<", "after" }, buf_lines(b))
+    end)
+
+    it("maps replacements on both sides of a newline and supports multiline output", function()
+        local b = mk_buf({ "ab", "cd", "tail" })
+        local delta = be.apply_text_edits(b, 0, "ab\ncd", {
+            { start_byte = 2, end_byte = 3, replacement = "B" },
+            { start_byte = 3, end_byte = 4, replacement = "/\nextra\n" },
+            { start_byte = 4, end_byte = 5, replacement = "C" },
+        })
+        assert.equals(1, delta)
+        assert.same({ "aB/", "extra", "Cd", "tail" }, buf_lines(b))
+    end)
+
+    it("supports insertion at byte one and at the empty source boundary", function()
+        local b = mk_buf({ "target", "tail" })
+        be.apply_text_edits(b, 0, "target", {
+            { start_byte = 1, end_byte = 1, replacement = "[" },
+            { start_byte = 7, end_byte = 7, replacement = "]" },
+        })
+        assert.same({ "[target]", "tail" }, buf_lines(b))
+
+        local empty = mk_buf({ "", "tail" })
+        be.apply_text_edits(empty, 0, "", {
+            { start_byte = 1, end_byte = 1, replacement = "new" },
+        })
+        assert.same({ "new", "tail" }, buf_lines(empty))
+    end)
+
+    it("validates the complete plan before mutating", function()
+        for _, edits in ipairs({
+            { { start_byte = 0, end_byte = 1, replacement = "x" } },
+            { { start_byte = 3, end_byte = 2, replacement = "x" } },
+            { { start_byte = 1, end_byte = 4, replacement = "x" } },
+            {
+                { start_byte = 1, end_byte = 3, replacement = "x" },
+                { start_byte = 2, end_byte = 2, replacement = "y" },
+            },
+        }) do
+            local b = mk_buf({ "ab", "tail" })
+            assert.has_error(function() be.apply_text_edits(b, 0, "ab", edits) end)
+            assert.same({ "ab", "tail" }, buf_lines(b))
+        end
+    end)
+end)

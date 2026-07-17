@@ -360,6 +360,133 @@ function M.chat_boundaries(cfg)
     return out
 end
 
+local function spans_intersect(a_start, a_end, b_start, b_end)
+    return a_start < b_end and b_start < a_end
+end
+
+--- Gather ready markers and return their normalized original-coordinate edits.
+--- Edits use 1-based half-open byte ranges: [start_byte, end_byte).
+--- @param text string
+--- @param opts table|nil  { boundaries = string[], bracket = boolean }
+--- @return table[] blocks
+--- @return string new_text
+--- @return table[] edits  sorted, non-overlapping DrillInEdit values
+function M.gather_edit_plan(text, opts)
+    opts = opts or {}
+    local bracket = opts.bracket
+    local markers = M.parse(text)
+    local ready_markers = {}
+    local blocks = {}
+
+    for _, marker in ipairs(markers) do
+        if marker.ready then
+            local explicit = marker.quoted and marker.quoted.text or nil
+            local entry = { marker = marker, explicit = explicit }
+            if not explicit then
+                entry.snippet, entry.span_start, entry.span_end = M.generate_snippet(text, marker, opts)
+            end
+            ready_markers[#ready_markers + 1] = entry
+            blocks[#blocks + 1] = {
+                quoted = explicit or (entry.snippet ~= "" and entry.snippet or nil),
+                sections = marker.sections,
+            }
+        end
+    end
+
+    -- Decoration is subordinate to marker mutation. The first inferred span in
+    -- document order owns brackets when inferred spans interact.
+    local owned_spans = {}
+    if bracket then
+        for _, entry in ipairs(ready_markers) do
+            local ss, se = entry.span_start, entry.span_end
+            if not entry.explicit and ss then
+                local conflicts = false
+                for _, other in ipairs(ready_markers) do
+                    if spans_intersect(ss, se + 1,
+                            other.marker.byte_start, other.marker.byte_end + 1) then
+                        conflicts = true
+                        break
+                    end
+                end
+                if not conflicts then
+                    for _, owned in ipairs(owned_spans) do
+                        if spans_intersect(ss, se + 1, owned[1], owned[2]) then
+                            conflicts = true
+                            break
+                        end
+                    end
+                end
+                if not conflicts then
+                    entry.decorate = true
+                    owned_spans[#owned_spans + 1] = { ss, se + 1 }
+                end
+            end
+        end
+    end
+
+    local edits = {}
+    local function edit(start_byte, end_byte, replacement)
+        edits[#edits + 1] = {
+            start_byte = start_byte,
+            end_byte = end_byte,
+            replacement = replacement,
+        }
+    end
+    for _, entry in ipairs(ready_markers) do
+        local marker = entry.marker
+        if entry.explicit then
+            local replacement = bracket and ("[" .. entry.explicit .. "]") or entry.explicit
+            edit(marker.byte_start, marker.byte_end + 1, replacement)
+        elseif entry.decorate then
+            local ss, se = entry.span_start, entry.span_end
+            edit(ss, ss, "[")
+            local gap = (se < marker.byte_start) and text:sub(se + 1, marker.byte_start - 1) or "x"
+            if se < marker.byte_start and gap:match("^%s*$") then
+                edit(se + 1, marker.byte_end + 1, "]")
+            else
+                edit(se + 1, se + 1, "]")
+                edit(marker.byte_start, marker.byte_end + 1, "")
+            end
+        else
+            edit(marker.byte_start, marker.byte_end + 1, "")
+        end
+    end
+
+    table.sort(edits, function(a, b)
+        if a.start_byte ~= b.start_byte then return a.start_byte < b.start_byte end
+        return a.end_byte < b.end_byte
+    end)
+
+    -- Same-boundary insertions have no stable application order, so expose a
+    -- single replacement. All other interactions were resolved above.
+    local normalized = {}
+    for _, candidate in ipairs(edits) do
+        local previous = normalized[#normalized]
+        if previous and candidate.start_byte == candidate.end_byte
+            and previous.start_byte == previous.end_byte
+            and candidate.start_byte == previous.start_byte then
+            previous.replacement = previous.replacement .. candidate.replacement
+        else
+            assert(candidate.start_byte >= 1 and candidate.end_byte <= #text + 1
+                    and candidate.start_byte <= candidate.end_byte,
+                "drill_in.gather_edit_plan: invalid edit range")
+            assert(not previous or previous.end_byte <= candidate.start_byte,
+                "drill_in.gather_edit_plan: overlapping normalized edits")
+            normalized[#normalized + 1] = candidate
+        end
+    end
+
+    local compatibility = {}
+    for _, candidate in ipairs(normalized) do
+        compatibility[#compatibility + 1] = {
+            byte_start = candidate.start_byte,
+            byte_end = candidate.end_byte - 1,
+            replacement = candidate.replacement,
+        }
+    end
+    return blocks, splice(text, compatibility), normalized
+end
+
 --- Gather ready markers and strip each from the inline text.
 --- - Marker with `<Q>` body → inline replaced by Q.
 --- - Marker without `<Q>` body → inline removed entirely; its block quote is
@@ -376,48 +503,8 @@ end
 --- @return table[] blocks  list of { quoted = string|nil, sections = list } in document order
 --- @return string new_text
 function M.gather_and_strip(text, opts)
-    opts = opts or {}
-    local bracket = opts.bracket
-    local markers = M.parse(text)
-    local blocks = {}
-    local edits = {}
-    local function edit(bs, be, repl) table.insert(edits, { byte_start = bs, byte_end = be, replacement = repl }) end
-    for _, m in ipairs(markers) do
-        if m.ready then
-            local explicit = m.quoted and m.quoted.text or nil
-            if explicit then
-                -- Explicit <Q>: restore Q inline (optionally bracketed) — the
-                -- whole marker collapses to the anchor text.
-                edit(m.byte_start, m.byte_end, bracket and ("[" .. explicit .. "]") or explicit)
-                table.insert(blocks, { quoted = explicit, sections = m.sections })
-            else
-                -- Unquoted: infer the anchor + its span, remove the marker, and
-                -- (optionally) bracket the span where it already sits.
-                local snip, ss, se = M.generate_snippet(text, m, opts)
-                if bracket and ss then
-                    edit(ss, ss - 1, "[") -- zero-width insert before the span
-                    local gap = (se < m.byte_start) and text:sub(se + 1, m.byte_start - 1) or "x"
-                    if se < m.byte_start and gap:match("^%s*$") then
-                        -- Inline: span abuts the marker — absorb the gap + marker into "]".
-                        edit(se + 1, m.byte_end, "]")
-                    else
-                        -- Standalone: span sits elsewhere — close it, remove the marker.
-                        edit(se + 1, se, "]") -- zero-width insert after the span
-                        edit(m.byte_start, m.byte_end, "")
-                    end
-                else
-                    edit(m.byte_start, m.byte_end, "") -- no span / no bracketing: just remove
-                end
-                table.insert(blocks, { quoted = (snip ~= "" and snip or nil), sections = m.sections })
-            end
-        end
-    end
-    -- splice() applies right-to-left on original offsets, so order ascending.
-    table.sort(edits, function(a, b)
-        if a.byte_start ~= b.byte_start then return a.byte_start < b.byte_start end
-        return a.byte_end < b.byte_end
-    end)
-    return blocks, splice(text, edits)
+    local blocks, new_text = M.gather_edit_plan(text, opts)
+    return blocks, new_text
 end
 
 --- Resolve a marker to its final inline text per the review-convention §5

@@ -144,6 +144,69 @@ function M.append_section_to_answer(buf, after_line_0_indexed, section)
     return M.make_handle(buf, insert_at + #insert_lines - 1)
 end
 
+--- Apply normalized half-open byte edits against an original joined-text slice.
+--- Coordinates are 1-based byte boundaries; start == end is insertion.
+--- The complete plan is validated and mapped before the first buffer mutation.
+function M.apply_text_edits(buf, start_row0, source_text, edits)
+    source_text = source_text or ""
+    edits = edits or {}
+    local limit = #source_text + 1
+
+    local function boundary(byte)
+        local row, col = start_row0, 0
+        local cursor = 1
+        while cursor < byte do
+            local nl = source_text:find("\n", cursor, true)
+            if not nl or nl >= byte then
+                col = col + byte - cursor
+                return row, col
+            end
+            row = row + 1
+            col = 0
+            cursor = nl + 1
+        end
+        return row, col
+    end
+
+    local mapped = {}
+    local previous
+    local line_delta = 0
+    for index, edit in ipairs(edits) do
+        assert(type(edit) == "table" and type(edit.start_byte) == "number"
+            and type(edit.end_byte) == "number" and type(edit.replacement) == "string",
+            "buffer_edit: invalid text edit")
+        assert(edit.start_byte % 1 == 0 and edit.end_byte % 1 == 0
+            and edit.start_byte >= 1 and edit.start_byte <= edit.end_byte
+            and edit.end_byte <= limit, "buffer_edit: text edit out of range")
+        if previous then
+            assert(previous.end_byte <= edit.start_byte, "buffer_edit: overlapping text edits")
+            assert(not (previous.start_byte == previous.end_byte
+                and edit.start_byte == edit.end_byte
+                and previous.start_byte == edit.start_byte),
+                "buffer_edit: duplicate insertion boundary")
+        end
+        local start_row, start_col = boundary(edit.start_byte)
+        local end_row, end_col = boundary(edit.end_byte)
+        mapped[index] = {
+            start_row = start_row, start_col = start_col,
+            end_row = end_row, end_col = end_col,
+            replacement = vim.split(edit.replacement, "\n", { plain = true }),
+        }
+        local removed = source_text:sub(edit.start_byte, edit.end_byte - 1)
+        local _, removed_breaks = removed:gsub("\n", "")
+        local _, added_breaks = edit.replacement:gsub("\n", "")
+        line_delta = line_delta + added_breaks - removed_breaks
+        previous = edit
+    end
+
+    for index = #mapped, 1, -1 do
+        local edit = mapped[index]
+        vim.api.nvim_buf_set_text(buf, edit.start_row, edit.start_col,
+            edit.end_row, edit.end_col, edit.replacement)
+    end
+    return line_delta
+end
+
 -- ============================================================================
 -- Streaming
 -- ============================================================================
