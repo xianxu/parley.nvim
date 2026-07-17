@@ -1,12 +1,13 @@
 ---
 id: 000193
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-16
-updated: 2026-07-16
+updated: 2026-07-17
 estimate_hours: 2.2
 started: 2026-07-16T22:54:13-07:00
+actual_hours: 2.23
 ---
 
 # parley fold sometimes at wrong place
@@ -117,6 +118,7 @@ approved spec and established exchange-model architecture reduce design cost.
 ### 2026-07-16
 
 ### 2026-07-17
+- 2026-07-17: closed — Semantic thinking, summary, tool-use, and tool-result folds remain correct during streaming; a 1,000-row history probe visits only the two-row insertion tail with zero streaming whole-chat parses, while full make test and mapped lifecycle suites pass.; review verdict: SHIP
 
 Claimed the issue and mapped the split folding lifecycle. The approved design
 makes semantic exchange blocks and the live insertion point the only folding

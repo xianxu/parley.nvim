@@ -363,3 +363,12 @@
   `cmp_registered` in neighborhood.lua) within a plenary spec-file run. Tests
   asserting registration/setup counts must assert deltas, reload the module,
   or expose a reset — never absolute counts on a fresh stub.
+
+## 2026-07-17 (#193)
+
+- **Neovim manual folds do not reliably grow with streamed tail replacement.**
+  Replacing the last line of a folded range can shrink the fold to its opener,
+  so model growth alone does not maintain the visible fold. Rule: after a
+  foldable streaming write, recreate only the active semantic model range;
+  never clear the window's fold tree, and pin both the shrink and unrelated-fold
+  preservation behavior in a real headless Neovim integration test.
