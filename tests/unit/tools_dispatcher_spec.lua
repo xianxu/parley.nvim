@@ -255,6 +255,12 @@ describe("resolve_read_path single base + confinement (#192)", function()
         assert.matches("outside working directory and configured read roots", err)
     end)
 
+    it("rejects an absolute existing path outside every permitted root", function()
+        local path, err = dispatcher.resolve_read_path(out .. "/secret.md", cwd, { cwd })
+        assert.is_nil(path)
+        assert.matches("outside working directory and configured read roots", err)
+    end)
+
     it("rejects a dangling symlink without crashing", function()
         vim.loop.fs_symlink(cwd .. "/missing-target", cwd .. "/dangling.md")
         local ok, path, err = pcall(dispatcher.resolve_read_path, "dangling.md", cwd, { cwd })

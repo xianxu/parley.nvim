@@ -310,11 +310,29 @@ The one-time parts (policy snapshot, `completefunc`, `parley_root_policy`, sourc
 
 ### Task 5: full suite, live verification, atlas, log
 
-- [ ] **Step 1: Full test run** — `make -f Makefile.parley test` — expect PASS (unit parallel + integration sequential). Fix any spec touching the old resolver signature or pinned OLD behavior that the greps below surface (grep for *behavior strings*, not just symbol names — `tool_loop_spec` and `build_messages_spec` pinned old semantics without naming the changed functions):
+- [x] **Step 1: Full test run** — `make -f Makefile.parley test` — expect PASS (unit parallel + integration sequential). Fix any spec touching the old resolver signature or pinned OLD behavior that the greps below surface (grep for *behavior strings*, not just symbol names — `tool_loop_spec` and `build_messages_spec` pinned old semantics without naming the changed functions):
   - `grep -rn "resolve_read_path" lua/ tests/` — every call must pass `(path, cwd, roots)`.
   - `grep -rn "merge_completion_candidates\|relative_to_root" lua/ tests/` — zero hits.
   - `grep -rn "search these roots\|configured roots\|first existing match" lua/ tests/ atlas/` — zero stale hits (new wording only).
-- [ ] **Step 2: Live verification in the real brain chat** (the issue's motivating case): open `brain/workshop/parley/2026-07-16.16-38-57.920.md` in nvim, insert mode, type `../ariadne/` → expect ariadne entries offered as `../ariadne/<name>` and segment-continuation; switch to another buffer and back, retype → still parley completion (not host cmp-path). Then ask the chat "tell me about ../ariadne/" → the `ls` tool call must succeed. Record the observed results in `## Log`.
-- [ ] **Step 3: Atlas** — update `atlas/infra/repo_mode.md` ("Reference neighborhood (#147)" section: ordered-roots + first-existing-match prose → single-base + confinement; completion = write-root glob, typed-form labels) and `atlas/providers/tool_use.md` (root-policy scope bullet, ~lines 63-66: same rewrite). Atlas holds current state only — replace the stale prose, don't append history.
-- [ ] **Step 4: Issue bookkeeping** — tick `## Plan` boxes in the issue, append a `## Log` session entry, set `estimate_hours` already present (set before change-code).
-- [ ] **Step 5: Close** — `sdlc close --issue 192 --verified '<test + live-verification evidence>'` (actual measured by the binary; boundary review auto-dispatched by close — fix Critical/Important before crossing).
+- [x] **Step 2: Live verification in the real brain chat** (the issue's motivating case): open `brain/workshop/parley/2026-07-16.16-38-57.920.md` in nvim, insert mode, type `../ariadne/` → expect ariadne entries offered as `../ariadne/<name>` and segment-continuation; switch to another buffer and back, retype → still parley completion (not host cmp-path). Then ask the chat "tell me about ../ariadne/" → the `ls` tool call must succeed. Record the observed results in `## Log`.
+- [x] **Step 3: Atlas** — update `atlas/infra/repo_mode.md` ("Reference neighborhood (#147)" section: ordered-roots + first-existing-match prose → single-base + confinement; completion = write-root glob, typed-form labels) and `atlas/providers/tool_use.md` (root-policy scope bullet, ~lines 63-66: same rewrite). Atlas holds current state only — replace the stale prose, don't append history.
+- [x] **Step 4: Issue bookkeeping** — tick `## Plan` boxes in the issue, append a `## Log` session entry, set `estimate_hours` already present (set before change-code).
+- [x] **Step 5: Close** — `sdlc close --issue 192 --verified '<test + live-verification evidence>'` (actual measured by the binary; boundary review auto-dispatched by close — fix Critical/Important before crossing).
+
+## Revisions
+
+### 2026-07-16 — post-close-review reclassification (advisory finding)
+
+The Core-concepts table listed `resolve_read_path` and `completion_candidates`
+under "Pure entities"; the boundary review correctly notes both are
+filesystem-boundary entities (they ARE the fs seam — `fs_realpath`, `glob`,
+`isdirectory`; tested directly against real tmpdir fixtures, no mocks). No
+hidden pure core to extract, so no code change — the table's *kind* claim was
+drifted, not the design. Read those two rows as "conceptual core /
+fs-boundary" rather than PURE. Also: Task 5 steps 1–4 ticked retroactively —
+they were completed (Log has the evidence) before the close, but the plan
+artifact wasn't updated until after the review flagged it; and the review's
+test-gap note (absolute existing path outside all roots through
+`resolve_read_path`) was closed post-review with a direct test
+(tools_dispatcher_spec: "rejects an absolute existing path outside every
+permitted root").

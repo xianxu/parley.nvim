@@ -1,12 +1,13 @@
 ---
 id: 000192
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-16
 updated: 2026-07-16
 estimate_hours: 1.2
 started: 2026-07-16T17:11:59-07:00
+actual_hours: 0.95
 ---
 
 # repo-root relative paths with dot-dot completion
@@ -124,6 +125,7 @@ against `baseline-v3.1.md`. Method A only.*
 ## Log
 
 ### 2026-07-16
+- 2026-07-16: closed — full suite 161 specs PASS 0 fail; live e2e on real brain/ariadne layout: ../ar completes to ../ariadne/, segment-continues to ../ariadne/workshop/, accidental ariadne/ form correctly dead (error names path), ls ../ariadne succeeds via dispatcher+builtin ls, ../../Documents-class escapes neither complete nor resolve, ~/blogs symlink case verified confinement-consistent; atlas swept to new semantics; review verdict: SHIP
 
 Created from design discussion in brain repo-mode chat
 (brain: workshop/parley/2026-07-16.16-38-57.920.md context). Empirically
