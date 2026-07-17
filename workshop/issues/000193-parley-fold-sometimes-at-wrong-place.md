@@ -34,18 +34,26 @@ leaving the conversational spine visible.
 - Keep the live exchange model authoritative during generation. Track the one
   insertion-point block receiving content; when a structural marker arrives,
   finalize that block and append the next semantic block. Do not reparse the
-  whole document during streaming or finalization.
+  whole document during streaming or finalization. Because legacy thinking
+  ends at a blank line while explicit thinking is known only when a later
+  `🧠:[END]` arrives, treat a blank as a provisional legacy boundary and
+  reconcile precisely the provisional span from that active response leg's
+  `🧠:` opener through the later terminator. Inspect no earlier block or line.
+  Ordinary writes still change only the insertion-point block; this bounded
+  provisional-span replacement is the sole multi-block exception.
 - Maintain folds incrementally from changed model blocks. Create or resize a
   fold only when the insertion-point block is foldable; skip fold work for
   non-foldable blocks. Completed tool blocks receive one fold when written.
   Never clear or rebuild folds outside the changed block range, including
-  user-created manual folds. An update may replace only the Parley-managed fold
-  for the active insertion-point block.
+  user-created manual folds. Since manual folds have no ownership identifier,
+  maintenance must be append-only: widening may add an outer Parley fold, but
+  it must never delete a fold to shrink or replace it. A contained older Parley
+  fold may remain nested after widening; observable folding must match a fresh
+  load at the outer semantic-block ranges, but exact nested fold sets need not.
 - On success, cancellation, or transport failure, finalize any non-empty
   emitted semantic block using its current range and remove transient
-  insertion state. If the active block is empty, remove its Parley-managed fold
-  rather than leaving an empty or stale fold. Preserve completed-block and
-  unrelated user folds on every terminal path.
+  insertion state. Do not create a fold for an empty active block. Preserve
+  completed-block and unrelated user folds on every terminal path.
 - Initial chat loading may parse the document once, construct the complete
   exchange model, and create folds for all foldable blocks.
 - Keep structural classification in the canonical parser/decoration grammar;
@@ -60,9 +68,10 @@ leaving the conversational spine visible.
 - [ ] The exchange model exposes first-class thinking and summary blocks.
 - [ ] Initial loading folds thinking, summary, tool calls, and tool results but
       not questions, agent headers, ordinary answer text, or transient state.
-- [ ] Streaming updates only the current insertion-point block and never parses
-      the whole chat to repair folds.
-- [ ] Foldable insertion points are created/resized incrementally while
+- [ ] Streaming updates only the current insertion-point block, except that a
+      late explicit thinking terminator may replace its bounded provisional
+      opener-to-terminator span; it never parses the whole chat.
+- [ ] Foldable insertion points are created/widened incrementally while
       non-foldable insertion points perform no fold creation work.
 - [ ] Finalization preserves correct folds without a whole-document corrective
       pass on success, cancellation, failure, or empty output, including
@@ -71,7 +80,8 @@ leaving the conversational spine visible.
       user-created manual folds.
 - [ ] Automated tests cover parser/model structure, initial folds, partial
       streaming, structural transitions across chunk boundaries, marker-like
-      ordinary content, tool blocks, terminal outcomes, and final-state parity.
+      ordinary content, tool blocks, terminal outcomes, and observable outer
+      fold parity with a fresh load while permitting contained historical folds.
 - [ ] Atlas documentation lists the canonical exchange structure and folding
       lifecycle.
 
@@ -133,3 +143,19 @@ ordinary marker-like content explicit regression cases.
 
 Decomposed the work around one pure incremental segment tracker and one thin
 manual-fold shell. Estimated 2.2 focused ship-hours using estimate-logic-v3.1.
+
+### 2026-07-17 — plan feasibility review
+
+The first plan review found that future-dependent thinking grammar and unowned
+Neovim manual folds made destructive resize unsafe. Revised the plan around one
+shared active-response reducer, provisional legacy classification, and
+append-only fold widening; added live-model cancellation repair, exact
+bounded-read/terminal parity tests, performance verification, and per-chunk
+commits.
+
+### 2026-07-17 — closed second spec-review ambiguities
+
+Removed contradictory fold-replacement permission, bounded late-terminator
+reconciliation to its provisional opener-through-terminator span, and defined
+final parity by observable outer semantic folds while permitting harmless
+contained folds left by append-only widening.
