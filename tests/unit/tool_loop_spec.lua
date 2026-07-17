@@ -247,7 +247,7 @@ describe("tool_loop.process_response: with tool_use", function()
         assert.matches("🔧: read_file id=toolu_ERR", text)
         assert.matches("📎: read_file id=toolu_ERR", text)
         assert.matches("error=true", text)
-        assert.matches("read path .* configured roots", text)
+        assert.matches("configured read roots", text)
     end)
 
     it("widens reads but not writes from ordinary nested repo Markdown", function()
@@ -266,16 +266,26 @@ describe("tool_loop.process_response: with tool_use", function()
 
         local old_cwd = vim.fn.getcwd()
         vim.cmd("cd " .. vim.fn.fnameescape(other_cwd))
-        local raw = mk_read_file_sse_response("toolu_NEIGHBORHOOD", "README.md")
+        -- #192: reads resolve from the write root ONLY (single base); the
+        -- repo root is permission, not a fallback base. The traversal
+        -- spelling reaches the repo-root file; the bare spelling fails.
+        local raw = mk_read_file_sse_response("toolu_NEIGHBORHOOD", "../../README.md")
         local outcome = tool_loop.process_response(bufnr, raw, {
             max_tool_iterations = 20,
         })
-        vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
-
         assert.equals("recurse", outcome)
         local text = buf_text(bufnr)
         assert.matches("📎: read_file id=toolu_NEIGHBORHOOD", text)
         assert.matches("from repo root", text)
+
+        local bare_raw = mk_read_file_sse_response("toolu_BARE", "README.md")
+        local bare_outcome = tool_loop.process_response(bufnr, bare_raw, {
+            max_tool_iterations = 20,
+        })
+        vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+        assert.equals("recurse", bare_outcome)
+        text = buf_text(bufnr)
+        assert.matches("read path not found: README.md", text)
 
         local write_raw = mk_write_file_sse_response("toolu_NARROW_WRITE", "README.md", "replaced")
         local write_outcome = tool_loop.process_response(bufnr, write_raw, {

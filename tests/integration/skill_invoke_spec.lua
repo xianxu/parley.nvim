@@ -241,7 +241,9 @@ describe("skill_invoke.invoke", function()
 
         parley.dispatcher.query = function(_b, _p, _payload, _h, on_exit)
             tasker.set_query("qid_read", {
-                raw_response = read_file_sse("README.md"),
+                -- #192: reads resolve from the write root (nested) only; the
+                -- repo root is permission, not a fallback base — traverse to it.
+                raw_response = read_file_sse("../../README.md"),
             })
             vim.schedule(function() on_exit("qid_read") end)
         end

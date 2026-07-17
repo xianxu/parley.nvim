@@ -65,8 +65,17 @@ No new external services; no fakes needed beyond the existing cmp stub.
 **Files:**
 - Modify: `lua/parley/tools/dispatcher.lua` (`resolve_read_path`, ~lines 122-151; header comment lines ~10-11; call sites ~281, ~310)
 - Test: `tests/unit/tools_dispatcher_spec.lua` (replace `describe("resolve_read_path ordered roots (#181)")`, ~lines 198-274)
+- Test: `tests/unit/tool_loop_spec.lua` (~lines 245-255 pin the OLD fallthrough semantics — must be rewritten in the same task)
 
-- [ ] **Step 1: Rewrite the #181 describe block to the new contract** — `describe("resolve_read_path single base + confinement (#192)")`. Reuse the block's existing tmpdir fixtures/helpers. Cases:
+**Error-message contract (part of the API — specs assert on these strings):**
+
+| Case | New error |
+|------|-----------|
+| target doesn't exist (missing file, missing parent dir, dangling symlink) | `read path not found: <path as typed>` |
+| exists but realpath escapes cwd ∪ read_roots | `path outside working directory and configured read roots: <path> (add a root to parley `tool_read_roots` to allow it)` — produced by `resolve_path_in_cwd`, passes through |
+| non-string/empty path | `path must be a non-empty string` |
+
+- [x] **Step 1: Rewrite the #181 describe block to the new contract** — `describe("resolve_read_path single base + confinement (#192)")`. Reuse the block's existing tmpdir fixtures/helpers. Cases:
 
 ```lua
 -- setup sketch (mirror the existing block's tmp scaffolding):
@@ -85,49 +94,73 @@ it("resolves ../sibling traversal within a permitted root", function()
 end)
 it("does NOT resolve against non-base permission roots", function()
     -- workspace-root-relative spelling (old #181 fallback) must fail:
+    -- cwd/sibling/docs/note.md doesn't exist → not-found error naming the typed path
     local path, err = dispatcher.resolve_read_path("sibling/docs/note.md", cwd, roots)
     assert.is_nil(path)
-    assert.matches("sibling/docs/note.md", err)
+    assert.equals("read path not found: sibling/docs/note.md", err)
 end)
 it("rejects traversal escaping every permitted root, naming the knob", function()
-    local path, err = dispatcher.resolve_read_path("../../etc/hosts", cwd, { cwd })
+    -- must target an EXISTING file so the confinement branch (not the
+    -- not-found branch) fires: out/secret.md exists, roots = {cwd} only
+    local path, err = dispatcher.resolve_read_path("../outside/secret.md", cwd, { cwd })
     assert.is_nil(path)
     assert.matches("tool_read_roots", err)
 end)
-it("rejects missing reads instead of synthesizing a leaf", function() ... end)       -- keep, new signature
-it("accepts absolute paths inside roots and rejects symlink escapes", function() ... end) -- keep, new signature
-it("rejects a dangling symlink without crashing", function() ... end)                 -- keep, new signature
+it("rejects missing reads instead of synthesizing a leaf", function()
+    -- keep the case; error message CHANGES:
+    -- old "read path not found in configured roots: missing.md"
+    -- new "read path not found: missing.md"
+    local path, err = dispatcher.resolve_read_path("missing.md", cwd, { cwd })
+    assert.is_nil(path)
+    assert.equals("read path not found: missing.md", err)
+end)
+it("accepts absolute paths inside roots and rejects symlink escapes", function()
+    -- keep the case; the symlink-escape error CHANGES:
+    -- old "read path resolves outside configured roots: …"
+    -- new "path outside working directory and configured read roots: …" (from resolve_path_in_cwd)
+    ...
+end)
+it("rejects a dangling symlink without crashing", function()
+    -- keep the case; error CHANGES to "read path not found: <path>"
+    -- (fs_realpath fails on the dangling target → not-found branch)
+    ...
+end)
 ```
 
-- [ ] **Step 2: Run to verify the new tests fail** — `make -f Makefile.parley test-spec SPEC=unit/tools_dispatcher` — expect failures in the new describe block only (wrong-arity call treats `cwd` as `read_roots`).
+- [x] **Step 2: Run to verify the new tests fail** — `make -f Makefile.parley test-spec SPEC=unit/tools_dispatcher` — expect failures in the new describe block only (wrong-arity call treats `cwd` as `read_roots`).
 
-- [ ] **Step 3: Implement** — replace the body of `resolve_read_path`:
+- [x] **Step 3: Implement** — replace the body of `resolve_read_path`:
 
 ```lua
 --- Read-side resolver (#192): resolve `path` against `cwd` (the neighborhood
 --- write root — the single base), confine the realpath to cwd ∪ read_roots,
 --- and require the target to exist (reads never synthesize a new-file leaf).
---- Delegates base+confinement to resolve_path_in_cwd — one mechanism for
---- reads and writes; reads differ only by extra roots + existence.
+--- Existence is checked up front so every not-found flavor (missing file,
+--- missing parent, dangling symlink) reports the path AS TYPED; base +
+--- confinement then delegate to resolve_path_in_cwd — one mechanism for
+--- reads and writes, reads differing only by extra roots + existence.
 function M.resolve_read_path(path, cwd, read_roots)
-    local abs, err = M.resolve_path_in_cwd(path, cwd, read_roots or {})
-    if not abs then
-        return nil, err
+    if type(path) ~= "string" or path == "" then
+        return nil, "path must be a non-empty string"
     end
-    if not vim.loop.fs_realpath(abs) then
+    local joined = path:sub(1, 1) == "/" and vim.fs.normalize(path)
+        or vim.fs.normalize(cwd .. "/" .. path)
+    if not vim.loop.fs_realpath(joined) then
         return nil, "read path not found: " .. path
     end
-    return abs
+    return M.resolve_path_in_cwd(path, cwd, read_roots or {})
 end
 ```
 
-Notes: passing `read_roots or {}` (never nil) keeps the escape error naming the `tool_read_roots` knob. The `fs_realpath(abs)` check rejects both missing files (leaf-synthesized by `resolve_path_in_cwd`) and dangling symlinks. Update the header comment table (line ~10): "ordered read roots" → "read base + confinement".
+Notes: the up-front `fs_realpath(joined)` check is what produces `read path not found: <typed path>` for ALL not-found flavors — without it, `resolve_path_in_cwd`'s leaf-synthesis branch reports `cannot resolve parent directory: <abs parent>` (names the missing parent, not the typed path — fails the Done-when criterion and the sketched assertions; flagged independently by both plan reviews). Passing `read_roots or {}` (never nil) keeps the escape error naming the `tool_read_roots` knob. Update the header comment table (line ~10): "ordered read roots" → "read base + confinement".
 
-- [ ] **Step 4: Update the two `execute_call` call sites** (~281, ~310): `M.resolve_read_path(call.input[field], policy.write_root, roots)` (and same for the `paths` loop). `roots_for_def()` is unchanged.
+- [x] **Step 3b: Rewrite the stale tool_loop test** — `tests/unit/tool_loop_spec.lua` ~245-255 ("widens reads but not writes from ordinary nested repo Markdown") pins the OLD fallthrough: it reads `"README.md"` from a nested write root and expects success via repo-root fallback. Rewrite to the new semantics: the traversal spelling (`"../…/README.md"` relative to the nested write root, per the fixture's layout) succeeds; the bare `"README.md"` spelling now fails with `read path not found: README.md` (the old asserted pattern `"read path .* configured roots"` matches nothing anymore). Adjust while keeping the test's original point: read-kind tools get the wide permission set, write tools stay cwd-confined.
 
-- [ ] **Step 5: Run the full dispatcher spec** — `make -f Makefile.parley test-spec SPEC=unit/tools_dispatcher` — expect PASS, including the untouched `resolve_path_in_cwd` blocks and the `execute_call` policy-enforcement test (~line 261).
+- [x] **Step 4: Update the two `execute_call` call sites** (~281, ~310): `M.resolve_read_path(call.input[field], policy.write_root, roots)` (and same for the `paths` loop). `roots_for_def()` is unchanged.
 
-- [ ] **Step 6: Commit** — `#192: resolve reads from the write root; read roots are permission-only` (body: supersedes #181 ordered-roots resolution; why single-base).
+- [x] **Step 5: Run the FULL suite** — `make -f Makefile.parley test` — expect PASS (not just the dispatcher spec: `tool_loop_spec` and others exercise the resolver indirectly; a chunk commit must never land red). Assertion hygiene: `assert.matches` takes Lua patterns — tmpdir paths contain `-` (magic char); escape or use `assert.equals`/plain-find as the existing #181 block does.
+
+- [x] **Step 6: Commit** — `#192: resolve reads from the write root; read roots are permission-only` (body: supersedes #181 ordered-roots resolution; why single-base).
 
 ## Chunk 2: completion in typed form
 
@@ -166,7 +199,9 @@ function M.completion_candidates(policy, base)
     if not policy or not policy.write_root then
         return {}
     end
-    local root = policy.write_root
+    -- policies are fs_realpath-canonical (no trailing slash) today; the strip
+    -- arithmetic below silently corrupts labels if that ever changes, so guard
+    local root = policy.write_root:gsub("/+$", "")
     local resolver = require("parley.tools.dispatcher").resolve_read_path
     local items = {}
     -- Glob echoes the pattern prefix verbatim (".." survives textually), so
@@ -189,7 +224,7 @@ end
 
 - [ ] **Step 4: Update the unit spec** — in `tests/unit/neighborhood_spec.lua`, delete the `merge_completion_candidates` test (~134-138). `build_policy`/`policy_for_path` tests are unchanged (read_roots still computed the same way — they just mean permission now).
 
-- [ ] **Step 5: Run both specs** — `make -f Makefile.parley test-spec SPEC=integration/neighborhood_completion` and `SPEC=unit/neighborhood` — expect PASS.
+- [ ] **Step 5: Run the FULL suite** — `make -f Makefile.parley test` — expect PASS (the neighborhood/completion surface is exercised beyond its own specs).
 
 - [ ] **Step 6: Commit** — `#192: complete dot-dot traversal in typed form from the write root`.
 
@@ -198,6 +233,7 @@ end
 **Files:**
 - Modify: `lua/parley/neighborhood.lua` (`format_tool_context` ~137-143)
 - Test: `tests/unit/neighborhood_spec.lua` (~122-132)
+- Test: `tests/unit/build_messages_spec.lua` (~line 136 asserts the OLD wording `"Relative reads search these roots in order"` — update it to the new first line in the same task)
 
 - [ ] **Step 1: Update the unit test** to the new wording:
 
@@ -216,7 +252,7 @@ it("formats guidance from the policy", function()
 end)
 ```
 
-- [ ] **Step 2: Run to verify failure**, **Step 3: implement the matching wording**, **Step 4: run to PASS** — `make -f Makefile.parley test-spec SPEC=unit/neighborhood`.
+- [ ] **Step 2: Run to verify failure**, **Step 3: implement the matching wording** (and update `build_messages_spec.lua:136`), **Step 4: run to PASS** — `make -f Makefile.parley test-spec SPEC=unit/neighborhood` AND `SPEC=unit/build_messages`.
 - [ ] **Step 5: Commit** — `#192: tool context states single-base + confinement contract`.
 
 ## Chunk 3: deterministic cmp attach
@@ -234,13 +270,17 @@ end)
 ```lua
 it("re-asserts the parley buffer config on BufEnter", function()
     -- ... stub cmp as in the previous test, prep chat, wait for first capture ...
+    -- CAUTION: `cmp_registered` is a module-local one-shot in neighborhood.lua and
+    -- persists across `it` blocks in a spec-file run — do NOT assert an absolute
+    -- register count on a fresh stub; assert it doesn't CHANGE across the re-assert.
+    local registers_before = register_count
     captured = nil
-    vim.api.nvim_exec_autocmds("BufEnter", { buffer = buf })
+    vim.api.nvim_exec_autocmds("BufEnter", { buffer = buf })  -- verified: fires buffer-local autocmds
     vim.wait(100, function() return captured ~= nil end)
     assert.is_not_nil(captured)  -- parley re-asserted after a host would have clobbered
     assert.same({ "parley_path", "buffer" },
         { captured.sources[1].name, captured.sources[2].name })
-    assert.equals(1, register_count)
+    assert.equals(registers_before, register_count)  -- re-assert never re-registers
 end)
 ```
 
@@ -270,9 +310,10 @@ The one-time parts (policy snapshot, `completefunc`, `parley_root_policy`, sourc
 
 ### Task 5: full suite, live verification, atlas, log
 
-- [ ] **Step 1: Full test run** — `make -f Makefile.parley test` — expect PASS (unit parallel + integration sequential). Fix any spec touching the old resolver signature that the greps below surface:
+- [ ] **Step 1: Full test run** — `make -f Makefile.parley test` — expect PASS (unit parallel + integration sequential). Fix any spec touching the old resolver signature or pinned OLD behavior that the greps below surface (grep for *behavior strings*, not just symbol names — `tool_loop_spec` and `build_messages_spec` pinned old semantics without naming the changed functions):
   - `grep -rn "resolve_read_path" lua/ tests/` — every call must pass `(path, cwd, roots)`.
   - `grep -rn "merge_completion_candidates\|relative_to_root" lua/ tests/` — zero hits.
+  - `grep -rn "search these roots\|configured roots\|first existing match" lua/ tests/ atlas/` — zero stale hits (new wording only).
 - [ ] **Step 2: Live verification in the real brain chat** (the issue's motivating case): open `brain/workshop/parley/2026-07-16.16-38-57.920.md` in nvim, insert mode, type `../ariadne/` → expect ariadne entries offered as `../ariadne/<name>` and segment-continuation; switch to another buffer and back, retype → still parley completion (not host cmp-path). Then ask the chat "tell me about ../ariadne/" → the `ls` tool call must succeed. Record the observed results in `## Log`.
 - [ ] **Step 3: Atlas** — update `atlas/infra/repo_mode.md` ("Reference neighborhood (#147)" section: ordered-roots + first-existing-match prose → single-base + confinement; completion = write-root glob, typed-form labels) and `atlas/providers/tool_use.md` (root-policy scope bullet, ~lines 63-66: same rewrite). Atlas holds current state only — replace the stale prose, don't append history.
 - [ ] **Step 4: Issue bookkeeping** — tick `## Plan` boxes in the issue, append a `## Log` session entry, set `estimate_hours` already present (set before change-code).

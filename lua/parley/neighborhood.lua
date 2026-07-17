@@ -215,7 +215,7 @@ function M.completion_candidates(policy, base)
     local accepted = {}
     local resolver = require("parley.tools.dispatcher").resolve_read_path
     for _, label in ipairs(M.merge_completion_candidates(groups)) do
-        if resolver(label:gsub("/$", ""), policy.read_roots) then
+        if resolver(label:gsub("/$", ""), policy.write_root, policy.read_roots) then
             accepted[#accepted + 1] = label
         end
     end

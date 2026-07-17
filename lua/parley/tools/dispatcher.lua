@@ -7,7 +7,7 @@
 -- exactly one place to audit and one place to fix.
 --
 -- SINGLE source for each invariant:
---   - ordered read roots:         resolve_read_path
+--   - read base + confinement:    resolve_read_path
 --   - write-root confinement:     resolve_path_in_cwd
 --   - result size cap:            truncate / truncate_preserving_footer (M5)
 --   - pcall-guarded handler call: execute_call
@@ -119,35 +119,23 @@ function M.resolve_path_in_cwd(path, cwd, allowed_roots)
     return nil, "path outside working directory: " .. path
 end
 
-function M.resolve_read_path(path, read_roots)
+--- Read-side resolver (#192): resolve `path` against `cwd` (the neighborhood
+--- write root — the single base), confine the realpath to cwd ∪ read_roots,
+--- and require the target to exist (reads never synthesize a new-file leaf).
+--- Existence is checked up front so every not-found flavor (missing file,
+--- missing parent, dangling symlink) reports the path AS TYPED; base +
+--- confinement then delegate to resolve_path_in_cwd — one mechanism for
+--- reads and writes, reads differing only by extra roots + existence.
+function M.resolve_read_path(path, cwd, read_roots)
     if type(path) ~= "string" or path == "" then
         return nil, "path must be a non-empty string"
     end
-    local roots = {}
-    for _, root in ipairs(read_roots or {}) do
-        local resolved = resolve_root(root, root)
-        if resolved then roots[#roots + 1] = resolved end
+    local joined = path:sub(1, 1) == "/" and vim.fs.normalize(path)
+        or vim.fs.normalize(cwd .. "/" .. path)
+    if not vim.loop.fs_realpath(joined) then
+        return nil, "read path not found: " .. path
     end
-    local candidates = {}
-    if path:sub(1, 1) == "/" then
-        candidates[1] = path
-    else
-        for _, root in ipairs(roots) do candidates[#candidates + 1] = root .. "/" .. path end
-    end
-    for _, candidate in ipairs(candidates) do
-        candidate = vim.fs.normalize(candidate)
-        if vim.loop.fs_lstat(candidate) then
-            local real = vim.loop.fs_realpath(candidate)
-            if not real then
-                return nil, "cannot resolve read path: " .. path
-            end
-            for _, root in ipairs(roots) do
-                if real == root or real:sub(1, #root + 1) == root .. "/" then return real end
-            end
-            return nil, "read path resolves outside configured roots: " .. path
-        end
-    end
-    return nil, "read path not found in configured roots: " .. path
+    return M.resolve_path_in_cwd(path, cwd, read_roots or {})
 end
 
 --------------------------------------------------------------------------------
@@ -278,7 +266,7 @@ function M.execute_call(call, tools_registry, opts)
             local roots = roots_for_def()
             local abs, scope_err
             if def.kind ~= "write" then
-                abs, scope_err = M.resolve_read_path(call.input[field], roots)
+                abs, scope_err = M.resolve_read_path(call.input[field], policy.write_root, roots)
             else
                 abs, scope_err = M.resolve_path_in_cwd(call.input[field], policy.write_root)
             end
@@ -307,7 +295,7 @@ function M.execute_call(call, tools_registry, opts)
             end
             local abs, scope_err
             if def.kind ~= "write" then
-                abs, scope_err = M.resolve_read_path(path, roots)
+                abs, scope_err = M.resolve_read_path(path, policy.write_root, roots)
             else
                 abs, scope_err = M.resolve_path_in_cwd(path, policy.write_root)
             end
