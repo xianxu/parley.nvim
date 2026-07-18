@@ -4,7 +4,7 @@
 
 **Goal:** Make semantic folds converge to a pure projection of only the exchange being mutated, without ghost folds or document-wide fold clearing.
 
-**Architecture:** A pure module projects one exchange's model blocks into exact fold ranges. Because Neovim manual folds have no stable IDs after mutation, consumers bracket a known exchange mutation: delete its old projected folds while intact, perform the buffer/model change, then render its new projection; initial and late-window hydration parse once and render all exchanges.
+**Architecture:** A pure module projects one exchange's model blocks into exact fold ranges. Because Neovim manual folds have no stable IDs after mutation, consumers bracket a known exchange mutation across every window displaying the buffer: delete its old projected folds while intact, perform the buffer/model change, then render its new projection; initial and late-window hydration parse once and render all exchanges with lightweight per-window initialization state.
 
 **Tech Stack:** Lua, Neovim manual folds/window events, Plenary/Busted, `exchange_model`.
 
@@ -31,14 +31,15 @@
 
 | Name | Kind | Lives in | Status | Wraps |
 |------|------|----------|--------|-------|
-| `prepare_exchange_update` | INTEGRATION | `lua/parley/tool_folds.lua` | new | window-local `normal! zd` |
+| `prepare_exchange_update` | INTEGRATION | `lua/parley/tool_folds.lua` | new | buffer-window snapshot + window-local `normal! zd` |
 | `reconcile_exchange` | INTEGRATION | `lua/parley/tool_folds.lua` | new | window-local `:fold` creation |
-| `hydrate_window` | INTEGRATION | `lua/parley/tool_folds.lua` | modified | parser/model provider + window events |
+| `hydrate_window` | INTEGRATION | `lua/parley/tool_folds.lua` | modified | parser/model provider + initialized registry + window events |
+| `around_write` | INTEGRATION | `lua/parley/dispatcher.lua` | new | guaranteed streaming mutation finalization |
 
-- **`prepare_exchange_update`** — deletes the old projection before the
-  mutation can shrink or migrate it. It visits projected starts in reverse
-  order and runs one `normal! zd` only when `foldclosed(start_1)` or
-  `foldlevel(start_1)` proves a manual fold exists there.
+- **`prepare_exchange_update`** — snapshots all windows showing the buffer and
+  deletes the old projection in each before mutation can shrink or migrate it.
+  It visits projected starts in reverse order and runs one `normal! zd` only
+  when `foldclosed(start_1)` or `foldlevel(start_1)` proves a fold exists there.
   - **Injected into:** Streaming `before_write` and tool-loop append.
   - **Future extensions:** A synchronous `with_exchange_update` wrapper for
     callers whose mutation is not split across callbacks.
@@ -47,10 +48,17 @@
   - **Injected into:** Streaming `after_write`, tool-loop append, and hydration.
   - **Future extensions:** Explicit list of changed exchange indexes.
 - **`hydrate_window`** — obtains a fresh model through one provider seam and
-  renders every exchange once for a newly entered window. Live consumers use
-  their current model and never reparse.
+  renders every exchange once for a newly entered window. A `(buf,win)`
+  initialized registry prevents duplicate identical folds and is cleared on
+  window/buffer teardown. Live consumers use their current model and never
+  reparse on success.
   - **Injected into:** `setup`, `BufWinEnter`, and `WinEnter`.
   - **Future extensions:** None planned.
+- **`around_write`** — wraps dispatcher buffer write, line/model callbacks, and
+  `after_write` so fold finalization runs on success, empty reductions, and
+  thrown callbacks.
+  - **Injected into:** `dispatcher.create_handler` options.
+  - **Future extensions:** Other buffer-state transactions needing finally.
 
 ## Chunk 1: Pure projection and mutation transaction
 
@@ -94,8 +102,9 @@ With a real window/manual folds:
 1. create the pre-summary streamed semantic fold, perform the actual
    `stream_replace_at_line`/model-span transition, then use the current add-only
    path and enumerate fold starts to prove the blank-line ghost exists;
-2. delete a projected fold before that same mutation, render the new summary,
-   and assert exactly one summary fold and none on the following blank line;
+2. in two real windows, delete the projected fold before that same mutation,
+   render the new summary in both, and assert exactly one summary fold per
+   window and none on either following blank line;
 3. pin `normal! zd` behavior for open and closed semantic folds;
 4. assert adjacent and disjoint user folds survive prepare/reconcile unchanged;
 5. document native behavior for nested and partially overlapping user folds
@@ -114,26 +123,30 @@ reproduce and the prepare/reconcile APIs to be absent.
 
 - [ ] **Step 1: Implement exact old-fold deletion**
 
-`prepare_exchange_update(buf, win, model, exchange_index)` validates the
-buffer/window/exchange, projects old ranges, and in `nvim_win_call` visits
-starts bottom-to-top. At each start it moves the cursor temporarily and runs
-`normal! zd` only when a fold level exists; it restores the original cursor.
-It never runs `zE`, never ranges across the exchange, and never touches another
-window.
+`prepare_exchange_update(buf, model, exchange_index)` validates the buffer and
+exchange, snapshots `win_findbuf(buf)`, projects old ranges, and in each valid
+window visits starts bottom-to-top. At each start it moves the cursor
+temporarily and runs `normal! zd` only when a fold level exists; it restores the
+cursor. It returns the window snapshot for post-mutation reconciliation and
+never runs `zE` or ranges across the exchange.
 
 - [ ] **Step 2: Implement exact new-fold rendering**
 
-`reconcile_exchange` projects the current exchange, converts only at the Ex
-boundary to one-based inclusive ranges, creates each manual fold, and closes
-the semantic fold. Invalid targets are no-ops. Add a test observer receiving
+`reconcile_exchange` projects the current exchange for one window, converts
+only at the Ex boundary to one-based inclusive ranges, creates each manual fold,
+and closes it. A buffer-scoped finalizer runs it for each surviving snapshot
+window. Invalid targets are no-ops. Add a test observer receiving
 `{ phase, win, exchange_index, ranges }` for locality assertions.
 
 - [ ] **Step 3: Add failure restoration seam**
 
-For synchronous callers, `with_exchange_update(..., mutate)` prepares, executes
-`mutate` under `xpcall`, reconciles from the possibly updated model, and rethrows
-the original traceback. Streaming uses split prepare/reconcile callbacks because
-the write is owned by `create_handler`.
+For synchronous callers, `with_exchange_update(..., mutate)` prepares all
+windows, executes `mutate` under `xpcall`, and on success reconciles from the
+updated live model. On error it reparses current buffer state through the shared
+model provider and attempts restoration; recovery failures leave prepared folds
+absent and never replace the original traceback. Add failures after buffer
+mutation and after model mutation. Streaming uses the same finalization policy
+through `dispatcher.create_handler`'s `around_write` seam.
 
 - [ ] **Step 4: Run GREEN**
 
@@ -151,17 +164,22 @@ documented user-fold cases.
 - [ ] **Step 1: Add RED streaming locality test**
 
 Through `M.respond` and its real `create_handler`, stream a summary transition
-in exchange 2 while exchange 1 and an unrelated user fold are closed. Assert
-observer sequence `prepare(2), reconcile(2)` for each write, no event for
-exchange 1, exact absence of a blank-line fold, and unchanged earlier/user
-folds. Retain bounded active-segment read assertions.
+in exchange 2 displayed in two windows while exchange 1 and unrelated user
+folds are closed in both. Assert observer sequence prepare/reconcile for
+exchange 2 in both windows, no event for exchange 1, exact absence of a
+blank-line fold, and unchanged earlier/user folds. Add an empty-reduction chunk,
+an injected stream-write failure, and an injected post-model-update failure;
+each must run recovery/finalization and preserve the original error. Retain
+bounded active-segment read assertions.
 
 - [ ] **Step 2: Wire before/after callbacks**
 
-Call `prepare_exchange_update` in the existing `before_write` after lease
-validation and before the dispatcher mutation. After `answer_structure.reduce`
-updates the live model, call `reconcile_exchange` once for `target_idx`, outside
-the changed-block loop. Delete `_apply_block_fold` use.
+Add `opts.around_write(qid, chunk, write_fn)` to `dispatcher.create_handler` and
+place the actual buffer write, `on_lines_changed`, and `after_write` inside
+`write_fn`. Chat response supplies a wrapper that prepares exchange 2 in all
+snapshot windows, invokes `write_fn`, then always finalizes from the live model
+or parse-from-buffer recovery. Ensure `#replacements == 0` still reaches the
+finalizer. Delete `_apply_block_fold` use.
 
 - [ ] **Step 3: Verify streaming GREEN**
 
@@ -177,9 +195,10 @@ existing streaming tests to pass.
 
 - [ ] **Step 1: Add RED real-entry-point test**
 
-Call `_append_section_to_answer` with a real buffer/model/window and observer.
-Assert only its supplied `exchange_idx` receives prepare/reconcile, the appended
-tool block folds, and another exchange/user fold is unchanged.
+Call `_append_section_to_answer` with a real two-window buffer/model and
+observer. Assert only its supplied `exchange_idx` receives prepare/reconcile in
+both windows, the appended tool block folds in both, and other exchange/user
+folds are unchanged.
 
 - [ ] **Step 2: Use `with_exchange_update`**
 
@@ -213,11 +232,12 @@ performing no mutation or error.
 
 - [ ] **Step 2: Implement idempotent hydration**
 
-`hydrate_window(buf, win, model_provider)` checks validity, configures fold
-options, obtains one fresh model, and uses the shared reconciler for every
-exchange. `setup` installs one augroup owner for `BufWinEnter`/`WinEnter` and
-schedules hydration with captured buffer/window IDs; repeat setup/events do not
-duplicate autocmd ownership or semantic folds.
+`hydrate_window(buf, win, model_provider)` checks validity and the lightweight
+initialized registry, configures fold options, obtains one fresh model, and
+uses the shared reconciler for every exchange before marking `(buf,win)` done.
+`setup` installs one augroup owner for `BufWinEnter`/`WinEnter`, `WinClosed`,
+`BufUnload`, and `BufDelete`, and schedules hydration with captured IDs. Repeat
+setup/events skip initialized windows; teardown clears the corresponding keys.
 
 - [ ] **Step 3: Verify lifecycle GREEN**
 
@@ -263,3 +283,11 @@ fold. Replaced it with prepare-before-mutation/reconcile-after-mutation, named
 the exact `normal! zd` selection behavior and overlap boundary, added real
 streaming/tool-loop/lifecycle tests plus a model-provider seam, enforced removal
 of add-only consumers, and raised the estimate to 3.0h.
+
+### 2026-07-17 — Multi-window and failure-finally correction
+
+Expanded each mutation transaction to snapshot and converge every window
+displaying the changed buffer; added dispatcher `around_write` so streaming
+finalization covers empty reductions and failures; defined parse-from-buffer
+recovery without masking the original error; and added a lightweight
+initialized `(buf,win)` registry plus teardown to make hydration idempotent.

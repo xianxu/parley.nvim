@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-07-17
 updated: 2026-07-17
-estimate_hours: 3.0
+estimate_hours: 3.5
 started: 2026-07-17T20:56:40-07:00
 ---
 
@@ -51,19 +51,35 @@ buffer/model mutation and creates exactly the new pure projection. The caller's
 current model plus exchange index identifies the changed exchange; no extmark or
 historical numeric index is used as durable identity.
 
-Streaming brackets each write to the active exchange with prepare/reconcile.
-Tool-loop append prepares its exchange before inserting and reconciles it after
-the model and buffer change. Unchanged exchanges receive no fold commands. The
-transaction restores the current projection even when the mutation raises,
-then rethrows the original error. All consumers use the same transaction
-adapter (`ARCH-DRY`, `ARCH-PURPOSE`).
+The mutation transaction is buffer-scoped. It snapshots every valid window
+displaying the buffer, prepares the changed exchange in each before mutation,
+then reconciles that exchange in every surviving snapshot window afterward. A
+window appearing later hydrates normally. Streaming brackets each write to the
+active exchange through a dispatcher `around_write` seam whose scope includes
+the buffer write, live-model growth/reduction, and after-write callbacks;
+reconciliation therefore runs as a `finally` action even for an empty reduction
+or thrown write/callback. Tool-loop append uses the synchronous form around its
+model and buffer mutation. Unchanged exchanges receive no fold commands.
+
+On successful mutation, reconciliation uses the caller's updated live model. On
+failure, the transaction attempts to rebuild a model from the current buffer
+through the shared model-provider seam and reconciles the changed exchange in
+each surviving window. If reparsing/reconciliation also fails, it leaves the
+prepared semantic folds absent, preserves unrelated folds, and rethrows the
+original error/traceback; recovery failure must never obscure the cause. Tests
+inject failure after buffer mutation and after model mutation. All consumers use
+the same transaction adapter (`ARCH-DRY`, `ARCH-PURPOSE`).
 
 Initial chat setup and a later `BufWinEnter`/`WinEnter` parse the current buffer
 through one model-provider seam and create the complete projection once in that
-window. Live streaming/tool-loop transactions use their already-current live
-model instead of reparsing. Scheduled hydration checks buffer/window validity
-at execution time and is idempotent when setup or window events repeat; no
-persistent ownership ledger remains to clean up or transfer across buffer reuse.
+window. A lightweight initialized registry keyed only by `(buf, win)` prevents
+repeated setup/window events from duplicating identical manual folds; it stores
+no fold ranges or exchange ownership. Live transactions use their current model
+and update no hydration identity. External structural edits do not trigger
+automatic full rehydration; their native manual-fold movement remains outside
+this regression's changed-exchange contract. `WinClosed`, `BufUnload`, and
+`BufDelete` clear initialized entries, so window/buffer reuse starts cleanly.
+Scheduled hydration checks validity and initialization again at execution time.
 
 If a user fold overlaps a semantic fold in the changed exchange, `zd` may select
 the innermost native manual fold; exact preservation of overlapping/nested folds
@@ -78,6 +94,7 @@ unchanged. Parley never issues `zE` or a document-wide fold clear.
   and no fold on the following blank line.
 - Desired semantic fold ranges are computed by a pure exchange-local function.
 - Streaming and tool-loop paths reconcile only their changed exchange.
+- Every window showing the changed buffer converges for that exchange.
 - Initial setup creates the same semantic folds through the shared reconciler.
 - Unchanged exchanges and unrelated user folds retain their ranges and closed
   state.
@@ -86,7 +103,8 @@ unchanged. Parley never issues `zE` or a document-wide fold clear.
 - Repeated setup and stale scheduled hydration are idempotent and harmless after
   buffer/window teardown; buffer reuse begins with no retained fold state.
 - Actual streaming and tool-loop entry points bracket mutations for only their
-  known exchange, and no add-only semantic-fold consumer remains.
+  known exchange, including empty reductions and failures, and no add-only
+  semantic-fold consumer remains.
 
 ## Estimate
 
@@ -96,17 +114,18 @@ familiarity: 1.0
 item: issue-spec design=0.25 impl=0.02
 item: lua-neovim design=0.75 impl=0.75
 item: lua-neovim design=0.35 impl=0.55
+item: lua-neovim design=0.15 impl=0.35
 item: atlas-docs design=0.03 impl=0.02
 item: milestone-review design=0.0 impl=0.15
-design-buffer: 0.08
-total: 3.0
+design-buffer: 0.10
+total: 3.5
 ```
 
 ## Plan
 
 - [ ] Write and approve the durable implementation plan.
 - [ ] Add RED pure and Neovim integration regressions for exact localized reconciliation.
-- [ ] Implement exchange-local fold projection, ownership, and reconciliation.
+- [ ] Implement exchange-local fold projection, mutation transaction, and reconciliation.
 - [ ] Route setup, streaming, and tool-loop consumers through the shared reconciler.
 - [ ] Update atlas and run focused, changed, and full verification.
 
@@ -141,3 +160,12 @@ localized prepare-before-mutation/reconcile-after-mutation transaction, defined
 the exact window-local `zd` behavior and overlap limitation, made late-window
 hydration explicitly reparse through one provider, added real consumer/race
 tests, and raised the estimate from 2.0h to 3.0h.
+
+### 2026-07-17 — Transaction scope and failure review
+
+Expanded prepare/reconcile across every window displaying the changed buffer;
+placed streaming writes and model callbacks inside a dispatcher `around_write`
+finally boundary; defined parse-from-buffer recovery without masking the
+original error; and added a lightweight per-window initialization registry so
+repeat setup/events cannot create duplicate identical folds. Explicitly scoped
+external structural-edit rehydration out of this regression.
