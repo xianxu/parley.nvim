@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-07-17
 updated: 2026-07-17
-estimate_hours: 2.0
+estimate_hours: 3.0
 started: 2026-07-17T20:56:40-07:00
 ---
 
@@ -41,49 +41,36 @@ The projection includes only foldable block kinds (`thinking`, `summary`,
 `exchange_model`; it does not inspect buffer text, existing folds, or editor
 state (`ARCH-PURE`, `ARCH-PURPOSE`).
 
-The Neovim adapter owns the manual folds created from that projection. One
-buffer-local namespace and exchange-anchor registry owns exchange identities.
-Each exchange anchor is a ranged extmark covering its question, with
-`right_gravity=false`, `end_right_gravity=true`, and `invalidate=true` so an
-insert before it moves the identity with the question while deletion of the
-covered question invalidates it. Ownership is per window and per valid exchange
-extmark ID, not per numeric exchange index: inserting an earlier exchange may
-renumber later exchanges without changing their identities. Each owned fold
-also carries invalidating start/end anchors so its current editor location can
-be retired after buffer edits move or shrink it.
+Manual folds have no stable identity after their covered text changes. The
+adapter therefore uses a mutation transaction rather than a persistent fold
+ledger. `prepare_exchange_update(buf, win, model, exchange_index)` computes the
+old pure projection while its manual folds are still intact and deletes one
+fold at each projected start with window-local `normal! zd`, in reverse block
+order. `reconcile_exchange(buf, win, model, exchange_index)` runs after the
+buffer/model mutation and creates exactly the new pure projection. The caller's
+current model plus exchange index identifies the changed exchange; no extmark or
+historical numeric index is used as durable identity.
 
-Before reconciliation, the buffer registry synchronizes against the current
-model. Valid anchors are matched only when their current start row equals that
-exchange's current question start; a missing row receives a new identity.
-Invalid anchors and valid anchors whose exchange no longer exists are retired
-from every window ledger before removal. A surviving anchor is never reassigned
-to a different row/exchange. This covers insertion before an exchange, whole
-question-line replacement that preserves the ranged anchor, exchange deletion,
-and buffer-number reuse without transferring or duplicating ownership.
+Streaming brackets each write to the active exchange with prepare/reconcile.
+Tool-loop append prepares its exchange before inserting and reconciles it after
+the model and buffer change. Unchanged exchanges receive no fold commands. The
+transaction restores the current projection even when the mutation raises,
+then rethrows the original error. All consumers use the same transaction
+adapter (`ARCH-DRY`, `ARCH-PURPOSE`).
 
-`reconcile_exchange(buf, win, model, exchange_index)` is the only incremental
-semantic-fold mutation path. It resolves or creates the exchange anchor,
-removes the folds previously owned by that exchange, computes the desired pure
-projection, creates exactly those folds, and replaces the ownership ledger.
-Unchanged exchanges receive no fold commands. User folds outside the changed
-exchange are never deleted or recreated.
+Initial chat setup and a later `BufWinEnter`/`WinEnter` parse the current buffer
+through one model-provider seam and create the complete projection once in that
+window. Live streaming/tool-loop transactions use their already-current live
+model instead of reparsing. Scheduled hydration checks buffer/window validity
+at execution time and is idempotent when setup or window events repeat; no
+persistent ownership ledger remains to clean up or transfer across buffer reuse.
 
-Initial chat setup reconciles every exchange once per existing window. A later
-`BufWinEnter`/`WinEnter` configures that window and idempotently reconciles every
-exchange once for each missing `(window, exchange-anchor)` ownership entry.
-Streaming reconciliation and tool-loop append reconcile only the exchange they
-already identify. A changed exchange is reconciled when its semantic block
-kinds, sizes, or positions may have changed; text-only edits that preserve those
-inputs do not require fold work. All consumers use the same projection and
-exchange-local adapter (`ARCH-DRY`). `WinClosed` retires only that window's
-ledger/fold anchors; `BufUnload`/`BufDelete` retires the buffer registry and every
-window ledger. Buffer-number reuse starts with no ownership state.
-
-If a user fold overlaps a Parley-owned semantic fold in the same changed
-exchange, Parley guarantees only that it does not issue a document-wide fold
-clear; overlapping manual folds are subject to Neovim's native merge/nesting
-behavior. The defended compatibility contract is preservation of unrelated user
-folds and untouched exchanges.
+If a user fold overlaps a semantic fold in the changed exchange, `zd` may select
+the innermost native manual fold; exact preservation of overlapping/nested folds
+cannot be guaranteed because Neovim exposes no fold IDs. The defended contract
+is explicit and testable: adjacent/partially overlapping cases follow native
+`zd` behavior, while unrelated user folds and every untouched exchange remain
+unchanged. Parley never issues `zE` or a document-wide fold clear.
 
 ## Done when
 
@@ -92,16 +79,14 @@ folds and untouched exchanges.
 - Desired semantic fold ranges are computed by a pure exchange-local function.
 - Streaming and tool-loop paths reconcile only their changed exchange.
 - Initial setup creates the same semantic folds through the shared reconciler.
-- Inserting or editing an earlier exchange does not transfer ownership of a
-  later exchange's folds.
 - Unchanged exchanges and unrelated user folds retain their ranges and closed
   state.
-- Ownership state is retired when its buffer or window becomes invalid.
 - A window opened after initial setup receives independent semantic folds;
-  closing it does not disturb another window's folds or ledger.
-- Inserting before, replacing the question of, or deleting an exchange neither
-  transfers nor duplicates another exchange's fold ownership; buffer reuse
-  begins cleanly.
+  closing it does not disturb another window's folds.
+- Repeated setup and stale scheduled hydration are idempotent and harmless after
+  buffer/window teardown; buffer reuse begins with no retained fold state.
+- Actual streaming and tool-loop entry points bracket mutations for only their
+  known exchange, and no add-only semantic-fold consumer remains.
 
 ## Estimate
 
@@ -109,12 +94,12 @@ folds and untouched exchanges.
 model: estimate-logic-v3.1
 familiarity: 1.0
 item: issue-spec design=0.25 impl=0.02
-item: lua-neovim design=0.45 impl=0.45
-item: lua-neovim design=0.25 impl=0.35
+item: lua-neovim design=0.75 impl=0.75
+item: lua-neovim design=0.35 impl=0.55
 item: atlas-docs design=0.03 impl=0.02
 item: milestone-review design=0.0 impl=0.15
-design-buffer: 0.03
-total: 2.0
+design-buffer: 0.08
+total: 3.0
 ```
 
 ## Plan
@@ -130,11 +115,11 @@ total: 2.0
 ### 2026-07-17
 
 Root cause: `_apply_block_fold` issues `:fold` for the latest block range but
-never retires the prior Parley-owned manual fold. Neovim can migrate that prior
+never retires the prior semantic manual fold. Neovim can migrate that prior
 range onto the blank margin when streaming replaces the semantic span. The
-approved design makes folds a pure per-exchange projection and reconciles only
-the exchange whose structure changed, keyed by stable anchors rather than
-numeric exchange indices (`ARCH-PURE`, `ARCH-DRY`, `ARCH-PURPOSE`).
+approved design makes folds a pure per-exchange projection and brackets only
+the known changed exchange's mutation (`ARCH-PURE`, `ARCH-DRY`,
+`ARCH-PURPOSE`).
 
 ## Revisions
 
@@ -145,3 +130,14 @@ specified ranged extmark gravity/invalidation plus registry synchronization and
 orphan retirement; widened setup/cleanup to the per-window lifecycle; and added
 acceptance coverage for late splits, question replacement, exchange deletion,
 insertion before an exchange, and buffer-number reuse.
+
+### 2026-07-17 — Plan review identity spike
+
+Direct Neovim experiments disproved the extmark-ledger design: insertion at an
+anchor and full-line replacement do not preserve a question-start identity
+under one gravity configuration, and a migrated manual fold exposes no fold ID
+that endpoint anchors can delete reliably. Replaced persistent ownership with a
+localized prepare-before-mutation/reconcile-after-mutation transaction, defined
+the exact window-local `zd` behavior and overlap limitation, made late-window
+hydration explicitly reparse through one provider, added real consumer/race
+tests, and raised the estimate from 2.0h to 3.0h.

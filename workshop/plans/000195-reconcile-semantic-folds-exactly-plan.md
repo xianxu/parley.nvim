@@ -2,11 +2,11 @@
 
 > **For agentic workers:** Consult AGENTS.md Section 3 (Subagent Strategy) to determine the appropriate execution approach: use superpowers-subagent-driven-development (if subagents are suitable per AGENTS.md) or superpowers-executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make each changed exchange's semantic folds converge exactly to a pure projection of its model without touching unchanged exchanges or unrelated user folds.
+**Goal:** Make semantic folds converge to a pure projection of only the exchange being mutated, without ghost folds or document-wide fold clearing.
 
-**Architecture:** Extract a pure fold projection from the exchange model, then render it through a buffer-owned exchange-anchor registry and per-window ownership ledger. Initial/window setup reconciles every exchange, while streaming and tool-loop paths call the same adapter for only the exchange they changed.
+**Architecture:** A pure module projects one exchange's model blocks into exact fold ranges. Because Neovim manual folds have no stable IDs after mutation, consumers bracket a known exchange mutation: delete its old projected folds while intact, perform the buffer/model change, then render its new projection; initial and late-window hydration parse once and render all exchanges.
 
-**Tech Stack:** Lua, Neovim extmarks/manual folds/autocmds, Plenary/Busted, `exchange_model`.
+**Tech Stack:** Lua, Neovim manual folds/window events, Plenary/Busted, `exchange_model`.
 
 ---
 
@@ -18,233 +18,248 @@
 |------|------|----------|--------|
 | `desired_folds` | PURE | `lua/parley/fold_projection.lua` | new |
 
-- **`desired_folds(model, exchange_index)`** — returns ordered
+- **`desired_folds(model, exchange_index)`** — ordered
   `{ block_index, kind, start_0, end_0 }` records for positive-size thinking,
   summary, tool-use, and tool-result blocks.
-  - **Relationships:** One exchange projects to zero or more semantic fold
-    ranges; ranges refer back to one model block.
-  - **DRY rationale:** Setup, streaming, and tool-loop must not each derive fold
-    coordinates or repeat the foldable-kind policy (`ARCH-DRY`).
-  - **Future extensions:** New semantic kinds widen the policy in this single
-    module.
+  - **Relationships:** One exchange projects to zero or more inclusive
+    zero-based ranges; each range refers to one model block.
+  - **DRY rationale:** Setup, streaming, and tool-loop share policy and
+    coordinates (`ARCH-DRY`, `ARCH-PURE`).
+  - **Future extensions:** New foldable semantic kinds widen here only.
 
 ### Integration points
 
 | Name | Kind | Lives in | Status | Wraps |
 |------|------|----------|--------|-------|
-| `FoldOwnershipRegistry` | INTEGRATION | `lua/parley/tool_folds.lua` | new | buffer extmarks and per-window state |
-| `reconcile_exchange` | INTEGRATION | `lua/parley/tool_folds.lua` | new | Neovim manual fold commands |
-| `fold window lifecycle` | INTEGRATION | `lua/parley/tool_folds.lua` | modified | `BufWinEnter`/`WinEnter`/`WinClosed`/buffer teardown |
+| `prepare_exchange_update` | INTEGRATION | `lua/parley/tool_folds.lua` | new | window-local `normal! zd` |
+| `reconcile_exchange` | INTEGRATION | `lua/parley/tool_folds.lua` | new | window-local `:fold` creation |
+| `hydrate_window` | INTEGRATION | `lua/parley/tool_folds.lua` | modified | parser/model provider + window events |
 
-- **`FoldOwnershipRegistry`** — one buffer registry owns ranged exchange
-  extmarks; each window ledger maps stable exchange extmark IDs to owned fold
-  endpoint extmarks.
-  - **Injected into:** The reconciliation adapter receives model/buffer/window
-    inputs and delegates desired ranges to the pure projection.
-  - **Future extensions:** Diagnostic inspection of owned fold identities.
-- **`reconcile_exchange`** — synchronizes exchange anchors, retires only that
-  exchange's owned folds in the target window, then renders its exact desired
-  projection.
-  - **Injected into:** Initial hydration, streaming span reconciliation, and
-    tool-loop append.
-  - **Future extensions:** Batched reconciliation of an explicit changed-ID
-    set, without whole-document mutation.
-- **`fold window lifecycle`** — hydrates missing `(window, exchange-anchor)`
-  entries and retires only the state whose window/buffer ended.
-  - **Injected into:** `tool_folds.setup`; no second lifecycle owner is added.
+- **`prepare_exchange_update`** — deletes the old projection before the
+  mutation can shrink or migrate it. It visits projected starts in reverse
+  order and runs one `normal! zd` only when `foldclosed(start_1)` or
+  `foldlevel(start_1)` proves a manual fold exists there.
+  - **Injected into:** Streaming `before_write` and tool-loop append.
+  - **Future extensions:** A synchronous `with_exchange_update` wrapper for
+    callers whose mutation is not split across callbacks.
+- **`reconcile_exchange`** — renders exactly the current pure projection after
+  mutation, in one specified window. It does not inspect other exchanges.
+  - **Injected into:** Streaming `after_write`, tool-loop append, and hydration.
+  - **Future extensions:** Explicit list of changed exchange indexes.
+- **`hydrate_window`** — obtains a fresh model through one provider seam and
+  renders every exchange once for a newly entered window. Live consumers use
+  their current model and never reparse.
+  - **Injected into:** `setup`, `BufWinEnter`, and `WinEnter`.
   - **Future extensions:** None planned.
 
-## Chunk 1: Pure projection and exact ownership adapter
+## Chunk 1: Pure projection and mutation transaction
 
-### Task 1: Extract the pure exchange fold projection
+### Task 1: Extract the pure exchange projection
 
 **Files:**
 - Create: `lua/parley/fold_projection.lua`
 - Create: `tests/unit/fold_projection_spec.lua`
 - Modify: `tests/unit/tool_folds_spec.lua`
 
-- [ ] **Step 1: Write RED pure projection tests**
+- [ ] **Step 1: Write RED pure tests**
 
-Create model fixtures covering all four foldable kinds, non-foldable/zero-size
-blocks, margins between blocks, multiple foldable blocks, and a second exchange.
-Assert exact ordered inclusive zero-based records. Also assert the module source
-contains no `vim`, `nvim`, filesystem, clock, or process dependency.
+Build `exchange_model` fixtures for all four foldable kinds, zero-size and
+ordinary blocks, margins, multiple blocks, and multiple exchanges. Assert exact
+ordered inclusive zero-based records. Load the module with `_G.vim=nil` in a
+plain isolated Lua package context to prove purity without brittle source grep.
 
-- [ ] **Step 2: Run the pure spec and verify RED**
+- [ ] **Step 2: Run RED**
 
-Run:
-`nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/fold_projection_spec.lua" -c "qa!"`
+Run the exact new spec with `PlenaryBustedFile`; expect module-not-found.
 
-Expected: FAIL because `parley.fold_projection` does not exist.
+- [ ] **Step 3: Implement `desired_folds`**
 
-- [ ] **Step 3: Implement the minimal projection**
+Own the foldable-kind set only in `fold_projection.lua`; use
+`model:block_start/end` and return no Neovim coordinates.
 
-Export `desired_folds(model, exchange_index)`. Keep the foldable-kind set in
-this module only. Use `model:block_start` and `model:block_end` directly; return
-no editor-specific coordinates.
+- [ ] **Step 4: Run GREEN**
 
-- [ ] **Step 4: Run projection/unit specs and verify GREEN**
+Run the new spec and `tests/unit/tool_folds_spec.lua`; expect all pass and the
+old duplicated policy owner removed.
 
-Run the new spec and `tests/unit/tool_folds_spec.lua`. Expected: all pass with
-the old policy test removed or redirected to the projection owner.
-
-### Task 2: Reproduce ghost folds and ownership non-transfer
+### Task 2: Prove exact `zd` behavior and reproduce the ghost
 
 **Files:**
 - Modify: `tests/integration/tool_folds_spec.lua`
 
-- [ ] **Step 1: Add RED exact-reconciliation regressions**
+- [ ] **Step 1: Add RED production-shaped tests**
 
-Add real-window tests that:
+With a real window/manual folds:
 
-1. create a fold for a streamed semantic span, mutate/reduce it into a one-line
-   summary plus blank margin, reconcile that exchange, close all semantic folds,
-   and enumerate every row to prove the only owned fold is the summary row;
-2. create two exchanges plus an unrelated user fold, reconcile only exchange 1,
-   and spy on the adapter's exchange target/ledger to prove exchange 2 receives
-   no delete/create commands and both untouched folds retain range/closed state;
-3. insert an exchange before an anchored exchange and prove its extmark identity
-   and fold ownership move with the logical exchange;
-4. replace a question line in place and reuse its valid ranged identity;
-5. delete an exchange and prove invalid/orphan ownership is retired rather than
-   transferred to a new exchange at that row;
-6. delete/recreate a buffer number and prove no old registry state survives.
+1. create the pre-summary streamed semantic fold, perform the actual
+   `stream_replace_at_line`/model-span transition, then use the current add-only
+   path and enumerate fold starts to prove the blank-line ghost exists;
+2. delete a projected fold before that same mutation, render the new summary,
+   and assert exactly one summary fold and none on the following blank line;
+3. pin `normal! zd` behavior for open and closed semantic folds;
+4. assert adjacent and disjoint user folds survive prepare/reconcile unchanged;
+5. document native behavior for nested and partially overlapping user folds
+   without promising identity Neovim does not expose.
 
-- [ ] **Step 2: Run the integration spec and verify RED**
+- [ ] **Step 2: Run RED**
 
-Run the exact `tool_folds_spec.lua` command. Expected: the ghost-fold assertion
-finds the extra blank-line fold and the new reconciliation/registry APIs are
-missing.
+Run `tests/integration/tool_folds_spec.lua`; expect the ghost assertion to
+reproduce and the prepare/reconcile APIs to be absent.
 
-### Task 3: Implement buffer identities and localized reconciliation
+### Task 3: Implement localized prepare/reconcile
 
 **Files:**
 - Modify: `lua/parley/tool_folds.lua`
 - Modify: `tests/integration/tool_folds_spec.lua`
 
-- [ ] **Step 1: Add one module namespace and ownership state**
+- [ ] **Step 1: Implement exact old-fold deletion**
 
-Store state by buffer, then window, then exchange extmark ID. Exchange marks are
-ranged across the question with `right_gravity=false`,
-`end_right_gravity=true`, and `invalidate=true`. Owned fold range marks use the
-same invalidating behavior. Expose test-only state inspection/reset seams rather
-than duplicating registry logic in tests.
+`prepare_exchange_update(buf, win, model, exchange_index)` validates the
+buffer/window/exchange, projects old ranges, and in `nvim_win_call` visits
+starts bottom-to-top. At each start it moves the cursor temporarily and runs
+`normal! zd` only when a fold level exists; it restores the original cursor.
+It never runs `zE`, never ranges across the exchange, and never touches another
+window.
 
-- [ ] **Step 2: Implement registry synchronization**
+- [ ] **Step 2: Implement exact new-fold rendering**
 
-For the current model, query existing exchange anchors with details. Retire
-invalid anchors and anchors whose start row no longer matches any current
-question start from every window ledger. Reuse a valid identity only at the
-same current question start; create identities for missing starts. Never key
-ownership by exchange index.
+`reconcile_exchange` projects the current exchange, converts only at the Ex
+boundary to one-based inclusive ranges, creates each manual fold, and closes
+the semantic fold. Invalid targets are no-ops. Add a test observer receiving
+`{ phase, win, exchange_index, ranges }` for locality assertions.
 
-- [ ] **Step 3: Implement `reconcile_exchange`**
+- [ ] **Step 3: Add failure restoration seam**
 
-Resolve the stable exchange identity, delete only the target window's prior
-owned manual folds using their current anchored positions, compute
-`desired_folds`, convert each range to one-based inclusive Ex coordinates,
-create the folds, and replace only that ledger entry. Invalid buffer/window or
-missing exchange returns without mutation. Preserve fold closed state by
-closing newly rendered semantic folds; do not issue `zE`/document-wide clears.
+For synchronous callers, `with_exchange_update(..., mutate)` prepares, executes
+`mutate` under `xpcall`, reconciles from the possibly updated model, and rethrows
+the original traceback. Streaming uses split prepare/reconcile callbacks because
+the write is owned by `create_handler`.
 
-- [ ] **Step 4: Verify GREEN and exact locality**
+- [ ] **Step 4: Run GREEN**
 
-Run unit and integration fold specs. Expected: one summary fold, no blank-line
-ghost, stable ownership through insertion/replacement, orphan cleanup after
-deletion/reuse, and unchanged user/other-exchange folds.
+Run fold unit/integration specs; expect exact summary-only convergence and the
+documented user-fold cases.
 
-## Chunk 2: Consumer and window lifecycle convergence
+## Chunk 2: Real consumers and window hydration
 
-### Task 4: Route every semantic-fold consumer through exchange reconciliation
+### Task 4: Bracket the actual streaming consumer
 
 **Files:**
 - Modify: `lua/parley/chat_respond.lua`
-- Modify: `lua/parley/tool_loop.lua`
-- Modify: `lua/parley/tool_folds.lua`
 - Modify: `tests/integration/chat_respond_spec.lua`
+
+- [ ] **Step 1: Add RED streaming locality test**
+
+Through `M.respond` and its real `create_handler`, stream a summary transition
+in exchange 2 while exchange 1 and an unrelated user fold are closed. Assert
+observer sequence `prepare(2), reconcile(2)` for each write, no event for
+exchange 1, exact absence of a blank-line fold, and unchanged earlier/user
+folds. Retain bounded active-segment read assertions.
+
+- [ ] **Step 2: Wire before/after callbacks**
+
+Call `prepare_exchange_update` in the existing `before_write` after lease
+validation and before the dispatcher mutation. After `answer_structure.reduce`
+updates the live model, call `reconcile_exchange` once for `target_idx`, outside
+the changed-block loop. Delete `_apply_block_fold` use.
+
+- [ ] **Step 3: Verify streaming GREEN**
+
+Run `chat_respond_spec.lua`; expect the new sequence/range assertions and all
+existing streaming tests to pass.
+
+### Task 5: Bracket the actual tool-loop consumer
+
+**Files:**
+- Modify: `lua/parley/tool_loop.lua`
+- Create or Modify: `tests/integration/tool_loop_spec.lua`
 - Modify: `tests/integration/tool_folds_spec.lua`
 
-- [ ] **Step 1: Add RED consumer-locality tests**
+- [ ] **Step 1: Add RED real-entry-point test**
 
-In streaming, instrument the reconciliation observer and assert a semantic span
-change calls it once for `target_idx` and never for another exchange. In
-tool-loop append, assert only `exchange_idx` is reconciled. Keep the existing
-bounded streaming-read assertions unchanged.
+Call `_append_section_to_answer` with a real buffer/model/window and observer.
+Assert only its supplied `exchange_idx` receives prepare/reconcile, the appended
+tool block folds, and another exchange/user fold is unchanged.
 
-- [ ] **Step 2: Replace `_apply_block_fold` consumers**
+- [ ] **Step 2: Use `with_exchange_update`**
 
-After `answer_structure.reduce` updates the current model, call
-`reconcile_exchange(buf, win, model, target_idx)` once, outside the changed-block
-loop. After tool-loop appends a block, call the same adapter once for
-`exchange_idx`. Delete `_apply_block_fold` and its parallel add-only behavior
-(`ARCH-DRY`, `ARCH-PURPOSE`).
+Wrap the existing model add plus buffer insert in the shared transaction. Remove
+the add-only `_apply_block_fold` call.
 
-- [ ] **Step 3: Run consumer specs and verify GREEN**
+- [ ] **Step 3: Enforce the single mutation path**
 
-Run `chat_respond_spec.lua` and `tool_folds_spec.lua`. Expected: locality probes
-see only the changed exchange and all prior streaming/tool folds remain correct.
+Add an architecture assertion that production code contains no
+`_apply_block_fold` and no add-only semantic fold creation outside
+`tool_folds.lua`; decide `apply_folds` becomes the hydration wrapper rather than
+a parallel incremental API (`ARCH-DRY`, `ARCH-PURPOSE`).
 
-### Task 5: Hydrate and retire per-window ownership
+- [ ] **Step 4: Verify tool-loop GREEN**
+
+Run exact tool-loop and fold specs; expect all pass.
+
+### Task 6: Hydrate initial and late windows safely
 
 **Files:**
 - Modify: `lua/parley/tool_folds.lua`
 - Modify: `tests/integration/tool_folds_spec.lua`
 
-- [ ] **Step 1: Add RED late-window and cleanup tests**
+- [ ] **Step 1: Add RED lifecycle tests**
 
-Set up a buffer in window A, open window B afterward, trigger the production
-window event, and prove B receives independent semantic folds without commands
-against A. Close B and prove A's ledger/folds survive. Trigger `BufUnload` and
-`BufDelete` and prove all buffer registry state/anchors are retired.
+Inject one `model_provider(buf)` that reparses current lines. Test initial setup,
+setup called twice, a second window opened after setup and hydrated via the real
+window event, independent window folds, close of window B leaving A unchanged,
+and a scheduled hydration callback delivered after buffer deletion/window close
+performing no mutation or error.
 
-- [ ] **Step 2: Implement idempotent lifecycle wiring**
+- [ ] **Step 2: Implement idempotent hydration**
 
-`setup(buf)` configures the current window and installs one augroup-backed
-lifecycle owner. `BufWinEnter`/`WinEnter` configures the entered window and
-reconciles only missing exchange identities for that window. `WinClosed`
-retires only that window ledger. `BufUnload`/`BufDelete` clears all buffer state
-and namespace marks. Repeated events are idempotent.
+`hydrate_window(buf, win, model_provider)` checks validity, configures fold
+options, obtains one fresh model, and uses the shared reconciler for every
+exchange. `setup` installs one augroup owner for `BufWinEnter`/`WinEnter` and
+schedules hydration with captured buffer/window IDs; repeat setup/events do not
+duplicate autocmd ownership or semantic folds.
 
-- [ ] **Step 3: Run lifecycle integration specs and verify GREEN**
+- [ ] **Step 3: Verify lifecycle GREEN**
 
-Run `tool_folds_spec.lua`; expected: late windows hydrate independently and all
-teardown assertions pass.
+Run `tool_folds_spec.lua`; expect all window/race tests pass.
 
-### Task 6: Map and verify the finalized architecture
+### Task 7: Map, verify, and hand off
 
 **Files:**
 - Modify: `atlas/chat/lifecycle.md`
 - Modify: `atlas/traceability.yaml`
 - Modify: `workshop/issues/000195-reconcile-semantic-folds-exactly.md`
 
-- [ ] **Step 1: Update atlas**
+- [ ] **Step 1: Update atlas and traceability**
 
-Map the pure per-exchange projection, stable exchange anchors, per-window owned
-fold ledgers, localized consumer calls, and lifecycle cleanup. Add the new pure
-module/spec to traceability.
+Map pure projection, exchange-local mutation bracketing, real consumers, and
+late-window hydration. Add the new pure module/spec and tool-loop integration
+test mapping.
 
 - [ ] **Step 2: Run focused verification**
 
-Run:
-
-- exact pure projection spec;
-- exact `tool_folds_spec.lua`;
-- exact `chat_respond_spec.lua`;
-- `make test-spec SPEC=chat/lifecycle`;
-- `make test-changed`;
-- `git diff --check`.
-
-Expected: all exit zero with no failures.
+Run exact projection, fold, chat-respond, and tool-loop specs; mapped
+`make test-spec SPEC=chat/lifecycle`; `make test-changed`; and
+`git diff --check`. Expected: all zero.
 
 - [ ] **Step 3: Run full verification**
 
 Run `make test`. If the known parallel `tools_builtin_find_spec`/`.test-tmp`
-race appears, verify its exact spec independently and run `make test JOBS=1`;
-record both outcomes without weakening the #195 regression gate.
+race appears, verify that exact spec and run `make test JOBS=1`; record both.
 
 - [ ] **Step 4: Update issue evidence and commit**
 
-Tick completed issue/plan checkboxes and append RED/GREEN/final verification to
-the issue log. Commit implementation and docs with #195 and the required
-co-author trailer; do not close or land until the operator smoke-tests the
-folding behavior.
+Tick plan/issue steps and append RED/GREEN/final evidence. Commit with #195 and
+the required co-author trailer. Do not close or land before operator smoke test.
+
+## Revisions
+
+### 2026-07-17 — Plan-review Neovim semantics spike
+
+Removed the infeasible extmark ownership ledger after direct tests showed no
+gravity configuration preserves a question-start identity across insertion and
+full-line replacement, and endpoint marks cannot identify a migrated manual
+fold. Replaced it with prepare-before-mutation/reconcile-after-mutation, named
+the exact `normal! zd` selection behavior and overlap boundary, added real
+streaming/tool-loop/lifecycle tests plus a model-provider seam, enforced removal
+of add-only consumers, and raised the estimate to 3.0h.
