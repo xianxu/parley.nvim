@@ -1269,22 +1269,21 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
         local exch_end = (exch.answer and exch.answer.line_end) or exch.question.line_end
         local exch_lines = {}
         for i = exch_start, exch_end do table.insert(exch_lines, lines[i]) end
-        local blocks, stripped_text = drill_in.gather_and_strip(table.concat(exch_lines, "\n"), di_opts)
+        local exchange_text = table.concat(exch_lines, "\n")
+        local blocks, _, marker_edits = drill_in.gather_edit_plan(exchange_text, di_opts)
         if #blocks > 0 then
-            local stripped_lines = vim.split(stripped_text, "\n", { plain = true })
             local user_prefix = _parley.config.chat_user_prefix or "💬:"
             local block_lines = drill_in.format_blocks(blocks)
-
-            local new_lines = {}
-            for i = 1, exch_start - 1 do table.insert(new_lines, lines[i]) end
-            for _, l in ipairs(stripped_lines) do table.insert(new_lines, l) end
-            table.insert(new_lines, "")
-            table.insert(new_lines, user_prefix)
-            for _, l in ipairs(block_lines) do table.insert(new_lines, l) end
-            local new_turn_end = #new_lines
-            for i = exch_end + 1, #lines do table.insert(new_lines, lines[i]) end
-
-            require("parley.buffer_edit").replace_all_lines(buf, new_lines)
+            local buffer_edit = require("parley.buffer_edit")
+            local boundary = exch_end < #lines and buffer_edit.make_handle(buf, exch_end) or nil
+            buffer_edit.apply_text_edits(buf, exch_start - 1, exchange_text, marker_edits)
+            local insert_at = boundary and buffer_edit.handle_line(boundary)
+                or vim.api.nvim_buf_line_count(buf)
+            if boundary then buffer_edit.handle_invalidate(boundary) end
+            local insert_lines = { "", user_prefix }
+            for _, line in ipairs(block_lines) do insert_lines[#insert_lines + 1] = line end
+            buffer_edit.insert_lines_at(buf, insert_at, insert_lines)
+            local new_turn_end = insert_at + #insert_lines
             _parley.logger.info(string.format(
                 "Drill-in branch: %d marker(s) → new turn after exchange #%d",
                 #blocks, exchange_idx
@@ -1321,11 +1320,23 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
         end
     end
     if not branch_handled and not is_resubmit then
-        local di_blocks, stripped_text = drill_in.gather_and_strip(table.concat(lines, "\n"), di_opts)
+        local source_text = table.concat(lines, "\n")
+        local di_blocks, _, marker_edits = drill_in.gather_edit_plan(source_text, di_opts)
         if #di_blocks > 0 then
-            local stripped_lines = vim.split(stripped_text, "\n", { plain = true })
-            local new_lines = drill_in.append_blocks(stripped_lines, di_blocks)
-            require("parley.buffer_edit").replace_all_lines(buf, new_lines)
+            local buffer_edit = require("parley.buffer_edit")
+            buffer_edit.apply_text_edits(buf, 0, source_text, marker_edits)
+            local current = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+            local keep = #current
+            while keep > 0 and current[keep] == "" do keep = keep - 1 end
+            if keep < #current then
+                buffer_edit.delete_lines_after(buf, keep, #current - keep)
+            end
+            local insert_lines = {}
+            if keep > 0 then insert_lines[#insert_lines + 1] = "" end
+            for _, line in ipairs(drill_in.format_blocks(di_blocks)) do
+                insert_lines[#insert_lines + 1] = line
+            end
+            buffer_edit.insert_lines_at(buf, keep, insert_lines)
             _parley.logger.info(string.format(
                 "Drill-in: gathered %d marker(s) into next turn", #di_blocks
             ))

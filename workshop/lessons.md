@@ -1,5 +1,21 @@
 # Lessons
 
+## 2026-07-17 (#194)
+
+- **A checked plan edge-case list must map to explicit production tests, not
+  merely to helper-level coverage or nearby happy paths.** The close review
+  found that end submission promised no/one/multiple trailing blanks and a
+  final-line marker, while its integration tests instantiated only the first
+  two shapes. Rule: before ticking a plan step, enumerate every named fixture
+  variant against the production entry-point tests; adjacent coverage does not
+  satisfy a promised slice (`ARCH-PURPOSE`).
+- **Whole-buffer replacement is observable UI state destruction even when the
+  resulting text is identical.** Neovim manual folds are attached to buffer
+  ranges, so rewriting the transcript can erase or migrate folds into unrelated
+  questions. Rule: plan semantic transforms as original-coordinate edits and
+  apply them bottom-to-top through bounded buffer mutations; test both fold text
+  and gutter visibility through the production entry point (`ARCH-PURE`).
+
 ## 2026-07-16 (#191)
 
 - **Moving an artifact into a typed archive subdirectory is also a consumer

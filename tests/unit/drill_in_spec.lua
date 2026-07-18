@@ -310,6 +310,83 @@ describe("drill_in.gather_and_strip", function()
     end)
 end)
 
+describe("drill_in.gather_edit_plan", function()
+    local function apply(text, edits)
+        for i = #edits, 1, -1 do
+            local edit = edits[i]
+            text = text:sub(1, edit.start_byte - 1)
+                .. edit.replacement
+                .. text:sub(edit.end_byte)
+        end
+        return text
+    end
+
+    local function assert_plan(input, opts, expected_edits, expected_text)
+        local blocks, transformed, edits = drill_in.gather_edit_plan(input, opts)
+        assert.same(expected_edits, edits)
+        assert.equals(expected_text, transformed)
+        assert.equals(transformed, apply(input, edits))
+
+        local old_blocks, old_text = drill_in.gather_and_strip(input, opts)
+        assert.same(blocks, old_blocks)
+        assert.equals(transformed, old_text)
+        return blocks
+    end
+
+    it("returns a 1-based half-open replacement for an explicit marker", function()
+        local blocks = assert_plan(
+            "x 🤖<Q>[U] y",
+            nil,
+            { { start_byte = 3, end_byte = 13, replacement = "Q" } },
+            "x Q y"
+        )
+        assert.equals("Q", blocks[1].quoted)
+        assert.equals("U", blocks[1].sections[1].text)
+    end)
+
+    it("returns bracket insertions and marker removal for an inferred anchor", function()
+        local prose = "alpha beta gamma delta epsilon zeta eta theta iota kappa"
+        local input = prose .. " 🤖[ask]"
+        local marker_start = #prose + 2
+        local blocks = assert_plan(input, { bracket = true }, {
+            { start_byte = 1, end_byte = 1, replacement = "[" },
+            { start_byte = #prose + 1, end_byte = #input + 1, replacement = "]" },
+        }, "[" .. prose .. "]")
+        assert.equals(prose, blocks[1].quoted)
+        assert.equals(marker_start, drill_in.parse(input)[1].byte_start)
+    end)
+
+    it("keeps multiline marker coordinates in the original text", function()
+        local input = "x\n🤖<multi\nline>[ask]\ny"
+        assert_plan(input, nil, {
+            { start_byte = 3, end_byte = 24, replacement = "multi\nline" },
+        }, "x\nmulti\nline\ny")
+    end)
+
+    it("sorts multiple marker replacements without overlap", function()
+        assert_plan("🤖<A>[Qa] mid 🤖<B>[Qb]", nil, {
+            { start_byte = 1, end_byte = 12, replacement = "A" },
+            { start_byte = 17, end_byte = 28, replacement = "B" },
+        }, "A mid B")
+    end)
+
+    it("lets the first interacting inferred anchor own decoration without losing later comments", function()
+        local prose = "alpha beta gamma delta epsilon zeta eta theta iota kappa"
+        local input = prose .. " 🤖[first] 🤖[second]"
+        local first_start = #prose + 2
+        local first_end = first_start + #"🤖[first]"
+        local second_start = first_end + 1
+        local blocks = assert_plan(input, { bracket = true }, {
+            { start_byte = 1, end_byte = 1, replacement = "[" },
+            { start_byte = #prose + 1, end_byte = first_end, replacement = "]" },
+            { start_byte = second_start, end_byte = #input + 1, replacement = "" },
+        }, "[" .. prose .. "] ")
+        assert.equals(2, #blocks)
+        assert.equals(prose, blocks[1].quoted)
+        assert.equals(prose, blocks[2].quoted)
+    end)
+end)
+
 -- ─── #127: inferred snippet anchors for unquoted markers ───────────────
 describe("drill_in.generate_snippet (#127)", function()
     -- Return the only marker in `text` (helper).

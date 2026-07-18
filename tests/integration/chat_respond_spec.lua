@@ -2484,6 +2484,18 @@ describe("chat_respond: drill-in pre-processing", function()
     local test_file
     local original_query
 
+    local function line_number(buf, text)
+        for row, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+            if line == text then return row end
+        end
+    end
+
+    local function closed_fold_text(buf, row)
+        local last = vim.fn.foldclosedend(row)
+        if last < row then return nil end
+        return table.concat(vim.api.nvim_buf_get_lines(buf, row - 1, last, false), "\n")
+    end
+
     before_each(function()
         test_file = make_chat_filename()
         original_query = parley.dispatcher.query
@@ -2504,6 +2516,123 @@ describe("chat_respond: drill-in pre-processing", function()
                 pcall(vim.api.nvim_buf_delete, buf, { force = true })
             end
         end
+    end)
+
+    it("preserves summary and user folds during end submission without rewriting the chat", function()
+        local chat_content = table.concat({
+            "# topic: Folded end drill-in", "- file: test.md", "---", "",
+            "💬: first question 🤖<term>[explain this]", "", "🤖: [A]", "answer body", "📝: summary", "",
+            "💬: follow up", "",
+        }, "\n")
+        vim.fn.writefile(vim.split(chat_content, "\n"), test_file)
+        vim.cmd("edit " .. test_file)
+        local buf = vim.api.nvim_get_current_buf()
+        vim.wo.foldmethod = "manual"
+        vim.wo.foldenable = true
+        vim.wo.foldminlines = 0
+        vim.wo.foldcolumn = "1"
+        vim.wo.number = false
+        vim.wo.signcolumn = "no"
+        local summary_row = assert(line_number(buf, "📝: summary"))
+        local user_start = assert(line_number(buf, "🤖: [A]"))
+        vim.cmd(string.format("%d,%dfold", summary_row, summary_row))
+        vim.cmd(string.format("%d,%dfold", user_start, user_start + 1))
+        vim.cmd("normal! zM")
+        vim.cmd("redraw!")
+        local screen_row = vim.fn.screenpos(0, summary_row, 1).row
+        local marker_before = vim.fn.screenstring(screen_row, 1)
+        local summary_before = closed_fold_text(buf, summary_row)
+        local user_before = closed_fold_text(buf, user_start)
+        vim.api.nvim_win_set_cursor(0, { vim.api.nvim_buf_line_count(buf), 0 })
+
+        local buffer_edit = require("parley.buffer_edit")
+        local original_replace_all = buffer_edit.replace_all_lines
+        buffer_edit.replace_all_lines = function() error("whole-buffer rewrite") end
+        local ok, err = pcall(function() parley.chat_respond({ range = 0 }) end)
+        buffer_edit.replace_all_lines = original_replace_all
+
+        assert.is_true(ok, err)
+        assert.equals(summary_row, vim.fn.foldclosed(summary_row))
+        assert.equals(summary_before, closed_fold_text(buf, summary_row))
+        assert.equals(user_before, closed_fold_text(buf, user_start))
+        local transformed_question_row = assert(line_number(buf, "💬: first question [term]"))
+        assert.equals(-1, vim.fn.foldclosed(transformed_question_row))
+        vim.cmd("redraw!")
+        local marker_after = vim.fn.screenstring(vim.fn.screenpos(0, summary_row, 1).row, 1)
+        assert.is_not.equals("", marker_before)
+        assert.equals(marker_before, marker_after)
+    end)
+
+    it("normalizes multiple trailing blank lines during end submission", function()
+        vim.fn.writefile({
+            "# topic: Trailing blank drill-in", "- file: test.md", "---", "",
+            "💬: first", "", "🤖: [A]", "answer 🤖<term>[expand]", "",
+            "💬: continue", "", "", "",
+        }, test_file)
+        vim.cmd("edit " .. test_file)
+        local buf = vim.api.nvim_get_current_buf()
+        vim.api.nvim_win_set_cursor(0, { vim.api.nvim_buf_line_count(buf), 0 })
+
+        local ok, err = pcall(function() parley.chat_respond({ range = 0 }) end)
+
+        assert.is_true(ok, err)
+        local joined = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+        assert.truthy(joined:find("answer [term]\n\n💬: continue\n\n> [term]\n\nexpand", 1, true), joined)
+        assert.is_nil(joined:find("\n\n\n> %[term%]"), joined)
+    end)
+
+    it("gathers a submission marker on the final physical line", function()
+        vim.fn.writefile({
+            "# topic: Final-line drill-in", "- file: test.md", "---", "",
+            "💬: explain 🤖<term>[expand]",
+        }, test_file)
+        vim.cmd("edit " .. test_file)
+        local buf = vim.api.nvim_get_current_buf()
+        vim.api.nvim_win_set_cursor(0, { vim.api.nvim_buf_line_count(buf), 0 })
+
+        local ok, err = pcall(function() parley.chat_respond({ range = 0 }) end)
+
+        assert.is_true(ok, err)
+        local joined = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+        assert.truthy(joined:find("💬: explain [term]\n\n💬:\n> [term]\n\nexpand", 1, true), joined)
+        assert.is_nil(joined:find("🤖<", 1, true), joined)
+    end)
+
+    it("shifts a later user fold with its text during branch submission", function()
+        local chat_content = table.concat({
+            "# topic: Folded branch drill-in", "- file: test.md", "---", "",
+            "💬: first", "", "🤖: [A]", "answer 🤖<term>[explain]", "📝: first summary", "",
+            "💬: later", "", "🤖: [A]", "later answer one", "later answer two", "",
+        }, "\n")
+        vim.fn.writefile(vim.split(chat_content, "\n"), test_file)
+        vim.cmd("edit " .. test_file)
+        local buf = vim.api.nvim_get_current_buf()
+        vim.wo.foldmethod = "manual"
+        vim.wo.foldenable = true
+        vim.wo.foldminlines = 0
+        vim.wo.foldcolumn = "1"
+        local summary_row = assert(line_number(buf, "📝: first summary"))
+        local later_start = assert(line_number(buf, "later answer one"))
+        vim.cmd(string.format("%d,%dfold", summary_row, summary_row))
+        vim.cmd(string.format("%d,%dfold", later_start, later_start + 1))
+        vim.cmd("normal! zM")
+        local summary_before = closed_fold_text(buf, summary_row)
+        local later_before = closed_fold_text(buf, later_start)
+        local count_before = vim.api.nvim_buf_line_count(buf)
+        vim.api.nvim_win_set_cursor(0, { 8, 0 })
+
+        local buffer_edit = require("parley.buffer_edit")
+        local original_replace_all = buffer_edit.replace_all_lines
+        buffer_edit.replace_all_lines = function() error("whole-buffer rewrite") end
+        local ok, err = pcall(function() parley.chat_respond({ range = 0 }) end)
+        buffer_edit.replace_all_lines = original_replace_all
+
+        assert.is_true(ok, err)
+        local delta = vim.api.nvim_buf_line_count(buf) - count_before
+        assert.equals(summary_before, closed_fold_text(buf, summary_row))
+        assert.equals(later_start + delta, vim.fn.foldclosed(later_start + delta))
+        assert.equals(later_before, closed_fold_text(buf, later_start + delta))
+        assert.equals(-1, vim.fn.foldclosed(line_number(buf, "💬: first")))
     end)
 
     it("gathers ready drill-in markers and appends them to the next user turn", function()

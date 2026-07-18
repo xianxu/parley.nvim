@@ -27,6 +27,12 @@ that bounded read to its recorded provisional opener. Tool calls/results fold
 immediately from their known appended block indices. Success and cancellation
 use the live model; there is no final whole-chat fold reparse.
 
+Inline-comment submission follows the same preservation boundary. Drill-in
+marker/anchor transformations are planned as original-coordinate byte edits and
+applied from bottom to top; end and branch destinations use narrow line edits.
+The submission path never replaces the whole chat, so completed semantic folds
+and unrelated user folds migrate only with their covered logical text.
+
 Pending responses also hold a per-buffer chat lease (`lua/parley/chat_lease.lua`) anchored on an `invalidate=true` extmark on the response's `🤖:` agent-header line (#138). Each async callback validates the lease before mutating the transcript; ordinary edits and streaming move the anchor and stay valid, while deleting that line — undo/redo of the inserted response, or removing the header — invalidates the lease, stops/suppresses late stream/tool/progress/topic writes, and prevents recursive tool resubmit from using a stale live model. The pending extmark and its staged output are discarded on lost ownership. (Pre-#138 the lease keyed on buffer `changedtick`, which mis-read Parley's own writes as drift; the extmark anchor makes `commit` a no-op.)
 
 While a response is pending, the chat buffer's standard `u` and `<C-r>` keys

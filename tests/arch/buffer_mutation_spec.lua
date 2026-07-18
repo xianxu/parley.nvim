@@ -52,7 +52,7 @@ describe("arch: buffer mutation boundary", function()
         arch.assert_pattern_scoping({
             pattern = "nvim_buf_set_text",
             scope = "lua/parley/**/*.lua",
-            allow_only_in = {},
+            allow_only_in = { "lua/parley/buffer_edit.lua" },
             rationale = "#90: nvim_buf_set_text must only be used via buffer_edit.lua",
         })
     end)

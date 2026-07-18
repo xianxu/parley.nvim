@@ -48,6 +48,15 @@ Accept and reject for `~X~` and the full §5 table are wired via `<M-a>` / `<M-r
      bracketed where it already sits (the snippet is **not** re-inserted). The
      enclosed spans are highlighted `ParleyReference` (see Anchor inference).
 
+   Submission applies marker removal/replacement and anchor bracketing as a
+   normalized list of half-open byte edits in original-buffer coordinates. The
+   pure planner resolves interacting inferred anchors; `buffer_edit` validates
+   and applies the plan from bottom to top. Destination placement remains
+   path-specific and bounded: end-append trims only the trailing blank suffix,
+   while branch inserts at the exchange boundary. Neither path rewrites the
+   whole chat, so unrelated semantic and user manual folds retain their logical
+   text and closed state.
+
 4. **Resolve** — `<M-a>` accepts the marker at cursor and `<M-r>` rejects it, per the §5 table. Bulk-resolve was dropped in #124 M2 — operators resolve markers one at a time, or ask an agent to walk the chains (agentic resolution, §6 of the canonical target).
 
 ## Resubmit interaction
@@ -149,11 +158,11 @@ Both parley and ariadne (`/fix` skill) parse this marker family identically. The
 
 ## Key files
 
-- `lua/parley/drill_in.lua` — pure-function module (`parse`, `gather_and_strip`, `generate_snippet`, `resolve`, `accept_at`, `reject_at`, `format_block`, `format_blocks`, `wrap`, `append_blocks`, `bracket_at`).
+- `lua/parley/drill_in.lua` — pure-function module (`parse`, `gather_edit_plan`, `gather_and_strip`, `generate_snippet`, `resolve`, `accept_at`, `reject_at`, `format_block`, `format_blocks`, `wrap`, `append_blocks`, `bracket_at`).
 - `lua/parley/chat_respond.lua` — pre-processing hook before message build (gates on resubmit detection); assembles the turn-prefix `boundaries` from config and threads them into `gather_and_strip` (#127).
 - `lua/parley/init.lua` — `<M-q>` (insert), `<M-a>` (accept), `<M-r>` (reject) wiring inside `prep_chat` / `setup_markdown_keymaps`; and the chat-only `*`/`#`/`g*`/`g#` anchor-jump maps (`bracket_jump`, #141) set in `prep_chat`.
 - `lua/parley/skills/review/init.lua` — shared section parser (`_parse_marker_sections`).
-- `lua/parley/buffer_edit.lua` — `replace_all_lines` helper used to write the rewritten buffer in one shot.
+- `lua/parley/buffer_edit.lua` — validates and applies bounded half-open marker/anchor edits; narrow line operations place the destination turn.
 - `tests/unit/drill_in_spec.lua` — unit specs for the pure module.
 - `tests/integration/chat_respond_spec.lua` — integration specs for the chat-respond hook.
 
