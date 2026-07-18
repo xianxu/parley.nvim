@@ -466,6 +466,9 @@ local config = {
 	-- `sdlc resolve`), else native go-to-file. Transparent (native gf preserved on
 	-- plain paths); remap here to disable.
 	chat_shortcut_resolve_ref_gf = { modes = { "n" }, shortcut = "gf" },
+	-- ariadne#171 M4: project jump — resolve the issue ref under the cursor to
+	-- the fleet-wide project record(s) referencing it (cross-repo class).
+	chat_shortcut_resolve_ref_project = { modes = { "n" }, shortcut = "gP" },
 	chat_shortcut_prune = { modes = { "n" }, shortcut = "<C-g>b" },
 	chat_shortcut_export_markdown = { modes = { "n" }, shortcut = "<C-g>em" },
 	chat_shortcut_export_html = { modes = { "n" }, shortcut = "<C-g>eh" },

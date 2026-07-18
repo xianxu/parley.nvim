@@ -2129,6 +2129,7 @@ M.prep_chat = function(buf, file_name)
 			-- parley_buffer scope (shared with markdown)
 			open_file = M.cmd.OpenFileUnderCursor,
 			resolve_ref_gf = M.cmd.ResolveRefOrGotoFile,
+			resolve_ref_project = M.cmd.ResolveRefProject,
 			copy_fence = M.cmd.CopyCodeFence,
 			outline = M.cmd.Outline,
 			branch_ref = {
@@ -2380,6 +2381,7 @@ M.setup_markdown_keymaps = function(buf)
 			-- parley_buffer scope (shared with chat)
 			open_file = M.cmd.OpenFileUnderCursor,
 			resolve_ref_gf = M.cmd.ResolveRefOrGotoFile,
+			resolve_ref_project = M.cmd.ResolveRefProject,
 			copy_fence = M.cmd.CopyCodeFence,
 			outline = M.cmd.Outline,
 			branch_ref = {
@@ -4189,6 +4191,15 @@ M.cmd.ResolveRefOrGotoFile = function()
 	require("parley.artifact_ref").goto_ref_at_cursor({
 		on_no_ref = function() vim.cmd("normal! gf") end,
 	})
+end
+
+-- ariadne#171 M4: project jump — resolve the issue ref under the cursor to the
+-- PROJECT record(s) referencing it, fleet-wide and archive-inclusive (`sdlc
+-- resolve --kind project`). A project is an always-cross-repo artifact class:
+-- the record may live in a different repo than the issue, so this never
+-- assumes a local path.
+M.cmd.ResolveRefProject = function()
+	require("parley.artifact_ref").goto_ref_at_cursor({ kind = "project" })
 end
 
 -- Vision tracker commands

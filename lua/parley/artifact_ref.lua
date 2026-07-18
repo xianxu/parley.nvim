@@ -103,7 +103,9 @@ function M.parse_resolve_output(stdout, is_json)
 end
 
 -- run_resolve(ref, opts, on_done, runner): shell to `sdlc resolve --json <ref>`
--- and call on_done(files|nil, err|nil). opts: { cwd, sdlc_cmd, shell }. The
+-- and call on_done(files|nil, err|nil). opts: { cwd, sdlc_cmd, shell, kind }.
+-- kind (e.g. "project", ariadne#171 M4) appends `--kind <kind>` so the same
+-- flow resolves fleet-wide project records instead of the issue family. The
 -- `runner(argv, on_complete)` seam defaults to vim.system; tests inject a fake so
 -- no real spawn happens. Reuses issues.build_spawn_argv (handles the "sdlc is a
 -- shell function, not a binary" case).
@@ -115,7 +117,13 @@ function M.run_resolve(ref, opts, on_done, runner)
     -- Match issues.lua's shell resolution so an rc-defined `sdlc` function loads
     -- from the user's login shell, not just vim.o.shell.
     local shell = opts.shell or vim.env.SHELL or vim.o.shell or "sh"
-    local argv = issues.build_spawn_argv({ sdlc_cmd, "resolve", "--json", ref }, is_exec, shell)
+    local cmd = { sdlc_cmd, "resolve", "--json" }
+    if opts.kind then
+        cmd[#cmd + 1] = "--kind"
+        cmd[#cmd + 1] = opts.kind
+    end
+    cmd[#cmd + 1] = ref
+    local argv = issues.build_spawn_argv(cmd, is_exec, shell)
     local run = runner
         or function(a, on_complete)
             vim.system(a, { text = true, cwd = opts.cwd }, function(res)
@@ -175,6 +183,9 @@ end
 -- opts.on_no_ref (optional): called when the cursor is NOT on an artifact ref —
 -- the smart-gf binding passes native `gf` here so `gf` resolves refs but still
 -- goes-to-file on plain paths; the dedicated key omits it (notifies instead).
+-- opts.kind (optional): resolve kind, e.g. "project" — the always-cross-repo
+-- project class (ariadne#171 M4): jumps to the project record(s) referencing
+-- the issue under the cursor, wherever in the fleet they live.
 -- Delegated to by parley init's M.cmd.ResolveRef* commands.
 function M.goto_ref_at_cursor(opts)
     opts = opts or {}
@@ -194,7 +205,7 @@ function M.goto_ref_at_cursor(opts)
     local float_picker = require("parley.float_picker")
     local cwd = neighborhood.for_buf(vim.api.nvim_get_current_buf())
     local sdlc_cmd = (_parley.config and _parley.config.sdlc_cmd) or "sdlc"
-    M.run_resolve(hit.ref, { cwd = cwd, sdlc_cmd = sdlc_cmd }, function(files, err)
+    M.run_resolve(hit.ref, { cwd = cwd, sdlc_cmd = sdlc_cmd, kind = opts.kind }, function(files, err)
         vim.schedule(function()
             M.dispatch_resolve_result(hit.ref, files, err, {
                 notify = function(msg, level)

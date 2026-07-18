@@ -437,6 +437,19 @@ M.entries = {
 		buffer_local = true,
 	},
 	{
+		-- ariadne#171 M4: project jump — resolve the issue ref under the cursor to
+		-- the fleet-wide project record(s) referencing it (`sdlc resolve --kind
+		-- project`), regardless of which repo holds the file. Pairs with gf.
+		id = "resolve_ref_project",
+		config_key = "chat_shortcut_resolve_ref_project",
+		default_key = "gP",
+		default_modes = { "n" },
+		scope = "parley_buffer",
+		desc = "Parley resolve project record(s) for ref",
+		help_desc = "Jump to the project record(s) referencing ariadne#11 under cursor (cross-repo)",
+		buffer_local = true,
+	},
+	{
 		id = "copy_fence",
 		config_key = "chat_shortcut_copy_fence",
 		default_key = "<leader>cf",
