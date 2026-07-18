@@ -1,12 +1,13 @@
 ---
 id: 000194
-status: working
+status: codecomplete
 deps: [193]
 github_issue:
 created: 2026-07-17
 updated: 2026-07-17
 estimate_hours: 2.5
 started: 2026-07-17T11:07:51-07:00
+actual_hours: 1.03
 ---
 
 # Preserve folds during inline-comment submission
@@ -106,6 +107,7 @@ Neovim fold behavior across multi-edit application.
 ## Log
 
 ### 2026-07-17
+- 2026-07-17: closed — User smoke-tested inline-comment submission successfully. Fresh verification: make test JOBS=1 passed all unit, integration, and architecture tests; make test-changed passed all mapped changed specs; git diff --check passed; working tree was clean. Parallel make test exposed a pre-existing test race where tools_builtin_find_spec traverses concurrently deleted .test-tmp directories; the exact spec passed 4/4 and the full serial suite passed.; review verdict: FIX-THEN-SHIP
 
 Created from the operator's smoke-test report after #193. Root-cause tracing
 found both drill-in submission paths reconstruct the full line array and pass it

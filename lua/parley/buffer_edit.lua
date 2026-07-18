@@ -106,10 +106,8 @@ function M.replace_answer(buf, line_start_0_indexed, line_end_0_indexed)
     return M.make_handle(buf, line_start_0_indexed)
 end
 
---- Replace the entire chat buffer with the given lines. Used by full-buffer
---- rewrites driven by pure transforms — the drill-in pipeline gathers ready
---- markers, strips them, and appends a quote block, then writes the result
---- back here in one shot.
+--- Replace the entire chat buffer with the given lines for callers whose
+--- operation intentionally owns the complete document.
 function M.replace_all_lines(buf, lines)
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 end

@@ -2521,8 +2521,8 @@ describe("chat_respond: drill-in pre-processing", function()
     it("preserves summary and user folds during end submission without rewriting the chat", function()
         local chat_content = table.concat({
             "# topic: Folded end drill-in", "- file: test.md", "---", "",
-            "💬: first question", "", "🤖: [A]", "answer body", "📝: summary", "",
-            "💬: follow up 🤖<term>[explain this]", "",
+            "💬: first question 🤖<term>[explain this]", "", "🤖: [A]", "answer body", "📝: summary", "",
+            "💬: follow up", "",
         }, "\n")
         vim.fn.writefile(vim.split(chat_content, "\n"), test_file)
         vim.cmd("edit " .. test_file)
@@ -2555,11 +2555,47 @@ describe("chat_respond: drill-in pre-processing", function()
         assert.equals(summary_row, vim.fn.foldclosed(summary_row))
         assert.equals(summary_before, closed_fold_text(buf, summary_row))
         assert.equals(user_before, closed_fold_text(buf, user_start))
-        assert.equals(-1, vim.fn.foldclosed(line_number(buf, "💬: first question")))
+        local transformed_question_row = assert(line_number(buf, "💬: first question [term]"))
+        assert.equals(-1, vim.fn.foldclosed(transformed_question_row))
         vim.cmd("redraw!")
         local marker_after = vim.fn.screenstring(vim.fn.screenpos(0, summary_row, 1).row, 1)
         assert.is_not.equals("", marker_before)
         assert.equals(marker_before, marker_after)
+    end)
+
+    it("normalizes multiple trailing blank lines during end submission", function()
+        vim.fn.writefile({
+            "# topic: Trailing blank drill-in", "- file: test.md", "---", "",
+            "💬: first", "", "🤖: [A]", "answer 🤖<term>[expand]", "",
+            "💬: continue", "", "", "",
+        }, test_file)
+        vim.cmd("edit " .. test_file)
+        local buf = vim.api.nvim_get_current_buf()
+        vim.api.nvim_win_set_cursor(0, { vim.api.nvim_buf_line_count(buf), 0 })
+
+        local ok, err = pcall(function() parley.chat_respond({ range = 0 }) end)
+
+        assert.is_true(ok, err)
+        local joined = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+        assert.truthy(joined:find("answer [term]\n\n💬: continue\n\n> [term]\n\nexpand", 1, true), joined)
+        assert.is_nil(joined:find("\n\n\n> %[term%]"), joined)
+    end)
+
+    it("gathers a submission marker on the final physical line", function()
+        vim.fn.writefile({
+            "# topic: Final-line drill-in", "- file: test.md", "---", "",
+            "💬: explain 🤖<term>[expand]",
+        }, test_file)
+        vim.cmd("edit " .. test_file)
+        local buf = vim.api.nvim_get_current_buf()
+        vim.api.nvim_win_set_cursor(0, { vim.api.nvim_buf_line_count(buf), 0 })
+
+        local ok, err = pcall(function() parley.chat_respond({ range = 0 }) end)
+
+        assert.is_true(ok, err)
+        local joined = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+        assert.truthy(joined:find("💬: explain [term]\n\n💬:\n> [term]\n\nexpand", 1, true), joined)
+        assert.is_nil(joined:find("🤖<", 1, true), joined)
     end)
 
     it("shifts a later user fold with its text during branch submission", function()
