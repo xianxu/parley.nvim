@@ -123,7 +123,7 @@ total: 3.5
 
 ## Plan
 
-- [ ] Write and approve the durable implementation plan.
+- [x] Write and approve the durable implementation plan.
 - [ ] Add RED pure and Neovim integration regressions for exact localized reconciliation.
 - [ ] Implement exchange-local fold projection, mutation transaction, and reconciliation.
 - [ ] Route setup, streaming, and tool-loop consumers through the shared reconciler.
