@@ -326,4 +326,21 @@ describe("create_handler: streaming behavior", function()
         assert.is_true(vim.wait(100, function() return #events == 4 end, 10))
         assert.same({ "before", "lines", "after", "finally" }, events)
     end)
+
+    it("finalizes around_write for an empty streamed chunk", function()
+        local events = {}
+        local handler = parley.dispatcher.create_handler(buf, nil, 3, true, "", false, nil, {
+            after_write = function() events[#events + 1] = "after" end,
+            around_write = function(_qid, chunk, write)
+                assert.equals("", chunk)
+                events[#events + 1] = "before"
+                write()
+                events[#events + 1] = "finally"
+            end,
+        })
+
+        handler(mock_qid, "")
+        assert.is_true(vim.wait(100, function() return #events == 3 end, 10))
+        assert.same({ "before", "after", "finally" }, events)
+    end)
 end)

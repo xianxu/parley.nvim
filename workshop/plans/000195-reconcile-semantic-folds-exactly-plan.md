@@ -2,7 +2,9 @@
 
 > **For agentic workers:** Consult AGENTS.md Section 3 (Subagent Strategy) to determine the appropriate execution approach: use superpowers-subagent-driven-development (if subagents are suitable per AGENTS.md) or superpowers-executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make semantic folds converge to a pure projection of only the exchange being mutated, without ghost folds or document-wide fold clearing.
+**Goal:** Make semantic folds converge to a pure projection: initial window
+hydration replaces restored fold state once, while live mutations reconcile
+only the changed exchange.
 
 **Architecture:** A pure module projects one exchange's model blocks into exact fold ranges. Because Neovim manual folds have no stable IDs after mutation, consumers bracket a known exchange mutation across every window displaying the buffer: delete its old projected folds while intact, perform the buffer/model change, then render its new projection; initial and late-window hydration parse once and render all exchanges with lightweight per-window initialization state.
 
@@ -502,3 +504,15 @@ restored manual folds before rendering the complete model projection. This is
 distinct from the streaming hot path, which remains localized to the changed
 exchange; the split makes initial state deterministic without reparsing or
 touching unchanged exchanges during response updates (`ARCH-PURE`).
+
+### 2026-07-18 — Close-review coverage ownership
+
+The close review correctly found that Chunk 2 described every fault injection
+as one monolithic `chat_respond` test even though the implemented architecture
+places those guarantees at separate injected seams. Coverage now pins empty
+chunks at dispatcher `around_write`, post-model-mutation recovery and
+multi-window convergence at `tool_folds.with_exchange_update`, and stale
+scheduled callbacks at hydration's validity boundary. The production
+`chat_respond` tests retain the actual streaming wiring and bounded-segment
+assertions; this split tests each INTEGRATION owner directly without duplicating
+its behavior in a heavier harness (`ARCH-DRY`, `ARCH-PURE`).

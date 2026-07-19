@@ -19,19 +19,20 @@
 --      to one blank line.
 --   3. Empty blocks contribute neither content nor gap.
 --
--- Layout convention:
+-- Default layout for newly appended content (parsed content stores its actual
+-- gaps instead):
 --   HEADER (header_lines lines)
---   MARGIN (1 blank)
+--   GAP (exchange.gap_before; default 1 blank)
 --   EXCHANGE 1:
 --     block 1: question (size lines)
---     MARGIN (1 blank)
+--     GAP (block.gap_before; default 1 blank)
 --     block 2: agent_header (1 line)
---     MARGIN (1 blank)
+--     GAP (block.gap_before; default 1 blank)
 --     block 3: text (size lines)
---     MARGIN (1 blank) — only between non-empty blocks
+--     GAP (block.gap_before; counted only between non-empty blocks)
 --     block 4: tool_use (size lines)
 --     ...
---   MARGIN (1 blank) — between exchanges
+--   GAP (next exchange.gap_before; default 1 blank)
 --   EXCHANGE 2:
 --     ...
 

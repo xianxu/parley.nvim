@@ -144,6 +144,42 @@ describe("tool_folds incremental manual folds", function()
         assert.equals(0, vim.fn.foldlevel(8))
     end)
 
+    it("recovers after the model changed without masking the mutation error", function()
+        local model = model_with("thinking", 2)
+        local recovered = model_with("summary", 1)
+        tool_folds.reconcile_exchange(buf, win, model, 1)
+        local previous_provider = tool_folds._model_provider
+        tool_folds._model_provider = function() return recovered end
+
+        local ok, err = pcall(function()
+            tool_folds.with_exchange_update(buf, model, 1, function()
+                vim.api.nvim_buf_set_lines(buf, 6, 8, false, { "📝: summary" })
+                model:replace_span(1, 3, 1, { { kind = "summary", size = 1 } })
+                error("post-model mutation exploded")
+            end)
+        end)
+        tool_folds._model_provider = previous_provider
+
+        assert.is_false(ok)
+        assert.matches("post%-model mutation exploded", err)
+        vim.cmd("normal! zM")
+        assert.equals(7, vim.fn.foldclosed(7))
+        assert.equals(7, vim.fn.foldclosedend(7))
+        assert.equals(0, vim.fn.foldlevel(8))
+    end)
+
+    it("ignores scheduled hydration after its target buffer is deleted", function()
+        local scheduled = {}
+        local original_schedule = vim.schedule
+        vim.schedule = function(callback) scheduled[#scheduled + 1] = callback end
+        tool_folds.setup(buf)
+        vim.schedule = original_schedule
+
+        vim.api.nvim_buf_delete(buf, { force = true })
+        assert.equals(1, #scheduled)
+        assert.has_no.errors(scheduled[1])
+    end)
+
     it("hydrates a window only once from one model provider", function()
         local calls = 0
         local model = model_with("thinking", 2)

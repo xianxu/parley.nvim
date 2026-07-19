@@ -1,12 +1,13 @@
 ---
 id: 000195
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-17
-updated: 2026-07-17
+updated: 2026-07-18
 estimate_hours: 3.5
 started: 2026-07-17T20:56:40-07:00
+actual_hours: 6.56
 ---
 
 # Reconcile semantic folds exactly
@@ -83,10 +84,12 @@ Scheduled hydration checks validity and initialization again at execution time.
 
 If a user fold overlaps a semantic fold in the changed exchange, `zd` may select
 the innermost native manual fold; exact preservation of overlapping/nested folds
-cannot be guaranteed because Neovim exposes no fold IDs. The defended contract
-is explicit and testable: adjacent/partially overlapping cases follow native
-`zd` behavior, while unrelated user folds and every untouched exchange remain
-unchanged. Parley never issues `zE` or a document-wide fold clear.
+cannot be guaranteed because Neovim exposes no fold IDs. The defended
+live-update contract is explicit and testable: adjacent/partially overlapping
+cases follow native `zd` behavior, while unrelated user folds and every
+untouched exchange remain unchanged. Initial window hydration is the sole
+exception: it issues `zE` once before rebuilding the complete semantic
+projection so restored orphan folds cannot survive.
 
 ## Done when
 
@@ -203,6 +206,14 @@ Operator smoke verification after restarting Neovim confirmed the reported
 folding issue is fixed. The one-line summary folds without capturing its
 following blank row; #195 is ready for the close boundary.
 
+The close review found the original normative Spec still prohibited `zE` even
+though the later deterministic-hydration revision intentionally introduced it.
+The Spec now names initial hydration as the sole document-wide-clear boundary;
+live response/tool transactions remain exchange-local. Review-promised fault
+coverage is split across the owning integration seams: dispatcher bracketing,
+fold transaction recovery, multi-window convergence, and scheduled invalid
+target handling (`ARCH-PURE`, `ARCH-PURPOSE`).
+
 ## Revisions
 
 ### 2026-07-17 — Fresh-eyes spec review
@@ -234,6 +245,7 @@ repeat setup/events cannot create duplicate identical folds. Explicitly scoped
 external structural-edit rehydration out of this regression.
 
 ### 2026-07-18 — Hydration/live-transaction race
+- 2026-07-18: closed — Full make test JOBS=1 and lint pass across 306 files; exact reported transcript hydrates with fold levels 1466=1, 1467=0, 1468=0; operator smoke confirms summaries, tool calls/results, and trailing blanks fold correctly.; review verdict: FIX-THEN-SHIP
 
 Changed hydration from add-once to exact convergence after operator testing
 showed that a live tool transaction can create folds before its scheduled
