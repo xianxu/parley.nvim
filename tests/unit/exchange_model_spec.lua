@@ -211,6 +211,25 @@ describe("exchange_model: replace_span", function()
         assert.has_error(function()
             m:replace_span(1, 1, 1, { { kind = "text", size = -1 } })
         end)
+        assert.has_error(function()
+            m:replace_span(1, 1, 1, { { kind = "text", size = 1, gap_before = -1 } })
+        end)
+    end)
+
+    it("preserves an inherited leading gap and explicit adjacent replacements", function()
+        local m = em.new(4)
+        m:add_exchange(1)
+        m:add_block(1, "agent_header", 1)
+        m:add_block(1, "stream_placeholder", 2)
+
+        local first_start = m:block_start(1, 3)
+        m:replace_span(1, 3, 1, {
+            { kind = "text", size = 1 },
+            { kind = "summary", size = 1, gap_before = 0 },
+        })
+
+        assert.equals(first_start, m:block_start(1, 3))
+        assert.equals(first_start + 1, m:block_start(1, 4))
     end)
 end)
 
@@ -245,6 +264,61 @@ describe("exchange_model: from_parsed_chat", function()
         assert.equals(3, m.exchanges[1].blocks[4].size)  -- tool_result: 16-14+1
         -- Exchange 2: question only
         assert.equals(1, #m.exchanges[2].blocks)
+    end)
+
+    it("preserves actual zero, one, and multi-line gaps from parser spans", function()
+        local parsed = {
+            header_end = 4,
+            exchanges = {
+                {
+                    question = { line_start = 6, line_end = 6 },
+                    answer = {
+                        line_start = 8, line_end = 12,
+                        sections = {
+                            { kind = "text", line_start = 10, line_end = 10 },
+                            { kind = "summary", line_start = 12, line_end = 12 },
+                        },
+                    },
+                },
+                {
+                    -- No blank between the prior summary and this question.
+                    question = { line_start = 13, line_end = 13 },
+                    answer = {
+                        -- Two blank lines before the agent header.
+                        line_start = 16, line_end = 18,
+                        sections = {
+                            -- No blank between header and text.
+                            { kind = "text", line_start = 17, line_end = 17 },
+                            { kind = "summary", line_start = 18, line_end = 18 },
+                        },
+                    },
+                },
+            },
+        }
+
+        local m = em.from_parsed_chat(parsed)
+        assert.equals(6, m:block_start(1, 1) + 1)
+        assert.equals(8, m:block_start(1, 2) + 1)
+        assert.equals(10, m:block_start(1, 3) + 1)
+        assert.equals(12, m:block_start(1, 4) + 1)
+        assert.equals(13, m:block_start(2, 1) + 1)
+        assert.equals(16, m:block_start(2, 2) + 1)
+        assert.equals(17, m:block_start(2, 3) + 1)
+        assert.equals(18, m:block_start(2, 4) + 1)
+    end)
+
+    it("does not count a zero-size block or its stored gap", function()
+        local m = em.new(4)
+        m:add_exchange(1)
+        m:add_block(1, "agent_header", 1)
+        m:add_block(1, "stream_placeholder", 1)
+        m:add_exchange(1)
+        local next_before = m:block_start(2, 1)
+
+        m:set_block_size(1, 3, 0)
+
+        assert.equals(next_before - 2, m:block_start(2, 1))
+        assert.equals(m:block_end(1, 2) + 2, m:append_pos(1))
     end)
 end)
 

@@ -540,6 +540,7 @@ D.create_handler = function(buf, win, line, first_undojoin, prefix, cursor, on_l
 		if opts.before_write and not opts.before_write(qid, chunk) then
 			return
 		end
+		local function write()
 		-- undojoin takes previous change into account, so skip it for the first chunk
 		if skip_first_undojoin then
 			skip_first_undojoin = false
@@ -597,6 +598,12 @@ D.create_handler = function(buf, win, line, first_undojoin, prefix, cursor, on_l
 		end
 		if should_move_cursor then
 			helpers.cursor_to_line(end_line, buf, win)
+		end
+		end
+		if opts.around_write then
+			opts.around_write(qid, chunk, write)
+		else
+			write()
 		end
 	end)
 end

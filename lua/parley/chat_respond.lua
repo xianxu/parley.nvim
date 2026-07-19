@@ -1679,11 +1679,16 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             end
             local reduced = require("parley.answer_structure").reduce(current_lines, patterns, { streaming = true })
             local replacements = {}
+            local previous_end_0 = first_block > 1 and model:block_end(target_idx, first_block - 1) or nil
             for _, section in ipairs(reduced.sections) do
+                local section_start_0 = first_line + section.line_start - 1
+                local section_end_0 = first_line + section.line_end - 1
                 replacements[#replacements + 1] = {
                     kind = section.kind,
                     size = section.line_end - section.line_start + 1,
+                    gap_before = previous_end_0 and (section_start_0 - previous_end_0 - 1) or 0,
                 }
+                previous_end_0 = section_end_0
             end
             if #replacements == 0 then return end
             local old_count = stream_block_idx - first_block + 1
@@ -1694,10 +1699,6 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             elseif #replacements >= 2 and replacements[#replacements - 1].kind == "thinking"
                 and replacements[#replacements].kind == "text" then
                 provisional_thinking_idx = changed[#changed - 1]
-            end
-            local fold = require("parley.tool_folds")
-            for _, block_index in ipairs(changed) do
-                fold._apply_block_fold(buf, win, model, target_idx, block_index)
             end
         end
         local base_handler = _parley.dispatcher.create_handler(buf, win, response_start_line, true, "", function()
@@ -1713,6 +1714,10 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                 reconcile_stream_span(last_written_line_0)
                 pending_session:tip_written(last_written_line_0)
                 lease_commit()
+            end,
+            around_write = function(_qid, _chunk, write)
+                return require("parley.tool_folds").with_exchange_update(
+                    buf, model, target_idx, write)
             end,
         })
         local response_handler = function(qid, chunk) pending_session:content(qid, chunk) end

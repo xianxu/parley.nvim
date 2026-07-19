@@ -48,6 +48,13 @@ local function buffer_contains(buf, needle)
     return text:find(needle, 1, true) ~= nil
 end
 
+local function find_line_number(buf, text)
+    for index, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+        if line == text then return index end
+    end
+    return nil
+end
+
 local function pending_virtual_text(buf)
     local ns = vim.api.nvim_get_namespaces().parley_chat_pending
     if not ns then return nil end
@@ -2032,6 +2039,29 @@ describe("chat_respond: pending request transcript drift", function()
         vim.cmd("normal! zM")
         assert.equals(thinking_row, vim.fn.foldclosed(thinking_row))
         assert.equals(thinking_row + 1, vim.fn.foldclosedend(thinking_row))
+    end)
+
+    it("folds an adjacent streamed summary on its physical row", function()
+        local buf = open_simple_chat()
+        local captured_handler
+        local qid = "qid_stream_adjacent_summary"
+
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, handler)
+            captured_handler = handler
+            parley.tasker.set_query(qid, { response = "", raw_response = "", buf = buf_arg })
+        end
+
+        parley.chat_respond({ range = 0 })
+        captured_handler(qid, "answer text\n📝: compact summary")
+
+        assert.is_true(vim.wait(200, function()
+            return buffer_contains(buf, "📝: compact summary")
+        end, 10))
+        local summary_row = assert(find_line_number(buf, "📝: compact summary"))
+        vim.cmd("normal! zM")
+        assert.equals(summary_row, vim.fn.foldclosed(summary_row))
+        assert.equals(summary_row, vim.fn.foldclosedend(summary_row))
+        assert.equals(0, vim.fn.foldlevel(summary_row + 1))
     end)
 
     it("reduces only the active streamed span without reparsing transcript history", function()

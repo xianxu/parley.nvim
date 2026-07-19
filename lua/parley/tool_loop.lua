@@ -149,17 +149,18 @@ function M._append_section_to_answer(bufnr, model, exchange_idx, section)
     local buffer_edit = require("parley.buffer_edit")
     local render_buffer = require("parley.render_buffer")
     local lines = render_buffer.render_section(section)
-    model:add_block(exchange_idx, section.kind, #lines)
-    local blk_idx = #model.exchanges[exchange_idx].blocks
-    local pos = model:block_start(exchange_idx, blk_idx)
-    -- Insert margin + content. The model's block_start is where
-    -- the content goes; the margin is one line before it.
-    local insert_lines = { "" }  -- margin blank
-    for _, l in ipairs(lines) do
-        table.insert(insert_lines, l)
-    end
-    buffer_edit.insert_lines_at(bufnr, pos - 1, insert_lines)
-    require("parley.tool_folds")._apply_block_fold(bufnr, nil, model, exchange_idx, blk_idx)
+    require("parley.tool_folds").with_exchange_update(bufnr, model, exchange_idx, function()
+        model:add_block(exchange_idx, section.kind, #lines)
+        local blk_idx = #model.exchanges[exchange_idx].blocks
+        local pos = model:block_start(exchange_idx, blk_idx)
+        -- Insert margin + content. The model's block_start is where
+        -- the content goes; the margin is one line before it.
+        local insert_lines = { "" }  -- margin blank
+        for _, l in ipairs(lines) do
+            table.insert(insert_lines, l)
+        end
+        buffer_edit.insert_lines_at(bufnr, pos - 1, insert_lines)
+    end)
 end
 
 --------------------------------------------------------------------------------

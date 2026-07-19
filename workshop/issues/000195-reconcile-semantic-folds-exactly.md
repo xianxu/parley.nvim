@@ -124,10 +124,10 @@ total: 3.5
 ## Plan
 
 - [x] Write and approve the durable implementation plan.
-- [ ] Add RED pure and Neovim integration regressions for exact localized reconciliation.
-- [ ] Implement exchange-local fold projection, mutation transaction, and reconciliation.
-- [ ] Route setup, streaming, and tool-loop consumers through the shared reconciler.
-- [ ] Update atlas and run focused, changed, and full verification.
+- [x] Add RED pure and Neovim integration regressions for exact localized reconciliation.
+- [x] Implement exchange-local fold projection, mutation transaction, and reconciliation.
+- [x] Route setup, streaming, and tool-loop consumers through the shared reconciler.
+- [x] Update atlas and run focused, changed, and full verification.
 
 ## Log
 
@@ -139,6 +139,69 @@ range onto the blank margin when streaming replaces the semantic span. The
 approved design makes folds a pure per-exchange projection and brackets only
 the known changed exchange's mutation (`ARCH-PURE`, `ARCH-DRY`,
 `ARCH-PURPOSE`).
+
+Implementation now projects fold ranges from `exchange_model` without Neovim,
+brackets streaming writes and synchronous tool appends by their known exchange,
+and reconciles that exchange across every displayed window. Regression coverage
+proves the one-line summary has no following blank-line fold, unrelated folds
+survive, failure recovery retains the original error, hydration is idempotent,
+and the real tool-loop consumer is localized. RED evidence included the missing
+projection module, missing prepare/reconcile APIs, and missing dispatcher
+`around_write` seam. GREEN evidence: focused projection/fold/dispatcher/tool-loop/
+chat-response specs and full `make test` (306 linted files, all tests passing).
+
+Operator smoke testing exposed a second convergence case: a live tool-loop
+transaction can finish before scheduled initial hydration, after which the
+add-only hydration pass nested an identical fold around the tool block and its
+trailing margin. A production-ordered RED test measured fold level 2. Hydration
+and changed-exchange prepare now retire every native layer at each projected
+semantic start before rendering exactly one fold; the tool-use, tool-result,
+and trailing blank rows assert levels 1, 1, and 0 respectively (`ARCH-PURE`,
+`ARCH-PURPOSE`).
+
+A follow-up smoke test found an already-migrated one-line summary fold could
+survive hydration because cleanup only visited desired fold starts. The pure
+projection now also returns each semantic block's trailing margin row; the
+adapter clears fold layers there before rendering. The production-shaped RED
+case began with a fold on the blank row and now converges to summary level 1,
+blank level 0 (`ARCH-PURE`, `ARCH-PURPOSE`).
+
+Exact inspection of the reported brain chat corrected that diagnosis. The
+parser records the summary at line 1466, but `from_parsed_chat` projects it at
+1467 because it discards absolute spans and assumes a blank between every
+exchange; the first missing historical separator is between lines 618–619 and
+shifts every later exchange by one. The approved direction is therefore to
+preserve gaps implied by exchange/item spans and fold only stated item bounds,
+removing inferred trailing-margin cleanup (`ARCH-DRY`, `ARCH-PURE`,
+`ARCH-PURPOSE`).
+
+Implemented the absolute-span root correction. Parsed question/answer spans now
+compile to explicit exchange-leading and intra-exchange gaps; zero-size blocks
+contribute neither size nor gap, and streaming replacements derive gaps from
+their already-bounded reducer spans. The reported file now projects summary
+1466–1466 and the next question at 1468. The inferred trailing-margin cleanup
+was removed; a synthetic marginless transcript and a real adjacent streamed
+summary both fold only their physical marker rows.
+
+Verification after the correction: exchange-model, projection, fold,
+dispatcher, tool-loop, chat-response, mapped `chat/exchange_model`, and mapped
+`chat/lifecycle` suites pass; streaming retains its bounded active-segment read.
+`make lint` reports 0 warnings/errors across 306 files, `git diff --check`
+passes, and `make test JOBS=1` passes every unit, architecture, and integration
+spec. Awaiting the operator's exact 1466/1467 smoke test before commit/close.
+
+The operator's 1466/1467 smoke still showed a second fold on the blank row.
+The model and fresh projection were correct; a RED integration test proved the
+remaining layer was restored window-local manual-fold state. Hydration had been
+additive, deleting only folds at currently desired starts, so an orphan at 1467
+could not be reached from the desired 1466 range. Initial window hydration now
+clears restored manual folds once and rebuilds the complete projection; live
+streaming remains changed-exchange-local. The regression measures summary level
+1 and blank level 0 (`ARCH-PURE`, `ARCH-PURPOSE`).
+
+Operator smoke verification after restarting Neovim confirmed the reported
+folding issue is fixed. The one-line summary folds without capturing its
+following blank row; #195 is ready for the close boundary.
 
 ## Revisions
 
@@ -169,3 +232,35 @@ finally boundary; defined parse-from-buffer recovery without masking the
 original error; and added a lightweight per-window initialization registry so
 repeat setup/events cannot create duplicate identical folds. Explicitly scoped
 external structural-edit rehydration out of this regression.
+
+### 2026-07-18 — Hydration/live-transaction race
+
+Changed hydration from add-once to exact convergence after operator testing
+showed that a live tool transaction can create folds before its scheduled
+initial hydration. The adapter now removes all native fold layers at projected
+semantic starts before rendering one semantic projection, allowing hydration
+and later exchange transactions to repair duplicate levels while retaining the
+documented overlapping-user-fold limitation.
+
+### 2026-07-18 — Migrated trailing-margin cleanup
+
+Extended the pure projection with model-owned trailing margin rows after smoke
+testing showed that an already-migrated one-line ghost sits outside all desired
+fold starts. Reconciliation clears those rows before rendering, making the
+blank-line invariant self-healing during hydration and live updates.
+
+### 2026-07-18 — Absolute-span root correction
+
+Revised the plan after proving the remaining blank fold is a model coordinate
+error, not a migrated Neovim fold. `parsed_chat` already states absolute item
+bounds; the model must preserve their implied gaps instead of reconstructing a
+canonical document. Fold reconciliation will target only foldable item spans
+inside the selected exchange, making inter-exchange gaps irrelevant.
+
+### 2026-07-18 — Deterministic initial hydration
+
+Initial window hydration now replaces restored manual-fold state before
+rendering the full semantic projection. This is the one lifecycle boundary
+where document-wide cleanup is required to make folds a pure function of
+content; subsequent response/tool mutations retain localized per-exchange
+prepare/reconcile behavior.
