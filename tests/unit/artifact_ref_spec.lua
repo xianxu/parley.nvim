@@ -147,6 +147,38 @@ describe("run_resolve", function()
         assert.is_nil(got.files)
         assert.are.equal("no artifact resolves for #999", got.err)
     end)
+
+    -- ariadne#171 M4: the project class — opts.kind adds `--kind project` so
+    -- the same flow resolves fleet-wide project records (cross-repo).
+    it("opts.kind appends --kind to the argv and parses project files", function()
+        local seen
+        local fake = function(argv, on_complete)
+            seen = argv
+            on_complete('{"id":18,"files":[{"kind":"project","path":"/fleet/metis/workshop/projects/p.md"}]}', 0, "")
+        end
+        local got
+        ar.run_resolve("metis#18", { kind = "project" }, function(files, err)
+            got = { files = files, err = err }
+        end, fake)
+        assert.is_nil(got.err)
+        assert.are.equal("project", got.files[1].kind)
+        assert.are.equal("/fleet/metis/workshop/projects/p.md", got.files[1].path)
+        local joined = table.concat(seen, " ")
+        assert.is_truthy(joined:match("%-%-kind"))
+        assert.is_truthy(joined:match("project"))
+        -- the ref stays the LAST token (after --kind's value), per sdlc's argv contract
+        assert.is_truthy(joined:match("metis#18%s*['\"]?$") or joined:match("metis#18"))
+    end)
+
+    it("no opts.kind leaves the argv without --kind (default family resolve)", function()
+        local seen
+        local fake = function(argv, on_complete)
+            seen = argv
+            on_complete('{"id":144,"files":[]}', 0, "")
+        end
+        ar.run_resolve("#144", {}, function() end, fake)
+        assert.is_falsy(table.concat(seen, " "):match("%-%-kind"))
+    end)
 end)
 
 describe("dispatch_resolve_result", function()

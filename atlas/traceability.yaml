@@ -110,11 +110,17 @@ atlas:
       - lua/parley/exchange_model.lua
       - lua/parley/buffer_edit.lua
       - lua/parley/render_buffer.lua
+      - lua/parley/fold_projection.lua
       - lua/parley/tool_folds.lua
+      - lua/parley/tool_loop.lua
+      - lua/parley/dispatcher.lua
     tests:
       - tests/unit/answer_structure_spec.lua
       - tests/unit/tool_folds_spec.lua
+      - tests/unit/fold_projection_spec.lua
       - tests/integration/tool_folds_spec.lua
+      - tests/integration/create_handler_spec.lua
+      - tests/integration/chat_respond_spec.lua
       - tests/unit/exchange_model_spec.lua
       - tests/unit/buffer_edit_spec.lua
       - tests/unit/render_buffer_spec.lua

@@ -4,13 +4,17 @@ The exchange model (`lua/parley/exchange_model.lua`) is the single source of tru
 
 ## Core Principle: Everything Is a Block
 
-An exchange is a flat list of blocks. Each block has a `kind` and `size` (line count). Positions are computed on demand from accumulated sizes. No absolute line numbers are stored.
+An exchange is a flat list of blocks. Each block has a `kind`, `size` (line
+count), and an intra-exchange `gap_before`; the exchange owns the leading gap
+before its question. Positions are computed on demand from accumulated sizes
+and gaps. Absolute line numbers are not retained after parser spans have been
+compiled into this relative layout.
 
 ```
 Exchange = {
     blocks = {
-        { kind = "question",      size = 1 },   -- 💬:
-        { kind = "agent_header",  size = 1 },   -- 🤖:
+        { kind = "question",      size = 1, gap_before = 0 }, -- 💬:
+        { kind = "agent_header",  size = 1, gap_before = 1 }, -- 🤖:
         { kind = "thinking",      size = 2 },   -- 🧠: semantic block
         { kind = "text",          size = 5 },   -- ordinary response text
         { kind = "tool_use",      size = 4 },   -- 🔧: + json fence
@@ -23,10 +27,13 @@ Exchange = {
 
 ## Layout Rules
 
-1. **1 blank margin** between adjacent non-empty blocks.
-2. **Empty blocks (size 0) cancel one margin** — invisible in layout.
-3. **1 blank margin** between exchanges.
-4. **Header** occupies `header_lines` at the top, followed by 1 margin.
+1. Existing chats preserve the zero-, one-, or multi-line gaps implied by
+   parser item spans; new live blocks default to one blank margin.
+2. The exchange exclusively owns its leading gap. The question block owns no
+   duplicate gap; later blocks own only intra-exchange gaps.
+3. Empty blocks contribute neither size nor gap and remain invisible.
+4. `exchange_total_size` excludes the exchange leading gap;
+   `exchange_start` adds each leading gap exactly once.
 
 ## Lifecycle
 
@@ -40,9 +47,8 @@ The model is built once per `M.respond` call and lives through the entire respon
 - **Spinner**: tracked as a block; set to size 0 when cleared.
 - **Prompt append**: uses `exchange_total_size` to compute insertion point.
 - **Folding**: `thinking`, `summary`, `tool_use`, and `tool_result` ranges come
-  only from the model. Neovim shrinks a manual fold when its streaming tail is
-  replaced, so Parley recreates only that active foldable range; ordinary text
-  performs no fold command.
+  only from their stated model block spans and stay inside the selected
+  exchange. Gaps are never projected as folds.
 
 Because the model is live state, `chat_respond` protects every pending async write with a chat lease anchored on an `invalidate=true` extmark on the response's agent-header line (#138). The anchor distinguishes Parley-owned writes from structural edits: streaming and ordinary edits move the anchor (valid), while deleting the header — undo/redo or other structural drift — invalidates the pending response instead of reconciling the model against a changed serialized transcript. (Pre-#138 the lease keyed on `changedtick` and committed each Parley write's new tick; the extmark anchor makes that commit unnecessary.)
 
@@ -50,14 +56,17 @@ Because the model is live state, `chat_respond` protects every pending async wri
 
 `from_parsed_chat(parsed_chat)` builds a model from parser output. The shared
 `answer_structure` reducer supplies semantic answer spans; the parser trims
-leading/trailing blank lines so model margins remain the source of truth.
+leading/trailing blank lines from item content, while adjacent absolute spans
+compile into relative gaps. Historical chats do not need canonical spacing.
+Streaming performs the same compilation from its bounded active-segment
+sections when replacing the insertion span.
 
 ## API
 
 | Method | Purpose |
 |--------|---------|
-| `add_exchange(q_size)` | Add exchange with question block |
-| `add_block(k, kind, size)` | Append block to exchange k |
+| `add_exchange(q_size, gap?)` | Add exchange with question block |
+| `add_block(k, kind, size, gap?)` | Append block to exchange k |
 | `grow_block(k, b, delta)` | Streaming grew the block |
 | `set_block_size(k, b, size)` | Set exact size (e.g., spinner → 0) |
 | `remove_block(k, b)` | Remove a block |

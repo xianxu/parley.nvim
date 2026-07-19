@@ -20,12 +20,28 @@ registry.
 ## Response (`:ParleyChatRespond` / `<C-g><C-g>`)
 Assembles context (with memory summarization), streams LLM response into buffer. The [exchange model](exchange_model.md) is the single source of truth for all transcript mutations during the response lifecycle — streaming text growth, tool block insertion, and prompt append all go through the model. [Response progress](response_progress.md) is cosmetic extmark state that begins at the response header (or a recursive leg's last visible block), then follows the current generation tip; it never becomes a model block. A per-buffer pending-session guard prevents duplicate calls.
 
-Streaming fold maintenance is insertion-scoped. After each write, Parley reduces
-only the active insertion block, updates its semantic model span, and recreates
-the fold only for foldable kinds. A late explicit thinking terminator may widen
-that bounded read to its recorded provisional opener. Tool calls/results fold
-immediately from their known appended block indices. Success and cancellation
-use the live model; there is no final whole-chat fold reparse.
+Semantic folds are a pure projection of one exchange's positive-size thinking,
+summary, tool-use, and tool-result blocks (`lua/parley/fold_projection.lua`).
+Streaming still reduces only the active insertion span; a late explicit
+thinking terminator may widen that bounded read to its recorded provisional
+opener. Before a known exchange mutation, Parley removes that exchange's old
+projected folds in every window showing the buffer; afterward it creates the
+updated projection in those same windows. Tool-loop appends use the same
+transaction. Unchanged exchanges receive no fold commands, unrelated user folds
+remain untouched during live reconciliation.
+
+Initial setup and window-entry events parse once and hydrate every exchange in
+the entering window. Hydration first clears restored/manual fold state in that
+window, then renders the complete semantic projection. This makes initial fold
+state a pure function of the parsed exchange model: stale blank-line folds and
+a live transaction that beats scheduled hydration cannot survive as duplicate
+nesting. Fold ranges
+come only from item bounds; inter-item and inter-exchange gaps are never fold
+targets. A lightweight `(buffer, window)` initialization registry
+prevents duplicate manual folds and is cleared with window/buffer teardown.
+Successful live transactions use the current model without reparsing; failure
+recovery reparses only to restore prepared folds while preserving the original
+error.
 
 Inline-comment submission follows the same preservation boundary. Drill-in
 marker/anchor transformations are planned as original-coordinate byte edits and

@@ -2,6 +2,13 @@
 
 ## 2026-07-17 (#194)
 
+- **A revision that changes a contract must update the normative Spec, not only
+  append historical rationale.** #195 intentionally made initial hydration the
+  sole `zE` boundary, but the original Spec still said Parley never clears
+  document-wide folds. Rule: after every behavioral plan revision, shadow-sweep
+  the Spec, Done-when, plan goal, atlas, and header comments for superseded
+  absolutes (`ARCH-PURPOSE`).
+
 - **A checked plan edge-case list must map to explicit production tests, not
   merely to helper-level coverage or nearby happy paths.** The close review
   found that end submission promised no/one/multiple trailing blanks and a

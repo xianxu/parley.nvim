@@ -8,29 +8,31 @@
 -- of exchange K live in the buffer?" Callers mutate the model (add
 -- blocks, grow blocks) and the model recomputes positions on demand
 -- from accumulated sizes. No absolute line numbers are ever stored —
--- only sizes.
+-- sizes and the gaps recorded before visible items.
 --
 -- See #90 design: size-based architecture.
 --
 -- Rules:
 --   1. Everything is a block (question, agent_header, text, tool_use,
 --      tool_result, spinner, thinking, note, ...).
---   2. 1 blank margin line between adjacent non-empty blocks.
---   3. Empty block (size 0) cancels one margin — effectively invisible.
+--   2. Parsed blocks preserve their actual preceding gaps; new blocks default
+--      to one blank line.
+--   3. Empty blocks contribute neither content nor gap.
 --
--- Layout convention:
+-- Default layout for newly appended content (parsed content stores its actual
+-- gaps instead):
 --   HEADER (header_lines lines)
---   MARGIN (1 blank)
+--   GAP (exchange.gap_before; default 1 blank)
 --   EXCHANGE 1:
 --     block 1: question (size lines)
---     MARGIN (1 blank)
+--     GAP (block.gap_before; default 1 blank)
 --     block 2: agent_header (1 line)
---     MARGIN (1 blank)
+--     GAP (block.gap_before; default 1 blank)
 --     block 3: text (size lines)
---     MARGIN (1 blank) — only between non-empty blocks
+--     GAP (block.gap_before; counted only between non-empty blocks)
 --     block 4: tool_use (size lines)
 --     ...
---   MARGIN (1 blank) — between exchanges
+--   GAP (next exchange.gap_before; default 1 blank)
 --   EXCHANGE 2:
 --     ...
 
@@ -62,10 +64,11 @@ end
 
 --- Add an exchange. The question is block 1 (always present).
 --- @param question_size integer  number of lines the question occupies
-function Model:add_exchange(question_size)
+function Model:add_exchange(question_size, gap_before)
     table.insert(self.exchanges, {
+        gap_before = gap_before == nil and MARGIN or gap_before,
         blocks = {
-            { kind = "question", size = question_size },
+            { kind = "question", size = question_size, gap_before = 0 },
         },
     })
 end
@@ -76,11 +79,12 @@ end
 --- @param kind string  block kind (agent_header/text/tool_use/tool_result/spinner/...)
 --- @param size integer  number of lines the block occupies
 --- @return integer  0-indexed insert position
-function Model:add_block(k, kind, size)
+function Model:add_block(k, kind, size, gap_before)
     local pos = self:append_pos(k)
     table.insert(self.exchanges[k].blocks, {
         kind = kind,
         size = size,
+        gap_before = gap_before == nil and MARGIN or gap_before,
     })
     return pos
 end
@@ -118,12 +122,23 @@ function Model:replace_span(k, first_block, old_count, sections)
     for _, section in ipairs(sections) do
         assert(type(section.kind) == "string" and type(section.size) == "number" and section.size >= 0,
             "invalid replacement section")
+        assert(section.gap_before == nil or (type(section.gap_before) == "number" and section.gap_before >= 0),
+            "invalid replacement gap")
     end
+    local inherited_gap = exchange.blocks[first_block] and exchange.blocks[first_block].gap_before or MARGIN
     for _ = 1, old_count do table.remove(exchange.blocks, first_block) end
     local changed = {}
     for offset, section in ipairs(sections) do
         local index = first_block + offset - 1
-        table.insert(exchange.blocks, index, { kind = section.kind, size = section.size })
+        local gap_before = section.gap_before
+        if gap_before == nil then
+            gap_before = offset == 1 and inherited_gap or MARGIN
+        end
+        table.insert(exchange.blocks, index, {
+            kind = section.kind,
+            size = section.size,
+            gap_before = gap_before,
+        })
         changed[#changed + 1] = index
     end
     return changed
@@ -140,9 +155,7 @@ function Model:exchange_total_size(k)
     local has_prev = false
     for _, blk in ipairs(self.exchanges[k].blocks) do
         if blk.size > 0 then
-            if has_prev then
-                size = size + MARGIN
-            end
+            if has_prev then size = size + (blk.gap_before or MARGIN) end
             size = size + blk.size
             has_prev = true
         end
@@ -153,12 +166,12 @@ end
 --- 0-indexed buffer line where exchange K starts (= where its first
 --- non-empty block starts).
 function Model:exchange_start(k)
-    local line = self.header_lines + MARGIN  -- after header + 1 margin
-    for i = 1, k - 1 do
+    local line = self.header_lines
+    for i = 1, k do
+        line = line + (self.exchanges[i].gap_before or MARGIN)
+        if i == k then return line end
         line = line + self:exchange_total_size(i)
-        line = line + MARGIN  -- margin between exchanges
     end
-    return line
 end
 
 --- 0-indexed buffer line where block B of exchange K starts.
@@ -168,23 +181,13 @@ function Model:block_start(k, b)
     local has_prev = false
     for i = 1, b do
         local blk = self.exchanges[k].blocks[i]
-        if i == b then
-            -- Margin before this block if there's preceding content
-            if has_prev and blk.size > 0 then
-                line = line + MARGIN
-            elseif has_prev then
-                -- Block is empty — position it where it would be
-                -- (after the margin), but it occupies 0 lines.
-                line = line + MARGIN
-            end
-            return line
-        end
         if blk.size > 0 then
-            if has_prev then
-                line = line + MARGIN
-            end
+            if has_prev then line = line + (blk.gap_before or MARGIN) end
+            if i == b then return line end
             line = line + blk.size
             has_prev = true
+        elseif i == b then
+            return line
         end
     end
     return line
@@ -273,24 +276,46 @@ end
 function M.from_parsed_chat(parsed_chat)
     local header_lines = parsed_chat.header_end or 0
     local model = M.new(header_lines)
+    local previous_exchange_end
     for _, ex in ipairs(parsed_chat.exchanges or {}) do
         local q_size = 1
+        local question_start = ex.question and ex.question.line_start or (header_lines + MARGIN + 1)
+        local question_end = question_start + q_size - 1
         if ex.question then
             q_size = ex.question.line_end - ex.question.line_start + 1
+            question_end = ex.question.line_end
         end
-        model:add_exchange(q_size)
+        local gap_before
+        if previous_exchange_end then
+            gap_before = question_start - previous_exchange_end - 1
+        else
+            gap_before = question_start - header_lines - 1
+        end
+        assert(gap_before >= 0, "overlapping exchange spans")
+        model:add_exchange(q_size, gap_before)
+        local previous_block_end = question_end
         if ex.answer then
             local k = #model.exchanges
             -- Agent header is the first answer block (🤖: line, 1 line)
-            model:add_block(k, "agent_header", 1)
+            local answer_start = ex.answer.line_start
+            local answer_gap = answer_start - previous_block_end - 1
+            assert(answer_gap >= 0, "overlapping answer spans")
+            model:add_block(k, "agent_header", 1, answer_gap)
+            previous_block_end = answer_start
             for _, sec in ipairs(ex.answer.semantic_sections or ex.answer.sections or {}) do
                 local sec_size = 1
                 if sec.line_start and sec.line_end then
                     sec_size = sec.line_end - sec.line_start + 1
                 end
-                model:add_block(k, sec.kind or sec.type or "text", sec_size)
+                local section_start = sec.line_start or (previous_block_end + MARGIN + 1)
+                local section_end = sec.line_end or (section_start + sec_size - 1)
+                local section_gap = section_start - previous_block_end - 1
+                assert(section_gap >= 0, "overlapping answer section spans")
+                model:add_block(k, sec.kind or sec.type or "text", sec_size, section_gap)
+                previous_block_end = section_end
             end
         end
+        previous_exchange_end = previous_block_end
     end
     return model
 end
