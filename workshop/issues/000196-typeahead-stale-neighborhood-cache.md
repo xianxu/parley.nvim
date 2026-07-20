@@ -1,12 +1,13 @@
 ---
 id: 000196
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-07-19
 updated: 2026-07-19
 estimate_hours: 0.85
 started: 2026-07-19T18:07:05-07:00
+actual_hours: 0.23
 ---
 
 # Path typeahead caches stale neighborhood; diverges from live tool-exec cwd
@@ -102,6 +103,7 @@ neighborhood/completion path was just traced end to end.
 ## Log
 
 ### 2026-07-19
+- 2026-07-19: closed — neighborhood_completion_spec 10/10 + neighborhood_spec 12/12 green; #196 transition regression is RED pre-fix (frozen cache still returns {} after repo recognized) and GREEN post-fix (production completefunc re-derives live root ../nbr2/); luacheck clean. Completion derives its neighborhood live via policy_for_buf — no attach-time freeze.; review verdict: SHIP
 
 - Diagnosed from a live report (cwd brain, chat under `brain/workshop/parley`,
   `../ar` typeahead empty while submission resolved `../ariadne`). Traced to the
