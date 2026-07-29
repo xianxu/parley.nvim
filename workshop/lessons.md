@@ -1,5 +1,26 @@
 # Lessons
 
+## 2026-07-19 (#196)
+
+- **A value cached at attach/init goes stale when its inputs are recognized
+  later; if a sibling path recomputes the same value live, the two silently
+  diverge.** Path typeahead froze the neighborhood policy in
+  `vim.b[buf].parley_root_policy` at completion-attach, while tool execution
+  recomputed `policy_for_buf` fresh each submit — so once the repo was
+  recognized *after* attach, completion offered a narrower root than submission
+  resolved. Rule: when two consumers must agree on a derived value, have them
+  share the derivation *at use time*, not a snapshot; only cache a derivation
+  whose inputs are immutable after capture, else invalidate on the exact inputs
+  that change it (here `config.repo_root` / `chat_roots`). One owner, evaluated
+  consistently (`ARCH-DRY`).
+- **A regression test that plants the very state the fix removes guards the
+  implementation line, not the behavior.** The first #196 test set
+  `parley_root_policy` directly — a var production no longer reads — so it
+  pinned one code path and would miss a freeze re-added under a different name.
+  Rule: drive the real state transition through the production entry point
+  (attach-before-recognition → recognize → assert the live result), so the test
+  survives refactors of *how* the value is derived (`ARCH-PURPOSE`).
+
 ## 2026-07-17 (#194)
 
 - **A revision that changes a contract must update the normative Spec, not only

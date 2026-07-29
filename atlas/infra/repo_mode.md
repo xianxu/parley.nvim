@@ -48,10 +48,13 @@ within one of them, never a fallback resolution base. Completion globs the
 write root only and labels candidates by textual prefix-strip (so `..`
 survives in typed form), filtered through the same read resolver — completion
 offers exactly what reads accept. Repo-mode `prep_md` attaches built-in and
-nvim-cmp completion backed by this policy and re-asserts the cmp buffer
-config on every BufEnter/InsertEnter so host configs that also call
-`cmp.setup.buffer` on BufEnter cannot displace it; global chats retain
-own-folder completion, and ordinary non-repo Markdown is unchanged.
+nvim-cmp completion backed by this policy — derived **live per completion**
+(never a snapshot frozen at attach), so completion always resolves against the
+same neighborhood the executor does, even when the repo is recognized only after
+the buffer attaches (#196) — and re-asserts the cmp buffer config on every
+BufEnter/InsertEnter so host configs that also call `cmp.setup.buffer` on
+BufEnter cannot displace it; global chats retain own-folder completion, and
+ordinary non-repo Markdown is unchanged.
 
 ### Markdown discovery
 

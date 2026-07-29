@@ -172,7 +172,13 @@ function M.policy_for_buf(buf)
 end
 
 local function policy_for_completion(buf)
-    return vim.b[buf].parley_root_policy or M.policy_for_buf(buf)
+    -- Always derive LIVE — completion must resolve the same neighborhood the
+    -- tool executor uses (chat_respond's policy_for_buf), evaluated at use time.
+    -- A policy frozen at attach goes stale when the repo is recognized only
+    -- after attach: completion would then offer a narrower root than submission
+    -- resolves (#196). ARCH-DRY: one derivation, one owner — not a cached copy
+    -- that can diverge. Cost is negligible next to the per-keystroke glob below.
+    return M.policy_for_buf(buf)
 end
 
 function M.completion_candidates(policy, base)
@@ -291,7 +297,6 @@ function M.attach_completion(buf)
     end
     if vim.b[buf].parley_completion_attached then return policy.write_root end
     vim.b[buf].parley_completion_attached = true
-    vim.b[buf].parley_root_policy = policy
     vim.api.nvim_set_option_value("completefunc", "v:lua.require'parley.neighborhood'.completefunc", { buf = buf })
     schedule_cmp_attach(buf)
     -- Re-assert the cmp buffer config on every entry: host configs that call

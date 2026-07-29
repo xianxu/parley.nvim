@@ -58,9 +58,13 @@ describe("neighborhood completion", function()
         local buf = vim.api.nvim_get_current_buf()
         parley.prep_md(buf)
         assert.is_true(vim.b[buf].parley_completion_attached)
-        local policy = vim.b[buf].parley_root_policy
+        -- #196: no policy is frozen in a buffer var anymore (completion derives
+        -- live). Re-running prep_md is still idempotent — attach stays set and
+        -- the completefunc keeps pointing at the parley entry point.
+        assert.equals("v:lua.require'parley.neighborhood'.completefunc", vim.bo[buf].completefunc)
         parley.prep_md(buf)
-        assert.same(policy, vim.b[buf].parley_root_policy)
+        assert.is_true(vim.b[buf].parley_completion_attached)
+        assert.equals("v:lua.require'parley.neighborhood'.completefunc", vim.bo[buf].completefunc)
 
         pcall(vim.cmd, "bwipeout!")
         parley.config.repo_root = nil
@@ -85,6 +89,43 @@ describe("neighborhood completion", function()
 
         local lua_items = neighborhood.completefunc(0, "lua/parley/in")
         assert.same({ "lua/parley/init.lua" }, lua_items)
+    end)
+
+    it("completefunc tracks the live neighborhood across attach-before-recognition (#196)", function()
+        -- A SECOND repo, deliberately NOT the configured chat_dir and NOT in
+        -- chat_roots, so its chat is only recognized once repo_root points at
+        -- it. This drives the real Done-when transition (behavior, not a planted
+        -- var): attach while unrecognized → narrow fallback root, then recognize
+        -- → live derivation must widen the root the production completefunc uses.
+        local repo2 = tmpdir .. "/repo2"
+        local repo2_chat = repo2 .. "/workshop/parley"
+        vim.fn.mkdir(repo2_chat, "p")
+        vim.fn.mkdir(tmpdir .. "/nbr2", "p")
+
+        local path = repo2_chat .. "/2026-06-29.topic.md"
+        local lines = {
+            "---", "topic: T", "file: 2026-06-29.topic.md",
+            "model: test-model", "provider: openai", "---", "", "💬: x",
+        }
+        vim.fn.writefile(lines, path)
+
+        -- Attach while repo2 is NOT recognized (repo_root points at the other
+        -- repo): the neighborhood falls back to the chat's own dir,
+        -- repo2/workshop/parley. Pre-#196 this fallback policy is frozen here.
+        parley.config.repo_root = repo
+        vim.cmd("edit! " .. vim.fn.fnameescape(path))
+        local buf = vim.api.nvim_get_current_buf()
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+        parley.prep_chat(buf, path)
+        -- ../nbr2 is unreachable from repo2/workshop/parley
+        -- (globs repo2/workshop/nbr2*, which does not exist).
+        assert.same({}, neighborhood.completefunc(0, "../nbr2"))
+
+        -- repo2 becomes recognized. A policy frozen at attach would keep the
+        -- fallback root and still miss the sibling; the live derivation widens
+        -- write_root to repo2, exposing ../nbr2 via the ../ read root.
+        parley.config.repo_root = repo2
+        assert.same({ "../nbr2/" }, neighborhood.completefunc(0, "../nbr2"))
     end)
 
     it("finds the start column for the current path token", function()
