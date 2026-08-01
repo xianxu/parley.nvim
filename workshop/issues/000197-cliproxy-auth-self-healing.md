@@ -212,7 +212,7 @@ dispatch → recovery live against the failing system.
 
 Durable plan: `workshop/plans/000197-cliproxy-auth-self-healing-plan.md`
 
-- [ ] M1 — Diagnose: pure classification vocabulary + management channel
+- [x] M1 — Diagnose: pure classification vocabulary + management channel
 - [ ] M2 — Recover: pure recovery policy + retry seam in the dispatcher
 - [ ] M3 — Prevent: stale-proxy reaping + login-flow robustness
 
@@ -300,5 +300,42 @@ safe when nothing was streamed (`qt.response == ""`) or it duplicates buffer
 content.
 
 ## Log
+
+### 2026-08-01 — M1 (Diagnose)
+
+Shipped Tasks 1–7. `cliproxy_auth.lua` is new and pure: `classify_response`
+(status-gated pattern table), `classify_auth_files` (the one interpreter of
+cliproxy's management schema), `diagnosis`. `cliproxy.lua` gained
+`management_key`/`auth_files`/`credential_health`/`recover`; `models_argv`
+generalized to `api_argv`. `check_auth_failure` and `detect_auth_failure` are
+deleted, not left beside the new seam.
+
+Discoveries worth keeping:
+
+- **The test suite could spawn a REAL proxy against the operator's live
+  auth-dir.** `cliproxyapi` is on nvim's PATH at `/opt/homebrew/bin/cliproxyapi`,
+  so `discover_binary` finds it whenever a spec sets `manage = true` without a
+  valid `binary_path`; `ensure_running` then spawns it with no `auth-dir`, i.e.
+  against `~/.cli-proxy-api`, starting a 15-minute refresh loop on the real
+  credential — the exact rotation race this issue is about. Observed directly: a
+  test-spawned proxy reported the operator's real account. `_set_data_dir` never
+  covered this (it guards the derived-artifact dir, not binary discovery). Both
+  cliproxy specs now pin `PATH` to system dirs only.
+- **Pre-existing suite flakiness, confirmed not ours.** `make test` fails on
+  `git_markdown_source_spec` + `markdown_finder_async_spec` (integration) and
+  `tools_builtin_find_spec` (unit) — all pass individually. Verified by running
+  the full suite at the pre-branch commit (375b635, docs-only): the same specs
+  fail there. Parallel-run interaction, tracked separately from this issue.
+- A **sixth** leaked proxy exists beyond the four in ## Problem: PID 44488,
+  `/opt/homebrew/bin/cliproxyapi -config /tmp/claude-501/cliproxy-gate.yaml`
+  (Jun 12, config deleted). The earlier count missed it because its process name
+  is `cliproxyapi`, not `cli-proxy-api` — M3's `parse_peers` must match both.
+
+Verification: `cliproxy_auth_spec` 28, `cliproxy_config_spec` 42,
+`dispatcher_query_spec` 52 (9 new for the claim contract, incl. the backstop
+timer and anti-double-fire), `cliproxy_lifecycle_spec` 43,
+`cliproxy_auth_login_spec` 8 (rewritten against `recover`),
+`cliproxy_conformance_spec` 2 green **against the real 7.1.71 binary**.
+`make lint` 0/0 across 309 files.
 
 ### 2026-08-01
