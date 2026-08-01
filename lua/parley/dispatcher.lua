@@ -14,6 +14,11 @@ local D = {
 	config = {},
 	providers = {},
 	query_dir = vim.fn.stdpath("cache") .. "/parley/query",
+	-- How long an adapter that CLAIMED a failure via recover_query has to settle
+	-- it (#197). A backstop, not a design element: every recovery path is
+	-- expected to call retry()/give_up() itself. Overridable so specs can drive
+	-- the timeout without sleeping.
+	recovery_timeout_ms = 15000,
 }
 
 ---@param opts table #	user config
@@ -161,7 +166,8 @@ end
 ---@param callback function | nil # optional callback handler
 ---@param on_progress function | nil # optional progress/status handler
 local query = function(buf, provider, payload, handler, on_exit, callback, on_progress,
-	on_activity, on_error, abort_before_start)
+	on_activity, on_error, abort_before_start, restart, attempt)
+	attempt = attempt or 0
 	-- make sure handler is a function
 	if type(handler) ~= "function" then
 		logger.error(
@@ -308,9 +314,12 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 				end
 			end
 
-			pcall(function()
-				require("parley.cliproxy").check_auth_failure(qt.provider, qt.raw_response)
-			end)
+			-- NOTE (#197): auth-failure detection deliberately does NOT live
+			-- here. finish_stdout runs on every completed response, successes
+			-- included, so classifying here means classifying ordinary
+			-- assistant prose — a chat about a 401 would have popped a login
+			-- prompt. It now lives in the terminal closure below, which is the
+			-- only scope that knows the HTTP status.
 		end
 
 		-- closure for uv.read_start(stdout, fn)
@@ -407,18 +416,66 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 				body = qt.raw_response,
 				stderr = clean_stderr,
 				io_error = io_error,
+				-- The request's model: the only path by which a failure body
+				-- that names neither provider nor model (cliproxy's expired-token
+				-- 401) can still be resolved to a credential channel (#197).
+				model = payload and payload.model,
+				-- Did any content already reach the buffer? `handler` writes
+				-- streamed content as it arrives, so a retry after a partial
+				-- stream would duplicate text. Recovery must not claim those.
+				streamed = qt.response ~= "",
+				attempt = attempt,
 			}
-			if type(on_error) == "function" then
-				on_error(qid, failure)
-			else
-				local safe_io_error = tostring(io_error or "none"):gsub("%s+", " "):sub(1, 160)
-				logger.error(string.format(
-					"%s query failed: code=%s signal=%s http_status=%s io_error=%s body_bytes=%d stderr_bytes=%d",
-					provider, tostring(code), tostring(signal), tostring(http_status), safe_io_error,
-					#qt.raw_response, #clean_stderr
-				))
-				legacy_complete(qid, qt)
+			local function deliver(msg)
+				if msg then
+					failure.message = msg
+				end
+				if type(on_error) == "function" then
+					on_error(qid, failure)
+				else
+					local safe_io_error = tostring(io_error or "none"):gsub("%s+", " "):sub(1, 160)
+					logger.error(string.format(
+						"%s query failed: code=%s signal=%s http_status=%s io_error=%s body_bytes=%d stderr_bytes=%d",
+						provider, tostring(code), tostring(signal), tostring(http_status), safe_io_error,
+						#qt.raw_response, #clean_stderr
+					))
+					legacy_complete(qid, qt)
+				end
 			end
+
+			-- Recovery seam (#197). `on_error` is TERMINAL downstream — it
+			-- finishes the pending session and tears down the chat leg — and
+			-- recovery is async, so an adapter cannot simply "run first": it
+			-- must CLAIM the failure synchronously. A truthy claim withholds
+			-- on_error and puts the adapter in debt for exactly one of
+			-- retry()/give_up(); a falsy claim (and every adapter without the
+			-- hook) leaves today's behavior untouched.
+			if type(adapter.recover_query) == "function" and attempt == 0
+				and type(restart) == "function" then
+				local settle = tasker.once(function(action, msg)
+					if action == "retry" then
+						restart(attempt + 1)
+					else
+						deliver(msg)
+					end
+				end)
+				local claimed = adapter.recover_query(failure, function()
+					settle("retry")
+				end, function(msg)
+					settle("give_up", msg)
+				end)
+				if claimed then
+					-- Backstop against a recovery that never settles: degrade to
+					-- today's behavior rather than hold the chat leg open
+					-- forever. `settle` is once-only, so this cannot double-fire
+					-- with a late retry/give_up.
+					vim.defer_fn(function()
+						settle("give_up", provider .. ": recovery timed out")
+					end, D.recovery_timeout_ms)
+					return
+				end
+			end
+			deliver()
 		else
 			legacy_complete(qid, qt)
 		end
@@ -449,9 +506,13 @@ D.query = function(buf, provider, payload, handler, on_exit, callback, on_progre
 			on_abort(msg)
 		end
 	end)
-	local function start_query()
+	-- `local function` (not `local x = function`) so it can pass ITSELF down as
+	-- the restart entry point: `query` is a file-local that cannot reference
+	-- itself, and the terminal closure that needs to re-issue the request is
+	-- nested inside it (#197).
+	local function start_query(attempt)
 		query(buf, provider, payload, handler, on_exit, callback, on_progress,
-			on_activity, on_error, abort_before_start)
+			on_activity, on_error, abort_before_start, start_query, attempt or 0)
 	end
 	local adapter = providers.get(provider)
 	if adapter.pre_query then

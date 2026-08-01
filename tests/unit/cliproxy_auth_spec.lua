@@ -180,3 +180,64 @@ describe("classify_auth_files", function()
         assert.matches("api%.anthropic%.com", h.message)
     end)
 end)
+
+describe("diagnosis", function()
+    -- Message text is API here: workshop/lessons.md records that specs across
+    -- this repo assert on wording, so these pin the contract deliberately.
+    local function verdict(over)
+        return vim.tbl_extend("force",
+            { kind = "no_auth", model = "claude-opus-4-8", provider = "claude",
+              message = "auth_unavailable: no auth available" }, over or {})
+    end
+
+    it("names the account and the proxy's own reason for a dead credential", function()
+        local msg = ca.diagnosis(verdict(), {
+            state = "unavailable", account = "me@example.com", failed = 6,
+            message = "OAuth access token has expired. Re-authenticate to continue.",
+        })
+        assert.matches("me@example.com", msg)
+        assert.matches("expired", msg)
+    end)
+
+    it("says a credential is missing rather than blaming the model", function()
+        local msg = ca.diagnosis(verdict(), { state = "missing", message = "no credential for claude" })
+        assert.matches("no.*credential", msg)
+        assert.matches("log in", msg)
+    end)
+
+    it("reports failure counts when the proxy tracked them", function()
+        local msg = ca.diagnosis(verdict(), {
+            state = "error", account = "me@example.com", failed = 4, message = "upstream 401",
+        })
+        assert.matches("4", msg)
+    end)
+
+    it("distinguishes quota from a login problem", function()
+        local msg = ca.diagnosis(verdict({ kind = "quota", message = "payment_required" }),
+            { state = "healthy", account = "me@example.com" })
+        assert.matches("quota", msg)
+        assert.is_nil(msg:lower():find("log in"))
+    end)
+
+    it("says so when credential state could not be read", function()
+        local msg = ca.diagnosis(verdict(), { state = "unknown", reason = "unreachable",
+            message = "proxy unreachable" })
+        assert.matches("unreachable", msg)
+    end)
+
+    it("flags a healthy credential as a transient failure, not an auth problem", function()
+        local msg = ca.diagnosis(verdict(), { state = "healthy", account = "me@example.com" })
+        assert.matches("healthy", msg)
+    end)
+
+    it("always names the model when the verdict carries one", function()
+        for _, state in ipairs({ "missing", "disabled", "unavailable", "error", "healthy", "unknown" }) do
+            local msg = ca.diagnosis(verdict(), { state = state, message = "x", account = "a@b.c" })
+            assert.matches("claude%-opus%-4%-8", msg, nil, "state " .. state .. " dropped the model")
+        end
+    end)
+
+    it("never returns an empty string", function()
+        assert.is_true(#ca.diagnosis(verdict({ model = nil, message = nil }), { state = "missing" }) > 0)
+    end)
+end)

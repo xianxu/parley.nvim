@@ -2049,15 +2049,20 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                     -- write; surface the terminal only after that write runs.
                     vim.schedule(function()
                         local status = failure and failure.http_status
-                        local body = failure and failure.body
+                        -- A recovery seam that gave up supplies a real
+                        -- diagnosis (#197); prefer it over the raw body, which
+                        -- is what produced the useless "response is empty" /
+                        -- naked-JSON notices this replaced. `body` stays on the
+                        -- failure table for the log.
+                        local detail = (failure and failure.message) or (failure and failure.body)
                         local message = "parley: provider request failed"
                         if status and (status < 200 or status > 299) then
                             message = message .. " (HTTP " .. tostring(status) .. ")"
                         elseif failure and failure.code then
                             message = message .. " (exit " .. tostring(failure.code) .. ")"
                         end
-                        if type(body) == "string" and body:match("%S") then
-                            message = message .. ": " .. body:sub(1, 500)
+                        if type(detail) == "string" and detail:match("%S") then
+                            message = message .. ": " .. detail:sub(1, 500)
                         end
                         teardown_chat_leg(message)
                     end)

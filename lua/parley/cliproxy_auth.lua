@@ -133,4 +133,59 @@ function M.classify_auth_files(files, channel)
     return best
 end
 
+--------------------------------------------------------------------------------
+-- Diagnosis (the sentence a human reads)
+--------------------------------------------------------------------------------
+
+--- Render the human diagnosis for a failure, from the verdict plus what the
+--- proxy says about its own credential.
+---
+--- Pure so the wording is unit-tested rather than eyeballed — message text is
+--- part of this repo's API (specs assert on it, see workshop/lessons.md). The
+--- point of #197 is that this replaces "cliproxyapi response is empty:
+--- body_bytes=215" with something that names the credential, its real state,
+--- and the next action.
+---@param verdict table # from classify_response
+---@param health table|nil # from classify_auth_files / auth_files
+---@return string
+function M.diagnosis(verdict, health)
+    health = health or {}
+    local model = verdict.model and (' for "' .. verdict.model .. '"') or ""
+    local who = health.account and (" (" .. health.account .. ")") or ""
+    local because = health.message and health.message ~= "" and (": " .. health.message) or ""
+    local failures = (type(health.failed) == "number" and health.failed > 0)
+        and (" after %d failed request(s)"):format(health.failed) or ""
+
+    -- Quota and model-availability are NOT login problems; saying "log in" here
+    -- sends the operator down a dead end (and re-running OAuth on a
+    -- quota-exhausted account changes nothing).
+    if verdict.kind == "quota" then
+        return ("cliproxy%s: quota or billing refused the request%s — not a login problem")
+            :format(model, because ~= "" and because or (": " .. tostring(verdict.message)))
+    end
+    if verdict.kind == "model_unavailable" then
+        return ("cliproxy%s: the model is unavailable upstream%s"):format(model, because)
+    end
+
+    local state = health.state
+    if state == "missing" then
+        return ("cliproxy%s: no credential is loaded for this channel — log in to create one")
+            :format(model)
+    elseif state == "disabled" then
+        return ("cliproxy%s: the credential%s is disabled%s — re-enable it or log in again")
+            :format(model, who, because)
+    elseif state == "unavailable" or state == "error" then
+        return ("cliproxy%s: the credential%s is %s%s%s — log in again to replace it")
+            :format(model, who, state, because, failures)
+    elseif state == "healthy" then
+        -- The proxy believes the credential is fine, so this failure is most
+        -- likely transient — say so instead of sending them to a login they
+        -- don't need.
+        return ("cliproxy%s: the request failed but the credential%s looks healthy: %s")
+            :format(model, who, tostring(verdict.message))
+    end
+    return ("cliproxy%s: could not read credential state (%s)%s; the request failed with: %s")
+        :format(model, tostring(health.reason or "unknown"), because, tostring(verdict.message))
+end
+
 return M

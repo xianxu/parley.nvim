@@ -907,4 +907,166 @@ describe("dispatcher.query internals", function()
             end
         end
     end)
+    --------------------------------------------------------------------------
+    -- Group J: recover_query claim contract (#197)
+    --
+    -- on_error is terminal downstream (it finishes the pending session and
+    -- tears down the chat leg), and recovery is async — so an adapter cannot
+    -- simply "run first". It must claim the failure synchronously, and a claim
+    -- is a debt: exactly one of retry()/give_up() must settle it.
+    --------------------------------------------------------------------------
+    describe("Group J: recover_query claim contract", function()
+        local providers = require("parley.providers")
+        local original_get
+
+        local function with_adapter(recover_query, fn)
+            original_get = providers.get
+            providers.get = function(name)
+                local adapter = vim.tbl_extend("force", {}, original_get(name))
+                adapter.recover_query = recover_query
+                return adapter
+            end
+            local ok, err = pcall(fn)
+            providers.get = original_get
+            assert.is_true(ok, tostring(err))
+        end
+
+        -- Drive one failing query; returns the errors on_error saw.
+        local function fail_query(body, status)
+            local errors = {}
+            dispatcher.query(nil, "openai", { model = "gpt-4", messages = {} }, function() end,
+                nil, nil, nil, nil, nil, function(_qid, failure)
+                    table.insert(errors, failure)
+                end)
+            captured_out_reader(nil, body or "")
+            captured_out_reader(nil, nil)
+            captured_terminal(0, 0, body or "", status_stderr(status or "503"), nil)
+            return errors
+        end
+
+        it("J1: an adapter without recover_query behaves exactly as before", function()
+            local errors = fail_query()
+            assert.equals(1, #errors)
+        end)
+
+        it("J2: a declined claim (falsy) lets on_error fire immediately", function()
+            local errors
+            with_adapter(function() return false end, function()
+                errors = fail_query()
+            end)
+            assert.equals(1, #errors)
+        end)
+
+        it("J3: a claim withholds on_error until the adapter settles", function()
+            local settle, errors
+            with_adapter(function(_failure, _retry, give_up)
+                settle = give_up
+                return true
+            end, function()
+                errors = fail_query()
+                assert.equals(0, #errors, "on_error fired despite the claim")
+                settle("diagnosed: credential expired")
+                assert.equals(1, #errors)
+                assert.equals("diagnosed: credential expired", errors[1].message)
+            end)
+        end)
+
+        it("J4: retry re-issues the request once and never fires on_error", function()
+            local starts, errors = 0, nil
+            local original_run = tasker.run
+            tasker.run = function(...)
+                starts = starts + 1
+                return original_run(...)
+            end
+            with_adapter(function(_failure, retry)
+                retry()
+                return true
+            end, function()
+                errors = fail_query()
+            end)
+            tasker.run = original_run
+            assert.equals(2, starts, "the query should have been re-issued exactly once")
+            assert.equals(0, #errors)
+        end)
+
+        it("J5: the retried attempt cannot re-enter recovery", function()
+            local claims = 0
+            local original_run = tasker.run
+            tasker.run = function(...) return original_run(...) end
+            with_adapter(function(failure, retry)
+                claims = claims + 1
+                if failure.attempt == 0 then
+                    retry()
+                    return true
+                end
+                return false
+            end, function()
+                fail_query()
+                -- second attempt's terminal must not be offered a claim
+                captured_out_reader(nil, "")
+                captured_out_reader(nil, nil)
+                captured_terminal(0, 0, "", status_stderr("503"), nil)
+            end)
+            tasker.run = original_run
+            assert.equals(1, claims, "recovery was offered to the retried attempt")
+        end)
+
+        it("J6: retry then give_up produces exactly one outcome", function()
+            local errors, starts = nil, 0
+            local original_run = tasker.run
+            tasker.run = function(...)
+                starts = starts + 1
+                return original_run(...)
+            end
+            with_adapter(function(_failure, retry, give_up)
+                retry()
+                give_up("too late")
+                give_up("also too late")
+                return true
+            end, function()
+                errors = fail_query()
+            end)
+            tasker.run = original_run
+            assert.equals(2, starts)
+            assert.equals(0, #errors)
+        end)
+
+        it("J7: a claim that never settles degrades to on_error via the backstop", function()
+            local saved_timeout = dispatcher.recovery_timeout_ms
+            dispatcher.recovery_timeout_ms = 20 -- drive the clock, don't sleep 15s
+            local errors
+            with_adapter(function() return true end, function()
+                errors = fail_query()
+                assert.equals(0, #errors)
+                assert.is_true(vim.wait(2000, function() return #errors == 1 end, 5),
+                    "the backstop never fired")
+            end)
+            dispatcher.recovery_timeout_ms = saved_timeout
+            assert.matches("timed out", errors[1].message)
+        end)
+
+        it("J8: the failure carries the request model and the streamed flag", function()
+            local seen
+            with_adapter(function(failure)
+                seen = failure
+                return false
+            end, function()
+                fail_query()
+            end)
+            assert.equals("gpt-4", seen.model)
+            assert.is_false(seen.streamed)
+            assert.equals(0, seen.attempt)
+        end)
+
+        it("J9: streamed is true once content reached the buffer", function()
+            local seen
+            with_adapter(function(failure)
+                seen = failure
+                return false
+            end, function()
+                fail_query('data: {"choices":[{"delta":{"content":"partial"}}]}\n')
+            end)
+            assert.is_true(seen.streamed)
+        end)
+    end)
 end)

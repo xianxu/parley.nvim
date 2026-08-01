@@ -1115,6 +1115,18 @@ cliproxyapi.pre_query = function(on_success, on_error)
     cliproxy.ensure_running(on_success, on_error or function() end)
 end
 
+-- Auth-failure recovery (issue #197). The dispatcher owns the mechanism (the
+-- claim contract, the single retry, the backstop timer); cliproxy owns the
+-- policy. Returning falsy — including when the module is unavailable — leaves
+-- the dispatcher's normal error path exactly as it was.
+cliproxyapi.recover_query = function(failure, retry, give_up)
+    local ok, cliproxy = pcall(require, "parley.cliproxy")
+    if not ok then
+        return false
+    end
+    return cliproxy.recover(failure, retry, give_up)
+end
+
 --------------------------------------------------------------------------------
 -- Azure adapter (extends openai)
 --------------------------------------------------------------------------------

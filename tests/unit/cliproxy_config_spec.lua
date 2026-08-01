@@ -201,20 +201,12 @@ describe("asset_name", function()
 end)
 
 --------------------------------------------------------------------------------
--- M3: auth-failure detection + login-provider resolution
+-- M3: login-provider resolution
+--
+-- detect_auth_failure lived here until #197 replaced it with
+-- cliproxy_auth.classify_response (status-gated, multi-pattern); its cases moved
+-- to tests/unit/cliproxy_auth_spec.lua.
 --------------------------------------------------------------------------------
-describe("detect_auth_failure", function()
-    it("extracts the model from cliproxy's 'unknown provider' error", function()
-        local r = '{"error":{"message":"unknown provider for model claude-opus-4-8","type":"server_error"}}'
-        assert.equals("claude-opus-4-8", cc.detect_auth_failure(r))
-    end)
-    it("returns nil for a normal streamed response", function()
-        assert.is_nil(cc.detect_auth_failure('data: {"choices":[{"delta":{"content":"hi"}}]}'))
-    end)
-    it("returns nil for a non-string", function()
-        assert.is_nil(cc.detect_auth_failure(nil))
-    end)
-end)
 
 describe("resolve_login_provider", function()
     local alias = {

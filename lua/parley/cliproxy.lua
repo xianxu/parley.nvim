@@ -635,8 +635,10 @@ function M.login_argv(provider)
     return { bin, "-config", config_path(), flag }
 end
 
---------------------------------------------------------------------------------
--- M3: auth-failure → guided login
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+-- Auth-failure recovery (#197) — the single owner of "the query failed for
+-- credential reasons". Replaces #131 M3's check_auth_failure, which sat on the
+-- success path and matched one stale message.
 --------------------------------------------------------------------------------
 
 local _login_prompt_active = false
@@ -645,43 +647,82 @@ function M._reset_login_prompt() -- test helper
     _login_prompt_active = false
 end
 
---- On a cliproxy response, detect a missing/invalid upstream credential and
---- prompt-and-confirm the right `:ParleyProxy login`. The provider is resolved
---- from parley's own `oauth-model-alias` (the channel the model sits under), not
---- from the model name. No-op for non-cliproxy providers + normal responses.
----@param provider string
----@param raw_response string
-function M.check_auth_failure(provider, raw_response)
-    local ok, providers = pcall(require, "parley.providers")
-    if not ok or providers.resolve_name(provider) ~= "cliproxyapi" then
-        return
-    end
-    local failed_model = cc.detect_auth_failure(raw_response)
-    if not failed_model or _login_prompt_active then
-        return
-    end
+-- Resolve the cliproxy channel a model is served by, from parley's own
+-- oauth-model-alias config (NOT a name heuristic).
+local function channel_for(model)
     local c = cfg() or {}
     local alias = type(c.config) == "table" and c.config["oauth-model-alias"] or nil
-    local login = alias and cc.resolve_login_provider(failed_model, alias) or nil
+    if not (model and alias) then
+        return nil
+    end
+    return cc.resolve_login_provider(model, alias)
+end
+
+-- Ask, once, whether to run the login this failure calls for. `message` is the
+-- diagnosis, so the operator decides with the real reason in front of them
+-- rather than a bare "needs login".
+local function prompt_login(login, message, done)
+    if _login_prompt_active then
+        return done()
+    end
     _login_prompt_active = true
     vim.schedule(function()
-        if not login then
-            _login_prompt_active = false
-            vim.notify(("cliproxy: \"%s\" — unknown provider / missing auth. Add it to "
-                .. "cliproxy.config['oauth-model-alias'], or :ParleyProxy login <provider>.")
-                :format(failed_model), vim.log.levels.WARN)
-            return
-        end
         local prefix = (require("parley").config or {}).cmd_prefix or "Parley"
-        vim.ui.select({ "Log in (" .. login .. ")", "Not now" }, {
-            prompt = ("cliproxy: \"%s\" needs the %s login."):format(failed_model, login),
-        }, function(_, idx)
-            _login_prompt_active = false
-            if idx == 1 then
-                vim.cmd(prefix .. "Proxy login " .. login)
-            end
-        end)
+        vim.ui.select({ "Log in (" .. login .. ")", "Not now" }, { prompt = message },
+            function(_, idx)
+                _login_prompt_active = false
+                if idx == 1 then
+                    vim.cmd(prefix .. "Proxy login " .. login)
+                end
+                done()
+            end)
     end)
+end
+
+--- React to a failed cliproxy query. Registered as the cliproxyapi adapter's
+--- `recover_query` hook, so the dispatcher owns the mechanism and this owns the
+--- policy.
+---
+--- CLAIM CONTRACT (dispatcher.lua): returning truthy withholds the terminal
+--- on_error and takes on the debt of calling exactly one of `retry`/`give_up`.
+--- Every path below therefore ends in one of them — an early return that called
+--- neither would hold the chat leg open until the dispatcher's backstop timer.
+--- The claim itself is synchronous and cheap because classify_response is pure.
+---@param failure table # { http_status, body, model, streamed, attempt, ... }
+---@param _retry fun() # unused in M1: this milestone diagnoses, it never repairs.
+---   M2's recovery ladder is what turns a verdict into a retry.
+---@param give_up fun(msg: string)
+---@return boolean claimed
+function M.recover(failure, _retry, give_up)
+    local verdict = ca.classify_response(failure.http_status, failure.body, failure.model)
+    if not verdict then
+        return false -- not a credential failure: let the normal path report it
+    end
+    if failure.streamed then
+        -- Content already reached the buffer; re-running would duplicate it.
+        -- Diagnose without claiming so the operator still learns why.
+        logger.warning("cliproxy: auth failure after partial content — not retrying")
+        return false
+    end
+
+    local channel = channel_for(verdict.model) or verdict.provider
+    M.credential_health(function(health)
+        local message = ca.diagnosis(verdict, health)
+        -- M1 diagnoses; it never repairs. The recovery ladder (decide/execute)
+        -- lands in M2, at which point the branches that call `retry` appear.
+        local login = channel and cc.resolve_login_provider(verdict.model,
+            ((cfg() or {}).config or {})["oauth-model-alias"] or {}) or nil
+        local needs_human = health.state == "missing" or health.state == "disabled"
+            or health.state == "unavailable" or health.state == "error"
+            or verdict.kind == "expired"
+        if needs_human and login then
+            return prompt_login(login, message, function()
+                give_up(message)
+            end)
+        end
+        give_up(message)
+    end, channel or "claude")
+    return true
 end
 
 --------------------------------------------------------------------------------
