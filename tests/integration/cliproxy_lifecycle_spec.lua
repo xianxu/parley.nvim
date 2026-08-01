@@ -970,6 +970,27 @@ describe("cliproxy IO lifecycle", function()
             assert.equals(1, skipped)
         end)
 
+        it("reaps exactly the list it was given, not a fresh scan", function()
+            -- The command shows a list, the operator confirms it, and reap must
+            -- act on THAT list — proxies start and exit between the prompt and
+            -- the answer.
+            local scans = 0
+            local saved_peers = cliproxy.peers
+            cliproxy.peers = function()
+                scans = scans + 1
+                return { { pid = 999998, started = "Fri Jun 12 10:04:21 2026",
+                           command = "cliproxyapi -config x" } }
+            end
+            local killed, skipped = cliproxy.reap({
+                { pid = 999999, started = "Fri Jun 12 10:04:21 2026", command = "cliproxyapi -config y" },
+            })
+            cliproxy.peers = saved_peers
+
+            assert.equals(0, scans, "reap re-scanned instead of using the confirmed list")
+            assert.equals(0, killed)
+            assert.equals(1, skipped)
+        end)
+
         it("stop() also reaps a parley-spawned proxy on a non-managed port", function()
             -- The leak: _spawned is cleared per stop() and the port sweep only
             -- covers the CURRENT endpoint, so a proxy started before an endpoint

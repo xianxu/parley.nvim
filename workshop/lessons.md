@@ -554,3 +554,20 @@
   three minutes later that a login they had since completed "did not complete".
   Rule: put the latch around the whole side-effecting block, not just the
   continuation.
+- **Substring matching keeps being the bug.** Within one issue it produced three
+  distinct defects: a `ps` scan that would have killed a shell whose command line
+  mentioned the binary, a credential glob where `gemini` matched `gemini-cli`,
+  and a flag check where `-login` matched inside `-claude-login` — disabling the
+  guard written for exactly that flag. Rule: when testing membership in a
+  namespace, match the whole token (first argv element, exact filename, the
+  usage line's leading flag), and write the test with a member that is a strict
+  prefix or suffix of another.
+- **Confirm-then-act must act on what was confirmed.** A reap prompt listed the
+  processes it found, then called a function that re-scanned and killed a
+  possibly different set. Rule: pass the confirmed collection into the mutating
+  call; never let it re-derive its own targets after the user has agreed.
+- **Bookkeeping deferred is bookkeeping compounded.** Plan checkboxes, an
+  outdated decision table, and twelve missing entity rows were flagged in four
+  consecutive reviews before being fixed, costing a review round each time. Rule:
+  when a review names a documentation drift, fix it in that round — the cost only
+  grows, and reviewers rightly keep re-raising it.

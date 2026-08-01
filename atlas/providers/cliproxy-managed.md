@@ -140,8 +140,8 @@ via `resolve_login_provider`.
 
 `cliproxy_auth.decide(verdict, health, proxy_state, attempt, login)` is the whole
 policy, pure and table-tested: one action out of `start` | `restart` | `retry` |
-`prompt_login` | `report`. `recover` gathers the inputs (liveness probe,
-credential health, the auth-dir mtime) and executes exactly one action, settling
+`prompt_login` | `report`. `recover` gathers the inputs (liveness probe and
+credential health — staleness lives entirely inside the record) and executes exactly one action, settling
 the claim exactly once.
 
 | situation | action |

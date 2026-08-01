@@ -152,6 +152,35 @@ describe("cliproxyapi management API conformance", function()
         assert.equals("404", code)
     end)
 
+    it("declares the login flags parley claims it supports", function()
+        if not binary then
+            print("SKIP: no cliproxyapi binary discoverable — conformance not verified")
+            return
+        end
+        -- LOGIN_FLAGS was the one dependency surface with no conformance check,
+        -- and it was WRONG for the installed release: 7.2.110 dropped `-login`
+        -- (google), which 7.1.71 has. This does not fail the build for a missing
+        -- flag — the flag set is legitimately version-dependent — it reports the
+        -- delta so the mapping is never silently stale.
+        local usage = vim.system({ binary, "-h" }, { text = true }):wait()
+        local help = (usage.stdout or "") .. (usage.stderr or "")
+        assert.is_true(#help > 0, "the binary printed no usage at all")
+
+        local missing = {}
+        for _, provider in ipairs(cliproxy.login_providers()) do
+            local argv, err = cliproxy.login_argv(provider)
+            if not argv then
+                missing[#missing + 1] = provider .. " (" .. tostring(err):sub(1, 60) .. ")"
+            end
+        end
+        if #missing > 0 then
+            print("NOTE: this cliproxy build does not support: " .. table.concat(missing, ", "))
+        end
+        -- claude is the channel this issue is about; it must work everywhere.
+        assert.is_truthy(cliproxy.login_argv("claude"),
+            "the installed binary has no -claude-login flag")
+    end)
+
     it("rejects the api-key bearer on the management route", function()
         if not binary then
             print("SKIP: no cliproxyapi binary discoverable — conformance not verified")

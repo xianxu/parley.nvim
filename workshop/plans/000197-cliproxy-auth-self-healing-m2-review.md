@@ -855,3 +855,182 @@ Append to `workshop/plans/000197-cliproxy-auth-self-healing-plan.md` `## Revisio
 4. **Record `run_login`'s per-provider contract.** Task 15 assumes one authorize-URL shape; the binary emits at least three (`/oauth/authorize`, `/o/oauth2/auth`, device-code flows). Record that `-no-browser` may only be passed where parley can capture and open the URL, that unmatched output must still reach the operator, and that the fake grows a device-code login mode so the rule is testable.
 5. **Record whether "resumes the query" is in scope.** Either wire `run_login`'s `on_done` back to a re-issue, or record the descope with the reason (an OAuth flow outlives the claim's 30 s backstop by two orders of magnitude) so the Done-when stops reading as delivered.
 6. **Tick what shipped.** 1 of 56 checkboxes is ticked while M1/M2/M3 are all `[x]` in the issue; the plan is the greppable record of what was built, and at 1/56 the next reviewer's traceability pass is meaningless.
+
+---
+
+## Re-review — 2026-08-01T13:10:54-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 197 — cliproxy auth failures must self-heal: detect, diagnose, recover |
+| repo | parley.nvim |
+| issue file | workshop/issues/000197-cliproxy-auth-self-healing.md |
+| boundary | milestone M2 |
+| milestone | M2 |
+| window | 819a781a71859450cb5f22aa6940d9213004bb70..HEAD |
+| command | sdlc milestone-close --issue 197 --milestone M2 |
+| reviewer | claude |
+| timestamp | 2026-08-01T13:10:54-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+M2/M3's core is now genuinely correct, and I verified it against the real dependency rather than trusting the Log: the staleness rung compares two distinct quantities from one management record and both are pinned by conformance; the peer latch arms on the zero-peer path with a wiring test that drives `ensure_running` three times; `reap()` counts only kills the OS accepted; the compound repair→restart is blocked by a per-claim latch (module state can't serve, and the code now says why); `lstart_sec` moved the oldest-peer comparison into the pure module; and `run_login` no longer passes `-no-browser` or filters output through a claude-shaped URL pattern, which was round 5's blocker. Measured independently: **284 examples across 15 specs, 0 failed, 0 errors** (conformance really booted a binary), `make lint` **0/0 in 313 files**. What blocks SHIP is that round 5's *other* finding — `google`'s `-login` flag does not exist on the installed 7.2.110 — was answered with a guard that cannot fire for that flag: `login_argv` does a **substring** `find` against `<binary> -h`, and `-login` is a substring of `-claude-login`. I ran it against the real binary: `login_argv("google")` returns argv with no error, and the binary then rejects `-login` outright. The one case the feature was written for is the one case it misses, and it is asserted as working in the code comment, the atlas, and the plan's "what actually shipped" entry. The fix is two lines and I verified an anchored match rejects exactly `-login` and accepts all six real flags.
+
+## 1. Strengths
+
+- **The `-no-browser` regression is properly reverted, not patched around** (`lua/parley/cliproxy.lua:1030-1058`). Parley now adds observability on top of the binary's own flow and surfaces *all* output debounced, and the comment records why per-provider URL matching was the wrong shape. `tests/integration/cliproxy_login_spec.lua:64-72` asserts the binary's own text reaches the operator verbatim.
+- **`lstart_sec` (`cliproxy_auth.lua:247-264`) is the right fix for the oldest-peer bug** — it puts the comparison in the pure module beside `parse_peers`, which already parses that field, and `cliproxy_auth_spec` pins that `Sun Jun 14` sorts before `Fri Jul 31` (the case a lexicographic compare gets backwards).
+- **The peer latch now arms on the scan** (`cliproxy.lua:838-845`), and the test at `cliproxy_lifecycle_spec.lua` asserts `ensure_running` scans once across three dispatches. That is the deletability check in the right direction: it fails if the guard stops arming.
+- **`reap()` handles luv's `nil, err` convention** (`cliproxy.lua:878-883`): `local called, rc = pcall(uv.kill, …)` + `rc == 0`, with a spec reaping a nonexistent pid and asserting `killed == 0, skipped == 1`.
+- **The per-claim restart latch (`cliproxy.lua:1192`, `:1255-1256`) is correctly scoped.** `credential_health` now reports whether it restarted via a second callback arg instead of leaving `recover` to read module state the repair itself clears — and `cliproxy_budget_spec` asserts the compound arithmetic so the "unreachable" claim stays checkable rather than being prose.
+
+## 2. Critical findings
+
+**C1 — `login_argv`'s `-h` validation substring-matches, so `google`'s `-login` always passes; the guard added for exactly that flag cannot fire.** `lua/parley/cliproxy.lua:778-783`
+
+```lua
+if help ~= "" and not help:find(flag, 1, true) then
+```
+
+`flag` for `google` is `-login`, and the help text contains `-claude-login`, `-kimi-login`, `-xai-login`, `-antigravity-login` — every one of which contains `-login` as a substring. Verified against the installed binary:
+
+```
+-claude-login          find()=true    REAL_FLAG_PRESENT=true
+-login                 find()=true    REAL_FLAG_PRESENT=false   <-- guard passes, flag does not exist
+-xai-login             find()=true    REAL_FLAG_PRESENT=true
+```
+
+and driven through parley's own code path with `binary_path = /opt/homebrew/bin/cliproxyapi` (7.2.110):
+
+```
+login_argv(google ) -> argv built, err=nil
+REAL BINARY -login  exit=2   "flag provided but not defined: -login"
+```
+
+Failure scenario: `:ParleyProxy login google` — advertised by `providers` and by tab-completion — builds an argv the binary rejects. The operator gets `cliproxy: google login exited 2` followed by the tail of a usage dump, which is the outcome the guard exists to replace. The code comment (`:774-777`), `atlas/providers/cliproxy-managed.md:245-248`, and plan Revisions #5 all state the opposite: "`:ParleyProxy login google` on a newer build now says so instead of silently not logging in." That is behavior drift from a contract recorded in three artifacts, verified false against the real dependency.
+
+No test can see it. The fake's `-h` (`tests/fixtures/fake_cliproxy`) hand-writes `-login` into its flag list, so the only assertion touching this (`cliproxy_lifecycle_spec.lua:500`, `assert.equals("-login", cliproxy.login_argv("google")[4])`) passes for the wrong reason, and the rejection path has zero coverage.
+
+Fix sketch — parse the flag set instead of searching for a substring. I verified this against the real help: it rejects exactly `-login` and accepts all six real flags.
+
+```lua
+local supported = {}
+for f in help:gmatch("\n%s*%-([%w%-]+)") do supported["-" .. f] = true end
+if next(supported) and not supported[flag] then
+    return nil, ("this cliproxy build has no `%s` flag — `%s -h` lists what it supports")
+        :format(flag, bin)
+end
+```
+
+Tests to add: a fake `-h` mode that omits `-login` while keeping `-claude-login` (that is the discriminating fixture), asserting `login_argv("google")` returns nil + the message; and see I4 — a conformance assertion over `LOGIN_FLAGS` would have caught both this and the stale `google` entry itself.
+
+## 3. Important findings
+
+**I1 — the peer-scan latch is still armed only on the success path; any raise inside `peers()` restores the ~150 ms per-dispatch blocking scan.** `lua/parley/cliproxy.lua:586-590`, `:634`, `:842`
+
+```lua
+if not M.peer_warning_shown() then
+    pcall(function() M.warn_about_peers(M.peers()) end)
+end
+```
+
+The latch is set inside `warn_about_peers`, which is only reached if `M.peers()` returns. `peers()` pcalls its `ps` call (`:817-819`) but `pids_on_port`'s `lsof` call (`:634`) is unguarded — and `vim.system` **raises** rather than returning an error when the process table is restricted, which the module's own comment asserts and which I reproduced in this environment:
+
+```
+ps ax -o pid,lstart,command    pcall_ok=false  EPERM: operation not permitted
+lsof -nP -iTCP:8317            pcall_ok=true   code=0
+```
+
+Failure scenario: a host where `ps` is readable but `lsof` is not (or `render_opts` raises) → `peers()` throws → the outer pcall swallows it → the latch never arms → `ensure_running` re-runs `ps ax` + `lsof` on every dispatch, forever. That is round 4's C1 surviving through a different door, and it contradicts the rule this milestone itself wrote into `workshop/lessons.md`: "set the latch where the expensive call happens." Fix:
+
+```lua
+if not M.peer_warning_shown() then
+    local ok, peers = pcall(M.peers)
+    M.warn_about_peers(ok and peers or {})   -- arms on every path
+end
+```
+with a test that makes `M.peers` throw and asserts `peer_warning_shown()` is true afterwards.
+
+**I2 — `:ParleyProxy reap` confirms one list of PIDs and SIGTERMs a different one.** `lua/parley/init.lua:453` + `lua/parley/cliproxy.lua:872`
+
+The command scans `cliproxy.peers()` to build the confirmation prompt, then `M.reap()` scans again and kills whatever the *second* scan returns. The whole point of showing "25546 since Sat Aug 1 02:02:56" is that the operator approves those processes; a proxy started between the two scans is killed unseen, and one that exited is counted as skipped. Cheap fix: `function M.reap(peers) for _, peer in ipairs(peers or M.peers()) do` and pass the approved list from the command. Raised as Minor at round 5; on a SIGTERM path behind a confirmation dialog it belongs here.
+
+**I3 — Docs update gate: `atlas/providers/cliproxy-managed.md:143-144` still says `recover` gathers "the auth-dir mtime".** That term was deleted by round 3's own fix — staleness is computed entirely inside the management record (`modtime` vs `updated_at`), with no `fs_stat`, which is why the check became pure. The same file states the correct version 8 lines later (`:152`), so the document contradicts itself about the milestone's central mechanism. Flagged at rounds 4 and 5; the "15s backstop" half of that finding *was* fixed this round (`:129-130` now names the relationship rather than a number), which is the right treatment to apply here too.
+
+**I4 — `LOGIN_FLAGS` is the one dependency surface with no conformance check, and its `google` entry is wrong for the installed release.** `lua/parley/cliproxy.lua:740-748`, `tests/integration/cliproxy_conformance_spec.lua`
+
+`REQUIRED_FIELDS` pins the management-record schema against the real binary — good — but parley also depends on the binary's **CLI** surface, and nothing checks it. `google = "-login"` does not exist on 7.2.110 (verified above), so `login_providers()` advertises, and tab-completion offers, a login that cannot run. This is a distinct gap from C1: even with the guard fixed, the correct behavior for `google` is unknown (does 7.2.110 fold Google into another flag, or drop it?). One assertion closes the drift permanently:
+
+```lua
+for _, provider in ipairs(cliproxy.login_providers()) do
+    assert.is_truthy(supported_flags(real_help)[LOGIN_FLAGS[provider]],
+        provider .. " advertises a flag this binary does not have")
+end
+```
+It will fail today — which is the point, and is the ARCH-MOCK discipline the rest of this milestone applied well.
+
+**I5 — plan traceability is still broken on three counts flagged across four reviews.** `workshop/plans/000197-cliproxy-auth-self-healing-plan.md`
+
+- **1 of 56 checkboxes ticked** (`:425` only) while the issue marks M1, M2 and M3 all `[x]`. Tasks 9 Steps 2–5 and 10–15 read as unstarted.
+- **`:421` — the `decide` table's `expired` row** still reads `| expired | true | any | any | prompt_login |`; the shipped policy retries on `healthy` (deliberately) and reports on `unknown`. Recommended at rounds 1, 2, 3 and 4.
+- **Core concepts (`:66-76`) is missing all twelve M2/M3 entities** — `credential_action`, `rfc3339_sec`, `healthier`, `channels_for_login`, `lstart_sec`, `restart_managed`, `credential_health_for_login`, `peers`, `reap`, `callback_port_blocked`, `await_credential`, `run_login`. Every row that *is* there verifies against the filesystem (I checked each: `classify_response`, `classify_auth_files`, `diagnosis`, `resolve_channel`, `render`, `decide`, `parse_peers` present; `detect_auth_failure` and `check_auth_failure` absent from `lua/`; `_failure_notice` in `chat_respond.lua`), and all PURE rows run without IO — the table is incomplete, not wrong. Recommended at rounds 2, 3, 4 and 5.
+
+The round-5 recommendation to rewrite the stale Revisions entry *was* handled correctly, by appending a new "what actually shipped" block rather than overwriting — that is the repo's convention and it reads well.
+
+## 4. Minor findings
+
+- `cliproxy.lua:417-419` — `credential_health`'s docstring still says the compound case is blocked "when `_management_restart_done` shows this claim already restarted the proxy"; the shipped guard is `recover`'s per-claim local, precisely because module state could not serve.
+- `cliproxy.lua:1156` — `@param _retry fun() # unused in M1: this milestone diagnoses, it never repairs`; the parameter is `retry` and drives the whole ladder. Sixth round.
+- `cliproxy_auth.lua:466` passes a second argument `auth_file_is_stale` no longer takes; `:436` still documents `proxy_state` as `{ running, auth_file_modtime }`.
+- `cliproxy.lua:873-874` — `reap()`'s in-loop comment still claims "a process we cannot identify as a proxy we started is left alone"; no such filter exists in the loop (identity comes from `parse_peers`, as the docstring correctly says).
+- `cliproxy.lua:778` — `vim.system({ bin, "-h" }):wait()` has no timeout; a `binary_path` that doesn't handle `-h` blocks nvim's main loop indefinitely on a user-facing command.
+- `channels_for_login("codex-device")` returns `{}` (no `CHANNEL_LOGIN` entry), so `newest_credential_mtime` falls back to matching **any** `*.json` — the peer-refresh filter it exists to provide doesn't apply to that login.
+- `run_login`: a login that exits **0** without writing a credential says nothing for the full 180 s (`on_exit` only settles on non-zero).
+- `newest_credential_mtime` re-decodes every auth-dir JSON on each 500 ms poll (≈360 polls per login), and re-derives the `~/.cli-proxy-api` default `config.lua` already documents.
+- The fake's `port_taken` login mode is unreachable from any spec (`cliproxy_login_spec.lua` binds `:54545` in-process), so it is untested fixture code.
+- The atlas and issue `## Log` present "`stop()` no longer leaks parley-spawned proxies on non-managed ports" as a fix; round 3 established the sweep was dead code and it was correctly deleted — the property was already true, so this window changed no behavior there. The `NB` comment at `cliproxy.lua:674-677` says this honestly; the atlas/Log do not.
+- The `## Log`'s verification counts are stale again: it says `cliproxy_auth_spec` 55 / `lifecycle` 49 / `budget` 2 / `login` 8; measured 58 / 52 / 3 / 10. It also labels conformance "real 7.1.71" while `discover_binary` resolves `/opt/homebrew/bin/cliproxyapi` = **7.2.110**, and `PINNED_VERSION = "7.1.71"` means download and conformance exercise different versions.
+- `cliproxy_recovery_e2e_spec.lua:186,195` — `local port = select(2, ("x"):find("x")) -- keep luacheck quiet about unused` + `assert.is_truthy(port)` is still dead scaffolding (sixth round); `:118` — `vim.ui.select` set in `before_each`, never restored.
+- Carried from M1/M2: `render_opts()` does a `mkdir` + file read on every call and sits on the query path; `resolve_channel` iterates `pairs()` (nondeterministic when a model appears under two channels); `classify_auth_files` treats a record with no `status` as healthy (`cliproxy_auth.lua:131`).
+
+## 5. Test coverage notes
+
+Verified independently, not from the Log: `cliproxy_auth_login` 19, `cliproxy_caller_teardown` 5, `cliproxy_command` 10, `cliproxy_conformance` 3, `cliproxy_dispatch` 3, `cliproxy_download` 3, `cliproxy_lifecycle` 52, `cliproxy_login` 10, `cliproxy_recovery_e2e` 4, `cliproxy_auth` 58, `cliproxy_budget` 3, `cliproxy_config` 46, `dispatcher_query` 56, `failure_notice` 6, `providers_pre_query` 6 — **284 examples, 0 failed, 0 errors**. `make lint` 0/0 in 313 files. One loud SKIP (`ps unavailable — peer detection not exercised`), which is the exact degradation `peers()` is written to survive and which I confirmed is a real EPERM in this environment — so the skip is honest, but M3's live peer detection went unexercised here.
+
+Gaps, in the order I'd close them:
+
+1. **`login_argv`'s rejection path has zero coverage** (C1), and the fake's hand-written `-h` agrees with parley's table rather than with the binary, so it can only confirm the table, never falsify it. The discriminating fixture is a help text with `-claude-login` but no `-login`.
+2. **No conformance check over `LOGIN_FLAGS`** (I4) — the CLI is a dependency surface parley parses, and it is the only one not pinned against the real binary.
+3. **The latch's failure path is untested** (I1) — the existing tests call `warn_about_peers({})` directly, so a raise inside `peers()` is invisible. Make `M.peers` throw and assert the latch armed.
+4. **`:ParleyProxy reap`'s command branch is untested** — not the confirmation list, not the double scan (I2), not the "no peers" message.
+5. **`run_login`'s zero-exit-no-credential path** — the one that waits three minutes in silence.
+6. **No scheduled conformance that `updated_at` holds still on a touch-only write.** The restart rung rests entirely on that behavior; `REQUIRED_FIELDS` pins that both fields exist, not that the gap between them means what the ladder reads it to mean.
+
+The `decide` table-test plus the `attempt >= 1` property sweep and the external-oracle epoch assertions in `cliproxy_auth_spec` remain the strongest patterns here — they falsify the implementation rather than restate it. The staleness integration test (`cliproxy_auth_login_spec.lua:367-393`), which seeds the load time with a real read and then `fs_utime`s the file, is the model for "reproduce the condition the way the system produces it."
+
+## 6. Architectural notes for upcoming work
+
+- **ARCH-DRY — pass with nits.** Every consolidation this milestone made has two live callers and one source: `restart_managed`, `credential_action`, `channels_for_login`, `healthier`, `lstart_sec`, and `SUBS_HELP` now covering `reap` (closing round 3's discoverability finding, with README updated in the same range). `_stray_spawned` was correctly *deleted* rather than kept after the deletability check. Remaining duplication is prose and defaults, not logic: the rotation-race explanation exists twice (`init.lua:463-465`, `cliproxy.lua:856-859`), and `newest_credential_mtime` re-derives the auth-dir default.
+- **ARCH-PURE — pass, with one placement note.** `decide`, `credential_action`, `rfc3339_sec`, `lstart_sec`, `parse_peers`, `channels_for_login`, `healthier`, `auth_file_is_stale` are genuinely pure, mock-free and externally validated; `recover` is gather-then-execute with no policy in it. Moving the oldest-peer comparison out of the IO shell into `lstart_sec` was exactly the fix round 5 asked for. The one decision still sitting in the shell is C1's: "does this binary support this flag" is a string-membership predicate over `-h` output, done with `find` inside `login_argv`. A pure `supports_flag(help_text, flag)` would be unit-testable against both the real and the fake help text — and is precisely where C1 would have been caught, because a table test over the real help is the only thing that distinguishes `-login` from `-claude-login`.
+- **ARCH-PURPOSE — flag, narrowly.** Shadow sweep on "who infers auth state" is clean: dispatch derives from the management API ✓, `:ParleyProxy models` derives on the correct channel axis ✓, all three hand-maintained restatements of the disproved empty-list inference are corrected ✓. Done-when by item: the 503 diagnosis ✓ (e2e), self-repair without a prompt ✓ (e2e asserts the answer arrives), management route + 404 restart ✓, peers detected/reapable and stated once ✓, login death reported ✓, resume-the-query **descoped and recorded** in both the issue and the plan ✓, fake + conformance in `make test` ✓. The residue is the login half for one provider: `google` is advertised in `providers` and completion, cannot run on the installed release, and the guard written to say so does not fire (C1). That is M3's stated purpose for that provider, not a separable follow-up.
+- **ARCH-MOCK — flag.** The fake's `updated_at` modelling (load time = first sighting of this content) is the best fake work in this issue: it makes the fake honest about the distinction the restart rung reads instead of letting a fixture manufacture it, which is what defeated round 3. `--error-mode`/`_once` and the four login modes run production's own HTTP and process boundaries. The gap is that the milestone added a **second** dependency surface — the binary's `-h` usage text, which parley now parses to make a decision — and the fake's version of it was written to agree with parley's `LOGIN_FLAGS` table rather than with the binary. A fake satisfies this principle only when the behavior we branch on is the behavior we conformance-check; here the branch is "does this build support this flag" and nothing compares the fake's answer to the real one. That is why C1 shipped green.
+- **Plan-gate carry-forward:** `workshop/plans/000197-cliproxy-auth-self-healing-plan-gate.md` `## Open findings` reads "(none — every finding has been disposed)" — verified on disk. PQ-5 was the item deferred into M2; delivered, on the right axis. Nothing to carry.
+- **Prior-review carry-forward:** of round 5's seven findings, **C1 (login output / `-no-browser`) ✓ closed**, **I1 (oldest peer) ✓ closed** via `lstart_sec`, **I2 (resumes the query) ✓ descoped and recorded** in the issue's Done-when and the plan, **I6 (M3-in-M2 window) ✓ recorded** as "Boundary bookkeeping" in the plan Revisions. **I3 half-closed** (the 15s is gone, the auth-dir-mtime sentence is not) → re-filed as I3. **I4 (plan) open** → re-filed as I5. **I5 (`-login` on 7.2.110) NOT closed** — the attempted fix is C1.
+- **For the close:** `stop()` has four callers, `peers()` three (`ensure_running`, `reap`, the command). Before a fifth, the port-release discipline, the `ps`/`lsof` cost and the peer-scan latch all want to sit behind one seam with one arming point — and the arming point should be unconditional, not on the happy path.
+
+## 7. Plan revision recommendations
+
+Append to `workshop/plans/000197-cliproxy-auth-self-healing-plan.md` `## Revisions`:
+
+1. **Correct the `login_argv` validation claim.** The newest entry ("what actually shipped", #5) states that `login_argv` validates the flag against `<binary> -h` so a newer build reports the missing `-login`. Verified false: the match is a substring `find` and `-login` is a substring of `-claude-login`, so the guard passes and the binary rejects the flag (C1). Record the shipped shape after the fix — the flag *set* is parsed out of the usage text, and `LOGIN_FLAGS` is conformance-checked against the real binary, which is what makes the version-dependence claim enforceable rather than documented.
+2. **The `decide` table's `expired` row still contradicts the code** (`:421`: `| expired | true | any | any | prompt_login |`). The shipped policy retries on `healthy` — deliberately, because prompting while displaying "looks healthy" is self-contradictory — and reports on `unknown`. Recommended at rounds 1, 2, 3 and 4; correct the row or record why it stands.
+3. **Add Core-concepts rows for the twelve M2/M3 entities** — `credential_action`, `rfc3339_sec`, `healthier`, `channels_for_login`, `lstart_sec`, `restart_managed`, `credential_health_for_login`, `peers`, `reap`, `callback_port_blocked`, `await_credential`, `run_login` — with kind/location/status/milestone, so the next table-vs-filesystem cross-check sees the real surface. Recommended at rounds 2, 3, 4 and 5.
+4. **Record `google`'s login status.** `LOGIN_FLAGS.google = "-login"` predates this issue and does not exist on 7.2.110. Either record what the current release uses for Google, or record that the provider is unsupported on ≥7.2 and that `login_providers()` must reflect that — otherwise completion keeps advertising a login that cannot run.
+5. **Record the latch's arming contract.** Task 14 says the warning fires once per session; the shipped guard arms only when `peers()` returns normally (I1). State that the latch is armed unconditionally around the scan — including when it raises — and that the zero-peer *and* raising paths are both tested, since the healthy machine is the one the operator lives in after `reap`.
+6. **Tick what shipped.** 1 of 56 checkboxes is ticked while M1/M2/M3 are all `[x]` in the issue. The plan is the greppable record of what was built; at 1/56 the next reviewer's traceability pass is meaningless.

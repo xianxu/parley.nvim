@@ -468,7 +468,7 @@ M.register_proxy_command = function(prefix)
 					if idx ~= 1 then
 						return
 					end
-					local killed, skipped = cliproxy.reap()
+					local killed, skipped = cliproxy.reap(peers)
 					vim.notify(("cliproxy: stopped %d process(es)%s"):format(
 						killed, skipped > 0 and (", skipped " .. skipped) or ""),
 						vim.log.levels.INFO)

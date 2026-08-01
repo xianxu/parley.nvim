@@ -584,6 +584,10 @@ function M.ensure_running(callback, on_error)
         -- plus `lsof` (~80-90ms measured, blocking the event loop) and this runs
         -- in pre_query on every single dispatch.
         if not M.peer_warning_shown() then
+            -- Arm FIRST: if peers() raises (unreadable process table), leaving
+            -- the latch unset would restore the ~150ms blocking scan on every
+            -- dispatch — the exact regression this guard exists to prevent.
+            M._arm_peer_scan()
             pcall(function()
                 M.warn_about_peers(M.peers())
             end)
@@ -756,6 +760,25 @@ function M.login_providers()
     return list
 end
 
+--- Does this usage text declare `flag` as a flag in its own right?
+---
+--- Whole-token, never a substring: `-login` (google) is a substring of
+--- `-claude-login`, `-codex-login`, `-kimi-login` and `-xai-login`, so a
+--- `find(flag, 1, true)` passes on every build — including the ones that
+--- dropped `-login`, which is the single case the check exists for.
+---@param help string
+---@param flag string
+---@return boolean
+function M._usage_has_flag(help, flag)
+    for line in help:gmatch("[^\n]+") do
+        local token = line:match("^%s*(%-[%w%-]+)")
+        if token == flag then
+            return true
+        end
+    end
+    return false
+end
+
 --- Build the argv for an interactive OAuth login for `provider`.
 --- Renders the config first so login writes into parley's configured auth-dir
 --- (not the cliproxy default), then passes -config.
@@ -777,7 +800,7 @@ function M.login_argv(provider)
     -- non-login.
     local usage = vim.system({ bin, "-h" }, { text = true }):wait()
     local help = (usage.stdout or "") .. (usage.stderr or "")
-    if help ~= "" and not help:find(flag, 1, true) then
+    if help ~= "" and not M._usage_has_flag(help, flag) then
         return nil, ("this cliproxy build has no `%s` flag — `%s -h` lists what it supports")
             :format(flag, bin)
     end
@@ -802,6 +825,11 @@ end
 ---@return boolean
 function M.peer_warning_shown()
     return _peer_warning_shown
+end
+
+--- Mark the once-per-session peer scan as done, whatever its outcome.
+function M._arm_peer_scan()
+    _peer_warning_shown = true
 end
 
 --- Every cliproxy process on this machine that parley neither spawned nor
@@ -866,10 +894,14 @@ end
 --- token must BE a cliproxy binary — not from a port probe: a peer is by
 --- definition not on the managed port, so there is nothing to probe against.
 --- Counts only kills the OS accepted.
+---@param peers table[]|nil # the list the operator confirmed; re-scans if omitted
 ---@return number killed, number skipped
-function M.reap()
+function M.reap(peers)
     local killed, skipped = 0, 0
-    for _, peer in ipairs(M.peers()) do
+    -- Kill exactly what was shown and confirmed: a fresh scan here would list a
+    -- different set than the operator agreed to (proxies start and exit between
+    -- the prompt and the answer).
+    for _, peer in ipairs(peers or M.peers()) do
         -- The command line records the config it booted from; a process we
         -- cannot identify as a proxy we started is left alone.
         -- luv's kill RETURNS nil+err (ESRCH, EPERM) rather than raising, so a

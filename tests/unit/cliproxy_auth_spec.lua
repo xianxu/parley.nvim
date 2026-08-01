@@ -520,3 +520,46 @@ describe("parse_peers", function()
         assert.same({}, ca.parse_peers("garbage\nlines\n", {}, {}))
     end)
 end)
+
+
+describe("_usage_has_flag", function()
+    local cliproxy = require("parley.cliproxy")
+    local HELP_710 = table.concat({
+        "Usage of cli-proxy-api",
+        "  -antigravity-login",
+        "  -claude-login",
+        "  -codex-login",
+        "  -config string",
+        "  -login",
+        "  -no-browser",
+    }, "\n")
+    -- 7.2.110 dropped `-login`; every other login flag still contains it.
+    local HELP_72 = table.concat({
+        "Usage of cliproxyapi",
+        "  -antigravity-login",
+        "  -claude-login",
+        "  -codex-device-login",
+        "  -codex-login",
+        "  -kimi-login",
+        "  -no-browser",
+        "  -xai-login",
+    }, "\n")
+
+    it("matches a flag as a whole token", function()
+        assert.is_true(cliproxy._usage_has_flag(HELP_710, "-login"))
+        assert.is_true(cliproxy._usage_has_flag(HELP_710, "-claude-login"))
+    end)
+
+    it("does NOT match a flag that only appears as a substring of another", function()
+        -- The whole point: `-login` is inside `-claude-login`, so a substring
+        -- test passes on a build that dropped `-login` — the single case this
+        -- guard was written for.
+        assert.is_false(cliproxy._usage_has_flag(HELP_72, "-login"))
+        assert.is_true(cliproxy._usage_has_flag(HELP_72, "-claude-login"))
+    end)
+
+    it("does not match an absent flag", function()
+        assert.is_false(cliproxy._usage_has_flag(HELP_72, "-nonesuch-login"))
+        assert.is_false(cliproxy._usage_has_flag("", "-claude-login"))
+    end)
+end)
