@@ -197,7 +197,9 @@ describe("cliproxy.recover", function()
         assert.is_false(out.claimed)
     end)
 
-    it("does not prompt when the proxy says the credential is healthy", function()
+    it("RETRIES without prompting when the proxy says the credential is healthy", function()
+        -- M2: the credential is fine, so the failure was transient — repair
+        -- silently rather than sending the operator to a login they don't need.
         serve() -- active credential
         local prompted = false
         vim.ui.select = function() prompted = true end
@@ -205,8 +207,16 @@ describe("cliproxy.recover", function()
             streamed = false, attempt = 0 })
         vim.wait(200, function() return false end)
         assert.is_true(out.claimed)
-        assert.equals("give_up", out.settled)
+        assert.equals("retry", out.settled)
         assert.is_false(prompted)
+    end)
+
+    it("does not retry a second time — attempt 1 reports instead", function()
+        serve()
+        local out = run({ http_status = 503, body = NO_AUTH, model = "claude-opus-4-8",
+            streamed = false, attempt = 1 })
+        assert.is_true(out.claimed)
+        assert.equals("give_up", out.settled)
         assert.matches("healthy", out.message)
     end)
 
@@ -261,8 +271,9 @@ describe("cliproxy.recover", function()
         })
         vim.wait(200, function() return false end)
         assert.is_true(out.claimed)
-        assert.matches("healthy", out.message)
-        assert.matches("g@example.com", out.message)
+        -- healthy gemini-cli credential ⇒ transient ⇒ retry, no prompt. Before
+        -- the channel fix this reported "no credential is loaded" and prompted.
+        assert.equals("retry", out.settled)
         assert.is_false(prompted, "prompted a login for a healthy credential")
     end)
 
@@ -305,8 +316,9 @@ describe("cliproxy.recover", function()
     -- The claim contract: a claim is a debt
     ----------------------------------------------------------------------------
 
-    it("always settles a claim, even when credential state cannot be read", function()
-        -- Nothing listening: credential_health returns unreachable.
+    it("starts a proxy that is not running, then retries", function()
+        -- M2: nothing listening ⇒ the repair is to start the proxy, not to
+        -- lecture the operator about credentials.
         parley.dispatcher.providers.cliproxyapi = {
             endpoint = ("http://127.0.0.1:%d/v1/chat/completions"):format(free_port()),
         }
@@ -314,8 +326,19 @@ describe("cliproxy.recover", function()
         local out = run({ http_status = 503, body = NO_AUTH, model = "claude-opus-4-8",
             streamed = false, attempt = 0 })
         assert.is_true(out.claimed)
+        assert.equals("retry", out.settled)
+    end)
+
+    it("settles rather than hanging when the proxy cannot be started", function()
+        parley.dispatcher.providers.cliproxyapi = {
+            endpoint = ("http://127.0.0.1:%d/v1/chat/completions"):format(free_port()),
+        }
+        require("parley.vault").add_secret("cliproxyapi", "testkey")
+        parley.config.cliproxy.binary_path = "/no/such/bin"
+        local out = run({ http_status = 503, body = NO_AUTH, model = "claude-opus-4-8",
+            streamed = false, attempt = 0 })
+        assert.is_true(out.claimed)
         assert.equals("give_up", out.settled) -- never left hanging
-        assert.matches("unreachable", out.message)
     end)
 
     it("settles with the diagnosis even when the login command raises", function()

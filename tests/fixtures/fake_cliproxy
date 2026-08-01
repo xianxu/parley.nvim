@@ -20,6 +20,14 @@ Modes:
   foreign              200 {"hello":"i am not cliproxy"}
   slow                 accept the connection, never respond
   crash                exit(1) immediately on startup
+
+Error modes (--error-mode / PARLEY_FAKE_ERROR_MODE) select what
+POST /v1/chat/completions answers, using the REAL bodies 7.1.71 emitted during
+the #197 outage:
+  ok                   200, a minimal completion
+  no_auth              503 auth_unavailable (providers=…, model=…)
+  expired              401 authentication_error, OAuth access token has expired
+  quota                402 payment_required
 """
 import json
 import os
@@ -37,6 +45,7 @@ def parse_args(argv):
     # key, restart it" repair off precisely that (issue #197).
     mgmt_key = None
     auth_store = os.environ.get("PARLEY_FAKE_AUTH_STORE")
+    error_mode = os.environ.get("PARLEY_FAKE_ERROR_MODE", "ok")
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -59,9 +68,12 @@ def parse_args(argv):
         elif a == "--auth-store":
             auth_store = argv[i + 1]
             i += 2
+        elif a == "--error-mode":
+            error_mode = argv[i + 1]
+            i += 2
         else:
             i += 1
-    return port, mode, mgmt_key, auth_store
+    return port, mode, mgmt_key, auth_store, error_mode
 
 
 def read_auth_store(auth_store):
@@ -117,7 +129,7 @@ def read_auth_store(auth_store):
 
 
 def main():
-    port, mode, mgmt_key, auth_store = parse_args(sys.argv[1:])
+    port, mode, mgmt_key, auth_store, error_mode = parse_args(sys.argv[1:])
     if mode == "crash":
         sys.stderr.write("fake_cliproxy: crash mode — exiting\n")
         sys.exit(1)
@@ -139,6 +151,31 @@ def main():
 
         def _bearer(self):
             return (self.headers.get("Authorization") or "").replace("Bearer ", "", 1)
+
+        # Real 7.1.71 error bodies, captured from ~/.cli-proxy-api/logs during
+        # the #197 outage. Selected by --error-mode so the recovery ladder can be
+        # driven end to end instead of through hand-built failure tables.
+        ERRORS = {
+            "no_auth": (503, {"type": "error", "error": {"type": "api_error", "message":
+                "auth_unavailable: no auth available (providers=claude, model=claude-opus-4-8); "
+                "check Claude auth/key session and cooldown state via /v0/management/auth-files"}}),
+            "expired": (401, {"type": "error", "error": {"type": "authentication_error",
+                "message": "OAuth access token has expired. Re-authenticate to continue."}}),
+            "quota": (402, {"error": {"message": "payment_required", "type": "quota_error"}}),
+        }
+
+        def do_POST(self):
+            length = int(self.headers.get("Content-Length") or 0)
+            if length:
+                self.rfile.read(length)
+            if error_mode in self.ERRORS:
+                status, body = self.ERRORS[error_mode]
+                self._json(status, body)
+                return
+            # ok: a minimal non-streaming completion
+            self._json(200, {"id": "chatcmpl-fake", "object": "chat.completion",
+                             "choices": [{"index": 0, "finish_reason": "stop",
+                                          "message": {"role": "assistant", "content": "ok"}}]})
 
         def do_GET(self):
             if mode == "slow":

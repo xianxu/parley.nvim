@@ -712,6 +712,30 @@ function M._reset_login_prompt() -- test helper
     _login_prompt_active = false
 end
 
+-- Newest mtime among a channel's credential files on disk, as RFC3339.
+--
+-- Compared against the modtime the proxy reports for the credential it LOADED:
+-- if disk is newer, its fsnotify watcher missed a write (a fresh login) and a
+-- restart will pick it up. Best-effort — nil when the dir is unreadable, and
+-- `decide` treats a missing timestamp as "not stale" rather than guessing.
+local function auth_file_modtime(channel)
+    local c = cfg() or {}
+    local dir = c.auth_dir
+    if type(dir) ~= "string" or dir == "" then
+        dir = vim.fn.expand("~/.cli-proxy-api")
+    end
+    local newest
+    for _, name in ipairs(vim.fn.readdir(dir) or {}) do
+        if name:sub(1, #channel + 1) == channel .. "-" and name:sub(-5) == ".json" then
+            local st = uv.fs_stat(dir .. "/" .. name)
+            if st and st.mtime and (not newest or st.mtime.sec > newest) then
+                newest = st.mtime.sec
+            end
+        end
+    end
+    return newest and os.date("!%Y-%m-%dT%H:%M:%SZ", newest) or nil
+end
+
 -- The oauth-model-alias block parley rendered, or nil.
 local function alias_block()
     local c = cfg() or {}
@@ -762,7 +786,7 @@ end
 ---   M2's recovery ladder is what turns a verdict into a retry.
 ---@param give_up fun(msg: string)
 ---@return boolean claimed
-function M.recover(failure, _retry, give_up)
+function M.recover(failure, retry, give_up)
     local verdict = ca.classify_response(failure.http_status, failure.body, failure.model)
     if not verdict then
         return false -- not a credential failure: let the normal path report it
@@ -788,43 +812,66 @@ function M.recover(failure, _retry, give_up)
     -- the failing model is worse than admitting we don't know.
     local channel = verdict.provider or cc.resolve_channel(verdict.model, alias_block() or {})
     local login = cc.channel_login(channel)
+    local attempt = failure.attempt or 0
+
     if not channel then
         local health = { state = "unknown", reason = "unknown_channel",
             message = ("no cliproxy channel is configured for \"%s\""):format(tostring(verdict.model)) }
-        local message = ca.diagnosis(verdict, health) .. "\nAdd it to "
-            .. "cliproxy.config['oauth-model-alias'], or run :ParleyProxy login <provider>."
-        give_up(message)
+        give_up(ca.diagnosis(verdict, health) .. "\nAdd it to "
+            .. "cliproxy.config['oauth-model-alias'], or run :ParleyProxy login <provider>.")
         return true
     end
-    M.credential_health(function(health)
-        local message = ca.diagnosis(verdict, health)
-        -- M1 diagnoses; it never repairs. The recovery ladder (decide/execute)
-        -- lands in M2, at which point the branches that call `retry` appear —
-        -- and `needs_human` moves into the pure `decide`, so policy has one
-        -- owner rather than two.
-        local credential_is_bad = health.state == "missing" or health.state == "disabled"
-            or health.state == "unavailable" or health.state == "error"
-        -- An `expired` verdict only overrides a *non*-healthy reading: if the
-        -- proxy says the credential is fine, prompting to log in while showing
-        -- "looks healthy" is self-contradictory.
-        local needs_human = credential_is_bad
-            or (verdict.kind == "expired" and health.state ~= "healthy")
-        if needs_human and not login then
-            -- The old check_auth_failure told operators exactly this and the
-            -- diagnosis alone doesn't: no login was offered because the model
-            -- isn't in any oauth-model-alias channel, so parley cannot tell
-            -- which login it needs.
+
+    -- Executes exactly one action and settles the claim exactly once. Every
+    -- branch ends in retry() or give_up() — an early return that called neither
+    -- would hold the chat leg open until the dispatcher's backstop.
+    local function execute(decision, health)
+        if decision.action == "retry" then
+            return retry()
+        end
+        if decision.action == "start" or decision.action == "restart" then
+            if not M.is_managed() then
+                -- Not ours to start or stop (see credential_health's note).
+                return give_up(decision.message)
+            end
+            if decision.action == "restart" then
+                M.stop()
+            end
+            return M.ensure_running(function()
+                retry()
+            end, function(msg)
+                give_up(decision.message .. "\n" .. tostring(msg))
+            end)
+        end
+        if decision.action == "prompt_login" and decision.login_provider then
+            return prompt_login(decision.login_provider, decision.message, function()
+                give_up(decision.message)
+            end)
+        end
+        local message = decision.message
+        if health and health.state == "missing" and not login then
             message = message .. ("\nNo login offered: \"%s\" is in no "):format(tostring(verdict.model))
                 .. "cliproxy.config['oauth-model-alias'] channel. Add it there, or run "
                 .. ":ParleyProxy login <provider>."
         end
-        if needs_human and login then
-            return prompt_login(login, message, function()
-                give_up(message)
-            end)
-        end
         give_up(message)
-    end, channel or "claude")
+    end
+
+    -- Gather the inputs `decide` needs, then let it own the policy.
+    local opts = render_opts()
+    M.health_probe(opts.host, opts.port, opts.secret, function(state)
+        local running = state ~= "down"
+        if not running then
+            -- No proxy ⇒ no credential state to read; decide on liveness alone.
+            local health = { state = "unknown", reason = "proxy_down",
+                message = "the proxy is not running" }
+            return execute(ca.decide(verdict, health, { running = false }, attempt, login), health)
+        end
+        M.credential_health(function(health)
+            local proxy_state = { running = true, auth_file_modtime = auth_file_modtime(channel) }
+            execute(ca.decide(verdict, health, proxy_state, attempt, login), health)
+        end, channel)
+    end)
     return true
 end
 

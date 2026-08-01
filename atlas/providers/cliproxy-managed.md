@@ -136,6 +136,37 @@ text. `failure.model` carries `payload.model`, the only path by which the
 expired-token 401 (which names neither provider nor model) resolves to a channel
 via `resolve_login_provider`.
 
+### The recovery ladder
+
+`cliproxy_auth.decide(verdict, health, proxy_state, attempt, login)` is the whole
+policy, pure and table-tested: one action out of `start` | `restart` | `retry` |
+`prompt_login` | `report`. `recover` gathers the inputs (liveness probe,
+credential health, the auth-dir mtime) and executes exactly one action, settling
+the claim exactly once.
+
+| situation | action |
+|---|---|
+| proxy not running | `start`, then retry |
+| credential `healthy` (failure was transient) | `retry` — **no prompt** |
+| auth file on disk newer than the proxy's copy | `restart`, then retry |
+| `missing` / `disabled` / `unavailable` | `prompt_login` with the proxy's own reason |
+| `error` whose message is auth-shaped | `prompt_login` |
+| `error` that isn't (DNS, upstream 5xx) | `report` — a login won't fix it |
+| `quota` / `model_unavailable` | `report`, never "log in" |
+| credential state unreadable | `report` honestly |
+| `attempt >= 1` | never a repair — pinned by a property test |
+
+`attempt` is the entire anti-loop mechanism: no repair action exists above
+attempt 0, so a retry cannot beget another. A `prompt_login` with no resolvable
+login provider degrades to `report` — a prompt you cannot act on is a worse
+report.
+
+**Timeout budget.** The repair's worst case (≤15s: management read, identity
+probe, port release, spawn probe, health poll, second read) is itemized above
+`credential_health` and must stay under `dispatcher.recovery_timeout_ms` (25s).
+If the backstop fired first it would spend the claim's one-shot and replace a
+correct diagnosis with "recovery timed out".
+
 ### The management route, and the 404 that matters
 
 cliproxy registers `/v0/management/*` only when it **booted** with a
@@ -158,9 +189,14 @@ is always false and never reflects what the running process loaded.
 The fake (`tests/fixtures/fake_cliproxy`) serves the management route from a
 **portable credential store** — a folder of auth JSONs plus a `state.json`
 overlay tests mutate between calls — and models the 200/401/404-without-key
-cases. `cliproxy_conformance_spec.lua` boots the **real** binary against a
+cases. It also serves the real 503/401/402 bodies on `/v1/chat/completions`
+(`--error-mode`), which is what lets `cliproxy_recovery_e2e_spec.lua` drive a
+real failure through `dispatcher.query` → `recover_query` → the operator-facing
+notice rather than hand-building failure tables.
+`cliproxy_conformance_spec.lua` boots the **real** binary against a
 *fabricated* credential in a throwaway auth-dir and asserts the fields
-`classify_auth_files` reads still exist. Never point that at the real auth-dir:
+`classify_auth_files` reads still exist — including the 404-without-key
+behavior the entire repair branches on. Never point that at the real auth-dir:
 cliproxy refreshes at startup and every 15m, and Claude's refresh tokens rotate
 on use — the race that caused this issue.
 

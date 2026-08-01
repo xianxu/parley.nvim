@@ -217,4 +217,97 @@ function M.diagnosis(verdict, health)
         :format(model, tostring(health.reason or "unknown"), because, tostring(verdict.message))
 end
 
+--------------------------------------------------------------------------------
+-- The recovery policy
+--------------------------------------------------------------------------------
+
+-- Does the proxy's own error text describe an auth problem? A credential in
+-- `error` state can be there for reasons a login won't fix (DNS, upstream 5xx),
+-- and sending someone through OAuth for a network blip is its own bug.
+local function error_is_auth_shaped(message)
+    if type(message) ~= "string" then
+        return false
+    end
+    for _, row in ipairs(FAILURES) do
+        if row.kind == "expired" and message:match(row.pattern) then
+            return true
+        end
+    end
+    return message:match("[Uu]nauthorized") ~= nil or message:match("[Ee]xpired") ~= nil
+end
+
+-- The auth file on disk is newer than the copy the proxy loaded ⇒ its watcher
+-- missed a write and a restart will pick it up. Only when BOTH timestamps are
+-- present: RFC3339 strings compare lexicographically, but a missing one tells us
+-- nothing and guessing "stale" would restart the proxy under every failure.
+local function auth_file_is_stale(health, proxy_state)
+    local disk = proxy_state and proxy_state.auth_file_modtime
+    local loaded = health and health.modtime
+    return type(disk) == "string" and type(loaded) == "string" and disk > loaded
+end
+
+--- Decide what to do about a failed cliproxy query. Pure: the IO shell gathers
+--- the inputs and executes the returned action, so the whole ladder is testable
+--- without mocks and there is exactly one place policy lives.
+---
+--- `attempt` is the entire anti-loop mechanism: at attempt >= 1 no repair action
+--- is ever returned, so a retry can never beget another.
+---@param verdict table # from classify_response
+---@param health table # from classify_auth_files / auth_files
+---@param proxy_state table # { running, auth_file_modtime }
+---@param attempt number
+---@param login_provider string|nil # resolved channel login, if any
+---@return table # { action, message, login_provider? }
+function M.decide(verdict, health, proxy_state, attempt, login_provider)
+    health = health or {}
+    proxy_state = proxy_state or {}
+    attempt = attempt or 0
+    local message = M.diagnosis(verdict, health)
+    local repairs_allowed = attempt < 1
+
+    local function prompt_or_report()
+        -- A prompt we cannot act on is just a worse report.
+        if login_provider then
+            return { action = "prompt_login", message = message, login_provider = login_provider }
+        end
+        return { action = "report", message = message }
+    end
+
+    -- Quota and model-availability are never login problems, whatever the
+    -- credential looks like.
+    if verdict.kind == "quota" or verdict.kind == "model_unavailable" then
+        return { action = "report", message = message }
+    end
+
+    if not proxy_state.running and repairs_allowed then
+        return { action = "start", message = message }
+    end
+
+    local state = health.state
+    if state == "missing" or state == "disabled" or state == "unavailable" then
+        return prompt_or_report()
+    end
+    if state == "error" then
+        if error_is_auth_shaped(health.message) then
+            return prompt_or_report()
+        end
+        return { action = "report", message = message }
+    end
+    if state == "healthy" then
+        -- The proxy believes the credential is good. An `expired` verdict here
+        -- is contradictory — believe the credential reading rather than prompt
+        -- for a login while displaying "looks healthy".
+        if repairs_allowed then
+            if auth_file_is_stale(health, proxy_state) then
+                return { action = "restart", message = message }
+            end
+            return { action = "retry", message = message }
+        end
+        return { action = "report", message = message }
+    end
+    -- state == "unknown": we could not read credential state. Report honestly
+    -- rather than guess at a login.
+    return { action = "report", message = message }
+end
+
 return M

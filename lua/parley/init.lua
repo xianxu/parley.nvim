@@ -406,16 +406,32 @@ M.register_proxy_command = function(prefix)
 					return
 				end
 				if #ids == 0 then
-					-- Empty = the provider isn't authenticated (its models aren't in
-					-- the dynamic registry). Offer the login, matching the dispatch
-					-- auth-failure flow.
-					vim.ui.select({ "Log in (" .. arg .. ")", "Not now" }, {
-						prompt = ("cliproxy: no %s models — not authenticated."):format(arg),
-					}, function(_, idx)
-						if idx == 1 then
-							vim.cmd(prefix .. "Proxy login " .. arg)
+					-- An empty list USED to be read as "not authenticated". #197
+					-- disproved exactly that inference — /v1/models kept listing
+					-- every model with the credential dead — so ask the proxy
+					-- instead of guessing, through the same source the dispatch
+					-- failure path uses (ARCH-PURPOSE: one vocabulary).
+					cliproxy.credential_health(function(health)
+						if health.state == "healthy" then
+							vim.notify(("cliproxy: %s is authenticated (%s) but serves no models — "
+								.. "check the model catalog, not the login."):format(
+								arg, tostring(health.account)), vim.log.levels.WARN)
+							return
 						end
-					end)
+						if health.state == "unknown" then
+							vim.notify(("cliproxy: no %s models, and credential state could not be "
+								.. "read (%s): %s"):format(arg, tostring(health.reason),
+								tostring(health.message)), vim.log.levels.WARN)
+							return
+						end
+						vim.ui.select({ "Log in (" .. arg .. ")", "Not now" }, {
+							prompt = ("cliproxy: no %s models — %s"):format(arg, health.message),
+						}, function(_, idx)
+							if idx == 1 then
+								vim.cmd(prefix .. "Proxy login " .. arg)
+							end
+						end)
+					end, arg)
 					return
 				end
 				vim.notify(("cliproxy %s models:\n  %s"):format(arg, table.concat(ids, "\n  ")), vim.log.levels.INFO)

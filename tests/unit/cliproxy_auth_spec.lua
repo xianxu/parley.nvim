@@ -253,3 +253,110 @@ describe("diagnosis", function()
         assert.is_true(#ca.diagnosis(verdict({ model = nil, message = nil }), { state = "missing" }) > 0)
     end)
 end)
+
+describe("decide", function()
+    -- The recovery policy as a table. Each row below is a test; the anti-loop
+    -- property at the end covers the whole space at attempt >= 1.
+    local function v(over)
+        return vim.tbl_extend("force",
+            { kind = "no_auth", model = "claude-opus-4-8", provider = "claude",
+              message = "auth_unavailable" }, over or {})
+    end
+    local function h(over)
+        return vim.tbl_extend("force", { state = "healthy", account = "me@example.com" }, over or {})
+    end
+    local UP = { running = true }
+    local DOWN = { running = false }
+
+    it("starts a proxy that isn't running", function()
+        assert.equals("start", ca.decide(v(), h(), DOWN, 0).action)
+    end)
+
+    it("prompts for a missing, disabled, or unavailable credential", function()
+        for _, state in ipairs({ "missing", "disabled", "unavailable" }) do
+            local d = ca.decide(v(), h({ state = state }), UP, 0, "claude")
+            assert.equals("prompt_login", d.action, "state " .. state)
+        end
+    end)
+
+    it("prompts when the proxy's error message is itself an auth error", function()
+        local d = ca.decide(v(), h({ state = "error",
+            message = "OAuth access token has expired. Re-authenticate to continue." }), UP, 0, "claude")
+        assert.equals("prompt_login", d.action)
+    end)
+
+    it("reports — does not prompt — when the error is not auth-shaped", function()
+        local d = ca.decide(v(), h({ state = "error",
+            message = "dial tcp: lookup api.anthropic.com: no such host" }), UP, 0)
+        assert.equals("report", d.action)
+    end)
+
+    it("retries once when the credential looks healthy (transient failure)", function()
+        assert.equals("retry", ca.decide(v(), h(), UP, 0).action)
+    end)
+
+    it("restarts when the auth file on disk is newer than the proxy's copy", function()
+        local d = ca.decide(v(), h({ modtime = "2026-08-01T00:00:00-07:00" }),
+            { running = true, auth_file_modtime = "2026-08-01T01:00:00-07:00" }, 0)
+        assert.equals("restart", d.action)
+    end)
+
+    it("does not call a file stale when either timestamp is missing", function()
+        assert.equals("retry", ca.decide(v(), h({ modtime = nil }),
+            { running = true, auth_file_modtime = "2026-08-01T01:00:00-07:00" }, 0).action)
+        assert.equals("retry", ca.decide(v(), h({ modtime = "2026-08-01T00:00:00-07:00" }),
+            { running = true }, 0).action)
+    end)
+
+    it("prompts on an expired verdict unless the proxy says the credential is fine", function()
+        assert.equals("prompt_login",
+            ca.decide(v({ kind = "expired" }), h({ state = "error",
+                message = "OAuth access token has expired." }), UP, 0, "claude").action)
+        -- healthy + expired is contradictory; believe the credential reading
+        assert.equals("retry", ca.decide(v({ kind = "expired" }), h(), UP, 0).action)
+    end)
+
+    it("never treats quota or model-unavailable as a login problem", function()
+        for _, kind in ipairs({ "quota", "model_unavailable" }) do
+            local d = ca.decide(v({ kind = kind }), h({ state = "missing" }), UP, 0)
+            assert.equals("report", d.action, "kind " .. kind)
+        end
+    end)
+
+    it("reports when credential state could not be read at all", function()
+        for _, reason in ipairs({ "unreachable", "unknown_channel", "management_key_mismatch" }) do
+            local d = ca.decide(v(), { state = "unknown", reason = reason }, UP, 0)
+            assert.equals("report", d.action, "reason " .. reason)
+        end
+    end)
+
+    it("carries a login provider on every prompt_login", function()
+        local d = ca.decide(v(), h({ state = "missing" }), UP, 0, "claude")
+        assert.equals("claude", d.login_provider)
+    end)
+
+    it("reports instead of prompting when no login provider is resolvable", function()
+        local d = ca.decide(v(), h({ state = "missing" }), UP, 0, nil)
+        assert.equals("report", d.action)
+    end)
+
+    it("PROPERTY: attempt >= 1 never returns a repair action", function()
+        local kinds = { "no_auth", "unknown_provider", "expired", "quota", "model_unavailable" }
+        local states = { "healthy", "error", "unavailable", "disabled", "missing", "unknown" }
+        for _, kind in ipairs(kinds) do
+            for _, state in ipairs(states) do
+                for _, running in ipairs({ true, false }) do
+                    local d = ca.decide(v({ kind = kind }), h({ state = state }),
+                        { running = running }, 1, "claude")
+                    assert.is_true(d.action == "prompt_login" or d.action == "report",
+                        ("%s/%s/running=%s at attempt 1 returned %s"):format(
+                            kind, state, tostring(running), d.action))
+                end
+            end
+        end
+    end)
+
+    it("always returns a message", function()
+        assert.is_true(#ca.decide(v(), h(), UP, 0).message > 0)
+    end)
+end)

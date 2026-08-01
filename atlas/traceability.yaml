@@ -395,6 +395,7 @@ atlas:
       - tests/integration/cliproxy_download_spec.lua
       - tests/integration/cliproxy_auth_login_spec.lua
       - tests/integration/cliproxy_conformance_spec.lua
+      - tests/integration/cliproxy_recovery_e2e_spec.lua
 
   providers/anthropic:
     code:
