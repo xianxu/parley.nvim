@@ -24,7 +24,11 @@ cliproxy._set_data_dir(vim.fn.tempname())
 -- the fake is lying and the classifier needs revisiting.
 local REQUIRED_FIELDS = {
     "provider", "type", "status", "status_message",
-    "unavailable", "disabled", "failed", "modtime", "account",
+    "unavailable", "disabled", "failed", "account",
+    -- The staleness pair: `modtime` is the credential file's mtime, `updated_at`
+    -- is when the proxy last LOADED it. The restart rung reads the gap between
+    -- them, so losing either upstream silently kills the missed-reload repair.
+    "modtime", "updated_at",
 }
 
 local function free_port()

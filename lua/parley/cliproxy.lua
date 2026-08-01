@@ -28,11 +28,6 @@ local POLL_BUDGET_MS = 5000  -- poll_until_healthy deadline
 
 local _spawned = {}
 
--- Every pid parley has EVER spawned this session, including ones no longer on
--- the managed port (an endpoint change would otherwise strand them: _spawned is
--- cleared by stop(), and the port sweep only covers the current port).
-local _stray_spawned = {}
-
 --------------------------------------------------------------------------------
 -- Config access
 --------------------------------------------------------------------------------
@@ -521,7 +516,6 @@ function M.spawn(binary, config_file)
     end
     uv.unref(handle)
     _spawned[pid] = { handle = handle, exited = false }
-    _stray_spawned[#_stray_spawned + 1] = pid
     return pid, handle
 end
 
@@ -537,7 +531,6 @@ end
 
 --- Test helper: forget all tracked spawns (does not kill them).
 function M._reset_spawned()
-    _stray_spawned = {}
     _spawned = {}
 end
 
@@ -586,10 +579,15 @@ function M.ensure_running(callback, on_error)
     end
 
     M.health_probe(host, port, secret, function(state)
-        -- Surface the rotation race once per session, whichever path we take.
-        pcall(function()
-            M.warn_about_peers(M.peers())
-        end)
+        -- Surface the rotation race once per session. The flag is checked BEFORE
+        -- peers(), not inside warn_about_peers: peers() shells out to `ps ax`
+        -- plus `lsof` (~80-90ms measured, blocking the event loop) and this runs
+        -- in pre_query on every single dispatch.
+        if not M.peer_warning_shown() then
+            pcall(function()
+                M.warn_about_peers(M.peers())
+            end)
+        end
         if state == "healthy" or state == "needs_login" then
             return callback() -- reuse the already-running (brew service / other nvim)
         end
@@ -673,17 +671,10 @@ function M.stop()
             end
         end
     end
-    -- Parley-spawned proxies on OTHER ports leaked before #197: _spawned only
-    -- reaches this session, and the managed-port sweep above only reaches one
-    -- port. A proxy this session started on a since-changed endpoint would
-    -- otherwise outlive every stop() and keep refreshing the shared auth-dir.
-    for _, pid in ipairs(_stray_spawned) do
-        if not killed[pid] then
-            pcall(uv.kill, pid, "sigterm")
-            killed[pid] = true
-        end
-    end
-    _stray_spawned = {}
+    -- NB: `_spawned` already holds every pid this session spawned, on any port,
+    -- and the loop above kills all of them — so a proxy left on a since-changed
+    -- endpoint is covered. Proxies from EARLIER nvim sessions are not reachable
+    -- from any in-process table; that is what peers()/reap() is for.
     return vim.tbl_count(killed)
 end
 
@@ -796,6 +787,13 @@ function M._reset_peer_warning() -- test seam
     _peer_warning_shown = false
 end
 
+--- Has the once-per-session peer warning already fired? Consulted BEFORE the
+--- expensive peers() scan, which runs on the dispatch hot path.
+---@return boolean
+function M.peer_warning_shown()
+    return _peer_warning_shown
+end
+
 --- Every cliproxy process on this machine that parley neither spawned nor
 --- manages. Best-effort: an empty list when `ps` is unavailable.
 ---@return table[] # { pid, started, command }
@@ -876,24 +874,13 @@ function M._reset_login_prompt() -- test helper
     _login_prompt_active = false
 end
 
--- mtime (epoch seconds) of the credential file the PROXY says it loaded.
---
--- The proxy hands us the exact path, so there is no directory glob and no second
--- channel→file mapping to keep in sync: a prefix match on the channel name
--- cannot tell `gemini` from `gemini-cli`, and reading the wrong file made the
--- staleness check permanently true for the shorter channel.
-local function loaded_credential_mtime(health)
-    local path = health and health.path
-    if type(path) ~= "string" or path == "" then
-        return nil
-    end
-    local st = uv.fs_stat(path)
-    return st and st.mtime and st.mtime.sec or nil
-end
-
 -- Newest credential mtime anywhere in the auth-dir, for the LOGIN watch, where
 -- no health record exists yet and any new credential counts.
-local function newest_credential_mtime()
+local function newest_credential_mtime(login)
+    local channels = {}
+    for _, ch in ipairs(login and cc.channels_for_login(login) or {}) do
+        channels[ch] = true
+    end
     local c = cfg() or {}
     local dir = c.auth_dir
     if type(dir) ~= "string" or dir == "" then
@@ -901,7 +888,16 @@ local function newest_credential_mtime()
     end
     local newest
     for _, name in ipairs(vim.fn.isdirectory(dir) == 1 and vim.fn.readdir(dir) or {}) do
-        if name:sub(-5) == ".json" then
+        -- Filter by the credential's declared `type`, not the filename: a PEER
+        -- proxy's 15-minute refresh rewriting an unrelated credential would
+        -- otherwise satisfy a login watch that never completed.
+        local matches = next(channels) == nil
+        if not matches and name:sub(-5) == ".json" then
+            local ok, decoded = pcall(vim.json.decode,
+                table.concat(vim.fn.readfile(dir .. "/" .. name), "\n"))
+            matches = ok and type(decoded) == "table" and channels[decoded.type] == true
+        end
+        if name:sub(-5) == ".json" and matches then
             local st = uv.fs_stat(dir .. "/" .. name)
             if st and st.mtime and (not newest or st.mtime.sec > newest) then
                 newest = st.mtime.sec
@@ -960,10 +956,10 @@ end
 ---@param since number|nil # epoch seconds; a file newer than this counts
 ---@param timeout_ms number
 ---@param cb fun(ok: boolean)
-function M.await_credential(_channel, since, timeout_ms, cb)
+function M.await_credential(login, since, timeout_ms, cb)
     local deadline = uv.now() + timeout_ms
     local function poll()
-        local mt = newest_credential_mtime()
+        local mt = newest_credential_mtime(login)
         if mt and (since == nil or mt > since) then
             return cb(true)
         end
@@ -985,9 +981,22 @@ end
 ---@param argv string[]
 ---@param on_done fun(ok: boolean)|nil
 function M.run_login(provider, argv, on_done)
-    on_done = on_done or function() end
-    local channel = cc.channels_for_login(provider)[1] or provider
-    local before = newest_credential_mtime()
+    -- One settle, ever: on_exit(non-zero) reported the failure immediately while
+    -- await_credential kept polling to its 3-minute deadline and then fired a
+    -- second time — telling an operator who had since logged in successfully
+    -- that their login "did not complete".
+    local settled = false
+    local raw_done = on_done or function() end
+    on_done = function(ok)
+        if settled then
+            return
+        end
+        settled = true
+        raw_done(ok)
+    end
+    -- channels_for_login("google") is {aistudio, gemini, gemini-cli}; taking [1]
+    -- picks aistudio while a -login writes gemini-cli. Read across all of them.
+    local before = newest_credential_mtime(provider)
     -- -no-browser so the URL comes to US: parley opens it (and shows it), rather
     -- than the binary opening a window parley can't report on.
     local cmd = vim.list_extend(vim.deepcopy(argv), { "-no-browser" })
@@ -1041,13 +1050,13 @@ function M.run_login(provider, argv, on_done)
     end
 
     -- Observe the outcome instead of assuming it.
-    M.await_credential(channel, before, 180000, function(ok)
+    M.await_credential(provider, before, 180000, function(ok)
         if ok then
-            M.credential_health(function(health)
+            M.credential_health_for_login(provider, function(health)
                 vim.notify(("cliproxy: %s login succeeded%s"):format(provider,
                     health.account and (" (" .. health.account .. ")") or ""), vim.log.levels.INFO)
                 on_done(true)
-            end, channel)
+            end)
         else
             pcall(vim.fn.jobstop, job)
             vim.notify(("cliproxy: %s login did not complete — no credential was written. "
@@ -1199,8 +1208,9 @@ function M.recover(failure, retry, give_up)
             return execute(ca.decide(verdict, health, { running = false }, attempt, login), health)
         end
         M.credential_health(function(health)
-            local proxy_state = { running = true, auth_file_modtime = loaded_credential_mtime(health) }
-            execute(ca.decide(verdict, health, proxy_state, attempt, login), health)
+            -- Staleness is decided entirely inside the record now (modtime vs
+            -- updated_at), so proxy_state carries only liveness.
+            execute(ca.decide(verdict, health, { running = true }, attempt, login), health)
         end, channel)
     end)
     return true

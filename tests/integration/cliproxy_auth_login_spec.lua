@@ -364,25 +364,33 @@ describe("cliproxy.recover", function()
         assert.equals(0, stops, "the healthy path SIGTERMed the proxy — restart rung, not retry")
     end)
 
-    it("takes the restart rung only when the credential file is genuinely newer", function()
-        -- The real scenario: the proxy LOADED the credential at T (that is what
-        -- its record reports), the file was rewritten at T+n by a fresh login,
-        -- and its watcher missed the write. The overlay pins the loaded modtime
-        -- in the past while the file on disk keeps its real (newer) mtime.
-        serve({ claude = { modtime = "2020-01-01T00:00:00Z" } })
+    it("takes the restart rung when the proxy's watcher missed a write", function()
+        -- Produced the way the system produces it: the proxy loads the
+        -- credential, then the file is touched WITHOUT a content change, which
+        -- is what a missed fsnotify reload looks like — modtime advances,
+        -- updated_at does not. No fabricated timestamps.
+        local store = serve()
+        local path = store .. "/claude-me@example.com.json"
+        -- first read: the proxy records its load time
+        local seeded = false
+        cliproxy.credential_health(function() seeded = true end, "claude")
+        vim.wait(6000, function() return seeded end, 20)
+        assert.is_true(seeded, "could not seed the proxy's load time")
         local stops = 0
         local saved_stop = cliproxy.stop
         cliproxy.stop = function(...)
             stops = stops + 1
             return saved_stop(...)
         end
+        local later = os.time() + 600
+        vim.loop.fs_utime(path, later, later)
 
         local out = run({ http_status = 503, body = NO_AUTH, model = "claude-opus-4-8",
             streamed = false, attempt = 0 })
         cliproxy.stop = saved_stop
 
         assert.equals("retry", out.settled) -- the restart rung still ends in a retry
-        assert.equals(1, stops, "a genuinely stale auth file did not trigger the restart rung")
+        assert.equals(1, stops, "a missed watcher reload did not trigger the restart rung")
     end)
 
     ----------------------------------------------------------------------------

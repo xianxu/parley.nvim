@@ -148,7 +148,7 @@ the claim exactly once.
 |---|---|
 | proxy not running | `start`, then retry |
 | credential `healthy` (failure was transient) | `retry` — **no prompt** |
-| auth file on disk newer than the proxy's copy | `restart`, then retry |
+| the credential file changed **after** the proxy loaded it (`modtime` > `updated_at`) | `restart`, then retry |
 | `missing` / `disabled` / `unavailable` | `prompt_login` with the proxy's own reason |
 | `error` whose message is auth-shaped | `prompt_login` |
 | `error` that isn't (DNS, upstream 5xx) | `report` — a login won't fix it |

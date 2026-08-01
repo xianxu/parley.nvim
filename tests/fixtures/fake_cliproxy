@@ -85,6 +85,14 @@ def parse_args(argv):
     return port, mode, mgmt_key, auth_store, error_mode
 
 
+# When the proxy last LOADED each credential into memory, keyed by filename.
+# The real binary advances this only when its watcher actually reloads the file
+# — a touch-only write advances `modtime` alone, and that difference IS the
+# missed-reload signal parley's restart rung reads. Modelling load time as
+# "first time we saw this content" makes the fake honest about it.
+_LOADED = {}
+
+
 def read_auth_store(auth_store):
     """Build management records from a portable folder of credential files.
 
@@ -107,7 +115,13 @@ def read_auth_store(auth_store):
             continue
         path = os.path.join(auth_store, name)
         with open(path) as f:
-            cred = json.load(f)
+            raw = f.read()
+        cred = json.loads(raw)
+        # Load time advances only on a CONTENT change, mirroring the watcher.
+        prev = _LOADED.get(name)
+        if prev is None or prev[0] != raw:
+            _LOADED[name] = (raw, time.time())
+        loaded_at = _LOADED[name][1]
         channel = cred.get("type") or name.split("-", 1)[0]
         account = cred.get("email") or name
         record = {
@@ -120,6 +134,7 @@ def read_auth_store(auth_store):
             "id": name,
             "label": account,
             "modtime": time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(os.path.getmtime(path))),
+            "updated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(loaded_at)),
             "name": name,
             "path": path,
             "provider": channel,

@@ -331,6 +331,7 @@ M.register_proxy_command = function(prefix)
 		{ name = "models", arg = "<provider>", desc = "list the models a provider currently serves" },
 		{ name = "providers", desc = "list the supported provider names" },
 		{ name = "login", arg = "<provider>", desc = "run an interactive OAuth login for a provider" },
+		{ name = "reap", desc = "stop other cliproxy processes racing this one's auth-dir" },
 		{ name = "update", desc = "download the pinned cliproxyapi release" },
 	}
 	local SUBS = vim.tbl_map(function(e)

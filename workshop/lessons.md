@@ -518,3 +518,19 @@
   drifts.** Three successive reviews re-opened the same timeout relationship.
   Rule: derive the terms from the constants the code actually uses, and assert
   the inequality — then the table cannot be right while the code is wrong.
+- **Fixing a comparison three times without asking what it compares.** #197's
+  staleness check was repaired on the timezone axis, then the calendar axis, and
+  was still dead code — because both operands were the *same quantity* (the
+  credential file's mtime, read two ways). Rule: when a comparison misbehaves,
+  first name what each side measures and confirm they are different quantities;
+  only then debug the comparison. A test that fabricates one operand can never
+  ask this question, so reproduce the condition the way the system produces it.
+- **"It's already covered" needs the deletion test.** A `_stray_spawned` sweep was
+  added with a regression test that passed with the code deleted, because the
+  existing `_spawned` table already held every pid. Rule: before adding a
+  belt-and-braces mechanism, delete the candidate and run the test that
+  supposedly pins it — if it still passes, the mechanism is dead weight.
+- **Put the cheap guard before the expensive scan, not inside it.** A
+  once-per-session warning called a blocking `ps ax` + `lsof` (~85ms) on every
+  dispatch because the guard lived inside the function the scan fed. Rule: on a
+  hot path, check the flag before doing the work it gates.

@@ -154,10 +154,8 @@ function M.classify_auth_files(files, channel)
                         or ("credential is " .. state),
                     account = f.account or f.email,
                     failed = f.failed,
-                    modtime = f.modtime,
-                    -- The proxy tells us WHICH file it loaded; the shell stats
-                    -- exactly that one. A directory glob by channel prefix
-                    -- cannot distinguish `gemini` from `gemini-cli`.
+                    modtime = f.modtime,      -- the credential FILE's mtime
+                    updated_at = f.updated_at, -- when the proxy last LOADED it
                     path = f.path,
                 }
             end
@@ -350,16 +348,23 @@ end
 -- agreement, so require a real gap before calling a file newer.
 local STALE_SKEW_SEC = 2
 
--- The auth file on disk is newer than the copy the proxy loaded ⇒ its watcher
--- missed a write and a restart will pick it up.
+-- The credential FILE is newer than the moment the proxy LOADED it ⇒ its
+-- fsnotify watcher missed a write and a restart will pick it up.
 --
--- Both sides are EPOCH SECONDS: the IO shell passes `uv.fs_stat().mtime.sec`
--- directly and the proxy's RFC3339 is parsed here. A missing value tells us
--- nothing, and guessing "stale" would restart the proxy under every failure.
-local function auth_file_is_stale(health, proxy_state)
-    local disk = tonumber(proxy_state and proxy_state.auth_file_modtime)
-    local loaded = M.rfc3339_sec(health and health.modtime)
-    return disk ~= nil and loaded ~= nil and disk > loaded + STALE_SKEW_SEC
+-- Both quantities come from the same record: `modtime` is the file's mtime,
+-- re-stat'd by the proxy per request, and `updated_at` is when the proxy last
+-- (re)loaded that credential into memory. Verified against the real binary: a
+-- content rewrite advances BOTH (the watcher reloaded); a touch-only write
+-- advances `modtime` alone — which is exactly the missed-reload signal.
+--
+-- The previous three attempts all compared `modtime` against the file's mtime
+-- read independently — the SAME quantity — so the comparison was self-referential
+-- and this rung was dead code. Fixing the comparison twice (timezone, then
+-- calendar) never surfaced it, because the bug was in the operands.
+local function auth_file_is_stale(health)
+    local on_disk = M.rfc3339_sec(health and health.modtime)
+    local loaded = M.rfc3339_sec(health and health.updated_at)
+    return on_disk ~= nil and loaded ~= nil and on_disk > loaded + STALE_SKEW_SEC
 end
 
 --- What a credential's health alone implies, independent of any request that

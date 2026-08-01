@@ -295,11 +295,27 @@ describe("decide", function()
         assert.equals("retry", ca.decide(v(), h(), UP, 0).action)
     end)
 
-    it("restarts when the auth file on disk is genuinely newer", function()
-        local loaded = "2026-08-01T00:34:46.994488305-07:00"
-        local d = ca.decide(v(), h({ modtime = loaded }),
-            { running = true, auth_file_modtime = ca.rfc3339_sec(loaded) + 3600 }, 0)
+    it("restarts when the file changed AFTER the proxy loaded it", function()
+        -- Both operands come from the SAME record: modtime is the file's mtime,
+        -- updated_at is when the proxy loaded it into memory. The three earlier
+        -- versions of this compared modtime against the file's mtime read
+        -- separately — the same quantity — so the rung was dead code.
+        local d = ca.decide(v(), h({
+            updated_at = "2026-08-01T00:34:46.994488305-07:00",
+            modtime = "2026-08-01T01:34:46.994488305-07:00",
+        }), { running = true }, 0)
         assert.equals("restart", d.action)
+    end)
+
+    it("retries when the proxy loaded the file at or after its mtime", function()
+        local same = "2026-08-01T00:34:46.994488305-07:00"
+        assert.equals("retry", ca.decide(v(), h({ modtime = same, updated_at = same }),
+            { running = true }, 0).action)
+        -- reloaded after the write: definitively not stale
+        assert.equals("retry", ca.decide(v(), h({
+            modtime = "2026-08-01T00:34:46-07:00",
+            updated_at = "2026-08-01T00:40:00-07:00",
+        }), { running = true }, 0).action)
     end)
 
     it("PROPERTY: the SAME instant is never stale, in any representation", function()
@@ -309,21 +325,20 @@ describe("decide", function()
         -- degenerate-fixture trap workshop/lessons.md records from M1 C1 — which
         -- the first version of THIS test walked straight into by using -07:00 on
         -- both sides.
-        local instant = 1785000000
         for _, reported in ipairs({
             "2026-08-01T18:35:01Z",
             "2026-08-01T11:35:01-07:00",
             "2026-08-01T20:35:01+02:00",
             "2026-08-01T11:35:01.994488305-07:00", -- the real binary's form
         }) do
-            local sec = ca.rfc3339_sec(reported)
-            assert.is_not_nil(sec, "failed to parse " .. reported)
-            local d = ca.decide(v(), h({ modtime = reported }),
-                { running = true, auth_file_modtime = sec }, 0)
+            assert.is_not_nil(ca.rfc3339_sec(reported), "failed to parse " .. reported)
+            -- Same instant expressed differently on each side must never be
+            -- stale: the answer must not depend on the operator's timezone.
+            local d = ca.decide(v(), h({ modtime = reported, updated_at = "2026-08-01T18:35:01Z" }),
+                { running = true }, 0)
             assert.equals("retry", d.action,
                 ("same instant read as stale for %s"):format(reported))
         end
-        assert.is_truthy(instant)
     end)
 
     it("parses to ABSOLUTE epochs, checked against an external oracle", function()
@@ -362,23 +377,24 @@ describe("decide", function()
     end)
 
     it("decide survives a malformed modtime from the proxy", function()
-        local ok, d = pcall(ca.decide, v(), h({ modtime = "2026-13-45T99:99:99Z" }),
-            { running = true, auth_file_modtime = 1785000000 }, 0)
+        local ok, d = pcall(ca.decide, v(), h({ modtime = "2026-13-45T99:99:99Z",
+            updated_at = "2020-01-01T00:00:00Z" }), { running = true }, 0)
         assert.is_true(ok, "decide raised on proxy-supplied garbage")
         assert.equals("retry", d.action)
     end)
 
     it("does not call a file stale when either timestamp is missing", function()
-        assert.equals("retry", ca.decide(v(), h({ modtime = nil }),
-            { running = true, auth_file_modtime = 1785000000 }, 0).action)
-        assert.equals("retry", ca.decide(v(), h({ modtime = "2026-08-01T00:00:00-07:00" }),
+        assert.equals("retry", ca.decide(v(), h({ modtime = nil, updated_at = "2026-08-01T00:00:00Z" }),
+            { running = true }, 0).action)
+        assert.equals("retry", ca.decide(v(), h({ modtime = "2026-08-01T00:00:00Z", updated_at = nil }),
             { running = true }, 0).action)
     end)
 
-    it("tolerates sub-second skew between the filesystem and the proxy", function()
-        local loaded = "2026-08-01T11:35:01-07:00"
-        assert.equals("retry", ca.decide(v(), h({ modtime = loaded }),
-            { running = true, auth_file_modtime = ca.rfc3339_sec(loaded) + 1 }, 0).action)
+    it("tolerates sub-second skew between the file mtime and the load stamp", function()
+        assert.equals("retry", ca.decide(v(), h({
+            modtime = "2026-08-01T11:35:02-07:00",
+            updated_at = "2026-08-01T11:35:01-07:00",
+        }), { running = true }, 0).action)
     end)
 
     it("prompts on an expired verdict unless the proxy says the credential is fine", function()

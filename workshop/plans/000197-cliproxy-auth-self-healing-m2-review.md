@@ -314,3 +314,179 @@ Append to `workshop/plans/000197-cliproxy-auth-self-healing-plan.md` `## Revisio
 2. **The four new pure entities are missing from Core concepts** — `credential_action`, `rfc3339_sec` and `healthier` (`cliproxy_auth.lua`) and `channels_for_login` (`cliproxy_config.lua`) are all new M2 pure entities the Revisions prose names but the greppable table does not list. Add rows with kind/location/status/milestone so an M3 reviewer cross-checking the table against the filesystem sees the real surface.
 3. **Record `rfc3339_sec`'s contract, not just its existence** — that it must be total (nil for any unparseable input, including out-of-range months) and that its tests assert absolute epochs against an external oracle including a leap-year date. The self-referential test shape is what let both C1s through; naming it in the plan is what stops a third.
 4. **Restate the budget as a derivation** — Revisions entry #4 says the budget "is asserted by `cliproxy_budget_spec` rather than restated in a comment", but the spec sums a hand-written table. Record that the terms derive from `POLL_BUDGET_MS`, the port-release deadline and `--max-time` (including the one-probe overrun each bounded loop can incur), and that the 404-repair-then-`restart` composition is either excluded by construction or included in the worst case.
+
+---
+
+## Re-review — 2026-08-01T12:28:31-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 197 — cliproxy auth failures must self-heal: detect, diagnose, recover |
+| repo | parley.nvim |
+| issue file | workshop/issues/000197-cliproxy-auth-self-healing.md |
+| boundary | milestone M2 |
+| milestone | M2 |
+| window | 819a781a71859450cb5f22aa6940d9213004bb70..HEAD |
+| command | sdlc milestone-close --issue 197 --milestone M2 |
+| reviewer | claude |
+| timestamp | 2026-08-01T12:28:31-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+M2's architecture is sound and the round-2 rework genuinely landed: `rfc3339_sec` is now correct (I verified it against an external oracle including 2024/2028/2100 and the 400-year rule — all exact), `decide`/`credential_action` are one pure policy with two real consumers, `restart_managed` collapsed the duplicated repair, and the `_once` fake modes let the e2e prove the answer actually arrives. I re-ran everything independently: 15 mapped specs, **275 examples, 0 failed, 0 errors** (conformance really booted a real binary), `make lint` **0/0 in 313 files** — every count in the Log checks out. What blocks SHIP is that the restart rung has been fixed twice on the wrong axis and is still wrong on a third: **`health.modtime` is the credential file's own mtime, re-stat'd by the proxy at request time**, and `loaded_credential_mtime` stats *the same file* — so `auth_file_is_stale` compares a value to itself and the `restart` rung is unreachable. I proved this three ways: two live probes against the real binary (after `touch`, `modtime` advanced with no restart; `updated_at` did not), and an end-to-end run through this repo's own fake in the honest scenario (`disk mtime=1785612284 | parsed loaded=1785612284 | ACTION=retry`, `stops=0`). The one test covering the rung passes only because it injects `modtime="2020-01-01T00:00:00Z"` through the fake's overlay — a value neither the fake's own record-builder nor the binary can produce. That leaves the issue's Done-when "a recoverable failure (proxy down, **stale in-memory auth**, transient) is repaired" undelivered. Alongside it, this window also carries three M3 commits that no boundary review has seen, and M3's new code repeats the axis and timestamp-compare mistakes the milestone's own lessons just recorded.
+
+## 1. Strengths
+
+- **`rfc3339_sec` is now genuinely correct, not just green.** I checked it against Python-derived epochs the repo doesn't contain — `2100-03-01T00:00:00Z → 4107542400` (the 400-year non-leap rule) — and every case matched. Round 2's C1 is properly closed, and the "external oracle" assertions at `tests/unit/cliproxy_auth_spec.lua:333-342` are the right shape.
+- **One policy, two real consumers.** `credential_action` (`cliproxy_auth.lua:374`) is called from `decide` (`:427`) and `init.lua:419` — the round-1 I2 divergence on `error` is structurally gone, and `cliproxy_command_spec.lua:117-136` asserts the exact channel set `{aistudio, gemini, gemini-cli}`, which pins the C2 fix on the axis that actually carries it.
+- **`restart_managed` (`cliproxy.lua:398`) is the correct extraction** — both the 404 repair (`:456`) and the ladder's restart rung (`:1173`) now inherit the port-release wait, and the comment explaining why no Python-fake test can catch its absence travelled with the code.
+- **The anti-loop property test (`cliproxy_auth_spec.lua:379-393`)** sweeps 5 kinds × 6 states × liveness at `attempt=1` and asserts no repair action can be returned. That is the safety argument expressed as a property rather than a case list, and it is the strongest test in the diff.
+- **`--error-mode` + `_once` (`tests/fixtures/fake_cliproxy:203-240`)** put the transience *inside* the fake instead of swapping servers mid-flight, which is what lets `cliproxy_recovery_e2e_spec.lua:156-161` assert `out.failure == nil` and `content` contains the answer — the Done-when, not its shadow.
+
+## 2. Critical findings
+
+**C1 — `auth_file_is_stale` compares the credential file's mtime against itself, so the `restart` rung is dead code and the "stale in-memory auth" repair does not exist.** `lua/parley/cliproxy.lua:885-892` + `lua/parley/cliproxy_auth.lua:359-363`
+
+`loaded_credential_mtime(health)` returns `uv.fs_stat(health.path).mtime.sec`. `auth_file_is_stale` compares that against `rfc3339_sec(health.modtime)`. The premise — that `modtime` is "the copy the proxy loaded" — is false. Probed live against the installed binary (7.2.110), touching the credential with **no restart**:
+
+```
+read 1:  modtime = 2026-08-01T12:12:37.068024338-07:00   file mtime = 12:12:37.068024
+  touch
+read 2:  modtime = 2026-08-01T12:12:43.181687-07:00      file mtime = 12:12:43.181687
+```
+
+`modtime` tracks the file on disk, re-stat'd per request. A second probe with a real **content** rewrite (what a fresh login does) shows the field that actually carries load time:
+
+```
+before: modtime=12:16:21.235762407  updated_at=12:16:21.556781
+after:  modtime=12:16:27.331418643  updated_at=12:16:27.331998   (watcher reloaded)
+touch-only case: modtime advanced, updated_at did NOT
+```
+
+Driven end to end through this repo's own harness and fake, in the honest scenario (proxy holding the credential, file rewritten ~1.5s later, no `state.json` override):
+
+```
+REVIEW: proxy-reported modtime=2026-08-01T12:24:44-0700 | disk mtime(sec)=1785612284
+      | parsed loaded(sec)=1785612284 | ACTION=retry
+REVIEW: settled=retry stops=0 health.state=healthy
+```
+
+Bit-identical, because they are the same quantity. Failure scenario: an operator's proxy misses an fsnotify write (the case the Spec calls out — "the proxy hot-reloads auth files … restart is a fallback"), the credential on disk is fresh and the in-memory one is dead, and the ladder returns `retry` forever. `attempt` then forbids any repair on the second pass, so the operator gets a report. The `restart` row in the atlas ladder table (`atlas/providers/cliproxy-managed.md:151`) describes behavior that cannot occur.
+
+Both prior rounds fixed the *comparison* (timezone axis, then calendar axis) without ever asking whether the two sides are the same quantity — this is the third instance of that class in one milestone.
+
+Fix sketch — compare within the record; no `fs_stat`, and the check becomes fully pure (dropping an IO term from the repair budget too):
+```lua
+-- cliproxy_auth.lua
+local function auth_file_is_stale(health)
+    local on_disk = M.rfc3339_sec(health and health.modtime)   -- file mtime
+    local loaded  = M.rfc3339_sec(health and health.updated_at) -- in-memory load
+    return on_disk ~= nil and loaded ~= nil and on_disk > loaded + STALE_SKEW_SEC
+end
+```
+This needs `updated_at` carried through `classify_auth_files` (beside `path`), added to `REQUIRED_FIELDS` in `cliproxy_conformance_spec.lua:24-27`, and — the part that matters most — a test that does **not** fabricate `modtime`. Delete the `state.json` override at `tests/integration/cliproxy_auth_login_spec.lua:372` and reproduce staleness the way the system produces it (the fake would need to model `updated_at` as load time, which is one line and is what makes the fake honest here). Also verify against the real binary that `updated_at` is stable across an *unloaded* write, since that is the exact signal being relied on.
+
+## 3. Important findings
+
+**I1 — `:ParleyProxy reap` is unreachable by discovery: absent from `SUBS_HELP`, from completion, and from README (Docs update gate + ARCH-DRY).** `lua/parley/init.lua:326-335`, `README.md:191`
+
+`SUBS_HELP` lists eight subcommands, no `reap`; `SUBS = vim.tbl_map(…, SUBS_HELP)` feeds `complete`, so `:ParleyProxy re<Tab>` yields nothing and bare `:ParleyProxy` never mentions it. The atlas states outright that `SUBS_HELP` "is the single source for both the usage text and the completion list (ARCH-DRY)" — this new branch is the first thing to bypass it. `README.md:191` still enumerates `status|start|stop|restart|models <provider>|providers|login <provider>|update`. A prevention feature the operator cannot find does not prevent anything. Fix: one row in `SUBS_HELP`, one word in README.
+
+**I2 — the `_stray_spawned` sweep is dead code, and its regression test does not pin it.** `lua/parley/cliproxy.lua:31-34, 524, 676-686`, `tests/integration/cliproxy_lifecycle_spec.lua:919`
+
+`_spawned[pid]` is set on every spawn (`:523`) and never removed for any individual pid — only wholesale in `_reset_spawned()` and at `stop():666`, *after* the loop at `:662-665` has already SIGTERMed everything in it. So every pid in `_stray_spawned` is, by construction, already in `_spawned`. I deleted the entire sweep in a scratch copy and re-ran the spec:
+
+```
+Success || cliproxy IO lifecycle peers and reap stop() also reaps a parley-spawned proxy on a non-managed port
+Success: 49   Failed: 0   Errors: 0
+```
+
+The test passes without the code it was written to pin (the M1 review used exactly this deletability check on `recover_query`'s registration). The code comment's rationale — "`_spawned` is cleared by stop()" — is backwards. Worth stating plainly: the actual #197 leak was proxies from *previous* nvim sessions, which neither `_spawned` nor `_stray_spawned` can reach; only `reap` addresses it, and the atlas + Log claim of a `stop()` fix overstates what changed.
+
+**I3 — `run_login` resolves the wrong channel and `await_credential` ignores its channel entirely — the third-axis defect, in the code shipped after fixing it.** `lua/parley/cliproxy.lua:963, 989, 1044-1050`
+
+`channels_for_login("google")` returns sorted `{aistudio, gemini, gemini-cli}`, so `[1]` is `aistudio` — but a `-login` writes a `gemini-cli-*.json`. `credential_health(cb, "aistudio")` then reads `missing`, and the success notice degrades to `"cliproxy: google login succeeded"` with no account for the one provider the whole third-axis fix was about. `codex-device` resolves to no channels at all and falls through to itself. `credential_health_for_login` — written this milestone for exactly this — is not used here. Separately, `await_credential(_channel, …)` discards the channel and `newest_credential_mtime` scans every `*.json` in the auth-dir, so a peer proxy's 15-minute token refresh rewriting an unrelated credential satisfies the watch and reports a login that never completed. Fix: `credential_health_for_login(provider, …)` for the report, and filter the watch by each file's decoded `type`.
+
+**I4 — `run_login` can settle twice, emitting a spurious "login did not complete" three minutes after the failure was already reported.** `lua/parley/cliproxy.lua:1029-1036` vs `:1044`
+
+`on_exit` with a non-zero code calls `on_done(false)` immediately, but `await_credential` was already started and keeps polling to its 180 000 ms deadline, then calls `on_done` a second time and notifies at WARN. Failure scenario: `dies_early` (the #197 mode) → operator sees "claude login exited 3", re-runs successfully → the *first* watcher is still live and fires again on the new credential, or times out and tells them the login they just completed did not complete. The `dies_early` spec (`tests/integration/cliproxy_login_spec.lua:79-88`) can't see it because it stops waiting at 20s. Fix: one `tasker.once`-style latch around `on_done`, and `jobstop` + cancel the watch on the exit path.
+
+**I5 — `peers()` runs a blocking `ps ax` + `lsof` on every query, for a warning that fires once per session.** `lua/parley/cliproxy.lua:589-592`
+
+`ensure_running` is the cliproxyapi adapter's `pre_query`, so this is on the dispatch hot path, and both `vim.system(...):wait()` calls block the event loop. Measured here: `lsof -nP -iTCP:<port>` ≈ **80–90 ms**, three runs. The once-per-session guard `_peer_warning_shown` lives *inside* `warn_about_peers`, after the expensive call. Fix: check the flag first — `if not _peer_warning_shown then pcall(function() M.warn_about_peers(M.peers()) end) end`.
+
+**I6 — `reap()` does not perform the identity probe its docstring and the plan both promise.** `lua/parley/cliproxy.lua:845-865`
+
+The docstring says "after an identity probe per pid so a process that merely shares a name is never killed" and plan Task 14 Step 3 says "SIGTERMs peers **after an identity probe** (reuse `port_holds_cliproxy`'s discipline)". The code does `peer.command:match("%-config%s")` — a command-line substring test. `parse_peers`' executable matching is good defence, but this is a documented contract the code does not keep, on a function that sends SIGTERM. Also `pcall(uv.kill, …)` returns true even when `uv.kill` returns `nil, err`, so `killed` counts processes that were not killed.
+
+**I7 — the compound "404 repair then restart" path is not made unreachable as the code and atlas claim; it is ~36s against a 30s backstop.** `lua/parley/cliproxy.lua:422-424, 456-462, 1163-1173`
+
+`execute` guards the restart rung on `_management_restart_done`, but `credential_health`'s second read clears that flag (`:458-460`) *before* invoking `cb`, and `cb` is what computes the decision. So the guard reads `false` on exactly the path it exists to block. Terms: probe 2 + auth_files 2 + [repair: stop 2 + release 4 + ensure 2 + poll 7] + read 2 + [restart: stop 2 + release 4 + ensure 2 + poll 7] = **36s**. Latent only because C1 makes `restart` unreachable — it goes live the moment C1 is fixed. This is the third round this budget relationship has been re-opened; the derived table (`M._repair_budget_sec`, 21s) is a good improvement but it models the single-repair path only. Fix: latch a per-claim boolean in `recover` rather than reading module state that the repair itself resets, and add the compound case to the budget or to `cliproxy_budget_spec`.
+
+**I8 — `warn_about_peers` picks the "oldest" peer by lexicographic compare of `ps lstart`, which starts with the day of the week.** `lua/parley/cliproxy.lua:832-837`
+
+Verified counterexample:
+```
+peers: "Fri Aug  1 03:00:00 2026" and "Mon Jun 15 09:00:00 2026"
+oldest chosen: the Aug 1 one   (truth: Jun 15)
+```
+The date is the only thing making the count actionable ("oldest since %s"), and the fixture test (`cliproxy_lifecycle_spec.lua`, asserting `Jun 12`) passes by luck because `F` < `S`. This is a new string-compare-on-timestamps in the same window as two `lessons.md` rules forbidding exactly that, tested with the same degenerate-fixture shape a third rule warns about. Fix: parse `lstart` (or carry `etime`/start epoch from `ps -o lstart=` → a numeric field) and compare numbers.
+
+**I9 — `atlas/providers/cliproxy-managed.md:129` still says "A 15s `recovery_timeout_ms` backstop"; the code says 30000.** Flagged at M2 round 1 (I4) and round 2 (I4); the number has since moved 25000 → 30000, so the doc is now off by 2×. The new "Timeout budget" paragraph correctly refuses to restate arithmetic — `:129` is the leftover that should get the same treatment (name the relationship, not the number).
+
+**I10 — scope: this M2 window contains three M3 commits, and M3 is already ticked `[x]` in the issue Plan with no boundary review of its own.** `ba0992d`, `bf98f8d`, `65d4402`
+
+Per AGENTS.md §3 an `Mx` row commits to its own `milestone-close`; M2's two prior verdicts were REWORK, so the boundary was never crossed, yet M3 landed on top. The practical consequence is that this review is the only fresh-eyes pass M3 will get — which is where C1's cousins (I3, I6, I8) live. Either run `milestone-close --milestone M3` separately after this rework, or state in the Log that M2's review deliberately absorbed M3 and record the verdict against both. Relatedly, the plan's checkboxes for Tasks 9–15 are unticked apart from a single `[x]` at line 425, so the plan does not reflect what shipped.
+
+## 4. Minor findings
+
+- `lua/parley/cliproxy.lua:1108` — `@param _retry fun() # unused in M1: this milestone diagnoses, it never repairs`; the parameter is `retry` and drives the ladder. Flagged in round 1 and round 2, still unfixed.
+- The Log records conformance as "real 7.1.71"; `discover_binary` resolves to `/opt/homebrew/bin/cliproxyapi` = **7.2.110** (the spec's `_set_data_dir(tempname())` hides the 7.1.71 tarball binary). Conforming against the newer binary is fine — the label is what's wrong, and `PINNED_VERSION = "7.1.71"` means download and conformance test different versions.
+- `tests/integration/cliproxy_recovery_e2e_spec.lua:186,195` — `local port = select(2, ("x"):find("x")) -- keep luacheck quiet about unused` plus `assert.is_truthy(port)` is still dead scaffolding (flagged twice). Same pattern at `cliproxy_auth_spec.lua:305,326`.
+- `tests/integration/cliproxy_recovery_e2e_spec.lua:118` — `vim.ui.select` replaced in `before_each`, never restored.
+- `lua/parley/cliproxy.lua:479-496` — `credential_health_for_login` issues one full `/v0/management/auth-files` request per channel (3 curls + 3 key reads for `google`) when a single response already carries every channel.
+- `tests/integration/cliproxy_lifecycle_spec.lua` peer test printed `SKIP: ps unavailable — peer detection not exercised` in my run — the M3 peer detection has no live coverage in this environment; the skip is loud, which is right, but the coverage claim in the Log should note it.
+- `lua/parley/cliproxy.lua:1060-1061` — two stray blank lines left after `run_login`; `:405-406` likewise after `restart_managed`.
+- Carried unfixed from M1/M2: `render_opts()` does `mkdir` + a file read on every call and sits on every query; `resolve_channel` iterates `pairs()` (nondeterministic when a model appears under two channels); `classify_auth_files` treats a record with no `status` as healthy (`cliproxy_auth.lua:131`).
+
+## 5. Test coverage notes
+
+Verified independently, not from the Log: `cliproxy_auth` 55, `cliproxy_config` 46, `cliproxy_budget` 2, `dispatcher_query` 56, `failure_notice` 6, `providers_pre_query` 6, `cliproxy_lifecycle` 49, `cliproxy_command` 10, `cliproxy_auth_login` 19, `cliproxy_recovery_e2e` 4, `cliproxy_login` 8, `cliproxy_conformance` 3, `cliproxy_dispatch` 3, `cliproxy_caller_teardown` 5, `cliproxy_download` 3 — **275 examples, 0 failed, 0 errors**; `make lint` 0/0 in 313 files. Every number in the Log matches. One loud SKIP (peer detection).
+
+Gaps, in the order I'd close them:
+
+1. **The restart rung has no honest test** (C1). Its only coverage fabricates `modtime` through the fake's overlay — a value the fake's own record-builder computes live and would never emit. Any test that must override a field the fake derives from real state is testing a state the system cannot reach; that's the tell.
+2. **`loaded_credential_mtime` has zero direct coverage** — the function whose premise is wrong. A single unit test asserting it returns something *different* from `health.modtime` would have failed on day one.
+3. **`_stray_spawned`'s test passes with the code deleted** (I2). Run the deletability check on new mechanisms before writing the Log entry that claims them.
+4. **`run_login`'s outcome contract is untested** — no test asserts `on_done` fires exactly once (I4), and none asserts the channel it reports on (I3). The `dies_early` spec stops waiting 160s before the second settle.
+5. **`warn_about_peers`' oldest-selection fixture is degenerate** (I8) — three peers whose lexicographic and chronological orders coincide.
+
+`cliproxy_auth_spec`'s external-oracle epoch assertions are the pattern to copy: they falsify the implementation rather than restate it. The staleness rows still don't, because the quantity they compare is self-referential regardless of representation.
+
+## 6. Architectural notes for upcoming work
+
+- **ARCH-DRY — flag.** Three in the diff: `_stray_spawned` duplicates `_spawned`'s key set exactly (I2); `run_login` re-derives a channel by hand where `credential_health_for_login` exists for that purpose (I3); `:ParleyProxy reap` bypasses `SUBS_HELP`, the single source the atlas names for help + completion (I1). Consolidated correctly this window: `restart_managed`, `credential_action`, `channels_for_login`, `healthier` — all single-source with two real callers each.
+- **ARCH-PURE — pass, with the same structural caveat as round 2, now realized.** `decide`, `credential_action`, `rfc3339_sec`, `parse_peers` are genuinely pure and mock-free. But the pure function's precondition is again unenforced by the shell: `auth_file_is_stale` assumes its two inputs are *different measurements*, and the boundary hands it the same one twice (C1). Purity doesn't protect a contract the seam doesn't keep — and here the fix makes it *more* pure, since `modtime` vs `updated_at` needs no `fs_stat` at all. That is the shape to reach for: when a pure predicate needs an IO-gathered second operand, first check whether the record already carries it.
+- **ARCH-PURPOSE — flag.** Shadow sweep on "who infers auth state": dispatch derives from the management API ✓; `:ParleyProxy models` derives, on the right axis ✓; all three hand-maintained restatements of the disproved empty-list inference are corrected ✓. But the issue's Done-when enumerates three recoverable failures — proxy down, **stale in-memory auth**, transient — and the middle one is not delivered (C1); its atlas row and plan row assert a repair that cannot fire. Second: prevention was the *point* of M3, and the only operator-facing lever, `:ParleyProxy reap`, ships undiscoverable (I1). Both are the deferred-purpose pattern, not separable follow-ups.
+- **ARCH-MOCK — flag.** The `--error-mode`/`_once` work is genuinely good: captured 7.1.71 bodies over the boundary production uses. The failure is on the field the ladder branches on. The fake models `modtime` *faithfully* (`os.path.getmtime(path)` per request, matching the binary I probed) — and the test reached past it with a `state.json` override to manufacture a value the real dependency cannot produce. That is the ARCH-MOCK anti-pattern in its subtlest form: a faithful fake, defeated by a fixture. Two conformance assertions would have caught it: that `modtime` equals the on-disk mtime, and that `updated_at` does not advance when only mtime does.
+- **Plan-gate carry-forward:** `workshop/plans/000197-cliproxy-auth-self-healing-plan-gate.md` `## Open findings` reads "(none — every finding has been disposed)" — verified on disk. PQ-5 was the item deferred into M2; it is delivered and on the right axis. Nothing to carry.
+- **Prior-review carry-forward:** M2 round 2's plan-revision recommendations #1–#4 have **no** Revisions entry (the plan's only M2 block, `:553`, corresponds to round 1). Round 1's recommendation #1 — the `expired` row — has now survived two reviews.
+- **Core concepts cross-check:** every existing row verifies against the filesystem — `classify_response`/`classify_auth_files`/`diagnosis`/`decide`/`parse_peers` in `cliproxy_auth.lua` ✓, `resolve_channel` + `render` in `cliproxy_config.lua` ✓, `detect_auth_failure` and `check_auth_failure` absent from `lua/` ✓ (only historical comments remain), `_failure_notice` in `chat_respond.lua` ✓. All PURE rows run without IO. The table is *incomplete*, not wrong: `credential_action`, `rfc3339_sec`, `healthier`, `channels_for_login` (M2) and `restart_managed`, `credential_health_for_login`, `peers`, `reap`, `callback_port_blocked`, `await_credential`, `run_login` (M3) have no rows.
+- **For the close:** `stop()` now has four callers and `peers()` two; before a fifth appears, the port-release discipline and the `ps`/`lsof` cost both want to be behind one seam.
+
+## 7. Plan revision recommendations
+
+Append to `workshop/plans/000197-cliproxy-auth-self-healing-plan.md` `## Revisions`:
+
+1. **Record what `modtime` actually is, and which field carries load time.** Task 9 Step 3 and the `decide` table both describe "auth file newer than the proxy's copy" as if the record's `modtime` were the loaded copy's timestamp. Verified against the binary: `modtime` is the file's mtime re-stat'd per request, and `updated_at` is when the proxy loaded the credential (probe evidence in C1). Record the corrected staleness definition, that it is computed entirely from the record (no `fs_stat`, so it leaves the repair budget), and that `updated_at` joins `REQUIRED_FIELDS` in the conformance spec.
+2. **The `decide` table's `expired` row still contradicts the code** (`:421`: `| expired | true | any | any | prompt_login |`). The shipped policy retries on `healthy` — deliberately — and reports on `unknown`. Recommended in M2 round 1 and again in round 2; correct the row or record why it stands.
+3. **Add Core-concepts rows for the entities M2 and M3 introduced** — `credential_action`, `rfc3339_sec`, `healthier`, `channels_for_login`, `restart_managed`, `credential_health_for_login`, `peers`, `reap`, `callback_port_blocked`, `await_credential`, `run_login` — with kind/location/status/milestone, so the next reviewer's table-vs-filesystem cross-check sees the real surface. (Round 2's recommendation #2, undone.)
+4. **State the anti-fabrication rule for fake-backed tests.** The restart rung's test overrode a field the fake derives from real state. Record that a test may not override a `state.json` field the fake computes live — if a state can't be produced, that is the finding, not the fixture.
+5. **Correct the compound-budget claim.** Task 5 / the atlas say the 404-repair→`restart` composition is "made unreachable"; the guard is reset by the repair's own second read before the decision is taken (I7). Record either the per-claim latch or the compound worst case as a budgeted term.
+6. **Name `reap` as user-facing surface.** Task 14 Step 3 stops at the command's behavior; add `SUBS_HELP` registration (the completion + help single source) and the README subcommand list to the task, so the Docs update gate has something to check against.
