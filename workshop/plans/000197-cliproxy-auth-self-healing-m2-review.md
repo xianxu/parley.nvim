@@ -1034,3 +1034,47 @@ Append to `workshop/plans/000197-cliproxy-auth-self-healing-plan.md` `## Revisio
 4. **Record `google`'s login status.** `LOGIN_FLAGS.google = "-login"` predates this issue and does not exist on 7.2.110. Either record what the current release uses for Google, or record that the provider is unsupported on ≥7.2 and that `login_providers()` must reflect that — otherwise completion keeps advertising a login that cannot run.
 5. **Record the latch's arming contract.** Task 14 says the warning fires once per session; the shipped guard arms only when `peers()` returns normally (I1). State that the latch is armed unconditionally around the scan — including when it raises — and that the zero-peer *and* raising paths are both tested, since the healthy machine is the one the operator lives in after `reap`.
 6. **Tick what shipped.** 1 of 56 checkboxes is ticked while M1/M2/M3 are all `[x]` in the issue. The plan is the greppable record of what was built; at 1/56 the next reviewer's traceability pass is meaningless.
+
+---
+
+## Re-review — 2026-08-01T13:55:29-07:00 (unknown)
+
+| field | value |
+|-------|-------|
+| issue | 197 — cliproxy auth failures must self-heal: detect, diagnose, recover |
+| repo | parley.nvim |
+| issue file | workshop/issues/000197-cliproxy-auth-self-healing.md |
+| boundary | milestone M2 |
+| milestone | M2 |
+| window | 819a781a71859450cb5f22aa6940d9213004bb70..HEAD |
+| command | sdlc milestone-close --issue 197 --milestone M2 |
+| reviewer | claude |
+| timestamp | 2026-08-01T13:55:29-07:00 |
+| verdict | unknown |
+
+## Review
+
+I'll start by verifying the current state of the repo and the artifacts.
+API Error: Connection closed mid-response. The response above may be incomplete.
+
+---
+
+## Re-review — 2026-08-01T14:15:17-07:00 (unknown)
+
+| field | value |
+|-------|-------|
+| issue | 197 — cliproxy auth failures must self-heal: detect, diagnose, recover |
+| repo | parley.nvim |
+| issue file | workshop/issues/000197-cliproxy-auth-self-healing.md |
+| boundary | milestone M2 |
+| milestone | M2 |
+| window | 819a781a71859450cb5f22aa6940d9213004bb70..HEAD |
+| command | sdlc milestone-close --issue 197 --milestone M2 |
+| reviewer | claude |
+| timestamp | 2026-08-01T14:15:17-07:00 |
+| verdict | unknown |
+
+## Review
+
+API Error: Connection closed mid-response. The response above may be incomplete.
+API Error: Connection closed mid-response. The response above may be incomplete.
