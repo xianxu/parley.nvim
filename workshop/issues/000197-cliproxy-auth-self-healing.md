@@ -360,7 +360,44 @@ Discoveries worth keeping:
   like nil, `management.key` created 0600 rather than chmod-after-open, banner
   width, and an empty scratch chat dropped from the window.
 
-Verification: `cliproxy_auth_spec` 28, `cliproxy_config_spec` 42,
+**Boundary review round 2: REWORK.** Two more Criticals, both invisible to
+round 1 because every fixture used `claude`:
+
+- **C1 — channel vs login-provider namespace.** `recover` queried credential
+  health with a LOGIN PROVIDER where a cliproxy CHANNEL is required. They
+  coincide only for claude; `gemini`/`gemini-cli`/`aistudio` all collapse to
+  `google`, while `/v0/management/auth-files` reports the channel. A **healthy**
+  gemini-cli credential therefore read as `missing` and prompted a spurious
+  login — fabricating the state this issue exists to report honestly, and
+  breaking the Done-when "only a genuinely dead credential prompts". Fixed with
+  a pure `resolve_channel` as the single model→channel source, from which
+  `resolve_login_provider` derives; when no channel resolves parley reports
+  `unknown_channel` instead of defaulting to `claude` and reporting another
+  account's health.
+- **C2 — the repair killed proxies parley doesn't manage.** `credential_health`
+  called `stop()` unconditionally; `stop()` reaps whoever holds the port and
+  `ensure_running` doesn't spawn when unmanaged, so a user on `manage = false`
+  would have their own proxy killed and left dead — and round 1's I2 fix made it
+  repeat on the next failure. Now gated on `is_managed()`.
+- **I1** cliproxy wraps Go errors with `%q`, so its messages contain escaped
+  quotes and the naive capture stopped at the first one, degrading the diagnosis
+  to the fragment `Post \` — the naked-fragment notice this issue set out to
+  remove. **I2** the retry re-ran `format_headers` on a payload whose route
+  marker the first attempt had consumed, so an anthropic-routed claude request
+  would retry against the OpenAI-shaped endpoint; per-attempt snapshot now.
+  **I3** the "bounded 3s" port wait counted only sleeps, not the 2s curl probes,
+  so it could run ~43s — past the dispatcher's own 15s backstop. **I4** docs
+  corrected in both places. **I5** added the gemini-cli fixture and three
+  non-claude cases whose absence let C1 ship.
+
+Verification (round 2): `cliproxy_auth_spec` 29, `cliproxy_config_spec` 46,
+`dispatcher_query_spec` 56, `cliproxy_auth_login_spec` 13,
+`cliproxy_lifecycle_spec` 45, `failure_notice_spec` 6,
+`providers_pre_query_spec` 6, `chat_respond_spec` 66, `cliproxy_dispatch` 3,
+`cliproxy_command` 6, `cliproxy_caller_teardown` 5, `cliproxy_conformance` 2
+(real 7.1.71). `make lint` 0/0 across 310 files.
+
+Verification (round 1): `cliproxy_auth_spec` 28, `cliproxy_config_spec` 42,
 `dispatcher_query_spec` 55 (12 new for the claim contract, incl. the backstop
 timer, anti-double-fire, and a throwing hook), `cliproxy_lifecycle_spec` 44,
 `cliproxy_auth_login_spec` 10 (rewritten against `recover`),
