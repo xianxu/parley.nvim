@@ -493,3 +493,28 @@
   The recovery backstop vs repair-budget relationship was re-opened by two
   successive reviews because it lived only in prose that said "re-check the
   other". Rule: express the terms as data and assert the inequality in a spec.
+- **A parser tested against itself is untested.** #197's RFC3339 parser was a
+  full day off for every date in a leap year, and every staleness test passed —
+  because each supplied the "disk" side as the parser's own output, so a
+  systematic offset cancelled on both sides. Rule: date/number parsers get at
+  least one assertion against an **external oracle** (absolute expected values
+  computed elsewhere), plus the boundary cases the algorithm branches on (leap
+  years, epoch, century/400-year rules).
+- **Two rungs that end in the same call are indistinguishable to tests.** The
+  `restart` and `retry` recovery rungs both finished with `retry()`, so a bug
+  that made `restart` fire on every healthy failure — SIGTERMing a shared daemon
+  — was invisible to integration and e2e alike. Rule: when branches converge on
+  one observable outcome, assert on the branch's *side effect* (here: that
+  `stop()` was not called), not just the outcome.
+- **Prefix-matching a name against a namespace with hierarchical members is a
+  bug waiting for the member to exist.** Globbing `<channel>-*.json` made
+  `gemini` match `gemini-cli`'s credential file. Rule: when the source of truth
+  already names the exact resource (the management record carries `path`), carry
+  it through rather than reconstructing it from a naming convention.
+- **`SO_REUSEADDR` makes a bind probe a liar.** Preflighting a port by binding it
+  reports "free" while another socket is actively listening — precisely the case
+  the preflight exists to catch. Rule: to detect a listener, *connect*.
+- **A budget in a comment drifts; a budget summed from a hand-written table also
+  drifts.** Three successive reviews re-opened the same timeout relationship.
+  Rule: derive the terms from the constants the code actually uses, and assert
+  the inequality — then the table cannot be right while the code is wrong.

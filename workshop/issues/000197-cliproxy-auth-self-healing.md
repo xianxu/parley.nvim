@@ -214,7 +214,7 @@ Durable plan: `workshop/plans/000197-cliproxy-auth-self-healing-plan.md`
 
 - [x] M1 — Diagnose: pure classification vocabulary + management channel
 - [x] M2 — Recover: pure recovery policy + retry seam in the dispatcher
-- [ ] M3 — Prevent: stale-proxy reaping + login-flow robustness
+- [x] M3 — Prevent: stale-proxy reaping + login-flow robustness
 
 ## Revisions
 
@@ -300,6 +300,44 @@ safe when nothing was streamed (`qt.response == ""`) or it duplicates buffer
 content.
 
 ## Log
+
+### 2026-08-01 — M3 (Prevent) + M2 review rework
+
+**M3.** `parse_peers` matches on the executable, never a substring — the real
+`ps` fixture contains a `zsh -c` wrapper quoting the proxy path, and substring
+matching would SIGTERM the operator's shell — and on **both** binary names, the
+omission that made this issue's own survey undercount (5 leaked proxies, not 4;
+verified live: `peers()` finds 6, correctly excluding the managed one).
+`ensure_running` warns once per session naming the rotation mechanism rather
+than a bare count; `:ParleyProxy reap` stops them; `stop()` no longer leaks
+parley-spawned proxies on non-managed ports.
+
+Login is finally observable: callback-port preflight by **connect** (libuv sets
+`SO_REUSEADDR`, so a bind probe reports "free" for exactly the case it must
+catch), the authorize URL captured and surfaced, the job kept off a closable
+terminal buffer, and the outcome reported — success with the account, a non-zero
+exit with stderr, or a bounded timeout. That is the dead end from ## Problem §5.
+
+**M2 boundary rework.** C1: `rfc3339_sec` counted year Y's own leap day, so every
+date in a leap year was a full day ahead and the staleness comparison would go
+permanently false from 2028 — the same defect as round 1's C1, moved from the
+timezone axis to the calendar axis, and green because the tests compared the
+parser to itself. I2: the credential-file glob prefix-matched, so `gemini` read
+`gemini-cli`'s file; the proxy names the exact path, so carrying it deletes the
+mapping. I1: the compound repair+restart path (~28s) is now unreachable rather
+than budgeted, and the terms derive from the constants each step uses. I3:
+`rfc3339_sec` is total, so proxy-supplied garbage cannot throw inside the async
+callback where nothing would settle the claim. I4/I5: docs de-duplicated; the
+healthy path now asserts `stop()` is **not** called — the one line that would
+have failed the day C1 landed.
+
+Verification: `cliproxy_auth_spec` 55, `cliproxy_config_spec` 46,
+`cliproxy_budget_spec` 2, `dispatcher_query_spec` 56, `failure_notice_spec` 6,
+`providers_pre_query_spec` 6, `cliproxy_lifecycle_spec` 49,
+`cliproxy_command_spec` 10, `cliproxy_auth_login_spec` 19,
+`cliproxy_recovery_e2e_spec` 4, `cliproxy_login_spec` 8,
+`cliproxy_conformance_spec` 3 (real 7.1.71), `cliproxy_dispatch` 3,
+`cliproxy_caller_teardown` 5. `make lint` 0/0 across 313 files.
 
 ### 2026-08-01 — M2 (Recover)
 
