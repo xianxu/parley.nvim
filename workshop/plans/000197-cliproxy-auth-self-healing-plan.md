@@ -422,7 +422,7 @@ Outcome: recoverable failures repair themselves and the query retries; only a de
 | `quota` / `model_unavailable` | – | – | – | `report` |
 | any | – | – | ≥1 | never `retry`/`restart`/`start` |
 
-- [ ] **Step 1: One test per row**, plus the anti-loop property: loop every `kind` × every `health.state` at `attempt = 1` and assert the action is always in `{prompt_login, report}`.
+- [x] **Step 1: One test per row**, plus the anti-loop property: loop every `kind` × every `health.state` at `attempt = 1` and assert the action is always in `{prompt_login, report}`.
 - [ ] **Step 2: Run and watch them fail.**
 - [ ] **Step 3: Implement** — `proxy_state` is `{running, auth_file_modtime, record_modtime}`; the staleness comparison is a string compare on RFC3339 timestamps only when both are present, else treat as not-stale (never guess).
 - [ ] **Step 4: Run tests. Step 5: Commit** — `cliproxy: #197 M2: decide recovery as a pure policy`
@@ -549,6 +549,32 @@ the plan needed corrections so M2 isn't built on the same assumptions.
    **M2**, not M1.
 5. **Corrected a stale claim**: `classify_response` is consumed by the IO shell
    too — `recover` calls it synchronously to make the claim decision cheap.
+
+### 2026-08-01 — after M2 boundary review (REWORK → applied)
+
+1. **Staleness is a normalization, not a string compare.** The plan instructed
+   "a string compare on RFC3339 timestamps only when both are present" — valid
+   only if both sides carry the same offset, which the shell cannot guarantee.
+   Both timestamps are now normalized to epoch seconds at the IO seam
+   (`uv.fs_stat().mtime.sec` on disk; `cliproxy_auth.rfc3339_sec` parses the
+   proxy's offset-bearing, fractional-second form), and `proxy_state` carries
+   `auth_file_modtime` compared against `health.modtime` — the plan's
+   `record_modtime` field never existed.
+2. **A third axis exists.** M1 round 2 named channel vs login provider;
+   `:ParleyProxy models` revealed a third — the model-owning provider set
+   (`providers()`), which coincides with the channel for five of six values and
+   not for `google`. `channels_for_login` derives the inverse from
+   `CHANNEL_LOGIN`, and `credential_health_for_login` reads every channel a login
+   serves, keeping the healthiest.
+3. **Task 12 shares policy via `credential_action`,** not via `decide` (which
+   needs a verdict the command has no way to produce). Both consumers now agree
+   on what `error` means.
+4. **The repair budget covers the whole claimed path** — including `recover`'s
+   pre-flight liveness probe and the `start`/`restart` rung, neither of which
+   existed when Task 5 itemized it — and is asserted by `cliproxy_budget_spec`
+   rather than restated in a comment that says "re-check the other".
+5. **Task 10's exhaustive-action spec is delivered**, driving every `decide`
+   action through `recover` and asserting exactly one settle each.
 
 ## Notes for the implementer
 

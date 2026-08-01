@@ -326,7 +326,40 @@ Task 12 removed the last hand-maintained `"empty model list ⇒ not authenticate
 inference (`:ParleyProxy models`) — the exact inference this issue disproved. An
 authenticated-but-empty provider is now told to check its catalog, not its login.
 
-Verification: `cliproxy_auth_spec` 43 (14 new for `decide`),
+**Boundary review: REWORK → applied.** Two Criticals, both of a class this
+issue had already fixed once:
+
+- **C1 — timestamp representations.** The staleness check compared a UTC `…Z`
+  string against cliproxy's local-offset RFC3339 with a plain `>`. The same
+  instant is `…T18:35:01Z` and `…T11:35:01-07:00`; `"Z" > "-"` is true. So the
+  `restart` rung fired on *every* healthy-credential failure for any operator
+  west of UTC — SIGTERMing a possibly-shared `brew services` daemon instead of
+  the silent retry the atlas promises — and was unreachable east of it. Both
+  sides are epoch seconds now. **The unit tests used `-07:00` on both sides**:
+  the exact degenerate-fixture trap `lessons.md` records from M1's C1, walked
+  into again while the rule was on the page.
+- **C2 — a third axis.** `:ParleyProxy models google` read health on the
+  model-owning-provider axis where the channel axis is required, so a healthy
+  gemini-cli account read as "no credential" and prompted a login — in the commit
+  claiming to delete that fabrication. `channels_for_login` derives the inverse
+  from `CHANNEL_LOGIN` rather than adding a third hand-maintained table.
+- **I1** the `restart` rung retyped `stop → ensure` without the port-release wait
+  an existing helper had (comment included); one `restart_managed` now serves
+  both. **I2** the models command carried its own policy that disagreed with
+  `decide` on `error`; both share `credential_action`. **I3** atlas + two
+  docstrings still asserted the deleted inference. **I4** the budget now covers
+  the whole claimed path and is asserted by `cliproxy_budget_spec`. **I5** the
+  Task-12 stubs discarded the channel argument, making C2 unobservable by
+  construction. **I6** the e2e asserted only the absence of a prompt, never that
+  the answer arrived — the fake grew `_once` transient modes so it can.
+
+Verification (post-rework): `cliproxy_auth_spec` 46, `cliproxy_config_spec` 46,
+`cliproxy_budget_spec` 2, `dispatcher_query_spec` 56, `cliproxy_lifecycle_spec` 45,
+`cliproxy_command_spec` 10, `cliproxy_auth_login_spec` 17,
+`cliproxy_recovery_e2e_spec` 4, `cliproxy_conformance_spec` 3 (real 7.1.71).
+`make lint` 0/0 across 312 files. Five more rules in `workshop/lessons.md`.
+
+Verification (pre-rework): `cliproxy_auth_spec` 43 (14 new for `decide`),
 `cliproxy_auth_login_spec` 16, `cliproxy_recovery_e2e_spec` 4,
 `cliproxy_command_spec` 9 (3 new for Task 12), `dispatcher_query_spec` 56,
 `cliproxy_lifecycle_spec` 45, `cliproxy_dispatch` 3, `cliproxy_caller_teardown` 5.
