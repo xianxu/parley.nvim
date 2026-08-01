@@ -331,10 +331,40 @@ Discoveries worth keeping:
   (Jun 12, config deleted). The earlier count missed it because its process name
   is `cliproxyapi`, not `cli-proxy-api` — M3's `parse_peers` must match both.
 
+**Boundary review round 1: REWORK.** One Critical, six Important — all real:
+
+- **C1 (regression I introduced).** The diff deleted the `pcall` guarding the old
+  auth hook and did not replace it at the new seam. `recover_query` runs
+  synchronously and touches the filesystem and `vim.system` before returning its
+  claim, so a throw skipped both `deliver()` and the backstop arming — and
+  tasker's `call_safely` swallows terminal errors, stranding the chat leg with
+  **no message at all**. Strictly worse than the pre-#197 behavior. Now guarded;
+  a hook that raised never claimed anything (J7b).
+- **I4** was the issue's own Done-when: `response is empty: body_bytes=215` was
+  still emitted, and *first*, because `finish_stdout` runs before the terminal
+  closure and cannot know the request failed. It now records the fact; only the
+  success branch reports it (J7c/J7d).
+- **I2**: the one-shot repair guard latched for the session despite a comment
+  claiming otherwise — it now clears on any successful lookup, bounding
+  *consecutive* attempts. **I3**: `stop()` returns before the proxy is gone and
+  real cliproxyapi shuts down gracefully, so the follow-up probe could see the
+  dying proxy and take `ensure_running`'s reuse branch, permanently spending the
+  one-shot; now waits for the port to be released. **I6**: restored the
+  `oauth-model-alias` guidance — the only thing telling an operator *why* no
+  login was offered.
+- **I1/I5** closed untested wiring: the adapter registration (deletable with
+  every other test still green) and the notice text, extracted as a pure
+  `chat_respond._failure_notice` so the user-visible last mile is testable.
+- Minors applied: `split_status` consolidated onto its two pre-existing
+  duplicates, `resolve_login_provider` derived once, `http_status == 0` treated
+  like nil, `management.key` created 0600 rather than chmod-after-open, banner
+  width, and an empty scratch chat dropped from the window.
+
 Verification: `cliproxy_auth_spec` 28, `cliproxy_config_spec` 42,
-`dispatcher_query_spec` 52 (9 new for the claim contract, incl. the backstop
-timer and anti-double-fire), `cliproxy_lifecycle_spec` 43,
-`cliproxy_auth_login_spec` 8 (rewritten against `recover`),
+`dispatcher_query_spec` 55 (12 new for the claim contract, incl. the backstop
+timer, anti-double-fire, and a throwing hook), `cliproxy_lifecycle_spec` 44,
+`cliproxy_auth_login_spec` 10 (rewritten against `recover`),
+`failure_notice_spec` 6, `providers_pre_query_spec` 6, `chat_respond_spec` 66,
 `cliproxy_conformance_spec` 2 green **against the real 7.1.71 binary**.
 `make lint` 0/0 across 309 files.
 
