@@ -302,6 +302,7 @@ content.
 ## Log
 
 ### 2026-08-01 — M1 (Diagnose)
+- 2026-08-01: closed M1 — Round-2 rework complete. C1 (channel vs login-provider namespace: healthy gemini-cli credential read as missing and prompted a spurious login) fixed via pure resolve_channel as single model->channel source; no "claude" default. C2 (404 repair killed unmanaged proxies) gated on is_managed(), with a spec asserting an unmanaged proxy survives. I1 escaped-quote message decode, I2 per-attempt payload snapshot, I3 wall-clock port-release bound, I4 docs corrected, I5 gemini-cli fixture + 3 non-claude recover cases. Green: cliproxy_auth 29, cliproxy_config 46, dispatcher_query 56, cliproxy_auth_login 13, cliproxy_lifecycle 45, failure_notice 6, providers_pre_query 6, chat_respond 66, cliproxy_dispatch 3, cliproxy_command 6, cliproxy_caller_teardown 5, cliproxy_conformance 2 (REAL 7.1.71). make lint 0/0 across 310 files.; review verdict: FIX-THEN-SHIP
 
 Shipped Tasks 1–7. `cliproxy_auth.lua` is new and pure: `classify_response`
 (status-gated pattern table), `classify_auth_files` (the one interpreter of
@@ -389,6 +390,27 @@ round 1 because every fixture used `claude`:
   so it could run ~43s — past the dispatcher's own 15s backstop. **I4** docs
   corrected in both places. **I5** added the gemini-cli fixture and three
   non-claude cases whose absence let C1 ship.
+
+**Boundary review round 3: FIX-THEN-SHIP.** No Criticals. Three Important, fixed
+in the close commit per the #174 protocol:
+
+- **I1** — `vim.cmd` was unguarded between the prompt-flag reset and `done()`, so
+  a raising `:ParleyProxy login` (constrained layout / a user `TermOpen` autocmd)
+  stranded the claim; 15s later the backstop replaced the diagnosis parley had
+  just displayed with "recovery timed out". Guarded, and pinned by a test that
+  throws from the login command.
+- **I2** — the conformance spec never pinned the 404-without-key behavior the
+  *entire* repair branches on. If a future cliproxy registered the route
+  unconditionally, the fake would keep returning 404, every test would stay green,
+  and the repair would silently never fire in production. Now asserted against
+  the real binary.
+- **I3** — the repair's worst case (≤16s) exceeded the dispatcher's own 15s
+  backstop, so a slow repair would be declared timed-out one second before
+  succeeding. The budget is now itemized in a comment, the port wait trimmed to
+  2s (≤15s total), and the backstop raised to 25s with the relationship stated.
+
+Lessons recorded in `workshop/lessons.md` (7 rules, incl. the degenerate-fixture
+trap that let C1 through and the live-credential hazard in binary discovery).
 
 Verification (round 2): `cliproxy_auth_spec` 29, `cliproxy_config_spec` 46,
 `dispatcher_query_spec` 56, `cliproxy_auth_login_spec` 13,

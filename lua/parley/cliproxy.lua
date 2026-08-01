@@ -344,8 +344,10 @@ local function wait_port_released(host, port, secret, cb)
     -- with --max-time 2, so counting only the defer interval would let this run
     -- ~43s — past the dispatcher's 15s recovery backstop, which would have
     -- already told the chat leg "timed out" while this kept mutating proxies.
-    -- Same shape poll_until_healthy uses.
-    local deadline = uv.now() + 3000
+    -- Same shape poll_until_healthy uses. 2s, not 3s: this step is one term in
+    -- the repair budget that must stay under dispatcher.recovery_timeout_ms —
+    -- see the REPAIR BUDGET note above credential_health.
+    local deadline = uv.now() + 2000
     local function poll()
         M.health_probe(host, port, secret, function(state)
             if state == "down" or uv.now() >= deadline then
@@ -360,6 +362,20 @@ end
 --- Credential health WITH the one repair parley can make unattended: a proxy
 --- that booted before the management key existed answers 404, and restarting it
 --- into the freshly rendered config is both safe and silent.
+---
+--- REPAIR BUDGET — this path must finish inside the dispatcher's
+--- `recovery_timeout_ms` backstop, or the backstop spends the claim's one-shot
+--- and the operator is told "recovery timed out" even though parley repaired
+--- the proxy and computed a correct diagnosis. Worst case, in order:
+---   auth_files curl        ≤2s  (--max-time 2)
+---   stop() identity probe  ≤2s  (blocking port_holds_cliproxy)
+---   wait_port_released      2s  (wall-clock bounded)
+---   ensure_running probe   ≤2s
+---   poll_until_healthy      5s  (POLL_BUDGET_MS)
+---   second auth_files curl ≤2s
+---                        = ≤15s, against a 25s backstop.
+--- Change either number and re-check the other; they are related by design, not
+--- by luck.
 ---
 --- Restarts at most once per consecutive run of 404s (the guard clears on any
 --- successful lookup). A second consecutive 404 is reported rather than retried, so a proxy that 404s for some other reason cannot become a restart
@@ -716,7 +732,16 @@ local function prompt_login(login, message, done)
             function(_, idx)
                 _login_prompt_active = false
                 if idx == 1 then
-                    vim.cmd(prefix .. "Proxy login " .. login)
+                    -- Guarded: :ParleyProxy login opens a window and jobstarts a
+                    -- terminal, so a constrained layout (E36) or any user
+                    -- BufNew/TermOpen autocmd that errors would propagate out of
+                    -- this callback and skip done() — stranding the claim until
+                    -- the dispatcher's backstop replaces the diagnosis we just
+                    -- showed with "recovery timed out".
+                    local cmd_ok, cmd_err = pcall(vim.cmd, prefix .. "Proxy login " .. login)
+                    if not cmd_ok then
+                        logger.error("cliproxy: login command failed: " .. tostring(cmd_err))
+                    end
                 end
                 done()
             end)

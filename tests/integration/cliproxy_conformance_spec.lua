@@ -58,7 +58,7 @@ describe("cliproxyapi management API conformance", function()
     -- Boot a real cliproxyapi against a THROWAWAY auth-dir holding a
     -- FABRICATED credential (see the safety note at the top). Returns
     -- port, mgmt_key.
-    local function boot()
+    local function boot(omit_management)
         local auth_dir = vim.fn.tempname()
         vim.fn.mkdir(auth_dir, "p")
         vim.fn.writefile({ vim.json.encode({
@@ -75,13 +75,16 @@ describe("cliproxyapi management API conformance", function()
         port = free_port()
         mgmt_key = cliproxy.management_key()
         local cfg_path = vim.fn.tempname() .. ".yaml"
-        vim.fn.writefile({ vim.json.encode({
+        local conf = {
             host = "127.0.0.1",
             port = port,
             ["auth-dir"] = auth_dir,
             ["api-keys"] = { "conformance" },
-            ["remote-management"] = { ["secret-key"] = mgmt_key, ["disable-control-panel"] = true },
-        }) }, cfg_path)
+        }
+        if not omit_management then
+            conf["remote-management"] = { ["secret-key"] = mgmt_key, ["disable-control-panel"] = true }
+        end
+        vim.fn.writefile({ vim.json.encode(conf) }, cfg_path)
 
         local handle, pid = uv.spawn(binary, { args = { "-config", cfg_path } }, function() end)
         assert(handle, "failed to spawn the real cliproxyapi")
@@ -128,6 +131,21 @@ describe("cliproxyapi management API conformance", function()
         local health = ca.classify_auth_files(decoded.files, "claude")
         assert.is_not_nil(health.state)
         assert.equals("conformance@example.invalid", health.account)
+    end)
+
+    it("404s the management route when no secret-key is configured", function()
+        if not binary then
+            print("SKIP: no cliproxyapi binary discoverable — conformance not verified")
+            return
+        end
+        -- The ENTIRE unattended repair branches on this 404 meaning "the running
+        -- proxy predates the key" (credential_health). The fake models it; if a
+        -- future cliproxy registers the route unconditionally and 401s instead,
+        -- every test would stay green while the repair silently never fires.
+        boot(true) -- no remote-management block
+        local reached, _body, code = get(mgmt_key)
+        assert.is_true(reached)
+        assert.equals("404", code)
     end)
 
     it("rejects the api-key bearer on the management route", function()

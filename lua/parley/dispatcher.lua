@@ -18,7 +18,13 @@ local D = {
 	-- it (#197). A backstop, not a design element: every recovery path is
 	-- expected to call retry()/give_up() itself. Overridable so specs can drive
 	-- the timeout without sleeping.
-	recovery_timeout_ms = 15000,
+	--
+	-- 25s because it must exceed the slowest legitimate recovery, not merely
+	-- feel short: cliproxy's management-route repair has a ≤15s worst case
+	-- (itemized above `credential_health` in cliproxy.lua). If the backstop
+	-- fired first it would spend the claim's one-shot and replace a correct
+	-- diagnosis with "recovery timed out".
+	recovery_timeout_ms = 25000,
 }
 
 ---@param opts table #	user config

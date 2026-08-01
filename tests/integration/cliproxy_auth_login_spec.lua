@@ -318,6 +318,29 @@ describe("cliproxy.recover", function()
         assert.matches("unreachable", out.message)
     end)
 
+    it("settles with the diagnosis even when the login command raises", function()
+        -- :ParleyProxy login opens a window and jobstarts a terminal, so a
+        -- constrained layout or a user autocmd can throw. Unguarded, that skips
+        -- done(), and the dispatcher's backstop later replaces the diagnosis
+        -- parley just showed with "recovery timed out".
+        serve({ claude = { unavailable = true, status_message = "token revoked" } })
+        vim.ui.select = function(_i, _o, cb) cb(nil, 1) end -- "Log in"
+        local saved_cmd = vim.cmd
+        vim.cmd = function(c)
+            if type(c) == "string" and c:find("Proxy login", 1, true) then
+                error("E36: Not enough room")
+            end
+            return saved_cmd(c)
+        end
+        local out = run({ http_status = 503, body = NO_AUTH, model = "claude-opus-4-8",
+            streamed = false, attempt = 0 })
+        vim.cmd = saved_cmd
+
+        assert.is_true(out.claimed)
+        assert.equals("give_up", out.settled)
+        assert.matches("revoked", out.message) -- the diagnosis, not a timeout
+    end)
+
     it("settles even when the operator dismisses the login prompt", function()
         serve({ claude = { unavailable = true, status_message = "dead" } })
         vim.ui.select = function(_i, _o, cb) cb(nil, 2) end -- "Not now"

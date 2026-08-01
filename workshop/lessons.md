@@ -416,3 +416,51 @@
   foldable streaming write, recreate only the active semantic model range;
   never clear the window's fold tree, and pin both the shrink and unrelated-fold
   preservation behavior in a real headless Neovim integration test.
+
+## 2026-08-01 (#197)
+
+- **A fixture set that only covers the case where two namespaces coincide cannot
+  catch confusing them.** #197 queried cliproxy credential health with a *login
+  provider* where a *channel* is required. The two are the same string for
+  `claude` and only for `claude` (`gemini`/`gemini-cli`/`aistudio` all collapse to
+  `google`), so a healthy credential read as "missing" and prompted a spurious
+  login — through 100+ green assertions, because every fixture used `claude`.
+  Rule: when two identifier spaces map many-to-one, the test set must include a
+  member where they *differ*; a passing suite over the degenerate case is no
+  evidence at all.
+- **When a refactor deletes a `pcall`, the replacement inherits the obligation.**
+  The old auth hook was called inside `pcall`; the new seam was not, and it runs
+  synchronously (filesystem + `vim.system`) before returning. A throw then
+  skipped both the error delivery and the timeout arming, and `tasker`'s
+  `call_safely` swallowed it — stranding the chat leg with no message, strictly
+  worse than the code replaced. Rule: grep the deleted call site for `pcall`/
+  `xpcall` before declaring a seam migration complete.
+- **A "claim" contract makes every early return a leak.** Once a hook signals it
+  owns a failure, the UI stays open until it settles. Rule: when a callback takes
+  ownership, audit *every* path out — including ones inside a `vim.ui.select`
+  callback, where a raising `vim.cmd` skips the settle — and pin it with a test
+  that throws from the riskiest step.
+- **Two timeouts on the same path must be related by construction, not by
+  eyeball.** The recovery backstop (15s) was shorter than the repair it guards
+  (≤16s worst case), so a slow repair would be declared timed-out one second
+  before succeeding, discarding a correct diagnosis. Rule: itemize the inner
+  budget in a comment, derive the outer from it, and note that changing one
+  requires re-checking the other.
+- **Don't log a condition on a shared path that cannot distinguish the cases.**
+  `finish_stdout` runs for successes *and* failures, so logging "response is
+  empty" there announced a misleading error ahead of every real diagnosis — the
+  exact symptom the issue existed to remove. Rule: record the fact where it is
+  observed, report it where the outcome is known.
+- **Broad error-matching patterns need a status gate, and the gate needs a
+  property test.** Patterns like `authentication_error` match ordinary assistant
+  prose — a chat *about* an auth bug would have popped a login dialog. Rule: gate
+  classification on a non-2xx status and pin it with `bodies × 2xx → nil`, not a
+  list of hand-picked cases.
+- **A test that spawns a real external binary can reach the operator's live
+  credentials.** `cliproxyapi` on `/opt/homebrew/bin` made `discover_binary` find
+  the real binary, and `ensure_running` spawned it with no `auth-dir` — i.e.
+  against `~/.cli-proxy-api`, starting a refresh loop on the operator's real
+  OAuth token (rotating refresh tokens; this is what broke the credential in the
+  first place). Rule: specs that exercise binary discovery must pin `PATH` to
+  system dirs, and any spec booting a real proxy must use a throwaway auth-dir
+  with a fabricated credential.

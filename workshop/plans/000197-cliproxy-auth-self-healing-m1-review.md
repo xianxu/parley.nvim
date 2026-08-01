@@ -288,3 +288,144 @@ Add a second `## Revisions` entry to `workshop/plans/000197-cliproxy-auth-self-h
 3. **Record the retry's payload contract.** Task 10's ladder calls `retry()`, and `format_headers` mutates the payload (`_parley_route`, `model`). Say the seam re-issues from a per-attempt payload snapshot (I2), or Task 10 will silently change the request it retries.
 4. **Give the Integration-points table a milestone column,** as the Core-concepts table now has. `peers`/`reap` and the hardened `login` are M3 and the fake's login modes are M3, but all four are listed as plain new/modified — the same cross-check problem the last revision fixed for pure entities.
 5. **Correct one stale line:** `classify_response` is described as "Consumed by `decide`; never by the IO shell directly", but the plan's own Task 6 has `cliproxy.recover` (the IO shell) call it synchronously to make the claim cheap. Reword to reflect the shipped design.
+
+---
+
+## Re-review — 2026-08-01T10:59:15-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 197 — cliproxy auth failures must self-heal: detect, diagnose, recover |
+| repo | parley.nvim |
+| issue file | workshop/issues/000197-cliproxy-auth-self-healing.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | 1bbe3050ddd7e4a3193bc7691f51ca1168b27a32^..HEAD |
+| command | sdlc milestone-close --issue 197 --milestone M1 |
+| reviewer | claude |
+| timestamp | 2026-08-01T10:59:15-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+All checks complete. Writing the review.
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+M1 now delivers its stated purpose, and both prior rounds' Criticals are genuinely fixed — I verified each against the code rather than the Log. The round-2 channel/login-provider defect is closed by a real single-source `resolve_channel` with non-claude fixtures that would have caught it; the unmanaged-proxy kill is gated on `is_managed()` with a spec asserting the operator's proxy survives; the unguarded-hook regression is guarded and pinned by J7b; `extract_message` decodes before falling back to the pattern; the retry snapshots the payload. I re-ran everything independently: `make test-spec SPEC=providers/cliproxy-managed` → 12 specs, **220 examples, 0 failed, 0 errors**, with the conformance spec really booting 7.1.71 (zero SKIP lines in the log); `make lint` → **0 warnings / 0 errors in 310 files**. I also confirmed the design's load-bearing assumption directly against the real binary: booted without a `remote-management.secret-key` it answers **404** on `/v0/management/auth-files` while `/v1/models` still returns 200 — so keying the repair off that 404 is correct. Nothing here is Critical. Two Important items remain, both cheap: **(I1)** I reproduced a claim that never settles — when the operator picks "Log in", `vim.cmd(...Proxy login...)` at `cliproxy.lua:719` is unguarded and sits *between* the flag reset and `done()`, so a raise skips `done()` entirely (probe: `claimed=true prompted=true settled=nil`), and the operator waits out the 15s backstop only to be handed "recovery timed out" in place of the diagnosis they just read. **(I2)** the live conformance check pins the 401-for-api-key case but not the 404-without-key case — the single signal the entire unattended repair is keyed on is modelled by the fake and verified by nobody.
+
+## 1. Strengths
+
+- **The round-2 C1 fix is structural, not a patch.** `resolve_channel` (`cliproxy_config.lua:161-177`) is now the one model→channel source and `resolve_login_provider` derives from it via `channel_login` — so the two namespaces can't drift apart again. `recover` prefers the body's `providers=` (`cliproxy.lua:764`) and, when nothing resolves, reports `unknown_channel` rather than defaulting to `claude`. The tests that would have caught the original bug now exist (`cliproxy_config_spec.lua` "coincides only for claude — the case that hid the bug"; the gemini-cli fixture in `cliproxy_auth_login_spec.lua:73-74`).
+- **`cliproxy_auth.lua` is honestly pure** (`lua/parley/cliproxy_auth.lua:1-220`) — no clock, no IO, no `vim.*` state. 29 unit tests, zero mocks. The `HEALTH_RANK` max-reduction is tested for order-independence *and* account attribution, and the PQ-2 property test (`cliproxy_auth_spec.lua:22-36`) is a genuine property over bodies × 2xx statuses, not a case list.
+- **The claim contract is implemented as specified, including the hard parts** (`dispatcher.lua:456-491`): one shared `tasker.once` behind both continuations, `pcall` around the hook with a raise normalised to "never claimed anything", the backstop that cannot double-fire, and `local function start_query` threaded as its own restart entry point. I traced the synchronous-`give_up` path (`auth_files`' `no_endpoint` branch calls `cb` inline) and confirmed it produces exactly one `on_error`.
+- **The I4 fix lands the issue's headline Done-when.** `finish_stdout` now *records* `qt.empty_response` (`dispatcher.lua:310-318`) and only the success branch reports it (`:495`). I verified the ordering is guaranteed, not incidental: `tasker.run`'s `maybe_finish` requires `stdout_done`, which is set in the same callback that drives `out_reader` to EOF — so `finish_stdout` always precedes the terminal.
+- **ARCH-MOCK is satisfied at the boundary that matters.** The fake serves the management route from a folder of credential JSONs plus a mutable `state.json` overlay (`tests/fixtures/fake_cliproxy:67-116`); production and test both reach it through `api_argv` + curl over HTTP; the safety note about never pointing the conformance spec at the operator's auth-dir is the right thing to have written down, and the PATH pin (`cliproxy_lifecycle_spec.lua:73-84`) closes the same hazard in the other direction.
+
+## 2. Critical findings
+
+None.
+
+## 3. Important findings
+
+**I1 — a claim can go unsettled on the login path: `vim.cmd` is unguarded between the flag reset and `done()`.** `lua/parley/cliproxy.lua:713-723`
+
+```lua
+_login_prompt_active = false
+if idx == 1 then
+    vim.cmd(prefix .. "Proxy login " .. login)   -- unguarded; done() is after it
+end
+done()
+```
+
+`recover`'s own docstring states "Every path below therefore ends in one of them", but this one doesn't when `vim.cmd` raises. `:ParleyProxy login` runs `vim.cmd("botright new")` + `jobstart(..., {term=true})` (`init.lua:428-431`), so a constrained window layout (E36) or *any* user `BufNew`/`TermOpen` autocmd that errors propagates out through `vim.ui.select` and out of the `vim.schedule` callback.
+
+Reproduced with a raising `ParleyProxy` command:
+```
+PROBE1 claimed=true prompted=true settled=nil
+  .../cliproxy.lua:719: in function 'cb'
+  .../cliproxy.lua:715: in function <.../cliproxy.lua:713>
+```
+
+Failure scenario: operator picks "Log in" → the command raises → `done()` never runs → the dispatcher's backstop fires 15s later with `settle("give_up", "cliproxyapi: recovery timed out")` → `_failure_notice` renders `parley: provider request failed (HTTP 401): cliproxyapi: recovery timed out`. The diagnosis parley correctly computed and just displayed in the prompt is discarded. On the exact path the issue is about. Blast radius is one query — `_login_prompt_active` is cleared before the raise, so later prompts still work (confirmed: `PROBE2 prompted=true settled=give_up`).
+
+Fix sketch: `pcall(vim.cmd, prefix .. "Proxy login " .. login)`, log the error, and call `done()` unconditionally — ideally in a way that survives a throw anywhere in the callback:
+```lua
+function(_, idx)
+    _login_prompt_active = false
+    if idx == 1 then
+        local ok, err = pcall(vim.cmd, prefix .. "Proxy login " .. login)
+        if not ok then logger.error("cliproxy: login command failed: " .. tostring(err)) end
+    end
+    done()
+end
+```
+Add a spec: a raising login command still settles the claim exactly once, with the diagnosis rather than the timeout message.
+
+**I2 — the live conformance check does not pin the 404-without-key behavior the whole repair is keyed on.** `tests/integration/cliproxy_conformance_spec.lua:106,133`
+
+The spec has exactly two tests: the field list, and "rejects the api-key bearer" (401). The fake models the *third* behavior — 404 when the config carries no `remote-management.secret-key` (`fake_cliproxy:148-152`) — and `credential_health`'s entire unattended repair branches on `reason == "no_management_route"` (`cliproxy.lua:371,378,388`). That behavior is asserted only in prose in the issue and the atlas.
+
+Failure scenario: a future cliproxy registers the route unconditionally and 401s (or 403s) without a key. The fake keeps returning 404, every test stays green, and in production the repair silently never fires — every diagnosis degrades to "could not read credential state (management_key_mismatch)" and the milestone's deliverable is quietly gone. This is precisely ARCH-MOCK's at-review lens: "a missing live conformance check for behavior we depend on."
+
+I confirmed the behavior is real *and* trivially pinnable — booting 7.1.71 against a keyless config and a throwaway auth-dir:
+```
+http=404          (management route, api-key bearer)
+http_nobearer=404
+models=200        (liveness unaffected)
+```
+Fix sketch: a third `it` in the conformance spec that boots with the `remote-management` block omitted and asserts `404` — the existing `boot()` only needs the block made optional.
+
+**I3 — the repair's worst-case wall clock exceeds the dispatcher's own 15s backstop, discarding the diagnosis it just computed.** `lua/parley/cliproxy.lua:348, 461, 396-403` vs `lua/parley/dispatcher.lua:20`
+
+Round 2's I3 fixed the ~43s case, but the budgets still don't add up to less than `recovery_timeout_ms`: `auth_files` curl (≤2s) + `stop()`'s blocking `port_holds_cliproxy` curl (≤2s) + `wait_port_released` (3s) + `ensure_running`'s probe (≤2s) + `poll_until_healthy` (`POLL_BUDGET_MS = 5000`) + the second `auth_files` (≤2s) = **≤16s**.
+
+Failure scenario: a slow-to-die proxy on a loaded machine → the backstop fires at 15s and spends the `once` → the repair completes a second later, reads healthy credential state, calls `give_up(diagnosis)` → no-op. The operator sees "recovery timed out" even though parley repaired the proxy and successfully diagnosed the failure. Fix: derive the repair's budget from `recovery_timeout_ms` (or raise the backstop above the repair's ceiling) so the two are related by construction rather than by coincidence, and state the relationship in a comment.
+
+## 4. Minor findings
+
+- `dispatcher.lua:491` — `deliver()` is still not once-guarded (carried from round 2). An adapter that calls `give_up()` and then returns falsy fires `on_error` twice. cliproxy never does this, so it's a contract-enforcement gap for future adapters; routing the fallthrough through `settle("give_up")` closes it.
+- `cliproxy.lua:802` — `channel or "claude"` is dead: the `if not channel` branch above returns. Leaving the defaulted string in place reads as if guessing is still possible.
+- `cliproxy.lua:687` — the section banner is 81 chars where every other rule in the file is 80 (carried unfixed from both prior rounds).
+- `cliproxy.lua:229-242` — `render_opts()` calls `management_key()`, which does `vim.fn.mkdir` + `io.open` on **every** call, and `render_opts` sits on `ensure_running` → every query. Memoize per data-dir, cleared by the existing `_set_data_dir` seam.
+- `cliproxy.lua:382` — `M.stop()` on the recovery path performs two blocking `vim.system():wait()` calls (curl `--max-time 2`, `lsof`) on the main loop, i.e. a UI stall on a chat failure.
+- `cliproxy.lua:342-358` and `:463-476` — two bounded-poll loops with the same shape and separate implementations (ARCH-DRY); one shared helper would prevent the deadline arithmetic diverging again.
+- `cliproxy_config.lua:163` — `resolve_channel` iterates `pairs()`, so a model listed under two channels (e.g. `gemini-2.5-pro` under both `gemini-cli` and `aistudio`, a realistic operator config) resolves nondeterministically across runs. The shipped default only has `claude`, so this is latent — but health is then read for an arbitrary one of the two.
+- `cliproxy_auth.lua:126-135` — a record with no `status` field is treated as `healthy`; a defensive `unknown` would be safer than assuming health (the conformance spec asserts `status` exists, but the classifier shouldn't depend on that).
+- `cliproxy_auth.lua:213-214` — `diagnosis` renders `tostring(verdict.message)` in the healthy branch, so a nil message yields "…looks healthy: nil".
+- `tests/integration/cliproxy_auth_login_spec.lua:117,119` — `vim.ui.select = saved_select` twice in `after_each`; and `parley.dispatcher.providers.cliproxyapi` is overwritten at `:85` and never restored (contained to the file by the per-file runner, but it's the leak class `workshop/lessons.md` documents).
+- `README.md:191` — the cliproxy bullet defers to the atlas, which is fully updated, but an operator on `manage = false` now needs a new config step (`remote-management.secret-key` in their own config) to get any diagnosis at all. One clause on that line would close it.
+
+## 5. Test coverage notes
+
+Verified independently rather than from the Log: 12 specs under `providers/cliproxy-managed` → **220 examples, 0 failed, 0 errors** (`cliproxy_config` 46, `dispatcher_query` 56, `cliproxy_lifecycle` 45, `cliproxy_auth` 29, `cliproxy_auth_login` 13, `failure_notice` 6, `providers_pre_query` 6, `conformance` 2, plus dispatch/command/teardown/download). Zero SKIP lines — the conformance spec genuinely booted the real binary. `make lint` → 0/0 in 310 files. The Log's round-2 counts match exactly.
+
+Gaps, in the order I'd close them:
+
+1. **No test drives `prompt_login` through a failing login command** (I1) — the one path where a claim escapes unsettled.
+2. **The 404-without-key case is fake-only** (I2). Ten lines in the conformance spec closes it, and I confirmed the assertion passes against 7.1.71 today.
+3. **No end-to-end path.** Every recover test hand-builds a `failure` table; nothing drives a failing cliproxy chat through `dispatcher.query` → `recover_query` → `on_error` → the chat notice. Correctly deferred to M2 Task 10/11 now that the plan moved the fake's chat-completions error modes there — but until then the three links that produce the user-visible outcome are only tested in isolation.
+4. **Repair-under-time-pressure** (I3) is unmodelled: the lifecycle specs use the instantly-dying Python fake, so the budget interaction with the backstop never appears.
+5. `management_key()`'s non-persistable branch (`cliproxy.lua:213-219`) and `auth_files`' `no_endpoint` branch (`cliproxy.lua:290-293` — the one path where `give_up` fires *before* `recover` returns its claim) are both untested. I hand-verified the latter produces exactly one `on_error`; a spec should hold that.
+
+The fixture-tie test (`cliproxy_auth_spec.lua:206-215`, classifying the captured 7.1.71 payload) remains the best pattern in this diff — it stops the hand-written `rec()` helper drifting from the real schema. Worth replicating for M2's `decide`.
+
+## 6. Architectural notes for upcoming work
+
+- **ARCH-DRY — pass, with two small carries.** The consolidations that were the point are real and verified: `api_argv` is the single request shape across four call sites, `split_status` absorbed both pre-existing regex copies (`classify`, `list_models`), and `resolve_login_provider` now derives from `resolve_channel` rather than being a parallel namespace. Remaining: the two bounded-poll loops, and `render_opts`'s per-call key read.
+- **ARCH-PURE — pass.** `cliproxy_auth.lua` holds the reasoning, `cliproxy.lua` gathers and executes, and the pure tests need no mocks. The carry-forward the plan already records still stands and is now the single most important thing for M2: `needs_human` (`cliproxy.lua:780-786`) is decision logic living in the IO shell. It must move inside `decide` when Task 9 lands, or M2 ships with two policy owners.
+- **ARCH-PURPOSE — pass with a tracked deferral.** Shadow sweep over "who infers auth state": the dispatch path derives from the management API ✓; `detect_auth_failure`/`check_auth_failure` are gone with no live callers (grepped `lua/ tests/ atlas/ README.md` — only historical comments) ✓; `classify()`'s `needs_login` is consumed purely as liveness at `cliproxy.lua:472,502,560`, never as an auth claim ✓. Two hand-maintained restatements of the disproved inference remain — `init.lua:408-419` ("empty list ⇒ not authenticated") and its docstring twin at `cliproxy.lua:811-813` — both legitimately scheduled as M2 Task 12 (PQ-5). Until that lands the codebase asserts two contradictory things about auth state; it must not survive M2.
+- **ARCH-MOCK — flag (I2).** Stateful fake behind the same HTTP boundary, portable file-backed credential store, production and test sharing `api_argv`, and a live conformance check that really runs. The gap is that the conformance surface is narrower than the fake's: the fake models 404-without-key and 200/401, the live check pins only 200-fields and 401. A fake satisfies this principle only when the behavior we *branch on* is the behavior we conformance-check.
+- **One thing to design for in M2, not a finding now:** `retry()` re-enters via `start_query(attempt+1)` (`dispatcher.lua:531-538`), which does **not** re-run `pre_query`. M1 never calls `retry`, so it doesn't bite — but M2's ladder retries precisely after a repair that may have restarted the proxy, and the retried attempt will fire without `ensure_running` having confirmed the replacement is up. Decide deliberately whether `restart` should route through `pre_query` before Task 10 relies on it.
+- **Plan-gate carry-forward:** `workshop/plans/000197-cliproxy-auth-self-healing-plan-gate.md` `## Open findings` is empty (verified on disk). I re-checked each disposition against the code: PQ-1 (404-driven, no config-drift check) ✓, PQ-2 (status gate + property test, verified green) ✓, PQ-3 (`model` threaded from `payload.model`, `dispatcher.lua:425`) ✓, PQ-4 (single seam, both old functions deleted) ✓, PQ-5 (still scheduled M2 Task 12) ✓, PQ-6 (M3 Task 15) ✓, PQ-7 (`disable-control-panel` default true, `allow-remote` never set, both tested) ✓, PQ-8 (claim contract as specified) ✓, PQ-9 ✓. Nothing to carry forward.
+- **Prior-round carry-forward:** round 1 C1/I1–I6 all verified fixed; round 2 C1, C2, I1–I5 all verified fixed. Still open from earlier rounds: banner width (`cliproxy.lua:687`), `render_opts` doing filesystem work per call, and the unguarded `deliver()`.
+
+## 7. Plan revision recommendations
+
+The plan now matches the code — the Core-concepts and Integration-points tables both carry milestone columns, every M1 row exists at its stated path, and the M2/M3 rows are correctly absent. Two small entries worth adding to `workshop/plans/000197-cliproxy-auth-self-healing-plan.md` `## Revisions`:
+
+1. **State the conformance surface as a contract, not a field list.** The plan's Task 7 describes the live check only as "assert every field `classify_auth_files` reads still exists". The repair policy branches on a *behavior* (404 when no `secret-key` was rendered), and that behavior is currently modelled by the fake and verified by nobody (I2). Record that the conformance check covers every management-API behavior parley branches on: the 200 field set, the 401 for the api-key bearer, and the 404 without a key.
+2. **Bound the repair under the backstop.** Task 5's restart and `dispatcher.recovery_timeout_ms` are specified independently, and their worst cases now cross (I3). Say that the repair's total budget must be derived from `recovery_timeout_ms`, so M2's ladder — which adds more async steps on the same claim — doesn't push further past it.
