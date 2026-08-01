@@ -63,15 +63,16 @@ After forcing one upstream failure the record became `"status":"error"` with the
 
 ### Pure entities (the conceptual core)
 
-| Name | Lives in | Status |
-|------|----------|--------|
-| `AuthVerdict` / `classify_response` | `lua/parley/cliproxy_auth.lua` | new |
-| `CredentialHealth` / `classify_auth_files` | `lua/parley/cliproxy_auth.lua` | new |
-| `RecoveryAction` / `decide` | `lua/parley/cliproxy_auth.lua` | new |
-| `diagnosis` | `lua/parley/cliproxy_auth.lua` | new |
-| `parse_peers` | `lua/parley/cliproxy_auth.lua` | new |
-| `render` (management-key field) | `lua/parley/cliproxy_config.lua` | modified |
-| `detect_auth_failure` | `lua/parley/cliproxy_config.lua` | deleted |
+| Name | Lives in | Status | Milestone |
+|------|----------|--------|-----------|
+| `AuthVerdict` / `classify_response` | `lua/parley/cliproxy_auth.lua` | new | M1 |
+| `CredentialHealth` / `classify_auth_files` | `lua/parley/cliproxy_auth.lua` | new | M1 |
+| `diagnosis` | `lua/parley/cliproxy_auth.lua` | new | M1 |
+| `render` (management-key field) | `lua/parley/cliproxy_config.lua` | modified | M1 |
+| `detect_auth_failure` | `lua/parley/cliproxy_config.lua` | deleted | M1 |
+| `_failure_notice` | `lua/parley/chat_respond.lua` | new | M1 |
+| `RecoveryAction` / `decide` | `lua/parley/cliproxy_auth.lua` | new | M2 |
+| `parse_peers` | `lua/parley/cliproxy_auth.lua` | new | M3 |
 
 - **AuthVerdict / `classify_response(http_status, body, request_model)`** — what the proxy said went wrong, as one typed value: `{kind, provider, model, message}` where `kind ∈ {no_auth, unknown_provider, expired, quota, model_unavailable}`, or `nil` for "not an auth failure".
   - **Invariant (PQ-2):** returns `nil` for **every** 2xx status regardless of body. The status gate comes first; the pattern table is only consulted on a non-2xx. This is a property, not a list of cases — see the property test in Task 1.
@@ -103,7 +104,9 @@ After forcing one upstream failure the record became `"status":"error"` with the
 |------|----------|--------|-------|
 | `management_key` | `lua/parley/cliproxy.lua` | new | filesystem (`<data_root>/management.key`) |
 | `auth_files` | `lua/parley/cliproxy.lua` | new | `GET /v0/management/auth-files` |
+| `credential_health` | `lua/parley/cliproxy.lua` | new | `auth_files` + the one unattended restart |
 | `api_argv` | `lua/parley/cliproxy.lua` | modified | `curl` (generalized from `models_argv`) |
+| `split_status` | `lua/parley/cliproxy.lua` | new | curl's `-w` status suffix |
 | `recover` | `lua/parley/cliproxy.lua` | new | executes a RecoveryAction |
 | `peers` / `reap` | `lua/parley/cliproxy.lua` | new | `ps` / `lsof` / `uv.kill` |
 | `login` (hardened) | `lua/parley/cliproxy.lua` | modified | `cli-proxy-api -claude-login` |
@@ -482,6 +485,41 @@ Outcome: the conditions that created this failure stop recurring.
 - [ ] `sdlc close --issue 197 --verified '<evidence>'` (let it measure `--actual`).
 
 ---
+
+## Revisions
+
+### 2026-08-01 — after the M1 boundary review (REWORK → rework applied)
+
+Reason: the M1 review found one Critical regression and six Important items; the
+plan needed three corrections so later milestones aren't planned against a
+description that no longer matches the code.
+
+1. **Integration-points table was incomplete for what M1 shipped.**
+   `credential_health` — a new public function carrying the whole 404-repair
+   policy — appeared only as Task 5 prose. Added, along with `split_status`.
+2. **The fake's `/v1/chat/completions` error modes did NOT ship in M1.** The
+   integration-points table listed them under the same `fake_cliproxy` bullet as
+   the management route, so the table claimed a capability that does not exist.
+   Only the management route + credential store + 404 behavior landed in M1;
+   the `no_auth`/`expired`/`quota`/`ok` modes move explicitly into **M2 Task 10**,
+   which needs them anyway to stop hand-building failure tables.
+3. **Core-concepts rows now carry a milestone column.** `decide` and
+   `parse_peers` were listed as "new" with no milestone, so an M1 reviewer
+   cross-checking the table against the filesystem found entities that do not
+   exist yet. Added `_failure_notice` (M1), extracted during the rework so the
+   user-visible last mile is testable.
+
+Carried into M2 from the review's architectural notes:
+
+- `recover`'s `needs_human` predicate is decision logic currently living in the
+  IO shell. It must move inside `decide` when Task 9 lands, or M2 ships with two
+  policy owners.
+- Task 11's e2e spec should drive `dispatcher.query` → `recover_query` →
+  `on_error` → the chat notice against the fake's new `no_auth` mode. M1 covered
+  those three links individually but never as one path.
+- Task 12 (collapsing `:ParleyProxy models`' empty-list inference onto `decide`)
+  is the last hand-maintained "empty list ⇒ not authenticated" claim in the
+  codebase — the exact inference this issue disproved. It must not survive M2.
 
 ## Notes for the implementer
 
