@@ -74,6 +74,61 @@ rounds:
             minimal.
           round: 1
       blocked: true
+    - "n": 2
+      timestamp: "2026-08-01T01:05:52-07:00"
+      agent: claude
+      dispose:
+        - id: PQ-1
+          disposition: addressed
+          note: config_drift task dropped; the no_management_route 404 from the running proxy replaces it.
+          round: 2
+        - id: PQ-2
+          disposition: addressed
+          note: Status gate is now an invariant returning nil for every 2xx, pinned by a property test.
+          round: 2
+        - id: PQ-3
+          disposition: addressed
+          note: failure table gains model from payload.model, in scope at dispatcher.lua:163; classify_response backfills.
+          round: 2
+        - id: PQ-4
+          disposition: addressed
+          note: check_auth_failure and detect_auth_failure are deleted; recover_query is the single owner, moved into M1.
+          round: 2
+        - id: PQ-5
+          disposition: addressed
+          note: Task 12 collapses the init.lua:408-419 prompt onto decide.
+          round: 2
+        - id: PQ-6
+          disposition: addressed
+          note: Login modes named success / port_taken / dies_early / hangs.
+          round: 2
+        - id: PQ-7
+          disposition: addressed
+          note: disable-control-panel defaults true when parley renders the key.
+          round: 2
+      findings:
+        - id: PQ-8
+          severity: Critical
+          title: recover_query's contract with on_error is unstated; as ordered it tears down the chat leg before any retry lands
+          detail: |-
+            Task 6 places recover_query "before on_error", but on_error is terminal: chat_respond.lua:2046-2065
+            runs pending_session:failure, chat_presentation.lua:174-181 finishes the session, and
+            teardown_chat_leg (chat_respond.lua:1753-1765) clears the lease and notifies the raw body. Recovery
+            is async, so on_error always wins and Done-when "repaired and retried without a prompt" cannot hold;
+            the retry's fresh qid (dispatcher.lua:175) has no live session. State the ownership contract — a
+            synchronous claim, or a give_up continuation with a bounded timeout. Also: retry cannot call
+            start_query (a local in D.query, dispatcher.lua:452) and query is not self-referencable
+            (dispatcher.lua:163 uses `local query = function`); the entry point must be threaded in.
+          round: 2
+        - id: PQ-9
+          severity: Minor
+          title: Tasks 1-3 inline full implementation source and a complete test file — compress to strategy lines
+          detail: |-
+            Keep the pattern-ordering constraint and one strategy line per risky function (classify_response →
+            arbitrary body x status property; classify_auth_files → rank collision across multi-record lists;
+            parse_peers → malformed ps output). The rest restates a diff that is stale on arrival.
+          round: 2
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#197 (plan-quality)
@@ -124,12 +179,35 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   the JSON route, so defaulting disable-control-panel to true keeps the new loopback surface
   minimal.
 
+## Round 2 — 2026-08-01T01:05:52-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- PQ-1 — addressed — config_drift task dropped; the no_management_route 404 from the running proxy replaces it.
+- PQ-2 — addressed — Status gate is now an invariant returning nil for every 2xx, pinned by a property test.
+- PQ-3 — addressed — failure table gains model from payload.model, in scope at dispatcher.lua:163; classify_response backfills.
+- PQ-4 — addressed — check_auth_failure and detect_auth_failure are deleted; recover_query is the single owner, moved into M1.
+- PQ-5 — addressed — Task 12 collapses the init.lua:408-419 prompt onto decide.
+- PQ-6 — addressed — Login modes named success / port_taken / dies_early / hangs.
+- PQ-7 — addressed — disable-control-panel defaults true when parley renders the key.
+
+### Raised
+
+- **PQ-8** [Critical] recover_query's contract with on_error is unstated; as ordered it tears down the chat leg before any retry lands
+  Task 6 places recover_query "before on_error", but on_error is terminal: chat_respond.lua:2046-2065
+  runs pending_session:failure, chat_presentation.lua:174-181 finishes the session, and
+  teardown_chat_leg (chat_respond.lua:1753-1765) clears the lease and notifies the raw body. Recovery
+  is async, so on_error always wins and Done-when "repaired and retried without a prompt" cannot hold;
+  the retry's fresh qid (dispatcher.lua:175) has no live session. State the ownership contract — a
+  synchronous claim, or a give_up continuation with a bounded timeout. Also: retry cannot call
+  start_query (a local in D.query, dispatcher.lua:452) and query is not self-referencable
+  (dispatcher.lua:163 uses `local query = function`); the entry point must be threaded in.
+- **PQ-9** [Minor] Tasks 1-3 inline full implementation source and a complete test file — compress to strategy lines
+  Keep the pattern-ordering constraint and one strategy line per risky function (classify_response →
+  arbitrary body x status property; classify_auth_files → rank collision across multi-record lists;
+  parse_peers → malformed ps output). The rest restates a diff that is stale on arrival.
+
 ## Open findings
 
-- **PQ-1** [Critical] Task 5's config_drift restart is dead code — ensure_running rewrites the file before the check
-- **PQ-2** [Critical] classify_response never reads http_status, so ten broad patterns run over successful bodies
-- **PQ-3** [Important] No path carries the cliproxy channel for the expired/401 verdict
-- **PQ-4** [Important] Plan never says whether check_auth_failure survives M2 alongside recover_query
-- **PQ-5** [Minor] decide's DRY rationale names the ParleyProxy models prompt as a consumer, but no task touches it
-- **PQ-6** [Minor] Task 15's login tests need fake modes the integration-points table does not list
-- **PQ-7** [Minor] Rendering secret-key also registers cliproxy's control panel; consider disabling it by default
+- **PQ-8** [Critical] recover_query's contract with on_error is unstated; as ordered it tears down the chat leg before any retry lands
+- **PQ-9** [Minor] Tasks 1-3 inline full implementation source and a complete test file — compress to strategy lines

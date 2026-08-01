@@ -216,6 +216,26 @@ Reason: the plan gate found two Critical design errors in the first draft. Delta
 - **PQ-7** — parley now defaults `disable-control-panel: true` when it renders
   the management key; only the JSON route is needed.
 
+### 2026-08-01 — plan-quality round 2 (PQ-8, PQ-9)
+
+Round 1's findings all disposed as addressed; one new Critical. Delta:
+
+- **PQ-8** — the seam needed an ownership contract, not just an ordering. `on_error`
+  is terminal and irreversible (`chat_respond.lua:1751-1765` latches
+  `leg_teardown_done` and clears the lease), while recovery is async — so "call
+  `recover_query` before `on_error`" still loses the race and the retry's fresh
+  `qid` would stream into a dead session. `recover_query(failure, retry, give_up)`
+  now **claims synchronously** (cheap, because `classify_response` is pure): falsy
+  ⇒ today's path unchanged; truthy ⇒ `on_error` is withheld and the adapter owes
+  exactly one of `retry()`/`give_up(msg)`, both behind one shared `tasker.once`,
+  with a 15s timer degrading a hung recovery to today's behavior. Second half of
+  the finding: `retry` cannot call `start_query` (a local in `D.query`) because
+  `query` is `local query = function` and not self-referencable — the entry point
+  is now threaded into `query` as a parameter.
+- **PQ-9** (Minor, applied) — compressed the inlined implementation/test source in
+  Tasks 1–2 to the non-obvious parts (pattern ordering, the status gate, the rank
+  table) plus strategy lines; full source restates a diff that goes stale.
+
 Also corrected from the repo itself: the test invocation is
 `make test-spec SPEC=providers/cliproxy-managed` (not `make test SPEC=<path>`),
 new files must be registered in `atlas/traceability.yaml`, and a retry is only

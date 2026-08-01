@@ -54,6 +54,8 @@ After forcing one upstream failure the record became `"status":"error"` with the
 1. **`ensure_running` rewrites the config before it probes** (`cliproxy.lua:295`). Any `config_drift()` check inside the `health_probe` callback compares the file to itself and is always false, and it would never observe what the *running* proxy actually loaded. Detect the stale-config condition from the running proxy instead — the `no_management_route` 404.
 2. **`finish_stdout` runs on every completed response** (`dispatcher.lua:266-314`), success included. Anything classified there sees ordinary assistant prose. A chat *about this issue* contains the strings `authentication_error` and `401 unauthorized`. Classification must be gated on a non-2xx HTTP status — and `http_status` does not exist in that closure at all; it is computed in the terminal closure at `dispatcher.lua:388-401`.
 3. **The failure table carries no model** (`dispatcher.lua:403-409`). The 401 body has neither provider nor model, and `resolve_login_provider` needs a model to find the channel. The model must be threaded from `payload.model`, which *is* in scope in `query()`.
+4. **`on_error` is terminal and irreversible.** It runs `pending_session:failure` → `chat_presentation`'s `failure` event → `finish(state)` + `surface_failure` → `teardown_chat_leg` (`chat_respond.lua:1751-1765`), which latches `leg_teardown_done` and clears the lease. Recovery is *async* (the health lookup is a curl subprocess), so "call `recover_query` before `on_error`" is not enough — `on_error` would still win the race, and the retry's fresh `qid` would stream into a dead session. Recovery must **claim** the failure synchronously.
+5. **`retry` cannot reach the query entry point.** `query` is `local query = function` (`dispatcher.lua:163`) — not self-referencable — and `start_query` is a local inside `D.query` (`dispatcher.lua:452`), invisible to the terminal closure nested in `query`. The entry point has to be threaded in as a parameter.
 
 ---
 
@@ -115,7 +117,7 @@ After forcing one upstream failure the record became `"status":"error"` with the
 - **`api_argv(host, port, secret, route)`** — `models_argv` generalized to any route so the health probe, the stop-time identity check, `list_models`, and `auth_files` share one request shape (ARCH-DRY; the comment at `cliproxy.lua:117` already claims this role — this keeps the claim true).
 - **`recover(failure, retry)`** — the single owner of auth-failure reaction: classify → gather health → `decide` → execute. Replaces `check_auth_failure` outright (PQ-4).
 - **`peers()` / `reap()`** — enumerate `cli-proxy-api` processes parley did not spawn; `reap` SIGTERMs them after an identity probe. Warn-once state is module-local with a `_reset` test seam (lessons.md: module-local one-shot flags leak across `it` blocks).
-- **`recover_query(failure, retry)` seam** — optional adapter hook in the **terminal closure** (`dispatcher.lua:383-425`), the only scope holding `http_status`, the body, and (once Task 6 threads it) the request's model. Mirrors `pre_query`'s optional/backward-compatible shape; adapters without it behave exactly as today.
+- **`recover_query(failure, retry, give_up)` seam** — optional adapter hook in the **terminal closure** (`dispatcher.lua:383-425`), the only scope holding `http_status`, the body, and (once Task 6 threads it) the request's model. Mirrors `pre_query`'s optional/backward-compatible shape; adapters without it behave exactly as today. **It claims the failure synchronously** — see "The claim contract" below, which is the only thing standing between an async recovery and a torn-down chat leg.
 - **`fake_cliproxy` (modified)** — the existing process-level fake grows:
   - **management route + credential store**: a folder of auth JSON files plus a `state.json` overlay (`{"claude": {"status": "error", "status_message": "…", "unavailable": true}}`) so tests mutate credential state *between* calls and the double stays stateful (ARCH-MOCK). Serves 401 on a wrong bearer and **404 when the config has no `remote-management.secret-key`**.
   - **error modes** on `/v1/chat/completions`: `no_auth` (the real 503 body), `expired` (the real 401 body), `quota`, and `ok`.
@@ -160,42 +162,14 @@ describe("classify_response", function()
         end
     end)
 
-    it("classifies auth_unavailable with provider and model", function()
-        local v = ca.classify_response(503, NO_AUTH)
-        assert.equals("no_auth", v.kind)
-        assert.equals("claude", v.provider)
-        assert.equals("claude-opus-4-8", v.model)
-    end)
-
-    it("backfills the request model when the body carries none", function()
-        local v = ca.classify_response(401, EXPIRED, "claude-opus-4-8")
-        assert.equals("expired", v.kind)
-        assert.equals("claude-opus-4-8", v.model) -- from request_model, not the body
-    end)
-
-    it("leaves model nil when neither body nor request supplies one", function()
-        assert.is_nil(ca.classify_response(401, EXPIRED).model)
-    end)
-
-    it("still classifies the legacy unknown-provider form", function()
-        local v = ca.classify_response(500,
-            '{"error":{"message":"unknown provider for model claude-opus-4-8","type":"server_error"}}')
-        assert.equals("unknown_provider", v.kind)
-        assert.equals("claude-opus-4-8", v.model)
-    end)
-
-    it("separates quota from auth", function()
-        assert.equals("quota", ca.classify_response(402, '{"error":{"message":"payment_required"}}').kind)
-    end)
-
-    it("returns nil for a non-auth 5xx", function()
-        assert.is_nil(ca.classify_response(500, '{"error":{"message":"dial tcp: no such host"}}'))
-    end)
-
-    it("tolerates a nil body and a nil status", function()
-        assert.is_nil(ca.classify_response(503, nil))
-        assert.is_nil(ca.classify_response(nil, NO_AUTH)) -- no status ⇒ cannot judge ⇒ nil
-    end)
+    -- Remaining cases, one `it` each:
+    --   503 + NO_AUTH            → kind=no_auth, provider=claude, model=claude-opus-4-8
+    --   401 + EXPIRED + model    → kind=expired, model backfilled from request_model
+    --   401 + EXPIRED, no model  → model stays nil (no guessing)
+    --   500 + legacy body        → kind=unknown_provider, model from the body
+    --   402 + payment_required   → kind=quota (NOT an auth prompt)
+    --   500 + "dial tcp: …"      → nil (a non-auth 5xx is not our business)
+    --   nil body / nil status    → nil (no status ⇒ cannot judge)
 end)
 ```
 
@@ -235,47 +209,14 @@ local FAILURES = {
     { kind = "model_unavailable", pattern = "model unavailable", captures = {} },
 }
 
---- Classify a FAILED cliproxy response.
----
---- The status gate is the whole safety story: these patterns are broad enough to
---- match ordinary assistant prose (a chat about this issue quotes every one of
---- them), and the caller sees successful bodies too. A 2xx — or an unknown
---- status — is never a failure, whatever the body says.
----@param http_status number|nil
----@param body string|nil
----@param request_model string|nil # backfills `model` for forms that omit it (401)
----@return table|nil # { kind, provider?, model?, message }
-function M.classify_response(http_status, body, request_model)
-    if type(http_status) ~= "number" or (http_status >= 200 and http_status <= 299) then
-        return nil
-    end
-    if type(body) ~= "string" or body == "" then
-        return nil
-    end
-    for _, row in ipairs(FAILURES) do
-        local a, b = body:match(row.pattern)
-        if a ~= nil then
-            local v = { kind = row.kind, message = M._message(body) }
-            local caps = { a, b }
-            for i, name in ipairs(row.captures) do
-                v[name] = caps[i]
-            end
-            v.model = v.model or request_model
-            return v
-        end
-    end
-    return nil
-end
-
--- Pull the human message out of cliproxy's error envelope.
-function M._message(body)
-    return body:match('"message"%s*:%s*"(.-)"') or body
-end
-
 return M
 ```
 
-Ordering constraint the tests pin: the `(providers=…, model=…)` row must precede the bare `auth_unavailable` row or the captures are lost.
+`classify_response(http_status, body, request_model)` then: **status gate first** — return nil unless `http_status` is a number outside 200–299 (this is the whole safety story; the patterns are broad enough to match ordinary assistant prose and the caller sees successful bodies too), nil on an empty body, then first-match wins over `FAILURES`, filling the row's named captures and falling back to `request_model` for `model`. A `_message` helper pulls `"message":"…"` out of cliproxy's error envelope for the human sentence.
+
+Two constraints the tests pin, both easy to break silently:
+- The `(providers=…, model=…)` row must precede the bare `auth_unavailable` row, or the captures are lost.
+- An unknown/nil status is treated as *not* a failure, not as a failure — never classify what you cannot place.
 
 - [ ] **Step 4: Run tests** — expect PASS (8 examples).
 - [ ] **Step 5: Register in `atlas/traceability.yaml`** — add `lua/parley/cliproxy_auth.lua` to `providers/cliproxy-managed`'s `code:` and `tests/unit/cliproxy_auth_spec.lua` to its `tests:`.
@@ -302,47 +243,16 @@ end
 Cases: active → `healthy` (carries `account`); no record for the channel → `missing`; empty list → `missing`; `status="error"` → `error` carrying `status_message` and `failed`; `unavailable` and `disabled` each outrank `status`; several credentials → healthiest wins and its account is reported; a record with `provider` absent matches on `type`.
 
 - [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement**
+- [ ] **Step 3: Implement** — filter records by `(f.provider or f.type) == channel`, map each to a state in precedence order `disabled > unavailable > status ~= "active" > healthy`, and keep the best by an explicit rank table:
 
 ```lua
 -- Worst-to-best so "healthiest wins" is a simple max: the proxy routes to any
 -- usable credential, so one healthy record makes the channel usable regardless
 -- of how many dead ones sit beside it.
 local HEALTH_RANK = { missing = 0, disabled = 1, unavailable = 2, error = 3, healthy = 4 }
-
---- Reduce the management API's record list to this channel's credential state.
----@param files table[] # the `files` array from /v0/management/auth-files
----@param channel string # cliproxy channel, e.g. "claude"
----@return table # { state, message, account, failed, modtime }
-function M.classify_auth_files(files, channel)
-    local best = { state = "missing", message = "no credential for " .. tostring(channel) }
-    for _, f in ipairs(type(files) == "table" and files or {}) do
-        if (f.provider or f.type) == channel then
-            local state
-            if f.disabled then
-                state = "disabled"
-            elseif f.unavailable then
-                state = "unavailable"
-            elseif f.status ~= nil and f.status ~= "active" then
-                state = "error"
-            else
-                state = "healthy"
-            end
-            if HEALTH_RANK[state] > HEALTH_RANK[best.state] then
-                best = {
-                    state = state,
-                    message = (f.status_message ~= nil and f.status_message ~= "")
-                        and f.status_message or ("credential is " .. state),
-                    account = f.account or f.email,
-                    failed = f.failed,
-                    modtime = f.modtime,
-                }
-            end
-        end
-    end
-    return best
-end
 ```
+
+  The returned health carries `state`, `message` (the record's `status_message` when non-empty, else a generated `"credential is <state>"`), `account` (`account` or `email`), `failed`, and `modtime`. Default when nothing matches: `{state = "missing"}`. The risky part is the rank collision across multi-record lists — that is what the "healthiest wins and reports *its* account" test pins.
 
 - [ ] **Step 4: Run tests. Step 5: Commit** — `cliproxy: #197 M1: derive credential health from the management record`
 
@@ -432,19 +342,39 @@ Replaces the config-drift idea the gate killed (PQ-1): `ensure_running` writes t
 
 **Files:** Modify `lua/parley/dispatcher.lua` (terminal closure `383-425`, `query()` signature area, `finish_stdout` `304-314`), `lua/parley/cliproxy.lua` (`recover`, delete `check_auth_failure`), `lua/parley/providers.lua`, `lua/parley/cliproxy_config.lua` (delete `detect_auth_failure`); tests: `tests/unit/dispatcher_query_spec.lua`, `tests/unit/cliproxy_config_spec.lua:167-177`, `tests/integration/cliproxy_auth_login_spec.lua`
 
-This is the task that resolves PQ-2/PQ-3/PQ-4 together. **One seam**, in the terminal closure — the only scope with `http_status`, the body, and the model.
+This is the task that resolves PQ-2/PQ-3/PQ-4/PQ-8 together. **One seam**, in the terminal closure — the only scope with `http_status`, the body, and the model.
+
+#### The claim contract (PQ-8)
+
+`on_error` is terminal (trap 4 above) and recovery is async, so the seam cannot merely run "before `on_error`" — it must decide *synchronously* whether it owns this failure:
+
+```
+adapter.recover_query(failure, retry, give_up) -> boolean claimed
+```
+
+- **Returns falsy** → the dispatcher calls `on_error` immediately, exactly as today. Adapters without the hook take this path by definition, so nothing about existing providers changes.
+- **Returns truthy** → the dispatcher does **not** call `on_error`. The adapter now owes exactly one of `retry()` or `give_up(msg)`.
+  - `retry()` re-enters the query at `attempt + 1`.
+  - `give_up(msg)` runs the original `on_error` path, with `msg` replacing the raw body in the notice.
+  - Both are wrapped in **one shared** `tasker.once`, so the first to land wins and nothing can double-fire.
+  - The dispatcher arms a bounded timer (15s, `vim.defer_fn`) that calls `give_up("cliproxy: recovery timed out")`. A hung recovery therefore degrades to today's behavior instead of stranding the chat leg forever.
+
+The claim is cheap and deterministic because the decision input — `classify_response` — is pure and synchronous. cliproxy claims iff **all** of: a non-nil verdict, `attempt == 0`, and `failure.streamed == false`. That last one is the retry precondition: `handler` has already written any streamed content into the buffer, so re-running would duplicate it. Each `query()` mints a fresh `qid` with clean `raw_response`/`response` (`dispatcher.lua:175-188`), so a retry from a non-streamed failure is otherwise clean state.
 
 - [ ] **Step 1: Write the failing tests**
-  - `finish_stdout` no longer classifies anything: a **successful** response whose text quotes `authentication_error` produces **no** prompt and no diagnosis (the regression the gate caught).
-  - The failure table carries `model` (from `payload.model`).
+  - `finish_stdout` no longer classifies anything: a **successful** response whose text quotes `authentication_error` produces no prompt and no diagnosis (the PQ-2 regression).
+  - The failure table carries `model` (from `payload.model`) and `streamed` (from `qt.response ~= ""`).
   - An adapter with no `recover_query` behaves exactly as today — the existing failure specs must pass untouched.
-  - The #197 503 body reaches `recover` with `http_status = 503` and the model, and the resulting message names the credential state, not just the model. Assert message wording explicitly (lessons.md: error text is API).
+  - **Claim semantics:** an adapter returning false ⇒ `on_error` fires once, immediately. Returning true ⇒ `on_error` has *not* fired; then `give_up("x")` ⇒ `on_error` fires once with `"x"`; and `retry()` ⇒ the query re-issues once with an identical payload and `on_error` never fires.
+  - **Anti-double-fire:** an adapter that calls `retry()` then `give_up()` (or either one twice) still produces exactly one outcome.
+  - **Timeout:** an adapter that claims and then does nothing ⇒ `on_error` fires once, after the timer, with the timeout message. Drive the clock rather than sleeping 15s in a spec.
+  - **Streamed guard:** a failure after partial content ⇒ cliproxy declines the claim ⇒ no duplicate text in the buffer.
 - [ ] **Step 2: Run and watch them fail.**
 - [ ] **Step 3: Implement**
-  - `dispatcher.lua`: add `model = payload.model` to the `failure` table (PQ-3). In the `failed` branch, before `on_error`, call `adapter.recover_query(failure, retry)` when present — where `retry` is a `tasker.once`-wrapped closure that re-runs `start_query()`. Document it beside `pre_query`'s doc block (`dispatcher.lua:437-443`), including the **retry precondition**: a retry is only offered when nothing was streamed (`qt.response == ""`), because `handler` has already written any streamed content into the buffer and a re-run would duplicate it. Each `query()` mints a fresh `qid` with clean `raw_response`/`response`, so retried state is otherwise clean.
+  - `dispatcher.lua`: thread the entry point in (PQ-8 part 2) — `query` gains trailing `restart, attempt` parameters, and `D.query` builds `local function start_query(n) query(…, start_query, n or 0) end` (declared with `local function` so it can pass itself down). Add `model = payload.model` and `streamed = qt.response ~= ""` to the `failure` table. In the `failed` branch, implement the claim contract above. Document it beside `pre_query`'s doc block (`dispatcher.lua:437-443`).
   - Delete the `check_auth_failure` call at `dispatcher.lua:311-313` and the function itself. Delete `detect_auth_failure`.
-  - `providers.lua`: register `cliproxyapi.recover_query = function(failure, retry) require("parley.cliproxy").recover(failure, retry) end`.
-  - `cliproxy.recover(failure, retry)` for M1: classify → resolve channel via `resolve_login_provider(verdict.model, oauth-model-alias)` → `auth_files(_, channel)` → `diagnosis` → notify / prompt, keeping the `_login_prompt_active` guard. **No** `retry` call yet; M2 adds the actions.
+  - `providers.lua`: register `cliproxyapi.recover_query`, delegating to `cliproxy.recover`.
+  - `cliproxy.recover(failure, retry, give_up)` for M1: classify synchronously and return the claim; if claimed, resolve the channel via `resolve_login_provider(verdict.model, oauth-model-alias)` → `auth_files(_, channel)` → `diagnosis` → notify or prompt, then **always** call `give_up(diagnosis)`. M1 never calls `retry` — M2 adds the actions that do.
 - [ ] **Step 4: Run the full suite** — `make test`, 0 failures, luacheck clean.
 - [ ] **Step 5: Grep for leftovers** — `detect_auth_failure`, `check_auth_failure`, and the literal `unknown provider for model` across `lua/ tests/ atlas/` (lessons.md: grep for the behavior, not just the symbol).
 - [ ] **Step 6: Commit** — `cliproxy: #197 M1: own auth-failure reaction in one status-aware seam`
@@ -498,7 +428,7 @@ Outcome: recoverable failures repair themselves and the query retries; only a de
 
 - [ ] **Step 1: Write the failing integration tests**, one per executable action against the fake: proxy down → started and retried; healthy credential + transient failure → retried, **no prompt**; `unavailable` → prompt, no retry; `quota` → neither. The "no prompt appears" assertions are the operator-visible promise of this issue — assert them explicitly, not by omission.
 - [ ] **Step 2: Run and watch them fail.**
-- [ ] **Step 3: Implement** the switch over `decide`'s action, passing `attempt` through from the seam.
+- [ ] **Step 3: Implement** the switch over `decide`'s action, passing `attempt` through from the seam. Every branch terminates the claim exactly once (Task 6's contract): `retry`/`restart`/`start` end in `retry()`, `prompt_login`/`report` end in `give_up(message)`. A branch that falls through without calling either would hang the chat leg until the 15s timer — add a spec that exercises **every** action value and asserts an outcome landed, so a future action added to the enum cannot silently skip this.
 - [ ] **Step 4: Run tests. Step 5: Commit** — `cliproxy: #197 M2: execute the recovery ladder on query failure`
 
 ### Task 11: end-to-end through a real chat
@@ -557,6 +487,7 @@ Outcome: the conditions that created this failure stop recurring.
 
 - **Don't reintroduce guessing.** `classify` (`cliproxy.lua:91`) stays the *liveness* probe and must not grow auth opinions — that is `auth_files`' job. If you find yourself adding an auth case to `classify`, or inferring auth from an empty model list, the design has drifted. Both inferences are what failed on 2026-08-01.
 - **The status gate is not optional.** `classify_response` is called on responses parley has already decided are failures, but the patterns are broad and the cost of a false positive is an unprompted login dialog mid-conversation. Keep the 2xx property test green.
+- **A claim is a debt.** Once `recover_query` returns truthy, the chat leg is held open and *only* `retry()` or `give_up()` releases it. Every path out of `recover` — including early returns on a decode failure or an unreachable proxy — must end in one of them. The 15s timer is a backstop against a bug, not a design element to lean on.
 - **One retry, ever.** The `attempt` parameter is the whole anti-loop mechanism. Never track retries in module-local state — lessons.md documents module-local one-shot flags leaking across `it` blocks, and this one would leak across *queries*.
 - **Error text is API here.** Specs assert on wording; change a message deliberately, with its spec — don't loosen the assertion.
 - **The fake is the deliverable, not scaffolding.** If you reach for a function-call mock of `vim.system` to test recovery, stop: the seam exists and the fake speaks HTTP.
