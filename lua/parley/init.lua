@@ -408,20 +408,32 @@ M.register_proxy_command = function(prefix)
 				if #ids == 0 then
 					-- An empty list USED to be read as "not authenticated". #197
 					-- disproved exactly that inference — /v1/models kept listing
-					-- every model with the credential dead — so ask the proxy
-					-- instead of guessing, through the same source the dispatch
-					-- failure path uses (ARCH-PURPOSE: one vocabulary).
-					cliproxy.credential_health(function(health)
-						if health.state == "healthy" then
+					-- every model with the credential dead — so ask the proxy.
+					--
+					-- THREE axes exist and only two coincide: `arg` here is a
+					-- model-owning provider (`google`), while credential health is
+					-- keyed by cliproxy CHANNEL (`gemini`/`gemini-cli`/`aistudio`).
+					-- Reading health under "google" finds nothing and would
+					-- fabricate "no credential" for a perfectly good account.
+					cliproxy.credential_health_for_login(arg, function(health)
+						local action = require("parley.cliproxy_auth")
+							.credential_action(health, arg)
+						if not action then
 							vim.notify(("cliproxy: %s is authenticated (%s) but serves no models — "
 								.. "check the model catalog, not the login."):format(
 								arg, tostring(health.account)), vim.log.levels.WARN)
 							return
 						end
-						if health.state == "unknown" then
-							vim.notify(("cliproxy: no %s models, and credential state could not be "
-								.. "read (%s): %s"):format(arg, tostring(health.reason),
-								tostring(health.message)), vim.log.levels.WARN)
+						if action == "report" then
+							-- Name the reason for an unreadable state: "unreachable"
+							-- is what the operator can act on, the message alone
+							-- often isn't.
+							local why = health.reason
+								and ("credential state could not be read (%s): %s"):format(
+									health.reason, tostring(health.message))
+								or tostring(health.message)
+							vim.notify(("cliproxy: no %s models — %s"):format(arg, why),
+								vim.log.levels.WARN)
 							return
 						end
 						vim.ui.select({ "Log in (" .. arg .. ")", "Not now" }, {
@@ -431,7 +443,7 @@ M.register_proxy_command = function(prefix)
 								vim.cmd(prefix .. "Proxy login " .. arg)
 							end
 						end)
-					end, arg)
+					end)
 					return
 				end
 				vim.notify(("cliproxy %s models:\n  %s"):format(arg, table.concat(ids, "\n  ")), vim.log.levels.INFO)

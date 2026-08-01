@@ -135,10 +135,10 @@ describe("cliproxy recovery end to end", function()
     end)
 
     it("repairs and completes a transient failure with no operator interaction", function()
-        -- Healthy credential + a failing request ⇒ retry. The fake is flipped to
-        -- `ok` before the retry lands, so the query completes normally and the
-        -- operator is never told anything.
-        local port = serve("no_auth")
+        -- The fake fails the first request and succeeds after, which is exactly
+        -- what "transient" means — and avoids racing the retry by swapping
+        -- servers mid-flight.
+        serve("no_auth_once")
         local prompted = false
         vim.ui.select = function() prompted = true end
 
@@ -151,24 +151,14 @@ describe("cliproxy recovery end to end", function()
             nil, nil, nil,
             function(_qid, failure) out.failure = failure; out.done = true end)
 
-        -- Let the first attempt fail, then heal the upstream.
-        vim.wait(3000, function() return out.failure ~= nil or out.done end, 25)
-        for _, p in ipairs(started) do pcall(function() uv.kill(p.pid, "sigkill") end) end
-        started = {}
-        local store = parley.config.cliproxy.auth_dir
-        local cfg_file = vim.fn.tempname() .. ".json"
-        vim.fn.writefile({ vim.json.encode({
-            port = port, ["auth-dir"] = store, ["api-keys"] = { "testkey" },
-            ["remote-management"] = { ["secret-key"] = cliproxy.management_key() },
-        }) }, cfg_file)
-        local handle, pid = uv.spawn(FAKE, {
-            args = { "-config", cfg_file },
-            env = { "PARLEY_FAKE_ERROR_MODE=ok", "PATH=" .. vim.env.PATH, "HOME=" .. vim.env.HOME },
-        }, function() end)
-        table.insert(started, { handle = handle, pid = pid })
-
         vim.wait(20000, function() return out.done end, 25)
+
         assert.is_false(prompted, "a self-repairable failure prompted the operator")
+        -- The Done-when is "repaired AND the query retried", so absence of a
+        -- prompt is not enough — the answer has to actually arrive.
+        assert.is_nil(out.failure, "the retried query still failed")
+        assert.is_true(out.done, "the query never completed")
+        assert.matches("ok", out.content)
     end)
 
     it("does not call a quota failure a login problem", function()

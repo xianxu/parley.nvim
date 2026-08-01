@@ -330,6 +330,12 @@ end
 -- (workshop/lessons.md: module-local one-shots leak if they only ever get set).
 local _management_restart_done = false
 
+-- The repair budget's terms, in seconds — exposed so a spec can assert the
+-- relationship with dispatcher.recovery_timeout_ms rather than trusting a
+-- comment (the M1 review re-opened this exact drift twice).
+M._repair_budget_sec = { probe = 2, auth_files = 2, stop_probe = 2, port_release = 2,
+    ensure_probe = 2, poll_healthy = 5, second_read = 2 }
+
 function M._reset_management_restart() -- test seam
     _management_restart_done = false
 end
@@ -359,23 +365,43 @@ local function wait_port_released(host, port, secret, cb)
     poll()
 end
 
+--- Stop the managed proxy, WAIT for the port to be released, then ensure a new
+--- one is running. One sequence, two callers (the management-route repair and
+--- the recovery ladder's `restart` rung) — the wait is the part that is easy to
+--- omit and impossible to catch with the Python fake, which dies instantly while
+--- the real cliproxyapi shuts down gracefully (ARCH-DRY).
+---@param on_ready fun()
+---@param on_error fun(msg: string)
+function M.restart_managed(on_ready, on_error)
+    local opts = render_opts()
+    M.stop()
+    wait_port_released(opts.host, opts.port, opts.secret, function()
+        M.ensure_running(on_ready, on_error)
+    end)
+end
+
+
 --- Credential health WITH the one repair parley can make unattended: a proxy
 --- that booted before the management key existed answers 404, and restarting it
 --- into the freshly rendered config is both safe and silent.
 ---
---- REPAIR BUDGET — this path must finish inside the dispatcher's
---- `recovery_timeout_ms` backstop, or the backstop spends the claim's one-shot
---- and the operator is told "recovery timed out" even though parley repaired
---- the proxy and computed a correct diagnosis. Worst case, in order:
----   auth_files curl        ≤2s  (--max-time 2)
----   stop() identity probe  ≤2s  (blocking port_holds_cliproxy)
----   wait_port_released      2s  (wall-clock bounded)
----   ensure_running probe   ≤2s
----   poll_until_healthy      5s  (POLL_BUDGET_MS)
----   second auth_files curl ≤2s
----                        = ≤15s, against a 25s backstop.
---- Change either number and re-check the other; they are related by design, not
---- by luck.
+--- REPAIR BUDGET — the WHOLE claimed path must finish inside the dispatcher's
+--- `recovery_timeout_ms`, or the backstop spends the claim's one-shot and the
+--- operator is told "recovery timed out" even though parley repaired the proxy
+--- and computed a correct diagnosis. Worst case, in order:
+---   recover's liveness probe   ≤2s
+---   auth_files curl            ≤2s
+---   [404 repair] stop() probe  ≤2s   (blocking port_holds_cliproxy)
+---   [404 repair] port release   2s
+---   [404 repair] ensure probe  ≤2s
+---   [404 repair] poll healthy   5s   (POLL_BUDGET_MS)
+---   [404 repair] second read   ≤2s
+---                            = ≤17s
+--- The `start`/`restart` rung is mutually exclusive with the 404 repair (a proxy
+--- that answered the management route is running, so `start` cannot follow; a
+--- `restart` follows a SUCCESSFUL read, which means no repair ran), and costs
+--- ≤11s on its own path. The binding worst case is therefore ≤17s against a 25s
+--- backstop — asserted by cliproxy_budget_spec so the two cannot drift apart.
 ---
 --- Restarts at most once per consecutive run of 404s (the guard clears on any
 --- successful lookup). A second consecutive 404 is reported rather than retried, so a proxy that 404s for some other reason cannot become a restart
@@ -407,22 +433,46 @@ function M.credential_health(cb, channel)
         _management_restart_done = true
         logger.info("cliproxy: proxy is running without the management route — restarting it "
             .. "into the rendered config so credential health can be read")
-        local opts = render_opts()
-        M.stop()
-        wait_port_released(opts.host, opts.port, opts.secret, function()
-            M.ensure_running(function()
-                M.auth_files(function(second)
-                    if second.reason ~= "no_management_route" then
-                        _management_restart_done = false
-                    end
-                    cb(second)
-                end, channel)
-            end, function(msg)
-                cb({ state = "unknown", reason = "no_management_route",
-                    message = "cannot restart the proxy to enable the management route: " .. tostring(msg) })
-            end)
+        M.restart_managed(function()
+            M.auth_files(function(second)
+                if second.reason ~= "no_management_route" then
+                    _management_restart_done = false
+                end
+                cb(second)
+            end, channel)
+        end, function(msg)
+            cb({ state = "unknown", reason = "no_management_route",
+                message = "cannot restart the proxy to enable the management route: " .. tostring(msg) })
         end)
     end, channel)
+end
+
+--- Credential health for a LOGIN PROVIDER (`google`), by reading every cliproxy
+--- channel that login serves and keeping the healthiest.
+---
+--- The third axis: `:ParleyProxy models` names providers on the model-owning
+--- axis, credential health is keyed by channel, and only five of six coincide —
+--- `google` covers gemini / gemini-cli / aistudio. Reading health under "google"
+--- finds nothing and fabricates "no credential" for a healthy account.
+---@param login string
+---@param cb fun(health: table)
+function M.credential_health_for_login(login, cb)
+    local channels = cc.channels_for_login(login)
+    if #channels == 0 then
+        return M.credential_health(cb, login) -- not a login-axis name; treat as a channel
+    end
+    local best, pending = nil, #channels
+    for _, channel in ipairs(channels) do
+        M.credential_health(function(health)
+            if best == nil or ca.healthier(health, best) then
+                best = health
+            end
+            pending = pending - 1
+            if pending == 0 then
+                cb(best)
+            end
+        end, channel)
+    end
 end
 
 --------------------------------------------------------------------------------
@@ -712,12 +762,13 @@ function M._reset_login_prompt() -- test helper
     _login_prompt_active = false
 end
 
--- Newest mtime among a channel's credential files on disk, as RFC3339.
+-- Newest mtime among a channel's credential files on disk, in EPOCH SECONDS.
 --
--- Compared against the modtime the proxy reports for the credential it LOADED:
--- if disk is newer, its fsnotify watcher missed a write (a fresh login) and a
--- restart will pick it up. Best-effort — nil when the dir is unreadable, and
--- `decide` treats a missing timestamp as "not stale" rather than guessing.
+-- Epoch, not a formatted string: the proxy reports its loaded credential in
+-- local-offset RFC3339 and a string compare against a UTC "…Z" rendering is
+-- wrong in a way that depends on the operator's timezone (always-stale west of
+-- UTC, never-stale east). cliproxy_auth parses the proxy's side; both are
+-- numbers by the time they meet.
 local function auth_file_modtime(channel)
     local c = cfg() or {}
     local dir = c.auth_dir
@@ -733,7 +784,7 @@ local function auth_file_modtime(channel)
             end
         end
     end
-    return newest and os.date("!%Y-%m-%dT%H:%M:%SZ", newest) or nil
+    return newest
 end
 
 -- The oauth-model-alias block parley rendered, or nil.
@@ -834,14 +885,13 @@ function M.recover(failure, retry, give_up)
                 -- Not ours to start or stop (see credential_health's note).
                 return give_up(decision.message)
             end
-            if decision.action == "restart" then
-                M.stop()
-            end
-            return M.ensure_running(function()
-                retry()
-            end, function(msg)
+            local function failed(msg)
                 give_up(decision.message .. "\n" .. tostring(msg))
-            end)
+            end
+            if decision.action == "restart" then
+                return M.restart_managed(retry, failed)
+            end
+            return M.ensure_running(retry, failed)
         end
         if decision.action == "prompt_login" and decision.login_provider then
             return prompt_login(decision.login_provider, decision.message, function()
@@ -881,8 +931,9 @@ end
 
 --- List the models a provider currently serves: ensure_running, GET /v1/models
 --- with the client bearer, then filter by the provider's owned_by. An EMPTY list
---- means the provider isn't authenticated — its models aren't in the dynamic
---- registry — which the command layer turns into a `login <provider>` prompt.
+--- means the provider serves no models right now — NOT that it is
+--- unauthenticated (#197 disproved that inference). The command layer reads
+--- credential health to tell those apart.
 ---@param provider string
 ---@param cb fun(ids: string[]|nil, err: string|nil)
 function M.list_models(provider, cb)

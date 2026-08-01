@@ -295,17 +295,57 @@ describe("decide", function()
         assert.equals("retry", ca.decide(v(), h(), UP, 0).action)
     end)
 
-    it("restarts when the auth file on disk is newer than the proxy's copy", function()
-        local d = ca.decide(v(), h({ modtime = "2026-08-01T00:00:00-07:00" }),
-            { running = true, auth_file_modtime = "2026-08-01T01:00:00-07:00" }, 0)
+    it("restarts when the auth file on disk is genuinely newer", function()
+        local loaded = "2026-08-01T00:34:46.994488305-07:00"
+        local d = ca.decide(v(), h({ modtime = loaded }),
+            { running = true, auth_file_modtime = ca.rfc3339_sec(loaded) + 3600 }, 0)
         assert.equals("restart", d.action)
+    end)
+
+    it("PROPERTY: the SAME instant is never stale, in any representation", function()
+        -- The bug this replaces compared a UTC "…Z" string against cliproxy's
+        -- local-offset string, so the answer depended on the operator's
+        -- timezone: always-stale west of UTC, never-stale east of it. Same
+        -- degenerate-fixture trap workshop/lessons.md records from M1 C1 — which
+        -- the first version of THIS test walked straight into by using -07:00 on
+        -- both sides.
+        local instant = 1785000000
+        for _, reported in ipairs({
+            "2026-08-01T18:35:01Z",
+            "2026-08-01T11:35:01-07:00",
+            "2026-08-01T20:35:01+02:00",
+            "2026-08-01T11:35:01.994488305-07:00", -- the real binary's form
+        }) do
+            local sec = ca.rfc3339_sec(reported)
+            assert.is_not_nil(sec, "failed to parse " .. reported)
+            local d = ca.decide(v(), h({ modtime = reported }),
+                { running = true, auth_file_modtime = sec }, 0)
+            assert.equals("retry", d.action,
+                ("same instant read as stale for %s"):format(reported))
+        end
+        assert.is_truthy(instant)
+    end)
+
+    it("parses every RFC3339 form to the same instant", function()
+        local utc = ca.rfc3339_sec("2026-08-01T18:35:01Z")
+        assert.equals(utc, ca.rfc3339_sec("2026-08-01T11:35:01-07:00"))
+        assert.equals(utc, ca.rfc3339_sec("2026-08-01T20:35:01+02:00"))
+        assert.equals(utc, ca.rfc3339_sec("2026-08-01T11:35:01.994488305-07:00"))
+        assert.is_nil(ca.rfc3339_sec("not a timestamp"))
+        assert.is_nil(ca.rfc3339_sec(nil))
     end)
 
     it("does not call a file stale when either timestamp is missing", function()
         assert.equals("retry", ca.decide(v(), h({ modtime = nil }),
-            { running = true, auth_file_modtime = "2026-08-01T01:00:00-07:00" }, 0).action)
+            { running = true, auth_file_modtime = 1785000000 }, 0).action)
         assert.equals("retry", ca.decide(v(), h({ modtime = "2026-08-01T00:00:00-07:00" }),
             { running = true }, 0).action)
+    end)
+
+    it("tolerates sub-second skew between the filesystem and the proxy", function()
+        local loaded = "2026-08-01T11:35:01-07:00"
+        assert.equals("retry", ca.decide(v(), h({ modtime = loaded }),
+            { running = true, auth_file_modtime = ca.rfc3339_sec(loaded) + 1 }, 0).action)
     end)
 
     it("prompts on an expired verdict unless the proxy says the credential is fine", function()

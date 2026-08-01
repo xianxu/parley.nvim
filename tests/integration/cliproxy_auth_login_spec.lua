@@ -312,6 +312,33 @@ describe("cliproxy.recover", function()
         assert.is_nil(out.message:find("me@example.com", 1, true))
     end)
 
+    it("EXHAUSTIVE: every decide action settles the claim exactly once", function()
+        -- Task 10's guard: a future action added to the enum cannot silently
+        -- fall through `execute` and hang the chat leg until the backstop.
+        local ca = require("parley.cliproxy_auth")
+        local saved_decide = ca.decide
+        local actions = { "start", "restart", "retry", "prompt_login", "report" }
+        serve()
+        vim.ui.select = function(_i, _o, cb) cb(nil, 2) end
+
+        for _, action in ipairs(actions) do
+            ca.decide = function(_v, _h, _p, _a, login)
+                return { action = action, message = "forced " .. action,
+                         login_provider = login or "claude" }
+            end
+            local settles = 0
+            local claimed = cliproxy.recover(
+                { http_status = 503, body = NO_AUTH, model = "claude-opus-4-8",
+                  streamed = false, attempt = 0 },
+                function() settles = settles + 1 end,
+                function() settles = settles + 1 end)
+            assert.is_true(claimed, action .. " did not claim")
+            vim.wait(9000, function() return settles > 0 end, 25)
+            assert.equals(1, settles, ("action %s settled %d times"):format(action, settles))
+        end
+        ca.decide = saved_decide
+    end)
+
     ----------------------------------------------------------------------------
     -- The claim contract: a claim is a debt
     ----------------------------------------------------------------------------

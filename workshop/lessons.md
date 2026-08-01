@@ -464,3 +464,32 @@
   first place). Rule: specs that exercise binary discovery must pin `PATH` to
   system dirs, and any spec booting a real proxy must use a throwaway auth-dir
   with a fabricated credential.
+- **Comparing timestamps across representations is wrong, not merely fragile.**
+  #197 M2 compared a UTC `…Z` string against cliproxy's local-offset RFC3339 with
+  a plain `>`. The same instant renders as `…T18:35:01Z` and `…T11:35:01-07:00`,
+  and `"Z" > "-"` is true while `"1" > "8"` is false — so the answer depended on
+  the operator's timezone: always-stale west of UTC, dead rung east of it. Rule:
+  normalize to epoch seconds at the IO seam and let pure code compare numbers;
+  never let a string compare stand in for a time compare.
+- **The degenerate-fixture trap repeats unless the test names the axis.** The
+  staleness tests used `-07:00` on *both* sides — the identical mistake this file
+  already recorded from M1's channel-vs-login bug, made again two milestones
+  later while the rule was on the page. Rule: when a value has multiple valid
+  representations, the test must enumerate them (`Z`, `+hh:mm`, `-hh:mm`,
+  fractional seconds), not pick one and repeat it.
+- **A "three axes" problem doesn't stop at two.** #197 fixed channel-vs-login,
+  then shipped provider-vs-channel in the very commit claiming to remove that
+  class of bug (`:ParleyProxy models google` reading health under `google` rather
+  than gemini/gemini-cli/aistudio). Rule: when a fix reveals two identifier
+  spaces, enumerate *all* the spaces in the system and check each consumer
+  against the one it needs — the second confusion is not fixed by fixing the
+  first.
+- **Two copies of a repair sequence will diverge at the fix.** The `restart` rung
+  re-implemented stop→ensure while omitting the port-release wait that an
+  existing helper had — including its comment explaining why the wait is required
+  and why no test can catch its absence. Rule: when adding a second caller for a
+  sequence that already exists, extract the helper instead of retyping it.
+- **A budget stated in a comment drifts; a budget asserted in a test cannot.**
+  The recovery backstop vs repair-budget relationship was re-opened by two
+  successive reviews because it lived only in prose that said "re-check the
+  other". Rule: express the terms as data and assert the inequality in a spec.

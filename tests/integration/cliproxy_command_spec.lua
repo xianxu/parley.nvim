@@ -70,8 +70,10 @@ describe(":ParleyProxy command", function()
     describe("models with an empty list", function()
         local cliproxy = require("parley.cliproxy")
         local saved_list, saved_health, saved_select
+        local seen_channels
 
         before_each(function()
+            seen_channels = {}
             saved_list = cliproxy.list_models
             saved_health = cliproxy.credential_health
             saved_select = vim.ui.select
@@ -85,7 +87,8 @@ describe(":ParleyProxy command", function()
         end)
 
         it("does NOT claim 'not authenticated' when the credential is healthy", function()
-            cliproxy.credential_health = function(cb)
+            cliproxy.credential_health = function(cb, channel)
+                seen_channels[#seen_channels + 1] = channel
                 cb({ state = "healthy", account = "me@example.com" })
             end
             local prompted = false
@@ -99,7 +102,8 @@ describe(":ParleyProxy command", function()
         end)
 
         it("prompts with the proxy's own reason when the credential is dead", function()
-            cliproxy.credential_health = function(cb)
+            cliproxy.credential_health = function(cb, channel)
+                seen_channels[#seen_channels + 1] = channel
                 cb({ state = "unavailable", account = "me@example.com",
                      message = "OAuth access token has expired." })
             end
@@ -113,8 +117,31 @@ describe(":ParleyProxy command", function()
             assert.is_truthy(prompt:find("expired", 1, true))
         end)
 
+        it("reads the CHANNEL axis, not the provider name (google → gemini*)", function()
+            -- C2: `google` is a model-owning provider; credential health is
+            -- keyed by channel. Five of six coincide — google does not, and it
+            -- is the one that motivated the M1 channel fix.
+            cliproxy.credential_health = function(cb, channel)
+                seen_channels[#seen_channels + 1] = channel
+                cb(channel == "gemini-cli"
+                    and { state = "healthy", account = "g@example.com" }
+                    or { state = "missing", message = "no credential for " .. tostring(channel) })
+            end
+            local prompted = false
+            vim.ui.select = function() prompted = true end
+            local msgs = capture_notify(function()
+                vim.cmd("ParleyProxy models google")
+                vim.wait(300, function() return false end)
+            end)
+            table.sort(seen_channels)
+            assert.same({ "aistudio", "gemini", "gemini-cli" }, seen_channels)
+            assert.is_false(prompted, "prompted a login despite a healthy gemini-cli credential")
+            assert.is_truthy(msgs[#msgs].msg:find("is authenticated", 1, true))
+        end)
+
         it("says so when credential state cannot be read", function()
-            cliproxy.credential_health = function(cb)
+            cliproxy.credential_health = function(cb, channel)
+                seen_channels[#seen_channels + 1] = channel
                 cb({ state = "unknown", reason = "unreachable", message = "proxy unreachable" })
             end
             local prompted = false

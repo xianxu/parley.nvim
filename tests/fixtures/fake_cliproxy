@@ -28,6 +28,8 @@ the #197 outage:
   no_auth              503 auth_unavailable (providers=…, model=…)
   expired              401 authentication_error, OAuth access token has expired
   quota                402 payment_required
+  <mode>_once          that error on the FIRST request, 200 thereafter — a
+                       genuinely transient failure for the retry rung
 """
 import json
 import os
@@ -137,6 +139,8 @@ def main():
         sys.stderr.write("fake_cliproxy: no port given\n")
         sys.exit(2)
 
+    served = {"first": False}  # for the `_once` transient modes
+
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_a):
             pass
@@ -168,6 +172,21 @@ def main():
             length = int(self.headers.get("Content-Length") or 0)
             if length:
                 self.rfile.read(length)
+            # `<mode>_once` fails the FIRST request and succeeds afterwards —
+            # a genuinely transient failure, which is what the recovery ladder's
+            # retry rung is for. Modelling it here removes the alternative:
+            # swapping servers mid-flight, which races the retry.
+            base = error_mode[:-5] if error_mode.endswith("_once") else None
+            if base is not None:
+                if not served["first"]:
+                    served["first"] = True
+                    status, body = self.ERRORS[base]
+                    self._json(status, body)
+                    return
+                self._json(200, {"id": "chatcmpl-fake", "object": "chat.completion",
+                                 "choices": [{"index": 0, "finish_reason": "stop",
+                                              "message": {"role": "assistant", "content": "ok"}}]})
+                return
             if error_mode in self.ERRORS:
                 status, body = self.ERRORS[error_mode]
                 self._json(status, body)

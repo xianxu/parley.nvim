@@ -211,10 +211,14 @@ on use — the race that caused this issue.
   keeps only ids whose `owned_by` matches the provider (map verified against the
   CLIProxyAPI catalog: claude→anthropic, codex→openai, google→google, xai→xai,
   kimi→moonshot, antigravity→antigravity). `/v1/models` reads the **dynamic**
-  registry (loaded auth clients only), so an unauthenticated provider contributes
-  no models → **empty list** → the command prompts `:ParleyProxy login <provider>`.
-  Chosen over the management API precisely because it auth-detects for free and
-  needs no management secret.
+  registry, so an empty list means "this provider serves no models right now" —
+  **not** "not authenticated". #197 disproved that inference (the registry kept
+  listing every model with the credential dead), so an empty list now triggers a
+  credential-health read on the CHANNEL axis
+  (`credential_health_for_login`: `google` → gemini / gemini-cli / aistudio) and
+  the shared `credential_action` policy decides between "authenticated but no
+  models — check the catalog", a login prompt carrying the proxy's own reason,
+  and an honest "state could not be read".
 - **Bare `:ParleyProxy`** prints per-subcommand help; `SUBS_HELP` (init.lua) is the
   single source for both the usage text and the completion list (ARCH-DRY).
 

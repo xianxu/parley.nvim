@@ -184,6 +184,25 @@ function M.channel_login(channel)
     return channel and CHANNEL_LOGIN[channel] or nil
 end
 
+--- Every cliproxy CHANNEL served by a login provider — the inverse of
+--- `channel_login`, derived rather than hand-maintained (ARCH-DRY).
+---
+--- Needed because a third axis exists: `providers()` names login-provider-shaped
+--- values (`google`), while credential health is keyed by channel
+--- (`gemini`/`gemini-cli`/`aistudio`). Five of six coincide; `google` does not.
+---@param login string
+---@return string[] channels # sorted, empty when the login is unknown
+function M.channels_for_login(login)
+    local out = {}
+    for channel, l in pairs(CHANNEL_LOGIN) do
+        if l == login then
+            out[#out + 1] = channel
+        end
+    end
+    table.sort(out)
+    return out
+end
+
 --- Resolve which login a model needs. Derives from resolve_channel so there is
 --- one model→channel source (ARCH-DRY).
 ---@param model string
@@ -228,9 +247,10 @@ end
 
 --- Parse a /v1/models response body and return the sorted model ids whose
 --- `owned_by` matches. Pure; empty for malformed input or no match. The
---- match-or-empty is what gives per-provider auth detection: an unauthenticated
---- provider contributes no models, so its filtered list is empty even when other
---- providers are present.
+--- match-or-empty says which models a provider SERVES. It is NOT an auth signal:
+--- #197 established that the registry keeps listing models with the credential
+--- dead, so an empty list means "no models right now" and the caller must read
+--- credential health to learn why.
 ---@param models_json string
 ---@param owned_by string
 ---@return string[]

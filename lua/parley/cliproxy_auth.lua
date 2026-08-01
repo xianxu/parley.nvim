@@ -162,6 +162,16 @@ function M.classify_auth_files(files, channel)
     return best
 end
 
+--- Is `a` a healthier reading than `b`? Same ranking classify_auth_files uses to
+--- pick within one channel, exposed so a caller spanning SEVERAL channels (one
+--- login provider) can apply it too without duplicating the order.
+---@param a table
+---@param b table
+---@return boolean
+function M.healthier(a, b)
+    return (HEALTH_RANK[(a or {}).state] or -1) > (HEALTH_RANK[(b or {}).state] or -1)
+end
+
 --------------------------------------------------------------------------------
 -- Diagnosis (the sentence a human reads)
 --------------------------------------------------------------------------------
@@ -236,14 +246,90 @@ local function error_is_auth_shaped(message)
     return message:match("[Uu]nauthorized") ~= nil or message:match("[Ee]xpired") ~= nil
 end
 
+--- Parse an RFC3339 timestamp to epoch seconds. Handles the offset and the
+--- fractional seconds cliproxy emits (`2026-08-01T00:34:46.994488305-07:00`).
+---
+--- Exists because a string compare across representations is WRONG, not merely
+--- fragile: the same instant is `…T18:35:01Z` on one side and `…T11:35:01-07:00`
+--- on the other, and `"1" > "8"` is false while `"Z" > "-"` is true — so the
+--- comparison's answer depends on the operator's timezone, not on the files.
+---@param ts string|nil
+---@return number|nil epoch_seconds
+function M.rfc3339_sec(ts)
+    if type(ts) ~= "string" then
+        return nil
+    end
+    local y, mo, d, h, mi, sec = ts:match("^(%d+)-(%d+)-(%d+)[Tt](%d+):(%d+):(%d+)")
+    if not y then
+        return nil
+    end
+    -- os.time interprets the table as LOCAL time, so convert to UTC by hand
+    -- rather than depending on the runner's zone.
+    local days = math.floor((tonumber(y) * 365) + math.floor(tonumber(y) / 4)
+        - math.floor(tonumber(y) / 100) + math.floor(tonumber(y) / 400))
+    local mdays = { 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334 }
+    local yy, mm = tonumber(y), tonumber(mo)
+    local leap = (yy % 4 == 0 and yy % 100 ~= 0) or yy % 400 == 0
+    days = days + mdays[mm] + tonumber(d) - 1 + ((leap and mm > 2) and 1 or 0)
+    -- days counted from year 0; subtract the epoch's own count (1970-01-01)
+    local epoch_days = (1970 * 365) + math.floor(1970 / 4) - math.floor(1970 / 100)
+        + math.floor(1970 / 400)
+    local total = (days - epoch_days) * 86400 + tonumber(h) * 3600 + tonumber(mi) * 60 + tonumber(sec)
+    local sign, oh, om = ts:match("([%+%-])(%d%d):?(%d%d)$")
+    if sign then
+        local offset = tonumber(oh) * 3600 + tonumber(om) * 60
+        total = total + (sign == "+" and -offset or offset)
+    end
+    return total
+end
+
+-- Filesystem mtimes and cliproxy's reported modtime have second-or-worse
+-- agreement, so require a real gap before calling a file newer.
+local STALE_SKEW_SEC = 2
+
 -- The auth file on disk is newer than the copy the proxy loaded ⇒ its watcher
--- missed a write and a restart will pick it up. Only when BOTH timestamps are
--- present: RFC3339 strings compare lexicographically, but a missing one tells us
--- nothing and guessing "stale" would restart the proxy under every failure.
+-- missed a write and a restart will pick it up.
+--
+-- Both sides are EPOCH SECONDS: the IO shell passes `uv.fs_stat().mtime.sec`
+-- directly and the proxy's RFC3339 is parsed here. A missing value tells us
+-- nothing, and guessing "stale" would restart the proxy under every failure.
 local function auth_file_is_stale(health, proxy_state)
-    local disk = proxy_state and proxy_state.auth_file_modtime
-    local loaded = health and health.modtime
-    return type(disk) == "string" and type(loaded) == "string" and disk > loaded
+    local disk = tonumber(proxy_state and proxy_state.auth_file_modtime)
+    local loaded = M.rfc3339_sec(health and health.modtime)
+    return disk ~= nil and loaded ~= nil and disk > loaded + STALE_SKEW_SEC
+end
+
+--- What a credential's health alone implies, independent of any request that
+--- failed: `prompt_login`, `report`, or nil when the credential is fine.
+---
+--- Shared by `decide` (the dispatch failure path) and `:ParleyProxy models`, so
+--- the two cannot disagree about what "error" means — the models command used to
+--- carry its own three-branch copy of this (ARCH-DRY, ARCH-PURPOSE).
+---@param health table
+---@param login_provider string|nil
+---@return string|nil action
+function M.credential_action(health, login_provider)
+    local state = (health or {}).state
+    local function prompt_or_report()
+        -- A prompt we cannot act on is just a worse report.
+        return login_provider and "prompt_login" or "report"
+    end
+    if state == "missing" or state == "disabled" or state == "unavailable" then
+        return prompt_or_report()
+    end
+    if state == "error" then
+        -- A credential can be in `error` for reasons a login won't fix (DNS,
+        -- upstream 5xx); sending someone through OAuth for a network blip is
+        -- its own bug.
+        if error_is_auth_shaped(health.message) then
+            return prompt_or_report()
+        end
+        return "report"
+    end
+    if state == "unknown" then
+        return "report"
+    end
+    return nil -- healthy
 end
 
 --- Decide what to do about a failed cliproxy query. Pure: the IO shell gathers
@@ -265,14 +351,6 @@ function M.decide(verdict, health, proxy_state, attempt, login_provider)
     local message = M.diagnosis(verdict, health)
     local repairs_allowed = attempt < 1
 
-    local function prompt_or_report()
-        -- A prompt we cannot act on is just a worse report.
-        if login_provider then
-            return { action = "prompt_login", message = message, login_provider = login_provider }
-        end
-        return { action = "report", message = message }
-    end
-
     -- Quota and model-availability are never login problems, whatever the
     -- credential looks like.
     if verdict.kind == "quota" or verdict.kind == "model_unavailable" then
@@ -283,30 +361,20 @@ function M.decide(verdict, health, proxy_state, attempt, login_provider)
         return { action = "start", message = message }
     end
 
-    local state = health.state
-    if state == "missing" or state == "disabled" or state == "unavailable" then
-        return prompt_or_report()
+    local credential = M.credential_action(health, login_provider)
+    if credential then
+        return { action = credential, message = message, login_provider = login_provider }
     end
-    if state == "error" then
-        if error_is_auth_shaped(health.message) then
-            return prompt_or_report()
+    -- credential_action returned nil ⇒ the proxy believes the credential is
+    -- good, so the failure was transient. An `expired` verdict here is
+    -- contradictory — believe the credential reading rather than prompt for a
+    -- login while displaying "looks healthy".
+    if repairs_allowed then
+        if auth_file_is_stale(health, proxy_state) then
+            return { action = "restart", message = message }
         end
-        return { action = "report", message = message }
+        return { action = "retry", message = message }
     end
-    if state == "healthy" then
-        -- The proxy believes the credential is good. An `expired` verdict here
-        -- is contradictory — believe the credential reading rather than prompt
-        -- for a login while displaying "looks healthy".
-        if repairs_allowed then
-            if auth_file_is_stale(health, proxy_state) then
-                return { action = "restart", message = message }
-            end
-            return { action = "retry", message = message }
-        end
-        return { action = "report", message = message }
-    end
-    -- state == "unknown": we could not read credential state. Report honestly
-    -- rather than guess at a login.
     return { action = "report", message = message }
 end
 
