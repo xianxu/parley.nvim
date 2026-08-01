@@ -63,6 +63,23 @@ function M.render(opts)
         -- cliproxy would read as a malformed api-keys.
         cfg["api-keys"] = nil
     end
+    if opts.management_key ~= nil and opts.management_key ~= "" then
+        -- The management API (/v0/management/auth-files) is parley's only honest
+        -- source of credential health (#197) and it authenticates with THIS key
+        -- — the api-keys bearer gets 401. Without the key rendered, cliproxy
+        -- doesn't even register the route (404).
+        --
+        -- Merge, never replace: the operator's raw `remote-management` block
+        -- passes through. `allow-remote` is deliberately never set, so the new
+        -- surface stays loopback-only, and the control panel is off unless the
+        -- operator asked for it — parley needs only the JSON route.
+        local rm = type(cfg["remote-management"]) == "table" and cfg["remote-management"] or {}
+        rm["secret-key"] = opts.management_key
+        if rm["disable-control-panel"] == nil then
+            rm["disable-control-panel"] = true
+        end
+        cfg["remote-management"] = rm
+    end
     return cfg, overrides
 end
 

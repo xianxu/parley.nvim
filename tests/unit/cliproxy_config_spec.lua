@@ -94,6 +94,45 @@ describe("render", function()
         assert.is_nil(cfg["api-keys"])
     end)
 
+    it("renders the management secret-key when given", function()
+        local cfg = cc.render({ host = "127.0.0.1", port = 8317, management_key = "abc123" })
+        assert.equals("abc123", cfg["remote-management"]["secret-key"])
+    end)
+
+    it("defaults the control panel off — parley needs only the JSON route", function()
+        local cfg = cc.render({ host = "127.0.0.1", port = 8317, management_key = "abc123" })
+        assert.is_true(cfg["remote-management"]["disable-control-panel"])
+    end)
+
+    it("lets an operator re-enable the control panel", function()
+        local cfg = cc.render({
+            host = "127.0.0.1", port = 8317, management_key = "abc123",
+            config = { ["remote-management"] = { ["disable-control-panel"] = false } },
+        })
+        assert.is_false(cfg["remote-management"]["disable-control-panel"])
+        assert.equals("abc123", cfg["remote-management"]["secret-key"])
+    end)
+
+    it("merges into an operator's remote-management block without clobbering it", function()
+        local cfg = cc.render({
+            host = "127.0.0.1", port = 8317, management_key = "abc123",
+            config = { ["remote-management"] = { ["some-future-key"] = "kept" } },
+        })
+        assert.equals("kept", cfg["remote-management"]["some-future-key"])
+        assert.equals("abc123", cfg["remote-management"]["secret-key"])
+    end)
+
+    it("never enables allow-remote on its own — the surface stays loopback-only", function()
+        local cfg = cc.render({ host = "127.0.0.1", port = 8317, management_key = "abc123" })
+        assert.is_nil(cfg["remote-management"]["allow-remote"])
+    end)
+
+    it("omits remote-management entirely without a key", function()
+        -- Pins that operators who never enable this see a byte-identical config.
+        assert.is_nil(cc.render({ host = "127.0.0.1", port = 8317 })["remote-management"])
+        assert.is_nil(cc.render({ host = "127.0.0.1", port = 8317, management_key = "" })["remote-management"])
+    end)
+
     it("preserves a nested map+list passthrough (oauth-model-alias) through encode", function()
         -- the structure cliproxyapi needs to route claude-opus-4-8 → Claude OAuth;
         -- guards the JSON-as-YAML emission of nested maps containing lists of maps.
