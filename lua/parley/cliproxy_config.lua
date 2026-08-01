@@ -184,6 +184,12 @@ function M.channel_login(channel)
     return channel and CHANNEL_LOGIN[channel] or nil
 end
 
+-- A device-code flow logs into an EXISTING channel; it is a login METHOD, not a
+-- channel of its own. Without this, channels_for_login("codex-device") is empty,
+-- which silently disables the login watch's peer-refresh filter and makes the
+-- success notice drop the account.
+local LOGIN_ALIASES = { ["codex-device"] = "codex" }
+
 --- Every cliproxy CHANNEL served by a login provider — the inverse of
 --- `channel_login`, derived rather than hand-maintained (ARCH-DRY).
 ---
@@ -193,6 +199,7 @@ end
 ---@param login string
 ---@return string[] channels # sorted, empty when the login is unknown
 function M.channels_for_login(login)
+    login = LOGIN_ALIASES[login] or login
     local out = {}
     for channel, l in pairs(CHANNEL_LOGIN) do
         if l == login then

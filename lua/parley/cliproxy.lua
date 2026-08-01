@@ -1035,7 +1035,9 @@ end
 ---@param provider string
 ---@param argv string[]
 ---@param on_done fun(ok: boolean)|nil
-function M.run_login(provider, argv, on_done)
+---@param timeout_ms number|nil # how long to watch for a credential (default 3min).
+---   Injectable so the timeout branch is reachable from a spec without sleeping.
+function M.run_login(provider, argv, on_done, timeout_ms)
     -- One settle, ever: on_exit(non-zero) reported the failure immediately while
     -- await_credential kept polling to its 3-minute deadline and then fired a
     -- second time — telling an operator who had since logged in successfully
@@ -1120,7 +1122,7 @@ function M.run_login(provider, argv, on_done)
     end
 
     -- Observe the outcome instead of assuming it.
-    M.await_credential(provider, before, 180000, function(ok)
+    M.await_credential(provider, before, timeout_ms or 180000, function(ok)
         if settled then
             return -- the exit path already reported; this watcher is abandoned
         end

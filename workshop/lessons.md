@@ -571,3 +571,15 @@
   consecutive reviews before being fixed, costing a review round each time. Rule:
   when a review names a documentation drift, fix it in that round — the cost only
   grows, and reviewers rightly keep re-raising it.
+- **Two hand-maintained sets on one axis will drift; enforce the correspondence
+  in a test.** `LOGIN_FLAGS` (7 entries) and `CHANNEL_LOGIN` (6 values) were both
+  edited by hand, and `codex-device` fell through the gap — silently disabling a
+  credential-watch filter whose comment promised it and dropping the account from
+  the success notice. Rule: when one table's keys must all resolve through
+  another, assert exactly that over the whole key set; deriving one from the
+  other is better still.
+- **A fake state no test drives is documentation, not a fixture.** Two of four
+  modeled login modes were unreachable — one because the timeout it needed was
+  hardcoded. Rule: every state a fake models needs a test that drives it, or the
+  state should be deleted; add the injection seam that makes the branch reachable
+  rather than leaving it as a comment.

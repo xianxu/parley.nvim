@@ -306,7 +306,32 @@ content.
 
 ## Log
 
+### 2026-08-01 — boundary bookkeeping (what was actually reviewed)
+
+Recording this explicitly, because the computed windows do not tell the story:
+
+- **M2's window (`819a781..HEAD`) carried all of M3's commits**, because the M2
+  review rounds outlasted the M2 work. Six full rounds ran on that window and
+  every finding was addressed. Rounds 7 and 8 died instantly on
+  `API Error: Connection closed mid-response` with no findings — twice
+  consecutively — so M2 closed with `--no-judge`, operator consulted, reason in
+  the close record. Probable cause: the review sidecar had grown to 1080 lines
+  across 8 blocks, and the review prompt reads it.
+- **M3's computed window was empty** (`BASE_SHA == HEAD`). Its review covered
+  the M3 surface by *content* across `ad2ce42..HEAD` — `parse_peers`, `peers`,
+  `reap`, `warn_about_peers`, the `stop()` fix, and the whole login flow — and
+  returned FIX-THEN-SHIP with three Important findings, all fixed in the close
+  commit.
+- Rounds 3–6 of the M2 window also reviewed M3 code directly, finding and fixing
+  real defects in `reap` (counting kills luv never made), `peers` (weekday-string
+  ordering, unarmed latch), and the login flow (the non-claude regression, the
+  version-dependent flag set, the abandoned watcher).
+
+So every line of M1–M3 has had fresh-context review; the *attribution* to
+boundaries is uneven, not the coverage.
+
 ### 2026-08-01 — M3 (Prevent) + M2 review rework
+- 2026-08-01: closed M3 — M3 (Prevent) verified. parse_peers matches on the EXECUTABLE, never a substring — the real ps fixture contains a zsh -c wrapper quoting the proxy path, which substring matching would SIGTERM — and on BOTH binary names, the omission that made this issue own survey undercount. Verified against the real process table outside the sandbox: peers() finds 6, correctly excluding the managed proxy and the shell wrapper. warn_about_peers names the rotation mechanism (15-min refresh over a shared auth-dir, rotating refresh tokens) once per session, ordering by parsed start time not weekday string; latch armed before the scan so a raise cannot restore the ~150ms per-dispatch blocking ps+lsof. reap acts on the CONFIRMED list and counts only kills the OS accepted (luv returns nil+err rather than raising). stop() no longer leaks parley-spawned proxies on non-managed ports. Login: callback-port preflight by CONNECT (a bind probe reports free under SO_REUSEADDR — exactly the case it must catch), the binary own output surfaced debounced WITHOUT -no-browser (intercepting a claude-shaped URL had broken google/kimi/xai/antigravity), job kept off a closable terminal buffer, credential watch filtered to the login channels, outcome reported exactly once, and login_argv validates the flag against <binary> -h by whole token. Green: cliproxy_auth 61, cliproxy_lifecycle 53, cliproxy_login 10, cliproxy_command 10, cliproxy_conformance 4 (REAL binary, reports google unsupported on the installed 7.2.110), cliproxy_budget 3, cliproxy_config 46, dispatcher_query 56, cliproxy_auth_login 19, cliproxy_recovery_e2e 4. make lint 0/0 across 313 files. NOTE: M3 code also received review coverage inside M2 window rounds 3-6, which found and fixed defects in reap, peers, and the login flow.; review verdict: FIX-THEN-SHIP
 - 2026-08-01: closed M2 — GATE WAIVER (--no-judge), reason recorded: the boundary review ran SIX full rounds on this window (C1/C2 + I1-I6 each round) and every finding was addressed; rounds 7 and 8 died immediately on "API Error: Connection closed mid-response" with no findings, twice consecutively. Probable cause: the review sidecar has grown to 1080 lines / 8 review blocks and the review prompt reads it. The failure is in the review infrastructure, not the code. Operator consulted and chose this precise per-gate waiver over --force. Round-6 content: C1 the flag guard could never fire (-login is a substring of -claude-login et al) — whole-token matching now, and the new LOGIN_FLAGS conformance check correctly reports google unsupported on the installed 7.2.110; third substring defect in this issue, rule recorded in lessons.md. I1 peer-scan latch armed only on success. I2 reap confirmed one PID list and killed another. I3/I4/I5 atlas, LOGIN_FLAGS conformance, and plan traceability (55 checkboxes, decide table expired row, 12 missing entities each verified present in lua/). Green: cliproxy_auth 61, cliproxy_budget 3, cliproxy_config 46, dispatcher_query 56, cliproxy_lifecycle 53, cliproxy_login 10, cliproxy_auth_login 19, cliproxy_recovery_e2e 4, cliproxy_command 10, cliproxy_conformance 4 (REAL 7.1.71 binary). make lint 0/0 across 313 files.; review verdict: not-run
 
 **M3.** `parse_peers` matches on the executable, never a substring — the real

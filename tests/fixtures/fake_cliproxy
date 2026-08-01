@@ -34,9 +34,11 @@ the #197 outage:
 Login modes (PARLEY_FAKE_LOGIN_MODE), used when invoked with a -*-login flag —
 the four ways #197's login could end:
   success              print the authorize URL, then write a credential
-  port_taken           hold :54545 so the preflight has something to find
   dies_early           print the URL, then exit non-zero (the #197 failure)
   hangs                print the URL and never write a credential
+
+(The callback-port preflight is fixtured by binding the port in-process from the
+spec — a spawned holder would outlive the test.)
 """
 import json
 import os
@@ -161,12 +163,6 @@ def run_login(login_mode, auth_store):
     """
     url = ("https://claude.ai/oauth/authorize?client_id=fake&code=true"
            "&redirect_uri=http%3A%2F%2Flocalhost%3A54545%2Fcallback&state=fake")
-    if login_mode == "port_taken":
-        srv = HTTPServer(("127.0.0.1", 54545), BaseHTTPRequestHandler)
-        sys.stdout.write(url + "\n")
-        sys.stdout.flush()
-        srv.serve_forever()
-        return
     sys.stdout.write("Visit the following URL to continue authentication:\n")
     sys.stdout.write(url + "\n")
     sys.stdout.flush()

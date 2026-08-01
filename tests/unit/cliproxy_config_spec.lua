@@ -329,3 +329,27 @@ describe("resolve_channel vs resolve_login_provider", function()
         assert.is_nil(cc.resolve_login_provider("no-such-model", alias))
     end)
 end)
+
+
+-- #197 M3 I1: LOGIN_FLAGS and CHANNEL_LOGIN are two hand-maintained sets on the
+-- same axis. This is the correspondence nothing enforced, and codex-device is
+-- what the drift produced.
+describe("every login provider resolves to at least one channel", function()
+    local cliproxy = require("parley.cliproxy")
+
+    it("has no login provider without channels", function()
+        local orphans = {}
+        for _, provider in ipairs(cliproxy.login_providers()) do
+            if #cc.channels_for_login(provider) == 0 then
+                orphans[#orphans + 1] = provider
+            end
+        end
+        assert.same({}, orphans,
+            "a login with no channel silently disables the credential-watch filter "
+                .. "and drops the account from the success notice")
+    end)
+
+    it("maps the device-code flow onto the channel it logs into", function()
+        assert.same({ "codex" }, cc.channels_for_login("codex-device"))
+    end)
+end)

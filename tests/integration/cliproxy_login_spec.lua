@@ -124,6 +124,30 @@ describe("cliproxy login", function()
         assert.is_truthy(settled_at)
     end)
 
+    it("reports a login that hangs, once, with the re-run instruction", function()
+        -- The timeout branch: the binary prints its URL and no credential ever
+        -- lands (the operator abandons the browser tab). Reachable only because
+        -- run_login takes an injectable timeout — it was dead code before.
+        vim.env.PARLEY_FAKE_LOGIN_MODE = "hangs"
+        local settles = 0
+        local result
+        cliproxy.run_login("claude", (cliproxy.login_argv("claude")), function(ok)
+            settles = settles + 1
+            result = ok
+        end, 1500)
+        vim.wait(12000, function() return settles > 0 end, 25)
+
+        assert.equals(1, settles)
+        assert.is_false(result)
+        assert.matches("did not complete", all_notices())
+        assert.matches("Re%-run", all_notices())
+
+        -- and it stays settled: no second word from the abandoned job
+        local after = #notices
+        vim.wait(2000, function() return #notices > after end, 100)
+        assert.equals(after, #notices)
+    end)
+
     it("preflights the callback port and names the remedy", function()
         if cliproxy.callback_port_blocked("claude") then
             print("SKIP: :54545 already held on this machine")
