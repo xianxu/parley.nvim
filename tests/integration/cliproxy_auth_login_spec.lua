@@ -422,6 +422,29 @@ describe("cliproxy.recover", function()
         assert.equals("give_up", out.settled) -- never left hanging
     end)
 
+    it("settles, and keeps prompting later, when vim.ui.select itself raises", function()
+        -- UI plugins replace vim.ui.select and can throw. Unguarded, that skips
+        -- the settle AND latches _login_prompt_active on, so no login is ever
+        -- offered again for the rest of the session.
+        serve({ claude = { unavailable = true, status_message = "token revoked" } })
+        vim.ui.select = function() error("dressing.nvim: window creation failed") end
+        local first = run({ http_status = 503, body = NO_AUTH, model = "claude-opus-4-8",
+            streamed = false, attempt = 0 })
+        assert.is_true(first.claimed)
+        assert.equals("give_up", first.settled, "a raising picker stranded the claim")
+
+        -- and the next failure must still be able to prompt
+        local prompted = false
+        vim.ui.select = function(_i, _o, cb)
+            prompted = true
+            cb(nil, 2)
+        end
+        local second = run({ http_status = 503, body = NO_AUTH, model = "claude-opus-4-8",
+            streamed = false, attempt = 0 })
+        assert.equals("give_up", second.settled)
+        assert.is_true(prompted, "the prompt latched off for the rest of the session")
+    end)
+
     it("settles with the diagnosis even when the login command raises", function()
         -- :ParleyProxy login opens a window and jobstarts a terminal, so a
         -- constrained layout or a user autocmd can throw. Unguarded, that skips

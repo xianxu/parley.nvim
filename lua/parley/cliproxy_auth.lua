@@ -378,9 +378,15 @@ local STALE_SKEW_SEC = 2
 --
 -- Both quantities come from the same record: `modtime` is the file's mtime,
 -- re-stat'd by the proxy per request, and `updated_at` is when the proxy last
--- (re)loaded that credential into memory. Verified against the real binary: a
--- content rewrite advances BOTH (the watcher reloaded); a touch-only write
--- advances `modtime` alone — which is exactly the missed-reload signal.
+-- (re)loaded that credential into memory. They are independent — pinned against
+-- the real binary by cliproxy_conformance_spec.
+--
+-- NB the gap opens only when the proxy's watcher MISSED a write. fsnotify
+-- observes attribute changes too, so an ordinary touch usually does trigger a
+-- reload and both advance together — correctly yielding "not stale". This rung
+-- is for the case where the reload did not happen, which is why the check is
+-- `modtime > updated_at + skew` rather than any assumption about what a
+-- particular kind of write does.
 --
 -- The previous three attempts all compared `modtime` against the file's mtime
 -- read independently — the SAME quantity — so the comparison was self-referential

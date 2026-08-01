@@ -583,3 +583,20 @@
   hardcoded. Rule: every state a fake models needs a test that drives it, or the
   state should be deleted; add the injection seam that makes the branch reachable
   rather than leaving it as a comment.
+- **`pcall(f, expr)` does not protect `expr`.** Arguments evaluate before the
+  call, so `pcall(vim.json.decode, readfile(p))` leaves the *read* unguarded —
+  and `vim.fn.readfile` raises (E17 on a directory, E484 on a vanished file). In
+  an async poll with no outer guard that stranded a login watch entirely. Rule:
+  wrap the whole expression in a closure — `pcall(function() … end)` — whenever
+  any argument can itself throw.
+- **Guarding the callback is not guarding the call.** `vim.ui.select` is replaced
+  by UI plugins that can raise; a previous fix had guarded only the code *inside*
+  its callback. The raise skipped the settle and latched the prompt-active flag
+  on for the session, so no login was ever offered again. Rule: when a fix guards
+  "the risky part", re-ask which call actually crosses into third-party code.
+- **A conformance check can falsify your own comment — let it.** Pinning
+  `updated_at` semantics against the real binary immediately disproved the stated
+  premise ("a touch never advances it"): fsnotify sees attribute changes, so the
+  proxy usually does reload. The code was right for a subtler reason than the
+  comment claimed. Rule: assert the property the logic actually needs
+  (independence of the two quantities), not the anecdote from one manual probe.

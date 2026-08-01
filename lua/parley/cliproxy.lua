@@ -948,8 +948,14 @@ local function newest_credential_mtime(login)
         -- otherwise satisfy a login watch that never completed.
         local matches = next(channels) == nil
         if not matches and name:sub(-5) == ".json" then
-            local ok, decoded = pcall(vim.json.decode,
-                table.concat(vim.fn.readfile(dir .. "/" .. name), "\n"))
+            -- The READ must be inside the pcall, not just the decode: arguments
+            -- evaluate first, and vim.fn.readfile RAISES (E17 on a directory,
+            -- E484 on a file that vanished between readdir and here — which peer
+            -- proxies cause every 15 minutes). This runs in an async poll with no
+            -- outer guard, so a raise would strand the login watch entirely.
+            local ok, decoded = pcall(function()
+                return vim.json.decode(table.concat(vim.fn.readfile(dir .. "/" .. name), "\n"))
+            end)
             matches = ok and type(decoded) == "table" and channels[decoded.type] == true
         end
         if name:sub(-5) == ".json" and matches then
@@ -1156,6 +1162,12 @@ local function prompt_login(login, message, done)
     end
     _login_prompt_active = true
     vim.schedule(function()
+        -- vim.ui.select is routinely replaced (dressing.nvim, telescope-ui-select,
+        -- snacks.nvim) and those implementations can raise. Unguarded, that skips
+        -- done() — stranding the claim until the backstop discards the diagnosis
+        -- — AND leaves _login_prompt_active true, so no login is ever offered
+        -- again for the rest of the session.
+        local prompt_ok, prompt_err = pcall(function()
         local prefix = (require("parley").config or {}).cmd_prefix or "Parley"
         vim.ui.select({ "Log in (" .. login .. ")", "Not now" }, { prompt = message },
             function(_, idx)
@@ -1174,6 +1186,12 @@ local function prompt_login(login, message, done)
                 end
                 done()
             end)
+        end)
+        if not prompt_ok then
+            _login_prompt_active = false
+            logger.error("cliproxy: login prompt failed: " .. tostring(prompt_err))
+            done()
+        end
     end)
 end
 

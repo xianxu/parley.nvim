@@ -148,6 +148,23 @@ describe("cliproxy login", function()
         assert.equals(after, #notices)
     end)
 
+    it("settles even when the auth-dir holds an unreadable entry", function()
+        -- readfile RAISES on a directory (E17) and on a file that vanished
+        -- (E484 — peer proxies rotate credentials every 15 minutes). The watch
+        -- runs in an async poll with no outer guard, so a raise there would
+        -- strand the login exactly the way #197 §5 describes.
+        vim.fn.mkdir(store .. "/trap.json", "p") -- a DIRECTORY named like a credential
+        local settles = 0
+        local result
+        cliproxy.run_login("claude", (cliproxy.login_argv("claude")), function(ok)
+            settles = settles + 1
+            result = ok
+        end, 1500)
+        vim.wait(12000, function() return settles > 0 end, 25)
+        assert.equals(1, settles, "an unreadable auth-dir entry stranded the login watch")
+        assert.is_boolean(result)
+    end)
+
     it("preflights the callback port and names the remedy", function()
         if cliproxy.callback_port_blocked("claude") then
             print("SKIP: :54545 already held on this machine")

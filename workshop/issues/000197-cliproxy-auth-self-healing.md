@@ -1,12 +1,13 @@
 ---
 id: 000197
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-08-01
 updated: 2026-08-01
 estimate_hours: 9.2
 started: 2026-08-01T00:24:22-07:00
+actual_hours: 11.17
 ---
 
 # cliproxy auth failures must self-heal: detect, diagnose, recover
@@ -333,6 +334,7 @@ content.
 ## Log
 
 ### 2026-08-01 — boundary bookkeeping (what was actually reviewed)
+- 2026-08-01: closed — The 2026-08-01 outage is fixed and re-verified end to end. cliproxy_recovery_e2e_spec drives a real HTTP 503 from the stateful fake through dispatcher.query -> recover_query -> the operator notice and asserts the diagnosis names the account and the proxy own status_message, with body_bytes nowhere in it; "response is empty" is no longer emitted on a failed request (J7c/J7d pin both directions). Recovery ladder: healthy credential retries silently, stopped proxy is started, missed watcher reload restarts, dead credential prompts with the real reason, quota never says log in, and attempt>=1 can return no repair action (property test over every kind x state x liveness). Prevention: peers() detects the leaked proxies that rotated the credential out from under each other — verified against the real process table, 6 found, managed proxy and shell wrapper correctly excluded — warns once naming the mechanism, and :ParleyProxy reap clears them. Login is observable: callback-port preflight by connect, the binary own output surfaced, outcome reported exactly once, flags validated against <binary> -h (correctly reports google unsupported on the installed 7.2.110). Green: cliproxy_auth 61, cliproxy_config 48, cliproxy_budget 3, dispatcher_query 56, failure_notice 6, providers_pre_query 6, cliproxy_lifecycle 53, cliproxy_command 10, cliproxy_auth_login 19, cliproxy_recovery_e2e 4, cliproxy_login 11, cliproxy_conformance 4 (REAL 7.1.71 binary), cliproxy_dispatch 3, cliproxy_caller_teardown 5. make lint 0/0 across 313 files. Pre-existing suite failures (git_markdown_source, markdown_finder_async, tools_builtin_find) verified identical at pre-branch commit 375b635.; review verdict: FIX-THEN-SHIP
 
 Recording this explicitly, because the computed windows do not tell the story:
 

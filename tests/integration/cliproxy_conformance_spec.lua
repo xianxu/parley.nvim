@@ -44,7 +44,7 @@ end
 local BINARY = cliproxy.discover_binary()
 
 describe("cliproxyapi management API conformance", function()
-    local binary, proc, port, mgmt_key
+    local binary, proc, port, mgmt_key, auth_dir_path
 
     before_each(function()
         binary = BINARY
@@ -64,6 +64,7 @@ describe("cliproxyapi management API conformance", function()
     -- port, mgmt_key.
     local function boot(omit_management)
         local auth_dir = vim.fn.tempname()
+        auth_dir_path = auth_dir
         vim.fn.mkdir(auth_dir, "p")
         vim.fn.writefile({ vim.json.encode({
             access_token = "sk-ant-oat01-" .. string.rep("P", 80),
@@ -150,6 +151,54 @@ describe("cliproxyapi management API conformance", function()
         local reached, _body, code = get(mgmt_key)
         assert.is_true(reached)
         assert.equals("404", code)
+    end)
+
+    it("reports updated_at as a load stamp distinct from the file's modtime", function()
+        if not binary then
+            print("SKIP: no cliproxyapi binary discoverable — conformance not verified")
+            return
+        end
+        -- The staleness rung branches on `modtime > updated_at`, so what must
+        -- hold is that the two are INDEPENDENT quantities — modtime tracking the
+        -- file, updated_at tracking the proxy's own load. Pinning that both
+        -- fields merely exist is not enough: if a future cliproxy makes
+        -- updated_at a copy of modtime, the fake keeps modelling a distinction
+        -- the binary no longer makes and the rung silently dies — which is
+        -- exactly how it died the first time.
+        --
+        -- NB what this does NOT assert: that a touch leaves updated_at frozen.
+        -- fsnotify observes attribute changes, so the proxy usually DOES reload
+        -- on a touch and advances updated_at — and that is correct: the rung
+        -- fires only when the watcher genuinely missed a write, which cannot be
+        -- forced deterministically from outside.
+        boot()
+        local cred = auth_dir_path .. "/claude-conformance@example.invalid.json"
+
+        local _, body1 = get(mgmt_key)
+        local r1 = vim.json.decode(body1).files[1]
+        assert.is_string(r1.modtime)
+        assert.is_string(r1.updated_at)
+        -- On a never-reloaded credential the proxy stamps updated_at FROM the
+        -- file's mtime, so they are equal here. That is the "not stale" state.
+        assert.equals(r1.modtime, r1.updated_at)
+
+        -- Move the file's mtime into the future. The proxy re-stats modtime; if
+        -- it also reloads, updated_at takes the reload's own wall clock — a
+        -- different value. Either way the two must not move as one mirror.
+        local later = os.time() + 5
+        vim.loop.fs_utime(cred, later, later)
+        vim.wait(1500, function() return false end)
+        local _, body2 = get(mgmt_key)
+        local r2 = vim.json.decode(body2).files[1]
+
+        assert.are_not.equal(r1.modtime, r2.modtime, "modtime did not track the file")
+        assert.are_not.equal(r2.modtime, r2.updated_at,
+            "updated_at mirrored modtime — the two are no longer independent "
+                .. "quantities, so `modtime > updated_at` can never be true and "
+                .. "cliproxy_auth.auth_file_is_stale must be revisited")
+        -- and both remain parseable by the comparison the rung performs
+        assert.is_not_nil(ca.rfc3339_sec(r2.modtime))
+        assert.is_not_nil(ca.rfc3339_sec(r2.updated_at))
     end)
 
     it("declares the login flags parley claims it supports", function()
