@@ -1094,6 +1094,37 @@ describe("dispatcher.query internals", function()
             assert.is_truthy(table.concat(logged, "\n"):find("response is empty", 1, true))
         end)
 
+        it("J4b: the retry re-issues from a payload snapshot, not the consumed table", function()
+            -- format_headers consumes payload fields (cliproxyapi nils
+            -- _parley_route; googleai nils model). Sharing one table across
+            -- attempts would silently retry a DIFFERENT request.
+            local seen = {}
+            local original_run = tasker.run
+            tasker.run = function(...)
+                local qt = tasker.get_query(captured_qid)
+                table.insert(seen, qt and qt.payload)
+                return original_run(...)
+            end
+            with_adapter(function(_failure, retry)
+                retry()
+                return true
+            end, function()
+                dispatcher.query(nil, "openai", { model = "gpt-4", messages = {}, _parley_route = "anthropic" },
+                    function() end, nil, nil, nil, nil, nil, function() end)
+                -- consume the marker the way format_headers would
+                local first = tasker.get_query(captured_qid)
+                first.payload._parley_route = nil
+                captured_out_reader(nil, "")
+                captured_out_reader(nil, nil)
+                captured_terminal(0, 0, "", status_stderr("503"), nil)
+            end)
+            tasker.run = original_run
+            assert.equals(2, #seen)
+            assert.are_not.equal(seen[1], seen[2], "the retry reused the same payload table")
+            assert.equals("anthropic", seen[2]._parley_route,
+                "the retry lost the route marker the first attempt consumed")
+        end)
+
         it("J8: the failure carries the request model and the streamed flag", function()
             local seen
             with_adapter(function(failure)

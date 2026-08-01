@@ -19,6 +19,10 @@ local MANAGED = {
         config = {
             ["oauth-model-alias"] = {
                 claude = { { name = "claude-opus-4-8", alias = "claude-opus-4-8", fork = true } },
+                -- A channel whose LOGIN PROVIDER differs from its channel name
+                -- (gemini-cli → google). claude is the one case where the two
+                -- coincide, which is why a claude-only fixture hid C1.
+                ["gemini-cli"] = { { name = "gemini-2.5-pro", alias = "gemini-2.5-pro", fork = true } },
             },
         },
     },
@@ -55,14 +59,17 @@ describe("cliproxy.recover", function()
 
     -- Start the fake with a credential store, optionally overlaying a broken
     -- state onto the claude channel, and point parley's endpoint at it.
-    local function serve(overlay)
+    local function serve(overlays)
         local port = free_port()
         local store = vim.fn.tempname()
         vim.fn.mkdir(store, "p")
         vim.fn.writefile({ vim.json.encode({ type = "claude", email = "me@example.com" }) },
             store .. "/claude-me@example.com.json")
-        if overlay then
-            vim.fn.writefile({ vim.json.encode({ claude = overlay }) }, store .. "/state.json")
+        vim.fn.writefile({ vim.json.encode({ type = "gemini-cli", email = "g@example.com" }) },
+            store .. "/gemini-cli-g@example.com.json")
+        if overlays then
+            -- Full channel → state map, so a test can break a NON-claude channel.
+            vim.fn.writefile({ vim.json.encode(overlays) }, store .. "/state.json")
         end
         local cfg_file = vim.fn.tempname() .. ".json"
         vim.fn.writefile({ vim.json.encode({
@@ -124,8 +131,8 @@ describe("cliproxy.recover", function()
     ----------------------------------------------------------------------------
 
     it("claims the #197 503, prompts the right login, and reports the real reason", function()
-        serve({ unavailable = true, status = "error",
-            status_message = "OAuth access token has expired. Re-authenticate to continue." })
+        serve({ claude = { unavailable = true, status = "error",
+            status_message = "OAuth access token has expired. Re-authenticate to continue." } })
         local prompt
         vim.ui.select = function(_items, opts, cb)
             prompt = opts.prompt
@@ -145,7 +152,7 @@ describe("cliproxy.recover", function()
     end)
 
     it("prompts the claude login resolved from oauth-model-alias, not the model name", function()
-        serve({ unavailable = true, status_message = "dead" })
+        serve({ claude = { unavailable = true, status_message = "dead" } })
         local prompt
         vim.ui.select = function(_items, opts, cb)
             prompt = opts.prompt
@@ -184,7 +191,7 @@ describe("cliproxy.recover", function()
     end)
 
     it("does not claim once content has streamed — a retry would duplicate it", function()
-        serve({ unavailable = true })
+        serve({ claude = { unavailable = true } })
         local out = run({ http_status = 503, body = NO_AUTH, model = "claude-opus-4-8",
             streamed = true, attempt = 0 })
         assert.is_false(out.claimed)
@@ -203,17 +210,17 @@ describe("cliproxy.recover", function()
         assert.matches("healthy", out.message)
     end)
 
-    it("tells the operator WHY no login was offered when the model has no alias", function()
-        -- Regression for guidance the old check_auth_failure gave and #197's
-        -- first cut dropped: with no oauth-model-alias entry parley cannot know
-        -- which login to run, and saying only "log in" leaves the operator with
-        -- no way to act.
-        serve({ unavailable = true, status_message = "dead" })
-        parley.config.cliproxy.config["oauth-model-alias"] = {} -- model in no channel
+    it("tells the operator WHY no login was offered when nothing names a channel", function()
+        -- Regression for guidance the old check_auth_failure gave. Note the
+        -- BODY here carries no `providers=` field (the 401 form), so the only
+        -- possible source of a channel is oauth-model-alias — and it's empty.
+        serve()
+        parley.config.cliproxy.config["oauth-model-alias"] = {}
         local prompted = false
         vim.ui.select = function() prompted = true end
-        local out = run({ http_status = 503, body = NO_AUTH, model = "claude-opus-4-8",
-            streamed = false, attempt = 0 })
+        local out = run({ http_status = 401,
+            body = '{"error":{"message":"OAuth access token has expired."}}',
+            model = "claude-opus-4-8", streamed = false, attempt = 0 })
         vim.wait(200, function() return false end)
         assert.is_true(out.claimed)
         assert.is_false(prompted)
@@ -237,6 +244,64 @@ describe("cliproxy.recover", function()
     end)
 
     ----------------------------------------------------------------------------
+    -- Channel vs login provider (C1) — they only coincide for claude
+    ----------------------------------------------------------------------------
+
+    it("reads health on the CHANNEL axis, not the login-provider axis", function()
+        -- A healthy gemini-cli credential must not be reported as missing just
+        -- because its login provider is called "google".
+        serve()
+        local prompted = false
+        vim.ui.select = function() prompted = true end
+        local out = run({
+            http_status = 503,
+            body = '{"type":"error","error":{"type":"api_error","message":"auth_unavailable: '
+                .. 'no auth available (providers=gemini-cli, model=gemini-2.5-pro)"}}',
+            model = "gemini-2.5-pro", streamed = false, attempt = 0,
+        })
+        vim.wait(200, function() return false end)
+        assert.is_true(out.claimed)
+        assert.matches("healthy", out.message)
+        assert.matches("g@example.com", out.message)
+        assert.is_false(prompted, "prompted a login for a healthy credential")
+    end)
+
+    it("prompts the google login for a dead gemini-cli credential", function()
+        serve({ ["gemini-cli"] = { unavailable = true, status_message = "token revoked" } })
+        local prompt
+        vim.ui.select = function(_i, opts, cb)
+            prompt = opts.prompt
+            cb(nil, 2)
+        end
+        local out = run({
+            http_status = 503,
+            body = '{"type":"error","error":{"message":"auth_unavailable: no auth available '
+                .. '(providers=gemini-cli, model=gemini-2.5-pro)"}}',
+            model = "gemini-2.5-pro", streamed = false, attempt = 0,
+        })
+        assert.is_true(out.claimed)
+        assert.is_truthy(prompt)
+        assert.matches("revoked", out.message)
+    end)
+
+    it("refuses to guess a channel when none resolves", function()
+        -- Guessing "claude" would confidently report ANOTHER account's health
+        -- for the failing model.
+        serve()
+        local prompted = false
+        vim.ui.select = function() prompted = true end
+        local out = run({ http_status = 401,
+            body = '{"error":{"message":"OAuth access token has expired."}}',
+            model = "some-unaliased-model", streamed = false, attempt = 0 })
+        vim.wait(200, function() return false end)
+        assert.is_true(out.claimed)
+        assert.equals("give_up", out.settled)
+        assert.is_false(prompted)
+        assert.matches("oauth%-model%-alias", out.message)
+        assert.is_nil(out.message:find("me@example.com", 1, true))
+    end)
+
+    ----------------------------------------------------------------------------
     -- The claim contract: a claim is a debt
     ----------------------------------------------------------------------------
 
@@ -254,7 +319,7 @@ describe("cliproxy.recover", function()
     end)
 
     it("settles even when the operator dismisses the login prompt", function()
-        serve({ unavailable = true, status_message = "dead" })
+        serve({ claude = { unavailable = true, status_message = "dead" } })
         vim.ui.select = function(_i, _o, cb) cb(nil, 2) end -- "Not now"
         local out = run({ http_status = 503, body = NO_AUTH, model = "claude-opus-4-8",
             streamed = false, attempt = 0 })

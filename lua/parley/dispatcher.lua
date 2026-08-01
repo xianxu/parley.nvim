@@ -529,7 +529,12 @@ D.query = function(buf, provider, payload, handler, on_exit, callback, on_progre
 	-- itself, and the terminal closure that needs to re-issue the request is
 	-- nested inside it (#197).
 	local function start_query(attempt)
-		query(buf, provider, payload, handler, on_exit, callback, on_progress,
+		-- Per-attempt payload snapshot. format_headers CONSUMES fields from the
+		-- payload (cliproxyapi nils `_parley_route`, googleai nils `model`), so
+		-- a retry that reused the same table would re-issue a materially
+		-- different request — an anthropic-routed claude call would retry against
+		-- the OpenAI-shaped endpoint with OpenAI headers.
+		query(buf, provider, vim.deepcopy(payload), handler, on_exit, callback, on_progress,
 			on_activity, on_error, abort_before_start, start_query, attempt or 0)
 	end
 	local adapter = providers.get(provider)

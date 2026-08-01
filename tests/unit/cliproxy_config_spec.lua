@@ -295,3 +295,37 @@ describe("parse_checksums", function()
         assert.is_nil(cc.parse_checksums(sample, "CLIProxyAPI_7.1.71_linux_amd64.tar.gz"))
     end)
 end)
+
+-- #197 C1: channel and login provider are DIFFERENT axes. They coincide for
+-- claude, which is why every test in M1 missed the confusion.
+describe("resolve_channel vs resolve_login_provider", function()
+    local alias = {
+        claude = { { name = "claude-opus-4-8", alias = "claude-opus-4-8" } },
+        ["gemini-cli"] = { { name = "gemini-2.5-pro", alias = "gemini-2.5-pro" } },
+        aistudio = { { name = "gemini-3-pro-preview", alias = "gemini-3-pro-preview" } },
+    }
+
+    it("returns the CHANNEL, which is what auth-files reports", function()
+        assert.equals("gemini-cli", cc.resolve_channel("gemini-2.5-pro", alias))
+        assert.equals("aistudio", cc.resolve_channel("gemini-3-pro-preview", alias))
+        assert.equals("claude", cc.resolve_channel("claude-opus-4-8", alias))
+    end)
+
+    it("collapses several channels onto one login provider", function()
+        assert.equals("google", cc.resolve_login_provider("gemini-2.5-pro", alias))
+        assert.equals("google", cc.resolve_login_provider("gemini-3-pro-preview", alias))
+        -- and the two axes differ for exactly those models
+        assert.are_not.equals(cc.resolve_channel("gemini-2.5-pro", alias),
+            cc.resolve_login_provider("gemini-2.5-pro", alias))
+    end)
+
+    it("coincides only for claude — the case that hid the bug", function()
+        assert.equals(cc.resolve_channel("claude-opus-4-8", alias),
+            cc.resolve_login_provider("claude-opus-4-8", alias))
+    end)
+
+    it("returns nil for an unknown model rather than guessing", function()
+        assert.is_nil(cc.resolve_channel("no-such-model", alias))
+        assert.is_nil(cc.resolve_login_provider("no-such-model", alias))
+    end)
+end)

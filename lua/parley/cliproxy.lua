@@ -340,14 +340,17 @@ end
 -- reuse-if-healthy branch, and never spawn the replacement. The Python fake
 -- dies instantly, which is why a test alone would not surface this.
 local function wait_port_released(host, port, secret, cb)
-    local deadline = 3000
-    local waited = 0
+    -- WALL-CLOCK deadline, not a count of sleeps: each health_probe is a curl
+    -- with --max-time 2, so counting only the defer interval would let this run
+    -- ~43s — past the dispatcher's 15s recovery backstop, which would have
+    -- already told the chat leg "timed out" while this kept mutating proxies.
+    -- Same shape poll_until_healthy uses.
+    local deadline = uv.now() + 3000
     local function poll()
         M.health_probe(host, port, secret, function(state)
-            if state == "down" or waited >= deadline then
+            if state == "down" or uv.now() >= deadline then
                 return cb(state == "down")
             end
-            waited = waited + 150
             vim.defer_fn(poll, 150)
         end)
     end
@@ -358,8 +361,8 @@ end
 --- that booted before the management key existed answers 404, and restarting it
 --- into the freshly rendered config is both safe and silent.
 ---
---- Restarts at most once per session. A second 404 is reported rather than
---- retried, so a proxy that 404s for some other reason cannot become a restart
+--- Restarts at most once per consecutive run of 404s (the guard clears on any
+--- successful lookup). A second consecutive 404 is reported rather than retried, so a proxy that 404s for some other reason cannot become a restart
 --- loop under every query.
 ---@param cb fun(health: table)
 ---@param channel string
@@ -371,6 +374,16 @@ function M.credential_health(cb, channel)
             -- again (I2 — the guard bounds consecutive attempts, not the session).
             _management_restart_done = false
             return cb(health)
+        end
+        if not M.is_managed() then
+            -- The proxy is the operator's own (`manage = false`). stop() reaps
+            -- whoever holds the port and ensure_running does NOT spawn when
+            -- unmanaged, so repairing here would kill their proxy and leave it
+            -- dead. Report instead, with the fix they can apply themselves.
+            return cb({ state = "unknown", reason = "no_management_route",
+                message = "this proxy is not managed by parley — add "
+                    .. "remote-management.secret-key to your own cliproxy config so parley "
+                    .. "can read credential health" })
         end
         if _management_restart_done then
             return cb(health)
@@ -683,15 +696,10 @@ function M._reset_login_prompt() -- test helper
     _login_prompt_active = false
 end
 
--- Resolve the cliproxy channel a model is served by, from parley's own
--- oauth-model-alias config (NOT a name heuristic).
-local function channel_for(model)
+-- The oauth-model-alias block parley rendered, or nil.
+local function alias_block()
     local c = cfg() or {}
-    local alias = type(c.config) == "table" and c.config["oauth-model-alias"] or nil
-    if not (model and alias) then
-        return nil
-    end
-    return cc.resolve_login_provider(model, alias)
+    return type(c.config) == "table" and c.config["oauth-model-alias"] or nil
 end
 
 -- Ask, once, whether to run the login this failure calls for. `message` is the
@@ -743,9 +751,26 @@ function M.recover(failure, _retry, give_up)
         return false
     end
 
-    -- One derivation of the login channel, reused below (ARCH-DRY).
-    local login = channel_for(verdict.model)
-    local channel = login or verdict.provider
+    -- CHANNEL vs LOGIN PROVIDER are different namespaces and only coincide for
+    -- claude. /v0/management/auth-files reports the CHANNEL (`gemini-cli`,
+    -- `aistudio`, …) while several channels share one login (`google`), so
+    -- querying health with a login provider silently finds nothing and
+    -- fabricates "no credential is loaded".
+    --
+    -- The failure body's `providers=` field IS the channel, so prefer it; fall
+    -- back to resolving the model through oauth-model-alias. If neither
+    -- resolves, do NOT guess a channel — reporting another account's health for
+    -- the failing model is worse than admitting we don't know.
+    local channel = verdict.provider or cc.resolve_channel(verdict.model, alias_block() or {})
+    local login = cc.channel_login(channel)
+    if not channel then
+        local health = { state = "unknown", reason = "unknown_channel",
+            message = ("no cliproxy channel is configured for \"%s\""):format(tostring(verdict.model)) }
+        local message = ca.diagnosis(verdict, health) .. "\nAdd it to "
+            .. "cliproxy.config['oauth-model-alias'], or run :ParleyProxy login <provider>."
+        give_up(message)
+        return true
+    end
     M.credential_health(function(health)
         local message = ca.diagnosis(verdict, health)
         -- M1 diagnoses; it never repairs. The recovery ladder (decide/execute)

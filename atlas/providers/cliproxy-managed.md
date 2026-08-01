@@ -145,8 +145,11 @@ emits that key, defaulting `disable-control-panel: true` and never setting
 `allow-remote`, so the surface stays loopback-only.
 
 A proxy started before the key existed therefore answers **404**, and that is the
-honest signal to restart it — `credential_health` does so **at most once per
-session**. There is deliberately no config-file drift check: `ensure_running`
+honest signal to restart it — `credential_health` does so **at most once per consecutive run of 404s** — the
+guard clears on any successful lookup, so a proxy the operator restarts
+mid-session is still repairable. The repair is skipped entirely when
+`manage = false`: `stop()` would reap the operator's own proxy and
+`ensure_running` does not spawn for an unmanaged instance. There is deliberately no config-file drift check: `ensure_running`
 rewrites the rendered config *before* it probes, so a file-vs-render comparison
 is always false and never reflects what the running process loaded.
 

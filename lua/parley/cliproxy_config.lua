@@ -148,13 +148,19 @@ local CHANNEL_LOGIN = {
     xai = "xai",
 }
 
---- Resolve which login a model needs, from parley's own `oauth-model-alias`
---- config (NOT a name heuristic): find the channel whose entries include the
---- model (by name or alias), then map channel → login provider.
+--- Resolve which cliproxy CHANNEL serves a model, from parley's own
+--- `oauth-model-alias` config (NOT a name heuristic).
+---
+--- The channel is the axis cliproxy itself uses: it is what
+--- /v0/management/auth-files reports in `provider`/`type` (`gemini-cli`,
+--- `aistudio`, …). It is NOT the login-provider axis — several channels share
+--- one login (`gemini`/`gemini-cli`/`aistudio` all log in via `google`), so
+--- querying credential health with a login provider silently finds nothing.
+--- Keep the two apart; `resolve_login_provider` derives from this one.
 ---@param model string
 ---@param oauth_model_alias table # the rendered config's oauth-model-alias block
----@return string|nil login_provider
-function M.resolve_login_provider(model, oauth_model_alias)
+---@return string|nil channel
+function M.resolve_channel(model, oauth_model_alias)
     if type(model) ~= "string" or type(oauth_model_alias) ~= "table" then
         return nil
     end
@@ -162,12 +168,29 @@ function M.resolve_login_provider(model, oauth_model_alias)
         if type(entries) == "table" then
             for _, e in ipairs(entries) do
                 if type(e) == "table" and (e.name == model or e.alias == model) then
-                    return CHANNEL_LOGIN[channel]
+                    return channel
                 end
             end
         end
     end
     return nil
+end
+
+--- The login a channel needs, or nil for a channel with no OAuth login
+--- (vertex uses a service account).
+---@param channel string|nil
+---@return string|nil login_provider
+function M.channel_login(channel)
+    return channel and CHANNEL_LOGIN[channel] or nil
+end
+
+--- Resolve which login a model needs. Derives from resolve_channel so there is
+--- one model→channel source (ARCH-DRY).
+---@param model string
+---@param oauth_model_alias table
+---@return string|nil login_provider
+function M.resolve_login_provider(model, oauth_model_alias)
+    return M.channel_login(M.resolve_channel(model, oauth_model_alias))
 end
 
 -- Provider → the `owned_by` value its models carry in /v1/models (verified

@@ -806,6 +806,28 @@ describe("cliproxy IO lifecycle", function()
             assert.is_false(vim.tbl_contains(cliproxy.spawned_pids(), second_pid))
         end)
 
+        it("never touches a proxy parley does not manage", function()
+            -- C2: stop() reaps whoever holds the port, and ensure_running does
+            -- NOT spawn when unmanaged — so repairing an operator's own proxy
+            -- would kill it and leave it dead.
+            local port = free_port()
+            local store = write_store()
+            set_endpoint(port)
+            start_keyless(port, store)
+            parley.config = { cliproxy = { manage = false, binary_path = FAKE } }
+
+            local h = await(function(done) cliproxy.credential_health(done, "claude") end)
+
+            assert.equals("unknown", h.state)
+            assert.equals("no_management_route", h.reason)
+            assert.matches("not managed by parley", h.message)
+            -- and it is still alive
+            local still_up = await(function(done)
+                cliproxy.health_probe("127.0.0.1", port, "testkey", done)
+            end)
+            assert.equals("healthy", still_up, "parley killed an unmanaged proxy")
+        end)
+
         it("passes a healthy lookup straight through without restarting", function()
             local port = free_port()
             local store = write_store()

@@ -41,8 +41,34 @@ local FAILURES = {
 
 -- Pull the human sentence out of cliproxy's error envelope (both the
 -- OpenAI-shaped and Anthropic-shaped bodies land on the same "message" key).
+--
+-- Decode first: cliproxy wraps Go errors with %q, so its messages routinely
+-- CONTAIN escaped quotes — e.g.
+--   Post \"https://api.anthropic.com/v1/messages\": dial tcp: …
+-- and a `"message"%s*:%s*"(.-)"` pattern stops at the first one, leaving the
+-- operator with the fragment `Post \`. Since verdict.message is the entire
+-- payload of the healthy/unknown/quota branches, that would recreate exactly
+-- the naked-fragment notice this issue set out to remove. The pattern remains
+-- as a fallback for bodies that aren't valid JSON.
 local function extract_message(body)
-    return body:match('"message"%s*:%s*"(.-)"') or body
+    local ok, decoded = pcall(vim.json.decode, body)
+    if ok and type(decoded) == "table" then
+        local err = decoded.error
+        if type(err) == "table" and type(err.message) == "string" then
+            return err.message
+        end
+        if type(err) == "string" then
+            return err
+        end
+        if type(decoded.message) == "string" then
+            return decoded.message
+        end
+    end
+    local captured = body:match('"message"%s*:%s*"(.-)"')
+    if captured then
+        return (captured:gsub("\\\\", "\\"):gsub('\\"', '"'))
+    end
+    return body
 end
 
 --- Classify a FAILED cliproxy response.

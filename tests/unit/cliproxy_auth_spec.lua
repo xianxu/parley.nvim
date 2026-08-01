@@ -73,6 +73,18 @@ describe("classify_response", function()
         assert.is_nil(ca.classify_response(500, '{"error":{"message":"dial tcp: no such host"}}'))
     end)
 
+    it("keeps a message containing escaped quotes whole", function()
+        -- cliproxy wraps Go errors with %q, so its messages routinely contain
+        -- escaped quotes. A naive `"(.-)"` capture stops at the first one and
+        -- leaves the operator with the fragment `Post \\`.
+        local body = '{"error":{"message":"Post \\"https://api.anthropic.com/v1/messages\\": '
+            .. 'dial tcp: no such host","type":"api_error"},"code":"auth_unavailable"}'
+        local v = ca.classify_response(503, body)
+        assert.equals("no_auth", v.kind)
+        assert.matches("api%.anthropic%.com", v.message)
+        assert.matches("no such host", v.message)
+    end)
+
     it("tolerates a nil body and a nil status", function()
         assert.is_nil(ca.classify_response(503, nil))
         -- No status ⇒ cannot place it ⇒ not a failure. Never classify what you
