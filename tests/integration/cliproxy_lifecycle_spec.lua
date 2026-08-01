@@ -851,6 +851,98 @@ describe("cliproxy IO lifecycle", function()
     end)
 
     --------------------------------------------------------------------------
+    -- peers / reap (#197 M3)
+    --------------------------------------------------------------------------
+    describe("peers and reap", function()
+        before_each(function()
+            cliproxy._reset_peer_warning()
+        end)
+
+        it("does not report parley's own proxy as a peer", function()
+            local port = free_port()
+            parley.dispatcher = parley.dispatcher or {}
+            parley.dispatcher.providers = parley.dispatcher.providers or {}
+            parley.dispatcher.providers.cliproxyapi = {
+                endpoint = ("http://127.0.0.1:%d/v1/chat/completions"):format(port),
+            }
+            require("parley.vault").add_secret("cliproxyapi", "testkey")
+            local cfgfile = vim.fn.tempname() .. ".yaml"
+            vim.fn.writefile({ vim.json.encode({ port = port }) }, cfgfile)
+            vim.env.PARLEY_FAKE_MODE = "healthy"
+            local pid = cliproxy.spawn(FAKE, cfgfile)
+            wait_listening(port)
+
+            local peers = cliproxy.peers()
+            if #peers == 0 and not vim.system then
+                print("SKIP: process table unreadable here")
+                return
+            end
+            -- An unreadable process table (sandbox/hardened runtime) yields an
+            -- empty list; say so rather than passing vacuously.
+            local ps_ok = vim.fn.executable("ps") == 1
+                and pcall(function() return vim.system({ "ps", "-p", tostring(pid) }):wait() end)
+            if not ps_ok then
+                print("SKIP: ps unavailable — peer detection not exercised")
+                return
+            end
+            local pids = vim.tbl_map(function(p) return p.pid end, peers)
+            assert.is_false(vim.tbl_contains(pids, pid),
+                "parley reported its own proxy as a peer")
+        end)
+
+        it("warns exactly once per session, naming the rotation mechanism", function()
+            local warnings = {}
+            local logger = require("parley.logger")
+            local saved = logger.warning
+            logger.warning = function(m) warnings[#warnings + 1] = tostring(m) end
+            local fake_peers = { { pid = 1, started = "Fri Jun 12 10:04:21 2026", command = "x" } }
+            cliproxy.warn_about_peers(fake_peers)
+            cliproxy.warn_about_peers(fake_peers)
+            logger.warning = saved
+
+            assert.equals(1, #warnings, "warned more than once per session")
+            assert.matches("ROTATE", warnings[1])
+            assert.matches("Proxy reap", warnings[1])
+            assert.matches("Jun 12", warnings[1]) -- oldest, so staleness is judgeable
+        end)
+
+        it("says nothing when there are no peers", function()
+            local warnings = {}
+            local logger = require("parley.logger")
+            local saved = logger.warning
+            logger.warning = function(m) warnings[#warnings + 1] = tostring(m) end
+            cliproxy.warn_about_peers({})
+            logger.warning = saved
+            assert.equals(0, #warnings)
+        end)
+
+        it("stop() also reaps a parley-spawned proxy on a non-managed port", function()
+            -- The leak: _spawned is cleared per stop() and the port sweep only
+            -- covers the CURRENT endpoint, so a proxy started before an endpoint
+            -- change outlived every stop() and kept refreshing the auth-dir.
+            local old_port = free_port()
+            local cfgfile = vim.fn.tempname() .. ".yaml"
+            vim.fn.writefile({ vim.json.encode({ port = old_port }) }, cfgfile)
+            vim.env.PARLEY_FAKE_MODE = "healthy"
+            local stray = cliproxy.spawn(FAKE, cfgfile)
+            wait_listening(old_port)
+
+            -- endpoint moves elsewhere
+            parley.dispatcher.providers.cliproxyapi = {
+                endpoint = ("http://127.0.0.1:%d/v1/chat/completions"):format(free_port()),
+            }
+            cliproxy.stop()
+
+            -- uv.kill(pid, 0) is a liveness syscall, not a process spawn, so it
+            -- works where reading the process table does not.
+            local gone = vim.wait(3000, function()
+                return not pcall(uv.kill, stray, 0) or uv.kill(stray, 0) ~= 0
+            end, 100)
+            assert.is_true(gone, "a parley-spawned proxy on an old port survived stop()")
+        end)
+    end)
+
+    --------------------------------------------------------------------------
     -- management key (#197)
     --------------------------------------------------------------------------
     describe("management_key", function()

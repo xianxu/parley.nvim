@@ -448,6 +448,30 @@ M.register_proxy_command = function(prefix)
 				end
 				vim.notify(("cliproxy %s models:\n  %s"):format(arg, table.concat(ids, "\n  ")), vim.log.levels.INFO)
 			end)
+		elseif sub == "reap" then
+			local peers = cliproxy.peers()
+			if #peers == 0 then
+				vim.notify("cliproxy: no other cliproxy processes are running", vim.log.levels.INFO)
+				return
+			end
+			local lines = { ("cliproxy: %d other process(es):"):format(#peers) }
+			for _, p in ipairs(peers) do
+				lines[#lines + 1] = ("  %d  since %s"):format(p.pid, p.started)
+			end
+			lines[#lines + 1] = ""
+			lines[#lines + 1] = "Each runs its own 15-minute auth refresh over the shared auth-dir,"
+			lines[#lines + 1] = "and OAuth refresh tokens rotate on use — so they can invalidate"
+			lines[#lines + 1] = "each other's credential."
+			vim.ui.select({ "Stop them", "Cancel" }, { prompt = table.concat(lines, "\n") },
+				function(_, idx)
+					if idx ~= 1 then
+						return
+					end
+					local killed, skipped = cliproxy.reap()
+					vim.notify(("cliproxy: stopped %d process(es)%s"):format(
+						killed, skipped > 0 and (", skipped " .. skipped) or ""),
+						vim.log.levels.INFO)
+				end)
 		elseif sub == "login" then
 			local argv, err = cliproxy.login_argv(arg)
 			if not argv then

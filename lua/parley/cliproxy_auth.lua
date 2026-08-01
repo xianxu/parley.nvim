@@ -228,6 +228,56 @@ function M.diagnosis(verdict, health)
 end
 
 --------------------------------------------------------------------------------
+-- Peer proxies (issue #197 M3)
+--------------------------------------------------------------------------------
+
+-- brew installs `cliproxyapi`; the release tarball ships `cli-proxy-api`. A
+-- survey of the machine that motivated this issue undercounted the leaked
+-- proxies because it grepped only one of the two names.
+local PROXY_BINARIES = { ["cliproxyapi"] = true, ["cli-proxy-api"] = true }
+
+--- Parse `ps -o pid,lstart,command` into the cliproxy processes parley neither
+--- spawned nor manages — the ones quietly sharing an auth-dir with it.
+---
+--- Matching is on the EXECUTABLE (the command's first token), never on a
+--- substring: a real `ps` on the machine that motivated #197 contained a `zsh -c`
+--- wrapper whose command line quoted the proxy path inside an `eval`, and a
+--- substring match would have SIGTERMed the operator's shell.
+---@param ps_output string|nil
+---@param own_pids number[] # pids parley spawned this session
+---@param managed_port_pids number[] # pids holding the managed port
+---@return table[] # { pid, started, command }
+function M.parse_peers(ps_output, own_pids, managed_port_pids)
+    if type(ps_output) ~= "string" then
+        return {}
+    end
+    local exclude = {}
+    for _, list in ipairs({ own_pids or {}, managed_port_pids or {} }) do
+        for _, pid in ipairs(list) do
+            exclude[pid] = true
+        end
+    end
+    local peers = {}
+    for line in ps_output:gmatch("[^\n]+") do
+        -- pid, lstart (Www Mmm DD HH:MM:SS YYYY), then the command
+        local pid, started, command = line:match(
+            "^%s*(%d+)%s+(%a+%s+%a+%s+%d+%s+[%d:]+%s+%d+)%s+(.+)$")
+        if pid and command then
+            local exe = command:match("^(%S+)")
+            local base = exe and exe:match("([^/]+)$")
+            if base and PROXY_BINARIES[base] and not exclude[tonumber(pid)] then
+                peers[#peers + 1] = {
+                    pid = tonumber(pid),
+                    started = started,
+                    command = command,
+                }
+            end
+        end
+    end
+    return peers
+end
+
+--------------------------------------------------------------------------------
 -- The recovery policy
 --------------------------------------------------------------------------------
 

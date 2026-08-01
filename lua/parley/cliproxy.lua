@@ -20,6 +20,11 @@ local M = {}
 -- our own daemon and never touches a reused/foreign one).
 local _spawned = {}
 
+-- Every pid parley has EVER spawned this session, including ones no longer on
+-- the managed port (an endpoint change would otherwise strand them: _spawned is
+-- cleared by stop(), and the port sweep only covers the current port).
+local _stray_spawned = {}
+
 --------------------------------------------------------------------------------
 -- Config access
 --------------------------------------------------------------------------------
@@ -501,6 +506,7 @@ function M.spawn(binary, config_file)
     end
     uv.unref(handle)
     _spawned[pid] = { handle = handle, exited = false }
+    _stray_spawned[#_stray_spawned + 1] = pid
     return pid, handle
 end
 
@@ -516,6 +522,7 @@ end
 
 --- Test helper: forget all tracked spawns (does not kill them).
 function M._reset_spawned()
+    _stray_spawned = {}
     _spawned = {}
 end
 
@@ -565,6 +572,10 @@ function M.ensure_running(callback, on_error)
     end
 
     M.health_probe(host, port, secret, function(state)
+        -- Surface the rotation race once per session, whichever path we take.
+        pcall(function()
+            M.warn_about_peers(M.peers())
+        end)
         if state == "healthy" or state == "needs_login" then
             return callback() -- reuse the already-running (brew service / other nvim)
         end
@@ -648,6 +659,17 @@ function M.stop()
             end
         end
     end
+    -- Parley-spawned proxies on OTHER ports leaked before #197: _spawned only
+    -- reaches this session, and the managed-port sweep above only reaches one
+    -- port. A proxy this session started on a since-changed endpoint would
+    -- otherwise outlive every stop() and keep refreshing the shared auth-dir.
+    for _, pid in ipairs(_stray_spawned) do
+        if not killed[pid] then
+            pcall(uv.kill, pid, "sigterm")
+            killed[pid] = true
+        end
+    end
+    _stray_spawned = {}
     return vim.tbl_count(killed)
 end
 
@@ -751,6 +773,84 @@ function M.login_argv(provider)
 end
 
 ---------------------------------------------------------------------------------
+-- Peer proxies (#197 M3) — the rotation race that caused this issue
+--------------------------------------------------------------------------------
+
+local _peer_warning_shown = false
+
+function M._reset_peer_warning() -- test seam
+    _peer_warning_shown = false
+end
+
+--- Every cliproxy process on this machine that parley neither spawned nor
+--- manages. Best-effort: an empty list when `ps` is unavailable.
+---@return table[] # { pid, started, command }
+function M.peers()
+    if vim.fn.executable("ps") ~= 1 then
+        return {}
+    end
+    -- pcall: vim.system RAISES (EPERM) rather than returning an error when the
+    -- process table is unreadable — sandboxes and hardened runtimes do this.
+    -- Peer detection is advisory, so it must never break a dispatch.
+    local ok, res = pcall(function()
+        return vim.system({ "ps", "ax", "-o", "pid,lstart,command" }, { text = true }):wait()
+    end)
+    if not ok or not res then
+        return {}
+    end
+    local opts = render_opts()
+    local port_pids = (opts.host and opts.port) and pids_on_port(opts.port) or {}
+    return ca.parse_peers(res.stdout, M.spawned_pids(), port_pids)
+end
+
+--- Warn ONCE per session that peer proxies exist, naming the mechanism rather
+--- than just the count — the operator cannot weigh "5 other proxies" without
+--- knowing that each runs its own 15-minute refresh loop over the shared
+--- auth-dir, and that Claude's refresh tokens rotate on use, so they invalidate
+--- each other's credential. That is what happened in #197.
+---@param peers table[]
+function M.warn_about_peers(peers)
+    if _peer_warning_shown or #peers == 0 then
+        return
+    end
+    _peer_warning_shown = true
+    local prefix = (require("parley").config or {}).cmd_prefix or "Parley"
+    local oldest = peers[1]
+    for _, p in ipairs(peers) do
+        if p.started < oldest.started then
+            oldest = p
+        end
+    end
+    logger.warning(([[cliproxy: %d other cliproxy process(es) are running (oldest since %s).
+Each runs its own 15-minute auth refresh over the shared auth-dir, and OAuth
+refresh tokens ROTATE on use — so they can invalidate each other's credential
+(this is what broke auth in #197). Run `:%sProxy reap` to stop them.]])
+        :format(#peers, oldest.started, prefix))
+end
+
+--- SIGTERM every peer, after an identity probe per pid so a process that merely
+--- shares a name is never killed.
+---@return number killed, number skipped
+function M.reap()
+    local killed, skipped = 0, 0
+    for _, peer in ipairs(M.peers()) do
+        -- The command line records the config it booted from; a process we
+        -- cannot identify as a proxy we started is left alone.
+        if peer.command:match("%-config%s") then
+            local ok = pcall(uv.kill, peer.pid, "sigterm")
+            if ok then
+                killed = killed + 1
+            else
+                skipped = skipped + 1
+            end
+        else
+            skipped = skipped + 1
+        end
+    end
+    return killed, skipped
+end
+
+--------------------------------------------------------------------------------
 -- Auth-failure recovery (#197) — the single owner of "the query failed for
 -- credential reasons". Replaces #131 M3's check_auth_failure, which sat on the
 -- success path and matched one stale message.

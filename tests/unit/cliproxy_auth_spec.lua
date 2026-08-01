@@ -400,3 +400,57 @@ describe("decide", function()
         assert.is_true(#ca.decide(v(), h(), UP, 0).message > 0)
     end)
 end)
+
+describe("parse_peers", function()
+    local PS = table.concat(vim.fn.readfile(vim.fn.getcwd() .. "/tests/fixtures/ps_cliproxy_peers.txt"), "\n")
+
+    it("finds proxies parley did not spawn and does not hold the managed port", function()
+        local peers = ca.parse_peers(PS, { 32610 }, { 32610 })
+        local pids = vim.tbl_map(function(p) return p.pid end, peers)
+        table.sort(pids)
+        assert.same({ 25546, 31789, 42688, 44488, 47373 }, pids)
+    end)
+
+    it("NEVER matches a shell whose command line merely mentions the binary", function()
+        -- Captured from a real `ps`: a zsh -c wrapper containing the proxy path
+        -- inside an eval. Substring matching here would SIGTERM the operator's
+        -- shell. The executable is the first token, not any token.
+        local peers = ca.parse_peers(PS, {}, {})
+        for _, p in ipairs(peers) do
+            assert.are_not.equal(25544, p.pid, "matched a shell wrapper")
+            assert.are_not.equal(50001, p.pid, "matched a grep")
+        end
+    end)
+
+    it("matches both binary names", function()
+        -- brew installs `cliproxyapi`; the release tarball ships `cli-proxy-api`.
+        -- An earlier survey of this very machine undercounted because it grepped
+        -- only one of them.
+        local peers = ca.parse_peers(PS, {}, {})
+        local names = {}
+        for _, p in ipairs(peers) do
+            names[p.command:match("([^/%s]+)%s")] = true
+        end
+        assert.is_true(names["cli-proxy-api"])
+        assert.is_true(names["cliproxyapi"])
+    end)
+
+    it("excludes parley's own spawned pids and the managed port holder", function()
+        assert.same({}, ca.parse_peers(PS, { 25546, 31789, 42688, 44488, 47373 }, { 32610 }))
+    end)
+
+    it("carries the start time so the operator can judge staleness", function()
+        local peers = ca.parse_peers(PS, {}, { 32610 })
+        for _, p in ipairs(peers) do
+            if p.pid == 44488 then
+                assert.matches("Jun 12", p.started)
+            end
+        end
+    end)
+
+    it("returns an empty list for empty or malformed input", function()
+        assert.same({}, ca.parse_peers("", {}, {}))
+        assert.same({}, ca.parse_peers(nil, {}, {}))
+        assert.same({}, ca.parse_peers("garbage\nlines\n", {}, {}))
+    end)
+end)
