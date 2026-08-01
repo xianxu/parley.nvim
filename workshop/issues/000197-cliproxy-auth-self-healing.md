@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-08-01
 updated: 2026-08-01
-estimate_hours:
+estimate_hours: 6.0
 started: 2026-08-01T00:24:22-07:00
 ---
 
@@ -125,6 +125,38 @@ fake. A **live conformance check** boots the real binary against a fabricated
 credential in a temp auth-dir — the technique used to capture the contract above,
 which exercises the real routes without touching operator credentials — and
 asserts the record fields the fake models still exist.
+
+## Estimate
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: issue-spec design=0.6 impl=0.05
+item: lua-neovim design=0.4 impl=0.4
+item: lua-neovim design=0.4 impl=0.6
+item: lua-neovim design=0.5 impl=0.7
+item: api-integration design=0.4 impl=0.4
+item: real-api-discovery design=0.0 impl=0.25
+item: cross-cutting-refactor design=0.1 impl=0.2
+item: atlas-docs design=0.1 impl=0.1
+item: milestone-review design=0.0 impl=0.45
+design-buffer: 0.15
+total: 6.0
+```
+
+Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against
+`baseline-v3.1.md`. Method A only. The three `lua-neovim` items are the three
+milestones' focused features (M1 pure classification, M2 policy + retry seam, M3
+peers/reap + login). `api-integration` is the management channel (key render,
+`auth_files`, argv generalization, drift restart); `real-api-discovery` covers
+the conformance check against the real binary — reduced because this session
+already captured the `/v0/management/auth-files` contract empirically, leaving
+only the automated check to build. `milestone-review` is 3 boundaries × 0.15.
+Design hours carry the ×0.2 spec discount (the plan pre-resolves the schemas,
+the decision table, and the message contracts) with the +15% buffer for a
+thorough plan doc; `impl=` values are 40% of the v2 ranges per v3.1.
+`familiarity: 1.0` — the cliproxy module is from #131 and this session traced
+the whole dispatch → recovery path end to end against the live system.
 
 ## Done when
 
