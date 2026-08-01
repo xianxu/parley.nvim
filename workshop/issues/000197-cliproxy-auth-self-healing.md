@@ -213,7 +213,7 @@ dispatch → recovery live against the failing system.
 Durable plan: `workshop/plans/000197-cliproxy-auth-self-healing-plan.md`
 
 - [x] M1 — Diagnose: pure classification vocabulary + management channel
-- [ ] M2 — Recover: pure recovery policy + retry seam in the dispatcher
+- [x] M2 — Recover: pure recovery policy + retry seam in the dispatcher
 - [ ] M3 — Prevent: stale-proxy reaping + login-flow robustness
 
 ## Revisions
@@ -300,6 +300,37 @@ safe when nothing was streamed (`qt.response == ""`) or it duplicates buffer
 content.
 
 ## Log
+
+### 2026-08-01 — M2 (Recover)
+
+`decide` is the whole ladder as a pure, table-tested function; `recover` shrank
+to gathering inputs and executing one action. That also settles the M1 review's
+ARCH-PURE note — `needs_human` was decision logic in the IO shell, which would
+have left M2 with two policy owners.
+
+Behavior now: a healthy credential **retries silently** (the failure was
+transient, and a login prompt would be noise); a dead one prompts carrying the
+proxy's own `status_message`; a proxy that isn't running is started; an auth file
+newer than the proxy's copy triggers a restart; quota and model-unavailable never
+say "log in". `attempt >= 1` can return no repair action at all — pinned by a
+property test over every kind × state × liveness combination.
+
+The fake grew the real 503/401/402 chat-completions bodies, which is what makes
+`cliproxy_recovery_e2e_spec` possible: a real HTTP failure driven through
+`dispatcher.query` → `recover_query` → the operator-facing notice. That closes
+the M1 review's top coverage gap — the three links were each tested individually
+and never joined. The e2e asserts the #197 503 now yields a diagnosis naming the
+account and reason, with no `body_bytes` anywhere in it.
+
+Task 12 removed the last hand-maintained `"empty model list ⇒ not authenticated"`
+inference (`:ParleyProxy models`) — the exact inference this issue disproved. An
+authenticated-but-empty provider is now told to check its catalog, not its login.
+
+Verification: `cliproxy_auth_spec` 43 (14 new for `decide`),
+`cliproxy_auth_login_spec` 16, `cliproxy_recovery_e2e_spec` 4,
+`cliproxy_command_spec` 9 (3 new for Task 12), `dispatcher_query_spec` 56,
+`cliproxy_lifecycle_spec` 45, `cliproxy_dispatch` 3, `cliproxy_caller_teardown` 5.
+`make lint` 0/0 across 311 files.
 
 ### 2026-08-01 — M1 (Diagnose)
 - 2026-08-01: closed M1 — Round-2 rework complete. C1 (channel vs login-provider namespace: healthy gemini-cli credential read as missing and prompted a spurious login) fixed via pure resolve_channel as single model->channel source; no "claude" default. C2 (404 repair killed unmanaged proxies) gated on is_managed(), with a spec asserting an unmanaged proxy survives. I1 escaped-quote message decode, I2 per-attempt payload snapshot, I3 wall-clock port-release bound, I4 docs corrected, I5 gemini-cli fixture + 3 non-claude recover cases. Green: cliproxy_auth 29, cliproxy_config 46, dispatcher_query 56, cliproxy_auth_login 13, cliproxy_lifecycle 45, failure_notice 6, providers_pre_query 6, chat_respond 66, cliproxy_dispatch 3, cliproxy_command 6, cliproxy_caller_teardown 5, cliproxy_conformance 2 (REAL 7.1.71). make lint 0/0 across 310 files.; review verdict: FIX-THEN-SHIP
