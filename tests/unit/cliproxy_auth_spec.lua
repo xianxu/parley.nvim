@@ -497,6 +497,23 @@ describe("parse_peers", function()
         end
     end)
 
+    it("orders peers by real start time, not by weekday name", function()
+        -- `ps lstart` begins with the WEEKDAY, so a string compare puts any
+        -- "Fri …" before any "Sun …" regardless of year — the oldest-peer report
+        -- would name the wrong process.
+        local fri_recent = "Fri Jul 31 10:00:00 2026"
+        local sun_old = "Sun Jun 14 09:50:39 2026"
+        assert.is_true(fri_recent < sun_old, "premise: lexicographic order is wrong here")
+        assert.is_true(ca.lstart_sec(sun_old) < ca.lstart_sec(fri_recent),
+            "lstart_sec did not order by actual time")
+    end)
+
+    it("lstart_sec is total", function()
+        assert.is_nil(ca.lstart_sec("garbage"))
+        assert.is_nil(ca.lstart_sec("Xyz Foo 12 10:04:21 2026"))
+        assert.is_nil(ca.lstart_sec(nil))
+    end)
+
     it("returns an empty list for empty or malformed input", function()
         assert.same({}, ca.parse_peers("", {}, {}))
         assert.same({}, ca.parse_peers(nil, {}, {}))

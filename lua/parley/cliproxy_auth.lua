@@ -238,6 +238,31 @@ end
 -- proxies because it grepped only one of the two names.
 local PROXY_BINARIES = { ["cliproxyapi"] = true, ["cli-proxy-api"] = true }
 
+--- Parse a `ps lstart` stamp ("Fri Jun 12 10:04:21 2026") to epoch seconds.
+---
+--- Needed because the field begins with the WEEKDAY, so comparing two of them as
+--- strings orders by day name — "Fri …" sorts before "Sun …" regardless of year.
+---@param lstart string|nil
+---@return number|nil
+function M.lstart_sec(lstart)
+    if type(lstart) ~= "string" then
+        return nil
+    end
+    local mon, day, h, mi, sec, year = lstart:match(
+        "^%a+%s+(%a+)%s+(%d+)%s+(%d+):(%d+):(%d+)%s+(%d+)$")
+    if not mon then
+        return nil
+    end
+    local months = { Jan = 1, Feb = 2, Mar = 3, Apr = 4, May = 5, Jun = 6,
+        Jul = 7, Aug = 8, Sep = 9, Oct = 10, Nov = 11, Dec = 12 }
+    local mm = months[mon]
+    if not mm then
+        return nil
+    end
+    return M.rfc3339_sec(("%04d-%02d-%02dT%02d:%02d:%02dZ"):format(
+        tonumber(year), mm, tonumber(day), tonumber(h), tonumber(mi), tonumber(sec)))
+end
+
 --- Parse `ps -o pid,lstart,command` into the cliproxy processes parley neither
 --- spawned nor manages — the ones quietly sharing an auth-dir with it.
 ---

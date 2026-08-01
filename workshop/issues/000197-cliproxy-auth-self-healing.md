@@ -112,9 +112,10 @@ normal api-key gets 401. The proxy hot-reloads auth files (fsnotify /
   spawn; warn once per session naming the rotation race, with `:ParleyProxy reap`
   to clean them. `stop()` stops leaking instances on non-managed ports.
 - **Login robustness.** Preflight the callback port (`-oauth-callback-port` is
-  the documented escape hatch), run `-no-browser` and capture the URL so parley
-  opens it and keeps the job off a closable terminal buffer, watch the auth-dir
-  for the written credential, then report success and resume.
+  the documented escape hatch), surface the binary's own output (NOT
+  `-no-browser` — each provider's flow differs), keep the job off a closable
+  terminal buffer, watch the auth-dir for the written credential, then report the
+  outcome exactly once.
 
 ### Testing (ARCH-MOCK)
 
@@ -205,7 +206,11 @@ dispatch → recovery live against the failing system.
 - Leaked non-managed proxies are detected and reapable; the rotation-race reason
   is stated once, not per query.
 - A login that dies mid-flow reports the failure instead of leaving an inert
-  browser window; a successful one is detected and resumes the query.
+  browser window; a successful one is detected and reported with the account.
+  **Descoped:** *resuming the triggering query* after a login. A login takes
+  minutes while the recovery claim is bounded by `recovery_timeout_ms`; holding
+  the chat leg open across it would guarantee the timeout the backstop exists to
+  avoid. The claim settles with the diagnosis and the operator re-sends.
 - Stateful fake + live conformance check both run in `make test`.
 
 ## Plan

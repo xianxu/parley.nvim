@@ -186,6 +186,16 @@ def run_login(login_mode, auth_store):
 
 
 def main():
+    # `-h` is now part of the surface parley depends on: it validates a login
+    # flag against the binary's own usage, because the flag set is
+    # version-dependent (7.2.110 dropped `-login`, which 7.1.71 had).
+    if "-h" in sys.argv[1:] or "--help" in sys.argv[1:]:
+        sys.stdout.write("Usage of fake_cliproxy\n")
+        for flag in ("-antigravity-login", "-claude-login", "-codex-device-login",
+                     "-codex-login", "-config string", "-kimi-login", "-login",
+                     "-no-browser", "-oauth-callback-port int", "-xai-login"):
+            sys.stdout.write("  %s\n" % flag)
+        sys.exit(0)
     port, mode, mgmt_key, auth_store, error_mode = parse_args(sys.argv[1:])
     login_mode = os.environ.get("PARLEY_FAKE_LOGIN_MODE")
     if login_mode or any(a.endswith("-login") for a in sys.argv[1:]):

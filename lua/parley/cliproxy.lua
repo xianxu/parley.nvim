@@ -771,6 +771,16 @@ function M.login_argv(provider)
         return nil, "unknown login provider '" .. tostring(provider)
             .. "' — valid: " .. table.concat(M.login_providers(), ", ")
     end
+    -- The flag set is version-dependent: 7.2.110 dropped `-login` (google) that
+    -- 7.1.71 had. Ask THIS binary rather than trusting a static table, so the
+    -- operator gets "your cliproxy doesn't support this" instead of a silent
+    -- non-login.
+    local usage = vim.system({ bin, "-h" }, { text = true }):wait()
+    local help = (usage.stdout or "") .. (usage.stderr or "")
+    if help ~= "" and not help:find(flag, 1, true) then
+        return nil, ("this cliproxy build has no `%s` flag — `%s -h` lists what it supports")
+            :format(flag, bin)
+    end
     -- Ensure the rendered config exists so a custom auth_dir is honored even
     -- before any dispatch has run (best-effort; ignore render errors here).
     pcall(write_rendered_config)
@@ -834,9 +844,12 @@ function M.warn_about_peers(peers)
         return
     end
     local prefix = (require("parley").config or {}).cmd_prefix or "Parley"
+    -- `ps lstart` starts with the WEEKDAY ("Fri Jun 12 …"), so a lexicographic
+    -- compare orders by day name — it would call a Friday process older than a
+    -- Sunday one from months earlier.
     local oldest = peers[1]
     for _, p in ipairs(peers) do
-        if p.started < oldest.started then
+        if (ca.lstart_sec(p.started) or math.huge) < (ca.lstart_sec(oldest.started) or math.huge) then
             oldest = p
         end
     end
@@ -1014,23 +1027,34 @@ function M.run_login(provider, argv, on_done)
     -- channels_for_login("google") is {aistudio, gemini, gemini-cli}; taking [1]
     -- picks aistudio while a -login writes gemini-cli. Read across all of them.
     local before = newest_credential_mtime(provider)
-    -- -no-browser so the URL comes to US: parley opens it (and shows it), rather
-    -- than the binary opening a window parley can't report on.
-    local cmd = vim.list_extend(vim.deepcopy(argv), { "-no-browser" })
-    local url_seen = false
-    local stderr_tail = {}
+    -- Do NOT pass -no-browser: each provider's flow differs (claude prints a
+    -- claude.ai/oauth/authorize URL; google/kimi/xai/antigravity print their own,
+    -- or drive the browser themselves), and suppressing the binary's browser
+    -- while matching only a claude-shaped URL left every other provider with a
+    -- silent, uncompletable login. Let the binary do exactly what it always did,
+    -- and ADD observability on top.
+    local cmd = vim.deepcopy(argv)
+    local output = {}
+    local shown = false
 
     local function handle_line(line)
-        local url = line:match("(https://[%w%.%-]+/oauth/authorize%S*)")
-        if url and not url_seen then
-            url_seen = true
-            pcall(function()
-                if vim.ui.open then
-                    vim.ui.open(url)
+        output[#output + 1] = line
+        -- Surface the instructions once, whatever shape they take — the URL may
+        -- be any host, and some providers print a code to paste instead.
+        --
+        -- DEBOUNCED: the binary prints its instructions across several lines
+        -- ("Visit the following URL:" then the URL), so emitting on the first
+        -- matching line would show a header with nothing under it.
+        if not shown and (line:match("https?://%S+") or line:lower():match("visit")) then
+            shown = true
+            vim.defer_fn(function()
+                if settled then
+                    return -- the login already died; don't invite them to continue it
                 end
-            end)
-            vim.notify("cliproxy: complete the login in your browser.\nIf it did not open, "
-                .. "visit:\n" .. url, vim.log.levels.INFO)
+                vim.notify(("cliproxy: %s login started — follow the instructions below "
+                    .. "(the browser may have opened already):\n%s"):format(
+                    provider, table.concat(output, "\n")), vim.log.levels.INFO)
+            end, 300)
         end
     end
 
@@ -1048,14 +1072,13 @@ function M.run_login(provider, argv, on_done)
             for _, line in ipairs(data or {}) do
                 if line ~= "" then
                     handle_line(line)
-                    stderr_tail[#stderr_tail + 1] = line
                 end
             end
         end,
         on_exit = function(_, code)
             if code ~= 0 then
                 return settle(false, ("cliproxy: %s login exited %d%s"):format(provider, code,
-                    #stderr_tail > 0 and ("\n" .. table.concat(stderr_tail, "\n"):sub(1, 300)) or ""),
+                    #output > 0 and ("\n" .. table.concat(output, "\n"):sub(-400)) or ""),
                     vim.log.levels.ERROR)
             end
         end,

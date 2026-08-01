@@ -690,3 +690,168 @@ Append to `workshop/plans/000197-cliproxy-auth-self-healing-plan.md` `## Revisio
 4. **Correct the compound-budget claim.** Task 5 / the atlas say the 404-repair→`restart` composition is "made unreachable"; the guard is reset by the repair's own second read before the decision is taken (I2, reproduced). Record either the per-claim latch or the compound worst case as a budgeted term asserted by `cliproxy_budget_spec`.
 5. **Record whether "resumes the query" is in scope.** Task 15 Step 3 says "then retry the pending query" and the issue's Done-when says the same. Either wire `run_login`'s `on_done` back to a re-issue, or record the descope with the reason (an OAuth flow outlives the claim's 30 s backstop by two orders of magnitude) so the Done-when stops reading as delivered.
 6. **Tick what shipped.** 55 of 56 checkboxes are unticked while M1/M2/M3 are all `[x]` in the issue. The plan is the greppable record of what was built; leaving it at 1/56 makes the next reviewer's traceability pass meaningless.
+
+---
+
+## Re-review — 2026-08-01T12:55:37-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 197 — cliproxy auth failures must self-heal: detect, diagnose, recover |
+| repo | parley.nvim |
+| issue file | workshop/issues/000197-cliproxy-auth-self-healing.md |
+| boundary | milestone M2 |
+| milestone | M2 |
+| window | 819a781a71859450cb5f22aa6940d9213004bb70..HEAD |
+| command | sdlc milestone-close --issue 197 --milestone M2 |
+| reviewer | claude |
+| timestamp | 2026-08-01T12:55:37-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+The milestone's core is now genuinely right, and I verified it rather than taking the Log's word: the staleness rung compares two real, distinct quantities (`modtime` vs `updated_at` inside one management record) and both are pinned against the live binary by `cliproxy_conformance_spec.lua:24-32`; the peer guard from round 4 now latches on the **scan** and has a wiring test that drives `ensure_running` three times and asserts one scan; `reap()` counts only kills the OS accepted; the compound repair→restart is blocked by a per-claim latch instead of module state the repair itself resets. Suite: **281 examples across 15 specs, 0 failed, 0 errors** (conformance really booted a real binary), `make lint` **0/0 in 313 files**. What blocks SHIP is a regression this window introduced in M3's login rework: `run_login` pipes the binary's stdout/stderr into callbacks that discard every line except one claude-shaped URL pattern, **while unconditionally passing `-no-browser`** — so for the providers whose authorize URL doesn't match that pattern the operator now gets no browser, no URL, no device code, and nothing at all until a 180 s "did not complete". I extracted the real 7.2.110 binary's OAuth strings and confirmed only claude and codex match; google, kimi, xai and antigravity do not. That is strictly worse than the terminal split it replaced, and the fake emits exactly one URL shape so no test can see it. Alongside it, five findings from round 4 are still open and I reproduced each: the "oldest peer" date is chosen by lexicographic compare of a string that starts with the day of the week; the Done-when "a successful [login] … resumes the query" is neither wired nor descoped; the atlas still says 15 s where the code says 30000; the plan is at 1/56 checkboxes with a `decide` row that has now contradicted the code across four reviews; and M3 rides in this M2 window with no boundary review of its own.
+
+## 1. Strengths
+
+- **The staleness rung is correct and honestly tested.** `auth_file_is_stale` (`lua/parley/cliproxy_auth.lua:364-368`) reads two different fields of one record and needs no `fs_stat` — the check got *more* pure while getting correct. `tests/integration/cliproxy_auth_login_spec.lua:367-393` reproduces staleness the way the system produces it (seed the load time with a real read, then `fs_utime` the file) and asserts `stop()` fired exactly once; its sibling at `:346-365` asserts `stop()` did **not** fire on the healthy path. Those two assertions are what finally make `retry` and `restart` distinguishable.
+- **Round 4's C1 is properly closed, latch and wiring both.** `warn_about_peers` (`cliproxy.lua:824-831`) sets `_peer_warning_shown` before the `#peers == 0` return, and `cliproxy_lifecycle_spec.lua` drives `ensure_running` three times asserting one `peers()` call. That is the deletability check in the right direction — the test fails if the guard stops arming.
+- **`reap()` counts real kills** (`cliproxy.lua:865-870`): `local called, rc = pcall(uv.kill, …)` + `rc == 0`, with a spec that reaps a nonexistent pid and asserts `killed == 0, skipped == 1`. luv's `nil, err` convention is now handled rather than swallowed.
+- **`run_login`'s settle latch wraps the notify, not just the callback** (`cliproxy.lua:997-1007`), and `cliproxy_login_spec.lua:90-111` asserts nothing further is said after settling. The contradictory "did not complete" three minutes later is gone.
+- **The budget is derived and the "unreachable" claim is checkable.** `M._repair_budget_sec` (`cliproxy.lua:341-350`) is computed from `CURL_MAX_TIME`/`PORT_RELEASE_MS`/`POLL_BUDGET_MS` including the one-probe overrun each bounded poll can incur, and `cliproxy_budget_spec` asserts both the single-repair inequality and the compound arithmetic, so a regressed latch shows up as a failing test rather than a 36 s timeout in production.
+
+## 2. Critical findings
+
+**C1 — `run_login` swallows the login binary's entire output except one claude-shaped URL, while suppressing the binary's own browser open; for google/kimi/xai/antigravity the operator sees nothing and the login cannot be completed.** `lua/parley/cliproxy.lua:1019`, `:1023-1037`, `:1040-1057`
+
+`local cmd = vim.list_extend(vim.deepcopy(argv), { "-no-browser" })` is applied to **every** provider, and `jobstart` pipes stdout/stderr into `on_stdout`/`on_stderr`, which call `handle_line` and then drop the line (stderr is kept only in `stderr_tail`, shown only on a non-zero exit). `handle_line` surfaces a line only when it matches `"(https://[%w%.%-]+/oauth/authorize%S*)"`.
+
+I extracted the OAuth endpoints from the installed binary (`strings /opt/homebrew/bin/cliproxyapi`, 7.2.110) and tested the pattern against them:
+
+```
+MATCH  https://claude.ai/oauth/authorize?...
+MATCH  https://auth.openai.com/oauth/authorize?...
+MISS   https://accounts.google.com/o/oauth2/auth?...
+MISS   https://accounts.google.com/o/oauth2/v2/auth?...
+MISS   https://oauth2.googleapis.com/device/code          (kimi/xai device flows)
+MISS   Starting Codex device authentication... <user code>
+```
+
+Failure scenario: `:ParleyProxy login xai` (or `kimi`, `antigravity`, `codex-device`) → parley passes `-no-browser` so the binary does not open anything → the device code / verification URL is printed to stdout → parley's pattern misses it → the line is discarded → the operator stares at an idle editor for three minutes and is then told the login "did not complete". Before this window the same command opened a terminal split showing all of it (`init.lua`, pre-`bf98f8d`), so this is a regression on documented user-facing surface, in the milestone whose stated purpose is login robustness.
+
+The fake cannot catch it: `tests/fixtures/fake_cliproxy:162` emits exactly one URL, claude-shaped, so `cliproxy_login_spec.lua:64-72` passes for the one provider that works (ARCH-MOCK — the fake models one provider's login output while production runs seven).
+
+Fix sketch — stop discarding output, and stop suppressing the browser where parley can't substitute for it:
+```lua
+-- only take the URL out of parley's hands where parley can actually open it
+local can_capture = URL_PATTERNS[provider] ~= nil
+local cmd = vim.deepcopy(argv)
+if can_capture then table.insert(cmd, "-no-browser") end
+...
+local function handle_line(line)
+    local url = can_capture and line:match(URL_PATTERNS[provider])
+    if url and not url_seen then ... end
+    tail[#tail + 1] = line          -- keep everything
+end
+-- and surface `tail` once no URL has been seen after a short grace period,
+-- so a device-code flow's user code reaches the operator
+```
+Tests: give the fake a `PARLEY_FAKE_LOGIN_MODE=device_code` mode that prints a `https://…/device` + user code and no `/oauth/authorize` URL, and assert the operator is shown that text. A conformance-style assertion that each supported provider's first stdout line is surfaced would close the drift permanently.
+
+## 3. Important findings
+
+**I1 — `warn_about_peers` picks the "oldest" peer with a lexicographic compare of `ps lstart`, which begins with the day of the week.** `lua/parley/cliproxy.lua:837-841`
+
+Reproduced:
+```
+peers: Sat Aug  1 03:00:00 2026 | Sun Jun 14 09:50:39 2026 | Mon Jun 15 09:00:00 2026
+chosen oldest: pid 3 (Mon Jun 15)     truth: pid 2 (Sun Jun 14)
+```
+The date is the only actionable content in the warning ("oldest since %s") — telling an operator their leak is a day old when it is seven weeks old is the #197 situation exactly. The fixture (`tests/fixtures/ps_cliproxy_peers.txt`) passes by luck: `Fri Jun 12` is lexicographically smallest, so the two orders coincide. This is a string-compare-on-timestamps in the same window that added two `workshop/lessons.md` rules forbidding exactly that, tested with the degenerate-fixture shape a third rule warns about. Raised at round 4 (I4), unfixed. Fix (ARCH-PURE): have `parse_peers` — already pure and already parsing `lstart` — carry a numeric start epoch, compare numbers, and add a fixture peer whose two orders disagree.
+
+**I2 — the Done-when "a successful [login] is detected **and resumes the query**" is not delivered and not recorded as descoped.** `lua/parley/init.lua:490`, `lua/parley/cliproxy.lua:1174-1178`
+
+`cliproxy.run_login(arg, argv)` is the only production caller and passes no `on_done`; `prompt_login` runs `:ParleyProxy login …` then calls `done()` → `give_up(message)` immediately. Plan Task 15 Step 3 says "Success → notify with the account, **then retry the pending query**." I accept that holding the claim across an OAuth flow is impossible (180 s watch vs a 30 s backstop) — but that is a reason to record the descope, not to leave the issue's Done-when reading as delivered with M3 ticked `[x]` (ARCH-PURPOSE). Raised at round 4 (I5), unfixed.
+
+**I3 — Docs update gate: the atlas asserts two things the code does not do.** `atlas/providers/cliproxy-managed.md:129-130`, `:143-144`
+
+- `:129-130` — "A 15s `recovery_timeout_ms` backstop" against `dispatcher.lua:30`'s `30000`. Flagged at M2 rounds 1, 2, 3 **and** 4; the constant has since moved 25000 → 30000, so the doc is now 2× off.
+- `:143-144` — "`recover` gathers the inputs (liveness probe, credential health, **the auth-dir mtime**)"; the auth-dir stat was deleted by this window's own round-3 fix. Staleness is now entirely inside the record.
+
+The new "Timeout budget" paragraph is right to refuse to restate arithmetic; `:129` should get the same treatment — name the relationship, not the number.
+
+**I4 — the plan no longer describes what shipped, on five counts.** `workshop/plans/000197-cliproxy-auth-self-healing-plan.md`
+
+- **1 of 56 checkboxes is ticked** (only `:425`) while the issue marks M1, M2 and M3 all `[x]`. Tasks 9 Steps 2–5, 10–15 read as unstarted.
+- `:421` — the `decide` table still reads `| expired | true | any | any | prompt_login |`; the shipped policy retries on `healthy` (deliberately) and reports on `unknown`. Recommended at rounds 1, 2, 3 and 4.
+- `:427` — Task 9 Step 3 still specifies `proxy_state = {running, auth_file_modtime, record_modtime}` and "a string compare on RFC3339 timestamps".
+- Revisions entry #1 (added *last* round) is itself stale: it records normalization "at the IO seam (`uv.fs_stat().mtime.sec`)" and `proxy_state` carrying `auth_file_modtime` — the design round 3 deleted.
+- Core concepts (`:66-76`) is still missing all eleven M2/M3 entities. Every row that *is* there verifies against the filesystem (I checked each: `classify_response`, `classify_auth_files`, `diagnosis`, `decide`, `parse_peers`, `resolve_channel`, `render`, `_failure_notice` present; `detect_auth_failure` absent from `lua/`), and all PURE rows run without IO — the table is incomplete, not wrong.
+
+**I5 — `:ParleyProxy login google` cannot work against the installed binary: `-login` is not a flag on 7.2.110.** `lua/parley/cliproxy.lua:744`
+
+```
+$ cliproxyapi -login -config /nonexistent.yaml
+flag provided but not defined: -login
+```
+`LOGIN_FLAGS.google = "-login"` predates this window (#131), so it is not a regression — but M3 is the login-robustness milestone, `providers`/`login` completion advertises `google`, and nothing in the suite exercises the argv against the real binary. Worth noting that M3 *improves* the symptom (the operator now sees "google login exited 2" instead of a silently dead terminal). Fix: verify each `LOGIN_FLAGS` entry against `--help` in the conformance spec — that is one assertion and it pins the whole table.
+
+**I6 — scope: this M2 window carries four M3 commits, and M3 is ticked `[x]` with no boundary review of its own.** `ba0992d`, `bf98f8d`, `65d4402`, `2f98176`
+
+Per AGENTS.md §3 each `Mx` row commits to its own `milestone-close`. M2's boundary was never crossed (four REWORKs), so M3 landed on top — meaning this review is the only fresh-eyes pass M3 gets, and C1 plus I1 are both M3 code. Either run `milestone-close --milestone M3` separately after the rework, or state in the `## Log` that M2's review deliberately absorbed M3 and record the verdict against both. Raised at round 4 (I8), unaddressed.
+
+## 4. Minor findings
+
+- `cliproxy.lua:860-862` — the comment inside `reap()`'s loop still claims "a process we cannot identify as a proxy we started is left alone"; the docstring was corrected but no such filter exists in the loop. On a function that sends SIGTERM, delete the stale comment.
+- `cliproxy.lua:1133` — `@param _retry fun() # unused in M1: this milestone diagnoses, it never repairs`; the parameter is `retry` and drives the whole ladder. Flagged rounds 1, 2, 3 and 4.
+- `cliproxy_auth.lua:441` passes a second argument `auth_file_is_stale` no longer takes, and `:411` still documents `proxy_state` as `{ running, auth_file_modtime }`.
+- `init.lua:453` + `cliproxy.lua:858` — `:ParleyProxy reap` scans `peers()` twice; the operator approves list A and list B is SIGTERMed.
+- The rotation-race explanation is hand-copied in two places (`init.lua:463-465`, `cliproxy.lua:836-839`) — ARCH-DRY on operator-facing prose.
+- `channels_for_login("codex-device")` returns `{}`, so `newest_credential_mtime` falls back to matching **any** `*.json` — the peer-refresh filter it exists to provide doesn't apply to that login.
+- `run_login`: a login that exits 0 without writing a credential waits the full 180 s before saying anything (`on_exit` only settles on non-zero).
+- `newest_credential_mtime` (`cliproxy.lua:886-888`) re-derives the `~/.cli-proxy-api` default that `config.lua` documents.
+- `credential_health_for_login` issues one full `/v0/management/auth-files` request per channel (3 curls + 3 key reads for `google`) when a single response carries every channel.
+- `cliproxy_recovery_e2e_spec.lua:186,195` — `local port = select(2, ("x"):find("x")) -- keep luacheck quiet about unused` plus `assert.is_truthy(port)` is still dead scaffolding (flagged four rounds); `:118` — `vim.ui.select` set in `before_each`, never restored.
+- Carried from M1/M2: `render_opts()` does `mkdir` + a file read on every call and sits on every query; `resolve_channel` iterates `pairs()` (nondeterministic when a model appears under two channels); `classify_auth_files` treats a record with no `status` as healthy (`cliproxy_auth.lua:131`).
+
+## 5. Test coverage notes
+
+Verified independently, not from the Log: `cliproxy_auth_login` 19, `cliproxy_caller_teardown` 5, `cliproxy_command` 10, `cliproxy_conformance` 3, `cliproxy_dispatch` 3, `cliproxy_download` 3, `cliproxy_lifecycle` 52, `cliproxy_login` 9, `cliproxy_recovery_e2e` 4, `cliproxy_auth` 56, `cliproxy_budget` 3, `cliproxy_config` 46, `dispatcher_query` 56, `failure_notice` 6, `providers_pre_query` 6 — **281 examples, 0 failed, 0 errors**; `make lint` 0/0 in 313 files. One loud SKIP (`ps unavailable — peer detection not exercised`), which is the degradation `peers()` is written to survive, so the skip is honest.
+
+The `## Log` predates the round-4 commit and is now wrong in five places: it lists `cliproxy_auth_spec` 55 (56), `cliproxy_lifecycle_spec` 49 (52), `cliproxy_budget_spec` 2 (3), `cliproxy_login_spec` 8 (9), omits `cliproxy_download_spec` 3, and labels conformance "real 7.1.71" — `discover_binary` resolves `/opt/homebrew/bin/cliproxyapi` = **7.2.110**, while `PINNED_VERSION = "7.1.71"` means download and conformance exercise different versions.
+
+Gaps, in the order I'd close them:
+
+1. **`run_login` is tested against one provider's output shape** (C1). Every assertion rides on a claude-shaped `/oauth/authorize` URL the fake hardcodes. A device-code mode in the fake, plus an assertion that unmatched output still reaches the operator, is the test that would have failed the day `-no-browser` went unconditional.
+2. **`LOGIN_FLAGS` is never checked against the binary** (I5). One conformance assertion per entry against `--help` pins the whole table.
+3. **The oldest-peer fixture is degenerate** (I1) — all entries order identically lexicographically and chronologically. Add one whose two orders disagree.
+4. **No live conformance that `updated_at` stays put on a touch-only write.** The whole restart rung rests on that behavior; `REQUIRED_FIELDS` pins the fields' *existence*, not that the gap means what the ladder reads it to mean.
+5. **`reap()`'s command branch is untested** — the spec covers the kill count but not `:ParleyProxy reap`'s double scan or its confirmation list.
+
+The `decide` table-test plus the `attempt >= 1` property sweep (`cliproxy_auth_spec.lua`) and the external-oracle epoch assertions remain the strongest patterns in this diff — they falsify the implementation rather than restate it.
+
+## 6. Architectural notes for upcoming work
+
+- **ARCH-DRY — pass with nits.** Every consolidation this milestone made has two live callers and one source: `restart_managed`, `credential_action`, `channels_for_login`, `healthier`, `SUBS_HELP` (now including `reap`, closing round 3's discoverability finding, with README updated in the same range). `_stray_spawned` was correctly *deleted* rather than kept after round 3's deletability check — the right response. Remaining duplication is prose and defaults, not logic: the rotation-race explanation twice, and `newest_credential_mtime` re-deriving the auth-dir default.
+- **ARCH-PURE — flag, narrowly.** `decide`, `credential_action`, `rfc3339_sec`, `parse_peers`, `channels_for_login`, `healthier` are genuinely pure, mock-free and externally validated; `recover` is gather-then-execute with no policy in it. Two things sit on the wrong side of the seam: choosing the oldest peer is business logic done in the IO shell with a string compare (I1) when `parse_peers` already parses the field, and `run_login`'s "which line is the URL" is a per-provider policy decision embedded in a `jobstart` callback (C1) — a pure `authorize_url(provider, line)` table would be unit-testable across all seven providers without spawning anything.
+- **ARCH-PURPOSE — flag.** Shadow sweep on "who infers auth state" is clean: dispatch derives from the management API ✓, `:ParleyProxy models` derives on the correct channel axis ✓, all three hand-maintained restatements of the disproved empty-list inference are corrected ✓, and "stale in-memory auth … repaired" is delivered and verified ✓. The residue is the login half, which *is* M3's point rather than a separable extension: the flow is unusable for most providers (C1) and "resumes the query" is neither wired nor descoped (I2).
+- **ARCH-MOCK — flag.** The fake's `updated_at` modelling (`fake_cliproxy:104-110`, load time = first sighting of this content) is exactly right — it makes the fake honest about the distinction the restart rung reads, instead of letting a fixture manufacture it, which is what defeated round 3. `--error-mode`/`_once` run production's own HTTP boundary with captured 7.1.71 bodies. The gap is the *process* boundary: `run_login` is the one place production shells out to a binary whose output it parses, and the fake models a single provider's output. A fake satisfies this principle only when the behavior we branch on is the behavior we check — here the branch is "does this line carry the authorize URL", and it is checked for one of seven providers.
+- **Plan-gate carry-forward:** `workshop/plans/000197-cliproxy-auth-self-healing-plan-gate.md` `## Open findings` reads "(none — every finding has been disposed)" — verified on disk. PQ-5 was the item deferred into M2; delivered, on the right axis. Nothing to carry.
+- **Prior-review carry-forward:** of round 4's nine findings, C1, I1, I2 and I3 are closed and verified closed. **I4, I5, I6, I7 and I8 remain open** and are re-filed above at their original severity. The `expired`-row plan correction has now survived four reviews; the `_retry` docstring four; the e2e dead scaffolding four.
+- **For the close:** `stop()` has four callers and `peers()` two. Before a fifth appears, the port-release discipline, the `ps`/`lsof` cost and the peer-scan latch all want to sit behind one seam with one arming point.
+
+## 7. Plan revision recommendations
+
+Append to `workshop/plans/000197-cliproxy-auth-self-healing-plan.md` `## Revisions`:
+
+1. **Rewrite Revisions entry #1 — it now describes a deleted design.** It records normalization "at the IO seam (`uv.fs_stat().mtime.sec`)" and `proxy_state` carrying `auth_file_modtime`; round 3 replaced that with a comparison *entirely inside the management record* (`modtime` = the file's mtime re-stat'd per request, `updated_at` = when the proxy loaded it), verified against the real binary, with no `fs_stat` — so the check is pure and left the repair budget. Correct Task 9 Step 3 (`:427`) to match instead of leaving it specifying `record_modtime` and a string compare.
+2. **The `decide` table's `expired` row still contradicts the code** (`:421`). The shipped policy retries on `healthy` (deliberately) and reports on `unknown`. Recommended at rounds 1, 2, 3 and 4 — correct the row or record why it stands.
+3. **Add Core-concepts rows for the eleven M2/M3 entities** — `credential_action`, `rfc3339_sec`, `healthier`, `channels_for_login`, `restart_managed`, `credential_health_for_login`, `peers`, `reap`, `callback_port_blocked`, `await_credential`, `run_login` — with kind/location/status/milestone (round 2 rec #2, round 3 rec #3, round 4 rec #3, still undone).
+4. **Record `run_login`'s per-provider contract.** Task 15 assumes one authorize-URL shape; the binary emits at least three (`/oauth/authorize`, `/o/oauth2/auth`, device-code flows). Record that `-no-browser` may only be passed where parley can capture and open the URL, that unmatched output must still reach the operator, and that the fake grows a device-code login mode so the rule is testable.
+5. **Record whether "resumes the query" is in scope.** Either wire `run_login`'s `on_done` back to a re-issue, or record the descope with the reason (an OAuth flow outlives the claim's 30 s backstop by two orders of magnitude) so the Done-when stops reading as delivered.
+6. **Tick what shipped.** 1 of 56 checkboxes is ticked while M1/M2/M3 are all `[x]` in the issue; the plan is the greppable record of what was built, and at 1/56 the next reviewer's traceability pass is meaningless.

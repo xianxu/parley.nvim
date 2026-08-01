@@ -62,7 +62,22 @@ describe("cliproxy login", function()
         end)
         assert.is_true(ok, "login never settled")
         assert.matches("oauth/authorize", all_notices())
-        assert.equals(1, #opened, "the URL was not opened for the operator")
+        -- parley does NOT open the URL itself any more: the binary keeps its own
+        -- browser flow (which differs per provider), and parley adds visibility.
+        assert.equals(0, #opened)
+    end)
+
+    it("surfaces the login's own output for ANY provider, not just claude", function()
+        -- The regression this replaces: parley passed -no-browser and matched
+        -- only a claude.ai/oauth/authorize URL, so google/kimi/xai/antigravity
+        -- logins showed the operator nothing at all and could not be completed.
+        vim.env.PARLEY_FAKE_LOGIN_MODE = "success"
+        local settled = await(function(done)
+            cliproxy.run_login("claude", (cliproxy.login_argv("claude")), done)
+        end)
+        assert.is_true(settled)
+        -- Whatever the binary printed reaches the operator verbatim.
+        assert.matches("Visit the following URL", all_notices())
     end)
 
     it("reports success with the account once a credential is written", function()

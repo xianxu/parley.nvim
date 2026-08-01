@@ -126,7 +126,7 @@ first"; it **claims** synchronously (cheap: `classify_response` is pure):
 - falsy → the dispatcher calls `on_error` immediately, exactly as before. Every
   adapter without the hook takes this path.
 - truthy → `on_error` is withheld and the adapter owes exactly one of
-  `retry()`/`give_up(msg)`, both behind one `tasker.once`. A 15s
+  `retry()`/`give_up(msg)`, both behind one `tasker.once`. A
   `recovery_timeout_ms` backstop degrades a hung recovery to today's behavior
   rather than stranding the chat leg.
 
@@ -209,14 +209,28 @@ found. `stop()` no longer leaks parley-spawned proxies on non-managed ports.
 1. **preflights the callback port** (claude's redirect is fixed at
    `localhost:54545`) by *connecting*, not binding — libuv sets `SO_REUSEADDR`,
    so a bind probe reports "free" for exactly the case this catches;
-2. runs with `-no-browser` and **captures the authorize URL**, opening it via
-   `vim.ui.open` and surfacing it so a failed auto-open is still recoverable;
+2. **surfaces the binary's own output** (debounced, so the whole instruction
+   block arrives together) — deliberately WITHOUT `-no-browser`: each provider's
+   flow differs, and suppressing the binary's browser while matching only a
+   claude-shaped URL left every other provider with a silent, uncompletable
+   login. Parley adds visibility; it does not take over the flow;
 3. keeps the job **off a closable terminal buffer** — in #197 the terminal-split
    job died mid-flow, taking its callback listener with it, and the browser's
    redirect had nowhere to land while nothing reported the death;
-4. **watches the auth-dir** for a written credential and reports the real
-   outcome: success with the account, a non-zero exit with its stderr, or a
+4. **watches the auth-dir** (filtered to the login's own channels, so a peer
+   proxy's refresh cannot satisfy it) and reports the real outcome exactly once:
+   success with the account, a non-zero exit with the binary's output, or a
    bounded timeout telling the operator to re-run.
+
+It does **not** resume the query that triggered the prompt. A login takes minutes
+and the recovery claim is bounded by `recovery_timeout_ms`; holding a chat leg
+open across it would guarantee the timeout it exists to avoid. The claim settles
+with the diagnosis, and the operator re-sends once the login lands.
+
+`login_argv` validates the flag against `<binary> -h` rather than a static table:
+the flag set is version-dependent (7.2.110 dropped `-login`, which 7.1.71 had),
+so `:ParleyProxy login google` on a newer build now says so instead of silently
+not logging in.
 
 ### Testing
 
