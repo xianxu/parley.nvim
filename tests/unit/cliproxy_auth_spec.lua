@@ -80,3 +80,103 @@ describe("classify_response", function()
         assert.is_nil(ca.classify_response(nil, NO_AUTH))
     end)
 end)
+
+-- One record of /v0/management/auth-files, shaped exactly as cliproxyapi 7.1.71
+-- returns it (captured from the real binary against a fabricated credential).
+local function rec(over)
+    return vim.tbl_extend("force", {
+        provider = "claude",
+        type = "claude",
+        account = "me@example.com",
+        email = "me@example.com",
+        account_type = "oauth",
+        status = "active",
+        status_message = "",
+        unavailable = false,
+        disabled = false,
+        failed = 0,
+        success = 3,
+        modtime = "2026-08-01T00:34:46-07:00",
+    }, over or {})
+end
+
+describe("classify_auth_files", function()
+    it("reports healthy for an active record", function()
+        local h = ca.classify_auth_files({ rec() }, "claude")
+        assert.equals("healthy", h.state)
+        assert.equals("me@example.com", h.account)
+    end)
+
+    it("reports missing when the channel has no record", function()
+        assert.equals("missing", ca.classify_auth_files({ rec({ provider = "codex", type = "codex" }) }, "claude").state)
+    end)
+
+    it("reports missing for an empty list", function()
+        assert.equals("missing", ca.classify_auth_files({}, "claude").state)
+    end)
+
+    it("reports missing for a nil list", function()
+        assert.equals("missing", ca.classify_auth_files(nil, "claude").state)
+    end)
+
+    it("carries status_message and failed through on error", function()
+        local h = ca.classify_auth_files({ rec({
+            status = "error",
+            failed = 4,
+            status_message = "OAuth access token has expired. Re-authenticate to continue.",
+        }) }, "claude")
+        assert.equals("error", h.state)
+        assert.equals(4, h.failed)
+        assert.matches("expired", h.message)
+    end)
+
+    it("ranks unavailable and disabled above a non-active status", function()
+        assert.equals("unavailable", ca.classify_auth_files({ rec({ unavailable = true }) }, "claude").state)
+        assert.equals("disabled", ca.classify_auth_files({ rec({ disabled = true }) }, "claude").state)
+        -- disabled outranks unavailable when both are set
+        assert.equals("disabled",
+            ca.classify_auth_files({ rec({ disabled = true, unavailable = true }) }, "claude").state)
+    end)
+
+    it("picks the healthiest credential when several exist, and reports ITS account", function()
+        local h = ca.classify_auth_files({
+            rec({ account = "dead@example.com", email = "dead@example.com", unavailable = true }),
+            rec({ account = "live@example.com", email = "live@example.com" }),
+        }, "claude")
+        assert.equals("healthy", h.state)
+        assert.equals("live@example.com", h.account)
+    end)
+
+    it("is order-independent when picking the healthiest", function()
+        local h = ca.classify_auth_files({
+            rec({ account = "live@example.com", email = "live@example.com" }),
+            rec({ account = "dead@example.com", email = "dead@example.com", disabled = true }),
+        }, "claude")
+        assert.equals("healthy", h.state)
+        assert.equals("live@example.com", h.account)
+    end)
+
+    it("matches on `type` when `provider` is absent", function()
+        local r = rec()
+        r.provider = nil
+        assert.equals("healthy", ca.classify_auth_files({ r }, "claude").state)
+    end)
+
+    it("generates a message when status_message is empty", function()
+        local h = ca.classify_auth_files({ rec({ unavailable = true }) }, "claude")
+        assert.matches("unavailable", h.message)
+    end)
+
+    -- Ties the hand-written rec() helper above to a payload the REAL binary
+    -- produced. If cliproxy renames a field, rec() would happily keep passing
+    -- on its own; this one would not.
+    it("classifies the captured 7.1.71 payload", function()
+        local path = vim.fn.getcwd() .. "/tests/fixtures/cliproxy_auth_files.json"
+        local decoded = vim.json.decode(table.concat(vim.fn.readfile(path), "\n"))
+        local h = ca.classify_auth_files(decoded.files, "claude")
+        assert.equals("error", h.state)
+        assert.equals("probe@example.com", h.account)
+        assert.equals(1, h.failed)
+        assert.matches("api%.anthropic%.com", h.message)
+    end)
+end)

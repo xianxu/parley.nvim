@@ -1,0 +1,32 @@
+{
+  "_comment": "Captured verbatim from cliproxyapi 7.1.71 (commit b6c22f2d) on 2026-08-01 via GET /v0/management/auth-files, against a FABRICATED claude credential in a temp auth-dir. Tokens were never real. `recent_requests` is truncated to two buckets; the live payload carries 20. This is the contract tests/integration/cliproxy_conformance_spec.lua re-checks against the real binary — if that check fails, the binary changed and classify_auth_files must be revisited.",
+  "files": [
+    {
+      "account": "probe@example.com",
+      "account_type": "oauth",
+      "auth_index": "75f85694b61808ba",
+      "created_at": "2026-08-01T00:34:46.994488305-07:00",
+      "disabled": false,
+      "email": "probe@example.com",
+      "failed": 1,
+      "id": "claude-probe@example.com.json",
+      "label": "probe@example.com",
+      "modtime": "2026-08-01T00:34:46.994488305-07:00",
+      "name": "claude-probe@example.com.json",
+      "path": "/tmp/mgmt/auth/claude-probe@example.com.json",
+      "provider": "claude",
+      "recent_requests": [
+        { "time": "23:50-00:00", "success": 0, "failed": 0 },
+        { "time": "00:00-00:10", "success": 0, "failed": 1 }
+      ],
+      "runtime_only": false,
+      "size": 395,
+      "source": "file",
+      "status": "error",
+      "status_message": "Post \"https://api.anthropic.com/v1/messages?beta=true\": dial tcp: lookup api.anthropic.com: no such host",
+      "success": 0,
+      "type": "claude",
+      "updated_at": "2026-08-01T00:35:26.870899-07:00"
+    }
+  ]
+}

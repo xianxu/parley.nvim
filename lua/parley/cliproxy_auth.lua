@@ -82,4 +82,55 @@ function M.classify_response(http_status, body, request_model)
     return nil
 end
 
+--------------------------------------------------------------------------------
+-- Credential health, read from /v0/management/auth-files
+--------------------------------------------------------------------------------
+
+-- Worst-to-best so "healthiest wins" is a simple max: the proxy routes to any
+-- usable credential, so one healthy record makes the channel usable regardless
+-- of how many dead ones sit beside it.
+local HEALTH_RANK = { missing = 0, disabled = 1, unavailable = 2, error = 3, healthy = 4 }
+
+-- Precedence within one record: an operator-disabled credential is disabled
+-- even if the proxy also marked it unavailable, and `status` only speaks when
+-- neither flag is set.
+local function record_state(f)
+    if f.disabled then
+        return "disabled"
+    elseif f.unavailable then
+        return "unavailable"
+    elseif f.status ~= nil and f.status ~= "active" then
+        return "error"
+    end
+    return "healthy"
+end
+
+--- Reduce the management API's record list to one channel's credential state.
+---
+--- This is the single interpreter of cliproxy's management schema: a field
+--- rename upstream lands here and nowhere else.
+---@param files table[]|nil # the `files` array from /v0/management/auth-files
+---@param channel string # cliproxy channel, e.g. "claude"
+---@return table # { state, message, account?, failed?, modtime? }
+function M.classify_auth_files(files, channel)
+    local best = { state = "missing", message = "no credential for " .. tostring(channel) }
+    for _, f in ipairs(type(files) == "table" and files or {}) do
+        if (f.provider or f.type) == channel then
+            local state = record_state(f)
+            if HEALTH_RANK[state] > HEALTH_RANK[best.state] then
+                best = {
+                    state = state,
+                    message = (type(f.status_message) == "string" and f.status_message ~= "")
+                        and f.status_message
+                        or ("credential is " .. state),
+                    account = f.account or f.email,
+                    failed = f.failed,
+                    modtime = f.modtime,
+                }
+            end
+        end
+    end
+    return best
+end
+
 return M
