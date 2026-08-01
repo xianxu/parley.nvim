@@ -326,13 +326,46 @@ describe("decide", function()
         assert.is_truthy(instant)
     end)
 
-    it("parses every RFC3339 form to the same instant", function()
+    it("parses to ABSOLUTE epochs, checked against an external oracle", function()
+        -- Values from Python's datetime, not from this parser. Comparing the
+        -- parser to itself is what let a whole-day leap-year error ship green:
+        -- a systematic offset cancels on both sides of every relative test.
+        assert.equals(1785609301, ca.rfc3339_sec("2026-08-01T18:35:01Z"))
+        assert.equals(0, ca.rfc3339_sec("1970-01-01T00:00:00Z"))
+        assert.equals(1577836800, ca.rfc3339_sec("2020-01-01T00:00:00Z"))
+        -- Leap-year dates: these were all +86400 before the fix.
+        assert.equals(1709164800, ca.rfc3339_sec("2024-02-29T00:00:00Z"))
+        assert.equals(1709251200, ca.rfc3339_sec("2024-03-01T00:00:00Z"))
+        assert.equals(1844683200, ca.rfc3339_sec("2028-06-15T12:00:00Z"))
+        assert.equals(951868800, ca.rfc3339_sec("2000-03-01T00:00:00Z")) -- 400-year rule
+    end)
+
+    it("agrees across representations of one instant", function()
         local utc = ca.rfc3339_sec("2026-08-01T18:35:01Z")
         assert.equals(utc, ca.rfc3339_sec("2026-08-01T11:35:01-07:00"))
         assert.equals(utc, ca.rfc3339_sec("2026-08-01T20:35:01+02:00"))
         assert.equals(utc, ca.rfc3339_sec("2026-08-01T11:35:01.994488305-07:00"))
-        assert.is_nil(ca.rfc3339_sec("not a timestamp"))
+    end)
+
+    it("is TOTAL — nil for anything unparseable, never a throw", function()
+        -- It runs inside an async callback, outside the dispatcher's
+        -- synchronous claim guard, so a throw settles nothing and the operator
+        -- waits out the backstop instead of seeing the diagnosis.
+        for _, bad in ipairs({ "not a timestamp", "2026-13-01T00:00:00Z",
+                               "2026-00-01T00:00:00Z", "2026-02-00T00:00:00Z",
+                               "2026-01-32T00:00:00Z", "", "2026-08-01" }) do
+            local ok, res = pcall(ca.rfc3339_sec, bad)
+            assert.is_true(ok, "raised on " .. bad)
+            assert.is_nil(res, "parsed nonsense: " .. bad)
+        end
         assert.is_nil(ca.rfc3339_sec(nil))
+    end)
+
+    it("decide survives a malformed modtime from the proxy", function()
+        local ok, d = pcall(ca.decide, v(), h({ modtime = "2026-13-45T99:99:99Z" }),
+            { running = true, auth_file_modtime = 1785000000 }, 0)
+        assert.is_true(ok, "decide raised on proxy-supplied garbage")
+        assert.equals("retry", d.action)
     end)
 
     it("does not call a file stale when either timestamp is missing", function()

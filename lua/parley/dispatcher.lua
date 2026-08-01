@@ -19,12 +19,15 @@ local D = {
 	-- expected to call retry()/give_up() itself. Overridable so specs can drive
 	-- the timeout without sleeping.
 	--
-	-- 25s because it must exceed the slowest legitimate recovery, not merely
-	-- feel short: cliproxy's management-route repair has a ≤15s worst case
-	-- (itemized above `credential_health` in cliproxy.lua). If the backstop
-	-- fired first it would spend the claim's one-shot and replace a correct
-	-- diagnosis with "recovery timed out".
-	recovery_timeout_ms = 25000,
+	-- It must exceed the slowest LEGITIMATE recovery, not merely feel short. The
+	-- binding case is cliproxy's management-route repair, whose terms are derived
+	-- in `cliproxy._repair_budget_sec` from the constants each step uses
+	-- (including the extra probe each bounded poll can overrun by) and currently
+	-- total 21s. `cliproxy_budget_spec` asserts this stays comfortably larger; if
+	-- the backstop fired first it would spend the claim's one-shot and replace a
+	-- correct diagnosis with "recovery timed out". A normal failure settles in a
+	-- few seconds — this bound is only ever reached by an actual repair.
+	recovery_timeout_ms = 30000,
 }
 
 ---@param opts table #	user config

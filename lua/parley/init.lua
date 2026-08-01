@@ -478,10 +478,15 @@ M.register_proxy_command = function(prefix)
 				vim.notify(err, vim.log.levels.ERROR)
 				return
 			end
-			-- Interactive OAuth — run in a terminal split so the URL/flow is visible.
-			vim.cmd("botright new")
-			vim.fn.jobstart(argv, { term = true })
-			vim.cmd("startinsert")
+			-- Preflight the OAuth callback port. #197's dead end: the login
+			-- process died, its listener went with it, and the browser redirect
+			-- had nowhere to land — the account chooser just looked inert.
+			local blocked = cliproxy.callback_port_blocked(arg)
+			if blocked then
+				vim.notify(blocked, vim.log.levels.ERROR)
+				return
+			end
+			cliproxy.run_login(arg, argv)
 		else
 			-- nil (bare invocation) → help at INFO; an unknown subcommand → WARN.
 			local level = sub == nil and vim.log.levels.INFO or vim.log.levels.WARN

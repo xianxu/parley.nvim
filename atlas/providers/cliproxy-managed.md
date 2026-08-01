@@ -161,11 +161,16 @@ attempt 0, so a retry cannot beget another. A `prompt_login` with no resolvable
 login provider degrades to `report` — a prompt you cannot act on is a worse
 report.
 
-**Timeout budget.** The repair's worst case (≤15s: management read, identity
-probe, port release, spawn probe, health poll, second read) is itemized above
-`credential_health` and must stay under `dispatcher.recovery_timeout_ms` (25s).
-If the backstop fired first it would spend the claim's one-shot and replace a
-correct diagnosis with "recovery timed out".
+**Timeout budget.** The repair must finish inside
+`dispatcher.recovery_timeout_ms`, or the backstop spends the claim's one-shot and
+replaces a correct diagnosis with "recovery timed out". The budget is *derived*
+in `cliproxy._repair_budget_sec` from the constants each step uses
+(`CURL_MAX_TIME`, `PORT_RELEASE_MS`, `POLL_BUDGET_MS`, plus the one extra probe
+each bounded poll can overrun by), and `cliproxy_budget_spec` asserts it stays
+comfortably under the backstop — deliberately no numbers restated here, because
+three successive reviews re-opened this drift when the docs carried the
+arithmetic. The compound case (a 404 repair followed by a `restart` decision) is
+made unreachable rather than budgeted: one restart per claim.
 
 ### The management route, and the 404 that matters
 
@@ -183,6 +188,32 @@ mid-session is still repairable. The repair is skipped entirely when
 `ensure_running` does not spawn for an unmanaged instance. There is deliberately no config-file drift check: `ensure_running`
 rewrites the rendered config *before* it probes, so a file-vs-render comparison
 is always false and never reflects what the running process loaded.
+
+### Peer proxies, and the login flow
+
+**Peers.** Every cliproxy runs a 15-minute auth refresh over its auth-dir, and
+Claude's OAuth refresh tokens rotate on use — so N proxies sharing one auth-dir
+invalidate each other's credential. That is what broke auth in #197 (five leaked
+instances from June). `peers()` finds cliproxy processes parley neither spawned
+nor manages, matching on the **executable** rather than a substring (a real `ps`
+contains a `zsh -c` wrapper quoting the proxy path — substring matching would
+SIGTERM the operator's shell) and on **both** binary names (`cliproxyapi` from
+brew, `cli-proxy-api` from the tarball). `ensure_running` warns once per session
+naming that mechanism, and `:ParleyProxy reap` stops them after showing what it
+found. `stop()` no longer leaks parley-spawned proxies on non-managed ports.
+
+**Login.** `:ParleyProxy login <provider>` now:
+1. **preflights the callback port** (claude's redirect is fixed at
+   `localhost:54545`) by *connecting*, not binding — libuv sets `SO_REUSEADDR`,
+   so a bind probe reports "free" for exactly the case this catches;
+2. runs with `-no-browser` and **captures the authorize URL**, opening it via
+   `vim.ui.open` and surfacing it so a failed auto-open is still recoverable;
+3. keeps the job **off a closable terminal buffer** — in #197 the terminal-split
+   job died mid-flow, taking its callback listener with it, and the browser's
+   redirect had nowhere to land while nothing reported the death;
+4. **watches the auth-dir** for a written credential and reports the real
+   outcome: success with the account, a non-zero exit with its stderr, or a
+   bounded timeout telling the operator to re-run.
 
 ### Testing
 

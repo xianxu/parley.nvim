@@ -163,3 +163,154 @@ Add a `## Revisions` entry to `workshop/plans/000197-cliproxy-auth-self-healing-
 3. **Task 12 needs a provider→channels resolver, and the plan should say which policy it shares.** The plan says "Route it through `auth_files` + `decide`"; the code routes through `credential_health` plus a private ladder, and `decide` needs a verdict this command has no way to produce. Record the intended shape — a pure `channels_for_login` derived from `CHANNEL_LOGIN`, plus whichever health→action helper both consumers share — so the third axis (`providers()` vs channel vs login) is named in the plan the way M1 round 2 named the first two.
 4. **Record the M2 terms of the repair budget.** Task 5's itemization predates `recover`'s pre-flight liveness probe and the `start`/`restart` rung; say the budget covers the whole claimed path and is derived from `recovery_timeout_ms`, not restated beside it.
 5. **Task 10 Step 3's exhaustive-action spec was not delivered** — either tick it with the spec, or record why the `execute` fall-through (a bare `give_up`) is deemed sufficient.
+
+---
+
+## Re-review — 2026-08-01T12:02:49-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 197 — cliproxy auth failures must self-heal: detect, diagnose, recover |
+| repo | parley.nvim |
+| issue file | workshop/issues/000197-cliproxy-auth-self-healing.md |
+| boundary | milestone M2 |
+| milestone | M2 |
+| window | 819a781a71859450cb5f22aa6940d9213004bb70..HEAD |
+| command | sdlc milestone-close --issue 197 --milestone M2 |
+| reviewer | claude |
+| timestamp | 2026-08-01T12:02:49-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+The rework from round 1 is substantial and mostly right: `decide`/`credential_action` are genuinely pure and shared by both consumers, `channels_for_login` derives the third axis from `CHANNEL_LOGIN` instead of adding a table, `restart_managed` collapses the duplicated repair sequence, and the fake's `_once` transient modes let the e2e assert the answer actually arrives. I re-ran everything independently against the committed HEAD (the working tree carries uncommitted M3 work, so I extracted `ad2ce42` to review): all 14 mapped specs green — `cliproxy_auth` 46, `cliproxy_config` 46, `cliproxy_budget` 2, `dispatcher_query` 56, `cliproxy_auth_login` 17, `cliproxy_command` 10, `cliproxy_recovery_e2e` 4, `cliproxy_conformance` 3 (real binary, no skip) — and `make lint` 0/0 in 312 files. The Log's counts match. What blocks SHIP is that the C1 fix introduced a new, verified defect of the same class it replaced: `rfc3339_sec` returns the wrong epoch — off by exactly one day — for **every date in a leap year**, which kills the `restart` rung from 2028-01-01 onward. I confirmed this against Python's reference for 2000, 2020, 2024 and 2028. It survived review because every staleness test feeds the parser's own output back in as the "disk" side, so the entire suite is invariant under any parser error. Alongside it, the budget's "mutually exclusive" argument is false (a 404 repair *can* be followed by a `restart`, ~28s against a 25s backstop), and `auth_file_modtime`'s prefix match makes the `gemini` channel read `gemini-cli`'s file.
+
+## 1. Strengths
+
+- **`decide` + `credential_action` are one policy with two real consumers.** `credential_action` (`lua/parley/cliproxy_auth.lua:311`) is called from both `decide` (`:364`) and `init.lua:419-420`, so the round-1 I2 divergence on `error` is genuinely gone — not documented away. Both now report on a DNS-shaped `error` and prompt only on an auth-shaped one.
+- **C2's fix is derived, not restated.** `channels_for_login` (`cliproxy_config.lua:195`) inverts `CHANNEL_LOGIN` rather than adding a third hand-maintained table (ARCH-DRY), and `cliproxy_command_spec.lua:117-136` now asserts the exact channel set `{aistudio, gemini, gemini-cli}` — closing round 1's I5, where the stub discarded the very argument carrying the bug.
+- **`restart_managed` (`cliproxy.lua:375`) is the right extraction.** Both the 404 repair (`:436`) and the ladder's `restart` rung (`:892`) now go through the port-release wait, and the comment explaining why the wait can't be caught by the Python fake travelled with it.
+- **The e2e now proves the Done-when rather than its shadow** (`cliproxy_recovery_e2e_spec.lua:156-161`): `assert.is_nil(out.failure)` + `assert.matches("ok", out.content)`, driven by the fake's `_once` mode. Modelling transience *inside* the fake instead of swapping servers mid-flight is the better ARCH-MOCK answer, and it removed the race round 1 flagged.
+- **Task 10's exhaustive-action spec is delivered** (`cliproxy_auth_login_spec.lua:315-339`) and drives all five actions through the real `recover`, giving `restart` its only integration path.
+
+## 2. Critical findings
+
+**C1 — `rfc3339_sec` is off by +1 day for every date in a leap year, so the `restart` rung goes dead for all of 2028 and every leap year after.** `lua/parley/cliproxy_auth.lua:258-284` (specifically `:268` and `:273`)
+
+The days-before-year-Y term `math.floor(y/4) - math.floor(y/100) + math.floor(y/400)` counts year Y's **own** leap day, so `days` is one too high whenever Y is a leap year; the separate `mm > 2` adjustment at `:273` does not cancel it. Verified at HEAD against Python's `datetime`:
+
+```
+2026-08-01T18:35:01Z    got=1785609301  want=1785609301  +0    OK
+2024-02-29T00:00:00Z    got=1709251200  want=1709164800  +1d   WRONG
+2024-03-01T00:00:00Z    got=1709337600  want=1709251200  +1d   WRONG
+2028-06-15T12:00:00Z    got=1844769600  want=1844683200  +1d   WRONG
+2020-01-01T00:00:00Z    got=1577923200  want=1577836800  +1d   WRONG
+2000-03-01T00:00:00Z    got=951955200   want=951868800   +1d   WRONG
+```
+
+Failure scenario: from 2028-01-01, `loaded` is 86400s larger than the true instant, so `disk > loaded + STALE_SKEW_SEC` (`:299`) is never true — `auth_file_is_stale` returns false for a file that is genuinely up to a day newer, `decide` falls through to `retry`, and the stale-in-memory-auth repair the issue's Done-when promises silently stops existing. This is the "never-stale east of UTC / dead rung" half of round 1's C1, reintroduced on the calendar axis instead of the timezone axis. It is wrong *today* as a documented public function (`M.rfc3339_sec`, "Parse an RFC3339 timestamp to epoch seconds") in the base-layer repo that propagates to consumers; only the behavioral manifestation is deferred.
+
+Fix sketch — count leap years strictly *before* Y:
+
+```lua
+local yy = tonumber(y)
+local prev = yy - 1
+local days = (yy * 365) + math.floor(prev / 4) - math.floor(prev / 100) + math.floor(prev / 400)
+-- epoch_days is unchanged: floor(1969/4)=492, floor(1969/100)=19, floor(1969/400)=4
+```
+
+The test that must come with it is the point (see I5): assert **absolute** epochs, not the parser against itself, and include at least one leap-year date —
+
+```lua
+assert.equals(1785609301, ca.rfc3339_sec("2026-08-01T18:35:01Z"))
+assert.equals(1709164800, ca.rfc3339_sec("2024-02-29T00:00:00Z")) -- fails today
+assert.equals(1844683200, ca.rfc3339_sec("2028-06-15T12:00:00Z")) -- fails today
+```
+
+## 3. Important findings
+
+**I1 — the budget's "mutually exclusive" argument is false; a 404 repair followed by a `restart` costs ~28s against the 25s backstop, and the spec that is supposed to prevent this drift cannot see it.** `lua/parley/cliproxy.lua:400-404`, `:336`, `tests/unit/cliproxy_budget_spec.lua`
+
+The comment claims "a `restart` follows a SUCCESSFUL read, which means no repair ran". The successful read can be the **second** read *after* the repair: `credential_health` (`:436-442`) calls `restart_managed`, then re-reads `auth_files`, then hands `second` to `cb` — and `recover` (`:920-923`) feeds exactly that into `decide`, which can return `restart` (`cliproxy_auth.lua:373`) and drive `restart_managed` a second time (`:892`). Path cost: probe 2 + auth_files 2 + [repair: stop 2 + release 2 + ensure 2 + poll 5 + read 2] + [restart: stop 2 + release 2 + ensure 2 + poll 5] = **28s**. Reachable when a login writes the auth file during the ~11s repair window.
+
+Compounding it, two terms are understated even on the non-compound path: `wait_port_released` (`:356`) and `poll_until_healthy` (`:530`) check their wall-clock deadline only *after* a probe returns, so each can overrun by one `--max-time 2` curl — real bounds 4s and 7s, not the table's 2s and 5s, making the plain 404 repair ~21s against a claimed 17s. `cliproxy_budget_spec` detects neither, because it sums `M._repair_budget_sec` — a hand-maintained restatement of the path — against the dispatcher constant. This is the third round the budget has been re-opened (M1 round 3 I3, M2 round 1 I4). Fix: either make the compound case unreachable (skip the `restart` rung when the 404 repair already restarted this proxy — the guard state is right there in `_management_restart_done`), or derive the terms from the constants they name (`POLL_BUDGET_MS`, the port-release deadline, `--max-time`) plus the per-step probe overrun, so the table cannot be right while the code is wrong.
+
+**I2 — `auth_file_modtime` prefix-matches, so channel `gemini` reads `gemini-cli`'s credential file and takes the `restart` rung forever after a gemini-cli login.** `lua/parley/cliproxy.lua:772-788` (`:780`)
+
+Verified:
+
+```
+files on disk: gemini-cli-g@example.com.json, aistudio-g@example.com.json
+channel "gemini" matched: { "gemini-cli-g@example.com.json" }
+```
+
+Failure scenario: an operator logs in to gemini-cli. A later `gemini`-channel failure reads `auth_file_modtime("gemini")` → the gemini-cli file's mtime, which is permanently newer than gemini's own record `modtime` → `restart` on **every** subsequent gemini failure, SIGTERMing a possibly-shared proxy — precisely the harm round 1's C1 was raised for. This was round 1's Minor; C1's fix made the comparison load-bearing, so it now has teeth.
+
+Fix sketch (ARCH-DRY, removes the second channel→file mapping entirely): the management record already carries `path`, and `classify_auth_files` already picked the winning record by channel. Carry `path` through health and `uv.fs_stat(health.path).mtime.sec` in the shell — no directory glob, no duplicated auth-dir default (`:774-777`), no E484 (Minor below). That needs `path` added to `REQUIRED_FIELDS` in `cliproxy_conformance_spec.lua:24-27`.
+
+**I3 — `decide` raises on a malformed `modtime`, and the throw is outside the dispatcher's guard, so the claim is never settled.** `lua/parley/cliproxy_auth.lua:273`
+
+`mdays[mm]` is nil for month `00` or `13`; verified:
+
+```
+decide with month=13: ok=false err=cliproxy_auth.lua:323: attempt to perform arithmetic on a nil value
+```
+
+The dispatcher's `pcall` (`dispatcher.lua:477`) wraps only the **synchronous** claim; `decide` runs inside `credential_health`'s async callback (`cliproxy.lua:922`), so a throw there settles nothing and the operator gets "recovery timed out" 25s later instead of the diagnosis — the exact outcome the budget note exists to prevent. Input is proxy-supplied JSON, so likelihood is low, but a documented pure function on the ladder's critical path should be total. Fix: range-check `mo` (and `d`) before indexing, returning nil like every other unparseable input.
+
+**I4 — Docs update gate: the atlas now carries three different numbers for one budget, two of them wrong.** `atlas/providers/cliproxy-managed.md:129`, `:164-166`
+
+`:129` still reads "A 15s `recovery_timeout_ms` backstop" against `dispatcher.lua:27`'s 25000 — flagged in round 1, unfixed. Worse, the **new** "Timeout budget" paragraph added in this same window (`:164`) says "The repair's worst case (≤15s: …)" while the code comment and `M._repair_budget_sec` added in the same window say ≤17s, and its itemization omits `recover`'s liveness probe — the term round 1 flagged as missing. A doc that restates a number the code already owns will keep drifting; state the relationship, not the arithmetic.
+
+**I5 — the staleness suite is structurally incapable of catching a parser bug, and the seam where the previous C1 lived is still untested.** `tests/unit/cliproxy_auth_spec.lua:298-334`, `lua/parley/cliproxy.lua:772`
+
+Every staleness case supplies the "disk" side as `ca.rfc3339_sec(...)`'s own output (`:301` `= ca.rfc3339_sec(loaded) + 3600`, `:322` `= sec`, `:348` `= ca.rfc3339_sec(loaded) + 1`), and the parser's own test compares it only to itself (`:329-332`: `assert.equals(utc, ca.rfc3339_sec("2026-08-01T11:35:01-07:00"))`). Any systematic parser error cancels on both sides — which is why C1 above is green. The one variable holding an absolute instant, `local instant = 1785000000` (`:305`), is never compared to anything; it ends at `assert.is_truthy(instant)` (`:326`).
+
+Separately, `auth_file_modtime` — the IO function where round 1's C1 actually lived — still has **zero** coverage. Round 1's #1 recommended gap was "assert `stop()` is not called on the healthy path — that one line would have failed the day C1 landed"; the assertion was not added, and no integration test drives the stale path through the fake. The `restart` rung's *decision* is exercised only by the exhaustive spec, which forces the action and bypasses `decide` entirely.
+
+## 4. Minor findings
+
+- `cliproxy.lua:836` — `@param _retry fun() # unused in M1: this milestone diagnoses, it never repairs`; the parameter is `retry` and drives the whole ladder. Flagged round 1, unfixed.
+- `cliproxy.lua:779` — `vim.fn.readdir` on a missing auth-dir prints `E484: Can't open file …` to the message area (verified; it does not raise), contradicting best-effort intent, on the one path whose purpose is a clean diagnosis. Flagged round 1, unfixed; disappears with I2's fix.
+- `cliproxy_recovery_e2e_spec.lua:186,195` — `local port = select(2, ("x"):find("x")) -- keep luacheck quiet about unused` + `assert.is_truthy(port)` is still dead scaffolding. Flagged round 1, unfixed. Same pattern newly added at `cliproxy_auth_spec.lua:305,326`.
+- `cliproxy_recovery_e2e_spec.lua:118` — `vim.ui.select` set in `before_each`, never restored.
+- `cliproxy.lua:459-476` — `credential_health_for_login` issues one full `/v0/management/auth-files` request per channel (3 curls + 3 management-key file reads for `google`) when a single response already contains every channel; `classify_auth_files(files, ch)` per channel over one body would do, and would remove the 3-way fan-in on the 404-repair guard.
+- `cliproxy_auth_login_spec.lua:336` — the exhaustive spec waits on `settles > 0` then asserts `== 1`, so a *second* settle arriving after the wait is not caught; a short additional `vim.wait` closes it.
+- Carried unfixed from M1 and still open: `render_opts()` does `mkdir` + a file read on every call and sits on every query; `resolve_channel` iterates `pairs()` (nondeterministic when a model is listed under two channels); `classify_auth_files` treats a record with no `status` as healthy (`cliproxy_auth.lua:131`).
+- Round 1's `deliver()`-not-once-guarded note: verified not a defect — `deliver` is reached only via `tasker.once` or the unclaimed fall-through.
+
+## 5. Test coverage notes
+
+Verified independently against `ad2ce42` (the tree is dirty with M3 WIP; I extracted HEAD to review and ran the M2 specs from the working tree, whose M3 additions are purely additive — `git diff HEAD` shows insertions only): `cliproxy_auth` 46, `cliproxy_config` 46, `cliproxy_budget` 2, `failure_notice` 6, `providers_pre_query` 6, `dispatcher_query` 56, `cliproxy_auth_login` 17, `cliproxy_command` 10, `cliproxy_recovery_e2e` 4, `cliproxy_conformance` 3 (real 7.1.71, no SKIP). `make lint` 0/0 in 312 files. Every count in the Log checks out. The three failures I saw in the M3 `peers and reap` block are uncommitted WIP outside this window.
+
+Gaps, in the order I'd close them:
+
+1. **Absolute-epoch assertions for `rfc3339_sec`** (C1/I5) — self-comparison cannot falsify a parser. One leap-year row would have caught this.
+2. **Break the self-reference in the staleness rows** — supply the disk side as a literal epoch, not `rfc3339_sec(...)`'s output.
+3. **`auth_file_modtime` has no test at all** (I2/I5) — a case with `gemini-cli-*.json` on disk asserting `auth_file_modtime("gemini")` is nil, and an integration case asserting `stop()` is not called when the credential is healthy.
+4. **The `restart` decision has no end-to-end path** — the exhaustive spec forces the action; nothing drives fake-modtime + real-file-mtime through `decide`.
+5. **The budget spec asserts its own table** (I1), not the code. Deriving the terms from `POLL_BUDGET_MS`, the port-release deadline and `--max-time` would make it a real gate.
+
+## 6. Architectural notes for upcoming work
+
+- **ARCH-DRY — flag.** Two restatements remain: `auth_file_modtime` re-derives channel→file *and* the auth-dir default that the management record's `path` already gives (I2), and `M._repair_budget_sec` restates by hand a path the code owns (I1). Everything else in this diff consolidated correctly — `restart_managed`, `credential_action`, `channels_for_login`, `healthier` are all single-source and all have two real callers.
+- **ARCH-PURE — pass with a flag.** `decide`, `credential_action` and `rfc3339_sec` are genuinely pure, mock-free, and carry 46 unit examples; `recover` is now gather-then-execute with no policy in it. The flag is that purity bought less than it should have: `rfc3339_sec` is *partial* where the ladder needs it total (I3), and its correctness is unverified because the tests are self-referential (I5). A pure function is only as trustworthy as an assertion against an external oracle — here, a known epoch.
+- **ARCH-PURPOSE — pass on the shadow sweep.** Enumerating "who infers auth state": the dispatch path derives from the management API ✓; `:ParleyProxy models` now derives, and on the correct channel axis ✓ (C2 closed); all three hand-maintained restatements of the disproved empty-list inference are corrected (`cliproxy.lua:932-936`, `cliproxy_config.lua:249-253`, `atlas/…:211-221`) ✓. The residue is the budget: still documentation asserting what the code does, restated in the atlas with a third number (I1/I4).
+- **ARCH-MOCK — pass with a gap.** `--error-mode` and the `_once` transient modes are the right shape: the captured 7.1.71 bodies over the same HTTP boundary production uses, with the state that makes "transient" real living inside the fake. The gap is fidelity on the one field the ladder branches on — the fake emits `%z` (`-0700`, `fake_cliproxy:115`) where the real binary emits `.994488305-07:00`, and `REQUIRED_FIELDS` (`cliproxy_conformance_spec.lua:24-27`) pins `modtime`'s *existence* but not that it parses. One line — `assert.is_not_nil(ca.rfc3339_sec(record.modtime))` — would conformance-check the behavior we branch on.
+- **Plan-gate carry-forward:** `workshop/plans/000197-cliproxy-auth-self-healing-plan-gate.md` `## Open findings` reads "(none — every finding has been disposed)" (verified on disk). PQ-5 was the item deferred into M2; it is delivered and, after C2's fix, delivered on the right axis. Nothing to carry.
+- **Core concepts cross-check:** every row verifies. `classify_response`/`classify_auth_files`/`diagnosis` at `cliproxy_auth.lua` ✓, `resolve_channel` + `render` at `cliproxy_config.lua` ✓, `detect_auth_failure` absent from the tree ✓, `_failure_notice` in `chat_respond.lua` ✓, `decide` at `cliproxy_auth.lua:347` ✓ (M2, new), `parse_peers` correctly still absent (M3). All PURE rows run without IO — `cliproxy_auth_spec` uses no mocks. The table is *incomplete* rather than wrong: `credential_action`, `rfc3339_sec`, `healthier` and `channels_for_login` are four new pure entities introduced this milestone with no row (see §7).
+- **For M3:** `stop()` will have a fourth caller once `reap` lands — the port-release discipline should be one helper before that, and `parse_peers` needs the same axis care (`cliproxyapi` vs `cli-proxy-api`, already in the Log).
+
+## 7. Plan revision recommendations
+
+Append to `workshop/plans/000197-cliproxy-auth-self-healing-plan.md` `## Revisions`:
+
+1. **The `decide` table's `expired` row still contradicts the code** — `:421` reads `` | `expired` | true | any | any | `prompt_login` | `` while the shipped policy retries on `healthy` (deliberately) and reports on `unknown`. This was plan-revision recommendation #1 from the M2 round-1 review and is the one item the rework's five Revisions entries did not cover. The table is the greppable contract; correct the row or record why it stands.
+2. **The four new pure entities are missing from Core concepts** — `credential_action`, `rfc3339_sec` and `healthier` (`cliproxy_auth.lua`) and `channels_for_login` (`cliproxy_config.lua`) are all new M2 pure entities the Revisions prose names but the greppable table does not list. Add rows with kind/location/status/milestone so an M3 reviewer cross-checking the table against the filesystem sees the real surface.
+3. **Record `rfc3339_sec`'s contract, not just its existence** — that it must be total (nil for any unparseable input, including out-of-range months) and that its tests assert absolute epochs against an external oracle including a leap-year date. The self-referential test shape is what let both C1s through; naming it in the plan is what stops a third.
+4. **Restate the budget as a derivation** — Revisions entry #4 says the budget "is asserted by `cliproxy_budget_spec` rather than restated in a comment", but the spec sums a hand-written table. Record that the terms derive from `POLL_BUDGET_MS`, the port-release deadline and `--max-time` (including the one-probe overrun each bounded loop can incur), and that the 404-repair-then-`restart` composition is either excluded by construction or included in the worst case.

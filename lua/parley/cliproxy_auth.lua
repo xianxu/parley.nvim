@@ -155,6 +155,10 @@ function M.classify_auth_files(files, channel)
                     account = f.account or f.email,
                     failed = f.failed,
                     modtime = f.modtime,
+                    -- The proxy tells us WHICH file it loaded; the shell stats
+                    -- exactly that one. A directory glob by channel prefix
+                    -- cannot distinguish `gemini` from `gemini-cli`.
+                    path = f.path,
                 }
             end
         end
@@ -313,17 +317,26 @@ function M.rfc3339_sec(ts)
     if not y then
         return nil
     end
-    -- os.time interprets the table as LOCAL time, so convert to UTC by hand
-    -- rather than depending on the runner's zone.
-    local days = math.floor((tonumber(y) * 365) + math.floor(tonumber(y) / 4)
-        - math.floor(tonumber(y) / 100) + math.floor(tonumber(y) / 400))
+    local yy, mm, dd = tonumber(y), tonumber(mo), tonumber(d)
+    -- Total by contract: anything unparseable — including an out-of-range month
+    -- — returns nil like every other bad input. This function runs inside an
+    -- ASYNC callback, outside the dispatcher's synchronous claim guard, so a
+    -- throw here would settle nothing and strand the chat leg.
+    if mm < 1 or mm > 12 or dd < 1 or dd > 31 then
+        return nil
+    end
+    -- Leap days STRICTLY BEFORE year yy. Using yy itself counts its own leap day,
+    -- which the mm > 2 adjustment below does not cancel — that put every date in
+    -- a leap year one day ahead and silently killed the staleness comparison for
+    -- all of 2028 onward.
+    local prev = yy - 1
+    local days = (yy * 365) + math.floor(prev / 4) - math.floor(prev / 100) + math.floor(prev / 400)
     local mdays = { 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334 }
-    local yy, mm = tonumber(y), tonumber(mo)
     local leap = (yy % 4 == 0 and yy % 100 ~= 0) or yy % 400 == 0
-    days = days + mdays[mm] + tonumber(d) - 1 + ((leap and mm > 2) and 1 or 0)
+    days = days + mdays[mm] + dd - 1 + ((leap and mm > 2) and 1 or 0)
     -- days counted from year 0; subtract the epoch's own count (1970-01-01)
-    local epoch_days = (1970 * 365) + math.floor(1970 / 4) - math.floor(1970 / 100)
-        + math.floor(1970 / 400)
+    local epoch_days = (1970 * 365) + math.floor(1969 / 4) - math.floor(1969 / 100)
+        + math.floor(1969 / 400)
     local total = (days - epoch_days) * 86400 + tonumber(h) * 3600 + tonumber(mi) * 60 + tonumber(sec)
     local sign, oh, om = ts:match("([%+%-])(%d%d):?(%d%d)$")
     if sign then

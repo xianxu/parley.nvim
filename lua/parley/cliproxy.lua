@@ -18,6 +18,14 @@ local M = {}
 
 -- pid -> uv process handle for proxies PARLEY spawned (so stop() is scoped to
 -- our own daemon and never touches a reused/foreign one).
+-- Timing constants the repair budget derives from. Changing one changes the
+-- budget automatically (cliproxy_budget_spec asserts it still fits under the
+-- dispatcher's backstop), which is what stops the comment-and-code drift that
+-- three successive reviews re-opened.
+local CURL_MAX_TIME = 2      -- seconds, --max-time on every probe
+local PORT_RELEASE_MS = 2000 -- wait_port_released deadline
+local POLL_BUDGET_MS = 5000  -- poll_until_healthy deadline
+
 local _spawned = {}
 
 -- Every pid parley has EVER spawned this session, including ones no longer on
@@ -130,7 +138,7 @@ M._classify = classify -- exposed for unit testing
 -- line so callers can split body from code.
 ---@param route string|nil # defaults to /v1/models
 local function api_argv(host, port, secret, route)
-    local args = { "curl", "-s", "-w", "\n%{http_code}", "--max-time", "2" }
+    local args = { "curl", "-s", "-w", "\n%{http_code}", "--max-time", tostring(CURL_MAX_TIME) }
     if type(secret) == "string" and secret ~= "" then
         table.insert(args, "-H")
         table.insert(args, "Authorization: Bearer " .. secret)
@@ -338,8 +346,18 @@ local _management_restart_done = false
 -- The repair budget's terms, in seconds — exposed so a spec can assert the
 -- relationship with dispatcher.recovery_timeout_ms rather than trusting a
 -- comment (the M1 review re-opened this exact drift twice).
-M._repair_budget_sec = { probe = 2, auth_files = 2, stop_probe = 2, port_release = 2,
-    ensure_probe = 2, poll_healthy = 5, second_read = 2 }
+-- Derived from the constants each step actually uses, NOT restated: CURL_MAX_TIME
+-- is the --max-time on every probe, and the two bounded polls check their
+-- deadline only AFTER a probe returns, so each can overrun by one full probe.
+M._repair_budget_sec = {
+    liveness_probe = CURL_MAX_TIME,
+    auth_files = CURL_MAX_TIME,
+    stop_identity_probe = CURL_MAX_TIME,
+    port_release = PORT_RELEASE_MS / 1000 + CURL_MAX_TIME,
+    ensure_probe = CURL_MAX_TIME,
+    poll_healthy = POLL_BUDGET_MS / 1000 + CURL_MAX_TIME,
+    second_read = CURL_MAX_TIME,
+}
 
 function M._reset_management_restart() -- test seam
     _management_restart_done = false
@@ -358,7 +376,7 @@ local function wait_port_released(host, port, secret, cb)
     -- Same shape poll_until_healthy uses. 2s, not 3s: this step is one term in
     -- the repair budget that must stay under dispatcher.recovery_timeout_ms —
     -- see the REPAIR BUDGET note above credential_health.
-    local deadline = uv.now() + 2000
+    local deadline = uv.now() + PORT_RELEASE_MS
     local function poll()
         M.health_probe(host, port, secret, function(state)
             if state == "down" or uv.now() >= deadline then
@@ -390,23 +408,20 @@ end
 --- that booted before the management key existed answers 404, and restarting it
 --- into the freshly rendered config is both safe and silent.
 ---
---- REPAIR BUDGET — the WHOLE claimed path must finish inside the dispatcher's
+--- REPAIR BUDGET — the whole claimed path must finish inside the dispatcher's
 --- `recovery_timeout_ms`, or the backstop spends the claim's one-shot and the
 --- operator is told "recovery timed out" even though parley repaired the proxy
---- and computed a correct diagnosis. Worst case, in order:
----   recover's liveness probe   ≤2s
----   auth_files curl            ≤2s
----   [404 repair] stop() probe  ≤2s   (blocking port_holds_cliproxy)
----   [404 repair] port release   2s
----   [404 repair] ensure probe  ≤2s
----   [404 repair] poll healthy   5s   (POLL_BUDGET_MS)
----   [404 repair] second read   ≤2s
----                            = ≤17s
---- The `start`/`restart` rung is mutually exclusive with the 404 repair (a proxy
---- that answered the management route is running, so `start` cannot follow; a
---- `restart` follows a SUCCESSFUL read, which means no repair ran), and costs
---- ≤11s on its own path. The binding worst case is therefore ≤17s against a 25s
---- backstop — asserted by cliproxy_budget_spec so the two cannot drift apart.
+--- and computed a correct diagnosis.
+---
+--- The terms are DERIVED in `M._repair_budget_sec` from the constants each step
+--- uses (`CURL_MAX_TIME`, `PORT_RELEASE_MS`, `POLL_BUDGET_MS`), including the one
+--- extra probe each bounded poll can overrun by — so the table cannot be right
+--- while the code is wrong. `cliproxy_budget_spec` asserts the inequality
+--- against `dispatcher.recovery_timeout_ms`.
+---
+--- The compound case (404 repair, then a `restart` decision on the second read)
+--- is made UNREACHABLE rather than budgeted: the ladder skips the restart rung
+--- when `_management_restart_done` shows this claim already restarted the proxy.
 ---
 --- Restarts at most once per consecutive run of 404s (the guard clears on any
 --- successful lookup). A second consecutive 404 is reported rather than retried, so a proxy that 404s for some other reason cannot become a restart
@@ -531,7 +546,6 @@ end
 --------------------------------------------------------------------------------
 
 local POLL_INTERVAL_MS = 250
-local POLL_BUDGET_MS = 5000
 
 local function poll_until_healthy(host, port, secret, pid, callback, on_error)
     local deadline = uv.now() + POLL_BUDGET_MS
@@ -862,22 +876,32 @@ function M._reset_login_prompt() -- test helper
     _login_prompt_active = false
 end
 
--- Newest mtime among a channel's credential files on disk, in EPOCH SECONDS.
+-- mtime (epoch seconds) of the credential file the PROXY says it loaded.
 --
--- Epoch, not a formatted string: the proxy reports its loaded credential in
--- local-offset RFC3339 and a string compare against a UTC "…Z" rendering is
--- wrong in a way that depends on the operator's timezone (always-stale west of
--- UTC, never-stale east). cliproxy_auth parses the proxy's side; both are
--- numbers by the time they meet.
-local function auth_file_modtime(channel)
+-- The proxy hands us the exact path, so there is no directory glob and no second
+-- channel→file mapping to keep in sync: a prefix match on the channel name
+-- cannot tell `gemini` from `gemini-cli`, and reading the wrong file made the
+-- staleness check permanently true for the shorter channel.
+local function loaded_credential_mtime(health)
+    local path = health and health.path
+    if type(path) ~= "string" or path == "" then
+        return nil
+    end
+    local st = uv.fs_stat(path)
+    return st and st.mtime and st.mtime.sec or nil
+end
+
+-- Newest credential mtime anywhere in the auth-dir, for the LOGIN watch, where
+-- no health record exists yet and any new credential counts.
+local function newest_credential_mtime()
     local c = cfg() or {}
     local dir = c.auth_dir
     if type(dir) ~= "string" or dir == "" then
         dir = vim.fn.expand("~/.cli-proxy-api")
     end
     local newest
-    for _, name in ipairs(vim.fn.readdir(dir) or {}) do
-        if name:sub(1, #channel + 1) == channel .. "-" and name:sub(-5) == ".json" then
+    for _, name in ipairs(vim.fn.isdirectory(dir) == 1 and vim.fn.readdir(dir) or {}) do
+        if name:sub(-5) == ".json" then
             local st = uv.fs_stat(dir .. "/" .. name)
             if st and st.mtime and (not newest or st.mtime.sec > newest) then
                 newest = st.mtime.sec
@@ -886,6 +910,154 @@ local function auth_file_modtime(channel)
     end
     return newest
 end
+
+-- Claude's OAuth redirect is fixed at http://localhost:54545/callback (read out
+-- of the 7.1.71 binary and confirmed by running the flow). The other providers
+-- use their own ports; 54545 is the one #197 got stuck on.
+local CALLBACK_PORTS = { claude = 54545 }
+
+--- Is the OAuth callback port already held? Returns nil when free, else a
+--- message naming the remedy.
+---
+--- Preflight exists because of the exact dead end in #197: the login process
+--- died, its callback listener went with it, and the browser's redirect had
+--- nowhere to land — so the account chooser looked inert with no error anywhere.
+---@param provider string
+---@return string|nil blocked_reason
+function M.callback_port_blocked(provider)
+    local port = CALLBACK_PORTS[provider]
+    if not port then
+        return nil
+    end
+    -- CONNECT, don't bind: libuv sets SO_REUSEADDR, so a second bind succeeds
+    -- even while another socket is actively listening — a bind probe would
+    -- report "free" for exactly the case this exists to catch. A successful
+    -- connect means something is listening, whatever set it up.
+    local connected = false
+    local probe = uv.new_tcp()
+    local done = false
+    probe:connect("127.0.0.1", port, function(err)
+        connected = err == nil
+        done = true
+        pcall(function() probe:close() end)
+    end)
+    vim.wait(500, function() return done end, 10)
+    if not done then
+        pcall(function() probe:close() end)
+    end
+    if not connected then
+        return nil
+    end
+    return ("cliproxy: OAuth callback port %d is already in use, so the browser "
+        .. "redirect would have nowhere to land. Stop whatever holds it (`lsof -nP -iTCP:%d`) "
+        .. "— a stale login is the usual culprit — or pass -oauth-callback-port to use another.")
+        :format(port, port)
+end
+
+--- Watch the auth-dir for a credential appearing/refreshing for `provider`,
+--- so a login's outcome is observed rather than assumed.
+---@param channel string
+---@param since number|nil # epoch seconds; a file newer than this counts
+---@param timeout_ms number
+---@param cb fun(ok: boolean)
+function M.await_credential(_channel, since, timeout_ms, cb)
+    local deadline = uv.now() + timeout_ms
+    local function poll()
+        local mt = newest_credential_mtime()
+        if mt and (since == nil or mt > since) then
+            return cb(true)
+        end
+        if uv.now() >= deadline then
+            return cb(false)
+        end
+        vim.defer_fn(poll, 500)
+    end
+    poll()
+end
+
+--- Run an interactive OAuth login and REPORT ITS OUTCOME.
+---
+--- Three things #197 needed and the terminal-split version didn't do: it kept
+--- the job alive independently of a closable buffer, it surfaced the authorize
+--- URL so a failed auto-open is still recoverable, and it said whether the login
+--- actually produced a credential instead of dying silently.
+---@param provider string
+---@param argv string[]
+---@param on_done fun(ok: boolean)|nil
+function M.run_login(provider, argv, on_done)
+    on_done = on_done or function() end
+    local channel = cc.channels_for_login(provider)[1] or provider
+    local before = newest_credential_mtime()
+    -- -no-browser so the URL comes to US: parley opens it (and shows it), rather
+    -- than the binary opening a window parley can't report on.
+    local cmd = vim.list_extend(vim.deepcopy(argv), { "-no-browser" })
+    local url_seen = false
+    local stderr_tail = {}
+
+    local function handle_line(line)
+        local url = line:match("(https://[%w%.%-]+/oauth/authorize%S*)")
+        if url and not url_seen then
+            url_seen = true
+            pcall(function()
+                if vim.ui.open then
+                    vim.ui.open(url)
+                end
+            end)
+            vim.notify("cliproxy: complete the login in your browser.\nIf it did not open, "
+                .. "visit:\n" .. url, vim.log.levels.INFO)
+        end
+    end
+
+    -- jobstart, NOT a terminal buffer: the buffer version died with the window
+    -- and took the callback listener with it.
+    local job = vim.fn.jobstart(cmd, {
+        on_stdout = function(_, data)
+            for _, line in ipairs(data or {}) do
+                if line ~= "" then
+                    handle_line(line)
+                end
+            end
+        end,
+        on_stderr = function(_, data)
+            for _, line in ipairs(data or {}) do
+                if line ~= "" then
+                    handle_line(line)
+                    stderr_tail[#stderr_tail + 1] = line
+                end
+            end
+        end,
+        on_exit = function(_, code)
+            if code ~= 0 then
+                vim.notify(("cliproxy: %s login exited %d%s"):format(provider, code,
+                    #stderr_tail > 0 and ("\n" .. table.concat(stderr_tail, "\n"):sub(1, 300)) or ""),
+                    vim.log.levels.ERROR)
+                return on_done(false)
+            end
+        end,
+    })
+    if job <= 0 then
+        vim.notify("cliproxy: could not start the login process", vim.log.levels.ERROR)
+        return on_done(false)
+    end
+
+    -- Observe the outcome instead of assuming it.
+    M.await_credential(channel, before, 180000, function(ok)
+        if ok then
+            M.credential_health(function(health)
+                vim.notify(("cliproxy: %s login succeeded%s"):format(provider,
+                    health.account and (" (" .. health.account .. ")") or ""), vim.log.levels.INFO)
+                on_done(true)
+            end, channel)
+        else
+            pcall(vim.fn.jobstop, job)
+            vim.notify(("cliproxy: %s login did not complete — no credential was written. "
+                .. "Re-run `:ParleyProxy login %s`."):format(provider, provider), vim.log.levels.WARN)
+            on_done(false)
+        end
+    end)
+end
+
+
 
 -- The oauth-model-alias block parley rendered, or nil.
 local function alias_block()
@@ -989,6 +1161,15 @@ function M.recover(failure, retry, give_up)
                 give_up(decision.message .. "\n" .. tostring(msg))
             end
             if decision.action == "restart" then
+                if _management_restart_done then
+                    -- The 404 repair already restarted this proxy inside THIS
+                    -- claim. Restarting again would stack two full repair
+                    -- budgets (~28s) past the dispatcher's 25s backstop, which
+                    -- would spend the claim's one-shot and replace the
+                    -- diagnosis with "recovery timed out". One restart per
+                    -- claim; retry against what we have.
+                    return retry()
+                end
                 return M.restart_managed(retry, failed)
             end
             return M.ensure_running(retry, failed)
@@ -1018,7 +1199,7 @@ function M.recover(failure, retry, give_up)
             return execute(ca.decide(verdict, health, { running = false }, attempt, login), health)
         end
         M.credential_health(function(health)
-            local proxy_state = { running = true, auth_file_modtime = auth_file_modtime(channel) }
+            local proxy_state = { running = true, auth_file_modtime = loaded_credential_mtime(health) }
             execute(ca.decide(verdict, health, proxy_state, attempt, login), health)
         end, channel)
     end)
