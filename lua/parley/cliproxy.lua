@@ -453,7 +453,7 @@ function M.credential_health(cb, channel)
                 if second.reason ~= "no_management_route" then
                     _management_restart_done = false
                 end
-                cb(second)
+                cb(second, true) -- second arg: this lookup restarted the proxy
             end, channel)
         end, function(msg)
             cb({ state = "unknown", reason = "no_management_route",
@@ -822,10 +822,17 @@ end
 --- each other's credential. That is what happened in #197.
 ---@param peers table[]
 function M.warn_about_peers(peers)
-    if _peer_warning_shown or #peers == 0 then
+    if _peer_warning_shown then
         return
     end
+    -- Latch on the SCAN, not on there being something to say. Latching only when
+    -- peers exist meant a healthy machine — the one that just reaped its leaked
+    -- proxies, as this milestone instructs — never armed the guard and paid the
+    -- ~150ms blocking ps+lsof on EVERY dispatch, forever.
     _peer_warning_shown = true
+    if #peers == 0 then
+        return
+    end
     local prefix = (require("parley").config or {}).cmd_prefix or "Parley"
     local oldest = peers[1]
     for _, p in ipairs(peers) do
@@ -840,21 +847,24 @@ refresh tokens ROTATE on use — so they can invalidate each other's credential
         :format(#peers, oldest.started, prefix))
 end
 
---- SIGTERM every peer, after an identity probe per pid so a process that merely
---- shares a name is never killed.
+--- SIGTERM every peer found by `peers()`.
+---
+--- Identity comes from `parse_peers`' executable match — the command's first
+--- token must BE a cliproxy binary — not from a port probe: a peer is by
+--- definition not on the managed port, so there is nothing to probe against.
+--- Counts only kills the OS accepted.
 ---@return number killed, number skipped
 function M.reap()
     local killed, skipped = 0, 0
     for _, peer in ipairs(M.peers()) do
         -- The command line records the config it booted from; a process we
         -- cannot identify as a proxy we started is left alone.
-        if peer.command:match("%-config%s") then
-            local ok = pcall(uv.kill, peer.pid, "sigterm")
-            if ok then
-                killed = killed + 1
-            else
-                skipped = skipped + 1
-            end
+        -- luv's kill RETURNS nil+err (ESRCH, EPERM) rather than raising, so a
+        -- bare pcall counts failures as successes and tells the operator the
+        -- rotation race is resolved when nothing was stopped.
+        local called, rc = pcall(uv.kill, peer.pid, "sigterm")
+        if called and rc == 0 then
+            killed = killed + 1
         else
             skipped = skipped + 1
         end
@@ -987,11 +997,18 @@ function M.run_login(provider, argv, on_done)
     -- that their login "did not complete".
     local settled = false
     local raw_done = on_done or function() end
-    on_done = function(ok)
+    -- The latch guards the NOTIFY as well as the callback: guarding only the
+    -- callback still let an abandoned watcher tell an operator — three minutes
+    -- after they were correctly told the login died, and after they had since
+    -- logged in successfully — that their login "did not complete".
+    local function settle(ok, message, level)
         if settled then
             return
         end
         settled = true
+        if message then
+            vim.notify(message, level)
+        end
         raw_done(ok)
     end
     -- channels_for_login("google") is {aistudio, gemini, gemini-cli}; taking [1]
@@ -1037,31 +1054,30 @@ function M.run_login(provider, argv, on_done)
         end,
         on_exit = function(_, code)
             if code ~= 0 then
-                vim.notify(("cliproxy: %s login exited %d%s"):format(provider, code,
+                return settle(false, ("cliproxy: %s login exited %d%s"):format(provider, code,
                     #stderr_tail > 0 and ("\n" .. table.concat(stderr_tail, "\n"):sub(1, 300)) or ""),
                     vim.log.levels.ERROR)
-                return on_done(false)
             end
         end,
     })
     if job <= 0 then
-        vim.notify("cliproxy: could not start the login process", vim.log.levels.ERROR)
-        return on_done(false)
+        return settle(false, "cliproxy: could not start the login process", vim.log.levels.ERROR)
     end
 
     -- Observe the outcome instead of assuming it.
     M.await_credential(provider, before, 180000, function(ok)
+        if settled then
+            return -- the exit path already reported; this watcher is abandoned
+        end
         if ok then
             M.credential_health_for_login(provider, function(health)
-                vim.notify(("cliproxy: %s login succeeded%s"):format(provider,
+                settle(true, ("cliproxy: %s login succeeded%s"):format(provider,
                     health.account and (" (" .. health.account .. ")") or ""), vim.log.levels.INFO)
-                on_done(true)
             end)
         else
             pcall(vim.fn.jobstop, job)
-            vim.notify(("cliproxy: %s login did not complete — no credential was written. "
+            settle(false, ("cliproxy: %s login did not complete — no credential was written. "
                 .. "Re-run `:ParleyProxy login %s`."):format(provider, provider), vim.log.levels.WARN)
-            on_done(false)
         end
     end)
 end
@@ -1145,6 +1161,12 @@ function M.recover(failure, retry, give_up)
     local channel = verdict.provider or cc.resolve_channel(verdict.model, alias_block() or {})
     local login = cc.channel_login(channel)
     local attempt = failure.attempt or 0
+    -- Per-claim, because credential_health CLEARS _management_restart_done on a
+    -- successful read — which happens before the decision is computed, so
+    -- reading module state here always saw false and the compound
+    -- repair-then-restart path (~36s, past the backstop) was never actually
+    -- blocked.
+    local restarted_this_claim = false
 
     if not channel then
         local health = { state = "unknown", reason = "unknown_channel",
@@ -1170,7 +1192,7 @@ function M.recover(failure, retry, give_up)
                 give_up(decision.message .. "\n" .. tostring(msg))
             end
             if decision.action == "restart" then
-                if _management_restart_done then
+                if restarted_this_claim then
                     -- The 404 repair already restarted this proxy inside THIS
                     -- claim. Restarting again would stack two full repair
                     -- budgets (~28s) past the dispatcher's 25s backstop, which
@@ -1207,7 +1229,8 @@ function M.recover(failure, retry, give_up)
                 message = "the proxy is not running" }
             return execute(ca.decide(verdict, health, { running = false }, attempt, login), health)
         end
-        M.credential_health(function(health)
+        M.credential_health(function(health, repaired)
+            restarted_this_claim = repaired == true
             -- Staleness is decided entirely inside the record now (modtime vs
             -- updated_at), so proxy_state carries only liveness.
             execute(ca.decide(verdict, health, { running = true }, attempt, login), health)

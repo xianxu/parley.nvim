@@ -86,6 +86,29 @@ describe("cliproxy login", function()
         assert.matches("exited 3", all_notices())
     end)
 
+    it("an abandoned watcher never speaks after the login already settled", function()
+        -- Round 3 fixed the settle COUNT but not the operator-visible half: the
+        -- watcher kept polling to its deadline and then told an operator who had
+        -- since logged in that their login "did not complete".
+        vim.env.PARLEY_FAKE_LOGIN_MODE = "dies_early"
+        local settles = 0
+        local settled_at
+        cliproxy.run_login("claude", (cliproxy.login_argv("claude")), function()
+            settles = settles + 1
+            settled_at = #notices
+        end)
+        vim.wait(8000, function() return settles > 0 end, 25)
+        assert.equals(1, settles)
+        assert.matches("exited 3", all_notices())
+
+        -- Nothing further may be said, however long the abandoned watch runs.
+        local after = #notices
+        vim.wait(3000, function() return #notices > after end, 100)
+        assert.equals(after, #notices, "the abandoned watcher notified after settling")
+        assert.is_nil(all_notices():find("did not complete", 1, true))
+        assert.is_truthy(settled_at)
+    end)
+
     it("preflights the callback port and names the remedy", function()
         if cliproxy.callback_port_blocked("claude") then
             print("SKIP: :54545 already held on this machine")

@@ -169,8 +169,11 @@ in `cliproxy._repair_budget_sec` from the constants each step uses
 each bounded poll can overrun by), and `cliproxy_budget_spec` asserts it stays
 comfortably under the backstop — deliberately no numbers restated here, because
 three successive reviews re-opened this drift when the docs carried the
-arithmetic. The compound case (a 404 repair followed by a `restart` decision) is
-made unreachable rather than budgeted: one restart per claim.
+arithmetic. The compound case (a 404 repair followed by a `restart` decision) is made
+unreachable by a **per-claim** latch — module state cannot serve here, because
+the repair clears its own flag before the decision is computed — and
+`cliproxy_budget_spec` asserts the compound arithmetic so the claim stays
+checkable.
 
 ### The management route, and the 404 that matters
 

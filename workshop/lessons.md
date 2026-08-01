@@ -534,3 +534,23 @@
   once-per-session warning called a blocking `ps ax` + `lsof` (~85ms) on every
   dispatch because the guard lived inside the function the scan fed. Rule: on a
   hot path, check the flag before doing the work it gates.
+- **A "once per session" guard must latch on the WORK, not on having something to
+  report.** #197's peer scan set its flag only when peers were found, so the
+  healthy machine — the one that had just cleaned up, as the feature instructs —
+  rescanned (~150ms blocking `ps`+`lsof`) on every request forever. Rule: set the
+  latch where the expensive call happens, and test the zero-result path
+  explicitly; it is the one the happy user lives in.
+- **Don't read module state a collaborator resets.** A compound-repair guard read
+  a flag that the repair itself cleared on success, before the decision that
+  consulted it — so it was always false and the path it guarded ran anyway. Rule:
+  when a guard must span one logical operation, scope it to that operation
+  (a per-call local), not to the module.
+- **`luv` returns `nil, err`; it does not raise.** `pcall(uv.kill, ...)` succeeds
+  on ESRCH and EPERM alike, so a reap reported "stopped 5" having stopped none.
+  Rule: for every `uv.*` call, check the returned code — a pcall around it tests
+  nothing.
+- **Latching a callback is not the same as silencing it.** An abandoned watcher
+  whose `on_done` was latched still called `vim.notify`, telling an operator
+  three minutes later that a login they had since completed "did not complete".
+  Rule: put the latch around the whole side-effecting block, not just the
+  continuation.

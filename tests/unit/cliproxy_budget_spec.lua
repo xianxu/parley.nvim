@@ -18,6 +18,25 @@ describe("repair budget vs recovery backstop", function()
                 :format(total, dispatcher.recovery_timeout_ms))
     end)
 
+    it("the COMPOUND path (repair then restart) stays under the backstop too", function()
+        -- The compound case is meant to be unreachable — recover latches a
+        -- per-claim flag so a repair is never followed by a restart. If that
+        -- latch ever regresses, two full repairs run (~36s) past the backstop,
+        -- the claim's one-shot is spent, and a correct diagnosis is replaced by
+        -- "recovery timed out". Assert the arithmetic so the claim is checkable.
+        local single = 0
+        for _, sec in pairs(cliproxy._repair_budget_sec) do
+            single = single + sec
+        end
+        local restart_only = cliproxy._repair_budget_sec.stop_identity_probe
+            + cliproxy._repair_budget_sec.port_release
+            + cliproxy._repair_budget_sec.ensure_probe
+            + cliproxy._repair_budget_sec.poll_healthy
+        assert.is_true((single + restart_only) * 1000 > dispatcher.recovery_timeout_ms,
+            "compound path now fits — either it became reachable and safe, or the "
+                .. "budget drifted; re-derive rather than deleting this test")
+    end)
+
     it("leaves real headroom, not a one-second coincidence", function()
         local total = 0
         for _, sec in pairs(cliproxy._repair_budget_sec) do

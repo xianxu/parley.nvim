@@ -906,6 +906,43 @@ describe("cliproxy IO lifecycle", function()
             assert.matches("Jun 12", warnings[1]) -- oldest, so staleness is judgeable
         end)
 
+        it("arms the guard even with NO peers — the healthy machine must not rescan", function()
+            -- The scan is a blocking ps+lsof (~150ms) on the dispatch hot path.
+            -- Latching only when peers exist meant a machine with none paid it
+            -- on every single query, forever.
+            cliproxy.warn_about_peers({})
+            assert.is_true(cliproxy.peer_warning_shown(),
+                "zero peers left the guard unarmed — every dispatch will rescan")
+        end)
+
+        it("ensure_running scans for peers at most once per session", function()
+            local scans = 0
+            local saved_peers = cliproxy.peers
+            cliproxy.peers = function()
+                scans = scans + 1
+                return {}
+            end
+            local port = free_port()
+            parley.dispatcher = parley.dispatcher or {}
+            parley.dispatcher.providers = parley.dispatcher.providers or {}
+            parley.dispatcher.providers.cliproxyapi = {
+                endpoint = ("http://127.0.0.1:%d/v1/chat/completions"):format(port),
+            }
+            require("parley.vault").add_secret("cliproxyapi", "testkey")
+            start_fake(port, "healthy")
+            wait_listening(port)
+            parley.config = { cliproxy = { manage = true, binary_path = FAKE } }
+
+            for _ = 1, 3 do
+                local done = false
+                cliproxy.ensure_running(function() done = true end, function() done = true end)
+                vim.wait(9000, function() return done end, 20)
+            end
+            cliproxy.peers = saved_peers
+
+            assert.equals(1, scans, "peers() re-scanned on later dispatches")
+        end)
+
         it("says nothing when there are no peers", function()
             local warnings = {}
             local logger = require("parley.logger")
@@ -914,6 +951,23 @@ describe("cliproxy IO lifecycle", function()
             cliproxy.warn_about_peers({})
             logger.warning = saved
             assert.equals(0, #warnings)
+        end)
+
+        it("reap counts only kills the OS accepted", function()
+            -- luv's kill RETURNS nil+err (ESRCH/EPERM) rather than raising, so a
+            -- bare pcall counted every failure as a success and told the
+            -- operator the rotation race was resolved when nothing was stopped.
+            local saved_peers = cliproxy.peers
+            cliproxy.peers = function()
+                return {
+                    { pid = 999999, started = "Fri Jun 12 10:04:21 2026", command = "cliproxyapi -config x" },
+                }
+            end
+            local killed, skipped = cliproxy.reap()
+            cliproxy.peers = saved_peers
+
+            assert.equals(0, killed, "counted a kill of a nonexistent pid")
+            assert.equals(1, skipped)
         end)
 
         it("stop() also reaps a parley-spawned proxy on a non-managed port", function()
