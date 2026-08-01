@@ -68,6 +68,7 @@ After forcing one upstream failure the record became `"status":"error"` with the
 | `AuthVerdict` / `classify_response` | `lua/parley/cliproxy_auth.lua` | new | M1 |
 | `CredentialHealth` / `classify_auth_files` | `lua/parley/cliproxy_auth.lua` | new | M1 |
 | `diagnosis` | `lua/parley/cliproxy_auth.lua` | new | M1 |
+| `resolve_channel` | `lua/parley/cliproxy_config.lua` | new | M1 |
 | `render` (management-key field) | `lua/parley/cliproxy_config.lua` | modified | M1 |
 | `detect_auth_failure` | `lua/parley/cliproxy_config.lua` | deleted | M1 |
 | `_failure_notice` | `lua/parley/chat_respond.lua` | new | M1 |
@@ -77,7 +78,7 @@ After forcing one upstream failure the record became `"status":"error"` with the
 - **AuthVerdict / `classify_response(http_status, body, request_model)`** — what the proxy said went wrong, as one typed value: `{kind, provider, model, message}` where `kind ∈ {no_auth, unknown_provider, expired, quota, model_unavailable}`, or `nil` for "not an auth failure".
   - **Invariant (PQ-2):** returns `nil` for **every** 2xx status regardless of body. The status gate comes first; the pattern table is only consulted on a non-2xx. This is a property, not a list of cases — see the property test in Task 1.
   - `request_model` backfills `model` when the body carries none (the 401 form), so every verdict can resolve a channel (PQ-3).
-  - **Relationships:** 1:1 with a *failed* query response. Consumed by `decide`; never by the IO shell directly.
+  - **Relationships:** 1:1 with a *failed* query response. Consumed by `decide` — and, deliberately, by `cliproxy.recover` in the IO shell, which calls it synchronously to decide the claim (Task 6's contract needs the claim to be cheap and immediate).
   - **DRY rationale:** Replaces `detect_auth_failure`'s single hardcoded pattern and becomes the one place any future cliproxy error string is added.
   - **Future extensions:** New cliproxy versions add message forms — one row in the table, no caller changes.
 
@@ -100,20 +101,21 @@ After forcing one upstream failure the record became `"status":"error"` with the
 
 ### Integration points (where pure meets the world)
 
-| Name | Lives in | Status | Wraps |
-|------|----------|--------|-------|
-| `management_key` | `lua/parley/cliproxy.lua` | new | filesystem (`<data_root>/management.key`) |
-| `auth_files` | `lua/parley/cliproxy.lua` | new | `GET /v0/management/auth-files` |
-| `credential_health` | `lua/parley/cliproxy.lua` | new | `auth_files` + the one unattended restart |
-| `api_argv` | `lua/parley/cliproxy.lua` | modified | `curl` (generalized from `models_argv`) |
-| `split_status` | `lua/parley/cliproxy.lua` | new | curl's `-w` status suffix |
-| `recover` | `lua/parley/cliproxy.lua` | new | executes a RecoveryAction |
-| `peers` / `reap` | `lua/parley/cliproxy.lua` | new | `ps` / `lsof` / `uv.kill` |
-| `login` (hardened) | `lua/parley/cliproxy.lua` | modified | `cli-proxy-api -claude-login` |
-| `recover_query` seam | `lua/parley/dispatcher.lua` | new | the adapter contract |
-| `check_auth_failure` | `lua/parley/cliproxy.lua` | deleted | (absorbed by `recover`) |
-| management + auth states | `tests/fixtures/fake_cliproxy` | modified | the real binary's routes |
-| login modes | `tests/fixtures/fake_cliproxy` | modified | the real binary's `-claude-login` |
+| Name | Lives in | Status | Wraps | Milestone |
+|------|----------|--------|-------|-----------|
+| `management_key` | `lua/parley/cliproxy.lua` | new | filesystem (`<data_root>/management.key`) | M1 |
+| `auth_files` | `lua/parley/cliproxy.lua` | new | `GET /v0/management/auth-files` | M1 |
+| `credential_health` | `lua/parley/cliproxy.lua` | new | `auth_files` + the one unattended restart | M1 |
+| `api_argv` | `lua/parley/cliproxy.lua` | modified | `curl` (generalized from `models_argv`) | M1 |
+| `split_status` | `lua/parley/cliproxy.lua` | new | curl's `-w` status suffix | M1 |
+| `recover` | `lua/parley/cliproxy.lua` | new | executes a RecoveryAction | M1 |
+| `recover_query` seam | `lua/parley/dispatcher.lua` | new | the adapter contract | M1 |
+| `check_auth_failure` | `lua/parley/cliproxy.lua` | deleted | (absorbed by `recover`) | M1 |
+| management + auth states | `tests/fixtures/fake_cliproxy` | modified | the real binary's routes | M1 |
+| chat-completions error modes | `tests/fixtures/fake_cliproxy` | modified | the real binary's error bodies | **M2** |
+| `peers` / `reap` | `lua/parley/cliproxy.lua` | new | `ps` / `lsof` / `uv.kill` | M3 |
+| `login` (hardened) | `lua/parley/cliproxy.lua` | modified | `cli-proxy-api -claude-login` | M3 |
+| login modes | `tests/fixtures/fake_cliproxy` | modified | the real binary's `-claude-login` | M3 |
 
 - **`management_key()`** — read-or-create a 32-hex-char key at `<data_root>/management.key`, mode 0600, beside the rendered config. Not the vault: the vault is in-memory and populated from `setup{}`, and this key must survive restarts without landing in the operator's dotfiles.
 - **`auth_files(cb, channel)`** — GET the management route, decode, hand the records to `classify_auth_files`. Returns `{state="unknown", reason="no_management_route"}` on 404, distinct from 401 / transport failure, because that 404 is the *repairable* "running proxy predates the key" state (PQ-1).
@@ -520,6 +522,33 @@ Carried into M2 from the review's architectural notes:
 - Task 12 (collapsing `:ParleyProxy models`' empty-list inference onto `decide`)
   is the last hand-maintained "empty list ⇒ not authenticated" claim in the
   codebase — the exact inference this issue disproved. It must not survive M2.
+
+### 2026-08-01 — after M1 boundary review round 2 (REWORK → applied)
+
+Round 2 found two more Criticals. Both were invisible to round 1's tests, and
+the plan needed corrections so M2 isn't built on the same assumptions.
+
+1. **Name the channel axis explicitly (C1).** The plan said "channel" throughout
+   but only ever named `resolve_login_provider` as the resolver — a *different*
+   namespace. `gemini`/`gemini-cli`/`aistudio` all collapse to the login provider
+   `google`, while `/v0/management/auth-files` reports the channel, so health
+   lookups for those three silently found nothing and prompted a spurious login.
+   `resolve_channel` is now the single model→channel source (added to the
+   Core-concepts table, M1) and `resolve_login_provider` derives from it. When no
+   channel resolves, parley reports `unknown_channel` — it does **not** default
+   to `claude`, which would confidently report another account's health.
+2. **The repair has a managed-mode precondition (C2).** Task 5's restart is only
+   legitimate under `is_managed()`: `stop()` reaps the port holder from any
+   session and `ensure_running` does not spawn when unmanaged, so the repair
+   would kill an operator's own proxy and leave it dead.
+3. **The retry re-issues from a per-attempt payload snapshot.** `format_headers`
+   consumes payload fields (`_parley_route`, `model`), so M2 Task 10's ladder
+   would otherwise retry a materially different request than the one that failed.
+4. **Integration-points table now carries a milestone column**, matching
+   Core-concepts, and records that the fake's chat-completions error modes are
+   **M2**, not M1.
+5. **Corrected a stale claim**: `classify_response` is consumed by the IO shell
+   too — `recover` calls it synchronously to make the claim decision cheap.
 
 ## Notes for the implementer
 
