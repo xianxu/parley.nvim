@@ -576,6 +576,39 @@ the plan needed corrections so M2 isn't built on the same assumptions.
 5. **Task 10's exhaustive-action spec is delivered**, driving every `decide`
    action through `recover` and asserting exactly one settle each.
 
+### 2026-08-01 — what actually shipped (M2 review rounds 3–5)
+
+The plan had drifted from the code on five counts. Recording the shipped shape:
+
+1. **Staleness compares `modtime` vs `updated_at`, both from the management
+   record** — not a file mtime against a reported one. Those were the *same
+   quantity*, which is why three successive fixes to the comparison left the
+   `restart` rung dead. The check is pure; there is no `fs_stat` term.
+2. **`credential_health` reports whether it restarted**, and `recover` latches
+   that per claim. Module state cannot serve: the repair clears its own flag
+   before the decision that consults it.
+3. **The peer scan latches on the scan, not on finding peers.** The zero-peer
+   case is the one the operator lives in after using `reap`, and it was paying a
+   ~150ms blocking `ps`+`lsof` per dispatch.
+4. **`run_login` does not take over the browser flow.** No `-no-browser`, no URL
+   matching: each provider's flow differs, and intercepting a claude-shaped URL
+   broke every other provider. Parley surfaces the binary's output (debounced)
+   and reports the outcome once.
+5. **`login_argv` validates the flag against `<binary> -h`.** The flag set is
+   version-dependent — 7.2.110 dropped `-login` that 7.1.71 has — so a static
+   table silently mis-reports what the installed binary can do.
+
+**Descoped, with reason:** resuming the triggering query after a successful
+login (Task 15 Step 3). A login takes minutes; the recovery claim is bounded by
+`recovery_timeout_ms`. Holding the chat leg open across it would guarantee the
+timeout the backstop exists to prevent. The claim settles with the diagnosis and
+the operator re-sends.
+
+**Boundary bookkeeping:** M3's commits landed inside M2's review window, because
+the M2 rounds outlasted the M2 work. M3's code was reviewed — rounds 3–5 found
+and fixed defects in `reap`, `peers`, and the login flow — but under M2's
+boundary. M3's own close covers the remaining delta and records this.
+
 ## Notes for the implementer
 
 - **Don't reintroduce guessing.** `classify` (`cliproxy.lua:91`) stays the *liveness* probe and must not grow auth opinions — that is `auth_files`' job. If you find yourself adding an auth case to `classify`, or inferring auth from an empty model list, the design has drifted. Both inferences are what failed on 2026-08-01.
