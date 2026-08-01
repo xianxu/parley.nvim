@@ -203,6 +203,39 @@ describe("cliproxy.recover", function()
         assert.matches("healthy", out.message)
     end)
 
+    it("tells the operator WHY no login was offered when the model has no alias", function()
+        -- Regression for guidance the old check_auth_failure gave and #197's
+        -- first cut dropped: with no oauth-model-alias entry parley cannot know
+        -- which login to run, and saying only "log in" leaves the operator with
+        -- no way to act.
+        serve({ unavailable = true, status_message = "dead" })
+        parley.config.cliproxy.config["oauth-model-alias"] = {} -- model in no channel
+        local prompted = false
+        vim.ui.select = function() prompted = true end
+        local out = run({ http_status = 503, body = NO_AUTH, model = "claude-opus-4-8",
+            streamed = false, attempt = 0 })
+        vim.wait(200, function() return false end)
+        assert.is_true(out.claimed)
+        assert.is_false(prompted)
+        assert.matches("oauth%-model%-alias", out.message)
+        assert.matches("ParleyProxy login", out.message)
+    end)
+
+    it("does not prompt on an expired verdict the proxy calls healthy", function()
+        -- Prompting "log in" while the message reads "looks healthy" is
+        -- self-contradictory; the credential reading wins.
+        serve() -- active credential
+        local prompted = false
+        vim.ui.select = function() prompted = true end
+        local out = run({ http_status = 401,
+            body = '{"type":"error","error":{"type":"authentication_error","message":'
+                .. '"OAuth access token has expired. Re-authenticate to continue."}}',
+            model = "claude-opus-4-8", streamed = false, attempt = 0 })
+        vim.wait(200, function() return false end)
+        assert.is_true(out.claimed)
+        assert.is_false(prompted)
+    end)
+
     ----------------------------------------------------------------------------
     -- The claim contract: a claim is a debt
     ----------------------------------------------------------------------------

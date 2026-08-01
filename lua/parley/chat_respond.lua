@@ -3,6 +3,30 @@
 --       chat_respond, chat_respond_all, resubmit_questions_recursively, cmd.Stop/ChatRespond
 local M = {}
 
+--- Build the user-facing notice for a failed provider request.
+---
+--- Pure (ARCH-PURE) and exposed so the last mile of #197 is testable: this is
+--- what actually puts the diagnosis in front of the operator. A recovery seam
+--- that gave up supplies `failure.message`; prefer it over `failure.body`, the
+--- raw provider JSON that produced the useless naked-error notices this
+--- replaced. `body` stays on the failure table for the log.
+---@param failure table|nil
+---@return string
+function M._failure_notice(failure)
+    local status = failure and failure.http_status
+    local detail = (failure and failure.message) or (failure and failure.body)
+    local message = "parley: provider request failed"
+    if status and (status < 200 or status > 299) then
+        message = message .. " (HTTP " .. tostring(status) .. ")"
+    elseif failure and failure.code then
+        message = message .. " (exit " .. tostring(failure.code) .. ")"
+    end
+    if type(detail) == "string" and detail:match("%S") then
+        message = message .. ": " .. detail:sub(1, 500)
+    end
+    return message
+end
+
 -- _parley holds the full parley module (set via M.setup()).
 -- All _parley.* accesses are intentionally dynamic so state mutations in init.lua
 -- (M.config, M._state, M._remote_reference_cache) are visible here by reference.
@@ -2048,22 +2072,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                     -- As above, staged content schedules its concrete buffer
                     -- write; surface the terminal only after that write runs.
                     vim.schedule(function()
-                        local status = failure and failure.http_status
-                        -- A recovery seam that gave up supplies a real
-                        -- diagnosis (#197); prefer it over the raw body, which
-                        -- is what produced the useless "response is empty" /
-                        -- naked-JSON notices this replaced. `body` stays on the
-                        -- failure table for the log.
-                        local detail = (failure and failure.message) or (failure and failure.body)
-                        local message = "parley: provider request failed"
-                        if status and (status < 200 or status > 299) then
-                            message = message .. " (HTTP " .. tostring(status) .. ")"
-                        elseif failure and failure.code then
-                            message = message .. " (exit " .. tostring(failure.code) .. ")"
-                        end
-                        if type(detail) == "string" and detail:match("%S") then
-                            message = message .. ": " .. detail:sub(1, 500)
-                        end
+                        local message = M._failure_notice(failure)
                         teardown_chat_leg(message)
                     end)
                 end)

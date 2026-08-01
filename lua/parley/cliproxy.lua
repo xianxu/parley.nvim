@@ -82,6 +82,12 @@ end
 -- Health probe (identity-checked)
 --------------------------------------------------------------------------------
 
+-- Split a curl `-w "\n%{http_code}"` result into body + numeric status.
+local function split_status(stdout)
+    local body, http = (stdout or ""):match("^(.*)\n(%d+)%s*$")
+    return body, tonumber(http)
+end
+
 -- Classify a curl result against cliproxy's /v1/models contract (route + body
 -- shapes confirmed in issue #131 Task 2.0):
 --   down                 connection refused / timeout (no usable response)
@@ -93,9 +99,7 @@ local function classify(code, stdout)
     if code ~= 0 then
         return "down"
     end
-    local out = stdout or ""
-    local body, http = out:match("^(.*)\n(%d+)%s*$")
-    http = tonumber(http)
+    local body, http = split_status(stdout)
     if http == 401 then
         return "client_key_mismatch"
     end
@@ -128,12 +132,6 @@ local function api_argv(host, port, secret, route)
     end
     table.insert(args, ("http://%s:%s%s"):format(host, port, route or "/v1/models"))
     return args
-end
-
--- Split a curl `-w "\n%{http_code}"` result into body + numeric status.
-local function split_status(stdout)
-    local body, http = (stdout or ""):match("^(.*)\n(%d+)%s*$")
-    return body, tonumber(http)
 end
 
 --- Probe http://host:port/v1/models with the client bearer and classify.
@@ -210,17 +208,17 @@ function M.management_key()
     local key = table.concat(vim.tbl_map(function(b)
         return ("%02x"):format(b)
     end, bytes))
-    local out, oerr = io.open(path, "w")
-    if not out then
+    -- Create with 0600 directly rather than open-then-chmod: the latter leaves
+    -- the key world-readable at the umask default for a brief window.
+    local fd, oerr = uv.fs_open(path, "w", tonumber("600", 8))
+    if not fd then
         -- Non-fatal: a key we cannot persist still works for this session, it
         -- just forces a proxy restart next time. Better than failing dispatch.
         logger.warning("cliproxy: cannot persist management key: " .. tostring(oerr))
         return key
     end
-    out:write(key)
-    out:close()
-    local fs_chmod = uv.fs_chmod or vim.loop.fs_chmod
-    fs_chmod(path, tonumber("600", 8))
+    uv.fs_write(fd, key)
+    uv.fs_close(fd)
     return key
 end
 
@@ -323,14 +321,37 @@ end
 
 
 -- One-shot guard for the management-route repair. Module-local rather than
--- per-call because the repair is per-proxy-lifetime, not per-query — but it is
--- reset explicitly (tests, and after a successful restart) so it can never
--- become a permanently-latched flag that silently disables the repair for the
--- rest of the session (workshop/lessons.md: module-local one-shots leak).
+-- per-call because the repair is per-proxy-lifetime, not per-query.
+--
+-- It is cleared again as soon as a lookup succeeds, so it bounds *consecutive*
+-- repair attempts rather than latching for the session: an operator who runs
+-- `brew services restart cliproxyapi` mid-session gets a working repair again,
+-- while a proxy that 404s for some other reason still cannot loop
+-- (workshop/lessons.md: module-local one-shots leak if they only ever get set).
 local _management_restart_done = false
 
 function M._reset_management_restart() -- test seam
     _management_restart_done = false
+end
+
+-- Wait (bounded) for a port to stop answering after SIGTERM. M.stop() returns
+-- immediately, and the REAL cliproxyapi shuts down gracefully — so without this
+-- the follow-up probe can still see the dying proxy, take ensure_running's
+-- reuse-if-healthy branch, and never spawn the replacement. The Python fake
+-- dies instantly, which is why a test alone would not surface this.
+local function wait_port_released(host, port, secret, cb)
+    local deadline = 3000
+    local waited = 0
+    local function poll()
+        M.health_probe(host, port, secret, function(state)
+            if state == "down" or waited >= deadline then
+                return cb(state == "down")
+            end
+            waited = waited + 150
+            vim.defer_fn(poll, 150)
+        end)
+    end
+    poll()
 end
 
 --- Credential health WITH the one repair parley can make unattended: a proxy
@@ -344,18 +365,33 @@ end
 ---@param channel string
 function M.credential_health(cb, channel)
     M.auth_files(function(health)
-        if health.reason ~= "no_management_route" or _management_restart_done then
+        if health.reason ~= "no_management_route" then
+            -- A working lookup means the repair is no longer spent: a proxy
+            -- restarted out from under us later in the session can be repaired
+            -- again (I2 — the guard bounds consecutive attempts, not the session).
+            _management_restart_done = false
+            return cb(health)
+        end
+        if _management_restart_done then
             return cb(health)
         end
         _management_restart_done = true
         logger.info("cliproxy: proxy is running without the management route — restarting it "
             .. "into the rendered config so credential health can be read")
+        local opts = render_opts()
         M.stop()
-        M.ensure_running(function()
-            M.auth_files(cb, channel)
-        end, function(msg)
-            cb({ state = "unknown", reason = "no_management_route",
-                message = "cannot restart the proxy to enable the management route: " .. tostring(msg) })
+        wait_port_released(opts.host, opts.port, opts.secret, function()
+            M.ensure_running(function()
+                M.auth_files(function(second)
+                    if second.reason ~= "no_management_route" then
+                        _management_restart_done = false
+                    end
+                    cb(second)
+                end, channel)
+            end, function(msg)
+                cb({ state = "unknown", reason = "no_management_route",
+                    message = "cannot restart the proxy to enable the management route: " .. tostring(msg) })
+            end)
         end)
     end, channel)
 end
@@ -635,7 +671,7 @@ function M.login_argv(provider)
     return { bin, "-config", config_path(), flag }
 end
 
--------------------------------------------------------------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
 -- Auth-failure recovery (#197) — the single owner of "the query failed for
 -- credential reasons". Replaces #131 M3's check_auth_failure, which sat on the
 -- success path and matched one stale message.
@@ -699,22 +735,39 @@ function M.recover(failure, _retry, give_up)
         return false -- not a credential failure: let the normal path report it
     end
     if failure.streamed then
-        -- Content already reached the buffer; re-running would duplicate it.
-        -- Diagnose without claiming so the operator still learns why.
-        logger.warning("cliproxy: auth failure after partial content — not retrying")
+        -- Content already reached the buffer; re-running would duplicate it, so
+        -- we decline the claim and let the normal error path report. No
+        -- credential lookup here: declining must stay synchronous.
+        logger.warning("cliproxy: auth failure after partial content — not claiming (a retry "
+            .. "would duplicate the streamed text)")
         return false
     end
 
-    local channel = channel_for(verdict.model) or verdict.provider
+    -- One derivation of the login channel, reused below (ARCH-DRY).
+    local login = channel_for(verdict.model)
+    local channel = login or verdict.provider
     M.credential_health(function(health)
         local message = ca.diagnosis(verdict, health)
         -- M1 diagnoses; it never repairs. The recovery ladder (decide/execute)
-        -- lands in M2, at which point the branches that call `retry` appear.
-        local login = channel and cc.resolve_login_provider(verdict.model,
-            ((cfg() or {}).config or {})["oauth-model-alias"] or {}) or nil
-        local needs_human = health.state == "missing" or health.state == "disabled"
+        -- lands in M2, at which point the branches that call `retry` appear —
+        -- and `needs_human` moves into the pure `decide`, so policy has one
+        -- owner rather than two.
+        local credential_is_bad = health.state == "missing" or health.state == "disabled"
             or health.state == "unavailable" or health.state == "error"
-            or verdict.kind == "expired"
+        -- An `expired` verdict only overrides a *non*-healthy reading: if the
+        -- proxy says the credential is fine, prompting to log in while showing
+        -- "looks healthy" is self-contradictory.
+        local needs_human = credential_is_bad
+            or (verdict.kind == "expired" and health.state ~= "healthy")
+        if needs_human and not login then
+            -- The old check_auth_failure told operators exactly this and the
+            -- diagnosis alone doesn't: no login was offered because the model
+            -- isn't in any oauth-model-alias channel, so parley cannot tell
+            -- which login it needs.
+            message = message .. ("\nNo login offered: \"%s\" is in no "):format(tostring(verdict.model))
+                .. "cliproxy.config['oauth-model-alias'] channel. Add it there, or run "
+                .. ":ParleyProxy login <provider>."
+        end
         if needs_human and login then
             return prompt_login(login, message, function()
                 give_up(message)
@@ -753,8 +806,7 @@ function M.list_models(provider, cb)
                     cb(nil, "cliproxy: /v1/models request failed")
                     return
                 end
-                -- same body/code split classify() uses (the -w status suffix)
-                local body = (obj.stdout or ""):match("^(.*)\n%d+%s*$") or obj.stdout
+                local body = split_status(obj.stdout) or obj.stdout
                 cb(cc.filter_models_by_owner(body, owned_by), nil)
             end)
         end)

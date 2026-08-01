@@ -58,7 +58,10 @@ end
 ---@param request_model string|nil # backfills `model` for forms that omit it (the 401)
 ---@return table|nil # { kind, provider?, model?, message }
 function M.classify_response(http_status, body, request_model)
-    if type(http_status) ~= "number" or (http_status >= 200 and http_status <= 299) then
+    -- 0 is curl's "no HTTP response at all" — same epistemic position as nil, so
+    -- it gets the same answer: never classify what you cannot situate.
+    if type(http_status) ~= "number" or http_status == 0
+        or (http_status >= 200 and http_status <= 299) then
         return nil
     end
     if type(body) ~= "string" or body == "" then

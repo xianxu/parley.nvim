@@ -1738,6 +1738,8 @@ describe("chat_respond: pending request transcript drift", function()
         end, 10))
         assert.is_true(notices[#notices].partial_present)
         assert.is_truthy(notices[#notices].message:find("provider request failed", 1, true))
+        -- Falls back to the raw body when no diagnosis was supplied (#197).
+        assert.is_truthy(notices[#notices].message:find("broken", 1, true))
         assert.is_nil(pending_mark(buf))
         assert.is_nil(require("parley.chat_lease").current(buf))
         assert.equals(0, runtime:open_timer_count())

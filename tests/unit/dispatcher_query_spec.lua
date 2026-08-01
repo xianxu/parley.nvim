@@ -1045,6 +1045,55 @@ describe("dispatcher.query internals", function()
             assert.matches("timed out", errors[1].message)
         end)
 
+        it("J7b: a THROWING recover_query still produces exactly one on_error", function()
+            -- The pre-#197 code pcall'd its auth hook; the seam must too.
+            -- recover_query runs synchronously and touches the filesystem and
+            -- vim.system before returning its claim, so it can raise — and an
+            -- unguarded throw would skip both deliver() and the backstop while
+            -- tasker's call_safely swallows the error, stranding the chat leg
+            -- with no message at all.
+            --
+            -- Harness limitation: tasker.run is stubbed here and the terminal is
+            -- invoked directly, so the real call_safely swallow does not
+            -- participate. This asserts the dispatcher's own guard.
+            local errors
+            local logged = {}
+            local original_error = logger.error
+            logger.error = function(m) table.insert(logged, tostring(m)) end
+            with_adapter(function()
+                error("boom from a recovery hook")
+            end, function()
+                errors = fail_query()
+            end)
+            logger.error = original_error
+            assert.equals(1, #errors, "a throwing hook must not swallow the failure")
+            assert.is_truthy(table.concat(logged, "\n"):find("recover_query raised", 1, true))
+        end)
+
+        it("J7c: 'response is empty' is not emitted on a FAILED request", function()
+            -- The issue's Done-when: the #197 503 must produce a diagnosis,
+            -- "not `response is empty`". finish_stdout runs before the terminal
+            -- closure and cannot know the request failed, so the log moved.
+            local logged = {}
+            local original_error = logger.error
+            logger.error = function(m) table.insert(logged, tostring(m)) end
+            fail_query('{"error":{"message":"auth_unavailable"}}', "503")
+            logger.error = original_error
+            assert.is_falsy(table.concat(logged, "\n"):find("response is empty", 1, true))
+        end)
+
+        it("J7d: 'response is empty' IS still emitted on a successful empty body", function()
+            local logged = {}
+            local original_error = logger.error
+            logger.error = function(m) table.insert(logged, tostring(m)) end
+            dispatcher.query(nil, "openai", { model = "gpt-4", messages = {} }, function() end)
+            captured_out_reader(nil, "")
+            captured_out_reader(nil, nil)
+            captured_terminal(0, 0, "", status_stderr("200"), nil)
+            logger.error = original_error
+            assert.is_truthy(table.concat(logged, "\n"):find("response is empty", 1, true))
+        end)
+
         it("J8: the failure carries the request model and the streamed flag", function()
             local seen
             with_adapter(function(failure)

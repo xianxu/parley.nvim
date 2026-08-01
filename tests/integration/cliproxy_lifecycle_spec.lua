@@ -782,6 +782,30 @@ describe("cliproxy IO lifecycle", function()
             assert.equals("healthy", still_up)
         end)
 
+        it("clears the one-shot after a successful lookup so a later restart is repairable", function()
+            -- I2: the guard bounds CONSECUTIVE attempts, not the session. An
+            -- operator running `brew services restart cliproxyapi` mid-session
+            -- must still get a repair.
+            local port = free_port()
+            local store = write_store()
+            set_endpoint(port)
+            local old_pid = start_keyless(port, store)
+            parley.config = { cliproxy = { manage = true, binary_path = FAKE, auth_dir = store } }
+
+            assert.equals("healthy", await(function(done)
+                cliproxy.credential_health(done, "claude")
+            end).state)
+            assert.is_false(vim.tbl_contains(cliproxy.spawned_pids(), old_pid))
+
+            -- Simulate the operator restarting a keyless proxy underneath us.
+            cliproxy.stop()
+            local second_pid = start_keyless(port, store)
+            local h = await(function(done) cliproxy.credential_health(done, "claude") end)
+
+            assert.equals("healthy", h.state, "the repair did not re-arm after a success")
+            assert.is_false(vim.tbl_contains(cliproxy.spawned_pids(), second_pid))
+        end)
+
         it("passes a healthy lookup straight through without restarting", function()
             local port = free_port()
             local store = write_store()

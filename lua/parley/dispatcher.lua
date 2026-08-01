@@ -307,11 +307,14 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 				end
 			end
 
+			-- Record, don't report (#197). finish_stdout runs BEFORE the terminal
+			-- closure and cannot know whether the request actually succeeded, so
+			-- logging here made every credential failure announce the misleading
+			-- "response is empty: body_bytes=215" *ahead of* the real diagnosis —
+			-- the exact symptom this issue set out to remove. The terminal
+			-- closure emits it, and only on a successful request.
 			if qt.response == "" then
-				local has_tool_use = qt.raw_response:find('"type":"tool_use"', 1, true) ~= nil
-				if not has_tool_use then
-					logger.error(qt.provider .. " response is empty: body_bytes=" .. #qt.raw_response)
-				end
+				qt.empty_response = qt.raw_response:find('"type":"tool_use"', 1, true) == nil
 			end
 
 			-- NOTE (#197): auth-failure detection deliberately does NOT live
@@ -459,11 +462,21 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 						deliver(msg)
 					end
 				end)
-				local claimed = adapter.recover_query(failure, function()
+				-- Guarded: `recover_query` runs synchronously and touches the
+				-- filesystem and vim.system before it returns its claim, so it
+				-- CAN raise. An unguarded throw here would skip deliver() AND
+				-- the backstop arming below, and tasker's call_safely swallows
+				-- terminal errors — stranding the chat leg with no message at
+				-- all. A hook that blew up never claimed anything.
+				local hook_ok, claimed = pcall(adapter.recover_query, failure, function()
 					settle("retry")
 				end, function(msg)
 					settle("give_up", msg)
 				end)
+				if not hook_ok then
+					logger.error(provider .. ": recover_query raised: " .. tostring(claimed))
+					claimed = false
+				end
 				if claimed then
 					-- Backstop against a recovery that never settles: degrade to
 					-- today's behavior rather than hold the chat leg open
@@ -477,6 +490,11 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 			end
 			deliver()
 		else
+			-- Only a request that SUCCEEDED can meaningfully be called empty;
+			-- on a failure the diagnosis carries the reason instead (#197).
+			if qt.empty_response then
+				logger.error(provider .. " response is empty: body_bytes=" .. #qt.raw_response)
+			end
 			legacy_complete(qid, qt)
 		end
 	end)

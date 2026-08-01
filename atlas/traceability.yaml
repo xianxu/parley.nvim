@@ -385,6 +385,7 @@ atlas:
     tests:
       - tests/unit/cliproxy_config_spec.lua
       - tests/unit/cliproxy_auth_spec.lua
+      - tests/unit/failure_notice_spec.lua
       - tests/unit/providers_pre_query_spec.lua
       - tests/unit/dispatcher_query_spec.lua
       - tests/integration/cliproxy_lifecycle_spec.lua
