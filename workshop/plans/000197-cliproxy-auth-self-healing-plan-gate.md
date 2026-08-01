@@ -129,6 +129,20 @@ rounds:
             parse_peers → malformed ps output). The rest restates a diff that is stale on arrival.
           round: 2
       blocked: true
+    - "n": 3
+      timestamp: "2026-08-01T01:11:32-07:00"
+      agent: claude
+      dispose:
+        - id: PQ-8
+          disposition: addressed
+          note: Synchronous claim contract + shared tasker.once + 15s backstop; entry point threaded in as a parameter. Verified against dispatcher.lua:163/383-425/452 and chat_respond.lua:1751-1764.
+          round: 3
+        - id: PQ-9
+          disposition: addressed
+          note: Tasks 1-3 reduced to the ordering constraint, the status-gate property, and the rank table plus strategy lines.
+          round: 3
+      blocked: false
+content_hash: c8930b45a0e2e03b8a2a2df308e73693de0430faad952d8084cb10898f95e6e5
 ---
 
 # Gate ledger — parley.nvim#197 (plan-quality)
@@ -207,7 +221,13 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   arbitrary body x status property; classify_auth_files → rank collision across multi-record lists;
   parse_peers → malformed ps output). The rest restates a diff that is stale on arrival.
 
+## Round 3 — 2026-08-01T01:11:32-07:00 (claude) — passed
+
+### Disposed
+
+- PQ-8 — addressed — Synchronous claim contract + shared tasker.once + 15s backstop; entry point threaded in as a parameter. Verified against dispatcher.lua:163/383-425/452 and chat_respond.lua:1751-1764.
+- PQ-9 — addressed — Tasks 1-3 reduced to the ordering constraint, the status-gate property, and the rank table plus strategy lines.
+
 ## Open findings
 
-- **PQ-8** [Critical] recover_query's contract with on_error is unstated; as ordered it tears down the chat leg before any retry lands
-- **PQ-9** [Minor] Tasks 1-3 inline full implementation source and a complete test file — compress to strategy lines
+(none — every finding has been disposed)

@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-08-01
 updated: 2026-08-01
-estimate_hours: 6.0
+estimate_hours: 9.2
 started: 2026-08-01T00:24:22-07:00
 ---
 
@@ -134,32 +134,63 @@ asserts the record fields the fake models still exist.
 ```estimate
 model: estimate-logic-v3.1
 familiarity: 1.0
-item: issue-spec design=0.6 impl=0.05
-item: lua-neovim design=0.4 impl=0.4
-item: lua-neovim design=0.4 impl=0.6
-item: lua-neovim design=0.5 impl=0.7
-item: api-integration design=0.4 impl=0.4
-item: real-api-discovery design=0.0 impl=0.25
-item: cross-cutting-refactor design=0.1 impl=0.2
-item: atlas-docs design=0.1 impl=0.1
+item: issue-spec design=1.0 impl=0.1
+item: lua-neovim design=0.3 impl=0.45
+item: api-integration design=0.4 impl=0.5
+item: lua-neovim design=0.5 impl=0.6
+item: cross-cutting-refactor design=0.1 impl=0.15
+item: real-api-discovery design=0.0 impl=0.15
+item: smaller-go-module design=0.05 impl=0.18
+item: lua-neovim design=0.3 impl=0.35
+item: lua-neovim design=0.3 impl=0.5
+item: smaller-go-module design=0.05 impl=0.15
+item: lua-neovim design=0.3 impl=0.5
+item: lua-neovim design=0.35 impl=0.55
+item: smaller-go-module design=0.05 impl=0.15
+item: atlas-docs design=0.04 impl=0.12
 item: milestone-review design=0.0 impl=0.45
 design-buffer: 0.15
-total: 6.0
+total: 9.2
 ```
 
 Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against
-`baseline-v3.1.md`. Method A only. The three `lua-neovim` items are the three
-milestones' focused features (M1 pure classification, M2 policy + retry seam, M3
-peers/reap + login). `api-integration` is the management channel (key render,
-`auth_files`, argv generalization, drift restart); `real-api-discovery` covers
-the conformance check against the real binary — reduced because this session
-already captured the `/v0/management/auth-files` contract empirically, leaving
-only the automated check to build. `milestone-review` is 3 boundaries × 0.15.
-Design hours carry the ×0.2 spec discount (the plan pre-resolves the schemas,
-the decision table, and the message contracts) with the +15% buffer for a
-thorough plan doc; `impl=` values are 40% of the v2 ranges per v3.1.
-`familiarity: 1.0` — the cliproxy module is from #131 and this session traced
-the whole dispatch → recovery path end to end against the live system.
+`baseline-v3.1.md`. Method A only. Re-derived after plan rounds 2 and 3 (see
+Revisions) — the first block was written against a 15-task plan and never
+revisited; **the increase is funding previously unfunded work, not a reaction to
+the judge's low-side-bias note.** Item order follows the plan's task order.
+
+M1: `issue-spec` (the live diagnosis + brainstorm + three plan-gate rounds — no
+×0.2 discount, this design dialogue actually happened); `lua-neovim` Tasks 1–2
+(pure classification); `api-integration` Tasks 3–5 (key render, `management_key`,
+`auth_files`, `api_argv`, the 404-driven restart); a **separate** `lua-neovim`
+for Task 6 — the plan's riskiest task, dispatcher surgery plus the PQ-8 claim
+contract across four files, which the first block left buried inside another
+item; `cross-cutting-refactor` for deleting `check_auth_failure` /
+`detect_auth_failure` and migrating their callers and specs;
+`real-api-discovery` for the conformance check (genuinely reduced — this session
+already captured the contract — and now written in v3.1-scaled units, which the
+first block was not); `smaller-go-module` for the fake's management route,
+credential store, and error modes, which the first block never funded at all.
+
+M2: `lua-neovim` Task 9 (`decide`), `lua-neovim` Tasks 10–11 (ladder + e2e),
+`smaller-go-module` Task 12 (collapsing `:ParleyProxy models`' prompt — added by
+PQ-5 after the first block).
+
+M3: `lua-neovim` Task 14 (peers/reap + `parse_peers` + the `stop()` fix),
+`lua-neovim` Task 15 (login robustness), `smaller-go-module` for the fake's four
+login modes.
+
+Cross-cutting: `atlas-docs` covers three atlas passes plus the
+`atlas/traceability.yaml` registrations; `milestone-review` is 3 boundaries
+× 0.15 (M1-close, M2-close, final close).
+
+Every `impl=` is now inside its v3.1-scaled band (40% of the v2 range) — the
+first block wrote `lua-neovim impl=0.7`, `real-api-discovery impl=0.25`, and
+`atlas-docs` at raw-table values, all above their scaled ceilings. Design hours
+carry the ×0.2 spec discount everywhere the plan pre-resolves the decision
+(schemas, the decide table, message contracts), with the +15% thorough-plan
+buffer. `familiarity: 1.0` — cliproxy is #131's module and this session traced
+dispatch → recovery live against the failing system.
 
 ## Done when
 
@@ -235,6 +266,32 @@ Round 1's findings all disposed as addressed; one new Critical. Delta:
 - **PQ-9** (Minor, applied) — compressed the inlined implementation/test source in
   Tasks 1–2 to the non-obvious parts (pattern ordering, the status gate, the rank
   table) plus strategy lines; full source restates a diff that goes stale.
+
+### 2026-08-01 — estimate re-derived (6.0 → 9.2)
+
+The plan gate passed round 3; estimate-quality returned INFO. Its critique was
+right on three counts and I re-derived rather than leave a stale number in the
+calibration ledger:
+
+- The block was written against the 15-task round-1 plan and never revisited
+  after PQ-8 added an async ownership protocol (claim contract, shared
+  `tasker.once`, timer backstop, threading `restart`/`attempt` through `query`)
+  and PQ-5 added Task 12.
+- Task 6 — the riskiest task in the plan, four files, two deletions, a changed
+  `query` signature — had no funding line of its own after PQ-4 moved the seam
+  from M2 into M1. It now has one.
+- The stateful fake (management route, disk credential store, four error modes,
+  four login modes) and the three atlas passes were unfunded; the fake is
+  explicitly a deliverable, not scaffolding.
+- Three items sat above their v3.1-scaled ceilings (`lua-neovim impl=0.7`,
+  `real-api-discovery impl=0.25`, `atlas-docs` at raw values) — the 40% scale is
+  now applied uniformly and every item is inside its band.
+
+Deliberately **not** adjusted for the judge's advisory note that parley's two
+`baseline-v3.1.md` rows (#144 at 0.61, #147 at 0.63) under-shoot by ~40%. That
+is the ledger's job at close under #117; inflating an estimate to meet a
+predicted miss would corrupt the very signal the ledger exists to collect. The
+9.2 comes only from funding work that exists in the plan.
 
 Also corrected from the repo itself: the test invocation is
 `make test-spec SPEC=providers/cliproxy-managed` (not `make test SPEC=<path>`),
