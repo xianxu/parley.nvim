@@ -93,18 +93,21 @@ normal api-key gets 401. The proxy hot-reloads auth files (fsnotify /
   `remote-management.secret-key` (generated once, stored in the vault beside the
   client secret; config stays 0600; `allow-remote` unset ⇒ localhost-only). Add
   `M.auth_files(cb)` built on the same argv helper `models_argv` uses, extended
-  to take a route + bearer (ARCH-DRY). `config_drift()` already exists but only
-  `status` reads it; wire it into `ensure_running` so adding the key actually
-  restarts a proxy rendered before it.
+  to take a route + bearer (ARCH-DRY). A proxy started before the key existed is
+  detected by the `no_management_route` 404 — a signal from the *running*
+  process — and restarted into the fresh config (see Revisions: a file-vs-render
+  drift check cannot work here).
 - **Recovery ladder — `cliproxy.lua`.** One entry point consuming `decide`:
   proxy down → start; credential healthy but request failed → retry once; auth
   file newer than the proxy's `modtime` → restart, retry; `unavailable` /
   `disabled` / expired-with-failed-refresh → prompt **carrying the real
   `status_message` and expiry**, not "needs login". Prompting stays the only
   human-facing step (operator decision, this session).
-- **Retry seam — `dispatcher.lua`.** Optional `adapter.recover_query(failure,
-  retry)` beside the existing `pre_query`, so the dispatcher owns the mechanism
-  and cliproxy owns the policy. Exactly one retry, never a loop.
+- **One owning seam — `dispatcher.lua`.** Optional `adapter.recover_query(failure,
+  retry)` beside the existing `pre_query`, placed in the terminal closure — the
+  only scope holding HTTP status, body, and the request's model. The dispatcher
+  owns the mechanism, cliproxy owns the policy. Exactly one retry, never a loop.
+  `check_auth_failure` in `finish_stdout` is **deleted**, not kept beside it.
 - **Prevention.** `M.peers()` enumerates `cli-proxy-api` processes parley did not
   spawn; warn once per session naming the rotation race, with `:ParleyProxy reap`
   to clean them. `stop()` stops leaking instances on non-managed ports.
@@ -181,6 +184,43 @@ Durable plan: `workshop/plans/000197-cliproxy-auth-self-healing-plan.md`
 - [ ] M1 — Diagnose: pure classification vocabulary + management channel
 - [ ] M2 — Recover: pure recovery policy + retry seam in the dispatcher
 - [ ] M3 — Prevent: stale-proxy reaping + login-flow robustness
+
+## Revisions
+
+### 2026-08-01 — plan-quality round 1 (PQ-1…PQ-7)
+
+Reason: the plan gate found two Critical design errors in the first draft. Delta:
+
+- **PQ-1** — dropped the `config_drift`-in-`ensure_running` task entirely. It was
+  dead code: `ensure_running` writes the rendered config at `cliproxy.lua:295`
+  *before* it probes, so `config_drift()` in the probe callback compares the file
+  to itself and never observes what the running proxy loaded. Replaced with the
+  `no_management_route` 404, which is a signal from the running process.
+- **PQ-2** — `classify_response` now takes `http_status` and returns nil for
+  **every** 2xx, whatever the body says. The first draft would have classified
+  ordinary assistant prose: `check_auth_failure` runs on every completed response
+  (`dispatcher.lua:266-314`), and a chat about this very issue quotes
+  `authentication_error`, `401 unauthorized`, and `payment_required`. Pinned by a
+  property test over bodies × 2xx statuses, not hand-picked cases.
+- **PQ-3** — the dispatcher's failure table gains `model` from `payload.model`,
+  and `classify_response` backfills it, so the 401 form (which names neither
+  provider nor model) can still resolve a login channel.
+- **PQ-4** — the `recover_query` seam moves from M2 into M1 and becomes the
+  *single* owner: `check_auth_failure` is deleted rather than left running beside
+  it. Removes the ARCH-DRY violation and the un-implementable "pass http_status
+  at `dispatcher.lua:311-313`" step (that scope has no status).
+- **PQ-5** — added M2 Task 12: `:ParleyProxy models`' hand-rolled login prompt
+  collapses onto `decide`, so both paths share one policy (ARCH-PURPOSE).
+- **PQ-6** — named the fake's login modes (`success`, `port_taken`, `dies_early`,
+  `hangs`) in the integration-points table.
+- **PQ-7** — parley now defaults `disable-control-panel: true` when it renders
+  the management key; only the JSON route is needed.
+
+Also corrected from the repo itself: the test invocation is
+`make test-spec SPEC=providers/cliproxy-managed` (not `make test SPEC=<path>`),
+new files must be registered in `atlas/traceability.yaml`, and a retry is only
+safe when nothing was streamed (`qt.response == ""`) or it duplicates buffer
+content.
 
 ## Log
 

@@ -4,9 +4,16 @@
 
 **Goal:** When a cliproxyapi query fails for credential reasons, parley diagnoses the real cause from the proxy's own management API, repairs what it can without asking, and prompts only when a human must sit at a browser.
 
-**Architecture:** A new pure module (`cliproxy_auth.lua`) owns the whole decision: it classifies the failure response, classifies credential health from `/v0/management/auth-files`, and returns the *action* to take. `cliproxy.lua` stays a thin IO shell that executes that action; `dispatcher.lua` gains one provider-agnostic `recover_query` seam so the retry mechanism is shared and the policy is not. Prevention (leaked-proxy reaping, login-flow robustness) closes the loop that created the failure.
+**Architecture:** A new pure module (`cliproxy_auth.lua`) owns the whole decision: it classifies the failure response, classifies credential health from `/v0/management/auth-files`, and returns the *action* to take. `cliproxy.lua` stays a thin IO shell that executes that action. **One seam owns auth failure**: a provider-agnostic `recover_query` hook in the dispatcher's terminal closure — the only place where HTTP status, response body, and the request's model are all in scope. The existing `check_auth_failure` call in `finish_stdout` is deleted, not kept beside it.
 
 **Tech Stack:** Lua / Neovim (`vim.system`, `vim.uv`), plenary.busted, the Python process-level fake at `tests/fixtures/fake_cliproxy`, real `cli-proxy-api` 7.1.71 for conformance.
+
+**Test commands** (this repo does NOT use `make test SPEC=<path>`):
+- One spec key: `make test-spec SPEC=providers/cliproxy-managed`
+- Everything: `make test` (lint + unit + integration) · Lint alone: `make lint`
+- Every new spec file and `lua/parley/cliproxy_auth.lua` must be registered under
+  `providers/cliproxy-managed` in `atlas/traceability.yaml`, or `make test-changed`
+  silently skips them.
 
 ---
 
@@ -21,7 +28,9 @@ Read `workshop/issues/000197-cliproxy-auth-self-healing.md` first — it holds t
 {"type":"error","error":{"type":"authentication_error","message":"OAuth access token has expired. Re-authenticate to continue."}}
 ```
 
-**Message templates in the 7.1.71 binary** (`strings` on the binary; these are the format strings, so the pattern table below must match their rendered form): `%s (providers=%s, model=%s)`, `no auth available`, `auth_unavailable`, `unknown provider for model %s`, `401 unauthorized`, `payment_required`, `model unavailable`, `auth_not_found`.
+The first arrived with HTTP 503, the second with HTTP 401.
+
+**Message templates in the 7.1.71 binary** (`strings` on the binary; the pattern table matches their rendered form): `%s (providers=%s, model=%s)`, `no auth available`, `auth_unavailable`, `unknown provider for model %s`, `401 unauthorized`, `payment_required`, `model unavailable`, `auth_not_found`.
 
 **`GET /v0/management/auth-files` response** (captured from 7.1.71 against a fabricated credential):
 
@@ -34,11 +43,17 @@ Read `workshop/issues/000197-cliproxy-auth-self-healing.md` first — it holds t
   "created_at":"…","updated_at":"…","modtime":"…","recent_requests":[{"time":"21:20-21:30","success":0,"failed":0}, …]}]}
 ```
 
-After forcing one upstream failure, the same record became `"status":"error"` with the upstream error verbatim in `status_message` and `"failed":1`. **Authentication:** the route accepts only the `remote-management.secret-key` bearer — the normal `api-keys` bearer gets 401. **Absent key:** with no `secret-key` rendered, the route 404s (the router does not register it).
+After forcing one upstream failure the record became `"status":"error"` with the upstream error verbatim in `status_message` and `"failed":1`. **Authentication:** the route accepts only the `remote-management.secret-key` bearer — the normal `api-keys` bearer gets 401. **Absent key:** with no `secret-key` rendered the route **404s** (the router never registers it). That 404 is load-bearing in this design — see Task 5.
 
 **Two behaviors that shape the design:**
-- The proxy hot-reloads auth files (fsnotify → `watcher.AuthUpdate`), so a fresh login needs no restart. Restart is a fallback for when the watcher demonstrably did not pick a file up.
+- The proxy hot-reloads auth files (fsnotify → `watcher.AuthUpdate`), so a fresh login needs no restart. Restart is a fallback.
 - Every proxy runs `core auth auto-refresh (interval=15m0s)` and attempts a refresh at startup. N proxies over one auth-dir means N refresh loops over one rotating refresh token — the cause of the original expiry.
+
+### Three traps in the existing code (each cost a Critical/Important at the plan gate)
+
+1. **`ensure_running` rewrites the config before it probes** (`cliproxy.lua:295`). Any `config_drift()` check inside the `health_probe` callback compares the file to itself and is always false, and it would never observe what the *running* proxy actually loaded. Detect the stale-config condition from the running proxy instead — the `no_management_route` 404.
+2. **`finish_stdout` runs on every completed response** (`dispatcher.lua:266-314`), success included. Anything classified there sees ordinary assistant prose. A chat *about this issue* contains the strings `authentication_error` and `401 unauthorized`. Classification must be gated on a non-2xx HTTP status — and `http_status` does not exist in that closure at all; it is computed in the terminal closure at `dispatcher.lua:388-401`.
+3. **The failure table carries no model** (`dispatcher.lua:403-409`). The 401 body has neither provider nor model, and `resolve_login_provider` needs a model to find the channel. The model must be threaded from `payload.model`, which *is* in scope in `query()`.
 
 ---
 
@@ -52,29 +67,33 @@ After forcing one upstream failure, the same record became `"status":"error"` wi
 | `CredentialHealth` / `classify_auth_files` | `lua/parley/cliproxy_auth.lua` | new |
 | `RecoveryAction` / `decide` | `lua/parley/cliproxy_auth.lua` | new |
 | `diagnosis` | `lua/parley/cliproxy_auth.lua` | new |
+| `parse_peers` | `lua/parley/cliproxy_auth.lua` | new |
 | `render` (management-key field) | `lua/parley/cliproxy_config.lua` | modified |
 | `detect_auth_failure` | `lua/parley/cliproxy_config.lua` | deleted |
 
-- **AuthVerdict / `classify_response(http_status, body)`** — what the proxy said went wrong, as one typed value: `{kind, provider, model, message}` where `kind ∈ {no_auth, unknown_provider, expired, quota, model_unavailable}` or `nil` for "not an auth failure".
-  - **Relationships:** 1:1 with a failed query response. Consumed by `decide`; never by the IO shell directly.
-  - **DRY rationale:** Replaces `detect_auth_failure`'s single hardcoded pattern *and* becomes the one place any future cliproxy error string is added. Today the same knowledge is smeared across `detect_auth_failure` and `classify`'s `/v1/models` heuristic (ARCH-DRY).
-  - **Future extensions:** New cliproxy versions add message forms — one row in the pattern table, no caller changes.
+- **AuthVerdict / `classify_response(http_status, body, request_model)`** — what the proxy said went wrong, as one typed value: `{kind, provider, model, message}` where `kind ∈ {no_auth, unknown_provider, expired, quota, model_unavailable}`, or `nil` for "not an auth failure".
+  - **Invariant (PQ-2):** returns `nil` for **every** 2xx status regardless of body. The status gate comes first; the pattern table is only consulted on a non-2xx. This is a property, not a list of cases — see the property test in Task 1.
+  - `request_model` backfills `model` when the body carries none (the 401 form), so every verdict can resolve a channel (PQ-3).
+  - **Relationships:** 1:1 with a *failed* query response. Consumed by `decide`; never by the IO shell directly.
+  - **DRY rationale:** Replaces `detect_auth_failure`'s single hardcoded pattern and becomes the one place any future cliproxy error string is added.
+  - **Future extensions:** New cliproxy versions add message forms — one row in the table, no caller changes.
 
-- **CredentialHealth / `classify_auth_files(files, provider)`** — reduces the management API's record list to this provider's credential state: `{state, message, account, failed, modtime}` with `state ∈ {healthy, error, unavailable, disabled, missing}`.
-  - **Relationships:** N records in → 1 health out (a provider may hold several credentials; the healthiest wins, since the proxy will route to any usable one).
-  - **DRY rationale:** First occurrence — but it is the single interpreter of the management schema, so a field rename in cliproxy lands in one function.
-  - **Future extensions:** `recent_requests` buckets are already in the payload; a rate/error-trend signal widens here without touching callers.
+- **CredentialHealth / `classify_auth_files(files, channel)`** — reduces the management API's record list to that channel's credential state: `{state, message, account, failed, modtime}` with `state ∈ {healthy, error, unavailable, disabled, missing}`.
+  - **Relationships:** N records in → 1 health out; the healthiest wins, since the proxy routes to any usable credential.
+  - **DRY rationale:** the single interpreter of the management schema — a field rename in cliproxy lands in one function.
+  - **Future extensions:** `recent_requests` is already in the payload; an error-trend signal widens here.
 
-- **RecoveryAction / `decide(verdict, health, proxy_state, attempt)`** — the whole recovery policy as a pure function returning `{action, message, login_provider}` with `action ∈ {start, restart, retry, prompt_login, report}`. `attempt` makes retry exhaustion explicit rather than stateful.
-  - **Relationships:** consumes one AuthVerdict + one CredentialHealth + a `proxy_state` snapshot; produces exactly one action.
-  - **DRY rationale:** Keeps the ladder out of callbacks. Without it the same branching would be duplicated between the dispatch-failure path and the `:ParleyProxy models` empty-list path, which already hand-rolls its own login prompt (`init.lua:408-419`) — that call site collapses onto `decide` too (ARCH-PURPOSE: every consumer derives from one vocabulary).
-  - **Future extensions:** an auto-relogin action is one more enum value; the operator chose prompt-only for this issue, and the shape does not have to change to revisit that.
+- **RecoveryAction / `decide(verdict, health, proxy_state, attempt)`** — the recovery policy as a pure function returning `{action, message, login_provider}` with `action ∈ {start, restart, retry, prompt_login, report}`. `attempt` makes retry exhaustion explicit rather than stateful.
+  - **DRY rationale:** keeps the ladder out of callbacks, and collapses the *second* hand-rolled login prompt at `init.lua:412-419` onto the same policy (Task 12 — PQ-5).
+  - **Future extensions:** an auto-relogin action is one more enum value; the operator chose prompt-only for this issue.
 
-- **`diagnosis(verdict, health)`** — renders the human sentence ("claude credential expired 2026-07-25 20:06; refresh rejected — log in again") from the same inputs. Pure so message wording is unit-tested, not eyeballed. Per `workshop/lessons.md`, error text here is API: specs assert on it.
+- **`diagnosis(verdict, health)`** — renders the human sentence from the same inputs. Pure, so wording is unit-tested. Per `workshop/lessons.md`, error text is API here: specs assert on it.
 
-- **`render` (modified)** — gains `remote-management.secret-key` from an injected `management_key` opt, same passthrough discipline as `api-keys`: set when non-empty, omitted (never `{}`) otherwise. Does **not** set `allow-remote`, so the management surface stays loopback-only.
+- **`parse_peers(ps_output, own_pids, managed_port_pids)`** — pure parse of `ps` output into the list of foreign `cli-proxy-api` processes.
 
-- **`detect_auth_failure` (deleted)** — superseded by `classify_response`. Its caller (`cliproxy.check_auth_failure`) and its tests migrate; `resolve_login_provider` stays as-is and is called with `verdict.model`.
+- **`render` (modified)** — gains `remote-management.secret-key` from an injected `management_key`, and defaults `disable-control-panel: true` when parley supplies the key (PQ-7: parley needs only the JSON route; leaving the control panel registered widens the new loopback surface for nothing). An operator-set value still wins.
+
+- **`detect_auth_failure` (deleted)** — superseded by `classify_response`. `resolve_login_provider` stays and is called with `verdict.model`.
 
 ### Integration points (where pure meets the world)
 
@@ -87,40 +106,59 @@ After forcing one upstream failure, the same record became `"status":"error"` wi
 | `peers` / `reap` | `lua/parley/cliproxy.lua` | new | `ps` / `lsof` / `uv.kill` |
 | `login` (hardened) | `lua/parley/cliproxy.lua` | modified | `cli-proxy-api -claude-login` |
 | `recover_query` seam | `lua/parley/dispatcher.lua` | new | the adapter contract |
+| `check_auth_failure` | `lua/parley/cliproxy.lua` | deleted | (absorbed by `recover`) |
 | management + auth states | `tests/fixtures/fake_cliproxy` | modified | the real binary's routes |
+| login modes | `tests/fixtures/fake_cliproxy` | modified | the real binary's `-claude-login` |
 
-- **`management_key()`** — read-or-create a 32-hex-char key at `<data_root>/management.key`, mode 0600, beside the rendered config. Not the vault: the vault is in-memory and populated from `setup{}`, and this key must survive restarts without appearing in the operator's dotfiles.
-  - **Injected into:** `render_opts()` → `cc.render`, and `auth_files`'s bearer.
-- **`auth_files(cb)`** — GET the management route, decode, hand the record list to `classify_auth_files`. Distinguishes 404 (key not rendered yet / proxy predates it) from 401 and transport failure, because 404 is a *repairable* state (re-render + restart), not an error to report.
-  - **Injected into:** `recover`, and `:ParleyProxy status`.
-- **`api_argv(host, port, secret, route)`** — `models_argv` generalized to any route so the health probe, the stop-time identity check, `list_models`, and `auth_files` share one request shape (ARCH-DRY; the existing comment at `cliproxy.lua:117` already claims this single-source role — this keeps the claim true).
-- **`recover(failure, provider, retry, attempt)`** — gathers `proxy_state` + health, calls `decide`, executes the returned action. The only place recovery touches the world.
-- **`peers()` / `reap()`** — enumerate `cli-proxy-api` processes parley did not spawn (`ps -axo pid,lstart,command`, cross-checked with `lsof` for the managed port); `reap` SIGTERMs them. Warn-once state is module-local and reset by `_reset` test seams, per the lessons.md rule about one-shot flags persisting across `it` blocks.
-- **`recover_query(failure, retry)` seam** — optional adapter hook, mirroring `pre_query`'s shape and backward-compatibility discipline (`dispatcher.lua:437-443`). Adapters without it behave exactly as today.
-- **`fake_cliproxy` (modified)** — the existing process-level fake grows the management route and a **portable credential store**: a folder of auth JSON files plus a `state.json` the test writes to select per-credential `status`/`unavailable`/`disabled`/`failed`. New modes serve the real 503/401 bodies on `/v1/chat/completions`. Integration tests run the real dispatch path against it; a live conformance check boots the real binary against a fabricated credential in a temp auth-dir and asserts the fields the fake models still exist (ARCH-MOCK).
+- **`management_key()`** — read-or-create a 32-hex-char key at `<data_root>/management.key`, mode 0600, beside the rendered config. Not the vault: the vault is in-memory and populated from `setup{}`, and this key must survive restarts without landing in the operator's dotfiles.
+- **`auth_files(cb, channel)`** — GET the management route, decode, hand the records to `classify_auth_files`. Returns `{state="unknown", reason="no_management_route"}` on 404, distinct from 401 / transport failure, because that 404 is the *repairable* "running proxy predates the key" state (PQ-1).
+- **`api_argv(host, port, secret, route)`** — `models_argv` generalized to any route so the health probe, the stop-time identity check, `list_models`, and `auth_files` share one request shape (ARCH-DRY; the comment at `cliproxy.lua:117` already claims this role — this keeps the claim true).
+- **`recover(failure, retry)`** — the single owner of auth-failure reaction: classify → gather health → `decide` → execute. Replaces `check_auth_failure` outright (PQ-4).
+- **`peers()` / `reap()`** — enumerate `cli-proxy-api` processes parley did not spawn; `reap` SIGTERMs them after an identity probe. Warn-once state is module-local with a `_reset` test seam (lessons.md: module-local one-shot flags leak across `it` blocks).
+- **`recover_query(failure, retry)` seam** — optional adapter hook in the **terminal closure** (`dispatcher.lua:383-425`), the only scope holding `http_status`, the body, and (once Task 6 threads it) the request's model. Mirrors `pre_query`'s optional/backward-compatible shape; adapters without it behave exactly as today.
+- **`fake_cliproxy` (modified)** — the existing process-level fake grows:
+  - **management route + credential store**: a folder of auth JSON files plus a `state.json` overlay (`{"claude": {"status": "error", "status_message": "…", "unavailable": true}}`) so tests mutate credential state *between* calls and the double stays stateful (ARCH-MOCK). Serves 401 on a wrong bearer and **404 when the config has no `remote-management.secret-key`**.
+  - **error modes** on `/v1/chat/completions`: `no_auth` (the real 503 body), `expired` (the real 401 body), `quota`, and `ok`.
+  - **login modes** (PQ-6), selected by `--login-mode`: `success` — print the `https://claude.ai/oauth/authorize?…` line on stdout and write a credential into the auth-dir after a short delay; `port_taken` — bind the callback port and idle; `dies_early` — print the URL then exit non-zero; `hangs` — print the URL and never write a credential (timeout case).
 
 ---
 
 ## Chunk 1: M1 — Diagnose
 
-Outcome: tonight's 503 produces a real diagnosis. No behavior change to recovery yet.
+Outcome: tonight's 503 produces a real diagnosis through the single owning seam. Recovery actions arrive in M2; M1's `decide` stand-in only ever reports or prompts.
 
-### Task 1: `classify_response` — the failure vocabulary
+### Task 1: `classify_response` — the failure vocabulary, status-gated
 
 **Files:**
 - Create: `lua/parley/cliproxy_auth.lua`
 - Create: `tests/unit/cliproxy_auth_spec.lua`
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1: Write the failing tests** — the property first, because it is the invariant that keeps this off the success path:
 
 ```lua
 local ca = require("parley.cliproxy_auth")
 
+-- The exact body from issue #197 (215 bytes, HTTP 503).
+local NO_AUTH = '{"type":"error","error":{"type":"api_error","message":"auth_unavailable: '
+    .. 'no auth available (providers=claude, model=claude-opus-4-8); check Claude auth/key '
+    .. 'session and cooldown state via /v0/management/auth-files"}}'
+local EXPIRED = '{"type":"error","error":{"type":"authentication_error","message":'
+    .. '"OAuth access token has expired. Re-authenticate to continue."}}'
+
 describe("classify_response", function()
-    -- The exact body from issue #197 (215 bytes, HTTP 503).
-    local NO_AUTH = '{"type":"error","error":{"type":"api_error","message":"auth_unavailable: '
-        .. 'no auth available (providers=claude, model=claude-opus-4-8); check Claude auth/key '
-        .. 'session and cooldown state via /v0/management/auth-files"}}'
+    it("PROPERTY: never classifies a 2xx, whatever the body says", function()
+        -- Assistant prose that quotes every trigger word — e.g. a chat about
+        -- this very issue. Regression guard for the gate's PQ-2.
+        local prose = "The proxy returned authentication_error and 401 unauthorized, "
+            .. "then payment_required; the model unavailable path is auth_unavailable: "
+            .. "no auth available (providers=claude, model=claude-opus-4-8)."
+        for _, body in ipairs({ prose, NO_AUTH, EXPIRED, "", "data: [DONE]" }) do
+            for _, status in ipairs({ 200, 201, 204, 299 }) do
+                assert.is_nil(ca.classify_response(status, body),
+                    ("classified a %d as a failure: %s"):format(status, body:sub(1, 40)))
+            end
+        end
+    end)
 
     it("classifies auth_unavailable with provider and model", function()
         local v = ca.classify_response(503, NO_AUTH)
@@ -129,12 +167,14 @@ describe("classify_response", function()
         assert.equals("claude-opus-4-8", v.model)
     end)
 
-    it("classifies the expired-token 401 (no model in the message)", function()
-        local v = ca.classify_response(401,
-            '{"type":"error","error":{"type":"authentication_error","message":'
-            .. '"OAuth access token has expired. Re-authenticate to continue."}}')
+    it("backfills the request model when the body carries none", function()
+        local v = ca.classify_response(401, EXPIRED, "claude-opus-4-8")
         assert.equals("expired", v.kind)
-        assert.is_nil(v.model)
+        assert.equals("claude-opus-4-8", v.model) -- from request_model, not the body
+    end)
+
+    it("leaves model nil when neither body nor request supplies one", function()
+        assert.is_nil(ca.classify_response(401, EXPIRED).model)
     end)
 
     it("still classifies the legacy unknown-provider form", function()
@@ -148,24 +188,18 @@ describe("classify_response", function()
         assert.equals("quota", ca.classify_response(402, '{"error":{"message":"payment_required"}}').kind)
     end)
 
-    it("returns nil for a normal SSE body", function()
-        assert.is_nil(ca.classify_response(200, 'data: {"choices":[{"delta":{"content":"hi"}}]}'))
-    end)
-
-    it("returns nil for a non-auth 500", function()
+    it("returns nil for a non-auth 5xx", function()
         assert.is_nil(ca.classify_response(500, '{"error":{"message":"dial tcp: no such host"}}'))
     end)
 
-    it("tolerates a nil body", function()
+    it("tolerates a nil body and a nil status", function()
         assert.is_nil(ca.classify_response(503, nil))
+        assert.is_nil(ca.classify_response(nil, NO_AUTH)) -- no status ⇒ cannot judge ⇒ nil
     end)
 end)
 ```
 
-- [ ] **Step 2: Run and watch it fail**
-
-Run: `make test SPEC=tests/unit/cliproxy_auth_spec.lua`
-Expected: FAIL — module `parley.cliproxy_auth` not found.
+- [ ] **Step 2: Run and watch it fail** — `make test-spec SPEC=providers/cliproxy-managed`. Expected: module not found. (Register the new files in `atlas/traceability.yaml` first, or the runner will not see the spec at all.)
 
 - [ ] **Step 3: Implement**
 
@@ -175,17 +209,15 @@ Expected: FAIL — module `parley.cliproxy_auth` not found.
 --
 -- No IO, no clock, no vim.* state (ARCH-PURE): every function is a
 -- deterministic transform, unit-tested without mocks. The IO shell
--- (parley/cliproxy.lua) gathers the inputs and executes the action this
--- module decides on.
+-- (parley/cliproxy.lua) gathers the inputs and executes the action decided here.
 --------------------------------------------------------------------------------
 
 local M = {}
 
--- cliproxyapi's failure vocabulary, most specific first. Each row's `pattern`
--- runs against the raw response body; `captures` names what the pattern's
--- captures mean. Verified against the 7.1.71 binary's format strings (see the
--- plan's "Context an implementer needs"). Adding support for a new cliproxy
--- error means adding a row here and nothing else (ARCH-DRY).
+-- cliproxyapi's failure vocabulary, most specific first. Verified against the
+-- 7.1.71 binary's format strings (see the plan's "Context an implementer
+-- needs"). Adding support for a new cliproxy error is one row here and nothing
+-- else (ARCH-DRY).
 local FAILURES = {
     {
         kind = "no_auth",
@@ -203,13 +235,20 @@ local FAILURES = {
     { kind = "model_unavailable", pattern = "model unavailable", captures = {} },
 }
 
---- Classify a failed cliproxy response. Returns nil when the body carries no
---- recognized auth/credential failure — including for successful bodies, so
---- callers can run this unconditionally.
+--- Classify a FAILED cliproxy response.
+---
+--- The status gate is the whole safety story: these patterns are broad enough to
+--- match ordinary assistant prose (a chat about this issue quotes every one of
+--- them), and the caller sees successful bodies too. A 2xx — or an unknown
+--- status — is never a failure, whatever the body says.
 ---@param http_status number|nil
 ---@param body string|nil
+---@param request_model string|nil # backfills `model` for forms that omit it (401)
 ---@return table|nil # { kind, provider?, model?, message }
-function M.classify_response(http_status, body)
+function M.classify_response(http_status, body, request_model)
+    if type(http_status) ~= "number" or (http_status >= 200 and http_status <= 299) then
+        return nil
+    end
     if type(body) ~= "string" or body == "" then
         return nil
     end
@@ -221,15 +260,14 @@ function M.classify_response(http_status, body)
             for i, name in ipairs(row.captures) do
                 v[name] = caps[i]
             end
+            v.model = v.model or request_model
             return v
         end
     end
     return nil
 end
 
--- Pull the human message out of either error envelope cliproxy uses
--- ({error:{message}} for OpenAI-shaped, {error:{message}} nested under type
--- for Anthropic-shaped — both land on the same key).
+-- Pull the human message out of cliproxy's error envelope.
 function M._message(body)
     return body:match('"message"%s*:%s*"(.-)"') or body
 end
@@ -237,30 +275,19 @@ end
 return M
 ```
 
-- [ ] **Step 4: Run tests**
+Ordering constraint the tests pin: the `(providers=…, model=…)` row must precede the bare `auth_unavailable` row or the captures are lost.
 
-Run: `make test SPEC=tests/unit/cliproxy_auth_spec.lua`
-Expected: PASS (7 examples).
-
-Note the ordering constraint the tests pin: the `(providers=…, model=…)` row must precede the bare `auth_unavailable` row, or the specific capture is lost. If a body matches both, the first row wins by construction.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add lua/parley/cliproxy_auth.lua tests/unit/cliproxy_auth_spec.lua
-git commit -m "cliproxy: #197 M1: classify cliproxy auth failures by vocabulary, not one pattern"
-```
+- [ ] **Step 4: Run tests** — expect PASS (8 examples).
+- [ ] **Step 5: Register in `atlas/traceability.yaml`** — add `lua/parley/cliproxy_auth.lua` to `providers/cliproxy-managed`'s `code:` and `tests/unit/cliproxy_auth_spec.lua` to its `tests:`.
+- [ ] **Step 6: Commit** — `cliproxy: #197 M1: classify auth failures by vocabulary, gated on non-2xx`
 
 ### Task 2: `classify_auth_files` — credential health from the management record
 
 **Files:**
-- Modify: `lua/parley/cliproxy_auth.lua`
-- Modify: `tests/unit/cliproxy_auth_spec.lua`
-- Create: `tests/fixtures/cliproxy_auth_files.json` (the captured 7.1.71 payload, used by both this spec and the conformance check)
+- Modify: `lua/parley/cliproxy_auth.lua`, `tests/unit/cliproxy_auth_spec.lua`
+- Create: `tests/fixtures/cliproxy_auth_files.json` (the captured 7.1.71 payload, shared with Task 7's conformance check)
 
-- [ ] **Step 1: Write the failing tests**
-
-Build records with a helper so each test states only the fields it cares about:
+- [ ] **Step 1: Write the failing tests** — with a record helper so each test states only what it cares about:
 
 ```lua
 local function rec(over)
@@ -270,72 +297,27 @@ local function rec(over)
         failed = 0, success = 3, modtime = "2026-08-01T00:34:46-07:00",
     }, over or {})
 end
-
-describe("classify_auth_files", function()
-    it("reports healthy for an active record", function()
-        local h = ca.classify_auth_files({ rec() }, "claude")
-        assert.equals("healthy", h.state)
-        assert.equals("me@example.com", h.account)
-    end)
-
-    it("reports missing when the provider has no record", function()
-        assert.equals("missing", ca.classify_auth_files({ rec({ provider = "codex" }) }, "claude").state)
-    end)
-
-    it("reports missing for an empty list", function()
-        assert.equals("missing", ca.classify_auth_files({}, "claude").state)
-    end)
-
-    it("carries status_message through on error", function()
-        local h = ca.classify_auth_files({ rec({ status = "error", failed = 4,
-            status_message = "OAuth access token has expired." }) }, "claude")
-        assert.equals("error", h.state)
-        assert.equals(4, h.failed)
-        assert.matches("expired", h.message)
-    end)
-
-    it("ranks unavailable and disabled above status", function()
-        assert.equals("unavailable", ca.classify_auth_files({ rec({ unavailable = true }) }, "claude").state)
-        assert.equals("disabled", ca.classify_auth_files({ rec({ disabled = true }) }, "claude").state)
-    end)
-
-    it("picks the healthiest credential when several exist", function()
-        local h = ca.classify_auth_files({
-            rec({ account = "dead@example.com", unavailable = true }),
-            rec({ account = "live@example.com" }),
-        }, "claude")
-        assert.equals("healthy", h.state)
-        assert.equals("live@example.com", h.account)
-    end)
-
-    it("matches on `type` when `provider` is absent", function()
-        local r = rec(); r.provider = nil
-        assert.equals("healthy", ca.classify_auth_files({ r }, "claude").state)
-    end)
-end)
 ```
 
-- [ ] **Step 2: Run and watch it fail**
+Cases: active → `healthy` (carries `account`); no record for the channel → `missing`; empty list → `missing`; `status="error"` → `error` carrying `status_message` and `failed`; `unavailable` and `disabled` each outrank `status`; several credentials → healthiest wins and its account is reported; a record with `provider` absent matches on `type`.
 
-Run: `make test SPEC=tests/unit/cliproxy_auth_spec.lua`
-Expected: FAIL — `classify_auth_files` is nil.
-
+- [ ] **Step 2: Run and watch it fail.**
 - [ ] **Step 3: Implement**
 
 ```lua
--- Worst-to-best so "healthiest wins" is a simple max: the proxy will route to
--- any usable credential, so one healthy record makes the provider usable
--- regardless of how many dead ones sit beside it.
+-- Worst-to-best so "healthiest wins" is a simple max: the proxy routes to any
+-- usable credential, so one healthy record makes the channel usable regardless
+-- of how many dead ones sit beside it.
 local HEALTH_RANK = { missing = 0, disabled = 1, unavailable = 2, error = 3, healthy = 4 }
 
---- Reduce the management API's record list to this provider's credential state.
+--- Reduce the management API's record list to this channel's credential state.
 ---@param files table[] # the `files` array from /v0/management/auth-files
----@param provider string # cliproxy channel, e.g. "claude"
+---@param channel string # cliproxy channel, e.g. "claude"
 ---@return table # { state, message, account, failed, modtime }
-function M.classify_auth_files(files, provider)
-    local best = { state = "missing", message = "no credential for " .. tostring(provider) }
+function M.classify_auth_files(files, channel)
+    local best = { state = "missing", message = "no credential for " .. tostring(channel) }
     for _, f in ipairs(type(files) == "table" and files or {}) do
-        if (f.provider or f.type) == provider then
+        if (f.provider or f.type) == channel then
             local state
             if f.disabled then
                 state = "disabled"
@@ -362,113 +344,51 @@ function M.classify_auth_files(files, provider)
 end
 ```
 
-- [ ] **Step 4: Run tests** — `make test SPEC=tests/unit/cliproxy_auth_spec.lua`, expect PASS.
-- [ ] **Step 5: Commit** — `cliproxy: #197 M1: derive credential health from the management record`
+- [ ] **Step 4: Run tests. Step 5: Commit** — `cliproxy: #197 M1: derive credential health from the management record`
 
 ### Task 3: render the management key
 
-**Files:**
-- Modify: `lua/parley/cliproxy_config.lua:45-67` (`render`)
-- Modify: `tests/unit/cliproxy_config_spec.lua`
+**Files:** Modify `lua/parley/cliproxy_config.lua:45-67` (`render`), `tests/unit/cliproxy_config_spec.lua`
 
-- [ ] **Step 1: Write the failing tests**
-
-```lua
-it("renders the management secret-key when given", function()
-    local out = cc.render({ host = "127.0.0.1", port = 8317, management_key = "abc123" })
-    assert.equals("abc123", out["remote-management"]["secret-key"])
-end)
-
-it("preserves other remote-management keys the operator set", function()
-    local out = cc.render({ host = "127.0.0.1", port = 8317, management_key = "abc123",
-        config = { ["remote-management"] = { ["disable-control-panel"] = true } } })
-    assert.is_true(out["remote-management"]["disable-control-panel"])
-    assert.equals("abc123", out["remote-management"]["secret-key"])
-end)
-
-it("never enables allow-remote on its own", function()
-    local out = cc.render({ host = "127.0.0.1", port = 8317, management_key = "abc123" })
-    assert.is_nil(out["remote-management"]["allow-remote"])
-end)
-
-it("omits remote-management entirely without a key", function()
-    local out = cc.render({ host = "127.0.0.1", port = 8317 })
-    assert.is_nil(out["remote-management"])
-end)
-```
-
-- [ ] **Step 2: Run and watch it fail** — `make test SPEC=tests/unit/cliproxy_config_spec.lua`.
-
-- [ ] **Step 3: Implement** — in `render`, after the `api-keys` block:
+- [ ] **Step 1: Write the failing tests** — key present → `remote-management["secret-key"]`; parley defaults `disable-control-panel = true` (PQ-7); an operator-set `disable-control-panel = false` still wins; `allow-remote` never set; **no key → no `remote-management` block at all** (pins that operators who never enable this see a byte-identical config).
+- [ ] **Step 2: Run and watch it fail.**
+- [ ] **Step 3: Implement** — after the `api-keys` block:
 
 ```lua
     if opts.management_key ~= nil and opts.management_key ~= "" then
         -- Merge, never replace: the operator's raw `remote-management` block
-        -- (e.g. disable-control-panel) passes through untouched. `allow-remote`
-        -- is deliberately not set — the management surface stays loopback-only.
-        local rm = cfg["remote-management"]
-        if type(rm) ~= "table" then
-            rm = {}
-        end
+        -- passes through. `allow-remote` is deliberately never set (loopback
+        -- only), and the control panel is off unless the operator asked for it —
+        -- parley needs only the JSON route.
+        local rm = type(cfg["remote-management"]) == "table" and cfg["remote-management"] or {}
         rm["secret-key"] = opts.management_key
+        if rm["disable-control-panel"] == nil then
+            rm["disable-control-panel"] = true
+        end
         cfg["remote-management"] = rm
     end
 ```
 
-- [ ] **Step 4: Run tests** — expect PASS, including the existing render specs (the last test above pins that a key-less render is byte-identical to today, so no operator sees a config change until this feature turns on).
-- [ ] **Step 5: Commit** — `cliproxy: #197 M1: render a loopback-only management secret-key`
+- [ ] **Step 4: Run tests. Step 5: Commit** — `cliproxy: #197 M1: render a loopback-only management secret-key`
 
 ### Task 4: `management_key()` + `auth_files()` + argv generalization
 
-**Files:**
-- Modify: `lua/parley/cliproxy.lua` (`models_argv` → `api_argv`, `render_opts`, new `management_key`, `auth_files`)
-- Modify: `tests/integration/cliproxy_lifecycle_spec.lua`
-- Modify: `tests/fixtures/fake_cliproxy`
+**Files:** Modify `lua/parley/cliproxy.lua`, `tests/integration/cliproxy_lifecycle_spec.lua`, `tests/fixtures/fake_cliproxy`
 
-- [ ] **Step 1: Extend the fake first** (the test needs a server to talk to)
-
-Add to `fake_cliproxy`: a `--auth-store <dir>` argument pointing at a folder of credential JSON files plus an optional `state.json` overlay (`{"claude": {"status": "error", "status_message": "…", "unavailable": true}}`). Serve `GET /v0/management/auth-files` → `{"files": [...]}` built from that folder, honoring the overlay; require the `Authorization: Bearer <secret-key from -config>` header, 401 on mismatch, **404 when the config carries no `remote-management.secret-key`** — that 404 is a state parley must distinguish, so the fake has to model it. Keep the store on disk, not in memory, so tests can mutate credential state between calls and the fake stays a *stateful* double (ARCH-MOCK).
-
-- [ ] **Step 2: Write the failing integration tests**
+- [ ] **Step 1: Extend the fake** — management route + credential store + the 404-without-key behavior, per the integration-points table above. Store on disk so state mutates between calls.
+- [ ] **Step 2: Write the failing integration tests** — healthy store → `state == "healthy"`; store with `state.json` marking claude `unavailable` → `state == "unavailable"` with the message; fake started from a **key-less** config → `{state="unknown", reason="no_management_route"}`; wrong bearer → `reason` distinguishes 401 from 404; `management_key()` is stable across calls, 32 chars, file mode 0600.
+- [ ] **Step 3: Implement** — `api_argv(host, port, secret, route)` (parameterize `models_argv`'s trailing path, default `/v1/models`; update its three callers). `management_key()` reads-or-creates `<data_root>/management.key` from `vim.uv.random(16)`, 0600. `render_opts()` gains `management_key = M.management_key()`. Then:
 
 ```lua
-it("reads credential health from the management API", function()
-    local port = free_port()
-    -- store with one healthy claude credential
-    local dir = write_auth_store({ claude = { account = "me@example.com" } })
-    start_fake_with_store(port, dir, { secret_key = "mgmt" })
-    wait_listening(port)
-    local health = await(function(done) cliproxy.auth_files(done) end)
-    assert.equals("healthy", health.state)
-end)
-
-it("reports a distinguishable 404 when no management key is rendered", function()
-    -- fake started from a config WITHOUT remote-management.secret-key
-    local res = await(function(done) cliproxy.auth_files(done) end)
-    assert.equals("no_management_route", res.reason)
-end)
-
-it("generates the management key once and reuses it", function()
-    local a = cliproxy.management_key()
-    local b = cliproxy.management_key()
-    assert.equals(a, b)
-    assert.equals(32, #a)
-    assert.equals("600", vim.fn.printf("%o", require("bit").band(
-        (vim.uv or vim.loop).fs_stat(cliproxy._management_key_path()).mode, tonumber("777", 8))))
-end)
-```
-
-- [ ] **Step 3: Implement**
-
-`api_argv(host, port, secret, route)` — take `models_argv` verbatim and parameterize the trailing URL path, defaulting to `/v1/models`; update its three existing callers. `management_key()` — read `<data_root>/management.key` if present, else generate 32 hex chars from `vim.uv.random(16)`, write 0600, return it. `render_opts()` gains `management_key = M.management_key()`. `auth_files(cb)` — `api_argv(..., management_key(), "/v0/management/auth-files")`, then classify:
-
-```lua
---- Fetch credential health for `provider` (default: the channel this endpoint
---- serves). Distinguishes the repairable "route not registered" 404 from real
---- failures, because a 404 means the running proxy predates the management key
---- and should be restarted, not reported.
+--- Fetch credential health for `channel`. Distinguishes the repairable "route
+--- not registered" 404 from real failures: a 404 means the RUNNING proxy
+--- predates the management key and must be restarted into the freshly rendered
+--- config — the only reliable signal of that, since ensure_running rewrites the
+--- config file before it probes (so a file-vs-render drift check is always
+--- false there).
 ---@param cb fun(health: table)
-function M.auth_files(cb, provider)
+---@param channel string
+function M.auth_files(cb, channel)
     local opts = render_opts()
     vim.system(api_argv(opts.host, opts.port, M.management_key(), "/v0/management/auth-files"),
         { text = true }, function(obj)
@@ -477,69 +397,72 @@ function M.auth_files(cb, provider)
                 if obj.code ~= 0 then
                     return cb({ state = "unknown", reason = "unreachable", message = obj.stderr })
                 end
-                if tonumber(http) == 404 then
+                http = tonumber(http)
+                if http == 404 then
                     return cb({ state = "unknown", reason = "no_management_route" })
-                end
-                if tonumber(http) ~= 200 then
+                elseif http == 401 then
+                    return cb({ state = "unknown", reason = "management_key_mismatch" })
+                elseif http ~= 200 then
                     return cb({ state = "unknown", reason = "http_" .. tostring(http) })
                 end
                 local ok, decoded = pcall(vim.json.decode, body or "")
                 if not ok or type(decoded) ~= "table" then
                     return cb({ state = "unknown", reason = "undecodable" })
                 end
-                cb(ca.classify_auth_files(decoded.files, provider or "claude"))
+                cb(ca.classify_auth_files(decoded.files, channel))
             end)
         end)
 end
 ```
 
-- [ ] **Step 4: Run tests** — `make test SPEC=tests/integration/cliproxy_lifecycle_spec.lua`, expect PASS.
-- [ ] **Step 5: Commit** — `cliproxy: #197 M1: read credential health over the management API`
+- [ ] **Step 4: Run tests. Step 5: Commit** — `cliproxy: #197 M1: read credential health over the management API`
 
-### Task 5: restart a proxy whose rendered config drifted
+### Task 5: restart a proxy that predates the management key
 
-**Files:**
-- Modify: `lua/parley/cliproxy.lua:284-332` (`ensure_running`), `config_drift` (line 396)
-- Modify: `tests/integration/cliproxy_lifecycle_spec.lua`
+**Files:** Modify `lua/parley/cliproxy.lua` (`recover`'s entry path), `tests/integration/cliproxy_lifecycle_spec.lua`
 
-`config_drift()` exists but only `status()` reads it. An operator upgrading into this feature has a proxy running from a key-less config; without this the management route 404s forever.
+Replaces the config-drift idea the gate killed (PQ-1): `ensure_running` writes the rendered config *before* probing (`cliproxy.lua:295`), so a file-vs-render comparison there is always false and never reflects what the running proxy loaded. The `no_management_route` 404 is the honest signal — it comes from the running process.
 
-- [ ] **Step 1: Write the failing test** — start the fake from a rendered config, mutate the Lua config so a fresh render differs, call `ensure_running`, assert the old pid is gone and a new proxy answers. Also assert the *negative*: no drift ⇒ same pid (reuse-if-healthy must not regress into restart-every-query).
+- [ ] **Step 1: Write the failing test** — start the fake from a key-less config; call the health lookup; assert parley restarts the proxy (old pid gone, new one answering) and the second lookup succeeds. Assert the **negative** too: when the route already answers 200, no restart happens (reuse-if-healthy must not regress into restart-per-query).
 - [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement** — in `ensure_running`, when the probe says `healthy`/`needs_login` **and** `config_drift()` is true **and** the port holds a parley-spawned proxy, `stop()` then spawn; otherwise reuse as today. Log at INFO with the reason so the restart is never mysterious.
-- [ ] **Step 4: Run tests.**
-- [ ] **Step 5: Commit** — `cliproxy: #197 M1: restart a proxy running a drifted config`
+- [ ] **Step 3: Implement** — a `_management_restart_done` one-shot guard (module-local, with `_reset` for tests) so a proxy that 404s for any other reason cannot cause a restart loop: on the first `no_management_route`, `stop()` + `ensure_running` + re-query; on a second, report.
+- [ ] **Step 4: Run tests. Step 5: Commit** — `cliproxy: #197 M1: restart a proxy that predates the management route`
 
-### Task 6: rewire diagnosis onto the new vocabulary
+### Task 6: the single owning seam — `recover_query`, and delete `check_auth_failure`
 
-**Files:**
-- Modify: `lua/parley/cliproxy.lua:496-533` (`check_auth_failure`)
-- Modify: `lua/parley/cliproxy_config.lua` (delete `detect_auth_failure`)
-- Modify: `tests/unit/cliproxy_config_spec.lua:167-177`, `tests/integration/cliproxy_auth_login_spec.lua`
-- Modify: `lua/parley/dispatcher.lua:311-313` (pass the HTTP status through)
+**Files:** Modify `lua/parley/dispatcher.lua` (terminal closure `383-425`, `query()` signature area, `finish_stdout` `304-314`), `lua/parley/cliproxy.lua` (`recover`, delete `check_auth_failure`), `lua/parley/providers.lua`, `lua/parley/cliproxy_config.lua` (delete `detect_auth_failure`); tests: `tests/unit/dispatcher_query_spec.lua`, `tests/unit/cliproxy_config_spec.lua:167-177`, `tests/integration/cliproxy_auth_login_spec.lua`
 
-- [ ] **Step 1: Write the failing tests** — extend `cliproxy_auth_login_spec.lua` so the **exact 503 body from #197** reaches the prompt path, and assert the prompt text names the credential state, not just the model. Per lessons.md, assert the message contract explicitly. Delete the `detect_auth_failure` unit tests, re-expressing each case against `classify_response` (already done in Task 1) — do not leave both.
+This is the task that resolves PQ-2/PQ-3/PQ-4 together. **One seam**, in the terminal closure — the only scope with `http_status`, the body, and the model.
+
+- [ ] **Step 1: Write the failing tests**
+  - `finish_stdout` no longer classifies anything: a **successful** response whose text quotes `authentication_error` produces **no** prompt and no diagnosis (the regression the gate caught).
+  - The failure table carries `model` (from `payload.model`).
+  - An adapter with no `recover_query` behaves exactly as today — the existing failure specs must pass untouched.
+  - The #197 503 body reaches `recover` with `http_status = 503` and the model, and the resulting message names the credential state, not just the model. Assert message wording explicitly (lessons.md: error text is API).
 - [ ] **Step 2: Run and watch them fail.**
-- [ ] **Step 3: Implement** — `check_auth_failure(provider, raw_response, http_status)` calls `ca.classify_response`, then `auth_files` for health, then `ca.diagnosis(...)` for the sentence, keeping the existing `_login_prompt_active` guard and `resolve_login_provider` mapping. Write `diagnosis` in `cliproxy_auth.lua` with its own unit tests (pure). Delete `detect_auth_failure`. Grep for its name and for the string `unknown provider for model` across `lua/ tests/ atlas/` before declaring done — lessons.md's rule about grepping for the *behavior*, not just the symbol.
-- [ ] **Step 4: Run the full suite** — `make test`, expect 0 failures, luacheck clean.
-- [ ] **Step 5: Commit** — `cliproxy: #197 M1: diagnose auth failures from real credential state`
+- [ ] **Step 3: Implement**
+  - `dispatcher.lua`: add `model = payload.model` to the `failure` table (PQ-3). In the `failed` branch, before `on_error`, call `adapter.recover_query(failure, retry)` when present — where `retry` is a `tasker.once`-wrapped closure that re-runs `start_query()`. Document it beside `pre_query`'s doc block (`dispatcher.lua:437-443`), including the **retry precondition**: a retry is only offered when nothing was streamed (`qt.response == ""`), because `handler` has already written any streamed content into the buffer and a re-run would duplicate it. Each `query()` mints a fresh `qid` with clean `raw_response`/`response`, so retried state is otherwise clean.
+  - Delete the `check_auth_failure` call at `dispatcher.lua:311-313` and the function itself. Delete `detect_auth_failure`.
+  - `providers.lua`: register `cliproxyapi.recover_query = function(failure, retry) require("parley.cliproxy").recover(failure, retry) end`.
+  - `cliproxy.recover(failure, retry)` for M1: classify → resolve channel via `resolve_login_provider(verdict.model, oauth-model-alias)` → `auth_files(_, channel)` → `diagnosis` → notify / prompt, keeping the `_login_prompt_active` guard. **No** `retry` call yet; M2 adds the actions.
+- [ ] **Step 4: Run the full suite** — `make test`, 0 failures, luacheck clean.
+- [ ] **Step 5: Grep for leftovers** — `detect_auth_failure`, `check_auth_failure`, and the literal `unknown provider for model` across `lua/ tests/ atlas/` (lessons.md: grep for the behavior, not just the symbol).
+- [ ] **Step 6: Commit** — `cliproxy: #197 M1: own auth-failure reaction in one status-aware seam`
 
 ### Task 7: live conformance check
 
-**Files:**
-- Create: `tests/integration/cliproxy_conformance_spec.lua`
+**Files:** Create `tests/integration/cliproxy_conformance_spec.lua`
 
-- [ ] **Step 1: Write the test** — skip unless a real binary is discoverable (`cliproxy.discover_binary()`) so CI without one stays green, and log the skip loudly rather than silently passing. Boot the real binary on a free port with a temp auth-dir holding a **fabricated** credential (`sk-ant-oat01-` + filler, `expired` in the past) and a rendered management key; GET `/v0/management/auth-files`; assert every field `classify_auth_files` reads still exists (`provider`/`type`, `status`, `status_message`, `unavailable`, `disabled`, `failed`, `modtime`). Tear the proxy down in `after_each`.
+- [ ] **Step 1: Write the test** — skip (loudly) unless `cliproxy.discover_binary()` finds a real binary, so CI without one stays green rather than silently passing. Boot the real binary on a free port with a temp auth-dir holding a **fabricated** credential (`sk-ant-oat01-` + filler, `expired` in the past) and a rendered management key; GET `/v0/management/auth-files`; assert every field `classify_auth_files` reads still exists (`provider`/`type`, `status`, `status_message`, `unavailable`, `disabled`, `failed`, `modtime`). Tear down in `after_each`.
 
-  **Never point this at the operator's real auth-dir.** The binary attempts a token refresh at startup and every 15m; a fabricated credential makes that attempt harmless, a real one would rotate the operator's live refresh token. `_set_data_dir` is already the established guard for the same class of mistake.
+  **Never point this at the operator's real auth-dir.** The binary attempts a token refresh at startup and every 15m; a fabricated credential makes that harmless, a real one would rotate the operator's live refresh token. `_set_data_dir` is the established guard for the same class of mistake.
 
-- [ ] **Step 2: Run it** — `make test SPEC=tests/integration/cliproxy_conformance_spec.lua`, expect PASS against 7.1.71.
-- [ ] **Step 3: Commit** — `cliproxy: #197 M1: pin the management-API contract against the real binary`
+- [ ] **Step 2: Run it. Step 3: Commit** — `cliproxy: #197 M1: pin the management-API contract against the real binary`
 
 ### Task 8: close M1
 
-- [ ] Update `atlas/` for the new auth-diagnosis surface and link it from `atlas/index.md`.
-- [ ] `sdlc milestone-close --issue 197 --milestone M1` — fix Critical/Important findings before crossing, log the verdict in `## Log`.
+- [ ] Update `atlas/` for the auth-diagnosis surface; link from `atlas/index.md`; confirm every new file is in `atlas/traceability.yaml`.
+- [ ] `sdlc milestone-close --issue 197 --milestone M1`; fix Critical/Important before crossing; log the verdict in `## Log`.
 
 ---
 
@@ -549,11 +472,7 @@ Outcome: recoverable failures repair themselves and the query retries; only a de
 
 ### Task 9: `decide` — the recovery policy, pure
 
-**Files:**
-- Modify: `lua/parley/cliproxy_auth.lua`
-- Modify: `tests/unit/cliproxy_auth_spec.lua`
-
-The policy as a table (each row is a test):
+**Files:** Modify `lua/parley/cliproxy_auth.lua`, `tests/unit/cliproxy_auth_spec.lua`
 
 | verdict.kind | proxy running | health.state | attempt | action |
 |---|---|---|---|---|
@@ -566,49 +485,39 @@ The policy as a table (each row is a test):
 | `no_auth` | true | `healthy` | 0 | `retry` |
 | `expired` | true | any | any | `prompt_login` |
 | `quota` / `model_unavailable` | – | – | – | `report` |
-| any | – | – | ≥1 | never `retry`/`restart`/`start` — escalate to `prompt_login` or `report` |
+| any | – | – | ≥1 | never `retry`/`restart`/`start` |
 
-- [ ] **Step 1: Write one test per row**, plus: `attempt >= 1` must never return a repair action (the anti-loop invariant — assert it by looping every verdict kind × health state at `attempt = 1` and asserting the action is in `{prompt_login, report}`).
+- [ ] **Step 1: One test per row**, plus the anti-loop property: loop every `kind` × every `health.state` at `attempt = 1` and assert the action is always in `{prompt_login, report}`.
 - [ ] **Step 2: Run and watch them fail.**
-- [ ] **Step 3: Implement** `decide(verdict, health, proxy_state, attempt)`. `proxy_state` is `{running, auth_file_modtime, record_modtime}`; the staleness comparison is string-compare on RFC3339 timestamps only if both are present, else treat as not-stale (never guess).
-- [ ] **Step 4: Run tests.**
-- [ ] **Step 5: Commit** — `cliproxy: #197 M2: decide recovery as a pure policy`
+- [ ] **Step 3: Implement** — `proxy_state` is `{running, auth_file_modtime, record_modtime}`; the staleness comparison is a string compare on RFC3339 timestamps only when both are present, else treat as not-stale (never guess).
+- [ ] **Step 4: Run tests. Step 5: Commit** — `cliproxy: #197 M2: decide recovery as a pure policy`
 
-### Task 10: `recover_query` seam in the dispatcher
+### Task 10: execute the ladder
 
-**Files:**
-- Modify: `lua/parley/dispatcher.lua:383-427`
-- Modify: `tests/unit/dispatcher_query_spec.lua`
+**Files:** Modify `lua/parley/cliproxy.lua` (`recover` gains the action switch), `tests/integration/cliproxy_lifecycle_spec.lua`
 
-- [ ] **Step 1: Write the failing tests** — (a) an adapter with no `recover_query` behaves exactly as today (the existing failure specs must pass untouched); (b) an adapter whose `recover_query` calls `retry()` re-issues the query once with the identical payload; (c) an adapter that calls `retry()` twice only re-issues once (`tasker.once`-style guard); (d) the retried query's failure does **not** re-enter recovery.
+- [ ] **Step 1: Write the failing integration tests**, one per executable action against the fake: proxy down → started and retried; healthy credential + transient failure → retried, **no prompt**; `unavailable` → prompt, no retry; `quota` → neither. The "no prompt appears" assertions are the operator-visible promise of this issue — assert them explicitly, not by omission.
 - [ ] **Step 2: Run and watch them fail.**
-- [ ] **Step 3: Implement** — in the `failed` branch, before `on_error`, if `adapter.recover_query` exists and this is attempt 0, call it with `(failure, retry)` where `retry` re-invokes the query path with `attempt = 1`. If it declines (returns falsy / never calls retry), fall through to the existing `on_error` path unchanged. Document the hook next to `pre_query`'s doc block, matching its backward-compatibility note.
-- [ ] **Step 4: Run tests** — `make test SPEC=tests/unit/dispatcher_query_spec.lua`.
-- [ ] **Step 5: Commit** — `cliproxy: #197 M2: add a provider-agnostic recover_query seam`
+- [ ] **Step 3: Implement** the switch over `decide`'s action, passing `attempt` through from the seam.
+- [ ] **Step 4: Run tests. Step 5: Commit** — `cliproxy: #197 M2: execute the recovery ladder on query failure`
 
-### Task 11: wire cliproxy's recovery ladder
+### Task 11: end-to-end through a real chat
 
-**Files:**
-- Modify: `lua/parley/cliproxy.lua` (new `recover`), `lua/parley/providers.lua` (register `cliproxyapi.recover_query`)
-- Modify: `tests/integration/cliproxy_lifecycle_spec.lua`
+**Files:** Create `tests/integration/cliproxy_recovery_e2e_spec.lua`
 
-- [ ] **Step 1: Write the failing integration tests** against the fake, one per executable action: proxy down → started and retried; healthy credential + transient failure → retried without a prompt; `unavailable` credential → prompt, no retry; `quota` → neither, just a report. Assert *no prompt appears* in the self-repair cases — that is the operator-visible promise of this issue.
-- [ ] **Step 2: Run and watch them fail.**
-- [ ] **Step 3: Implement** `recover(failure, provider, retry, attempt)`: classify → gather `proxy_state` + `auth_files` health → `decide` → execute. `no_management_route` health short-circuits to a re-render + restart (Task 5's drift path), then retry.
-- [ ] **Step 4: Run tests.**
-- [ ] **Step 5: Commit** — `cliproxy: #197 M2: execute the recovery ladder on query failure`
+- [ ] Drive `chat_respond` against the fake serving the #197 503: assert the buffer shows the diagnosis and the spinner/lease tears down cleanly (`chat_respond.lua:2046-2065`). Then a self-repair case: assert the answer completes with no operator interaction. Register the spec in `atlas/traceability.yaml`. Commit.
 
-### Task 12: end-to-end through a real chat
+### Task 12: collapse the second login prompt (PQ-5)
 
-**Files:**
-- Modify: `tests/integration/chat_respond_spec.lua` (or a new `cliproxy_recovery_e2e_spec.lua`)
+**Files:** Modify `lua/parley/init.lua:403-422`, `tests/integration/cliproxy_command_spec.lua`
 
-- [ ] **Step 1** — drive `chat_respond` against the fake serving the #197 503, assert the buffer shows the diagnosis and the spinner/lease tears down cleanly (the failure path at `chat_respond.lua:2046-2065`); then assert a self-repair case completes the answer with no operator interaction.
-- [ ] **Step 2** — run, commit.
+`:ParleyProxy models <provider>` hand-rolls its own "not authenticated → log in?" prompt from an empty model list. That is a second, weaker copy of this issue's policy — and empty-list is exactly the inference this issue proved unreliable.
+
+- [ ] Route it through `auth_files` + `decide` so both paths give the same diagnosis and the same prompt. Test that an empty list with a *healthy* credential no longer claims "not authenticated". Commit.
 
 ### Task 13: close M2
 
-- [ ] Update `atlas/`, then `sdlc milestone-close --issue 197 --milestone M2`.
+- [ ] Update `atlas/`; `sdlc milestone-close --issue 197 --milestone M2`.
 
 ---
 
@@ -618,39 +527,36 @@ Outcome: the conditions that created this failure stop recurring.
 
 ### Task 14: peer-proxy detection and reaping
 
-**Files:**
-- Modify: `lua/parley/cliproxy.lua` (new `peers`, `reap`; fix `stop`), `lua/parley/init.lua` (`:ParleyProxy reap` + completer)
-- Modify: `tests/integration/cliproxy_lifecycle_spec.lua`, `tests/unit/` for the pure parsing
+**Files:** Modify `lua/parley/cliproxy.lua` (`peers`, `reap`, `stop`), `lua/parley/cliproxy_auth.lua` (`parse_peers`), `lua/parley/init.lua` (`:ParleyProxy reap` + completer); tests in `tests/unit/cliproxy_auth_spec.lua` + `tests/integration/cliproxy_lifecycle_spec.lua`
 
-- [ ] **Step 1** — split the pure part out first: `cliproxy_auth.parse_peers(ps_output, managed_pid, managed_port_pids)` → the list of foreign proxies, unit-tested against a captured `ps` fixture (including the real one from this issue: four June daemons with deleted configs). Then the IO wrapper runs `ps`.
-- [ ] **Step 2** — `ensure_running` warns **once per session** when peers exist, naming the reason: each proxy runs a 15-minute auth auto-refresh over the shared auth-dir, and Claude's refresh tokens rotate, so peers can invalidate each other's credential. Message must name `:ParleyProxy reap`.
-- [ ] **Step 3** — `:ParleyProxy reap` SIGTERMs peers after an identity probe (reuse `port_holds_cliproxy`'s discipline — never kill a process merely because it matches a name).
-- [ ] **Step 4** — fix `stop()` to reap parley-spawned proxies on non-managed ports too; add the regression test.
+- [ ] **Step 1** — pure first: `parse_peers(ps_output, own_pids, managed_port_pids)` unit-tested against a captured `ps` fixture, including the real one from this issue (four June daemons, configs deleted, ports 8327/8331/8333/8335).
+- [ ] **Step 2** — `ensure_running` warns **once per session** when peers exist, naming the mechanism: each proxy runs a 15-minute auth auto-refresh over the shared auth-dir and Claude's refresh tokens rotate, so peers invalidate each other's credential. The message must name `:ParleyProxy reap`.
+- [ ] **Step 3** — `:ParleyProxy reap` SIGTERMs peers **after an identity probe** (reuse `port_holds_cliproxy`'s discipline — never kill a process merely because its name matches).
+- [ ] **Step 4** — fix `stop()` to also reap parley-spawned proxies on non-managed ports; add the regression test.
 - [ ] **Step 5** — tests, commit: `cliproxy: #197 M3: detect and reap peer proxies racing the auth-dir`
 
 ### Task 15: login-flow robustness
 
-**Files:**
-- Modify: `lua/parley/cliproxy.lua` (`login_argv` → a `login()` that owns the flow), `lua/parley/init.lua:423-432`
-- Modify: `tests/integration/cliproxy_auth_login_spec.lua`
+**Files:** Modify `lua/parley/cliproxy.lua` (`login_argv` → a `login()` owning the flow), `lua/parley/init.lua:423-432`, `tests/integration/cliproxy_auth_login_spec.lua`, `tests/fixtures/fake_cliproxy` (login modes)
 
-- [ ] **Step 1: Preflight the callback port** — claude's redirect is `http://localhost:54545/callback` (confirmed from the binary and from an isolated run). If the port is held, refuse with the exact remedy, including `-oauth-callback-port` as the escape hatch. Test with a socket the spec binds itself.
-- [ ] **Step 2: Own the URL** — run the login with `-no-browser`, capture stdout, extract the `https://claude.ai/oauth/authorize?…` line, `vim.ui.open()` it, and show it in a copyable notification so a failed auto-open is still recoverable. The job is no longer tied to a closable terminal buffer — the failure mode from this issue.
-- [ ] **Step 3: Detect the outcome** — watch the auth-dir for the written credential (and/or poll `auth_files` until `healthy`), with a bounded timeout. On success: notify with the account, then retry the pending query. On process exit without a credential: report the exit code and stderr instead of dying silently.
-- [ ] **Step 4** — tests against the fake (success, callback-port-taken, process-dies-early, timeout), commit: `cliproxy: #197 M3: make the OAuth login observable and resumable`
+- [ ] **Step 1: Preflight the callback port** — claude's redirect is `http://localhost:54545/callback` (confirmed from the binary and an isolated run). If held, refuse with the exact remedy including `-oauth-callback-port`. Test against the fake's `port_taken` mode.
+- [ ] **Step 2: Own the URL** — run with `-no-browser`, capture stdout, extract the `https://claude.ai/oauth/authorize?…` line, `vim.ui.open()` it, and surface it copyably so a failed auto-open is still recoverable. The job no longer depends on a closable terminal buffer — the exact failure from this issue.
+- [ ] **Step 3: Detect the outcome** — watch the auth-dir for the credential (and/or poll `auth_files` until `healthy`) with a bounded timeout. Success → notify with the account, then retry the pending query. Process exits without a credential → report exit code and stderr instead of dying silently. Test against `success`, `dies_early`, and `hangs`.
+- [ ] **Step 4** — tests, commit: `cliproxy: #197 M3: make the OAuth login observable and resumable`
 
 ### Task 16: close the issue
 
-- [ ] Update `atlas/` for the lifecycle/prevention surface; verify `atlas/index.md` links it.
-- [ ] Full `make test` + luacheck, both clean.
-- [ ] Re-verify the original failure end-to-end: with a deliberately broken credential, confirm the diagnosis names the real cause; with a healthy one, confirm no regression in normal dispatch.
+- [ ] Update `atlas/`; verify `atlas/index.md` and `atlas/traceability.yaml` cover every new file.
+- [ ] Full `make test` + `make lint`, both clean.
+- [ ] Re-verify the original failure end to end: with a deliberately broken credential the diagnosis names the real cause; with a healthy one, normal dispatch is unchanged.
 - [ ] `sdlc close --issue 197 --verified '<evidence>'` (let it measure `--actual`).
 
 ---
 
 ## Notes for the implementer
 
-- **Don't reintroduce guessing.** `classify` (`cliproxy.lua:91`) stays as the *liveness* probe. It must not grow auth opinions — that is `auth_files`' job now. If you find yourself adding an auth case to `classify`, the design has drifted.
+- **Don't reintroduce guessing.** `classify` (`cliproxy.lua:91`) stays the *liveness* probe and must not grow auth opinions — that is `auth_files`' job. If you find yourself adding an auth case to `classify`, or inferring auth from an empty model list, the design has drifted. Both inferences are what failed on 2026-08-01.
+- **The status gate is not optional.** `classify_response` is called on responses parley has already decided are failures, but the patterns are broad and the cost of a false positive is an unprompted login dialog mid-conversation. Keep the 2xx property test green.
 - **One retry, ever.** The `attempt` parameter is the whole anti-loop mechanism. Never track retries in module-local state — lessons.md documents module-local one-shot flags leaking across `it` blocks, and this one would leak across *queries*.
-- **Error text is API here.** Specs assert on message wording; when you change a message, change its spec deliberately rather than loosening the assertion.
-- **The fake is the deliverable, not scaffolding.** If you find yourself reaching for a function-call mock of `vim.system` to test recovery, stop: the seam already exists and the fake already speaks HTTP.
+- **Error text is API here.** Specs assert on wording; change a message deliberately, with its spec — don't loosen the assertion.
+- **The fake is the deliverable, not scaffolding.** If you reach for a function-call mock of `vim.system` to test recovery, stop: the seam exists and the fake speaks HTTP.
