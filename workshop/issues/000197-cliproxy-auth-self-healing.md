@@ -221,6 +221,32 @@ Durable plan: `workshop/plans/000197-cliproxy-auth-self-healing-plan.md`
 - [x] M2 — Recover: pure recovery policy + retry seam in the dispatcher
 - [x] M3 — Prevent: stale-proxy reaping + login-flow robustness
 
+## Outcome
+
+The 2026-08-01 failure, re-verified end to end through
+`cliproxy_recovery_e2e_spec` (a real HTTP 503 from the fake, driven through
+`dispatcher.query` → `recover_query` → the operator-facing notice):
+
+**Before** — two messages, neither actionable:
+```
+Parley.nvim: cliproxyapi response is empty: body_bytes=215
+parley: provider request failed (HTTP 503): {"type":"error", … "auth_unavailable: …"}
+```
+
+**After** — the credential, its real state, and the next action:
+```
+parley: provider request failed (HTTP 503): cliproxy for "claude-opus-4-8":
+the credential (lovchatvol@gmail.com) is unavailable: OAuth access token has
+expired. Re-authenticate to continue. — log in again to replace it
+```
+plus a login prompt naming the resolved channel. `response is empty` is no
+longer emitted on a failed request at all (it now fires only for a *successful*
+empty body, where it means something).
+
+And the failure would not have happened: the five leaked proxies that rotated
+the credential out from under each other are now detected on the first dispatch,
+with a warning naming the mechanism and `:ParleyProxy reap` to clear them.
+
 ## Revisions
 
 ### 2026-08-01 — plan-quality round 1 (PQ-1…PQ-7)
