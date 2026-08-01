@@ -31,12 +31,21 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 def parse_args(argv):
     port = None
     mode = os.environ.get("PARLEY_FAKE_MODE", "healthy")
+    # Management key comes from the rendered config, exactly as the real binary
+    # takes it. When it is absent the management routes are NOT registered —
+    # cliproxy 7.1.71 answers 404, and parley keys its "this proxy predates the
+    # key, restart it" repair off precisely that (issue #197).
+    mgmt_key = None
+    auth_store = os.environ.get("PARLEY_FAKE_AUTH_STORE")
     i = 0
     while i < len(argv):
         a = argv[i]
         if a in ("-config", "--config"):
             with open(argv[i + 1]) as f:
-                port = int(json.load(f).get("port"))
+                cfg = json.load(f)
+            port = int(cfg.get("port"))
+            mgmt_key = (cfg.get("remote-management") or {}).get("secret-key")
+            auth_store = cfg.get("auth-dir") or auth_store
             i += 2
         elif a == "--port":
             port = int(argv[i + 1])
@@ -44,13 +53,71 @@ def parse_args(argv):
         elif a == "--mode":
             mode = argv[i + 1]
             i += 2
+        elif a == "--management-key":
+            mgmt_key = argv[i + 1]
+            i += 2
+        elif a == "--auth-store":
+            auth_store = argv[i + 1]
+            i += 2
         else:
             i += 1
-    return port, mode
+    return port, mode, mgmt_key, auth_store
+
+
+def read_auth_store(auth_store):
+    """Build management records from a portable folder of credential files.
+
+    The store IS the state: a folder of `<channel>-<account>.json` credential
+    files plus an optional `state.json` overlay keyed by channel, e.g.
+    {"claude": {"status": "error", "status_message": "...", "unavailable": true}}.
+    Tests mutate those files between calls, so the double is stateful across
+    requests rather than a fixed canned reply (AGENTS.md external-service rule).
+    """
+    if not auth_store or not os.path.isdir(auth_store):
+        return []
+    overlay = {}
+    overlay_path = os.path.join(auth_store, "state.json")
+    if os.path.exists(overlay_path):
+        with open(overlay_path) as f:
+            overlay = json.load(f)
+    files = []
+    for name in sorted(os.listdir(auth_store)):
+        if not name.endswith(".json") or name == "state.json":
+            continue
+        path = os.path.join(auth_store, name)
+        with open(path) as f:
+            cred = json.load(f)
+        channel = cred.get("type") or name.split("-", 1)[0]
+        account = cred.get("email") or name
+        record = {
+            "account": account,
+            "account_type": "oauth",
+            "auth_index": name,
+            "disabled": False,
+            "email": account,
+            "failed": 0,
+            "id": name,
+            "label": account,
+            "modtime": time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(os.path.getmtime(path))),
+            "name": name,
+            "path": path,
+            "provider": channel,
+            "runtime_only": False,
+            "size": os.path.getsize(path),
+            "source": "file",
+            "status": "active",
+            "status_message": "",
+            "success": 0,
+            "type": channel,
+            "unavailable": False,
+        }
+        record.update(overlay.get(channel, {}))
+        files.append(record)
+    return files
 
 
 def main():
-    port, mode = parse_args(sys.argv[1:])
+    port, mode, mgmt_key, auth_store = parse_args(sys.argv[1:])
     if mode == "crash":
         sys.stderr.write("fake_cliproxy: crash mode — exiting\n")
         sys.exit(1)
@@ -70,9 +137,24 @@ def main():
             self.end_headers()
             self.wfile.write(body)
 
+        def _bearer(self):
+            return (self.headers.get("Authorization") or "").replace("Bearer ", "", 1)
+
         def do_GET(self):
             if mode == "slow":
                 time.sleep(30)
+                return
+            if self.path.startswith("/v0/management/auth-files"):
+                # No key rendered ⇒ the route was never registered. The real
+                # binary 404s here, and parley treats that as repairable.
+                if not mgmt_key:
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+                if self._bearer() != mgmt_key:
+                    self._json(401, {"error": "unauthorized"})
+                    return
+                self._json(200, {"files": read_auth_store(auth_store)})
                 return
             if self.path.startswith("/v1/models"):
                 if mode == "client_key_mismatch":

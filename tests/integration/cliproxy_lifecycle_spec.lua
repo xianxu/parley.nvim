@@ -8,7 +8,8 @@ local FAKE = vim.fn.getcwd() .. "/tests/fixtures/fake_cliproxy"
 
 -- Redirect cliproxy's derived-artifact dir to a temp dir so this spec NEVER
 -- touches the real ~/.local/share/nvim, even run bare (no XDG redirect).
-require("parley.cliproxy")._set_data_dir(vim.fn.tempname())
+local SPEC_DATA_DIR = vim.fn.tempname()
+require("parley.cliproxy")._set_data_dir(SPEC_DATA_DIR)
 
 -- Track fake processes started by a test so after_each can reap them.
 local started = {}
@@ -578,6 +579,150 @@ describe("cliproxy IO lifecycle", function()
             end)
             assert.is_nil(r.err)
             assert.same({}, r.ids) -- command layer turns this into a login prompt
+        end)
+    end)
+
+    --------------------------------------------------------------------------
+    -- management API: credential health (#197)
+    --------------------------------------------------------------------------
+    describe("auth_files", function()
+        local function set_endpoint(port)
+            parley.dispatcher = parley.dispatcher or {}
+            parley.dispatcher.providers = parley.dispatcher.providers or {}
+            parley.dispatcher.providers.cliproxyapi = {
+                endpoint = ("http://127.0.0.1:%d/v1/chat/completions"):format(port),
+            }
+            require("parley.vault").add_secret("cliproxyapi", "testkey")
+        end
+
+        -- A portable credential store: a folder of auth JSONs plus an optional
+        -- state.json overlay. Mutating those files between calls is what makes
+        -- the fake stateful rather than canned.
+        local function write_store(overlay)
+            local dir = vim.fn.tempname()
+            vim.fn.mkdir(dir, "p")
+            vim.fn.writefile({ vim.json.encode({ type = "claude", email = "me@example.com" }) },
+                dir .. "/claude-me@example.com.json")
+            if overlay then
+                vim.fn.writefile({ vim.json.encode(overlay) }, dir .. "/state.json")
+            end
+            return dir
+        end
+
+        -- Start the fake the way the real binary is started: from a rendered
+        -- config, so the management key travels the same path in test as in
+        -- production.
+        local function start_with_config(port, store, mgmt_key)
+            local cfg_file = vim.fn.tempname() .. ".json"
+            local conf = { port = port, ["auth-dir"] = store, ["api-keys"] = { "testkey" } }
+            if mgmt_key then
+                conf["remote-management"] = { ["secret-key"] = mgmt_key }
+            end
+            vim.fn.writefile({ vim.json.encode(conf) }, cfg_file)
+            local handle, pid = uv.spawn(FAKE, { args = { "-config", cfg_file } }, function() end)
+            assert(handle, "failed to spawn fake_cliproxy")
+            table.insert(started, { handle = handle, pid = pid })
+            wait_listening(port)
+        end
+
+        local function health(channel)
+            return await(function(done)
+                cliproxy.auth_files(done, channel or "claude")
+            end)
+        end
+
+        it("reports healthy for an active credential", function()
+            local port = free_port()
+            set_endpoint(port)
+            start_with_config(port, write_store(), cliproxy.management_key())
+            local h = health()
+            assert.equals("healthy", h.state)
+            assert.equals("me@example.com", h.account)
+        end)
+
+        it("reports the proxy's own reason for an unavailable credential", function()
+            local port = free_port()
+            set_endpoint(port)
+            start_with_config(port, write_store({
+                claude = { unavailable = true, status = "error",
+                    status_message = "OAuth access token has expired." },
+            }), cliproxy.management_key())
+            local h = health()
+            assert.equals("unavailable", h.state)
+            assert.matches("expired", h.message)
+        end)
+
+        it("distinguishes a proxy that predates the management key (404)", function()
+            -- The repairable case: cliproxy only registers the management routes
+            -- when it BOOTED with a secret-key, so this 404 means "restart me",
+            -- not "error".
+            local port = free_port()
+            set_endpoint(port)
+            start_with_config(port, write_store(), nil) -- no key in the config
+            local h = health()
+            assert.equals("unknown", h.state)
+            assert.equals("no_management_route", h.reason)
+        end)
+
+        it("distinguishes a rejected management key (401) from a missing route", function()
+            local port = free_port()
+            set_endpoint(port)
+            start_with_config(port, write_store(), "some-other-key")
+            local h = health()
+            assert.equals("unknown", h.state)
+            assert.equals("management_key_mismatch", h.reason)
+        end)
+
+        it("distinguishes an unreachable proxy", function()
+            set_endpoint(free_port()) -- nothing listening
+            local h = health()
+            assert.equals("unknown", h.state)
+            assert.equals("unreachable", h.reason)
+        end)
+
+        it("reports missing when the channel has no credential", function()
+            local port = free_port()
+            set_endpoint(port)
+            start_with_config(port, write_store(), cliproxy.management_key())
+            assert.equals("missing", health("codex").state)
+        end)
+    end)
+
+    --------------------------------------------------------------------------
+    -- management key (#197)
+    --------------------------------------------------------------------------
+    describe("management_key", function()
+        -- These tests repoint the derived-artifact root and (in the reload case)
+        -- swap package.loaded. Both are restored: a module-identity swap left
+        -- behind is the kind of cross-test leak workshop/lessons.md documents.
+        local spec_data_dir
+
+        before_each(function()
+            spec_data_dir = vim.fn.tempname()
+            cliproxy._set_data_dir(spec_data_dir)
+        end)
+
+        after_each(function()
+            package.loaded["parley.cliproxy"] = cliproxy
+            cliproxy._set_data_dir(SPEC_DATA_DIR)
+        end)
+
+        it("generates once, reuses thereafter, and persists 0600", function()
+            local a = cliproxy.management_key()
+            local b = cliproxy.management_key()
+            assert.equals(a, b)
+            assert.equals(32, #a)
+            assert.matches("^%x+$", a)
+            local mode = (uv.fs_stat(cliproxy._management_key_path()) or {}).mode
+            assert.equals(tonumber("600", 8), bit.band(mode, tonumber("777", 8)))
+        end)
+
+        it("survives a restart — a regenerated key would 401 against the running proxy", function()
+            local first = cliproxy.management_key()
+            package.loaded["parley.cliproxy"] = nil
+            local reloaded = require("parley.cliproxy")
+            reloaded._set_data_dir(spec_data_dir)
+            assert.equals(first, reloaded.management_key())
         end)
     end)
 end)

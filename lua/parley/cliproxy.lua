@@ -11,6 +11,7 @@
 
 local uv = vim.uv or vim.loop
 local cc = require("parley.cliproxy_config")
+local ca = require("parley.cliproxy_auth")
 local logger = require("parley.logger")
 
 local M = {}
@@ -113,19 +114,26 @@ end
 
 M._classify = classify -- exposed for unit testing
 
--- Build the curl argv for GET /v1/models on host:port with an optional client
--- bearer. Single source of truth for the request shape (ARCH-DRY): the health
--- probe, the stop-time identity check, and list_models all go through here.
--- `-w "\n%{http_code}"` appends the status code on its own line so classify()
--- can split body from code.
-local function models_argv(host, port, secret)
+-- Build the curl argv for a GET against host:port with an optional bearer.
+-- Single source of truth for the request shape (ARCH-DRY): the health probe,
+-- the stop-time identity check, list_models, and the management-API reader all
+-- go through here. `-w "\n%{http_code}"` appends the status code on its own
+-- line so callers can split body from code.
+---@param route string|nil # defaults to /v1/models
+local function api_argv(host, port, secret, route)
     local args = { "curl", "-s", "-w", "\n%{http_code}", "--max-time", "2" }
     if type(secret) == "string" and secret ~= "" then
         table.insert(args, "-H")
         table.insert(args, "Authorization: Bearer " .. secret)
     end
-    table.insert(args, ("http://%s:%s/v1/models"):format(host, port))
+    table.insert(args, ("http://%s:%s%s"):format(host, port, route or "/v1/models"))
     return args
+end
+
+-- Split a curl `-w "\n%{http_code}"` result into body + numeric status.
+local function split_status(stdout)
+    local body, http = (stdout or ""):match("^(.*)\n(%d+)%s*$")
+    return body, tonumber(http)
 end
 
 --- Probe http://host:port/v1/models with the client bearer and classify.
@@ -135,7 +143,7 @@ end
 ---@param secret string|nil
 ---@param cb fun(state: string)
 function M.health_probe(host, port, secret, cb)
-    vim.system(models_argv(host, port, secret), { text = true }, function(obj)
+    vim.system(api_argv(host, port, secret), { text = true }, function(obj)
         local state = classify(obj.code, obj.stdout)
         vim.schedule(function()
             cb(state)
@@ -172,6 +180,50 @@ end
 
 M._config_path = config_path -- exposed for tests
 
+local function management_key_path()
+    local dir = data_root()
+    vim.fn.mkdir(dir, "p")
+    return dir .. "/management.key"
+end
+
+M._management_key_path = management_key_path -- exposed for tests
+
+--- The bearer for cliproxy's management API (#197), read-or-created beside the
+--- rendered config at 0600.
+---
+--- Deliberately NOT in the vault: the vault is in-memory and populated from
+--- setup{}, and this key must survive restarts without the operator having to
+--- carry a generated secret in their dotfiles. It is a local-loopback
+--- credential for a process parley itself launched.
+---@return string
+function M.management_key()
+    local path = management_key_path()
+    local f = io.open(path, "r")
+    if f then
+        local existing = (f:read("*a") or ""):gsub("%s+$", "")
+        f:close()
+        if existing ~= "" then
+            return existing
+        end
+    end
+    local bytes = { string.byte(uv.random(16), 1, 16) }
+    local key = table.concat(vim.tbl_map(function(b)
+        return ("%02x"):format(b)
+    end, bytes))
+    local out, oerr = io.open(path, "w")
+    if not out then
+        -- Non-fatal: a key we cannot persist still works for this session, it
+        -- just forces a proxy restart next time. Better than failing dispatch.
+        logger.warning("cliproxy: cannot persist management key: " .. tostring(oerr))
+        return key
+    end
+    out:write(key)
+    out:close()
+    local fs_chmod = uv.fs_chmod or vim.loop.fs_chmod
+    fs_chmod(path, tonumber("600", 8))
+    return key
+end
+
 -- Single place that gathers the render inputs (host:port from the provider
 -- endpoint, auth_dir, vault-resolved client secret, raw config passthrough).
 -- Consumed by write_rendered_config, config_drift, and status (ARCH-DRY) — add
@@ -181,7 +233,14 @@ local function render_opts()
     local c = cfg() or {}
     local secret = require("parley.vault").get_secret(
         require("parley.providers").get_secret_name("cliproxyapi"))
-    return { host = host, port = port, auth_dir = c.auth_dir, secret = secret, config = c.config }
+    return {
+        host = host,
+        port = port,
+        auth_dir = c.auth_dir,
+        secret = secret,
+        config = c.config,
+        management_key = M.management_key(),
+    }
 end
 
 -- Render the merged config from Lua + the resolved secret, write it 0600.
@@ -207,6 +266,61 @@ local function write_rendered_config()
     fs_chmod(path, tonumber("600", 8))
     return path, opts.host, opts.port, opts.secret
 end
+
+--------------------------------------------------------------------------------
+-- Credential health (management API) — issue #197
+--------------------------------------------------------------------------------
+
+--- Read credential health for a cliproxy `channel` (e.g. "claude") from the
+--- proxy's own /v0/management/auth-files.
+---
+--- This is the honest replacement for the two inferences that failed on
+--- 2026-08-01: a response-body pattern, and the shape of /v1/models (which
+--- still lists every model when the credential is dead).
+---
+--- The 404 is load-bearing rather than an error: cliproxy only registers the
+--- management routes when a `remote-management.secret-key` is present in the
+--- config it BOOTED with, so a 404 means the running proxy predates the key and
+--- should be restarted into the freshly rendered config. That is also why we do
+--- not compare the config file on disk to a fresh render — ensure_running
+--- rewrites that file before it probes, so such a comparison is always false and
+--- never reflects what the running process actually loaded.
+---@param cb fun(health: table) # { state, message, account?, failed?, modtime?, reason? }
+---@param channel string
+function M.auth_files(cb, channel)
+    local opts = render_opts()
+    if not opts.host then
+        return cb({ state = "unknown", reason = "no_endpoint",
+            message = "cannot parse host:port from endpoint" })
+    end
+    vim.system(api_argv(opts.host, opts.port, opts.management_key, "/v0/management/auth-files"),
+        { text = true }, function(obj)
+            local body, http = split_status(obj.stdout)
+            vim.schedule(function()
+                if obj.code ~= 0 then
+                    return cb({ state = "unknown", reason = "unreachable",
+                        message = tostring(obj.stderr or "proxy unreachable") })
+                end
+                if http == 404 then
+                    return cb({ state = "unknown", reason = "no_management_route",
+                        message = "proxy is running without the management route" })
+                elseif http == 401 then
+                    return cb({ state = "unknown", reason = "management_key_mismatch",
+                        message = "management key rejected by the running proxy" })
+                elseif http ~= 200 then
+                    return cb({ state = "unknown", reason = "http_" .. tostring(http),
+                        message = "management API returned HTTP " .. tostring(http) })
+                end
+                local ok, decoded = pcall(vim.json.decode, body or "")
+                if not ok or type(decoded) ~= "table" then
+                    return cb({ state = "unknown", reason = "undecodable",
+                        message = "management API returned an undecodable body" })
+                end
+                cb(ca.classify_auth_files(decoded.files, channel))
+            end)
+        end)
+end
+
 
 --------------------------------------------------------------------------------
 -- Spawn (detached, PID-tracked)
@@ -354,7 +468,7 @@ end
 -- reaps a foreign process that merely happens to hold the port. A 401
 -- (client_key_mismatch) still means a cliproxy is there, so it counts.
 local function port_holds_cliproxy(host, port, secret)
-    local res = vim.system(models_argv(host, port, secret), { text = true }):wait()
+    local res = vim.system(api_argv(host, port, secret), { text = true }):wait()
     local state = classify(res.code, res.stdout)
     return state == "healthy" or state == "needs_login" or state == "client_key_mismatch"
 end
@@ -554,7 +668,7 @@ function M.list_models(provider, cb)
             cb(nil, "cannot parse host:port from endpoint")
             return
         end
-        vim.system(models_argv(opts.host, opts.port, opts.secret), { text = true }, function(obj)
+        vim.system(api_argv(opts.host, opts.port, opts.secret), { text = true }, function(obj)
             vim.schedule(function()
                 if obj.code ~= 0 then
                     cb(nil, "cliproxy: /v1/models request failed")
