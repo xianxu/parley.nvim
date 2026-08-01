@@ -322,6 +322,44 @@ function M.auth_files(cb, channel)
 end
 
 
+-- One-shot guard for the management-route repair. Module-local rather than
+-- per-call because the repair is per-proxy-lifetime, not per-query — but it is
+-- reset explicitly (tests, and after a successful restart) so it can never
+-- become a permanently-latched flag that silently disables the repair for the
+-- rest of the session (workshop/lessons.md: module-local one-shots leak).
+local _management_restart_done = false
+
+function M._reset_management_restart() -- test seam
+    _management_restart_done = false
+end
+
+--- Credential health WITH the one repair parley can make unattended: a proxy
+--- that booted before the management key existed answers 404, and restarting it
+--- into the freshly rendered config is both safe and silent.
+---
+--- Restarts at most once per session. A second 404 is reported rather than
+--- retried, so a proxy that 404s for some other reason cannot become a restart
+--- loop under every query.
+---@param cb fun(health: table)
+---@param channel string
+function M.credential_health(cb, channel)
+    M.auth_files(function(health)
+        if health.reason ~= "no_management_route" or _management_restart_done then
+            return cb(health)
+        end
+        _management_restart_done = true
+        logger.info("cliproxy: proxy is running without the management route — restarting it "
+            .. "into the rendered config so credential health can be read")
+        M.stop()
+        M.ensure_running(function()
+            M.auth_files(cb, channel)
+        end, function(msg)
+            cb({ state = "unknown", reason = "no_management_route",
+                message = "cannot restart the proxy to enable the management route: " .. tostring(msg) })
+        end)
+    end, channel)
+end
+
 --------------------------------------------------------------------------------
 -- Spawn (detached, PID-tracked)
 --------------------------------------------------------------------------------
