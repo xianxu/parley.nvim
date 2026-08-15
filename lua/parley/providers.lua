@@ -31,6 +31,10 @@ local sse = require("parley.sse")
 local safe_json_decode = sse.safe_json_decode
 local strip_data_prefix = sse.strip_data_prefix
 
+-- The per-provider tool-use wire protocols (#198). providers.lua keeps only
+-- the published delegations; the protocols themselves live in tools/wire_*.
+local wire_anthropic = require("parley.tools.wire_anthropic")
+
 local function tool_progress_message(tool_name)
     if tool_name == "web_search" or tool_name == "web_search_call" then
         return "Searching web..."
@@ -646,104 +650,16 @@ anthropic.parse_usage = function(raw_response)
     return metrics
 end
 
---- Walk a captured Anthropic SSE response string and extract any
---- client-side tool_use blocks as normalized ToolCall tables.
----
---- Anthropic's streaming shape for tool use (per docs):
----
----     content_block_start  with content_block.type == "tool_use"
----                          → { id, name, input = {} } at .index
----     content_block_delta  with delta.type == "input_json_delta"
----                          and delta.partial_json string chunks
----                          accumulated at the same .index
----     content_block_stop   at .index finalizes the block; we decode
----                          the assembled JSON into the ToolCall.input
----     message_stop         ends the response
----
---- The decoder IGNORES:
----   - text / thinking blocks (not tool calls)
----   - server_tool_use (web_search, web_fetch) — resolved by Anthropic
----     server-side, no client tool_result needed
----   - web_search_tool_result / web_fetch_tool_result (server replies)
----
---- Returns a flat list of ToolCalls in the order they were streamed.
---- Called once after streaming completes by the tool_loop driver,
---- same pattern as `anthropic.parse_usage`.
----
---- @param raw_response string the full captured SSE response
---- @return ToolCall[]
-anthropic.decode_tool_calls_from_stream = function(raw_response)
-    if type(raw_response) ~= "string" or raw_response == "" then
-        return {}
-    end
-
-    -- index -> { id, name, parts = {} }
-    local in_flight = {}
-    -- Preserve streaming order of completion.
-    local completed = {}
-
-    for line in raw_response:gmatch("[^\n]+") do
-        -- Only `data:` lines carry JSON payloads.
-        if line:sub(1, 6) == "data: " then
-            local decoded = safe_json_decode(strip_data_prefix(line))
-            if type(decoded) == "table" then
-                local idx = decoded.index or 0
-                local t = decoded.type
-
-                if t == "content_block_start" then
-                    local block = decoded.content_block
-                    if type(block) == "table" and block.type == "tool_use" then
-                        -- Only CLIENT-side tool_use. server_tool_use is
-                        -- intentionally skipped.
-                        in_flight[idx] = {
-                            id = block.id,
-                            name = block.name,
-                            parts = {},
-                        }
-                    end
-
-                elseif t == "content_block_delta" then
-                    local d = decoded.delta
-                    if type(d) == "table" and d.type == "input_json_delta"
-                       and type(d.partial_json) == "string" then
-                        local state = in_flight[idx]
-                        if state then
-                            table.insert(state.parts, d.partial_json)
-                        end
-                    end
-
-                elseif t == "content_block_stop" then
-                    local state = in_flight[idx]
-                    if state then
-                        local full_json = table.concat(state.parts)
-                        local input = {}
-                        if full_json ~= "" then
-                            local ok, parsed = pcall(vim.json.decode, full_json)
-                            if ok and type(parsed) == "table" then
-                                input = parsed
-                            end
-                        end
-                        table.insert(completed, {
-                            id = state.id,
-                            name = state.name,
-                            input = input,
-                        })
-                        in_flight[idx] = nil
-                    end
-                end
-            end
-        end
-    end
-
-    return completed
+-- The Anthropic tool wire moved to lua/parley/tools/wire_anthropic.lua in
+-- #198, when a second wire made the protocol worth separating from adapter
+-- concerns. These two names stay because they are the published surface:
+-- the pre-existing specs and skill_invoke call them directly.
+function M.anthropic_encode_tools(tool_definitions)
+    return wire_anthropic.encode_tools(tool_definitions)
 end
 
--- Top-level re-export so `providers.decode_anthropic_tool_calls_from_stream`
--- works like `providers.anthropic_encode_tools`. The tool_loop driver
--- (Task 2.7) consumes via this top-level function so it does not need
--- to know the adapter table layout.
 function M.decode_anthropic_tool_calls_from_stream(raw_response)
-    return anthropic.decode_tool_calls_from_stream(raw_response)
+    return wire_anthropic.decode_tool_calls_from_stream(raw_response)
 end
 
 --------------------------------------------------------------------------------
@@ -1318,25 +1234,8 @@ end
 -- See dispatcher.lua for the append logic.
 --------------------------------------------------------------------------------
 
---- Convert a list of parley ToolDefinitions into the Anthropic payload
---- shape for the `tools` array. Each entry contains only the fields
---- Anthropic cares about: name, description, input_schema. Internal
---- fields (handler, kind, needs_backup) are intentionally dropped.
----
---- Pure. Accepts nil or empty list and returns an empty table.
----@param tool_definitions ToolDefinition[]|nil
----@return table[] anthropic_tools
-function M.anthropic_encode_tools(tool_definitions)
-    local out = {}
-    for _, def in ipairs(tool_definitions or {}) do
-        table.insert(out, {
-            name = def.name,
-            description = def.description,
-            input_schema = def.input_schema,
-        })
-    end
-    return out
-end
+-- M.anthropic_encode_tools now lives beside its decode twin, above the
+-- Google adapter — both are one-line delegations to wire_anthropic (#198).
 
 --- OpenAI tool encoder — stub that raises. Deferred to a #81 follow-up.
 ---@diagnostic disable-next-line: unused-local
