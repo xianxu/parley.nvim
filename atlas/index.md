@@ -24,7 +24,7 @@ This index provides a central directory for all atlas entries of the `parley.nvi
 - [Anthropic Provider](providers/anthropic.md): Implementation for Claude models.
 - [Google AI Provider](providers/googleai.md): Implementation for Gemini models.
 - [Agents](providers/agents.md): Agent configuration and selection mechanisms.
-- [Tool Use](providers/tool_use.md): Client-side tool loop, Unix tools (ls/find/grep), file operations (read/edit/write), safety mechanisms.
+- [Tool Use](providers/tool_use.md): Client-side tool loop, per-provider wires (anthropic/openai) behind one registry, Unix tools (ls/find/grep), file operations (read/edit/write), safety mechanisms.
 - [System Prompts](providers/system_prompts.md): Editable system prompts with built-in/custom/modified sources.
 
 ## 3. Context & References

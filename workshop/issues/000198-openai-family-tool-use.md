@@ -285,3 +285,47 @@ two separate `{role:"tool", tool_call_id}` messages, was accepted by the codex
 channel and produced a correct summary of both results. No error.
 
 Raw captures preserved for use as test fixtures in M1.
+
+**M1 — the pure wire layer.** Landed as `lua/parley/sse.lua`,
+`tools/wire_anthropic.lua`, `tools/wire_openai.lua`, `tools/wire.lua`, plus
+`providers.cliproxy_route` / `cliproxy_strategy`. 72 new/changed unit
+assertions; full suite green.
+
+Evidence beyond the unit tests: fed `translate_messages`' and `encode_tools`'
+**real output** to the live proxy and got a correct answer back —
+`Paris: 18°C, light rain; Tokyo: 26°C, clear.` — so parallel `tool_calls` plus
+separate `role:"tool"` messages are accepted end to end, not merely
+shaped right. Also mutation-tested the decoder specs (sorting the index order
+drops 17 passes to 16; removing the `empty_dict` coercion drops 10 to 8), since
+those tests were written after the implementation rather than before.
+
+Three findings from doing the work:
+
+1. **`dispatcher_spec` was pinning the latent bug.** Its cliproxy case used
+   `claude-sonnet-4-6` with no `web_search_strategy` — so `format_payload`
+   built an *openai* payload while the old encoder stamped anthropic-shaped
+   tools onto it, and the test asserted `t.name == "read_file"`, i.e. demanded
+   the mismatch. Rewritten to assert tools follow the route.
+2. **The `googleai`/`ollama` stubs stay until M2.** The plan had them deleted
+   here, but their only caller is the dispatcher chain M2 replaces; removing
+   them first would leave the tree calling a nil. Deleted in M2 instead, in the
+   commit that removes the last reference.
+3. **`strip_data_prefix` was leaking `gsub`'s count** as a second return value.
+   Parenthesized in the hoist; verified all seven call sites either
+   single-assign or pass to a one-parameter function, so it is inert.
+
+**Codex credential expired mid-session** — `auth_unavailable: no auth
+available (providers=codex, model=gpt-5.6-sol)`, the #197 failure mode. The
+round-trip above was therefore validated through the `claude` channel (cliproxy
+translating openai→anthropic), which exercises the same payload shape; the
+codex-side validation earlier in this Log used the identical shape before the
+credential died. **M2's Task 2.7 e2e needs `:ParleyProxy login codex` first.**
+
+**Two test-suite hazards worth knowing** (neither caused by this work):
+`tests/unit/tools_builtin_find_spec.lua` shells `find` over the live repo tree,
+so it races other specs creating/deleting temp files and fails intermittently
+under the parallel runner (passes 3/3 in isolation). And
+`chat_progress_process_spec` flaked once on fake-SSE-server port allocation.
+Both re-run clean. Separately, `git`-dependent integration specs fail under a
+restricted sandbox (`git init` cannot copy hook templates); they pass in a
+normal shell — full suite exit 0.
