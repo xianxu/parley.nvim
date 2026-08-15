@@ -43,14 +43,19 @@ describe("skill_assembly.build_invocation", function()
         assert.is_false(vim.tbl_contains(auto.tools, "propose_edits")) -- elevated withheld
     end)
 
-    it("sets tool_choice from force_tool, else nil", function()
+    -- #198: this used to emit Anthropic's {type="tool", name=…} directly.
+    -- A forced choice is spelled differently per wire, so the pure assembler
+    -- carries the NAME and skill_invoke shapes it once the agent is known.
+    it("carries force_tool as a plain name, else nil", function()
         local forced = assembly.build_invocation(manifest(), { body = "B", document = "D", manual = true })
-        assert.are.same({ type = "tool", name = "propose_edits" }, forced.tool_choice)
+        assert.are.equal("propose_edits", forced.force_tool)
+        -- and emphatically NOT a pre-shaped wire table
+        assert.is_nil(forced.tool_choice)
 
         local m = manifest()
         m.force_tool = nil -- (tbl_extend can't drop a key via nil; clear it on the table)
         local none = assembly.build_invocation(m, { body = "B", document = "D", manual = true })
-        assert.is_nil(none.tool_choice)
+        assert.is_nil(none.force_tool)
     end)
 end)
 
@@ -88,12 +93,48 @@ describe("skill_assembly.resolve_agent (pure, injected deps)", function()
         assert.are.equal("SA", assembly.resolve_agent(manifest({ name = "other" }), d).name)
     end)
 
-    it("tier 4: first tool-capable agent (anthropic/cliproxyapi)", function()
-        assert.are.equal("anthropic", assembly.resolve_agent(manifest({ name = "other" }), deps()).provider)
+    -- #198 widened "tool-capable" from a hardcoded anthropic/cliproxyapi pair
+    -- to "has a tool wire". This fixture lists openai FIRST precisely because
+    -- it used to be skipped; now it is a legitimate answer.
+    it("tier 4: first tool-capable agent, which now includes openai", function()
+        assert.are.equal("openai", assembly.resolve_agent(manifest({ name = "other" }), deps()).provider)
+    end)
+
+    it("tier 4: skips agents whose provider has no tool wire", function()
+        local d = deps({
+            agent_names = { "g", "y" },
+            agents = {
+                g = { provider = "googleai", model = { model = "gemini-3-pro-preview" } },
+                y = { provider = "anthropic", model = { model = "claude-sonnet-5" } },
+            },
+        })
+        assert.are.equal("anthropic", assembly.resolve_agent(manifest({ name = "other" }), d).provider)
+    end)
+
+    it("tier 4: accepts cliproxyapi on either route", function()
+        for _, model in ipairs({
+            { model = "gpt-5.6-sol" },
+            { model = "claude-opus-4-8", web_search_strategy = "anthropic_tools_route" },
+        }) do
+            local d = deps({
+                agent_names = { "c" },
+                agents = { c = { provider = "cliproxyapi", model = model } },
+            })
+            assert.are.equal("cliproxyapi",
+                assembly.resolve_agent(manifest({ name = "other" }), d).provider)
+        end
     end)
 
     it("returns nil when nothing resolves", function()
         local d = deps({ agent_names = {}, agents = {} })
+        assert.is_nil(assembly.resolve_agent(manifest({ name = "other" }), d))
+    end)
+
+    it("returns nil when no listed agent has a tool wire", function()
+        local d = deps({
+            agent_names = { "g" },
+            agents = { g = { provider = "googleai", model = { model = "gemini-3-pro-preview" } } },
+        })
         assert.is_nil(assembly.resolve_agent(manifest({ name = "other" }), d))
     end)
 end)

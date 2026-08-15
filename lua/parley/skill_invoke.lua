@@ -206,8 +206,14 @@ function M.invoke(buf, manifest, args, opts)
     end
 
     local payload = llm.prepare_payload(inv.messages, agent.model, agent.provider, inv.tools)
-    if inv.tool_choice then
-        payload.tool_choice = inv.tool_choice
+    -- #198: skill_assembly hands us the forced tool NAME; the wire shapes it.
+    -- Anthropic wants {type="tool", name=…}, OpenAI {type="function",
+    -- function={name=…}} — sending the anthropic shape to an OpenAI-family
+    -- agent is a 400, which is what the widened tool-capable predicate would
+    -- otherwise have started causing for the review and voice_apply skills.
+    if inv.force_tool then
+        payload.tool_choice = require("parley.tools.wire")
+            .encode_tool_choice(agent.provider, agent.model, inv.force_tool)
     end
     -- Large-document tool output needs headroom: a multi-edit propose_edits batch
     -- echoes old/new/explain per edit and easily exceeds the default (4096),
@@ -249,7 +255,14 @@ function M.invoke(buf, manifest, args, opts)
                 end
                 local function complete()
                     local qt = tasker.get_query(qid) or {}
-                    local calls = providers.decode_anthropic_tool_calls_from_stream(qt.raw_response or "")
+                    -- #198: decode with the agent's own wire. Hardcoding the
+                    -- anthropic decoder here meant an OpenAI-family skill
+                    -- agent yielded zero calls and logged "model returned no
+                    -- tool call" — indistinguishable from a truncated
+                    -- response. (agent.provider/agent.model are the same pair
+                    -- used for prepare_payload above.)
+                    local calls = require("parley.tools.wire").decode(
+                        agent.provider, agent.model, qt.raw_response or "")
                     local results = {}
                     local applied = 0
                     local errors = {}
