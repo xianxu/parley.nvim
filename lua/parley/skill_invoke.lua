@@ -112,7 +112,7 @@ function M.invoke(buf, manifest, args, opts)
     local p = parley()
     local llm = require("parley.dispatcher") -- LLM dispatcher: prepare_payload / query
     local tools_dispatcher = require("parley.tools.dispatcher") -- tool dispatcher: execute_call
-    local providers = require("parley.providers")
+    local wire = require("parley.tools.wire") -- per-provider tool protocol (#198)
     local tasker = require("parley.tasker")
     local tools_registry = require("parley.tools")
     local assembly = require("parley.skill_assembly")
@@ -212,8 +212,8 @@ function M.invoke(buf, manifest, args, opts)
     -- agent is a 400, which is what the widened tool-capable predicate would
     -- otherwise have started causing for the review and voice_apply skills.
     if inv.force_tool then
-        payload.tool_choice = require("parley.tools.wire")
-            .encode_tool_choice(agent.provider, agent.model, inv.force_tool)
+        payload.tool_choice = wire.encode_tool_choice(
+            agent.provider, agent.model, inv.force_tool)
     end
     -- Large-document tool output needs headroom: a multi-edit propose_edits batch
     -- echoes old/new/explain per edit and easily exceeds the default (4096),
@@ -261,8 +261,7 @@ function M.invoke(buf, manifest, args, opts)
                     -- tool call" — indistinguishable from a truncated
                     -- response. (agent.provider/agent.model are the same pair
                     -- used for prepare_payload above.)
-                    local calls = require("parley.tools.wire").decode(
-                        agent.provider, agent.model, qt.raw_response or "")
+                    local calls = wire.decode(agent.provider, agent.model, qt.raw_response or "")
                     local results = {}
                     local applied = 0
                     local errors = {}
