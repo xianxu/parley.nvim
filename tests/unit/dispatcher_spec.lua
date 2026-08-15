@@ -330,29 +330,52 @@ describe("prepare_payload: anthropic client-side tools (Task 1.5)", function()
         parley._state.web_search = false
     end)
 
-    it("cliproxyapi routing: anthropic-family model gets client-side tools", function()
+    -- #198 rewrote the three cases below. They previously asserted that a
+    -- cliproxy claude model got ANTHROPIC-shaped tools regardless of route,
+    -- and that non-anthropic models raised. The first was a latent bug: this
+    -- `model` fixture carries no web_search_strategy, so format_payload built
+    -- an OPENAI payload for it while the encoder (which keyed on `^claude%-`
+    -- alone) stamped anthropic-shaped tools onto it. Both now consult
+    -- providers.cliproxy_route, so the tools always match the payload.
+
+    it("cliproxyapi routing: tools follow the ROUTE, not the model family", function()
+        -- No strategy override → openai route → openai-shaped tools, matching
+        -- the openai-shaped payload format_payload builds for this model.
         local payload = dispatcher.prepare_payload(msgs(user("hi")), model, "cliproxyapi", { "read_file" })
         assert.is_not_nil(payload.tools)
-        -- Look for read_file in the list (may be mixed with server-side tools)
-        local has_read_file = false
+        local found
         for _, t in ipairs(payload.tools) do
-            if t.name == "read_file" then has_read_file = true end
+            if t.type == "function" and t["function"].name == "read_file" then found = true end
         end
-        assert.is_true(has_read_file)
+        assert.is_true(found)
     end)
 
-    it("cliproxyapi routing: non-anthropic model raises with anthropic-family message", function()
-        local openai_model = { model = "gpt-5.4", temperature = 0.8, max_tokens = 1024 }
-        local ok, err = pcall(dispatcher.prepare_payload, msgs(user("hi")), openai_model, "cliproxyapi", { "read_file" })
-        assert.is_false(ok)
-        assert.matches("anthropic%-family", tostring(err))
+    it("cliproxyapi routing: anthropic route gets anthropic-shaped tools", function()
+        local anthropic_model = vim.tbl_extend("force", model,
+            { web_search_strategy = "anthropic_tools_route" })
+        local payload = dispatcher.prepare_payload(
+            msgs(user("hi")), anthropic_model, "cliproxyapi", { "read_file" })
+        local found
+        for _, t in ipairs(payload.tools) do
+            if t.name == "read_file" then found = true end
+        end
+        assert.is_true(found)
     end)
 
-    it("openai provider raises when agent_tools is provided", function()
+    it("cliproxyapi routing: a non-anthropic model now encodes instead of raising", function()
+        local openai_model = { model = "gpt-5.6-sol", temperature = 0.8, max_tokens = 1024 }
+        local payload = dispatcher.prepare_payload(
+            msgs(user("hi")), openai_model, "cliproxyapi", { "read_file" })
+        assert.equals("function", payload.tools[1].type)
+        assert.equals("read_file", payload.tools[1]["function"].name)
+    end)
+
+    it("openai provider encodes tools instead of raising", function()
         local openai_model = { model = "gpt-5.4", temperature = 0.8, max_tokens = 1024 }
-        local ok, err = pcall(dispatcher.prepare_payload, msgs(user("hi")), openai_model, "openai", { "read_file" })
-        assert.is_false(ok)
-        assert.matches("tools not supported", tostring(err))
+        local payload = dispatcher.prepare_payload(
+            msgs(user("hi")), openai_model, "openai", { "read_file" })
+        assert.equals("function", payload.tools[1].type)
+        assert.equals("read_file", payload.tools[1]["function"].name)
     end)
 
     it("googleai provider raises when agent_tools is provided", function()

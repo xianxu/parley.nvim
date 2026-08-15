@@ -983,10 +983,10 @@ end
 cliproxyapi.format_payload = function(messages, model, _provider_name)
     local strategy = get_cliproxy_strategy(model)
     local model_name = type(model) == "table" and model.model or nil
-    local use_anthropic_route = is_cliproxy_anthropic_route_model(model_name)
+    -- Gates tool_choice below, NOT the route — cliproxy_route owns that now.
     local use_code_execution_model = type(model_name) == "string" and model_name:find("^code_execution_") ~= nil
 
-    if strategy == "anthropic_tools_route" and use_anthropic_route then
+    if M.cliproxy_route(model_name, strategy) == "anthropic" then
         local parley = require("parley")
         local payload = anthropic.format_payload(messages, model, "anthropic")
         -- CLIProxy may require direct tool callers for model-invoked web tools.
@@ -1279,36 +1279,41 @@ end
 -- M.anthropic_encode_tools now lives beside its decode twin, above the
 -- Google adapter — both are one-line delegations to wire_anthropic (#198).
 
---- OpenAI tool encoder — stub that raises. Deferred to a #81 follow-up.
----@diagnostic disable-next-line: unused-local
-function M.openai_encode_tools(_tool_definitions)
-    error("tools not supported for this provider yet — see #81 follow-up")
+--- OpenAI tool encoder. Was a raising #81 stub until #198 gave the
+--- OpenAI family a real wire; copilot / azure / ollama share it.
+---@param tool_definitions ToolDefinition[]|nil
+---@return table[]
+function M.openai_encode_tools(tool_definitions)
+    return require("parley.tools.wire").encode("openai", nil, tool_definitions)
 end
 
---- Google AI tool encoder — stub that raises. Deferred to a #81 follow-up.
+--- CLIProxyAPI tool encoder. Encodes for whichever wire this model routes
+--- to — the SAME decision `cliproxyapi.format_payload` makes, via the same
+--- helper, so the tools in the payload can no longer disagree with the
+--- payload's own shape (#198).
+---@param tool_definitions ToolDefinition[]|nil
+---@param model string|table the model name, or the model params table
+---@return table[]
+function M.cliproxyapi_encode_tools(tool_definitions, model)
+    return require("parley.tools.wire").encode("cliproxyapi", model, tool_definitions)
+end
+
+-- Google AI and Ollama tool encoders — still the raising #81 stubs. Their
+-- only caller is the dispatcher's provider chain (dispatcher.lua:124-126),
+-- which M2 replaces with the wire registry; they are deleted THERE, in the
+-- same commit that removes the last reference, so the tree is never left
+-- calling a nil. Ollama gains real tool support at that point (it shares the
+-- openai wire); googleai stays unsupported until someone writes a
+-- functionDeclarations wire, but the registry's error will at least name the
+-- provider instead of claiming an anthropic-family requirement.
 ---@diagnostic disable-next-line: unused-local
 function M.googleai_encode_tools(_tool_definitions)
     error("tools not supported for this provider yet — see #81 follow-up")
 end
 
---- Ollama tool encoder — stub that raises. Deferred to a #81 follow-up.
 ---@diagnostic disable-next-line: unused-local
 function M.ollama_encode_tools(_tool_definitions)
     error("tools not supported for this provider yet — see #81 follow-up")
-end
-
---- CLIProxyAPI tool encoder — delegates to the Anthropic encoder only
---- when the target model name begins with "claude-" (i.e. routed to
---- an Anthropic-family model). Otherwise raises with an
---- anthropic-family-only message so the error is specific and actionable.
----@param tool_definitions ToolDefinition[]
----@param model_name string|table the model name (or table containing .model)
-function M.cliproxyapi_encode_tools(tool_definitions, model_name)
-    local name = type(model_name) == "table" and model_name.model or model_name
-    if type(name) ~= "string" or not name:match("^claude%-") then
-        error("tools not supported for this provider yet — cliproxyapi requires an anthropic-family model (see #81 follow-up)")
-    end
-    return M.anthropic_encode_tools(tool_definitions)
 end
 
 return M
