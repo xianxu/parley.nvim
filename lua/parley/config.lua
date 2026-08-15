@@ -144,6 +144,15 @@ local config = {
 					{ name = "claude-opus-4-8", alias = "claude-opus-4-8", fork = true },
 					{ name = "claude-fable-5", alias = "claude-fable-5", fork = true },
 				},
+				-- The codex channel, for ToolSol* below. Declaring it here is what
+				-- lets parley answer "which login does this model need" when the
+				-- credential dies: without it, an expired codex token surfaces only
+				-- as cliproxyapi's `auth_unavailable: no auth available
+				-- (providers=codex)`, which names no next action. With it, the
+				-- failure resolves to `:ParleyProxy login codex`.
+				["codex"] = {
+					{ name = "gpt-5.6-sol", alias = "gpt-5.6-sol", fork = true },
+				},
 			},
 		},
 	},
@@ -248,6 +257,33 @@ local config = {
 			provider = "cliproxyapi",
 			name = "ToolOpus*",
 			model = { model = "claude-opus-4-8", web_search_strategy = "anthropic_tools_route" },
+			system_prompt = require("parley.defaults").chat_system_prompt,
+			synthetic_system_prompt = true,
+			tools = { "@all"},
+		},
+		{
+			-- The first non-Anthropic Tool agent, on the codex channel. No
+			-- `web_search_strategy` override: providers.cliproxyapi already defaults to
+			-- `openai_tools_route`, which is the right route for an OpenAI-family model
+			-- -- the Claude entries above override it precisely because they are not.
+			-- Verified against cliproxyapi 7.2.110: generates, calls tools with parseable
+			-- arguments, returns `reasoning_content`, and caches ~93% of a repeated prefix.
+			--
+			-- Client-side tools work here because parley speaks the OpenAI
+			-- function-calling wire natively (#198) — encode, streamed decode, and the
+			-- content-block → tool_calls/role:"tool" message translation all live in
+			-- lua/parley/tools/wire_openai.lua behind the wire registry.
+			--
+			-- Staying on the OpenAI route is what BUYS web search. cliproxy will happily
+			-- translate an Anthropic-shaped tool request to codex, but server-side
+			-- web_search/web_fetch go inert on that cross-family path (no
+			-- `server_tool_use` blocks at all). On this route `{type="web_search"}` and
+			-- the client function tools coexist in one `tools` array and both fire —
+			-- verified end to end: two sequential read_file rounds plus a cited web
+			-- result in a single turn.
+			provider = "cliproxyapi",
+			name = "ToolSol*",
+			model = { model = "gpt-5.6-sol" },
 			system_prompt = require("parley.defaults").chat_system_prompt,
 			synthetic_system_prompt = true,
 			tools = { "@all"},

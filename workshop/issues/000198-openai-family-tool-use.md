@@ -358,6 +358,44 @@ before the close commit, per the #174 protocol:
 - **I5:** plan `## Revisions` appended (the stub-deletion deviation, the
   consolidated spec file, the I4 handoff, and `sse.str` as a new entity).
 
+**M2 — wiring, and the end-to-end proof.** The regression above is closed:
+`prepare_payload` translates and encodes at the one seam upstream of every
+payload builder, `tool_loop` / `skill_invoke` / `empty_response` all decode
+through the wire registry, and the `googleai`/`ollama` stubs died with the
+chain that was their last caller.
+
+The codex credential recovered on its own mid-session (cliproxy refreshed it),
+so no `:ParleyProxy login codex` was needed after all.
+
+E2E against the LIVE codex channel, driving real chat buffers through
+`cmd_respond` — buffer output captured, not paraphrased:
+
+1. **Single tool round.** `ToolSol*` emitted `🔧: read_file
+   id=call_pVTFO06rF6hU0xm8olOh709G`, the tool ran, `📎:` carried
+   `1  PARLEY_E2E_SENTINEL_7731`, the loop recursed, and the answer was *"The
+   sentinel token is `PARLEY_E2E_SENTINEL_7731`"* — a token it could not have
+   guessed.
+2. **Multi-round + web search in ONE turn.** Two *sequential* `read_file`
+   rounds (`call_bUZLTi2…` then `call_FIz1Gv1…`), each with its own 🔧:/📎:
+   pair, then a cited web result:
+   `github.com/neovim/neovim/releases?…utm_source=openai` — the `utm_source`
+   marker showing it went through server-side search. This is the exact
+   combination the anthropic route cannot give a codex model, and the reason
+   option A was rejected.
+3. **Anthropic route unregressed.** `ToolOpus*` ran the same prompt, emitted a
+   `toolu_*`-id tool call (anthropic wire), and answered correctly.
+4. **`force_tool` skill on an OpenAI-family agent.** The `review` skill (which
+   compels `propose_edits`) ran on `gpt-5.6-sol`. Instrumented
+   `prepare_payload` to make the wire evidence rather than inference:
+   `provider=cliproxyapi model=gpt-5.6-sol wire=openai tools[1].type=web_search`,
+   terminal `ok=true`, and the artifact really edited — *"This **sentence** has
+   a **spelling** error."* That is the path that would have 400'd had
+   `tool_choice` stayed Anthropic-shaped.
+
+Live wire conformance (`PARLEY_LIVE_CONFORMANCE=1`) also passes against
+7.2.110: all four delta fields present, `finish_reason=tool_calls`, decoder
+yields a usable ToolCall.
+
 **Two test-suite hazards worth knowing** (neither caused by this work):
 `tests/unit/tools_builtin_find_spec.lua` shells `find` over the live repo tree,
 so it races other specs creating/deleting temp files and fails intermittently
