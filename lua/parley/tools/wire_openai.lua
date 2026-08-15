@@ -179,4 +179,108 @@ function M.has_tool_calls(raw_response)
         and raw_response:find('"tool_calls"', 1, true) ~= nil
 end
 
+--------------------------------------------------------------------------------
+-- Messages
+--------------------------------------------------------------------------------
+
+--- Prefix marking a failed tool result. OpenAI has no `is_error` field on a
+--- tool message, so the signal has to live in the content — otherwise the
+--- model cannot distinguish a failed call from a successful one that
+--- happened to return error text.
+local ERROR_PREFIX = "Error: "
+
+--- Translate parley's internal (Anthropic-shaped) message list into OpenAI
+--- shape.
+---
+--- Parley builds messages Anthropic's way: an assistant turn carries
+--- [text, tool_use] content blocks, and the immediately following user turn
+--- carries the matching [tool_result] blocks. chat_respond's
+--- _emit_content_blocks_as_messages is the single place that shape — and the
+--- #155 / #156 invariants that keep it well-formed — is produced. This
+--- function consumes that already-validated output rather than duplicating
+--- the invariants, which is why the translation lives here and not in the
+--- emitter (ARCH-DRY).
+---
+--- Two structural differences:
+---   * tool calls hang off the assistant message as `tool_calls[]`, with
+---     `arguments` a JSON STRING rather than an object;
+---   * each result becomes its OWN `{role = "tool", tool_call_id = …}`
+---     message, so one user turn can fan out into several messages.
+---
+--- Messages whose `content` is a plain string pass through untouched. That
+--- is the majority path — this runs on every openai-family request, not just
+--- tool-using ones, because history may carry tool blocks from earlier turns.
+---@param messages table[]|nil
+---@return table[]
+function M.translate_messages(messages)
+    local out = {}
+
+    for _, msg in ipairs(messages or {}) do
+        if type(msg.content) ~= "table" then
+            -- Plain string content (or none): identity.
+            table.insert(out, msg)
+
+        elseif msg.role == "assistant" then
+            local texts, tool_calls = {}, {}
+            for _, block in ipairs(msg.content) do
+                if block.type == "text" then
+                    table.insert(texts, block.text or "")
+                elseif block.type == "tool_use" then
+                    local input = block.input
+                    if type(input) ~= "table" or not next(input) then
+                        input = vim.empty_dict()
+                    end
+                    table.insert(tool_calls, {
+                        id = block.id,
+                        type = "function",
+                        ["function"] = {
+                            name = block.name,
+                            arguments = vim.json.encode(input),
+                        },
+                    })
+                end
+            end
+
+            local translated = { role = "assistant" }
+            -- Left nil (not "") when the turn was tool calls only.
+            if #texts > 0 then
+                translated.content = table.concat(texts, "\n\n")
+            end
+            if #tool_calls > 0 then
+                translated.tool_calls = tool_calls
+            end
+            table.insert(out, translated)
+
+        else
+            -- A user turn carrying tool_result blocks. Each result becomes
+            -- its own message; any stray text blocks collapse into one user
+            -- message after them, preserving the batch's relative order.
+            local texts = {}
+            for _, block in ipairs(msg.content) do
+                if block.type == "tool_result" then
+                    local content = block.content or ""
+                    if block.is_error then
+                        content = ERROR_PREFIX .. content
+                    end
+                    table.insert(out, {
+                        role = "tool",
+                        tool_call_id = block.tool_use_id,
+                        content = content,
+                    })
+                elseif block.type == "text" then
+                    table.insert(texts, block.text or "")
+                end
+            end
+            if #texts > 0 then
+                table.insert(out, {
+                    role = msg.role or "user",
+                    content = table.concat(texts, "\n\n"),
+                })
+            end
+        end
+    end
+
+    return out
+end
+
 return M
