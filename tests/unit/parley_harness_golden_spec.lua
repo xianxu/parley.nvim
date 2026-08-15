@@ -24,6 +24,10 @@ local FIXTURES = {
 -- (edit_file/write_file deliberately excluded to keep golden output stable).
 local READONLY_TOOLS = { "read_file", "ls", "find", "grep", "chat_history_search" }
 
+-- Comparison is on DECODED tables, deliberately. vim.json.encode does not fix
+-- key order, so regenerating a golden yields a byte-different but semantically
+-- identical file. Never "tighten" this into a string compare — it would flake
+-- on every regeneration while catching nothing extra. (#198)
 local function read_json(path)
     local f = assert(io.open(path, "r"))
     local s = f:read("*a")
@@ -39,6 +43,37 @@ describe("parley_harness golden round-trip", function()
                 { agent_name = "ToolSonnet", tools = READONLY_TOOLS }
             )
             local golden = read_json("tests/fixtures/golden_payloads/" .. name .. ".json")
+            assert.same(golden, payload)
+        end)
+    end
+end)
+
+-- #198: the same transcripts through the OPENAI wire. Only the tool-bearing
+-- ones are interesting — they are where the shapes diverge (tool_calls with
+-- JSON-string arguments on the assistant message, one role:"tool" message per
+-- result, `function` tool envelopes). Provider and model are pinned explicitly
+-- rather than named via a shipped agent, for the same machine-independence
+-- reason READONLY_TOOLS exists.
+local OPENAI_FIXTURES = {
+    "one-round-tool-use",
+    "two-round-tool-use",
+    "tool-error",
+    "mixed-text-and-tools",
+}
+
+describe("parley_harness golden round-trip (openai wire)", function()
+    for _, name in ipairs(OPENAI_FIXTURES) do
+        it("openai payload for " .. name .. " matches golden", function()
+            local payload = harness.build_payload(
+                "tests/fixtures/transcripts/" .. name .. ".md",
+                {
+                    agent_name = "ToolSonnet",
+                    tools = READONLY_TOOLS,
+                    provider = "cliproxyapi",
+                    model = { model = "gpt-5.6-sol" },
+                }
+            )
+            local golden = read_json("tests/fixtures/golden_payloads/openai-" .. name .. ".json")
             assert.same(golden, payload)
         end)
     end
