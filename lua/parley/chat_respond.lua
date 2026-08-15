@@ -1845,6 +1845,11 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                             return
                         end
                         local outcome = tool_loop.process_response(buf, qt.raw_response or "", {
+                            -- #198: selects the tool wire. Without these the
+                            -- loop assumes anthropic and silently decodes zero
+                            -- calls from an OpenAI-family response.
+                            provider = agent_info.provider,
+                            model = agent_info.model,
                             max_tool_iterations = agent_info.max_tool_iterations or require("parley.defaults").max_tool_iterations,
                             tool_result_max_bytes = agent_info.tool_result_max_bytes or 102400,
                             root_policy = agent_info.root_policy,

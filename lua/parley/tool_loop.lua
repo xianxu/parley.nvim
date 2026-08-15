@@ -182,15 +182,23 @@ end
 ---
 --- @param bufnr integer the chat buffer
 --- @param raw_response string the captured SSE stream from qt.raw_response
---- @param agent_info table|nil { max_tool_iterations, tool_result_max_bytes, cwd? }
+--- @param agent_info table|nil { provider?, model?, max_tool_iterations,
+---   tool_result_max_bytes, cwd? }. `provider` + `model` select the tool wire
+---   (#198); absent, the anthropic wire is assumed.
 --- @param live_model Model|nil  live exchange_model from chat_respond (preferred)
 --- @param exchange_idx integer|nil  active exchange index (required when live_model is passed)
 --- @return "done"|"recurse"
 function M.process_response(bufnr, raw_response, agent_info, live_model, exchange_idx)
     agent_info = agent_info or {}
 
-    local providers = require("parley.providers")
-    local tool_calls = providers.decode_anthropic_tool_calls_from_stream(raw_response or "")
+    -- #198: decode with the wire this agent's provider/model actually speaks.
+    -- This was hardcoded to the anthropic decoder, so an OpenAI-family agent's
+    -- tool_calls decoded to zero and the loop reported "done" — a silently
+    -- empty answer instead of a tool round. Defaults to anthropic when
+    -- agent_info carries no provider, which keeps every pre-#198 caller (and
+    -- the buffer-rebuild fallback below) working unchanged.
+    local tool_calls = require("parley.tools.wire").decode(
+        agent_info.provider or "anthropic", agent_info.model, raw_response or "")
 
     if #tool_calls == 0 then
         -- Plain-text response. Tool loop is done for this submission.

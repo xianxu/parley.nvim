@@ -315,3 +315,98 @@ describe("tool_loop.process_response: with tool_use", function()
         assert.matches("````", text)
     end)
 end)
+
+-- #198 M2 Task 2.2. The loop decoded through the Anthropic wire
+-- unconditionally, so an OpenAI-family agent's tool call was silently
+-- dropped: process_response saw zero calls, returned "done", and the chat
+-- rendered an empty answer. agent_info now carries provider + model and the
+-- decode goes through the wire registry.
+describe("tool_loop.process_response: wire selection (#198)", function()
+    local scratch_file
+    before_each(function()
+        registry.register_builtins()
+        scratch_file = tmp_base .. "/wire-" .. math.random(0, 0xFFFFFF) .. ".txt"
+        vim.fn.writefile({ "alpha", "beta" }, scratch_file)
+    end)
+
+    -- One OpenAI tool_calls stream calling read_file on the scratch file.
+    local function mk_openai_tool_sse(call_id, path)
+        local chunks = {
+            { choices = { { index = 0, delta = { role = "assistant", tool_calls = {
+                { index = 0, id = call_id, type = "function",
+                  ["function"] = { name = "read_file", arguments = "" } } } } } } },
+            { choices = { { index = 0, delta = { tool_calls = {
+                { index = 0, ["function"] = {
+                    arguments = vim.json.encode({ path = path }) } } } } } } },
+            { choices = { { index = 0, delta = {}, finish_reason = "tool_calls" } } },
+        }
+        local lines = {}
+        for _, c in ipairs(chunks) do
+            table.insert(lines, "data: " .. vim.json.encode(c))
+            table.insert(lines, "")
+        end
+        table.insert(lines, "data: [DONE]")
+        return table.concat(lines, "\n")
+    end
+
+    it("drives the loop from an OpenAI tool_calls stream", function()
+        local bufnr = mk_buffer({ "💬: read this file", "🤖: [ToolSol*]" })
+        local outcome = tool_loop.process_response(bufnr, mk_openai_tool_sse("call_X1", scratch_file), {
+            provider = "cliproxyapi",
+            model = { model = "gpt-5.6-sol" },
+            max_tool_iterations = 20,
+            tool_result_max_bytes = 102400,
+            cwd = tmp_base,
+        })
+
+        assert.equals("recurse", outcome)
+        local text = buf_text(bufnr)
+        assert.matches("🔧: read_file id=call_X1", text)
+        assert.matches("📎: read_file id=call_X1", text)
+        assert.matches("alpha", text)
+    end)
+
+    it("drives the loop for the plain openai provider too", function()
+        local bufnr = mk_buffer({ "💬: read this file", "🤖: [GPT]" })
+        local outcome = tool_loop.process_response(bufnr, mk_openai_tool_sse("call_X2", scratch_file), {
+            provider = "openai",
+            model = { model = "gpt-5.4" },
+            max_tool_iterations = 20,
+            cwd = tmp_base,
+        })
+        assert.equals("recurse", outcome)
+        assert.matches("🔧: read_file id=call_X2", buf_text(bufnr))
+    end)
+
+    -- The regression this task closes.
+    it("would have dropped that stream under the anthropic default", function()
+        local bufnr = mk_buffer({ "💬: read this file", "🤖: [ToolSol*]" })
+        local outcome = tool_loop.process_response(bufnr, mk_openai_tool_sse("call_X3", scratch_file), {
+            -- no provider → anthropic default
+            max_tool_iterations = 20,
+            cwd = tmp_base,
+        })
+        assert.equals("done", outcome)
+    end)
+
+    it("still decodes anthropic when no provider is given (back-compat)", function()
+        local bufnr = mk_buffer({ "💬: read this file", "🤖: [Claude]" })
+        local outcome = tool_loop.process_response(bufnr,
+            mk_read_file_sse_response("toolu_WIRE_1", scratch_file), {
+                max_tool_iterations = 20, cwd = tmp_base })
+        assert.equals("recurse", outcome)
+        assert.matches("🔧: read_file id=toolu_WIRE_1", buf_text(bufnr))
+    end)
+
+    it("decodes anthropic on cliproxy's anthropic route", function()
+        local bufnr = mk_buffer({ "💬: read this file", "🤖: [ToolOpus*]" })
+        local outcome = tool_loop.process_response(bufnr,
+            mk_read_file_sse_response("toolu_WIRE_2", scratch_file), {
+                provider = "cliproxyapi",
+                model = { model = "claude-opus-4-8",
+                          web_search_strategy = "anthropic_tools_route" },
+                max_tool_iterations = 20, cwd = tmp_base })
+        assert.equals("recurse", outcome)
+        assert.matches("🔧: read_file id=toolu_WIRE_2", buf_text(bufnr))
+    end)
+end)
