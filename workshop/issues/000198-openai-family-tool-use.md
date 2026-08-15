@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-08-15
 updated: 2026-08-15
-estimate_hours: 5.5
+estimate_hours: 5.6
 started: 2026-08-15T10:03:41-07:00
 ---
 
@@ -25,8 +25,8 @@ anthropic-family model (see #81 follow-up)
 The stubs it belongs to — `openai_encode_tools`, `googleai_encode_tools`,
 `ollama_encode_tools` (`providers.lua:1348-1362`) — are the #81 M1 deferral.
 The concrete trigger is a `ToolSol*` agent (`gpt-5.6-sol` on cliproxyapi's
-codex channel), but the same wall blocks the `openai` provider itself and
-everything sharing `openai.format_payload` (copilot, azure, ollama).
+codex channel), but the same wall blocks the `openai` provider itself plus
+copilot, azure, and ollama.
 
 Three things are missing, not one:
 
@@ -50,8 +50,9 @@ round-trip closes. That would have been a ~100-line fix.
 
 It was rejected because **server-side `web_search` / `web_fetch` are silently
 inert on that cross-family path**. An Anthropic-shaped request carrying
-`web_search_20250305` to a codex model produced no `server_tool_use` blocks at
-all — the model just answered from memory. (Same tools on the `claude` channel
+parley's `web_search_20260209` / `web_fetch_20260209` to a codex model produced
+no `server_tool_use` blocks at all — the model just answered from memory.
+(Same tools on the `claude` channel
 work fine, because that channel passes through to a real Anthropic endpoint;
 the loss is specific to cross-family translation.) Routing `ToolSol*` that way
 would have traded away search to gain tools.
@@ -74,9 +75,11 @@ modules behind one registry seam:
   specs passing).
 - `lua/parley/tools/wire_openai.lua` — new. Encode, decode, and the
   content-block → OpenAI message translation.
-- `lua/parley/tools/wire.lua` — registry mapping (provider, route) → wire
+- `lua/parley/tools/wire.lua` — registry resolving (provider, **model**) → wire
   module. The single seam `dispatcher`, `tool_loop`, and `skill_invoke`
-  consume, replacing three independent provider conditionals (ARCH-DRY).
+  consume, replacing three independent provider conditionals (ARCH-DRY). Keyed
+  on the model, not a route: a route parameter is one a caller can forget, and
+  forgetting it fails silently as zero decoded tool calls.
 
 **Route selection does not change.** cliproxyapi keeps today's rule —
 anthropic wire iff anthropic-family model *and*
@@ -118,8 +121,8 @@ subsequent request.
   🔧:/📎: blocks render, the loop recurses, the final answer lands — with
   `web_search` enabled and working in the same request.
 - `providers.openai_encode_tools` no longer raises; the plain `openai`
-  provider (and copilot/azure/ollama, which share `openai.format_payload`)
-  can run tool-enabled agents.
+  provider, copilot and azure (which delegate to `openai.format_payload`), and
+  ollama (which has its own builder) can all run tool-enabled agents.
 - `tool_loop`, `skill_invoke`, and `dispatcher`'s `empty_response` predicate
   all decode through the wire registry — no provider hardcoded at a call site.
 - Parallel tool calls in one turn decode correctly (distinct `index` values).
@@ -165,16 +168,39 @@ post-×0.4 per v3.1):
 | M1 registry + `cliproxy_route`/`_strategy` | smaller-go-module | 0.04 | 0.16 |
 | M1 encoder delegation + branch test | smaller-go-module | 0.02 | 0.12 |
 | M1 fixture capture (already taken) | real-api-discovery | 0.00 | 0.12 |
+| M1 atlas update (Task 1.9 Step 3 — required at the milestone) | atlas-docs | 0.02 | 0.06 |
 | M1 milestone review | milestone-review | 0.02 | 0.14 |
 | M2 dispatcher seam (translate + encode + empty_response) | smaller-go-module | 0.06 | 0.20 |
 | M2 `tool_loop` + `chat_respond` threading | smaller-go-module | 0.03 | 0.14 |
 | M2 `skill_invoke` + `skill_assembly` + `tool_choice` | lua-neovim | 0.30 | 0.40 |
-| M2 `fake_cliproxy` tool mode + integration spec | api-integration | 0.40 | 0.40 |
+| M2 `fake_cliproxy` tool mode + integration spec | api-integration | 0.20 | 0.40 |
 | M2 golden payloads | smaller-go-module | 0.02 | 0.12 |
 | M2 live conformance spec | real-api-discovery | 0.00 | 0.18 |
-| M2 manual e2e against the real codex API | real-api-discovery | 0.00 | 0.20 |
+| M2 manual e2e against the real codex API | real-api-discovery | 0.00 | 0.40 |
 | M2 atlas update | atlas-docs | 0.02 | 0.06 |
+| M2 `lessons.md` update (Task 2.8 Step 4) | atlas-docs | 0.00 | 0.03 |
 | M2 close review | milestone-review | 0.02 | 0.14 |
+
+**Two deliberate deviations**, both from the estimate-quality review:
+
+- *`fake_cliproxy` design at the ×0.2 floor (0.20, not mid-range 0.40).* The
+  plan pre-resolves this tightly — the mode selector follows the existing
+  `--error-mode` precedent and the statefulness rule is spelled out — so by this
+  block's own "design cost survives only where the plan didn't resolve it"
+  standard it belongs at the low end.
+- *Manual e2e impl at 0.40, which is ABOVE `real-api-discovery`'s ×0.4 band
+  (0.12–0.24).* Intentional. v3.1's ×0.4 scale is calibrated on **AI-paired**
+  implementation, which compresses; Task 2.7 is six operator-driven round-trips
+  in a live editor against a real API, which does not. The unscaled 0.3–0.6
+  range is the honest one here, so this line is written unscaled.
+
+**Calibration note (advisory, for #127's ledger — NOT applied to the total):**
+recent window-trusted parley rows near this size have run consistently over —
+#187 0.58, #190 0.57, #195 0.53, #168 0.60, #186 0.96, #197 0.82 (est/actual);
+median ≈0.6. Against that, 5.6 projects an actual nearer 7–9h. This issue's
+shape (8 new files, 2 milestones, a live-API dependency, a mostly *sequential*
+task chain that gets little within-session parallelism) sits with the low-ratio
+rows. Recorded as v3.1 drift to measure at close, not hand-inflated here.
 
 ```estimate
 model: estimate-logic-v3.1
@@ -182,12 +208,12 @@ familiarity: 1.0
 item: cross-cutting-refactor   design=0.14 impl=0.22
 item: lua-neovim               design=1.00 impl=1.28
 item: smaller-go-module        design=0.17 impl=0.74
-item: api-integration          design=0.40 impl=0.40
-item: real-api-discovery       design=0.00 impl=0.50
-item: atlas-docs               design=0.02 impl=0.06
+item: api-integration          design=0.20 impl=0.40
+item: real-api-discovery       design=0.00 impl=0.70
+item: atlas-docs               design=0.04 impl=0.15
 item: milestone-review         design=0.04 impl=0.28
 design-buffer: 0.15
-total: 5.52
+total: 5.60
 ```
 
 ## Plan
