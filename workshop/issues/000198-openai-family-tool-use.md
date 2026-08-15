@@ -223,7 +223,7 @@ See `workshop/plans/000198-openai-family-tool-use-plan.md`.
 - [x] M1 — pure wire layer: `wire_anthropic` extraction, `wire_openai`
       (encode / decode / translate), `wire` registry, unit specs + captured
       fixtures. No consumer wiring.
-- [ ] M2 — wire it up: dispatcher / tool_loop / skill_invoke / chat_respond /
+- [x] M2 — wire it up: dispatcher / tool_loop / skill_invoke / chat_respond /
       skill_assembly, fake tool mode, OpenAI-route goldens, live conformance,
       end-to-end `ToolSol*` verification.
 
