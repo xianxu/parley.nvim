@@ -25,17 +25,11 @@ local ANTHROPIC_WEB_FETCH_BETA_TAG = "web-fetch-2025-09-10"
 -- Helpers shared across adapters
 --------------------------------------------------------------------------------
 
-local function safe_json_decode(str)
-    local success, decoded = pcall(vim.json.decode, str)
-    if success then
-        return decoded
-    end
-    return nil
-end
-
-local function strip_data_prefix(line)
-    return line:gsub("^data: ", "")
-end
+-- Hoisted to lua/parley/sse.lua in #198 so the tool wire modules can share
+-- them. Aliased as locals here so the ~20 existing call sites are untouched.
+local sse = require("parley.sse")
+local safe_json_decode = sse.safe_json_decode
+local strip_data_prefix = sse.strip_data_prefix
 
 local function tool_progress_message(tool_name)
     if tool_name == "web_search" or tool_name == "web_search_call" then
