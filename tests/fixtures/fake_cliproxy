@@ -31,6 +31,18 @@ the #197 outage:
   <mode>_once          that error on the FIRST request, 200 thereafter — a
                        genuinely transient failure for the retry rung
 
+Response modes (--response-mode / PARLEY_FAKE_RESPONSE_MODE) select the SHAPE of
+a successful POST /v1/chat/completions, orthogonal to the error modes above:
+  completion           (default) a minimal non-streaming completion
+  tool_call            STATEFUL, models one OpenAI tool round:
+                         request WITHOUT a role:"tool" message -> an SSE stream
+                           of delta.tool_calls (the model calling a tool)
+                         request WITH one    -> a plain streamed completion
+                       This is what lets an integration test drive the real
+                       tool_loop recursion against a process instead of mocks.
+  tool_call_parallel   same, but the first response calls TWO tools at distinct
+                       array indices.
+
 Login modes (PARLEY_FAKE_LOGIN_MODE), used when invoked with a -*-login flag —
 the four ways #197's login could end:
   success              print the authorize URL, then write a credential
@@ -57,6 +69,7 @@ def parse_args(argv):
     mgmt_key = None
     auth_store = os.environ.get("PARLEY_FAKE_AUTH_STORE")
     error_mode = os.environ.get("PARLEY_FAKE_ERROR_MODE", "ok")
+    response_mode = os.environ.get("PARLEY_FAKE_RESPONSE_MODE", "completion")
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -81,10 +94,12 @@ def parse_args(argv):
             i += 2
         elif a == "--error-mode":
             error_mode = argv[i + 1]
+        elif a == "--response-mode" and i + 1 < len(argv):
+            response_mode = argv[i + 1]
             i += 2
         else:
             i += 1
-    return port, mode, mgmt_key, auth_store, error_mode
+    return port, mode, mgmt_key, auth_store, error_mode, response_mode
 
 
 # When the proxy last LOADED each credential into memory, keyed by filename.
@@ -192,7 +207,7 @@ def main():
                      "-no-browser", "-oauth-callback-port int", "-xai-login"):
             sys.stdout.write("  %s\n" % flag)
         sys.exit(0)
-    port, mode, mgmt_key, auth_store, error_mode = parse_args(sys.argv[1:])
+    port, mode, mgmt_key, auth_store, error_mode, response_mode = parse_args(sys.argv[1:])
     login_mode = os.environ.get("PARLEY_FAKE_LOGIN_MODE")
     if login_mode or any(a.endswith("-login") for a in sys.argv[1:]):
         run_login(login_mode or "success", auth_store)
@@ -205,6 +220,10 @@ def main():
         sys.exit(2)
 
     served = {"first": False}  # for the `_once` transient modes
+    # Files the tool_call mode asks parley to read. Injected so the spec owns
+    # the fixture content and the scope guard sees a path inside its root.
+    TOOL_PATH_A = os.environ.get("PARLEY_FAKE_TOOL_PATH_A", "/dev/null")
+    TOOL_PATH_B = os.environ.get("PARLEY_FAKE_TOOL_PATH_B", "/dev/null")
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_a):
@@ -233,10 +252,71 @@ def main():
             "quota": (402, {"error": {"message": "payment_required", "type": "quota_error"}}),
         }
 
+        def _sse(self, chunks):
+            """Stream `chunks` as SSE, terminated by [DONE] — the shape parley's
+            openai-family decoder reads."""
+            body = b""
+            for c in chunks:
+                body += b"data: " + json.dumps(c).encode() + b"\n\n"
+            body += b"data: [DONE]\n\n"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        @staticmethod
+        def _tool_call_chunks(calls):
+            """One OpenAI tool round. id + name arrive in a call's FIRST chunk
+            and arguments accumulate separately, because that split is exactly
+            what the decoder has to reassemble."""
+            chunks = []
+            for idx, (call_id, name, _args) in enumerate(calls):
+                chunks.append({"choices": [{"index": 0, "delta": {"role": "assistant",
+                    "tool_calls": [{"index": idx, "id": call_id, "type": "function",
+                                    "function": {"name": name, "arguments": ""}}]}}]})
+            for idx, (_id, _name, args) in enumerate(calls):
+                chunks.append({"choices": [{"index": 0, "delta": {
+                    "tool_calls": [{"index": idx,
+                                    "function": {"arguments": json.dumps(args)}}]}}]})
+            chunks.append({"choices": [{"index": 0, "delta": {},
+                                        "finish_reason": "tool_calls"}]})
+            return chunks
+
+        def _streamed_text(self, text):
+            self._sse([
+                {"choices": [{"index": 0, "delta": {"role": "assistant", "content": text}}]},
+                {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+            ])
+
         def do_POST(self):
             length = int(self.headers.get("Content-Length") or 0)
-            if length:
-                self.rfile.read(length)
+            raw_body = self.rfile.read(length) if length else b""
+
+            # STATEFUL tool mode. Which round we are in is read from the REQUEST
+            # rather than from a counter: a request carrying a role:"tool"
+            # message is by definition the second leg, which makes this correct
+            # under retries and concurrent buffers where a counter would drift.
+            if response_mode in ("tool_call", "tool_call_parallel") and error_mode == "ok":
+                try:
+                    parsed = json.loads(raw_body or b"{}")
+                except ValueError:
+                    parsed = {}
+                answered = any(m.get("role") == "tool"
+                               for m in parsed.get("messages", []) or [])
+                if answered:
+                    self._streamed_text("Done: the tool result was received.")
+                    return
+                if response_mode == "tool_call_parallel":
+                    self._sse(self._tool_call_chunks([
+                        ("call_fake_a", "read_file", {"path": TOOL_PATH_A}),
+                        ("call_fake_b", "read_file", {"path": TOOL_PATH_B}),
+                    ]))
+                else:
+                    self._sse(self._tool_call_chunks([
+                        ("call_fake_a", "read_file", {"path": TOOL_PATH_A}),
+                    ]))
+                return
             # `<mode>_once` fails the FIRST request and succeeds afterwards —
             # a genuinely transient failure, which is what the recovery ladder's
             # retry rung is for. Modelling it here removes the alternative:
