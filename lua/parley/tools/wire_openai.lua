@@ -131,17 +131,18 @@ function M.decode_tool_calls_from_stream(raw_response)
                         table.insert(order, idx)
                     end
 
-                    if tc.id then
-                        state.id = tc.id
-                    end
+                    -- sse.str, not `if tc.id then`: an explicit JSON null
+                    -- decodes to vim.NIL, which is TRUTHY, so the obvious
+                    -- guard would let a continuation chunk overwrite the id
+                    -- and name captured in the first chunk with userdata.
+                    state.id = sse.str(tc.id) or state.id
 
                     local fn = tc["function"]
                     if type(fn) == "table" then
-                        if fn.name then
-                            state.name = fn.name
-                        end
-                        if type(fn.arguments) == "string" then
-                            table.insert(state.parts, fn.arguments)
+                        state.name = sse.str(fn.name) or state.name
+                        local args = sse.str(fn.arguments)
+                        if args then
+                            table.insert(state.parts, args)
                         end
                     end
                 end
@@ -152,19 +153,30 @@ function M.decode_tool_calls_from_stream(raw_response)
     local completed = {}
     for _, idx in ipairs(order) do
         local state = by_index[idx]
-        local input = {}
-        local full_json = table.concat(state.parts)
-        if full_json ~= "" then
-            local ok, parsed = pcall(vim.json.decode, full_json)
-            if ok and type(parsed) == "table" then
-                input = parsed
+        -- A nameless entry is not a call. It happens when a stream carries a
+        -- continuation fragment whose opening chunk never arrived, and it has
+        -- no analogue on the anthropic wire (a call exists there only if
+        -- content_block_start named it). Surfacing one would put an
+        -- unexecutable ToolCall into the loop, where the registry lookup
+        -- concatenates the nil name and raises — breaking the very
+        -- never-raise contract this decoder advertises. Dropping it is safe:
+        -- nothing was written to the buffer for it, so nothing is left
+        -- unmatched.
+        if state.name then
+            local input = {}
+            local full_json = table.concat(state.parts)
+            if full_json ~= "" then
+                local ok, parsed = pcall(vim.json.decode, full_json)
+                if ok and type(parsed) == "table" then
+                    input = parsed
+                end
             end
+            table.insert(completed, {
+                id = state.id,
+                name = state.name,
+                input = input,
+            })
         end
-        table.insert(completed, {
-            id = state.id,
-            name = state.name,
-            input = input,
-        })
     end
 
     return completed
@@ -172,6 +184,11 @@ end
 
 --- Did this stream carry a client tool call at all? Cheap plain-text probe,
 --- not a parse. See wire_anthropic.has_tool_calls for why it exists.
+---
+--- A backend that emits `"tool_calls":null` on every delta would make this
+--- permanently true. That errs in the benign direction — it suppresses the
+--- "response is empty" notice rather than causing one — so it stays a
+--- substring probe rather than paying a full parse on every response.
 ---@param raw_response string
 ---@return boolean
 function M.has_tool_calls(raw_response)

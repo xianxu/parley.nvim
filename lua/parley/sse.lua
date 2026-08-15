@@ -30,10 +30,38 @@ end
 
 --- Strip the SSE `data: ` prefix from a line. Lines without the prefix are
 --- returned unchanged.
+---
+--- Parenthesized so this returns ONE value: `gsub` also returns a
+--- replacement count, and leaking it makes `f(strip_data_prefix(line))`
+--- pass two arguments.
 ---@param line string
 ---@return string
 function M.strip_data_prefix(line)
     return (line:gsub("^data: ", ""))
+end
+
+--- Read an optional string field out of decoded JSON.
+---
+--- `vim.json.decode` turns an explicit JSON `null` into `vim.NIL`, a userdata
+--- that is **truthy in Lua**. So the natural-looking guard
+---
+---     if obj.name then state.name = obj.name end
+---
+--- accepts a null and overwrites a good value with userdata, which then
+--- raises the moment anything concatenates it. Streaming wires emit explicit
+--- nulls freely (OpenAI sends `"finish_reason":null` on every chunk), and a
+--- continuation chunk may repeat a field as null that an earlier chunk set
+--- properly — so this is reachable, not theoretical.
+---
+--- Use this at every optional-field read in a decoder: it collapses `nil`,
+--- `vim.NIL`, and any non-string to `nil`, which is what callers mean.
+---@param value any
+---@return string|nil
+function M.str(value)
+    if type(value) == "string" then
+        return value
+    end
+    return nil
 end
 
 return M

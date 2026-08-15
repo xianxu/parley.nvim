@@ -33,10 +33,19 @@ Group sentinels expand alphabetically; the combined list is de-duplicated by nam
 ## Wires (per-provider tool protocol)
 
 A **wire** owns everything about how one provider family expresses client-side
-tool use on the network. `lua/parley/tools/wire.lua` is the registry every
-consumer goes through; the protocols themselves are pure modules beside it.
-Before #198 the Anthropic protocol lived inline in `providers.lua` and each
-consumer hardcoded it.
+tool use on the network. `lua/parley/tools/wire.lua` is the registry consumers
+resolve through; the protocols themselves are pure modules beside it. Before
+#198 the Anthropic protocol lived inline in `providers.lua` and each consumer
+hardcoded it.
+
+> **State at #198 M1:** the wire layer and the encoders are wired up; the
+> *read* side is not. `dispatcher.lua` still runs its five-branch provider
+> chain, `tool_loop.lua` and `skill_invoke.lua` still call
+> `providers.decode_anthropic_tool_calls_from_stream` directly, `dispatcher`'s
+> `empty_response` still hardcodes the Anthropic literal, and nothing calls
+> `translate_messages` yet. M2 rewires all four. Until then an OpenAI-family
+> tool agent builds a valid request but decodes zero calls — see the issue Log.
+> Drop this note at M2's atlas pass.
 
 | Module | Speaks for |
 |--------|-----------|
@@ -72,7 +81,9 @@ Internally parley always speaks Anthropic's shape — assistant `[text, tool_use
 content blocks followed by a user turn of matching `[tool_result]` blocks — and
 `_emit_content_blocks_as_messages` is the single place that shape and its
 `#155`/`#156` invariants are produced. `wire_openai.translate_messages` converts
-that already-validated output at the dispatcher seam into OpenAI's shape:
+that already-validated output into OpenAI's shape (called from
+`dispatcher.prepare_payload` as of M2 — the one point upstream of every payload
+builder, since cliproxy's openai route and ollama each build their own):
 `tool_calls[]` on the assistant message with **JSON-string** `arguments`, plus
 one `{role = "tool", tool_call_id}` message per result. `is_error` folds into
 the content string (OpenAI has no such field). Translating in the adapter rather

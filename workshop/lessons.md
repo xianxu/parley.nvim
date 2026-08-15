@@ -600,3 +600,29 @@
   proxy usually does reload. The code was right for a subtler reason than the
   comment claimed. Rule: assert the property the logic actually needs
   (independence of the two quantities), not the anecdote from one manual probe.
+- **`vim.NIL` is truthy, so `if obj.field then` accepts an explicit JSON null.**
+  `vim.json.decode` maps JSON `null` to a userdata sentinel, not to `nil`. In a
+  streaming decoder that reads a field across chunks, a later chunk carrying
+  `"id":null` therefore *overwrote* a correctly captured value with userdata,
+  which then raised `attempt to concatenate a userdata value` two frames away —
+  in code whose stated contract was "never raises, degrade instead". The tell
+  was an asymmetry that was already visible in the same function: `arguments`
+  was `type(...) == "string"`-guarded while `id`/`name` were truthiness-guarded.
+  Rule: read every optional field out of decoded JSON through a typed accessor
+  (`sse.str`), never a bare truthiness test — and when one field in a block is
+  type-guarded and its siblings are not, treat the inconsistency as the bug.
+- **A test that branches on its environment can assert nothing.** A spec for a
+  config-level fallback did `if configured then assert.equals(configured, got)
+  else assert.equals("none", got) end` — and in the unit process the config was
+  never set, so it permanently took the else branch and green-lit the one
+  behaviour the function existed to own. Rule: if a test needs ambient state,
+  stub it explicitly; a conditional assertion is a skipped test that reports
+  success. Corollary: an entity whose test needs that branch has an ambient
+  input and is not as pure as its docstring says.
+- **Splitting a milestone at a layer boundary can turn a loud failure into a
+  silent one.** Landing encoders in M1 and decoders in M2 left a window where a
+  tool agent built a valid request, decoded zero calls, and rendered an empty
+  answer — replacing an explicit "tools not supported" raise. Rule: when
+  sequencing milestones, ask what the intermediate state *does* for a user, not
+  just what it contains; if a clear error becomes a wrong answer, record the
+  no-merge constraint and order the milestone to close the exposure first.

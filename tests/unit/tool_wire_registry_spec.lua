@@ -73,6 +73,31 @@ describe("wire.encode", function()
     end)
 end)
 
+describe("wire.encode_tool_choice", function()
+    it("shapes the forced tool per wire", function()
+        assert.same({ type = "tool", name = "propose_edits" },
+            wire.encode_tool_choice("anthropic", { model = "claude-sonnet-5" }, "propose_edits"))
+        assert.same({ type = "function", ["function"] = { name = "propose_edits" } },
+            wire.encode_tool_choice("openai", { model = "gpt-5.4" }, "propose_edits"))
+    end)
+
+    it("follows the cliproxy route", function()
+        assert.same({ type = "tool", name = "propose_edits" },
+            wire.encode_tool_choice("cliproxyapi",
+                { model = "claude-sonnet-5", web_search_strategy = "anthropic_tools_route" },
+                "propose_edits"))
+        assert.same({ type = "function", ["function"] = { name = "propose_edits" } },
+            wire.encode_tool_choice("cliproxyapi", { model = "gpt-5.6-sol" }, "propose_edits"))
+    end)
+
+    it("raises for a provider with no wire, naming the provider", function()
+        local ok, err = pcall(wire.encode_tool_choice, "googleai",
+            { model = "gemini-3-pro-preview" }, "propose_edits")
+        assert.is_false(ok)
+        assert.matches("googleai", tostring(err))
+    end)
+end)
+
 describe("wire.decode / has_tool_calls / translate_messages", function()
     -- These run on EVERY response, including from non-tool agents and
     -- providers with no wire, so they degrade quietly instead of raising.
@@ -152,22 +177,50 @@ describe("providers.cliproxy_strategy", function()
                 web_search_strategy = "anthropic_tools_route" }))
     end)
 
-    it("falls back to the provider-level config when the model has none", function()
-        -- The config default is openai_tools_route; the point of exposing
-        -- this is that consumers must NOT re-implement the fallback by
-        -- reading model.web_search_strategy directly.
+    -- M1 review I1. This previously branched on whether parley was set up,
+    -- and in the unit process it is NOT — so it degraded to
+    -- assert.equals("none", "none") and never exercised the config fallback
+    -- that is the entire reason this wrapper is exposed. Stubbed explicitly.
+    describe("config-level fallback", function()
         local parley = require("parley")
-        local configured = parley.dispatcher
-            and parley.dispatcher.providers
-            and parley.dispatcher.providers.cliproxyapi
-            and parley.dispatcher.providers.cliproxyapi.web_search_strategy
-        local got = providers.cliproxy_strategy({ model = "gpt-5.6-sol" })
-        if configured then
-            assert.equals(configured, got)
-        else
-            -- parley not set up in this process: documented "none" fallback
-            assert.equals("none", got)
-        end
+        local saved_dispatcher
+
+        before_each(function()
+            saved_dispatcher = parley.dispatcher
+            parley.dispatcher = {
+                providers = {
+                    cliproxyapi = { web_search_strategy = "anthropic_tools_route" },
+                },
+            }
+        end)
+
+        after_each(function()
+            parley.dispatcher = saved_dispatcher
+        end)
+
+        it("picks up the provider-level strategy when the model has none", function()
+            assert.equals("anthropic_tools_route",
+                providers.cliproxy_strategy({ model = "claude-sonnet-5" }))
+        end)
+
+        it("lets a model-level strategy win over the config", function()
+            assert.equals("openai_tools_route",
+                providers.cliproxy_strategy({
+                    model = "claude-sonnet-5",
+                    web_search_strategy = "openai_tools_route",
+                }))
+        end)
+
+        it("routes through to cliproxy_route, so config alone can pick the wire", function()
+            -- The end-to-end point: a claude model with NO model-level
+            -- strategy still reaches the anthropic wire via config.
+            assert.equals(wire_anthropic, wire.resolve("cliproxyapi", { model = "claude-sonnet-5" }))
+        end)
+
+        it("falls back to \"none\" when the provider config has no strategy", function()
+            parley.dispatcher = { providers = { cliproxyapi = {} } }
+            assert.equals("none", providers.cliproxy_strategy({ model = "claude-sonnet-5" }))
+        end)
     end)
 
     it("ignores an unrecognised strategy on the model table", function()

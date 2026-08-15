@@ -405,3 +405,38 @@ Three coupled changes; splitting them ships a broken intermediate.
 - **`translate_messages` runs on every OpenAI-family request, tool-less ones included.** The string-content pass-through must be exact identity or every existing OpenAI chat changes shape. Task 1.6's first pinned behavior is the guard; the full suite in Task 1.8 Step 4 is the backstop.
 - **The registry must stay model-keyed.** The moment a consumer passes a route instead, the forget-the-route failure returns — and it fails *silently*, as zero decoded tool calls. If a future caller genuinely has no model, give it an explicit `wire.for_route(route)` rather than letting `nil` default.
 - **`googleai` remains wireless.** `resolve` returns nil and `encode` raises naming the provider — the same failure the issue fixes, but honest about which provider and no longer claiming an anthropic-family requirement. Out of scope by ARCH-PURPOSE: the issue's purpose is the OpenAI family, and Google needs a genuinely different shape (`functionDeclarations`), not a deferred half of this one.
+
+---
+
+## Revisions
+
+### 2026-08-15 — M1 execution deviations
+
+**1. `M.ollama_encode_tools` / `M.googleai_encode_tools`: status `deleted` → `deleted in M2`.**
+Core-concepts table rows and Task 1.8 both said M1 deletes them. It does not.
+Their only caller is the dispatcher's provider chain (`dispatcher.lua:124-126`),
+which M2 Task 2.1 removes — deleting them at M1 would leave the tree calling a
+nil for any googleai/ollama agent that declared tools. They are deleted in M2,
+in the same commit that removes the last reference. Task 1.8's Files list
+changes accordingly.
+
+**2. Task 1.7's test files consolidated.** The task named both
+`tests/unit/tool_wire_registry_spec.lua` and `tests/unit/cliproxy_route_spec.lua`;
+everything landed in the former. The latter does not exist.
+
+**3. M1 → M2 handoff carries a live regression, not just missing capability.**
+M1 unblocked the *encoders* while the *decoders* still assume Anthropic. So at
+this commit a `ToolSol*` turn builds a valid OpenAI request, receives
+`delta.tool_calls`, decodes zero calls through
+`providers.decode_anthropic_tool_calls_from_stream`, and renders an empty
+answer — where before M1 it raised a clear "tools not supported for this
+provider yet" at request-build time. **M1 must not merge without M2.** M2 Tasks
+2.1/2.2 are therefore closing an exposure, not merely adding capability, and
+should be sequenced first within the milestone.
+
+**4. New pure entity: `sse.str`** (`lua/parley/sse.lua`), from M1 review C1.
+`vim.json.decode` maps an explicit JSON `null` to `vim.NIL`, which is **truthy**
+in Lua, so `if obj.name then …` accepts it and overwrites a good value with
+userdata that raises on the next concatenation. Both decoders now read every
+optional field through `sse.str`, making the class unrepresentable rather than
+patched per-site. Add to the Core-concepts table as `new`.

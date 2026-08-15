@@ -220,7 +220,7 @@ total: 5.60
 
 See `workshop/plans/000198-openai-family-tool-use-plan.md`.
 
-- [ ] M1 — pure wire layer: `wire_anthropic` extraction, `wire_openai`
+- [x] M1 — pure wire layer: `wire_anthropic` extraction, `wire_openai`
       (encode / decode / translate), `wire` registry, unit specs + captured
       fixtures. No consumer wiring.
 - [ ] M2 — wire it up: dispatcher / tool_loop / skill_invoke / chat_respond /
@@ -230,6 +230,7 @@ See `workshop/plans/000198-openai-family-tool-use-plan.md`.
 ## Log
 
 ### 2026-08-15
+- 2026-08-15: closed M1 — Pure wire layer landed: sse.lua + wire_anthropic + wire_openai + wire registry + cliproxy_route/cliproxy_strategy. Full suite exit 0 (unit+integration, unsandboxed). Anthropic tool specs UNCHANGED and still 19+6 pass = behaviour-preserving move; golden payloads byte-identical. 72 new assertions across 5 new specs incl. both real captured SSE fixtures. Beyond units: fed encode_tools+translate_messages real output to live cliproxy and got a correct answer back (parallel tool_calls + separate role:tool messages accepted end-to-end). Decoder specs mutation-verified (index sort 17->16, empty_dict removal 10->8).; review verdict: FIX-THEN-SHIP
 
 Wire behavior established empirically against the operator's running
 cliproxyapi 7.2.110 (`127.0.0.1:8317`, codex channel authed) before planning,
@@ -320,6 +321,42 @@ round-trip above was therefore validated through the `claude` channel (cliproxy
 translating openai→anthropic), which exercises the same payload shape; the
 codex-side validation earlier in this Log used the identical shape before the
 credential died. **M2's Task 2.7 e2e needs `:ParleyProxy login codex` first.**
+
+**⚠ M1 MUST NOT MERGE WITHOUT M2 — intermediate-state regression.** M1
+unblocked the *encoders* while the *decoders* still assume Anthropic. At this
+commit a `ToolSol*` turn builds a valid OpenAI request, gets `delta.tool_calls`
+back, decodes **zero** calls (`tool_loop.lua:193` still calls
+`decode_anthropic_tool_calls_from_stream`), and renders an empty answer with a
+"response is empty" notice — where before M1 it raised a clear *"tools not
+supported for this provider yet"* at request-build time. A clear raise became a
+silent wrong answer. M2 Tasks 2.1/2.2 close it and should be sequenced first
+within the milestone. (M1 review I4.)
+
+**M1 review verdict: FIX-THEN-SHIP** — one Critical, five Important. All fixed
+before the close commit, per the #174 protocol:
+
+- **C1 (real bug I introduced):** `vim.json.decode` maps an explicit JSON
+  `null` to `vim.NIL`, which is **truthy in Lua** — so `if tc.id then` accepted
+  it and a continuation chunk carrying `"id":null` overwrote the correctly
+  captured id with userdata. Probed and confirmed: the resulting ToolCall
+  raised `attempt to concatenate field 'name' (a userdata value)` in the
+  registry lookup two frames downstream, breaking the decoder's own
+  never-raise contract. Fixed by a shared `sse.str()` used at every optional
+  field read in **both** decoders — making the class unrepresentable rather
+  than patched per-site — plus dropping nameless entries, which have no
+  anthropic analogue and cannot be executed.
+- **I1:** the `cliproxy_strategy` config-fallback test was self-skipping —
+  `parley` is not set up in the unit process, so it degraded to
+  `assert.equals("none", "none")` and never exercised the one behaviour the
+  wrapper exists to own. Now stubs the provider config explicitly.
+- **I2:** `has_tool_calls` and `encode_tool_choice` — the two functions Task
+  1.2 flagged as "NOT moves", and the exact call sites M2 rewires — had no
+  direct coverage. Pinned by value now, including the exact wire spelling the
+  substring probe depends on, in a new `anthropic_tool_wire_spec.lua`.
+- **I3:** the atlas described M2 wiring in the present tense. Scoped to a
+  state note, to be dropped at M2's atlas pass.
+- **I5:** plan `## Revisions` appended (the stub-deletion deviation, the
+  consolidated spec file, the I4 handoff, and `sse.str` as a new entity).
 
 **Two test-suite hazards worth knowing** (neither caused by this work):
 `tests/unit/tools_builtin_find_spec.lua` shells `find` over the live repo tree,

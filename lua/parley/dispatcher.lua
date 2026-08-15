@@ -109,7 +109,10 @@ D.prepare_payload = function(messages, model, provider, agent_tools)
 	local payload = adapter.format_payload(messages, model, provider)
 
 	-- M1 Task 1.5: append client-side tools to whatever the adapter emitted.
-	-- Non-Anthropic providers raise here when agent_tools is non-empty.
+	-- This chain is superseded by lua/parley/tools/wire.lua and is removed in
+	-- #198 M2, which also deletes the two stubs it is the last caller of.
+	-- Anthropic, openai and cliproxyapi now all encode successfully; only
+	-- googleai and ollama still raise.
 	if agent_tools and #agent_tools > 0 then
 		local tools_registry = require("parley.tools")
 		local defs = tools_registry.select(agent_tools)
@@ -119,7 +122,7 @@ D.prepare_payload = function(messages, model, provider, agent_tools)
 		elseif provider == "cliproxyapi" then
 			client_tools = providers.cliproxyapi_encode_tools(defs, model)
 		elseif provider == "openai" then
-			client_tools = providers.openai_encode_tools(defs) -- raises
+			client_tools = providers.openai_encode_tools(defs)
 		elseif provider == "googleai" then
 			client_tools = providers.googleai_encode_tools(defs) -- raises
 		elseif provider == "ollama" then

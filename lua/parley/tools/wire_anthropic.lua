@@ -110,9 +110,15 @@ function M.decode_tool_calls_from_stream(raw_response)
                     if type(block) == "table" and block.type == "tool_use" then
                         -- Only CLIENT-side tool_use. server_tool_use is
                         -- intentionally skipped.
+                        -- sse.str guards the same vim.NIL hazard the OpenAI
+                        -- decoder hit (#198 M1 review C1): an explicit JSON
+                        -- null decodes to truthy userdata, which raises
+                        -- downstream the moment the name is concatenated.
+                        -- Not observed on this wire, but the read is
+                        -- identical, so the guard belongs at both.
                         in_flight[idx] = {
-                            id = block.id,
-                            name = block.name,
+                            id = sse.str(block.id),
+                            name = sse.str(block.name),
                             parts = {},
                         }
                     end

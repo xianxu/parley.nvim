@@ -171,6 +171,51 @@ describe("wire_openai.decode_tool_calls_from_stream (synthetic)", function()
         assert.same({}, wire.decode_tool_calls_from_stream(body))
     end)
 
+    -- M1 review C1. vim.json.decode turns an explicit JSON null into
+    -- vim.NIL, which is TRUTHY in Lua — so `if tc.id then` accepted it and
+    -- overwrote the good id with userdata. This wire emits explicit nulls
+    -- freely ("finish_reason":null on every chunk), so it is reachable, and
+    -- the userdata then raised on concatenation two frames downstream, in
+    -- the registry lookup inside tools/dispatcher.
+    it("does not let an explicit null clobber a captured id or name", function()
+        local calls = wire.decode_tool_calls_from_stream(table.concat({
+            'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_good",' ..
+                '"type":"function","function":{"name":"get_weather","arguments":""}}]}}]}',
+            'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":null,' ..
+                '"function":{"name":null,"arguments":"{\\"city\\":\\"Paris\\"}"}}]}}]}',
+        }, "\n\n"))
+
+        assert.equals(1, #calls)
+        assert.equals("call_good", calls[1].id)
+        assert.equals("get_weather", calls[1].name)
+        assert.same({ city = "Paris" }, calls[1].input)
+        -- the actual downstream failure mode: this must not raise
+        assert.has_no.errors(function()
+            return "Tool '" .. calls[1].name .. "' is not available"
+        end)
+    end)
+
+    it("drops an entry that never carried a name", function()
+        -- A continuation fragment whose opening chunk never arrived. It has
+        -- no analogue on the anthropic wire, and surfacing it would put an
+        -- unexecutable ToolCall into the loop.
+        local calls = wire.decode_tool_calls_from_stream(
+            'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,' ..
+            '"function":{"arguments":"{}"}}]}}]}')
+        assert.same({}, calls)
+    end)
+
+    it("keeps a well-formed call when a nameless entry shares the stream", function()
+        local calls = wire.decode_tool_calls_from_stream(table.concat({
+            'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,' ..
+                '"function":{"arguments":"{}"}}]}}]}',
+            'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":1,"id":"call_b",' ..
+                '"function":{"name":"ls","arguments":"{}"}}]}}]}',
+        }, "\n\n"))
+        assert.equals(1, #calls)
+        assert.equals("ls", calls[1].name)
+    end)
+
     it("tolerates a missing index by defaulting to 0", function()
         local calls = wire.decode_tool_calls_from_stream(sse({
             tc_chunk({ { id = "call_a", ["function"] = { name = "x", arguments = "{}" } } }),
