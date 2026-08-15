@@ -4,8 +4,9 @@
 -- pieces of M2 into a single "received an SSE response, turn it into
 -- a 🔧:/📎: round-trip" operation:
 --
---   providers.decode_anthropic_tool_calls_from_stream (Task 2.4)
---     → extracts ToolCalls from the captured raw SSE response
+--   tools.wire.decode (#198)
+--     → extracts ToolCalls from the captured raw SSE response, using the
+--       wire this agent's provider/model actually speaks
 --
 --   tools.dispatcher.execute_call (Task 2.3)
 --     → cwd-scope check, pcall-guarded handler invocation,

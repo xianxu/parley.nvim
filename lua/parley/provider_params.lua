@@ -240,6 +240,42 @@ M.resolve_params = function(provider, model_config)
 end
 
 --------------------------------------------------------------------------------
+-- raise_output_cap(payload, provider, model_config, floor)
+--
+-- Raise the output-token cap on an already-built payload to at least `floor`,
+-- writing whichever KEY this provider/model actually uses.
+--
+-- The cap is not always called `max_tokens`: gpt-5 renames it to
+-- `max_completion_tokens` and googleai to `maxOutputTokens` (the `api_name`
+-- specs above). A caller that hardcodes `max_tokens` therefore does two wrong
+-- things at once on a renaming model — it leaves the real cap untouched, and
+-- it adds a key that family's API rejects. #198 hit exactly that: the skill
+-- driver's large-document bump was a silent no-op for every gpt-5 agent,
+-- which is precisely the set of agents #198 made eligible for skills.
+--
+-- Returns the api_name written, or nil when the model declares no cap at all
+-- (e.g. the search-api models, which mark both names unsupported — there is
+-- nothing to raise and adding one would be rejected).
+---@param payload table  built payload, mutated in place
+---@param provider string
+---@param model_config table|string
+---@param floor number
+---@return string|nil api_name
+M.raise_output_cap = function(payload, provider, model_config, floor)
+    if type(model_config) ~= "table" then
+        model_config = { model = tostring(model_config) }
+    end
+    local schema = M.get_schema(provider, model_config.model or "")
+    local spec = schema.params and schema.params.max_tokens
+    if not spec then
+        return nil -- this model has no output cap in its schema
+    end
+    local api_name = spec.api_name or "max_tokens"
+    payload[api_name] = math.max(payload[api_name] or 0, floor)
+    return api_name
+end
+
+--------------------------------------------------------------------------------
 -- resolve_tool_overrides(provider, model_config, tool_name) → table
 --
 -- Produces provider/model-specific tool override fields.

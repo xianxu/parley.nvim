@@ -600,6 +600,9 @@
   proxy usually does reload. The code was right for a subtler reason than the
   comment claimed. Rule: assert the property the logic actually needs
   (independence of the two quantities), not the anecdote from one manual probe.
+
+## 2026-08-15 (#198)
+
 - **`vim.NIL` is truthy, so `if obj.field then` accepts an explicit JSON null.**
   `vim.json.decode` maps JSON `null` to a userdata sentinel, not to `nil`. In a
   streaming decoder that reads a field across chunks, a later chunk carrying

@@ -85,18 +85,6 @@ function M.has_tool_calls_by_name(name, raw_response)
     return w.has_tool_calls(raw_response)
 end
 
---- Decode tool calls given a stamped wire name. Degrades to an empty list.
----@param name string|nil
----@param raw_response string
----@return ToolCall[]
-function M.decode_by_name(name, raw_response)
-    local w = M.by_name(name)
-    if not w then
-        return {}
-    end
-    return w.decode_tool_calls_from_stream(raw_response)
-end
-
 --- Which wire does this (provider, model) pair speak?
 ---@param provider string|nil
 ---@param model table|string|nil  model params table, or a bare model name
@@ -104,6 +92,13 @@ end
 function M.resolve(provider, model)
     if provider == "cliproxyapi" then
         local providers = require("parley.providers")
+        -- A bare string is read as the model NAME here, while
+        -- cliproxyapi.format_payload discards it (`… or nil`) because its
+        -- payload builder needs the params table. They therefore disagree for
+        -- string models — unreachable through prepare_payload, which
+        -- short-circuits strings before either runs, and reachable only via the
+        -- public cliproxyapi_encode_tools. Treating the name as a name is the
+        -- more useful of the two behaviours, so it is kept deliberately.
         local model_name = type(model) == "table" and model.model or model
         local strategy = providers.cliproxy_strategy(type(model) == "table" and model or nil)
         if providers.cliproxy_route(model_name, strategy) == "anthropic" then

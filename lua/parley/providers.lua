@@ -146,8 +146,10 @@ local function is_cliproxy_anthropic_route_model(model_name)
     return model_name:find("^claude%-") ~= nil or model_name:find("^code_execution_") ~= nil
 end
 
---- Resolve the configured cliproxy web-search strategy for a model. PURE
---- wrapper over the local above, exposed in #198 because consumers outside
+--- Resolve the configured cliproxy web-search strategy for a model.
+--- NOT pure: falls back to module-global config (parley.dispatcher.providers)
+--- when the model table carries no strategy. That ambient read is the whole
+--- point — it is exposed in #198 because consumers outside
 --- this file need it and MUST NOT re-implement the config-level fallback by
 --- reading `model.web_search_strategy` directly (a model table often carries
 --- none, and the provider config supplies it).

@@ -4,8 +4,14 @@
 -- artifact document into the LLM-call inputs the thin M3 driver feeds to
 -- dispatcher.prepare_payload. resolve_agent is the agent cascade salvaged from
 -- skill_runner, made PURE by INJECTING its config + agent-registry deps (v1 read
--- the parley module directly). No IO, no require("parley") here — the driver
--- supplies `body` (the source() result) and the agent deps at the boundary.
+-- the parley module directly). The driver supplies `body` (the source() result)
+-- and the agent deps at the boundary.
+--
+-- One ambient read remains (#198): resolve_agent's tool-capable test calls
+-- wire.resolve, which for cliproxyapi reaches providers.cliproxy_strategy and
+-- thus module-global config for the web_search_strategy fallback. Outcome-
+-- neutral today — cliproxyapi resolves to SOME wire either way — but it is a
+-- real dependency, so this file is not the pure island the rest of it is.
 
 local M = {}
 

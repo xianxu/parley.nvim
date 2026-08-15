@@ -434,6 +434,10 @@ atlas:
   providers/tool_use:
     code:
       - lua/parley/tool_loop.lua
+      - lua/parley/sse.lua
+      - lua/parley/tools/wire.lua
+      - lua/parley/tools/wire_anthropic.lua
+      - lua/parley/tools/wire_openai.lua
       - lua/parley/tools/init.lua
       - lua/parley/tools/dispatcher.lua
       - lua/parley/tools/serialize.lua
@@ -455,7 +459,16 @@ atlas:
     tests:
       - tests/integration/chat_lease_spec.lua
       - tests/integration/neighborhood_completion_spec.lua
+      - tests/integration/openai_tool_loop_spec.lua
+      - tests/integration/cliproxy_tool_conformance_spec.lua
       - tests/unit/tool_loop_spec.lua
+      - tests/unit/tool_wire_registry_spec.lua
+      - tests/unit/anthropic_tool_wire_spec.lua
+      - tests/unit/openai_tool_encode_spec.lua
+      - tests/unit/openai_tool_decode_spec.lua
+      - tests/unit/openai_message_translate_spec.lua
+      - tests/unit/openai_payload_tools_spec.lua
+      - tests/unit/provider_params_output_cap_spec.lua
       - tests/unit/neighborhood_spec.lua
       - tests/unit/build_messages_spec.lua
       - tests/unit/tools_registry_spec.lua

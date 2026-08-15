@@ -218,7 +218,15 @@ function M.invoke(buf, manifest, args, opts)
     -- Large-document tool output needs headroom: a multi-edit propose_edits batch
     -- echoes old/new/explain per edit and easily exceeds the default (4096),
     -- truncating the tool JSON → empty decode. (Was skill_runner's explicit bump.)
-    payload.max_tokens = math.max(payload.max_tokens or 0, 100000)
+    --
+    -- Goes through provider_params because the cap is not always called
+    -- `max_tokens`: gpt-5 renames it to `max_completion_tokens`. Setting
+    -- `max_tokens` directly left the real cap at 4096 for every gpt-5 agent —
+    -- causing the exact truncation this line exists to prevent — while adding
+    -- a key that family's API rejects. #198 made those agents eligible for
+    -- skills, so the no-op became reachable.
+    require("parley.provider_params").raise_output_cap(
+        payload, agent.provider, agent.model, 100000)
 
     skill_render.clear_decorations(buf)
 

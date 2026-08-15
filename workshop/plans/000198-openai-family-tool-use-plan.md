@@ -88,10 +88,10 @@ No consumer is rewired in M1. At its end the wire modules exist, are unit-tested
 - Create: `lua/parley/sse.lua`
 - Modify: `lua/parley/providers.lua:28-38`
 
-- [ ] **Step 1: Create `lua/parley/sse.lua`** with `safe_json_decode` and `strip_data_prefix`, bodies copied verbatim from `providers.lua:28-38`.
-- [ ] **Step 2: Replace the locals in `providers.lua`** with `local sse = require("parley.sse")` and local aliases, so the ~20 existing call sites are untouched.
-- [ ] **Step 3: Run the full suite** — `make test`. Expected: PASS, unchanged. A pure move.
-- [ ] **Step 4: Commit** — `git commit -am "providers: #198 M1: hoist shared SSE decode helpers"`
+- [x] **Step 1: Create `lua/parley/sse.lua`** with `safe_json_decode` and `strip_data_prefix`, bodies copied verbatim from `providers.lua:28-38`.
+- [x] **Step 2: Replace the locals in `providers.lua`** with `local sse = require("parley.sse")` and local aliases, so the ~20 existing call sites are untouched.
+- [x] **Step 3: Run the full suite** — `make test`. Expected: PASS, unchanged. A pure move.
+- [x] **Step 4: Commit** — `git commit -am "providers: #198 M1: hoist shared SSE decode helpers"`
 
 ### Task 1.2: Move the Anthropic wire out of providers.lua
 
@@ -100,13 +100,13 @@ No consumer is rewired in M1. At its end the wire modules exist, are unit-tested
 - Modify: `lua/parley/providers.lua:681-753` (delete `anthropic.decode_tool_calls_from_stream`), `:1330-1345` (`M.anthropic_encode_tools` → delegate)
 - Test: `tests/unit/anthropic_tool_encode_spec.lua`, `tests/unit/anthropic_tool_decode_spec.lua` — **UNCHANGED**, they are the regression proof
 
-- [ ] **Step 1: Run the existing Anthropic specs for a green baseline.** Record the test count; it must be identical after the move.
+- [x] **Step 1: Run the existing Anthropic specs for a green baseline.** Record the test count; it must be identical after the move.
 
 Run: `nvim --headless -c "PlenaryBustedFile tests/unit/anthropic_tool_decode_spec.lua"`
 
-- [ ] **Step 2: Create the module** with `encode_tools` and `decode_tool_calls_from_stream` moved verbatim (including the documented `server_tool_use` / thinking-block exclusions), requiring `parley.sse` for the helpers.
+- [x] **Step 2: Create the module** with `encode_tools` and `decode_tool_calls_from_stream` moved verbatim (including the documented `server_tool_use` / thinking-block exclusions), requiring `parley.sse` for the helpers.
 
-- [ ] **Step 3: Add the two functions that are NOT moves:**
+- [x] **Step 3: Add the two functions that are NOT moves:**
 
 ```lua
 --- Cheap predicate for dispatcher's empty_response check.
@@ -123,11 +123,11 @@ end
 
 `has_tool_calls` promotes the `dispatcher.lua:326` literal to the wire (keep the plain-text `find(..., true)` form — the existing line depends on plain matching). `encode_tool_choice` promotes `skill_assembly.lua:37`'s literal. Neither changes behavior yet; M2 routes the call sites here.
 
-- [ ] **Step 4: Delegate from `providers.lua`.** Keep BOTH public names — `M.anthropic_encode_tools` and `M.decode_anthropic_tool_calls_from_stream` — since the untouched specs and `skill_invoke.lua:252` call them.
+- [x] **Step 4: Delegate from `providers.lua`.** Keep BOTH public names — `M.anthropic_encode_tools` and `M.decode_anthropic_tool_calls_from_stream` — since the untouched specs and `skill_invoke.lua:252` call them.
 
-- [ ] **Step 5: Re-run Step 1's command.** Expected: PASS, identical count. A differing count means the move was not verbatim.
+- [x] **Step 5: Re-run Step 1's command.** Expected: PASS, identical count. A differing count means the move was not verbatim.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git commit -am "providers: #198 M1: extract the anthropic tool wire
@@ -143,9 +143,9 @@ anthropic tool specs are unchanged and still pass — that is the proof."
 
 Captures from the operator's live cliproxyapi 7.2.110 are staged in the session scratchpad (`wire/openai_*.sse`); copy them in rather than re-issuing billable calls. Strip nothing — the specs must exercise the real interleaving (usage chunk, `[DONE]` sentinel, ignored `native_finish_reason` fields).
 
-- [ ] **Step 1: Copy the staged captures in.**
-- [ ] **Step 2: Record provenance** (`captured 2026-08-15 from cliproxyapi 7.2.110, model gpt-5.6-sol`) in the spec that loads them — SSE files cannot carry comments. This is what a re-capture must reproduce.
-- [ ] **Step 3: Commit.**
+- [x] **Step 1: Copy the staged captures in.**
+- [x] **Step 2: Record provenance** (`captured 2026-08-15 from cliproxyapi 7.2.110, model gpt-5.6-sol`) in the spec that loads them — SSE files cannot carry comments. This is what a re-capture must reproduce.
+- [x] **Step 3: Commit.**
 
 ### Task 1.4: `wire_openai.encode_tools` + `encode_tool_choice`
 
@@ -155,16 +155,16 @@ Captures from the operator's live cliproxyapi 7.2.110 are staged in the session 
 
 Target shape: `{type="function", ["function"]={name, description, parameters=input_schema}}`. `["function"]` bracket syntax is required — `function` is a Lua keyword. `encode_tool_choice(name)` returns `{type="function", ["function"]={name=name}}`.
 
-- [ ] **Step 1: Write the failing spec.** Pin, in order of likelihood-of-getting-wrong:
+- [x] **Step 1: Write the failing spec.** Pin, in order of likelihood-of-getting-wrong:
   - **an empty `input_schema` encodes as `{}`, not `[]`** — an empty Lua table JSON-encodes as an array and OpenAI rejects it where an object schema belongs. `vim.empty_dict()` is the fix; `_emit_content_blocks_as_messages` already hit this at `chat_respond.lua:669-675`.
   - internal `ToolDefinition` fields (`handler`, `kind`, `needs_backup`) never reach the payload.
   - `nil` input returns `{}`.
 
   Follow `tests/unit/anthropic_tool_encode_spec.lua:26-34`'s `registry.reset()` / `registry.register_builtins()` before/after pair — omitting the restore breaks later specs sharing the process.
-- [ ] **Step 2: Run to verify it fails** (`module 'parley.tools.wire_openai' not found`).
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run to verify it passes.**
-- [ ] **Step 5: Commit.**
+- [x] **Step 2: Run to verify it fails** (`module 'parley.tools.wire_openai' not found`).
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run to verify it passes.**
+- [x] **Step 5: Commit.**
 
 ### Task 1.5: `wire_openai.decode_tool_calls_from_stream`
 
@@ -174,18 +174,18 @@ Target shape: `{type="function", ["function"]={name, description, parameters=inp
 
 The hard one. Unlike Anthropic — explicit `content_block_start`/`_stop` framing around a top-level `.index` — OpenAI streams an *array* of partial `tool_calls`: `id` and `function.name` arrive only in the first chunk for an index, `function.arguments` accumulates as string fragments, and **nothing closes a call**.
 
-- [ ] **Step 1: Write the failing spec.** Pin these behaviors:
+- [x] **Step 1: Write the failing spec.** Pin these behaviors:
   - a call split across chunks reassembles (`{"city":` + `"Paris"}` → `{city="Paris"}`).
   - **parallel calls stay separate and ordered** — distinct `index` values, order of *first appearance*, not numeric order. This is the case the real fixture covers.
   - **resilience, all four:** missing arguments, malformed-JSON arguments, a stream cut short with no `finish_reason`, and a plain-text response — each yields `input = {}` or `{}` overall and **never raises**. A raising decoder breaks the chat buffer mid-loop.
   - the real-fixture assertion against `tests/fixtures/openai_parallel_tool_calls.sse`: two `get_weather` calls, `{city="Paris"}` then `{city="Tokyo"}`.
-- [ ] **Step 2: Run to verify it fails.**
-- [ ] **Step 3: Implement.** Accumulate into `by_index[idx] = {id, name, parts={}}` with a separate `order` list of first appearance; at the end `table.concat(parts)` and `pcall(vim.json.decode)`, defaulting `input` to `{}`.
+- [x] **Step 2: Run to verify it fails.**
+- [x] **Step 3: Implement.** Accumulate into `by_index[idx] = {id, name, parts={}}` with a separate `order` list of first appearance; at the end `table.concat(parts)` and `pcall(vim.json.decode)`, defaulting `input` to `{}`.
 
   **Deliberately NOT gated on `finish_reason == "tool_calls"`:** a truncated stream still yields whatever assembled, and `tool_loop` already writes synthetic 📎: results for calls it cannot resolve (`tool_loop.lua:81-97`). Gating would drop them silently and strand the buffer with an unmatched 🔧:.
-- [ ] **Step 4: Run to verify it passes.**
-- [ ] **Step 5: Add `has_tool_calls`** (plain-text find for `"tool_calls"`) with a two-case test: plain-text stream false, tool stream true.
-- [ ] **Step 6: Commit.**
+- [x] **Step 4: Run to verify it passes.**
+- [x] **Step 5: Add `has_tool_calls`** (plain-text find for `"tool_calls"`) with a two-case test: plain-text stream false, tool stream true.
+- [x] **Step 6: Commit.**
 
 ### Task 1.6: `wire_openai.translate_messages`
 
@@ -195,7 +195,7 @@ The hard one. Unlike Anthropic — explicit `content_block_start`/`_stop` framin
 
 Input is whatever `_emit_content_blocks_as_messages` produced — already `#155`/`#156`-validated. Output is OpenAI shape.
 
-- [ ] **Step 1: Write the failing spec.** Pin:
+- [x] **Step 1: Write the failing spec.** Pin:
   - **string-content messages are returned by exact identity.** This is the majority path — every tool-less OpenAI chat in the plugin flows through it. Get this wrong and every existing chat changes shape.
   - assistant `[text, tool_use]` → `content` + `tool_calls[]`, with `arguments` a **JSON string**, not a table.
   - a user `[tool_result, tool_result]` batch → **two separate `{role="tool", tool_call_id=…}` messages**, order preserved.
@@ -203,10 +203,10 @@ Input is whatever `_emit_content_blocks_as_messages` produced — already `#155`
   - a tool-only assistant turn leaves `content` **nil**, not `""` — the live round-trip used explicit `null` and was accepted; `""` risks reading as a real empty answer.
   - empty tool input encodes as `arguments == "{}"`.
   - a full two-round loop preserves message order end to end.
-- [ ] **Step 2: Run to verify it fails.**
-- [ ] **Step 3: Implement.** Messages whose `content` is not a table pass straight through. Assistant tables split into joined text + `tool_calls`; non-assistant tables emit one `role="tool"` message per `tool_result` (and a `role="user"` message for any stray text blocks).
-- [ ] **Step 4: Run to verify it passes.**
-- [ ] **Step 5: Commit.**
+- [x] **Step 2: Run to verify it fails.**
+- [x] **Step 3: Implement.** Messages whose `content` is not a table pass straight through. Assistant tables split into joined text + `tool_calls`; non-assistant tables emit one `role="tool"` message per `tool_result` (and a `role="user"` message for any stray text blocks).
+- [x] **Step 4: Run to verify it passes.**
+- [x] **Step 5: Commit.**
 
 ### Task 1.7: The `wire` registry
 
@@ -215,14 +215,14 @@ Input is whatever `_emit_content_blocks_as_messages` produced — already `#155`
 - Modify: `lua/parley/providers.lua` (add `M.cliproxy_route`, `M.cliproxy_strategy`)
 - Test: `tests/unit/tool_wire_registry_spec.lua`, `tests/unit/cliproxy_route_spec.lua`
 
-- [ ] **Step 1: Write the failing specs.** For the registry, pin:
+- [x] **Step 1: Write the failing specs.** For the registry, pin:
   - `anthropic` → anthropic wire; `openai` / `copilot` / `azure` / `ollama` → openai wire.
   - **`cliproxyapi` resolves by MODEL, deriving the route internally** — `{model="claude-sonnet-5", web_search_strategy="anthropic_tools_route"}` → anthropic wire; `{model="gpt-5.6-sol"}` → openai wire. There is no route parameter on the public API to forget.
   - `googleai` → nil; `decode`/`has_tool_calls` degrade to `{}`/`false` for it, while `encode` raises naming the provider.
 
   For `cliproxy_route`, pin today's matrix — anthropic-family + `anthropic_tools_route` → `"anthropic"`; anthropic-family without the strategy → `"openai"`; non-anthropic model → `"openai"` regardless of strategy; nil model → `"openai"` — **plus** the one intentional change: `code_execution_*` + `anthropic_tools_route` → `"anthropic"`, which the current `cliproxyapi_encode_tools` would have raised on.
-- [ ] **Step 2: Run to verify they fail.**
-- [ ] **Step 3: Implement the registry**, public API keyed on `(provider, model)`:
+- [x] **Step 2: Run to verify they fail.**
+- [x] **Step 3: Implement the registry**, public API keyed on `(provider, model)`:
 
 ```lua
 function M.resolve(provider, model)
@@ -238,9 +238,9 @@ end
 
 `encode` raises when no wire resolves (an agent asked for tools the provider cannot carry — fail fast at request time). `decode` / `has_tool_calls` / `translate_messages` degrade quietly, since they run on every response including from non-tool agents.
 
-- [ ] **Step 4: Implement `cliproxy_route` and `cliproxy_strategy`** in `providers.lua`, the former extracted from `is_cliproxy_anthropic_route_model` (`:144-149`) plus the strategy test at `:1037`, the latter exposing the existing `get_cliproxy_strategy` local **including its config-level fallback**.
-- [ ] **Step 5: Run to verify they pass.**
-- [ ] **Step 6: Commit.**
+- [x] **Step 4: Implement `cliproxy_route` and `cliproxy_strategy`** in `providers.lua`, the former extracted from `is_cliproxy_anthropic_route_model` (`:144-149`) plus the strategy test at `:1037`, the latter exposing the existing `get_cliproxy_strategy` local **including its config-level fallback**.
+- [x] **Step 5: Run to verify they pass.**
+- [x] **Step 6: Commit.**
 
 ### Task 1.8: Point the encoders at the registry
 
@@ -250,18 +250,18 @@ end
 
 The two deleted stubs become unreachable once M2 replaces the dispatcher's provider chain (`dispatcher.lua:124-126` is their only caller). Delete them here and let M2's chain removal land in the same issue; leaving dead raising stubs behind is the kind of residue ARCH-PURPOSE flags.
 
-- [ ] **Step 1: Write the failing spec.** Pin: `openai_encode_tools` no longer raises and emits `type == "function"`; `cliproxyapi_encode_tools` emits `type == "function"` for `gpt-5.6-sol` and still emits `input_schema` for `claude-sonnet-5` + `anthropic_tools_route`.
-- [ ] **Step 2: Run to verify it fails** (both encoders raise today).
-- [ ] **Step 3: Implement** — both encoders become one-line delegations to `wire.encode(provider, model, defs)`, and `cliproxyapi.format_payload`'s branch test becomes `if M.cliproxy_route(model_name, strategy) == "anthropic" then`, replacing `strategy == "anthropic_tools_route" and use_anthropic_route`. `use_code_execution_model` stays — it gates `tool_choice`, not the route.
-- [ ] **Step 4: Run the FULL suite** — `make test`. `tests/unit/parley_harness_golden_spec.lua` must be green: the Anthropic goldens prove nothing disturbed the anthropic path.
-- [ ] **Step 5: Commit.**
+- [x] **Step 1: Write the failing spec.** Pin: `openai_encode_tools` no longer raises and emits `type == "function"`; `cliproxyapi_encode_tools` emits `type == "function"` for `gpt-5.6-sol` and still emits `input_schema` for `claude-sonnet-5` + `anthropic_tools_route`.
+- [x] **Step 2: Run to verify it fails** (both encoders raise today).
+- [x] **Step 3: Implement** — both encoders become one-line delegations to `wire.encode(provider, model, defs)`, and `cliproxyapi.format_payload`'s branch test becomes `if M.cliproxy_route(model_name, strategy) == "anthropic" then`, replacing `strategy == "anthropic_tools_route" and use_anthropic_route`. `use_code_execution_model` stays — it gates `tool_choice`, not the route.
+- [x] **Step 4: Run the FULL suite** — `make test`. `tests/unit/parley_harness_golden_spec.lua` must be green: the Anthropic goldens prove nothing disturbed the anthropic path.
+- [x] **Step 5: Commit.**
 
 ### Task 1.9: Close M1
 
-- [ ] **Step 1: `make test`** — green, no new failures vs. the Task 1.2 baseline.
-- [ ] **Step 2: luacheck** clean (see TOOLING.md).
-- [ ] **Step 3: Update `atlas/`** for the new `lua/parley/sse.lua` + `lua/parley/tools/wire*.lua` surface; keep `atlas/index.md` linking every file (AGENTS.md §8 — at the milestone, not deferred).
-- [ ] **Step 4: `sdlc milestone-close --issue 198 --milestone M1`** — the binary dispatches the mandatory fresh-eyes review itself (AGENTS.md §3; do NOT separately run `superpowers-requesting-code-review`). Fix Critical/Important before crossing; log the verdict in `## Log`.
+- [x] **Step 1: `make test`** — green, no new failures vs. the Task 1.2 baseline.
+- [x] **Step 2: luacheck** clean (see TOOLING.md).
+- [x] **Step 3: Update `atlas/`** for the new `lua/parley/sse.lua` + `lua/parley/tools/wire*.lua` surface; keep `atlas/index.md` linking every file (AGENTS.md §8 — at the milestone, not deferred).
+- [x] **Step 4: `sdlc milestone-close --issue 198 --milestone M1`** — the binary dispatches the mandatory fresh-eyes review itself (AGENTS.md §3; do NOT separately run `superpowers-requesting-code-review`). Fix Critical/Important before crossing; log the verdict in `## Log`.
 
 ---
 
@@ -279,15 +279,15 @@ M1 built the protocol; M2 makes the running system use it.
 
 `prepare_payload` is the one point upstream of **all** payload builders, and it is already where tools are encoded and appended — so both halves of the wire decision live together.
 
-- [ ] **Step 1: Write the failing tests.** Pin:
+- [x] **Step 1: Write the failing tests.** Pin:
   - **`cliproxyapi` + `gpt-5.6-sol` + content-block history → `payload.messages` contains a `role == "tool"` message.** This is the regression test for the Critical; it must exercise the *cliproxy* path, not `providers.get("openai")`.
   - the same for provider `openai`, and for `ollama`.
   - `anthropic` and cliproxy's anthropic route are **not** translated — content blocks survive as-is.
   - tools encode to the right shape per provider/model.
   - **the APPEND invariant:** with `web_search` on, server-side tools already in `payload.tools` survive and client tools follow them (the #81 Task 1.0 discovery — a regression here is silent).
   - the config-level strategy fallback: a cliproxy model table with no `web_search_strategy` still routes per `providers.cliproxyapi.web_search_strategy`.
-- [ ] **Step 2: Run to verify they fail.**
-- [ ] **Step 3: Implement.** Resolve the wire once, translate if it can, then build and encode:
+- [x] **Step 2: Run to verify they fail.**
+- [x] **Step 3: Implement.** Resolve the wire once, translate if it can, then build and encode:
 
 ```lua
     local w = require("parley.tools.wire").resolve(provider, model)
@@ -308,9 +308,9 @@ M1 built the protocol; M2 makes the running system use it.
 
 Translation is **unconditional**, not gated on this request declaring tools — a prior turn's tool blocks live in history and must translate on every subsequent request. The `translate_messages` capability check replaces a per-provider branch: only `wire_openai` defines it. This deletes the five-branch chain at `:114-131`.
 
-- [ ] **Step 4: Fix the `empty_response` predicate.** `dispatcher.lua:326` hardcodes the Anthropic literal, so a tool-only turn from an OpenAI-family agent would report an empty response. Thread `provider` + `model` onto `qt` at query creation and call `wire.has_tool_calls(provider, model, qt.raw_response)`, inverted. Do NOT recompute a route here — `has_tool_calls` takes the model and resolves internally. Add a test pinning **both** a cliproxy anthropic-route tool turn and a cliproxy openai-route tool turn as non-empty.
-- [ ] **Step 5: Run to verify they pass.**
-- [ ] **Step 6: Commit.**
+- [x] **Step 4: Fix the `empty_response` predicate.** `dispatcher.lua:326` hardcodes the Anthropic literal, so a tool-only turn from an OpenAI-family agent would report an empty response. Thread `provider` + `model` onto `qt` at query creation and call `wire.has_tool_calls(provider, model, qt.raw_response)`, inverted. Do NOT recompute a route here — `has_tool_calls` takes the model and resolves internally. Add a test pinning **both** a cliproxy anthropic-route tool turn and a cliproxy openai-route tool turn as non-empty.
+- [x] **Step 5: Run to verify they pass.**
+- [x] **Step 6: Commit.**
 
 ### Task 2.2: Provider-aware decode in the tool loop
 
@@ -318,12 +318,12 @@ Translation is **unconditional**, not gated on this request declaring tools — 
 - Modify: `lua/parley/tool_loop.lua:189-199`, `lua/parley/chat_respond.lua:1847-1852`
 - Test: `tests/unit/tool_loop_spec.lua`
 
-- [ ] **Step 1: Write the failing test** — `process_response` given an OpenAI `tool_calls` stream plus `agent_info = {provider="openai", model=…}` writes 🔧:/📎: blocks and returns `"recurse"`; the same stream with no provider (Anthropic default) returns `"done"`; an Anthropic stream with a cliproxy anthropic-route model still returns `"recurse"`.
-- [ ] **Step 2: Run to verify it fails.**
-- [ ] **Step 3: Implement** — replace `providers.decode_anthropic_tool_calls_from_stream(...)` with `wire.decode(agent_info.provider, agent_info.model, raw_response or "")`. Default `provider` to `"anthropic"` when absent, so existing callers and the buffer-rebuild fallback path (`tool_loop.lua:206-222`) keep working.
-- [ ] **Step 4: Pass provider + model from `chat_respond`** — the `agent_info` table built inline at `:1847` gains them alongside `root_policy`.
-- [ ] **Step 5: Run to verify it passes.**
-- [ ] **Step 6: Commit.**
+- [x] **Step 1: Write the failing test** — `process_response` given an OpenAI `tool_calls` stream plus `agent_info = {provider="openai", model=…}` writes 🔧:/📎: blocks and returns `"recurse"`; the same stream with no provider (Anthropic default) returns `"done"`; an Anthropic stream with a cliproxy anthropic-route model still returns `"recurse"`.
+- [x] **Step 2: Run to verify it fails.**
+- [x] **Step 3: Implement** — replace `providers.decode_anthropic_tool_calls_from_stream(...)` with `wire.decode(agent_info.provider, agent_info.model, raw_response or "")`. Default `provider` to `"anthropic"` when absent, so existing callers and the buffer-rebuild fallback path (`tool_loop.lua:206-222`) keep working.
+- [x] **Step 4: Pass provider + model from `chat_respond`** — the `agent_info` table built inline at `:1847` gains them alongside `root_policy`.
+- [x] **Step 5: Run to verify it passes.**
+- [x] **Step 6: Commit.**
 
 ### Task 2.3: skill_invoke — decode, tool_choice, and the capability predicate
 
@@ -333,17 +333,17 @@ Translation is **unconditional**, not gated on this request declaring tools — 
 
 Three coupled changes; splitting them ships a broken intermediate.
 
-- [ ] **Step 1: Write the failing tests.** Pin:
+- [x] **Step 1: Write the failing tests.** Pin:
   - `skill_invoke`'s decode resolves by `(agent.provider, agent.model)` — **the same pair already in scope at `:208`**. Test a cliproxy **anthropic-route** agent decodes its tool call; without the model this silently yields zero calls and the path logs "model returned no tool call", indistinguishable from a truncated response.
   - `skill_assembly.build` returns `force_tool = "propose_edits"` (a plain name) rather than a wire-shaped `tool_choice` table.
   - `skill_invoke` encodes that name per-wire at payload time: `{type="tool", name=…}` for anthropic, `{type="function", function={name=…}}` for openai.
   - `resolve_agent`'s tool-capable fallback accepts an `openai`-provider agent.
-- [ ] **Step 2: Run to verify they fail.**
-- [ ] **Step 3: Implement.** `skill_assembly.lua:37` stops constructing Anthropic's shape (moved to `wire_anthropic.encode_tool_choice` in Task 1.2); `skill_invoke.lua:209` calls `wire.encode_tool_choice(agent.provider, agent.model, inv.force_tool)`. Widen `skill_assembly.lua:93` to `wire.resolve(agent.provider, agent.model) ~= nil`.
+- [x] **Step 2: Run to verify they fail.**
+- [x] **Step 3: Implement.** `skill_assembly.lua:37` stops constructing Anthropic's shape (moved to `wire_anthropic.encode_tool_choice` in Task 1.2); `skill_invoke.lua:209` calls `wire.encode_tool_choice(agent.provider, agent.model, inv.force_tool)`. Widen `skill_assembly.lua:93` to `wire.resolve(agent.provider, agent.model) ~= nil`.
 
   **Why this is in scope:** widening the predicate without translating `tool_choice` would hand the review skill to an agent it 400s against. Both shipped `force_tool` skills (`skills/review/init.lua:500` and `skills/voice_apply/init.lua:31`, both `propose_edits`) go through this path. `tool_choice` is wire knowledge and belongs beside `encode_tools` (ARCH-PURPOSE).
-- [ ] **Step 4: Run to verify they pass.**
-- [ ] **Step 5: Commit.**
+- [x] **Step 4: Run to verify they pass.**
+- [x] **Step 5: Commit.**
 
 ### Task 2.4: Teach `fake_cliproxy` to call tools
 
@@ -351,11 +351,11 @@ Three coupled changes; splitting them ships a broken intermediate.
 - Modify: `tests/fixtures/fake_cliproxy`
 - Create: `tests/integration/openai_tool_loop_spec.lua`
 
-- [ ] **Step 1: Add a stateful `tool_call` response mode**, selected like the existing error modes (`--response-mode` / `PARLEY_FAKE_RESPONSE_MODE`, following the `--error-mode` precedent in the fake's docstring). First `POST /v1/chat/completions` → the captured `tool_calls` stream; a request whose body contains a `role:"tool"` message → a plain completion.
-- [ ] **Step 2: Write the integration spec** — drive a chat buffer through `chat_respond` against the fake; assert 🔧: and 📎: blocks land and the loop terminates. Follow `tests/integration/cliproxy_dispatch_spec.lua` for spawn/teardown.
-- [ ] **Step 3: Run — expect FAIL, then PASS once the mode lands.**
-- [ ] **Step 4: Add a parallel-call case** — two indices, both 🔧:/📎: pairs render in order.
-- [ ] **Step 5: Commit.**
+- [x] **Step 1: Add a stateful `tool_call` response mode**, selected like the existing error modes (`--response-mode` / `PARLEY_FAKE_RESPONSE_MODE`, following the `--error-mode` precedent in the fake's docstring). First `POST /v1/chat/completions` → the captured `tool_calls` stream; a request whose body contains a `role:"tool"` message → a plain completion.
+- [x] **Step 2: Write the integration spec** — drive a chat buffer through `chat_respond` against the fake; assert 🔧: and 📎: blocks land and the loop terminates. Follow `tests/integration/cliproxy_dispatch_spec.lua` for spawn/teardown.
+- [x] **Step 3: Run — expect FAIL, then PASS once the mode lands.**
+- [x] **Step 4: Add a parallel-call case** — two indices, both 🔧:/📎: pairs render in order.
+- [x] **Step 5: Commit.**
 
 ### Task 2.5: OpenAI-route golden payloads
 
@@ -363,39 +363,39 @@ Three coupled changes; splitting them ships a broken intermediate.
 - Modify: `tests/unit/parley_harness_golden_spec.lua:9-17`
 - Create: `tests/fixtures/golden_payloads/openai-{one-round-tool-use,two-round-tool-use,tool-error}.json`
 
-- [ ] **Step 1: Extend the spec** to run the existing tool transcripts a second time under an OpenAI-route agent, reusing the `READONLY_TOOLS` pin (its comment at `:19-25` explains the machine-independence reason, which applies identically).
-- [ ] **Step 2: Generate the goldens and READ THEM before committing** — confirm by eye that `arguments` are JSON strings, each `tool_result` became its own `role:"tool"` message, and `parameters` is `{}` not `[]`. A golden captured from a bug is a bug with a test defending it.
-- [ ] **Step 3: Confirm the Anthropic goldens are byte-identical.**
-- [ ] **Step 4: Commit.**
+- [x] **Step 1: Extend the spec** to run the existing tool transcripts a second time under an OpenAI-route agent, reusing the `READONLY_TOOLS` pin (its comment at `:19-25` explains the machine-independence reason, which applies identically).
+- [x] **Step 2: Generate the goldens and READ THEM before committing** — confirm by eye that `arguments` are JSON strings, each `tool_result` became its own `role:"tool"` message, and `parameters` is `{}` not `[]`. A golden captured from a bug is a bug with a test defending it.
+- [x] **Step 3: Confirm the Anthropic goldens are byte-identical.**
+- [x] **Step 4: Commit.**
 
 ### Task 2.6: Live wire conformance
 
 **Files:**
 - Create: `tests/integration/cliproxy_tool_conformance_spec.lua`
 
-- [ ] **Step 1: Write it** on the `cliproxy_conformance_spec.lua` model — a `REQUIRED_FIELDS`-style list (`index`, `id`, `function.name`, `function.arguments`, `finish_reason == "tool_calls"`) asserted against a real response, so upstream wire drift fails here rather than in a user's chat.
-- [ ] **Step 2: Gate behind `PARLEY_LIVE_CONFORMANCE=1`,** skip otherwise. Unlike the management-API check this needs a real credential, so it must reuse an already-running proxy read-only and never spawn a second one against a live auth-dir (#197's rotation race).
-- [ ] **Step 3: Run once with the flag to confirm it passes against 7.2.110; confirm it SKIPS cleanly without it.**
-- [ ] **Step 4: Commit.**
+- [x] **Step 1: Write it** on the `cliproxy_conformance_spec.lua` model — a `REQUIRED_FIELDS`-style list (`index`, `id`, `function.name`, `function.arguments`, `finish_reason == "tool_calls"`) asserted against a real response, so upstream wire drift fails here rather than in a user's chat.
+- [x] **Step 2: Gate behind `PARLEY_LIVE_CONFORMANCE=1`,** skip otherwise. Unlike the management-API check this needs a real credential, so it must reuse an already-running proxy read-only and never spawn a second one against a live auth-dir (#197's rotation race).
+- [x] **Step 3: Run once with the flag to confirm it passes against 7.2.110; confirm it SKIPS cleanly without it.**
+- [x] **Step 4: Commit.**
 
 ### Task 2.7: End-to-end verification in the real editor
 
 **Files:**
 - Modify: `lua/parley/config.lua` (the `ToolSol*` block)
 
-- [ ] **Step 1: Carry the uncommitted `ToolSol*` + `codex` alias config forward** from the `000197` working tree into this issue's branch, then **extend** its comment. The existing text is already correct that `openai_tools_route` suits an OpenAI-family model — it does not need contradicting. What it should gain: parley now speaks the OpenAI tool wire natively, and web search coexists with function tools on that route. Separately, sweep for the stale "cliproxyapi requires an anthropic-family model" framing anywhere it survives.
-- [ ] **Step 2: Manual e2e** — select `ToolSol*`, ask for something needing a file read AND a web lookup in one turn. Confirm 🔧:/📎: render, the loop recurses, a cited URL appears, the answer lands, no error.
-- [ ] **Step 3: Multi-round loop** — a task needing ≥2 sequential rounds; confirm the iteration counter advances and terminates.
-- [ ] **Step 4: Regression-check `ToolOpus*`** through the same prompt — unchanged, including `server_tool_use` web search (which the operator confirmed works on the claude channel).
-- [ ] **Step 5: Exercise a skill on an OpenAI-family agent** — the `force_tool` path from Task 2.3, end to end. Unit tests alone will not catch a wrong `tool_choice` shape; the API will.
-- [ ] **Step 6: Capture the actual buffer output into `## Log`** — evidence, not a claim that it worked.
+- [x] **Step 1: Carry the uncommitted `ToolSol*` + `codex` alias config forward** from the `000197` working tree into this issue's branch, then **extend** its comment. The existing text is already correct that `openai_tools_route` suits an OpenAI-family model — it does not need contradicting. What it should gain: parley now speaks the OpenAI tool wire natively, and web search coexists with function tools on that route. Separately, sweep for the stale "cliproxyapi requires an anthropic-family model" framing anywhere it survives.
+- [x] **Step 2: Manual e2e** — select `ToolSol*`, ask for something needing a file read AND a web lookup in one turn. Confirm 🔧:/📎: render, the loop recurses, a cited URL appears, the answer lands, no error.
+- [x] **Step 3: Multi-round loop** — a task needing ≥2 sequential rounds; confirm the iteration counter advances and terminates.
+- [x] **Step 4: Regression-check `ToolOpus*`** through the same prompt — unchanged, including `server_tool_use` web search (which the operator confirmed works on the claude channel).
+- [x] **Step 5: Exercise a skill on an OpenAI-family agent** — the `force_tool` path from Task 2.3, end to end. Unit tests alone will not catch a wrong `tool_choice` shape; the API will.
+- [x] **Step 6: Capture the actual buffer output into `## Log`** — evidence, not a claim that it worked.
 
 ### Task 2.8: Close the issue
 
-- [ ] **Step 1: `make test`** green. **Step 2: luacheck** clean.
-- [ ] **Step 3: Update `atlas/`** for the wire seam, the `tool_choice` relocation, and the widened tool-capable predicate.
-- [ ] **Step 4: Update `workshop/lessons.md`** with rules from what the reviews caught (AGENTS.md §4) — the plan-gate Critical here (a translation seam installed in a builder two of its four supposed consumers never call) is exactly the class worth a rule.
-- [ ] **Step 5: `sdlc close --issue 198 --verified '<evidence>'`** — omit `--actual` so the binary measures and adopts the hours (AGENTS.md §5; never hand-type them).
+- [x] **Step 1: `make test`** green. **Step 2: luacheck** clean.
+- [x] **Step 3: Update `atlas/`** for the wire seam, the `tool_choice` relocation, and the widened tool-capable predicate.
+- [x] **Step 4: Update `workshop/lessons.md`** with rules from what the reviews caught (AGENTS.md §4) — the plan-gate Critical here (a translation seam installed in a builder two of its four supposed consumers never call) is exactly the class worth a rule.
+- [x] **Step 5: `sdlc close --issue 198 --verified '<evidence>'`** — omit `--actual` so the binary measures and adopts the hours (AGENTS.md §5; never hand-type them).
 
 ---
 
@@ -440,3 +440,54 @@ in Lua, so `if obj.name then …` accepts it and overwrites a good value with
 userdata that raises on the next concatenation. Both decoders now read every
 optional field through `sse.str`, making the class unrepresentable rather than
 patched per-site. Add to the Core-concepts table as `new`.
+
+### 2026-08-15 — M2 execution deviations
+
+**5. Task 2.1 Step 4's `empty_response` mechanism changed.** The step specified
+`wire.has_tool_calls(provider, model, qt.raw_response)` with the note "*Do NOT
+recompute a route here — `has_tool_calls` takes the model and resolves
+internally.*" That is not implementable as written: the query table carries the
+provider and the **serialized payload**, whose `model` is a bare NAME, and no
+model params table. `claude-sonnet-5` resolves to a *different* wire depending
+on the agent's `web_search_strategy`, so a name-only resolution silently picks
+the wrong decoder.
+
+What shipped instead is a payload stamp, mirroring the existing `_parley_route`
+convention: `prepare_payload` writes `_parley_tool_wire`
+(`dispatcher.lua:149`), `query` consumes it onto the query table *before* the
+body is serialized (`:201-211`), and the probe resolves through
+`wire.by_name`. Two places must strip it — `dispatcher.query` and
+`scripts/parley_harness.lua` (so the goldens stay an accurate request model);
+both are covered by tests (`dispatcher_query_spec` Group K, and the golden spec
+itself).
+
+New Core-concepts rows this adds to `lua/parley/tools/wire.lua`: `by_name`,
+`name_for`, `has_tool_calls_by_name` — all `new`, all pure. (A fourth,
+`decode_by_name`, was written and then deleted in the close-review pass: no
+caller ever materialised, and `tool_loop`/`skill_invoke` resolve by
+`(provider, model)` because the agent is in scope there.)
+
+**6. Task 2.4's integration spec does not drive `chat_respond`.** The step said
+"drive a chat buffer through `chat_respond`"; `openai_tool_loop_spec.lua`
+composes `dispatcher.query` + `tool_loop.process_response` against the fake
+instead. The close review flagged the resulting gap — the production threading
+at `chat_respond.lua:1851-1852` was deletable with the suite green — so the
+`chat_respond` coverage landed as a separate case in
+`tests/integration/chat_respond_spec.lua` ("threads provider/model to the tool
+loop so an openai-family agent recurses"), verified by mutation: deleting those
+two lines fails it with "tool loop did not recurse".
+
+**7. Task 2.5 shipped four OpenAI goldens, not three.**
+`openai-mixed-text-and-tools` was added alongside the named one-round,
+two-round and tool-error fixtures, since interleaved text and tool blocks are a
+distinct shape.
+
+**8. New entity from the close review: `provider_params.raise_output_cap`.**
+`skill_invoke`'s large-document headroom bump wrote `max_tokens` directly,
+which for gpt-5 models is a no-op — `provider_params` renames the cap to
+`max_completion_tokens`, so the effective limit stayed at 4096 (causing the
+truncation the bump exists to prevent) while a rejected `max_tokens` key rode
+along. Reachable precisely because Task 2.3 widened the skill predicate to
+OpenAI-family agents. The helper lives in `provider_params` because that is
+where the renaming is defined, and its spec pins the invariant "raise whichever
+key `resolve_params` wrote" rather than a hand-listed model table.

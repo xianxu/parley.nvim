@@ -286,6 +286,17 @@ function M.translate_messages(messages)
                     })
                 elseif block.type == "text" then
                     table.insert(texts, block.text or "")
+                else
+                    -- Unreachable today: parley builds no multimodal blocks, and
+                    -- the only table-content non-assistant messages come from
+                    -- _emit_content_blocks_as_messages. But dropping content on
+                    -- the floor is how a future image/document block would
+                    -- vanish from a request with no symptom but a confused
+                    -- model, so say so.
+                    require("parley.logger").warning(
+                        "wire_openai.translate_messages: dropping unsupported "
+                        .. tostring(msg.role) .. " content block of type "
+                        .. tostring(block.type))
                 end
             end
             if #texts > 0 then

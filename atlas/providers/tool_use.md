@@ -115,7 +115,7 @@ and the serialized payload, whose `model` is a bare NAME. That is not enough —
 `web_search_strategy`, so re-deriving on the response side would silently pick
 the wrong decoder. Instead `prepare_payload` stamps `_parley_tool_wire` on the
 payload, `dispatcher.query` consumes it onto the query table before the body is
-serialized, and the read paths resolve via `wire.by_name`. The stamp never goes
+serialized, and the `empty_response` probe resolves via `wire.by_name`. (`tool_loop` and `skill_invoke` still resolve by `(provider, model)` — they run where the agent is in scope and need no stamp.) The stamp never goes
 over the network; `scripts/parley_harness.lua` strips it too, so the golden
 payloads stay an accurate model of the request.
 

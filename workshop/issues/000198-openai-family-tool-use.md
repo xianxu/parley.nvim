@@ -1,12 +1,13 @@
 ---
 id: 000198
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-08-15
 updated: 2026-08-15
 estimate_hours: 5.6
 started: 2026-08-15T10:03:41-07:00
+actual_hours: 1.73
 ---
 
 # Native OpenAI-family tool-use support
@@ -230,6 +231,7 @@ See `workshop/plans/000198-openai-family-tool-use-plan.md`.
 ## Log
 
 ### 2026-08-15
+- 2026-08-15: closed — Native OpenAI-family tool use, end to end on the LIVE codex channel. ToolSol* (gpt-5.6-sol): two SEQUENTIAL read_file rounds with 🔧:/📎: pairs plus a cited web result in ONE turn (utm_source=openai) — client tools and server-side web search together, the combination the anthropic route cannot give a codex model. Single-round run answered with a sentinel it could not have guessed. ToolOpus* unregressed on the anthropic route (toolu_* ids). The review skill (force_tool=propose_edits) ran on gpt-5.6-sol with wire=openai and actually applied edits — the path that would 400 with an anthropic-shaped tool_choice. Live wire conformance passes vs 7.2.110. Full suite exit 0 (178 spec files, unit+integration), luacheck clean across 142 files; anthropic goldens byte-identical, 4 new openai-route goldens read by eye before commit; integration spec mutation-verified (disabling translation drops it 4->2 passes).; review verdict: FIX-THEN-SHIP
 - 2026-08-15: closed M1 — Pure wire layer landed: sse.lua + wire_anthropic + wire_openai + wire registry + cliproxy_route/cliproxy_strategy. Full suite exit 0 (unit+integration, unsandboxed). Anthropic tool specs UNCHANGED and still 19+6 pass = behaviour-preserving move; golden payloads byte-identical. 72 new assertions across 5 new specs incl. both real captured SSE fixtures. Beyond units: fed encode_tools+translate_messages real output to live cliproxy and got a correct answer back (parallel tool_calls + separate role:tool messages accepted end-to-end). Decoder specs mutation-verified (index sort 17->16, empty_dict removal 10->8).; review verdict: FIX-THEN-SHIP
 
 Wire behavior established empirically against the operator's running
@@ -396,11 +398,20 @@ Live wire conformance (`PARLEY_LIVE_CONFORMANCE=1`) also passes against
 7.2.110: all four delta fields present, `finish_reason=tool_calls`, decoder
 yields a usable ToolCall.
 
-**Two test-suite hazards worth knowing** (neither caused by this work):
-`tests/unit/tools_builtin_find_spec.lua` shells `find` over the live repo tree,
-so it races other specs creating/deleting temp files and fails intermittently
-under the parallel runner (passes 3/3 in isolation). And
-`chat_progress_process_spec` flaked once on fake-SSE-server port allocation.
-Both re-run clean. Separately, `git`-dependent integration specs fail under a
-restricted sandbox (`git init` cannot copy hook templates); they pass in a
-normal shell — full suite exit 0.
+**Test-suite hazards worth knowing** (none caused by this work). Several specs
+fail intermittently under the PARALLEL runner and pass in isolation:
+
+- `tests/unit/tools_builtin_find_spec.lua` shells `find` over the live repo
+  tree, so it races other specs creating and deleting temp files (3/3 alone).
+- `chat_progress_process_spec` flaked once on fake-SSE-server port allocation.
+- `git_markdown_source_spec` and `markdown_finder_async_spec` (11/0/0 and 3/0/0
+  alone).
+
+**Correction to an earlier note in this Log:** those last two were first
+attributed here solely to sandboxing. That is not the whole story. A restricted
+sandbox *is* a proven cause — `git init` in `.test-tmp` fails with
+`Operation not permitted` copying hook templates, reproduced directly — but the
+close review reproduced the same two failures **unsandboxed** under the parallel
+runner, so runner interference is a cause too. Full-suite runs here were exit 0
+unsandboxed; the honest summary is that both mechanisms exist and neither is
+this issue's doing.
