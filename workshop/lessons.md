@@ -626,3 +626,24 @@
   sequencing milestones, ask what the intermediate state *does* for a user, not
   just what it contains; if a clear error becomes a wrong answer, record the
   no-merge constraint and order the milestone to close the exposure first.
+- **"OpenAI-compatible" does not mean "shares the OpenAI payload builder."** A
+  cross-cutting change was scoped to `openai.format_payload` on the assumption
+  that the cliproxy OpenAI route and ollama delegated to it. They don't — each
+  builds its own payload; only copilot and azure delegate. The change would
+  have shipped with every unit test and golden green while missing the issue's
+  own target agent, because the tests exercised `providers.get("openai")` and
+  the target went through `cliproxy_openai_payload`. Rule: before installing a
+  cross-cutting step in a "shared" function, grep for its actual callers and
+  pick the seam with exactly one — here `dispatcher.prepare_payload`, the sole
+  caller of `adapter.format_payload`. Corollary for tests: a regression test
+  must exercise the path the ISSUE names, not the path that is easiest to
+  construct.
+- **Milestone-close is a long-running external process; do not race it.** A
+  `sdlc milestone-close` exceeded the foreground timeout and was backgrounded.
+  A hand-rolled liveness check (`pgrep` piped into `kill -0`) returned empty
+  and so reported "finished" instantly, and a second close was launched while
+  the first was still dispatching its review — the #172 re-close loop, caught
+  only by reading the first run's output afterwards. Rule: for a long verb, use
+  the harness's own backgrounding and wait for ITS completion signal; never
+  infer "process died" from an empty `pgrep`, which is indistinguishable from
+  "never matched".
