@@ -1,0 +1,9 @@
+  PID STARTED                      COMMAND
+25544 Sat Aug  1 02:02:56 2026     /bin/zsh -c source /Users/x/.claude/shell-snapshots/snap.sh 2>/dev/null || true && eval '~/.local/share/nvim/parley/cliproxy/bin/cli-proxy-api -config lab/cliproxy-agi3.yaml' < /dev/null && pwd -P
+25546 Sat Aug  1 02:02:56 2026     /Users/x/.local/share/nvim/parley/cliproxy/bin/cli-proxy-api -config lab/cliproxy-agi3.yaml
+31789 Sun Jun 14 09:50:39 2026     /Users/x/.local/share/nvim/parley/cliproxy/bin/cli-proxy-api -config /tmp/claude-501/cliproxy-verify.yaml
+32610 Sat Aug  1 00:16:04 2026     /Users/x/.local/share/nvim/parley/cliproxy/bin/cli-proxy-api -config /Users/x/.local/share/nvim/parley/cliproxy/config.yaml
+42688 Sun Jun 14 10:09:38 2026     /Users/x/.local/share/nvim/parley/cliproxy/bin/cli-proxy-api -config /tmp/claude-501/cliproxy-canon.yaml
+44488 Fri Jun 12 10:04:21 2026     /opt/homebrew/bin/cliproxyapi -config /tmp/claude-501/cliproxy-gate.yaml -local-model
+47373 Sat Jun 13 12:34:10 2026     /Users/x/.local/share/nvim/parley/cliproxy/bin/cli-proxy-api -config /tmp/claude-501/cliproxy-verify.yaml
+50001 Sat Aug  1 03:00:00 2026     grep -i cliproxyapi

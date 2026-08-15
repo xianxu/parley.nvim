@@ -26,9 +26,12 @@ fires) and cooperative for those who run their own (it reuses it). Set
   `healthy`/`needs_login`/`client_key_mismatch`/`foreign`/`down`), `spawn`
   (detached, PID-tracked), `ensure_running` (reuse-if-healthy → else
   discover/spawn/poll, bounded — never hangs), `list_models` (#132), and
-  `status`/`start`/`stop`/`restart`/`login_argv`. The `GET /v1/models` curl argv is
-  built once in `models_argv` and shared by `health_probe`, the stop-time identity
-  check, and `list_models` (ARCH-DRY). Tested against a process-level fake.
+  `status`/`start`/`stop`/`restart`/`login_argv`. The curl argv is built once in
+  `api_argv` (route-parameterized since #197) and shared by `health_probe`, the
+  stop-time identity check, `list_models`, and the management read (ARCH-DRY).
+  Tested against a process-level fake.
+- **`cliproxy_auth.lua`** (pure, #197): the auth-failure vocabulary, credential
+  health, and the diagnosis text — see Auth-failure → diagnosis and recovery.
 
 ## Flow
 
@@ -75,22 +78,175 @@ silently skips the request (neither the query nor the abort fires). This is the
 same gate all secret-backed providers use; just be aware managed mode doesn't
 remove the secret requirement (the secret is the client↔proxy token).
 
-## Auth-failure → guided login (M3)
+## Auth-failure → diagnosis and recovery (#197)
 
-When a cliproxy chat fails because the upstream credential is missing/invalid,
-cliproxyapi returns `"unknown provider for model <X>"` (it resolves models only
-from *loaded* auth clients — `util.GetProviderName` reads the dynamic registry,
-so an unloaded auth makes the model unresolvable; the static catalog isn't
-consulted). The dispatcher's cliproxy response path calls
-`cliproxy.check_auth_failure`, which:
-1. `cliproxy_config.detect_auth_failure` extracts `<X>` from that error.
-2. `cliproxy_config.resolve_login_provider` finds the **channel** whose
-   `oauth-model-alias` list contains `<X>` and maps it → a login provider — over
-   cliproxyapi's fixed channel set (claude/codex/gemini-cli/vertex/aistudio/kimi/
-   antigravity). This is **config-driven, not a name heuristic**: the channel
-   key in the rendered `oauth-model-alias` *is* the provider (the default keys by
-   the canonical `claude` channel for exactly this reason).
-3. prompts (`vim.ui.select`) `:ParleyProxy login <provider>`.
+**The principle: parley does not infer credential state, it asks.**
+
+#131 M3 inferred it two ways and both were wrong by 2026-08-01: a single
+response pattern (`"unknown provider for model <X>"`, which 7.1.71 no longer
+emits for a dead credential) and the shape of `/v1/models` (which still lists
+every model while the credential is dead). The source of truth is now the
+proxy's own **`GET /v0/management/auth-files`**.
+
+- **`cliproxy_auth.lua`** (pure, no IO):
+  - `classify_response(http_status, body, request_model)` → `{kind, provider,
+    model, message}` over a pattern table of the messages the binary actually
+    emits (`auth_unavailable`/`no auth available (providers=…, model=…)`,
+    `unknown provider for model`, `OAuth access token has expired`,
+    `payment_required`, …). **Returns nil for every 2xx, whatever the body
+    says** — the patterns are broad enough to match ordinary assistant prose, and
+    the caller sees successful bodies too. A property test pins it.
+  - `classify_auth_files(files, channel)` → `{state, message, account, failed,
+    modtime}`, `state ∈ healthy|error|unavailable|disabled|missing`. The single
+    interpreter of the management schema; healthiest record wins.
+  - `diagnosis(verdict, health)` → the sentence a human reads. Quota and
+    model-unavailable never say "log in".
+- **`cliproxy.lua`**: `management_key()` (read-or-create `management.key`, 0600,
+  beside the rendered config — *not* the vault, which is in-memory and
+  setup{}-populated), `auth_files()` (the raw read), `credential_health()` (adds
+  the one unattended repair, below), `recover()` (the policy).
+- **`api_argv`** replaces `models_argv`, parameterized by route, so the health
+  probe, the stop-time identity check, `list_models`, and the management read
+  share one request shape (ARCH-DRY).
+
+### One owning seam
+
+Auth-failure reaction lives in **`dispatcher.lua`'s terminal closure** — the only
+scope holding HTTP status, body, and the request's model — reached via the
+optional adapter hook **`recover_query(failure, retry, give_up)`**. The old
+`check_auth_failure` call in `finish_stdout` is gone: that path runs on *every*
+completed response, so classifying there classified assistant prose (a chat
+quoting `authentication_error` would have popped a login prompt).
+
+**The claim contract.** `on_error` is terminal downstream — it finishes the
+pending session and tears down the chat leg (`chat_respond.lua`
+`teardown_chat_leg`) — while recovery is async. So the hook cannot merely "run
+first"; it **claims** synchronously (cheap: `classify_response` is pure):
+
+- falsy → the dispatcher calls `on_error` immediately, exactly as before. Every
+  adapter without the hook takes this path.
+- truthy → `on_error` is withheld and the adapter owes exactly one of
+  `retry()`/`give_up(msg)`, both behind one `tasker.once`. A
+  `recovery_timeout_ms` backstop degrades a hung recovery to today's behavior
+  rather than stranding the chat leg.
+
+cliproxy claims only when: a verdict exists, `attempt == 0`, and nothing has
+streamed (`failure.streamed`) — a retry after partial content would duplicate
+text. `failure.model` carries `payload.model`, the only path by which the
+expired-token 401 (which names neither provider nor model) resolves to a channel
+via `resolve_login_provider`.
+
+### The recovery ladder
+
+`cliproxy_auth.decide(verdict, health, proxy_state, attempt, login)` is the whole
+policy, pure and table-tested: one action out of `start` | `restart` | `retry` |
+`prompt_login` | `report`. `recover` gathers the inputs (liveness probe and
+credential health — staleness lives entirely inside the record) and executes exactly one action, settling
+the claim exactly once.
+
+| situation | action |
+|---|---|
+| proxy not running | `start`, then retry |
+| credential `healthy` (failure was transient) | `retry` — **no prompt** |
+| the credential file changed **after** the proxy loaded it (`modtime` > `updated_at`) | `restart`, then retry |
+| `missing` / `disabled` / `unavailable` | `prompt_login` with the proxy's own reason |
+| `error` whose message is auth-shaped | `prompt_login` |
+| `error` that isn't (DNS, upstream 5xx) | `report` — a login won't fix it |
+| `quota` / `model_unavailable` | `report`, never "log in" |
+| credential state unreadable | `report` honestly |
+| `attempt >= 1` | never a repair — pinned by a property test |
+
+`attempt` is the entire anti-loop mechanism: no repair action exists above
+attempt 0, so a retry cannot beget another. A `prompt_login` with no resolvable
+login provider degrades to `report` — a prompt you cannot act on is a worse
+report.
+
+**Timeout budget.** The repair must finish inside
+`dispatcher.recovery_timeout_ms`, or the backstop spends the claim's one-shot and
+replaces a correct diagnosis with "recovery timed out". The budget is *derived*
+in `cliproxy._repair_budget_sec` from the constants each step uses
+(`CURL_MAX_TIME`, `PORT_RELEASE_MS`, `POLL_BUDGET_MS`, plus the one extra probe
+each bounded poll can overrun by), and `cliproxy_budget_spec` asserts it stays
+comfortably under the backstop — deliberately no numbers restated here, because
+three successive reviews re-opened this drift when the docs carried the
+arithmetic. The compound case (a 404 repair followed by a `restart` decision) is made
+unreachable by a **per-claim** latch — module state cannot serve here, because
+the repair clears its own flag before the decision is computed — and
+`cliproxy_budget_spec` asserts the compound arithmetic so the claim stays
+checkable.
+
+### The management route, and the 404 that matters
+
+cliproxy registers `/v0/management/*` only when it **booted** with a
+`remote-management.secret-key`, and authenticates it with that key specifically
+(the `api-keys` bearer gets 401 — pinned by the conformance spec). `render` now
+emits that key, defaulting `disable-control-panel: true` and never setting
+`allow-remote`, so the surface stays loopback-only.
+
+A proxy started before the key existed therefore answers **404**, and that is the
+honest signal to restart it — `credential_health` does so **at most once per consecutive run of 404s** — the
+guard clears on any successful lookup, so a proxy the operator restarts
+mid-session is still repairable. The repair is skipped entirely when
+`manage = false`: `stop()` would reap the operator's own proxy and
+`ensure_running` does not spawn for an unmanaged instance. There is deliberately no config-file drift check: `ensure_running`
+rewrites the rendered config *before* it probes, so a file-vs-render comparison
+is always false and never reflects what the running process loaded.
+
+### Peer proxies, and the login flow
+
+**Peers.** Every cliproxy runs a 15-minute auth refresh over its auth-dir, and
+Claude's OAuth refresh tokens rotate on use — so N proxies sharing one auth-dir
+invalidate each other's credential. That is what broke auth in #197 (five leaked
+instances from June). `peers()` finds cliproxy processes parley neither spawned
+nor manages, matching on the **executable** rather than a substring (a real `ps`
+contains a `zsh -c` wrapper quoting the proxy path — substring matching would
+SIGTERM the operator's shell) and on **both** binary names (`cliproxyapi` from
+brew, `cli-proxy-api` from the tarball). `ensure_running` warns once per session
+naming that mechanism, and `:ParleyProxy reap` stops them after showing what it
+found. `stop()` no longer leaks parley-spawned proxies on non-managed ports.
+
+**Login.** `:ParleyProxy login <provider>` now:
+1. **preflights the callback port** (claude's redirect is fixed at
+   `localhost:54545`) by *connecting*, not binding — libuv sets `SO_REUSEADDR`,
+   so a bind probe reports "free" for exactly the case this catches;
+2. **surfaces the binary's own output** (debounced, so the whole instruction
+   block arrives together) — deliberately WITHOUT `-no-browser`: each provider's
+   flow differs, and suppressing the binary's browser while matching only a
+   claude-shaped URL left every other provider with a silent, uncompletable
+   login. Parley adds visibility; it does not take over the flow;
+3. keeps the job **off a closable terminal buffer** — in #197 the terminal-split
+   job died mid-flow, taking its callback listener with it, and the browser's
+   redirect had nowhere to land while nothing reported the death;
+4. **watches the auth-dir** (filtered to the login's own channels, so a peer
+   proxy's refresh cannot satisfy it) and reports the real outcome exactly once:
+   success with the account, a non-zero exit with the binary's output, or a
+   bounded timeout telling the operator to re-run.
+
+It does **not** resume the query that triggered the prompt. A login takes minutes
+and the recovery claim is bounded by `recovery_timeout_ms`; holding a chat leg
+open across it would guarantee the timeout it exists to avoid. The claim settles
+with the diagnosis, and the operator re-sends once the login lands.
+
+`login_argv` validates the flag against `<binary> -h` rather than a static table:
+the flag set is version-dependent (7.2.110 dropped `-login`, which 7.1.71 had),
+so `:ParleyProxy login google` on a newer build now says so instead of silently
+not logging in.
+
+### Testing
+
+The fake (`tests/fixtures/fake_cliproxy`) serves the management route from a
+**portable credential store** — a folder of auth JSONs plus a `state.json`
+overlay tests mutate between calls — and models the 200/401/404-without-key
+cases. It also serves the real 503/401/402 bodies on `/v1/chat/completions`
+(`--error-mode`), which is what lets `cliproxy_recovery_e2e_spec.lua` drive a
+real failure through `dispatcher.query` → `recover_query` → the operator-facing
+notice rather than hand-building failure tables.
+`cliproxy_conformance_spec.lua` boots the **real** binary against a
+*fabricated* credential in a throwaway auth-dir and asserts the fields
+`classify_auth_files` reads still exist — including the 404-without-key
+behavior the entire repair branches on. Never point that at the real auth-dir:
+cliproxy refreshes at startup and every 15m, and Claude's refresh tokens rotate
+on use — the race that caused this issue.
 
 ## Models & providers (#132)
 
@@ -103,10 +259,14 @@ consulted). The dispatcher's cliproxy response path calls
   keeps only ids whose `owned_by` matches the provider (map verified against the
   CLIProxyAPI catalog: claude→anthropic, codex→openai, google→google, xai→xai,
   kimi→moonshot, antigravity→antigravity). `/v1/models` reads the **dynamic**
-  registry (loaded auth clients only), so an unauthenticated provider contributes
-  no models → **empty list** → the command prompts `:ParleyProxy login <provider>`.
-  Chosen over the management API precisely because it auth-detects for free and
-  needs no management secret.
+  registry, so an empty list means "this provider serves no models right now" —
+  **not** "not authenticated". #197 disproved that inference (the registry kept
+  listing every model with the credential dead), so an empty list now triggers a
+  credential-health read on the CHANNEL axis
+  (`credential_health_for_login`: `google` → gemini / gemini-cli / aistudio) and
+  the shared `credential_action` policy decides between "authenticated but no
+  models — check the catalog", a login prompt carrying the proxy's own reason,
+  and an honest "state could not be read".
 - **Bare `:ParleyProxy`** prints per-subcommand help; `SUBS_HELP` (init.lua) is the
   single source for both the usage text and the completion list (ARCH-DRY).
 

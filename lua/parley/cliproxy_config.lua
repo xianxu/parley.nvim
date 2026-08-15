@@ -63,6 +63,23 @@ function M.render(opts)
         -- cliproxy would read as a malformed api-keys.
         cfg["api-keys"] = nil
     end
+    if opts.management_key ~= nil and opts.management_key ~= "" then
+        -- The management API (/v0/management/auth-files) is parley's only honest
+        -- source of credential health (#197) and it authenticates with THIS key
+        -- — the api-keys bearer gets 401. Without the key rendered, cliproxy
+        -- doesn't even register the route (404).
+        --
+        -- Merge, never replace: the operator's raw `remote-management` block
+        -- passes through. `allow-remote` is deliberately never set, so the new
+        -- surface stays loopback-only, and the control panel is off unless the
+        -- operator asked for it — parley needs only the JSON route.
+        local rm = type(cfg["remote-management"]) == "table" and cfg["remote-management"] or {}
+        rm["secret-key"] = opts.management_key
+        if rm["disable-control-panel"] == nil then
+            rm["disable-control-panel"] = true
+        end
+        cfg["remote-management"] = rm
+    end
     return cfg, overrides
 end
 
@@ -117,20 +134,6 @@ end
 -- M3: auth-failure detection + login-provider resolution
 --------------------------------------------------------------------------------
 
---- Detect cliproxyapi's "missing/invalid upstream credential" failure in a raw
---- response and return the model name. cliproxyapi collapses a missing-credential
---- into `"unknown provider for model <X>"` (verified in the source:
---- util.GetProviderName only reads the dynamic registry, so an unloaded auth
---- makes the model unresolvable). Returns the model name, or nil.
----@param raw_response string
----@return string|nil model
-function M.detect_auth_failure(raw_response)
-    if type(raw_response) ~= "string" then
-        return nil
-    end
-    return raw_response:match("unknown provider for model%s+([%w%-%._]+)")
-end
-
 -- cliproxyapi's fixed channel set → the :ParleyProxy login provider it needs.
 -- The channel keys ARE the providers (cliproxyapi static catalog); vertex uses a
 -- service account (no OAuth login) so it's intentionally absent.
@@ -145,13 +148,19 @@ local CHANNEL_LOGIN = {
     xai = "xai",
 }
 
---- Resolve which login a model needs, from parley's own `oauth-model-alias`
---- config (NOT a name heuristic): find the channel whose entries include the
---- model (by name or alias), then map channel → login provider.
+--- Resolve which cliproxy CHANNEL serves a model, from parley's own
+--- `oauth-model-alias` config (NOT a name heuristic).
+---
+--- The channel is the axis cliproxy itself uses: it is what
+--- /v0/management/auth-files reports in `provider`/`type` (`gemini-cli`,
+--- `aistudio`, …). It is NOT the login-provider axis — several channels share
+--- one login (`gemini`/`gemini-cli`/`aistudio` all log in via `google`), so
+--- querying credential health with a login provider silently finds nothing.
+--- Keep the two apart; `resolve_login_provider` derives from this one.
 ---@param model string
 ---@param oauth_model_alias table # the rendered config's oauth-model-alias block
----@return string|nil login_provider
-function M.resolve_login_provider(model, oauth_model_alias)
+---@return string|nil channel
+function M.resolve_channel(model, oauth_model_alias)
     if type(model) ~= "string" or type(oauth_model_alias) ~= "table" then
         return nil
     end
@@ -159,12 +168,55 @@ function M.resolve_login_provider(model, oauth_model_alias)
         if type(entries) == "table" then
             for _, e in ipairs(entries) do
                 if type(e) == "table" and (e.name == model or e.alias == model) then
-                    return CHANNEL_LOGIN[channel]
+                    return channel
                 end
             end
         end
     end
     return nil
+end
+
+--- The login a channel needs, or nil for a channel with no OAuth login
+--- (vertex uses a service account).
+---@param channel string|nil
+---@return string|nil login_provider
+function M.channel_login(channel)
+    return channel and CHANNEL_LOGIN[channel] or nil
+end
+
+-- A device-code flow logs into an EXISTING channel; it is a login METHOD, not a
+-- channel of its own. Without this, channels_for_login("codex-device") is empty,
+-- which silently disables the login watch's peer-refresh filter and makes the
+-- success notice drop the account.
+local LOGIN_ALIASES = { ["codex-device"] = "codex" }
+
+--- Every cliproxy CHANNEL served by a login provider — the inverse of
+--- `channel_login`, derived rather than hand-maintained (ARCH-DRY).
+---
+--- Needed because a third axis exists: `providers()` names login-provider-shaped
+--- values (`google`), while credential health is keyed by channel
+--- (`gemini`/`gemini-cli`/`aistudio`). Five of six coincide; `google` does not.
+---@param login string
+---@return string[] channels # sorted, empty when the login is unknown
+function M.channels_for_login(login)
+    login = LOGIN_ALIASES[login] or login
+    local out = {}
+    for channel, l in pairs(CHANNEL_LOGIN) do
+        if l == login then
+            out[#out + 1] = channel
+        end
+    end
+    table.sort(out)
+    return out
+end
+
+--- Resolve which login a model needs. Derives from resolve_channel so there is
+--- one model→channel source (ARCH-DRY).
+---@param model string
+---@param oauth_model_alias table
+---@return string|nil login_provider
+function M.resolve_login_provider(model, oauth_model_alias)
+    return M.channel_login(M.resolve_channel(model, oauth_model_alias))
 end
 
 -- Provider → the `owned_by` value its models carry in /v1/models (verified
@@ -202,9 +254,10 @@ end
 
 --- Parse a /v1/models response body and return the sorted model ids whose
 --- `owned_by` matches. Pure; empty for malformed input or no match. The
---- match-or-empty is what gives per-provider auth detection: an unauthenticated
---- provider contributes no models, so its filtered list is empty even when other
---- providers are present.
+--- match-or-empty says which models a provider SERVES. It is NOT an auth signal:
+--- #197 established that the registry keeps listing models with the credential
+--- dead, so an empty list means "no models right now" and the caller must read
+--- credential health to learn why.
 ---@param models_json string
 ---@param owned_by string
 ---@return string[]

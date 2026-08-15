@@ -374,6 +374,7 @@ atlas:
   providers/cliproxy-managed:
     code:
       - lua/parley/cliproxy_config.lua
+      - lua/parley/cliproxy_auth.lua
       - lua/parley/cliproxy.lua
       - lua/parley/providers.lua
       - lua/parley/dispatcher.lua
@@ -383,6 +384,9 @@ atlas:
       - lua/parley/init.lua
     tests:
       - tests/unit/cliproxy_config_spec.lua
+      - tests/unit/cliproxy_auth_spec.lua
+      - tests/unit/failure_notice_spec.lua
+      - tests/unit/cliproxy_budget_spec.lua
       - tests/unit/providers_pre_query_spec.lua
       - tests/unit/dispatcher_query_spec.lua
       - tests/integration/cliproxy_lifecycle_spec.lua
@@ -391,6 +395,9 @@ atlas:
       - tests/integration/cliproxy_caller_teardown_spec.lua
       - tests/integration/cliproxy_download_spec.lua
       - tests/integration/cliproxy_auth_login_spec.lua
+      - tests/integration/cliproxy_conformance_spec.lua
+      - tests/integration/cliproxy_recovery_e2e_spec.lua
+      - tests/integration/cliproxy_login_spec.lua
 
   providers/anthropic:
     code:
@@ -427,6 +434,10 @@ atlas:
   providers/tool_use:
     code:
       - lua/parley/tool_loop.lua
+      - lua/parley/sse.lua
+      - lua/parley/tools/wire.lua
+      - lua/parley/tools/wire_anthropic.lua
+      - lua/parley/tools/wire_openai.lua
       - lua/parley/tools/init.lua
       - lua/parley/tools/dispatcher.lua
       - lua/parley/tools/serialize.lua
@@ -448,7 +459,16 @@ atlas:
     tests:
       - tests/integration/chat_lease_spec.lua
       - tests/integration/neighborhood_completion_spec.lua
+      - tests/integration/openai_tool_loop_spec.lua
+      - tests/integration/cliproxy_tool_conformance_spec.lua
       - tests/unit/tool_loop_spec.lua
+      - tests/unit/tool_wire_registry_spec.lua
+      - tests/unit/anthropic_tool_wire_spec.lua
+      - tests/unit/openai_tool_encode_spec.lua
+      - tests/unit/openai_tool_decode_spec.lua
+      - tests/unit/openai_message_translate_spec.lua
+      - tests/unit/openai_payload_tools_spec.lua
+      - tests/unit/provider_params_output_cap_spec.lua
       - tests/unit/neighborhood_spec.lua
       - tests/unit/build_messages_spec.lua
       - tests/unit/tools_registry_spec.lua

@@ -1582,6 +1582,68 @@ describe("chat_respond: pending request transcript drift", function()
         return calls, ranges
     end
 
+    -- #198 close review I3. chat_respond.lua's `provider = agent_info.provider`
+    -- / `model = agent_info.model` is the ONLY point where the wire selector
+    -- reaches tool_loop in production. Every other tool test here uses an
+    -- anthropic agent, which decodes correctly with or without the threading
+    -- because tool_loop defaults to "anthropic" — so deleting those two lines
+    -- left the whole suite green while every OpenAI-family tool agent went
+    -- silent. This test fails if they are removed.
+    local function mk_openai_tool_sse(call_id, path)
+        local chunks = {
+            { choices = { { index = 0, delta = { role = "assistant", tool_calls = {
+                { index = 0, id = call_id, type = "function",
+                  ["function"] = { name = "read_file", arguments = "" } } } } } } },
+            { choices = { { index = 0, delta = { tool_calls = {
+                { index = 0, ["function"] = {
+                    arguments = vim.json.encode({ path = path }) } } } } } } },
+            { choices = { { index = 0, delta = {}, finish_reason = "tool_calls" } } },
+        }
+        local lines = {}
+        for _, c in ipairs(chunks) do
+            table.insert(lines, "data: " .. vim.json.encode(c))
+            table.insert(lines, "")
+        end
+        table.insert(lines, "data: [DONE]")
+        return table.concat(lines, "\n")
+    end
+
+    it("threads provider/model to the tool loop so an openai-family agent recurses", function()
+        local buf = open_simple_chat()
+        parley._state.agent = "ToolSol*"
+        require("parley.tool_loop").reset(buf)
+
+        local legs = 0
+        local first
+        parley.dispatcher.query = function(buf_arg, _provider, _payload, _handler, on_exit)
+            legs = legs + 1
+            local qid = "qid_openai_thread_" .. legs
+            parley.tasker.set_query(qid, {
+                response = "",
+                -- Only the FIRST leg calls a tool; the recursion then ends.
+                raw_response = legs == 1
+                    and mk_openai_tool_sse("call_THREAD_1", scratch_file) or "",
+                buf = buf_arg,
+            })
+            if legs == 1 then first = { qid = qid, complete = on_exit } end
+        end
+
+        parley.chat_respond({ range = 0 })
+        assert.is_true(vim.wait(2000, function() return first ~= nil end, 10),
+            "first leg never issued")
+        first.complete(first.qid)
+
+        -- A second leg means the OpenAI tool_calls stream was decoded and the
+        -- loop recursed. Without the threading, tool_loop decodes zero calls,
+        -- returns "done", and no second leg is ever issued.
+        assert.is_true(vim.wait(2000, function() return legs >= 2 end, 10),
+            "tool loop did not recurse — provider/model not reaching tool_loop")
+
+        local text = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+        assert.matches("🔧: read_file id=call_THREAD_1", text)
+        assert.matches("📎: read_file id=call_THREAD_1", text)
+    end)
+
     it("runs a tool-only completion immediately before playful reveal", function()
         local buf = open_simple_chat()
         parley._state.agent = "ToolSonnet"
@@ -1738,6 +1800,8 @@ describe("chat_respond: pending request transcript drift", function()
         end, 10))
         assert.is_true(notices[#notices].partial_present)
         assert.is_truthy(notices[#notices].message:find("provider request failed", 1, true))
+        -- Falls back to the raw body when no diagnosis was supplied (#197).
+        assert.is_truthy(notices[#notices].message:find("broken", 1, true))
         assert.is_nil(pending_mark(buf))
         assert.is_nil(require("parley.chat_lease").current(buf))
         assert.equals(0, runtime:open_timer_count())

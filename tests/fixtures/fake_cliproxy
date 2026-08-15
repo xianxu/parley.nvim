@@ -20,6 +20,37 @@ Modes:
   foreign              200 {"hello":"i am not cliproxy"}
   slow                 accept the connection, never respond
   crash                exit(1) immediately on startup
+
+Error modes (--error-mode / PARLEY_FAKE_ERROR_MODE) select what
+POST /v1/chat/completions answers, using the REAL bodies 7.1.71 emitted during
+the #197 outage:
+  ok                   200, a minimal completion
+  no_auth              503 auth_unavailable (providers=…, model=…)
+  expired              401 authentication_error, OAuth access token has expired
+  quota                402 payment_required
+  <mode>_once          that error on the FIRST request, 200 thereafter — a
+                       genuinely transient failure for the retry rung
+
+Response modes (--response-mode / PARLEY_FAKE_RESPONSE_MODE) select the SHAPE of
+a successful POST /v1/chat/completions, orthogonal to the error modes above:
+  completion           (default) a minimal non-streaming completion
+  tool_call            STATEFUL, models one OpenAI tool round:
+                         request WITHOUT a role:"tool" message -> an SSE stream
+                           of delta.tool_calls (the model calling a tool)
+                         request WITH one    -> a plain streamed completion
+                       This is what lets an integration test drive the real
+                       tool_loop recursion against a process instead of mocks.
+  tool_call_parallel   same, but the first response calls TWO tools at distinct
+                       array indices.
+
+Login modes (PARLEY_FAKE_LOGIN_MODE), used when invoked with a -*-login flag —
+the four ways #197's login could end:
+  success              print the authorize URL, then write a credential
+  dies_early           print the URL, then exit non-zero (the #197 failure)
+  hangs                print the URL and never write a credential
+
+(The callback-port preflight is fixtured by binding the port in-process from the
+spec — a spawned holder would outlive the test.)
 """
 import json
 import os
@@ -31,12 +62,23 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 def parse_args(argv):
     port = None
     mode = os.environ.get("PARLEY_FAKE_MODE", "healthy")
+    # Management key comes from the rendered config, exactly as the real binary
+    # takes it. When it is absent the management routes are NOT registered —
+    # cliproxy 7.1.71 answers 404, and parley keys its "this proxy predates the
+    # key, restart it" repair off precisely that (issue #197).
+    mgmt_key = None
+    auth_store = os.environ.get("PARLEY_FAKE_AUTH_STORE")
+    error_mode = os.environ.get("PARLEY_FAKE_ERROR_MODE", "ok")
+    response_mode = os.environ.get("PARLEY_FAKE_RESPONSE_MODE", "completion")
     i = 0
     while i < len(argv):
         a = argv[i]
         if a in ("-config", "--config"):
             with open(argv[i + 1]) as f:
-                port = int(json.load(f).get("port"))
+                cfg = json.load(f)
+            port = int(cfg.get("port"))
+            mgmt_key = (cfg.get("remote-management") or {}).get("secret-key")
+            auth_store = cfg.get("auth-dir") or auth_store
             i += 2
         elif a == "--port":
             port = int(argv[i + 1])
@@ -44,19 +86,144 @@ def parse_args(argv):
         elif a == "--mode":
             mode = argv[i + 1]
             i += 2
+        elif a == "--management-key":
+            mgmt_key = argv[i + 1]
+            i += 2
+        elif a == "--auth-store":
+            auth_store = argv[i + 1]
+            i += 2
+        elif a == "--error-mode":
+            error_mode = argv[i + 1]
+        elif a == "--response-mode" and i + 1 < len(argv):
+            response_mode = argv[i + 1]
+            i += 2
         else:
             i += 1
-    return port, mode
+    return port, mode, mgmt_key, auth_store, error_mode, response_mode
+
+
+# When the proxy last LOADED each credential into memory, keyed by filename.
+# The real binary advances this only when its watcher actually reloads the file
+# — a touch-only write advances `modtime` alone, and that difference IS the
+# missed-reload signal parley's restart rung reads. Modelling load time as
+# "first time we saw this content" makes the fake honest about it.
+_LOADED = {}
+
+
+def read_auth_store(auth_store):
+    """Build management records from a portable folder of credential files.
+
+    The store IS the state: a folder of `<channel>-<account>.json` credential
+    files plus an optional `state.json` overlay keyed by channel, e.g.
+    {"claude": {"status": "error", "status_message": "...", "unavailable": true}}.
+    Tests mutate those files between calls, so the double is stateful across
+    requests rather than a fixed canned reply (AGENTS.md external-service rule).
+    """
+    if not auth_store or not os.path.isdir(auth_store):
+        return []
+    overlay = {}
+    overlay_path = os.path.join(auth_store, "state.json")
+    if os.path.exists(overlay_path):
+        with open(overlay_path) as f:
+            overlay = json.load(f)
+    files = []
+    for name in sorted(os.listdir(auth_store)):
+        if not name.endswith(".json") or name == "state.json":
+            continue
+        path = os.path.join(auth_store, name)
+        with open(path) as f:
+            raw = f.read()
+        cred = json.loads(raw)
+        # Load time advances only on a CONTENT change, mirroring the watcher.
+        prev = _LOADED.get(name)
+        if prev is None or prev[0] != raw:
+            _LOADED[name] = (raw, time.time())
+        loaded_at = _LOADED[name][1]
+        channel = cred.get("type") or name.split("-", 1)[0]
+        account = cred.get("email") or name
+        record = {
+            "account": account,
+            "account_type": "oauth",
+            "auth_index": name,
+            "disabled": False,
+            "email": account,
+            "failed": 0,
+            "id": name,
+            "label": account,
+            "modtime": time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(os.path.getmtime(path))),
+            "updated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(loaded_at)),
+            "name": name,
+            "path": path,
+            "provider": channel,
+            "runtime_only": False,
+            "size": os.path.getsize(path),
+            "source": "file",
+            "status": "active",
+            "status_message": "",
+            "success": 0,
+            "type": channel,
+            "unavailable": False,
+        }
+        record.update(overlay.get(channel, {}))
+        files.append(record)
+    return files
+
+
+def run_login(login_mode, auth_store):
+    """Stand in for `cli-proxy-api -<provider>-login`.
+
+    Models what the real binary does from parley's side: print an authorize URL
+    on stdout, then (on success) write a credential into the auth-dir. The four
+    modes are the four ways #197's login could end.
+    """
+    url = ("https://claude.ai/oauth/authorize?client_id=fake&code=true"
+           "&redirect_uri=http%3A%2F%2Flocalhost%3A54545%2Fcallback&state=fake")
+    sys.stdout.write("Visit the following URL to continue authentication:\n")
+    sys.stdout.write(url + "\n")
+    sys.stdout.flush()
+    if login_mode == "dies_early":
+        sys.stderr.write("fake login: exiting non-zero before any callback\n")
+        sys.exit(3)
+    if login_mode == "hangs":
+        time.sleep(300)
+        return
+    # success: write a credential after a beat, as a completed OAuth would
+    time.sleep(0.5)
+    if auth_store:
+        os.makedirs(auth_store, exist_ok=True)
+        with open(os.path.join(auth_store, "claude-fake@example.com.json"), "w") as f:
+            json.dump({"type": "claude", "email": "fake@example.com"}, f)
+    sys.exit(0)
 
 
 def main():
-    port, mode = parse_args(sys.argv[1:])
+    # `-h` is now part of the surface parley depends on: it validates a login
+    # flag against the binary's own usage, because the flag set is
+    # version-dependent (7.2.110 dropped `-login`, which 7.1.71 had).
+    if "-h" in sys.argv[1:] or "--help" in sys.argv[1:]:
+        sys.stdout.write("Usage of fake_cliproxy\n")
+        for flag in ("-antigravity-login", "-claude-login", "-codex-device-login",
+                     "-codex-login", "-config string", "-kimi-login", "-login",
+                     "-no-browser", "-oauth-callback-port int", "-xai-login"):
+            sys.stdout.write("  %s\n" % flag)
+        sys.exit(0)
+    port, mode, mgmt_key, auth_store, error_mode, response_mode = parse_args(sys.argv[1:])
+    login_mode = os.environ.get("PARLEY_FAKE_LOGIN_MODE")
+    if login_mode or any(a.endswith("-login") for a in sys.argv[1:]):
+        run_login(login_mode or "success", auth_store)
+        return
     if mode == "crash":
         sys.stderr.write("fake_cliproxy: crash mode — exiting\n")
         sys.exit(1)
     if port is None:
         sys.stderr.write("fake_cliproxy: no port given\n")
         sys.exit(2)
+
+    served = {"first": False}  # for the `_once` transient modes
+    # Files the tool_call mode asks parley to read. Injected so the spec owns
+    # the fixture content and the scope guard sees a path inside its root.
+    TOOL_PATH_A = os.environ.get("PARLEY_FAKE_TOOL_PATH_A", "/dev/null")
+    TOOL_PATH_B = os.environ.get("PARLEY_FAKE_TOOL_PATH_B", "/dev/null")
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_a):
@@ -70,9 +237,125 @@ def main():
             self.end_headers()
             self.wfile.write(body)
 
+        def _bearer(self):
+            return (self.headers.get("Authorization") or "").replace("Bearer ", "", 1)
+
+        # Real 7.1.71 error bodies, captured from ~/.cli-proxy-api/logs during
+        # the #197 outage. Selected by --error-mode so the recovery ladder can be
+        # driven end to end instead of through hand-built failure tables.
+        ERRORS = {
+            "no_auth": (503, {"type": "error", "error": {"type": "api_error", "message":
+                "auth_unavailable: no auth available (providers=claude, model=claude-opus-4-8); "
+                "check Claude auth/key session and cooldown state via /v0/management/auth-files"}}),
+            "expired": (401, {"type": "error", "error": {"type": "authentication_error",
+                "message": "OAuth access token has expired. Re-authenticate to continue."}}),
+            "quota": (402, {"error": {"message": "payment_required", "type": "quota_error"}}),
+        }
+
+        def _sse(self, chunks):
+            """Stream `chunks` as SSE, terminated by [DONE] — the shape parley's
+            openai-family decoder reads."""
+            body = b""
+            for c in chunks:
+                body += b"data: " + json.dumps(c).encode() + b"\n\n"
+            body += b"data: [DONE]\n\n"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        @staticmethod
+        def _tool_call_chunks(calls):
+            """One OpenAI tool round. id + name arrive in a call's FIRST chunk
+            and arguments accumulate separately, because that split is exactly
+            what the decoder has to reassemble."""
+            chunks = []
+            for idx, (call_id, name, _args) in enumerate(calls):
+                chunks.append({"choices": [{"index": 0, "delta": {"role": "assistant",
+                    "tool_calls": [{"index": idx, "id": call_id, "type": "function",
+                                    "function": {"name": name, "arguments": ""}}]}}]})
+            for idx, (_id, _name, args) in enumerate(calls):
+                chunks.append({"choices": [{"index": 0, "delta": {
+                    "tool_calls": [{"index": idx,
+                                    "function": {"arguments": json.dumps(args)}}]}}]})
+            chunks.append({"choices": [{"index": 0, "delta": {},
+                                        "finish_reason": "tool_calls"}]})
+            return chunks
+
+        def _streamed_text(self, text):
+            self._sse([
+                {"choices": [{"index": 0, "delta": {"role": "assistant", "content": text}}]},
+                {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+            ])
+
+        def do_POST(self):
+            length = int(self.headers.get("Content-Length") or 0)
+            raw_body = self.rfile.read(length) if length else b""
+
+            # STATEFUL tool mode. Which round we are in is read from the REQUEST
+            # rather than from a counter: a request carrying a role:"tool"
+            # message is by definition the second leg, which makes this correct
+            # under retries and concurrent buffers where a counter would drift.
+            if response_mode in ("tool_call", "tool_call_parallel") and error_mode == "ok":
+                try:
+                    parsed = json.loads(raw_body or b"{}")
+                except ValueError:
+                    parsed = {}
+                answered = any(m.get("role") == "tool"
+                               for m in parsed.get("messages", []) or [])
+                if answered:
+                    self._streamed_text("Done: the tool result was received.")
+                    return
+                if response_mode == "tool_call_parallel":
+                    self._sse(self._tool_call_chunks([
+                        ("call_fake_a", "read_file", {"path": TOOL_PATH_A}),
+                        ("call_fake_b", "read_file", {"path": TOOL_PATH_B}),
+                    ]))
+                else:
+                    self._sse(self._tool_call_chunks([
+                        ("call_fake_a", "read_file", {"path": TOOL_PATH_A}),
+                    ]))
+                return
+            # `<mode>_once` fails the FIRST request and succeeds afterwards —
+            # a genuinely transient failure, which is what the recovery ladder's
+            # retry rung is for. Modelling it here removes the alternative:
+            # swapping servers mid-flight, which races the retry.
+            base = error_mode[:-5] if error_mode.endswith("_once") else None
+            if base is not None:
+                if not served["first"]:
+                    served["first"] = True
+                    status, body = self.ERRORS[base]
+                    self._json(status, body)
+                    return
+                self._json(200, {"id": "chatcmpl-fake", "object": "chat.completion",
+                                 "choices": [{"index": 0, "finish_reason": "stop",
+                                              "message": {"role": "assistant", "content": "ok"}}]})
+                return
+            if error_mode in self.ERRORS:
+                status, body = self.ERRORS[error_mode]
+                self._json(status, body)
+                return
+            # ok: a minimal non-streaming completion
+            self._json(200, {"id": "chatcmpl-fake", "object": "chat.completion",
+                             "choices": [{"index": 0, "finish_reason": "stop",
+                                          "message": {"role": "assistant", "content": "ok"}}]})
+
         def do_GET(self):
             if mode == "slow":
                 time.sleep(30)
+                return
+            if self.path.startswith("/v0/management/auth-files"):
+                # No key rendered ⇒ the route was never registered. The real
+                # binary 404s here, and parley treats that as repairable.
+                if not mgmt_key:
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+                if self._bearer() != mgmt_key:
+                    self._json(401, {"error": "unauthorized"})
+                    return
+                self._json(200, {"files": read_auth_store(auth_store)})
                 return
             if self.path.startswith("/v1/models"):
                 if mode == "client_key_mismatch":

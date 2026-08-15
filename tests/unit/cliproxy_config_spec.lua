@@ -94,6 +94,45 @@ describe("render", function()
         assert.is_nil(cfg["api-keys"])
     end)
 
+    it("renders the management secret-key when given", function()
+        local cfg = cc.render({ host = "127.0.0.1", port = 8317, management_key = "abc123" })
+        assert.equals("abc123", cfg["remote-management"]["secret-key"])
+    end)
+
+    it("defaults the control panel off — parley needs only the JSON route", function()
+        local cfg = cc.render({ host = "127.0.0.1", port = 8317, management_key = "abc123" })
+        assert.is_true(cfg["remote-management"]["disable-control-panel"])
+    end)
+
+    it("lets an operator re-enable the control panel", function()
+        local cfg = cc.render({
+            host = "127.0.0.1", port = 8317, management_key = "abc123",
+            config = { ["remote-management"] = { ["disable-control-panel"] = false } },
+        })
+        assert.is_false(cfg["remote-management"]["disable-control-panel"])
+        assert.equals("abc123", cfg["remote-management"]["secret-key"])
+    end)
+
+    it("merges into an operator's remote-management block without clobbering it", function()
+        local cfg = cc.render({
+            host = "127.0.0.1", port = 8317, management_key = "abc123",
+            config = { ["remote-management"] = { ["some-future-key"] = "kept" } },
+        })
+        assert.equals("kept", cfg["remote-management"]["some-future-key"])
+        assert.equals("abc123", cfg["remote-management"]["secret-key"])
+    end)
+
+    it("never enables allow-remote on its own — the surface stays loopback-only", function()
+        local cfg = cc.render({ host = "127.0.0.1", port = 8317, management_key = "abc123" })
+        assert.is_nil(cfg["remote-management"]["allow-remote"])
+    end)
+
+    it("omits remote-management entirely without a key", function()
+        -- Pins that operators who never enable this see a byte-identical config.
+        assert.is_nil(cc.render({ host = "127.0.0.1", port = 8317 })["remote-management"])
+        assert.is_nil(cc.render({ host = "127.0.0.1", port = 8317, management_key = "" })["remote-management"])
+    end)
+
     it("preserves a nested map+list passthrough (oauth-model-alias) through encode", function()
         -- the structure cliproxyapi needs to route claude-opus-4-8 → Claude OAuth;
         -- guards the JSON-as-YAML emission of nested maps containing lists of maps.
@@ -162,20 +201,12 @@ describe("asset_name", function()
 end)
 
 --------------------------------------------------------------------------------
--- M3: auth-failure detection + login-provider resolution
+-- M3: login-provider resolution
+--
+-- detect_auth_failure lived here until #197 replaced it with
+-- cliproxy_auth.classify_response (status-gated, multi-pattern); its cases moved
+-- to tests/unit/cliproxy_auth_spec.lua.
 --------------------------------------------------------------------------------
-describe("detect_auth_failure", function()
-    it("extracts the model from cliproxy's 'unknown provider' error", function()
-        local r = '{"error":{"message":"unknown provider for model claude-opus-4-8","type":"server_error"}}'
-        assert.equals("claude-opus-4-8", cc.detect_auth_failure(r))
-    end)
-    it("returns nil for a normal streamed response", function()
-        assert.is_nil(cc.detect_auth_failure('data: {"choices":[{"delta":{"content":"hi"}}]}'))
-    end)
-    it("returns nil for a non-string", function()
-        assert.is_nil(cc.detect_auth_failure(nil))
-    end)
-end)
 
 describe("resolve_login_provider", function()
     local alias = {
@@ -262,5 +293,63 @@ describe("parse_checksums", function()
     end)
     it("returns nil for an asset not listed", function()
         assert.is_nil(cc.parse_checksums(sample, "CLIProxyAPI_7.1.71_linux_amd64.tar.gz"))
+    end)
+end)
+
+-- #197 C1: channel and login provider are DIFFERENT axes. They coincide for
+-- claude, which is why every test in M1 missed the confusion.
+describe("resolve_channel vs resolve_login_provider", function()
+    local alias = {
+        claude = { { name = "claude-opus-4-8", alias = "claude-opus-4-8" } },
+        ["gemini-cli"] = { { name = "gemini-2.5-pro", alias = "gemini-2.5-pro" } },
+        aistudio = { { name = "gemini-3-pro-preview", alias = "gemini-3-pro-preview" } },
+    }
+
+    it("returns the CHANNEL, which is what auth-files reports", function()
+        assert.equals("gemini-cli", cc.resolve_channel("gemini-2.5-pro", alias))
+        assert.equals("aistudio", cc.resolve_channel("gemini-3-pro-preview", alias))
+        assert.equals("claude", cc.resolve_channel("claude-opus-4-8", alias))
+    end)
+
+    it("collapses several channels onto one login provider", function()
+        assert.equals("google", cc.resolve_login_provider("gemini-2.5-pro", alias))
+        assert.equals("google", cc.resolve_login_provider("gemini-3-pro-preview", alias))
+        -- and the two axes differ for exactly those models
+        assert.are_not.equals(cc.resolve_channel("gemini-2.5-pro", alias),
+            cc.resolve_login_provider("gemini-2.5-pro", alias))
+    end)
+
+    it("coincides only for claude — the case that hid the bug", function()
+        assert.equals(cc.resolve_channel("claude-opus-4-8", alias),
+            cc.resolve_login_provider("claude-opus-4-8", alias))
+    end)
+
+    it("returns nil for an unknown model rather than guessing", function()
+        assert.is_nil(cc.resolve_channel("no-such-model", alias))
+        assert.is_nil(cc.resolve_login_provider("no-such-model", alias))
+    end)
+end)
+
+
+-- #197 M3 I1: LOGIN_FLAGS and CHANNEL_LOGIN are two hand-maintained sets on the
+-- same axis. This is the correspondence nothing enforced, and codex-device is
+-- what the drift produced.
+describe("every login provider resolves to at least one channel", function()
+    local cliproxy = require("parley.cliproxy")
+
+    it("has no login provider without channels", function()
+        local orphans = {}
+        for _, provider in ipairs(cliproxy.login_providers()) do
+            if #cc.channels_for_login(provider) == 0 then
+                orphans[#orphans + 1] = provider
+            end
+        end
+        assert.same({}, orphans,
+            "a login with no channel silently disables the credential-watch filter "
+                .. "and drops the account from the success notice")
+    end)
+
+    it("maps the device-code flow onto the channel it logs into", function()
+        assert.same({ "codex" }, cc.channels_for_login("codex-device"))
     end)
 end)

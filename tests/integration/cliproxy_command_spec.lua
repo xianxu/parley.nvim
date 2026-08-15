@@ -63,6 +63,98 @@ describe(":ParleyProxy command", function()
         end
     end)
 
+    -- #197 Task 12: an empty model list USED to be read as "not authenticated".
+    -- That inference is exactly what this issue disproved — /v1/models kept
+    -- listing every model while the credential was dead — so the command now
+    -- asks the proxy instead of guessing.
+    describe("models with an empty list", function()
+        local cliproxy = require("parley.cliproxy")
+        local saved_list, saved_health, saved_select
+        local seen_channels
+
+        before_each(function()
+            seen_channels = {}
+            saved_list = cliproxy.list_models
+            saved_health = cliproxy.credential_health
+            saved_select = vim.ui.select
+            cliproxy.list_models = function(_p, cb) cb({}, nil) end
+        end)
+
+        after_each(function()
+            cliproxy.list_models = saved_list
+            cliproxy.credential_health = saved_health
+            vim.ui.select = saved_select
+        end)
+
+        it("does NOT claim 'not authenticated' when the credential is healthy", function()
+            cliproxy.credential_health = function(cb, channel)
+                seen_channels[#seen_channels + 1] = channel
+                cb({ state = "healthy", account = "me@example.com" })
+            end
+            local prompted = false
+            vim.ui.select = function() prompted = true end
+            local msgs = capture_notify(function()
+                vim.cmd("ParleyProxy models claude")
+                vim.wait(300, function() return false end)
+            end)
+            assert.is_false(prompted, "prompted a login for an authenticated provider")
+            assert.is_truthy(msgs[#msgs].msg:find("is authenticated", 1, true))
+        end)
+
+        it("prompts with the proxy's own reason when the credential is dead", function()
+            cliproxy.credential_health = function(cb, channel)
+                seen_channels[#seen_channels + 1] = channel
+                cb({ state = "unavailable", account = "me@example.com",
+                     message = "OAuth access token has expired." })
+            end
+            local prompt
+            vim.ui.select = function(_i, opts, cb) prompt = opts.prompt; cb(nil, 2) end
+            capture_notify(function()
+                vim.cmd("ParleyProxy models claude")
+                vim.wait(300, function() return false end)
+            end)
+            assert.is_truthy(prompt)
+            assert.is_truthy(prompt:find("expired", 1, true))
+        end)
+
+        it("reads the CHANNEL axis, not the provider name (google → gemini*)", function()
+            -- C2: `google` is a model-owning provider; credential health is
+            -- keyed by channel. Five of six coincide — google does not, and it
+            -- is the one that motivated the M1 channel fix.
+            cliproxy.credential_health = function(cb, channel)
+                seen_channels[#seen_channels + 1] = channel
+                cb(channel == "gemini-cli"
+                    and { state = "healthy", account = "g@example.com" }
+                    or { state = "missing", message = "no credential for " .. tostring(channel) })
+            end
+            local prompted = false
+            vim.ui.select = function() prompted = true end
+            local msgs = capture_notify(function()
+                vim.cmd("ParleyProxy models google")
+                vim.wait(300, function() return false end)
+            end)
+            table.sort(seen_channels)
+            assert.same({ "aistudio", "gemini", "gemini-cli" }, seen_channels)
+            assert.is_false(prompted, "prompted a login despite a healthy gemini-cli credential")
+            assert.is_truthy(msgs[#msgs].msg:find("is authenticated", 1, true))
+        end)
+
+        it("says so when credential state cannot be read", function()
+            cliproxy.credential_health = function(cb, channel)
+                seen_channels[#seen_channels + 1] = channel
+                cb({ state = "unknown", reason = "unreachable", message = "proxy unreachable" })
+            end
+            local prompted = false
+            vim.ui.select = function() prompted = true end
+            local msgs = capture_notify(function()
+                vim.cmd("ParleyProxy models claude")
+                vim.wait(300, function() return false end)
+            end)
+            assert.is_false(prompted)
+            assert.is_truthy(msgs[#msgs].msg:find("could not be read", 1, true))
+        end)
+    end)
+
     it("models with no provider prints its usage line", function()
         local msgs = capture_notify(function()
             vim.cmd("ParleyProxy models")

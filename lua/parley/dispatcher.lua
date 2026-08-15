@@ -14,6 +14,20 @@ local D = {
 	config = {},
 	providers = {},
 	query_dir = vim.fn.stdpath("cache") .. "/parley/query",
+	-- How long an adapter that CLAIMED a failure via recover_query has to settle
+	-- it (#197). A backstop, not a design element: every recovery path is
+	-- expected to call retry()/give_up() itself. Overridable so specs can drive
+	-- the timeout without sleeping.
+	--
+	-- It must exceed the slowest LEGITIMATE recovery, not merely feel short. The
+	-- binding case is cliproxy's management-route repair, whose terms are derived
+	-- in `cliproxy._repair_budget_sec` from the constants each step uses
+	-- (including the extra probe each bounded poll can overrun by) and currently
+	-- total 21s. `cliproxy_budget_spec` asserts this stays comfortably larger; if
+	-- the backstop fired first it would spend the claim's one-shot and replace a
+	-- correct diagnosis with "recovery timed out". A normal failure settles in a
+	-- few seconds — this bound is only ever reached by an actual repair.
+	recovery_timeout_ms = 30000,
 }
 
 ---@param opts table #	user config
@@ -91,29 +105,31 @@ D.prepare_payload = function(messages, model, provider, agent_tools)
 		}
 	end
 
+	local wire = require("parley.tools.wire")
+
+	-- #198: translate parley's internal (anthropic-shaped) messages into the
+	-- wire's own shape BEFORE the adapter builds its payload.
+	--
+	-- This has to happen here, not in openai.format_payload: cliproxy's openai
+	-- route builds through cliproxy_openai_payload and ollama through its own
+	-- format_payload — only copilot and azure delegate to openai's. This is the
+	-- single caller of adapter.format_payload, so it is the one point upstream
+	-- of every builder.
+	--
+	-- Unconditional, NOT gated on this request declaring tools: a prior turn's
+	-- tool blocks live in history and must translate on every later request.
+	-- Identity for the anthropic wire and for string-content messages.
+	messages = wire.translate_messages(provider, model, messages)
+
 	local adapter = providers.get(provider)
 	local payload = adapter.format_payload(messages, model, provider)
 
-	-- M1 Task 1.5: append client-side tools to whatever the adapter emitted.
-	-- Non-Anthropic providers raise here when agent_tools is non-empty.
+	-- Append client-side tools to whatever the adapter emitted, encoded for
+	-- the same wire the messages were just translated for.
 	if agent_tools and #agent_tools > 0 then
 		local tools_registry = require("parley.tools")
 		local defs = tools_registry.select(agent_tools)
-		local client_tools
-		if provider == "anthropic" then
-			client_tools = providers.anthropic_encode_tools(defs)
-		elseif provider == "cliproxyapi" then
-			client_tools = providers.cliproxyapi_encode_tools(defs, model)
-		elseif provider == "openai" then
-			client_tools = providers.openai_encode_tools(defs) -- raises
-		elseif provider == "googleai" then
-			client_tools = providers.googleai_encode_tools(defs) -- raises
-		elseif provider == "ollama" then
-			client_tools = providers.ollama_encode_tools(defs) -- raises
-		else
-			error("tools not supported for this provider yet — see #81 follow-up (provider: "
-				.. tostring(provider) .. ")")
-		end
+		local client_tools = wire.encode(provider, model, defs)
 
 		-- APPEND, do not CLOBBER: preserves server-side tools (web_search,
 		-- web_fetch) that the adapter may have already written into
@@ -123,6 +139,14 @@ D.prepare_payload = function(messages, model, provider, agent_tools)
 			table.insert(payload.tools, t)
 		end
 	end
+
+	-- Stamp the wire so the RESPONSE side can decode with the same one. By the
+	-- time a stream comes back the model params table is gone, and the payload
+	-- carries only a bare model NAME — re-deriving from that would lose an
+	-- agent's `anthropic_tools_route` override and pick the wrong decoder.
+	-- `query` strips this before the request goes out, exactly as
+	-- cliproxyapi.format_headers does with `_parley_route`.
+	payload._parley_tool_wire = wire.name_for(provider, model)
 
 	logger.debug("payload: " .. vim.inspect(payload))
 	return payload
@@ -161,7 +185,8 @@ end
 ---@param callback function | nil # optional callback handler
 ---@param on_progress function | nil # optional progress/status handler
 local query = function(buf, provider, payload, handler, on_exit, callback, on_progress,
-	on_activity, on_error, abort_before_start)
+	on_activity, on_error, abort_before_start, restart, attempt)
+	attempt = attempt or 0
 	-- make sure handler is a function
 	if type(handler) ~= "function" then
 		logger.error(
@@ -170,6 +195,12 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 		return
 	end
 
+	-- Consume the tool-wire stamp prepare_payload left: it travels on the
+	-- payload only to reach here, and must not go out over the network.
+	-- Stripped BEFORE the debug log and the request body are produced.
+	local tool_wire = payload._parley_tool_wire
+	payload._parley_tool_wire = nil
+
     logger.debug("query to send is: " .. vim.json.encode(payload))
 
 	local qid = helpers.uuid()
@@ -177,6 +208,7 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 		timestamp = os.time(),
 		buf = buf,
 		provider = provider,
+		tool_wire = tool_wire,
 		payload = payload,
 		handler = handler,
 		on_exit = on_exit,
@@ -301,16 +333,27 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 				end
 			end
 
+			-- Record, don't report (#197). finish_stdout runs BEFORE the terminal
+			-- closure and cannot know whether the request actually succeeded, so
+			-- logging here made every credential failure announce the misleading
+			-- "response is empty: body_bytes=215" *ahead of* the real diagnosis —
+			-- the exact symptom this issue set out to remove. The terminal
+			-- closure emits it, and only on a successful request.
 			if qt.response == "" then
-				local has_tool_use = qt.raw_response:find('"type":"tool_use"', 1, true) ~= nil
-				if not has_tool_use then
-					logger.error(qt.provider .. " response is empty: body_bytes=" .. #qt.raw_response)
-				end
+				-- Per-wire (#198): the anthropic literal was hardcoded here, so
+				-- a tool-only turn from an OpenAI-family agent reported an
+				-- empty response. qt.tool_wire is the wire prepare_payload
+				-- actually built for.
+				qt.empty_response = not require("parley.tools.wire")
+					.has_tool_calls_by_name(qt.tool_wire, qt.raw_response)
 			end
 
-			pcall(function()
-				require("parley.cliproxy").check_auth_failure(qt.provider, qt.raw_response)
-			end)
+			-- NOTE (#197): auth-failure detection deliberately does NOT live
+			-- here. finish_stdout runs on every completed response, successes
+			-- included, so classifying here means classifying ordinary
+			-- assistant prose — a chat about a 401 would have popped a login
+			-- prompt. It now lives in the terminal closure below, which is the
+			-- only scope that knows the HTTP status.
 		end
 
 		-- closure for uv.read_start(stdout, fn)
@@ -407,19 +450,82 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 				body = qt.raw_response,
 				stderr = clean_stderr,
 				io_error = io_error,
+				-- The request's model: the only path by which a failure body
+				-- that names neither provider nor model (cliproxy's expired-token
+				-- 401) can still be resolved to a credential channel (#197).
+				model = payload and payload.model,
+				-- Did any content already reach the buffer? `handler` writes
+				-- streamed content as it arrives, so a retry after a partial
+				-- stream would duplicate text. Recovery must not claim those.
+				streamed = qt.response ~= "",
+				attempt = attempt,
 			}
-			if type(on_error) == "function" then
-				on_error(qid, failure)
-			else
-				local safe_io_error = tostring(io_error or "none"):gsub("%s+", " "):sub(1, 160)
-				logger.error(string.format(
-					"%s query failed: code=%s signal=%s http_status=%s io_error=%s body_bytes=%d stderr_bytes=%d",
-					provider, tostring(code), tostring(signal), tostring(http_status), safe_io_error,
-					#qt.raw_response, #clean_stderr
-				))
-				legacy_complete(qid, qt)
+			local function deliver(msg)
+				if msg then
+					failure.message = msg
+				end
+				if type(on_error) == "function" then
+					on_error(qid, failure)
+				else
+					local safe_io_error = tostring(io_error or "none"):gsub("%s+", " "):sub(1, 160)
+					logger.error(string.format(
+						"%s query failed: code=%s signal=%s http_status=%s io_error=%s body_bytes=%d stderr_bytes=%d",
+						provider, tostring(code), tostring(signal), tostring(http_status), safe_io_error,
+						#qt.raw_response, #clean_stderr
+					))
+					legacy_complete(qid, qt)
+				end
 			end
+
+			-- Recovery seam (#197). `on_error` is TERMINAL downstream — it
+			-- finishes the pending session and tears down the chat leg — and
+			-- recovery is async, so an adapter cannot simply "run first": it
+			-- must CLAIM the failure synchronously. A truthy claim withholds
+			-- on_error and puts the adapter in debt for exactly one of
+			-- retry()/give_up(); a falsy claim (and every adapter without the
+			-- hook) leaves today's behavior untouched.
+			if type(adapter.recover_query) == "function" and attempt == 0
+				and type(restart) == "function" then
+				local settle = tasker.once(function(action, msg)
+					if action == "retry" then
+						restart(attempt + 1)
+					else
+						deliver(msg)
+					end
+				end)
+				-- Guarded: `recover_query` runs synchronously and touches the
+				-- filesystem and vim.system before it returns its claim, so it
+				-- CAN raise. An unguarded throw here would skip deliver() AND
+				-- the backstop arming below, and tasker's call_safely swallows
+				-- terminal errors — stranding the chat leg with no message at
+				-- all. A hook that blew up never claimed anything.
+				local hook_ok, claimed = pcall(adapter.recover_query, failure, function()
+					settle("retry")
+				end, function(msg)
+					settle("give_up", msg)
+				end)
+				if not hook_ok then
+					logger.error(provider .. ": recover_query raised: " .. tostring(claimed))
+					claimed = false
+				end
+				if claimed then
+					-- Backstop against a recovery that never settles: degrade to
+					-- today's behavior rather than hold the chat leg open
+					-- forever. `settle` is once-only, so this cannot double-fire
+					-- with a late retry/give_up.
+					vim.defer_fn(function()
+						settle("give_up", provider .. ": recovery timed out")
+					end, D.recovery_timeout_ms)
+					return
+				end
+			end
+			deliver()
 		else
+			-- Only a request that SUCCEEDED can meaningfully be called empty;
+			-- on a failure the diagnosis carries the reason instead (#197).
+			if qt.empty_response then
+				logger.error(provider .. " response is empty: body_bytes=" .. #qt.raw_response)
+			end
 			legacy_complete(qid, qt)
 		end
 	end)
@@ -449,9 +555,18 @@ D.query = function(buf, provider, payload, handler, on_exit, callback, on_progre
 			on_abort(msg)
 		end
 	end)
-	local function start_query()
-		query(buf, provider, payload, handler, on_exit, callback, on_progress,
-			on_activity, on_error, abort_before_start)
+	-- `local function` (not `local x = function`) so it can pass ITSELF down as
+	-- the restart entry point: `query` is a file-local that cannot reference
+	-- itself, and the terminal closure that needs to re-issue the request is
+	-- nested inside it (#197).
+	local function start_query(attempt)
+		-- Per-attempt payload snapshot. format_headers CONSUMES fields from the
+		-- payload (cliproxyapi nils `_parley_route`, googleai nils `model`), so
+		-- a retry that reused the same table would re-issue a materially
+		-- different request — an anthropic-routed claude call would retry against
+		-- the OpenAI-shaped endpoint with OpenAI headers.
+		query(buf, provider, vim.deepcopy(payload), handler, on_exit, callback, on_progress,
+			on_activity, on_error, abort_before_start, start_query, attempt or 0)
 	end
 	local adapter = providers.get(provider)
 	if adapter.pre_query then

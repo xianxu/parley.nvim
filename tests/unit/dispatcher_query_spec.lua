@@ -907,4 +907,311 @@ describe("dispatcher.query internals", function()
             end
         end
     end)
+    --------------------------------------------------------------------------
+    -- Group J: recover_query claim contract (#197)
+    --
+    -- on_error is terminal downstream (it finishes the pending session and
+    -- tears down the chat leg), and recovery is async — so an adapter cannot
+    -- simply "run first". It must claim the failure synchronously, and a claim
+    -- is a debt: exactly one of retry()/give_up() must settle it.
+    --------------------------------------------------------------------------
+    describe("Group J: recover_query claim contract", function()
+        local providers = require("parley.providers")
+        local original_get
+
+        local function with_adapter(recover_query, fn)
+            original_get = providers.get
+            providers.get = function(name)
+                local adapter = vim.tbl_extend("force", {}, original_get(name))
+                adapter.recover_query = recover_query
+                return adapter
+            end
+            local ok, err = pcall(fn)
+            providers.get = original_get
+            assert.is_true(ok, tostring(err))
+        end
+
+        -- Drive one failing query; returns the errors on_error saw.
+        local function fail_query(body, status)
+            local errors = {}
+            dispatcher.query(nil, "openai", { model = "gpt-4", messages = {} }, function() end,
+                nil, nil, nil, nil, nil, function(_qid, failure)
+                    table.insert(errors, failure)
+                end)
+            captured_out_reader(nil, body or "")
+            captured_out_reader(nil, nil)
+            captured_terminal(0, 0, body or "", status_stderr(status or "503"), nil)
+            return errors
+        end
+
+        it("J1: an adapter without recover_query behaves exactly as before", function()
+            local errors = fail_query()
+            assert.equals(1, #errors)
+        end)
+
+        it("J2: a declined claim (falsy) lets on_error fire immediately", function()
+            local errors
+            with_adapter(function() return false end, function()
+                errors = fail_query()
+            end)
+            assert.equals(1, #errors)
+        end)
+
+        it("J3: a claim withholds on_error until the adapter settles", function()
+            local settle, errors
+            with_adapter(function(_failure, _retry, give_up)
+                settle = give_up
+                return true
+            end, function()
+                errors = fail_query()
+                assert.equals(0, #errors, "on_error fired despite the claim")
+                settle("diagnosed: credential expired")
+                assert.equals(1, #errors)
+                assert.equals("diagnosed: credential expired", errors[1].message)
+            end)
+        end)
+
+        it("J4: retry re-issues the request once and never fires on_error", function()
+            local starts, errors = 0, nil
+            local original_run = tasker.run
+            tasker.run = function(...)
+                starts = starts + 1
+                return original_run(...)
+            end
+            with_adapter(function(_failure, retry)
+                retry()
+                return true
+            end, function()
+                errors = fail_query()
+            end)
+            tasker.run = original_run
+            assert.equals(2, starts, "the query should have been re-issued exactly once")
+            assert.equals(0, #errors)
+        end)
+
+        it("J5: the retried attempt cannot re-enter recovery", function()
+            local claims = 0
+            local original_run = tasker.run
+            tasker.run = function(...) return original_run(...) end
+            with_adapter(function(failure, retry)
+                claims = claims + 1
+                if failure.attempt == 0 then
+                    retry()
+                    return true
+                end
+                return false
+            end, function()
+                fail_query()
+                -- second attempt's terminal must not be offered a claim
+                captured_out_reader(nil, "")
+                captured_out_reader(nil, nil)
+                captured_terminal(0, 0, "", status_stderr("503"), nil)
+            end)
+            tasker.run = original_run
+            assert.equals(1, claims, "recovery was offered to the retried attempt")
+        end)
+
+        it("J6: retry then give_up produces exactly one outcome", function()
+            local errors, starts = nil, 0
+            local original_run = tasker.run
+            tasker.run = function(...)
+                starts = starts + 1
+                return original_run(...)
+            end
+            with_adapter(function(_failure, retry, give_up)
+                retry()
+                give_up("too late")
+                give_up("also too late")
+                return true
+            end, function()
+                errors = fail_query()
+            end)
+            tasker.run = original_run
+            assert.equals(2, starts)
+            assert.equals(0, #errors)
+        end)
+
+        it("J7: a claim that never settles degrades to on_error via the backstop", function()
+            local saved_timeout = dispatcher.recovery_timeout_ms
+            dispatcher.recovery_timeout_ms = 20 -- drive the clock, don't sleep 15s
+            local errors
+            with_adapter(function() return true end, function()
+                errors = fail_query()
+                assert.equals(0, #errors)
+                assert.is_true(vim.wait(2000, function() return #errors == 1 end, 5),
+                    "the backstop never fired")
+            end)
+            dispatcher.recovery_timeout_ms = saved_timeout
+            assert.matches("timed out", errors[1].message)
+        end)
+
+        it("J7b: a THROWING recover_query still produces exactly one on_error", function()
+            -- The pre-#197 code pcall'd its auth hook; the seam must too.
+            -- recover_query runs synchronously and touches the filesystem and
+            -- vim.system before returning its claim, so it can raise — and an
+            -- unguarded throw would skip both deliver() and the backstop while
+            -- tasker's call_safely swallows the error, stranding the chat leg
+            -- with no message at all.
+            --
+            -- Harness limitation: tasker.run is stubbed here and the terminal is
+            -- invoked directly, so the real call_safely swallow does not
+            -- participate. This asserts the dispatcher's own guard.
+            local errors
+            local logged = {}
+            local original_error = logger.error
+            logger.error = function(m) table.insert(logged, tostring(m)) end
+            with_adapter(function()
+                error("boom from a recovery hook")
+            end, function()
+                errors = fail_query()
+            end)
+            logger.error = original_error
+            assert.equals(1, #errors, "a throwing hook must not swallow the failure")
+            assert.is_truthy(table.concat(logged, "\n"):find("recover_query raised", 1, true))
+        end)
+
+        it("J7c: 'response is empty' is not emitted on a FAILED request", function()
+            -- The issue's Done-when: the #197 503 must produce a diagnosis,
+            -- "not `response is empty`". finish_stdout runs before the terminal
+            -- closure and cannot know the request failed, so the log moved.
+            local logged = {}
+            local original_error = logger.error
+            logger.error = function(m) table.insert(logged, tostring(m)) end
+            fail_query('{"error":{"message":"auth_unavailable"}}', "503")
+            logger.error = original_error
+            assert.is_falsy(table.concat(logged, "\n"):find("response is empty", 1, true))
+        end)
+
+        it("J7d: 'response is empty' IS still emitted on a successful empty body", function()
+            local logged = {}
+            local original_error = logger.error
+            logger.error = function(m) table.insert(logged, tostring(m)) end
+            dispatcher.query(nil, "openai", { model = "gpt-4", messages = {} }, function() end)
+            captured_out_reader(nil, "")
+            captured_out_reader(nil, nil)
+            captured_terminal(0, 0, "", status_stderr("200"), nil)
+            logger.error = original_error
+            assert.is_truthy(table.concat(logged, "\n"):find("response is empty", 1, true))
+        end)
+
+        it("J4b: the retry re-issues from a payload snapshot, not the consumed table", function()
+            -- format_headers consumes payload fields (cliproxyapi nils
+            -- _parley_route; googleai nils model). Sharing one table across
+            -- attempts would silently retry a DIFFERENT request.
+            local seen = {}
+            local original_run = tasker.run
+            tasker.run = function(...)
+                local qt = tasker.get_query(captured_qid)
+                table.insert(seen, qt and qt.payload)
+                return original_run(...)
+            end
+            with_adapter(function(_failure, retry)
+                retry()
+                return true
+            end, function()
+                dispatcher.query(nil, "openai", { model = "gpt-4", messages = {}, _parley_route = "anthropic" },
+                    function() end, nil, nil, nil, nil, nil, function() end)
+                -- consume the marker the way format_headers would
+                local first = tasker.get_query(captured_qid)
+                first.payload._parley_route = nil
+                captured_out_reader(nil, "")
+                captured_out_reader(nil, nil)
+                captured_terminal(0, 0, "", status_stderr("503"), nil)
+            end)
+            tasker.run = original_run
+            assert.equals(2, #seen)
+            assert.are_not.equal(seen[1], seen[2], "the retry reused the same payload table")
+            assert.equals("anthropic", seen[2]._parley_route,
+                "the retry lost the route marker the first attempt consumed")
+        end)
+
+        it("J8: the failure carries the request model and the streamed flag", function()
+            local seen
+            with_adapter(function(failure)
+                seen = failure
+                return false
+            end, function()
+                fail_query()
+            end)
+            assert.equals("gpt-4", seen.model)
+            assert.is_false(seen.streamed)
+            assert.equals(0, seen.attempt)
+        end)
+
+        it("J9: streamed is true once content reached the buffer", function()
+            local seen
+            with_adapter(function(failure)
+                seen = failure
+                return false
+            end, function()
+                fail_query('data: {"choices":[{"delta":{"content":"partial"}}]}\n')
+            end)
+            assert.is_true(seen.streamed)
+        end)
+    end)
+    -- #198 M2. The tool wire is stamped onto the payload by prepare_payload
+    -- purely to reach query(); it must be consumed here and never sent.
+    describe("Group K: tool-wire stamp (#198)", function()
+        it("K1: the payload actually serialized carries no _parley_tool_wire", function()
+            -- D.query deep-copies the payload per attempt (so a retry re-issues
+            -- an identical request), and the copy is what gets written to the
+            -- request body. Assert on THAT, not on the caller's table, which
+            -- deliberately keeps the stamp for subsequent attempts.
+            local original_table_to_file = helpers.table_to_file
+            local sent
+            helpers.table_to_file = function(tbl, path)
+                sent = vim.deepcopy(tbl)
+                return original_table_to_file(tbl, path)
+            end
+            local ok, err = pcall(function()
+                local payload = { model = "gpt-4", messages = {}, _parley_tool_wire = "openai" }
+                dispatcher.query(nil, "openai", payload, make_handler(), nil, nil)
+            end)
+            helpers.table_to_file = original_table_to_file
+            assert.is_true(ok, tostring(err))
+            assert.is_truthy(sent)
+            assert.is_nil(sent._parley_tool_wire)
+            assert.equals("gpt-4", sent.model)
+        end)
+
+        it("K2: records the stamp on the query table for the response side", function()
+            local payload = { model = "gpt-4", messages = {}, _parley_tool_wire = "openai" }
+            dispatcher.query(nil, "openai", payload, make_handler(), nil, nil)
+            assert.equals("openai", tasker.get_query(captured_qid).tool_wire)
+        end)
+
+        it("K3: a tool-only openai turn is NOT reported as an empty response", function()
+            -- The bug this replaced: empty_response probed for the anthropic
+            -- literal, so an openai tool turn (no text delta at all) looked
+            -- empty and surfaced a spurious notice.
+            local payload = { model = "gpt-4", messages = {}, _parley_tool_wire = "openai" }
+            dispatcher.query(nil, "openai", payload, make_handler(), nil, nil)
+            captured_out_reader(nil,
+                'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_a",' ..
+                '"type":"function","function":{"name":"ls","arguments":"{}"}}]}}]}\n')
+            captured_out_reader(nil, nil) -- EOF: this is what runs finish_stdout
+            captured_terminal(0, 0, "", status_stderr("200"), nil)
+            assert.is_false(tasker.get_query(captured_qid).empty_response)
+        end)
+
+        it("K4: a genuinely empty openai turn IS reported as empty", function()
+            local payload = { model = "gpt-4", messages = {}, _parley_tool_wire = "openai" }
+            dispatcher.query(nil, "openai", payload, make_handler(), nil, nil)
+            captured_out_reader(nil, 'data: {"choices":[{"index":0,"delta":{}}]}\n')
+            captured_out_reader(nil, nil)
+            captured_terminal(0, 0, "", status_stderr("200"), nil)
+            assert.is_true(tasker.get_query(captured_qid).empty_response)
+        end)
+
+        it("K5: a tool-only anthropic turn is still NOT reported as empty", function()
+            local payload = { model = "claude-sonnet-5", messages = {}, _parley_tool_wire = "anthropic" }
+            dispatcher.query(nil, "anthropic", payload, make_handler(), nil, nil)
+            captured_out_reader(nil,
+                'data: {"type":"content_block_start","index":0,"content_block":' ..
+                '{"type":"tool_use","id":"toolu_1","name":"ls","input":{}}}\n')
+            captured_out_reader(nil, nil)
+            captured_terminal(0, 0, "", status_stderr("200"), nil)
+            assert.is_false(tasker.get_query(captured_qid).empty_response)
+        end)
+    end)
 end)

@@ -331,6 +331,7 @@ M.register_proxy_command = function(prefix)
 		{ name = "models", arg = "<provider>", desc = "list the models a provider currently serves" },
 		{ name = "providers", desc = "list the supported provider names" },
 		{ name = "login", arg = "<provider>", desc = "run an interactive OAuth login for a provider" },
+		{ name = "reap", desc = "stop other cliproxy processes racing this one's auth-dir" },
 		{ name = "update", desc = "download the pinned cliproxyapi release" },
 	}
 	local SUBS = vim.tbl_map(function(e)
@@ -406,30 +407,87 @@ M.register_proxy_command = function(prefix)
 					return
 				end
 				if #ids == 0 then
-					-- Empty = the provider isn't authenticated (its models aren't in
-					-- the dynamic registry). Offer the login, matching the dispatch
-					-- auth-failure flow.
-					vim.ui.select({ "Log in (" .. arg .. ")", "Not now" }, {
-						prompt = ("cliproxy: no %s models — not authenticated."):format(arg),
-					}, function(_, idx)
-						if idx == 1 then
-							vim.cmd(prefix .. "Proxy login " .. arg)
+					-- An empty list USED to be read as "not authenticated". #197
+					-- disproved exactly that inference — /v1/models kept listing
+					-- every model with the credential dead — so ask the proxy.
+					--
+					-- THREE axes exist and only two coincide: `arg` here is a
+					-- model-owning provider (`google`), while credential health is
+					-- keyed by cliproxy CHANNEL (`gemini`/`gemini-cli`/`aistudio`).
+					-- Reading health under "google" finds nothing and would
+					-- fabricate "no credential" for a perfectly good account.
+					cliproxy.credential_health_for_login(arg, function(health)
+						local action = require("parley.cliproxy_auth")
+							.credential_action(health, arg)
+						if not action then
+							vim.notify(("cliproxy: %s is authenticated (%s) but serves no models — "
+								.. "check the model catalog, not the login."):format(
+								arg, tostring(health.account)), vim.log.levels.WARN)
+							return
 						end
+						if action == "report" then
+							-- Name the reason for an unreadable state: "unreachable"
+							-- is what the operator can act on, the message alone
+							-- often isn't.
+							local why = health.reason
+								and ("credential state could not be read (%s): %s"):format(
+									health.reason, tostring(health.message))
+								or tostring(health.message)
+							vim.notify(("cliproxy: no %s models — %s"):format(arg, why),
+								vim.log.levels.WARN)
+							return
+						end
+						vim.ui.select({ "Log in (" .. arg .. ")", "Not now" }, {
+							prompt = ("cliproxy: no %s models — %s"):format(arg, health.message),
+						}, function(_, idx)
+							if idx == 1 then
+								vim.cmd(prefix .. "Proxy login " .. arg)
+							end
+						end)
 					end)
 					return
 				end
 				vim.notify(("cliproxy %s models:\n  %s"):format(arg, table.concat(ids, "\n  ")), vim.log.levels.INFO)
 			end)
+		elseif sub == "reap" then
+			local peers = cliproxy.peers()
+			if #peers == 0 then
+				vim.notify("cliproxy: no other cliproxy processes are running", vim.log.levels.INFO)
+				return
+			end
+			local lines = { ("cliproxy: %d other process(es):"):format(#peers) }
+			for _, p in ipairs(peers) do
+				lines[#lines + 1] = ("  %d  since %s"):format(p.pid, p.started)
+			end
+			lines[#lines + 1] = ""
+			lines[#lines + 1] = "Each runs its own 15-minute auth refresh over the shared auth-dir,"
+			lines[#lines + 1] = "and OAuth refresh tokens rotate on use — so they can invalidate"
+			lines[#lines + 1] = "each other's credential."
+			vim.ui.select({ "Stop them", "Cancel" }, { prompt = table.concat(lines, "\n") },
+				function(_, idx)
+					if idx ~= 1 then
+						return
+					end
+					local killed, skipped = cliproxy.reap(peers)
+					vim.notify(("cliproxy: stopped %d process(es)%s"):format(
+						killed, skipped > 0 and (", skipped " .. skipped) or ""),
+						vim.log.levels.INFO)
+				end)
 		elseif sub == "login" then
 			local argv, err = cliproxy.login_argv(arg)
 			if not argv then
 				vim.notify(err, vim.log.levels.ERROR)
 				return
 			end
-			-- Interactive OAuth — run in a terminal split so the URL/flow is visible.
-			vim.cmd("botright new")
-			vim.fn.jobstart(argv, { term = true })
-			vim.cmd("startinsert")
+			-- Preflight the OAuth callback port. #197's dead end: the login
+			-- process died, its listener went with it, and the browser redirect
+			-- had nowhere to land — the account chooser just looked inert.
+			local blocked = cliproxy.callback_port_blocked(arg)
+			if blocked then
+				vim.notify(blocked, vim.log.levels.ERROR)
+				return
+			end
+			cliproxy.run_login(arg, argv)
 		else
 			-- nil (bare invocation) → help at INFO; an unknown subcommand → WARN.
 			local level = sub == nil and vim.log.levels.INFO or vim.log.levels.WARN

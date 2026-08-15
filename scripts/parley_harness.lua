@@ -80,7 +80,22 @@ function M.build_payload(transcript_path, opts)
 
     local dispatcher = require("parley.dispatcher")
     local tools = opts.tools or agent_info.tools
-    local payload = dispatcher.prepare_payload(messages, agent_info.model, agent_info.provider, tools)
+    -- Explicit provider/model overrides (#198). Goldens for the openai wire
+    -- need a non-anthropic route, and pinning it here — rather than naming a
+    -- shipped agent — keeps them independent of agent config, for the same
+    -- reason the golden spec pins its tool list instead of using `@all`.
+    local provider = opts.provider or agent_info.provider
+    local model = opts.model or agent_info.model
+    local payload = dispatcher.prepare_payload(messages, model, provider, tools)
+
+    -- Mirror what dispatcher.query() consumes before the request body is
+    -- serialized (#198). `_parley_tool_wire` rides on the payload only to
+    -- carry the resolved tool wire from prepare_payload to the response side;
+    -- it never goes over the network, so a harness that models the REQUEST
+    -- must not show it. This keeps the goldens an accurate picture of the
+    -- wire — and, incidentally, makes the golden spec a second guard that the
+    -- stamp is internal.
+    payload._parley_tool_wire = nil
     return payload
 end
 

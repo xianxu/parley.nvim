@@ -416,3 +416,237 @@
   foldable streaming write, recreate only the active semantic model range;
   never clear the window's fold tree, and pin both the shrink and unrelated-fold
   preservation behavior in a real headless Neovim integration test.
+
+## 2026-08-01 (#197)
+
+- **A fixture set that only covers the case where two namespaces coincide cannot
+  catch confusing them.** #197 queried cliproxy credential health with a *login
+  provider* where a *channel* is required. The two are the same string for
+  `claude` and only for `claude` (`gemini`/`gemini-cli`/`aistudio` all collapse to
+  `google`), so a healthy credential read as "missing" and prompted a spurious
+  login — through 100+ green assertions, because every fixture used `claude`.
+  Rule: when two identifier spaces map many-to-one, the test set must include a
+  member where they *differ*; a passing suite over the degenerate case is no
+  evidence at all.
+- **When a refactor deletes a `pcall`, the replacement inherits the obligation.**
+  The old auth hook was called inside `pcall`; the new seam was not, and it runs
+  synchronously (filesystem + `vim.system`) before returning. A throw then
+  skipped both the error delivery and the timeout arming, and `tasker`'s
+  `call_safely` swallowed it — stranding the chat leg with no message, strictly
+  worse than the code replaced. Rule: grep the deleted call site for `pcall`/
+  `xpcall` before declaring a seam migration complete.
+- **A "claim" contract makes every early return a leak.** Once a hook signals it
+  owns a failure, the UI stays open until it settles. Rule: when a callback takes
+  ownership, audit *every* path out — including ones inside a `vim.ui.select`
+  callback, where a raising `vim.cmd` skips the settle — and pin it with a test
+  that throws from the riskiest step.
+- **Two timeouts on the same path must be related by construction, not by
+  eyeball.** The recovery backstop (15s) was shorter than the repair it guards
+  (≤16s worst case), so a slow repair would be declared timed-out one second
+  before succeeding, discarding a correct diagnosis. Rule: itemize the inner
+  budget in a comment, derive the outer from it, and note that changing one
+  requires re-checking the other.
+- **Don't log a condition on a shared path that cannot distinguish the cases.**
+  `finish_stdout` runs for successes *and* failures, so logging "response is
+  empty" there announced a misleading error ahead of every real diagnosis — the
+  exact symptom the issue existed to remove. Rule: record the fact where it is
+  observed, report it where the outcome is known.
+- **Broad error-matching patterns need a status gate, and the gate needs a
+  property test.** Patterns like `authentication_error` match ordinary assistant
+  prose — a chat *about* an auth bug would have popped a login dialog. Rule: gate
+  classification on a non-2xx status and pin it with `bodies × 2xx → nil`, not a
+  list of hand-picked cases.
+- **A test that spawns a real external binary can reach the operator's live
+  credentials.** `cliproxyapi` on `/opt/homebrew/bin` made `discover_binary` find
+  the real binary, and `ensure_running` spawned it with no `auth-dir` — i.e.
+  against `~/.cli-proxy-api`, starting a refresh loop on the operator's real
+  OAuth token (rotating refresh tokens; this is what broke the credential in the
+  first place). Rule: specs that exercise binary discovery must pin `PATH` to
+  system dirs, and any spec booting a real proxy must use a throwaway auth-dir
+  with a fabricated credential.
+- **Comparing timestamps across representations is wrong, not merely fragile.**
+  #197 M2 compared a UTC `…Z` string against cliproxy's local-offset RFC3339 with
+  a plain `>`. The same instant renders as `…T18:35:01Z` and `…T11:35:01-07:00`,
+  and `"Z" > "-"` is true while `"1" > "8"` is false — so the answer depended on
+  the operator's timezone: always-stale west of UTC, dead rung east of it. Rule:
+  normalize to epoch seconds at the IO seam and let pure code compare numbers;
+  never let a string compare stand in for a time compare.
+- **The degenerate-fixture trap repeats unless the test names the axis.** The
+  staleness tests used `-07:00` on *both* sides — the identical mistake this file
+  already recorded from M1's channel-vs-login bug, made again two milestones
+  later while the rule was on the page. Rule: when a value has multiple valid
+  representations, the test must enumerate them (`Z`, `+hh:mm`, `-hh:mm`,
+  fractional seconds), not pick one and repeat it.
+- **A "three axes" problem doesn't stop at two.** #197 fixed channel-vs-login,
+  then shipped provider-vs-channel in the very commit claiming to remove that
+  class of bug (`:ParleyProxy models google` reading health under `google` rather
+  than gemini/gemini-cli/aistudio). Rule: when a fix reveals two identifier
+  spaces, enumerate *all* the spaces in the system and check each consumer
+  against the one it needs — the second confusion is not fixed by fixing the
+  first.
+- **Two copies of a repair sequence will diverge at the fix.** The `restart` rung
+  re-implemented stop→ensure while omitting the port-release wait that an
+  existing helper had — including its comment explaining why the wait is required
+  and why no test can catch its absence. Rule: when adding a second caller for a
+  sequence that already exists, extract the helper instead of retyping it.
+- **A budget stated in a comment drifts; a budget asserted in a test cannot.**
+  The recovery backstop vs repair-budget relationship was re-opened by two
+  successive reviews because it lived only in prose that said "re-check the
+  other". Rule: express the terms as data and assert the inequality in a spec.
+- **A parser tested against itself is untested.** #197's RFC3339 parser was a
+  full day off for every date in a leap year, and every staleness test passed —
+  because each supplied the "disk" side as the parser's own output, so a
+  systematic offset cancelled on both sides. Rule: date/number parsers get at
+  least one assertion against an **external oracle** (absolute expected values
+  computed elsewhere), plus the boundary cases the algorithm branches on (leap
+  years, epoch, century/400-year rules).
+- **Two rungs that end in the same call are indistinguishable to tests.** The
+  `restart` and `retry` recovery rungs both finished with `retry()`, so a bug
+  that made `restart` fire on every healthy failure — SIGTERMing a shared daemon
+  — was invisible to integration and e2e alike. Rule: when branches converge on
+  one observable outcome, assert on the branch's *side effect* (here: that
+  `stop()` was not called), not just the outcome.
+- **Prefix-matching a name against a namespace with hierarchical members is a
+  bug waiting for the member to exist.** Globbing `<channel>-*.json` made
+  `gemini` match `gemini-cli`'s credential file. Rule: when the source of truth
+  already names the exact resource (the management record carries `path`), carry
+  it through rather than reconstructing it from a naming convention.
+- **`SO_REUSEADDR` makes a bind probe a liar.** Preflighting a port by binding it
+  reports "free" while another socket is actively listening — precisely the case
+  the preflight exists to catch. Rule: to detect a listener, *connect*.
+- **A budget in a comment drifts; a budget summed from a hand-written table also
+  drifts.** Three successive reviews re-opened the same timeout relationship.
+  Rule: derive the terms from the constants the code actually uses, and assert
+  the inequality — then the table cannot be right while the code is wrong.
+- **Fixing a comparison three times without asking what it compares.** #197's
+  staleness check was repaired on the timezone axis, then the calendar axis, and
+  was still dead code — because both operands were the *same quantity* (the
+  credential file's mtime, read two ways). Rule: when a comparison misbehaves,
+  first name what each side measures and confirm they are different quantities;
+  only then debug the comparison. A test that fabricates one operand can never
+  ask this question, so reproduce the condition the way the system produces it.
+- **"It's already covered" needs the deletion test.** A `_stray_spawned` sweep was
+  added with a regression test that passed with the code deleted, because the
+  existing `_spawned` table already held every pid. Rule: before adding a
+  belt-and-braces mechanism, delete the candidate and run the test that
+  supposedly pins it — if it still passes, the mechanism is dead weight.
+- **Put the cheap guard before the expensive scan, not inside it.** A
+  once-per-session warning called a blocking `ps ax` + `lsof` (~85ms) on every
+  dispatch because the guard lived inside the function the scan fed. Rule: on a
+  hot path, check the flag before doing the work it gates.
+- **A "once per session" guard must latch on the WORK, not on having something to
+  report.** #197's peer scan set its flag only when peers were found, so the
+  healthy machine — the one that had just cleaned up, as the feature instructs —
+  rescanned (~150ms blocking `ps`+`lsof`) on every request forever. Rule: set the
+  latch where the expensive call happens, and test the zero-result path
+  explicitly; it is the one the happy user lives in.
+- **Don't read module state a collaborator resets.** A compound-repair guard read
+  a flag that the repair itself cleared on success, before the decision that
+  consulted it — so it was always false and the path it guarded ran anyway. Rule:
+  when a guard must span one logical operation, scope it to that operation
+  (a per-call local), not to the module.
+- **`luv` returns `nil, err`; it does not raise.** `pcall(uv.kill, ...)` succeeds
+  on ESRCH and EPERM alike, so a reap reported "stopped 5" having stopped none.
+  Rule: for every `uv.*` call, check the returned code — a pcall around it tests
+  nothing.
+- **Latching a callback is not the same as silencing it.** An abandoned watcher
+  whose `on_done` was latched still called `vim.notify`, telling an operator
+  three minutes later that a login they had since completed "did not complete".
+  Rule: put the latch around the whole side-effecting block, not just the
+  continuation.
+- **Substring matching keeps being the bug.** Within one issue it produced three
+  distinct defects: a `ps` scan that would have killed a shell whose command line
+  mentioned the binary, a credential glob where `gemini` matched `gemini-cli`,
+  and a flag check where `-login` matched inside `-claude-login` — disabling the
+  guard written for exactly that flag. Rule: when testing membership in a
+  namespace, match the whole token (first argv element, exact filename, the
+  usage line's leading flag), and write the test with a member that is a strict
+  prefix or suffix of another.
+- **Confirm-then-act must act on what was confirmed.** A reap prompt listed the
+  processes it found, then called a function that re-scanned and killed a
+  possibly different set. Rule: pass the confirmed collection into the mutating
+  call; never let it re-derive its own targets after the user has agreed.
+- **Bookkeeping deferred is bookkeeping compounded.** Plan checkboxes, an
+  outdated decision table, and twelve missing entity rows were flagged in four
+  consecutive reviews before being fixed, costing a review round each time. Rule:
+  when a review names a documentation drift, fix it in that round — the cost only
+  grows, and reviewers rightly keep re-raising it.
+- **Two hand-maintained sets on one axis will drift; enforce the correspondence
+  in a test.** `LOGIN_FLAGS` (7 entries) and `CHANNEL_LOGIN` (6 values) were both
+  edited by hand, and `codex-device` fell through the gap — silently disabling a
+  credential-watch filter whose comment promised it and dropping the account from
+  the success notice. Rule: when one table's keys must all resolve through
+  another, assert exactly that over the whole key set; deriving one from the
+  other is better still.
+- **A fake state no test drives is documentation, not a fixture.** Two of four
+  modeled login modes were unreachable — one because the timeout it needed was
+  hardcoded. Rule: every state a fake models needs a test that drives it, or the
+  state should be deleted; add the injection seam that makes the branch reachable
+  rather than leaving it as a comment.
+- **`pcall(f, expr)` does not protect `expr`.** Arguments evaluate before the
+  call, so `pcall(vim.json.decode, readfile(p))` leaves the *read* unguarded —
+  and `vim.fn.readfile` raises (E17 on a directory, E484 on a vanished file). In
+  an async poll with no outer guard that stranded a login watch entirely. Rule:
+  wrap the whole expression in a closure — `pcall(function() … end)` — whenever
+  any argument can itself throw.
+- **Guarding the callback is not guarding the call.** `vim.ui.select` is replaced
+  by UI plugins that can raise; a previous fix had guarded only the code *inside*
+  its callback. The raise skipped the settle and latched the prompt-active flag
+  on for the session, so no login was ever offered again. Rule: when a fix guards
+  "the risky part", re-ask which call actually crosses into third-party code.
+- **A conformance check can falsify your own comment — let it.** Pinning
+  `updated_at` semantics against the real binary immediately disproved the stated
+  premise ("a touch never advances it"): fsnotify sees attribute changes, so the
+  proxy usually does reload. The code was right for a subtler reason than the
+  comment claimed. Rule: assert the property the logic actually needs
+  (independence of the two quantities), not the anecdote from one manual probe.
+
+## 2026-08-15 (#198)
+
+- **`vim.NIL` is truthy, so `if obj.field then` accepts an explicit JSON null.**
+  `vim.json.decode` maps JSON `null` to a userdata sentinel, not to `nil`. In a
+  streaming decoder that reads a field across chunks, a later chunk carrying
+  `"id":null` therefore *overwrote* a correctly captured value with userdata,
+  which then raised `attempt to concatenate a userdata value` two frames away —
+  in code whose stated contract was "never raises, degrade instead". The tell
+  was an asymmetry that was already visible in the same function: `arguments`
+  was `type(...) == "string"`-guarded while `id`/`name` were truthiness-guarded.
+  Rule: read every optional field out of decoded JSON through a typed accessor
+  (`sse.str`), never a bare truthiness test — and when one field in a block is
+  type-guarded and its siblings are not, treat the inconsistency as the bug.
+- **A test that branches on its environment can assert nothing.** A spec for a
+  config-level fallback did `if configured then assert.equals(configured, got)
+  else assert.equals("none", got) end` — and in the unit process the config was
+  never set, so it permanently took the else branch and green-lit the one
+  behaviour the function existed to own. Rule: if a test needs ambient state,
+  stub it explicitly; a conditional assertion is a skipped test that reports
+  success. Corollary: an entity whose test needs that branch has an ambient
+  input and is not as pure as its docstring says.
+- **Splitting a milestone at a layer boundary can turn a loud failure into a
+  silent one.** Landing encoders in M1 and decoders in M2 left a window where a
+  tool agent built a valid request, decoded zero calls, and rendered an empty
+  answer — replacing an explicit "tools not supported" raise. Rule: when
+  sequencing milestones, ask what the intermediate state *does* for a user, not
+  just what it contains; if a clear error becomes a wrong answer, record the
+  no-merge constraint and order the milestone to close the exposure first.
+- **"OpenAI-compatible" does not mean "shares the OpenAI payload builder."** A
+  cross-cutting change was scoped to `openai.format_payload` on the assumption
+  that the cliproxy OpenAI route and ollama delegated to it. They don't — each
+  builds its own payload; only copilot and azure delegate. The change would
+  have shipped with every unit test and golden green while missing the issue's
+  own target agent, because the tests exercised `providers.get("openai")` and
+  the target went through `cliproxy_openai_payload`. Rule: before installing a
+  cross-cutting step in a "shared" function, grep for its actual callers and
+  pick the seam with exactly one — here `dispatcher.prepare_payload`, the sole
+  caller of `adapter.format_payload`. Corollary for tests: a regression test
+  must exercise the path the ISSUE names, not the path that is easiest to
+  construct.
+- **Milestone-close is a long-running external process; do not race it.** A
+  `sdlc milestone-close` exceeded the foreground timeout and was backgrounded.
+  A hand-rolled liveness check (`pgrep` piped into `kill -0`) returned empty
+  and so reported "finished" instantly, and a second close was launched while
+  the first was still dispatching its review — the #172 re-close loop, caught
+  only by reading the first run's output afterwards. Rule: for a long verb, use
+  the harness's own backgrounding and wait for ITS completion signal; never
+  infer "process died" from an empty `pgrep`, which is indistinguishable from
+  "never matched".

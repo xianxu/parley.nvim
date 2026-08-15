@@ -8,7 +8,8 @@ local FAKE = vim.fn.getcwd() .. "/tests/fixtures/fake_cliproxy"
 
 -- Redirect cliproxy's derived-artifact dir to a temp dir so this spec NEVER
 -- touches the real ~/.local/share/nvim, even run bare (no XDG redirect).
-require("parley.cliproxy")._set_data_dir(vim.fn.tempname())
+local SPEC_DATA_DIR = vim.fn.tempname()
+require("parley.cliproxy")._set_data_dir(SPEC_DATA_DIR)
 
 -- Track fake processes started by a test so after_each can reap them.
 local started = {}
@@ -69,6 +70,19 @@ describe("cliproxy IO lifecycle", function()
     before_each(function()
         saved_config = parley.config
         saved_path = vim.env.PATH
+        -- System dirs only — deliberately WITHOUT /opt/homebrew/bin (#197).
+        --
+        -- A brew-installed `cliproxyapi` on PATH makes discover_binary() find
+        -- the REAL binary, and ensure_running then spawns it with a config whose
+        -- auth-dir is unset — i.e. pointed at the operator's real
+        -- ~/.cli-proxy-api, starting a 15-minute refresh loop on their live
+        -- credential. That is the very rotation hazard this issue exists to fix,
+        -- and _set_data_dir above does not cover it (it guards the derived-artifact
+        -- dir, not binary discovery). Tests that want a binary set binary_path
+        -- explicitly; tests that want discovery to FAIL now get that
+        -- deterministically. curl/env/python3 all live in /usr/bin, so the fake
+        -- and the health probes still work.
+        vim.env.PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
         parley.config = { cliproxy = { manage = true } }
     end)
 
@@ -578,6 +592,466 @@ describe("cliproxy IO lifecycle", function()
             end)
             assert.is_nil(r.err)
             assert.same({}, r.ids) -- command layer turns this into a login prompt
+        end)
+    end)
+
+    --------------------------------------------------------------------------
+    -- management API: credential health (#197)
+    --------------------------------------------------------------------------
+    describe("auth_files", function()
+        local function set_endpoint(port)
+            parley.dispatcher = parley.dispatcher or {}
+            parley.dispatcher.providers = parley.dispatcher.providers or {}
+            parley.dispatcher.providers.cliproxyapi = {
+                endpoint = ("http://127.0.0.1:%d/v1/chat/completions"):format(port),
+            }
+            require("parley.vault").add_secret("cliproxyapi", "testkey")
+        end
+
+        -- A portable credential store: a folder of auth JSONs plus an optional
+        -- state.json overlay. Mutating those files between calls is what makes
+        -- the fake stateful rather than canned.
+        local function write_store(overlay)
+            local dir = vim.fn.tempname()
+            vim.fn.mkdir(dir, "p")
+            vim.fn.writefile({ vim.json.encode({ type = "claude", email = "me@example.com" }) },
+                dir .. "/claude-me@example.com.json")
+            if overlay then
+                vim.fn.writefile({ vim.json.encode(overlay) }, dir .. "/state.json")
+            end
+            return dir
+        end
+
+        -- Start the fake the way the real binary is started: from a rendered
+        -- config, so the management key travels the same path in test as in
+        -- production.
+        local function start_with_config(port, store, mgmt_key)
+            local cfg_file = vim.fn.tempname() .. ".json"
+            local conf = { port = port, ["auth-dir"] = store, ["api-keys"] = { "testkey" } }
+            if mgmt_key then
+                conf["remote-management"] = { ["secret-key"] = mgmt_key }
+            end
+            vim.fn.writefile({ vim.json.encode(conf) }, cfg_file)
+            local handle, pid = uv.spawn(FAKE, { args = { "-config", cfg_file } }, function() end)
+            assert(handle, "failed to spawn fake_cliproxy")
+            table.insert(started, { handle = handle, pid = pid })
+            wait_listening(port)
+        end
+
+        local function health(channel)
+            return await(function(done)
+                cliproxy.auth_files(done, channel or "claude")
+            end)
+        end
+
+        it("reports healthy for an active credential", function()
+            local port = free_port()
+            set_endpoint(port)
+            start_with_config(port, write_store(), cliproxy.management_key())
+            local h = health()
+            assert.equals("healthy", h.state)
+            assert.equals("me@example.com", h.account)
+        end)
+
+        it("reports the proxy's own reason for an unavailable credential", function()
+            local port = free_port()
+            set_endpoint(port)
+            start_with_config(port, write_store({
+                claude = { unavailable = true, status = "error",
+                    status_message = "OAuth access token has expired." },
+            }), cliproxy.management_key())
+            local h = health()
+            assert.equals("unavailable", h.state)
+            assert.matches("expired", h.message)
+        end)
+
+        it("distinguishes a proxy that predates the management key (404)", function()
+            -- The repairable case: cliproxy only registers the management routes
+            -- when it BOOTED with a secret-key, so this 404 means "restart me",
+            -- not "error".
+            local port = free_port()
+            set_endpoint(port)
+            start_with_config(port, write_store(), nil) -- no key in the config
+            local h = health()
+            assert.equals("unknown", h.state)
+            assert.equals("no_management_route", h.reason)
+        end)
+
+        it("distinguishes a rejected management key (401) from a missing route", function()
+            local port = free_port()
+            set_endpoint(port)
+            start_with_config(port, write_store(), "some-other-key")
+            local h = health()
+            assert.equals("unknown", h.state)
+            assert.equals("management_key_mismatch", h.reason)
+        end)
+
+        it("distinguishes an unreachable proxy", function()
+            set_endpoint(free_port()) -- nothing listening
+            local h = health()
+            assert.equals("unknown", h.state)
+            assert.equals("unreachable", h.reason)
+        end)
+
+        it("reports missing when the channel has no credential", function()
+            local port = free_port()
+            set_endpoint(port)
+            start_with_config(port, write_store(), cliproxy.management_key())
+            assert.equals("missing", health("codex").state)
+        end)
+    end)
+
+    --------------------------------------------------------------------------
+    -- credential_health: repair a proxy that predates the management key (#197)
+    --------------------------------------------------------------------------
+    describe("credential_health", function()
+        local function set_endpoint(port)
+            parley.dispatcher = parley.dispatcher or {}
+            parley.dispatcher.providers = parley.dispatcher.providers or {}
+            parley.dispatcher.providers.cliproxyapi = {
+                endpoint = ("http://127.0.0.1:%d/v1/chat/completions"):format(port),
+            }
+            require("parley.vault").add_secret("cliproxyapi", "testkey")
+        end
+
+        local function write_store()
+            local dir = vim.fn.tempname()
+            vim.fn.mkdir(dir, "p")
+            vim.fn.writefile({ vim.json.encode({ type = "claude", email = "me@example.com" }) },
+                dir .. "/claude-me@example.com.json")
+            return dir
+        end
+
+        local function start_keyless(port, store)
+            local cfg_file = vim.fn.tempname() .. ".json"
+            vim.fn.writefile({ vim.json.encode({
+                port = port, ["auth-dir"] = store, ["api-keys"] = { "testkey" },
+            }) }, cfg_file)
+            local handle, pid = uv.spawn(FAKE, { args = { "-config", cfg_file } }, function() end)
+            assert(handle, "failed to spawn fake_cliproxy")
+            table.insert(started, { handle = handle, pid = pid })
+            wait_listening(port)
+            return pid
+        end
+
+        before_each(function()
+            cliproxy._reset_management_restart()
+        end)
+
+        it("restarts a keyless proxy once, then reads health from the new one", function()
+            local port = free_port()
+            local store = write_store()
+            set_endpoint(port)
+            local old_pid = start_keyless(port, store)
+            -- ensure_running must be able to respawn: point it at the fake and
+            -- at an auth-dir holding the credential, so the restarted proxy
+            -- renders WITH the management key and serves the route.
+            parley.config = { cliproxy = { manage = true, binary_path = FAKE, auth_dir = store } }
+
+            local h = await(function(done)
+                cliproxy.credential_health(done, "claude")
+            end)
+
+            assert.equals("healthy", h.state)
+            assert.is_false(vim.tbl_contains(cliproxy.spawned_pids(), old_pid))
+        end)
+
+        it("does not restart twice — a persistent 404 is reported, not looped", function()
+            local port = free_port()
+            local store = write_store()
+            set_endpoint(port)
+            -- No discoverable binary ⇒ the repair's restart cannot succeed.
+            parley.config = { cliproxy = { manage = true, binary_path = "/no/such/bin" } }
+            start_keyless(port, store)
+
+            local first = await(function(done) cliproxy.credential_health(done, "claude") end)
+            assert.equals("unknown", first.state)
+
+            -- The repair stopped the old proxy and could not start a new one.
+            -- Put another keyless proxy back on the port: if the guard did NOT
+            -- hold, the second lookup would stop() this one too. Its survival is
+            -- the observable proof that the repair ran at most once.
+            start_keyless(port, store)
+            local second = await(function(done) cliproxy.credential_health(done, "claude") end)
+
+            assert.equals("unknown", second.state)
+            assert.equals("no_management_route", second.reason)
+            local still_up = await(function(done)
+                cliproxy.health_probe("127.0.0.1", port, "testkey", done)
+            end)
+            assert.equals("healthy", still_up)
+        end)
+
+        it("clears the one-shot after a successful lookup so a later restart is repairable", function()
+            -- I2: the guard bounds CONSECUTIVE attempts, not the session. An
+            -- operator running `brew services restart cliproxyapi` mid-session
+            -- must still get a repair.
+            local port = free_port()
+            local store = write_store()
+            set_endpoint(port)
+            local old_pid = start_keyless(port, store)
+            parley.config = { cliproxy = { manage = true, binary_path = FAKE, auth_dir = store } }
+
+            assert.equals("healthy", await(function(done)
+                cliproxy.credential_health(done, "claude")
+            end).state)
+            assert.is_false(vim.tbl_contains(cliproxy.spawned_pids(), old_pid))
+
+            -- Simulate the operator restarting a keyless proxy underneath us.
+            cliproxy.stop()
+            local second_pid = start_keyless(port, store)
+            local h = await(function(done) cliproxy.credential_health(done, "claude") end)
+
+            assert.equals("healthy", h.state, "the repair did not re-arm after a success")
+            assert.is_false(vim.tbl_contains(cliproxy.spawned_pids(), second_pid))
+        end)
+
+        it("never touches a proxy parley does not manage", function()
+            -- C2: stop() reaps whoever holds the port, and ensure_running does
+            -- NOT spawn when unmanaged — so repairing an operator's own proxy
+            -- would kill it and leave it dead.
+            local port = free_port()
+            local store = write_store()
+            set_endpoint(port)
+            start_keyless(port, store)
+            parley.config = { cliproxy = { manage = false, binary_path = FAKE } }
+
+            local h = await(function(done) cliproxy.credential_health(done, "claude") end)
+
+            assert.equals("unknown", h.state)
+            assert.equals("no_management_route", h.reason)
+            assert.matches("not managed by parley", h.message)
+            -- and it is still alive
+            local still_up = await(function(done)
+                cliproxy.health_probe("127.0.0.1", port, "testkey", done)
+            end)
+            assert.equals("healthy", still_up, "parley killed an unmanaged proxy")
+        end)
+
+        it("passes a healthy lookup straight through without restarting", function()
+            local port = free_port()
+            local store = write_store()
+            set_endpoint(port)
+            local cfg_file = vim.fn.tempname() .. ".json"
+            vim.fn.writefile({ vim.json.encode({
+                port = port, ["auth-dir"] = store, ["api-keys"] = { "testkey" },
+                ["remote-management"] = { ["secret-key"] = cliproxy.management_key() },
+            }) }, cfg_file)
+            local handle, pid = uv.spawn(FAKE, { args = { "-config", cfg_file } }, function() end)
+            table.insert(started, { handle = handle, pid = pid })
+            wait_listening(port)
+            parley.config = { cliproxy = { manage = true, binary_path = FAKE, auth_dir = store } }
+
+            local h = await(function(done) cliproxy.credential_health(done, "claude") end)
+
+            assert.equals("healthy", h.state)
+            -- reuse-if-healthy must not regress into restart-per-query
+            assert.same({}, cliproxy.spawned_pids())
+        end)
+    end)
+
+    --------------------------------------------------------------------------
+    -- peers / reap (#197 M3)
+    --------------------------------------------------------------------------
+    describe("peers and reap", function()
+        before_each(function()
+            cliproxy._reset_peer_warning()
+        end)
+
+        it("does not report parley's own proxy as a peer", function()
+            local port = free_port()
+            parley.dispatcher = parley.dispatcher or {}
+            parley.dispatcher.providers = parley.dispatcher.providers or {}
+            parley.dispatcher.providers.cliproxyapi = {
+                endpoint = ("http://127.0.0.1:%d/v1/chat/completions"):format(port),
+            }
+            require("parley.vault").add_secret("cliproxyapi", "testkey")
+            local cfgfile = vim.fn.tempname() .. ".yaml"
+            vim.fn.writefile({ vim.json.encode({ port = port }) }, cfgfile)
+            vim.env.PARLEY_FAKE_MODE = "healthy"
+            local pid = cliproxy.spawn(FAKE, cfgfile)
+            wait_listening(port)
+
+            local peers = cliproxy.peers()
+            if #peers == 0 and not vim.system then
+                print("SKIP: process table unreadable here")
+                return
+            end
+            -- An unreadable process table (sandbox/hardened runtime) yields an
+            -- empty list; say so rather than passing vacuously.
+            local ps_ok = vim.fn.executable("ps") == 1
+                and pcall(function() return vim.system({ "ps", "-p", tostring(pid) }):wait() end)
+            if not ps_ok then
+                print("SKIP: ps unavailable — peer detection not exercised")
+                return
+            end
+            local pids = vim.tbl_map(function(p) return p.pid end, peers)
+            assert.is_false(vim.tbl_contains(pids, pid),
+                "parley reported its own proxy as a peer")
+        end)
+
+        it("warns exactly once per session, naming the rotation mechanism", function()
+            local warnings = {}
+            local logger = require("parley.logger")
+            local saved = logger.warning
+            logger.warning = function(m) warnings[#warnings + 1] = tostring(m) end
+            local fake_peers = { { pid = 1, started = "Fri Jun 12 10:04:21 2026", command = "x" } }
+            cliproxy.warn_about_peers(fake_peers)
+            cliproxy.warn_about_peers(fake_peers)
+            logger.warning = saved
+
+            assert.equals(1, #warnings, "warned more than once per session")
+            assert.matches("ROTATE", warnings[1])
+            assert.matches("Proxy reap", warnings[1])
+            assert.matches("Jun 12", warnings[1]) -- oldest, so staleness is judgeable
+        end)
+
+        it("arms the guard even with NO peers — the healthy machine must not rescan", function()
+            -- The scan is a blocking ps+lsof (~150ms) on the dispatch hot path.
+            -- Latching only when peers exist meant a machine with none paid it
+            -- on every single query, forever.
+            cliproxy.warn_about_peers({})
+            assert.is_true(cliproxy.peer_warning_shown(),
+                "zero peers left the guard unarmed — every dispatch will rescan")
+        end)
+
+        it("ensure_running scans for peers at most once per session", function()
+            local scans = 0
+            local saved_peers = cliproxy.peers
+            cliproxy.peers = function()
+                scans = scans + 1
+                return {}
+            end
+            local port = free_port()
+            parley.dispatcher = parley.dispatcher or {}
+            parley.dispatcher.providers = parley.dispatcher.providers or {}
+            parley.dispatcher.providers.cliproxyapi = {
+                endpoint = ("http://127.0.0.1:%d/v1/chat/completions"):format(port),
+            }
+            require("parley.vault").add_secret("cliproxyapi", "testkey")
+            start_fake(port, "healthy")
+            wait_listening(port)
+            parley.config = { cliproxy = { manage = true, binary_path = FAKE } }
+
+            for _ = 1, 3 do
+                local done = false
+                cliproxy.ensure_running(function() done = true end, function() done = true end)
+                vim.wait(9000, function() return done end, 20)
+            end
+            cliproxy.peers = saved_peers
+
+            assert.equals(1, scans, "peers() re-scanned on later dispatches")
+        end)
+
+        it("says nothing when there are no peers", function()
+            local warnings = {}
+            local logger = require("parley.logger")
+            local saved = logger.warning
+            logger.warning = function(m) warnings[#warnings + 1] = tostring(m) end
+            cliproxy.warn_about_peers({})
+            logger.warning = saved
+            assert.equals(0, #warnings)
+        end)
+
+        it("reap counts only kills the OS accepted", function()
+            -- luv's kill RETURNS nil+err (ESRCH/EPERM) rather than raising, so a
+            -- bare pcall counted every failure as a success and told the
+            -- operator the rotation race was resolved when nothing was stopped.
+            local saved_peers = cliproxy.peers
+            cliproxy.peers = function()
+                return {
+                    { pid = 999999, started = "Fri Jun 12 10:04:21 2026", command = "cliproxyapi -config x" },
+                }
+            end
+            local killed, skipped = cliproxy.reap()
+            cliproxy.peers = saved_peers
+
+            assert.equals(0, killed, "counted a kill of a nonexistent pid")
+            assert.equals(1, skipped)
+        end)
+
+        it("reaps exactly the list it was given, not a fresh scan", function()
+            -- The command shows a list, the operator confirms it, and reap must
+            -- act on THAT list — proxies start and exit between the prompt and
+            -- the answer.
+            local scans = 0
+            local saved_peers = cliproxy.peers
+            cliproxy.peers = function()
+                scans = scans + 1
+                return { { pid = 999998, started = "Fri Jun 12 10:04:21 2026",
+                           command = "cliproxyapi -config x" } }
+            end
+            local killed, skipped = cliproxy.reap({
+                { pid = 999999, started = "Fri Jun 12 10:04:21 2026", command = "cliproxyapi -config y" },
+            })
+            cliproxy.peers = saved_peers
+
+            assert.equals(0, scans, "reap re-scanned instead of using the confirmed list")
+            assert.equals(0, killed)
+            assert.equals(1, skipped)
+        end)
+
+        it("stop() also reaps a parley-spawned proxy on a non-managed port", function()
+            -- The leak: _spawned is cleared per stop() and the port sweep only
+            -- covers the CURRENT endpoint, so a proxy started before an endpoint
+            -- change outlived every stop() and kept refreshing the auth-dir.
+            local old_port = free_port()
+            local cfgfile = vim.fn.tempname() .. ".yaml"
+            vim.fn.writefile({ vim.json.encode({ port = old_port }) }, cfgfile)
+            vim.env.PARLEY_FAKE_MODE = "healthy"
+            local stray = cliproxy.spawn(FAKE, cfgfile)
+            wait_listening(old_port)
+
+            -- endpoint moves elsewhere
+            parley.dispatcher.providers.cliproxyapi = {
+                endpoint = ("http://127.0.0.1:%d/v1/chat/completions"):format(free_port()),
+            }
+            cliproxy.stop()
+
+            -- uv.kill(pid, 0) is a liveness syscall, not a process spawn, so it
+            -- works where reading the process table does not.
+            local gone = vim.wait(3000, function()
+                return not pcall(uv.kill, stray, 0) or uv.kill(stray, 0) ~= 0
+            end, 100)
+            assert.is_true(gone, "a parley-spawned proxy on an old port survived stop()")
+        end)
+    end)
+
+    --------------------------------------------------------------------------
+    -- management key (#197)
+    --------------------------------------------------------------------------
+    describe("management_key", function()
+        -- These tests repoint the derived-artifact root and (in the reload case)
+        -- swap package.loaded. Both are restored: a module-identity swap left
+        -- behind is the kind of cross-test leak workshop/lessons.md documents.
+        local spec_data_dir
+
+        before_each(function()
+            spec_data_dir = vim.fn.tempname()
+            cliproxy._set_data_dir(spec_data_dir)
+        end)
+
+        after_each(function()
+            package.loaded["parley.cliproxy"] = cliproxy
+            cliproxy._set_data_dir(SPEC_DATA_DIR)
+        end)
+
+        it("generates once, reuses thereafter, and persists 0600", function()
+            local a = cliproxy.management_key()
+            local b = cliproxy.management_key()
+            assert.equals(a, b)
+            assert.equals(32, #a)
+            assert.matches("^%x+$", a)
+            local mode = (uv.fs_stat(cliproxy._management_key_path()) or {}).mode
+            assert.equals(tonumber("600", 8), bit.band(mode, tonumber("777", 8)))
+        end)
+
+        it("survives a restart — a regenerated key would 401 against the running proxy", function()
+            local first = cliproxy.management_key()
+            package.loaded["parley.cliproxy"] = nil
+            local reloaded = require("parley.cliproxy")
+            reloaded._set_data_dir(spec_data_dir)
+            assert.equals(first, reloaded.management_key())
         end)
     end)
 end)

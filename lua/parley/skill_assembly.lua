@@ -4,8 +4,14 @@
 -- artifact document into the LLM-call inputs the thin M3 driver feeds to
 -- dispatcher.prepare_payload. resolve_agent is the agent cascade salvaged from
 -- skill_runner, made PURE by INJECTING its config + agent-registry deps (v1 read
--- the parley module directly). No IO, no require("parley") here — the driver
--- supplies `body` (the source() result) and the agent deps at the boundary.
+-- the parley module directly). The driver supplies `body` (the source() result)
+-- and the agent deps at the boundary.
+--
+-- One ambient read remains (#198): resolve_agent's tool-capable test calls
+-- wire.resolve, which for cliproxyapi reaches providers.cliproxy_strategy and
+-- thus module-global config for the web_search_strategy fallback. Outcome-
+-- neutral today — cliproxyapi resolves to SOME wire either way — but it is a
+-- real dependency, so this file is not the pure island the rest of it is.
 
 local M = {}
 
@@ -15,7 +21,7 @@ local M = {}
 --- there is NO separate `system_prompt` field (that would double-apply).
 --- @param manifest table SkillManifest
 --- @param opts table { body = string, document = string, manual = boolean? }
---- @return table { messages, tools, tool_choice }
+--- @return table { messages, tools, force_tool }
 function M.build_invocation(manifest, opts)
     opts = opts or {}
     local body = opts.body or ""
@@ -32,18 +38,18 @@ function M.build_invocation(manifest, opts)
         end
     end
 
-    local tool_choice = nil
-    if manifest.force_tool then
-        tool_choice = { type = "tool", name = manifest.force_tool }
-    end
-
+    -- Carry the tool NAME, not a wire shape (#198). Anthropic spells a forced
+    -- choice `{type="tool", name=…}` and OpenAI `{type="function",
+    -- function={name=…}}`; that is wire knowledge, and this module is pure and
+    -- provider-agnostic. skill_invoke encodes it through the wire registry at
+    -- payload time, once the agent — and therefore the wire — is known.
     return {
         messages = {
             { role = "system", content = body },
             { role = "user", content = opts.document or "" },
         },
         tools = tools,
-        tool_choice = tool_choice,
+        force_tool = manifest.force_tool,
     }
 end
 
@@ -87,10 +93,14 @@ function M.resolve_agent(manifest, deps)
         if agent then return agent end
     end
 
-    -- 4: first tool-capable agent
+    -- 4: first tool-capable agent. "Tool-capable" is now "has a tool wire"
+    -- rather than a hardcoded provider pair (#198) — openai, copilot, azure
+    -- and ollama qualify too. cliproxyapi resolves on either route, so the
+    -- model matters only for picking WHICH wire, not whether one exists.
+    local wire = require("parley.tools.wire")
     for _, name in ipairs(deps.agent_names or {}) do
         local agent = (deps.agents or {})[name]
-        if agent and (agent.provider == "anthropic" or agent.provider == "cliproxyapi") then
+        if agent and wire.resolve(agent.provider, agent.model) ~= nil then
             return agent
         end
     end

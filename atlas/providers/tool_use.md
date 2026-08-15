@@ -30,6 +30,95 @@ An agent's `tools` field is an explicit allow-list resolved by `tools.select()` 
 
 Group sentinels expand alphabetically; the combined list is de-duplicated by name (first occurrence wins), so `{ "edit_file", "@readonly" }` is safe. An unknown name or group raises at agent-config validation, naming the offending token.
 
+## Wires (per-provider tool protocol)
+
+A **wire** owns everything about how one provider family expresses client-side
+tool use on the network. `lua/parley/tools/wire.lua` is the registry consumers
+resolve through; the protocols themselves are pure modules beside it. Before
+#198 the Anthropic protocol lived inline in `providers.lua` and each consumer
+hardcoded it.
+
+Every consumer resolves through the registry: `dispatcher.prepare_payload`
+(translate + encode), `dispatcher`'s `empty_response` probe, `tool_loop`, and
+`skill_invoke`. No provider is hardcoded at a call site.
+
+| Module | Speaks for |
+|--------|-----------|
+| `tools/wire_anthropic.lua` | `anthropic`; cliproxyapi's anthropic route |
+| `tools/wire_openai.lua` | `openai`, `copilot`, `azure`, `ollama`; cliproxyapi's openai route |
+| `tools/wire.lua` | the registry — resolves, then forwards |
+
+Contract: `encode_tools`, `encode_tool_choice`, `decode_tool_calls_from_stream`,
+`has_tool_calls`, and the OPTIONAL `translate_messages` (defined only by wires
+whose message shape differs from parley's internal one).
+
+**The registry API takes `(provider, model)`, never a route.** cliproxyapi
+speaks both wires depending on the model, so a route argument is one a caller
+can forget — and a forgotten route resolves to *some* wire and then decodes
+zero tool calls, which downstream is indistinguishable from a model that chose
+not to call a tool. `providers.cliproxy_route(model_name, strategy)` derives it
+inside; `providers.cliproxy_strategy(model)` supplies the strategy including its
+config-level fallback. `cliproxyapi.format_payload` asks the *same* helper, so
+the tools in a payload can never disagree with the payload's own shape (they
+could before #198: the encoder keyed on `^claude%-` alone).
+
+`encode`/`encode_tool_choice` **raise** for a provider with no wire — a real
+misconfiguration, caught at request-build time and naming the provider.
+`decode`/`has_tool_calls`/`translate_messages` **degrade quietly**, because they
+run on every response including from agents that declared no tools.
+
+`googleai` has no wire yet; it needs `functionDeclarations`, a genuinely
+different shape.
+
+### Message shapes
+
+Internally parley always speaks Anthropic's shape — assistant `[text, tool_use]`
+content blocks followed by a user turn of matching `[tool_result]` blocks — and
+`_emit_content_blocks_as_messages` is the single place that shape and its
+`#155`/`#156` invariants are produced. `wire_openai.translate_messages` converts
+that already-validated output into OpenAI's shape, called from
+`dispatcher.prepare_payload` — the one point upstream of every payload builder,
+since cliproxy's openai route (`cliproxy_openai_payload`) and `ollama` each
+build their own and only copilot/azure delegate to `openai.format_payload`:
+`tool_calls[]` on the assistant message with **JSON-string** `arguments`, plus
+one `{role = "tool", tool_call_id}` message per result. `is_error` folds into
+the content string (OpenAI has no such field). Translating in the adapter rather
+than forking the emitter keeps those invariants single-sourced.
+
+### Stream decoding differs structurally
+
+Anthropic frames each call with `content_block_start`/`_stop` around a top-level
+`.index`. OpenAI streams an *array* of partial `delta.tool_calls[]` where `id`
+and `function.name` arrive only in that call's first chunk, `arguments`
+accumulates as string fragments, and **nothing closes a call**. The OpenAI
+decoder therefore keys on the array index, orders by first appearance, and is
+deliberately *not* gated on `finish_reason == "tool_calls"` — a truncated stream
+still surfaces what assembled, so the loop can write a synthetic result instead
+of stranding the buffer with an unmatched 🔧:. Malformed `arguments` yield an
+empty input rather than raising.
+
+Wire shapes are pinned by real captures in `tests/fixtures/openai_*.sse`, plus a
+live conformance spec (`cliproxy_tool_conformance_spec.lua`, gated behind
+`PARLEY_LIVE_CONFORMANCE=1`) that asks a real proxy for a real tool call so
+upstream drift fails there rather than as a silently empty chat answer.
+
+`vim.json.decode` maps an explicit JSON `null` to `vim.NIL`, which is **truthy**
+in Lua — a bare `if obj.field then` accepts it and overwrites a good value with
+userdata that raises on the next concatenation. Both decoders read optional
+fields through `sse.str()` for that reason.
+
+### The response side needs the request's wire
+
+A stream comes back with no model params table: the query table has the provider
+and the serialized payload, whose `model` is a bare NAME. That is not enough —
+`claude-sonnet-5` resolves to a *different* wire depending on the agent's
+`web_search_strategy`, so re-deriving on the response side would silently pick
+the wrong decoder. Instead `prepare_payload` stamps `_parley_tool_wire` on the
+payload, `dispatcher.query` consumes it onto the query table before the body is
+serialized, and the `empty_response` probe resolves via `wire.by_name`. (`tool_loop` and `skill_invoke` still resolve by `(provider, model)` — they run where the agent is in scope and need no stamp.) The stamp never goes
+over the network; `scripts/parley_harness.lua` strips it too, so the golden
+payloads stay an accurate model of the request.
+
 ## Loop Model
 
 1. User submits → Claude responds (may include `tool_use` content blocks)

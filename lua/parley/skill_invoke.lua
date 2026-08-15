@@ -112,7 +112,7 @@ function M.invoke(buf, manifest, args, opts)
     local p = parley()
     local llm = require("parley.dispatcher") -- LLM dispatcher: prepare_payload / query
     local tools_dispatcher = require("parley.tools.dispatcher") -- tool dispatcher: execute_call
-    local providers = require("parley.providers")
+    local wire = require("parley.tools.wire") -- per-provider tool protocol (#198)
     local tasker = require("parley.tasker")
     local tools_registry = require("parley.tools")
     local assembly = require("parley.skill_assembly")
@@ -206,13 +206,27 @@ function M.invoke(buf, manifest, args, opts)
     end
 
     local payload = llm.prepare_payload(inv.messages, agent.model, agent.provider, inv.tools)
-    if inv.tool_choice then
-        payload.tool_choice = inv.tool_choice
+    -- #198: skill_assembly hands us the forced tool NAME; the wire shapes it.
+    -- Anthropic wants {type="tool", name=…}, OpenAI {type="function",
+    -- function={name=…}} — sending the anthropic shape to an OpenAI-family
+    -- agent is a 400, which is what the widened tool-capable predicate would
+    -- otherwise have started causing for the review and voice_apply skills.
+    if inv.force_tool then
+        payload.tool_choice = wire.encode_tool_choice(
+            agent.provider, agent.model, inv.force_tool)
     end
     -- Large-document tool output needs headroom: a multi-edit propose_edits batch
     -- echoes old/new/explain per edit and easily exceeds the default (4096),
     -- truncating the tool JSON → empty decode. (Was skill_runner's explicit bump.)
-    payload.max_tokens = math.max(payload.max_tokens or 0, 100000)
+    --
+    -- Goes through provider_params because the cap is not always called
+    -- `max_tokens`: gpt-5 renames it to `max_completion_tokens`. Setting
+    -- `max_tokens` directly left the real cap at 4096 for every gpt-5 agent —
+    -- causing the exact truncation this line exists to prevent — while adding
+    -- a key that family's API rejects. #198 made those agents eligible for
+    -- skills, so the no-op became reachable.
+    require("parley.provider_params").raise_output_cap(
+        payload, agent.provider, agent.model, 100000)
 
     skill_render.clear_decorations(buf)
 
@@ -249,7 +263,13 @@ function M.invoke(buf, manifest, args, opts)
                 end
                 local function complete()
                     local qt = tasker.get_query(qid) or {}
-                    local calls = providers.decode_anthropic_tool_calls_from_stream(qt.raw_response or "")
+                    -- #198: decode with the agent's own wire. Hardcoding the
+                    -- anthropic decoder here meant an OpenAI-family skill
+                    -- agent yielded zero calls and logged "model returned no
+                    -- tool call" — indistinguishable from a truncated
+                    -- response. (agent.provider/agent.model are the same pair
+                    -- used for prepare_payload above.)
+                    local calls = wire.decode(agent.provider, agent.model, qt.raw_response or "")
                     local results = {}
                     local applied = 0
                     local errors = {}
