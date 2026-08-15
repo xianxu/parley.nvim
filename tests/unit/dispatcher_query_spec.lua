@@ -1149,4 +1149,69 @@ describe("dispatcher.query internals", function()
             assert.is_true(seen.streamed)
         end)
     end)
+    -- #198 M2. The tool wire is stamped onto the payload by prepare_payload
+    -- purely to reach query(); it must be consumed here and never sent.
+    describe("Group K: tool-wire stamp (#198)", function()
+        it("K1: the payload actually serialized carries no _parley_tool_wire", function()
+            -- D.query deep-copies the payload per attempt (so a retry re-issues
+            -- an identical request), and the copy is what gets written to the
+            -- request body. Assert on THAT, not on the caller's table, which
+            -- deliberately keeps the stamp for subsequent attempts.
+            local original_table_to_file = helpers.table_to_file
+            local sent
+            helpers.table_to_file = function(tbl, path)
+                sent = vim.deepcopy(tbl)
+                return original_table_to_file(tbl, path)
+            end
+            local ok, err = pcall(function()
+                local payload = { model = "gpt-4", messages = {}, _parley_tool_wire = "openai" }
+                dispatcher.query(nil, "openai", payload, make_handler(), nil, nil)
+            end)
+            helpers.table_to_file = original_table_to_file
+            assert.is_true(ok, tostring(err))
+            assert.is_truthy(sent)
+            assert.is_nil(sent._parley_tool_wire)
+            assert.equals("gpt-4", sent.model)
+        end)
+
+        it("K2: records the stamp on the query table for the response side", function()
+            local payload = { model = "gpt-4", messages = {}, _parley_tool_wire = "openai" }
+            dispatcher.query(nil, "openai", payload, make_handler(), nil, nil)
+            assert.equals("openai", tasker.get_query(captured_qid).tool_wire)
+        end)
+
+        it("K3: a tool-only openai turn is NOT reported as an empty response", function()
+            -- The bug this replaced: empty_response probed for the anthropic
+            -- literal, so an openai tool turn (no text delta at all) looked
+            -- empty and surfaced a spurious notice.
+            local payload = { model = "gpt-4", messages = {}, _parley_tool_wire = "openai" }
+            dispatcher.query(nil, "openai", payload, make_handler(), nil, nil)
+            captured_out_reader(nil,
+                'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_a",' ..
+                '"type":"function","function":{"name":"ls","arguments":"{}"}}]}}]}\n')
+            captured_out_reader(nil, nil) -- EOF: this is what runs finish_stdout
+            captured_terminal(0, 0, "", status_stderr("200"), nil)
+            assert.is_false(tasker.get_query(captured_qid).empty_response)
+        end)
+
+        it("K4: a genuinely empty openai turn IS reported as empty", function()
+            local payload = { model = "gpt-4", messages = {}, _parley_tool_wire = "openai" }
+            dispatcher.query(nil, "openai", payload, make_handler(), nil, nil)
+            captured_out_reader(nil, 'data: {"choices":[{"index":0,"delta":{}}]}\n')
+            captured_out_reader(nil, nil)
+            captured_terminal(0, 0, "", status_stderr("200"), nil)
+            assert.is_true(tasker.get_query(captured_qid).empty_response)
+        end)
+
+        it("K5: a tool-only anthropic turn is still NOT reported as empty", function()
+            local payload = { model = "claude-sonnet-5", messages = {}, _parley_tool_wire = "anthropic" }
+            dispatcher.query(nil, "anthropic", payload, make_handler(), nil, nil)
+            captured_out_reader(nil,
+                'data: {"type":"content_block_start","index":0,"content_block":' ..
+                '{"type":"tool_use","id":"toolu_1","name":"ls","input":{}}}\n')
+            captured_out_reader(nil, nil)
+            captured_terminal(0, 0, "", status_stderr("200"), nil)
+            assert.is_false(tasker.get_query(captured_qid).empty_response)
+        end)
+    end)
 end)

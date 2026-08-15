@@ -105,32 +105,31 @@ D.prepare_payload = function(messages, model, provider, agent_tools)
 		}
 	end
 
+	local wire = require("parley.tools.wire")
+
+	-- #198: translate parley's internal (anthropic-shaped) messages into the
+	-- wire's own shape BEFORE the adapter builds its payload.
+	--
+	-- This has to happen here, not in openai.format_payload: cliproxy's openai
+	-- route builds through cliproxy_openai_payload and ollama through its own
+	-- format_payload — only copilot and azure delegate to openai's. This is the
+	-- single caller of adapter.format_payload, so it is the one point upstream
+	-- of every builder.
+	--
+	-- Unconditional, NOT gated on this request declaring tools: a prior turn's
+	-- tool blocks live in history and must translate on every later request.
+	-- Identity for the anthropic wire and for string-content messages.
+	messages = wire.translate_messages(provider, model, messages)
+
 	local adapter = providers.get(provider)
 	local payload = adapter.format_payload(messages, model, provider)
 
-	-- M1 Task 1.5: append client-side tools to whatever the adapter emitted.
-	-- This chain is superseded by lua/parley/tools/wire.lua and is removed in
-	-- #198 M2, which also deletes the two stubs it is the last caller of.
-	-- Anthropic, openai and cliproxyapi now all encode successfully; only
-	-- googleai and ollama still raise.
+	-- Append client-side tools to whatever the adapter emitted, encoded for
+	-- the same wire the messages were just translated for.
 	if agent_tools and #agent_tools > 0 then
 		local tools_registry = require("parley.tools")
 		local defs = tools_registry.select(agent_tools)
-		local client_tools
-		if provider == "anthropic" then
-			client_tools = providers.anthropic_encode_tools(defs)
-		elseif provider == "cliproxyapi" then
-			client_tools = providers.cliproxyapi_encode_tools(defs, model)
-		elseif provider == "openai" then
-			client_tools = providers.openai_encode_tools(defs)
-		elseif provider == "googleai" then
-			client_tools = providers.googleai_encode_tools(defs) -- raises
-		elseif provider == "ollama" then
-			client_tools = providers.ollama_encode_tools(defs) -- raises
-		else
-			error("tools not supported for this provider yet — see #81 follow-up (provider: "
-				.. tostring(provider) .. ")")
-		end
+		local client_tools = wire.encode(provider, model, defs)
 
 		-- APPEND, do not CLOBBER: preserves server-side tools (web_search,
 		-- web_fetch) that the adapter may have already written into
@@ -140,6 +139,14 @@ D.prepare_payload = function(messages, model, provider, agent_tools)
 			table.insert(payload.tools, t)
 		end
 	end
+
+	-- Stamp the wire so the RESPONSE side can decode with the same one. By the
+	-- time a stream comes back the model params table is gone, and the payload
+	-- carries only a bare model NAME — re-deriving from that would lose an
+	-- agent's `anthropic_tools_route` override and pick the wrong decoder.
+	-- `query` strips this before the request goes out, exactly as
+	-- cliproxyapi.format_headers does with `_parley_route`.
+	payload._parley_tool_wire = wire.name_for(provider, model)
 
 	logger.debug("payload: " .. vim.inspect(payload))
 	return payload
@@ -188,6 +195,12 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 		return
 	end
 
+	-- Consume the tool-wire stamp prepare_payload left: it travels on the
+	-- payload only to reach here, and must not go out over the network.
+	-- Stripped BEFORE the debug log and the request body are produced.
+	local tool_wire = payload._parley_tool_wire
+	payload._parley_tool_wire = nil
+
     logger.debug("query to send is: " .. vim.json.encode(payload))
 
 	local qid = helpers.uuid()
@@ -195,6 +208,7 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 		timestamp = os.time(),
 		buf = buf,
 		provider = provider,
+		tool_wire = tool_wire,
 		payload = payload,
 		handler = handler,
 		on_exit = on_exit,
@@ -326,7 +340,12 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 			-- the exact symptom this issue set out to remove. The terminal
 			-- closure emits it, and only on a successful request.
 			if qt.response == "" then
-				qt.empty_response = qt.raw_response:find('"type":"tool_use"', 1, true) == nil
+				-- Per-wire (#198): the anthropic literal was hardcoded here, so
+				-- a tool-only turn from an OpenAI-family agent reported an
+				-- empty response. qt.tool_wire is the wire prepare_payload
+				-- actually built for.
+				qt.empty_response = not require("parley.tools.wire")
+					.has_tool_calls_by_name(qt.tool_wire, qt.raw_response)
 			end
 
 			-- NOTE (#197): auth-failure detection deliberately does NOT live

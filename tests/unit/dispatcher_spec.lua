@@ -378,19 +378,165 @@ describe("prepare_payload: anthropic client-side tools (Task 1.5)", function()
         assert.equals("read_file", payload.tools[1]["function"].name)
     end)
 
-    it("googleai provider raises when agent_tools is provided", function()
-        local gm = { model = "gemini-2.5-flash", temperature = 1.0, top_p = 1.0, top_k = 64, max_tokens = 8192 }
-        local ok, err = pcall(dispatcher.prepare_payload, msgs(user("hi")), gm, "googleai", { "read_file" })
-        assert.is_false(ok)
-        assert.matches("tools not supported", tostring(err))
+    it("ollama provider encodes tools instead of raising", function()
+        local payload = dispatcher.prepare_payload(
+            msgs(user("hi")), { model = "llama3", max_tokens = 1024 }, "ollama", { "read_file" })
+        assert.equals("function", payload.tools[1].type)
     end)
 
-    it("ollama provider raises when agent_tools is provided", function()
-        local olm = { model = "llama3.1", temperature = 0.6, top_p = 1.0, max_tokens = 1024 }
-        local ok, err = pcall(dispatcher.prepare_payload, msgs(user("hi")), olm, "ollama", { "read_file" })
+    it("googleai still raises, but names the provider", function()
+        local gm = { model = "gemini-2.5-flash", max_tokens = 8192 }
+        local ok, err = pcall(dispatcher.prepare_payload,
+            msgs(user("hi")), gm, "googleai", { "read_file" })
         assert.is_false(ok)
-        assert.matches("tools not supported", tostring(err))
+        assert.matches("googleai", tostring(err))
     end)
+end)
+
+-- #198 M2 Task 2.1. The translation must sit UPSTREAM of every payload
+-- builder, not inside openai.format_payload: cliproxy's openai route builds
+-- through cliproxy_openai_payload and ollama through its own format_payload,
+-- so installing it in openai's would miss the issue's own target while every
+-- unit test and golden still passed. prepare_payload is the single caller of
+-- adapter.format_payload, hence the seam.
+describe("prepare_payload: openai-family message translation (#198 M2)", function()
+    local tools_mod = require("parley.tools")
+
+    -- history containing a completed tool round, in parley's internal
+    -- (anthropic-shaped) form
+    local function tool_history()
+        return {
+            { role = "user", content = "weather?" },
+            { role = "assistant", content = {
+                { type = "text", text = "Checking." },
+                { type = "tool_use", id = "call_a", name = "get_weather",
+                  input = { city = "Paris" } },
+            } },
+            { role = "user", content = {
+                { type = "tool_result", tool_use_id = "call_a", content = "18C" },
+            } },
+        }
+    end
+
+    before_each(function()
+        parley._state = parley._state or {}
+        parley._state.web_search = false
+        tools_mod.reset()
+        tools_mod.register({
+            name = "read_file",
+            description = "Read a file.",
+            input_schema = { type = "object", properties = { path = { type = "string" } } },
+            handler = function() return { content = "", is_error = false } end,
+            kind = "read",
+        })
+    end)
+
+    after_each(function()
+        tools_mod.register_builtins()
+    end)
+
+    -- THE regression test for the plan gate's Critical.
+    it("translates for cliproxyapi's openai route (the issue's own target)", function()
+        local payload = dispatcher.prepare_payload(
+            tool_history(), { model = "gpt-5.6-sol" }, "cliproxyapi", { "read_file" })
+
+        local roles = {}
+        for _, m in ipairs(payload.messages) do table.insert(roles, m.role) end
+        assert.same({ "user", "assistant", "tool" }, roles)
+        assert.equals("call_a", payload.messages[3].tool_call_id)
+        -- arguments must be a JSON string, not a table
+        assert.equals("string", type(payload.messages[2].tool_calls[1]["function"].arguments))
+    end)
+
+    it("translates for the plain openai provider", function()
+        local payload = dispatcher.prepare_payload(
+            tool_history(), { model = "gpt-5.4" }, "openai", { "read_file" })
+        assert.equals("tool", payload.messages[3].role)
+        assert.equals("call_a", payload.messages[3].tool_call_id)
+    end)
+
+    it("translates for ollama, which has its own payload builder", function()
+        local payload = dispatcher.prepare_payload(
+            tool_history(), { model = "llama3" }, "ollama", { "read_file" })
+        assert.equals("tool", payload.messages[3].role)
+    end)
+
+    it("does NOT translate for anthropic", function()
+        local payload = dispatcher.prepare_payload(
+            tool_history(), { model = "claude-sonnet-5", max_tokens = 1024 },
+            "anthropic", { "read_file" })
+        -- content blocks survive intact
+        assert.equals("table", type(payload.messages[2].content))
+        assert.equals("tool_use", payload.messages[2].content[2].type)
+    end)
+
+    it("does NOT translate on cliproxy's anthropic route", function()
+        local payload = dispatcher.prepare_payload(
+            tool_history(),
+            { model = "claude-sonnet-5", web_search_strategy = "anthropic_tools_route" },
+            "cliproxyapi", { "read_file" })
+        assert.equals("table", type(payload.messages[2].content))
+    end)
+
+    -- Translation is unconditional: history carries tool blocks from earlier
+    -- turns even when THIS request declares no tools.
+    it("translates even when the request declares no tools", function()
+        local payload = dispatcher.prepare_payload(
+            tool_history(), { model = "gpt-5.4" }, "openai", nil)
+        assert.equals("tool", payload.messages[3].role)
+    end)
+
+    it("leaves a tool-less string-content conversation byte-identical", function()
+        local plain = {
+            { role = "user", content = "hi" },
+            { role = "assistant", content = "hello" },
+        }
+        local payload = dispatcher.prepare_payload(
+            vim.deepcopy(plain), { model = "gpt-5.4" }, "openai", nil)
+        assert.same(plain, payload.messages)
+    end)
+
+    -- The response side must decode with the wire the REQUEST was built for.
+    -- The stamp exists because by then the model params table is gone and the
+    -- payload carries only a bare model name — re-deriving from that would
+    -- lose an agent's anthropic_tools_route override.
+    describe("_parley_tool_wire stamp", function()
+        it("names the wire the payload was built for", function()
+            assert.equals("openai", dispatcher.prepare_payload(
+                msgs(user("hi")), { model = "gpt-5.6-sol" }, "cliproxyapi", nil)._parley_tool_wire)
+            assert.equals("anthropic", dispatcher.prepare_payload(
+                msgs(user("hi")),
+                { model = "claude-sonnet-5", web_search_strategy = "anthropic_tools_route" },
+                "cliproxyapi", nil)._parley_tool_wire)
+            assert.equals("anthropic", dispatcher.prepare_payload(
+                msgs(user("hi")), { model = "claude-sonnet-5", max_tokens = 1024 },
+                "anthropic", nil)._parley_tool_wire)
+        end)
+
+        it("survives the anthropic-route model whose bare name would mislead", function()
+            -- claude-sonnet-5 WITHOUT the strategy resolves to the openai
+            -- wire; WITH it, anthropic. A name-only re-derivation on the
+            -- response side cannot tell these apart.
+            local with = dispatcher.prepare_payload(msgs(user("hi")),
+                { model = "claude-sonnet-5", web_search_strategy = "anthropic_tools_route" },
+                "cliproxyapi", nil)
+            local without = dispatcher.prepare_payload(msgs(user("hi")),
+                { model = "claude-sonnet-5" }, "cliproxyapi", nil)
+            assert.equals("anthropic", with._parley_tool_wire)
+            assert.equals("openai", without._parley_tool_wire)
+        end)
+
+        it("is nil for a provider with no wire", function()
+            assert.is_nil(dispatcher.prepare_payload(
+                msgs(user("hi")), { model = "gemini-2.5-flash", max_tokens = 8192 },
+                "googleai", nil)._parley_tool_wire)
+        end)
+    end)
+
+    -- The pre-#198 pair asserting googleai AND ollama both raise now lives
+    -- upstairs, split: ollama encodes through the openai wire it already
+    -- shares a payload shape with, and googleai still raises but the message
+    -- names the provider instead of pointing at the #81 follow-up.
 end)
 
 describe("prepare_payload: googleai provider", function()

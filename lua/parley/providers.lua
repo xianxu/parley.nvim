@@ -1298,22 +1298,11 @@ function M.cliproxyapi_encode_tools(tool_definitions, model)
     return require("parley.tools.wire").encode("cliproxyapi", model, tool_definitions)
 end
 
--- Google AI and Ollama tool encoders — still the raising #81 stubs. Their
--- only caller is the dispatcher's provider chain (dispatcher.lua:124-126),
--- which M2 replaces with the wire registry; they are deleted THERE, in the
--- same commit that removes the last reference, so the tree is never left
--- calling a nil. Ollama gains real tool support at that point (it shares the
--- openai wire); googleai stays unsupported until someone writes a
--- functionDeclarations wire, but the registry's error will at least name the
--- provider instead of claiming an anthropic-family requirement.
----@diagnostic disable-next-line: unused-local
-function M.googleai_encode_tools(_tool_definitions)
-    error("tools not supported for this provider yet — see #81 follow-up")
-end
-
----@diagnostic disable-next-line: unused-local
-function M.ollama_encode_tools(_tool_definitions)
-    error("tools not supported for this provider yet — see #81 follow-up")
-end
+-- M.googleai_encode_tools and M.ollama_encode_tools are GONE (#198 M2). Their
+-- only caller was the dispatcher's provider chain, which the wire registry
+-- replaced in this same commit. Ollama gained real tool support there (it
+-- shares the openai wire); googleai has no wire until someone writes a
+-- functionDeclarations one, and the registry's error names the provider
+-- rather than claiming an anthropic-family requirement.
 
 return M

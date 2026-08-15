@@ -40,6 +40,63 @@ local BY_PROVIDER = {
     ollama = wire_openai,
 }
 
+local BY_NAME = {
+    anthropic = wire_anthropic,
+    openai = wire_openai,
+}
+
+--- Look a wire up by the name `name_for` produced.
+---
+--- Exists for the response side: by the time a stream comes back, the model
+--- table is long gone (the dispatcher's query table carries the provider and
+--- the serialized payload, not the agent's model params). prepare_payload
+--- stamps `name_for`'s answer onto the payload, query strips it onto the query
+--- table, and the read paths resolve through here — so request and response
+--- are guaranteed to agree on the wire without re-deriving it from partial
+--- information. Re-deriving from the payload's bare model NAME would silently
+--- lose an agent's `anthropic_tools_route` override.
+---@param name string|nil
+---@return table|nil
+function M.by_name(name)
+    return BY_NAME[name]
+end
+
+--- The name of the wire this (provider, model) pair speaks.
+---@param provider string|nil
+---@param model table|string|nil
+---@return "anthropic"|"openai"|nil
+function M.name_for(provider, model)
+    local w = M.resolve(provider, model)
+    if w == wire_anthropic then return "anthropic" end
+    if w == wire_openai then return "openai" end
+    return nil
+end
+
+--- Did this response carry a client tool call, given a stamped wire name?
+--- Degrades to false for an unknown name, same reasoning as `has_tool_calls`.
+---@param name string|nil
+---@param raw_response string
+---@return boolean
+function M.has_tool_calls_by_name(name, raw_response)
+    local w = M.by_name(name)
+    if not w then
+        return false
+    end
+    return w.has_tool_calls(raw_response)
+end
+
+--- Decode tool calls given a stamped wire name. Degrades to an empty list.
+---@param name string|nil
+---@param raw_response string
+---@return ToolCall[]
+function M.decode_by_name(name, raw_response)
+    local w = M.by_name(name)
+    if not w then
+        return {}
+    end
+    return w.decode_tool_calls_from_stream(raw_response)
+end
+
 --- Which wire does this (provider, model) pair speak?
 ---@param provider string|nil
 ---@param model table|string|nil  model params table, or a bare model name
