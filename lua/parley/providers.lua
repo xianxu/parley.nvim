@@ -146,6 +146,48 @@ local function is_cliproxy_anthropic_route_model(model_name)
     return model_name:find("^claude%-") ~= nil or model_name:find("^code_execution_") ~= nil
 end
 
+--- Resolve the configured cliproxy web-search strategy for a model. PURE
+--- wrapper over the local above, exposed in #198 because consumers outside
+--- this file need it and MUST NOT re-implement the config-level fallback by
+--- reading `model.web_search_strategy` directly (a model table often carries
+--- none, and the provider config supplies it).
+---@param model_config table|nil
+---@return string strategy  one of the three known strategies, or "none"
+function M.cliproxy_strategy(model_config)
+    return get_cliproxy_strategy(model_config)
+end
+
+--- Which wire does a cliproxyapi request use? PURE.
+---
+--- This is today's rule, extracted rather than rewritten: cliproxy proxies
+--- anthropic-family models to a real Anthropic endpoint (where server-side
+--- web_search actually runs) and everything else to an OpenAI-compatible
+--- one. Both wires carry client tools after #198, so routing did not need
+--- to change to support them.
+---
+--- Extracted because `cliproxyapi.format_payload` and
+--- `cliproxyapi_encode_tools` were making this decision by two DIFFERENT
+--- tests — the former checked strategy AND model family, the latter checked
+--- `^claude%-` alone — so they could disagree. They now share one function
+--- (ARCH-DRY).
+---
+--- One intentional behaviour change falls out of that: a `code_execution_*`
+--- model used to RAISE in the encoder while format_payload routed it to the
+--- anthropic wire. It now encodes, which is what format_payload always
+--- intended.
+---@param model_name string|nil
+---@param strategy string|nil
+---@return "anthropic"|"openai"
+function M.cliproxy_route(model_name, strategy)
+    if strategy ~= "anthropic_tools_route" then
+        return "openai"
+    end
+    if is_cliproxy_anthropic_route_model(model_name) then
+        return "anthropic"
+    end
+    return "openai"
+end
+
 --------------------------------------------------------------------------------
 -- OpenAI adapter (base for copilot, azure, ollama)
 --------------------------------------------------------------------------------
