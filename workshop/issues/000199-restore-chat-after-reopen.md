@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-08-18
 updated: 2026-08-18
-estimate_hours:
+estimate_hours: 1.13
 started: 2026-08-18T15:21:36-07:00
 ---
 
@@ -52,6 +52,23 @@ chat behavior unavailable until Neovim restarts.
   it.
 - Standalone `:bunload` retains the prepared marker and mapping.
 - Relevant integration tests and repository lint pass.
+
+## Estimate
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: issue-spec design=0.5 impl=0.04
+item: lua-neovim design=0.2 impl=0.2
+item: milestone-review design=0.0 impl=0.08
+design-buffer: 0.15
+total: 1.13
+```
+
+Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md`
+against `baseline-v3.1.md`. Method A only. The reviewed spec resolves the
+lifecycle decision, so the Lua design component uses the high-spec discount;
+implementation values use v3.1's 40% ship-wall-clock scaling.
 
 ## Plan
 
