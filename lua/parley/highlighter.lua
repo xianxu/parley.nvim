@@ -1121,6 +1121,12 @@ M.setup_buf_handler = function()
         group = gid,
         callback = function(event)
             local buf = event.buf
+            -- :bdelete removes buffer-local setup while keeping the handle
+            -- reusable; :bunload preserves the mappings, so only deletion
+            -- ends prep_chat's idempotence lifecycle (#199).
+            if event.event == "BufDelete" then
+                _parley._prepared_bufs[buf] = nil
+            end
             _parley._parley_bufs[buf] = nil
             for winid, cache in pairs(_decor_cache) do
                 if cache.bufnr == buf then

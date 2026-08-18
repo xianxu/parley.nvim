@@ -648,6 +648,47 @@ end)
 describe("define keybinding split (#161)", function()
     local kb = require("parley.keybinding_registry")
     local parley = require("parley")
+    local lifecycle_path, lifecycle_buf, saved_hidden
+
+    local function has_visual_map(key)
+        local mapping = vim.fn.maparg(key, "x", false, true)
+        return mapping and mapping.buffer == 1 and next(mapping) ~= nil
+    end
+
+    local function open_lifecycle_chat(suffix)
+        local dir = parley.config.chat_dir
+        vim.fn.mkdir(dir, "p")
+        lifecycle_path = dir .. "/2026-08-18-" .. suffix .. ".md"
+        vim.fn.writefile({
+            "# topic: " .. suffix,
+            "- file: " .. vim.fn.fnamemodify(lifecycle_path, ":t"),
+            "---",
+            "",
+            "💬: hi",
+        }, lifecycle_path)
+        vim.cmd("edit " .. vim.fn.fnameescape(lifecycle_path))
+        lifecycle_buf = vim.api.nvim_get_current_buf()
+        assert.is_true(parley._prepared_bufs[lifecycle_buf])
+        return lifecycle_buf
+    end
+
+    after_each(function()
+        if saved_hidden ~= nil then
+            vim.o.hidden = saved_hidden
+            saved_hidden = nil
+        end
+        if lifecycle_buf then
+            if vim.api.nvim_buf_is_valid(lifecycle_buf) then
+                pcall(vim.api.nvim_buf_delete, lifecycle_buf, { force = true })
+            end
+            parley._prepared_bufs[lifecycle_buf] = nil
+            lifecycle_buf = nil
+        end
+        if lifecycle_path then
+            vim.fn.delete(lifecycle_path)
+            lifecycle_path = nil
+        end
+    end)
 
     it("routes visual <M-CR> to define, keeps visual <C-g><C-g> as respond, n/i respond", function()
         local buf = vim.api.nvim_create_buf(false, true)
@@ -720,7 +761,38 @@ describe("define keybinding split (#161)", function()
         assert.is_true(cgg and cgg.buffer == 1 and next(cgg) ~= nil,
             "<C-g><C-g> not buffer-mapped in visual mode after prep_chat")
 
+        vim.api.nvim_buf_delete(buf, { force = true })
+        parley._prepared_bufs[buf] = nil
         vim.fn.delete(path)
+    end)
+
+    it("restores visual chat mappings after bdelete and finder-style reopen", function()
+        local original = open_lifecycle_chat("bdelete-reopen")
+        assert.is_true(has_visual_map("<M-CR>"))
+        assert.is_true(has_visual_map("<C-g><C-g>"))
+
+        vim.cmd("bdelete " .. original)
+        local reopened = parley.open_buf(lifecycle_path, true)
+
+        assert.are.equal(original, reopened, "finder reopen must exercise the resurrected handle")
+        assert.is_true(has_visual_map("<M-CR>"), "visual definition mapping was not restored")
+        assert.is_true(has_visual_map("<C-g><C-g>"), "visual respond mapping was not restored")
+    end)
+
+    it("preserves prepared chat state across standalone bunload", function()
+        saved_hidden = vim.o.hidden
+        vim.o.hidden = true
+        local original = open_lifecycle_chat("bunload-reopen")
+        assert.is_true(has_visual_map("<M-CR>"))
+
+        vim.cmd("enew")
+        vim.cmd("bunload " .. original)
+        assert.is_true(parley._prepared_bufs[original],
+            "BufUnload must not invalidate preparation while mappings survive")
+
+        local reopened = parley.open_buf(lifecycle_path, true)
+        assert.are.equal(original, reopened)
+        assert.is_true(has_visual_map("<M-CR>"))
     end)
 end)
 

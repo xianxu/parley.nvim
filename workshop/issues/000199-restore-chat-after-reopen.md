@@ -72,16 +72,16 @@ implementation values use v3.1's 40% ship-wall-clock scaling.
 
 ## Plan
 
-- [ ] Add an integration test that reproduces prepare → `:bdelete` →
+- [x] Add an integration test that reproduces prepare → `:bdelete` →
       finder-style reopen and asserts the chat mappings are restored.
-- [ ] Add the adjacent `:bunload` regression asserting the preparation marker
+- [x] Add the adjacent `:bunload` regression asserting the preparation marker
       is retained and the mapping remains present after reopen.
-- [ ] Run the focused test and confirm it fails because the prepared marker
+- [x] Run the focused test and confirm it fails because the prepared marker
       survives teardown.
-- [ ] In the existing synchronous classification teardown, clear the prepared
+- [x] In the existing synchronous classification teardown, clear the prepared
       marker only when `event.event == "BufDelete"`; leave the marker untouched
       when the shared callback receives `BufUnload`.
-- [ ] Run focused and broader verification, then update the issue log and atlas
+- [x] Run focused and broader verification, then update the issue log and atlas
       only if the architectural map needs a behavior change.
 
 ## Log
@@ -98,6 +98,15 @@ implementation values use v3.1's 40% ship-wall-clock scaling.
   `BufUnload` would cause unnecessary repeated setup.
 - Plan-quality gate PQ-1 required the implementation step to name the event
   guard explicitly because the owning autocmd receives both lifecycle events.
+- TDD red: `tests/integration/define_spec.lua` reported 26 passing and the new
+  `:bdelete` regression failing because visual `<M-CR>` was not restored; the
+  adjacent `:bunload` regression passed.
+- TDD green: the focused definition spec passed 27/27 after the guarded
+  teardown change. Full `make test` passed with the repository's pinned
+  ripgrep 15.1.0 ahead of the host's 15.2.0 (required by harness goldens), and
+  lint reported 0 warnings/errors across 326 files. `git diff --check` passed.
+  No atlas update is needed: this restores the existing documented lifecycle
+  and introduces no new surface.
 
 ## Revisions
 
