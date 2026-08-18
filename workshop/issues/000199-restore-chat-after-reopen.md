@@ -1,12 +1,13 @@
 ---
 id: 000199
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-08-18
 updated: 2026-08-18
 estimate_hours: 1.13
 started: 2026-08-18T15:21:36-07:00
+actual_hours: 0.24
 ---
 
 # Restore chat setup after buffer reopen
@@ -87,6 +88,7 @@ implementation values use v3.1's 40% ship-wall-clock scaling.
 ## Log
 
 ### 2026-08-18
+- 2026-08-18: closed — TDD red reproduced missing visual <M-CR> after :bdelete plus finder-style reopen; green focused define spec passed 27/27; standalone :bunload preservation passed; full make test passed with pinned ripgrep 15.1.0; lint reported 0 warnings/errors across 326 files; git diff --check passed. No atlas update: this restores the documented buffer lifecycle and adds no surface.; review verdict: SHIP
 
 - Reproduced against the production `open_buf(path, true)` path: Neovim reused
   buffer handle 1; `_prepared_bufs[1]` remained true; visual `<M-CR>` and
