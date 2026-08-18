@@ -22,16 +22,25 @@ chat behavior unavailable until Neovim restarts.
 
 ## Spec
 
-- Treat `BufUnload`/`BufDelete` as the end of a chat buffer's prepared
-  lifecycle. The existing synchronous teardown must invalidate
-  `M._prepared_bufs[buf]` alongside the other buffer-keyed state so a later
-  `BufEnter` can prepare a resurrected handle again (ARCH-DRY).
+- Treat `BufDelete` as the end of a chat buffer's prepared lifecycle. The
+  synchronous classification teardown in `highlighter.setup_buf_handler` must
+  invalidate `M._prepared_bufs[buf]` alongside `_parley_bufs[buf]`, because both
+  are buffer-keyed inputs to that handler's `BufEnter` classification/setup
+  path (ARCH-DRY). Do not clear the marker for standalone `BufUnload`: Neovim
+  preserves buffer-local mappings across `:bunload`, while `:bdelete` removes
+  them.
 - Keep `prep_chat`'s idempotence guard for repeated `BufEnter` events while a
   buffer remains loaded; do not rerun all chat setup on every entry.
 - Cover the production path with an integration regression: prepare a real
-  chat, verify its visual mappings, `:bdelete` it, reopen it through
+  chat, verify its visual mappings are present, `:bdelete` it, reopen it through
   `open_buf(..., true)` as Chat Finder does, verify Neovim reused the handle,
-  and verify both visual `<M-CR>` and `<C-g><C-g>` were restored.
+  and verify both visual `<M-CR>` and `<C-g><C-g>` mappings were restored. The
+  test need not invoke network-backed callbacks; mapping presence proves that
+  `prep_chat` reran after the lifecycle transition.
+- Cover the neighboring negative case: standalone `:bunload` must retain the
+  prepared marker and its buffer-local mapping across reopen, proving teardown
+  distinguishes `BufUnload` from `BufDelete` and does not redundantly prepare
+  an already-prepared handle (ARCH-PURPOSE).
 - No external service or binary is involved (ARCH-MOCK); this is a thin Neovim
   lifecycle fix with no new pure entity or public interface (ARCH-PURE).
 
@@ -41,12 +50,15 @@ chat behavior unavailable until Neovim restarts.
 - The same reopened chat regains visual `<C-g><C-g>` response submission.
 - The regression test fails without the lifecycle invalidation and passes with
   it.
+- Standalone `:bunload` retains the prepared marker and mapping.
 - Relevant integration tests and repository lint pass.
 
 ## Plan
 
 - [ ] Add an integration test that reproduces prepare → `:bdelete` →
       finder-style reopen and asserts the chat mappings are restored.
+- [ ] Add the adjacent `:bunload` regression asserting the preparation marker
+      is retained and the mapping remains present after reopen.
 - [ ] Run the focused test and confirm it fails because the prepared marker
       survives teardown.
 - [ ] Clear the prepared marker in the existing synchronous buffer teardown.
@@ -62,3 +74,6 @@ chat behavior unavailable until Neovim restarts.
   `<C-g><C-g>` changed from present before `:bdelete` to absent after reopen.
   Root cause is incomplete teardown of buffer-keyed preparation state
   (ARCH-PURPOSE).
+- Checked standalone `:bunload`: Neovim reused the same handle and retained the
+  visual mapping. Scope is therefore specifically `BufDelete`; clearing on
+  `BufUnload` would cause unnecessary repeated setup.
