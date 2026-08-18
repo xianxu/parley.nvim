@@ -78,7 +78,9 @@ implementation values use v3.1's 40% ship-wall-clock scaling.
       is retained and the mapping remains present after reopen.
 - [ ] Run the focused test and confirm it fails because the prepared marker
       survives teardown.
-- [ ] Clear the prepared marker in the existing synchronous buffer teardown.
+- [ ] In the existing synchronous classification teardown, clear the prepared
+      marker only when `event.event == "BufDelete"`; leave the marker untouched
+      when the shared callback receives `BufUnload`.
 - [ ] Run focused and broader verification, then update the issue log and atlas
       only if the architectural map needs a behavior change.
 
@@ -94,3 +96,15 @@ implementation values use v3.1's 40% ship-wall-clock scaling.
 - Checked standalone `:bunload`: Neovim reused the same handle and retained the
   visual mapping. Scope is therefore specifically `BufDelete`; clearing on
   `BufUnload` would cause unnecessary repeated setup.
+- Plan-quality gate PQ-1 required the implementation step to name the event
+  guard explicitly because the owning autocmd receives both lifecycle events.
+
+## Revisions
+
+### 2026-08-18 — Plan-quality event distinction
+
+Reason: PQ-1 found that “clear in the existing teardown” was ambiguous because
+the teardown callback receives both `BufDelete` and `BufUnload`.
+
+Delta: the implementation step now requires an `event.event == "BufDelete"`
+guard and explicitly preserves the marker for `BufUnload`.
