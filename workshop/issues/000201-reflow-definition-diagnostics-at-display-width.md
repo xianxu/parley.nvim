@@ -120,11 +120,11 @@ primitive calibration.*
 
 ## Plan
 
-- [ ] Canonicalize generated definitions once for footnote storage and diagnostics.
-- [ ] Make the shared wrapper display-cell aware, row-preserving, and Unicode-safe.
-- [ ] Publish semantic diagnostic messages without creation-time hard wrapping.
-- [ ] Reflow custom virtual-line and float displays at their measured widths and on resize.
-- [ ] Cover Neovim's built-in diagnostic float, update atlas documentation, and verify.
+- [x] Canonicalize generated definitions once for footnote storage and diagnostics.
+- [x] Make the shared wrapper display-cell aware, row-preserving, and Unicode-safe.
+- [x] Publish semantic diagnostic messages without creation-time hard wrapping.
+- [x] Reflow custom virtual-line and float displays at their measured widths and on resize.
+- [x] Cover Neovim's built-in diagnostic float, update atlas documentation, and verify.
 
 ## Log
 
@@ -136,6 +136,31 @@ primitive calibration.*
   float preserves those embedded newlines at its different width. Design keeps
   messages canonical and moves width-dependent wrapping to the renderers
   (`ARCH-DRY`, `ARCH-PURE`, `ARCH-PURPOSE`).
+- RED: `tests/unit/define_spec.lua` failed four canonicalization/width-independence
+  assertions; `tests/integration/define_spec.lua` showed the stored diagnostic
+  retained creation-width newlines; `tests/unit/diagnostic_text_spec.lua` failed
+  because the pure wrapper did not exist; `tests/unit/skill_render_spec.lua`
+  showed review messages were still hard-wrapped; and
+  `tests/integration/review_diag_display_spec.lua` showed absent display-cell
+  shaping, border-unaware float placement, and no resize reflow.
+- GREEN: the focused define, diagnostic-text, skill-render, define-integration,
+  and diagnostic-display specs pass (95 assertions). Coverage includes fresh
+  and rehydrated footnotes, semantic review rows, wide/combining Unicode,
+  overlong tokens, narrowest-of-two-window virtual lines, current and
+  non-current `WinResized`, `WinEnter` float ownership, border-aware explicit
+  float rows/heights, lifecycle deduplication/cleanup, immutable payloads, and
+  Neovim's built-in diagnostic float.
+- Verification: `make test-changed` passes; `make lint` reports zero warnings
+  and errors in 328 files; and the pinned-ripgrep `make test` passes. Its first
+  run hit the unrelated `chat_progress_process_spec.lua` temporary-port flake
+  (`port` was nil); that spec passed in isolation and the complete pinned suite
+  then passed on rerun. `git diff --check` is clean for all #201 files.
+- Outcome: definitions and their managed footnotes now have one canonical
+  paragraph source of truth, while the pure `diagnostic_text.wrap_rows` helper
+  is shared by both custom renderers (`ARCH-DRY`, `ARCH-PURE`). All four message
+  consumers—footnote storage, diagnostic publication, Parley's virtual
+  lines/definition float, and Neovim's built-in float—retain their intended
+  width semantics (`ARCH-PURPOSE`).
 
 ## Revisions
 

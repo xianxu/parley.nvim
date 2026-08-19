@@ -15,6 +15,9 @@ made the definition durable as a managed footnote; [#167](../../workshop/issues/
 narrowed the visible decoration to the selected term plus footnote reference;
 [#172](../../workshop/issues/000172-markdown-footnote-diagnostics.md)
 rehydrates persisted managed footnotes in all markdown buffers.
+[#201](../../workshop/issues/000201-reflow-definition-diagnostics-at-display-width.md)
+made definition storage and diagnostic payloads width-independent and moved
+display-cell wrapping to each rendered surface.
 
 ## Flow
 
@@ -47,10 +50,11 @@ rehydrates persisted managed footnotes in all markdown buffers.
    `DiffChange` (`skill_render.highlight_span`); **(c)** refreshes persisted
    footnote diagnostics (`skill_render.refresh_footnote_diagnostics`), which
    parses the managed footer and sets INFO `vim.diagnostic` entries on matching
-   inline `term[^id]` spans (`define.format_definition` →
-   `skill_render.format_diagnostic_message`) on the `parley_skill` namespace;
+   inline `term[^id]` spans with canonical, unwrapped messages from
+   `define.format_definition` on the `parley_skill` namespace;
    **(d)** records the undo/redo projection states.
-   `diag_display` opens a centered, non-focusable diagnostic float when the
+   `diag_display` wraps that semantic message in display cells at the float's
+   actual inner width and opens the centered, non-focusable float when the
    cursor is on the term/footnote anchor span. A no-`emit_definition` response,
    stale selection, cancellation, provider failure, or deleted buffer leaves no
    footnote reference/footer and no pending spinner.
@@ -72,17 +76,25 @@ watcher doesn't mistake it for a user edit.
 ## Pure core vs IO shell (ARCH-PURE)
 
 - **Pure** (`lua/parley/define.lua`, unit-tested with plain tables): `slice_selection`,
-  `context_for_selection`, `format_definition`, `bracket_edit` (plans the `[term]`
+  `context_for_selection`, `normalize_definition`, `format_definition`,
+  `bracket_edit` (plans the `[term]`
   wrap as a legacy set_lines edit), `diagnostic_span_after_bracket` (legacy range
   mapping), `apply_definition_footnote` (durable footer transform), and
   `strip_definition_footnote_footer` / `footnote_diagnostics` (treat the first
   markdown footnote definition line as the managed footer boundary).
+- **Pure display shaping** (`lua/parley/diagnostic_text.lua`): `wrap_rows`
+  preserves semantic newline rows while greedily wrapping horizontal prose by
+  an injected display-cell measurement. The same helper splits overlong UTF-8
+  tokens safely for review virtual lines and the definition float.
 - **IO shell** (`lua/parley/init.lua`): `define_visual`, `render_definition`;
   `lua/parley/selection_spinner.lua` owns immediate selection-anchored progress;
   `lua/parley/buffer_edit.lua` owns the full-buffer footnote rewrite;
   `lua/parley/skill_render.lua` publishes footnote diagnostics; and
   `lua/parley/highlighter.lua` refreshes them from chat and markdown lifecycle
-  hooks.
+  hooks. `lua/parley/skills/review/diag_display.lua` measures the narrowest
+  visible buffer window for shared virtual lines and the definition float's
+  inner width, then rerenders tracked buffers on cursor movement, window entry,
+  and `WinResized` without changing the diagnostic payload.
 - **External service** (Anthropic) exercised via the process-level fake reused
   from `skill_invoke_spec` (SSE tool-call injection).
 
@@ -159,15 +171,18 @@ tool-call args (`result.calls[1].input`), read in `on_done`.
 - `lua/parley/init.lua` — `define_visual`, `render_definition`, `chat_define` wiring.
 - `lua/parley/highlighter.lua` — chat/markdown buffer lifecycle refresh hooks.
 - `lua/parley/skill_render.lua` — footnote diagnostic refresh in the shared namespace.
+- `lua/parley/diagnostic_text.lua` — pure semantic-row/display-cell wrapper.
+- `lua/parley/skills/review/diag_display.lua` — measured virtual-line and definition-float rendering lifecycle.
 - `lua/parley/chat_respond.lua` — strips managed footnote footer from LLM messages.
 - `lua/parley/skills/define/init.lua` — the unforced `define` skill.
 - `lua/parley/tools/builtin/emit_definition.lua` — output-only structured tool.
 - `lua/parley/selection_spinner.lua` — immediate inline canonical spinner and idempotent teardown.
 - `lua/parley/skill_invoke.lua` — `opts.no_reload` / `opts.document`, optional detached progress, and terminal cleanup seams.
 - `lua/parley/config.lua`, `lua/parley/keybinding_registry.lua` — the `<M-CR>` split.
-- `tests/unit/define_spec.lua`, `tests/integration/define_spec.lua`, and
-  `tests/integration/skill_invoke_spec.lua` — pure, inline lifecycle, and shared
-  terminal coverage.
+- `tests/unit/define_spec.lua`, `tests/unit/diagnostic_text_spec.lua`,
+  `tests/integration/define_spec.lua`, `tests/integration/review_diag_display_spec.lua`,
+  and `tests/integration/skill_invoke_spec.lua` — pure, width/reflow, inline
+  lifecycle, and shared terminal coverage.
 
 ## Related
 
