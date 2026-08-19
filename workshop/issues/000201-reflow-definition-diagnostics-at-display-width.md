@@ -102,7 +102,11 @@ currently have inconsistent width semantics.
 
 ## Plan
 
-- [ ]
+- [ ] Canonicalize generated definitions once for footnote storage and diagnostics.
+- [ ] Make the shared wrapper display-cell aware, row-preserving, and Unicode-safe.
+- [ ] Publish semantic diagnostic messages without creation-time hard wrapping.
+- [ ] Reflow custom virtual-line and float displays at their measured widths and on resize.
+- [ ] Cover Neovim's built-in diagnostic float, update atlas documentation, and verify.
 
 ## Log
 
