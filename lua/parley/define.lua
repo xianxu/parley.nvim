@@ -63,21 +63,26 @@ function M.context_for_selection(parsed_chat, sel_line, all_lines, find_exchange
     return table.concat(slice, "\n")
 end
 
---- Compose the diagnostic message ("TERM — definition"), hard-wrapped to width.
---- Delegates wrapping to skill_render's diagnostic formatter (the same wrap the
---- review path uses).
+--- Canonicalize a generated definition as one semantic paragraph.
+--- @param definition string|nil
+--- @return string
+function M.normalize_definition(definition)
+    local normalized = tostring(definition or ""):gsub("%s+", " ")
+    normalized = normalized:gsub("^%s+", ""):gsub("%s+$", "")
+    if normalized == "" then
+        return "(no definition)"
+    end
+    return normalized
+end
+
+--- Compose the semantic diagnostic message ("TERM — definition"). Presentation
+--- wrapping belongs to the display surface because its available width can
+--- change independently of diagnostic creation.
 --- @param term string|nil
 --- @param definition string|nil
---- @param width integer|nil
 --- @return string
-function M.format_definition(term, definition, width)
-    definition = definition or ""
-    definition = (definition:gsub("%s+$", "")) -- parens → keep only the string
-    if definition == "" then
-        definition = "(no definition)"
-    end
-    local head = tostring(term or "") .. " — " .. definition
-    return require("parley.skill_render").format_diagnostic_message(head, width)
+function M.format_definition(term, definition)
+    return tostring(term or "") .. " — " .. M.normalize_definition(definition)
 end
 
 --- Plan the reference-bracket wrap of the selection ([term]) as a set_lines edit
@@ -152,11 +157,7 @@ end
 --- @param definition string|nil
 --- @return string
 function M.format_footnote_line(id, definition)
-    definition = trim(definition)
-    if definition == "" then
-        definition = "(no definition)"
-    end
-    return string.format("[^%s]: %s", id, definition)
+    return string.format("[^%s]: %s", id, M.normalize_definition(definition))
 end
 
 local function is_divider(line)
@@ -216,11 +217,7 @@ local function parse_footnote_line(line)
     if not id then
         return nil
     end
-    definition = trim(definition)
-    if definition == "" then
-        definition = "(no definition)"
-    end
-    return id, definition
+    return id, M.normalize_definition(definition)
 end
 
 local function parse_structured_definition(definition)
@@ -229,13 +226,9 @@ local function parse_structured_definition(definition)
         term, body = definition:match("^`([^`]+)`%s*%.?%s*(.*)$")
     end
     if not term then
-        return nil, definition
+        return nil, M.normalize_definition(definition)
     end
-    body = trim(body)
-    if body == "" then
-        body = "(no definition)"
-    end
-    return term, body
+    return term, M.normalize_definition(body)
 end
 
 local function is_term_byte(ch)
@@ -451,10 +444,7 @@ function M.apply_definition_footnote(lines, l1, c1, l2, c2, term, definition)
         end
     end
     out = replace_or_append_footnote(out, id, definition)
-    local normalized_definition = trim(definition)
-    if normalized_definition == "" then
-        normalized_definition = "(no definition)"
-    end
+    local normalized_definition = M.normalize_definition(definition)
     return {
         lines = out,
         id = id,

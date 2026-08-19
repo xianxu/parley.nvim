@@ -65,32 +65,22 @@ describe("define.context_for_selection", function()
 end)
 
 describe("define.format_definition", function()
+    it("canonicalizes arbitrary definition whitespace into one paragraph", function()
+        assert.equals("alpha beta gamma", define.normalize_definition("  alpha\n\n beta\t gamma  "))
+        assert.equals("(no definition)", define.normalize_definition(" \n\t "))
+        assert.equals("alpha beta gamma", define.normalize_definition("alpha beta gamma"))
+    end)
+
     it("composes 'TERM — definition'", function()
         local msg = define.format_definition("ASIN", "Amazon Standard Identification Number.", 200)
         assert.equals("ASIN — Amazon Standard Identification Number.", msg)
     end)
 
-    it("hard-wraps to width", function()
-        local msg = define.format_definition("X", string.rep("word ", 30), 40)
-        for _, l in ipairs(vim.split(msg, "\n", { plain = true })) do
-            assert.is_true(#l <= 40)
-        end
-    end)
-
-    it("passes nil width through to the shared diagnostic formatter", function()
-        local skill_render = require("parley.skill_render")
-        local orig = skill_render.format_diagnostic_message
-        local captured_width
-        skill_render.format_diagnostic_message = function(text, width)
-            captured_width = width
-            return text
-        end
-        local ok, err = pcall(function()
-            assert.equals("X — word", define.format_definition("X", "word"))
-        end)
-        skill_render.format_diagnostic_message = orig
-        if not ok then error(err) end
-        assert.is_nil(captured_width)
+    it("keeps semantic text independent of presentation width", function()
+        local definition = string.rep("word ", 30)
+        assert.equals(define.format_definition("X", definition, 20),
+            define.format_definition("X", definition, 200))
+        assert.is_nil(define.format_definition("X", definition):find("\n", 1, true))
     end)
 
     it("trims a nil/blank definition to a safe string", function()
@@ -167,6 +157,21 @@ describe("define durable footnotes", function()
         assert.are.same({ lnum = 0, col = 8, end_lnum = 0, end_col = 19 }, result.diagnostic_span)
         assert.equals("asin", result.id)
         assert.equals("Amazon Standard Identification Number.", result.definition)
+    end)
+
+    it("stores arbitrary definition whitespace as one physical footnote line", function()
+        local result = define.apply_definition_footnote(
+            { "here is term in context" },
+            1, 8, 1, 11,
+            "term",
+            "  alpha\n\n beta\t gamma  "
+        )
+
+        assert.equals("alpha beta gamma", result.definition)
+        assert.equals("[^term]: alpha beta gamma", result.lines[#result.lines])
+        for _, line in ipairs(result.lines) do
+            assert.is_nil(line:find("\n", 1, true))
+        end
     end)
 
     it("updates an existing managed footnote instead of duplicating it", function()
@@ -344,6 +349,16 @@ describe("define durable footnotes", function()
             end_lnum = 0,
             end_col = 19,
         } }, diagnostics)
+    end)
+
+    it("canonicalizes rehydrated definition whitespace", function()
+        local diagnostics = define.footnote_diagnostics({
+            "here is term[^term] in context",
+            "",
+            "[^term]: alpha   beta\t gamma",
+        })
+
+        assert.equals("alpha beta gamma", diagnostics[1].definition)
     end)
 
     it("uses a leading quoted footnote term to span a multi-word persisted anchor", function()

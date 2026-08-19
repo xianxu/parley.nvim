@@ -503,19 +503,19 @@ describe("define_visual + render_definition (#161)", function()
             vim.api.nvim_buf_get_lines(buf, 2, 3, false)[1])
     end)
 
-    it("word-wraps long define diagnostics to the diagnostic display width", function()
+    it("keeps long define diagnostics canonical across creation widths", function()
         local prior_win = vim.api.nvim_get_current_win()
         vim.cmd("vsplit")
         local narrow_win = vim.api.nvim_get_current_win()
         vim.cmd("vertical resize 45")
-        local expected_width = require("parley.skill_render").diagnostic_wrap_width()
+        local definition = table.concat({
+            "alpha", "beta", "gamma", "delta", "epsilon", "zeta",
+            "eta", "theta", "iota", "kappa", "lambda", "mu",
+        }, " ")
         parley.dispatcher.query = function(_b, _p, _payload, _h, on_exit)
             query_called = true
             tasker.set_query("qid_dv_long", {
-                raw_response = emit_definition_sse("ASIN", table.concat({
-                    "alpha", "beta", "gamma", "delta", "epsilon", "zeta",
-                    "eta", "theta", "iota", "kappa", "lambda", "mu",
-                }, " ")),
+                raw_response = emit_definition_sse("ASIN", definition),
             })
             vim.schedule(function() on_exit("qid_dv_long") end)
         end
@@ -530,11 +530,10 @@ describe("define_visual + render_definition (#161)", function()
         pcall(vim.api.nvim_win_close, narrow_win, true)
 
         local msg = vim.diagnostic.get(buf, { namespace = ns })[1].message
-        assert.is_truthy(msg:find("\n", 1, true), "long define diagnostic did not wrap")
-        for _, line in ipairs(vim.split(msg, "\n", { plain = true })) do
-            assert.is_true(#line <= expected_width or not line:find(" ", 1, true),
-                "wrapped define diagnostic exceeds display width: " .. line)
-        end
+        assert.equals("ASIN — " .. definition, msg)
+        assert.is_nil(msg:find("\n", 1, true))
+        assert.equals("[^asin]: " .. definition,
+            vim.api.nvim_buf_get_lines(buf, -2, -1, false)[1])
     end)
 
     it("re-defining a footnoted term updates the footer without duplicating the inline reference", function()
