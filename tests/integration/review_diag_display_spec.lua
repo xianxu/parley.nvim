@@ -249,6 +249,45 @@ describe("review.diag_display", function()
         vim.cmd("close")
     end)
 
+    it("leaves canonical payloads for Neovim's built-in diagnostic float to wrap", function()
+        local diag_ns = require("parley.skill_render").diag_namespace()
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_set_current_buf(buf)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "reviewed text" })
+        local message = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda"
+        vim.diagnostic.set(diag_ns, buf, { {
+            lnum = 0,
+            col = 0,
+            end_lnum = 0,
+            end_col = 13,
+            message = message,
+            severity = vim.diagnostic.severity.INFO,
+            source = "parley-skill",
+        } })
+
+        local narrow_buf, narrow_win = vim.diagnostic.open_float(buf, {
+            namespace = diag_ns,
+            scope = "buffer",
+            max_width = 20,
+            border = "single",
+        })
+        assert.is_true(vim.api.nvim_win_is_valid(narrow_win))
+        assert.is_true(vim.api.nvim_win_get_config(narrow_win).width <= 20)
+        assert.is_true(vim.wo[narrow_win].wrap)
+        vim.api.nvim_win_close(narrow_win, true)
+        assert.is_false(vim.api.nvim_buf_is_valid(narrow_buf))
+
+        local _, wide_win = vim.diagnostic.open_float(buf, {
+            namespace = diag_ns,
+            scope = "buffer",
+            max_width = 40,
+            border = "single",
+        })
+        assert.is_true(vim.api.nvim_win_get_config(wide_win).width > 20)
+        assert.are.equal(message, vim.diagnostic.get(buf, { namespace = diag_ns })[1].message)
+        vim.api.nvim_win_close(wide_win, true)
+    end)
+
     it("shows footnote diagnostics only while the cursor is inside the anchor span", function()
         local skill_render = require("parley.skill_render")
         local diag_ns = skill_render.diag_namespace()
