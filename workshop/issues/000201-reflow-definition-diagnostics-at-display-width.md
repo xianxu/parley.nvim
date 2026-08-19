@@ -44,12 +44,18 @@ currently have inconsistent width semantics.
     and derives its height from the resulting display rows, so the whole message
     is visible without stale short lines or clipped soft-wrapped rows when the
     rows fit the parent window.
-- The pure wrapper accepts canonical text, a positive display-cell width, and
-  an injected display-width function. It greedily wraps at word boundaries,
-  preserves explicit empty/newline-delimited rows, and splits an individual
-  token when necessary so every emitted nonempty row is width-bounded. Production
-  uses Neovim's display-width semantics, covering tabs and wide Unicode rather
-  than Lua byte length.
+- Definition canonicalization occurs upstream of display. The pure wrapper
+  accepts semantic text (including review newlines), a display-cell width, and
+  an injected display-width function. It greedily wraps each newline-delimited
+  row at word boundaries, preserves leading/interior/trailing empty rows, and
+  treats horizontal whitespace (including review tabs) as a separator rendered
+  as one ordinary space; it does not mutate the canonical diagnostic payload.
+- The wrapper coerces its supported width to at least two display cells, the
+  maximum width of one ordinary terminal glyph. It splits an overlong token only
+  at valid UTF-8 character boundaries, keeping zero-cell combining characters
+  adjacent to their preceding character, so every emitted nonempty row fits the
+  effective width. Production uses Neovim's display-width semantics, covering
+  tabs and wide Unicode rather than Lua byte length.
 - Width is remeasured and visible diagnostics are rerendered on initial display,
   cursor-driven refresh, window entry, and `WinResized`. Explicit option changes
   that alter gutters take effect on the next existing diagnostic refresh or
@@ -60,6 +66,9 @@ currently have inconsistent width semantics.
   parent-window height after border space. If unusually long content exceeds
   the screen capacity, the buffer retains all rows while the float clips to the
   available height; ordinary concise definitions must show every row.
+- The float is horizontally centered. Vertically, its top row is anchored at
+  the cursor's screen row and clamped on every render/re-render so the content
+  height plus the top and bottom border rows stays inside the parent window.
 - Managed definition footnotes remain one logical Markdown definition line.
   Width-dependent line breaks are presentation only and are never written into
   the document.
@@ -86,6 +95,9 @@ currently have inconsistent width semantics.
   whitespace is canonicalized consistently for fresh and rehydrated diagnostics.
 - Wide Unicode, tabs, and overlong tokens obey display-cell width bounds, and
   Neovim's built-in diagnostic float receives canonical unwrapped text.
+- Two windows showing the same buffer use their narrowest available text width;
+  leading/interior/trailing empty review rows remain distinct, and float
+  placement remains inside the parent after reflow changes its height.
 - Focused unit/integration regressions, lint, and the full test suite pass.
 
 ## Plan
@@ -112,3 +124,11 @@ currently have inconsistent width semantics.
 - Defined wrapping in display cells, long-token splitting, multi-window width
   ownership, resize refresh triggers, float row/height accounting, overflow,
   and compatibility with Neovim's built-in diagnostic float.
+
+### 2026-08-18 — resolve second spec-review findings
+
+- Clarified that definition normalization happens upstream while the shared
+  wrapper consumes semantic row-preserving text, normalizes horizontal display
+  whitespace only in its output, and leaves diagnostic payloads unchanged.
+- Added the two-cell minimum, UTF-8/combining-character split behavior, and
+  border-aware vertical placement on every float rerender.
