@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-08-18
 updated: 2026-08-18
-estimate_hours:
+estimate_hours: 2.12
 started: 2026-08-18T17:17:25-07:00
 ---
 
@@ -99,6 +99,24 @@ currently have inconsistent width semantics.
   leading/interior/trailing empty review rows remain distinct, and float
   placement remains inside the parent after reflow changes its height.
 - Focused unit/integration regressions, lint, and the full test suite pass.
+
+## Estimate
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: issue-spec design=0.8 impl=0.08
+item: lua-neovim design=0.4 impl=0.4
+item: atlas-docs design=0.02 impl=0.04
+item: milestone-review design=0.05 impl=0.14
+design-buffer: 0.15
+total: 2.12
+```
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md`
+against `baseline-v3.1.md`. Method A only. The Lua/Neovim design uses the
+thorough-spec discount; v3.1 implementation values are 40% of the v2/v2.1
+primitive calibration.*
 
 ## Plan
 
