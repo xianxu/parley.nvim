@@ -172,7 +172,7 @@ local function float_config(win, width, line_count)
         win = win,
         width = width,
         height = height,
-        row = math.min(vim.fn.winline(), math.max(0, win_height - height - 2)),
+        row = math.min(math.max(0, vim.fn.winline() - 1), math.max(0, win_height - height - 2)),
         col = math.max(0, math.floor((win_width - width - 2) / 2)),
         style = "minimal",
         border = "rounded",

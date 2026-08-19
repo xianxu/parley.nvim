@@ -139,6 +139,65 @@ describe("review.diag_display", function()
         assert.are.equal(1, #vim.diagnostic.get(buf, { namespace = diag_ns }))
     end)
 
+    it("reflows the custom definition float on resize with border-contained cursor anchoring", function()
+        local diag_ns = require("parley.skill_render").diag_namespace()
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_set_current_buf(buf)
+        local lines = {}
+        for i = 1, 40 do
+            lines[i] = i == 20 and "ACOS[^acos]" or ("line " .. i)
+        end
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+        local definition_win = vim.api.nvim_get_current_win()
+        vim.cmd("rightbelow vsplit")
+        local other_win = vim.api.nvim_get_current_win()
+        vim.api.nvim_win_set_buf(other_win, vim.api.nvim_create_buf(false, true))
+        vim.api.nvim_set_current_win(definition_win)
+        vim.api.nvim_win_set_width(definition_win, 30)
+        vim.api.nvim_win_set_cursor(definition_win, { 20, 2 })
+        vim.cmd("normal! zt")
+        local message = "ACOS — ratio of advertising spend to attributed sales revenue used to compare campaign efficiency across products"
+
+        dd.set(true)
+        vim.diagnostic.set(diag_ns, buf, { {
+            lnum = 19,
+            col = 0,
+            end_lnum = 19,
+            end_col = 11,
+            message = message,
+            severity = vim.diagnostic.severity.INFO,
+            source = "parley-footnote",
+        } })
+
+        local narrow = diagnostic_floats()[1]
+        local narrow_lines = vim.api.nvim_buf_get_lines(narrow.buf, 0, -1, false)
+        assert.are.equal(0, narrow.config.row)
+        assert.are.equal(#narrow_lines, narrow.config.height)
+        assert.is_true(narrow.config.row + narrow.config.height + 2 <= vim.api.nvim_win_get_height(definition_win))
+        assert.is_true(narrow.config.col + narrow.config.width + 2 <= vim.api.nvim_win_get_width(definition_win))
+
+        vim.api.nvim_win_set_width(definition_win, 50)
+        vim.api.nvim_exec_autocmds("WinResized", {})
+        local wide = diagnostic_floats()[1]
+        local wide_lines = vim.api.nvim_buf_get_lines(wide.buf, 0, -1, false)
+        assert.is_true(#wide_lines < #narrow_lines)
+        assert.are.equal(#wide_lines, wide.config.height)
+        assert.are.equal(message, vim.diagnostic.get(buf, { namespace = diag_ns })[1].message)
+
+        for _, command in ipairs({ "zt", "zz", "zb" }) do
+            vim.cmd("normal! " .. command)
+            vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
+            local floated = diagnostic_floats()[1]
+            local parent_height = vim.api.nvim_win_get_height(definition_win)
+            local expected_row = math.max(0, math.min(vim.fn.winline() - 1, parent_height - floated.config.height - 2))
+            assert.are.equal(expected_row, floated.config.row)
+            assert.is_true(floated.config.row + floated.config.height + 2 <= parent_height)
+        end
+
+        vim.api.nvim_set_current_win(other_win)
+        vim.cmd("close")
+    end)
+
     it("reflows virtual lines to the narrowest visible window and on resize without changing the payload", function()
         local skill_render = require("parley.skill_render")
         local diag_ns = skill_render.diag_namespace()

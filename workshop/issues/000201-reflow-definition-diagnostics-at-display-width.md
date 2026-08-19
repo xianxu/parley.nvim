@@ -1,12 +1,13 @@
 ---
 id: 000201
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-08-18
 updated: 2026-08-18
 estimate_hours: 2.12
 started: 2026-08-18T17:17:25-07:00
+actual_hours: 2.18
 ---
 
 # Reflow definition diagnostics at display width
@@ -129,6 +130,7 @@ primitive calibration.*
 ## Log
 
 ### 2026-08-18
+- 2026-08-18: closed — Focused define/diagnostic-text/skill-render/diagnostic-display specs pass (95 assertions); real narrow/wide/two-window/WinEnter/WinResized/non-current-buffer/built-in-float regressions pass; make test-changed, make lint (0 warnings/errors in 328 files), pinned-ripgrep full make test rerun, and task-scoped git diff --check pass. First full run hit an unrelated temporary-port allocation flake in chat_progress_process_spec; isolated retry and complete rerun passed.; review verdict: FIX-THEN-SHIP
 
 - Root cause traced through `define.format_definition` →
   `skill_render.format_diagnostic_message` → `diag_display`: messages are
@@ -161,6 +163,20 @@ primitive calibration.*
   consumers—footnote storage, diagnostic publication, Parley's virtual
   lines/definition float, and Neovim's built-in float—retain their intended
   width semantics (`ARCH-PURPOSE`).
+- Boundary review returned `FIX-THEN-SHIP`: it found the custom float's
+  `winline()` anchor was passed as a one-based value and that the central custom
+  float resize/height/containment path lacked a production regression. The new
+  long-definition regression failed at row 1 versus the required row 0, then
+  passed after converting the cursor screen row to a zero-based float offset;
+  it now covers narrow-to-wide reflow, explicit row-count height, immutable
+  payloads, horizontal/vertical border containment, and top/middle/bottom
+  anchoring. The durable Task 1–6 checklist was reconciled as requested.
+- Post-review verification: the expanded diagnostic-display spec passes 12/12,
+  `make test-changed` passes, lint remains zero warnings/errors in 328 files,
+  and the complete pinned-ripgrep suite passes on rerun. The first post-review
+  full run hit the same unrelated temporary-port flake; its isolated 7/7 retry
+  and the subsequent complete suite both passed. Task-scoped `git diff --check`
+  is clean.
 
 ## Revisions
 

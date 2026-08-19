@@ -56,21 +56,21 @@
 
 **Files:** `lua/parley/define.lua`, `tests/unit/define_spec.lua`, `tests/integration/define_spec.lua`
 
-- [ ] Test `define.normalize_definition`, `format_definition`, `apply_definition_footnote`, and `footnote_diagnostics`: arbitrary fresh/rehydrated whitespace forms → canonical idempotent one-paragraph messages and one-line footnotes.
-- [ ] Run the define unit and integration specs; expect RED from the missing shared canonicalizer and width-dependent formatter.
-- [ ] Implement `normalize_definition` ownership across the named definition functions.
-- [ ] Rerun both specs; expect GREEN.
-- [ ] Commit `diagnostics: #201 canonicalize definition payloads` with only the named code/tests.
+- [x] Test `define.normalize_definition`, `format_definition`, `apply_definition_footnote`, and `footnote_diagnostics`: arbitrary fresh/rehydrated whitespace forms → canonical idempotent one-paragraph messages and one-line footnotes.
+- [x] Run the define unit and integration specs; expect RED from the missing shared canonicalizer and width-dependent formatter.
+- [x] Implement `normalize_definition` ownership across the named definition functions.
+- [x] Rerun both specs; expect GREEN.
+- [x] Commit `diagnostics: #201 canonicalize definition payloads` with only the named code/tests.
 
 ### Task 2: Add pure display-cell wrapping
 
 **Files:** `lua/parley/diagnostic_text.lua`, `tests/unit/diagnostic_text_spec.lua`
 
-- [ ] Test `diagnostic_text.wrap_rows`: arbitrary semantic-row structure and valid UTF-8 tokens under injected display widths → preserve input bytes/semantic rows and bound every rendered row without separating combining sequences.
-- [ ] Run the new unit spec; expect RED because the module is absent.
-- [ ] Implement `wrap_rows` and its private accumulated-width UTF-8 token splitter.
-- [ ] Rerun the unit spec; expect GREEN.
-- [ ] Commit `diagnostics: #201 wrap semantic text by display cells` with only the new module/spec.
+- [x] Test `diagnostic_text.wrap_rows`: arbitrary semantic-row structure and valid UTF-8 tokens under injected display widths → preserve input bytes/semantic rows and bound every rendered row without separating combining sequences.
+- [x] Run the new unit spec; expect RED because the module is absent.
+- [x] Implement `wrap_rows` and its private accumulated-width UTF-8 token splitter.
+- [x] Rerun the unit spec; expect GREEN.
+- [x] Commit `diagnostics: #201 wrap semantic text by display cells` with only the new module/spec.
 
 ## Chunk 2: Render-time reflow and lifecycle
 
@@ -78,29 +78,29 @@
 
 **Files:** `lua/parley/skill_render.lua`, `tests/unit/skill_render_spec.lua`, `tests/integration/define_spec.lua`
 
-- [ ] Test `skill_render.attach_diagnostics` and `refresh_footnote_diagnostics`: long semantic payloads under arbitrary creation widths → preserve semantic newlines and add no presentation newlines.
-- [ ] Run the skill-render spec; expect RED from creation-time wrapping.
-- [ ] Make the named publishers width-independent and remove obsolete creation-time formatting APIs.
-- [ ] Rerun focused specs and shadow-search obsolete APIs; expect GREEN/no consumers.
-- [ ] Commit `diagnostics: #201 publish semantic messages` with only the named code/tests.
+- [x] Test `skill_render.attach_diagnostics` and `refresh_footnote_diagnostics`: long semantic payloads under arbitrary creation widths → preserve semantic newlines and add no presentation newlines.
+- [x] Run the skill-render spec; expect RED from creation-time wrapping.
+- [x] Make the named publishers width-independent and remove obsolete creation-time formatting APIs.
+- [x] Rerun focused specs and shadow-search obsolete APIs; expect GREEN/no consumers.
+- [x] Commit `diagnostics: #201 publish semantic messages` with only the named code/tests.
 
 ### Task 4: Reflow custom displays
 
 **Files:** `lua/parley/skills/review/diag_display.lua`, `tests/integration/review_diag_display_spec.lua`
 
-- [ ] Test `diagnostic_message_lines`, float geometry/rendering, and display lifecycle: adversarial text geometry plus same/different-buffer window-event sequences → target-width rows, border-safe placement, narrowest-visible virtual width, immutable payloads, and exactly one leak-free global lifecycle.
-- [ ] Run the diagnostic-display integration spec; expect RED from stale rows/geometry/lifecycle.
-- [ ] Implement the named render-time width, geometry, and global cursor/window lifecycle surfaces using `diagnostic_text.wrap_rows`.
-- [ ] Rerun the integration spec; expect GREEN.
-- [ ] Commit `diagnostics: #201 reflow at render width` with only the named code/tests.
+- [x] Test `diagnostic_message_lines`, float geometry/rendering, and display lifecycle: adversarial text geometry plus same/different-buffer window-event sequences → target-width rows, border-safe placement, narrowest-visible virtual width, immutable payloads, and exactly one leak-free global lifecycle.
+- [x] Run the diagnostic-display integration spec; expect RED from stale rows/geometry/lifecycle.
+- [x] Implement the named render-time width, geometry, and global cursor/window lifecycle surfaces using `diagnostic_text.wrap_rows`.
+- [x] Rerun the integration spec; expect GREEN.
+- [x] Commit `diagnostics: #201 reflow at render width` with only the named code/tests.
 
 ### Task 5: Verify the built-in consumer
 
 **Files:** `tests/integration/review_diag_display_spec.lua`
 
-- [ ] Test `vim.diagnostic.open_float`: one canonical payload across arbitrary float widths → Neovim owns wrapping while the underlying message stays unchanged and returned float objects are cleaned up.
-- [ ] Run the diagnostic-display integration spec; expect GREEN because Tasks 1–4 established the contract.
-- [ ] Commit `test: #201 cover built-in diagnostic reflow`.
+- [x] Test `vim.diagnostic.open_float`: one canonical payload across arbitrary float widths → Neovim owns wrapping while the underlying message stays unchanged and returned float objects are cleaned up.
+- [x] Run the diagnostic-display integration spec; expect GREEN because Tasks 1–4 established the contract.
+- [x] Commit `test: #201 cover built-in diagnostic reflow`.
 
 ## Chunk 3: Documentation and verification
 
@@ -110,15 +110,15 @@
 - Modify: `atlas/chat/inline_define.md`
 - Modify: `workshop/issues/000201-reflow-definition-diagnostics-at-display-width.md`
 
-- [ ] **Step 1: Update the inline-definition flow map**
+- [x] **Step 1: Update the inline-definition flow map**
 
 Document that the managed footnote and diagnostic payload are canonical single-paragraph text, while `diag_display` performs display-cell wrapping at actual float/virtual-line width and refreshes on window resize. Remove the stale statement that `define.format_definition` calls creation-time `skill_render.format_diagnostic_message`.
 
-- [ ] **Step 2: Run atlas traceability verification**
+- [x] **Step 2: Run atlas traceability verification**
 
 Run `make test-changed`. Expected: the inline-definition traceability mapping and mapped specs PASS.
 
-- [ ] **Step 3: Run focused tests and lint**
+- [x] **Step 3: Run focused tests and lint**
 
 ```bash
 for spec in tests/unit/define_spec.lua tests/unit/diagnostic_text_spec.lua tests/unit/skill_render_spec.lua tests/integration/define_spec.lua tests/integration/review_diag_display_spec.lua; do
@@ -130,7 +130,7 @@ git diff --check
 
 Expected: all focused specs PASS, lint reports zero warnings/errors, and `git diff --check` is silent.
 
-- [ ] **Step 4: Run the full suite in the repository's pinned ripgrep environment**
+- [x] **Step 4: Run the full suite in the repository's pinned ripgrep environment**
 
 ```bash
 env PATH=/opt/homebrew/Cellar/ripgrep/15.1.0/bin:/Users/xianxu/.luarocks/bin:/opt/homebrew/bin:/usr/bin:/bin make test
@@ -138,13 +138,13 @@ env PATH=/opt/homebrew/Cellar/ripgrep/15.1.0/bin:/Users/xianxu/.luarocks/bin:/op
 
 Expected: all lint, unit, architecture, and integration checks PASS.
 
-- [ ] **Step 5: Record verified implementation evidence**
+- [x] **Step 5: Record verified implementation evidence**
 
 Only after Steps 2–4 succeed, tick each existing issue-plan summary checkbox without changing its wording. Append a dated `## Log` entry with the exact RED/GREEN commands, focused/full verification, root-cause confirmation, all display consumers covered, and `ARCH-DRY`/`ARCH-PURE`/`ARCH-PURPOSE` outcomes. Preserve all prior log and revision text.
 
 Run `git diff --check` again after these issue/atlas edits. Expected: silent, so the final committed state—not only the pre-log code state—is whitespace-clean.
 
-- [ ] **Step 6: Commit docs and verified issue evidence**
+- [x] **Step 6: Commit docs and verified issue evidence**
 
 ```bash
 git add atlas/chat/inline_define.md workshop/issues/000201-reflow-definition-diagnostics-at-display-width.md
