@@ -63,34 +63,29 @@ describe("skill_render", function()
         assert.are.equal(0, #marks)
     end)
 
-    it("wrap hard-wraps at word boundaries to the given width", function()
-        local w = skill_render.wrap("the quick brown fox jumps over the lazy dog", 12)
-        assert.is_truthy(w:find("\n"), "wrapped into multiple lines")
-        for line in (w .. "\n"):gmatch("(.-)\n") do
-            assert.is_true(#line <= 12 or not line:find(" ", 1, true), "within width or single long word: " .. line)
-        end
-    end)
-
-    it("format_diagnostic_message word-wraps display text at the requested width", function()
-        local msg = skill_render.format_diagnostic_message("alpha beta gamma delta epsilon zeta", 16)
-        assert.is_truthy(msg:find("\n", 1, true), "diagnostic message did not wrap")
-        for _, line in ipairs(vim.split(msg, "\n", { plain = true })) do
-            assert.is_true(#line <= 16 or not line:find(" ", 1, true),
-                "wrapped line exceeds width: " .. line)
-        end
-    end)
-
-    it("attach_diagnostics wraps the message + spans the edit's lines (end_lnum)", function()
+    it("attach_diagnostics preserves semantic messages + spans the edit's lines (end_lnum)", function()
         local buf = scratch({ "a", "b", "c", "d" })
         local original = "a\nb\nc\nd"
         local pos = original:find("b")
+        local explanation = string.rep("word ", 30) .. "\nsemantic row"
         skill_render.attach_diagnostics(buf, {
-            { pos = pos, explain = string.rep("word ", 30), new_string = "x\ny" },
+            { pos = pos, explain = explanation, new_string = "x\ny" },
         }, original)
         local d = vim.diagnostic.get(buf)[1]
         assert.are.equal(1, d.lnum) -- 0-based line of "b"
         assert.are.equal(2, d.end_lnum) -- spans the 2-line new_string
-        assert.is_truthy(d.message:find("\n"), "long message is wrapped")
+        assert.are.equal(explanation, d.message)
+    end)
+
+    it("refresh_footnote_diagnostics publishes an unwrapped canonical message", function()
+        local definition = table.concat(vim.tbl_map(function(i)
+            return "word" .. i
+        end, vim.fn.range(1, 30)), " ")
+        local buf = scratch({ "ASIN[^asin]", "", "[^asin]: " .. definition })
+        skill_render.refresh_footnote_diagnostics(buf)
+        local d = vim.diagnostic.get(buf, { namespace = skill_render.diag_namespace() })[1]
+        assert.are.equal("ASIN — " .. definition, d.message)
+        assert.is_nil(d.message:find("\n", 1, true))
     end)
 
     it("snapshot captures highlights + diagnostics; apply_snapshot restores them", function()

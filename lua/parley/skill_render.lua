@@ -49,66 +49,6 @@ function M.diag_namespace()
     return diag_ns_id
 end
 
---- Hard-wrap text to `width` columns at word boundaries (greedy), preserving any
---- existing newlines. PURE. Lets `virtual_lines` render a long "why" as multiple
---- wrapped rows (nvim doesn't soft-wrap virtual text). A word longer than width
---- stays on its own (overflowing) line rather than being split. (#133 M6)
---- @param text string
---- @param width number|nil  default 76
---- @return string
-function M.wrap(text, width)
-    width = width or 76
-    local out = {}
-    for para in (tostring(text) .. "\n"):gmatch("(.-)\n") do
-        if para == "" then
-            table.insert(out, "")
-        else
-            local line = ""
-            for word in para:gmatch("%S+") do
-                if line == "" then
-                    line = word
-                elseif #line + 1 + #word <= width then
-                    line = line .. " " .. word
-                else
-                    table.insert(out, line)
-                    line = word
-                end
-            end
-            table.insert(out, line)
-        end
-    end
-    return table.concat(out, "\n")
-end
-
--- Usable wrap width for the virtual_lines "why": the window's text columns
--- (total width minus the number/sign/fold gutter, via getwininfo.textoff) minus
--- a margin for the indent + connector nvim renders under the line. Wrapping to a
--- fixed 76 overflowed the indented virtual_lines and truncated the right edge
--- (#133 review). Falls back to 76 with no window.
-local function diag_wrap_width()
-    local ok, info = pcall(function()
-        return vim.fn.getwininfo(vim.api.nvim_get_current_win())[1]
-    end)
-    if not ok or type(info) ~= "table" then
-        return 76
-    end
-    return math.max(30, (info.width or 80) - (info.textoff or 0) - 10)
-end
-
---- Current usable wrap width for Parley diagnostic virtual lines.
---- @return integer
-function M.diagnostic_wrap_width()
-    return diag_wrap_width()
-end
-
---- Format a diagnostic message for Neovim virtual_lines display.
---- @param text string
---- @param width number|nil default current diagnostic display width
---- @return string
-function M.format_diagnostic_message(text, width)
-    return M.wrap(text, width or M.diagnostic_wrap_width())
-end
-
 local function is_footnote_diagnostic(diagnostic)
     local user_data = diagnostic.user_data or {}
     return diagnostic.source == FOOTNOTE_SOURCE or user_data.parley_kind == "footnote"
@@ -139,7 +79,6 @@ function M.refresh_footnote_diagnostics(buf, opts)
     local define = require("parley.define")
     local reader = opts.reader or require("parley.line_reader").for_buffer(buf)
     local lines = reader:lines(0, -1, false)
-    local width = M.diagnostic_wrap_width()
     local diagnostics = {}
     vim.api.nvim_buf_clear_namespace(buf, footnote_hl_ns_id, 0, -1)
 
@@ -156,7 +95,7 @@ function M.refresh_footnote_diagnostics(buf, opts)
             col = footnote.col,
             end_lnum = footnote.end_lnum or footnote.lnum,
             end_col = footnote.end_col,
-            message = define.format_definition(footnote.term or footnote.id, footnote.definition, width),
+            message = define.format_definition(footnote.term or footnote.id, footnote.definition),
             severity = vim.diagnostic.severity.INFO,
             source = FOOTNOTE_SOURCE,
             user_data = { parley_kind = "footnote" },
@@ -185,14 +124,12 @@ end
 
 --- Attach INFO diagnostics from edit explanations. Each diagnostic spans the
 --- edit's line range (lnum..end_lnum) so "cursor in the region" matches, and its
---- message is hard-wrapped to the window's usable width for `virtual_lines`
---- display (no right-edge truncation). (#133 M6)
+--- message remains semantic; each consumer wraps it to its actual display width.
 --- @param buf number
 --- @param edits table[]  applied edits with {pos, explain, new_string?}
 --- @param original_content string  file content before edits
 function M.attach_diagnostics(buf, edits, original_content)
     ensure_namespaces()
-    local width = M.diagnostic_wrap_width()
     local diagnostics = {}
     for _, edit in ipairs(edits) do
         local line_num = 0
@@ -209,7 +146,7 @@ function M.attach_diagnostics(buf, edits, original_content)
             lnum = line_num,
             end_lnum = line_num + span,
             col = 0,
-            message = M.format_diagnostic_message(edit.explain or "edit applied", width),
+            message = tostring(edit.explain or "edit applied"),
             severity = vim.diagnostic.severity.INFO,
             source = "parley-skill",
         })
