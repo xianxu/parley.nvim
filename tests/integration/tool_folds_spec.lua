@@ -54,7 +54,7 @@ describe("tool_folds incremental manual folds", function()
         assert.equals(12, vim.fn.foldclosedend(11))
     end)
 
-    it("builds initial folds from semantic model blocks without clearing an unrelated fold", function()
+    it("builds initial folds from semantic model blocks and clears user folds in the span", function()
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
             "---", "topic: folds", "file: folds.md", "---", "",
             "💬: q", "", "🤖: [A]", "", "🧠: think", "detail", "",
@@ -73,8 +73,36 @@ describe("tool_folds incremental manual folds", function()
         assert.equals(18, vim.fn.foldclosedend(15))
         assert.equals(20, vim.fn.foldclosed(20))
         assert.equals(23, vim.fn.foldclosedend(20))
-        assert.equals(25, vim.fn.foldclosed(25))
-        assert.equals(26, vim.fn.foldclosedend(25))
+        -- #200: Parley owns every fold within an exchange span, so a manual
+        -- fold over the exchange's trailing prose does not survive a reconcile.
+        -- (Contrast the case above, whose fold sits outside every span.)
+        assert.equals(-1, vim.fn.foldclosed(25))
+    end)
+
+    -- #200: the deleter only zd'd at DESIRED start rows, so a fold anywhere
+    -- else in the exchange survived forever — that is what let a drifted fold
+    -- anchor on a 💬: line and persist for the whole session.
+    it("clears a stale fold anywhere in the exchange, not just at a projected start", function()
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+            "header", "", "💬: q", "", "🤖: a", "",
+            "📎: read_file", "```", "b", "```", "tail",
+        })
+        local model = exchange_model.new(1)
+        model:add_exchange(1)
+        model:add_block(1, "agent_header", 1)
+        model:add_block(1, "tool_result", 4)
+        tool_folds.reconcile_exchange(buf, win, model, 1)
+
+        -- The shape a drifted reconcile leaves behind: a fold no projected
+        -- range starts on, covering the question.
+        vim.api.nvim_win_call(win, function() vim.cmd("3,6fold") end)
+
+        tool_folds.reconcile_exchange(buf, win, model, 1)
+        vim.cmd("normal! zM")
+
+        assert.equals(-1, vim.fn.foldclosed(3))   -- 💬: must not be folded
+        assert.equals(7, vim.fn.foldclosed(7))    -- 📎: folded at its own start
+        assert.equals(10, vim.fn.foldclosedend(7))
     end)
 
     it("reconciles a changed exchange without leaving a blank-line ghost", function()

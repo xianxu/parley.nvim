@@ -21,25 +21,58 @@ local function notify(event)
     if M._observer then M._observer(event) end
 end
 
-local function delete_projected_folds(buf, win, ranges)
+--- Delete every fold overlapping rows [first_0, last_0].
+---
+--- Parley owns every fold within an exchange span (#200): the projection is a
+--- desired state, and a fold the projection no longer wants must not survive.
+--- Deleting only at projected start rows — the previous behavior — left a
+--- drifted fold in place forever, since nothing else ever removes one.
+--- Folds outside every exchange span are untouched.
+local function clear_folds_in_span(buf, win, first_0, last_0)
     if not valid_target(buf, win) then return end
+    if first_0 == nil or last_0 == nil or last_0 < first_0 then return end
     vim.api.nvim_win_call(win, function()
         local cursor = vim.api.nvim_win_get_cursor(win)
-        for index = #ranges, 1, -1 do
-            local row = ranges[index].start_0 + 1
-            vim.api.nvim_win_set_cursor(win, { row, 0 })
-            while vim.fn.foldlevel(row) > 0 do
-                vim.cmd("normal! zd")
-            end
-        end
         local line_count = vim.api.nvim_buf_line_count(buf)
-        vim.api.nvim_win_set_cursor(win, { math.min(cursor[1], line_count), cursor[2] })
+        local last_row = math.min(last_0 + 1, line_count)
+        local row = math.max(first_0 + 1, 1)
+        while row <= last_row do
+            -- Probe with foldlevel and pay for a cursor set only on a row that
+            -- actually carries a fold. chat_respond wraps every streamed chunk
+            -- in with_exchange_update, so the common case here is "span already
+            -- clean" and it must not cost a cursor set per row.
+            if vim.fn.foldlevel(row) > 0 then
+                vim.api.nvim_win_set_cursor(win, { row, 0 })
+                -- zD also removes nested folds at the cursor; the guard is only
+                -- in case foldlevel fails to drop.
+                local guard = 0
+                while vim.fn.foldlevel(row) > 0 and guard < 32 do
+                    vim.cmd("normal! zD")
+                    guard = guard + 1
+                end
+            end
+            row = row + 1
+        end
+        vim.api.nvim_win_set_cursor(win, {
+            math.min(cursor[1], vim.api.nvim_buf_line_count(buf)), cursor[2],
+        })
     end)
+end
+
+--- 0-indexed [first, last] buffer rows an exchange occupies, or nil when it has
+--- no visible block.
+local function exchange_span(model, exchange_index)
+    if not model or not model.exchanges[exchange_index] then return nil end
+    local last_0 = model:last_nonempty_block_end(exchange_index)
+    if not last_0 then return nil end
+    return model:exchange_start(exchange_index), last_0
 end
 
 function M.reconcile_exchange(buf, win, model, exchange_index)
     if not valid_target(buf, win) or not model.exchanges[exchange_index] then return false end
     local ranges = projection.desired_folds(model, exchange_index)
+    local first_0, last_0 = exchange_span(model, exchange_index)
+    clear_folds_in_span(buf, win, first_0, last_0)
     vim.api.nvim_win_call(win, function()
         vim.api.nvim_set_option_value("foldminlines", 0, { win = win })
         for _, range in ipairs(ranges) do
@@ -53,10 +86,11 @@ end
 function M.prepare_exchange_update(buf, model, exchange_index)
     if not vim.api.nvim_buf_is_valid(buf) or not model.exchanges[exchange_index] then return {} end
     local ranges = projection.desired_folds(model, exchange_index)
+    local first_0, last_0 = exchange_span(model, exchange_index)
     local windows = vim.fn.win_findbuf(buf) or {}
     for _, win in ipairs(windows) do
         if valid_target(buf, win) then
-            delete_projected_folds(buf, win, ranges)
+            clear_folds_in_span(buf, win, first_0, last_0)
             notify({ phase = "prepare", win = win, exchange_index = exchange_index, ranges = ranges })
         end
     end
