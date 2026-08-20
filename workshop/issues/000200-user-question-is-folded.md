@@ -72,9 +72,12 @@ Two root causes, both fixed here:
       the projection.
 - [ ] A stale/drifted model never anchors a fold on a `💬:` line, never leaves a
       `💬:` line inside a fold's interior, and never throws `E16`.
-- [ ] Reconciling an exchange whose fold set is unchanged does no fold work —
-      the streaming path (`chat_respond.lua:1743`, one call per chunk) stays
-      within the existing `tests/perf/chat_typing.lua` budget.
+- [ ] Clearing an exchange span scales with the number of folds present, not
+      with exchange length — the streaming path (`chat_respond.lua:1743`, one
+      call per chunk) must not become quadratic in answer size. Measured
+      per-chunk on a 600-row exchange and pinned by an in-suite scaling test.
+- [ ] A drifted exchange that cannot be folded says so — the refusal is not
+      silent.
 - [ ] One `parley.fence` module owns the fenced-body grammar; `serialize`,
       `answer_structure` and `chat_parser` all derive from it.
 - [ ] A nested ``` block inside a tool body no longer truncates its section.
@@ -348,10 +351,65 @@ merely refusing.
 isolation but failed under full-suite load (8.35ms vs 79.05ms — measuring the
 machine, not the algorithm). Rewritten to compare best-of-N minimums.
 
-**Verification:** `make test` exit 0, full suite green; lint 0 warnings /
-0 errors across 329 files. Two integration specs (`git_markdown_source`,
-`markdown_finder_async`) fail under the sandbox because `git init` cannot copy
-its template hooks — they pass unsandboxed and are unrelated to this issue.
+**Verification:** `make test` exit 0 (run twice), full suite green; lint 0
+warnings / 0 errors across 329 files.
+
+Caveat on how that was obtained: under the agent sandbox, `git_markdown_source`
+and `markdown_finder_async` fail because `git init` cannot copy its template
+hooks into the sandbox-redirected `TMPDIR` (`Operation not permitted`). Neither
+spec contains the string `fold`, and both pass in isolation. The M1 boundary
+review reported these as a deterministic `make test` failure caused by the
+Makefile setting `TMPDIR=$(CURDIR)/.test-tmp` — that mechanism did not
+reproduce: the Makefile sets no `TMPDIR`, and `make test` exits 0 twice here
+with a normal `TMPDIR`. The failure is environmental and tied to where `TMPDIR`
+points, not to the Makefile.
+
+### 2026-08-20 — M1 boundary review: REWORK, addressed
+
+The M1 boundary review returned **REWORK** on 1 Critical + 5 Important + 8
+Minor. Every finding was checked against the code before acting.
+
+**C1 (Critical) — a regression this milestone introduced, confirmed by
+reproduction.** Widening the clear from projected start rows to the whole
+exchange span widened *destruction* without widening *verification*. The span
+came from the same stale model and was never checked; worse, an exchange with
+no foldable block yields an empty range list, so `verify_anchors` returned true
+vacuously and the drift branch never ran. Reproduced: reconciling a drifted
+exchange 1 deleted exchange 2's `📎:` fold —
+
+    before: 📎 at 26 foldclosed=26
+    after:  📎 at 15 foldclosed=-1   (want 15)
+
+— and nothing recreates it, because `hydrate_window` latches. That is the
+"always folded" invariant failing with the same persistence signature #200
+exists to remove. Fixed with a pure `fold_projection.verify_span`, applied in
+both destructive paths (`reconcile_exchange` and `prepare_exchange_update`);
+the probe is now a regression test and reports `foldclosed=15`.
+
+Also addressed: atlas section for the new reconcile contract (I1); a
+tool-bearing corpus fixture, since the real corpus has **zero**
+`tool_use`/`tool_result` blocks and the harness claimed coverage it lacked
+(I2); the `Done when` line the removed memo made unmeetable (I3); drift
+refusals now carry which half failed to the observer and one debug line (I5);
+plus the minors — `is_foldable()` accessor instead of exporting a mutable
+policy table, an injectable corpus seam, a per-file assertion floor, a
+"refused ⇒ created nothing" assertion, an honest perf-test name, and three
+`workshop/lessons.md` entries.
+
+**One finding corrected rather than applied (I4).** The review attributed the
+two sandbox test failures to `make` setting `TMPDIR=$(CURDIR)/.test-tmp` and
+reported `make test` failing deterministically. The Makefile sets no `TMPDIR`
+(`grep -rn TMPDIR Makefile` is empty) and `make test` exits 0 here. The cause
+is where `TMPDIR` points under the agent sandbox. The finding's substance — my
+Log wording was imprecise, and "run it unsandboxed" is not the mechanism — was
+right, and the wording is fixed.
+
+**Verification after rework:** `fold_projection_spec` 14/14,
+`tool_folds_spec` 18/18, `fold_invariants_spec` 11/11 (now including a
+transcript with real 🔧:/📎: blocks); `make test` exit 0; lint 0 warnings /
+0 errors across 329 files. Note `chat_progress_process_spec.lua` is flaky under
+full-suite load — it binds a local port and intermittently gets none; it passes
+7/7 in isolation, contains no fold code, and the suite passes on retry.
 
 ## Revisions
 

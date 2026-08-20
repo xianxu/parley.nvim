@@ -9,9 +9,11 @@ local FOLDABLE = {
     tool_result = true,
 }
 
--- Exported so consumers (the corpus harness) read the policy instead of
--- restating it.
-M.FOLDABLE = FOLDABLE
+--- Whether a block kind folds. An accessor rather than the live table, so a
+--- consumer reads the policy without being able to mutate it.
+function M.is_foldable(block_kind)
+    return FOLDABLE[block_kind] == true
+end
 
 -- Block kinds carry answer_structure's vocabulary; a buffer line is classified
 -- with highlight_structure's. They agree except for thinking, whose marker
@@ -27,6 +29,29 @@ local ANCHOR_KIND = {
 --- @return string|nil  nil when the block kind is not foldable
 function M.anchor_kind(block_kind)
     return ANCHOR_KIND[block_kind]
+end
+
+--- Check that an exchange's span really is that exchange: it starts on its own
+--- question line and covers no other question.
+---
+--- The span is the input to fold *destruction*, and it comes from the same
+--- possibly-stale model as the fold ranges. Verifying only the ranges leaves
+--- the destructive half unchecked — and when an exchange has no foldable block
+--- the range list is empty, so range verification passes vacuously while a
+--- drifted span still gets cleared. That deletes a neighbouring exchange's
+--- fold, which nothing recreates (`hydrate_window` latches per buf/win), so the
+--- "always folded" invariant breaks for the rest of the session (#200 C1).
+--- @return boolean
+function M.verify_span(first_0, last_0, lines, patterns)
+    patterns = patterns or require("parley.highlight_structure").patterns()
+    local first = lines[first_0]
+    if first == nil or not first:match(patterns.user_pattern) then return false end
+    for row = first_0 + 1, last_0 do
+        local line = lines[row]
+        if line == nil then return false end
+        if line:match(patterns.user_pattern) then return false end
+    end
+    return true
 end
 
 --- Check that a range really describes the block it claims: its first line

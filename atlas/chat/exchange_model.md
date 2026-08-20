@@ -48,9 +48,40 @@ The model is built once per `M.respond` call and lives through the entire respon
 - **Prompt append**: uses `exchange_total_size` to compute insertion point.
 - **Folding**: `thinking`, `summary`, `tool_use`, and `tool_result` ranges come
   only from their stated model block spans and stay inside the selected
-  exchange. Gaps are never projected as folds.
+  exchange. Gaps are never projected as folds. See *Fold reconciliation* below
+  for how that projection is applied.
 
 Because the model is live state, `chat_respond` protects every pending async write with a chat lease anchored on an `invalidate=true` extmark on the response's agent-header line (#138). The anchor distinguishes Parley-owned writes from structural edits: streaming and ordinary edits move the anchor (valid), while deleting the header — undo/redo or other structural drift — invalidates the pending response instead of reconciling the model against a changed serialized transcript. (Pre-#138 the lease keyed on `changedtick` and committed each Parley write's new tick; the extmark anchor makes that commit unnecessary.)
+
+## Fold reconciliation
+
+`tool_folds` is the only module that creates or deletes folds. Since #200 it
+treats `fold_projection`'s output as a **desired state**, not an append list —
+three properties follow:
+
+- **Parley owns every fold within an exchange span.** Reconciling clears the
+  whole span before recreating the projected folds, so a fold the projection no
+  longer wants cannot survive. This includes a manual `zf` the operator made
+  inside an exchange: it is deleted on the next reconcile. Folds outside every
+  exchange span are untouched. (Operator-decided contract change, 2026-08-20;
+  previously only folds at projected start rows were removed, which meant a
+  drifted fold survived for the rest of the session.)
+- **Both halves are verified against the buffer before anything is applied.**
+  The fold ranges must anchor on their own marker line and cover no question;
+  the exchange span must start on its own question and contain no other. The
+  span check matters independently: an exchange with no foldable block has an
+  empty range list, so range verification alone would pass vacuously while a
+  stale span cleared a neighbouring exchange's folds.
+- **Drift heals once, then refuses.** If verification fails, the model is
+  re-derived from the buffer and rechecked. If it still does not verify, no
+  fold is created rather than a wrong one, and the refusal is logged at debug
+  with which half drifted — a silently unfolded exchange is otherwise
+  indistinguishable from one with nothing to fold.
+
+Clearing walks fold-to-fold (`zj`/`zD` in a single VimL crossing) rather than
+probing every row, because `chat_respond` wraps every streamed chunk in
+`with_exchange_update`: the clear is on the per-chunk path and must scale with
+the number of folds present, not with exchange length.
 
 ## Loading from Parser
 

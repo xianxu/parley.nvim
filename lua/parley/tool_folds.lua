@@ -21,6 +21,22 @@ local function notify(event)
     if M._observer then M._observer(event) end
 end
 
+--- Report a refused reconcile. The observer seam carries the detail for tests;
+--- production gets one debug line, because an exchange that silently stops
+--- folding is indistinguishable from one that has nothing to fold.
+local function report_drift(buf, win, exchange_index, failed_index, which, ranges)
+    notify({
+        phase = "drift", win = win, exchange_index = exchange_index, ranges = {},
+        failed_index = failed_index, which = which,
+        failed_range = failed_index and ranges and ranges[failed_index] or nil,
+    })
+    local range = failed_index and ranges and ranges[failed_index]
+    require("parley.logger").debug(string.format(
+        "tool_folds: refused fold reconcile for buf %d exchange %d — %s drift%s",
+        buf, exchange_index, which or "model",
+        range and string.format(" at rows %d..%d (%s)", range.start_0, range.end_0, range.kind) or ""))
+end
+
 --- Delete every fold overlapping rows [first_0, last_0].
 ---
 --- Parley owns every fold within an exchange span (#200): the projection is a
@@ -101,13 +117,31 @@ local function covered_lines(buf, ranges)
     return out
 end
 
---- True when every range fits the buffer AND describes the block it claims.
-local function ranges_fit(buf, ranges, patterns)
-    local line_count = vim.api.nvim_buf_line_count(buf)
-    for _, range in ipairs(ranges) do
-        if range.end_0 >= line_count then return false end
+--- Read rows [first_0, last_0], keyed by 0-based row; absent past end-of-buffer.
+local function span_lines(buf, first_0, last_0)
+    local out = {}
+    if first_0 == nil or last_0 == nil then return out end
+    local last = math.min(last_0, vim.api.nvim_buf_line_count(buf) - 1)
+    if first_0 > last then return out end
+    local chunk = vim.api.nvim_buf_get_lines(buf, first_0, last + 1, false)
+    for offset, line in ipairs(chunk) do out[first_0 + offset - 1] = line end
+    return out
+end
+
+--- True when the model still describes the buffer, for BOTH halves of the
+--- reconcile: the ranges it will create and the span it will clear. Returns the
+--- failing range index when range verification is what failed, so the caller
+--- can say which block drifted rather than only that something did.
+--- @return boolean ok, integer|nil failed_range_index, string|nil which
+local function model_fits(buf, ranges, first_0, last_0, patterns)
+    -- A missing row is drift, which verify_anchors already reports, so the
+    -- fits-in-buffer rule is not restated here.
+    local ok, failed = projection.verify_anchors(ranges, covered_lines(buf, ranges), patterns)
+    if not ok then return false, failed, "ranges" end
+    if not projection.verify_span(first_0, last_0, span_lines(buf, first_0, last_0), patterns) then
+        return false, nil, "span"
     end
-    return (projection.verify_anchors(ranges, covered_lines(buf, ranges), patterns))
+    return true
 end
 
 local function default_model_provider(buf)
@@ -136,20 +170,26 @@ function M.reconcile_exchange(buf, win, model, exchange_index)
     local ranges = projection.desired_folds(model, exchange_index)
     local first_0, last_0 = exchange_span(model, exchange_index)
 
-    if not ranges_fit(buf, ranges, patterns) then
+    local fits, failed_index, which = model_fits(buf, ranges, first_0, last_0, patterns)
+    if not fits then
         local provider = M._model_provider or default_model_provider
         local ok, fresh = pcall(provider, buf)
-        if not (ok and fresh and fresh.exchanges[exchange_index]) then
-            notify({ phase = "drift", win = win, exchange_index = exchange_index, ranges = {} })
+        local fresh_ranges, fresh_first, fresh_last
+        if ok and fresh and fresh.exchanges[exchange_index] then
+            fresh_ranges = projection.desired_folds(fresh, exchange_index)
+            fresh_first, fresh_last = exchange_span(fresh, exchange_index)
+            fits = model_fits(buf, fresh_ranges, fresh_first, fresh_last, patterns)
+        else
+            fits = false
+        end
+        if not fits then
+            -- Refuse rather than fold wrongly — but do not swallow the
+            -- diagnosis with it. A silently unfolded exchange is the same
+            -- shape of invisible failure that let #200 persist unnoticed.
+            report_drift(buf, win, exchange_index, failed_index, which, ranges)
             return false
         end
-        local fresh_ranges = projection.desired_folds(fresh, exchange_index)
-        if not ranges_fit(buf, fresh_ranges, patterns) then
-            notify({ phase = "drift", win = win, exchange_index = exchange_index, ranges = {} })
-            return false
-        end
-        ranges = fresh_ranges
-        first_0, last_0 = exchange_span(fresh, exchange_index)
+        ranges, first_0, last_0 = fresh_ranges, fresh_first, fresh_last
     end
 
     clear_folds_in_span(buf, win, first_0, last_0)
@@ -167,6 +207,13 @@ function M.prepare_exchange_update(buf, model, exchange_index)
     if not vim.api.nvim_buf_is_valid(buf) or not model.exchanges[exchange_index] then return {} end
     local ranges = projection.desired_folds(model, exchange_index)
     local first_0, last_0 = exchange_span(model, exchange_index)
+    local patterns = require("parley.highlight_structure").patterns(require("parley.config"))
+    -- Same destructive operation as reconcile, so the same guard: a stale span
+    -- here would clear a neighbouring exchange's folds before the mutation even
+    -- runs, and finalize would not recreate them (#200 C1).
+    if not projection.verify_span(first_0, last_0, span_lines(buf, first_0, last_0), patterns) then
+        first_0, last_0 = nil, nil
+    end
     local windows = vim.fn.win_findbuf(buf) or {}
     for _, win in ipairs(windows) do
         if valid_target(buf, win) then

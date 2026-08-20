@@ -133,3 +133,48 @@ describe("anchor verification", function()
         assert.is_true(ok)
     end)
 end)
+
+-- #200 C1: the diff widened DESTRUCTION (projected start rows → whole span)
+-- but originally widened verification only over CREATION. A stale span is
+-- handed to the fold clear, so it must be verified too — otherwise reconciling
+-- a drifted exchange deletes a neighbour's fold, permanently (hydrate_window
+-- latches per buf/win). That breaks the Spec's "always folded" invariant with
+-- the same persistence signature #200 exists to eliminate.
+describe("span verification", function()
+    local projection = require("parley.fold_projection")
+    local patterns = require("parley.highlight_structure").patterns({})
+
+    it("accepts a span anchored on its own question and containing no other", function()
+        assert.is_true(projection.verify_span(4, 7, {
+            [4] = "💬: a question",
+            [5] = "",
+            [6] = "🤖: [A]",
+            [7] = "prose",
+        }, patterns))
+    end)
+
+    it("rejects a span that overshoots into the next question", function()
+        assert.is_false(projection.verify_span(4, 7, {
+            [4] = "💬: a question",
+            [5] = "🤖: [A]",
+            [6] = "prose",
+            [7] = "💬: the next question",
+        }, patterns))
+    end)
+
+    it("rejects a span whose first row is not a question", function()
+        assert.is_false(projection.verify_span(4, 6, {
+            [4] = "prose",
+            [5] = "more",
+            [6] = "still more",
+        }, patterns))
+    end)
+
+    it("rejects a span running past the end of the buffer", function()
+        assert.is_false(projection.verify_span(4, 6, { [4] = "💬: q", [5] = "x" }, patterns))
+    end)
+
+    it("accepts a single-row span holding only its question", function()
+        assert.is_true(projection.verify_span(4, 4, { [4] = "💬: q" }, patterns))
+    end)
+end)

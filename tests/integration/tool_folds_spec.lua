@@ -153,6 +153,12 @@ describe("tool_folds incremental manual folds", function()
         assert.has_no.errors(function()
             tool_folds.reconcile_exchange(buf, win, model, 1)
         end)
+        -- Refusing means creating nothing, not merely not crashing.
+        assert.is_false(tool_folds.reconcile_exchange(buf, win, model, 1))
+        for row = 1, vim.api.nvim_buf_line_count(buf) do
+            assert.message(("a fold was created at row %d despite refusal"):format(row))
+                .equals(0, vim.fn.foldlevel(row))
+        end
     end)
 
     -- #200 PQ-5: chat_respond wraps EVERY streamed chunk in
@@ -163,7 +169,7 @@ describe("tool_folds incremental manual folds", function()
     -- Timed under a loaded test suite, so each size is sampled repeatedly and
     -- compared on its MINIMUM: the least-contended sample is the one that
     -- reflects the algorithm rather than the machine.
-    it("clears an exchange span in time independent of the span length", function()
+    it("clears an exchange span without a per-row walk as the span grows", function()
         local function best_reconcile_ms(body_lines)
             local lines = { "header", "", "💬: q", "", "🤖: a", "", "🔧: read id=x" }
             for i = 1, body_lines do lines[#lines + 1] = "body " .. i end
@@ -200,6 +206,51 @@ describe("tool_folds incremental manual folds", function()
         -- O(span), not to police small constant-factor drift.
         assert.message(("50-row span %.2fms vs 800-row span %.2fms — clearing scales with span")
             :format(small, large)).is_true(large < small * 6 + 3)
+    end)
+
+    -- #200 C1: widening destruction (projected start rows -> whole span) without
+    -- widening verification let a drifted reconcile delete a NEIGHBOUR's fold,
+    -- which nothing recreates. Note exchange 1 has no foldable block, so range
+    -- verification passes vacuously — the span check is what catches this.
+    it("does not destroy a neighbouring exchange's fold when its own span drifted", function()
+        local lines = { "---", "topic: t", "file: f.md", "---", "",
+            "💬: first", "", "🤖: [A]" }
+        for i = 1, 12 do lines[#lines + 1] = "prose " .. i end
+        vim.list_extend(lines, { "", "💬: second", "", "🤖: [A]", "",
+            "📎: grep", "```", "c1", "```" })
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+        tool_folds.hydrate_window(buf, win)
+
+        local chat_parser = require("parley.chat_parser")
+        local stale = exchange_model.from_parsed_chat(chat_parser.parse_chat(
+            vim.api.nvim_buf_get_lines(buf, 0, -1, false), 4, require("parley.config")))
+
+        vim.api.nvim_buf_set_lines(buf, 8, 18, false, {})  -- bypass with_exchange_update
+        tool_folds.reconcile_exchange(buf, win, stale, 1)
+
+        local row
+        for i, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+            if line:match("^📎: grep") then row = i end
+        end
+        assert.message("the neighbouring tool fold was destroyed by a drifted span")
+            .equals(row, vim.fn.foldclosed(row))
+    end)
+
+    it("reports which half of the model drifted when it refuses", function()
+        local seen
+        tool_folds._observer = function(e) if e.phase == "drift" then seen = e end end
+
+        local model = exchange_model.new(1)
+        model:add_exchange(1)
+        model:add_block(1, "agent_header", 1)
+        model:add_block(1, "tool_result", 40)  -- anchors nowhere; past EOF
+
+        tool_folds.reconcile_exchange(buf, win, model, 1)
+        tool_folds._observer = nil
+
+        assert.is_not_nil(seen)
+        assert.equals("ranges", seen.which)
+        assert.equals(1, seen.failed_index)
     end)
 
     it("reconciles a changed exchange without leaving a blank-line ghost", function()

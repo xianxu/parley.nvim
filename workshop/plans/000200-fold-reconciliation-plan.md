@@ -1397,3 +1397,49 @@ Delta:
 - **Minor — header.** Added an explicit **Non-goals** section: markdown fences in
   ordinary answer prose stay fence-naive (tool bodies are the actual defect
   surface), fold state is not persisted, `~~~` fences are unsupported.
+
+### 2026-08-20 — M1 implementation deltas (boundary review REWORK → rework applied)
+
+Reason: the M1 boundary review returned REWORK on one Critical plus five
+Important findings. The plan described code that was deliberately not written,
+and missed a destructive-path check.
+
+Delta:
+
+- **C1 — span verification added (new, not in the original plan).** Task 3's
+  "verify → re-derive → clear → create" verified only the *creation* half. The
+  span handed to `clear_folds_in_span` came from the same stale model and was
+  never checked; with no foldable block the range list is empty and
+  `verify_anchors` returns `true` vacuously, so a drifted span was cleared as-is
+  and destroyed a neighbouring exchange's fold — permanently, since
+  `hydrate_window` latches. Reproduced, then fixed with a pure
+  `fold_projection.verify_span` applied in both `reconcile_exchange` and
+  `prepare_exchange_update`. This was a regression the diff introduced: the old
+  start-row-only delete could not reach a neighbour.
+- **Task 3's memo is struck.** `applied_matches` / `record_applied` / the
+  `"unchanged"` phase and its observer test were never written and should not
+  be: verification proves the model matches the buffer, not which folds exist,
+  so the short-circuit let an externally-added fold survive the span it was
+  meant to own. PQ-5 is answered algorithmically instead.
+- **Task 2's `clear_folds_in_span` is a fold-to-fold VimL walk**, not a per-row
+  `foldlevel` probe — one `nvim_exec2` crossing using `zj`/`zD` with a
+  span-bounded `s:guard`. Per-chunk on a 600-row exchange: `0.078ms` (pre-#200,
+  no clearing) → `3.705ms` (row walk from Lua) → `1.198ms` (row walk in VimL) →
+  `0.067ms` (fold-to-fold).
+- **Task 4's harness** enumerates via an injectable corpus seam over
+  `git ls-files` plus a readability filter and a `>= 8` floor, and asserts a
+  per-file subject count so a parse change cannot make it green-and-empty. The
+  oracle reads `projection.is_foldable()` — an accessor, not the live table.
+- **A tool-bearing fixture moved earlier, into M1.** The real corpus contains
+  *zero* `tool_use`/`tool_result` blocks (measured), so the harness could not
+  exercise the issue's headline case at all. `tests/fixtures/fold_tool_transcript.md`
+  supplies that shape now; M2 Task 10's adversarial fixture remains separate.
+- **Drift is no longer silent** — the refusal carries which half failed
+  (`ranges` vs `span`) and the failing range, to the observer seam and to one
+  debug log line.
+
+Correction to the review: I4 attributed the two sandbox test failures to the
+Makefile setting `TMPDIR=$(CURDIR)/.test-tmp`. The Makefile sets no `TMPDIR`,
+and `make test` exits 0 twice with a normal one; the cause is where `TMPDIR`
+points under the agent sandbox, not the Makefile. The finding's substance —
+that the Log's wording was imprecise — was valid and is fixed.

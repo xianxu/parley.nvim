@@ -650,3 +650,30 @@
   the harness's own backgrounding and wait for ITS completion signal; never
   infer "process died" from an empty `pgrep`, which is indistinguishable from
   "never matched".
+- **In Lua a `local function` is not in scope for functions defined above it —
+  and a `pcall` at the call site hides the consequence.** #200 defined
+  `default_model_provider` below `reconcile_exchange`; inside the earlier
+  function the name resolved to a nil *global*, so the drift re-derive path
+  could never run. Because the call was `pcall(provider, buf)`, the failure
+  was swallowed and the code took the "refuse" branch silently — tests still
+  passed, since refusing looks identical to having nothing to fold. Lint caught
+  it, not the suite. Rule: when a function is reached only through a `pcall`,
+  the tests must assert the *success* branch was taken, not merely that nothing
+  threw; and treat "accessing undefined variable" from the linter as a
+  correctness finding, not style.
+- **Widening a destructive operation demands widening its verification, not
+  just the verification of what it creates.** #200 changed fold clearing from
+  "delete at projected start rows" to "clear the whole exchange span", but
+  verified only the fold ranges. The span came from the same stale model and
+  went unchecked — and for an exchange with no foldable block the range list is
+  empty, so range verification passed *vacuously* while the stale span deleted
+  a neighbouring exchange's fold. Rule: when a diff widens what an operation can
+  destroy, enumerate the inputs to the destruction separately from the inputs to
+  the creation, and check that a vacuous input (empty list, nil span) fails
+  closed rather than open.
+- **A wall-clock assertion in the test suite measures the machine, not the
+  algorithm.** #200's first scaling test passed alone and failed under full
+  suite load (8.35ms vs 79.05ms) because both numbers inflated unequally under
+  contention. Rule: to pin an algorithmic property, sample repeatedly and
+  compare the MINIMUM of each size — the least-contended sample is the one that
+  reflects the code — and name the test for the property it actually pins.
