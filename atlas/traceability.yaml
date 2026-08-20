@@ -111,6 +111,7 @@ atlas:
       - lua/parley/buffer_edit.lua
       - lua/parley/render_buffer.lua
       - lua/parley/fold_projection.lua
+      - lua/parley/exchange_anchors.lua
       - lua/parley/tool_folds.lua
       - lua/parley/tool_loop.lua
       - lua/parley/dispatcher.lua
@@ -118,6 +119,7 @@ atlas:
       - tests/unit/answer_structure_spec.lua
       - tests/unit/tool_folds_spec.lua
       - tests/unit/fold_projection_spec.lua
+      - tests/unit/exchange_anchors_spec.lua
       - tests/integration/tool_folds_spec.lua
       - tests/integration/fold_invariants_spec.lua
       - tests/integration/create_handler_spec.lua

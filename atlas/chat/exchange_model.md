@@ -66,17 +66,25 @@ three properties follow:
   exchange span are untouched. (Operator-decided contract change, 2026-08-20;
   previously only folds at projected start rows were removed, which meant a
   drifted fold survived for the rest of the session.)
-- **Both halves are verified against the buffer before anything is applied.**
-  The fold ranges must anchor on their own marker line and cover no question.
-  The span must additionally start on its own question *and* contain no other —
-  both, because a stale span can either grow forward over the next question or
-  slide wholly inside a neighbour's answer, where it covers that neighbour's
-  folds without containing any question. The span check matters independently
-  of the range check: an exchange with no foldable block has an empty range
-  list, so range verification alone passes vacuously. The question-anchor
-  requirement is waived for exchange 1 only, because `chat_parser` fabricates a
-  question block for an assistant-first transcript and that path can produce no
-  other index.
+- **What gets created is verified; what gets cleared is identified.** The two
+  halves are guarded differently because they fail differently.
+  - *Creation*: each fold range must anchor on its own marker line and cover no
+    question, checked against the buffer (`fold_projection.verify_anchors`).
+  - *Destruction*: the rows an exchange owns come from `exchange_anchors` —
+    one `invalidate = true` extmark per exchange start, in the manner
+    `chat_lease` anchors the streaming insertion point (#138). Marks travel
+    with edits, so the span is right even when the model's remembered rows are
+    not. A row-span is not an identity: positional rules ("starts on a
+    question, contains no other") are satisfied equally by a *different*
+    exchange's rows, which is how a drifted reconcile could delete a
+    neighbour's folds.
+  - Identity declines rather than guesses when the anchor count disagrees with
+    the model's exchange count (a structural edit re-indexed the exchanges), or
+    when either bounding mark's line was deleted. The positional check
+    (`verify_span`) remains only as the fallback floor for those cases, and its
+    question-anchor requirement is waived for exchange 1, because `chat_parser`
+    fabricates a question block for an assistant-first transcript and that path
+    can produce no other index.
 - **Drift heals once, then refuses.** If verification fails, the model is
   re-derived from the buffer and rechecked. If it still does not verify, no
   fold is created rather than a wrong one, and the refusal is logged at debug

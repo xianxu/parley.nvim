@@ -284,6 +284,54 @@ describe("tool_folds incremental manual folds", function()
             .equals(row, vim.fn.foldclosed(row))
     end)
 
+    -- #200 C1 round 4: positional checks alias — they cannot tell THIS
+    -- exchange's rows from another exchange's. Identity comes from extmarks
+    -- that travel with edits, so the cleared region is right even when the
+    -- model's remembered rows are not.
+    it("clears the rows an exchange actually owns after edits the model never saw", function()
+        local anchors = require("parley.exchange_anchors")
+        local lines = { "---", "topic: t", "file: f.md", "---", "" }
+        for e = 1, 3 do
+            vim.list_extend(lines, { "💬: q" .. e, "", "🤖: [A]",
+                "📎: t" .. e, "```", "x", "```", "" })
+        end
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+        tool_folds.hydrate_window(buf, win)
+
+        local before = { anchors.span(buf, 2, 3) }
+        vim.api.nvim_buf_set_lines(buf, 5, 5, false, { "INSERTED", "LINES", "ABOVE" })
+        local after = { anchors.span(buf, 2, 3) }
+
+        assert.message("identity did not follow the edit")
+            .same({ before[1] + 3, before[2] + 3 }, after)
+
+        -- Every tool marker still folds at its own row: nothing was cleared
+        -- that belonged to a neighbour.
+        vim.cmd("normal! zM")
+        for i, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+            if line:match("^📎:") then
+                assert.message(("tool marker at %d lost its fold"):format(i))
+                    .equals(i, vim.fn.foldclosed(i))
+            end
+        end
+    end)
+
+    it("falls back rather than trusting identity across a structural change", function()
+        local anchors = require("parley.exchange_anchors")
+        local lines = { "---", "topic: t", "file: f.md", "---", "" }
+        for e = 1, 3 do
+            vim.list_extend(lines, { "💬: q" .. e, "", "🤖: [A]",
+                "📎: t" .. e, "```", "x", "```", "" })
+        end
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+        tool_folds.hydrate_window(buf, win)
+
+        -- A model claiming a different exchange count means anchor k and model
+        -- index k may describe different exchanges — exactly the aliasing this
+        -- guards. Identity must decline, not guess.
+        assert.is_nil(anchors.span(buf, 2, 4))
+    end)
+
     it("reconciles a changed exchange without leaving a blank-line ghost", function()
         local model = model_with("thinking", 2)
         tool_folds.reconcile_exchange(buf, win, model, 1)

@@ -1507,3 +1507,50 @@ Delta:
   and `make test` exits 0; sandboxed it fails. The review subprocess inherits
   this session's sandbox. The half that was mine — the `Makefile.parley:28`
   `TMPDIR` redirect — stays corrected.
+
+### 2026-08-20 — M1 round 4: extmark-anchored exchange identity (operator decision)
+
+Reason: round 4 showed the two-part span rule still aliases. The anchor test
+cannot distinguish *this* exchange's question from any other exchange's, so a
+stale span aligned onto a later exchange's start passes both halves while the
+range check is vacuous. Reproduced. The underlying fact is that **a row-span is
+not an identity** — three rounds of sharpening a positional heuristic could not
+fix that, and each round's fix introduced the next round's defect.
+
+Operator decision (2026-08-20): fix identity properly inside M1 rather than
+defer it.
+
+**Design — `lua/parley/exchange_anchors.lua` (new, thin IO shell).**
+
+An extmark per exchange start row, created `invalidate = true`, in a dedicated
+namespace. Neovim moves marks across ordinary edits and flags one invalid only
+when its own line is deleted — the same property `chat_lease` relies on (#138).
+
+    set(buf, starts_0)   -- replace all anchors, one per exchange start
+    span(buf, k, count)  -- [first_0, last_0] for exchange k, or nil
+    clear(buf)
+
+`span` derives exchange k's extent from *live* mark positions:
+`[anchor_k, anchor_{k+1} - 1]`, and to the last buffer line for the final
+exchange. This is what removes the aliasing: the cleared region is read from
+marks that travelled with the edits, not from a model's remembered rows.
+
+**Guards, each closing a way the anchors could themselves alias:**
+
+- `count` must equal the model's exchange count. A structural edit that adds or
+  removes an exchange makes anchor *k* refer to a different exchange than model
+  index *k*; the count mismatch detects that and forces the fallback.
+- Both bounding marks must be valid. If `anchor_{k+1}`'s line was deleted, the
+  span would silently over-extend into the next exchange.
+- No anchors, or any guard failing → fall back to the model span plus the
+  existing `verify_span`. The heuristic remains as a floor, not the primary.
+
+Anchors are refreshed only from a model that has *verified* against the buffer
+(hydration, and after a successful re-derive), so a stale parse cannot install
+misleading identity. Invalidated alongside `initialized` on
+`WinClosed`/`BufUnload`/`BufDelete`.
+
+**Scope note.** This does not by itself remove the per-tick re-parse for
+healable drift: the *creation* half still needs verified ranges, and healing a
+stale model still costs one parse per changedtick. Measured, not assumed —
+see the issue Log.

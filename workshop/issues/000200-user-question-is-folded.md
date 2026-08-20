@@ -509,6 +509,57 @@ at all.
 `fold_invariants_spec` 12/12; `make test` exit 0; lint 0 warnings / 0 errors
 across 329 files.
 
+### 2026-08-20 — M1 round 4: extmark-anchored exchange identity
+
+**C1 (Critical) — the positional span rule aliases.** Round 3's two-part check
+("starts on its own question, no question after the first row") cannot
+distinguish *this* exchange's rows from any other exchange's, so a stale span
+aligned onto a later exchange's start satisfies both halves while the range
+check is vacuous. Three rounds of sharpening a positional heuristic could not
+fix this, because the underlying fact is that **a row-span is not an identity**
+— and each round's fix introduced the next round's defect.
+
+Operator decision: fix identity properly inside M1 rather than defer it.
+
+**`lua/parley/exchange_anchors.lua`** (new, thin IO shell) holds one
+`invalidate = true` extmark per exchange start — the mechanism `chat_lease`
+already uses for the streaming insertion point (#138). Neovim moves marks
+across ordinary edits and flags one invalid only when its own line is deleted,
+so a mark set from a verified parse keeps describing the same exchange through
+edits the model never saw. Demonstrated:
+
+    anchored span ex2 before edit:      { 13, 20 }
+    anchored span ex2 after +3 above:   { 16, 23 }   (model unchanged)
+
+Reconcile and `prepare_exchange_update` now take the rows to clear from
+identity, falling back to the positional check only when identity declines:
+anchor count ≠ model exchange count (a structural edit re-indexed the
+exchanges), or either bounding mark's line was deleted. Anchors are installed
+only from a model that verified against the buffer — anchoring a stale parse
+would make aliasing worse, not better.
+
+`model_fits` no longer checks the span at all; creation is *verified*,
+destruction is *identified*. That separation is the actual lesson from four
+rounds: the two halves fail differently and cannot share one guard.
+
+**Correction to my own framing.** When choosing this option I said identity
+would "likely kill the per-tick re-parse." Measured: it does not — 10 full
+parses over 10 tick-moving reconciles, unchanged. The creation half still needs
+verified ranges, so healing a stale model still costs one parse per changedtick.
+That cost applies only under *sustained* drift; normal streaming keeps the model
+in sync through `with_exchange_update` and never reaches the re-derive. The
+250 ms backoff bounds the unhealable case.
+
+**Verification:** `exchange_anchors_spec` 10/10 (including both aliasing
+guards), `fold_projection_spec` 16/16, `tool_folds_spec` 21/21,
+`fold_invariants_spec` 12/12; `make test` exit 0; lint 0 warnings / 0 errors
+across 331 files. All four earlier scenarios still hold — original symptom
+`foldclosed=-1`, R1 `15`, R2 `reconcile -> true`, R3 `22`.
+
+Note `tools_builtin_find_spec.lua` joins `chat_progress_process_spec.lua` as
+load-flaky: 4/4 in isolation, intermittent under the full suite, no fold code
+in either.
+
 ## Revisions
 
 ### 2026-08-20 — Fold ownership contract + plan-quality round 1

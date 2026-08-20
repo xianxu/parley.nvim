@@ -9,6 +9,7 @@
 
 local M = {}
 local projection = require("parley.fold_projection")
+local exchange_anchors = require("parley.exchange_anchors")
 local initialized = {}
 
 local function valid_target(buf, win)
@@ -134,15 +135,12 @@ end
 --- failing range index when range verification is what failed, so the caller
 --- can say which block drifted rather than only that something did.
 --- @return boolean ok, integer|nil failed_range_index, string|nil which
-local function model_fits(buf, ranges, first_0, last_0, patterns, exchange_index)
+local function model_fits(buf, ranges, patterns)
     -- A missing row is drift, which verify_anchors already reports, so the
-    -- fits-in-buffer rule is not restated here.
+    -- fits-in-buffer rule is not restated here. The span is NOT checked here:
+    -- it is established by identity in owned_span, not by inspecting rows.
     local ok, failed = projection.verify_anchors(ranges, covered_lines(buf, ranges), patterns)
     if not ok then return false, failed, "ranges" end
-    if not projection.verify_span(first_0, last_0, span_lines(buf, first_0, last_0),
-        patterns, exchange_index > 1) then
-        return false, nil, "span"
-    end
     return true
 end
 
@@ -209,6 +207,33 @@ local function mark_drift_logged(buf)
     if rederived[buf] then rederived[buf].logged = true end
 end
 
+--- Install exchange identity from a model that has verified against the
+--- buffer. Anchoring an unverified parse would make the aliasing worse, not
+--- better, so this is only ever called after model_fits passed.
+local function anchor_from(buf, model)
+    local starts = {}
+    for k in ipairs(model.exchanges) do starts[k] = model:exchange_start(k) end
+    exchange_anchors.set(buf, starts)
+end
+
+--- The rows exchange K owns. Extmark identity first: those marks travelled with
+--- the edits, so they describe the exchange even when the model's remembered
+--- rows do not. Only when identity cannot be established (no anchors, a
+--- structural edit changed the exchange count, a bounding line was deleted) do
+--- we fall back to the model's own rows plus the positional check — which is a
+--- floor, not the primary, because it cannot tell one exchange's rows from
+--- another's.
+local function owned_span(buf, model, exchange_index, patterns)
+    local first_0, last_0 = exchange_anchors.span(buf, exchange_index, #model.exchanges)
+    if first_0 then return first_0, last_0, true end
+    first_0, last_0 = exchange_span(model, exchange_index)
+    if not projection.verify_span(buf and first_0, last_0,
+        span_lines(buf, first_0, last_0), patterns, exchange_index > 1) then
+        return nil, nil, false
+    end
+    return first_0, last_0, false
+end
+
 --- Reconcile exchange K's folds to the projection's desired state.
 ---
 --- The projection is a desired state, not an append list: the exchange's span is
@@ -224,16 +249,23 @@ function M.reconcile_exchange(buf, win, model, exchange_index)
     if not valid_target(buf, win) or not model.exchanges[exchange_index] then return false end
     local patterns = require("parley.highlight_structure").patterns(require("parley.config"))
     local ranges = projection.desired_folds(model, exchange_index)
-    local first_0, last_0 = exchange_span(model, exchange_index)
+    local first_0, last_0 = owned_span(buf, model, exchange_index, patterns)
 
-    local fits, failed_index, which = model_fits(buf, ranges, first_0, last_0, patterns, exchange_index)
+    local fits, failed_index, which = model_fits(buf, ranges, patterns)
+    if fits and first_0 == nil then fits, which = false, "span" end
     if not fits then
         local fresh, already_logged = rederive_model(buf)
         local fresh_ranges, fresh_first, fresh_last
         if fresh and fresh.exchanges[exchange_index] then
             fresh_ranges = projection.desired_folds(fresh, exchange_index)
-            fresh_first, fresh_last = exchange_span(fresh, exchange_index)
-            fits = model_fits(buf, fresh_ranges, fresh_first, fresh_last, patterns, exchange_index)
+            fits = model_fits(buf, fresh_ranges, patterns)
+            if fits then
+                -- A parse that verifies is authoritative: install identity from
+                -- it, then read the span back through those marks.
+                anchor_from(buf, fresh)
+                fresh_first, fresh_last = owned_span(buf, fresh, exchange_index, patterns)
+                fits = fresh_first ~= nil
+            end
         else
             fits = false
         end
@@ -266,15 +298,13 @@ end
 function M.prepare_exchange_update(buf, model, exchange_index)
     if not vim.api.nvim_buf_is_valid(buf) or not model.exchanges[exchange_index] then return {} end
     local ranges = projection.desired_folds(model, exchange_index)
-    local first_0, last_0 = exchange_span(model, exchange_index)
+    local first_0, last_0
     local patterns = require("parley.highlight_structure").patterns(require("parley.config"))
-    -- Same destructive operation as reconcile, so the same guard: a stale span
-    -- here would clear a neighbouring exchange's folds before the mutation even
-    -- runs, and finalize would not recreate them (#200 C1).
-    if not projection.verify_span(first_0, last_0, span_lines(buf, first_0, last_0),
-        patterns, exchange_index > 1) then
-        first_0, last_0 = nil, nil
-    end
+    -- Same destructive operation as reconcile, so the same rule: clear only
+    -- rows this exchange can be shown to own. A stale span here would clear a
+    -- neighbour's folds before the mutation even runs, and finalize would not
+    -- recreate them (#200 C1).
+    first_0, last_0 = owned_span(buf, model, exchange_index, patterns)
     local windows = vim.fn.win_findbuf(buf) or {}
     for _, win in ipairs(windows) do
         if valid_target(buf, win) then
@@ -339,6 +369,7 @@ function M.hydrate_window(buf, win, model_provider)
     local provider = model_provider or M._model_provider or default_model_provider
     local model = provider(buf)
     if not model then return false end
+    anchor_from(buf, model)
     vim.api.nvim_win_call(win, function()
         vim.cmd("normal! zE")
     end)
@@ -392,7 +423,10 @@ function M.setup(buf)
     })
     vim.api.nvim_create_autocmd({ "BufUnload", "BufDelete" }, {
         group = group, buffer = buf,
-        callback = function() initialized[buf] = nil end,
+        callback = function()
+            initialized[buf] = nil
+            exchange_anchors.clear(buf)
+        end,
     })
     local win = vim.api.nvim_get_current_win()
     vim.schedule(function()
