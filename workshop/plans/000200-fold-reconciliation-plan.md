@@ -1479,3 +1479,31 @@ Delta:
   and the fixtures are listed explicitly so they depend on neither git nor cwd.
 - **Core concepts** now names `verify_span` and `is_foldable`, and no longer
   proposes whole-range verification as a future extension — M1 shipped it.
+
+### 2026-08-20 — M1 boundary review round 3 (the narrowing was too loose)
+
+Reason: round 2's interior-only span rule missed a stale span landing wholly
+inside a neighbour's answer — no question in range, so nothing guarded the
+clear. My stated justification ("reaching a neighbour means covering its
+question") was wrong. Reproduced against HEAD.
+
+Delta:
+
+- **`verify_span` requires both an on-question anchor and a clean interior.**
+  The anchor requirement is waived for exchange index 1 only; verified that
+  `chat_parser`'s fabricated-question path can produce no other index
+  (`current_exchange` is never reset to nil). Callers pass
+  `exchange_index > 1`.
+- **Re-derive backoff (250 ms) added.** The `changedtick` memo bounds only the
+  same-tick fan-out; on the streaming path each chunk is a new tick. Measured
+  refused-reconcile cost on a 4805-line chat: 1356 ms → 1.05 ms (memo) →
+  0.75 ms (memo + backoff). Round 2's I1 is now actually answered, not just
+  reduced.
+- **The false justification is removed from the source comment** at
+  `fold_projection.lua` and from `atlas/chat/exchange_model.md`, both of which
+  had carried it.
+- On the `git init` finding: measured rather than argued. Unsandboxed it
+  succeeds under `.test-tmp`, under a repo subdirectory, and outside the repo,
+  and `make test` exits 0; sandboxed it fails. The review subprocess inherits
+  this session's sandbox. The half that was mine — the `Makefile.parley:28`
+  `TMPDIR` redirect — stays corrected.

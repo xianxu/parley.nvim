@@ -253,6 +253,37 @@ describe("tool_folds incremental manual folds", function()
         assert.equals(1, seen.failed_index)
     end)
 
+    -- #200 C1 round 3: an interior-only span check is not enough. A stale span
+    -- can land WHOLLY INSIDE a neighbour's answer — covering that neighbour's
+    -- folds while containing no question at all — so the span must also be
+    -- anchored on its own question (for every exchange after the first).
+    it("does not destroy a later exchange's fold when its span slid into that answer", function()
+        local lines = { "---", "topic: t", "file: f.md", "---", "",
+            "💬: q1", "", "🤖: [A]" }
+        for i = 1, 10 do lines[#lines + 1] = "prose1 " .. i end
+        vim.list_extend(lines, { "", "💬: q2", "", "🤖: [A]" })
+        for i = 1, 10 do lines[#lines + 1] = "prose2 " .. i end
+        vim.list_extend(lines, { "", "💬: q3", "", "🤖: [A]",
+            "📎: grep", "```", "c1", "```" })
+        for i = 1, 20 do lines[#lines + 1] = "tail " .. i end
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+        tool_folds.hydrate_window(buf, win)
+
+        local chat_parser = require("parley.chat_parser")
+        local stale = exchange_model.from_parsed_chat(chat_parser.parse_chat(
+            vim.api.nvim_buf_get_lines(buf, 0, -1, false), 4, require("parley.config")))
+
+        vim.api.nvim_buf_set_lines(buf, 5, 20, false, {})  -- slide ex2's span into ex3
+        tool_folds.reconcile_exchange(buf, win, stale, 2)
+
+        local row
+        for i, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+            if line:match("^📎: grep") then row = i end
+        end
+        assert.message("a later exchange's fold was destroyed by a slid span")
+            .equals(row, vim.fn.foldclosed(row))
+    end)
+
     it("reconciles a changed exchange without leaving a blank-line ghost", function()
         local model = model_with("thinking", 2)
         tool_folds.reconcile_exchange(buf, win, model, 1)

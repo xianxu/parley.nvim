@@ -168,12 +168,13 @@ describe("span verification", function()
     -- permanently — a fresh parse yields the same anchor, and hydrate_window
     -- latches. The span check must test what the producer actually guarantees:
     -- that the span does not reach into a NEIGHBOURING exchange.
-    it("accepts a span whose first row is not a question", function()
-        assert.is_true(projection.verify_span(4, 6, {
-            [4] = "",
-            [5] = "🤖: [A]",
-            [6] = "🔧: read id=x",
-        }, patterns))
+    it("accepts an off-question anchor only where the parser can produce one", function()
+        local lines = { [4] = "", [5] = "🤖: [A]", [6] = "🔧: read id=x" }
+        -- exchange 1 may be anchored off-question (fabricated question block)
+        assert.is_true(projection.verify_span(4, 6, lines, patterns, false))
+        -- any later exchange may not: a stale span can land wholly inside a
+        -- neighbour's answer, covering its folds while containing no question
+        assert.is_false(projection.verify_span(4, 6, lines, patterns, true))
     end)
 
     it("rejects a span running past the end of the buffer", function()
@@ -182,6 +183,14 @@ describe("span verification", function()
 
     it("accepts a single-row span holding only its question", function()
         assert.is_true(projection.verify_span(4, 4, { [4] = "💬: q" }, patterns))
+    end)
+
+    it("rejects a span that starts mid-answer when an anchor is required", function()
+        assert.is_false(projection.verify_span(4, 6, {
+            [4] = "prose in a neighbour's answer",
+            [5] = "📎: grep",
+            [6] = "```",
+        }, patterns, true))
     end)
 
     it("still rejects a stale span that reached the next exchange's question", function()

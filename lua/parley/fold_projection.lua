@@ -31,7 +31,7 @@ function M.anchor_kind(block_kind)
     return ANCHOR_KIND[block_kind]
 end
 
---- Check that an exchange's span has not drifted into a NEIGHBOURING exchange.
+--- Check that an exchange's span has not drifted off the exchange it describes.
 ---
 --- The span is the input to fold *destruction*, and it comes from the same
 --- possibly-stale model as the fold ranges. Verifying only the ranges leaves
@@ -41,17 +41,29 @@ end
 --- fold, which nothing recreates (`hydrate_window` latches per buf/win), so the
 --- "always folded" invariant breaks for the rest of the session (#200 C1).
 ---
---- The test is "no question after the first row", NOT "the first row is a
---- question". `chat_parser` fabricates a question block for an assistant-first
---- transcript (`chat_parser.lua:623-635`), so `exchange_start` legitimately
---- lands on prose or a blank line; demanding a question there refuses those
---- transcripts *permanently*, since a fresh parse produces the same anchor and
---- hydration will not re-run. A span reaching a neighbour is still caught,
---- because reaching one means covering its question.
+--- Two checks, and BOTH are needed:
+---
+--- * the span starts on its own question, when `anchor_required`. An interior
+---   scan alone is not enough: a stale span can land wholly *inside* a
+---   neighbour's answer, covering that neighbour's folds while containing no
+---   question at all. Reproduced — a stale exchange-2 span cleared exchange 3's
+---   `📎:` fold with no question anywhere in range.
+--- * no question appears after the first row, which catches a span that has
+---   grown forward over the next exchange.
+---
+--- `anchor_required` is false only for exchange index 1. `chat_parser`
+--- fabricates a question block when an answer has no preceding question
+--- (`chat_parser.lua:623-635`), leaving `exchange_start` on prose or a blank
+--- line; demanding a question there refuses such transcripts *permanently*,
+--- since a fresh parse produces the same anchor and hydration will not re-run.
+--- That path can only ever produce exchange 1: it fires when `current_exchange`
+--- is nil, and `current_exchange` is never reset to nil once set.
 --- @return boolean
-function M.verify_span(first_0, last_0, lines, patterns)
+function M.verify_span(first_0, last_0, lines, patterns, anchor_required)
     patterns = patterns or require("parley.highlight_structure").patterns()
-    if lines[first_0] == nil then return false end
+    local first = lines[first_0]
+    if first == nil then return false end
+    if anchor_required and not first:match(patterns.user_pattern) then return false end
     for row = first_0 + 1, last_0 do
         local line = lines[row]
         if line == nil then return false end

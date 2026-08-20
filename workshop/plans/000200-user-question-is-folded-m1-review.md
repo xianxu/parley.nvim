@@ -287,3 +287,158 @@ Append to `workshop/plans/000200-fold-reconciliation-plan.md` `## Revisions`:
 - **Correct the `fold_projection` Core-concepts entry** (`:38-41`): it should name `verify_span` and `is_foldable`, and its "Future extensions" bullet should stop proposing whole-range verification, which M1 shipped.
 - **Strike the "injectable corpus seam" claim** from the M1 implementation-deltas revision, or make it true; as written the plan asserts a seam the spec does not have.
 - **Correct the I4 rebuttal** at `:1442`: `Makefile.parley:28` does set `TMPDIR=$(CURDIR)/.test-tmp` (included via `Makefile` → `Makefile.local`), and `make test` fails deterministically on `git_markdown_source_spec.lua` and `markdown_finder_async_spec.lua` on this machine. The original finding stands.
+
+---
+
+## Re-review — 2026-08-20T16:29:07-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 200 — user question is folded |
+| repo | parley.nvim |
+| issue file | workshop/issues/000200-user-question-is-folded.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | 387d8c44be087e3559f226b5076710f1698d7c95..HEAD |
+| command | sdlc milestone-close --issue 200 --milestone M1 |
+| reviewer | claude |
+| timestamp | 2026-08-20T16:29:07-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+Note on scope: the supplied window (`387d8c4..HEAD`) is empty — `387d8c4` **is** `HEAD`. M1 has never been closed (rounds 1 and 2 both returned REWORK), so I reviewed the branch point to HEAD, `38a6cdd..HEAD`, which is the full un-closed M1 work.
+
+The round-2 C1 fix is real — the assistant-first transcript folds again, the fixture has teeth, and the changedtick memo genuinely collapses the hydration fan-out. What blocks SHIP is that the narrowing over-corrected in the opposite direction and re-opened round-1's C1. `verify_span` now accepts any span with no question *after* its first row; the code comment (`fold_projection.lua:49-50`) and the plan (`:1460`) justify this with "a span reaching a neighbour is still caught, because reaching one means covering its question," which is false when a stale span lands *inside* a neighbour's answer rather than straddling its question. I reproduced it: an exchange with no foldable block (empty `ranges` ⇒ `verify_anchors` vacuously true) plus a 30-line upstream deletion makes `reconcile_exchange` return `true` while destroying a later exchange's `📎:` fold — `foldclosed 77 → -1`, and `hydrate_window` returns `false` (latched), so it never comes back. The same probe against base `38a6cdd` keeps the fold at `foldclosed=47`, so this is a regression the milestone introduces, not a pre-existing hole. `prepare_exchange_update` carries the same check with **no** re-derive fallback and destroys the fold on its own. That is the Spec's second invariant ("`🔧:`, `📎:`, `📝:` and `🧠:` blocks are always folded") failing with exactly the session-persistent signature #200 exists to remove — for the third round running, now from the loose side.
+
+## 1. Strengths
+
+- **The round-2 C1 is genuinely fixed and pinned by a real transcript.** `tests/fixtures/fold_assistant_first.md` is a parsed transcript, not a hand-built model, and `fold_invariants_spec` runs it green at 12/12. The narrowing solves the problem it was written for.
+- **Verification is properly pure.** `verify_anchors` / `verify_span` (`fold_projection.lua:52`, `:74`) take a row→text map from a caller that reads the buffer once; the "loads without a Neovim global" test still passes and the unit spec drives both with plain Lua tables. Textbook `ARCH-PURE`.
+- **The memo does fix the fan-out case it can fix.** Measured on a 4325-line chat with a drifted model: 20 reconciles at one changedtick cost 5.90 ms/call amortized (≈ one parse total) instead of 20 full parses. `hydrate_window`'s per-exchange × per-window loop is the real beneficiary.
+- **Verification adds zero false positives on real input.** I instrumented `_observer` across all 11 corpus files on a cold `hydrate_window`: **0 drift refusals**. The checks don't fire on healthy transcripts.
+- **The `workshop/lessons.md` entries generalize correctly** — "widening a destructive operation demands widening its verification" and "a vacuous input must fail closed rather than open" are the right abstractions. (Round 3 violates the same principle from the other side: the check is now weaker than the destruction it guards.)
+- **`clear_folds_in_span` holds its scaling claim** and the `s:guard` E350 bound (`tool_folds.lua:64-67`) is a real hazard correctly anticipated.
+
+## 2. Critical findings
+
+**C1 — The narrowed `verify_span` re-opens round 1's C1: a drifted reconcile permanently destroys a neighbouring exchange's tool fold.**
+`lua/parley/fold_projection.lua:52-61`, applied at `lua/parley/tool_folds.lua:142` and `:240` — `ARCH-PURPOSE`.
+
+Dropping `if not first:match(patterns.user_pattern) then return false end` leaves the interior scan as the only span guard. The interior scan catches a span that *straddles* a neighbour's question; it cannot catch a span that lands wholly inside a neighbour's answer. Combined with `verify_anchors({}, …) == true` for an exchange with no foldable block, the destructive half is unguarded again.
+
+Reproduced (3 exchanges; exchange 2 = question + prose, no foldable block; exchange 3 = long answer with a `📎:` fold; delete 30 prose lines from exchange 1 bypassing `with_exchange_update`; reconcile exchange 2):
+
+```
+BEFORE: 📎 at row 77 foldclosed=77
+stale exchange 2 span (0-based) = 40..49 ; ranges=0
+after mutation rows 40..49 hold: "e3 prose 16..20", "", "📎: grep id=z", "```", "hit 1", "hit 2"   <- no 💬: anywhere
+reconcile_exchange(stale, 2) -> true
+AFTER:  📎 at row 47 foldclosed=-1 (want 47)
+hydrate_window again -> false          <- latched; nothing recreates it
+```
+
+Same probe with base `38a6cdd`'s `tool_folds.lua` + `fold_projection.lua` prepended to `runtimepath`: `AFTER: 📎 at row 47 foldclosed=47`. **The fold survives at base and dies at HEAD** — a regression, because the old start-row-only `zd` could never reach a neighbour.
+
+`prepare_exchange_update` is affected identically and is worse: it has no re-derive fallback, only a "skip the clear" branch. Called alone on the stale model it produces the same `foldclosed 77 → -1`. It is on the per-chunk streaming path (`chat_respond.lua:1743`), so a user pruning an earlier exchange mid-response reaches it — deleting an earlier exchange does not move the #138 agent-header extmark, so the lease stays valid and the model stays stale.
+
+**Fix sketch — restore the anchor rule and exempt only what the producer actually leaves unanchored.** `chat_parser.lua:627` fabricates a question block only when `current_exchange` is nil, and `current_exchange` is never reset to nil (`:278`, `:572`, `:627` are its only assignments), so an unanchored span can only ever be exchange **1**:
+
+```lua
+function M.verify_span(first_0, last_0, lines, patterns, allow_unanchored)
+    patterns = patterns or require("parley.highlight_structure").patterns()
+    local first = lines[first_0]
+    if first == nil then return false end
+    -- Only exchange 1 can legitimately start off-question: chat_parser
+    -- fabricates a question block for an assistant-first transcript
+    -- (chat_parser.lua:623-635), and only when no exchange exists yet.
+    if not allow_unanchored and not first:match(patterns.user_pattern) then return false end
+    for row = first_0 + 1, last_0 do
+        local line = lines[row]
+        if line == nil or line:match(patterns.user_pattern) then return false end
+    end
+    return true
+end
+```
+
+with both call sites passing `exchange_index == 1`. The exemption is free: `exchange_start(1)` is `header_lines + MARGIN` (`exchange_model.lua:168-174`) and cannot drift forward, and end-drift past the next question is still caught by the interior scan. (Round 2's alternative — trust the freshly re-derived model's own span — also works, but it forces a re-parse on every reconcile for assistant-first transcripts, which compounds I1.)
+
+**Regression test:** the probe above, on **both** `reconcile_exchange` and `prepare_exchange_update`, asserting the later `📎:` keeps `foldclosed == its own row`. No existing test reaches the "empty ranges + drifted span landing in a question-free window" shape.
+
+## 3. Important findings
+
+**I1 — The changedtick memo does not bound the streaming path it was added for.**
+`lua/parley/tool_folds.lua:164-173`.
+
+Round 2's I1 was specifically "the drift path re-parses the entire buffer on every streamed chunk." Every streamed chunk *mutates the buffer*, so the tick moves and the memo misses every time. Measured on a 4325-line chat with a drifted model:
+
+```
+same-tick reconcile   (memo hits) :  5.90 ms/call   (≈ one parse amortised over 20)
+tick-moving reconcile (streaming) : 81.82 ms/call   (a full re-parse every call)
+```
+
+The commit message's "1356 ms → 1.05 ms" describes the fan-out case only. Secondary: `report_drift`'s "once per buffer state" is once per tick, i.e. once per chunk while streaming, and `logger.lua:89-93` does an unconditional `io.open`/write/`close` with no level gate. Fix: back off per (buf, exchange) for the duration of a drift episode rather than per tick.
+
+**I2 — The atlas now contradicts the code it documents.**
+`atlas/chat/exchange_model.md:71` still reads "the exchange span must start on its own question and contain no other" — the round-1 rule, which `387d8c4` deliberately removed. The one restatement of the model in the docs has drifted from its source, which is the same `ARCH-DRY` hazard this issue is about. Update it in the same pass as the C1 fix.
+
+**I3 — README not updated for the operator-visible fold-ownership change (Docs gate; round-2 I3, still open).**
+`README.md:159` is the only fold-facing user documentation and is untouched in the window. The milestone makes a manual `zf` inside an exchange vanish on the next reconcile — an operator-decided contract change. The atlas records it; the place a user would look does not. One sentence.
+
+**I4 — "`make test` green" is not reproducible here, and the recorded mechanism is wrong for the third round.**
+`workshop/issues/000200-user-question-is-folded.md:354`, `:413`, and the caveat at `:379-403`.
+
+With sandboxing disabled in this session, `make test` exits **2**, failing on `git_markdown_source_spec.lua` and `markdown_finder_async_spec.lua` (neither contains the string "fold"). Cause is `git init` → 128, `cannot copy .../git-core/templates/hooks/commit-msg.sample ... Operation not permitted`. The Log attributes this to `TMPDIR=$(TEST_TMP)` plus the agent sandbox. Measured mechanism:
+
+```
+git init in .test-tmp/gitprobe              -> 128   (real HOME, no sandbox)
+git init in .gitprobe4  (repo root, no TMPDIR involvement) -> 128
+git init in $HOME/gitprobe3                 ->   0
+cp  .../commit-msg.sample  .test-tmp/       ->   0
+```
+
+So it is neither TMPDIR nor the sandbox flag — `git init` is blocked for **any** directory under the repo root for this process tree, while the same template file copies fine. The substance is unrelated to #200 and the fold work is green (independently confirmed: `fold_projection_spec` 15/15, `tool_folds_spec` 18/18, `fold_invariants_spec` 12/12, lint 0 warnings / 0 errors across 329 files). But `sdlc close` consumes this text as `--verified`, so state it as "fold suites green; `make test` blocked on two fold-unrelated specs by a machine-local `git init` restriction under the repo root," not "exit 0, full suite green."
+
+**I5 — `prepare_exchange_update`'s refusal is silent and mis-reports (round-2 Minor, escalated by C1).**
+`lua/parley/tool_folds.lua:240-248`. On span-verify failure it nils the span, skips the clear, and still emits `notify({phase = "prepare", ranges = <stale ranges>})` with no `report_drift`. An observer cannot distinguish "cleared" from "refused", so the Done-when "a drifted exchange that cannot be folded says so" holds only on the reconcile path — and this is the path C1 shows destroying folds, so it needs both the corrected check and the diagnostic.
+
+## 4. Minor findings
+
+- `tool_folds.lua:164` — `setmetatable({}, {__mode = "k"})` is a no-op: keys are buffer *numbers*, which aren't collectable, so nothing is ever weakly reclaimed. Nothing clears `rederived[buf]` on `BufUnload`/`BufDelete` either, though the sibling `initialized[buf]` is (`:358-361`). Each entry pins a whole parsed model for the session.
+- `tool_folds.lua:213` — `report_drift` logs `ranges` / `failed_index` / `which` from the **stale** `model_fits`, but the refusal decision came from the **fresh** one; the logged "which half drifted" can name the wrong half.
+- `tool_folds.lua:106-119` vs `:121-130` — `covered_lines` and `span_lines` are near-identical row-map readers; since `desired_folds` asserts every range lies inside the span (`fold_projection.lua:111`), one span read would serve both verifiers instead of two overlapping buffer reads per chunk (`ARCH-DRY`, carried from round 2).
+- The `rederived` memo has no reset seam, and a cache hit at the same changedtick silently bypasses an injected `M._model_provider` — a test swapping providers without touching the buffer gets the previous model.
+- `tool_folds.lua:333` — `foldtext()`'s `else` fallback still renders an off-marker fold as ordinary prose; the Log blames this branch for masking #200 for a whole session.
+- `workshop/issues/…:177`, `:341` — `make perf` still cited as evidence for the streaming fold path; `grep -rln fold tests/perf/` is empty (only `chat_typing.lua`, `harness.lua`). Carried from rounds 1 and 2.
+- `workshop/issues/…:340` — the `0.067 ms` per-chunk figure predates round 1's added `span_lines` + `verify_span` pass; round 2 measured 0.078 ms for the same shape.
+- `tests/integration/fold_invariants_spec.lua:17` shells `git ls-files` with no seam (`ARCH-MOCK`). The false "injectable seam" claim is correctly withdrawn and the comment is now honest; the direct external call remains.
+
+## 5. Test coverage notes
+
+- All three fold suites pass, run independently: `fold_projection_spec` 15/15, `tool_folds_spec` 18/18, `fold_invariants_spec` 12/12 (11 subjects + the floor check). Lint 0/0 across 329 files.
+- **The gap that shipped C1 is structural.** Every drift test in `tool_folds_spec.lua` either gives the exchange foldable ranges (so `verify_anchors` catches the drift) or drifts by a small enough amount that the neighbour's question lands inside the window — `:215` ("does not destroy a neighbouring exchange's fold") is exactly the small-drift shape. Nothing covers empty-`ranges` + a drifted span landing in a question-free window. One fixture closes it.
+- **`prepare_exchange_update`'s destructive path has no direct test** — every existing test reaches it via `with_exchange_update` or tests `reconcile_exchange`. My probe shows it destroys folds on its own.
+- The corpus harness exercises only the cold `hydrate_window` path, which the issue's own audit measured clean *before* the fix; I confirmed zero drift refusals across all 11 files. It is a regression net over real shapes, not proof of the fix — the drift tests in `tool_folds_spec.lua` are. Worth one Log line (carried from round 2).
+- No test pins the re-derive's cost or repetition (I1). An observer assertion that N reconciles across N ticks trigger at most one re-derive per drift episode would pin it.
+
+## 6. Architectural notes
+
+- **ARCH-DRY — flag (minor).** `is_foldable()` and `ANCHOR_KIND` are single-sourced and consumed rather than restated — good. Two restatements remain: `covered_lines`/`span_lines`, and the atlas prose at `exchange_model.md:71`, which has now drifted from the rule in code (I2). M2's three-owner fence grammar is the real DRY debt and stays correctly scoped there.
+- **ARCH-PURE — pass.** Verification is pure and nvim-free with buffer reads hoisted into the shell; the new `rederived` memo is module-level mutable state but sits in the IO shell (`tool_folds`), not the pure module — correct placement. Keep the C1 fix in that same split: the predicate learns one parameter, the shell decides what to pass.
+- **ARCH-PURPOSE — flag (C1).** Shadow-sweep over operations on fold state. Round 1: destruction unverified. Round 2: the check was stricter than the producer guarantees, breaking "always folded." Round 3: the check is looser than the invariant requires, breaking "always folded" again from the other side. Both Spec invariants must hold *simultaneously*; the fix has to distinguish what the producer guarantees (exchange 1 may be unanchored) from what it does not (exchanges 2..N always start on a question). Into M2, the same lens bites harder: `answer_structure`/`chat_parser` boundaries feed `exchange_span`, which is now a **destructive** input — a fence-naive mis-segmentation there will delete folds, not merely mis-render them.
+- **ARCH-MOCK — pass on the production path, minor in tests.** No external binary or service in production; `M._model_provider` / `M._observer` are real seams the tests drive. The only external call is `git ls-files` in `fold_invariants_spec.lua:17`, now honestly documented as a single point of definition rather than a seam.
+
+## 7. Plan revision recommendations
+
+Append to `workshop/plans/000200-fold-reconciliation-plan.md` `## Revisions`:
+
+- **2026-08-20 — M1 boundary review round 3 (the narrowing was too loose).** The round-2 revision at `:1460` claims the "no question after the first row" rule "still catches a span reaching a neighbour — reaching one means covering its question," and that it is "simpler than the reviewer's suggested 'trust the re-derived model's span' and needs no stale-vs-fresh distinction." Both are wrong: a stale span landing wholly *inside* a neighbour's answer covers no question, and with an empty range list nothing else guards the clear. Reproduced against base vs HEAD. Record the rule actually adopted — the anchor requirement holds for every exchange except index 1, whose off-question anchor is what `chat_parser.lua:627` guarantees (and only there, since `current_exchange` is never reset to nil).
+- **Same entry — the changedtick memo bounds the same-tick fan-out only.** Record the measured tick-moving cost (81.8 ms/call on a 4325-line chat vs 5.9 ms/call amortised same-tick) so round-2's I1 is not recorded as fully answered, and name the backoff actually adopted.
+- **Correct the code comment** at `fold_projection.lua:44-50`, which carries the same false justification into the source.
+- **Update `atlas/chat/exchange_model.md:71`** in the same pass so the atlas stops stating the round-1 rule (I2).
+- **Restate the `## Log` verification paragraph** (`workshop/issues/…:354`, `:413`, `:379-403`) per I4: `git init` is blocked for any directory under the repo root on this machine, independent of `TMPDIR` and of the agent sandbox; the fold suites are green and `make test` is not.

@@ -456,6 +456,55 @@ single point of definition, not an injection point, and the comment now says so.
 **Verification:** `fold_projection_spec` 15/15, `tool_folds_spec` 18/18,
 `fold_invariants_spec` 12/12; lint 0 warnings / 0 errors across 329 files.
 
+### 2026-08-20 — M1 boundary review round 3: REWORK, addressed
+
+**C1 (Critical) — round 2's narrowing was too loose, and my justification for
+it was wrong.** I claimed an interior-only span check "still catches a span
+reaching a neighbour — reaching one means covering its question." False: a
+stale span can land *wholly inside* a neighbour's answer, covering its folds
+while containing no question at all. Reproduced —
+
+    stale ex2 span 1-based: 20..32
+    span now covers rows 20..32; contains a question: false; 📎 now at 22
+    RESULT: 📎 at 22 -> foldclosed=-1 (want 22)
+
+The rule now requires **both**: the span starts on its own question, *and* no
+question appears after the first row. The anchor requirement is waived for
+exchange index 1 only — verified that `chat_parser`'s fabrication path
+(`:623-635`) can produce no other index, because it fires only when
+`current_exchange` is nil and `current_exchange` is never reset to nil once set
+(assignments at `:278` init, `:572`, `:627`).
+
+All four scenarios now hold together, each with a regression test:
+
+| scenario | result |
+|---|---|
+| original reported symptom (question folded) | `foldclosed=-1` ✓ |
+| R1 drifted span destroys neighbour | `foldclosed=15` ✓ |
+| R2 assistant-first refused permanently | `reconcile -> true` ✓ |
+| R3 span slid inside a later answer | `foldclosed=22` ✓ |
+
+**Re-derive backoff added.** The `changedtick` key only collapses the same-tick
+fan-out (reconcile runs per exchange); on the streaming path every chunk is a
+new tick, so persistent drift still re-parsed per chunk. Since drift does not
+clear by itself, a failed re-derive now backs off 250 ms before the next parse.
+Refused-reconcile cost on a 4805-line chat: 1356 ms → 0.75 ms.
+
+**On the `git init` question, settled with measurements rather than a third
+guess.** Verified unsandboxed: `git init` succeeds under `.test-tmp`, under a
+plain repo subdirectory, and outside the repo (all exit 0), and `make test`
+exits 0. Verified sandboxed: it fails with `Operation not permitted`. So the
+review's round-3 claim — that `git init` is blocked for any directory under the
+repo root independent of the sandbox — does not hold here; the boundary-review
+subprocess inherits this session's sandbox, which is what it is observing. What
+*was* mine to fix stands corrected: `Makefile.parley:28` does set
+`TMPDIR="$(TEST_TMP)"`, which is why the sandbox denial lands on the git specs
+at all.
+
+**Verification:** `fold_projection_spec` 16/16, `tool_folds_spec` 19/19,
+`fold_invariants_spec` 12/12; `make test` exit 0; lint 0 warnings / 0 errors
+across 329 files.
+
 ## Revisions
 
 ### 2026-08-20 — Fold ownership contract + plan-quality round 1

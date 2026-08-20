@@ -134,12 +134,13 @@ end
 --- failing range index when range verification is what failed, so the caller
 --- can say which block drifted rather than only that something did.
 --- @return boolean ok, integer|nil failed_range_index, string|nil which
-local function model_fits(buf, ranges, first_0, last_0, patterns)
+local function model_fits(buf, ranges, first_0, last_0, patterns, exchange_index)
     -- A missing row is drift, which verify_anchors already reports, so the
     -- fits-in-buffer rule is not restated here.
     local ok, failed = projection.verify_anchors(ranges, covered_lines(buf, ranges), patterns)
     if not ok then return false, failed, "ranges" end
-    if not projection.verify_span(first_0, last_0, span_lines(buf, first_0, last_0), patterns) then
+    if not projection.verify_span(first_0, last_0, span_lines(buf, first_0, last_0),
+        patterns, exchange_index > 1) then
         return false, nil, "span"
     end
     return true
@@ -163,13 +164,41 @@ end
 -- tick.
 local rederived = setmetatable({}, { __mode = "k" })
 
+-- Minimum gap between re-parses once one has failed to resolve the drift. The
+-- changedtick key alone only collapses the same-tick fan-out (reconcile runs
+-- per exchange); on the streaming path every chunk is a NEW tick, so persistent
+-- drift would re-parse per chunk — 81.8 ms/call on a 4325-line chat. Drift is
+-- exceptional and does not clear by itself, so retrying every chunk buys
+-- nothing; retrying a few times a second recovers promptly once the buffer is
+-- parseable again.
+local REDERIVE_RETRY_MS = 250
+
 local function rederive_model(buf)
     local tick = vim.api.nvim_buf_get_var(buf, "changedtick")
     local hit = rederived[buf]
     if hit and hit.tick == tick then return hit.model, hit.logged end
+    if hit and hit.model == nil and hit.failed_at
+        and (vim.loop.now() - hit.failed_at) < REDERIVE_RETRY_MS then
+        -- A recent re-parse of this buffer already failed to help; the content
+        -- has changed, but not in a way worth paying a full parse for yet.
+        return nil, hit.logged
+    end
     local ok, model = pcall(M._model_provider or default_model_provider, buf)
-    rederived[buf] = { tick = tick, model = ok and model or nil, logged = false }
-    return rederived[buf].model, false
+    model = ok and model or nil
+    rederived[buf] = {
+        tick = tick,
+        model = model,
+        logged = hit and hit.logged or false,
+        failed_at = model == nil and vim.loop.now() or nil,
+    }
+    return model, rederived[buf].logged
+end
+
+--- The re-derived model did not resolve the drift, so start the retry clock
+--- even though the parse itself succeeded.
+local function mark_rederive_unhelpful(buf)
+    local hit = rederived[buf]
+    if hit and not hit.failed_at then hit.failed_at = vim.loop.now() end
 end
 
 local function mark_drift_logged(buf)
@@ -193,14 +222,14 @@ function M.reconcile_exchange(buf, win, model, exchange_index)
     local ranges = projection.desired_folds(model, exchange_index)
     local first_0, last_0 = exchange_span(model, exchange_index)
 
-    local fits, failed_index, which = model_fits(buf, ranges, first_0, last_0, patterns)
+    local fits, failed_index, which = model_fits(buf, ranges, first_0, last_0, patterns, exchange_index)
     if not fits then
         local fresh, already_logged = rederive_model(buf)
         local fresh_ranges, fresh_first, fresh_last
         if fresh and fresh.exchanges[exchange_index] then
             fresh_ranges = projection.desired_folds(fresh, exchange_index)
             fresh_first, fresh_last = exchange_span(fresh, exchange_index)
-            fits = model_fits(buf, fresh_ranges, fresh_first, fresh_last, patterns)
+            fits = model_fits(buf, fresh_ranges, fresh_first, fresh_last, patterns, exchange_index)
         else
             fits = false
         end
@@ -213,6 +242,7 @@ function M.reconcile_exchange(buf, win, model, exchange_index)
             report_drift(buf, win, exchange_index, failed_index, which, ranges,
                 not already_logged)
             mark_drift_logged(buf)
+            mark_rederive_unhelpful(buf)
             return false
         end
         ranges, first_0, last_0 = fresh_ranges, fresh_first, fresh_last
@@ -237,7 +267,8 @@ function M.prepare_exchange_update(buf, model, exchange_index)
     -- Same destructive operation as reconcile, so the same guard: a stale span
     -- here would clear a neighbouring exchange's folds before the mutation even
     -- runs, and finalize would not recreate them (#200 C1).
-    if not projection.verify_span(first_0, last_0, span_lines(buf, first_0, last_0), patterns) then
+    if not projection.verify_span(first_0, last_0, span_lines(buf, first_0, last_0),
+        patterns, exchange_index > 1) then
         first_0, last_0 = nil, nil
     end
     local windows = vim.fn.win_findbuf(buf) or {}

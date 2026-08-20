@@ -67,11 +67,16 @@ three properties follow:
   previously only folds at projected start rows were removed, which meant a
   drifted fold survived for the rest of the session.)
 - **Both halves are verified against the buffer before anything is applied.**
-  The fold ranges must anchor on their own marker line and cover no question;
-  the exchange span must start on its own question and contain no other. The
-  span check matters independently: an exchange with no foldable block has an
-  empty range list, so range verification alone would pass vacuously while a
-  stale span cleared a neighbouring exchange's folds.
+  The fold ranges must anchor on their own marker line and cover no question.
+  The span must additionally start on its own question *and* contain no other —
+  both, because a stale span can either grow forward over the next question or
+  slide wholly inside a neighbour's answer, where it covers that neighbour's
+  folds without containing any question. The span check matters independently
+  of the range check: an exchange with no foldable block has an empty range
+  list, so range verification alone passes vacuously. The question-anchor
+  requirement is waived for exchange 1 only, because `chat_parser` fabricates a
+  question block for an assistant-first transcript and that path can produce no
+  other index.
 - **Drift heals once, then refuses.** If verification fails, the model is
   re-derived from the buffer and rechecked. If it still does not verify, no
   fold is created rather than a wrong one, and the refusal is logged at debug
