@@ -162,15 +162,16 @@ corpus-harness row, whose oracle PQ-2 already forced a redesign of.
 
 Design: `workshop/plans/000200-fold-reconciliation-plan.md`
 
-- [ ] M1 — fold reconciliation
-  - [ ] Anchor **and interior** verification in `fold_projection` (pure)
-  - [ ] `clear_folds_in_span` replaces start-row-only fold deletion; convert the
+- [x] M1 — fold reconciliation
+  - [x] Anchor **and interior** verification in `fold_projection` (pure)
+  - [x] `clear_folds_in_span` replaces start-row-only fold deletion; convert the
         two tests encoding the old ownership contract
-  - [ ] `reconcile_exchange` verifies → re-derives on drift → clears → creates,
-        short-circuiting when the fold set is unchanged (streaming hot path)
-  - [ ] Corpus regression harness (`tests/integration/fold_invariants_spec.lua`),
+  - [x] `reconcile_exchange` verifies → re-derives on drift → clears → creates.
+        The streaming hot path is handled by fold-to-fold clearing, not by the
+        planned memo — see the Log for why the memo was removed.
+  - [x] Corpus regression harness (`tests/integration/fold_invariants_spec.lua`),
         oracle derived from the parsed model
-  - [ ] Streaming perf measured against `tests/perf/chat_typing.lua`
+  - [x] Streaming perf measured (`make perf` plus a direct per-chunk benchmark)
 - [ ] M2 — one fence grammar
   - [ ] Extract `lua/parley/fence.lua` (+ property and round-trip tests)
   - [ ] `serialize` derives fence selection **and its reader-side matchers**
@@ -298,6 +299,59 @@ line-shifting) with nothing making them agree.
     iCloud `chat_dir`.
 - Plan revised against all nine findings; deltas recorded in the plan's
   `## Revisions`.
+
+### 2026-08-20 — M1 implemented
+
+TDD throughout; each task red before green.
+
+- **Task 1** — `fold_projection.anchor_kind` + `verify_anchors`, pure and
+  nvim-free (the load-without-vim test still passes). Verification covers the
+  anchor *and* the interior, so end-drift that keeps a valid anchor while
+  overshooting the next question is rejected. 9/9.
+- **Task 2** — `clear_folds_in_span` replaces the start-row-only `zd` loop.
+  Red reproduced the surviving stale fold. As PQ-1 predicted,
+  `tool_folds_spec.lua:57` then failed; converted per the ownership decision.
+  `:39` was dispositioned by *running* it — its fold sits outside the span and
+  survives, so the narrower contract still holds where it should.
+- **Task 3** — verify → re-derive on drift → clear → create. Red reproduced
+  both reported failures exactly: a fold anchored on `💬:` at row 22, and
+  `E16: Invalid range: 7,46fold`.
+- **Task 4** — corpus harness, 10/10 across the tracked transcripts.
+
+**End-to-end proof.** Re-ran the original `drift_probe.lua`: row 23
+`💬: second question` now reports `foldclosed=-1` (was `foldclosed=23
+foldend=26`, rendering `💬: second question (4 lines)`), and the drifted
+exchange's real `📎:` still folds at its own row — it healed rather than
+merely refusing.
+
+**Two corrections to the plan, both found by running the code:**
+
+- **The planned memo was removed.** Memoizing the applied range set is
+  *unsound*: verification proves the MODEL matches the buffer but says nothing
+  about which folds actually exist, so short-circuiting let an externally-added
+  fold survive inside the span — defeating the very contract the span clear
+  enforces. Two tests caught it. PQ-5's concern was real, but the honest fix is
+  algorithmic: clear fold-to-fold with `zj` instead of probing every row.
+  Measured per-chunk reconcile on a 600-row exchange:
+  `0.078ms` (pre-#200, no clearing at all) → `3.705ms` (row walk from Lua) →
+  `1.198ms` (row walk in one VimL crossing) → **`0.067ms`** (fold-to-fold).
+  Faster than the pre-#200 baseline *and* fully verified. `make perf` shows no
+  regression (`edit_total` @5000: 2.59→2.55ms median).
+- **A scope bug lint caught, not the tests:** `default_model_provider` was
+  defined *below* `reconcile_exchange`, so inside it the name resolved to a nil
+  global and the drift re-derive could never run — the failure was silent
+  because `pcall` swallowed it. Moved above first use. Worth a lessons entry:
+  in Lua a `local function` is not in scope for functions defined earlier, and
+  a `pcall` around the call site hides it.
+
+**Perf test instrument.** The first version asserted wall-clock and passed in
+isolation but failed under full-suite load (8.35ms vs 79.05ms — measuring the
+machine, not the algorithm). Rewritten to compare best-of-N minimums.
+
+**Verification:** `make test` exit 0, full suite green; lint 0 warnings /
+0 errors across 329 files. Two integration specs (`git_markdown_source`,
+`markdown_finder_async`) fail under the sandbox because `git init` cannot copy
+its template hooks — they pass unsandboxed and are unrelated to this issue.
 
 ## Revisions
 
