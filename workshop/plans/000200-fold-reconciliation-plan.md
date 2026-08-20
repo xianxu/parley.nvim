@@ -10,6 +10,12 @@
 
 **Issue:** `#200` — see its `## Log` for the audit and the reproduction.
 
+**Non-goals** (deliberate scope boundaries, not oversights):
+
+- **Markdown fences in ordinary answer prose stay fence-naive.** Task 9 suppresses structural markers only inside `tool_use` / `tool_result` bodies, so a `💬:` line inside a plain triple-backtick block in an answer still forks an exchange. Tool bodies are machine-generated and routinely contain transcript text, which is why they are the actual defect surface; answer prose is author-controlled and the same suppression there would need a general markdown block model, not a fence pair. Revisit only if a real transcript exhibits it.
+- **Fold state is not persisted across sessions.** Reconciliation restores the invariants on hydration; it does not remember which folds the user had opened.
+- **`~~~` tilde fences are not supported.** No provider emits them today; `fence.open_len` widens to return `(len, char)` if one ever does.
+
 ---
 
 ## Core concepts
@@ -25,7 +31,7 @@
 
 - **fence** — the canonical fenced-block grammar for tool bodies: `open_len(line)` → N when the line opens a fence (≥3 backticks + optional info string), `closes(line, n)` → true only for a bare run of exactly N backticks, `for_content(s)` → the shortest fence strictly longer than any run in `s`.
   - **Relationships:** 1:N — one grammar, three consumers (`serialize`, `answer_structure`, `chat_parser`). No consumer holds a reference to another.
-  - **DRY rationale:** Today the rule lives in three places. `tools/serialize.lua:84` gets it right with a `%1` backreference; `answer_structure.lua:88` closes on *any* ≥3-backtick run; `chat_parser.lua:549` does not model fences at all. This is the single source those three derive from (`ARCH-DRY`, and `ARCH-PURPOSE`'s shadow-sweep: every consumer derives, none restates).
+  - **DRY rationale:** Today the rule lives in three places, each independently written. `tools/serialize.lua:84` gets it right with a `%1` backreference (and restates it again on the reader side at `:85-88` and `:135`); `answer_structure.lua:88` closes on *any* ≥3-backtick run; `chat_parser.lua:455-469` has its own correct-but-separate `tool_fence_len` tracker. This is the single source all of them derive from (`ARCH-DRY`, and `ARCH-PURPOSE`'s shadow-sweep: every consumer derives, none restates — including serialize's reader-side matchers, which are consumers too).
   - **Future extensions:** Tilde fences (`~~~`) if a provider ever emits them — `open_len` widens to return `(len, char)`.
 
 - **fold_projection** — gains `anchor_kind` (block kind → the structural kind its first line must classify as) and `verify_anchors(ranges, anchor_lines, patterns)` → `ok, failed_index`. Stays pure and nvim-free.
@@ -35,7 +41,7 @@
 
 - **answer_structure** — its tool-section scanner derives fence open/close from `fence` instead of "any ``` run", and stops a never-closed fence at the last line before the first following boundary rather than running to the end of the answer.
 
-- **chat_parser** — the main loop tracks tool-fence state and suppresses structural classification for lines inside a tool body, so a `💬:` / `🤖:` / `📎:` / `📝:` line in tool output can no longer fork a spurious exchange.
+- **chat_parser** — its existing `cb_state.tool_fence_len` tracker derives its grammar from `fence` instead of restating it, and the main loop (`:549`) *consults* that tracker before classifying, so a `💬:` / `🤖:` / `📎:` / `📝:` line in tool output can no longer fork a spurious exchange. No second fence tracker is introduced (PQ-3).
 
 **Test surface.** All four are PURE — unit tests, no IO mocks: `tests/unit/fence_spec.lua` (new), `tests/unit/fold_projection_spec.lua`, `tests/unit/answer_structure_spec.lua`, `tests/unit/chat_parser_tools_spec.lua`.
 
@@ -111,8 +117,40 @@ describe("anchor verification", function()
         assert.is_false(ok)
         assert.equals(1, failed)
     end)
+
+    -- PQ-4: the Spec's invariant is "a question is never INSIDE a fold" —
+    -- not merely "never a fold header". End-drift keeps the anchor correct
+    -- while the range overshoots into the next exchange's question.
+    it("rejects a range whose interior swallows a user question", function()
+        local ranges = { { kind = "tool_result", start_0 = 4, end_0 = 8 } }
+        local ok, failed = projection.verify_anchors(ranges, {
+            [4] = "📎: read_file",
+            [5] = "```",
+            [6] = "body",
+            [7] = "```",
+            [8] = "💬: next question",
+        }, patterns)
+        assert.is_false(ok)
+        assert.equals(1, failed)
+    end)
+
+    it("does not mistake a question marker inside a fenced body for a turn", function()
+        local ranges = { { kind = "tool_result", start_0 = 4, end_0 = 7 } }
+        local ok = projection.verify_anchors(ranges, {
+            [4] = "📎: grep",
+            [5] = "```",
+            [6] = "  💬: matched line from a transcript",
+            [7] = "```",
+        }, patterns)
+        assert.is_true(ok)
+    end)
 end)
 ```
+
+The last case matters: the interior scan must reject only a line that
+`highlight_structure` classifies as `user` at column 0, which an indented or
+fenced occurrence is not. The scan is a guard against *drift*, not a second
+fence parser — M2 Task 9 owns in-body marker suppression (`ARCH-DRY`).
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -141,22 +179,37 @@ function M.anchor_kind(block_kind)
     return ANCHOR_KIND[block_kind]
 end
 
---- Check that every range's first line really carries its block's marker.
---- `anchor_lines` maps a range's start_0 to that buffer line's text; a
---- missing entry means the row is past the end of the buffer.
+--- Check that a range really describes the block it claims: its first line
+--- carries the block's marker, and no interior line is a user question.
+--- `lines` maps a buffer row (0-based) to its text for every row the ranges
+--- cover; a missing anchor row means the range runs past end-of-buffer.
 --- @return boolean ok, integer|nil failed_range_index
-function M.verify_anchors(ranges, anchor_lines, patterns)
+function M.verify_anchors(ranges, lines, patterns)
     local classify = require("parley.highlight_structure").classify
     for index, range in ipairs(ranges) do
-        local line = anchor_lines[range.start_0]
-        if line == nil then return false, index end
-        if classify(line, patterns).kind ~= M.anchor_kind(range.kind) then
+        local anchor = lines[range.start_0]
+        if anchor == nil then return false, index end
+        if classify(anchor, patterns).kind ~= M.anchor_kind(range.kind) then
             return false, index
+        end
+        -- The invariant is "never inside a fold", so end-drift that keeps a
+        -- valid anchor but overshoots the next question must fail too (PQ-4).
+        for row = range.start_0 + 1, range.end_0 do
+            local line = lines[row]
+            if line == nil then return false, index end
+            if classify(line, patterns).kind == "user" then
+                return false, index
+            end
         end
     end
     return true, nil
 end
 ```
+
+Verification is still pure and nvim-free — the caller reads the buffer once and
+hands in the row→text map (`ARCH-PURE`). Passing every covered row rather than
+just the anchors keeps the whole check in one pass over one input, instead of a
+second `verify_spans` entry point (`ARCH-DRY`).
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -179,6 +232,15 @@ git commit -m "folds: #200 M1: verify fold anchors in the projection"
 - Test: `tests/integration/tool_folds_spec.lua`
 
 The current deleter positions the cursor at each *desired start row* and `zd`s. A fold anywhere else in the exchange is untouched — that is what lets a stale fold survive forever. Replace it with a span clear.
+
+**This changes an ownership contract, deliberately (PQ-1).** Today the contract is *"Parley owns folds at projected start rows"*; after this task it is **"Parley owns every fold within an exchange span"** — operator decision, 2026-08-20. A manual `zf` inside an exchange is now deleted on the next reconcile. A fold outside every exchange span is still untouched.
+
+Two pre-existing tests encode the old contract and **must both be dispositioned in this task** — do not predict their result, run them:
+
+| Test | Fold it creates | Disposition |
+|---|---|---|
+| `tests/integration/tool_folds_spec.lua:39` — *"leaves a user fold outside the rewritten range untouched"* | `10,11fold`, asserted at 11–12 after the mutation shifts it | Expected to survive — the exchange holds only a `thinking` block at 7–9, so 11–12 should fall outside the span. **Verify by running; if it now fails, the fold is inside the span and this test converts like the one below.** |
+| `tests/integration/tool_folds_spec.lua:57` — *"builds initial folds from semantic model blocks without clearing an unrelated fold"* | `25,26fold` over trailing prose `plain one` / `plain two`, asserted at `:76-77` | **Converts.** Lines 25–26 are the exchange's trailing text block, inside the span, so the fold is now deleted by design. |
 
 - [ ] **Step 1: Write the failing test**
 
@@ -232,13 +294,20 @@ local function clear_folds_in_span(buf, win, first_0, last_0)
         local last_row = math.min(last_0 + 1, line_count)
         local row = math.max(first_0 + 1, 1)
         while row <= last_row do
-            vim.api.nvim_win_set_cursor(win, { row, 0 })
-            -- zD deletes nested folds at the cursor too, so one pass per row
-            -- is enough; guard the loop anyway in case foldlevel does not drop.
-            local guard = 0
-            while vim.fn.foldlevel(row) > 0 and guard < 32 do
-                vim.cmd("normal! zD")
-                guard = guard + 1
+            -- PQ-5: probe with foldlevel (no cursor motion) and only pay for a
+            -- cursor set on a row that actually carries a fold. This runs per
+            -- streamed chunk via chat_respond's around_write, where the common
+            -- case is "span already clean" — that case must cost one VimL call
+            -- per row, not a cursor set per row.
+            if vim.fn.foldlevel(row) > 0 then
+                vim.api.nvim_win_set_cursor(win, { row, 0 })
+                -- zD deletes nested folds at the cursor too, so one pass per row
+                -- is enough; guard the loop anyway in case foldlevel does not drop.
+                local guard = 0
+                while vim.fn.foldlevel(row) > 0 and guard < 32 do
+                    vim.cmd("normal! zD")
+                    guard = guard + 1
+                end
             end
             row = row + 1
         end
@@ -280,12 +349,28 @@ function M.prepare_exchange_update(buf, model, exchange_index)
 end
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 4: Convert the test that encodes the old contract**
+
+In `tests/integration/tool_folds_spec.lua:57`, rename the test and invert its
+last two assertions — the user fold at 25–26 is now inside the exchange span
+and is cleared by design:
+
+```lua
+    it("builds initial folds from semantic model blocks and clears user folds in the span", function()
+        -- ... buffer setup and `vim.cmd("25,26fold")` unchanged ...
+
+        -- #200: Parley owns every fold within an exchange span, so a manual
+        -- fold over the exchange's trailing prose does not survive a reconcile.
+        assert.equals(-1, vim.fn.foldclosed(25))
+    end)
+```
+
+- [ ] **Step 5: Run the whole file and disposition test `:39` empirically**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/tool_folds_spec.lua" -c "qa!"`
-Expected: PASS — including the pre-existing `leaves a user fold outside the rewritten range untouched` (that fold sits at lines 10-11, outside the exchange span, so the span clear does not reach it).
+Expected: PASS. If `leaves a user fold outside the rewritten range untouched` fails, its fold *is* inside the span — convert it the same way and record the correction in the issue `## Log`, rather than widening the span exception to keep it green.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add lua/parley/tool_folds.lua tests/integration/tool_folds_spec.lua
@@ -425,6 +510,18 @@ function M.reconcile_exchange(buf, win, model, exchange_index)
         first_0, last_0 = exchange_span(fresh, exchange_index)
     end
 
+    -- PQ-5: chat_respond.lua:1743 wraps EVERY streamed chunk in
+    -- with_exchange_update, so this runs per chunk. Most chunks only grow a
+    -- text block and leave the fold set identical — in that case neither the
+    -- span clear nor the re-fold is needed, and skipping both keeps the hot
+    -- path O(#ranges) instead of O(span). Verification above already proved
+    -- the recorded set still matches the buffer, so the memo cannot go stale
+    -- silently: any drift fails ranges_fit and takes the slow path.
+    if applied_matches(buf, win, exchange_index, ranges) then
+        notify({ phase = "unchanged", win = win, exchange_index = exchange_index, ranges = ranges })
+        return true
+    end
+
     clear_folds_in_span(buf, win, first_0, last_0)
     vim.api.nvim_win_call(win, function()
         vim.api.nvim_set_option_value("foldminlines", 0, { win = win })
@@ -432,22 +529,88 @@ function M.reconcile_exchange(buf, win, model, exchange_index)
             vim.cmd(string.format("%d,%dfold", range.start_0 + 1, range.end_0 + 1))
         end
     end)
+    record_applied(buf, win, exchange_index, ranges)
     notify({ phase = "reconcile", win = win, exchange_index = exchange_index, ranges = ranges })
     return true
 end
 ```
+
+With the memo alongside `initialized`, invalidated by the same `WinClosed` /
+`BufUnload` / `BufDelete` autocmds so it cannot outlive the window it describes:
+
+```lua
+local applied = {}  -- [buf][win][exchange_index] = "start:end,start:end"
+
+local function ranges_key(ranges)
+    local parts = {}
+    for i, r in ipairs(ranges) do parts[i] = r.start_0 .. ":" .. r.end_0 end
+    return table.concat(parts, ",")
+end
+
+local function applied_matches(buf, win, exchange_index, ranges)
+    local per_buf = applied[buf]
+    local per_win = per_buf and per_buf[win]
+    return per_win ~= nil and per_win[exchange_index] == ranges_key(ranges)
+end
+
+local function record_applied(buf, win, exchange_index, ranges)
+    applied[buf] = applied[buf] or {}
+    applied[buf][win] = applied[buf][win] or {}
+    applied[buf][win][exchange_index] = ranges_key(ranges)
+end
+```
+
+`prepare_exchange_update`'s span clear must drop the memo for that exchange
+(`applied[buf][win][exchange_index] = nil`) — it removes folds reconcile would
+otherwise believe are still applied.
 
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/tool_folds_spec.lua" -c "qa!"`
 Expected: PASS, all cases.
 
-- [ ] **Step 5: Run the full fold + exchange-model spec set**
+- [ ] **Step 5: Pin the streaming hot path (PQ-5)**
+
+The memo is a performance claim, so test it as one. Append to
+`tests/integration/tool_folds_spec.lua`:
+
+```lua
+it("does not re-clear or re-fold an exchange whose fold set is unchanged", function()
+    -- The streaming shape: around_write calls with_exchange_update per chunk.
+    -- Growing a trailing text block must not touch the fold set.
+    local phases = {}
+    tool_folds._observer = function(e) phases[#phases + 1] = e.phase end
+    finally(function() tool_folds._observer = nil end)
+
+    -- ... buffer with one 📎: block plus trailing prose, hydrate, then ...
+    for _ = 1, 5 do
+        tool_folds.reconcile_exchange(buf, win, model, 1)
+    end
+
+    local unchanged = 0
+    for _, p in ipairs(phases) do if p == "unchanged" then unchanged = unchanged + 1 end end
+    assert.equals(4, unchanged)  -- first applies, the rest short-circuit
+end)
+```
+
+- [ ] **Step 6: Measure it against the existing perf harness**
+
+The repo already has a streaming perf gate — `tests/perf/chat_typing.lua` driven
+by `tests/integration/perf_chat_typing_spec.lua` through `tests/perf/harness.lua`.
+Run it before and after Tasks 2–3:
+
+Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/perf_chat_typing_spec.lua" -c "qa!"`
+Expected: within the harness's existing budget. Record both numbers in the issue
+`## Log`. If the after-number regresses beyond the budget, the memo is not
+short-circuiting the streaming path — fix that before proceeding to M2 rather
+than raising the budget.
+
+- [ ] **Step 7: Run the full fold + exchange-model spec set**
 
 Run: `make test-spec SPEC=chat/exchange_model`
 Expected: every mapped spec passes — in particular `keeps exactly one fold level across consecutive tool-loop appends` (the span clear is what makes that hold structurally rather than by luck) and `restores from the current buffer model without masking a mutation error`.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add lua/parley/tool_folds.lua tests/integration/tool_folds_spec.lua
@@ -462,7 +625,9 @@ The audit that found this ran as a throwaway script. Make it a durable test so t
 
 **Files:**
 - Create: `tests/integration/fold_invariants_spec.lua`
-- Reference: `workshop/parley/*.md` (the in-repo corpus; the operator's `chat_dir` is not available in CI)
+- Reference: the in-repo corpus under `workshop/parley/` — **11 files on disk, 10 tracked** at time of writing. The *127* in the issue `## Log` is the operator's iCloud `chat_dir`, which is not available in CI; do not restate 127 as this harness's coverage. Enumerate via `git ls-files` rather than a filesystem glob, so the suite's shape does not vary with untracked or deleted working-tree files. The corpus is a *regression net over real shapes*; the adversarial fixture (Task 10) is the real coverage of the defect classes.
+
+**The oracle must derive from the parsed model, not from raw text (PQ-2).** A regex sweep over file lines asserts `foldclosed(i) == i` for every `📎:`-looking line — but after Task 9 a `📎:` *inside* a tool body is content, correctly living inside the enclosing fold, so a raw-text oracle would demand the opposite of what Task 9 implements and Task 10's fixture could never pass. Walk the exchange model instead: only question `line_start`s and foldable block starts enter the assertions, and in-body markers are structurally invisible to them.
 
 - [ ] **Step 1: Write the test**
 
@@ -486,7 +651,9 @@ describe("fold invariants over the repo transcript corpus", function()
         end
     end)
 
-    local corpus = vim.fn.glob("workshop/parley/*.md", false, true)
+    -- Tracked files only: a filesystem glob makes the suite's shape depend on
+    -- the working tree (right now: 11 on disk, 10 tracked, 1 deleted-not-staged).
+    local corpus = vim.fn.systemlist("git ls-files workshop/parley/*.md")
 
     it("finds a corpus to check", function()
         assert.is_true(#corpus > 0)
@@ -502,17 +669,27 @@ describe("fold invariants over the repo transcript corpus", function()
             tool_folds.hydrate_window(buf, win)
             vim.api.nvim_win_call(win, function() vim.cmd("normal! zM") end)
 
-            for i, line in ipairs(lines) do
-                local closed = vim.fn.foldclosed(i)
-                if line:match("^💬:") then
-                    assert.message(("question folded at %s:%d"):format(path, i))
-                        .equals(-1, closed)
-                elseif line:match("^🔧:") or line:match("^📎:")
-                    or line:match("^📝:") or line:match("^🧠:") then
-                    assert.message(("marker not folded at %s:%d"):format(path, i))
-                        .is_true(closed ~= -1)
-                    assert.message(("marker swallowed by an earlier fold at %s:%d"):format(path, i))
-                        .equals(i, closed)
+            -- Model-derived oracle (PQ-2): the structural positions come from
+            -- the same parse the folder used, so a marker inside a tool body is
+            -- not a subject of either assertion.
+            local chat_parser = require("parley.chat_parser")
+            local header_end = chat_parser.find_header_end(lines)
+            if not header_end then return end  -- not a chat transcript
+            local model = require("parley.exchange_model").from_parsed_chat(
+                chat_parser.parse_chat(lines, header_end, require("parley.config")))
+
+            for k, exchange in ipairs(model.exchanges) do
+                local q_row = model:exchange_start(k) + 1
+                assert.message(("question folded at %s:%d"):format(path, q_row))
+                    .equals(-1, vim.fn.foldclosed(q_row))
+
+                for b, block in ipairs(exchange.blocks) do
+                    if block.size > 0 and FOLDABLE_KINDS[block.kind] then
+                        local row = model:block_start(k, b) + 1
+                        assert.message(("%s block not folded at its own start, %s:%d")
+                            :format(block.kind, path, row))
+                            .equals(row, vim.fn.foldclosed(row))
+                    end
                 end
             end
             vim.api.nvim_buf_delete(buf, { force = true })
@@ -521,10 +698,14 @@ describe("fold invariants over the repo transcript corpus", function()
 end)
 ```
 
+`FOLDABLE_KINDS` must not be a fourth restatement of the policy — export the
+existing table from `fold_projection` (`M.FOLDABLE`) and read it here, so the
+harness tracks the policy automatically if it ever changes (`ARCH-DRY`).
+
 - [ ] **Step 2: Run it**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/fold_invariants_spec.lua" -c "qa!"`
-Expected: PASS. (It passed at audit time on all 127 transcripts, so a failure here means a regression introduced by Tasks 1-3, not a pre-existing defect.)
+Expected: PASS over the 10 tracked transcripts. The audit's equivalent sweep was clean across the operator's full 127-file `chat_dir`, so a failure here means a regression introduced by Tasks 1-3, not a pre-existing defect.
 
 - [ ] **Step 3: Register in traceability**
 
@@ -599,8 +780,43 @@ describe("fence grammar", function()
         assert.equals("````", fence.for_content("a ``` block"))
         assert.equals("`````", fence.for_content("a ```` block"))
     end)
+
+    -- The grammar is a scanner over arbitrary model output, so three literals
+    -- are blind to the malformed-input class. Pin the invariant instead.
+    it("always picks a fence that cannot be closed by its own content", function()
+        local bodies = {
+            "", "plain", "`", "``", "```", "````````",
+            "``` ```` `````", "a\n```\nb\n````\nc", "`\n``\n```\n",
+            "```json\n{}\n```", "text with ` inline ` ticks",
+        }
+        for _, body in ipairs(bodies) do
+            local open = fence.for_content(body)
+            local n = fence.open_len(open)
+            assert.message(("for_content(%q) -> %q is not a valid opener")
+                :format(body, open)).is_true(n ~= nil)
+            for line in (body .. "\n"):gmatch("([^\n]*)\n") do
+                assert.message(("body line %q closes its own fence %q")
+                    :format(line, open)).is_false(fence.closes(line, n))
+            end
+        end
+    end)
+
+    it("round-trips a serialized tool result through the reader", function()
+        local serialize = require("parley.tools.serialize")
+        for _, body in ipairs({ "plain", "```\nnested\n```", "````\ndeep\n````" }) do
+            local rendered = serialize.render_result("read_file", body)
+            local parsed = serialize.parse_result(rendered)
+            assert.message(("round-trip lost content for %q"):format(body))
+                .equals(body, parsed.content)
+        end
+    end)
 end)
 ```
+
+The round-trip case is the one that would have caught the `answer_structure`
+defect had it existed earlier; confirm `render_result` / `parse_result` are the
+actual exported names in `lua/parley/tools/serialize.lua` before writing it, and
+use whatever the real pair is.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -738,6 +954,41 @@ end
 ```
 
 Leave `FENCE_MIN` only if other code references it; otherwise delete it and use `fence.MIN`.
+
+- [ ] **Step 3b: Convert the reader side too**
+
+`ARCH-PURPOSE`'s shadow-sweep: the writer is not the only consumer. The reader
+restates the same rule three more times as `%1` backreferences —
+`lua/parley/tools/serialize.lua:88`, `:90` (the `json` info-string variant), and
+`:135` in `parse_result`. A hand-maintained restatement is a deferred consumer,
+not a finished one, so convert them in the same task rather than leaving the
+Done-when half-met.
+
+Replace the single-regex extraction with a line scan driven by the grammar:
+
+```lua
+-- Extract a fenced body using the shared grammar: the first line that opens a
+-- fence defines the length, and only a bare run of that same length closes it.
+local function extract_fenced_body(text)
+    local lines = vim.split(text, "\n", { plain = true })
+    local open_len, first
+    for i, line in ipairs(lines) do
+        if not open_len then
+            open_len = fence.open_len(line)
+            if open_len then first = i + 1 end
+        elseif fence.closes(line, open_len) then
+            return table.concat(lines, "\n", first, i - 1)
+        end
+    end
+    return nil
+end
+```
+
+Both `parse_call` and `parse_result` then call it, so writer and reader share
+one definition of "the same pair". The parity test in Step 1 and
+`SPEC=providers/tool_use` are the guard that behavior is unchanged; if either
+regresses, the regex and the scanner disagree on an input the grammar has to
+decide — fix the grammar, not the call site.
 
 - [ ] **Step 4: Run the tool specs**
 
@@ -933,51 +1184,60 @@ Expected: FAIL — the first case reports 3 exchanges (the two in-body markers e
 
 - [ ] **Step 3: Write minimal implementation**
 
-Declare the state next to the other loop state in `parse_chat`:
+**Correction (PQ-3): `chat_parser` already models fences.** The earlier claim
+that it "does not model fences at all" is false. `cb_append_line`
+(`lua/parley/chat_parser.lua:455-469`) already tracks `cb_state.tool_fence_len`
+with correct same-length close matching, and drives a `tool_body_complete`
+auto-transition at `:428`/`:440`. Introducing `tool_fence_len` /
+`tool_awaiting_fence` locals in `parse_chat` would create a **second state
+machine over the same fences**, with a different open pattern and a different
+close test — two trackers that can disagree (`ARCH-DRY`).
+
+The real gap is narrower: the fence state exists in `cb_state`, but the **main
+loop at `:549` never consults it** before branching on `decoration_kind`. So the
+task is to read the state that is already there, and to make the one existing
+tracker derive its grammar from `parley.fence`.
+
+**Step 3a — make the existing tracker derive from the grammar.** In
+`cb_append_line`, replace the two inline patterns with the module:
 
 ```lua
-	-- Tool-body fence state (#200). Structural markers inside a tool body are
-	-- CONTENT — tool output routinely contains 💬:/🤖:/📎: lines (reading a
-	-- transcript, grepping this repo). Without this, such a line forks a
-	-- spurious exchange and drags the rest of the tool body out of its block.
-	local fence = require("parley.fence")
-	local tool_fence_len = nil      -- open fence length, nil when closed
-	local tool_awaiting_fence = false -- saw the 🔧:/📎: header, fence not yet open
-```
-
-At the top of the content loop, immediately after `decoration_kind` is computed:
-
-```lua
-	for i = header_end + 1, #lines do
-		local line = lines[i]
-		local decoration_kind = highlight_structure.classify(line, decoration_patterns).kind
-
-		if tool_fence_len then
-			if fence.closes(line, tool_fence_len) then
-				tool_fence_len = nil
-			end
-			-- Inside the body every line is content, whatever it looks like.
-			decoration_kind = "text"
-		elseif tool_awaiting_fence then
-			local opened = fence.open_len(line)
-			if opened then
-				tool_fence_len = opened
-				tool_awaiting_fence = false
-				decoration_kind = "text"
-			elseif decoration_kind ~= "text" and decoration_kind ~= "blank" then
-				-- Malformed block: no body ever opened. Fall through and let
-				-- the marker be structural again.
-				tool_awaiting_fence = false
+		if cb_state.current_kind == "tool_use" or cb_state.current_kind == "tool_result" then
+			if not cb_state.tool_fence_len then
+				cb_state.tool_fence_len = fence.open_len(line)
+			elseif fence.closes(line, cb_state.tool_fence_len) then
+				cb_state.tool_body_complete = true
 			end
 		end
 ```
 
-In the `tool_use` and `tool_result` arms, set the flag after `cb_append_line(line, i)`:
+This is the `ARCH-PURPOSE` half of the Done-when — `chat_parser` genuinely
+derives from `parley.fence` rather than restating it. Note `fence.open_len` must
+accept the same info-string shape the current pattern does (`^(`+)[%w_%-]*%s*$`);
+Task 6's grammar is the place to reconcile that, and a parity test there must
+pin it, because this line changes how existing transcripts parse.
+
+**Step 3b — let the main loop see the body.** In `parse_chat`, immediately after
+`decoration_kind` is computed, suppress structural classification while
+`cb_state` says we are inside a tool body:
 
 ```lua
-			tool_awaiting_fence = true
-			tool_fence_len = nil
+		-- #200: structural markers inside a tool body are CONTENT. Tool output
+		-- routinely contains 💬:/🤖:/📎: lines (reading a transcript, grepping
+		-- this repo). cb_append_line already knows where the body is; the main
+		-- loop just has to stop classifying against it.
+		if cb_state and cb_state.tool_fence_len and not cb_state.tool_body_complete
+			and (cb_state.current_kind == "tool_use" or cb_state.current_kind == "tool_result")
+		then
+			decoration_kind = "text"
+		end
 ```
+
+No new state, no second grammar — the main loop reads the tracker that already
+exists. Confirm by inspection that `cb_state` is in scope at `:549` and that
+`cb_append_line` has already run for the *previous* line, so the flag reflects
+the body the current line sits in; if the ordering is off by one, fix the
+ordering rather than adding a shadow variable.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -1014,10 +1274,18 @@ The real corpus contains no in-body markers today (the audit found 0), so it can
 
 In `tests/integration/fold_invariants_spec.lua`, extend the corpus list:
 
+Extend the `git ls-files` list Task 4 established — do not reintroduce a
+filesystem glob, which is exactly what made the suite's shape depend on the
+working tree:
+
 ```lua
-    local corpus = vim.fn.glob("workshop/parley/*.md", false, true)
-    vim.list_extend(corpus, vim.fn.glob("tests/fixtures/fold_adversarial.md", false, true))
+    local corpus = vim.fn.systemlist("git ls-files workshop/parley/*.md")
+    table.insert(corpus, "tests/fixtures/fold_adversarial.md")
 ```
+
+The fixture is a tracked file, so it is deliberately named rather than globbed:
+it is the *designed* coverage of the defect classes, and a silent disappearance
+should fail the suite, not shrink it.
 
 - [ ] **Step 3: Run it**
 
@@ -1074,4 +1342,58 @@ Let `close` measure `--actual` itself.
 
 ## Revisions
 
-_(none yet — append timestamped entries here rather than overwriting above)_
+### 2026-08-20 — plan-quality round 1 (PQ-1 … PQ-5 + minors)
+
+Reason: `sdlc change-code --issue 200` blocked with 1 Critical and 4 Important
+findings, plus 4 Minor. Each was verified against the code before revising —
+all five blocking findings were real.
+
+Delta:
+
+- **PQ-1 (Critical) — Task 2.** The span clear silently reversed an ownership
+  contract and broke `tests/integration/tool_folds_spec.lua:57`, a test named
+  *"…without clearing an unrelated fold"* whose `25,26fold` sits inside the
+  exchange span. Operator decision (2026-08-20): **Parley owns every fold within
+  an exchange span** — the wider contract is intended. Task 2 now states the
+  contract change explicitly, tabulates *both* pre-existing tests that encode
+  the old one (`:39` and `:57`), converts `:57`, and requires `:39` to be
+  dispositioned by running it rather than by prediction.
+- **PQ-2 (Important) — Tasks 4 & 10.** The corpus oracle regex-matched raw file
+  text, so it asserted `foldclosed == i` for markers *inside* tool bodies —
+  exactly what Task 9 makes untrue, meaning Task 10's fixture could never pass.
+  The oracle now walks the parsed exchange model: only question `line_start`s
+  and foldable block starts are subjects, so in-body markers are structurally
+  invisible to it. `FOLDABLE` is exported from `fold_projection` rather than
+  restated a fourth time (`ARCH-DRY`).
+- **PQ-3 (Important) — Task 9.** The plan's claim that `chat_parser` "does not
+  model fences at all" was **false**: `chat_parser.lua:455-469` already tracks
+  `cb_state.tool_fence_len` with correct same-length matching. The planned new
+  locals would have been a second state machine over the same fences. Task 9 now
+  (a) converts that existing tracker to derive from `parley.fence`, and (b) has
+  the main loop at `:549` consult it. Smaller change, no shadow state.
+- **PQ-4 (Important) — Task 1.** `verify_anchors` checked `start_0` only, so
+  end-drift that keeps a valid anchor while overshooting the next question
+  passed verification — leaving the Spec's "not swallowed by an earlier fold"
+  half undefended. Verification now scans each range's interior for a `user`
+  classification, in the same pass over the same input.
+- **PQ-5 (Important) — Tasks 2 & 3.** `chat_respond.lua:1743` wraps **every
+  streamed chunk** in `with_exchange_update`, so an O(span) clear with a cursor
+  set per row lands on the hot path. Two mitigations: `clear_folds_in_span`
+  probes with `foldlevel` and only sets the cursor on rows that actually carry a
+  fold; and `reconcile_exchange` memoizes the applied range set per
+  (buf, win, exchange) and short-circuits when the desired set is unchanged —
+  the common streaming case. Pinned by an observer-phase test and measured
+  against the existing `tests/perf/chat_typing.lua` harness.
+- **Minor — Task 6.** `fence` was tested with three hand-picked literals; added
+  a property case (`for_content` output can never be closed by its own content,
+  over malformed inputs) and a serialize round-trip case.
+- **Minor — Task 7.** Only the writer side derived from the grammar. Added Step
+  3b converting the reader-side `%1` restatements at `serialize.lua:88`, `:90`,
+  `:135` — otherwise the Done-when is half-met (`ARCH-PURPOSE`).
+- **Minor — Task 4.** The 127-transcript figure is the operator's iCloud
+  `chat_dir`, not this harness's coverage: the in-repo corpus is 11 files, 10
+  tracked. Corrected, and the corpus is now enumerated with `git ls-files` so the
+  suite's shape does not vary with the working tree.
+- **Minor — header.** Added an explicit **Non-goals** section: markdown fences in
+  ordinary answer prose stay fence-naive (tool bodies are the actual defect
+  surface), fold state is not persisted, `~~~` fences are unsupported.
