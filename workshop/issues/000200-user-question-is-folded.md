@@ -354,15 +354,19 @@ machine, not the algorithm). Rewritten to compare best-of-N minimums.
 **Verification:** `make test` exit 0 (run twice), full suite green; lint 0
 warnings / 0 errors across 329 files.
 
-Caveat on how that was obtained: under the agent sandbox, `git_markdown_source`
-and `markdown_finder_async` fail because `git init` cannot copy its template
-hooks into the sandbox-redirected `TMPDIR` (`Operation not permitted`). Neither
-spec contains the string `fold`, and both pass in isolation. The M1 boundary
-review reported these as a deterministic `make test` failure caused by the
-Makefile setting `TMPDIR=$(CURDIR)/.test-tmp` — that mechanism did not
-reproduce: the Makefile sets no `TMPDIR`, and `make test` exits 0 twice here
-with a normal `TMPDIR`. The failure is environmental and tied to where `TMPDIR`
-points, not to the Makefile.
+Caveat on how that was obtained, corrected: `Makefile.parley:28` **does** set
+`TMPDIR="$(TEST_TMP)"` (= `$(CURDIR)/.test-tmp`) in `TEST_ENV`, reaching the
+top-level `Makefile` via `include Makefile.workflow` / `-include Makefile.local`.
+An earlier note here claimed the Makefile sets no `TMPDIR`; that was wrong — it
+came from grepping only `Makefile` and not the included sub-makefiles, and the
+M1 review was right to reject it.
+
+The full mechanism needs both halves: the harness redirects `TMPDIR` into the
+repo at `.test-tmp`, **and** under the agent sandbox `git init` is denied the
+write it needs to copy its template hooks there (`Operation not permitted`), so
+`git_markdown_source_spec` and `markdown_finder_async_spec` fail. Outside the
+sandbox the same `git init` under `.test-tmp` succeeds (verified, exit 0) and
+`make test` exits 0. Neither spec contains the string `fold`.
 
 ### 2026-08-20 — M1 boundary review: REWORK, addressed
 
@@ -410,6 +414,47 @@ transcript with real 🔧:/📎: blocks); `make test` exit 0; lint 0 warnings /
 0 errors across 329 files. Note `chat_progress_process_spec.lua` is flaky under
 full-suite load — it binds a local port and intermittently gets none; it passes
 7/7 in isolation, contains no fold code, and the suite passes on retry.
+
+### 2026-08-20 — M1 boundary review round 2: REWORK, addressed
+
+**C1 (Critical) — my round-1 fix over-corrected, creating the same class of
+failure it removed.** `verify_span` demanded the span's first row be a `💬:`
+line. `chat_parser.lua:623-635` fabricates a question block when an answer has
+no preceding question, so `exchange_start` lands on a blank line — verification
+failed, the re-derive produced the identical anchor, and `reconcile_exchange`
+refused permanently. Reproduced:
+
+    reconcile -> false  which=span
+    exchange_start(1)=4 -> line ""
+    🧠: / 🔧: / 📎: / 📝:  all foldclosed=-1
+
+Fixed by testing what the producer actually guarantees: **no question after the
+first row**, rather than a question *at* it. A span reaching a neighbour still
+fails, because reaching one means covering its question. Both C1 scenarios now
+hold together — the assistant-first transcript folds all four markers, and the
+neighbour's `📎:` keeps `foldclosed == its own row`. Pinned by
+`tests/fixtures/fold_assistant_first.md`, verified to fail with the old rule.
+
+**Streaming cost of the drift branch.** The re-derive re-parsed the whole
+buffer on every refused reconcile — once per exchange and once per streamed
+chunk. Measured **1356 ms** per refused reconcile on a 4805-line chat; memoized
+on `changedtick` it is **1.05 ms** (1290×). The key is exact, not approximate:
+identical buffer content gives an identical parse, and any edit moves the tick —
+unlike the fold-state memo removed earlier, this one cannot go stale silently.
+The drift log is emitted once per buffer state rather than once per call.
+
+**A correction I owe the record.** My round-1 rebuttal of I4 was wrong.
+`Makefile.parley:28` does set `TMPDIR="$(TEST_TMP)"`; I had grepped only
+`Makefile` and missed the `include Makefile.workflow` / `-include
+Makefile.local` chain. The review was right. Accurate mechanism: the harness
+points `TMPDIR` into `.test-tmp`, and the agent sandbox denies `git init` the
+template-hook write there. Unsandboxed both succeed.
+
+Also withdrawn: the "injectable corpus seam" claim — `corpus_provider` is a
+single point of definition, not an injection point, and the comment now says so.
+
+**Verification:** `fold_projection_spec` 15/15, `tool_folds_spec` 18/18,
+`fold_invariants_spec` 12/12; lint 0 warnings / 0 errors across 329 files.
 
 ## Revisions
 

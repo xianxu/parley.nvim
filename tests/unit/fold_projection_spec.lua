@@ -162,11 +162,17 @@ describe("span verification", function()
         }, patterns))
     end)
 
-    it("rejects a span whose first row is not a question", function()
-        assert.is_false(projection.verify_span(4, 6, {
-            [4] = "prose",
-            [5] = "more",
-            [6] = "still more",
+    -- chat_parser fabricates a question block for an assistant-first transcript
+    -- (`chat_parser.lua:623-635`), so exchange_start can land on prose or a
+    -- blank line. Requiring a question there refuses such a transcript
+    -- permanently — a fresh parse yields the same anchor, and hydrate_window
+    -- latches. The span check must test what the producer actually guarantees:
+    -- that the span does not reach into a NEIGHBOURING exchange.
+    it("accepts a span whose first row is not a question", function()
+        assert.is_true(projection.verify_span(4, 6, {
+            [4] = "",
+            [5] = "🤖: [A]",
+            [6] = "🔧: read id=x",
         }, patterns))
     end)
 
@@ -176,5 +182,15 @@ describe("span verification", function()
 
     it("accepts a single-row span holding only its question", function()
         assert.is_true(projection.verify_span(4, 4, { [4] = "💬: q" }, patterns))
+    end)
+
+    it("still rejects a stale span that reached the next exchange's question", function()
+        assert.is_false(projection.verify_span(4, 8, {
+            [4] = "💬: mine",
+            [5] = "🤖: [A]",
+            [6] = "prose",
+            [7] = "",
+            [8] = "💬: the neighbour",
+        }, patterns))
     end)
 end)

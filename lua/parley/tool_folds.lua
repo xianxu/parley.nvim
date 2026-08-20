@@ -24,12 +24,13 @@ end
 --- Report a refused reconcile. The observer seam carries the detail for tests;
 --- production gets one debug line, because an exchange that silently stops
 --- folding is indistinguishable from one that has nothing to fold.
-local function report_drift(buf, win, exchange_index, failed_index, which, ranges)
+local function report_drift(buf, win, exchange_index, failed_index, which, ranges, do_log)
     notify({
         phase = "drift", win = win, exchange_index = exchange_index, ranges = {},
         failed_index = failed_index, which = which,
         failed_range = failed_index and ranges and ranges[failed_index] or nil,
     })
+    if not do_log then return end
     local range = failed_index and ranges and ranges[failed_index]
     require("parley.logger").debug(string.format(
         "tool_folds: refused fold reconcile for buf %d exchange %d — %s drift%s",
@@ -153,6 +154,28 @@ local function default_model_provider(buf)
     return require("parley.exchange_model").from_parsed_chat(parsed)
 end
 
+-- The drift re-derive parses the WHOLE buffer, and reconcile runs once per
+-- exchange (apply_folds/hydrate_window) and once per streamed chunk. Measured
+-- 1356 ms per refused reconcile on a 4805-line chat, so re-parsing per call is
+-- not affordable. Keyed on changedtick: identical buffer content yields an
+-- identical parse, so reusing it within a tick is exact, not an approximation.
+-- Unlike a fold-state memo this cannot go stale silently — any edit moves the
+-- tick.
+local rederived = setmetatable({}, { __mode = "k" })
+
+local function rederive_model(buf)
+    local tick = vim.api.nvim_buf_get_var(buf, "changedtick")
+    local hit = rederived[buf]
+    if hit and hit.tick == tick then return hit.model, hit.logged end
+    local ok, model = pcall(M._model_provider or default_model_provider, buf)
+    rederived[buf] = { tick = tick, model = ok and model or nil, logged = false }
+    return rederived[buf].model, false
+end
+
+local function mark_drift_logged(buf)
+    if rederived[buf] then rederived[buf].logged = true end
+end
+
 --- Reconcile exchange K's folds to the projection's desired state.
 ---
 --- The projection is a desired state, not an append list: the exchange's span is
@@ -172,10 +195,9 @@ function M.reconcile_exchange(buf, win, model, exchange_index)
 
     local fits, failed_index, which = model_fits(buf, ranges, first_0, last_0, patterns)
     if not fits then
-        local provider = M._model_provider or default_model_provider
-        local ok, fresh = pcall(provider, buf)
+        local fresh, already_logged = rederive_model(buf)
         local fresh_ranges, fresh_first, fresh_last
-        if ok and fresh and fresh.exchanges[exchange_index] then
+        if fresh and fresh.exchanges[exchange_index] then
             fresh_ranges = projection.desired_folds(fresh, exchange_index)
             fresh_first, fresh_last = exchange_span(fresh, exchange_index)
             fits = model_fits(buf, fresh_ranges, fresh_first, fresh_last, patterns)
@@ -186,7 +208,11 @@ function M.reconcile_exchange(buf, win, model, exchange_index)
             -- Refuse rather than fold wrongly — but do not swallow the
             -- diagnosis with it. A silently unfolded exchange is the same
             -- shape of invisible failure that let #200 persist unnoticed.
-            report_drift(buf, win, exchange_index, failed_index, which, ranges)
+            -- Logged once per buffer state: reconcile runs per exchange and
+            -- per streamed chunk, so a persistent drift would otherwise flood.
+            report_drift(buf, win, exchange_index, failed_index, which, ranges,
+                not already_logged)
+            mark_drift_logged(buf)
             return false
         end
         ranges, first_0, last_0 = fresh_ranges, fresh_first, fresh_last

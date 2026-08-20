@@ -31,8 +31,7 @@ function M.anchor_kind(block_kind)
     return ANCHOR_KIND[block_kind]
 end
 
---- Check that an exchange's span really is that exchange: it starts on its own
---- question line and covers no other question.
+--- Check that an exchange's span has not drifted into a NEIGHBOURING exchange.
 ---
 --- The span is the input to fold *destruction*, and it comes from the same
 --- possibly-stale model as the fold ranges. Verifying only the ranges leaves
@@ -41,11 +40,18 @@ end
 --- drifted span still gets cleared. That deletes a neighbouring exchange's
 --- fold, which nothing recreates (`hydrate_window` latches per buf/win), so the
 --- "always folded" invariant breaks for the rest of the session (#200 C1).
+---
+--- The test is "no question after the first row", NOT "the first row is a
+--- question". `chat_parser` fabricates a question block for an assistant-first
+--- transcript (`chat_parser.lua:623-635`), so `exchange_start` legitimately
+--- lands on prose or a blank line; demanding a question there refuses those
+--- transcripts *permanently*, since a fresh parse produces the same anchor and
+--- hydration will not re-run. A span reaching a neighbour is still caught,
+--- because reaching one means covering its question.
 --- @return boolean
 function M.verify_span(first_0, last_0, lines, patterns)
     patterns = patterns or require("parley.highlight_structure").patterns()
-    local first = lines[first_0]
-    if first == nil or not first:match(patterns.user_pattern) then return false end
+    if lines[first_0] == nil then return false end
     for row = first_0 + 1, last_0 do
         local line = lines[row]
         if line == nil then return false end

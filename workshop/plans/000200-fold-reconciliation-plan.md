@@ -34,10 +34,10 @@
   - **DRY rationale:** Today the rule lives in three places, each independently written. `tools/serialize.lua:84` gets it right with a `%1` backreference (and restates it again on the reader side at `:85-88` and `:135`); `answer_structure.lua:88` closes on *any* ≥3-backtick run; `chat_parser.lua:455-469` has its own correct-but-separate `tool_fence_len` tracker. This is the single source all of them derive from (`ARCH-DRY`, and `ARCH-PURPOSE`'s shadow-sweep: every consumer derives, none restates — including serialize's reader-side matchers, which are consumers too).
   - **Future extensions:** Tilde fences (`~~~`) if a provider ever emits them — `open_len` widens to return `(len, char)`.
 
-- **fold_projection** — gains `anchor_kind` (block kind → the structural kind its first line must classify as) and `verify_anchors(ranges, anchor_lines, patterns)` → `ok, failed_index`. Stays pure and nvim-free.
+- **fold_projection** — gains `anchor_kind` (block kind → the structural kind its first line must classify as), `verify_anchors(ranges, lines, patterns)` → `ok, failed_index` (anchor **and** interior), `verify_span(first_0, last_0, lines, patterns)` guarding the destructive half, and `is_foldable(kind)` as a read-only view of the policy. Stays pure and nvim-free.
   - **Relationships:** 1:1 with `exchange_model` (projects one exchange at a time); consumed only by `tool_folds`.
   - **DRY rationale:** The block-kind ↔ marker-kind mapping (`thinking`↔`reasoning`, the rest identity) exists implicitly today, split between `answer_structure`'s emitted kinds and `highlight_structure`'s classified kinds. Naming it once stops the two vocabularies drifting.
-  - **Future extensions:** A `verify_spans` that checks the whole range, not just the anchor, if end-drift ever matters.
+  - **Future extensions:** none outstanding — whole-range verification and span verification both shipped in M1.
 
 - **answer_structure** — its tool-section scanner derives fence open/close from `fence` instead of "any ``` run", and stops a never-closed fence at the last line before the first following boundary rather than running to the end of the answer.
 
@@ -1438,8 +1438,44 @@ Delta:
   (`ranges` vs `span`) and the failing range, to the observer seam and to one
   debug log line.
 
-Correction to the review: I4 attributed the two sandbox test failures to the
-Makefile setting `TMPDIR=$(CURDIR)/.test-tmp`. The Makefile sets no `TMPDIR`,
-and `make test` exits 0 twice with a normal one; the cause is where `TMPDIR`
-points under the agent sandbox, not the Makefile. The finding's substance —
-that the Log's wording was imprecise — was valid and is fixed.
+On I4 — my first rebuttal was wrong and is withdrawn. `Makefile.parley:28` does
+set `TMPDIR="$(TEST_TMP)"`; I had grepped only `Makefile`, missing the
+`include Makefile.workflow` / `-include Makefile.local` chain. The accurate
+mechanism needs both halves: the harness points `TMPDIR` at `.test-tmp` inside
+the repo, and the agent sandbox denies `git init` the template-hook write there.
+Unsandboxed, that same `git init` succeeds and `make test` exits 0.
+
+### 2026-08-20 — M1 boundary review round 2 (C1 over-correction)
+
+Reason: the round-1 C1 fix over-corrected. `verify_span` required the span's
+first row to be a `💬:` line, but `chat_parser.lua:623-635` fabricates a
+question block for an assistant-first transcript, so `exchange_start` lands on
+a blank line. Verification failed, the re-derive produced the same anchor, and
+`reconcile_exchange` refused **permanently** — the same "always folded"
+invariant failing with the same session-persistent signature the fix was
+written to remove. Reproduced: all four markers `foldclosed=-1`, `which="span"`.
+
+Delta:
+
+- **`verify_span` now tests only "no question after the first row."** That is
+  what the producer actually guarantees, and it still catches a span reaching a
+  neighbour — reaching one means covering its question. Both C1 scenarios now
+  hold at once: the assistant-first transcript folds all four markers, and the
+  neighbour's `📎:` keeps `foldclosed == its own row`. Simpler than the
+  reviewer's suggested "trust the re-derived model's span" and needs no
+  stale-vs-fresh distinction.
+- **`tests/fixtures/fold_assistant_first.md`** pins it in the corpus harness.
+  Verified to have teeth: with the anchor rule restored it fails
+  ("thinking block not folded at its own start").
+- **The drift re-derive is memoized per `changedtick`.** It re-parsed the whole
+  buffer on every refused reconcile — and reconcile runs once per exchange and
+  once per streamed chunk. Measured 1356 ms per refused reconcile on a
+  4805-line chat; now 1.05 ms. Keying on `changedtick` is exact rather than
+  approximate: identical buffer content yields an identical parse, and any edit
+  moves the tick. The drift log line is emitted once per buffer state instead of
+  once per call.
+- **The "injectable corpus seam" claim is withdrawn.** `corpus_provider` is a
+  single point of definition, not an injection point; the comment now says so,
+  and the fixtures are listed explicitly so they depend on neither git nor cwd.
+- **Core concepts** now names `verify_span` and `is_foldable`, and no longer
+  proposes whole-range verification as a future extension — M1 shipped it.

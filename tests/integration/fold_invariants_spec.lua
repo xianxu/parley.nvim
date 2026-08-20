@@ -9,9 +9,11 @@ local projection = require("parley.fold_projection")
 -- assert `foldclosed(i) == i` for every 📎:-looking line, including one inside a
 -- tool body — where it is content, correctly living inside the enclosing fold.
 -- Only question line_starts and foldable block starts are subjects here.
--- Seam mirroring tool_folds' _model_provider / _observer pattern: the corpus
--- source is injectable, so this does not hard-depend on cwd or git-on-PATH.
-local M_corpus_provider = function()
+-- Single point of definition for where the real corpus comes from. Not an
+-- injection seam — nothing outside this file can replace it — but it keeps the
+-- git dependency in one place, and the tracked fixtures below are listed
+-- explicitly so they do not depend on git or cwd at all.
+local function corpus_provider()
     return vim.fn.systemlist("git ls-files 'workshop/parley/*.md'")
 end
 
@@ -38,8 +40,16 @@ describe("fold invariants over the repo transcript corpus", function()
     -- summary 20, question 46, text 38, agent_header 38, tool_use 0,
     -- tool_result 0), so on its own this harness cannot exercise the issue's
     -- headline 🔧:/📎: case at all. A tracked fixture supplies that shape.
-    local corpus = { "tests/fixtures/fold_tool_transcript.md" }
-    for _, path in ipairs(M_corpus_provider()) do
+    -- fold_assistant_first.md pins #200 C1 round 2: chat_parser fabricates a
+    -- question block when an answer has no preceding 💬: (chat_parser.lua:623),
+    -- so exchange_start lands on a blank line. Requiring a question anchor
+    -- there refused such transcripts permanently. Every other corpus file and
+    -- fixture starts with 💬:, so nothing else covers this shape.
+    local corpus = {
+        "tests/fixtures/fold_tool_transcript.md",
+        "tests/fixtures/fold_assistant_first.md",
+    }
+    for _, path in ipairs(corpus_provider()) do
         if vim.fn.filereadable(path) == 1 then corpus[#corpus + 1] = path end
     end
 
