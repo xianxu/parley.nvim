@@ -105,6 +105,103 @@ describe("tool_folds incremental manual folds", function()
         assert.equals(10, vim.fn.foldclosedend(7))
     end)
 
+    -- #200 ROOT CAUSE: reconcile treated the projection as an append list, so a
+    -- model that drifted from the buffer anchored a fold on a 💬: line and
+    -- nothing ever removed it (hydrate_window latches per buf/win).
+    it("never anchors a fold on a user question when the model has drifted", function()
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+            "---", "topic: t", "file: f.md", "---", "",
+            "💬: first", "", "🤖: [A]", "", "📎: read_file",
+            "```", "b1", "b2", "```", "", "prose", "",
+            "💬: second question", "", "🤖: [A]", "",
+            "📎: grep", "```", "c1", "```",
+        })
+        tool_folds.hydrate_window(buf, win)
+
+        -- A model built BEFORE a mutation that bypassed with_exchange_update.
+        local chat_parser = require("parley.chat_parser")
+        local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+        local model = exchange_model.from_parsed_chat(
+            chat_parser.parse_chat(lines, 4, require("parley.config")))
+        require("parley.buffer_edit").insert_lines_at(buf, 16, { "x1", "x2", "x3", "x4" })
+
+        tool_folds.reconcile_exchange(buf, win, model, 2)
+        vim.cmd("normal! zM")
+
+        local after = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+        for i, line in ipairs(after) do
+            if line:match("^💬:") then
+                assert.message(("question folded at row %d"):format(i))
+                    .equals(-1, vim.fn.foldclosed(i))
+            end
+        end
+        -- It healed rather than merely refusing: the real 📎: is folded.
+        for i, line in ipairs(after) do
+            if line:match("^📎: grep") then
+                assert.message(("tool result not folded at row %d"):format(i))
+                    .equals(i, vim.fn.foldclosed(i))
+            end
+        end
+    end)
+
+    it("does not throw when drift runs a projected range past the end of the buffer", function()
+        local model = exchange_model.new(1)
+        model:add_exchange(1)
+        model:add_block(1, "agent_header", 1)
+        model:add_block(1, "tool_result", 40)  -- far past EOF
+
+        assert.has_no.errors(function()
+            tool_folds.reconcile_exchange(buf, win, model, 1)
+        end)
+    end)
+
+    -- #200 PQ-5: chat_respond wraps EVERY streamed chunk in
+    -- with_exchange_update, so reconcile runs per chunk. Clearing the span must
+    -- therefore scale with the number of folds present, not with the length of
+    -- the exchange — otherwise a long tool body makes streaming quadratic.
+    --
+    -- Timed under a loaded test suite, so each size is sampled repeatedly and
+    -- compared on its MINIMUM: the least-contended sample is the one that
+    -- reflects the algorithm rather than the machine.
+    it("clears an exchange span in time independent of the span length", function()
+        local function best_reconcile_ms(body_lines)
+            local lines = { "header", "", "💬: q", "", "🤖: a", "", "🔧: read id=x" }
+            for i = 1, body_lines do lines[#lines + 1] = "body " .. i end
+            local probe = vim.api.nvim_create_buf(false, true)
+            vim.api.nvim_buf_set_lines(probe, 0, -1, false, lines)
+            vim.api.nvim_win_set_buf(win, probe)
+            vim.api.nvim_set_option_value("foldmethod", "manual", { win = win })
+            vim.api.nvim_set_option_value("foldenable", true, { win = win })
+
+            local model = exchange_model.new(1)
+            model:add_exchange(1)
+            model:add_block(1, "agent_header", 1)
+            model:add_block(1, "tool_use", body_lines + 1)
+            tool_folds.reconcile_exchange(probe, win, model, 1)
+
+            local best = math.huge
+            for _ = 1, 5 do
+                local started = vim.loop.hrtime()
+                for _ = 1, 20 do
+                    tool_folds.reconcile_exchange(probe, win, model, 1)
+                end
+                best = math.min(best, (vim.loop.hrtime() - started) / 1e6)
+            end
+            vim.api.nvim_win_set_buf(win, buf)
+            vim.api.nvim_buf_delete(probe, { force = true })
+            return best
+        end
+
+        local small = best_reconcile_ms(50)
+        local large = best_reconcile_ms(800)  -- 16x the rows, still one fold
+
+        -- A row-walk puts this near 16x; fold-to-fold navigation keeps it flat.
+        -- The bound is deliberately loose — it exists to catch a return to
+        -- O(span), not to police small constant-factor drift.
+        assert.message(("50-row span %.2fms vs 800-row span %.2fms — clearing scales with span")
+            :format(small, large)).is_true(large < small * 6 + 3)
+    end)
+
     it("reconciles a changed exchange without leaving a blank-line ghost", function()
         local model = model_with("thinking", 2)
         tool_folds.reconcile_exchange(buf, win, model, 1)
@@ -238,6 +335,13 @@ describe("tool_folds incremental manual folds", function()
     end)
 
     it("does not duplicate live folds when scheduled hydration runs afterward", function()
+        -- #200: the model must describe the buffer it folds — verification now
+        -- refuses a projection whose anchors are not really there. Give the
+        -- appended tool_use block a real 🔧: marker to anchor on.
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+            "header", "", "💬: q", "", "🤖: a", "",
+            "🧠: first", "thinking", "", "🔧: read id=x", "{}",
+        })
         local model = model_with("thinking", 2)
         tool_folds.with_exchange_update(buf, model, 1, function()
             model:add_block(1, "tool_use", 2)

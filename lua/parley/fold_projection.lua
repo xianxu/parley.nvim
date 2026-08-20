@@ -41,17 +41,26 @@ end
 --- exchange's question.
 --- @return boolean ok, integer|nil failed_range_index
 function M.verify_anchors(ranges, lines, patterns)
-    local classify = require("parley.highlight_structure").classify
+    local highlight_structure = require("parley.highlight_structure")
+    patterns = patterns or highlight_structure.patterns()
+    local user_pattern = patterns.user_pattern
     for index, range in ipairs(ranges) do
-        for row = range.start_0, range.end_0 do
+        local anchor = lines[range.start_0]
+        if anchor == nil then return false, index end
+        if highlight_structure.classify(anchor, patterns).kind ~= M.anchor_kind(range.kind) then
+            return false, index
+        end
+        -- The interior only ever asks one question — "is this a user turn?" —
+        -- so match that prefix directly instead of running the full classifier
+        -- over every covered row. This runs per streamed chunk across an entire
+        -- exchange span, and full classification costs ~10 pattern matches plus
+        -- a footnote lookup per line. Any line the classifier would call `user`
+        -- matches this pattern, because no earlier branch can claim a line that
+        -- begins with the user prefix at column 0.
+        for row = range.start_0 + 1, range.end_0 do
             local line = lines[row]
             if line == nil then return false, index end
-            local kind = classify(line, patterns).kind
-            if row == range.start_0 then
-                if kind ~= M.anchor_kind(range.kind) then return false, index end
-            elseif kind == "user" then
-                return false, index
-            end
+            if line:match(user_pattern) then return false, index end
         end
     end
     return true, nil

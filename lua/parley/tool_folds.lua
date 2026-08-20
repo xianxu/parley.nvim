@@ -35,24 +35,39 @@ local function clear_folds_in_span(buf, win, first_0, last_0)
         local cursor = vim.api.nvim_win_get_cursor(win)
         local line_count = vim.api.nvim_buf_line_count(buf)
         local last_row = math.min(last_0 + 1, line_count)
-        local row = math.max(first_0 + 1, 1)
-        while row <= last_row do
-            -- Probe with foldlevel and pay for a cursor set only on a row that
-            -- actually carries a fold. chat_respond wraps every streamed chunk
-            -- in with_exchange_update, so the common case here is "span already
-            -- clean" and it must not cost a cursor set per row.
-            if vim.fn.foldlevel(row) > 0 then
-                vim.api.nvim_win_set_cursor(win, { row, 0 })
-                -- zD also removes nested folds at the cursor; the guard is only
-                -- in case foldlevel fails to drop.
-                local guard = 0
-                while vim.fn.foldlevel(row) > 0 and guard < 32 do
-                    vim.cmd("normal! zD")
-                    guard = guard + 1
-                end
-            end
-            row = row + 1
-        end
+        local first_row = math.max(first_0 + 1, 1)
+        if first_row > last_row then return end
+        -- Walk fold-to-fold, not row-to-row, in ONE Lua→VimL crossing.
+        -- chat_respond wraps every streamed chunk in with_exchange_update, so
+        -- this is a per-chunk cost and it must not scale with exchange length:
+        -- probing every row costs O(span) (3.7ms from Lua, 1.2ms natively, on a
+        -- 600-row exchange), while `zj` jumps straight to the next fold start,
+        -- making it O(number of folds present). zD deletes nested folds at the
+        -- cursor too. If zj cannot move there is no further fold below, so stop.
+        -- s:guard bounds the loop absolutely: `zD` refuses under a non-manual
+        -- 'foldmethod' (E350), which would otherwise leave foldlevel unchanged
+        -- and spin here forever. Bounding by the span means the worst case
+        -- degrades to the row-walk cost rather than hanging the editor.
+        vim.api.nvim_exec2(string.format([[
+            execute %d
+            let s:guard = 0
+            let s:limit = %d
+            while line('.') <= %d && s:guard < s:limit
+              let s:guard += 1
+              if foldlevel(line('.')) > 0
+                silent! normal! zD
+                if foldlevel(line('.')) > 0
+                  break
+                endif
+              else
+                let s:before = line('.')
+                silent! normal! zj
+                if line('.') == s:before
+                  break
+                endif
+              endif
+            endwhile
+        ]], first_row, (last_row - first_row + 2) * 2, last_row), {})
         vim.api.nvim_win_set_cursor(win, {
             math.min(cursor[1], vim.api.nvim_buf_line_count(buf)), cursor[2],
         })
@@ -68,10 +83,75 @@ local function exchange_span(model, exchange_index)
     return model:exchange_start(exchange_index), last_0
 end
 
+--- Read every buffer row the ranges cover, keyed by 0-based row. Rows past the
+--- end of the buffer are simply absent; verify_anchors treats a missing row as
+--- drift.
+local function covered_lines(buf, ranges)
+    local out = {}
+    local line_count = vim.api.nvim_buf_line_count(buf)
+    for _, range in ipairs(ranges) do
+        local last = math.min(range.end_0, line_count - 1)
+        if range.start_0 <= last then
+            local chunk = vim.api.nvim_buf_get_lines(buf, range.start_0, last + 1, false)
+            for offset, line in ipairs(chunk) do
+                out[range.start_0 + offset - 1] = line
+            end
+        end
+    end
+    return out
+end
+
+--- True when every range fits the buffer AND describes the block it claims.
+local function ranges_fit(buf, ranges, patterns)
+    local line_count = vim.api.nvim_buf_line_count(buf)
+    for _, range in ipairs(ranges) do
+        if range.end_0 >= line_count then return false end
+    end
+    return (projection.verify_anchors(ranges, covered_lines(buf, ranges), patterns))
+end
+
+local function default_model_provider(buf)
+    local chat_parser = require("parley.chat_parser")
+    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    local header_end = chat_parser.find_header_end(lines)
+    if not header_end then return nil end
+    local parsed = chat_parser.parse_chat(lines, header_end, require("parley.config"))
+    return require("parley.exchange_model").from_parsed_chat(parsed)
+end
+
+--- Reconcile exchange K's folds to the projection's desired state.
+---
+--- The projection is a desired state, not an append list: the exchange's span is
+--- cleared before the desired folds are created, so a fold the projection no
+--- longer wants cannot survive. Before anything is applied, every range is
+--- checked against the buffer — it must fit, must anchor on its own marker, and
+--- must not cover a question. A model that has drifted from the buffer (any
+--- mutation not wrapped in with_exchange_update) would otherwise anchor a fold
+--- on a 💬: line and leave it there for the rest of the session (#200). On drift
+--- the model is re-derived from the buffer once; if that still does not verify,
+--- no fold is created rather than a wrong one.
 function M.reconcile_exchange(buf, win, model, exchange_index)
     if not valid_target(buf, win) or not model.exchanges[exchange_index] then return false end
+    local patterns = require("parley.highlight_structure").patterns(require("parley.config"))
     local ranges = projection.desired_folds(model, exchange_index)
     local first_0, last_0 = exchange_span(model, exchange_index)
+
+    if not ranges_fit(buf, ranges, patterns) then
+        local provider = M._model_provider or default_model_provider
+        local ok, fresh = pcall(provider, buf)
+        if not (ok and fresh and fresh.exchanges[exchange_index]) then
+            notify({ phase = "drift", win = win, exchange_index = exchange_index, ranges = {} })
+            return false
+        end
+        local fresh_ranges = projection.desired_folds(fresh, exchange_index)
+        if not ranges_fit(buf, fresh_ranges, patterns) then
+            notify({ phase = "drift", win = win, exchange_index = exchange_index, ranges = {} })
+            return false
+        end
+        ranges = fresh_ranges
+        first_0, last_0 = exchange_span(fresh, exchange_index)
+    end
+
     clear_folds_in_span(buf, win, first_0, last_0)
     vim.api.nvim_win_call(win, function()
         vim.api.nvim_set_option_value("foldminlines", 0, { win = win })
@@ -101,15 +181,6 @@ function M.finalize_exchange_update(buf, windows, model, exchange_index)
     for _, win in ipairs(windows or {}) do
         M.reconcile_exchange(buf, win, model, exchange_index)
     end
-end
-
-local function default_model_provider(buf)
-    local chat_parser = require("parley.chat_parser")
-    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-    local header_end = chat_parser.find_header_end(lines)
-    if not header_end then return nil end
-    local parsed = chat_parser.parse_chat(lines, header_end, require("parley.config"))
-    return require("parley.exchange_model").from_parsed_chat(parsed)
 end
 
 function M.with_exchange_update(buf, model, exchange_index, mutate)
