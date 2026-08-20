@@ -177,10 +177,14 @@ local function rederive_model(buf)
     local tick = vim.api.nvim_buf_get_var(buf, "changedtick")
     local hit = rederived[buf]
     if hit and hit.tick == tick then return hit.model, hit.logged end
-    if hit and hit.model == nil and hit.failed_at
+    -- Deliberately NOT conditioned on hit.model == nil: the common case is a
+    -- parse that SUCCEEDED but still did not verify, which is exactly what
+    -- mark_rederive_unhelpful stamps. Gating on a nil model excluded those and
+    -- left the streaming path re-parsing once per tick.
+    if hit and hit.failed_at
         and (vim.loop.now() - hit.failed_at) < REDERIVE_RETRY_MS then
-        -- A recent re-parse of this buffer already failed to help; the content
-        -- has changed, but not in a way worth paying a full parse for yet.
+        -- A recent re-parse of this buffer already failed to resolve the drift;
+        -- the content has changed, but not yet worth another full parse.
         return nil, hit.logged
     end
     local ok, model = pcall(M._model_provider or default_model_provider, buf)

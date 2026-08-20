@@ -339,7 +339,11 @@ merely refusing.
   `0.078ms` (pre-#200, no clearing at all) → `3.705ms` (row walk from Lua) →
   `1.198ms` (row walk in one VimL crossing) → **`0.067ms`** (fold-to-fold).
   Faster than the pre-#200 baseline *and* fully verified. `make perf` shows no
-  regression (`edit_total` @5000: 2.59→2.55ms median).
+  regression (`edit_total` @5000: 2.59→2.55ms median) — it attaches production
+  chat handlers (`tests/perf/chat_typing.lua:21`), so it does exercise fold
+  *hydration*, but not the streaming path; the direct per-chunk benchmark is
+  the streaming evidence. (An earlier note here claimed the perf harness never
+  touches folds at all — that was wrong.)
 - **A scope bug lint caught, not the tests:** `default_model_provider` was
   defined *below* `reconcile_exchange`, so inside it the name resolved to a nil
   global and the drift re-derive could never run — the failure was silent
