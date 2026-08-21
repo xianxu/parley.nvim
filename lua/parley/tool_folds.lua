@@ -85,7 +85,12 @@ local function clear_folds_in_span(buf, win, first_0, last_0)
                 endif
               endif
             endwhile
+            let g:parley_fold_clear_iters = s:guard
         ]], first_row, (last_row - first_row + 2) * 2, last_row), {})
+        -- Loop iterations, exposed so a test can assert this walks folds rather
+        -- than rows without timing anything. A wall-clock assertion measures the
+        -- machine as much as the algorithm.
+        M._last_clear_iters = vim.g.parley_fold_clear_iters
         vim.api.nvim_win_set_cursor(win, {
             math.min(cursor[1], vim.api.nvim_buf_line_count(buf)), cursor[2],
         })
@@ -262,6 +267,23 @@ function M.reconcile_exchange(buf, win, model, exchange_index)
 
     local fits, failed_index, which = model_fits(buf, ranges, patterns)
     if fits and first_0 == nil then fits, which = false, "span" end
+    -- Creation and destruction are proved by different means and must be tied
+    -- together: model_fits shows a range matches the buffer's TEXT, identity
+    -- shows which rows this exchange owns, and neither shows they describe the
+    -- SAME exchange. Without this, a stale model's ranges can verify against a
+    -- LATER exchange's markers while the clear removes this one's folds.
+    -- A freshly installed identity always satisfies it — anchors sit at
+    -- model:exchange_start(k), and desired_folds already asserts every range
+    -- lies inside the exchange bounds — so it cannot cause a permanent refusal.
+    -- O(#ranges), so it stays off the per-chunk scaling path.
+    if fits then
+        for index, range in ipairs(ranges) do
+            if range.start_0 < first_0 or range.end_0 > last_0 then
+                fits, failed_index, which = false, index, "containment"
+                break
+            end
+        end
+    end
     if not fits then
         local fresh, already_logged = rederive_model(buf)
         local fresh_ranges, fresh_first, fresh_last

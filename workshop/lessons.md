@@ -677,3 +677,18 @@
   contention. Rule: to pin an algorithmic property, sample repeatedly and
   compare the MINIMUM of each size — the least-contended sample is the one that
   reflects the code — and name the test for the property it actually pins.
+- **Deleted tests do not fail — verify the inventory, not just the result.**
+  #200 replaced one test by slicing a spec file between two textual markers and
+  removed nine regression tests with it, every pin from seven review rounds. The
+  suite went green at 16 tests where it had been 25. Rule: after any structural
+  edit to a spec (moving, replacing, or reordering blocks), diff the test
+  inventory against `HEAD` — `comm -13` over the extracted `it("...")` names —
+  before trusting the run. A shrinking green suite is the most convincing wrong
+  signal available.
+- **Prove a performance property by counting work, not by timing it.** #200's
+  span-clearing test asserted wall-clock and flaked twice under suite load, once
+  sending the author chasing a regression that was only contention. Exposing the
+  clear loop's iteration count turned it into an exact assertion: a 16x longer
+  span must cost no more iterations. If a property is algorithmic, find the
+  countable quantity that expresses it; reach for a clock only when the thing
+  under test really is latency.

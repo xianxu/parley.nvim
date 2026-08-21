@@ -185,8 +185,8 @@ describe("tool_folds incremental manual folds", function()
     -- Timed under a loaded test suite, so each size is sampled repeatedly and
     -- compared on its MINIMUM: the least-contended sample is the one that
     -- reflects the algorithm rather than the machine.
-    it("clears an exchange span without a per-row walk as the span grows", function()
-        local function best_reconcile_ms(body_lines)
+    it("clears an exchange span by walking folds, not rows", function()
+        local function clear_iters(body_lines)
             local lines = { "header", "", "💬: q", "", "🤖: a", "", "🔧: read id=x" }
             for i = 1, body_lines do lines[#lines + 1] = "body " .. i end
             local probe = vim.api.nvim_create_buf(false, true)
@@ -199,29 +199,24 @@ describe("tool_folds incremental manual folds", function()
             model:add_exchange(1)
             model:add_block(1, "agent_header", 1)
             model:add_block(1, "tool_use", body_lines + 1)
+            truth(model)
             tool_folds.reconcile_exchange(probe, win, model, 1)
+            tool_folds.reconcile_exchange(probe, win, model, 1)
+            local iters = tool_folds._last_clear_iters
 
-            local best = math.huge
-            for _ = 1, 5 do
-                local started = vim.loop.hrtime()
-                for _ = 1, 20 do
-                    tool_folds.reconcile_exchange(probe, win, model, 1)
-                end
-                best = math.min(best, (vim.loop.hrtime() - started) / 1e6)
-            end
             vim.api.nvim_win_set_buf(win, buf)
             vim.api.nvim_buf_delete(probe, { force = true })
-            return best
+            return iters
         end
 
-        local small = best_reconcile_ms(50)
-        local large = best_reconcile_ms(800)  -- 16x the rows, still one fold
+        local small = clear_iters(50)
+        local large = clear_iters(800)  -- 16x the rows, still exactly one fold
 
-        -- A row-walk puts this near 16x; fold-to-fold navigation keeps it flat.
-        -- The bound is deliberately loose — it exists to catch a return to
-        -- O(span), not to police small constant-factor drift.
-        assert.message(("50-row span %.2fms vs 800-row span %.2fms — clearing scales with span")
-            :format(small, large)).is_true(large < small * 6 + 3)
+        assert.is_not_nil(small)
+        -- A row walk would put `large` near 800. Fold-to-fold navigation makes
+        -- it a small constant, independent of span.
+        assert.message(("50-row span took %s iterations, 800-row span %s")
+            :format(tostring(small), tostring(large))).is_true(large <= small + 2)
     end)
 
     -- #200 C1: widening destruction (projected start rows -> whole span) without
@@ -446,6 +441,43 @@ describe("tool_folds incremental manual folds", function()
             if line:match("^📎:") then
                 assert.message(("%s at %d lost its fold after prune+add")
                     :format(line, i)).equals(i, vim.fn.foldclosed(i))
+            end
+        end
+    end)
+
+    -- #200 round 8: verification and identity use different coordinate systems.
+    -- model_fits proves a range matches the buffer's TEXT; identity proves which
+    -- rows the exchange owns. Neither proves they describe the SAME exchange —
+    -- so a stale model's ranges could verify against a *later* exchange's
+    -- markers while identity cleared this one's rows.
+    it("refuses when the ranges it would create lie outside the rows it owns", function()
+        local chat_parser = require("parley.chat_parser")
+        local function parse()
+            return exchange_model.from_parsed_chat(chat_parser.parse_chat(
+                vim.api.nvim_buf_get_lines(buf, 0, -1, false), 4,
+                require("parley.config")))
+        end
+        local lines = { "---", "topic: t", "file: f.md", "---", "" }
+        for e = 1, 3 do
+            vim.list_extend(lines, { "💬: q" .. e, "", "🤖: [A]",
+                "📎: t" .. e, "```", "x", "```", "" })
+        end
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+        tool_folds.hydrate_window(buf, win)
+        local stale = parse()
+
+        -- Grow exchange 1's answer by exactly one exchange's height, so the
+        -- stale ranges for exchange 3 land on exchange 2's markers.
+        vim.api.nvim_buf_set_lines(buf, 12, 12, false,
+            { "pad1", "pad2", "pad3", "pad4", "pad5", "pad6", "pad7", "pad8" })
+
+        tool_folds.with_exchange_update(buf, stale, 3, function() end)
+        vim.cmd("normal! zM")
+
+        for i, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+            if line:match("^📎:") then
+                assert.message(("%s at %d lost its fold"):format(line, i))
+                    .equals(i, vim.fn.foldclosed(i))
             end
         end
     end)

@@ -699,6 +699,49 @@ the test now exercises the real prune-and-add sequence instead.
 harness contention diagnosed in round 6), lint 0 warnings / 0 errors across 331
 files. All six earlier scenarios still hold.
 
+### 2026-08-20 — M1 round 8: tie creation to destruction
+
+**C1 (Critical) — the two halves could describe different exchanges.**
+`model_fits` proves a range matches the buffer's *text*; identity proves which
+rows the exchange *owns*. Nothing proved they referred to the same exchange, so
+a stale model's ranges could verify against a later exchange's markers while
+the clear removed this one's rows:
+
+    identity span for ex3 (0-based): 29..36
+    model range: tool_result rows 24..27   INSIDE SPAN = false
+
+`📎: t3` lost its fold with no drift event and no debug line, and nothing
+recreated it. Reproduced by inserting one exchange's height into an earlier
+exchange's answer — and it is a regression this milestone introduced, since
+pre-#200 the deleter could only reach projected start rows.
+
+Fix: an O(#ranges) containment check — every range must lie inside the rows
+identity says this exchange owns. It cannot cause a permanent refusal, because
+`anchor_from` installs marks at `model:exchange_start(k)` and `desired_folds`
+already asserts each range lies inside the exchange bounds, so a freshly
+installed identity always satisfies it.
+
+**The scaling test is now deterministic.** It asserted wall-clock, and flaked
+twice under load — once sending me chasing a regression that was contention.
+`clear_folds_in_span` now reports its loop-iteration count, and the test asserts
+that a 16× longer span costs no more iterations. It measures the algorithm
+instead of the machine.
+
+**A mistake of mine worth recording.** While replacing that test I sliced the
+spec between two markers and deleted **nine** regression tests — every C1 pin
+from rounds 1–7 — leaving 16 where there had been 25, all green. Caught by
+comparing the test count against `HEAD`, not by the suite: deleted tests do not
+fail. Restored from `HEAD` and reapplied the single intended edit. Rule: after
+any structural edit to a spec file, diff the test inventory against `HEAD`
+rather than trusting a green run.
+
+**Verification:** `exchange_anchors_spec` 12/12, `fold_projection_spec` 22/22,
+`tool_folds_spec` 1/1 unit + 25/25 integration, `fold_invariants_spec` 12/12 —
+72 fold tests, stable across repeated runs; `make test` exit 0 (after clearing
+the harness scratch dirs; `chat_progress_process_spec` also needed a retry, the
+port-binding flake noted earlier), lint 0 warnings / 0 errors across 331 files.
+All earlier scenarios hold.
+
 ## Revisions
 
 ### 2026-08-20 — Fold ownership contract + plan-quality round 1
