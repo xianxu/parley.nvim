@@ -2,6 +2,8 @@
 
 local M = {}
 
+local fence = require("parley.fence")
+
 local BOUNDARY = {
     reasoning = true,
     summary = true,
@@ -75,24 +77,45 @@ function M.reduce(lines, patterns, opts)
             add("summary", i, i)
             i = i + 1
         elseif kind == "tool_use" or kind == "tool_result" then
+            -- Match the fence by LENGTH, via the shared grammar. Classifying on
+            -- `fence` alone closes on any >=3-backtick run, so a nested ``` in
+            -- a tool body ended the section early and its tail was emitted as
+            -- unfoldable text (#200).
             local last = i
-            local fence_open = false
+            local open_len = nil
+            local boundary_before_close = nil
             local cursor = i + 1
             while cursor <= #lines do
-                local next_kind = kinds[cursor]
-                if next_kind == "fence" then
-                    last = cursor
-                    if fence_open then
-                        cursor = cursor + 1
+                local line = lines[cursor]
+                if not open_len then
+                    open_len = fence.open_len(line)
+                    if open_len then
+                        last = cursor
+                    elseif BOUNDARY[kinds[cursor]] then
                         break
+                    else
+                        last = cursor
                     end
-                    fence_open = true
-                elseif not fence_open and BOUNDARY[next_kind] then
+                elseif fence.closes(line, open_len) then
+                    last = cursor
+                    cursor = cursor + 1
                     break
                 else
+                    -- Remember the first boundary seen inside an open fence: if
+                    -- the fence never closes, the section stops here rather
+                    -- than swallowing the rest of the answer.
+                    if boundary_before_close == nil and BOUNDARY[kinds[cursor]] then
+                        boundary_before_close = cursor
+                    end
                     last = cursor
                 end
                 cursor = cursor + 1
+            end
+            if open_len and cursor > #lines and boundary_before_close then
+                -- Unterminated: rewind to just before the first boundary so the
+                -- blocks after it still segment.
+                last = boundary_before_close - 1
+                cursor = boundary_before_close
             end
             add(kind, i, last)
             i = cursor

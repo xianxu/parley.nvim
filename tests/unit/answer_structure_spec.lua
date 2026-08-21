@@ -47,3 +47,60 @@ describe("answer_structure.reduce", function()
         assert.same({ 1, 2 }, { result.sections[1].line_start, result.sections[1].line_end })
     end)
 end)
+
+-- #200 M2: the tool-section scanner closed on ANY >=3-backtick run, because
+-- highlight_structure classifies every such line as `fence`. A tool body whose
+-- content contains a nested ``` block therefore ended early, and its tail was
+-- emitted as unfoldable `text` — violating "tool blocks are always folded".
+describe("tool sections with nested fences (#200)", function()
+    local answer_structure = require("parley.answer_structure")
+    local patterns = require("parley.highlight_structure").patterns({})
+
+    it("keeps a nested shorter fence inside the tool section", function()
+        local lines = {
+            "📎: read_file",
+            "````",
+            "here is a markdown file:",
+            "```lua",
+            "print('hi')",
+            "```",
+            "end of file",
+            "````",
+            "",
+            "📝: read the file",
+        }
+        local sections = answer_structure.reduce(lines, patterns).sections
+        assert.equals("tool_result", sections[1].kind)
+        assert.equals(1, sections[1].line_start)
+        assert.message("section ended at the nested fence instead of the matching one")
+            .equals(8, sections[1].line_end)
+        assert.equals("summary", sections[2].kind)
+    end)
+
+    it("still ends a plain tool section at its own matching fence", function()
+        local lines = {
+            "📎: read_file", "```", "ok", "```", "", "📝: done",
+        }
+        local sections = answer_structure.reduce(lines, patterns).sections
+        assert.equals("tool_result", sections[1].kind)
+        assert.equals(4, sections[1].line_end)
+        assert.equals("summary", sections[2].kind)
+    end)
+
+    -- An unterminated fence must not swallow the rest of the answer: stop at
+    -- the next structural boundary so later blocks still segment.
+    it("stops an unterminated fence at the next boundary", function()
+        local lines = {
+            "📎: read_file", "````", "body that never closes", "",
+            "📝: summary anyway", "text after",
+        }
+        local sections = answer_structure.reduce(lines, patterns).sections
+        assert.equals("tool_result", sections[1].kind)
+        assert.message("an unterminated fence swallowed the following summary")
+            .is_true(sections[1].line_end < 5)
+        local kinds = {}
+        for _, s in ipairs(sections) do kinds[#kinds + 1] = s.kind end
+        assert.message("summary was lost: " .. vim.inspect(kinds))
+            .is_true(vim.tbl_contains(kinds, "summary"))
+    end)
+end)
