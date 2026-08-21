@@ -2,6 +2,8 @@
 
 local M = {}
 
+local fence = require("parley.fence")
+
 -- The fold policy, stated once: a block kind folds exactly when it has a marker
 -- line to anchor on, and this maps each to the kind that line must classify as.
 -- Block kinds carry answer_structure's vocabulary; a buffer line is classified
@@ -75,6 +77,12 @@ end
 --- The interior scan is what defends "a question is never INSIDE a fold":
 --- end-drift can leave a valid anchor while the range overshoots the next
 --- exchange's question.
+---
+--- It consumes the fence grammar rather than matching the prefix raw. Since M2,
+--- a `💬:` inside a tool body is legitimate CONTENT — tool output routinely
+--- quotes transcripts — so a raw match would reject a correct projection and
+--- refuse the whole exchange. Only a marker outside the fenced body signals the
+--- drift this guard exists to catch.
 --- @return boolean ok, integer|nil failed_range_index
 function M.verify_anchors(ranges, lines, patterns)
     -- Required lazily and only when the caller did not supply patterns, so the
@@ -95,17 +103,27 @@ function M.verify_anchors(ranges, lines, patterns)
         if classify(anchor, patterns).kind ~= M.anchor_kind(range.kind) then
             return false, index
         end
-        -- The interior only ever asks one question — "is this a user turn?" —
-        -- so match that prefix directly instead of running the full classifier
-        -- over every covered row. This runs per streamed chunk across an entire
-        -- exchange span, and full classification costs ~10 pattern matches plus
-        -- a footnote lookup per line. Any line the classifier would call `user`
-        -- matches this pattern, because no earlier branch can claim a line that
-        -- begins with the user prefix at column 0.
+        -- The interior asks one question per row — "is this a user turn?" — so
+        -- match the prefix directly rather than running the full classifier.
+        -- This runs per streamed chunk over an entire exchange span, and full
+        -- classification costs ~10 pattern matches plus a footnote lookup per
+        -- line. Any line the classifier would call `user` matches this pattern,
+        -- because no earlier branch can claim a line starting with the user
+        -- prefix at column 0.
+        --
+        -- Lines inside the block's fenced body are skipped: there a marker is
+        -- content, not a turn (#200 M2).
+        local body_len = nil
         for row = range.start_0 + 1, range.end_0 do
             local line = lines[row]
             if line == nil then return false, index end
-            if line:match(user_pattern) then return false, index end
+            if body_len then
+                if fence.closes(line, body_len) then body_len = nil end
+            elseif fence.open_len(line) then
+                body_len = fence.open_len(line)
+            elseif line:match(user_pattern) then
+                return false, index
+            end
         end
     end
     return true, nil

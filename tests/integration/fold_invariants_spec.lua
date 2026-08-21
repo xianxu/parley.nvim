@@ -48,6 +48,11 @@ describe("fold invariants over the repo transcript corpus", function()
     local corpus = {
         "tests/fixtures/fold_tool_transcript.md",
         "tests/fixtures/fold_assistant_first.md",
+        -- M2's adversarial shapes: structural markers inside tool bodies, a
+        -- shorter fence nested in a longer one, and a summary marker that is
+        -- content. The real corpus contains none of these (the audit found 0),
+        -- so without this fixture nothing exercises the M2 defects.
+        "tests/fixtures/fold_adversarial.md",
     }
     for _, path in ipairs(corpus_provider()) do
         if vim.fn.filereadable(path) == 1 then corpus[#corpus + 1] = path end

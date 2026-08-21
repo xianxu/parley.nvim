@@ -139,6 +139,45 @@ describe("anchor verification", function()
     -- The interior scan is a guard against DRIFT, not a second fence parser:
     -- it must reject only a line classified as `user` at column 0. M2 owns
     -- in-body marker suppression.
+    -- Since M2 a marker inside a tool body is content even at column 0, because
+    -- tool output quotes transcripts. The guard must still fire for one OUTSIDE
+    -- the body — that is the drift it exists to catch.
+    it("accepts an unindented question marker inside the fenced body", function()
+        local ranges = { { kind = "tool_result", start_0 = 4, end_0 = 8 } }
+        assert.is_true(projection.verify_anchors(ranges, {
+            [4] = "📎: read_file",
+            [5] = "```",
+            [6] = "💬: a question quoted from the file being read",
+            [7] = "🤖: and its answer",
+            [8] = "```",
+        }, patterns))
+    end)
+
+    it("still rejects a question after the body has closed", function()
+        local ranges = { { kind = "tool_result", start_0 = 4, end_0 = 8 } }
+        local ok, failed = projection.verify_anchors(ranges, {
+            [4] = "📎: read_file",
+            [5] = "```",
+            [6] = "content",
+            [7] = "```",
+            [8] = "💬: next question",
+        }, patterns)
+        assert.is_false(ok)
+        assert.equals(1, failed)
+    end)
+
+    it("keeps a longer nested fence from closing the body early", function()
+        local ranges = { { kind = "tool_result", start_0 = 4, end_0 = 9 } }
+        assert.is_true(projection.verify_anchors(ranges, {
+            [4] = "📎: read_file",
+            [5] = "````",
+            [6] = "```",
+            [7] = "💬: still inside the outer body",
+            [8] = "```",
+            [9] = "````",
+        }, patterns))
+    end)
+
     it("does not mistake a question marker inside a fenced body for a turn", function()
         local ranges = { { kind = "tool_result", start_0 = 4, end_0 = 7 } }
         local ok = projection.verify_anchors(ranges, {
