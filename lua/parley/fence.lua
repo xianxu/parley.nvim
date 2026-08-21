@@ -21,16 +21,20 @@ M.MIN = 3
 
 --- Length of the fence this line opens, or nil when it opens none.
 ---
---- The info string is a bare word (`json`, `py_3`), matching what the writer
---- emits and what chat_parser's tracker already accepted. Prose after the
---- ticks is not a fence — "``` see below" is content, not an opener.
+--- The info string follows CommonMark: anything after the backticks that does
+--- not itself contain a backtick. Being stricter than this is not a harmless
+--- conservatism — it is how the whole scanner desyncs. A genuine opener the
+--- grammar refuses (`render_buffer` emits ```` ```json {"type": "request"} ````)
+--- leaves its CLOSER to be read as an opener, and every consumer downstream
+--- shifts by one fence: bodies start in the wrong place, and the guards that
+--- defend "a question is never folded" blind themselves (#200 BR-43).
 --- @param line string
 --- @return integer|nil
 function M.open_len(line)
     if type(line) ~= "string" then return nil end
-    local ticks = line:match("^(`+)[%w_%-]*%s*$")
+    local ticks, info = line:match("^(`+)([^`]*)$")
     if not ticks or #ticks < M.MIN then return nil end
-    return #ticks
+    return #ticks, info
 end
 
 --- Whether this line closes a fence of length `n`.
@@ -85,6 +89,45 @@ function M.extract_body(lines, from)
             if open_len then first = index + 1 end
         elseif M.closes(lines[index], open_len) then
             return table.concat(lines, "\n", first, index - 1), first - 1, index
+        end
+    end
+    return nil
+end
+
+--- The extent of the fenced body belonging to a tool marker at `marker_row`.
+---
+--- ONE definition of "where is this tool block's body", called by every
+--- consumer. Three scanners each deciding it independently is how #200's guards
+--- kept blinding themselves — a rejected opener, an opener found too far from
+--- its marker, or an unterminated body each desynced one scanner but not the
+--- others.
+---
+--- Requires all three, none of them optional:
+---   * the opener sits on the line IMMEDIATELY after the marker — the shape
+---     every writer emits; accepting one further down lets a closing fence be
+---     mistaken for an opening one;
+---   * the opener is recognised by the CommonMark-conformant `open_len`;
+---   * a matching bare close of the same length actually EXISTS. Without that
+---     an unclosed fence swallows the rest of the buffer.
+---
+--- `stop_row` bounds the search: the close must appear at or before it. A real
+--- body never spans a structural boundary, and without the bound an UNCLOSED
+--- body latches onto the next unrelated bare fence anywhere later in the
+--- buffer — swallowing every question in between. Callers pass the row of the
+--- next boundary; omitting it searches to the end.
+---
+--- @param lines string[]         1-based buffer lines
+--- @param marker_row integer     1-based row of the 🔧:/📎: line
+--- @param stop_row integer|nil   last row the close may appear on
+--- @return integer|nil first_body_row, integer|nil last_body_row, integer|nil close_row
+function M.tool_body(lines, marker_row, stop_row)
+    local open_row = marker_row + 1
+    local open_len = M.open_len(lines[open_row] or "")
+    if not open_len then return nil end
+    local last = math.min(stop_row or #lines, #lines)
+    for row = open_row + 1, last do
+        if M.closes(lines[row], open_len) then
+            return open_row + 1, row - 1, row
         end
     end
     return nil

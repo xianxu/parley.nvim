@@ -4,6 +4,19 @@ local fence = require("parley.fence")
 -- independently — serialize (correctly, twice), answer_structure (closing on any
 -- >=3-backtick run), and chat_parser (correctly, but as its own tracker).
 describe("fence grammar", function()
+    -- BR-43 root cause: a too-strict info string makes a genuine opener
+    -- invisible, and its CLOSER is then read as an opener — every downstream
+    -- scanner shifts by one fence and the guards blind themselves. CommonMark
+    -- allows any info string that contains no backtick.
+    it("accepts any CommonMark info string", function()
+        assert.equals(3, fence.open_len('```json {"type": "request"}'))
+        assert.equals(3, fence.open_len("``` lua extra"))
+        assert.equals(4, fence.open_len("````  spaced  info  "))
+        assert.equals(3, fence.open_len("```text"))
+        -- A backtick in the info string is not a fence, per CommonMark.
+        assert.is_nil(fence.open_len("``` has ` a backtick"))
+    end)
+
     it("recognises an opening fence of three or more backticks", function()
         assert.equals(3, fence.open_len("```"))
         assert.equals(4, fence.open_len("````"))
@@ -12,8 +25,9 @@ describe("fence grammar", function()
         assert.equals(3, fence.open_len("```lua"))
         assert.is_nil(fence.open_len("``"))
         assert.is_nil(fence.open_len("plain text"))
-        -- An info string is a bare word; prose after the ticks is not a fence.
-        assert.is_nil(fence.open_len("``` some prose here"))
+        -- Prose after the ticks IS a valid info string per CommonMark; what
+        -- disqualifies a line is a backtick inside it.
+        assert.equals(3, fence.open_len("``` some prose here"))
     end)
 
     it("closes only on a bare run of the same length", function()
@@ -125,5 +139,45 @@ describe("fence / serialize parity", function()
             }))
             assert.equals(body, parsed.input.body)
         end
+    end)
+end)
+
+-- BR-43: one definition of a tool block's body extent, called by every
+-- consumer. Three scanners deciding it independently is how the guards kept
+-- blinding themselves.
+describe("tool body extent", function()
+    it("spans from just after the opener to just before the close", function()
+        local first, last, close = fence.tool_body({
+            "📎: read id=1", "```", "a", "b", "```", "after",
+        }, 1)
+        assert.equals(3, first)
+        assert.equals(4, last)
+        assert.equals(5, close)
+    end)
+
+    it("requires the opener immediately after the marker", function()
+        -- A blank line between marker and fence means this is not a tool body;
+        -- accepting it lets a CLOSING fence further down be read as an opener.
+        assert.is_nil(fence.tool_body({ "📎: read id=1", "", "```", "a", "```" }, 1))
+    end)
+
+    it("requires a matching close to exist", function()
+        assert.is_nil(fence.tool_body({ "📎: read id=1", "```", "a", "b" }, 1))
+    end)
+
+    it("is not closed by a shorter or longer run", function()
+        local _, last, close = fence.tool_body({
+            "📎: x", "````", "```", "`````", "````", "tail",
+        }, 1)
+        assert.equals(4, last)
+        assert.equals(5, close)
+    end)
+
+    it("accepts a CommonMark info string on the opener", function()
+        local first, last = fence.tool_body({
+            "🔧: x", '```json {"type": "request"}', "body", "```",
+        }, 1)
+        assert.equals(3, first)
+        assert.equals(3, last)
     end)
 end)

@@ -528,30 +528,14 @@ local fence = require("parley.fence")
 	-- not acceptable.
 	local in_tool_body = {}
 	do
-		local row = header_end + 1
-		while row <= #lines do
+		for row = header_end + 1, #lines do
 			local kind = highlight_structure.classify(lines[row], decoration_patterns).kind
 			if kind == "tool_use" or kind == "tool_result" then
-				local open_len, open_at
-				local scan = row + 1
-				while scan <= #lines do
-					local scan_kind = highlight_structure.classify(lines[scan], decoration_patterns).kind
-					if not open_len then
-						open_len = fence.open_len(lines[scan])
-						if open_len then
-							open_at = scan
-						elseif scan_kind == "tool_use" or scan_kind == "tool_result"
-							or scan_kind == "user" or scan_kind == "assistant" then
-							break -- no body before the next block starts
-						end
-					elseif fence.closes(lines[scan], open_len) then
-						for body = open_at + 1, scan - 1 do in_tool_body[body] = true end
-						break
-					end
-					scan = scan + 1
+				local first, last = fence.tool_body(lines, row)
+				if first then
+					for body = first, last do in_tool_body[body] = true end
 				end
 			end
-			row = row + 1
 		end
 	end
 

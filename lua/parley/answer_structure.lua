@@ -77,51 +77,23 @@ function M.reduce(lines, patterns, opts)
             add("summary", i, i)
             i = i + 1
         elseif kind == "tool_use" or kind == "tool_result" then
-            -- Match the fence by LENGTH, via the shared grammar. Classifying on
-            -- `fence` alone closes on any >=3-backtick run, so a nested ``` in
-            -- a tool body ended the section early and its tail was emitted as
-            -- unfoldable text (#200).
-            local last = i
-            local open_len = nil
-            local closed = false
-            local boundary_before_close = nil
-            local cursor = i + 1
-            while cursor <= #lines do
-                local line = lines[cursor]
-                if not open_len then
-                    open_len = fence.open_len(line)
-                    if open_len then
-                        last = cursor
-                    elseif BOUNDARY[kinds[cursor]] then
-                        break
-                    else
-                        last = cursor
-                    end
-                elseif fence.closes(line, open_len) then
+            -- One definition of the body's extent, shared with chat_parser and
+            -- fold_projection (BR-43). A body exists only when the opener sits
+            -- immediately after the marker AND a matching close exists; without
+            -- one, the section stops at the next boundary rather than running
+            -- to the end of the answer.
+            local body_first, _, close_row = fence.tool_body(lines, i)
+            local last, cursor
+            if close_row then
+                last, cursor = close_row, close_row + 1
+            else
+                last, cursor = i, i + 1
+                while cursor <= #lines and not BOUNDARY[kinds[cursor]] do
                     last = cursor
-                    closed = true
                     cursor = cursor + 1
-                    break
-                else
-                    -- Remember the first boundary seen inside an open fence: if
-                    -- the fence never closes, the section stops here rather
-                    -- than swallowing the rest of the answer.
-                    if boundary_before_close == nil and BOUNDARY[kinds[cursor]] then
-                        boundary_before_close = cursor
-                    end
-                    last = cursor
                 end
-                cursor = cursor + 1
             end
-            -- Gate on `not closed`, not on running off the end: a body whose
-            -- close IS the last line also leaves cursor > #lines, and rewinding
-            -- there truncates a correctly closed block at its opener (BR-29).
-            if open_len and not closed and boundary_before_close then
-                -- Unterminated: rewind to just before the first boundary so the
-                -- blocks after it still segment.
-                last = boundary_before_close - 1
-                cursor = boundary_before_close
-            end
+            local _ = body_first
             add(kind, i, last)
             i = cursor
         else

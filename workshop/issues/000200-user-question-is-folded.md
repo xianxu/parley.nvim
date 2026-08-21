@@ -1037,6 +1037,60 @@ grammar, keeping serialize for the schema.
 re-run clean — 115 files, 463 exchanges, 1155 assertions, 0 violations; lint
 0 warnings / 0 errors across 333 files.
 
+### 2026-08-21 — M2 review round 3: root cause found, one shape deferred to #203
+
+**BR-43 (Critical) — the root of the whole "guard blinds itself" family.** My
+`open_len` was stricter than CommonMark: it accepted only a bare-word info
+string, so ```` ```json {"type": "request"} ```` — which `render_buffer.lua:104`
+emits — was refused. A refused opener leaves its **closer** to be read as an
+opener, and every consumer downstream shifts by one fence. That single flaw
+generated BR-33 and BR-43 alike. `open_len` now follows CommonMark: any info
+string containing no backtick.
+
+Structural half done as directed: **one** `fence.tool_body()` defines a tool
+block's extent — opener immediately after the marker, CommonMark-conformant, and
+a matching close must exist — and `chat_parser`, `answer_structure` and
+`fold_projection` all call it instead of each scanning independently.
+
+**One shape deferred, by operator decision, to #203.** An unclosed body that
+latches onto a later unrelated bare fence is locally indistinguishable from a
+legitimate body quoting a transcript: both have an opener after the marker and a
+matching bare close further down. Three discriminators were tried and each
+failed — bounding at "the next structural boundary" is circular, since the
+boundary may be inside the body; declining when the body holds a question
+defeats M2's headline case, because `read_file` on a transcript produces exactly
+that with a minimum-length fence (I implemented it and two M2 tests went red).
+
+The decisive fact, which I did not surface early enough: **generation was never
+broken.** `fence.for_content` picks a fence strictly longer than the longest run
+in the content, so a parley-written body provably cannot close its own fence and
+the first matching close is always correct. This shape requires input parley did
+not write. It is a malformed-input robustness question, not a format defect, and
+recovering from it needs a real fence-depth parser rather than another heuristic.
+Recorded as a `pending` test pointing at #203.
+
+I also mis-framed the choice when asking: I described declining-when-uncertain as
+costing suppression "only in the ambiguous case", when the ambiguous case *is*
+the main case. Corrected before the decision was made.
+
+**BR-45 does not reproduce.** It reported `parse_chat` ~48% slower. Measured over
+the 111 real transcripts, two runs per revision: M1 close `dc5ee17` 204.0 /
+174.1 ms, `ca3c8bb` 203.8 / 201.5 ms, HEAD 199.8 ms. The ranges overlap; there is
+no reliable difference at this resolution.
+
+**BR-44 corrected rather than refactored.** The plan claimed "no second fence
+tracker is introduced". Two consumers of the grammar do exist inside
+`chat_parser` — `cb_state` for block segmentation, `in_tool_body[]` for
+main-loop classification. PQ-3's objection was to two independent *grammars*,
+and both now derive from `parley.fence`. Unifying them is a parser refactor with
+real regression surface; not attempted at close time, and no longer claimed.
+
+**Verification:** `fence_spec` 19/19, `chat_parser_tools_spec` 20/20 + 1 pending,
+`answer_structure_spec` 9/9, `parse_chat_spec` 54/54, `fold_projection_spec`
+26/26, `fold_invariants_spec` 13/13; `make test` exit 0; lint 0 warnings /
+0 errors across 333 files; live-corpus audit clean (1155 assertions, 0
+violations).
+
 ## Revisions
 
 ### 2026-08-20 — Fold ownership contract + plan-quality round 1

@@ -119,16 +119,26 @@ function M.verify_anchors(ranges, lines, patterns)
         -- one grammar-rejected opener (render_buffer emits
         -- ```json {"type": "request"}) desync the scan and silently disable
         -- this guard for the rest of the range.
-        local tracks_body = range.kind == "tool_use" or range.kind == "tool_result"
-        local body_len = tracks_body and fence.open_len(lines[range.start_0 + 1] or "") or nil
+        -- Body extent from the one shared definition (BR-43), so this guard
+        -- cannot disagree with the parser about where a body is. `lines` is
+        -- keyed by 0-based row; tool_body wants a 1-based list, so shift.
+        local body_first, body_last
+        if range.kind == "tool_use" or range.kind == "tool_result" then
+            local shifted = {}
+            for row = range.start_0, range.end_0 do
+                shifted[row - range.start_0 + 1] = lines[row]
+            end
+            local f, l = fence.tool_body(shifted, 1)
+            if f then
+                body_first = range.start_0 + f - 1
+                body_last = range.start_0 + l - 1
+            end
+        end
         for row = range.start_0 + 1, range.end_0 do
             local line = lines[row]
             if line == nil then return false, index end
-            if body_len then
-                if row > range.start_0 + 1 and fence.closes(line, body_len) then
-                    body_len = nil
-                end
-            elseif line:match(user_pattern) then
+            local in_body = body_first and row >= body_first and row <= body_last
+            if not in_body and line:match(user_pattern) then
                 return false, index
             end
         end

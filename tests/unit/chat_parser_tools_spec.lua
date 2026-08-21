@@ -497,3 +497,53 @@ describe("unterminated tool body (#200 BR-30)", function()
         assert.equals(2, #parse(lines).exchanges)
     end)
 end)
+
+-- BR-43: three shapes where a tool-body scan that accepts an opener anywhere
+-- after the marker, or rejects a legitimate CommonMark opener, reads a CLOSING
+-- fence as an opening one — and the rest of the chat stops forking exchanges.
+-- None of them appears in the live 115-file corpus.
+describe("tool-body extent desync (#200 BR-43)", function()
+    local function count(extra)
+        local lines = { "---", "topic: t", "file: f.md", "---" }
+        vim.list_extend(lines, extra)
+        return #parser.parse_chat(lines, 4, test_config()).exchanges
+    end
+
+    it("survives an opener whose info string the old grammar rejected", function()
+        assert.equals(3, count({
+            "", "💬: q1", "", "🤖: [A]", "📎: r id=1",
+            '```json {"type": "request"}', "body", "```",
+            "", "💬: q2", "", "🤖: [A]", "", "💬: q3",
+        }))
+    end)
+
+    -- Deferred to #203 (operator decision, 2026-08-21). An unclosed body
+    -- that latches onto a later unrelated bare fence is locally
+    -- indistinguishable from a legitimate body quoting a transcript: both have
+    -- an opener after the marker and a matching bare close further down. Every
+    -- local discriminator tried either reintroduces the swallow or defeats M2's
+    -- headline case (suppressing a 💬: that really is tool output). Bounding at
+    -- the "next structural boundary" is circular — the boundary may itself be
+    -- inside the body.
+    --
+    -- Unreachable from anything parley writes: for_content guarantees a body
+    -- cannot close its own fence, so the first matching close is always right
+    -- for well-formed input. This shape needs a hand-edited, truncated, or
+    -- externally-pasted transcript, and recovering from it needs a real
+    -- fence-depth parser rather than another heuristic — hence #203.
+    -- Current behaviour: 2 exchanges, where M1 (dc5ee17) gave 3.
+    pending("survives an unclosed body followed by a later bare fence", function()
+        assert.equals(3, count({
+            "", "💬: q1", "", "🤖: [A]", "📎: r id=1", "```", "never closed",
+            "", "💬: q2", "", "🤖: [A]", "```", "", "💬: q3",
+        }))
+    end)
+
+    it("survives an answer that shows the transcript format in a plain block", function()
+        assert.equals(3, count({
+            "", "💬: q1", "", "🤖: [A]", "the transcript format looks like",
+            "```text", "📎: read_file id=x", "```",
+            "", "💬: q2", "", "🤖: [A]", "", "💬: q3",
+        }))
+    end)
+end)

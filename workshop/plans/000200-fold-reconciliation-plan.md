@@ -41,7 +41,9 @@
 
 - **answer_structure** — its tool-section scanner derives fence open/close from `fence` instead of "any ``` run", and stops a never-closed fence at the last line before the first following boundary rather than running to the end of the answer.
 
-- **chat_parser** — its existing `cb_state.tool_fence_len` tracker derives its grammar from `fence` instead of restating it, and the main loop (`:549`) *consults* that tracker before classifying, so a `💬:` / `🤖:` / `📎:` / `📝:` line in tool output can no longer fork a spurious exchange. No second fence tracker is introduced (PQ-3).
+- **chat_parser** — its existing `cb_state.tool_fence_len` tracker derives its grammar from `fence` instead of restating it, and the main loop no longer classifies against a body: a precomputed `in_tool_body[]`, built from `fence.tool_body`, suppresses structural markers there, so a `💬:` / `🤖:` / `📎:` / `📝:` line in tool output cannot fork a spurious exchange.
+
+  **Correction (BR-44):** this entry previously claimed "no second fence tracker is introduced". Two consumers of the grammar do now exist inside `chat_parser` — the `cb_state` tracker drives *block segmentation* (when a tool block ends and a text block resumes), while `in_tool_body[]` drives *main-loop classification*. PQ-3's objection was to two independent **grammars**, and both now derive from `parley.fence`, which is the property that matters. Unifying them into a single pass is worthwhile but is a parser refactor with real regression surface; it was not attempted at close time and is not claimed.
 
 **Test surface.** All four are PURE — unit tests, no IO mocks: `tests/unit/fence_spec.lua` (new), `tests/unit/fold_projection_spec.lua`, `tests/unit/answer_structure_spec.lua`, `tests/unit/chat_parser_tools_spec.lua`.
 
