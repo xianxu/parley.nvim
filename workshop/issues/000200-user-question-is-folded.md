@@ -940,6 +940,49 @@ JSON body cannot exercise a line-start run) — re-aimed, and two of three now
 fail without the conversion. And one test expectation cited the in-body marker's
 line number rather than the real question's.
 
+### 2026-08-21 — M2 boundary review: REWORK, addressed
+
+**BR-31 (Important) — I destroyed 11 pre-existing tests.** I wrote
+`tests/unit/chat_parser_tools_spec.lua` with `cat >` believing it was a new
+file; it existed, with 11 tests covering `content_blocks` recognition from #81.
+The suite reported 16 green where it should have been 27. This is the **second**
+deletion of tests in this issue, after I had already written the lessons entry
+about the first — that rule keyed on "structural *edit*", and I did not apply it
+because creating a file did not feel like editing one. Restored all 11 from
+`9a6e939~1` and re-appended my 5, wired to the file's existing `parser` /
+`test_config()` helpers rather than a second set. 16/16, zero duplicates.
+
+**BR-33 (Important) — my fence-aware interior scan disabled its own guard.** It
+entered body mode on *any* line the grammar accepted as an opener, for *any*
+foldable kind. A bare closing run is indistinguishable from an opener, so one
+grammar-rejected fence desynced the scan and it stopped checking for user
+markers for the rest of the range. Not hypothetical: `render_buffer.lua:104`
+emits ```` ```json {"type": "request"} ````, whose info string the grammar
+rejects. Now tracked only for `tool_use`/`tool_result`, and only when the body
+opens on the line immediately after the marker — the serialized shape. Two tests
+pin it: a `thinking` range with a code fence inside, and a range whose opener
+the grammar rejects.
+
+**BR-34 (Important) — a tick with no evidence.** I bulk-ticked M2's plan steps,
+including "re-run the audit against the operator's live `chat_dir`". It had not
+been run. It has been now:
+
+    AUDIT files=115 parsed=111 exchanges=463 assertions=1155
+          question_violations=0 marker_violations=0
+
+Recorded beside the tick, with a census that bounds what it proves: the live
+corpus holds `thinking=406`, `summary=286`, and **zero tool blocks**. Neither
+the in-repo transcripts nor the operator's own exercise the `🔧:`/`📎:` case
+this issue is named for — the two fixtures are its only coverage, and "audited
+115 transcripts" must not be read otherwise.
+
+**BR-32 (Important)** — `atlas/chat/format.md` still named
+`tools/serialize.lua` as the fence single source. It now points at
+`lua/parley/fence.lua` for the grammar and keeps serialize for the schema.
+
+Two lessons added: `cat >` on an assumed-new path is a silent overwrite, and
+never bulk-tick checkboxes.
+
 ## Revisions
 
 ### 2026-08-20 — Fold ownership contract + plan-quality round 1

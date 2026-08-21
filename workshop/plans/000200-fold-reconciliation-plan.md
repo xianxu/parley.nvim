@@ -1325,7 +1325,11 @@ Expected: lint clean, everything passes.
 
 - [x] **Step 2: Re-run the original audit scripts**
 
-Re-run the three audit scans from the issue Log against the operator's live `chat_dir` (127 transcripts) and confirm 0 violations — the pre-fix baseline was also 0 there, so this proves no regression on real data.
+Re-run the three audit scans from the issue Log against the operator's live `chat_dir` and confirm 0 violations — the pre-fix baseline was also 0 there, so this proves no regression on real data.
+
+**Run 2026-08-21:** 115 files, 111 parsed as chats, 463 exchanges, **1155 assertions, 0 question violations, 0 marker violations** on real Neovim fold state.
+
+Census from the same run, worth recording because it bounds what the audit proves: the live corpus contains `thinking=406`, `summary=286`, and **zero `tool_use` / zero `tool_result`**. So neither the in-repo corpus nor the operator's own transcripts exercise the `🔧:`/`📎:` case this issue is named for. `tests/fixtures/fold_tool_transcript.md` and `fold_adversarial.md` are the only coverage of it — "audited 115 transcripts" must not be read as tool coverage.
 
 - [x] **Step 3: Atlas**
 

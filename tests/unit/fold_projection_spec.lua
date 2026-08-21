@@ -178,6 +178,38 @@ describe("anchor verification", function()
         }, patterns))
     end)
 
+    -- BR-33: entering body mode on ANY fence, for ANY range kind, silently
+    -- disables the question guard for the rest of the range. A bare run is
+    -- indistinguishable from an opener, so one grammar-rejected fence desyncs
+    -- the scan — and render_buffer emits ```json {"type": "request"}, whose
+    -- info string the grammar rejects.
+    it("keeps guarding a thinking block, which has no fenced body", function()
+        local ranges = { { kind = "thinking", start_0 = 4, end_0 = 8 } }
+        local ok, failed = projection.verify_anchors(ranges, {
+            [4] = "🧠: reasoning",
+            [5] = "```",
+            [6] = "some code the model was thinking about",
+            [7] = "```",
+            [8] = "💬: drifted into the next question",
+        }, patterns)
+        assert.is_false(ok)
+        assert.equals(1, failed)
+    end)
+
+    it("keeps guarding after a fence the grammar does not accept as an opener", function()
+        local ranges = { { kind = "tool_result", start_0 = 4, end_0 = 9 } }
+        local ok, failed = projection.verify_anchors(ranges, {
+            [4] = "📎: read_file",
+            [5] = '```json {"type": "request"}',  -- info string the grammar rejects
+            [6] = "body",
+            [7] = "```",
+            [8] = "more",
+            [9] = "💬: drifted into the next question",
+        }, patterns)
+        assert.is_false(ok)
+        assert.equals(1, failed)
+    end)
+
     it("does not mistake a question marker inside a fenced body for a turn", function()
         local ranges = { { kind = "tool_result", start_0 = 4, end_0 = 7 } }
         local ok = projection.verify_anchors(ranges, {

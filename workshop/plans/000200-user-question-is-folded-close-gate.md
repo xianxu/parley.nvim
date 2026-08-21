@@ -360,6 +360,104 @@ rounds:
           round: 4
       boundary: M1
       blocked: false
+    - "n": 5
+      timestamp: "2026-08-21T11:47:17-07:00"
+      agent: claude
+      findings:
+        - id: BR-29
+          severity: Critical
+          title: answer_structure's unterminated-fence rewind fires on a correctly closed fence, truncating the tool block
+          detail: "lua/parley/answer_structure.lua:114 gates the rewind on `cursor > #lines`, which is\nequally true when the fence closed on the last line of the span. A tool body containing\na BOUNDARY-classified line (\U0001F4DD:/\U0001F4AC:/\U0001F916:/\U0001F512:) whose close is that last line is truncated\nat its opener: reduce returns tool_result 1..2 / summary 3..3 / text 4..4 where dc5ee17\nreturned tool_result 1..4. Measured on real fold state, the body leaks out of its fold\nand a fold is anchored on the in-body marker. Reachable on the streaming path\n(chat_respond.lua:1704) and on cold parse of a chat ending at a tool-result fence.\nFix: track a `closed` flag set in the close branch and gate the rewind on `not closed`."
+          family: failure-fallback-misgated
+          round: 5
+        - id: BR-30
+          severity: Critical
+          title: chat_parser's in-body suppression is unbounded, so one unclosed fence swallows the rest of the chat
+          detail: "lua/parley/chat_parser.lua:526 suppresses structural classification while tool_fence_len\nis set and tool_body_complete is false, with no terminator. An opener that never gets a\nmatching bare close reclassifies every later marker to text and forks no further\nexchange: 3 exchanges before M2, 1 after. Reachable without a malformed file — an answer\nquoting a \U0001F4CE: line inside ordinary markdown prose (fence-naive by design) opens a tool\nblock whose body never closes. Exchange starts feed exchange_anchors identity, which\ndrives the M1 destructive fold clear. answer_structure got a bounded fallback for this\ncase in the same milestone; chat_parser did not. Fix: precompute in_tool_body[] with a\nlookahead that requires the close to exist, and suppress on that."
+          family: unterminated-fence-degradation
+          round: 5
+        - id: BR-31
+          severity: Important
+          title: 11 pre-existing tests deleted from chat_parser_tools_spec.lua, undeclared
+          detail: |-
+            The file was replaced wholesale (344 -> 108 lines), dropping the entire #81
+            content_blocks contract plus "a tool_use prefix without a fenced body ... empty input" —
+            the only malformed-tool-tolerance test, and the class of the C2 regression. None were
+            relocated. The M2 Log reports "chat_parser_tools_spec 5/5" without noting it was 11.
+            This is the rule at workshop/lessons.md:706-713, added by this issue.
+          family: spec-surgery-loses-tests
+          round: 5
+        - id: BR-32
+          severity: Important
+          title: atlas/chat/format.md still names tools/serialize.lua as the fence single source
+          detail: |-
+            Plan Task 11 Step 3 names atlas/chat/format.md explicitly and is ticked, but the file is
+            untouched: line 12 still reads "Single source of truth for the schema:
+            lua/parley/tools/serialize.lua". atlas/chat/parsing.md never mentions the in-body-content
+            rule and line 17 still says structural markers "always terminate either mode".
+            traceability.yaml adds fence.lua under chat/exchange_model + providers/tool_use, not
+            chat/parsing as the plan directed. ARCH-PURPOSE shadow sweep incomplete.
+          family: shadow-consumer-not-derived
+          round: 5
+        - id: BR-33
+          severity: Important
+          title: fold_projection's interior scan enters body mode on any fence, disabling the question guard
+          detail: |-
+            lua/parley/fold_projection.lua:120-126 treats any open_len-matching line as a body opener
+            for any foldable range kind. A bare run is indistinguishable from an opener, so one
+            unmatched or grammar-rejected fence (e.g. an info string with non-word characters, as
+            render_buffer.lua:104 emits) desyncs the scan and it stops checking for user markers for
+            the rest of the range — silently disabling the guard that defends "a question is never
+            inside a fold". Fix: fence-track only for tool_use/tool_result and require the body to
+            open at range.start_0 + 1.
+          family: drift-guard-blinded
+          round: 5
+        - id: BR-34
+          severity: Important
+          title: Plan Task 11 Step 2 (127-transcript audit re-run) is ticked with no evidence in the Log
+          detail: |-
+            The M2 Log records spec counts, make test, lint and the M1 drift probes, but no re-run of
+            the three audit scans against the operator's live chat_dir. That audit is the only
+            evidence covering the C2 shape: the in-repo corpus provably lacks it (old-vs-new parser
+            exchange counts differ on 0 of 23 in-repo transcripts).
+          family: ticked-without-evidence
+          round: 5
+        - id: BR-35
+          severity: Minor
+          title: chat_parser.lua:267 require is unindented in a tab-indented function body
+          family: style-consistency
+          round: 5
+        - id: BR-36
+          severity: Minor
+          title: chat_parser.lua:457-459 comment still restates the fence grammar the module no longer owns
+          family: shadow-consumer-not-derived
+          round: 5
+        - id: BR-37
+          severity: Minor
+          title: fold_projection.lua:122-123 calls fence.open_len twice on the same line
+          family: redundant-computation
+          round: 5
+        - id: BR-38
+          severity: Minor
+          title: fence.lua declares itself pure but is absent from the PURE_FILES arch guard
+          detail: |-
+            tests/arch/buffer_mutation_spec.lua:62 lists the modules whose purity is enforced. The
+            new module's header claim ("Pure: no Neovim API, no state") and the plan's PURE
+            classification are documentation until it is added there. One line.
+          family: purity-claim-unenforced
+          round: 5
+        - id: BR-39
+          severity: Minor
+          title: fold_invariants_spec's oracle derives from the same parse it validates, so segmentation bugs pass
+          detail: |-
+            Both the expectations and the fold state come from one parse, so a mis-segmentation is
+            asserted as correct — C1 and C2 both pass this harness. It validates fold application,
+            not segmentation; the header comment should say so rather than let the harness be
+            credited with coverage it cannot have.
+          family: oracle-derives-from-subject
+          round: 5
+      boundary: M2
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#200 (boundary-review)
@@ -554,6 +652,68 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   lessons.md's own "widening a destructive operation demands widening its
   verification" entry warns about.
 
+## Round 5 — 2026-08-21T11:47:17-07:00 (claude) — BLOCKED
+
+### Raised
+
+- **BR-29** [Critical] `failure-fallback-misgated` answer_structure's unterminated-fence rewind fires on a correctly closed fence, truncating the tool block
+  lua/parley/answer_structure.lua:114 gates the rewind on `cursor > #lines`, which is
+  equally true when the fence closed on the last line of the span. A tool body containing
+  a BOUNDARY-classified line (📝:/💬:/🤖:/🔒:) whose close is that last line is truncated
+  at its opener: reduce returns tool_result 1..2 / summary 3..3 / text 4..4 where dc5ee17
+  returned tool_result 1..4. Measured on real fold state, the body leaks out of its fold
+  and a fold is anchored on the in-body marker. Reachable on the streaming path
+  (chat_respond.lua:1704) and on cold parse of a chat ending at a tool-result fence.
+  Fix: track a `closed` flag set in the close branch and gate the rewind on `not closed`.
+- **BR-30** [Critical] `unterminated-fence-degradation` chat_parser's in-body suppression is unbounded, so one unclosed fence swallows the rest of the chat
+  lua/parley/chat_parser.lua:526 suppresses structural classification while tool_fence_len
+  is set and tool_body_complete is false, with no terminator. An opener that never gets a
+  matching bare close reclassifies every later marker to text and forks no further
+  exchange: 3 exchanges before M2, 1 after. Reachable without a malformed file — an answer
+  quoting a 📎: line inside ordinary markdown prose (fence-naive by design) opens a tool
+  block whose body never closes. Exchange starts feed exchange_anchors identity, which
+  drives the M1 destructive fold clear. answer_structure got a bounded fallback for this
+  case in the same milestone; chat_parser did not. Fix: precompute in_tool_body[] with a
+  lookahead that requires the close to exist, and suppress on that.
+- **BR-31** [Important] `spec-surgery-loses-tests` 11 pre-existing tests deleted from chat_parser_tools_spec.lua, undeclared
+  The file was replaced wholesale (344 -> 108 lines), dropping the entire #81
+  content_blocks contract plus "a tool_use prefix without a fenced body ... empty input" —
+  the only malformed-tool-tolerance test, and the class of the C2 regression. None were
+  relocated. The M2 Log reports "chat_parser_tools_spec 5/5" without noting it was 11.
+  This is the rule at workshop/lessons.md:706-713, added by this issue.
+- **BR-32** [Important] `shadow-consumer-not-derived` atlas/chat/format.md still names tools/serialize.lua as the fence single source
+  Plan Task 11 Step 3 names atlas/chat/format.md explicitly and is ticked, but the file is
+  untouched: line 12 still reads "Single source of truth for the schema:
+  lua/parley/tools/serialize.lua". atlas/chat/parsing.md never mentions the in-body-content
+  rule and line 17 still says structural markers "always terminate either mode".
+  traceability.yaml adds fence.lua under chat/exchange_model + providers/tool_use, not
+  chat/parsing as the plan directed. ARCH-PURPOSE shadow sweep incomplete.
+- **BR-33** [Important] `drift-guard-blinded` fold_projection's interior scan enters body mode on any fence, disabling the question guard
+  lua/parley/fold_projection.lua:120-126 treats any open_len-matching line as a body opener
+  for any foldable range kind. A bare run is indistinguishable from an opener, so one
+  unmatched or grammar-rejected fence (e.g. an info string with non-word characters, as
+  render_buffer.lua:104 emits) desyncs the scan and it stops checking for user markers for
+  the rest of the range — silently disabling the guard that defends "a question is never
+  inside a fold". Fix: fence-track only for tool_use/tool_result and require the body to
+  open at range.start_0 + 1.
+- **BR-34** [Important] `ticked-without-evidence` Plan Task 11 Step 2 (127-transcript audit re-run) is ticked with no evidence in the Log
+  The M2 Log records spec counts, make test, lint and the M1 drift probes, but no re-run of
+  the three audit scans against the operator's live chat_dir. That audit is the only
+  evidence covering the C2 shape: the in-repo corpus provably lacks it (old-vs-new parser
+  exchange counts differ on 0 of 23 in-repo transcripts).
+- **BR-35** [Minor] `style-consistency` chat_parser.lua:267 require is unindented in a tab-indented function body
+- **BR-36** [Minor] `shadow-consumer-not-derived` chat_parser.lua:457-459 comment still restates the fence grammar the module no longer owns
+- **BR-37** [Minor] `redundant-computation` fold_projection.lua:122-123 calls fence.open_len twice on the same line
+- **BR-38** [Minor] `purity-claim-unenforced` fence.lua declares itself pure but is absent from the PURE_FILES arch guard
+  tests/arch/buffer_mutation_spec.lua:62 lists the modules whose purity is enforced. The
+  new module's header claim ("Pure: no Neovim API, no state") and the plan's PURE
+  classification are documentation until it is added there. One line.
+- **BR-39** [Minor] `oracle-derives-from-subject` fold_invariants_spec's oracle derives from the same parse it validates, so segmentation bugs pass
+  Both the expectations and the fold state come from one parse, so a mis-segmentation is
+  asserted as correct — C1 and C2 both pass this harness. It validates fold application,
+  not segmentation; the header comment should say so rather than let the harness be
+  credited with coverage it cannot have.
+
 ## Open findings
 
 - **BR-4** [Important] Plan Core-concepts entry contradicts the code and the plan's own line 65
@@ -579,3 +739,14 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-26** [Minor] per-chunk reconcile cost is linear in projected-range length, and that axis is unasserted
 - **BR-27** [Minor] atlas does not record that the clear transiently forces 'foldenable'
 - **BR-28** [Minor] prepare clears the identified span unverified while reconcile refuses to create unverified
+- **BR-29** [Critical] `failure-fallback-misgated` answer_structure's unterminated-fence rewind fires on a correctly closed fence, truncating the tool block
+- **BR-30** [Critical] `unterminated-fence-degradation` chat_parser's in-body suppression is unbounded, so one unclosed fence swallows the rest of the chat
+- **BR-31** [Important] `spec-surgery-loses-tests` 11 pre-existing tests deleted from chat_parser_tools_spec.lua, undeclared
+- **BR-32** [Important] `shadow-consumer-not-derived` atlas/chat/format.md still names tools/serialize.lua as the fence single source
+- **BR-33** [Important] `drift-guard-blinded` fold_projection's interior scan enters body mode on any fence, disabling the question guard
+- **BR-34** [Important] `ticked-without-evidence` Plan Task 11 Step 2 (127-transcript audit re-run) is ticked with no evidence in the Log
+- **BR-35** [Minor] `style-consistency` chat_parser.lua:267 require is unindented in a tab-indented function body
+- **BR-36** [Minor] `shadow-consumer-not-derived` chat_parser.lua:457-459 comment still restates the fence grammar the module no longer owns
+- **BR-37** [Minor] `redundant-computation` fold_projection.lua:122-123 calls fence.open_len twice on the same line
+- **BR-38** [Minor] `purity-claim-unenforced` fence.lua declares itself pure but is absent from the PURE_FILES arch guard
+- **BR-39** [Minor] `oracle-derives-from-subject` fold_invariants_spec's oracle derives from the same parse it validates, so segmentation bugs pass

@@ -720,3 +720,20 @@
   it was added. Rule: a cross-milestone hazard is only recorded once a test
   exercises it; a comment predicting the break is documentation of a gap, not
   coverage of one.
+- **`cat > file` on a path you assume is new is a silent overwrite — check
+  existence, not intent.** #200 M2 created what it believed was a new
+  `chat_parser_tools_spec.lua` and destroyed 11 pre-existing tests. The suite
+  went green at 16 where it should have been 27. This is the *second* deletion
+  of tests in the same issue, after a lessons entry had already been written
+  about the first: that rule said "after any structural EDIT to a spec, diff the
+  inventory against HEAD", and it was not applied because this felt like a
+  creation, not an edit. Rule: before writing a spec file, `test -e` it — and
+  diff the inventory against `HEAD` on creation as well as on edit, since a
+  creation that lands on an existing path is the most destructive edit there is.
+- **Never bulk-tick checkboxes.** #200 M2 ticked a plan's step list with a
+  blanket replace, including "re-run the audit against the operator's live
+  chat_dir" — which had not been run. A tick is a claim of evidence; applying it
+  mechanically converts a plan into fiction. The audit was afterwards actually
+  run (115 files, 1155 assertions, 0 violations) and its result recorded beside
+  the tick. Rule: tick a step only in the same action that produced its
+  evidence, and put the evidence next to the tick.

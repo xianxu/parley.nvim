@@ -113,14 +113,21 @@ function M.verify_anchors(ranges, lines, patterns)
         --
         -- Lines inside the block's fenced body are skipped: there a marker is
         -- content, not a turn (#200 M2).
-        local body_len = nil
+        -- Only tool blocks have a fenced body, and it opens on the line
+        -- immediately after the marker — the serialized shape. Tracking fences
+        -- for any kind, or entering body mode anywhere in the range, would let
+        -- one grammar-rejected opener (render_buffer emits
+        -- ```json {"type": "request"}) desync the scan and silently disable
+        -- this guard for the rest of the range.
+        local tracks_body = range.kind == "tool_use" or range.kind == "tool_result"
+        local body_len = tracks_body and fence.open_len(lines[range.start_0 + 1] or "") or nil
         for row = range.start_0 + 1, range.end_0 do
             local line = lines[row]
             if line == nil then return false, index end
             if body_len then
-                if fence.closes(line, body_len) then body_len = nil end
-            elseif fence.open_len(line) then
-                body_len = fence.open_len(line)
+                if row > range.start_0 + 1 and fence.closes(line, body_len) then
+                    body_len = nil
+                end
             elseif line:match(user_pattern) then
                 return false, index
             end
