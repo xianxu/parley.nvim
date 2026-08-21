@@ -482,6 +482,34 @@ describe("tool_folds incremental manual folds", function()
         end
     end)
 
+    -- The ownership contract has two halves and only one was pinned: Parley owns
+    -- every fold WITHIN an exchange span, and leaves folds outside every span
+    -- alone. Without this, widening the clear again would pass the suite.
+    it("leaves a fold outside every exchange span untouched", function()
+        local chat_parser = require("parley.chat_parser")
+        local lines = { "---", "topic: t", "file: f.md", "---", "" }
+        for e = 1, 2 do
+            vim.list_extend(lines, { "💬: q" .. e, "", "🤖: [A]",
+                "📎: t" .. e, "```", "x", "```", "" })
+        end
+        -- Frontmatter sits above the first exchange, so it is owned by nobody.
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+        tool_folds.hydrate_window(buf, win)
+        vim.api.nvim_win_call(win, function() vim.cmd("1,4fold") end)
+
+        local model = exchange_model.from_parsed_chat(chat_parser.parse_chat(
+            vim.api.nvim_buf_get_lines(buf, 0, -1, false), 4,
+            require("parley.config")))
+        for k in ipairs(model.exchanges) do
+            tool_folds.reconcile_exchange(buf, win, model, k)
+        end
+        vim.cmd("normal! zM")
+
+        assert.message("a fold above every exchange was cleared")
+            .equals(1, vim.fn.foldclosed(1))
+        assert.equals(4, vim.fn.foldclosedend(1))
+    end)
+
     it("falls back rather than trusting identity across a structural change", function()
         local anchors = require("parley.exchange_anchors")
         local lines = { "---", "topic: t", "file: f.md", "---", "" }

@@ -2,28 +2,31 @@
 
 local M = {}
 
-local FOLDABLE = {
-    thinking = true,
-    summary = true,
-    tool_use = true,
-    tool_result = true,
-}
-
---- Whether a block kind folds. An accessor rather than the live table, so a
---- consumer reads the policy without being able to mutate it.
-function M.is_foldable(block_kind)
-    return FOLDABLE[block_kind] == true
-end
-
+-- The fold policy, stated once: a block kind folds exactly when it has a marker
+-- line to anchor on, and this maps each to the kind that line must classify as.
 -- Block kinds carry answer_structure's vocabulary; a buffer line is classified
 -- with highlight_structure's. They agree except for thinking, whose marker
--- classifies as "reasoning". Named once, so the two vocabularies cannot drift.
+-- classifies as "reasoning".
+--
+-- FOLDABLE is derived rather than restated. Two hand-maintained key sets would
+-- drift, and the drift is silent and total: a kind foldable here but missing
+-- there yields a range whose anchor_kind is nil, verification fails, and the
+-- whole exchange refuses to fold (ARCH-DRY).
 local ANCHOR_KIND = {
     thinking = "reasoning",
     summary = "summary",
     tool_use = "tool_use",
     tool_result = "tool_result",
 }
+
+local FOLDABLE = {}
+for kind in pairs(ANCHOR_KIND) do FOLDABLE[kind] = true end
+
+--- Whether a block kind folds. An accessor rather than the live table, so a
+--- consumer reads the policy without being able to mutate it.
+function M.is_foldable(block_kind)
+    return FOLDABLE[block_kind] == true
+end
 
 --- The structural kind a foldable block's first line must classify as.
 --- @return string|nil  nil when the block kind is not foldable

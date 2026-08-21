@@ -145,7 +145,11 @@ end
 -- identical parse, so reusing it within a tick is exact, not an approximation.
 -- Unlike a fold-state memo this cannot go stale silently — any edit moves the
 -- tick.
-local rederived = setmetatable({}, { __mode = "k" })
+-- Keyed by buffer number. NOT weak: `__mode = "k"` collects only GC-able keys,
+-- and an integer is never collected, so a weak table here would look like
+-- cleanup while retaining a parsed model per buffer forever. Cleared explicitly
+-- on the buffer lifecycle events below.
+local rederived = {}
 
 -- Minimum gap between re-parses once one has failed to resolve the drift. The
 -- changedtick key alone only collapses the same-tick fan-out (reconcile runs
@@ -467,6 +471,7 @@ function M.setup(buf)
         group = group, buffer = buf,
         callback = function()
             initialized[buf] = nil
+            rederived[buf] = nil
             exchange_anchors.clear(buf)
         end,
     })

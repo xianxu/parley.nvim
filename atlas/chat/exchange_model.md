@@ -80,11 +80,21 @@ three properties follow:
     neighbour's folds.
   - Identity declines rather than guesses when the anchor count disagrees with
     the model's exchange count (a structural edit re-indexed the exchanges), or
-    when either bounding mark's line was deleted. The positional check
-    (`verify_span`) remains only as the fallback floor for those cases, and its
+    when *any* anchor no longer resolves in ascending order — a compensating
+    delete-and-add keeps the count equal while re-indexing which exchange each
+    anchor names. There is **no positional fallback**: a decline routes to a
+    re-derive, which reinstalls identity from a fresh parse. Identity may be
+    installed only from a model parsed from the current buffer, because a
+    prefix-stale model looks structurally sound while laying down too few
+    anchors.
+  - Positional reasoning survives in one place only: `fold_projection.verify_starts`
+    validates a model's exchange starts *before* they become identity. Its
     question-anchor requirement is waived for exchange 1, because `chat_parser`
     fabricates a question block for an assistant-first transcript and that path
     can produce no other index.
+  - The two halves are tied together: every created range must lie inside the
+    rows identity says the exchange owns. Verification proves a range matches
+    the buffer's text; only containment proves it belongs to *this* exchange.
 - **Drift heals once, then refuses.** If verification fails, the model is
   re-derived from the buffer and rechecked. If it still does not verify, no
   fold is created rather than a wrong one, and the refusal is logged at debug

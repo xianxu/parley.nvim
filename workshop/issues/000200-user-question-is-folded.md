@@ -759,6 +759,41 @@ runs in its own environment. The accurate statement is: these three specs are
 environment-sensitive, none contains fold code, and the failures reproduce with
 all #200 changes stashed.
 
+### 2026-08-20 — M1 boundary review: FIX-THEN-SHIP, five Importants addressed
+
+First non-REWORK verdict. No Criticals. All five findings verified before
+acting:
+
+- **BR-1 — `FOLDABLE` restated `ANCHOR_KIND`'s key set.** Two hand-maintained
+  tables with identical keys, and the drift mode is silent and *total*: a kind
+  present in one and not the other yields a nil `anchor_kind`, verification
+  fails, and the whole exchange stops folding. `FOLDABLE` is now derived from
+  `ANCHOR_KIND` (`ARCH-DRY`).
+- **BR-2 — only half the ownership contract was pinned.** Tests covered "Parley
+  owns every fold within an exchange span" but nothing covered "folds outside
+  every span are untouched", so re-widening the clear would have passed the
+  suite. Added a test folding the frontmatter — owned by no exchange — and
+  asserting it survives a full reconcile.
+- **BR-5 — the re-derive memo leaked a parsed model per buffer.**
+  `setmetatable({}, { __mode = "k" })` collects only GC-able keys, and the keys
+  here are buffer *numbers*, which are never collected. It read as cleanup while
+  retaining every parse. Dropped the misleading weak mode and cleared
+  `rederived[buf]` on the buffer lifecycle events alongside `initialized` and
+  the anchors.
+- **BR-3 / BR-4 — docs described code from three rounds ago.**
+  `atlas/chat/exchange_model.md` still named `verify_span` and "the positional
+  fallback", both removed in round 5; the plan's Core-concepts entry contradicted
+  both the code and its own later text. Both now describe what exists: no
+  positional fallback, identity installable only from a current-buffer parse,
+  `verify_starts` as the one surviving positional check, and the containment tie
+  between creation and destruction.
+
+**Verification:** `exchange_anchors_spec` 12/12, `fold_projection_spec` 15/15,
+`tool_folds_spec` 1/1 unit + 26/26 integration, `fold_invariants_spec` 12/12 —
+**66** fold tests, inventory audited (zero duplicate `it()` names in any fold
+spec); `make test` exit 0 on a clean scratch dir; lint 0 warnings / 0 errors
+across 331 files. All eight reproduced scenarios still hold.
+
 ## Revisions
 
 ### 2026-08-20 — Fold ownership contract + plan-quality round 1
