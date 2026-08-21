@@ -214,16 +214,26 @@ end
 --- Identity may be absent or stale — most commonly because the chat gained an
 --- exchange, which makes the anchor count disagree with the model and would
 --- otherwise leave identity declined for every exchange from then on. So a
---- decline first tries to REINSTALL identity from this model before giving up.
+--- decline can reinstall identity, but ONLY from a model just parsed from this
+--- buffer (`verified`).
+---
+--- The `verified` gate is not ceremony. `verify_starts` can only judge the rows
+--- it is given: a *prefix-stale* model — the buffer grew a trailing exchange the
+--- model never saw — passes it trivially, because its starts really are
+--- ascending question lines. Installing from it lays down too FEW anchors, so
+--- the last one owns to end-of-buffer and its clear swallows every exchange
+--- after it. Prefix-staleness is the canonical drift, which makes the untrusted
+--- model exactly the one that must not define identity.
 ---
 --- There is deliberately no positional fallback. A row-span is not an identity:
 --- "starts on a question, contains no other" is satisfied equally by another
 --- exchange's rows, and with no foldable blocks the range check is vacuous, so
 --- falling through would clear rows we cannot prove we own. Returning nil sends
 --- the caller to the re-derive, which installs identity from a fresh parse.
-local function owned_span(buf, model, exchange_index, patterns)
+local function owned_span(buf, model, exchange_index, patterns, verified)
     local first_0, last_0 = exchange_anchors.span(buf, exchange_index, #model.exchanges)
     if first_0 then return first_0, last_0 end
+    if not verified then return nil end
     if not anchor_from(buf, model, patterns) then return nil end
     return exchange_anchors.span(buf, exchange_index, #model.exchanges)
 end
@@ -243,7 +253,9 @@ function M.reconcile_exchange(buf, win, model, exchange_index)
     if not valid_target(buf, win) or not model.exchanges[exchange_index] then return false end
     local patterns = require("parley.highlight_structure").patterns(require("parley.config"))
     local ranges = projection.desired_folds(model, exchange_index)
-    local first_0, last_0 = owned_span(buf, model, exchange_index, patterns)
+    -- The caller's model is not trusted to define identity; only a parse of the
+    -- current buffer is (see owned_span).
+    local first_0, last_0 = owned_span(buf, model, exchange_index, patterns, false)
 
     local fits, failed_index, which = model_fits(buf, ranges, patterns)
     if fits and first_0 == nil then fits, which = false, "span" end
@@ -256,7 +268,7 @@ function M.reconcile_exchange(buf, win, model, exchange_index)
             if fits then
                 -- A parse that verifies is authoritative: install identity from
                 -- it, then read the span back through those marks.
-                fresh_first, fresh_last = owned_span(buf, fresh, exchange_index, patterns)
+                fresh_first, fresh_last = owned_span(buf, fresh, exchange_index, patterns, true)
                 fits = fresh_first ~= nil
             end
         else
@@ -297,12 +309,23 @@ function M.prepare_exchange_update(buf, model, exchange_index)
     -- rows this exchange can be shown to own. A stale span here would clear a
     -- neighbour's folds before the mutation even runs, and finalize would not
     -- recreate them (#200 C1).
-    first_0, last_0 = owned_span(buf, model, exchange_index, patterns)
+    -- Destructive, so the same rule as reconcile: clear only rows this exchange
+    -- can be shown to own, and never let an untrusted model define that. When
+    -- identity declines there is nothing safe to clear — say so rather than
+    -- clearing silently.
+    first_0, last_0 = owned_span(buf, model, exchange_index, patterns, false)
+    -- Skipping the clear is safe: finalize's reconcile owns the span and will
+    -- clear it there. Surfaced on the existing prepare event rather than as a
+    -- drift event, because "identity not established yet" is the ordinary
+    -- first-call state, not a fault, and a fault-shaped signal for it would
+    -- drown the real ones.
+    local identified = first_0 ~= nil
     local windows = vim.fn.win_findbuf(buf) or {}
     for _, win in ipairs(windows) do
         if valid_target(buf, win) then
             clear_folds_in_span(buf, win, first_0, last_0)
-            notify({ phase = "prepare", win = win, exchange_index = exchange_index, ranges = ranges })
+            notify({ phase = "prepare", win = win, exchange_index = exchange_index,
+                ranges = ranges, identified = identified })
         end
     end
     return windows
@@ -362,6 +385,7 @@ function M.hydrate_window(buf, win, model_provider)
     local provider = model_provider or M._model_provider or default_model_provider
     local model = provider(buf)
     if not model then return false end
+    -- Freshly parsed from this buffer, so it may define identity.
     anchor_from(buf, model, require("parley.highlight_structure").patterns(require("parley.config")))
     vim.api.nvim_win_call(win, function()
         vim.cmd("normal! zE")

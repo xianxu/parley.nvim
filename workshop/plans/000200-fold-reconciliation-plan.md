@@ -1598,3 +1598,27 @@ Delta:
   part of that exchange's answer. A manual fold there is therefore cleared;
   `tool_folds_spec.lua:39` converts, matching `:57`.
 - Dead helpers `exchange_span` and `span_lines` removed.
+
+### 2026-08-20 — M1 round 6: identity install requires a current-buffer parse
+
+Reason: round 5's reinstall-on-decline let a *prefix-stale* model define
+identity. `verify_starts` passes such a model trivially, too few anchors get
+installed, the last one owns to EOF, and its clear swallows the trailing
+exchanges. Reproduced through `with_exchange_update`.
+
+Delta:
+
+- `owned_span(buf, model, k, patterns, verified)` — identity may be installed
+  only from a model parsed from the current buffer. `reconcile_exchange` passes
+  `false` for the caller's model, `true` for the re-derived one;
+  `hydrate_window` passes `true`.
+- `prepare_exchange_update` reports identity availability on its `prepare`
+  event instead of emitting a drift event; skipping the clear is safe because
+  finalize's reconcile owns the span.
+- **Explicit non-fix:** do not add a buffer-wide completeness scan to
+  `verify_starts`. It would be correct now and wrong at M2, where a `💬:` inside
+  a fenced tool body stops starting an exchange — the scan would decline forever
+  and reopen the round-2 permanent-refusal defect. Any such scan must consume
+  the M2 `fence` grammar.
+- Test fixtures without `---` frontmatter now declare their hand-built model as
+  the buffer's truth via the existing `_model_provider` seam.

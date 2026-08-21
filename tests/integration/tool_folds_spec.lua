@@ -20,6 +20,7 @@ describe("tool_folds incremental manual folds", function()
     end)
 
     after_each(function()
+        tool_folds._model_provider = nil
         if vim.api.nvim_buf_is_valid(original_buf) then
             vim.api.nvim_win_set_buf(win, original_buf)
         end
@@ -27,6 +28,16 @@ describe("tool_folds incremental manual folds", function()
             vim.api.nvim_buf_delete(buf, { force = true })
         end
     end)
+
+    -- #200: identity may only be installed from a model parsed from the current
+    -- buffer, so a hand-built model has to be declared as this buffer's truth.
+    -- These fixtures are bare block layouts with no `---` frontmatter, so the
+    -- default provider cannot parse them; the seam is what the module already
+    -- offers for exactly this.
+    local function truth(model)
+        tool_folds._model_provider = function() return model end
+        return model
+    end
 
     local function model_with(kind, size)
         local model = exchange_model.new(1)
@@ -43,7 +54,7 @@ describe("tool_folds incremental manual folds", function()
     -- test :57 encodes, now applying to the tail of the buffer too.
     it("clears a user fold in the last exchange's trailing prose", function()
         vim.cmd("10,11fold")
-        local model = model_with("thinking", 2)
+        local model = truth(model_with("thinking", 2))
         tool_folds.reconcile_exchange(buf, win, model, 1)
         tool_folds.with_exchange_update(buf, model, 1, function()
             require("parley.buffer_edit").stream_replace_at_line(buf, 7, {
@@ -95,6 +106,7 @@ describe("tool_folds incremental manual folds", function()
         model:add_exchange(1)
         model:add_block(1, "agent_header", 1)
         model:add_block(1, "tool_result", 4)
+        truth(model)
         tool_folds.reconcile_exchange(buf, win, model, 1)
 
         -- The shape a drifted reconcile leaves behind: a fold no projected
@@ -358,6 +370,48 @@ describe("tool_folds incremental manual folds", function()
         end
     end)
 
+    -- #200 round 6: identity must only be installed from a model produced from
+    -- the CURRENT buffer. A prefix-stale model (the buffer gained a trailing
+    -- exchange the model never saw) passes verify_starts trivially — its starts
+    -- really are ascending questions — but installs too FEW anchors, so the
+    -- last one owns to end-of-buffer and its clear swallows the exchanges after
+    -- it. prepare_exchange_update is the destructive path here: it clears on
+    -- identity alone and never checks ranges.
+    it("does not install identity from a model that stops short of the buffer", function()
+        local chat_parser = require("parley.chat_parser")
+        local function parse()
+            return exchange_model.from_parsed_chat(chat_parser.parse_chat(
+                vim.api.nvim_buf_get_lines(buf, 0, -1, false), 4,
+                require("parley.config")))
+        end
+        local lines = { "---", "topic: t", "file: f.md", "---", "" }
+        for e = 1, 2 do
+            vim.list_extend(lines, { "💬: q" .. e, "", "🤖: [A]",
+                "📎: t" .. e, "```", "x", "```", "" })
+        end
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+        tool_folds.hydrate_window(buf, win)
+        local stale = parse()  -- knows two exchanges
+
+        -- The chat grows and the tail is folded from a current parse.
+        vim.api.nvim_buf_set_lines(buf, -1, -1, false,
+            { "💬: q3", "", "🤖: [A]", "📎: t3", "```", "x", "```", "" })
+        tool_folds.apply_folds(buf, win, parse)
+        vim.cmd("normal! zM")
+        local tail
+        for i, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+            if line:match("^📎: t3") then tail = i end
+        end
+        assert.equals(tail, vim.fn.foldclosed(tail))
+
+        -- Now drive the destructive path with the prefix-stale model.
+        tool_folds.with_exchange_update(buf, stale, 2, function() end)
+        vim.cmd("normal! zM")
+
+        assert.message("a prefix-stale model's identity swallowed the trailing exchange")
+            .equals(tail, vim.fn.foldclosed(tail))
+    end)
+
     it("falls back rather than trusting identity across a structural change", function()
         local anchors = require("parley.exchange_anchors")
         local lines = { "---", "topic: t", "file: f.md", "---", "" }
@@ -375,7 +429,7 @@ describe("tool_folds incremental manual folds", function()
     end)
 
     it("reconciles a changed exchange without leaving a blank-line ghost", function()
-        local model = model_with("thinking", 2)
+        local model = truth(model_with("thinking", 2))
         tool_folds.reconcile_exchange(buf, win, model, 1)
         vim.cmd("normal! zM")
 
@@ -392,7 +446,7 @@ describe("tool_folds incremental manual folds", function()
     end)
 
     it("prepares and reconciles the changed exchange in every displayed window", function()
-        local model = model_with("thinking", 2)
+        local model = truth(model_with("thinking", 2))
         local second_win = vim.api.nvim_open_win(buf, false, {
             relative = "editor", row = 1, col = 1, width = 30, height = 8,
             style = "minimal",
@@ -419,7 +473,7 @@ describe("tool_folds incremental manual folds", function()
     end)
 
     it("restores from the current buffer model without masking a mutation error", function()
-        local model = model_with("thinking", 2)
+        local model = truth(model_with("thinking", 2))
         local recovered = model_with("summary", 1)
         tool_folds.reconcile_exchange(buf, win, model, 1)
         local previous_provider = tool_folds._model_provider
@@ -442,7 +496,7 @@ describe("tool_folds incremental manual folds", function()
     end)
 
     it("recovers after the model changed without masking the mutation error", function()
-        local model = model_with("thinking", 2)
+        local model = truth(model_with("thinking", 2))
         local recovered = model_with("summary", 1)
         tool_folds.reconcile_exchange(buf, win, model, 1)
         local previous_provider = tool_folds._model_provider
@@ -479,7 +533,7 @@ describe("tool_folds incremental manual folds", function()
 
     it("hydrates a window only once from one model provider", function()
         local calls = 0
-        local model = model_with("thinking", 2)
+        local model = truth(model_with("thinking", 2))
         local provider = function()
             calls = calls + 1
             return model
@@ -496,7 +550,7 @@ describe("tool_folds incremental manual folds", function()
     it("replaces a persisted orphan fold with the exact initial projection", function()
         vim.api.nvim_buf_set_lines(buf, 6, 8, false, { "📝: summary", "" })
         vim.cmd("8,8fold")
-        local model = model_with("summary", 1)
+        local model = truth(model_with("summary", 1))
 
         assert.is_true(tool_folds.hydrate_window(buf, win, function() return model end))
         vim.cmd("normal! zM")
@@ -514,7 +568,7 @@ describe("tool_folds incremental manual folds", function()
             "header", "", "💬: q", "", "🤖: a", "",
             "🧠: first", "thinking", "", "🔧: read id=x", "{}",
         })
-        local model = model_with("thinking", 2)
+        local model = truth(model_with("thinking", 2))
         tool_folds.with_exchange_update(buf, model, 1, function()
             model:add_block(1, "tool_use", 2)
         end)
@@ -544,7 +598,7 @@ describe("tool_folds incremental manual folds", function()
     end)
 
     it("keeps exactly one fold level across consecutive tool-loop appends", function()
-        local model = model_with("thinking", 2)
+        local model = truth(model_with("thinking", 2))
         local second_win = vim.api.nvim_open_win(buf, false, {
             relative = "editor", row = 1, col = 1, width = 30, height = 8,
             style = "minimal",

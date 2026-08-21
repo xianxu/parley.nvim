@@ -606,6 +606,64 @@ passes 4/4 in isolation), lint 0 warnings / 0 errors across 331 files. All five
 scenarios still hold: original symptom `foldclosed=-1`, R1 `15`, R2
 `reconcile -> true`, R3 `22`, R4 alias probe `24`.
 
+### 2026-08-20 — M1 round 6: identity may only come from a current-buffer parse
+
+**C1 (Critical) — round 5's "reinstall identity on decline" was unsound.**
+`verify_starts` can only judge the rows it is handed, and a *prefix-stale*
+model — the buffer grew a trailing exchange the model never saw — passes it
+trivially: its starts really are ascending question lines. Installing from it
+lays down too FEW anchors, so the last anchor owns to end-of-buffer and its
+clear swallows every exchange after it. Prefix-staleness is the canonical
+drift, which makes the untrusted model exactly the one that must not define
+identity. Reproduced through the production path (`with_exchange_update`, no
+hand-built model):
+
+    BEFORE:  📎 9->9   📎 17->17   📎 25->25
+    AFTER:   📎 9->9   📎 17->17   📎 25->-1     drift_event=false
+
+Fix: `owned_span` takes a `verified` flag and may install identity only from a
+model just parsed from this buffer. `reconcile_exchange` passes `false` for the
+caller's model and `true` for the re-derived one; `hydrate_window` passes
+`true`. The cost is one extra parse when identity declines, already bounded by
+the changedtick memo and the 250 ms backoff.
+
+Deliberately *not* fixed by adding a completeness scan to `verify_starts`
+("every question line in the buffer is a start"). That would be correct today
+and a trap at M2: once `chat_parser` stops forking an exchange for a `💬:`
+inside a fenced tool body, the scan would see a question that is not a start,
+decline forever, and reopen round 2's permanent-refusal defect. If it is ever
+added it must consume the M2 `fence` grammar, not a raw regex.
+
+`prepare_exchange_update` now reports identity availability on its existing
+`prepare` event rather than emitting a drift event: "identity not established
+yet" is the ordinary first-call state, and a fault-shaped signal for it would
+drown the real ones. Skipping the clear there is safe — finalize's reconcile
+owns the span.
+
+**Test-fixture consequence.** Seven pre-existing tests drive `reconcile_exchange`
+with hand-built models against buffers that have no `---` frontmatter, so the
+default provider cannot parse them and, with the caller's model no longer
+trusted, nothing could establish identity. They now declare their model as the
+buffer's truth through the module's existing `_model_provider` seam — which is
+what that seam is for.
+
+**Verification:** `exchange_anchors_spec` 10/10, `fold_projection_spec` 22/22,
+`tool_folds_spec` 23/23 unit + integration, `fold_invariants_spec` 12/12;
+lint 0 warnings / 0 errors across 331 files. All six scenarios hold: original
+symptom `foldclosed=-1`, R1 `15`, R2 `reconcile -> true`, R3 `22`, R4 alias
+`24`, R5 append `{5,12}`.
+
+**`make test` and the `tools_builtin_find_spec` failure — diagnosed, not
+waved off.** It failed on two consecutive full runs. Isolation passes 4/4
+(three times), and it passes under the suite's own `TEST_ENV`. Running the full
+suite with the #200 changes **stashed** reproduces the failure, so it is not
+this issue's. Root cause: the spec runs the `find` tool over the repo root,
+which includes a `.test-tmp` left populated by previous runs and actively
+mutated by the current one — traversing a tree that is changing under it makes
+`find` exit nonzero. `rm -rf .test-tmp .test-home .test-xdg` before `make test`
+gives **exit 0** on the full suite. Worth its own issue: the harness should
+clean its scratch dirs, or the spec should not scan them.
+
 ## Revisions
 
 ### 2026-08-20 — Fold ownership contract + plan-quality round 1
