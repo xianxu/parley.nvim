@@ -412,6 +412,44 @@ describe("tool_folds incremental manual folds", function()
             .equals(tail, vim.fn.foldclosed(tail))
     end)
 
+    -- #200 round 7: pruning an old exchange and asking again keeps the exchange
+    -- COUNT unchanged while re-indexing which exchange each anchor names. A
+    -- count-only identity check hands back a shifted mapping and the clear
+    -- lands on a neighbour. Ordinary parley usage, so this is the shape that
+    -- matters most.
+    it("survives pruning one exchange and adding another", function()
+        local chat_parser = require("parley.chat_parser")
+        local function parse()
+            return exchange_model.from_parsed_chat(chat_parser.parse_chat(
+                vim.api.nvim_buf_get_lines(buf, 0, -1, false), 4,
+                require("parley.config")))
+        end
+        local lines = { "---", "topic: t", "file: f.md", "---", "" }
+        for e = 1, 3 do
+            vim.list_extend(lines, { "💬: q" .. e, "", "🤖: [A]",
+                "📎: t" .. e, "```", "x", "```", "" })
+        end
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+        tool_folds.hydrate_window(buf, win)
+
+        -- Prune exchange 1 (8 lines) and ask a new question: count unchanged.
+        vim.api.nvim_buf_set_lines(buf, 5, 13, false, {})
+        vim.api.nvim_buf_set_lines(buf, -1, -1, false,
+            { "💬: q4", "", "🤖: [A]", "📎: t4", "```", "x", "```", "" })
+
+        local fresh = parse()
+        assert.equals(3, #fresh.exchanges)
+        tool_folds.with_exchange_update(buf, fresh, #fresh.exchanges, function() end)
+        vim.cmd("normal! zM")
+
+        for i, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+            if line:match("^📎:") then
+                assert.message(("%s at %d lost its fold after prune+add")
+                    :format(line, i)).equals(i, vim.fn.foldclosed(i))
+            end
+        end
+    end)
+
     it("falls back rather than trusting identity across a structural change", function()
         local anchors = require("parley.exchange_anchors")
         local lines = { "---", "topic: t", "file: f.md", "---", "" }

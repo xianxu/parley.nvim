@@ -51,27 +51,32 @@ end
 --- Returns nil whenever identity cannot be established, so the caller falls
 --- back rather than clearing rows it cannot prove it owns.
 ---
---- `count` is the model's exchange count and must match the anchor count: a
---- structural edit that adds or removes an exchange makes anchor k describe a
---- different exchange than model index k, which is exactly the aliasing this
---- module exists to prevent.
+--- `count` is the model's exchange count and must match the anchor count.
+---
+--- EVERY anchor must still resolve, strictly ascending — not merely the two
+--- bounding this exchange. A count check alone is fooled by a compensating
+--- edit: delete one exchange and add another and the count is unchanged, but
+--- index k now names a different exchange. That is ordinary usage — prune an
+--- old exchange to shed context, then ask the next question — and it is the
+--- aliasing this module exists to prevent, so a single unresolvable or
+--- out-of-order anchor anywhere invalidates the whole mapping.
 function M.span(buf, k, count)
     if not vim.api.nvim_buf_is_valid(buf) then return nil end
     local ids = anchors[buf]
     if not ids or #ids == 0 or #ids ~= count then return nil end
     if k < 1 or k > #ids then return nil end
 
-    local first = anchor_row(buf, ids, k)
-    if not first then return nil end
+    local rows, previous = {}, -1
+    for index = 1, #ids do
+        local row = anchor_row(buf, ids, index)
+        if not row or row <= previous then return nil end
+        rows[index], previous = row, row
+    end
 
     if k == #ids then
-        return first, math.max(vim.api.nvim_buf_line_count(buf) - 1, first)
+        return rows[k], math.max(vim.api.nvim_buf_line_count(buf) - 1, rows[k])
     end
-    -- The NEXT anchor bounds this exchange. If its line is gone the true
-    -- boundary is unknown, and guessing would over-extend into a neighbour.
-    local next_first = anchor_row(buf, ids, k + 1)
-    if not next_first or next_first <= first then return nil end
-    return first, next_first - 1
+    return rows[k], rows[k + 1] - 1
 end
 
 function M.clear(buf)

@@ -664,6 +664,41 @@ mutated by the current one — traversing a tree that is changing under it makes
 gives **exit 0** on the full suite. Worth its own issue: the harness should
 clean its scratch dirs, or the spec should not scan them.
 
+### 2026-08-20 — M1 round 7: validate the whole anchor mapping, not its ends
+
+**C1 (Critical) — `span` checked only the two bounding anchors.** A
+*compensating* edit — delete one exchange, add another — leaves the count
+unchanged while re-indexing which exchange each anchor names, so index k could
+resolve to a different exchange and the clear landed on a neighbour. The user
+sequence is ordinary parley usage: prune an old exchange to shed context, then
+ask the next question.
+
+`span` now resolves **every** anchor, strictly ascending, and declines the whole
+mapping if any one of them fails — a decline routes to the re-derive, which
+reinstalls identity from a fresh parse.
+
+Second half of the same finding: `owned_span` with `verified = true` consulted
+the marks *before* reinstalling, so even the drift branch preferred
+possibly-stale marks over the current-buffer parse it was already holding. It
+now reinstalls first when it has a verified model — that parse is strictly
+better evidence than marks predating the edit that caused the decline.
+
+Same mistake class as rounds 1–6, stated plainly: I validated a *subset* of the
+invariant (the ends of the mapping) rather than the invariant itself (the whole
+index→exchange mapping).
+
+One test premise of mine was also wrong and is corrected: I first tried to force
+non-ascending anchors by collapsing the rows between two of them. Unreachable —
+`invalidate = true` means deleting an anchor's line invalidates that mark rather
+than letting two anchors coincide. The ascending check stays as defensive code;
+the test now exercises the real prune-and-add sequence instead.
+
+**Verification:** `exchange_anchors_spec` 12/12, `fold_projection_spec` 22/22,
+`tool_folds_spec` 24/24, `fold_invariants_spec` 12/12 — 70 fold tests;
+`make test` exit 0 (after `rm -rf .test-tmp .test-home .test-xdg`, per the
+harness contention diagnosed in round 6), lint 0 warnings / 0 errors across 331
+files. All six earlier scenarios still hold.
+
 ## Revisions
 
 ### 2026-08-20 — Fold ownership contract + plan-quality round 1

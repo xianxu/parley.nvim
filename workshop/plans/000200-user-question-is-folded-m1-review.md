@@ -846,3 +846,150 @@ Append to `workshop/plans/000200-fold-reconciliation-plan.md` `## Revisions`:
 - **2026-08-20 — Destructive-path guards are asymmetric (I4).** Record that `prepare_exchange_update` clears on identity alone with no range verification and no drift report, and that its declined-identity branch is the one destructive path with neither guard; name the test that pins it.
 
 Then update the issue: correct the round-5 `## Log` "Verification" paragraph per the environment qualifier in §5, and add a `## Log` entry for C1 so the round-5 "all five scenarios still hold" table is not left standing as the last word.
+
+---
+
+## Re-review — 2026-08-20T17:55:36-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 200 — user question is folded |
+| repo | parley.nvim |
+| issue file | workshop/issues/000200-user-question-is-folded.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | 7a2529453f9a9affd9a62c87d89eb47dd6627152..7a2529453f9a9affd9a62c87d89eb47dd6627152 |
+| command | sdlc milestone-close --issue 200 --milestone M1 |
+| reviewer | claude |
+| timestamp | 2026-08-20T17:55:36-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+The extmark-identity design is the right answer to five rounds of positional heuristics, and the milestone's headline symptom is genuinely fixed and well pinned: a drifted model no longer anchors a fold on `💬:`, no longer throws `E16`, and the four earlier C1 scenarios each have a regression test with teeth. What blocks SHIP is that `exchange_anchors.span`'s aliasing guard is still one-sided — it checks the anchor *count* and only the two marks bounding `k`, so any **compensating** structural edit (delete one exchange, add another) keeps `#ids == count` while leaving anchor *k* describing a different exchange than model index *k*. I reproduced this twice through the production streaming entry (`with_exchange_update`, `chat_respond.lua:1743`) with a *fresh* parse as the model: a neighbouring `📎:` goes `17 → foldclosed=-1` with `drift_event=false`, and `hydrate_window` latches so nothing recreates it — the Spec's second invariant failing with exactly the silent-and-permanent signature #200 exists to remove, on the destructive path this milestone widened. Separately, the in-suite scaling test that the Spec's Done-when names as the pin for the streaming-perf criterion never creates or clears a fold at all (every `reconcile_exchange` call in it refuses), so that Done-when is not actually pinned; and four round-6 findings (atlas `verify_span`, plan Core-concepts, README, the `which == "span"` test) are unaddressed.
+
+## 1. Strengths
+
+- **The identity split is the right architecture and is honestly documented.** `lua/parley/exchange_anchors.lua:1-16` and `atlas/chat/exchange_model.md:69-80` state the actual insight — creation is *verified*, destruction is *identified*, and the two halves cannot share one guard. That is a real architectural gain over four rounds of sharpening one positional predicate.
+- **The `verified` gate added this round is correct and load-bearing.** I confirmed `tests/integration/tool_folds_spec.lua:380` ("does not install identity from a model that stops short of the buffer") drives the prefix-stale shape through `with_exchange_update` with no hand-built model, and it is the round-6 C1 repro turned into a test.
+- **`clear_folds_in_span` (`lua/parley/tool_folds.lua:49-93`) genuinely delivers its performance property.** Wiring the module seam into the scaling scenario myself, 16× the rows costs 2.0× the time (0.77 ms → 1.54 ms) — the fold-to-fold `zj`/`zD` walk is real, and the `s:guard` E350 bound is a sound absolute stop.
+- **`fold_projection` is still genuinely pure.** The "loads without a Neovim global" case at `tests/unit/fold_projection_spec.lua:32` passes; `covered_lines` is the single row-map reader; `is_foldable()` is an accessor and the corpus oracle actually consumes it (`fold_invariants_spec.lua:87`) rather than restating the policy.
+- **The corpus harness is honest about its own limits.** `fold_invariants_spec.lua:39-47` states outright that the real corpus carries zero tool blocks and names the fixtures that supply the shape, with a `checked > 0` floor. Verified: 12/12, and `make lint` is 0 warnings / 0 errors across 331 files exactly as the Log claims.
+
+## 2. Critical findings
+
+**C1 — `exchange_anchors.span` aliases when a structural edit deletes one exchange and adds another: anchor *k* then describes a different exchange, and the clear silently destroys a neighbour's tool folds, permanently.**
+`lua/parley/exchange_anchors.lua:55-77` (`M.span`), `lua/parley/tool_folds.lua:225-231` (`owned_span`), `:246-283` (`reconcile_exchange`) — `ARCH-PURPOSE`.
+
+The module's own contract says the count check is what stops aliasing: *"a structural edit that adds or removes an exchange makes anchor k describe a different exchange than model index k, which is exactly the aliasing this module exists to prevent"* (`exchange_anchors.lua:52-54`). But `#ids ~= count` is defeated by any edit pair that nets to zero, and `span` validates only marks `k` and `k+1` — an invalid mark *below* `k` is never noticed. So after "delete an earlier exchange, ask a new question", the anchors are stale, the count matches, and `owned_span` hands back rows the exchange does not own — with `verified = false`, so nothing re-derives and nothing reports.
+
+Reproduced through the production per-chunk path, model = a fresh `chat_parser` parse of the current buffer (the same shape `chat_respond.lua:1523-1524` builds), so `model_fits` passes and the drift branch never runs:
+
+```
+HYDRATED (4 exchanges):        t1@9->9   t2@17->17  t3@25->25  t4@33->33
+AFTER delete-ex2 + append q5:  t1@9->9   t3@17->17  t4@25->25  t5@33->-1
+  span(1,4)=nil  span(2,4)=nil  span(3,4)={13,20}  span(4,4)={21,36}
+AFTER with_exchange_update(fresh, 3):
+                               t1@9->9   t3@17->-1  t4@25->25  t5@33->33
+  drift_event=false
+```
+
+`📎: t3` loses its fold and nothing recreates it — `hydrate_window` latches per buf/win, and streaming reconciles only the target exchange. The three-exchange variant is the same, via the last anchor's unbounded span-to-EOF: `span(3,3)={13,28}` covers model exchanges 2 *and* 3, and `📎: t3` goes `17 → -1`. Only a forced full `apply_folds` (which reconciles `k=1` first, declines, and reinstalls identity) heals it.
+
+This is a regression the milestone introduced: pre-#200 `delete_projected_folds` only `zd`'d at projected start rows and could not reach a neighbour. The user sequence is ordinary parley usage — prune an old exchange to shed context, then ask the next question.
+
+Fix sketch — make `span` decline whenever the index→exchange mapping *could* have shifted, not only when the count changed:
+
+```lua
+function M.span(buf, k, count)
+    if not vim.api.nvim_buf_is_valid(buf) then return nil end
+    local ids = anchors[buf]
+    if not ids or #ids == 0 or #ids ~= count then return nil end
+    if k < 1 or k > #ids then return nil end
+    -- EVERY anchor must still resolve, ascending. One deleted line anywhere
+    -- means index k may no longer be exchange k — a compensating delete+add
+    -- keeps the count equal while re-indexing the exchanges.
+    local rows, previous = {}, -1
+    for i = 1, #ids do
+        local row = anchor_row(buf, ids, i)
+        if not row or row <= previous then return nil end
+        rows[i], previous = row, row
+    end
+    ...
+end
+```
+
+A decline routes to the re-derive, which reinstalls identity from a fresh parse — verified to heal both probes. Cost is one extra parse, already bounded by the `changedtick` memo and the 250 ms backoff (the same trade round 6 accepted). Also worth closing in the same edit: `owned_span` with `verified = true` (`tool_folds.lua:226`) reads `exchange_anchors.span` *before* reinstalling, so even the drift branch prefers possibly-stale marks over the just-parsed model it is holding — prefer `anchor_from` when a verified model is in hand.
+
+Regression test: the probe above — hydrate N exchanges, delete a middle one and append a new one, then drive `with_exchange_update(buf, fresh_parse, #exchanges, function() end)` and assert every `📎:` still has `foldclosed == its own row`.
+
+## 3. Important findings
+
+**I1 — The scaling test never creates or clears a fold; the Done-when it is named as pinning is unpinned.**
+`tests/integration/tool_folds_spec.lua:188-224`.
+
+The test builds a hand model but does not call the file's own `truth()` helper, so `_model_provider` is nil and the probe buffer has no `---` frontmatter — `default_model_provider` returns nil. I instrumented it: every `reconcile_exchange` call returns `false` with `phase="drift"`, `foldclosed(7) == -1`, at both 50 and 800 body rows. Both timings measure the refusal early-return (bounded further by the 250 ms backoff), so `large < small * 6 + 3` passes vacuously and a return to O(span) clearing would not be caught. The Spec's Done-when — *"Measured per-chunk … and pinned by an in-suite scaling test"* — is therefore not met by this test. Fix: add `truth(model)` before the first reconcile (the same one-line fixture change round 6 applied to the other seven tests) and assert `reconcile_exchange` returns true / `foldclosed` is the fold row before timing. I verified this makes the path real *and* the property still holds: 0.77 ms → 1.54 ms for 16× the rows.
+
+**I2 — `tests/unit/fold_projection_spec.lua:180-266` is a byte-identical copy of `:49-135`.**
+Seven `it()` cases are defined and run twice (`anchor verification` appears twice in the output). Beyond the ARCH-DRY hazard of two copies silently diverging, the "22/22" figure the issue Log reports — and `sdlc close` consumes as verification evidence — is inflated: 15 distinct cases, not 22. Delete `:180-266` (keep the first copy, which carries the `#200` rationale comment at `:45-48`) and correct the Log's counts.
+
+**I3 — The atlas still documents `verify_span` and a fallback that no longer exists (round-6 I1, unaddressed).**
+`atlas/chat/exchange_model.md:83-85` — AGENTS.md §8.
+
+*"The positional check (`verify_span`) remains only as the fallback floor for those cases…"* — `grep -rn verify_span lua/` returns nothing, and `tool_folds.lua:219-223` says explicitly "There is deliberately no positional fallback". This is the third hand-maintained restatement of the ownership contract (module header, atlas, plan) and the atlas copy is wrong. Rewrite: identity declines on count mismatch or a deleted bounding mark (and, per C1, on any unresolvable anchor); a decline routes to the re-derive, which installs identity from a fresh parse; `verify_starts` validates a whole model's starts at *install* time and is the only positional check left.
+
+**I4 — Plan Core-concepts contradicts the code (round-6 I3, unaddressed).**
+`workshop/plans/000200-fold-reconciliation-plan.md:37` and `:41`.
+
+The `fold_projection` bullet still reads *"gains … `verify_span(first_0, last_0, lines, patterns, anchor_required)` guarding the destructive half"* and *"Future extensions: none outstanding — whole-range verification and span verification both shipped in M1."* Neither is true at HEAD; the later bullet at `:65` correctly names `verify_starts`, so the plan contradicts itself. The greppable table is what M2 and downstream work read — fix the bullet, don't leave the correction only in `## Revisions`.
+
+**I5 — README not updated for the fold-ownership change (round-6 I2 — fifth consecutive round open).**
+`README.md:159-160` — Docs update gate.
+
+The README mentions folds only for the toggle shortcut. M1 makes Parley delete **any** fold inside an exchange span, including a manual `zf` the operator made, and round 5 widened the last exchange's span to end-of-buffer so a manual fold in the trailing prose is cleared too (`tests/integration/tool_folds_spec.lua:55` asserts exactly this). That is a change to what a user's own keystrokes do, recorded in the atlas and the plan but nowhere a user reads. Two lines near `:159`.
+
+**I6 — No test pins the declined-identity refusal (round-6 I5, unaddressed).**
+`tests/integration/tool_folds_spec.lua:255`.
+
+`grep -rn '"span"\|identified' tests/` returns nothing. The only drift-reporting test asserts `which == "ranges"` / `failed_index == 1`. Nothing asserts that when identity declines and `ranges` is empty (so `model_fits` is vacuously true), reconcile refuses, creates nothing, and emits `which == "span"`; nothing asserts `prepare_exchange_update`'s new `identified = false` on the prepare event. That refusal is now the only thing standing between a declined identity and an unverified clear — it should be pinned, not inferred. (Round 6 asked for this; the round-6 Log answers the *design* question but not the coverage one.)
+
+## 4. Minor findings
+
+- `lua/parley/tool_folds.lua:143` — `setmetatable({}, {__mode = "k"})` is still a no-op (integer buffer handles are never collectable) and `rederived[buf]` is still not dropped in the `BufUnload`/`BufDelete` callback at `:441-447`, which does clear `initialized` and `exchange_anchors`. Round-5/6 Minor, still open.
+- `lua/parley/exchange_anchors.lua:25` — `M.set` returns without dropping `anchors[buf]` when the buffer is invalid, leaving a stale id list. Round-5/6 Minor, still open.
+- `tests/unit/exchange_anchors_spec.lua` creates buffers and calls the extmark API, but TOOLING.md reserves `tests/unit/` for "pure logic, no Neovim APIs" and the plan classifies `exchange_anchors` as an Integration entity. Belongs under `tests/integration/`. Round-5/6 Minor, still open.
+- `lua/parley/tool_folds.lua:196` — `anchor_from`'s `@return boolean installed` still returns `true` when `exchange_anchors.set` internally bailed. Harmless (the caller re-reads through `span()`), but the name lies. Round-6 Minor, still open.
+- `workshop/lessons.md` — the largest lesson of rounds 3-6 is still missing: *a positional heuristic is not an identity; when a check must distinguish this instance from a structurally identical one, anchor it to a durable handle — and only install that handle from a source derived from current truth.* Round-5/6 Minor, still open; C1 adds the corollary that a count check is not an identity check either.
+- `lua/parley/tool_folds.lua:392-396` — `foldtext()`'s `else` fallback still renders a corrupt fold as ordinary text, which the issue's own root-cause chain blames for masking #200 for a whole session. Round-6 Minor, still open.
+- `lua/parley/tool_folds.lua:293-301` — two stacked comment blocks say the same thing ("Same destructive operation as reconcile, so the same rule…" then "Destructive, so the same rule as reconcile…"); collapse to one.
+- `lua/parley/tool_folds.lua:82-84` — the `break` when `foldlevel` is still > 0 after `zD` gives up on the rest of the span silently. Correct as a hang guard, but a debug line there would surface an E350 rather than degrade to a partial clear.
+
+## 5. Test coverage notes
+
+- Verified myself: `fold_projection_spec` 22/22 (15 distinct — see I2), `exchange_anchors_spec` 10/10, `tool_folds_spec` 23/23, `fold_invariants_spec` 12/12; `make lint` 0 warnings / 0 errors in 331 files. All match the Log.
+- `make test` exits 1 here on `git_markdown_source_spec.lua` and `markdown_finder_async_spec.lua`. I confirmed the Log's mechanism directly rather than re-litigating it: `git init .test-tmp/probe_gi` fails with `fatal: cannot copy '…/templates/hooks/commit-msg.sample' … Operation not permitted`, and this session's environment also denies `/tmp` writes and process substitution. Neither spec contains the string `fold`. The Log's environment qualifier (round 6) is accurate as written.
+- **Uncovered:** C1's compensating delete+add shape (no test drives a structural edit that preserves the exchange count); the `which == "span"` refusal and `prepare`'s `identified = false` (I6); the span-clear performance property, which I1 shows is asserted but never exercised.
+- The corpus harness remains cold-path only (`hydrate_window` on a fresh parse), which the issue's own audit measured clean *before* the fix — correctly scoped as a regression net and honestly labelled at `fold_invariants_spec.lua:39-47`.
+
+## 6. Architectural notes
+
+- **ARCH-DRY — flag (I2, I3, I4).** `is_foldable()` / `ANCHOR_KIND` are single-sourced and actually consumed, and the twin row-map readers are gone. But the diff ships a verbatim duplicated 87-line test block (I2), and the fold-ownership contract is stated in prose in three places (module header, atlas, plan) with two of the three currently wrong — three hand-maintained restatements of one contract is precisely the shape that produced this issue.
+- **ARCH-PURE — pass.** `fold_projection` stays nvim-free with the buffer read hoisted into `covered_lines`; `exchange_anchors` is a thin extmark shell with no business logic; the "when may identity be installed" policy correctly lives in `tool_folds`, not inside it. Keep C1's fix on that side of the seam — the all-anchors-resolve rule belongs in `span` (a property of the marks) while the reinstall decision stays in `owned_span`.
+- **ARCH-PURPOSE — flag (C1).** Shadow-sweep over the Spec's two invariants: *"a question is never folded"* is defended on both halves and pinned by six scenarios. *"`🔧:`/`📎:`/`📝:`/`🧠:` are always folded"* is defended on creation and still loses on destruction — this round moved the failure from a stale *model* to stale *anchors*, but the outcome for the user is identical: a neighbour's tool fold vanishes, silently, for the session. The milestone has now built the right primitive twice and each time guarded it with a predicate weaker than the property it must establish (count ≠ identity, just as span ≠ identity).
+- **ARCH-MOCK — pass, n/a.** No external binary or service on the production path. `M._model_provider` / `M._observer` are real injected seams I drove directly. `git ls-files` in `fold_invariants_spec.lua:17` is test-only and honestly labelled as a single point of definition rather than an injection seam.
+- **Going into M2:** the interaction flagged in round 6 stands and now has a second edge. Whatever M2 does to stop a `💬:` inside a fenced tool body forking an exchange changes both what "every question line is a start" means (so any completeness scan added to `verify_starts` must consume the `fence` grammar) *and* what the exchange count is — which C1 shows is load-bearing for identity. A fence fix that changes `#model.exchanges` on existing transcripts will make identity decline across the corpus on first parse; budget one re-derive per buffer for that, and re-run `fold_invariants_spec` as the canary.
+
+## 7. Plan revision recommendations
+
+Append to `workshop/plans/000200-fold-reconciliation-plan.md` `## Revisions`:
+
+- **2026-08-20 — Core concepts corrected: `verify_span` no longer exists (round-6 I3, still open).** Fix the `fold_projection` bullet at `:37` to list `anchor_kind`, `verify_anchors`, `verify_starts`, `is_foldable`, and replace `:41`'s "whole-range verification and span verification both shipped in M1" with the delivered shape: creation is verified by `verify_anchors`; destruction is identified by `exchange_anchors`; `verify_starts` guards the identity *install*, not the clear.
+- **2026-08-20 — M1 round 7: the anchor-count guard is not an identity check (C1).** Record that `#ids ~= count` is defeated by a compensating structural edit (delete one exchange, add another) and that `span` validates only marks `k` and `k+1`, so an invalid mark below `k` goes unnoticed — reproduced through `with_exchange_update` with a fresh parse (`📎 17 → foldclosed=-1`, `drift_event=false`, both at the terminal anchor's span-to-EOF and at a non-terminal index). Record the fix (every anchor must resolve and be strictly ascending, else decline to the re-derive; `owned_span(verified=true)` prefers reinstalling over remembered marks) and name the regression test.
+- **2026-08-20 — Task 3 Step 6's scaling pin was vacuous (I1).** Record that `tests/integration/tool_folds_spec.lua:188` omitted the `truth()` seam, so every `reconcile_exchange` in it refused (`which="span"`, `foldclosed=-1`) and the timing measured the refusal path; the Spec's streaming-perf Done-when was unpinned until the seam was wired. Note the re-measured real figures (50-row 0.77 ms vs 800-row 1.54 ms).
+
+Then update the issue: correct the round-5/6 `## Log` test counts for the duplicated `fold_projection_spec` block (15 distinct cases, not 22), and add a `## Log` entry for C1 so the round-6 "all six scenarios hold" table is not left standing as the last word.

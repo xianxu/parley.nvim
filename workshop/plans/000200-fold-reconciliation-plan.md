@@ -1622,3 +1622,23 @@ Delta:
   the M2 `fence` grammar.
 - Test fixtures without `---` frontmatter now declare their hand-built model as
   the buffer's truth via the existing `_model_provider` seam.
+
+### 2026-08-20 — M1 round 7: whole-mapping validation
+
+Reason: `exchange_anchors.span` validated only the two anchors bounding the
+requested exchange. A compensating delete+add keeps the anchor count equal while
+re-indexing the exchanges, so index k could name a different exchange and the
+clear landed on a neighbour — reachable through ordinary usage (prune an old
+exchange, ask again).
+
+Delta:
+
+- `span` resolves every anchor, strictly ascending, and declines the whole
+  mapping when any one fails. A decline routes to the re-derive.
+- `owned_span` with `verified = true` now reinstalls identity *before* reading
+  the marks: a current-buffer parse beats marks that may predate the edit which
+  caused the decline.
+- Note for future edits: with `invalidate = true`, deleting an anchor's line
+  invalidates that mark, so two anchors cannot coincide. The strictly-ascending
+  check is defensive, not a reachable path — do not write a test that claims to
+  exercise it by collapsing rows.

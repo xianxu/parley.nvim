@@ -59,6 +59,28 @@ describe("exchange_anchors", function()
         assert.is_nil(anchors.span(buf, 2, 3))
     end)
 
+    -- #200 round 7: checking only the two BOUNDING anchors is not enough. A
+    -- compensating delete+add keeps the count equal while re-indexing the
+    -- exchanges, so index k may no longer be exchange k even though k and k+1
+    -- both still resolve. Ordinary usage: prune an old exchange, ask again.
+    it("refuses when any anchor anywhere was lost, not just a bounding one", function()
+        anchors.set(buf, { 1, 4, 7 })
+        vim.api.nvim_buf_set_lines(buf, 1, 2, false, {})  -- delete anchor 1's line
+        assert.is_nil(anchors.span(buf, 2, 3))
+        assert.is_nil(anchors.span(buf, 3, 3))
+    end)
+
+    -- The finding's real sequence: prune an old exchange and add a new one. The
+    -- count still matches, so a count-only check would hand back a mapping in
+    -- which index k names a different exchange.
+    it("refuses after a compensating delete and add leaves the count unchanged", function()
+        anchors.set(buf, { 1, 4, 7 })
+        vim.api.nvim_buf_set_lines(buf, 1, 4, false, {})            -- prune exchange 1
+        vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "💬: q4", "d1" })  -- add a new one
+        assert.is_nil(anchors.span(buf, 1, 3))
+        assert.is_nil(anchors.span(buf, 2, 3))
+    end)
+
     it("refuses when nothing has been anchored", function()
         assert.is_nil(anchors.span(buf, 1, 3))
     end)

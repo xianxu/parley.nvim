@@ -231,10 +231,13 @@ end
 --- falling through would clear rows we cannot prove we own. Returning nil sends
 --- the caller to the re-derive, which installs identity from a fresh parse.
 local function owned_span(buf, model, exchange_index, patterns, verified)
-    local first_0, last_0 = exchange_anchors.span(buf, exchange_index, #model.exchanges)
-    if first_0 then return first_0, last_0 end
-    if not verified then return nil end
-    if not anchor_from(buf, model, patterns) then return nil end
+    -- With a verified model in hand, reinstall FIRST: it was parsed from the
+    -- current buffer, so it is strictly better evidence than marks that may
+    -- predate the edit which sent us here.
+    if verified then
+        if not anchor_from(buf, model, patterns) then return nil end
+        return exchange_anchors.span(buf, exchange_index, #model.exchanges)
+    end
     return exchange_anchors.span(buf, exchange_index, #model.exchanges)
 end
 
