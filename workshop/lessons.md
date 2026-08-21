@@ -710,3 +710,13 @@
   as progress. Rule: after any structural edit to a spec, run
   `grep -o 'it("[^"]*"' <spec> | sort | uniq -d` and require it to be empty, as
   well as diffing the count against `HEAD`.
+- **When a guard encodes an assumption a later milestone will invalidate, write
+  the fixture that will break it — do not just note the risk.** #200 M1 recorded,
+  in the plan and in a code comment, that M2 would make an in-body `💬:`
+  legitimate content and that any raw-prefix scan would then reject correct
+  input. M2 duly broke it — in `verify_anchors`, the sibling of the function the
+  note named — and *nothing in the suite noticed*, because the real corpus has no
+  in-body markers at all. What caught it was the adversarial fixture, on the day
+  it was added. Rule: a cross-milestone hazard is only recorded once a test
+  exercises it; a comment predicting the break is documentation of a gap, not
+  coverage of one.

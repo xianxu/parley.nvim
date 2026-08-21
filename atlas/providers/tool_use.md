@@ -147,6 +147,31 @@ Tool blocks in the transcript:
 ```
 ```
 
+### The fenced-body grammar
+
+`lua/parley/fence.lua` is the single source for how a tool body is delimited,
+and every consumer derives from it (#200 M2):
+
+- A body **opens** on a run of ≥3 backticks, optionally followed by a bare-word
+  info string (`json`, `lua`).
+- It **closes** only on a bare run of the *same length*. Not a shorter run —
+  that is body content — and not a longer one, which belongs to some other pair.
+- A writer picks a fence strictly longer than the longest run in the content, so
+  nothing in the body can terminate it. That is what lets tool output contain
+  fenced code, or an entire transcript, verbatim.
+
+The consumers: `tools/serialize` (writer *and* both reader paths),
+`answer_structure`'s tool-section scanner, `chat_parser`'s `tool_fence_len`
+tracker, and `fold_projection`'s interior drift scan.
+
+**Inside a body, structural markers are content.** Tool output routinely quotes
+transcripts — `read_file` on a chat, `grep` for `💬:` — so a `💬:`/`🤖:`/`📎:`
+line within a fenced body does not start a turn and does not end a block.
+`chat_parser`'s main loop consults the tracker before classifying; the fold
+projection's drift scan skips fenced rows for the same reason. Ordinary answer
+prose is a deliberate exception: it stays fence-naive, because suppressing there
+would need a general markdown block model rather than a fence pair.
+
 ## Safety
 
 - **root-policy scope**: chat and `skill_invoke` pass one neighborhood policy to

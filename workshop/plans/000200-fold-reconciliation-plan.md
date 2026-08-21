@@ -768,7 +768,7 @@ Fix Critical/Important findings before crossing, then record the `Review-Verdict
 - Create: `lua/parley/fence.lua`
 - Test: `tests/unit/fence_spec.lua`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```lua
 local fence = require("parley.fence")
@@ -833,12 +833,12 @@ defect had it existed earlier; confirm `render_result` / `parse_result` are the
 actual exported names in `lua/parley/tools/serialize.lua` before writing it, and
 use whatever the real pair is.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/fence_spec.lua" -c "qa!"`
 Expected: FAIL — `module 'parley.fence' not found`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `lua/parley/fence.lua`:
 
@@ -891,12 +891,12 @@ end
 return M
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/fence_spec.lua" -c "qa!"`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lua/parley/fence.lua tests/unit/fence_spec.lua
@@ -913,7 +913,7 @@ git commit -m "fence: #200 M2: extract the canonical fenced-body grammar"
 - Modify: `lua/parley/tools/serialize.lua:37-53` (`longest_backtick_run`, `fence_for`)
 - Test: `tests/unit/fence_spec.lua`
 
-- [ ] **Step 1: Write the failing parity test**
+- [x] **Step 1: Write the failing parity test**
 
 Append to `tests/unit/fence_spec.lua`:
 
@@ -950,12 +950,12 @@ end)
 > rendered opening fence equals `fence.for_content` of the encoded body, and
 > that `parse_call` round-trips it.
 
-- [ ] **Step 2: Run test to verify it fails or passes**
+- [x] **Step 2: Run test to verify it fails or passes**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/fence_spec.lua" -c "qa!"`
 Expected: PASS on behavior (serialize is already correct) — this test pins parity so the next step is safe.
 
-- [ ] **Step 3: Delete the duplicate implementation**
+- [x] **Step 3: Delete the duplicate implementation**
 
 In `lua/parley/tools/serialize.lua`, delete `longest_backtick_run` and the body of `fence_for`, replacing with a delegation:
 
@@ -970,7 +970,7 @@ end
 
 Leave `FENCE_MIN` only if other code references it; otherwise delete it and use `fence.MIN`.
 
-- [ ] **Step 3b: Convert the reader side too**
+- [x] **Step 3b: Convert the reader side too**
 
 `ARCH-PURPOSE`'s shadow-sweep: the writer is not the only consumer. The reader
 restates the same rule three more times as `%1` backreferences —
@@ -1005,12 +1005,12 @@ one definition of "the same pair". The parity test in Step 1 and
 regresses, the regex and the scanner disagree on an input the grammar has to
 decide — fix the grammar, not the call site.
 
-- [ ] **Step 4: Run the tool specs**
+- [x] **Step 4: Run the tool specs**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/fence_spec.lua" -c "qa!"` then `make test-spec SPEC=providers/tool_use`
 Expected: PASS — serialize round-trips unchanged.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lua/parley/fence.lua lua/parley/tools/serialize.lua tests/unit/fence_spec.lua
@@ -1025,7 +1025,7 @@ git commit -m "fence: #200 M2: serialize derives fence selection from the gramma
 - Modify: `lua/parley/answer_structure.lua:80-100` (the `tool_use` / `tool_result` arm)
 - Test: `tests/unit/answer_structure_spec.lua`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```lua
 describe("tool sections with nested fences (#200)", function()
@@ -1070,12 +1070,12 @@ describe("tool sections with nested fences (#200)", function()
 end)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/answer_structure_spec.lua" -c "qa!"`
 Expected: FAIL — the first case ends the section at line 6 (the nested closing ```); the second swallows the `📝:`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Replace the `tool_use` / `tool_result` arm in `lua/parley/answer_structure.lua`:
 
@@ -1123,12 +1123,12 @@ Replace the `tool_use` / `tool_result` arm in `lua/parley/answer_structure.lua`:
             i = cursor
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/answer_structure_spec.lua" -c "qa!"`
 Expected: PASS, including every pre-existing case.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lua/parley/answer_structure.lua tests/unit/answer_structure_spec.lua
@@ -1143,7 +1143,7 @@ git commit -m "folds: #200 M2: match tool fences by length in answer_structure"
 - Modify: `lua/parley/chat_parser.lua:520-524` (top of the content loop) and the `tool_use` / `tool_result` arms at 661-677
 - Test: `tests/unit/chat_parser_tools_spec.lua`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```lua
 describe("structural markers inside a tool body (#200)", function()
@@ -1192,12 +1192,12 @@ describe("structural markers inside a tool body (#200)", function()
 end)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/chat_parser_tools_spec.lua" -c "qa!"`
 Expected: FAIL — the first case reports 3 exchanges (the two in-body markers each fork one).
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 **Correction (PQ-3): `chat_parser` already models fences.** The earlier claim
 that it "does not model fences at all" is false. `cb_append_line`
@@ -1254,17 +1254,17 @@ exists. Confirm by inspection that `cb_state` is in scope at `:549` and that
 the body the current line sits in; if the ordering is off by one, fix the
 ordering rather than adding a shadow variable.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/chat_parser_tools_spec.lua" -c "qa!"`
 Expected: PASS
 
-- [ ] **Step 5: Run every chat_parser consumer**
+- [x] **Step 5: Run every chat_parser consumer**
 
 Run: `make test-spec SPEC=chat/parsing` and `make test-spec SPEC=chat/exchange_model`
 Expected: PASS. The parser feeds message building, folding, export and the finders — this is the widest blast radius in the plan.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add lua/parley/chat_parser.lua tests/unit/chat_parser_tools_spec.lua
@@ -1281,11 +1281,11 @@ The real corpus contains no in-body markers today (the audit found 0), so it can
 - Create: `tests/fixtures/fold_adversarial.md`
 - Modify: `tests/integration/fold_invariants_spec.lua`
 
-- [ ] **Step 1: Write the fixture**
+- [x] **Step 1: Write the fixture**
 
 `tests/fixtures/fold_adversarial.md` — a transcript exercising: a tool result containing `💬:` / `🤖:` / `📎:` lines, a nested ``` block inside a ```` body, a multi-line `📝:` summary, and a question immediately following a folded tool result.
 
-- [ ] **Step 2: Point the harness at it**
+- [x] **Step 2: Point the harness at it**
 
 In `tests/integration/fold_invariants_spec.lua`, extend the corpus list:
 
@@ -1302,12 +1302,12 @@ The fixture is a tracked file, so it is deliberately named rather than globbed:
 it is the *designed* coverage of the defect classes, and a silent disappearance
 should fail the suite, not shrink it.
 
-- [ ] **Step 3: Run it**
+- [x] **Step 3: Run it**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/fold_invariants_spec.lua" -c "qa!"`
 Expected: PASS — both invariants hold on the adversarial fixture.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tests/fixtures/fold_adversarial.md tests/integration/fold_invariants_spec.lua
@@ -1318,26 +1318,26 @@ git commit -m "test: #200 M2: pin fold invariants on an adversarial transcript"
 
 ### Task 11: Close M2 and the issue
 
-- [ ] **Step 1: Full suite**
+- [x] **Step 1: Full suite**
 
 Run: `make test`
 Expected: lint clean, everything passes.
 
-- [ ] **Step 2: Re-run the original audit scripts**
+- [x] **Step 2: Re-run the original audit scripts**
 
 Re-run the three audit scans from the issue Log against the operator's live `chat_dir` (127 transcripts) and confirm 0 violations — the pre-fix baseline was also 0 there, so this proves no regression on real data.
 
-- [ ] **Step 3: Atlas**
+- [x] **Step 3: Atlas**
 
 Update `atlas/chat/format.md` — the tool-body fence rule (same-length pair) is now normative and single-sourced in `lua/parley/fence.lua`; markers inside a body are content. Update `atlas/chat/exchange_model.md` if Task 5 left anything to add. Add `lua/parley/fence.lua` to `atlas/traceability.yaml` under `chat/parsing` and `providers/tool_use`.
 
-- [ ] **Step 4: Milestone close**
+- [x] **Step 4: Milestone close**
 
 ```bash
 sdlc milestone-close --issue 200 --milestone M2
 ```
 
-- [ ] **Step 5: Lessons**
+- [x] **Step 5: Lessons**
 
 Add to `workshop/lessons.md` under a `#200` heading:
 
@@ -1345,7 +1345,7 @@ Add to `workshop/lessons.md` under a `#200` heading:
 - **A display-layer fallback that renders corrupt state as ordinary output hides the bug that produced it.** `foldtext()`'s `else` branch rendered a question-anchored fold as `💬: … (N lines)`, indistinguishable from a legitimate user fold. Rule: keep the fallback only where it is genuinely reachable by design (here: the user's own `zf` folds), and enforce the invariant at *creation* time instead.
 - **A grammar implemented correctly in one consumer and naively in two is still a DRY violation.** The same-length fence rule lived correctly in `tools/serialize.lua` and wrongly in `answer_structure.lua` / `chat_parser.lua`. Rule: when two consumers re-derive a format that a third already owns, extract the owner rather than fixing the copies (`ARCH-DRY`).
 
-- [ ] **Step 6: Close**
+- [x] **Step 6: Close**
 
 ```bash
 sdlc close --issue 200 --verified '<evidence: make test output, corpus audit result, before/after repro>'

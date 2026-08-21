@@ -112,6 +112,7 @@ atlas:
       - lua/parley/render_buffer.lua
       - lua/parley/fold_projection.lua
       - lua/parley/exchange_anchors.lua
+      - lua/parley/fence.lua
       - lua/parley/tool_folds.lua
       - lua/parley/tool_loop.lua
       - lua/parley/dispatcher.lua
@@ -444,6 +445,7 @@ atlas:
       - lua/parley/tools/init.lua
       - lua/parley/tools/dispatcher.lua
       - lua/parley/tools/serialize.lua
+      - lua/parley/fence.lua
       - lua/parley/tools/types.lua
       - lua/parley/tools/builtin/argv.lua
       - lua/parley/tools/builtin/read_file.lua
@@ -460,6 +462,7 @@ atlas:
       - lua/parley/neighborhood.lua
       - lua/parley/repo_artifacts.lua
     tests:
+      - tests/unit/fence_spec.lua
       - tests/integration/chat_lease_spec.lua
       - tests/integration/neighborhood_completion_spec.lua
       - tests/integration/openai_tool_loop_spec.lua

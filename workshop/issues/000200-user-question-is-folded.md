@@ -66,25 +66,26 @@ Two root causes, both fixed here:
 
 ## Done when
 
-- [ ] `reconcile_exchange` verifies each projected range against its anchor
+- [x] `reconcile_exchange` verifies each projected range against its anchor
       marker *and its interior*, re-derives the model from the buffer on drift,
       and clears the exchange span before creating folds — no fold can outlive
       the projection.
-- [ ] A stale/drifted model never anchors a fold on a `💬:` line, never leaves a
+- [x] A stale/drifted model never anchors a fold on a `💬:` line, never leaves a
       `💬:` line inside a fold's interior, and never throws `E16`.
-- [ ] Clearing an exchange span scales with the number of folds present, not
+- [x] Clearing an exchange span scales with the number of folds present, not
       with exchange length — the streaming path (`chat_respond.lua:1743`, one
       call per chunk) must not become quadratic in answer size. Measured
       per-chunk on a 600-row exchange and pinned by an in-suite scaling test.
-- [ ] A drifted exchange that cannot be folded says so — the refusal is not
+- [x] A drifted exchange that cannot be folded says so — the refusal is not
       silent.
-- [ ] One `parley.fence` module owns the fenced-body grammar; `serialize`,
-      `answer_structure` and `chat_parser` all derive from it.
-- [ ] A nested ``` block inside a tool body no longer truncates its section.
-- [ ] A `💬:`/`🤖:`/`📎:` line inside a tool body is content, not a turn.
-- [ ] A durable corpus harness asserts both invariants against real transcripts
+- [x] One `parley.fence` module owns the fenced-body grammar; `serialize`
+      (writer *and* both readers), `answer_structure`, `chat_parser` and
+      `fold_projection`'s drift scan all derive from it.
+- [x] A nested ``` block inside a tool body no longer truncates its section.
+- [x] A `💬:`/`🤖:`/`📎:` line inside a tool body is content, not a turn.
+- [x] A durable corpus harness asserts both invariants against real transcripts
       plus an adversarial fixture, measured on actual Neovim fold state.
-- [ ] `make test` green; atlas + lessons updated.
+- [x] `make test` green; atlas + lessons updated.
 
 ## Estimate
 
@@ -175,15 +176,16 @@ Design: `workshop/plans/000200-fold-reconciliation-plan.md`
   - [x] Corpus regression harness (`tests/integration/fold_invariants_spec.lua`),
         oracle derived from the parsed model
   - [x] Streaming perf measured (`make perf` plus a direct per-chunk benchmark)
-- [ ] M2 — one fence grammar
-  - [ ] Extract `lua/parley/fence.lua` (+ property and round-trip tests)
-  - [ ] `serialize` derives fence selection **and its reader-side matchers**
-        from it (+ parity test)
-  - [ ] `answer_structure` matches fences by length; unterminated fence stops
+- [x] M2 — one fence grammar
+  - [x] Extract `lua/parley/fence.lua` (+ property and round-trip tests)
+  - [x] `serialize` derives fence selection **and its reader-side matchers**
+        from it (+ parity test) — the reader restatement was truncating bodies
+  - [x] `answer_structure` matches fences by length; unterminated fence stops
         at the next boundary instead of swallowing the rest of the answer
-  - [ ] `chat_parser`'s existing `tool_fence_len` tracker derives from `fence`,
+  - [x] `chat_parser`'s existing `tool_fence_len` tracker derives from `fence`,
         and the main loop consults it — no second tracker
-  - [ ] Adversarial fixture added to the corpus harness
+  - [x] Adversarial fixture added to the corpus harness — it immediately caught
+        the M1/M2 interaction in `verify_anchors`
 
 ## Log
 
@@ -883,6 +885,60 @@ on a *shrinking* suite and a duplicated `describe` makes it *grow*.
 74 fold tests, zero duplicate names in any spec; `make test` exit 0 on a clean
 scratch dir; lint 0 warnings / 0 errors across 331 files. All nine reproduced
 scenarios hold.
+
+### 2026-08-21 — M2 implemented: one fence grammar
+
+TDD throughout; each task red before green.
+
+- **Task 6** — `lua/parley/fence.lua`: `open_len` / `closes` / `for_content` /
+  `longest_run` / `extract_body`, pure. The property test pins what the grammar
+  exists to guarantee — no line of a body can close the fence chosen for it —
+  over malformed inputs rather than literals. A parity test asserts the grammar
+  agrees with serialize's *existing* writer before anything was converted.
+- **Task 7** — `serialize` derives both halves. The reader restatement was not
+  merely duplication, it was **wrong**: a `%1` backreference matches a PREFIX of
+  a longer run, so `parse_result("```\na\n`````\nb\n```")` returned `"a"`
+  where the grammar returns the whole body. Reachable from any tool output not
+  produced by `render_result`.
+- **Task 8** — `answer_structure` matches by length. A nested ``` no longer ends
+  a tool section early (its tail had been emitted as unfoldable `text`), and an
+  unterminated fence rewinds to the first structural boundary instead of
+  swallowing the rest of the answer.
+- **Task 9** — smaller than planned, exactly as PQ-3 said. `chat_parser` already
+  had a correct tracker; the main loop simply never consulted it. Two changes,
+  no second state machine.
+- **Task 10** — the adversarial fixture, which earned its place immediately.
+
+**The fixture caught the M1/M2 interaction on the day it was added.** M1 had
+recorded the hazard — that M2 would make an in-body `💬:` legitimate content and
+any raw-prefix scan would then reject correct input — and it landed in
+`verify_anchors`, the sibling of the function the note named. PQ-4's interior
+drift scan rejected the whole exchange:
+
+    observer: drift/ranges
+    row 10  🧠:  foldclosed=-1        (every marker in exchange 1 unfolded)
+
+The scan now consumes the fence grammar and skips the block's fenced body, while
+still rejecting a question *after* the body closes — the end-drift it exists to
+catch. Both directions pinned, plus a longer nested fence that must not close
+the outer body early. Nothing else in the suite could have caught this: the real
+corpus contains no in-body markers and no nested fences at all.
+
+**Verification:** `fence_spec` 13/13, `tools_serialize_spec` 18/18,
+`answer_structure_spec` 7/7, `chat_parser_tools_spec` 5/5,
+`fold_projection_spec` 24/24, `exchange_anchors_spec` 12/12,
+`tool_folds_spec` 1/1 unit + 30/30 integration, `fold_invariants_spec` 13/13;
+`make test` exit 0 on a clean scratch dir; lint 0 warnings / 0 errors across 333
+files. All six M1 drift probes still hold — checked deliberately, because
+`chat_parser`'s exchange boundaries feed `exchange_anchors`, which drives a
+destructive fold clear.
+
+Two corrections of my own along the way: a `git stash` "teeth check" was a no-op
+because the file was already committed, and re-running it properly against the
+parent commit exposed one of three new serialize tests as vacuous (a single-line
+JSON body cannot exercise a line-start run) — re-aimed, and two of three now
+fail without the conversion. And one test expectation cited the in-body marker's
+line number rather than the real question's.
 
 ## Revisions
 
