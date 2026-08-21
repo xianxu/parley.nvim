@@ -264,6 +264,7 @@ M.parse_chat = function(lines, header_end, config)
 
 	-- Get prefixes
 	local highlight_structure = require("parley.highlight_structure")
+local fence = require("parley.fence")
 	local decoration_patterns = highlight_structure.patterns(config)
 	local memory_enabled = config.chat_memory and config.chat_memory.enable
 	local summary_prefix = decoration_patterns.summary_prefix
@@ -458,15 +459,9 @@ M.parse_chat = function(lines, header_end, config)
 		-- the same number of bare backticks with no info string.
 		if cb_state.current_kind == "tool_use" or cb_state.current_kind == "tool_result" then
 			if not cb_state.tool_fence_len then
-				local fence = line:match("^(`+)[%w_%-]*%s*$")
-				if fence and #fence >= 3 then
-					cb_state.tool_fence_len = #fence
-				end
-			else
-				local expected_close = string.rep("`", cb_state.tool_fence_len)
-				if line == expected_close then
-					cb_state.tool_body_complete = true
-				end
+				cb_state.tool_fence_len = fence.open_len(line)
+			elseif fence.closes(line, cb_state.tool_fence_len) then
+				cb_state.tool_body_complete = true
 			end
 		end
 	end
@@ -521,6 +516,18 @@ M.parse_chat = function(lines, header_end, config)
 	for i = header_end + 1, #lines do
 		local line = lines[i]
 		local decoration_kind = highlight_structure.classify(line, decoration_patterns).kind
+
+		-- #200: structural markers inside a tool body are CONTENT. Tool output
+		-- routinely contains 💬:/🤖:/📎: lines (reading a transcript, grepping
+		-- this repo), and each one used to fork a spurious exchange that then
+		-- dragged the rest of the body out of its block. cb_append_line already
+		-- tracks where the body is; the main loop just has to stop classifying
+		-- against it. No second tracker (ARCH-DRY).
+		if cb_state and cb_state.tool_fence_len and not cb_state.tool_body_complete
+			and (cb_state.current_kind == "tool_use" or cb_state.current_kind == "tool_result")
+		then
+			decoration_kind = "text"
+		end
 
 		-- Check for branch reference (🌿:) — always detected, even between consecutive links.
 		-- Before the first question: first 🌿: is parent_link, subsequent ones are children.
