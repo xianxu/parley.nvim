@@ -283,6 +283,7 @@ line-shifting) with nothing making them agree.
 ### 2026-08-18
 
 ### 2026-08-20 — design landed, plan-quality round 1
+- 2026-08-20: closed M1 — M1 green: exchange_anchors 12/12, fold_projection 15/15, tool_folds 1/1 unit + 28/28 integration, fold_invariants 12/12 = 68 fold tests, inventory audited (zero duplicate it() names, counts diffed against HEAD); make test exit 0 on a clean scratch dir; lint 0 warnings/0 errors across 331 files. Latest Critical fixed: clear_folds_in_span navigates with zj and deletes with zD, both of which no-op under nofoldenable, so a stale fold survived the reconcile meant to remove it - reproducing the original reported render verbatim and permanently. Reachable from a user set nofoldenable, from zi, or from parley own chat_toggle_tool_folds. foldenable is now saved, forced and restored around the clear only; a test asserts the operator setting is unchanged. It shipped because every fold spec fixed foldenable = true in setup, so two foldenable = false variants were added and both verified to fail with the guard removed. Nine defects each reproduced and pinned: original reported symptom user question row 23 foldclosed=-1 (was 23, foldend 26); R1 neighbour fold destroyed -1 to 15; R2 assistant-first permanently refused, now reconcile true; R3 span slid inside a later answer -1 to 22; R4 positional aliasing closed structurally, probe 24; R5 identity inert after append, now {5,12}; R6 prefix-stale install, tail fold preserved; R7 prune-one-add-one keeps every tool fold; R8 ranges outside owned rows now refuse; R9 nofoldenable clear now removes the stale fold, probe foldclosed(3)=-1. Creation is verified, destruction is identified, and the two are tied by containment. E16 past-EOF crash gone; refusal provably creates nothing. Clear walks folds not rows, asserted on loop-iteration count not wall clock. Six lessons recorded.; review verdict: FIX-THEN-SHIP
 
 - Committed the audit, Spec and durable plan (`38a6cdd`). They had been authored
   the previous session but never committed, so the only record of the
@@ -828,6 +829,60 @@ with it, rather than assumed to pin anything.
 68 fold tests; `make test` exit 0 on a clean scratch dir; lint 0 warnings /
 0 errors across 331 files. All eight earlier scenarios hold, plus the
 `foldenable = false` probe now reporting `foldclosed(3)=-1`.
+
+### 2026-08-20 — M1 FIX-THEN-SHIP: findings fixed, milestone closed
+
+Verdict FIX-THEN-SHIP. Per #174 the findings are fixed before the close commit
+and bundled into it; no re-review of this boundary.
+
+**I-A — reconcile was O(number of exchanges in the chat), on the per-chunk
+path.** `span()` resolves every anchor to detect re-indexing (the round-7 fix),
+so cost tracked chat length rather than exchange length. Resolved rows are now
+cached per `(buf, changedtick)` — exact, since extmarks move only on edits and
+every edit bumps the tick. Measured, streaming exchange held constant:
+
+    exchanges=10   0.0386 -> 0.0355 ms
+    exchanges=50   0.0495 -> 0.0380 ms
+    exchanges=200  0.1172 -> 0.0434 ms
+    exchanges=500  0.2549 -> 0.0675 ms
+
+Growth over 50× more exchanges falls from 6.6× to 1.9×, and 500 exchanges now
+sits below the 0.078 ms pre-#200 baseline. The residual is **not** in this
+module: `exchange_model:exchange_start(k)` (`exchange_model.lua:168-175`) walks
+exchanges 1..k, so reconciling the last exchange of a long chat is inherently
+O(k). Pre-existing and outside #200's scope — recorded rather than fixed here.
+
+**I-B — the drift refusal was silenced for the buffer's lifetime.**
+`rederived[buf].logged` was carried into each new tick's entry and never reset,
+so only the *first* refusal in a session ever produced a line. The comment
+claimed "once per buffer state" and the Done-when requires that a refusal not be
+silent — silent persistent non-folding being #200's own pathology. `logged` no
+longer inherits, and the memo is dropped on a successful reconcile so a later
+unrelated drift reports again.
+
+Minors fixed: `_last_clear_iters` reset on every early return (a stale count was
+readable as if it described the current call); the iteration instrument moved
+off a global to `vim.b`; `prepare_exchange_update` no longer computes
+`desired_folds` per chunk purely to fill an observer payload; `verify_anchors`
+requires `highlight_structure` only when patterns are not supplied, so the
+module is nvim-free at *call* time and not merely at load — now pinned by a test
+that nils `_G.vim` and calls it; containment moved out of the IO shell into
+`fold_projection.ranges_within` with five unit cases; `_observer` reset in
+`after_each` so a failing assertion cannot leak it; stale comments describing
+wall-clock sampling corrected.
+
+Bookkeeping the review asked for: **#202 filed** for the `make test` harness
+contention diagnosed in round 6 (it would otherwise have been archived with this
+issue); README now documents the fold-ownership contract, which is
+operator-visible and had been atlas-only; M1's plan step checkboxes ticked; a
+sixth lessons entry added for duplicate-detection, since the existing rule keys
+on a *shrinking* suite and a duplicated `describe` makes it *grow*.
+
+**Verification:** `exchange_anchors_spec` 12/12, `fold_projection_spec` 21/21,
+`tool_folds_spec` 1/1 unit + 28/28 integration, `fold_invariants_spec` 12/12 —
+74 fold tests, zero duplicate names in any spec; `make test` exit 0 on a clean
+scratch dir; lint 0 warnings / 0 errors across 331 files. All nine reproduced
+scenarios hold.
 
 ## Revisions
 

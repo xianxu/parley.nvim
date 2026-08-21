@@ -702,3 +702,11 @@
   itself flips — parley has a fold-toggle shortcut), the suite must exercise both
   states, and code that depends on the option should save/force/restore it rather
   than assume.
+- **Check the test inventory for duplicates, not only for shrinkage.** The
+  companion rule above catches deleted tests by a falling count. #200 hit the
+  mirror image: a botched edit left `describe("anchor verification")` in the file
+  twice, so seven cases ran as copies and the count *rose*. Every fold-test total
+  reported for four rounds was inflated by seven, and a growing green suite reads
+  as progress. Rule: after any structural edit to a spec, run
+  `grep -o 'it("[^"]*"' <spec> | sort | uniq -d` and require it to be empty, as
+  well as diffing the count against `HEAD`.

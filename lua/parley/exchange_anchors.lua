@@ -18,6 +18,14 @@ local M = {}
 local ns_id = vim.api.nvim_create_namespace("parley_exchange_anchors")
 local anchors = {}
 
+-- Resolved rows per buffer, keyed by changedtick. span() reads EVERY anchor to
+-- detect re-indexing (the round-7 aliasing fix), which makes it O(number of
+-- exchanges in the chat) — and reconcile runs it twice per streamed chunk, so
+-- on a long chat that cost scales with chat length rather than exchange length.
+-- Caching on changedtick is exact: extmarks move only on edits, and every edit
+-- bumps the tick.
+local resolved = {}
+
 --- Replace every anchor on `buf` with one per exchange start row (0-indexed,
 --- ascending). Call only with rows from a model that has verified against the
 --- buffer — anchoring a stale parse would install misleading identity.
@@ -34,6 +42,7 @@ function M.set(buf, starts_0)
         ids[index] = id
     end
     anchors[buf] = ids
+    resolved[buf] = nil
 end
 
 --- Live row of anchor `index`, or nil when it is missing or its line was
@@ -60,18 +69,32 @@ end
 --- old exchange to shed context, then ask the next question — and it is the
 --- aliasing this module exists to prevent, so a single unresolvable or
 --- out-of-order anchor anywhere invalidates the whole mapping.
+--- Resolve every anchor once per buffer state. Returns nil when the mapping is
+--- no longer trustworthy; the nil is cached too, so a drifted buffer does not
+--- re-walk the anchors on every chunk.
+local function resolved_rows(buf, ids)
+    local tick = vim.api.nvim_buf_get_var(buf, "changedtick")
+    local hit = resolved[buf]
+    if hit and hit.tick == tick and hit.count == #ids then return hit.rows end
+
+    local rows, previous = {}, -1
+    for index = 1, #ids do
+        local row = anchor_row(buf, ids, index)
+        if not row or row <= previous then rows = nil break end
+        rows[index], previous = row, row
+    end
+    resolved[buf] = { tick = tick, count = #ids, rows = rows }
+    return rows
+end
+
 function M.span(buf, k, count)
     if not vim.api.nvim_buf_is_valid(buf) then return nil end
     local ids = anchors[buf]
     if not ids or #ids == 0 or #ids ~= count then return nil end
     if k < 1 or k > #ids then return nil end
 
-    local rows, previous = {}, -1
-    for index = 1, #ids do
-        local row = anchor_row(buf, ids, index)
-        if not row or row <= previous then return nil end
-        rows[index], previous = row, row
-    end
+    local rows = resolved_rows(buf, ids)
+    if not rows then return nil end
 
     if k == #ids then
         return rows[k], math.max(vim.api.nvim_buf_line_count(buf) - 1, rows[k])
@@ -81,6 +104,7 @@ end
 
 function M.clear(buf)
     anchors[buf] = nil
+    resolved[buf] = nil
     if vim.api.nvim_buf_is_valid(buf) then
         pcall(vim.api.nvim_buf_clear_namespace, buf, ns_id, 0, -1)
     end

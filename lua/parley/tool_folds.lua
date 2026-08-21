@@ -47,6 +47,9 @@ end
 --- drifted fold in place forever, since nothing else ever removes one.
 --- Folds outside every exchange span are untouched.
 local function clear_folds_in_span(buf, win, first_0, last_0)
+    -- Reset first: an early return must not leave a previous call's count
+    -- readable as if it described this one.
+    M._last_clear_iters = nil
     if not valid_target(buf, win) then return end
     if first_0 == nil or last_0 == nil or last_0 < first_0 then return end
     vim.api.nvim_win_call(win, function()
@@ -94,13 +97,13 @@ local function clear_folds_in_span(buf, win, first_0, last_0)
                 endif
               endif
             endwhile
-            let g:parley_fold_clear_iters = s:guard
+            let b:parley_fold_clear_iters = s:guard
             let &l:foldenable = s:fen
         ]], first_row, (last_row - first_row + 2) * 2, last_row), {})
         -- Loop iterations, exposed so a test can assert this walks folds rather
         -- than rows without timing anything. A wall-clock assertion measures the
         -- machine as much as the algorithm.
-        M._last_clear_iters = vim.g.parley_fold_clear_iters
+        M._last_clear_iters = vim.b[buf].parley_fold_clear_iters
         vim.api.nvim_win_set_cursor(win, {
             math.min(cursor[1], vim.api.nvim_buf_line_count(buf)), cursor[2],
         })
@@ -189,7 +192,11 @@ local function rederive_model(buf)
     rederived[buf] = {
         tick = tick,
         model = model,
-        logged = hit and hit.logged or false,
+        -- Deliberately not carried forward from `hit`: suppression is per
+        -- buffer STATE. Inheriting it silenced every later refusal in the
+        -- session after the first, and silent persistent non-folding is #200's
+        -- own pathology.
+        logged = false,
         failed_at = model == nil and vim.loop.now() or nil,
     }
     return model, rederived[buf].logged
@@ -291,12 +298,8 @@ function M.reconcile_exchange(buf, win, model, exchange_index)
     -- lies inside the exchange bounds — so it cannot cause a permanent refusal.
     -- O(#ranges), so it stays off the per-chunk scaling path.
     if fits then
-        for index, range in ipairs(ranges) do
-            if range.start_0 < first_0 or range.end_0 > last_0 then
-                fits, failed_index, which = false, index, "containment"
-                break
-            end
-        end
+        local within, offender = projection.ranges_within(ranges, first_0, last_0)
+        if not within then fits, failed_index, which = false, offender, "containment" end
     end
     if not fits then
         local fresh, already_logged = rederive_model(buf)
@@ -335,13 +338,16 @@ function M.reconcile_exchange(buf, win, model, exchange_index)
             vim.cmd(string.format("%d,%dfold", range.start_0 + 1, range.end_0 + 1))
         end
     end)
+    -- The exchange folded, so any earlier refusal for this buffer is resolved:
+    -- drop the memo so a later, unrelated drift is reported rather than
+    -- swallowed by a stale suppression flag.
+    rederived[buf] = nil
     notify({ phase = "reconcile", win = win, exchange_index = exchange_index, ranges = ranges })
     return true
 end
 
 function M.prepare_exchange_update(buf, model, exchange_index)
     if not vim.api.nvim_buf_is_valid(buf) or not model.exchanges[exchange_index] then return {} end
-    local ranges = projection.desired_folds(model, exchange_index)
     local first_0, last_0
     local patterns = require("parley.highlight_structure").patterns(require("parley.config"))
     -- Same destructive operation as reconcile, so the same rule: clear only
@@ -363,8 +369,11 @@ function M.prepare_exchange_update(buf, model, exchange_index)
     for _, win in ipairs(windows) do
         if valid_target(buf, win) then
             clear_folds_in_span(buf, win, first_0, last_0)
+            -- desired_folds is deliberately NOT computed here: prepare only
+            -- clears, and this runs per streamed chunk, so it must not do work
+            -- solely to populate an observer payload.
             notify({ phase = "prepare", win = win, exchange_index = exchange_index,
-                ranges = ranges, identified = identified })
+                identified = identified })
         end
     end
     return windows
@@ -440,23 +449,35 @@ end
 function M.foldtext()
     local start_line = vim.fn.getline(vim.v.foldstart)
     local line_count = vim.v.foldend - vim.v.foldstart + 1
+    -- Derived from the configured prefixes, not hardcoded: these were the last
+    -- hand-maintained copy of the marker vocabulary, so a customised
+    -- chat_tool_use_prefix (etc.) silently fell through to the preview branch —
+    -- the same branch that rendered "💬: q (4 lines)" and made #200 look like
+    -- ordinary text instead of a corrupt fold.
+    local patterns = require("parley.highlight_structure").patterns(require("parley.config"))
 
-    if start_line:match("^🔧:") then
-        local name = start_line:match("^🔧:%s*(%S+)") or "tool"
-        return string.format("🔧 %s (%d lines) ", name, line_count)
-    elseif start_line:match("^📎:") then
-        local name = start_line:match("^📎:%s*(%S+)") or "result"
+    local tool_use = patterns.tool_use_prefix
+    local tool_result = patterns.tool_result_prefix
+    if start_line:match(patterns.tool_use_pattern) then
+        local name = start_line:match(patterns.tool_use_pattern .. "%s*(%S+)") or "tool"
+        return string.format("%s %s (%d lines) ", tool_use:gsub(":$", ""), name, line_count)
+    elseif start_line:match(patterns.tool_result_pattern) then
+        local name = start_line:match(patterns.tool_result_pattern .. "%s*(%S+)") or "result"
         local is_error = start_line:match("error=true") and " error" or ""
-        return string.format("📎 %s%s (%d lines) ", name, is_error, line_count)
-    elseif start_line:match("^🧠:") then
-        return "🧠 thinking (" .. line_count .. " lines) "
-    elseif start_line:match("^📝:") then
-        return "📝 summary (" .. line_count .. " lines) "
-    else
-        local preview = start_line:sub(1, 60)
-        if #start_line > 60 then preview = preview .. "..." end
-        return preview .. " (" .. line_count .. " lines) "
+        return string.format("%s %s%s (%d lines) ",
+            tool_result:gsub(":$", ""), name, is_error, line_count)
+    elseif start_line:match(patterns.reasoning_pattern) then
+        return patterns.reasoning_prefix:gsub(":$", "") .. " thinking (" .. line_count .. " lines) "
+    elseif start_line:match(patterns.summary_pattern) then
+        return patterns.summary_prefix:gsub(":$", "") .. " summary (" .. line_count .. " lines) "
     end
+
+    -- Reached only when a fold is anchored on something Parley never folds.
+    -- That is the #200 signature, so say so rather than rendering it as if it
+    -- were ordinary content.
+    local preview = start_line:sub(1, 60)
+    if #start_line > 60 then preview = preview .. "..." end
+    return "⚠ unexpected fold: " .. preview .. " (" .. line_count .. " lines) "
 end
 
 --- Set up folding on a chat buffer.

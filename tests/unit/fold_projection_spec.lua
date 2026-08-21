@@ -29,6 +29,23 @@ describe("fold_projection", function()
         assert.same({}, projection.desired_folds(model, 3))
     end)
 
+    it("verifies without a Neovim global when patterns are supplied", function()
+        local projection = require("parley.fold_projection")
+        local patterns = require("parley.highlight_structure").patterns({})
+        local saved = _G.vim
+        _G.vim = nil
+        local ok, result = pcall(projection.verify_starts, { 1, 4 },
+            { [1] = "💬: q1", [4] = "💬: q2" }, patterns)
+        local ok2, result2 = pcall(projection.ranges_within,
+            { { start_0 = 5, end_0 = 6 } }, 4, 8)
+        _G.vim = saved
+
+        assert.is_true(ok)
+        assert.is_true(result)
+        assert.is_true(ok2)
+        assert.is_true(result2)
+    end)
+
     it("loads without a Neovim global", function()
         local path = vim.api.nvim_get_runtime_file("lua/parley/fold_projection.lua", false)[1]
         local loader = assert(loadfile(path))
@@ -137,6 +154,42 @@ end)
 -- #200: positional reasoning cannot police an individual clear (a row-span is
 -- not an identity — see exchange_anchors), but it is the right check for
 -- deciding whether a model is sound enough to anchor identity FROM.
+-- #200: containment is what ties the two halves together — verification proves
+-- a range matches the buffer's text, identity proves which rows the exchange
+-- owns, and only this proves they describe the same exchange. Pure, so it is
+-- pinned here rather than only through an integration path.
+describe("range containment", function()
+    local projection = require("parley.fold_projection")
+
+    it("accepts ranges wholly inside the owned rows", function()
+        local ok, failed = projection.ranges_within(
+            { { start_0 = 5, end_0 = 8 }, { start_0 = 10, end_0 = 10 } }, 4, 12)
+        assert.is_true(ok)
+        assert.is_nil(failed)
+    end)
+
+    it("rejects a range starting before the owned rows and names it", function()
+        local ok, failed = projection.ranges_within(
+            { { start_0 = 5, end_0 = 8 }, { start_0 = 2, end_0 = 6 } }, 4, 12)
+        assert.is_false(ok)
+        assert.equals(2, failed)
+    end)
+
+    it("rejects a range running past the owned rows", function()
+        local ok, failed = projection.ranges_within({ { start_0 = 5, end_0 = 13 } }, 4, 12)
+        assert.is_false(ok)
+        assert.equals(1, failed)
+    end)
+
+    it("rejects when no rows are owned at all", function()
+        assert.is_false(projection.ranges_within({ { start_0 = 5, end_0 = 8 } }, nil, nil))
+    end)
+
+    it("accepts an empty range list inside owned rows", function()
+        assert.is_true(projection.ranges_within({}, 4, 12))
+    end)
+end)
+
 describe("start-row validation", function()
     local projection = require("parley.fold_projection")
     local patterns = require("parley.highlight_structure").patterns({})

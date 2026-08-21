@@ -1598,3 +1598,221 @@ findings:
       it is now the last hand-maintained copy of the marker vocabulary BR-1
       consolidated into ANCHOR_KIND (ARCH-DRY).
 ```
+
+---
+
+## Re-review — 2026-08-20T21:52:18-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 200 — user question is folded |
+| repo | parley.nvim |
+| issue file | workshop/issues/000200-user-question-is-folded.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | 5213a2acb707f994e641d329bd9558cce8c80d64..5213a2acb707f994e641d329bd9558cce8c80d64 |
+| command | sdlc milestone-close --issue 200 --milestone M1 |
+| reviewer | claude |
+| timestamp | 2026-08-20T21:52:18-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+The review window handed to me was empty (`5213a2a..5213a2a`), so I reviewed the whole M1 range `38a6cdd..HEAD` against the issue's Spec/Plan and re-verified every prior finding against the code. The Critical from the last round (BR-19, the `nofoldenable` no-op clear) is genuinely fixed: the guard is present at `tool_folds.lua:76-98`, saved/forced/restored inside the existing `nvim_win_call`, and two `foldenable = false` variants were added. I re-ran all five fold specs — 15 + 12 + 1 + 28 + 12 = 68 green — and `luacheck` at 0/0 across 331 files. I independently confirmed the mechanism (`foldlevel()` does read 0 under `nofoldenable`; `zE` and `:fold` both work regardless, and `:fold` does *not* silently re-enable the option the way `zf` does, so the "creation needs no guard" claim holds). No new Critical surfaced: I probed the two hypotheses most likely to reopen the round-2 permanent-refusal class — a `🔒:` local section between exchanges shifting `exchange_start`, and `zE` no-opping under `nofoldenable` — and both were disproved empirically. What keeps this off SHIP is that the two Importants raised alongside BR-19 were not touched: **BR-21 leaves an M1 `Done when` line unmet** ("a drifted exchange that cannot be folded says so — the refusal is not silent"), and it is a one-line fix; BR-20's per-chunk scaling axis is still unmeasured in-suite.
+
+### 1. Strengths
+
+- **`fold_projection.lua:15-23`** — deriving `FOLDABLE` from `ANCHOR_KIND` is the right consolidation, and it makes the drift structurally impossible rather than merely tested (ARCH-DRY). The mapping test at `fold_projection_spec.lua:52` pins the surviving hand-maintained half.
+- **`tool_folds.lua:76-99`** — the foldenable guard is correctly scoped: it wraps only the clear, uses `&l:` so the global default for new windows is untouched, and the restore sits after `endwhile` so a `break` still reaches it. `tool_folds_spec.lua:538` asserts the operator's setting survives, which is the part that would otherwise regress silently.
+- **`tool_folds_spec.lua:543`** — the "does not deepen fold nesting" test is the better of the two new cases: it pins the compounding failure (one level per streamed chunk), not just the single-shot symptom.
+- **`tool_folds.lua:158-162, 484`** — the memo-leak fix is honest about *why* `__mode = "k"` was a no-op, and clears on the same lifecycle event as `initialized` and the anchors.
+- **`exchange_anchors.lua:63-80`** — whole-mapping validation with a strict-ascending check, declining rather than guessing, is the correct shape for an identity oracle. The module comment earns its length.
+- **Test-inventory discipline** — I re-ran the audit the log claims: zero duplicate `it()`/`describe()` names across all five fold specs. That claim checks out.
+
+### 2. Critical findings
+
+None.
+
+### 3. Important findings
+
+Both are prior findings re-raised; see the dispose block. In brief:
+
+- **BR-21** (`tool_folds.lua:191`) — `logged` is carried into every new tick's entry and is never reset; `grep -n logged lua/parley/tool_folds.lua` shows `mark_drift_logged` as the only writer and no clear on success. After the first refusal in a buffer, every later refusal is silent, including an unrelated drift much later in the session. This is the M1 `Done when` line "the refusal is not silent", and the issue's Plan ticks M1 complete. Fix: clear the flag when `reconcile_exchange` succeeds, or key suppression on the tick.
+- **BR-20** (`exchange_anchors.lua:70-74`) — `span` resolves every anchor on every call, twice per streamed chunk. Unchanged.
+- **BR-4** is half-done: the plan's Core-concepts entry now correctly names `verify_starts` (`000200-fold-reconciliation-plan.md:37`), but `## Revisions` still stops at round 7 — round 8's containment tie and the round-9 foldenable guard are recorded only in the issue Log.
+
+### 4. Minor findings
+
+- New: per-chunk reconcile cost is linear in projected-range *length* (`covered_lines` + `verify_anchors`' interior scan), an O(span) read this milestone introduced. Measured best-of-30: 0.0070 / 0.0100 / 0.0230 / 0.0825 / 0.3440 ms at 25 / 100 / 400 / 1600 / 6400 body rows. Small in absolute terms; the point is that the in-suite scaling test asserts only clear-loop iterations, so this axis is unasserted.
+- New: `atlas/chat/exchange_model.md`'s clearing bullet describes `zj`/`zD` but not that the clear transiently forces `'foldenable'` — a window option the module does not own. One-line delta; docs gate.
+- New: `prepare_exchange_update` clears the identified span with no range verification, while `reconcile_exchange` refuses to *create* unverified. If finalize's reconcile then refuses, the span is left cleared with nothing recreated. I could not reach this in production (the re-derive normally heals), so it is an asymmetry note, not a demonstrated bug — but it is the exact shape of `lessons.md`'s own "widening a destructive operation demands widening its verification".
+- Prior minors BR-6 through BR-18 and BR-22 through BR-25 are all still present verbatim; disposed below.
+
+### 5. Test coverage notes
+
+- 68 fold tests, all green, no duplicate names, lint clean. The two new `foldenable = false` cases close the "the suite fixed an environment setting" gap for the clear path.
+- Still uncovered: (a) `foldmethod` other than `manual` on the creation half (BR-13) — the clear half reasons about E350 explicitly, the create half throws; (b) the `identified` prepare-event field has no assertion anywhere (BR-23); (c) `_observer` is reset inline at `tool_folds_spec.lua:260,765` rather than in `after_each`, so a failing assertion leaks it into the next test (BR-24).
+- The corpus harness currently enumerates 11 files (2 fixtures + 9 tracked; `2026-05-03…global-warming-overview.md` is deleted-but-unstaged in the working tree and correctly dropped by the `filereadable` filter). The `#corpus >= 8` floor is doing real work here.
+
+### 6. Architectural notes
+
+- **ARCH-DRY — flag.** The `FOLDABLE`/`ANCHOR_KIND` consolidation is a clean pass. Three duplications remain: the repeated comment paragraph and split declaration in `prepare_exchange_update` (`tool_folds.lua:345-355`, BR-6), the doubled return in `owned_span` (`:256-260`, BR-7), and `foldtext`'s hardcoded four marker prefixes (`:444-454`, BR-25) — now the last hand-maintained copy of the marker vocabulary, and the branch that rendered `💬: q (4 lines)` in the first place.
+- **ARCH-PURE — flag.** The verify path is well-shaped: `covered_lines` does the one buffer read, `verify_anchors` is a pure function over the resulting map. Two leaks persist: `verify_anchors` requires `highlight_structure` unconditionally even when `patterns` is supplied (`fold_projection.lua:80`), so the module's "pure and nvim-free" claim is pinned at load time only (BR-9); and the containment predicate at `tool_folds.lua:293-300` is pure logic living in the IO shell, reachable only through integration tests (BR-12).
+- **ARCH-PURPOSE — flag.** M1's scope is a legitimate milestone, not an under-delivery — M2's fence work is separable and has its own boundary. But one M1 `Done when` is not met (BR-21), and the Plan ticks M1 anyway. That is the finding.
+- **ARCH-MOCK — pass with one noted exception.** No external binary or service is in the production path. The corpus harness shells to `git ls-files` outside any seam (`fold_invariants_spec.lua:17`, BR-17), mitigated by the `>= 8` floor turning a missing git into a loud failure rather than a silently shrunken suite.
+
+For M2: the "explicit non-fix" recorded in the round-6 revision — do not add a buffer-wide completeness scan to `verify_starts` until it can consume the `fence` grammar — is the load-bearing note. Carry it into the M2 plan, not just the Revisions.
+
+### 7. Plan revision recommendations
+
+Two `## Revisions` entries are missing from `workshop/plans/000200-fold-reconciliation-plan.md`:
+
+- **M1 round 8: tie creation to destruction** — `model_fits` proves a range matches the buffer's text; identity proves which rows the exchange owns; nothing proved they described the same exchange. Delta: an O(#ranges) containment check in `reconcile_exchange`; and the scaling test now asserts `clear_folds_in_span`'s loop-iteration count instead of wall-clock.
+- **M1 round 9: the clear forces `'foldenable'`** — `zj`/`zD` are inert under `nofoldenable`, so the clear silently no-opped and a stale question-anchored fold survived permanently. Delta: save/force/restore `&l:foldenable` inside the existing `nvim_win_call`, creation needs no guard, two `foldenable = false` spec variants.
+
+Separately, the plan's Task 1-5 step checkboxes (`:85` through `:753`) are all still unticked although M1 is complete (BR-18).
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      FOLDABLE derived from ANCHOR_KIND at fold_projection.lua:22-23; drift is now structurally impossible.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      tool_folds_spec.lua:488 folds the frontmatter and asserts it survives a full reconcile.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      grep verify_span over atlas/ is empty; the section now states "no positional fallback" and documents the containment tie.
+  - id: BR-4
+    disposition: not-addressed
+    note: |
+      Core-concepts fixed at plan:37, but Revisions still stop at round 7 — rounds 8 and 9 unrecorded.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      Weak mode dropped (tool_folds.lua:162); rederived[buf] cleared on BufUnload/BufDelete at :484.
+  - id: BR-6
+    disposition: not-addressed
+    note: |
+      tool_folds.lua:348-354 still repeats the paragraph; :345 still splits the declaration from :355.
+  - id: BR-7
+    disposition: not-addressed
+    note: |
+      tool_folds.lua:256-260 unchanged.
+  - id: BR-8
+    disposition: not-addressed
+    note: |
+      Both comments unchanged — spec :184-186 still describes wall-clock sampling, :93 still says the case above sits outside every span when it now asserts that fold IS cleared.
+  - id: BR-9
+    disposition: not-addressed
+    note: |
+      fold_projection.lua:80 still requires highlight_structure unconditionally; the purity test still checks load time only.
+  - id: BR-10
+    disposition: not-addressed
+    note: |
+      tool_folds.lua:344 unchanged.
+  - id: BR-11
+    disposition: not-addressed
+    note: |
+      tool_folds.lua:50-51 and :57 still return before the iteration count is written at :103.
+  - id: BR-12
+    disposition: not-addressed
+    note: |
+      tool_folds.lua:293-300 unchanged.
+  - id: BR-13
+    disposition: not-addressed
+    note: |
+      tool_folds.lua:335 still unguarded while the clear half reasons about E350 at :63-68.
+  - id: BR-14
+    disposition: not-addressed
+    note: |
+      The new lessons entry keys on a shrinking suite and a comm -13 set diff; duplicates collapse in a set, so no rule covers the duplicate-block defect.
+  - id: BR-15
+    disposition: not-addressed
+    note: |
+      workshop/issues/ still holds eight issues, none for the scratch-dir contention.
+  - id: BR-16
+    disposition: not-addressed
+    note: |
+      No README.md change anywhere in 38a6cdd..HEAD.
+  - id: BR-17
+    disposition: not-addressed
+    note: |
+      fold_invariants_spec.lua:17 unchanged; the >= 8 floor still mitigates it.
+  - id: BR-18
+    disposition: not-addressed
+    note: |
+      Every Task 1-5 step checkbox in the durable plan is still unticked.
+  - id: BR-19
+    disposition: addressed
+    note: |
+      Guard at tool_folds.lua:76-98 with two foldenable=false tests; verified foldlevel() reads 0 under nofoldenable and that :fold does not re-enable the option.
+  - id: BR-20
+    disposition: not-addressed
+    note: |
+      exchange_anchors.lua:70-74 still resolves every anchor per call; no memo, and the scaling test still varies span length only.
+  - id: BR-21
+    disposition: not-addressed
+    note: |
+      tool_folds.lua:191 still carries logged forward; no writer resets it on success. This is the unmet "refusal is not silent" Done-when.
+  - id: BR-22
+    disposition: not-addressed
+    note: |
+      tool_folds.lua:97,103 unchanged.
+  - id: BR-23
+    disposition: not-addressed
+    note: |
+      grep identified over lua/ and tests/ returns only the two emit sites.
+  - id: BR-24
+    disposition: not-addressed
+    note: |
+      tool_folds_spec.lua:260,765 still reset inline; after_each at :22 resets only _model_provider.
+  - id: BR-25
+    disposition: not-addressed
+    note: |
+      tool_folds.lua:444-454 unchanged.
+findings:
+  - id: new
+    severity: Minor
+    title: |
+      per-chunk reconcile cost is linear in projected-range length, and that axis is unasserted
+    detail: |
+      covered_lines plus verify_anchors' interior scan is an O(span) buffer read
+      this milestone introduced on the per-streamed-chunk path. Measured
+      best-of-30 per reconcile with a single thinking range: 0.0070 / 0.0100 /
+      0.0230 / 0.0825 / 0.3440 ms at 25 / 100 / 400 / 1600 / 6400 body rows —
+      clean linearity, so streaming a long foldable block is O(N^2) overall.
+      Absolute cost is small, but the in-suite scaling test asserts only
+      clear-loop iteration count, so nothing pins this axis.
+  - id: new
+    severity: Minor
+    title: |
+      atlas does not record that the clear transiently forces 'foldenable'
+    detail: |
+      The last commit made tool_folds write a window option it does not own,
+      saving and restoring it around the clear. atlas/chat/exchange_model.md's
+      fold-reconciliation section describes the zj/zD walk but not this, so the
+      operator-visible contract ("your foldenable setting is momentarily forced
+      on and restored") lives only in a code comment. One-line delta.
+  - id: new
+    severity: Minor
+    title: |
+      prepare clears the identified span unverified while reconcile refuses to create unverified
+    detail: |
+      prepare_exchange_update destroys every fold in the identified span with no
+      range verification; reconcile_exchange refuses to create when verification
+      fails. If finalize's reconcile then refuses, the span is left cleared with
+      nothing recreated and hydrate_window latches. I could not reach this in
+      production — the re-derive normally heals within the same call — so this is
+      an asymmetry note rather than a demonstrated bug, but it is the shape
+      lessons.md's own "widening a destructive operation demands widening its
+      verification" entry warns about.
+```

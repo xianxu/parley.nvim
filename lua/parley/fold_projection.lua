@@ -77,13 +77,22 @@ end
 --- exchange's question.
 --- @return boolean ok, integer|nil failed_range_index
 function M.verify_anchors(ranges, lines, patterns)
-    local highlight_structure = require("parley.highlight_structure")
-    patterns = patterns or highlight_structure.patterns()
+    -- Required lazily and only when the caller did not supply patterns, so the
+    -- module stays callable — not merely loadable — without a Neovim global.
+    local highlight_structure
+    if not patterns then
+        highlight_structure = require("parley.highlight_structure")
+        patterns = highlight_structure.patterns()
+    end
+    local classify = M._classify or function(line, p)
+        highlight_structure = highlight_structure or require("parley.highlight_structure")
+        return highlight_structure.classify(line, p)
+    end
     local user_pattern = patterns.user_pattern
     for index, range in ipairs(ranges) do
         local anchor = lines[range.start_0]
         if anchor == nil then return false, index end
-        if highlight_structure.classify(anchor, patterns).kind ~= M.anchor_kind(range.kind) then
+        if classify(anchor, patterns).kind ~= M.anchor_kind(range.kind) then
             return false, index
         end
         -- The interior only ever asks one question — "is this a user turn?" —
@@ -98,6 +107,21 @@ function M.verify_anchors(ranges, lines, patterns)
             if line == nil then return false, index end
             if line:match(user_pattern) then return false, index end
         end
+    end
+    return true, nil
+end
+
+--- Every range must lie inside the rows the exchange owns.
+---
+--- Verification proves a range matches the buffer's *text*; identity proves
+--- which rows belong to this exchange. Only containment proves they describe
+--- the same exchange — without it a stale model's ranges can verify against a
+--- later exchange's markers while the clear removes this one's rows (#200).
+--- @return boolean ok, integer|nil failed_range_index
+function M.ranges_within(ranges, first_0, last_0)
+    if first_0 == nil or last_0 == nil then return false, nil end
+    for index, range in ipairs(ranges) do
+        if range.start_0 < first_0 or range.end_0 > last_0 then return false, index end
     end
     return true, nil
 end

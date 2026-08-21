@@ -104,7 +104,11 @@ three properties follow:
 Clearing walks fold-to-fold (`zj`/`zD` in a single VimL crossing) rather than
 probing every row, because `chat_respond` wraps every streamed chunk in
 `with_exchange_update`: the clear is on the per-chunk path and must scale with
-the number of folds present, not with exchange length.
+the number of folds present, not with the number of rows. It transiently forces
+`'foldenable'` and restores the operator's value — `zj` will not navigate and
+`zD` will not delete while folding is disabled, so without that the clear
+silently no-ops and a stale fold survives. Resolved anchor rows are cached per
+`(buffer, changedtick)` so the per-chunk cost does not track chat length.
 
 ## Loading from Parser
 

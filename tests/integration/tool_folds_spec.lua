@@ -21,6 +21,7 @@ describe("tool_folds incremental manual folds", function()
 
     after_each(function()
         tool_folds._model_provider = nil
+        tool_folds._observer = nil
         if vim.api.nvim_buf_is_valid(original_buf) then
             vim.api.nvim_win_set_buf(win, original_buf)
         end
@@ -182,9 +183,10 @@ describe("tool_folds incremental manual folds", function()
     -- therefore scale with the number of folds present, not with the length of
     -- the exchange — otherwise a long tool body makes streaming quadratic.
     --
-    -- Timed under a loaded test suite, so each size is sampled repeatedly and
-    -- compared on its MINIMUM: the least-contended sample is the one that
-    -- reflects the algorithm rather than the machine.
+    -- Asserted on the clear loop's ITERATION COUNT, not wall-clock. A timing
+    -- bound measures the machine as much as the algorithm, and flaked under
+    -- suite load twice — once sending the author chasing contention as if it
+    -- were a regression.
     it("clears an exchange span by walking folds, not rows", function()
         local function clear_iters(body_lines)
             local lines = { "header", "", "💬: q", "", "🤖: a", "", "🔧: read id=x" }
@@ -558,6 +560,61 @@ describe("tool_folds incremental manual folds", function()
         -- One level, not one per reconcile: chat_respond reconciles per streamed
         -- chunk, so nesting growth here would compound across a whole answer.
         assert.equals(1, vim.fn.foldlevel(7))
+    end)
+
+    -- BR-25: foldtext's fallback branch is what rendered "💬: q (4 lines)" and
+    -- made #200 read as ordinary text. It should announce a fold Parley would
+    -- never have created, and its marker branches should follow the configured
+    -- prefixes rather than a hardcoded copy.
+    it("labels a fold anchored on something Parley never folds", function()
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+            "header", "", "💬: q", "", "🤖: a", "", "🔧: read id=x", "{}", "tail",
+        })
+        vim.api.nvim_set_option_value("foldmethod", "manual", { win = win })
+        vim.api.nvim_win_call(win, function() vim.cmd("3,5fold") end)
+        vim.cmd("normal! zM")
+        vim.fn.setpos(".", { 0, 3, 1, 0 })
+
+        local text = vim.api.nvim_win_call(win, function()
+            vim.v.foldstart = 3
+            return tool_folds.foldtext()
+        end)
+        assert.matches("unexpected fold", text)
+
+        vim.api.nvim_win_call(win, function() vim.cmd("normal! zR") vim.cmd("7,8fold") end)
+        local tool_text = vim.api.nvim_win_call(win, function()
+            vim.v.foldstart = 7
+            vim.v.foldend = 8
+            return tool_folds.foldtext()
+        end)
+        assert.matches("read", tool_text)
+        assert.is_nil(tool_text:match("unexpected"))
+    end)
+
+    -- BR-23: prepare's `identified` flag had no reader; a diagnostic nobody
+    -- asserts is a diagnostic that can quietly stop being true.
+    it("reports on the prepare event whether identity was established", function()
+        local seen = {}
+        tool_folds._observer = function(e)
+            if e.phase == "prepare" then seen[#seen + 1] = e.identified end
+        end
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+            "---", "topic: t", "file: f.md", "---", "",
+            "💬: q", "", "🤖: [A]", "📎: t", "```", "x", "```", "",
+        })
+        tool_folds.hydrate_window(buf, win)
+        local chat_parser = require("parley.chat_parser")
+        local model = exchange_model.from_parsed_chat(chat_parser.parse_chat(
+            vim.api.nvim_buf_get_lines(buf, 0, -1, false), 4, require("parley.config")))
+
+        tool_folds.prepare_exchange_update(buf, model, 1)
+        assert.equals(true, seen[#seen])
+
+        -- A model claiming an exchange count the anchors do not match cannot be
+        -- identified, and prepare must say so rather than clear blindly.
+        model:add_exchange(1)
+        tool_folds.prepare_exchange_update(buf, model, 1)
+        assert.equals(false, seen[#seen])
     end)
 
     it("falls back rather than trusting identity across a structural change", function()

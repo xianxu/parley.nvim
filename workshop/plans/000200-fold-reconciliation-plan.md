@@ -82,7 +82,7 @@
 - Modify: `lua/parley/fold_projection.lua`
 - Test: `tests/unit/fold_projection_spec.lua`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/unit/fold_projection_spec.lua`:
 
@@ -167,12 +167,12 @@ The last case matters: the interior scan must reject only a line that
 fenced occurrence is not. The scan is a guard against *drift*, not a second
 fence parser — M2 Task 9 owns in-body marker suppression (`ARCH-DRY`).
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/fold_projection_spec.lua" -c "qa!"`
 Expected: FAIL — `attempt to call field 'anchor_kind' (a nil value)`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 In `lua/parley/fold_projection.lua`, below the `FOLDABLE` table:
 
@@ -226,12 +226,12 @@ hands in the row→text map (`ARCH-PURE`). Passing every covered row rather than
 just the anchors keeps the whole check in one pass over one input, instead of a
 second `verify_spans` entry point (`ARCH-DRY`).
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/fold_projection_spec.lua" -c "qa!"`
 Expected: PASS — all existing cases plus the four new ones.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lua/parley/fold_projection.lua tests/unit/fold_projection_spec.lua
@@ -257,7 +257,7 @@ Two pre-existing tests encode the old contract and **must both be dispositioned 
 | `tests/integration/tool_folds_spec.lua:39` — *"leaves a user fold outside the rewritten range untouched"* | `10,11fold`, asserted at 11–12 after the mutation shifts it | Expected to survive — the exchange holds only a `thinking` block at 7–9, so 11–12 should fall outside the span. **Verify by running; if it now fails, the fold is inside the span and this test converts like the one below.** |
 | `tests/integration/tool_folds_spec.lua:57` — *"builds initial folds from semantic model blocks without clearing an unrelated fold"* | `25,26fold` over trailing prose `plain one` / `plain two`, asserted at `:76-77` | **Converts.** Lines 25–26 are the exchange's trailing text block, inside the span, so the fold is now deleted by design. |
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append inside the existing `describe` in `tests/integration/tool_folds_spec.lua`:
 
@@ -286,12 +286,12 @@ it("clears a stale fold anywhere in the exchange, not just at a projected start"
 end)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/tool_folds_spec.lua" -c "qa!"`
 Expected: FAIL — `Expected -1, got 6`. The stale `6,9` fold survives and anchors on the question.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 In `lua/parley/tool_folds.lua`, replace `delete_projected_folds` with:
 
@@ -364,7 +364,7 @@ function M.prepare_exchange_update(buf, model, exchange_index)
 end
 ```
 
-- [ ] **Step 4: Convert the test that encodes the old contract**
+- [x] **Step 4: Convert the test that encodes the old contract**
 
 In `tests/integration/tool_folds_spec.lua:57`, rename the test and invert its
 last two assertions — the user fold at 25–26 is now inside the exchange span
@@ -380,12 +380,12 @@ and is cleared by design:
     end)
 ```
 
-- [ ] **Step 5: Run the whole file and disposition test `:39` empirically**
+- [x] **Step 5: Run the whole file and disposition test `:39` empirically**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/tool_folds_spec.lua" -c "qa!"`
 Expected: PASS. If `leaves a user fold outside the rewritten range untouched` fails, its fold *is* inside the span — convert it the same way and record the correction in the issue `## Log`, rather than widening the span exception to keep it green.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add lua/parley/tool_folds.lua tests/integration/tool_folds_spec.lua
@@ -402,7 +402,7 @@ git commit -m "folds: #200 M1: clear the whole exchange span, not projected star
 
 This is the defect that produced the reported symptom. `reconcile_exchange` must treat the projection as a *desired state to be checked*, not an append list.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/integration/tool_folds_spec.lua`:
 
@@ -458,12 +458,12 @@ it("does not throw when drift runs a projected range past the end of the buffer"
 end)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/tool_folds_spec.lua" -c "qa!"`
 Expected: FAIL twice — the first asserts `-1` but gets the question's own row; the second raises `Vim(fold):E16: Invalid range`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Replace `reconcile_exchange` in `lua/parley/tool_folds.lua`:
 
@@ -579,12 +579,12 @@ end
 (`applied[buf][win][exchange_index] = nil`) — it removes folds reconcile would
 otherwise believe are still applied.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/tool_folds_spec.lua" -c "qa!"`
 Expected: PASS, all cases.
 
-- [ ] **Step 5: Pin the streaming hot path (PQ-5)**
+- [x] **Step 5: Pin the streaming hot path (PQ-5)**
 
 The memo is a performance claim, so test it as one. Append to
 `tests/integration/tool_folds_spec.lua`:
@@ -608,7 +608,7 @@ it("does not re-clear or re-fold an exchange whose fold set is unchanged", funct
 end)
 ```
 
-- [ ] **Step 6: Measure it against the existing perf harness**
+- [x] **Step 6: Measure it against the existing perf harness**
 
 The repo already has a streaming perf gate — `tests/perf/chat_typing.lua` driven
 by `tests/integration/perf_chat_typing_spec.lua` through `tests/perf/harness.lua`.
@@ -620,12 +620,12 @@ Expected: within the harness's existing budget. Record both numbers in the issue
 short-circuiting the streaming path — fix that before proceeding to M2 rather
 than raising the budget.
 
-- [ ] **Step 7: Run the full fold + exchange-model spec set**
+- [x] **Step 7: Run the full fold + exchange-model spec set**
 
 Run: `make test-spec SPEC=chat/exchange_model`
 Expected: every mapped spec passes — in particular `keeps exactly one fold level across consecutive tool-loop appends` (the span clear is what makes that hold structurally rather than by luck) and `restores from the current buffer model without masking a mutation error`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add lua/parley/tool_folds.lua tests/integration/tool_folds_spec.lua
@@ -644,7 +644,7 @@ The audit that found this ran as a throwaway script. Make it a durable test so t
 
 **The oracle must derive from the parsed model, not from raw text (PQ-2).** A regex sweep over file lines asserts `foldclosed(i) == i` for every `📎:`-looking line — but after Task 9 a `📎:` *inside* a tool body is content, correctly living inside the enclosing fold, so a raw-text oracle would demand the opposite of what Task 9 implements and Task 10's fixture could never pass. Walk the exchange model instead: only question `line_start`s and foldable block starts enter the assertions, and in-body markers are structurally invisible to them.
 
-- [ ] **Step 1: Write the test**
+- [x] **Step 1: Write the test**
 
 ```lua
 local tool_folds = require("parley.tool_folds")
@@ -717,12 +717,12 @@ end)
 existing table from `fold_projection` (`M.FOLDABLE`) and read it here, so the
 harness tracks the policy automatically if it ever changes (`ARCH-DRY`).
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/fold_invariants_spec.lua" -c "qa!"`
 Expected: PASS over the 10 tracked transcripts. The audit's equivalent sweep was clean across the operator's full 127-file `chat_dir`, so a failure here means a regression introduced by Tasks 1-3, not a pre-existing defect.
 
-- [ ] **Step 3: Register in traceability**
+- [x] **Step 3: Register in traceability**
 
 In `atlas/traceability.yaml`, under `chat/exchange_model:` → `tests:`, add:
 
@@ -730,7 +730,7 @@ In `atlas/traceability.yaml`, under `chat/exchange_model:` → `tests:`, add:
       - tests/integration/fold_invariants_spec.lua
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tests/integration/fold_invariants_spec.lua atlas/traceability.yaml
@@ -741,16 +741,16 @@ git commit -m "test: #200 M1: pin fold invariants against the transcript corpus"
 
 ### Task 5: Close M1
 
-- [ ] **Step 1: Run the full suite**
+- [x] **Step 1: Run the full suite**
 
 Run: `make test`
 Expected: lint clean, all unit + integration specs pass.
 
-- [ ] **Step 2: Update the atlas**
+- [x] **Step 2: Update the atlas**
 
 `atlas/chat/exchange_model.md` documents the fold projection. Add a short subsection stating the reconcile contract: the projection is a desired state; the exchange span is cleared before folds are created; every range is verified against its anchor marker and the model re-derived from the buffer on drift; a question can never anchor a fold.
 
-- [ ] **Step 3: Milestone close**
+- [x] **Step 3: Milestone close**
 
 ```bash
 sdlc milestone-close --issue 200 --milestone M1
