@@ -526,24 +526,31 @@ local fence = require("parley.fence")
 	-- whose body never closes. Exchange starts feed exchange_anchors identity,
 	-- which drives a destructive fold clear, so degrading open-endedly here is
 	-- not acceptable.
-	local in_tool_body = {}
-	do
-		for row = header_end + 1, #lines do
-			local kind = highlight_structure.classify(lines[row], decoration_patterns).kind
-			if kind == "tool_use" or kind == "tool_result" then
-				local first, last = fence.tool_body(lines, row)
-				if first then
-					for body = first, last do in_tool_body[body] = true end
-				end
-			end
-		end
-	end
+	-- #200: one depth-aware pass decides both which rows are inside a tool body
+	-- and which tool markers are structural. Depth is the requirement: a 📎:
+	-- written inside an ordinary fenced block is not a marker, and treating it
+	-- as one makes that block's closer look like a body opener — the scan then
+	-- latches onto the next block and the "body" spans a real question, folding
+	-- it (BR-43).
+	local body_lines = {}
+	for row = header_end + 1, #lines do body_lines[row - header_end] = lines[row] end
+	local body_set, marker_set = fence.scan(body_lines, function(line)
+		local kind = highlight_structure.classify(line, decoration_patterns).kind
+		return kind == "tool_use" or kind == "tool_result"
+	end)
+	local in_tool_body, depth0_marker = {}, {}
+	for k in pairs(body_set) do in_tool_body[k + header_end] = true end
+	for k in pairs(marker_set) do depth0_marker[k + header_end] = true end
 
 	for i = header_end + 1, #lines do
 		local line = lines[i]
 		local decoration_kind = highlight_structure.classify(line, decoration_patterns).kind
 
 		if in_tool_body[i] then
+			decoration_kind = "text"
+		elseif (decoration_kind == "tool_use" or decoration_kind == "tool_result")
+			and not depth0_marker[i] then
+			-- A marker inside some other fenced block is content, not a block.
 			decoration_kind = "text"
 		end
 

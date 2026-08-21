@@ -665,6 +665,111 @@ rounds:
           round: 7
       boundary: M2
       blocked: true
+    - "n": 8
+      timestamp: "2026-08-21T16:40:13-07:00"
+      agent: claude
+      dispose:
+        - id: BR-30
+          disposition: addressed
+          note: Verified by revert - making tool_body swallow to end turns chat_parser_tools_spec.lua:465 red.
+          round: 8
+        - id: BR-32
+          disposition: not-addressed
+          note: format.md fixed; atlas/chat/parsing.md:17 untouched and fence.lua went under chat/exchange_model, not chat/parsing as ticked Step 3 directs.
+          round: 8
+        - id: BR-35
+          disposition: not-addressed
+          note: chat_parser.lua:267 is still unindented.
+          round: 8
+        - id: BR-36
+          disposition: not-addressed
+          note: chat_parser.lua:456-459 still restates the grammar and is now also wrong about the info string.
+          round: 8
+        - id: BR-38
+          disposition: not-addressed
+          note: tests/arch/buffer_mutation_spec.lua:61-65 still omits lua/parley/fence.lua.
+          round: 8
+        - id: BR-39
+          disposition: not-addressed
+          note: No comment added; the Critical below is a concrete case the oracle cannot see.
+          round: 8
+        - id: BR-43
+          disposition: not-addressed
+          note: Requirement (a) marker-at-fence-depth-0 not implemented; question folded at HEAD (foldclosed=10) where dc5ee17 gives -1.
+          round: 8
+        - id: BR-44
+          disposition: not-addressed
+          note: Plan Correction landed, but the two trackers now measurably disagree at HEAD (tool_use[9..13] vs [9..14]).
+          round: 8
+        - id: BR-45
+          disposition: not-addressed
+          note: Reproduces under interleaved min-of-5 - tool-free 43.01ms to 52.83ms, tool-heavy 33.65ms to 51.46ms vs dc5ee17.
+          round: 8
+        - id: BR-46
+          disposition: not-addressed
+          note: No mechanical gate; plan line 1340 still ticked; a new green-on-revert fix-pin claim shipped this round.
+          round: 8
+      findings:
+        - id: BR-47
+          severity: Important
+          title: 'fence.tool_body''s stop_row is dead API documented as the mitigation for the bug deferred to #203'
+          detail: |-
+            This is the 2nd finding in family failure-fallback-misgated (BR-29 was the 1st - a rewind
+            that fired on correctly closed input). Do NOT fix this instance; state the rule. Rule: a
+            degradation path is real only when a production caller reaches it AND a test drives the
+            degraded branch; an available-but-unpassed parameter, or an arm no fixture enters, is
+            documentation that reads as protection. Prevalence in this issue: 2 - BR-29 fired on the
+            wrong input, stop_row fires on none. fence.lua:113-117 asserts stop_row prevents an
+            unclosed body latching onto a later bare fence, which is exactly what the issue Log records
+            as deferred to #203 after that bound was rejected as circular. Call sites
+            chat_parser.lua:534, answer_structure.lua:85, fold_projection.lua:131 all omit it; fence_spec
+            never exercises it. Either delete the parameter or give it a caller and a red-on-revert test.
+          family: failure-fallback-misgated
+          round: 8
+        - id: BR-48
+          severity: Important
+          title: The hand-maintained restatements of the fence model drifted from fence.lua inside the milestone
+          detail: |-
+            This is the 4th finding in family shadow-consumer-not-derived. Earlier rounds fixed
+            instances. Do NOT fix this instance - fix the rule. Rule: every consumer of a
+            single-sourced model must DERIVE from it; a hand-maintained restatement is a deferred
+            consumer, and prose cannot derive, so the enforceable substitute is (i) reduce the
+            restating section to a pointer at the source's own docstring, and (ii) register the source
+            module and its spec under every atlas key whose page states the rule, so make test-changed
+            couples them. Measured drift: atlas/providers/tool_use.md:155-156 says "a bare-word info
+            string (json, lua)" - the grammar replaced by 6c0132d two commits after that page was
+            written; :164-165 and :170 name chat_parser's tool_fence_len tracker as what the main loop
+            consults, which is in_tool_body[]; tool_body is unmentioned. Plan Core concepts line 33
+            says three consumers where there are four. Prevalence in this issue: 4.
+          family: shadow-consumer-not-derived
+          round: 8
+        - id: BR-49
+          severity: Minor
+          title: fence.open_len returns an undocumented second value that every caller ignores
+          detail: |-
+            fence.lua:37 returns "#ticks, info" while :32 annotates "@return integer|nil". No caller
+            uses info. In argument position the extra return silently expands the call; fence_spec's
+            assert.equals calls survive only because luassert compares the first two arguments.
+            Drop the second return or annotate it.
+          family: serialized-shape-assumed
+          round: 8
+        - id: BR-50
+          severity: Minor
+          title: answer_structure.lua:93 keeps a dead "local _ = body_first" assignment
+          family: style-consistency
+          round: 8
+        - id: BR-51
+          severity: Minor
+          title: verify_anchors copies every tool range into a shifted table on each per-chunk call
+          detail: |-
+            fold_projection.lua:126-131 allocates a full copy of range.start_0..end_0 per tool range
+            per verify, on the streaming path; an offset argument on fence.tool_body would avoid it.
+            fence.closes:50 also runs line:match("^(`+)") twice on the matching path, now once per
+            body row of every tool_body scan.
+          family: redundant-computation
+          round: 8
+      boundary: M2
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#200 (boundary-review)
@@ -1038,6 +1143,58 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   a recorded red-on-revert run, and a close-gate check that no plan step naming
   sdlc milestone-close or sdlc close is ticked at the moment that command runs.
 
+## Round 8 — 2026-08-21T16:40:13-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-30 — addressed — Verified by revert - making tool_body swallow to end turns chat_parser_tools_spec.lua:465 red.
+- BR-32 — not-addressed — format.md fixed; atlas/chat/parsing.md:17 untouched and fence.lua went under chat/exchange_model, not chat/parsing as ticked Step 3 directs.
+- BR-35 — not-addressed — chat_parser.lua:267 is still unindented.
+- BR-36 — not-addressed — chat_parser.lua:456-459 still restates the grammar and is now also wrong about the info string.
+- BR-38 — not-addressed — tests/arch/buffer_mutation_spec.lua:61-65 still omits lua/parley/fence.lua.
+- BR-39 — not-addressed — No comment added; the Critical below is a concrete case the oracle cannot see.
+- BR-43 — not-addressed — Requirement (a) marker-at-fence-depth-0 not implemented; question folded at HEAD (foldclosed=10) where dc5ee17 gives -1.
+- BR-44 — not-addressed — Plan Correction landed, but the two trackers now measurably disagree at HEAD (tool_use[9..13] vs [9..14]).
+- BR-45 — not-addressed — Reproduces under interleaved min-of-5 - tool-free 43.01ms to 52.83ms, tool-heavy 33.65ms to 51.46ms vs dc5ee17.
+- BR-46 — not-addressed — No mechanical gate; plan line 1340 still ticked; a new green-on-revert fix-pin claim shipped this round.
+
+### Raised
+
+- **BR-47** [Important] `failure-fallback-misgated` fence.tool_body's stop_row is dead API documented as the mitigation for the bug deferred to #203
+  This is the 2nd finding in family failure-fallback-misgated (BR-29 was the 1st - a rewind
+  that fired on correctly closed input). Do NOT fix this instance; state the rule. Rule: a
+  degradation path is real only when a production caller reaches it AND a test drives the
+  degraded branch; an available-but-unpassed parameter, or an arm no fixture enters, is
+  documentation that reads as protection. Prevalence in this issue: 2 - BR-29 fired on the
+  wrong input, stop_row fires on none. fence.lua:113-117 asserts stop_row prevents an
+  unclosed body latching onto a later bare fence, which is exactly what the issue Log records
+  as deferred to #203 after that bound was rejected as circular. Call sites
+  chat_parser.lua:534, answer_structure.lua:85, fold_projection.lua:131 all omit it; fence_spec
+  never exercises it. Either delete the parameter or give it a caller and a red-on-revert test.
+- **BR-48** [Important] `shadow-consumer-not-derived` The hand-maintained restatements of the fence model drifted from fence.lua inside the milestone
+  This is the 4th finding in family shadow-consumer-not-derived. Earlier rounds fixed
+  instances. Do NOT fix this instance - fix the rule. Rule: every consumer of a
+  single-sourced model must DERIVE from it; a hand-maintained restatement is a deferred
+  consumer, and prose cannot derive, so the enforceable substitute is (i) reduce the
+  restating section to a pointer at the source's own docstring, and (ii) register the source
+  module and its spec under every atlas key whose page states the rule, so make test-changed
+  couples them. Measured drift: atlas/providers/tool_use.md:155-156 says "a bare-word info
+  string (json, lua)" - the grammar replaced by 6c0132d two commits after that page was
+  written; :164-165 and :170 name chat_parser's tool_fence_len tracker as what the main loop
+  consults, which is in_tool_body[]; tool_body is unmentioned. Plan Core concepts line 33
+  says three consumers where there are four. Prevalence in this issue: 4.
+- **BR-49** [Minor] `serialized-shape-assumed` fence.open_len returns an undocumented second value that every caller ignores
+  fence.lua:37 returns "#ticks, info" while :32 annotates "@return integer|nil". No caller
+  uses info. In argument position the extra return silently expands the call; fence_spec's
+  assert.equals calls survive only because luassert compares the first two arguments.
+  Drop the second return or annotate it.
+- **BR-50** [Minor] `style-consistency` answer_structure.lua:93 keeps a dead "local _ = body_first" assignment
+- **BR-51** [Minor] `redundant-computation` verify_anchors copies every tool range into a shifted table on each per-chunk call
+  fold_projection.lua:126-131 allocates a full copy of range.start_0..end_0 per tool range
+  per verify, on the streaming path; an offset argument on fence.tool_body would avoid it.
+  fence.closes:50 also runs line:match("^(`+)") twice on the matching path, now once per
+  body row of every tool_body scan.
+
 ## Open findings
 
 - **BR-4** [Important] Plan Core-concepts entry contradicts the code and the plan's own line 65
@@ -1063,7 +1220,6 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-26** [Minor] per-chunk reconcile cost is linear in projected-range length, and that axis is unasserted
 - **BR-27** [Minor] atlas does not record that the clear transiently forces 'foldenable'
 - **BR-28** [Minor] prepare clears the identified span unverified while reconcile refuses to create unverified
-- **BR-30** [Critical] `unterminated-fence-degradation` chat_parser's in-body suppression is unbounded, so one unclosed fence swallows the rest of the chat
 - **BR-32** [Important] `shadow-consumer-not-derived` atlas/chat/format.md still names tools/serialize.lua as the fence single source
 - **BR-35** [Minor] `style-consistency` chat_parser.lua:267 require is unindented in a tab-indented function body
 - **BR-36** [Minor] `shadow-consumer-not-derived` chat_parser.lua:457-459 comment still restates the fence grammar the module no longer owns
@@ -1073,3 +1229,8 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-44** [Important] `shadow-consumer-not-derived` A second in-tool-body tracker was introduced while the plan's Core concepts states none was
 - **BR-45** [Important] `redundant-computation` The precompute reclassifies every line two to three times, making parse_chat about 48 percent slower
 - **BR-46** [Important] `ticked-without-evidence` The revert-must-go-red rule was written and then not applied by the commit that wrote it
+- **BR-47** [Important] `failure-fallback-misgated` fence.tool_body's stop_row is dead API documented as the mitigation for the bug deferred to #203
+- **BR-48** [Important] `shadow-consumer-not-derived` The hand-maintained restatements of the fence model drifted from fence.lua inside the milestone
+- **BR-49** [Minor] `serialized-shape-assumed` fence.open_len returns an undocumented second value that every caller ignores
+- **BR-50** [Minor] `style-consistency` answer_structure.lua:93 keeps a dead "local _ = body_first" assignment
+- **BR-51** [Minor] `redundant-computation` verify_anchors copies every tool range into a shifted table on each per-chunk call

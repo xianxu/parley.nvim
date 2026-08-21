@@ -539,6 +539,17 @@ describe("tool-body extent desync (#200 BR-43)", function()
         }))
     end)
 
+    -- The shape that folded a question at HEAD: a 📎: inside a ```text block is
+    -- not a marker, and treating it as one made that block's CLOSER read as a
+    -- body opener, so the "body" spanned 💬: q2 and fold_projection suppressed
+    -- its own guard over those rows.
+    it("does not treat a marker inside an ordinary fenced block as structural", function()
+        assert.equals(3, count({
+            "", "💬: q1", "🤖: [A]", "```text", "📎: read_file id=x", "```", "",
+            "💬: q2", "", "🤖: [A]", "```", "code", "```", "", "💬: q3",
+        }))
+    end)
+
     it("survives an answer that shows the transcript format in a plain block", function()
         assert.equals(3, count({
             "", "💬: q1", "", "🤖: [A]", "the transcript format looks like",

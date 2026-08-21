@@ -142,42 +142,50 @@ describe("fence / serialize parity", function()
     end)
 end)
 
--- BR-43: one definition of a tool block's body extent, called by every
--- consumer. Three scanners deciding it independently is how the guards kept
--- blinding themselves.
-describe("tool body extent", function()
-    it("spans from just after the opener to just before the close", function()
-        local first, last, close = fence.tool_body({
-            "📎: read id=1", "```", "a", "b", "```", "after",
-        }, 1)
-        assert.equals(3, first)
-        assert.equals(4, last)
-        assert.equals(5, close)
+
+
+
+-- BR-43: fence DEPTH is the requirement every earlier attempt missed. A marker
+-- written inside an ordinary fenced block is not a marker, and treating it as
+-- one makes that block's closer look like a body opener.
+describe("depth-aware scan", function()
+    local function is_marker(line)
+        return line:match("^🔧:") ~= nil or line:match("^📎:") ~= nil
+    end
+
+    it("ignores a tool marker written inside an ordinary fenced block", function()
+        local body, markers = fence.scan({
+            "🤖: [A]", "```text", "📎: read_file id=x", "```", "💬: q2",
+        }, is_marker)
+        assert.is_nil(markers[3])
+        assert.is_nil(body[5])
     end)
 
-    it("requires the opener immediately after the marker", function()
-        -- A blank line between marker and fence means this is not a tool body;
-        -- accepting it lets a CLOSING fence further down be read as an opener.
-        assert.is_nil(fence.tool_body({ "📎: read id=1", "", "```", "a", "```" }, 1))
+    it("marks a real tool body and stops at its close", function()
+        local body, markers = fence.scan({
+            "📎: read id=1", "```", "a", "b", "```", "💬: q2",
+        }, is_marker)
+        assert.is_true(markers[1])
+        assert.is_true(body[3])
+        assert.is_true(body[4])
+        assert.is_nil(body[5])
+        assert.is_nil(body[6])
     end)
 
-    it("requires a matching close to exist", function()
-        assert.is_nil(fence.tool_body({ "📎: read id=1", "```", "a", "b" }, 1))
+    it("treats an unclosed opener as text rather than swallowing the rest", function()
+        local body = fence.scan({
+            "🤖: [A]", "```", "never closed", "💬: q2", "🤖: [A]",
+        }, is_marker)
+        assert.is_nil(body[4])
     end)
 
-    it("is not closed by a shorter or longer run", function()
-        local _, last, close = fence.tool_body({
-            "📎: x", "````", "```", "`````", "````", "tail",
-        }, 1)
-        assert.equals(4, last)
-        assert.equals(5, close)
-    end)
-
-    it("accepts a CommonMark info string on the opener", function()
-        local first, last = fence.tool_body({
-            "🔧: x", '```json {"type": "request"}', "body", "```",
-        }, 1)
-        assert.equals(3, first)
-        assert.equals(3, last)
+    it("keeps in-body markers as content inside a real tool body", function()
+        local body, markers = fence.scan({
+            "📎: read id=1", "````", "💬: quoted", "📎: quoted", "````", "💬: real",
+        }, is_marker)
+        assert.is_true(body[3])
+        assert.is_true(body[4])
+        assert.is_nil(markers[4])
+        assert.is_nil(body[6])
     end)
 end)

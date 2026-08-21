@@ -94,43 +94,60 @@ function M.extract_body(lines, from)
     return nil
 end
 
---- The extent of the fenced body belonging to a tool marker at `marker_row`.
+--- One linear pass over a buffer, answering both questions at once: which rows
+--- are inside a tool body, and which tool markers are structural.
 ---
---- ONE definition of "where is this tool block's body", called by every
---- consumer. Three scanners each deciding it independently is how #200's guards
---- kept blinding themselves — a rejected opener, an opener found too far from
---- its marker, or an unterminated body each desynced one scanner but not the
---- others.
+--- The missing requirement in every earlier attempt was **fence depth**. A
+--- `📎:` written inside an ordinary fenced block is not a marker at all, and
+--- treating it as one makes the enclosing block's CLOSER look like the body's
+--- opener — the scan then latches onto the next block's opener and the "body"
+--- spans a real question. That folded a `💬:` line at depth 0 (#200 BR-43).
 ---
---- Requires all three, none of them optional:
----   * the opener sits on the line IMMEDIATELY after the marker — the shape
----     every writer emits; accepting one further down lets a closing fence be
----     mistaken for an opening one;
----   * the opener is recognised by the CommonMark-conformant `open_len`;
----   * a matching bare close of the same length actually EXISTS. Without that
----     an unclosed fence swallows the rest of the buffer.
+--- The pass:
+---   * at depth 0, a tool marker whose NEXT line opens a body consumes through
+---     that body's close; the rows between are body;
+---   * any other depth-0 opener skips to its own close — everything inside is
+---     depth > 0 and yields no markers;
+---   * an opener with no matching close is treated as ordinary text rather than
+---     swallowing the remainder, so malformed input over-forks instead of
+---     silently losing exchanges.
 ---
---- `stop_row` bounds the search: the close must appear at or before it. A real
---- body never spans a structural boundary, and without the bound an UNCLOSED
---- body latches onto the next unrelated bare fence anywhere later in the
---- buffer — swallowing every question in between. Callers pass the row of the
---- next boundary; omitting it searches to the end.
----
---- @param lines string[]         1-based buffer lines
---- @param marker_row integer     1-based row of the 🔧:/📎: line
---- @param stop_row integer|nil   last row the close may appear on
---- @return integer|nil first_body_row, integer|nil last_body_row, integer|nil close_row
-function M.tool_body(lines, marker_row, stop_row)
-    local open_row = marker_row + 1
-    local open_len = M.open_len(lines[open_row] or "")
-    if not open_len then return nil end
-    local last = math.min(stop_row or #lines, #lines)
-    for row = open_row + 1, last do
-        if M.closes(lines[row], open_len) then
-            return open_row + 1, row - 1, row
+--- @param lines string[]                    1-based
+--- @param is_tool_marker fun(line):boolean  true for 🔧:/📎: at column 0
+--- @return table in_tool_body  set of 1-based rows inside a tool body
+--- @return table markers       set of 1-based rows holding a depth-0 tool marker
+function M.scan(lines, is_tool_marker)
+    local in_tool_body, markers = {}, {}
+
+    local function close_of(open_len, from)
+        for row = from, #lines do
+            if M.closes(lines[row], open_len) then return row end
+        end
+        return nil
+    end
+
+    local row = 1
+    while row <= #lines do
+        local line = lines[row] or ""
+        if is_tool_marker(line) then
+            markers[row] = true
+            local body_len = M.open_len(lines[row + 1] or "")
+            local close = body_len and close_of(body_len, row + 2)
+            if close then
+                for body = row + 2, close - 1 do in_tool_body[body] = true end
+                row = close + 1
+            else
+                row = row + 1
+            end
+        else
+            local open_len = M.open_len(line)
+            local close = open_len and close_of(open_len, row + 1)
+            -- Only a CLOSED block establishes depth; an unclosed opener is
+            -- ordinary text, so a stray fence cannot hide the rest of the chat.
+            row = close and (close + 1) or (row + 1)
         end
     end
-    return nil
+    return in_tool_body, markers
 end
 
 return M

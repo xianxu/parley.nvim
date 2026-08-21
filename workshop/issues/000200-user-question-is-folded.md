@@ -1091,6 +1091,49 @@ real regression surface; not attempted at close time, and no longer claimed.
 0 errors across 333 files; live-corpus audit clean (1155 assertions, 0
 violations).
 
+### 2026-08-21 — M2 review round 4: fence DEPTH, the requirement every attempt missed
+
+**BR-43 (Critical) — my own M2 work folded a question.** Requirement (a), *the
+marker must be at fence depth 0*, was never implemented. A `📎:` written inside
+an ordinary ```` ```text ```` block was treated as a real marker; the enclosing
+block's **closer** was then read as the body's opener, the scan latched onto the
+next block, and the "body" spanned a real question. `verify_anchors` suppressed
+its own user-pattern check over exactly those rows, so M1's last line of defence
+passed too. Reproduced:
+
+    exchanges: 2  (M1 gave 3)
+    row 12  💬: q2   foldclosed=9
+
+Fixed with the single linear pass the review specified — `fence.scan` returns
+`in_tool_body[]` and the depth-0 marker set together:
+
+* at depth 0, a tool marker whose next line opens a body consumes to its close;
+* any other depth-0 opener skips to its own close, so nothing inside is a marker;
+* an opener with no close is ordinary text, so malformed input over-forks rather
+  than hiding the rest of the chat.
+
+`chat_parser`, `answer_structure` and `fold_projection` all consume that one
+pass. After: 3 exchanges, `foldclosed(12) = -1`. Pinned, and the test verified to
+go red against `6c0132d`.
+
+This also settles a scope note that had been wrong since M2 started: markers
+inside *any* fenced block are content, not only inside tool bodies. The plan's
+"answer prose stays fence-naive" non-goal was what let this through.
+
+**BR-47 — `fence.tool_body` removed.** `fence.scan` supersedes it, and its
+`stop_row` parameter was dead API whose doc comment advertised a mitigation for
+the shape deferred to #203. Its 5 tests went with it; 4 `scan` tests replace
+them, and the inventory diff against `HEAD` confirms nothing else was lost —
+after finding, mid-edit, that my own slicing had duplicated a parity block.
+
+Remaining Importants (BR-45, BR-46, BR-48) were demoted past the round cap and
+will not block; BR-45 is recorded above as not reproducing.
+
+**Verification:** `make test` exit 0; lint 0 warnings / 0 errors across 333
+files; every fold and fence spec audited for duplicate names (zero); live-corpus
+audit clean at 1155 assertions, 0 violations; all six M1 drift probes hold; the
+#203 shape correctly still yields 2, as deferred.
+
 ## Revisions
 
 ### 2026-08-20 — Fold ownership contract + plan-quality round 1
