@@ -31,43 +31,33 @@ function M.anchor_kind(block_kind)
     return ANCHOR_KIND[block_kind]
 end
 
---- Check that an exchange's span has not drifted off the exchange it describes.
+--- Validate a whole model's exchange start rows before they are used to
+--- install extmark identity.
 ---
---- The span is the input to fold *destruction*, and it comes from the same
---- possibly-stale model as the fold ranges. Verifying only the ranges leaves
---- the destructive half unchecked — and when an exchange has no foldable block
---- the range list is empty, so range verification passes vacuously while a
---- drifted span still gets cleared. That deletes a neighbouring exchange's
---- fold, which nothing recreates (`hydrate_window` latches per buf/win), so the
---- "always folded" invariant breaks for the rest of the session (#200 C1).
+--- Positional reasoning cannot police an *individual* clear — "starts on a
+--- question, contains no other" is satisfied equally by a different exchange's
+--- rows, which is why identity is anchored rather than computed (#200). But it
+--- is exactly right for deciding whether a model is structurally sound enough
+--- to anchor FROM: every exchange must begin on a question line, and the starts
+--- must be strictly ascending and inside the buffer.
 ---
---- Two checks, and BOTH are needed:
----
---- * the span starts on its own question, when `anchor_required`. An interior
----   scan alone is not enough: a stale span can land wholly *inside* a
----   neighbour's answer, covering that neighbour's folds while containing no
----   question at all. Reproduced — a stale exchange-2 span cleared exchange 3's
----   `📎:` fold with no question anywhere in range.
---- * no question appears after the first row, which catches a span that has
----   grown forward over the next exchange.
----
---- `anchor_required` is false only for exchange index 1. `chat_parser`
---- fabricates a question block when an answer has no preceding question
---- (`chat_parser.lua:623-635`), leaving `exchange_start` on prose or a blank
---- line; demanding a question there refuses such transcripts *permanently*,
---- since a fresh parse produces the same anchor and hydration will not re-run.
---- That path can only ever produce exchange 1: it fires when `current_exchange`
---- is nil, and `current_exchange` is never reset to nil once set.
+--- Exchange 1 is exempt from the question requirement. `chat_parser` fabricates
+--- a question block when an answer has no preceding question
+--- (`chat_parser.lua:623-635`), leaving that start on prose or a blank line;
+--- refusing it would make identity permanently unavailable for such
+--- transcripts. Only index 1 can reach that path — it fires when
+--- `current_exchange` is nil, and `current_exchange` is never reset to nil.
 --- @return boolean
-function M.verify_span(first_0, last_0, lines, patterns, anchor_required)
+function M.verify_starts(starts_0, lines, patterns)
     patterns = patterns or require("parley.highlight_structure").patterns()
-    local first = lines[first_0]
-    if first == nil then return false end
-    if anchor_required and not first:match(patterns.user_pattern) then return false end
-    for row = first_0 + 1, last_0 do
+    if #starts_0 == 0 then return false end
+    local previous = -1
+    for index, row in ipairs(starts_0) do
+        if row <= previous then return false end
+        previous = row
         local line = lines[row]
         if line == nil then return false end
-        if line:match(patterns.user_pattern) then return false end
+        if index > 1 and not line:match(patterns.user_pattern) then return false end
     end
     return true
 end

@@ -92,15 +92,6 @@ local function clear_folds_in_span(buf, win, first_0, last_0)
     end)
 end
 
---- 0-indexed [first, last] buffer rows an exchange occupies, or nil when it has
---- no visible block.
-local function exchange_span(model, exchange_index)
-    if not model or not model.exchanges[exchange_index] then return nil end
-    local last_0 = model:last_nonempty_block_end(exchange_index)
-    if not last_0 then return nil end
-    return model:exchange_start(exchange_index), last_0
-end
-
 --- Read every buffer row the ranges cover, keyed by 0-based row. Rows past the
 --- end of the buffer are simply absent; verify_anchors treats a missing row as
 --- drift.
@@ -116,17 +107,6 @@ local function covered_lines(buf, ranges)
             end
         end
     end
-    return out
-end
-
---- Read rows [first_0, last_0], keyed by 0-based row; absent past end-of-buffer.
-local function span_lines(buf, first_0, last_0)
-    local out = {}
-    if first_0 == nil or last_0 == nil then return out end
-    local last = math.min(last_0, vim.api.nvim_buf_line_count(buf) - 1)
-    if first_0 > last then return out end
-    local chunk = vim.api.nvim_buf_get_lines(buf, first_0, last + 1, false)
-    for offset, line in ipairs(chunk) do out[first_0 + offset - 1] = line end
     return out
 end
 
@@ -207,31 +187,45 @@ local function mark_drift_logged(buf)
     if rederived[buf] then rederived[buf].logged = true end
 end
 
---- Install exchange identity from a model that has verified against the
---- buffer. Anchoring an unverified parse would make the aliasing worse, not
---- better, so this is only ever called after model_fits passed.
-local function anchor_from(buf, model)
+--- Install exchange identity from `model`, if its structure holds up.
+---
+--- Anchoring a structurally wrong model would make aliasing worse rather than
+--- better, so the start rows are validated first: strictly ascending, inside
+--- the buffer, and each on a question line (exchange 1 excepted — the parser
+--- can legitimately start it off-question).
+--- @return boolean installed
+local function anchor_from(buf, model, patterns)
     local starts = {}
     for k in ipairs(model.exchanges) do starts[k] = model:exchange_start(k) end
+    local lines = {}
+    local line_count = vim.api.nvim_buf_line_count(buf)
+    for _, row in ipairs(starts) do
+        if row >= 0 and row < line_count then
+            lines[row] = vim.api.nvim_buf_get_lines(buf, row, row + 1, false)[1]
+        end
+    end
+    if not projection.verify_starts(starts, lines, patterns) then return false end
     exchange_anchors.set(buf, starts)
+    return true
 end
 
---- The rows exchange K owns. Extmark identity first: those marks travelled with
---- the edits, so they describe the exchange even when the model's remembered
---- rows do not. Only when identity cannot be established (no anchors, a
---- structural edit changed the exchange count, a bounding line was deleted) do
---- we fall back to the model's own rows plus the positional check — which is a
---- floor, not the primary, because it cannot tell one exchange's rows from
---- another's.
+--- The rows exchange K owns, from extmark identity.
+---
+--- Identity may be absent or stale — most commonly because the chat gained an
+--- exchange, which makes the anchor count disagree with the model and would
+--- otherwise leave identity declined for every exchange from then on. So a
+--- decline first tries to REINSTALL identity from this model before giving up.
+---
+--- There is deliberately no positional fallback. A row-span is not an identity:
+--- "starts on a question, contains no other" is satisfied equally by another
+--- exchange's rows, and with no foldable blocks the range check is vacuous, so
+--- falling through would clear rows we cannot prove we own. Returning nil sends
+--- the caller to the re-derive, which installs identity from a fresh parse.
 local function owned_span(buf, model, exchange_index, patterns)
     local first_0, last_0 = exchange_anchors.span(buf, exchange_index, #model.exchanges)
-    if first_0 then return first_0, last_0, true end
-    first_0, last_0 = exchange_span(model, exchange_index)
-    if not projection.verify_span(buf and first_0, last_0,
-        span_lines(buf, first_0, last_0), patterns, exchange_index > 1) then
-        return nil, nil, false
-    end
-    return first_0, last_0, false
+    if first_0 then return first_0, last_0 end
+    if not anchor_from(buf, model, patterns) then return nil end
+    return exchange_anchors.span(buf, exchange_index, #model.exchanges)
 end
 
 --- Reconcile exchange K's folds to the projection's desired state.
@@ -262,7 +256,6 @@ function M.reconcile_exchange(buf, win, model, exchange_index)
             if fits then
                 -- A parse that verifies is authoritative: install identity from
                 -- it, then read the span back through those marks.
-                anchor_from(buf, fresh)
                 fresh_first, fresh_last = owned_span(buf, fresh, exchange_index, patterns)
                 fits = fresh_first ~= nil
             end
@@ -369,7 +362,7 @@ function M.hydrate_window(buf, win, model_provider)
     local provider = model_provider or M._model_provider or default_model_provider
     local model = provider(buf)
     if not model then return false end
-    anchor_from(buf, model)
+    anchor_from(buf, model, require("parley.highlight_structure").patterns(require("parley.config")))
     vim.api.nvim_win_call(win, function()
         vim.cmd("normal! zE")
     end)

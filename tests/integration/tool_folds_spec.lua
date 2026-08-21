@@ -36,7 +36,12 @@ describe("tool_folds incremental manual folds", function()
         return model
     end
 
-    it("leaves a user fold outside the rewritten range untouched", function()
+    -- #200: with extmark identity the LAST exchange runs to the end of the
+    -- buffer, rather than stopping at its last non-empty block. Trailing prose
+    -- after the final block is part of that exchange's answer, so a manual fold
+    -- there is inside the span and is cleared — the same ownership contract
+    -- test :57 encodes, now applying to the tail of the buffer too.
+    it("clears a user fold in the last exchange's trailing prose", function()
         vim.cmd("10,11fold")
         local model = model_with("thinking", 2)
         tool_folds.reconcile_exchange(buf, win, model, 1)
@@ -50,8 +55,7 @@ describe("tool_folds incremental manual folds", function()
 
         assert.equals(7, vim.fn.foldclosed(7))
         assert.equals(9, vim.fn.foldclosedend(7))
-        assert.equals(11, vim.fn.foldclosed(11))
-        assert.equals(12, vim.fn.foldclosedend(11))
+        assert.equals(-1, vim.fn.foldclosed(11))
     end)
 
     it("builds initial folds from semantic model blocks and clears user folds in the span", function()
@@ -307,6 +311,44 @@ describe("tool_folds incremental manual folds", function()
 
         -- Every tool marker still folds at its own row: nothing was cleared
         -- that belonged to a neighbour.
+        vim.cmd("normal! zM")
+        for i, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+            if line:match("^📎:") then
+                assert.message(("tool marker at %d lost its fold"):format(i))
+                    .equals(i, vim.fn.foldclosed(i))
+            end
+        end
+    end)
+
+    -- #200 round 5: identity that cannot survive a NEW exchange is inert.
+    -- hydrate_window latches per buf/win, so without a reinstall point the
+    -- anchor count disagrees with the model from the first appended exchange
+    -- onward and identity declines for every exchange, permanently.
+    it("reinstalls identity after the chat gains an exchange", function()
+        local anchors = require("parley.exchange_anchors")
+        local chat_parser = require("parley.chat_parser")
+        local lines = { "---", "topic: t", "file: f.md", "---", "" }
+        for e = 1, 2 do
+            vim.list_extend(lines, { "💬: q" .. e, "", "🤖: [A]",
+                "📎: t" .. e, "```", "x", "```", "" })
+        end
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+        tool_folds.hydrate_window(buf, win)
+        local before = { anchors.span(buf, 1, 2) }
+        assert.is_not_nil(before[1])
+
+        vim.api.nvim_buf_set_lines(buf, -1, -1, false,
+            { "💬: q3", "", "🤖: [A]", "📎: t3", "```", "x", "```", "" })
+        local grown = exchange_model.from_parsed_chat(chat_parser.parse_chat(
+            vim.api.nvim_buf_get_lines(buf, 0, -1, false), 4, require("parley.config")))
+        assert.equals(3, #grown.exchanges)
+        -- Stale: three exchanges in the buffer, two anchors.
+        assert.is_nil(anchors.span(buf, 1, 3))
+
+        tool_folds.reconcile_exchange(buf, win, grown, 3)
+
+        assert.message("identity stayed inert after the chat grew")
+            .same(before, { anchors.span(buf, 1, 3) })
         vim.cmd("normal! zM")
         for i, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
             if line:match("^📎:") then

@@ -560,6 +560,52 @@ Note `tools_builtin_find_spec.lua` joins `chat_progress_process_spec.lua` as
 load-flaky: 4/4 in isolation, intermittent under the full suite, no fold code
 in either.
 
+### 2026-08-20 — M1 round 5: identity refresh
+
+**C1 (Critical) — the identity mechanism went inert on the first appended
+exchange.** Round 4 refreshed anchors only at hydration and after a successful
+re-derive. `hydrate_window` latches per buf/win, so once a chat gains an
+exchange — normal flow — `#ids ~= #model.exchanges` and identity declines for
+*every* exchange, permanently. Reproduced:
+
+    after hydrate:            identity for ex1 = { 5, 12 }
+    model now has 3 exchanges; anchors hold {}
+    after reconcile ex3:      identity for ex1 = {}
+
+With identity inert, every clear fell through to the positional check that
+identity exists to replace — and with `ranges == {}` that check is vacuous, so
+the round-1 hole was effectively reopened. Now:
+
+    after reconcile ex3:      identity for ex1 = { 5, 12 }
+
+Three changes, and the middle one is the point:
+
+- `owned_span` reinstalls identity on decline before giving up.
+- **The positional fallback is removed.** A decline returns nil and routes to
+  the re-derive, which installs identity from a fresh parse. Falling through was
+  clearing rows we could not prove we owned.
+- `verify_span` becomes `verify_starts`: the positional logic now validates a
+  whole model's exchange starts at *install* time (ascending, in-buffer, each on
+  a question except exchange 1) instead of guarding every clear. That is the
+  only place positional reasoning is sound, which is what five rounds were
+  really about.
+
+**Behaviour change worth flagging.** The last exchange's span now runs to
+end-of-buffer rather than to `last_nonempty_block_end`, since trailing prose
+belongs to that exchange's answer. A manual fold in the tail is therefore
+cleared. `tool_folds_spec.lua:39` converts to assert that, matching `:57`. This
+follows from the ownership contract chosen on 2026-08-20, but it is a wider
+consequence than that decision anticipated.
+
+Dead helpers `exchange_span` and `span_lines` removed.
+
+**Verification:** `exchange_anchors_spec` 10/10, `fold_projection_spec` 22/22,
+`tool_folds_spec` 22/22, `fold_invariants_spec` 12/12 — 66 fold tests;
+`make test` exit 0 (second run; `tools_builtin_find_spec` is load-flaky and
+passes 4/4 in isolation), lint 0 warnings / 0 errors across 331 files. All five
+scenarios still hold: original symptom `foldclosed=-1`, R1 `15`, R2
+`reconcile -> true`, R3 `22`, R4 alias probe `24`.
+
 ## Revisions
 
 ### 2026-08-20 — Fold ownership contract + plan-quality round 1

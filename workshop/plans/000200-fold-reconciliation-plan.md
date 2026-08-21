@@ -50,6 +50,21 @@
 | Name | Lives in | Status | Wraps |
 |------|----------|--------|-------|
 | `tool_folds` | `lua/parley/tool_folds.lua` | modified | Neovim window fold state |
+| `exchange_anchors` | `lua/parley/exchange_anchors.lua` | new | Neovim extmark namespace |
+
+- **exchange_anchors** — one `invalidate = true` extmark per exchange start,
+  giving an exchange a durable identity that survives edits the model never saw.
+  Consumed only by `tool_folds`; consumes no other module.
+  - **Why it must exist:** a row-span is not an identity. Positional rules
+    ("starts on a question, contains no other") are satisfied equally by a
+    *different* exchange's rows, so they cannot police a destructive operation.
+  - **The split it enables:** creation is *verified* (ranges checked against the
+    buffer), destruction is *identified* (rows read from marks). The two halves
+    fail differently and cannot share one guard — the lesson of four review
+    rounds spent sharpening a single positional check.
+  - `fold_projection.verify_starts` is the remaining positional check, used once
+    at install time to decide whether a model is sound enough to anchor from,
+    not per-clear.
 
 - **tool_folds** — owns every fold Parley creates. `clear_folds_in_span` (new, private) replaces `delete_projected_folds`'s start-row-only `zd` loop; `reconcile_exchange` becomes verify → (re-derive on drift) → clear span → create.
   - **Injected into:** Nothing — it is the outermost shell. It *consumes* `fold_projection` (pure) and a `model_provider` seam (`M._model_provider`, already used by the existing tests to inject a fake model).
@@ -1554,3 +1569,32 @@ misleading identity. Invalidated alongside `initialized` on
 healable drift: the *creation* half still needs verified ranges, and healing a
 stale model still costs one parse per changedtick. Measured, not assumed —
 see the issue Log.
+
+### 2026-08-20 — M1 round 5: identity refresh (C1) and Core-concepts correction
+
+Reason: the round-4 design refreshed anchors only at hydration and after a
+successful re-derive. That set is insufficient. `hydrate_window` latches per
+buf/win, so from the first *appended* exchange onward `#ids ~= #model.exchanges`
+and identity declines for every exchange — permanently. Reproduced: after one
+append, `anchors.span(buf, 1, 3)` returned nil and stayed nil across reconcile.
+With identity inert, every clear fell through to the positional check the
+mechanism exists to replace, and with `ranges == {}` that check is vacuous.
+
+Delta:
+
+- **`owned_span` reinstalls identity on decline** before giving up, so a chat
+  that gains an exchange recovers on the next reconcile instead of degrading
+  silently.
+- **The positional fallback is removed.** A decline now returns nil and sends
+  the caller to the re-derive, which installs identity from a fresh parse.
+  Falling through to `verify_span` was clearing rows we could not prove we
+  owned.
+- **`verify_span` is replaced by `verify_starts`**, which validates a whole
+  model's exchange starts (ascending, in-buffer, each on a question except
+  exchange 1) at *install* time. The positional logic moves from guarding every
+  clear to gating identity installation — the only place it is sound.
+- **Behaviour change recorded:** the last exchange's span now runs to the end of
+  the buffer rather than to `last_nonempty_block_end`, because trailing prose is
+  part of that exchange's answer. A manual fold there is therefore cleared;
+  `tool_folds_spec.lua:39` converts, matching `:57`.
+- Dead helpers `exchange_span` and `span_lines` removed.
