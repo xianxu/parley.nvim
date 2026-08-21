@@ -959,9 +959,14 @@ grammar-rejected fence desynced the scan and it stopped checking for user
 markers for the rest of the range. Not hypothetical: `render_buffer.lua:104`
 emits ```` ```json {"type": "request"} ````, whose info string the grammar
 rejects. Now tracked only for `tool_use`/`tool_result`, and only when the body
-opens on the line immediately after the marker — the serialized shape. Two tests
-pin it: a `thinking` range with a code fence inside, and a range whose opener
-the grammar rejects.
+opens on the line immediately after the marker — the serialized shape.
+
+**One** test pins it — the range whose opener the grammar rejects. The
+`thinking` case is characterization only: verified green against `b2bf1d5~1`
+too, so it documents behaviour rather than proving the fix. This entry
+originally claimed "two tests pin it", which was false; the revert check is what
+exposed it, and that is now the rule in `lessons.md` — a claim that a test pins
+a fix may only be written by the action that saw the revert go red.
 
 **BR-34 (Important) — a tick with no evidence.** I bulk-ticked M2's plan steps,
 including "re-run the audit against the operator's live `chat_dir`". It had not
@@ -982,6 +987,55 @@ this issue is named for — the two fixtures are its only coverage, and "audited
 
 Two lessons added: `cat >` on an assumed-new path is a silent overwrite, and
 never bulk-tick checkboxes.
+
+### 2026-08-21 — M2 review round 2: two Criticals in my own M2 code, plus a change that was never mine
+
+**BR-40 (Critical) — I committed an unrelated config change, and destroyed an
+operator stash doing it.** `b2bf1d5` flipped `max_full_exchanges` from 42 to 999.
+That change came from `stash@{0}: On 000147-… local max_full_exchanges scratch`,
+which one of my `git stash pop` calls consumed; its content then rode along in a
+`git add lua/`. Both halves repaired: the default is back to 42, and the stash
+is restored from the unreachable commit (`ef94eee`) to its original position and
+message. Lesson for me: `git add <dir>` after any stash traffic can pick up work
+that is not mine, and a `pop` that takes the wrong entry is silent.
+
+**BR-29 (Critical) — my unterminated-fence rewind fired on correctly closed
+bodies.** The gate was `cursor > #lines`, which is equally true when the fence
+closes *on* the last line. A tool body containing a BOUNDARY-classified line and
+closing on the final line was truncated at its opener — `tool_result 1..2` where
+`dc5ee17` returned `1..4` — so the body leaked out of its fold and a fold
+anchored on the in-body marker. Reachable on the streaming path and on cold
+parse of a chat ending at a tool-result fence. Now gated on an explicit `closed`
+flag.
+
+**BR-30 (Critical) — my in-body suppression had no terminator.** It suppressed
+while a fence was open and incomplete, so an opener that never closes
+reclassified every later marker and the rest of the chat forked no exchanges: 3
+before M2, 1 after. Reachable without a malformed file — an answer quoting a
+`📎:` line in ordinary prose (fence-naive by design) starts a tool block whose
+body never closes. Exchange starts feed `exchange_anchors` identity, which drives
+the M1 destructive fold clear, so open-ended degradation here is not acceptable.
+Replaced with a precomputed `in_tool_body[]` whose lookahead requires the close
+to exist; `answer_structure` already had that bounded fallback and the parser did
+not.
+
+**BR-41 (Important) — the rule, not the instances.** Third finding in the
+`ticked-without-evidence` family. Plan steps for `sdlc milestone-close M2` and
+`sdlc close` were ticked *from inside* the milestone-close review, and this Log
+claimed "two tests pin" BR-33 when reverting the module left one of them green.
+Both corrected, and `lessons.md` extended with the half that has teeth: for a
+regression test the evidence is the **revert going red**, not the suite going
+green — and never tick a gate step from inside the gate. The pre-existing entry
+stated half this rule and was violated by the commit that wrote it.
+
+**BR-32** — `atlas/chat/format.md` now points at `lua/parley/fence.lua` for the
+grammar, keeping serialize for the schema.
+
+**Verification:** `chat_parser_tools_spec` 18/18, `answer_structure_spec` 9/9,
+`parse_chat_spec` 54/54, `fold_projection_spec` 26/26, `exchange_model_spec`
+28/28, `tool_folds` 30/30 integration, `fold_invariants` 13/13; live-corpus audit
+re-run clean — 115 files, 463 exchanges, 1155 assertions, 0 violations; lint
+0 warnings / 0 errors across 333 files.
 
 ## Revisions
 

@@ -458,6 +458,92 @@ rounds:
           round: 5
       boundary: M2
       blocked: true
+    - "n": 6
+      timestamp: "2026-08-21T12:36:09-07:00"
+      agent: claude
+      dispose:
+        - id: BR-29
+          disposition: not-addressed
+          note: "Unchanged at answer_structure.lua:114; reproduced end-to-end — tool_result truncated to 2 rows and a fold anchored on an in-body \U0001F4DD:."
+          round: 6
+        - id: BR-30
+          disposition: not-addressed
+          note: Unchanged at chat_parser.lua:526; measured 3 exchanges pre-M2 vs 1 at HEAD on two independent reachable inputs.
+          round: 6
+        - id: BR-31
+          disposition: addressed
+          note: All 11 names from 9a6e939~1 present plus 5 new; 16/16 green, zero duplicate it() names.
+          round: 6
+        - id: BR-32
+          disposition: not-addressed
+          note: format.md fixed; traceability.yaml still omits fence.lua from chat/parsing and atlas/chat/parsing.md still lacks the in-body-content rule.
+          round: 6
+        - id: BR-33
+          disposition: addressed
+          note: Fix verified by revert — rejected-opener case flips true→false. Only one of the two claimed tests has teeth (see the new ticked-without-evidence finding).
+          round: 6
+        - id: BR-34
+          disposition: addressed
+          note: Audit run and recorded with the census bounding it (115 files, 1155 assertions, zero tool blocks).
+          round: 6
+        - id: BR-35
+          disposition: not-addressed
+          note: chat_parser.lua:267 still at column 0 in a tab-indented body.
+          round: 6
+        - id: BR-36
+          disposition: not-addressed
+          note: chat_parser.lua:456-459 comment unchanged.
+          round: 6
+        - id: BR-37
+          disposition: addressed
+          note: fold_projection.lua:121 now calls fence.open_len once.
+          round: 6
+        - id: BR-38
+          disposition: not-addressed
+          note: fence.lua still absent from PURE_FILES at tests/arch/buffer_mutation_spec.lua:62.
+          round: 6
+        - id: BR-39
+          disposition: not-addressed
+          note: Header comment still justifies the oracle without stating that it validates fold application, not segmentation.
+          round: 6
+      findings:
+        - id: BR-40
+          severity: Critical
+          title: max_full_exchanges default changed 42 to 999 in the M2 fix commit, unrelated and undeclared
+          detail: "lua/parley/config.lua:640, introduced solely in b2bf1d5 (git log -S confirms) and\nunmentioned in that commit message, the issue, or the plan. Consumed at\nchat_respond.lua:737, so chat-memory summarisation effectively never fires and every\nprior exchange is sent to the provider in full instead of as its \U0001F4DD: summary. A\nuser-visible cost and context-window change with no connection to fence grammar or\nfolding. Revert, or split into its own issue with a rationale and a README note."
+          family: undeclared-scope-change
+          round: 6
+        - id: BR-41
+          severity: Important
+          title: Gate steps ticked from inside the gate, and a regression test claimed to pin a fix that it does not
+          detail: |-
+            This is the 2nd (and 3rd) finding in family ticked-without-evidence. Do NOT fix the
+            instances — fix the rule. Prevalence, all in this issue: BR-34 (Task 11 Step 2, fixed
+            last round); plan lines 1338 and 1352 tick "sdlc milestone-close M2" and "sdlc close"
+            while this review IS that milestone-close, no "closed M2" log line exists and status is
+            still working; and the Log's "Two tests pin it" for BR-33 is false — reverting
+            fold_projection.lua to b2bf1d5~1 leaves fold_projection_spec.lua:184 green, so only the
+            rejected-opener test pins anything. Rule: a tick, or a written claim that a test pins a
+            fix, is a claim of evidence and may only be written by the action that produced it — for
+            a regression test that evidence is the revert going RED, not the suite going green.
+            Corollary: never tick a gate step from inside the gate. workshop/lessons.md:722-726
+            states half this rule and was violated by the same commit that wrote it; extend it with
+            the revert half.
+          family: ticked-without-evidence
+          round: 6
+        - id: BR-42
+          severity: Minor
+          title: The fence-aware interior scan requires the body to open at exactly start_0 + 1
+          detail: |-
+            fold_projection.lua:121 keys on the shape serialize.render_call/render_result emit today.
+            A hand-edited or LLM-emitted transcript with a blank line between the marker and its
+            opening fence loses fence-awareness, so an in-body marker refuses the whole exchange.
+            Either name the coupling in the comment or accept the first non-blank line after the
+            marker.
+          family: serialized-shape-assumed
+          round: 6
+      boundary: M2
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#200 (boundary-review)
@@ -714,6 +800,51 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   not segmentation; the header comment should say so rather than let the harness be
   credited with coverage it cannot have.
 
+## Round 6 — 2026-08-21T12:36:09-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-29 — not-addressed — Unchanged at answer_structure.lua:114; reproduced end-to-end — tool_result truncated to 2 rows and a fold anchored on an in-body 📝:.
+- BR-30 — not-addressed — Unchanged at chat_parser.lua:526; measured 3 exchanges pre-M2 vs 1 at HEAD on two independent reachable inputs.
+- BR-31 — addressed — All 11 names from 9a6e939~1 present plus 5 new; 16/16 green, zero duplicate it() names.
+- BR-32 — not-addressed — format.md fixed; traceability.yaml still omits fence.lua from chat/parsing and atlas/chat/parsing.md still lacks the in-body-content rule.
+- BR-33 — addressed — Fix verified by revert — rejected-opener case flips true→false. Only one of the two claimed tests has teeth (see the new ticked-without-evidence finding).
+- BR-34 — addressed — Audit run and recorded with the census bounding it (115 files, 1155 assertions, zero tool blocks).
+- BR-35 — not-addressed — chat_parser.lua:267 still at column 0 in a tab-indented body.
+- BR-36 — not-addressed — chat_parser.lua:456-459 comment unchanged.
+- BR-37 — addressed — fold_projection.lua:121 now calls fence.open_len once.
+- BR-38 — not-addressed — fence.lua still absent from PURE_FILES at tests/arch/buffer_mutation_spec.lua:62.
+- BR-39 — not-addressed — Header comment still justifies the oracle without stating that it validates fold application, not segmentation.
+
+### Raised
+
+- **BR-40** [Critical] `undeclared-scope-change` max_full_exchanges default changed 42 to 999 in the M2 fix commit, unrelated and undeclared
+  lua/parley/config.lua:640, introduced solely in b2bf1d5 (git log -S confirms) and
+  unmentioned in that commit message, the issue, or the plan. Consumed at
+  chat_respond.lua:737, so chat-memory summarisation effectively never fires and every
+  prior exchange is sent to the provider in full instead of as its 📝: summary. A
+  user-visible cost and context-window change with no connection to fence grammar or
+  folding. Revert, or split into its own issue with a rationale and a README note.
+- **BR-41** [Important] `ticked-without-evidence` Gate steps ticked from inside the gate, and a regression test claimed to pin a fix that it does not
+  This is the 2nd (and 3rd) finding in family ticked-without-evidence. Do NOT fix the
+  instances — fix the rule. Prevalence, all in this issue: BR-34 (Task 11 Step 2, fixed
+  last round); plan lines 1338 and 1352 tick "sdlc milestone-close M2" and "sdlc close"
+  while this review IS that milestone-close, no "closed M2" log line exists and status is
+  still working; and the Log's "Two tests pin it" for BR-33 is false — reverting
+  fold_projection.lua to b2bf1d5~1 leaves fold_projection_spec.lua:184 green, so only the
+  rejected-opener test pins anything. Rule: a tick, or a written claim that a test pins a
+  fix, is a claim of evidence and may only be written by the action that produced it — for
+  a regression test that evidence is the revert going RED, not the suite going green.
+  Corollary: never tick a gate step from inside the gate. workshop/lessons.md:722-726
+  states half this rule and was violated by the same commit that wrote it; extend it with
+  the revert half.
+- **BR-42** [Minor] `serialized-shape-assumed` The fence-aware interior scan requires the body to open at exactly start_0 + 1
+  fold_projection.lua:121 keys on the shape serialize.render_call/render_result emit today.
+  A hand-edited or LLM-emitted transcript with a blank line between the marker and its
+  opening fence loses fence-awareness, so an in-body marker refuses the whole exchange.
+  Either name the coupling in the comment or accept the first non-blank line after the
+  marker.
+
 ## Open findings
 
 - **BR-4** [Important] Plan Core-concepts entry contradicts the code and the plan's own line 65
@@ -741,12 +872,11 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-28** [Minor] prepare clears the identified span unverified while reconcile refuses to create unverified
 - **BR-29** [Critical] `failure-fallback-misgated` answer_structure's unterminated-fence rewind fires on a correctly closed fence, truncating the tool block
 - **BR-30** [Critical] `unterminated-fence-degradation` chat_parser's in-body suppression is unbounded, so one unclosed fence swallows the rest of the chat
-- **BR-31** [Important] `spec-surgery-loses-tests` 11 pre-existing tests deleted from chat_parser_tools_spec.lua, undeclared
 - **BR-32** [Important] `shadow-consumer-not-derived` atlas/chat/format.md still names tools/serialize.lua as the fence single source
-- **BR-33** [Important] `drift-guard-blinded` fold_projection's interior scan enters body mode on any fence, disabling the question guard
-- **BR-34** [Important] `ticked-without-evidence` Plan Task 11 Step 2 (127-transcript audit re-run) is ticked with no evidence in the Log
 - **BR-35** [Minor] `style-consistency` chat_parser.lua:267 require is unindented in a tab-indented function body
 - **BR-36** [Minor] `shadow-consumer-not-derived` chat_parser.lua:457-459 comment still restates the fence grammar the module no longer owns
-- **BR-37** [Minor] `redundant-computation` fold_projection.lua:122-123 calls fence.open_len twice on the same line
 - **BR-38** [Minor] `purity-claim-unenforced` fence.lua declares itself pure but is absent from the PURE_FILES arch guard
 - **BR-39** [Minor] `oracle-derives-from-subject` fold_invariants_spec's oracle derives from the same parse it validates, so segmentation bugs pass
+- **BR-40** [Critical] `undeclared-scope-change` max_full_exchanges default changed 42 to 999 in the M2 fix commit, unrelated and undeclared
+- **BR-41** [Important] `ticked-without-evidence` Gate steps ticked from inside the gate, and a regression test claimed to pin a fix that it does not
+- **BR-42** [Minor] `serialized-shape-assumed` The fence-aware interior scan requires the body to open at exactly start_0 + 1

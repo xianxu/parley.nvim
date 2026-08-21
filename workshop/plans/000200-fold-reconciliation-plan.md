@@ -1349,7 +1349,7 @@ Add to `workshop/lessons.md` under a `#200` heading:
 - **A display-layer fallback that renders corrupt state as ordinary output hides the bug that produced it.** `foldtext()`'s `else` branch rendered a question-anchored fold as `💬: … (N lines)`, indistinguishable from a legitimate user fold. Rule: keep the fallback only where it is genuinely reachable by design (here: the user's own `zf` folds), and enforce the invariant at *creation* time instead.
 - **A grammar implemented correctly in one consumer and naively in two is still a DRY violation.** The same-length fence rule lived correctly in `tools/serialize.lua` and wrongly in `answer_structure.lua` / `chat_parser.lua`. Rule: when two consumers re-derive a format that a third already owns, extract the owner rather than fixing the copies (`ARCH-DRY`).
 
-- [x] **Step 6: Close**
+- [ ] **Step 6: Close**
 
 ```bash
 sdlc close --issue 200 --verified '<evidence: make test output, corpus audit result, before/after repro>'

@@ -513,19 +513,53 @@ local fence = require("parley.fence")
 	end
 
 	-- Loop through content lines
+	-- #200: structural markers inside a tool body are CONTENT. Tool output
+	-- routinely contains 💬:/🤖:/📎: lines (reading a transcript, grepping this
+	-- repo), and each one used to fork a spurious exchange that then dragged
+	-- the rest of the body out of its block.
+	--
+	-- Precomputed with a lookahead that requires the close to EXIST (BR-30).
+	-- Suppressing on "fence open and not yet complete" has no terminator, so an
+	-- opener that never closes reclassifies every later marker and the rest of
+	-- the chat forks no exchanges at all. That is reachable without a malformed
+	-- file: an answer quoting a 📎: line in ordinary prose starts a tool block
+	-- whose body never closes. Exchange starts feed exchange_anchors identity,
+	-- which drives a destructive fold clear, so degrading open-endedly here is
+	-- not acceptable.
+	local in_tool_body = {}
+	do
+		local row = header_end + 1
+		while row <= #lines do
+			local kind = highlight_structure.classify(lines[row], decoration_patterns).kind
+			if kind == "tool_use" or kind == "tool_result" then
+				local open_len, open_at
+				local scan = row + 1
+				while scan <= #lines do
+					local scan_kind = highlight_structure.classify(lines[scan], decoration_patterns).kind
+					if not open_len then
+						open_len = fence.open_len(lines[scan])
+						if open_len then
+							open_at = scan
+						elseif scan_kind == "tool_use" or scan_kind == "tool_result"
+							or scan_kind == "user" or scan_kind == "assistant" then
+							break -- no body before the next block starts
+						end
+					elseif fence.closes(lines[scan], open_len) then
+						for body = open_at + 1, scan - 1 do in_tool_body[body] = true end
+						break
+					end
+					scan = scan + 1
+				end
+			end
+			row = row + 1
+		end
+	end
+
 	for i = header_end + 1, #lines do
 		local line = lines[i]
 		local decoration_kind = highlight_structure.classify(line, decoration_patterns).kind
 
-		-- #200: structural markers inside a tool body are CONTENT. Tool output
-		-- routinely contains 💬:/🤖:/📎: lines (reading a transcript, grepping
-		-- this repo), and each one used to fork a spurious exchange that then
-		-- dragged the rest of the body out of its block. cb_append_line already
-		-- tracks where the body is; the main loop just has to stop classifying
-		-- against it. No second tracker (ARCH-DRY).
-		if cb_state and cb_state.tool_fence_len and not cb_state.tool_body_complete
-			and (cb_state.current_kind == "tool_use" or cb_state.current_kind == "tool_result")
-		then
+		if in_tool_body[i] then
 			decoration_kind = "text"
 		end
 

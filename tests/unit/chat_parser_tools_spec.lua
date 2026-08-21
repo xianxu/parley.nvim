@@ -450,3 +450,50 @@ describe("structural markers inside a tool body (#200)", function()
         assert.equals(2, #parse(lines).exchanges)
     end)
 end)
+
+-- BR-30: suppression was gated on "fence open and body not complete", with no
+-- terminator. An opener that never gets a matching bare close reclassified
+-- every later marker as text, so the rest of the chat forked no exchanges at
+-- all. Reachable without a malformed file: an answer quoting a 📎: line in
+-- ordinary prose starts a tool block whose body never closes.
+describe("unterminated tool body (#200 BR-30)", function()
+    local function parse(lines)
+        return parser.parse_chat(lines, 4, test_config())
+    end
+    local header = { "---", "topic: t", "file: f.md", "---" }
+
+    it("does not swallow the rest of the chat after an unclosed fence", function()
+        local lines = vim.list_extend(vim.deepcopy(header), {
+            "",
+            "💬: q1",
+            "",
+            "🤖: [A]",
+            "📎: read id=r1",
+            "```",
+            "a body whose fence is never closed",
+            "",
+            "💬: q2",
+            "",
+            "🤖: [A]",
+            "",
+            "💬: q3",
+        })
+        assert.message("an unclosed fence swallowed the following exchanges")
+            .equals(3, #parse(lines).exchanges)
+    end)
+
+    it("does not swallow the chat when prose quotes a tool marker", function()
+        local lines = vim.list_extend(vim.deepcopy(header), {
+            "",
+            "💬: q1",
+            "",
+            "🤖: [A]",
+            "The transcript format uses lines like",
+            "📎: read_file id=example",
+            "to mark a tool result.",
+            "",
+            "💬: q2",
+        })
+        assert.equals(2, #parse(lines).exchanges)
+    end)
+end)

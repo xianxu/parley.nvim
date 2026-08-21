@@ -183,6 +183,8 @@ describe("anchor verification", function()
     -- indistinguishable from an opener, so one grammar-rejected fence desyncs
     -- the scan — and render_buffer emits ```json {"type": "request"}, whose
     -- info string the grammar rejects.
+    -- Characterization, NOT a fix pin: verified green against b2bf1d5~1 too.
+    -- The rejected-opener case below is the one that actually pins BR-33.
     it("keeps guarding a thinking block, which has no fenced body", function()
         local ranges = { { kind = "thinking", start_0 = 4, end_0 = 8 } }
         local ok, failed = projection.verify_anchors(ranges, {

@@ -104,3 +104,40 @@ describe("tool sections with nested fences (#200)", function()
             .is_true(vim.tbl_contains(kinds, "summary"))
     end)
 end)
+
+-- BR-29: the unterminated-fence rewind was gated on `cursor > #lines`, which is
+-- equally true when the fence closed ON the last line. A correctly closed body
+-- containing a BOUNDARY-classified line was then truncated at its opener.
+describe("tool section closing on the last line (#200 BR-29)", function()
+    local answer_structure = require("parley.answer_structure")
+    local patterns = require("parley.highlight_structure").patterns({})
+
+    it("keeps a body whose close is the final line of the span", function()
+        local lines = {
+            "📎: read_file",
+            "```",
+            "📝: a summary marker quoted inside the body",
+            "```",
+        }
+        local sections = answer_structure.reduce(lines, patterns).sections
+        assert.equals(1, #sections)
+        assert.equals("tool_result", sections[1].kind)
+        assert.message("body truncated at its opener despite closing correctly")
+            .equals(4, sections[1].line_end)
+    end)
+
+    it("keeps a body with an in-body question closing on the final line", function()
+        local lines = {
+            "🔧: read_file",
+            "````",
+            "💬: quoted question",
+            "```",
+            "nested",
+            "```",
+            "````",
+        }
+        local sections = answer_structure.reduce(lines, patterns).sections
+        assert.equals("tool_use", sections[1].kind)
+        assert.equals(7, sections[1].line_end)
+    end)
+end)

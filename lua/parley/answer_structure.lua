@@ -83,6 +83,7 @@ function M.reduce(lines, patterns, opts)
             -- unfoldable text (#200).
             local last = i
             local open_len = nil
+            local closed = false
             local boundary_before_close = nil
             local cursor = i + 1
             while cursor <= #lines do
@@ -98,6 +99,7 @@ function M.reduce(lines, patterns, opts)
                     end
                 elseif fence.closes(line, open_len) then
                     last = cursor
+                    closed = true
                     cursor = cursor + 1
                     break
                 else
@@ -111,7 +113,10 @@ function M.reduce(lines, patterns, opts)
                 end
                 cursor = cursor + 1
             end
-            if open_len and cursor > #lines and boundary_before_close then
+            -- Gate on `not closed`, not on running off the end: a body whose
+            -- close IS the last line also leaves cursor > #lines, and rewinding
+            -- there truncates a correctly closed block at its opener (BR-29).
+            if open_len and not closed and boundary_before_close then
                 -- Unterminated: rewind to just before the first boundary so the
                 -- blocks after it still segment.
                 last = boundary_before_close - 1

@@ -730,6 +730,16 @@
   creation, not an edit. Rule: before writing a spec file, `test -e` it — and
   diff the inventory against `HEAD` on creation as well as on edit, since a
   creation that lands on an existing path is the most destructive edit there is.
+- **A tick, or a claim that a test pins a fix, may only be written by the action
+  that produced its evidence — and for a regression test that evidence is the
+  REVERT going red, not the suite going green.** #200 wrote "two tests pin it";
+  reverting the module left one of them green, so it pinned nothing and was a
+  characterization test wearing a fix-pin label. **Corollary: never tick a gate
+  step from inside the gate.** The same issue ticked "sdlc milestone-close M2"
+  and "sdlc close" in its plan while the milestone-close review was running, with
+  no `closed M2` log line and status still `working`. This rule was written
+  half-formed in the very commit that violated it; the revert half is the part
+  that has teeth.
 - **Never bulk-tick checkboxes.** #200 M2 ticked a plan's step list with a
   blanket replace, including "re-run the audit against the operator's live
   chat_dir" — which had not been run. A tick is a claim of evidence; applying it
