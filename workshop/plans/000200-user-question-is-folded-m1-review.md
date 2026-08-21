@@ -1147,3 +1147,25 @@ Append to `workshop/plans/000200-fold-reconciliation-plan.md` `## Revisions`:
 - **2026-08-20 — Task 3 Step 6's scaling pin is still vacuous (round-7 I1, still open).** Record that `tests/integration/tool_folds_spec.lua:187` omits the `truth()` seam, so every `reconcile_exchange` in it refuses (`which="span"`, `foldclosed=-1`, `reconcile → false`, re-measured at HEAD) and the timings measure the refusal early-return; the Spec's streaming-perf Done-when is unpinned until the seam is wired.
 
 Then update the issue: correct the `## Log` test counts for the duplicated `fold_projection_spec` block (15 distinct cases, not 22), soften the round-7 `make test` claim to what reproduces (still flaky from a cleaned scratch dir; `tools_builtin_find_spec` and the two `git init` specs each failed on a separate clean run here, none containing fold code), and add a round-8 entry so the "all six earlier scenarios still hold" table is not left standing as the last word.
+
+---
+
+## Re-review — 2026-08-20T18:31:05-07:00 (unknown)
+
+| field | value |
+|-------|-------|
+| issue | 200 — user question is folded |
+| repo | parley.nvim |
+| issue file | workshop/issues/000200-user-question-is-folded.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | bedc1a1dfe12a6a729ef69a8ea15edade80556e4..bedc1a1dfe12a6a729ef69a8ea15edade80556e4 |
+| command | sdlc milestone-close --issue 200 --milestone M1 |
+| reviewer | claude |
+| timestamp | 2026-08-20T18:31:05-07:00 |
+| verdict | unknown |
+
+## Review
+
+The review window is degenerate (Base == Head → empty diff). Since this is the M1 close boundary, I'll review M1's actual delivery: the branch range from the plan commit to HEAD.
+API Error: Your computer went to sleep mid-response. The response above may be incomplete.

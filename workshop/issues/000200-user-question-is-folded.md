@@ -735,12 +735,29 @@ fail. Restored from `HEAD` and reapplied the single intended edit. Rule: after
 any structural edit to a spec file, diff the test inventory against `HEAD`
 rather than trusting a green run.
 
-**Verification:** `exchange_anchors_spec` 12/12, `fold_projection_spec` 22/22,
+**Verification:** `exchange_anchors_spec` 12/12, `fold_projection_spec` **15/15**,
 `tool_folds_spec` 1/1 unit + 25/25 integration, `fold_invariants_spec` 12/12 —
-72 fold tests, stable across repeated runs; `make test` exit 0 (after clearing
-the harness scratch dirs; `chat_progress_process_spec` also needed a retry, the
-port-binding flake noted earlier), lint 0 warnings / 0 errors across 331 files.
-All earlier scenarios hold.
+**65** fold tests, stable across repeated runs; `make test` exit 0, lint 0
+warnings / 0 errors across 331 files. All earlier scenarios hold.
+
+**A third spec-surgery defect, and the count above is the corrected one.** The
+boundary review found `describe("anchor verification")` present **twice** in
+`fold_projection_spec.lua` — 7 tests duplicated by an earlier edit of mine. The
+"22/22" reported in the round-7 entry was 15 distinct cases plus 7 copies, so
+every fold-test total I have quoted from round 4 onward was inflated by 7. The
+duplicate block is removed and all five fold specs are now audited for duplicate
+`it()` names (zero) as well as for count against `HEAD`.
+
+Three structural-edit defects in this file set now — nine tests deleted, seven
+duplicated, one test premise unreachable — none of which a green run could
+reveal. The `## Log` counts above are the audited ones.
+
+**`make test` claim, narrowed.** Round 7 said cleaning the scratch dirs gives
+exit 0. That holds here (verified again on a clean run), but the boundary review
+saw `tools_builtin_find_spec` and both `git init` specs fail on separate clean
+runs in its own environment. The accurate statement is: these three specs are
+environment-sensitive, none contains fold code, and the failures reproduce with
+all #200 changes stashed.
 
 ## Revisions
 
