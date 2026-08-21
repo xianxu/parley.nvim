@@ -794,6 +794,41 @@ acting:
 spec); `make test` exit 0 on a clean scratch dir; lint 0 warnings / 0 errors
 across 331 files. All eight reproduced scenarios still hold.
 
+### 2026-08-20 — M1: the clear silently no-opped under `nofoldenable`
+
+**C1 (Critical) — the reported symptom returns verbatim when folding is
+disabled in the window.** `clear_folds_in_span` navigates with `zj` and deletes
+with `zD`; with `foldenable` off, neither acts, so the loop runs to completion
+having removed nothing. A stale fold — including one anchored on a `💬:` line —
+survives the reconcile that exists to remove it, permanently, since nothing else
+deletes folds and `hydrate_window` latches. Reproduced:
+
+    foldenable at reconcile=true  -> foldclosed(3)=-1
+    foldenable at reconcile=false -> foldclosed(3)=3     💬: q (4 lines)
+
+The trigger is ordinary: a user's `set nofoldenable`, `zi`, or **parley's own**
+`chat_toggle_tool_folds` (`init.lua:2236`). A regression this milestone
+introduced — the pre-#200 `zd` at projected start rows did not consult fold
+navigation at all.
+
+Fixed by saving, forcing and restoring `&l:foldenable` around the clear only,
+inside the existing `nvim_win_call`. Creation needs no guard: `%d,%dfold` works
+under either setting. The operator's setting is left exactly as found, and a
+test asserts that.
+
+**The reason it shipped is the more useful finding.** Every fold spec set
+`foldenable = true` in setup, so no test could ever have caught it. Added two
+`foldenable = false` variants — stale-fold clearing, and the "exactly one fold
+level across repeated reconciles" property that would otherwise deepen nesting
+once per streamed chunk. Both verified to fail with the guard removed and pass
+with it, rather than assumed to pin anything.
+
+**Verification:** `exchange_anchors_spec` 12/12, `fold_projection_spec` 15/15,
+`tool_folds_spec` 1/1 unit + 28/28 integration, `fold_invariants_spec` 12/12 —
+68 fold tests; `make test` exit 0 on a clean scratch dir; lint 0 warnings /
+0 errors across 331 files. All eight earlier scenarios hold, plus the
+`foldenable = false` probe now reporting `foldclosed(3)=-1`.
+
 ## Revisions
 
 ### 2026-08-20 — Fold ownership contract + plan-quality round 1

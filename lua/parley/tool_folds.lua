@@ -66,7 +66,16 @@ local function clear_folds_in_span(buf, win, first_0, last_0)
         -- 'foldmethod' (E350), which would otherwise leave foldlevel unchanged
         -- and spin here forever. Bounding by the span means the worst case
         -- degrades to the row-walk cost rather than hanging the editor.
+        -- 'foldenable' must be on for this walk: with it off, zj does not
+        -- navigate and zD does not delete, so the loop silently no-ops and a
+        -- stale fold survives the reconcile that exists to remove it —
+        -- including one anchored on a question, the exact reported symptom.
+        -- Reachable from a user's `set nofoldenable`, `zi`, or parley's own
+        -- chat_toggle_tool_folds. Saved and restored so the operator's setting
+        -- is not changed underneath them.
         vim.api.nvim_exec2(string.format([[
+            let s:fen = &l:foldenable
+            setlocal foldenable
             execute %d
             let s:guard = 0
             let s:limit = %d
@@ -86,6 +95,7 @@ local function clear_folds_in_span(buf, win, first_0, last_0)
               endif
             endwhile
             let g:parley_fold_clear_iters = s:guard
+            let &l:foldenable = s:fen
         ]], first_row, (last_row - first_row + 2) * 2, last_row), {})
         -- Loop iterations, exposed so a test can assert this walks folds rather
         -- than rows without timing anything. A wall-clock assertion measures the

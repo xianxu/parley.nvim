@@ -1410,3 +1410,191 @@ findings:
     detail: |
       The issue's Plan section is correctly ticked; the durable plan's steps lag.
 ```
+
+---
+
+## Re-review — 2026-08-20T21:38:20-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 200 — user question is folded |
+| repo | parley.nvim |
+| issue file | workshop/issues/000200-user-question-is-folded.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | c7b06080c6f71061805d867bcc0bb65f2243f60b..c7b06080c6f71061805d867bcc0bb65f2243f60b |
+| command | sdlc milestone-close --issue 200 --milestone M1 |
+| reviewer | claude |
+| timestamp | 2026-08-20T21:38:20-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+The M1 reconciliation design is sound and the review history shows real convergence — the verified-creation / identified-destruction split is the right architecture, `fold_projection` stayed pure and nvim-free, `FOLDABLE` now derives from `ANCHOR_KIND`, and 66 fold tests plus a corpus harness pin eight previously-reproduced scenarios (all green here: 15 + 12 + 1 + 26 + 12; lint 0/0 across 331 files). What blocks SHIP is that the new clearing mechanism has an undeclared precondition: `clear_folds_in_span` gates every deletion on `foldlevel()`, which returns 0 for every row when the window has `'nofoldenable'`. In that state the clear is a complete no-op, reconcile degrades to exactly the pre-#200 append-only behaviour, and I reproduced both the headline symptom (`💬: q (4 lines)` surviving a reconcile) and unbounded fold nesting (25 reconciles → 25 nested levels at the same rows, i.e. one level per streamed chunk). Parley itself ships `chat_toggle_tool_folds`, which sets `vim.wo.foldenable = not vim.wo.foldenable`, so this is a first-class user state, and no fold spec exercises it — every one sets `foldenable = true` in `before_each`.
+
+## 1. Strengths
+
+- **The creation/destruction split is the right abstraction.** `lua/parley/tool_folds.lua:118-130` + `lua/parley/exchange_anchors.lua:63-80` — "creation is verified, destruction is identified" is the lesson four rounds of positional heuristics could not reach, and the module comment states *why* a row-span is not an identity rather than just what the code does.
+- **`exchange_anchors.span` validates the whole mapping, not the bounding pair** (`lua/parley/exchange_anchors.lua:69-74`). The compensating delete-and-add case (prune an exchange, ask again) is ordinary usage and would have aliased under a count-only check; `tests/unit/exchange_anchors_spec.lua:76-82` pins it.
+- **`FOLDABLE` derived from `ANCHOR_KIND`** (`lua/parley/fold_projection.lua:15-23`) with the drift mode named in the comment — and `tests/integration/fold_invariants_spec.lua:87` reads the policy through `projection.is_foldable()` instead of restating it. Clean `ARCH-DRY` closure.
+- **The scaling test counts work instead of timing it** (`tests/integration/tool_folds_spec.lua:188-219`, `M._last_clear_iters`). Converting a flaky wall-clock assertion into "16× the rows must cost no more iterations" is the correct instrument, and the corresponding `workshop/lessons.md` entry generalises it.
+- **The corpus harness fails loudly rather than shrinking to green** — the `#corpus >= 8` floor and the `checked > 0` per-file assertion (`tests/integration/fold_invariants_spec.lua:56-59, 96-98`) both defend against the "green-and-empty" failure that the Log records happening three separate times.
+
+## 2. Critical findings
+
+**C-A — `clear_folds_in_span` deletes nothing when the window has `'nofoldenable'`; #200's exact symptom returns and persists.** `lua/parley/tool_folds.lua:75,77`
+
+The VimL loop only reaches `zD` via `if foldlevel(line('.')) > 0`. Measured raw Vim behaviour: with `nofoldenable`, `:fold` **does** create the fold, but `foldlevel()` reports `0` for its rows (re-enabling shows `foldlevel(13)=1`, `foldclosed(13)=12`). `zj` still navigates. So the loop walks fold-to-fold and never deletes — reconcile becomes append-only, which is the root cause #200 exists to remove.
+
+Reproduced, two failure modes:
+
+```
+foldenable at reconcile=true  -> foldclosed(3)=-1
+foldenable at reconcile=false -> foldclosed(3)=3    💬: q (4 lines)
+```
+
+```
+foldenable during 25 reconciles=true  -> foldlevel(10)=1
+foldenable during 25 reconciles=false -> foldlevel(10)=25
+```
+
+The first is the operator's originally reported render, byte-for-byte, surviving a reconcile that is supposed to remove it — and it is permanent, because nothing else deletes folds and `hydrate_window` latches on `initialized[buf][win]`. The second means fold nesting grows one level per streamed chunk (`chat_respond.lua:1743` wraps every chunk), directly violating the property `tests/integration/tool_folds_spec.lua:698` claims to pin.
+
+Trigger conditions are ordinary: `set nofoldenable` in a user config, `zi`, or parley's own `chat_toggle_tool_folds` (`lua/parley/init.lua:2236`, `config_key = chat_shortcut_toggle_tool_folds`). It is a regression this milestone introduced — the pre-#200 `zd` at projected start rows did not consult `foldlevel()`.
+
+Fix sketch: inside the existing `nvim_win_call`, save and force the option around the clear only —
+
+```
+let s:fen = &l:foldenable | setlocal foldenable
+... existing loop ...
+let &l:foldenable = s:fen
+```
+
+Creation needs no guard: `%d,%dfold` works under either setting and does not itself flip `foldenable` (verified). Then add a `foldenable = false` variant of the ownership and the "exactly one fold level across consecutive appends" tests — the whole fold suite currently runs only with `foldenable = true` (`tests/integration/tool_folds_spec.lua:15`, `tests/integration/fold_invariants_spec.lua:71`), which is why this shipped.
+
+## 3. Important findings
+
+**I-A — `reconcile_exchange` is now O(number of exchanges in the chat) per call, on the per-chunk streaming path, and nothing pins that axis.** `lua/parley/exchange_anchors.lua:69-74` via `lua/parley/tool_folds.lua:270,345`
+
+`span()` resolves *every* anchor on every call (correctly — that is the round-7 aliasing fix), so the cost scales with chat length rather than exchange length. Measured, streaming exchange held constant:
+
+```
+exchanges=10    lines=125    per-reconcile=0.0386 ms
+exchanges=50    lines=605    per-reconcile=0.0495 ms
+exchanges=200   lines=2405   per-reconcile=0.1172 ms
+exchanges=500   lines=6005   per-reconcile=0.2549 ms
+```
+
+`with_exchange_update` calls `owned_span` twice per chunk (prepare + finalize), so ≈0.5 ms/chunk at 500 exchanges against the 0.078 ms pre-#200 baseline the Log cites. The `0.067 ms` M1 measurement was taken on a short chat and does not cover this axis, and the in-suite scaling test varies `body_lines` only. Fix sketch: memoise the resolved anchor rows per `(buf, changedtick)` — exact, since extmarks only move on edits and every edit bumps the tick — and extend the iteration-count test with a second dimension that holds span length fixed while growing the exchange count.
+
+**I-B — the drift refusal is logged once per buffer *lifetime*, not once per buffer *state*.** `lua/parley/tool_folds.lua:181,195-197,312-314`
+
+`rederived[buf].logged` is carried forward into every new tick's entry (`logged = hit and hit.logged or false`) and never reset on a successful reconcile, so after the first refusal in a buffer every later refusal — including an unrelated drift much later in the session — produces no debug line. The comment at `:310-311` says "logged once per buffer state", and the Done-when says "A drifted exchange that cannot be folded says so — the refusal is not silent." Silent persistent non-folding is #200's own pathology. Fix sketch: clear `rederived[buf].logged` when `reconcile_exchange` succeeds, or key the suppression on the tick rather than the buffer.
+
+## 4. Minor findings
+
+- `lua/parley/tool_folds.lua:88,93` — `vim.g.parley_fold_clear_iters` is a test instrument written to a *global* on every clear, on the per-chunk path. `nvim_exec2(..., { output = true })` or a `vim.b` var would keep it out of the global namespace.
+- `lua/parley/tool_folds.lua:351,357` — `identified` is emitted on the prepare event but nothing consumes or asserts it; a diagnostic with no reader.
+- `tests/integration/tool_folds_spec.lua:252,706` — `_observer` is set inline and reset inline, but not in `after_each` (unlike `_model_provider` at `:23`); a failing assertion between the two leaks the observer into later tests.
+- `lua/parley/tool_folds.lua:434-449` — `foldtext()` hardcodes `🔧:`/`📎:`/`🧠:`/`📝:` instead of deriving from `highlight_structure.patterns(config)`, so a customised prefix silently falls through to the preview branch — the same branch that rendered `💬: q (4 lines)` and masked #200. Pre-existing and outside the diff, but it is now the last hand-maintained copy of the marker vocabulary BR-1 consolidated (`ARCH-DRY`), and making that branch loud is cheap insurance.
+
+## 5. Test coverage notes
+
+Verified green in this environment: `fold_projection_spec` 15/15, `exchange_anchors_spec` 12/12, `tool_folds_spec` 1/1 unit + 26/26 integration, `fold_invariants_spec` 12/12 (11 files — the corpus floor of 8 absorbs the one transcript deleted-but-unstaged in the working tree). `make lint` 0 warnings / 0 errors across 331 files. The eight reproduced scenarios each have a named regression test, and the fixtures (`fold_assistant_first.md`, `fold_tool_transcript.md`) genuinely cover shapes the real corpus lacks — the harness comment honestly records that the real corpus has zero tool blocks.
+
+The gap is one-dimensional and it is exactly where C-A lives: **`'foldenable'` is never varied**. Both fold specs pin it to `true` in setup, so the entire fold surface is tested in one of its two window states. Adding the `foldenable = false` variant of the ownership test, the stale-fold test, and the "exactly one fold level" test would have caught C-A and would catch its whole class. Secondarily, no test varies exchange *count* while holding span length fixed (I-A).
+
+## 6. Architectural notes for upcoming work
+
+- **ARCH-DRY — pass**, with the Minor above. `FOLDABLE` deriving from `ANCHOR_KIND` and the corpus spec reading `is_foldable()` are the right shape; `foldtext()` is the residual restatement.
+- **ARCH-PURE — pass**, with a structural caution. `fold_projection` is pure and nvim-free; `exchange_anchors` and `tool_folds` are the IO shell. But the clearing *algorithm* now lives as an embedded VimL program string inside that shell (`tool_folds.lua:69-89`) — there is no representation of it that can be tested below the Neovim boundary, and C-A is precisely the kind of environment-coupled defect that hides there. Worth stating its preconditions (`foldmethod=manual`, `foldenable`) explicitly in the comment as part of the fix rather than only the E350 case that is already noted.
+- **ARCH-PURPOSE — flag, via C-A.** The Spec's contract is "Folding holds these two invariants **at all times**, not merely on a cold open." M1 delivers that for `foldenable` windows only; in the other state the invariant fails in the originally reported form. This is the purpose of the issue, not a separable extension, so it belongs inside M1 rather than as follow-up. Everything else on the M1 checklist is delivered as claimed.
+- **ARCH-MOCK — pass.** No external binary or service in the production path. The test-only `vim.fn.systemlist("git ls-files …")` in `corpus_provider` is a file enumeration with an in-file acknowledgement that it is a single point of definition rather than an injection seam; the tracked fixtures make the assertions themselves git-independent.
+- **For M2:** the fence extraction should not re-learn C-A's lesson — when a pure module's grammar is consumed by a Neovim-side scanner, keep the environment-dependent predicate (`foldlevel`, `foldenable`, fence state) out of the pure module's contract and pin the shell's preconditions with a test that varies them.
+
+## 7. Plan revision recommendations
+
+- **`workshop/plans/000200-fold-reconciliation-plan.md` — a `## Revisions` entry for the `foldenable` precondition.** The plan's `tool_folds` integration entry and the atlas paragraph ("Clearing walks fold-to-fold (`zj`/`zD` in a single VimL crossing) … must scale with the number of folds present") describe the mechanism without its precondition. Record that fold-to-fold clearing depends on `foldlevel()`, that `foldlevel()` reports 0 under `'nofoldenable'`, and that the clear therefore forces the option for its duration — plus the test obligation to run the ownership cases in both window states.
+- **Same file / `atlas/chat/exchange_model.md` — a note on the new scaling axis.** Both currently state only the per-chunk *span-length* property. Add that identity resolution is O(number of exchanges) per reconcile (with the measurements above), and whichever mitigation is chosen for I-A.
+- No revision needed for the Core-concepts table: `fold_projection` (modified), `tool_folds` (modified) and `exchange_anchors` (new, `lua/parley/exchange_anchors.lua`) all exist at their stated paths with the stated kinds, PURE/INTEGRATION classification holds, and the `verify_span` / positional-fallback text was already corrected to match round 5's code. `fence` @ `lua/parley/fence.lua` is correctly absent — it is M2 Task 6.
+
+```findings
+findings:
+  - id: new
+    severity: Critical
+    title: |
+      clear_folds_in_span deletes nothing under 'nofoldenable', restoring the #200 symptom permanently
+    detail: |
+      tool_folds.lua:75,77 gate every deletion on foldlevel(), which reports 0
+      for all rows when the window has 'nofoldenable' (verified: :fold still
+      creates the fold, foldlevel() just cannot see it; zj still navigates).
+      Reconcile degrades to append-only. Reproduced both failure modes — a
+      stale fold covering a question survives and renders "💬: q (4 lines)",
+      and 25 reconciles produce 25 nested fold levels at the same rows, i.e.
+      one level per streamed chunk. Parley ships chat_toggle_tool_folds
+      (init.lua:2236) which sets this very option, and no fold spec varies it.
+      Fix: save/force/restore &l:foldenable around the clear loop inside the
+      existing nvim_win_call, and add foldenable=false variants of the
+      ownership and fold-nesting tests.
+  - id: new
+    severity: Important
+    title: |
+      reconcile_exchange is O(number of exchanges) per call on the per-chunk streaming path
+    detail: |
+      exchange_anchors.span resolves every anchor on every call, so per-chunk
+      cost scales with chat length, not exchange length. Measured with the
+      streamed exchange held constant: 0.0386 ms at 10 exchanges, 0.0495 at 50,
+      0.1172 at 200, 0.2549 at 500 — and owned_span runs twice per chunk
+      (prepare + finalize) against a 0.078 ms pre-200 baseline. The in-suite
+      scaling test varies span length only, so this axis is unpinned. Fix:
+      memoise resolved anchor rows per (buf, changedtick) — exact, since marks
+      only move on edits and every edit bumps the tick — and extend the
+      iteration-count test to hold span fixed while growing exchange count.
+  - id: new
+    severity: Important
+    title: |
+      the drift refusal is logged once per buffer lifetime, not once per buffer state
+    detail: |
+      rederived[buf].logged is carried into every new tick's entry
+      (tool_folds.lua:181) and never reset on a successful reconcile, so after
+      the first refusal in a buffer every later refusal — including an
+      unrelated drift much later in the session — is silent. The comment at
+      :310-311 says "once per buffer state" and the Done-when requires the
+      refusal not be silent. Fix: clear the flag when reconcile_exchange
+      succeeds, or key the suppression on the tick rather than the buffer.
+  - id: new
+    severity: Minor
+    title: |
+      vim.g.parley_fold_clear_iters is a test instrument written to a global on the per-chunk path
+    detail: |
+      tool_folds.lua:88,93. Prefer nvim_exec2 with output capture, or a
+      buffer-local var, so the production hot path does not publish a global.
+  - id: new
+    severity: Minor
+    title: |
+      the prepare event's `identified` flag has no consumer and no test
+    detail: |
+      tool_folds.lua:351,357 emit it, nothing reads or asserts it.
+  - id: new
+    severity: Minor
+    title: |
+      _observer is reset inline rather than in after_each, so a failing assertion leaks it
+    detail: |
+      tests/integration/tool_folds_spec.lua:252,706 — _model_provider is reset
+      in after_each (:23) but _observer is not.
+  - id: new
+    severity: Minor
+    title: |
+      foldtext hardcodes the four marker prefixes instead of deriving from highlight_structure.patterns
+    detail: |
+      tool_folds.lua:434-449. A customised chat_tool_use_prefix silently falls
+      through to the preview branch — the same branch that rendered
+      "💬: q (4 lines)" and masked #200. Pre-existing and outside the diff, but
+      it is now the last hand-maintained copy of the marker vocabulary BR-1
+      consolidated into ANCHOR_KIND (ARCH-DRY).
+```

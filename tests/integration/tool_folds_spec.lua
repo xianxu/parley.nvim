@@ -510,6 +510,56 @@ describe("tool_folds incremental manual folds", function()
         assert.equals(4, vim.fn.foldclosedend(1))
     end)
 
+    -- #200: the whole fold suite ran only with foldenable = true, which is how
+    -- a clear that silently no-ops under `nofoldenable` shipped. With it off,
+    -- zj does not navigate and zD does not delete. Reachable from a user's
+    -- `set nofoldenable`, `zi`, or parley's own chat_toggle_tool_folds.
+    it("clears a stale fold even when folding is disabled in the window", function()
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+            "header", "", "💬: q", "", "🤖: a", "",
+            "📎: read_file", "```", "b", "```", "tail",
+        })
+        local model = exchange_model.new(1)
+        model:add_exchange(1)
+        model:add_block(1, "agent_header", 1)
+        model:add_block(1, "tool_result", 4)
+        truth(model)
+        tool_folds.reconcile_exchange(buf, win, model, 1)
+        vim.api.nvim_win_call(win, function() vim.cmd("3,6fold") end)
+
+        vim.api.nvim_set_option_value("foldenable", false, { win = win })
+        tool_folds.reconcile_exchange(buf, win, model, 1)
+
+        -- The operator's setting must survive untouched.
+        assert.is_false(vim.api.nvim_get_option_value("foldenable", { win = win }))
+
+        vim.api.nvim_set_option_value("foldenable", true, { win = win })
+        vim.cmd("normal! zM")
+        assert.message("a stale fold on the question survived a nofoldenable reconcile")
+            .equals(-1, vim.fn.foldclosed(3))
+        assert.equals(7, vim.fn.foldclosed(7))
+    end)
+
+    it("does not deepen fold nesting when reconciling with folding disabled", function()
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+            "header", "", "💬: q", "", "🤖: a", "",
+            "📎: read_file", "```", "b", "```", "tail",
+        })
+        local model = exchange_model.new(1)
+        model:add_exchange(1)
+        model:add_block(1, "agent_header", 1)
+        model:add_block(1, "tool_result", 4)
+        truth(model)
+
+        vim.api.nvim_set_option_value("foldenable", false, { win = win })
+        for _ = 1, 25 do tool_folds.reconcile_exchange(buf, win, model, 1) end
+        vim.api.nvim_set_option_value("foldenable", true, { win = win })
+
+        -- One level, not one per reconcile: chat_respond reconciles per streamed
+        -- chunk, so nesting growth here would compound across a whole answer.
+        assert.equals(1, vim.fn.foldlevel(7))
+    end)
+
     it("falls back rather than trusting identity across a structural change", function()
         local anchors = require("parley.exchange_anchors")
         local lines = { "---", "topic: t", "file: f.md", "---", "" }

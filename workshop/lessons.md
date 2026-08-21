@@ -692,3 +692,13 @@
   span must cost no more iterations. If a property is algorithmic, find the
   countable quantity that expresses it; reach for a clock only when the thing
   under test really is latency.
+- **A suite that fixes an environment setting cannot find bugs in the other
+  setting.** #200's fold clearing silently no-opped under `nofoldenable` — `zj`
+  will not navigate and `zD` will not delete — so a stale fold survived the
+  reconcile meant to remove it, reproducing the issue's original symptom
+  verbatim. It shipped because every fold spec set `foldenable = true` in setup,
+  making the defect untestable by construction. Rule: when behaviour depends on
+  an editor option or environment flag that users can flip (and that the product
+  itself flips — parley has a fold-toggle shortcut), the suite must exercise both
+  states, and code that depends on the option should save/force/restore it rather
+  than assume.
